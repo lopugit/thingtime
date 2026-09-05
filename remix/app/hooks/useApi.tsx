@@ -596,6 +596,44 @@ export function useApi() {
 				[asyncFetcher]
 			)
 		},
+    // Subspaces — Reddit-style communities (api/utils/subspaces). Reads are
+    // plain GETs (guest-visible); every mutation goes through the fetcher so
+    // failures surface through the shared API-failure path.
+    subspaces: {
+      list: useCallback(
+        async (args?: { q?: string; mine?: boolean; cursor?: string; limit?: number }) =>
+          getJson(`/api/v1/subspaces${toQuery({ q: args?.q, mine: args?.mine ? 1 : undefined, cursor: args?.cursor, limit: args?.limit })}`),
+        []
+      ),
+      get: useCallback(async (args: { slug?: string; id?: string }) => getJson(`/api/v1/subspaces/get${toQuery(args)}`), []),
+      create: useCallback(async (body: Record<string, unknown>) => asyncFetcher.submit(body, { action: '/api/v1/subspaces', errorContext: 'create the subspace' }), [asyncFetcher]),
+      update: useCallback(
+        async (body: Record<string, unknown>) => asyncFetcher.submit(body, { action: '/api/v1/subspaces/update', errorContext: 'save the subspace settings' }),
+        [asyncFetcher]
+      ),
+      join: useCallback(async (args: { slug?: string; id?: string }) => asyncFetcher.submit(args, { action: '/api/v1/subspaces/join', errorContext: 'join the subspace' }), [asyncFetcher]),
+      leave: useCallback(async (args: { slug?: string; id?: string }) => asyncFetcher.submit(args, { action: '/api/v1/subspaces/leave', errorContext: 'leave the subspace' }), [asyncFetcher]),
+      members: useCallback(
+        async (args: { slug?: string; id?: string; role?: string; banned?: boolean; cursor?: string; limit?: number }) =>
+          getJson(`/api/v1/subspaces/members${toQuery({ ...args, banned: args?.banned ? 1 : undefined })}`),
+        []
+      ),
+      mutateMember: useCallback(
+        async (body: Record<string, unknown>) => asyncFetcher.submit(body, { action: '/api/v1/subspaces/members', errorContext: 'update the member' }),
+        [asyncFetcher]
+      ),
+      moderate: useCallback(
+        async (body: { id: string; action: string; reason?: string; value?: boolean; flairId?: string | null }) =>
+          asyncFetcher.submit(body, { action: '/api/v1/subspaces/moderate', errorContext: 'moderate the post' }),
+        [asyncFetcher]
+      ),
+      modlog: useCallback(async (args: { slug?: string; id?: string; cursor?: string; limit?: number }) => getJson(`/api/v1/subspaces/modlog${toQuery(args)}`), []),
+      feed: useCallback(
+        async (args: { slug?: string; id?: string; sort?: string; range?: string; cursor?: string; limit?: number; includeRemoved?: boolean }) =>
+          getJson(`/api/v1/subspaces/feed${toQuery({ ...args, includeRemoved: args?.includeRemoved ? 1 : undefined })}`),
+        []
+      )
+    },
     things: {
       feed: useCallback(async (args) => getJson(`/api/v1/things/feed${toQuery(args)}`), []),
       // the explore board — public trending posts; `anon: 1` keeps logged-out
@@ -723,6 +761,13 @@ export function useApi() {
       vote: useCallback(
         async (args: { id: string; optionIndex: number }) =>
           asyncFetcher.submit({ id: args?.id, optionIndex: args?.optionIndex }, { action: '/api/v1/things/vote', errorContext: 'save your vote' }),
+        [asyncFetcher]
+      ),
+      // up/down vote (the separate focused reaction kind): 'up' | 'down' casts
+      // or flips, the same direction again clears, null clears
+      updown: useCallback(
+        async (args: { id: string; direction: 'up' | 'down' | null }) =>
+          asyncFetcher.submit({ id: args?.id, direction: args?.direction ?? null }, { action: '/api/v1/things/updown', errorContext: 'save your vote' }),
         [asyncFetcher]
       ),
       comment: useCallback(

@@ -17,6 +17,23 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-05: **Subspaces 🪐 + up/down votes 🔼** — Reddit-style communities as
+  things: `subspace` (slug, branding, rules, flairs, access), relational
+  `subspace-member` (role/approval/ban) and `subspace-modlog` docs, posts
+  gaining `title`/`subspaceId`/`flairId` with a server-side posting gate and a
+  root `subspaceMod` state (remove/approve/pin/lock/nsfw/spoiler, redaction for
+  non-mods, feed fences incl. private subspaces), `/api/v1/subspaces*` (list/
+  create, get, update, join, leave, members, moderate, modlog, feed with
+  hot/new/top/rising/controversial), and `updown` — a separate focused vote kind
+  (`POST /api/v1/things/updown`, one of up/down per user per post or comment,
+  aggregated as `votes`) beside the untouched native emoji reactions. UI: `/s`,
+  `/s/:slug`, `/s/:slug/mod`, the ▲ score ▼ pill on every post/comment card,
+  subspace/title/flair in the composer, mod menu on cards, drawer entry,
+  Settings → Subspaces. One new partial index (`things_subspace_posts`);
+  contracts `api.things`, `api.things-feed`, `api.things-comment`,
+  `api.things-user` bumped to 1.2.0. Live walk: `remix/scripts/verify-subspaces.mjs`.
+  See the [PR note](../PRs/subspaces-communities-and-updown-votes.md). — Claude (AI)
+
 - 2026-09-05: Repair Recovery catalogue refresh/architecture selection, malformed
   archive handling, background verification, rollback preservation, and cold
   cloud packaging. Share the protected main/PR release builder and correct its

@@ -21,14 +21,25 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.integration-ci-credentials']?.version, '1.1.0');
   assert.equal(manifest.features['api.integration-ci-progress']?.version, '1.0.0');
   assert.equal(manifest.features['api.things-search']?.version, '1.1.1');
+  assert.equal(manifest.features['api.things-share']?.version, '1.1.0');
+  // subspaces + up/down votes: posts/comments gained title/subspace/flair/
+  // subspaceMod/votes and the feeds honour subspace fences (additive → minor)
+  for (const feature of ['api.things', 'api.things-comment', 'api.things-feed', 'api.things-user']) {
+    assert.equal(manifest.features[feature]?.version, '1.2.0', feature);
+  }
   for (const feature of [
-    'api.things',
-    'api.things-comment',
-    'api.things-feed',
-    'api.things-share',
-    'api.things-user'
+    'api.subspaces',
+    'api.subspaces-get',
+    'api.subspaces-update',
+    'api.subspaces-join',
+    'api.subspaces-leave',
+    'api.subspaces-members',
+    'api.subspaces-moderate',
+    'api.subspaces-modlog',
+    'api.subspaces-feed',
+    'api.things-updown'
   ]) {
-    assert.equal(manifest.features[feature]?.version, '1.1.0', feature);
+    assert.equal(manifest.features[feature]?.version, '1.0.0', feature);
   }
   assert.equal(manifest.features['api.things-update']?.version, '1.2.0');
   assert.ok(manifest.operations.some((operation) => operation.path === THINGTIME_CAPABILITY_MANIFEST_PATH));

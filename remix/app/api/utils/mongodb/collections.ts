@@ -1113,6 +1113,17 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
       { name: 'things_member_key_lookup', partialFilterExpression: { 'crystal.memberKey': { $type: 'string' } } },
       ['things_member_key_unique']
     ),
+    // Subspace post feeds (api/utils/subspaces): every /s/<slug> sort reads the
+    // newest posts of ONE subspace — chronological pages for "new", a bounded
+    // newest-first candidate window for hot/top/rising/controversial (the ranked
+    // home-feed pattern, so vote tallies stay relational and no denormalized
+    // score field is ever needed). Partial on the string ref so posts outside
+    // any subspace never enter it; the match always carries thingtime:'post',
+    // so a free-form data crystal squatting the key can't surface.
+    col.createIndex(
+      { 'crystal.subspaceId': 1, createdAt: -1, shareId: 1 },
+      { name: 'things_subspace_posts', partialFilterExpression: { 'crystal.subspaceId': { $type: 'string' } } }
+    ),
     createIndexReplacing(
       col,
       { 'crystal.dmKey': 1 },

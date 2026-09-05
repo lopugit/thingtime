@@ -312,6 +312,41 @@ export const MAX_COMMUNITY_DESCRIPTION_CHARS = 500;
 export const MAX_SECTION_NAME_CHARS = 60;
 export const MAX_CHATS_PER_COMMUNITY = 500;
 export const MAX_COMMUNITIES_PER_USER = 50;
+// Subspaces (see api/utils/subspaces): Reddit-style communities — a subspace
+// thing with branding/rules/flairs, relational subspace-member docs, a mod log,
+// and post-level moderation state on a server-owned root field. Up/down votes
+// are their own focused reaction kind (`updown`) beside the open-vocabulary
+// emoji reactions. All bounds live here so no write path can disagree.
+export const SUBSPACE_SLUG_PATTERN = /^[a-z0-9_]{3,30}$/;
+export const MIN_SUBSPACE_SLUG_CHARS = 3;
+export const MAX_SUBSPACE_SLUG_CHARS = 30;
+export const MAX_SUBSPACE_NAME_CHARS = 80;
+export const MAX_SUBSPACE_DESCRIPTION_CHARS = 1000;
+export const MAX_SUBSPACE_RULES = 15;
+export const MAX_SUBSPACE_RULE_TITLE_CHARS = 100;
+export const MAX_SUBSPACE_RULE_TEXT_CHARS = 500;
+export const MAX_SUBSPACE_FLAIRS = 50;
+export const MAX_SUBSPACE_FLAIR_ID_CHARS = 40;
+export const MAX_SUBSPACE_FLAIR_LABEL_CHARS = 64;
+export const MAX_SUBSPACE_ACCENT_CHARS = 32;
+export const MAX_SUBSPACE_ICON_CHARS = 16;
+export const MAX_SUBSPACES_PER_USER = 25;
+export const MAX_SUBSPACE_MEMBERSHIPS_PER_USER = 500;
+export const MAX_SUBSPACE_MOD_REASON_CHARS = 300;
+export const MAX_POST_TITLE_CHARS = 300;
+export const SUBSPACE_ACCESS_MODES = ['public', 'restricted', 'private'] as const;
+export type SubspaceAccessMode = (typeof SUBSPACE_ACCESS_MODES)[number];
+export const SUBSPACE_ROLES = ['owner', 'moderator', 'member'] as const;
+export type SubspaceRole = (typeof SUBSPACE_ROLES)[number];
+export const SUBSPACE_FEED_SORTS = ['hot', 'new', 'top', 'rising', 'controversial'] as const;
+export type SubspaceFeedSort = (typeof SUBSPACE_FEED_SORTS)[number];
+export const UPDOWN_DIRECTIONS = ['up', 'down'] as const;
+export type UpdownDirection = (typeof UPDOWN_DIRECTIONS)[number];
+// Dedicated-endpoint kinds of the family (no generic crystal sanitizers, so
+// /api/v1/things refuses them; excluded from own-things listings + generic
+// DELETE the way the messenger family is).
+export const SUBSPACE_THINGTIME = ['subspace', 'subspace-member', 'subspace-modlog'] as const;
+export const UPDOWN_THINGTIME = 'updown';
 // Custom emoji: the image is an inline data URI stored on its own thing doc
 // (the avatar pattern, FUNDAMENTALS §3 relational rule) — ~512KB binary ≈
 // 700K base64 chars. Names are the `:name:` vocabulary, Mongo-key-safe.
@@ -541,6 +576,21 @@ const rootThingSchema: ThingtimeSchema = {
 				'Protected server-owned moderation state. Generic Thing create/update input never writes it; only moderation analysis and admin review may stamp it.'
 		},
 		{
+			name: 'subspaceMod',
+			type: 'object',
+			required: false,
+			system: true,
+			description:
+				'Protected subspace moderation state on posts: { status: approved|removed, removedById, removedAt, reason, pinned, locked, nsfw, spoiler }. Written only by subspace moderators through POST /api/v1/subspaces/moderate; removed posts are redacted for everyone but the author and mods and hidden from feeds.'
+		},
+		{
+			name: 'subspacePrivate',
+			type: 'boolean',
+			required: false,
+			system: true,
+			description: 'Server-stamped when a post is published into a private subspace: visible to that subspace’s members (and the author) only, on every read surface.'
+		},
+		{
 			name: 'attachmentFinalizationLeaseId',
 			type: 'string',
 			required: false,
@@ -691,6 +741,27 @@ const postSchema: ThingtimeSchema = {
       required: false,
       description:
         'Free-form structured thing payload — required for thingtime posts, bounded like data crystals (searchable as crystal.thing.<field>). Thingtime posts can also carry images and a listing.'
+    },
+    {
+      name: 'title',
+      type: 'string',
+      required: false,
+      max: MAX_POST_TITLE_CHARS,
+      description: `Optional headline (Reddit-style post title), max ${MAX_POST_TITLE_CHARS} chars. Subspace posts usually carry one; ordinary feed posts may too.`
+    },
+    {
+      name: 'subspaceId',
+      type: 'id',
+      required: false,
+      description:
+        'shareId of the subspace this post is published into. Validated on every write: the author must be allowed to post there (not banned; approved in restricted subspaces; a member in private ones).'
+    },
+    {
+      name: 'flairId',
+      type: 'string',
+      required: false,
+      max: MAX_SUBSPACE_FLAIR_ID_CHARS,
+      description: 'Id of one of the subspace’s post flairs (validated against the subspace; mod-only flairs need a moderator).'
     }
   ],
   example: {
@@ -1472,6 +1543,149 @@ const voteSchema: ThingtimeSchema = {
     { name: 'voteKey', type: 'string', required: true, description: 'Canonical dedupe key <pollId>~<userId> — unique per (poll, user), server-written.' }
   ],
   example: { optionIndex: 1, voteKey: 'poll_123~664f1c2a9d3e5b0012345678' }
+};
+
+// Up/down votes — Reddit-style scoring as a SEPARATE, deliberately limited
+// reaction kind beside the open-vocabulary emoji reactions (which stay exactly
+// as they are, multi-token and all). One relational child thing per
+// (user, target) — FUNDAMENTALS §3 — minted only by POST /api/v1/things/updown
+// (no generic sanitizer: a client-written updownKey could squat another
+// user's slot). Same-direction again removes the vote; the other direction
+// flips it in place. Aggregated on read as `votes` on posts and comments.
+const updownSchema: ThingtimeSchema = {
+  id: UPDOWN_THINGTIME,
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Up/down vote',
+  summary: 'One user’s upvote or downvote on a post or comment — one doc per (user, target).',
+  detail:
+    'Created/flipped/removed only by POST /api/v1/things/updown { id, direction }. A standalone thing ' +
+    'pointing at the voted post or comment via targetId, carrying acl ["tt:inherit"] so it is visible ' +
+    'exactly when its target is. crystal.direction is "up" or "down"; crystal.updownKey ' +
+    '("<targetId>~<userId>", server-written) rides the root uniqueKeys namespace so one vote per ' +
+    'user per target is structural. Tallies are batch-aggregated onto posts/comments as ' +
+    '`votes { up, down, score, viewerVote }` — native emoji reactions are untouched by this kind.',
+  requiresTarget: true,
+  createdVia: 'POST /api/v1/things/updown',
+  fields: [
+    { name: 'direction', type: 'enum', required: true, values: [...UPDOWN_DIRECTIONS], description: 'up or down.' },
+    { name: 'updownKey', type: 'string', required: true, description: 'Canonical dedupe key <targetId>~<userId> — unique per (target, user), server-written.' }
+  ],
+  example: { direction: 'up', updownKey: '4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f~664f1c2a9d3e5b0012345678' }
+};
+
+// Subspaces — Reddit-style communities. Everything is a thing: the subspace
+// itself (branding, rules, flairs, access mode), one relational member doc per
+// (subspace, user) carrying role/approval/ban state, and an append-only mod
+// log. Posts join a subspace through crystal.subspaceId (validated on every
+// write by api/utils/subspaces/gate.ts) and carry moderation state on the
+// server-owned root `subspaceMod` field. Written ONLY through
+// /api/v1/subspaces* — no generic sanitizers.
+const subspaceSchema: ThingtimeSchema = {
+  id: 'subspace',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Subspace',
+  summary: 'A Reddit-style community: slug, branding, rules, post flairs, and an access mode.',
+  detail:
+    'Created through POST /api/v1/subspaces; the creator becomes its owner and first member. The ' +
+    'slug is unique (root uniqueKeys `subspaceSlug:<slug>`), lowercase [a-z0-9_] 3–30 chars, and is ' +
+    'the /s/<slug> URL. Membership is relational subspace-member things (never an embedded member ' +
+    'array); member counts are aggregated on read. access: public (anyone posts), restricted (only ' +
+    'approved posters/mods post, everyone reads), private (members only — posts are hidden from ' +
+    'non-members everywhere). Subspace things themselves are always listable (acl ["tt:all"]).',
+  createdVia: 'POST /api/v1/subspaces',
+  fields: [
+    { name: 'slug', type: 'string', required: true, max: MAX_SUBSPACE_SLUG_CHARS, description: 'Unique URL slug, lowercase [a-z0-9_], 3–30 chars.' },
+    { name: 'name', type: 'string', required: true, max: MAX_SUBSPACE_NAME_CHARS, description: 'Display name.' },
+    { name: 'description', type: 'string', required: false, max: MAX_SUBSPACE_DESCRIPTION_CHARS, description: 'About text shown in the sidebar.' },
+    { name: 'access', type: 'enum', required: true, values: [...SUBSPACE_ACCESS_MODES], description: 'public / restricted / private.' },
+    { name: 'nsfw', type: 'boolean', required: false, description: 'Marks the whole subspace 18+.' },
+    {
+      name: 'rules',
+      type: 'record',
+      required: false,
+      description: `Ordered community rules — a list of { title (≤${MAX_SUBSPACE_RULE_TITLE_CHARS}), text (≤${MAX_SUBSPACE_RULE_TEXT_CHARS}) }, max ${MAX_SUBSPACE_RULES}.`
+    },
+    {
+      name: 'flairs',
+      type: 'record',
+      required: false,
+      description: `Post flairs authors (or mods, when modOnly) can tag posts with — a list of { id (slug ≤${MAX_SUBSPACE_FLAIR_ID_CHARS}), label (≤${MAX_SUBSPACE_FLAIR_LABEL_CHARS}), emoji, color, modOnly }, max ${MAX_SUBSPACE_FLAIRS}.`
+    },
+    {
+      name: 'branding',
+      type: 'object',
+      required: false,
+      description: 'Visual identity of the subspace.',
+      children: [
+        { name: 'icon', type: 'string', required: false, max: MAX_SUBSPACE_ICON_CHARS, description: 'Emoji icon.' },
+        { name: 'iconUrl', type: 'string', required: false, description: 'http(s) icon image URL.' },
+        { name: 'bannerUrl', type: 'string', required: false, description: 'http(s) banner image URL.' },
+        { name: 'accent', type: 'string', required: false, max: MAX_SUBSPACE_ACCENT_CHARS, description: 'CSS accent color.' }
+      ]
+    }
+  ],
+  example: {
+    slug: 'rainbows',
+    name: 'Rainbows',
+    description: 'All things prismatic 🌈',
+    access: 'public',
+    nsfw: false,
+    rules: [{ title: 'Be kind', text: 'No gatekeeping the spectrum.' }],
+    flairs: [{ id: 'photo', label: 'Photo', emoji: '📸', color: '#7c5cff', modOnly: false }],
+    branding: { icon: '🌈', iconUrl: null, bannerUrl: null, accent: '#7c5cff' }
+  }
+};
+
+const subspaceMemberSchema: ThingtimeSchema = {
+  id: 'subspace-member',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Subspace member',
+  summary: "One user's membership of one subspace — role, posting approval, and ban state (relational child doc).",
+  detail:
+    'targetId = the subspace shareId, ownerId = the member. Uniqueness rides the root uniqueKeys ' +
+    'namespace (`subspaceMemberKey:<subspaceId>:<userId>`). Roles: owner > moderator > member. A ' +
+    'banned user keeps a member doc (banned: true) so the ban outlives leaving/rejoining; approved ' +
+    'marks a trusted poster in restricted subspaces. Written only by /api/v1/subspaces/join, /leave ' +
+    'and /members.',
+  createdVia: 'POST /api/v1/subspaces (creator) / POST /api/v1/subspaces/join',
+  fields: [
+    { name: 'memberKey', type: 'string', required: true, description: 'Unique `<subspaceId>:<userId>` pair key.' },
+    { name: 'role', type: 'enum', required: true, values: [...SUBSPACE_ROLES], description: 'owner / moderator / member.' },
+    { name: 'approved', type: 'boolean', required: false, description: 'Approved poster (restricted subspaces).' },
+    { name: 'banned', type: 'boolean', required: false, description: 'Banned from posting, commenting and voting here.' },
+    { name: 'banReason', type: 'string', required: false, max: MAX_SUBSPACE_MOD_REASON_CHARS, description: 'Shown to the banned user.' },
+    { name: 'banUntil', type: 'date', required: false, description: 'Temporary ban expiry (null = permanent).' },
+    { name: 'left', type: 'boolean', required: false, description: 'True once the user left (kept for bans); rejoining clears it.' }
+  ],
+  example: { memberKey: 'c0ffee…:5eed…', role: 'member', approved: false, banned: false }
+};
+
+const subspaceModlogSchema: ThingtimeSchema = {
+  id: 'subspace-modlog',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Subspace mod log entry',
+  summary: 'One moderator action in a subspace (append-only audit trail).',
+  detail:
+    'targetId = the subspace shareId, ownerId = the acting moderator. Written beside every ' +
+    'moderation mutation (remove/approve/pin/lock/flair/ban/unban/role/approve-poster/settings) so ' +
+    '/s/<slug>/mod can show who did what; listed via GET /api/v1/subspaces/modlog.',
+  createdVia: 'moderation mutations under /api/v1/subspaces/*',
+  fields: [
+    { name: 'action', type: 'string', required: true, max: 40, description: 'Action key, e.g. post.remove, member.ban.' },
+    { name: 'postId', type: 'id', required: false, description: 'Affected post/comment shareId.' },
+    { name: 'userId', type: 'id', required: false, description: 'Affected user id.' },
+    { name: 'reason', type: 'string', required: false, max: MAX_SUBSPACE_MOD_REASON_CHARS, description: 'Moderator note.' },
+    { name: 'detail', type: 'record', required: false, description: 'Small bounded extra (e.g. { flairId, role }).' }
+  ],
+  example: { action: 'post.remove', postId: '4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', reason: 'Rule 1' }
 };
 
 const subscriptionSchema: ThingtimeSchema = {
@@ -3171,7 +3385,7 @@ export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) =>
 // unreachable, unaccounted, and never pruned again — so create/run/delete
 // cycles would re-open exactly the unbounded accumulation the retention cap
 // closes. Cascading is also the only way an owner can ever remove them.
-export const CASCADE_CHILD_THINGTIME = [ATTACHMENT_THINGTIME, 'comment', 'reaction', 'save', 'action-run'] as const;
+export const CASCADE_CHILD_THINGTIME = [ATTACHMENT_THINGTIME, 'comment', 'reaction', 'save', 'action-run', UPDOWN_THINGTIME] as const;
 
 // Messenger kinds are owned by /api/v1/chats* end to end. Create/update are
 // already refused by the missing crystal sanitizers, and DELETE must be too:
@@ -3310,6 +3524,10 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   actionRunSchema,
   saveThingSchema,
   voteSchema,
+  updownSchema,
+  subspaceSchema,
+  subspaceMemberSchema,
+  subspaceModlogSchema,
   folderSchema,
   appSchema,
   appDataSchema,
@@ -3473,6 +3691,12 @@ const sanitizeMediaLayout = (value: unknown): { ok: true; mediaLayout: PostMedia
 	return { ok: true, mediaLayout: { mode, columns, ...(spans ? { spans } : {}) } };
 };
 
+// Post → subspace references are shareIds (uuid / seeded ids) and flair ids
+// are short slugs; both are bounded here so the multikey/lookup indexes never
+// see arbitrary strings.
+const SUBSPACE_REF_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+const SUBSPACE_FLAIR_ID_PATTERN = /^[A-Za-z0-9_-]{1,40}$/;
+
 const sanitizePostCrystal = (
 	input: Record<string, unknown>,
 	appliedIds: string[],
@@ -3575,6 +3799,32 @@ const sanitizePostCrystal = (
 	const layout = sanitizeMediaLayout(input.mediaLayout);
 	if (layout.ok === false) return layout;
 
+	// Subspace vocabulary (title / subspaceId / flairId). Shape-only here — the
+	// registry is pure; whether the author may post into that subspace with
+	// that flair is decided by api/utils/subspaces/gate.ts on every write.
+	// Empty/null values drop the key, so a PATCH with `title: ''` clears the
+	// headline and `subspaceId: null` pulls the post out of its subspace.
+	if (input.title !== undefined && input.title !== null && typeof input.title !== 'string') {
+		return fail(400, 'title must be a string');
+	}
+	const title = typeof input.title === 'string' ? input.title.replace(/\s+/g, ' ').trim() : '';
+	if (title.length > MAX_POST_TITLE_CHARS) return fail(400, `Post title is too long (max ${MAX_POST_TITLE_CHARS})`);
+	let subspaceId: string | null = null;
+	if (input.subspaceId !== undefined && input.subspaceId !== null && input.subspaceId !== '') {
+		if (typeof input.subspaceId !== 'string' || !SUBSPACE_REF_PATTERN.test(input.subspaceId.trim())) {
+			return fail(400, 'subspaceId must be a subspace id');
+		}
+		subspaceId = input.subspaceId.trim();
+	}
+	let flairId: string | null = null;
+	if (input.flairId !== undefined && input.flairId !== null && input.flairId !== '') {
+		if (typeof input.flairId !== 'string' || !SUBSPACE_FLAIR_ID_PATTERN.test(input.flairId.trim())) {
+			return fail(400, 'flairId must be a flair id');
+		}
+		flairId = input.flairId.trim();
+	}
+	if (flairId && !subspaceId) return fail(400, 'Flairs belong to subspace posts — set subspaceId too');
+
 	return {
 		ok: true,
 		crystal: {
@@ -3584,7 +3834,10 @@ const sanitizePostCrystal = (
 			images,
 			listing,
 			thing,
-			...(layout.mediaLayout ? { mediaLayout: layout.mediaLayout } : {})
+			...(layout.mediaLayout ? { mediaLayout: layout.mediaLayout } : {}),
+			...(title ? { title } : {}),
+			...(subspaceId ? { subspaceId } : {}),
+			...(flairId ? { flairId } : {})
 		}
 	};
 };

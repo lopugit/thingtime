@@ -1206,6 +1206,96 @@ email whose link points at the attacker.
       data crystal) makes the vote endpoint answer 409 — never a silent
       `ok: true` that drops the vote.
 
+## Subspaces (`remix/app/components/Subspaces/`, `remix/app/api/utils/subspaces/`, `/api/v1/subspaces*`)
+
+- [ ] `/s` lists subspaces newest-first with member counts; search narrows by
+      slug/name; **Mine ⭐** shows only joined ones; **Create ➕** (or
+      `/s?create=1`, the drawer's Subspaces ▸ Create) opens the modal. The
+      slug previews live from the name (`Rainbow Makers` → `rainbow_makers`),
+      reserved words (`all`, `mod`, `create`…) and <3-char slugs are refused,
+      a taken slug answers 409 with a Lopu toast, and success navigates to
+      `/s/<slug>` with the creator as 👑 owner.
+- [ ] `/s/<slug>` renders banner (image or accent gradient) + icon + name +
+      `👥 members` + access badge, the sort tabs (Hot/New/Top/Rising/
+      Controversial; Top/Controversial add a range select), the composer
+      LOCKED to the subspace (chip `s/<slug>`, a Title input above the body,
+      a Flair select when flairs exist), the post column, and the sidebar
+      (About, Rules, Flairs, Moderators, and **Mod tools 🎩** for mods). At
+      375px the sidebar stacks below the posts; nothing scrolls horizontally.
+- [ ] Join/Leave paints instantly (count ±1, button flips) and reverts with a
+      toast on failure; owners see no leave button (API 409s anyway); banned
+      viewers see a 🚫 notice and a disabled button.
+- [ ] A post made from the subspace composer shows the `🪐 s/<slug>` chip,
+      the title as an h2, and the flair chip — on `/s/<slug>`, `/feed`,
+      `/post/:id` and the author's profile alike. The feed composer's
+      **🪐 No subspace** select lists joined subspaces; picking one reveals
+      the title + flair controls and the post lands in that subspace.
+- [ ] Posting rules: unknown flair 400, mod-only flair 403 for members,
+      restricted subspace 403 for unapproved posters (✋ hint under the
+      composer), private subspace 403 for non-members; PATCHing
+      `crystal.flairId` re-runs the same gate (author may flair, but not with
+      a mod-only flair). Generic `POST /api/v1/things` with
+      `thingtime: ["subspace"|"subspace-member"|"subspace-modlog"|"updown"]`
+      answers 403.
+- [ ] Moderation (··· menu on a subspace post, mods only): Remove (prompt for
+      a reason) redacts the post for everyone but the author + mods (body,
+      media, title gone; "🧹 Removed by moderators" notice; reason visible to
+      author/mods only) and drops it from every feed; Approve restores it;
+      Pin leads Hot/New with a 📌 badge (max 5); Lock shows 🔒 and makes
+      commenting 423 for everyone but mods — replies to replies included;
+      18+ / Spoiler toggle badges; Flair submenu (lazy-loaded list). Every
+      action lands in the mod log with the actor.
+- [ ] `/s/<slug>/mod` (mods only; others see the 🎩 notice): Queue (newest,
+      removed included, "Removed only" switch); Members (username + action:
+      add/approve/unapprove/kick/make mod/demote, per-row buttons; only the
+      owner can promote/demote/moderate other mods; the owner can't be
+      banned); Banned (ban with reason + days, unban); Settings (name,
+      description, icon, accent, icon/banner URLs; access + 18+ owner-only,
+      disabled for mods); Rules (add/reorder/remove, ≤15); Flairs (emoji/
+      label/color/mods-only, ids minted on save, ≤50); Log (newest first).
+      A banned user cannot post, comment, vote, or (re)join; the ban outlives
+      leaving; a temporary ban expires on its own.
+- [ ] Access: switching to **private** walls `/s/<slug>` for non-members
+      (🔒 empty state, feed 403), hides its posts from the home feed, search,
+      trending, RSS and direct `/post/:id` reads for non-members, while
+      members and mods keep seeing them; a mod **adds** members to a private
+      subspace; switching back to public re-exposes them. **Restricted**
+      keeps reading open but only approved posters/mods post.
+- [ ] Settings → **Subspaces 🪐**: the vote-pill switches hide the ▲▼ pills
+      on posts and/or comments across every mounted card immediately; the
+      default sort applies when a `/s/<slug>` link carries no `?sort=`.
+- [ ] Deleting a post removes its `updown` votes (cascade); a subspace's
+      posts survive it losing a flair (chip simply disappears).
+
+## Up/down votes (`remix/app/api/utils/things/updown.ts`, `remix/app/components/Feed/UpdownControl.tsx`)
+
+- [ ] Every post and comment card shows the ▲ score ▼ pill beside the
+      react button (native emoji reactions are untouched — react, multi-react
+      and the picker keep working on the same card). Tap ▲: the arrow fills,
+      score +1 INSTANTLY (optimistic), then the server tally reconciles; tap
+      ▲ again → cleared; tap ▼ while ▲ is set → flips (score −2 net, up −1,
+      down +1). Rapid double-taps never double-count (in-flight guard).
+- [ ] `POST /api/v1/things/updown { id, direction }` returns
+      `votes { up, down, score, viewerVote }` matching the card; `direction:
+      null` clears; `"sideways"` 400s; anonymous 401; a subspace/data thing id
+      400s (only posts/comments are votable); a not-visible post 404s.
+- [ ] One vote per user per target survives races (root `uniqueKeys`
+      `updownKey:<targetId>~<userId>`): two tabs voting the same post converge
+      on one doc; the 409 "vote slot blocked" path never returns a silent ok.
+- [ ] Logged out: pills show the score, tapping toasts "Log in to vote 🔼".
+- [ ] Votes on a comment ride `comments[].votes` in every projection and the
+      comment pill is compact; a shared post's nested original shows the
+      live score read-only.
+- [ ] Banned subspace members get 403 voting on that subspace's posts AND
+      their comments (root-post walk); votes elsewhere keep working.
+- [ ] Vote endpoint failure (devtools: fail `/api/v1/things/updown` once)
+      reverts the pill to the pre-tap tally with a Lopu error toast.
+- [ ] Subspace sorts use the relational tallies: Top (with range) orders by
+      score, Controversial needs both sides and peaks when split, Rising
+      favours fresh score, Hot is time-weighted (a two-day-old high scorer
+      falls behind fresh content), New is chronological with pins first;
+      `scripts/verify-subspaces.mjs` walks all of this against a live stack.
+
 ## Thing context menu (`remix/app/components/Thingtime/ContextMenu/`)
 
 - [ ] Open the hover (popover) menu from a row inside a SMALL editor box: the

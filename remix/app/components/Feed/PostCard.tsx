@@ -14,6 +14,7 @@ import {
   MenuItem,
   MenuItemOption,
   MenuList,
+  MenuGroup,
   MenuOptionGroup,
   Popover,
   PopoverAnchor,
@@ -48,6 +49,8 @@ import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity'
 import { RAINBOW } from '~/theme/rainbow';
 import { PostComposer } from './PostComposer';
 import { ReactionControl } from './ReactionControl';
+import { UpdownControl } from './UpdownControl';
+import { useSubspacePrefs } from '~/components/Subspaces/useSubspacePrefs';
 import { splashEmoji } from './emojiSplash';
 import { isUnknownReactionFailure, reactionFailureMessage, shouldReconcileReactionFailure } from './reactionFailure';
 import { mergeReactionOverlay, mergeReactionOverlays, noteLocalReactions } from './reactionOverlay';
@@ -55,8 +58,8 @@ import { fetchThreadInto, getCachedThread, prefetchNextDepth, setCachedThread, w
 import { canonicalPostTags } from '~/components/Attachments/attachmentUiCore';
 import { profileMentionHref, splitMentionSegments, type MentionSegment } from '~/utils/mentions';
 import { extractInlineHashtags, searchTagHref, splitHashtagSegments, type HashtagSegment } from './hashtags';
-import { CIRCLE_META, MARKETPLACE_CATEGORY_META, REACTION_EMOJIS, timeAgo } from './feedTypes';
-import type { EngagementEvent, FeedAuthor, PostChange, PostComment, PostVisibility, PublicPost } from './feedTypes';
+import { CIRCLE_META, MARKETPLACE_CATEGORY_META, REACTION_EMOJIS, applyUpdownVote, timeAgo } from './feedTypes';
+import type { EngagementEvent, FeedAuthor, PostChange, PostComment, PostVisibility, PublicPost, UpdownDirection } from './feedTypes';
 import type { PollRenderPollContext } from '~/components/Kinds';
 
 // Apply one token's toggle to a post, idempotently (a no-op if the post already
@@ -1008,6 +1011,32 @@ const CommentRow = (props: {
   // bubble, mirroring the post's comments-then-react row. A single tap hearts
   // the comment (default ReactionControl mode — no tapOpens); hover or
   // touch-and-hold still opens the quick-react popup.
+  // up/down vote pill beside the react control (compact); same optimistic
+  // functional-update contract as the post-level pill
+  const [commentPrefs] = useSubspacePrefs();
+  const showVotesOnComments = commentPrefs.showVotes && commentPrefs.showVotesOnComments;
+  const commentUpdownInFlightRef = React.useRef(false);
+  const handleCommentUpdown = async (direction: UpdownDirection) => {
+    if (!user) {
+      lopu({ title: 'Log in to vote 🔼', status: 'info', duration: 6000 });
+      return;
+    }
+    if (pending || commentUpdownInFlightRef.current) return;
+    commentUpdownInFlightRef.current = true;
+    const before = comment.votes;
+    onChanged(comment.id, (current) => applyUpdownVote(current, direction));
+    try {
+      const resp = await api.v1.things.updown({ id: comment.id, direction });
+      onChanged(comment.id, (current) => ({ ...current, votes: resp.votes }));
+    } catch (err: any) {
+      onChanged(comment.id, (current) => ({ ...current, votes: before }));
+      lopu({ title: err?.error || 'Vote did not save 😞', status: 'error' });
+    } finally {
+      commentUpdownInFlightRef.current = false;
+    }
+  };
+  const commentUpdown = <UpdownControl size="sm" votes={comment.votes} onVote={handleCommentUpdown} enabled={!!user && !pending} />;
+
   const reactControl = (
     <Box ref={reactAnchorRef} position="relative" display="flex" flexShrink={0}>
       <ReactionControl
@@ -1102,6 +1131,7 @@ const CommentRow = (props: {
                 <MessageCircle size={13} strokeWidth={2.2} />
               </Flex>
               {reactControl}
+              {showVotesOnComments && commentUpdown}
             </Flex>
             {/* thread reveal lives BELOW the comment (FB/IG-style), left
             edge flush with the reply icon */}
@@ -1271,6 +1301,69 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   const reactAnchorRef = React.useRef<HTMLDivElement | null>(null);
 
   const isOwner = !!user && !!post.author && user.id === post.author.id;
+  // subspace moderation rights ride the projection (viewerCanModerate); the
+  // vote pill is a per-browser preference (Settings → Subspaces)
+  const canModerate = !!post.subspaceMod?.viewerCanModerate;
+  const [subspacePrefs] = useSubspacePrefs();
+  const showVotes = subspacePrefs.showVotes;
+
+  // up/down vote — the separate focused reaction kind. Optimistic through the
+  // same functional PostChange path reactions use (idempotent against the
+  // freshest post), reconciled from the server tally, reverted on failure.
+  const updownInFlightRef = React.useRef(false);
+  const handleUpdown = async (direction: UpdownDirection) => {
+    if (!user) {
+      lopu({ title: 'Log in to vote 🔼', status: 'info', duration: 6000 });
+      return;
+    }
+    if (updownInFlightRef.current) return;
+    updownInFlightRef.current = true;
+    const before = post.votes;
+    onChanged?.(post.id, (current) => applyUpdownVote(current, direction));
+    onEngagement?.({ thingId: post.id, signal: 'react' });
+    try {
+      const resp = await api.v1.things.updown({ id: post.id, direction });
+      onChanged?.(post.id, (current) => ({ ...current, votes: resp.votes }));
+    } catch (err: any) {
+      onChanged?.(post.id, (current) => ({ ...current, votes: before }));
+      lopu({ title: err?.error || 'Vote did not save 😞', status: 'error' });
+    } finally {
+      updownInFlightRef.current = false;
+    }
+  };
+
+  // subspace moderation (mods only): each action round-trips through
+  // /api/v1/subspaces/moderate and swaps in the re-projected post; the flair
+  // list loads lazily when the menu opens (the embed stays lean)
+  const [modFlairs, setModFlairs] = React.useState<{ id: string; label: string; emoji: string | null; modOnly: boolean }[] | null>(null);
+  const loadFlairs = () => {
+    if (modFlairs || !post.subspace) return;
+    api.v1.subspaces
+      .get({ id: post.subspace.id })
+      .then((resp: any) =>
+        setModFlairs(
+          ((resp?.subspace?.flairs || []) as any[]).map((flair) => ({ id: flair.id, label: flair.label, emoji: flair.emoji ?? null, modOnly: flair.modOnly === true }))
+        )
+      )
+      .catch(() => setModFlairs([]));
+  };
+  const handleModerate = async (action: string, extra: Record<string, unknown> = {}) => {
+    try {
+      const resp: any = await api.v1.subspaces.moderate({ id: post.id, action, ...extra } as any);
+      if (resp?.post) onChanged?.(post.id, resp.post);
+      lopu({ title: `Done — ${action} 🎩`, status: 'success', duration: 4000 });
+    } catch (err: any) {
+      lopu({ title: err?.error || 'Moderation action failed 😞', status: 'error' });
+    }
+  };
+  const handleOwnFlair = async (flairId: string | null) => {
+    try {
+      const resp: any = await api.v1.things.update({ id: post.id, crystal: { flairId } } as any);
+      if (resp?.post) onChanged?.(post.id, resp.post);
+    } catch (err: any) {
+      lopu({ title: err?.error || 'Could not change the flair 😞', status: 'error' });
+    }
+  };
 	const circle = mediaThing
 		? { emoji: '🔗', label: 'Inherited audience', hint: 'This media follows the privacy of the Thing it belongs to' }
 		: CIRCLE_META[post.visibility] || CIRCLE_META.public;
@@ -1755,8 +1848,8 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
               </Tooltip>
             </Flex>
           </Box>
-          {isOwner && (
-            <Menu placement="bottom-end" autoSelect={false}>
+          {(isOwner || canModerate) && (
+            <Menu placement="bottom-end" autoSelect={false} onOpen={loadFlairs}>
               <MenuButton
                 as={IconButton}
 				aria-label={mediaThing ? 'Media options' : 'Post options'}
@@ -1767,7 +1860,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                 borderRadius="8px"
               />
               <MenuList minWidth="190px" borderRadius={RADIUS_MD} zIndex={10}>
-                {!mediaThing && (
+                {isOwner && !mediaThing && (
                   <MenuItem fontSize="sm" onClick={handleEditStart}>
                     Edit ✏️
                   </MenuItem>
@@ -1775,7 +1868,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                 <MenuItem fontSize="sm" onClick={handleCopyLink}>
                   Copy link 🔗
                 </MenuItem>
-                {!mediaThing && (
+                {isOwner && !mediaThing && (
                   <>
                     <MenuDivider />
                     <MenuOptionGroup
@@ -1796,10 +1889,143 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                     </MenuItem>
                   </>
                 )}
+                {!mediaThing && post.subspace && (
+                  <>
+                    <MenuDivider />
+                    {canModerate && (
+                      <MenuGroup title="Moderation 🎩" fontSize="xs">
+                        {post.subspaceMod?.removed ? (
+                          <MenuItem fontSize="sm" onClick={() => handleModerate('approve')}>
+                            Approve ✅
+                          </MenuItem>
+                        ) : (
+                          <MenuItem
+                            fontSize="sm"
+                            onClick={() => handleModerate('remove', { reason: window.prompt('Reason (shown to the author and the mod log)') || undefined })}
+                          >
+                            Remove 🧹
+                          </MenuItem>
+                        )}
+                        <MenuItem fontSize="sm" onClick={() => handleModerate(post.subspaceMod?.pinned ? 'unpin' : 'pin')}>
+                          {post.subspaceMod?.pinned ? 'Unpin' : 'Pin'} 📌
+                        </MenuItem>
+                        <MenuItem fontSize="sm" onClick={() => handleModerate(post.subspaceMod?.locked ? 'unlock' : 'lock')}>
+                          {post.subspaceMod?.locked ? 'Unlock comments' : 'Lock comments'} 🔒
+                        </MenuItem>
+                        <MenuItem fontSize="sm" onClick={() => handleModerate('nsfw', { value: !post.subspaceMod?.nsfw })}>
+                          {post.subspaceMod?.nsfw ? 'Unmark 18+' : 'Mark 18+'} 🔞
+                        </MenuItem>
+                        <MenuItem fontSize="sm" onClick={() => handleModerate('spoiler', { value: !post.subspaceMod?.spoiler })}>
+                          {post.subspaceMod?.spoiler ? 'Unmark spoiler' : 'Mark spoiler'} ⚠️
+                        </MenuItem>
+                      </MenuGroup>
+                    )}
+                    <MenuOptionGroup
+                      title="Flair"
+                      type="radio"
+                      value={post.flair?.id || ''}
+                      onChange={(value) => {
+                        const flairId = (value as string) || null;
+                        if (canModerate) handleModerate('flair', { flairId });
+                        else handleOwnFlair(flairId);
+                      }}
+                    >
+                      <MenuItemOption value="" fontSize="sm">
+                        No flair
+                      </MenuItemOption>
+                      {(modFlairs || [])
+                        .filter((flair) => canModerate || !flair.modOnly)
+                        .map((flair) => (
+                          <MenuItemOption key={flair.id} value={flair.id} fontSize="sm">
+                            {flair.emoji ? `${flair.emoji} ` : ''}
+                            {flair.label}
+                          </MenuItemOption>
+                        ))}
+                      {modFlairs === null && (
+                        <MenuItemOption value="__loading" fontSize="sm" isDisabled>
+                          Loading flairs…
+                        </MenuItemOption>
+                      )}
+                    </MenuOptionGroup>
+                  </>
+                )}
               </MenuList>
             </Menu>
           )}
         </Flex>
+
+        {/* subspace context — where the post lives, its flair, mod badges */}
+        {(post.subspace || post.subspaceMod?.removed) && (
+          <Flex alignItems="center" columnGap={1.5} rowGap={1} flexWrap="wrap" fontSize="xs" data-testid="post-subspace-line">
+            {post.subspace && (
+              <Flex
+                as={Link}
+                to={`/s/${post.subspace.slug}`}
+                alignItems="center"
+                columnGap={1}
+                fontWeight={700}
+                color={INK}
+                border={BORDER}
+                borderRadius="999px"
+                paddingX={2}
+                paddingY="1px"
+                _hover={{ borderColor: post.subspace.accent || ACCENT }}
+                onClick={(event: React.MouseEvent) => event.stopPropagation()}
+                title={post.subspace.name}
+              >
+                <Text as="span">{post.subspace.icon || '🪐'}</Text>
+                <Text as="span" fontFamily="mono" fontWeight={600}>
+                  s/{post.subspace.slug}
+                </Text>
+              </Flex>
+            )}
+            {post.flair && (
+              <Text
+                as="span"
+                fontWeight={600}
+                paddingX={2}
+                paddingY="1px"
+                borderRadius="999px"
+                border={`1px solid ${post.flair.color || 'var(--tt-border, #ececef)'}`}
+                color={post.flair.color || TEXT}
+                data-testid="post-flair"
+              >
+                {post.flair.emoji ? `${post.flair.emoji} ` : ''}
+                {post.flair.label}
+              </Text>
+            )}
+            {post.subspaceMod?.pinned && (
+              <Text as="span" color={MUTED} title="Pinned by moderators">
+                📌 Pinned
+              </Text>
+            )}
+            {post.subspaceMod?.locked && (
+              <Text as="span" color={MUTED} title="Comments are locked">
+                🔒 Locked
+              </Text>
+            )}
+            {post.subspaceMod?.nsfw && (
+              <Text as="span" color="var(--tt-danger, #e5484d)" fontWeight={700}>
+                18+
+              </Text>
+            )}
+            {post.subspaceMod?.spoiler && (
+              <Text as="span" color={MUTED}>
+                ⚠️ Spoiler
+              </Text>
+            )}
+          </Flex>
+        )}
+        {post.title && !editing && (
+          <Text as="h2" fontFamily="heading" fontSize="lg" fontWeight={700} color={INK} lineHeight="1.25" whiteSpace="normal" data-testid="post-title">
+            {post.title}
+          </Text>
+        )}
+        {post.subspaceMod?.removed && (
+          <Flex alignItems="center" columnGap={2} fontSize="sm" color={MUTED} border="1px dashed var(--tt-border, #ececef)" borderRadius={RADIUS_MD} padding={3} data-testid="post-removed">
+            🧹 Removed by moderators{post.subspaceMod.reason ? ` — ${post.subspaceMod.reason}` : ''}
+          </Flex>
+        )}
 
         {/* body — shares render caption + nested original; the owner's edit
         mode mounts the FULL composer (type tabs, photos, listing, thing,
@@ -1915,6 +2141,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
             aria-expanded={commentsOpen}
             onClick={toggleComments}
           />
+          {showVotes && <UpdownControl votes={post.votes} onVote={handleUpdown} enabled={!!user} accent={post.subspace?.accent} />}
 
           {user ? (
             <Box ref={reactAnchorRef} position="relative" display="flex">

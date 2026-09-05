@@ -13,6 +13,7 @@ import {
   type ThingDoc,
   type Viewer
 } from './things';
+import { subspaceFeedClauses } from '../subspaces/gate';
 
 // Trending — the engine behind GET /api/v1/things/trending and /explore.
 //
@@ -94,9 +95,13 @@ export const getTrendingPosts = async (
 
   // public circle only, regardless of viewer — an anonymous null viewer makes
   // visibilityQueryFor emit exactly the coarse public superset clause
-  const match = withMatch(postMatch(), visibilityQueryFor(null, ['public']), {
-    createdAt: { $gte: new Date(Date.now() - TRENDING_WINDOW_MS) }
-  });
+  const match = withMatch(
+    postMatch(),
+    visibilityQueryFor(null, ['public']),
+    { createdAt: { $gte: new Date(Date.now() - TRENDING_WINDOW_MS) } },
+    // subspace fences: removed + private-subspace posts never trend publicly
+    ...subspaceFeedClauses(null)
+  );
 
   const candidates = (await things
     .find(match as any)

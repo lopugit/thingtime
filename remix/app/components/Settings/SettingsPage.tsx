@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router';
 import { AlgorithmManager } from './AlgorithmManager';
 import { LinkedDeployments } from './LinkedDeployments';
 import { NotificationSettingsSection } from './NotificationSettings';
+import { SubspacePreferencesSection } from '~/components/Subspaces/SubspacePreferencesSection';
 import { PasskeysManager } from './PasskeysManager';
 import { TokenMinter } from './TokenMinter';
 import { RainbowButton, SettingRow, SettingsSection } from './SettingsSection';
@@ -524,6 +525,9 @@ export const SettingsPage = () => {
 
         {/* notifications (auth only) — per-type switches for the bell */}
         {user && <NotificationSettingsSection user={user} />}
+
+        {/* subspaces — vote pills + default sort (per-browser preferences) */}
+        <SubspacePreferencesSection />
 
         {/* admin (admins only) */}
         {user?.isAdmin && (

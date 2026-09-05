@@ -7570,7 +7570,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things',
-    featureVersion: '1.1.0',
+    featureVersion: '1.2.0',
+    contractVersion: '1.1.0',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
@@ -8079,7 +8080,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-comment',
-    featureVersion: '1.1.0',
+    featureVersion: '1.2.0',
+    contractVersion: '1.1.0',
     group: 'things',
     title: 'Comment on post',
     endpoint: '/api/v1/things/comment',
@@ -8268,7 +8270,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-feed',
-    featureVersion: '1.1.0',
+    featureVersion: '1.2.0',
+    contractVersion: '1.1.0',
     group: 'things',
     title: 'Feed page',
     endpoint: '/api/v1/things/feed',
@@ -8504,6 +8507,247 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     notes: ['Responses carry Cache-Control: private, no-store — the library is viewer-specific and never edge-cached.']
   }),
+  // ── Subspaces ─────────────────────────────────────────────────────────────
+  // Reddit-style communities (api/utils/subspaces): user-created subspaces
+  // with branding, rules, post flairs and an access mode; joining/leaving;
+  // moderation (remove/approve/pin/lock/flair, bans, roles, mod log); a
+  // per-subspace feed with hot/new/top/rising/controversial sorts. Up/down
+  // voting is its own focused reaction kind (see things-updown) and never
+  // touches the native emoji reactions.
+  endpoint({
+    id: 'subspaces',
+    group: 'subspaces',
+    title: 'Subspaces',
+    endpoint: '/api/v1/subspaces',
+    summary: 'Browses the subspace directory or founds a new subspace.',
+    detail:
+      'GET lists subspaces newest-first (public; each row carries memberCount and the caller’s own membership ' +
+      'state under `viewer`) — `?q=` searches slug/name, `?mine=1` narrows to the caller’s memberships. POST ' +
+      'creates a subspace from a unique slug (3–30 chars of [a-z0-9_], the /s/<slug> URL) plus name, ' +
+      'description, access (public | restricted | private), nsfw, rules, flairs and branding; the creator ' +
+      'becomes owner and first member. Subspaces are things (thingtime ["subspace"]) with relational ' +
+      'subspace-member docs — the generic /api/v1/things CRUD refuses the whole family.',
+    auth: { mode: 'optional', description: 'GET works logged out; POST requires an auth cookie or Bearer token.' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET to browse; pass q to search and cursor/limit to page (nextCursor is null on the last page).',
+      'POST slug + name (+ description, access, nsfw, rules, flairs, branding) to found one.',
+      'A taken slug answers 409; a reserved or malformed slug answers 400.',
+      'Post into it with POST /api/v1/things { thingtime: ["post"], crystal: { subspaceId, title, flairId, … } }.'
+    ],
+    requestExamples: [
+      { name: 'Browse', description: 'Newest subspaces.', method: 'GET', query: { q: 'rain', limit: 20 } },
+      { name: 'My subspaces', description: 'Only the ones the caller joined.', method: 'GET', query: { mine: 1 } },
+      {
+        name: 'Found a subspace',
+        description: 'Create s/rainbows with a rule, a flair and branding.',
+        method: 'POST',
+        body: {
+          slug: 'rainbows',
+          name: 'Rainbows',
+          description: 'All things prismatic 🌈',
+          access: 'public',
+          rules: [{ title: 'Be kind', text: 'No gatekeeping the spectrum.' }],
+          flairs: [{ label: 'Photo', emoji: '📸', color: '#7c5cff' }],
+          branding: { icon: '🌈', accent: '#7c5cff' }
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 201,
+        description: 'Founded.',
+        body: {
+          ok: true,
+          subspace: {
+            id: 'c0ffee12-dddd-4ddd-8ddd-000000000004',
+            slug: 'rainbows',
+            name: 'Rainbows',
+            access: 'public',
+            memberCount: 1,
+            viewer: { role: 'owner', member: true, canModerate: true, canPost: true }
+          }
+        }
+      },
+      { status: 409, description: 'Slug taken.', body: { ok: false, error: 's/rainbows is taken — pick another slug' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-get',
+    group: 'subspaces',
+    title: 'Subspace detail',
+    endpoint: '/api/v1/subspaces/get',
+    summary: 'Reads one subspace by slug or id with counts, the moderator roster, and the caller’s permissions.',
+    detail:
+      'Returns the subspace (branding, rules, flairs, access), memberCount + postCount (live posts only), the ' +
+      'public moderator roster, and `viewer` — the caller’s role, membership, approval, ban state, canModerate ' +
+      'and canPost — so the /s/<slug> page can render its header, sidebar and post button from one call.',
+    auth: { mode: 'optional', description: 'Works logged out; the viewer block is empty for anonymous callers.' },
+    methods: ['GET'],
+    steps: ['GET with ?slug=<slug> (or ?id=<shareId>).', 'Unknown subspaces answer 404.'],
+    requestExamples: [{ name: 'By slug', description: 'Read s/rainbows.', method: 'GET', query: { slug: 'rainbows' } }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'The subspace.',
+        body: {
+          ok: true,
+          subspace: { id: 'c0ffee12-…', slug: 'rainbows', name: 'Rainbows', memberCount: 128, postCount: 42, viewer: { role: null, member: false, canModerate: false, canPost: true } },
+          moderators: [{ userId: '664f…', profile: { username: 'lopu' }, role: 'owner' }]
+        }
+      },
+      { status: 404, description: 'No such subspace.', body: { ok: false, error: 'Subspace not found' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-update',
+    group: 'subspaces',
+    title: 'Subspace settings',
+    endpoint: '/api/v1/subspaces/update',
+    summary: 'Moderators edit branding, rules and flairs; the owner changes access and the 18+ flag.',
+    detail:
+      'POST { id|slug, name?, description?, rules?, flairs?, branding? } as a moderator, plus access? and nsfw? ' +
+      'as the owner. Flipping access to/from private re-stamps the subspace’s posts so feeds fence them ' +
+      'correctly. Every change writes a settings.update mod-log entry.',
+    auth: { mode: 'session-or-bearer', description: 'Requires a moderator (owner for access/nsfw).' },
+    methods: ['POST'],
+    steps: ['POST the fields to change.', 'Non-moderators receive 403; owner-only fields 403 for moderators.'],
+    requestExamples: [
+      { name: 'Add a flair', description: 'Replace the flair list.', method: 'POST', body: { slug: 'rainbows', flairs: [{ id: 'photo', label: 'Photo' }, { label: 'Question' }] } },
+      { name: 'Go private', description: 'Owner locks the subspace to members.', method: 'POST', body: { slug: 'rainbows', access: 'private' } }
+    ],
+    responseExamples: [{ status: 200, description: 'Updated.', body: { ok: true, subspace: { slug: 'rainbows', access: 'private' } } }]
+  }),
+  endpoint({
+    id: 'subspaces-join',
+    group: 'subspaces',
+    title: 'Join subspace',
+    endpoint: '/api/v1/subspaces/join',
+    summary: 'Joins a public or restricted subspace (private ones need a moderator to add you).',
+    detail:
+      'POST { id|slug }. Creates the caller’s relational subspace-member doc (or restores it after leaving). ' +
+      'Banned users receive 403 with the ban reason; private subspaces answer 403 unless the caller was added ' +
+      'by a moderator. Joining twice is a friendly no-op (joined: false).',
+    auth: { mode: 'session-or-bearer', description: 'Requires an auth cookie or Bearer token.' },
+    methods: ['POST'],
+    steps: ['POST the subspace slug or id.', 'Read the returned subspace.viewer for your new state.'],
+    requestExamples: [{ name: 'Join', description: 'Join s/rainbows.', method: 'POST', body: { slug: 'rainbows' } }],
+    responseExamples: [
+      { status: 200, description: 'Joined.', body: { ok: true, joined: true, subspace: { slug: 'rainbows', memberCount: 129, viewer: { role: 'member', member: true } } } },
+      { status: 403, description: 'Banned or private.', body: { ok: false, error: 's/rainbows is private — a moderator has to add you 🔒' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-leave',
+    group: 'subspaces',
+    title: 'Leave subspace',
+    endpoint: '/api/v1/subspaces/leave',
+    summary: 'Leaves a subspace (owners can’t leave their own).',
+    detail: 'POST { id|slug }. Removes the caller’s member doc; a banned member’s doc is kept (left: true) so the ban outlives the membership. Owners answer 409.',
+    auth: { mode: 'session-or-bearer', description: 'Requires an auth cookie or Bearer token.' },
+    methods: ['POST'],
+    steps: ['POST the subspace slug or id.'],
+    requestExamples: [{ name: 'Leave', description: 'Leave s/rainbows.', method: 'POST', body: { slug: 'rainbows' } }],
+    responseExamples: [
+      { status: 200, description: 'Left.', body: { ok: true, subspace: { slug: 'rainbows', viewer: { role: null, member: false } } } },
+      { status: 409, description: 'Owner.', body: { ok: false, error: 'Owners can’t leave their own subspace 👑' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-members',
+    group: 'subspaces',
+    title: 'Subspace members',
+    endpoint: '/api/v1/subspaces/members',
+    summary: 'Lists members (mod roster public, full list + ban list mod-only) and applies moderator member actions.',
+    detail:
+      'GET ?slug=&role=owner|moderator|member&banned=1&cursor=&limit= — the moderator roster is public; the full ' +
+      'member list and the ban list require a moderator. POST { id|slug, userId|username, action, role?, ' +
+      'reason?, banDays? } with action add (private subspaces), remove (kick), approve/unapprove (restricted ' +
+      'posting rights), ban/unban (banDays for a temporary ban; bans on non-members are pre-emptive), or role ' +
+      '(owner only: moderator | member). Moderators can’t moderate other moderators or the owner; every action ' +
+      'writes a member.<action> mod-log entry.',
+    auth: { mode: 'optional', description: 'GET of the mod roster works logged out; everything else needs a moderator session.' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET role=moderator for the public mod roster.',
+      'As a moderator, GET the full list, or banned=1 for the ban list.',
+      'POST an action against a username or userId.'
+    ],
+    requestExamples: [
+      { name: 'Mod roster', description: 'Who moderates s/rainbows.', method: 'GET', query: { slug: 'rainbows', role: 'moderator' } },
+      { name: 'Ban for a week', description: 'Temporary ban with a reason.', method: 'POST', body: { slug: 'rainbows', username: 'spammer', action: 'ban', reason: 'Rule 2', banDays: 7 } },
+      { name: 'Promote', description: 'Owner makes someone a moderator.', method: 'POST', body: { slug: 'rainbows', username: 'helper', action: 'role', role: 'moderator' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Members page.', body: { ok: true, members: [{ userId: '664f…', profile: { username: 'lopu' }, role: 'owner', approved: true, banned: false, joinedAt: '2026-09-05T00:00:00.000Z' }], nextCursor: null } },
+      { status: 403, description: 'Not a moderator.', body: { ok: false, error: 'Moderators only — you need a mod hat for that 🎩' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-moderate',
+    group: 'subspaces',
+    title: 'Moderate post',
+    endpoint: '/api/v1/subspaces/moderate',
+    summary: 'Moderator actions on a post in a subspace: remove, approve, pin, lock, nsfw, spoiler, flair.',
+    detail:
+      'POST { id (post shareId), action, reason?, value?, flairId? }. Writes the server-owned root subspaceMod ' +
+      'state (never client-writable) and a post.<action> mod-log entry, then returns the re-projected post. ' +
+      'Removed posts are redacted for everyone but their author and the subspace’s moderators and vanish from ' +
+      'every feed; locked posts refuse new comments (423) from everyone but moderators; at most 5 posts are ' +
+      'pinned per subspace. The post keeps its author’s emoji reactions and up/down votes throughout.',
+    auth: { mode: 'session-or-bearer', description: 'Requires a moderator of the post’s subspace.' },
+    methods: ['POST'],
+    steps: ['POST the post id and an action.', 'Use the returned post to reconcile the card in place.'],
+    requestExamples: [
+      { name: 'Remove', description: 'Remove a post citing rule 1.', method: 'POST', body: { id: '4f6b2c1e-…', action: 'remove', reason: 'Rule 1' } },
+      { name: 'Pin', description: 'Pin to the top of hot/new.', method: 'POST', body: { id: '4f6b2c1e-…', action: 'pin' } },
+      { name: 'Flair', description: 'Set (or clear with null) the post flair.', method: 'POST', body: { id: '4f6b2c1e-…', action: 'flair', flairId: 'photo' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Applied.', body: { ok: true, post: { id: '4f6b2c1e-…', subspaceMod: { status: 'removed', removed: true, reason: 'Rule 1', pinned: false, locked: false } } } },
+      { status: 404, description: 'Not a subspace post.', body: { ok: false, error: 'Post not found in a subspace' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-modlog',
+    group: 'subspaces',
+    title: 'Mod log',
+    endpoint: '/api/v1/subspaces/modlog',
+    summary: 'The subspace’s moderation log, newest first (moderators only).',
+    detail: 'GET ?slug=&cursor=&limit=. Each entry names the acting moderator, the affected post and/or user, the action key (post.remove, member.ban, settings.update, …), the reason and a small detail record.',
+    auth: { mode: 'session-or-bearer', description: 'Requires a moderator session.' },
+    methods: ['GET'],
+    steps: ['GET with the slug; page with cursor.'],
+    requestExamples: [{ name: 'Latest actions', description: 'Newest 20 entries.', method: 'GET', query: { slug: 'rainbows' } }],
+    responseExamples: [
+      { status: 200, description: 'Entries.', body: { ok: true, entries: [{ id: '…', action: 'post.remove', actor: { username: 'lopu' }, postId: '4f6b2c1e-…', reason: 'Rule 1', createdAt: '2026-09-05T00:00:00.000Z' }], nextCursor: null } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-feed',
+    group: 'subspaces',
+    title: 'Subspace feed',
+    endpoint: '/api/v1/subspaces/feed',
+    summary: 'The posts of one subspace with hot/new/top/rising/controversial sorts.',
+    detail:
+      'GET ?slug=&sort=hot|new|top|rising|controversial&range=hour|day|week|month|year|all&cursor=&limit=. ' +
+      '`new` pages by (createdAt, id) cursor with pinned posts leading the first page; the ranked sorts score a ' +
+      'bounded newest-first window with the relational up/down tallies (Reddit’s hot/controversy formulas, ' +
+      'HN-style rising) and page by offset — deterministic for a fixed dataset + timestamp. Removed posts are ' +
+      'excluded (moderators may pass includeRemoved=1 to review them); private subspaces answer 403 to ' +
+      'non-members. Posts project exactly like the home feed plus title, flair, subspace, subspaceMod and votes.',
+    auth: { mode: 'optional', description: 'Works logged out for public/restricted subspaces; votes/viewerVote need a session.' },
+    methods: ['GET'],
+    steps: ['GET with the slug and a sort.', 'Feed nextCursor back until it is null.', 'Handle 403 for private subspaces you have not joined.'],
+    requestExamples: [
+      { name: 'Hot', description: 'Front page of s/rainbows.', method: 'GET', query: { slug: 'rainbows', sort: 'hot' } },
+      { name: 'Top this week', description: 'Highest-scoring posts of the week.', method: 'GET', query: { slug: 'rainbows', sort: 'top', range: 'week' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'A page.', body: { ok: true, sort: 'hot', subspace: { slug: 'rainbows' }, posts: [{ id: '4f6b2c1e-…', title: 'Double rainbow', votes: { up: 12, down: 1, score: 11, viewerVote: 'up' }, subspaceMod: { pinned: true } }], nextCursor: '20' } },
+      { status: 403, description: 'Private.', body: { ok: false, error: 's/secret is private — members only 🔒' } }
+    ]
+  }),
   endpoint({
     id: 'things-vote',
     group: 'things',
@@ -8547,6 +8791,36 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           pollVotes: { counts: [3, 5, 1], totalVotes: 9, viewerVote: 1 }
         }
       }
+    ]
+  }),
+  endpoint({
+    id: 'things-updown',
+    group: 'things',
+    title: 'Upvote / downvote',
+    endpoint: '/api/v1/things/updown',
+    summary: 'Casts, flips, or clears the current user’s up/down vote on a visible post or comment.',
+    detail:
+      'Reddit-style scoring as a SEPARATE focused reaction kind: exactly one of "up" | "down" per (user, ' +
+      'target). The same direction again clears the vote, the other direction flips it in place, and ' +
+      'direction null clears. Votes are standalone things (thingtime ["updown"], crystal.direction, targetId = ' +
+      'the post or comment, acl ["tt:inherit"]) deduped through a server-written key in the root uniqueKeys ' +
+      'namespace, so /api/v1/things refuses the kind. Tallies ride every post and comment projection as ' +
+      '`votes { up, down, score, viewerVote }`. The native multi-emoji reactions (POST /api/v1/things/react) are ' +
+      'a different kind and are untouched by this endpoint. Banned members of a subspace can’t vote on its posts.',
+    auth: { mode: 'session-or-bearer', description: 'Requires an auth cookie or Authorization: Bearer token (PAT scope things.updown).' },
+    methods: ['POST'],
+    steps: [
+      'POST the post/comment id and direction "up" or "down" (null to clear).',
+      'Use the returned votes to reconcile the card optimistically.',
+      'Handle 401 unauthenticated, 404 for missing or not-visible targets, 403 when banned in the subspace.'
+    ],
+    requestExamples: [
+      { name: 'Upvote', description: 'Vote a post up.', method: 'POST', body: { id: '4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', direction: 'up' } },
+      { name: 'Clear', description: 'Remove your vote.', method: 'POST', body: { id: '4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', direction: null } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Fresh tally.', body: { ok: true, direction: 'up', votes: { up: 13, down: 1, score: 12, viewerVote: 'up' } } },
+      { status: 400, description: 'Bad direction.', body: { ok: false, error: 'direction must be "up", "down", or null to clear your vote' } }
     ]
   }),
   endpoint({
@@ -8681,7 +8955,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-user',
-    featureVersion: '1.1.0',
+    featureVersion: '1.2.0',
+    contractVersion: '1.1.0',
     group: 'things',
     title: 'User posts',
     endpoint: '/api/v1/things/user',

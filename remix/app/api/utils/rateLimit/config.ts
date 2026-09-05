@@ -32,6 +32,10 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'things.save': { limit: 60, windowMs: 60_000, enabled: true },
   // poll vote toggles (POST /api/v1/things/vote) — same shape as reactions
   'things.vote': { limit: 60, windowMs: 60_000, enabled: true },
+  // up/down vote toggles (POST /api/v1/things/updown) — same shape as reactions
+  'things.updown': { limit: 60, windowMs: 60_000, enabled: true },
+  // subspace mutations (create/update/join/leave/members/moderate) — write-shaped
+  'subspaces.write': { limit: 60, windowMs: 60_000, enabled: true },
   // schema browsing (/api/v1/schemas/browse) — read-only, bounded like search
   'schemas.browse': { limit: 120, windowMs: 60_000, enabled: true },
   // embed SDK reads (GET /api/v1/embed/things) — the only anonymous

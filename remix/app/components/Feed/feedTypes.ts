@@ -63,6 +63,9 @@ export type PostComment = {
   tags: string[];
   reactionCounts: Record<string, number>;
   viewerReactions: string[];
+  // up/down votes — the separate focused reaction kind (POST /api/v1/things/updown).
+  // Optional while older deployments roll out; treat absence as no votes.
+  votes?: PublicUpdownVotes;
   // direct replies — the comment's own /post/:id page shows the thread
   commentCount: number;
   // nested replies (threads ship two levels deep, ≤ 5 per level, oldest →
@@ -96,6 +99,16 @@ export type PublicPost = {
   reactionCounts: Record<string, number>;
   // every reaction token the viewer has toggled on this post (multi-react)
   viewerReactions: string[];
+  // up/down votes — the separate focused reaction kind beside the emoji
+  // reactions (POST /api/v1/things/updown). Optional during rollout.
+  votes?: PublicUpdownVotes;
+  // Subspace vocabulary (api/utils/subspaces): optional headline (any post may
+  // carry one), the subspace embed + flair, and the moderation state — null
+  // outside subspaces. Optional during rollout.
+  title?: string | null;
+  subspace?: PublicPostSubspace | null;
+  flair?: PublicPostFlair | null;
+  subspaceMod?: PublicSubspaceMod | null;
   commentCount: number;
   // Viewer-relative count layers. Optional while older deployments roll out;
   // commentCount remains the backward-compatible total.
@@ -124,6 +137,60 @@ export type PublicPost = {
 // viewer's own option (null = hasn't voted). Mirrors PublicPollVotes in
 // api/utils/things/pollCore.ts.
 export type PublicPollVotes = { counts: number[]; totalVotes: number; viewerVote: number | null };
+
+// Up/down vote tally carried on posts and comments (mirrors PublicUpdownVotes
+// in api/utils/things/updownCore.ts): raw counts, net score, the viewer's
+// own vote (null = hasn't voted).
+export type UpdownDirection = 'up' | 'down';
+export type PublicUpdownVotes = { up: number; down: number; score: number; viewerVote: UpdownDirection | null };
+export const EMPTY_VOTES: PublicUpdownVotes = { up: 0, down: 0, score: 0, viewerVote: null };
+
+// Lean subspace embed on subspace posts (mirrors PublicPostSubspace in
+// api/utils/things/things.ts) — identity + branding + the viewer's own role.
+export type SubspaceAccess = 'public' | 'restricted' | 'private';
+export type SubspaceRole = 'owner' | 'moderator' | 'member';
+export type PublicPostSubspace = {
+  id: string;
+  slug: string;
+  name: string;
+  icon: string | null;
+  iconUrl: string | null;
+  accent: string | null;
+  access: SubspaceAccess;
+  nsfw: boolean;
+  viewerRole: SubspaceRole | null;
+};
+export type PublicPostFlair = { id: string; label: string; emoji: string | null; color: string | null };
+export type PublicSubspaceMod = {
+  status: 'approved' | 'removed';
+  removed: boolean;
+  reason: string | null;
+  removedAt: string | null;
+  pinned: boolean;
+  locked: boolean;
+  nsfw: boolean;
+  spoiler: boolean;
+  viewerCanModerate: boolean;
+};
+
+// Apply one up/down tap to a post or comment optimistically: same direction
+// again clears, the other direction flips (both counters move), null clears.
+// Idempotent against the FRESHEST snapshot so concurrent reactions on other
+// fields are never clobbered — the reaction-toggle pattern.
+export const applyUpdownVote = <T extends { votes?: PublicUpdownVotes }>(prev: T, direction: UpdownDirection | null): T => {
+  const votes = prev.votes || EMPTY_VOTES;
+  const current = votes.viewerVote;
+  const next = current === direction ? null : direction;
+  if (next === current) return prev;
+  let { up, down } = votes;
+  if (current === 'up') up -= 1;
+  if (current === 'down') down -= 1;
+  if (next === 'up') up += 1;
+  if (next === 'down') down += 1;
+  up = Math.max(0, up);
+  down = Math.max(0, down);
+  return { ...prev, votes: { up, down, score: up - down, viewerVote: next } };
+};
 
 // A post update bubbled up from a card. A value replaces the post (null removes
 // it); a function applies a delta to the FRESHEST post in the list — the form
