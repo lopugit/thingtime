@@ -92,12 +92,12 @@
   ".github/workflows/control-plane-ci.yml": {
     "mtime": 1788595842.1300235,
     "ast_hash": "bfed51c6d824f861a025dabbf1313f8f",
-    "semantic_hash": ""
+    "semantic_hash": "bfed51c6d824f861a025dabbf1313f8f"
   },
   ".github/workflows/develop-pr-preview.yml": {
     "mtime": 1788595749.228661,
     "ast_hash": "6b83eb82641375a22268183508811210",
-    "semantic_hash": ""
+    "semantic_hash": "6b83eb82641375a22268183508811210"
   },
   ".github/workflows/electron-release.yml": {
     "mtime": 1788591041.2395835,
@@ -155,9 +155,9 @@
     "semantic_hash": "012107e7ca5e0a7d0b6d35017f9800c5"
   },
   "README.md": {
-    "mtime": 1788595366.5114753,
-    "ast_hash": "ae130775f356401dd51f85c125262a31",
-    "semantic_hash": ""
+    "mtime": 1788596189.112816,
+    "ast_hash": "780fb62a17646baffc415fe0c0342550",
+    "semantic_hash": "780fb62a17646baffc415fe0c0342550"
   },
   ".github/workflows/commander-release.yml": {
     "mtime": 1788591041.2393472,
@@ -370,9 +370,9 @@
     "semantic_hash": "675d78e2b701e3915d9349da8c576bb2"
   },
   ".github/TESTING.md": {
-    "mtime": 1788594267.6768692,
-    "ast_hash": "d0a6e114ae77ee72e0339b4b4eedb2f1",
-    "semantic_hash": "d0a6e114ae77ee72e0339b4b4eedb2f1"
+    "mtime": 1788596203.116253,
+    "ast_hash": "f1c40e48363c0387a22937414dfff051",
+    "semantic_hash": "f1c40e48363c0387a22937414dfff051"
   },
   "PRs/634-control-plane-event-hardening--harden-lopu-comment-admission.md": {
     "mtime": 1788593664.831865,
