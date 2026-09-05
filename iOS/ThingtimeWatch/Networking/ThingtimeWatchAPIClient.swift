@@ -10,6 +10,7 @@ struct ThingtimeWatchPairingRequest: Equatable, Sendable {
     let expiresAt: String
     let verificationURL: URL
     let credential: String
+    let approvalToken: String
 }
 
 struct ThingtimeWatchSyncResult: Sendable {
@@ -33,17 +34,23 @@ struct ThingtimeWatchAPIClient: Sendable {
         guard let url = URL(string: origin), url.scheme == "https", url.host != nil else {
             throw ThingtimeWatchAPIError.invalidOrigin
         }
-        self.origin = url
+        guard let normalized = URL(string: Self.normalizedOrigin(url)), url.user == nil, url.password == nil else {
+            throw ThingtimeWatchAPIError.invalidOrigin
+        }
+        self.origin = normalized
         self.credential = credential
     }
 
-    func startPairing() async throws -> ThingtimeWatchPairingRequest {
+    func startPairing(targetUsername: String? = nil) async throws -> ThingtimeWatchPairingRequest {
+        try await verifyCapabilities(requirements: ["api.watch-pairing": "1.2.0"])
         let credential = try Self.newCredential()
         let device = await Self.deviceDescriptor()
+        var body: [String: Any] = ["op": "start", "device": device, "codeFormat": "numeric-4"]
+        if let targetUsername, !targetUsername.isEmpty { body["targetUsername"] = targetUsername }
         let json = try await requestJSON(
             path: "/api/v1/watch/pairing",
             method: "POST",
-            body: ["op": "start", "device": device],
+            body: body,
             authenticated: false
         )
         let pairing = try json.requiredDictionary("pairing")
@@ -51,8 +58,11 @@ struct ThingtimeWatchAPIClient: Sendable {
         let deviceCode = try pairing.requiredString("deviceCode")
         let userCode = try pairing.requiredString("userCode")
         let expiresAt = try pairing.requiredString("expiresAt")
-        let path = try pairing.requiredString("verificationPath")
-        guard let verificationURL = URL(string: path, relativeTo: origin)?.absoluteURL else {
+        let path = try pairing.requiredString("verificationEntryPath")
+        guard let verificationURL = URL(string: path, relativeTo: origin)?.absoluteURL,
+              Self.normalizedOrigin(verificationURL) == Self.normalizedOrigin(origin),
+              verificationURL.path == "/watch/pair",
+              verificationURL.query == nil else {
             throw ThingtimeWatchAPIError.invalidResponse
         }
         return ThingtimeWatchPairingRequest(
@@ -61,7 +71,8 @@ struct ThingtimeWatchAPIClient: Sendable {
             userCode: userCode,
             expiresAt: expiresAt,
             verificationURL: verificationURL,
-            credential: credential
+            credential: credential,
+            approvalToken: try pairing.requiredString("approvalToken")
         )
     }
 
@@ -229,12 +240,12 @@ struct ThingtimeWatchAPIClient: Sendable {
         return ThingtimeWatchUploadResult(thingID: thingID, attachmentID: attachmentID)
     }
 
-    private func verifyCapabilities() async throws {
+    private func verifyCapabilities(requirements: [String: String] = Self.minimumFeatures) async throws {
         let json = try await requestJSON(path: "/.well-known/thingtime-capabilities.json", method: "GET", body: nil, authenticated: false)
         guard let features = json["features"] as? [String: Any] else {
             throw ThingtimeWatchAPIError.incompatible("Thingtime’s capability manifest is unavailable.")
         }
-        for (feature, minimum) in Self.minimumFeatures {
+        for (feature, minimum) in requirements {
             let value = features[feature]
             let actual = value as? String ?? (value as? [String: Any])?["version"] as? String
             guard let actual, ThingtimeWatchUploadRequirements.satisfies(actual: actual, minimum: minimum) else {
@@ -370,6 +381,11 @@ enum ThingtimeWatchAPIError: LocalizedError {
 
     var isUnauthorized: Bool {
         if case let .server(status, _, _) = self { return status == 401 }
+        return false
+    }
+
+    var isRetryablePairingError: Bool {
+        if case let .server(status, _, _) = self { return status == 429 || status == 408 || status >= 500 }
         return false
     }
 

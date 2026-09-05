@@ -2,6 +2,24 @@ import XCTest
 @testable import Thingtime
 
 final class ThingtimeWatchPayloadTests: XCTestCase {
+    func testQuickApprovalHandoffIsScopedAndOmitsWatchCredentials() throws {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let handoff = ThingtimeWatchApprovalHandoff(pairingID: "test-pairing", userCode: "0123", approvalToken: "ttapprove_" + String(repeating: "a", count: 43), origin: "https://thingtime.com", expiresAt: formatter.string(from: Date().addingTimeInterval(300)))
+        XCTAssertEqual(ThingtimeWatchApprovalHandoff.decode(handoff.message), handoff)
+        XCTAssertNil(handoff.message["credential"])
+        XCTAssertNil(handoff.message["deviceCode"])
+        var invalid = handoff.message
+        invalid["origin"] = "https://thingtime.com.evil.invalid/path"
+        XCTAssertNil(ThingtimeWatchApprovalHandoff.decode(invalid))
+        invalid = handoff.message
+        invalid["expiresAt"] = formatter.string(from: Date().addingTimeInterval(-1))
+        XCTAssertNil(ThingtimeWatchApprovalHandoff.decode(invalid))
+        invalid = handoff.message
+        invalid["userCode"] = "123"
+        XCTAssertNil(ThingtimeWatchApprovalHandoff.decode(invalid))
+    }
+
     func testSnapshotRoundTripsThroughWatchConnectivityEnvelope() throws {
         let notification = ThingtimeWatchNotification(
             id: "notification-1",

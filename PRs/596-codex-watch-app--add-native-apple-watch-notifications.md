@@ -1,5 +1,64 @@
 # PR #596 — Add native Apple Watch notifications
 
+## TestFlight build 24 — quick approval and four-digit codes
+
+- New requests use four numeric digits, uniquely reserved for five minutes.
+  `/watch/pair` accepts the visible code; `/pair/1234` prefills it through sign-in.
+  Older eight-character codes/full approval links remain valid. Indexed lookup
+  fails closed on collisions and returns no claim secret or account information.
+- Code entry uses four evenly spaced squares over one accessible native input,
+  keeping paste/autofill atomic. Legacy codes expand to eight squares, and
+  leading zeroes, native selection, arrow keys, backspace and keyboard submit work.
+- Three Watch choices: **Paired iPhone account** (default), **Enter a username**,
+  and **Use a code / link**. Phone handoff carries an independent 256-bit proof,
+  never the Watch's claim secret or credential. The phone offers the request to
+  its active account; username targeting addresses that account directly.
+  Signed-in sessions on the same origin display the exact Watch/account/PIN and
+  a one-tap **Approve Watch** button. Delivery never approves automatically.
+- `api.watch-pairing` is 1.2.0. Clients negotiate before dependent operations.
+  Lookup is limited to five/account and ten/IP per five minutes; start, offer,
+  approve and username targets have separate budgets. Claim polling has its own
+  60/minute budget, fixing the old shared limit that stopped polling after ~90s.
+- The Watch displays the exact phone/computer address and step-by-step
+  instructions instead of opening an unsupported watchOS browser sheet.
+  **Check approval** retains the pending code, transient network failures retry
+  with bounded backoff, expired codes can be replaced, and switching domains
+  cancels stale requests. Fresh preview builds default to the preview domain.
+- Missing `api.watch-pairing` support is detected before code creation and
+  produces an actionable domain hint. Production/development do not gain the
+  feature merely because a TestFlight build is uploaded; deploy the matching
+  server contracts to those origins first.
+- The headless real-HTTP Watch group passes all 72 checks, including 31 pending
+  polls, code-only lookup, cross-origin rejection, wrong code recovery,
+  same-account approval retry, cross-account takeover rejection, idempotent
+  claims, and direct notification download with the resulting device credential.
+  New checks cover recipient-only inboxes, handoff forgery/takeover rejection,
+  no automatic approval, numeric expiry, username delivery/typos, and PIN limits.
+  Capability tests (8), device/input/client tests (57), collection/index tests (37), all native tests
+  (31), scoped lint, full iPhone/embedded-Watch simulator build, and complete
+  Vercel output build pass. Test fixtures use isolated accounts and redact
+  pairing secrets from runner output.
+- Desktop (1280×900) and phone (390×844) browser QA exercises sign-in, wrong-code
+  recovery, short-link prefill, explicit approval, claim, direct notification
+  sync, a second signed-in session receiving the phone offer, username targeting,
+  and dismissal. Scoped box-sizing and paragraph margins keep these cards compact
+  without mobile overflow; the floating card clears the existing bottom tools.
+  Chrome extension control was unavailable, so QA used isolated headed Chrome.
+  The installed Chrome 87 lacked modern APIs; its Settings flow passed, then
+  current Chrome for Testing 153 passed the complete flow on the main feed.
+  Real keyboard paste replaced all four squares (including leading zeroes),
+  legacy paste expanded all eight, and selection/backspace/full-value fill passed.
+  Desktop squares measured 71×71px with a centered card; phone and desktop had
+  no horizontal overflow. The native iOS one-time-code suggestion still needs
+  physical-device acceptance, though the field is one native autofill input.
+  Typecheck ratchet reports 109 pre-existing errors against baseline 108; no new
+  Watch diagnostics remain. Physical WatchConnectivity transport
+  still requires paired-device acceptance; simulator/API tests are not that proof.
+- Local QA uses `http://127.0.0.1:18290/watch/pair` via the unique, no-restart
+  `watch-pairing.ecosystem.config.cjs` fixture. Tailscale/Funnel is unavailable
+  because the installed CLI points at a missing app; use the public preview on
+  real phones and Watches.
+
 ## TestFlight build 23 — direct Watch accounts and private Things
 
 - The Watch now pairs directly to Thingtime over HTTPS with a short browser

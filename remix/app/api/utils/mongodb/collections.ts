@@ -1345,6 +1345,12 @@ const ensureCustomDataIndexes = (uri: string, db: any) => {
   customIndexesEnsured.set(uri, run);
 };
 
+export const createWatchPairingIndexes = (sessions: any) => [
+	sessions.createIndex({ 'meta.userCodeHash': 1, expiresAt: 1 }, { partialFilterExpression: { purpose: 'watch-pairing' } }),
+	sessions.createIndex({ 'meta.userCodeHash': 1 }, { name: 'watch_active_pin_unique', unique: true, partialFilterExpression: { purpose: 'watch-pairing', 'meta.shortCodeActive': true } }),
+	sessions.createIndex({ 'meta.recipientUserId': 1, createdAt: -1 }, { partialFilterExpression: { purpose: 'watch-pairing' } })
+];
+
 export const ensureIndexes = async () => {
   if (!indexesEnsured) {
     indexesEnsured = (async () => {
@@ -1375,6 +1381,7 @@ export const ensureIndexes = async () => {
 				col('users').createIndex({ 'meta.admin': 1, createdAt: -1, _id: 1 }, { partialFilterExpression: { 'meta.admin': true } }),
         col('sessions').createIndex({ jti: 1 }, { unique: true }),
         col('sessions').createIndex({ userId: 1 }),
+				...createWatchPairingIndexes(col('sessions')),
         // TTL: reap sessions once expiresAt passes. getLiveSession already
         // treats past-expiry docs as dead, so deletion removes nothing usable —
         // without it expired/revoked sessions (app grants especially) pile up

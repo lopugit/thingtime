@@ -54,7 +54,7 @@
     "test:desktop-oauth": "node --import tsx --test app/api/utils/apps/desktopOAuthCore.test.ts",
     "test:deployments": "node --import tsx --test app/api/utils/deployments/*.test.ts",
     "test:hooks": "node --import tsx --test app/hooks/*.test.ts",
-    "test:devices": "node --import tsx --test app/components/Devices/*.test.ts app/api/utils/devices/*.test.ts",
+    "test:devices": "node --import tsx --test app/components/Devices/*.test.ts app/components/Watch/*.test.ts app/api/utils/devices/*.test.ts",
     "test:editorjs": "node --import tsx --test app/components/Editor/*.test.ts app/components/Kinds/*.test.ts",
     "test:embed": "node --import tsx --test app/embed/*.test.ts",
     "test:embed-bundle": "node --test scripts/embed-bundle-source-map.test.mjs",

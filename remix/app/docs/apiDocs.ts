@@ -88,26 +88,33 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'watch-pairing',
-		featureVersion: '1.0.0',
+		contractVersion: '1.2.0',
+		featureVersion: '1.2.0',
 		group: 'devices',
 		title: 'Pair Apple Watch directly',
 		endpoint: '/api/v1/watch/pairing',
 		summary: 'Starts, approves, inspects, and claims a short-lived direct Apple Watch pairing.',
 		detail:
-			'The Watch starts anonymously and receives a high-entropy device code plus a short human code. The user opens the returned same-origin verification path, signs in, and explicitly approves the named Watch. The Watch then claims the approval with its locally generated ttnode_ credential. Thingtime stores only domain-separated hashes and creates a revocable watchOS device session.',
-		auth: { mode: 'none', description: 'Start, inspect, and claim are code-bound and fail-closed rate limited. Approval requires a same-origin full user session.' },
+			'The Watch starts with optional codeFormat numeric-4 (legacy default: eight characters) and optional targetUsername. Four-digit PINs are uniquely reserved for five minutes. A separate high-entropy approvalToken lets the paired phone offer the request to its signed-in account WITHOUT approving it. GET op=pending lists only that account’s requests, with the PIN prefilled for explicit approval in any same-origin session. Username targets never grant access by themselves. Secret values are stored only as domain-separated hashes; offered human codes are retained for owner-only display. Claim requires the separate Watch-held device secret and credential. Polling allows 60/minute per IP. Lookup allows five/account and ten/IP per five minutes; start/offer/approve have separate ceilings and username targets accept five requests per five minutes. The short /pair/:code page supports manual approval; old full links remain valid.',
+		auth: { mode: 'none', description: 'Start/inspect/claim are code-bound and fail-closed rate limited. Pending requires a full user session. Lookup/offer/approve also require same-origin. Offered requests are bound to their recipient account.' },
 		methods: ['GET', 'POST'],
 		steps: [
-			'POST { op: "start", device } from the Watch.',
+			'POST { op: "start", device, codeFormat: "numeric-4", targetUsername? } from the Watch.',
+			'Optionally relay pairingId, userCode and approvalToken to the paired phone; its signed-in session POSTs op: "offer". Never relay deviceCode or credential.',
+			'Any signed-in session can GET ?op=pending, show the Watch/account/code, and explicitly approve. No automatic approval occurs.',
+			'On a phone or computer open verificationEntryPath, sign in, and POST { op: "lookup", userCode } to retrieve the pairingId and safe device details.',
 			'Open verificationPath on a signed-in browser and POST { op: "approve", pairingId, userCode }.',
 			'Poll POST { op: "claim", pairingId, deviceCode, credential } until approved, then store the credential in Watch Keychain.'
 		],
 		requestExamples: [
+			{ name: 'Find a Watch by code', description: 'Authenticated, rate-limited lookup; never returns a device credential or device code.', method: 'POST', body: { op: 'lookup', userCode: '1234' } },
+			{ name: 'Pending Watch approvals', description: 'At most five unexpired, unapproved requests addressed to the current account.', method: 'GET', query: { op: 'pending' } },
+			{ name: 'Offer from paired phone', description: 'Attach to this account without approving.', method: 'POST', body: { op: 'offer', pairingId: 'pairing-jti', userCode: '1234', approvalToken: 'ttapprove_…' } },
 			{
 				name: 'Start Watch pairing',
-				description: 'Create a ten-minute direct pairing request.',
+				description: 'Create a five-minute direct pairing request.',
 				method: 'POST',
-				body: { op: 'start', device: { name: 'Lopu’s Apple Watch', platform: 'watchos', model: 'Watch', osVersion: 'watchOS 26', appVersion: '23' } }
+				body: { op: 'start', codeFormat: 'numeric-4', device: { name: 'Lopu’s Apple Watch', platform: 'watchos', model: 'Watch', osVersion: 'watchOS 26', appVersion: '24' } }
 			},
 			{
 				name: 'Claim approved Watch',
@@ -120,7 +127,7 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 			{
 				status: 201,
 				description: 'Pairing started.',
-				body: { ok: true, pairing: { pairingId: 'pairing-jti', userCode: 'THING123', verificationPath: '/watch/pair?pairing=…&code=…', expiresAt: '2026-09-05T01:00:00.000Z' } }
+				body: { ok: true, pairing: { pairingId: 'pairing-jti', userCode: '1234', deviceCode: 'ttwatch_…', approvalToken: 'ttapprove_…', verificationEntryPath: '/watch/pair', verificationPath: '/watch/pair?pairing=…&code=1234', expiresAt: '2026-09-05T01:00:00.000Z' } }
 			},
 			{ status: 428, description: 'Awaiting user approval.', body: { ok: false, code: 'authorization_pending', error: 'Approve this Watch in Thingtime first' } }
 		]

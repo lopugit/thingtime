@@ -17,6 +17,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-05 — Watch code-entry and pairing recovery — Codex (AI)
+
+- Added four-digit, five-minute codes, `/pair/1234` links, and a phone/computer
+  `/watch/pair` form. Paired-iPhone account handoff (default) and username targeting
+  show a prefilled **Approve Watch** card in matching signed-in sessions; delivery
+  never approves automatically. Older complete approval links still work.
+  `api.watch-pairing` is now 1.2.0. Watch build 24 displays the
+  exact address and retry/new-code controls without opening a watchOS web sheet.
+- The approval PIN has evenly spaced squares backed by one accessible native
+  input, preserving whole-code paste, autofill, selection and legacy-code support.
+- Split claim-poll and human-code rate limits, recover from transient network
+  errors, reserve unique active PINs, and reject unsupported origins before pairing. Added full HTTP flow
+  coverage through direct notification sync; details in
+  [PR #596](../PRs/596-codex-watch-app--add-native-apple-watch-notifications.md).
+
 ### 2026-09-05 — Direct Apple Watch accounts, sync, and private Things — Codex (AI)
 
 - Replaced the Watch's iPhone-relay session dependency with direct HTTPS device

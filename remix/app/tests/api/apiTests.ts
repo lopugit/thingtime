@@ -1,5 +1,7 @@
 import { expectJson, expectNdjson, expectRedirectedTo, expectStatus, type ApiTestContext, type ApiTestDefinition } from './apiTestRunner';
 import { apiEndpointDocs } from '~/docs/apiDocs';
+import { watchPairingTests } from './watchPairingTests';
+import { watchQuickApprovalTests } from './watchQuickApprovalTests';
 
 // crypto-sourced randomness: these suffixes end up in registered usernames /
 // email aliases, and Web Crypto is available everywhere this runs (browser
@@ -2260,6 +2262,8 @@ export const apiTests: ApiTestDefinition[] = [
       'Created webpage was deleted (or was never created and the guard answered).'
     )
   },
+  ...watchPairingTests,
+  ...watchQuickApprovalTests,
   ...apiDocsSmokeTests
 ];
 

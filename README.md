@@ -1538,12 +1538,21 @@ double-sends.
 The native targets register their current APNs tokens through the authenticated
 `POST /api/v1/notifications/devices` session. Thingtime chooses the application
 topics server-side, stores tokens only in protected binary `secure` data, and
-never returns token values from the API. The paired watch receives its signed-in
-state and notification inbox from the iPhone through Watch Connectivity; no
-Thingtime password or reusable web credential is copied to the watch. Each
-registration is bound to the browser session that created it, so logout,
-revocation, or session expiry immediately makes that target ineligible for
-delivery even if its cleanup is delayed.
+never returns token values from the API. The Watch pairs directly using an
+four-digit code entered at the selected origin's `/watch/pair` or `/pair/1234`
+page on an iPhone or computer. Alternatively the paired phone offers the request
+to its active account, or the Watch targets an entered username; matching signed-in
+sessions show an explicit, prefilled **Approve Watch** button. Codes expire after
+five minutes; sending a request never auto-approves it. The phone handoff uses a
+separate one-request proof, never the Watch's private claim secret. The Watch
+stores only a scoped device credential in Watch Keychain,
+not the browser session or password, and downloads notifications without an
+iPhone relay. Deploy `api.watch-pairing` 1.2.0 alongside the Watch build before
+enabling this flow on an origin; the client checks the origin's capability
+manifest. See [Watch preview setup](iOS/README.md#connect-the-watch-during-preview-testing)
+for code-entry, domain selection, and local test instructions. Each push
+registration is bound to its browser/device session so revocation or expiry
+makes that target ineligible for delivery even if cleanup is delayed.
 
 Configure the APNs provider in each Vercel environment that should deliver
 native alerts:

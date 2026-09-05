@@ -1,6 +1,19 @@
 import Foundation
 import UserNotifications
 import WatchKit
+import WatchConnectivity
+
+enum ThingtimeWatchApprovalMethod: String, CaseIterable, Identifiable {
+    case phone, username, code
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .phone: "Paired iPhone account"
+        case .username: "Enter a username"
+        case .code: "Use a code / link"
+        }
+    }
+}
 
 enum ThingtimeWatchFavorite: String, CaseIterable, Identifiable, Codable {
     case record
@@ -73,6 +86,9 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
     @Published private(set) var pendingPairing: ThingtimeWatchPairingRequest?
     @Published private(set) var pairingDomain: ThingtimeWatchDomain = .production
     @Published private(set) var isPairing = false
+    @Published private(set) var approvalMethod: ThingtimeWatchApprovalMethod = .phone
+    @Published var pairingUsername = ""
+    @Published private(set) var approvalDeliveryMessage: String?
     @Published private(set) var attachmentStatusMessage: String?
     @Published private(set) var attachmentIsBusy = false
     @Published private(set) var historyNotifications: [ThingtimeWatchNotification] = []
@@ -96,6 +112,7 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
     private var deviceToken: String?
     private var refreshTask: Task<Void, Never>?
     private var pairingTask: Task<Void, Never>?
+    private let approvalSession = WCSession.isSupported() ? WCSession.default : nil
     private var lastHistoryWindow: (from: String, to: String, archive: Bool)?
     private var downloadedArchive: [ThingtimeWatchNotification] = []
     private var downloadedVisibleCount = 0
@@ -113,6 +130,8 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
         if let selectedAccountID { ThingtimeWatchAccountStorage.selectedAccountID = selectedAccountID }
         if let domain = UserDefaults.standard.string(forKey: Self.domainKey).flatMap(ThingtimeWatchDomain.init(rawValue:)) {
             pairingDomain = domain
+        } else if ThingtimeWatchDomain.availableCases.contains(.buildPreview) {
+            pairingDomain = .buildPreview
         }
         loadFavorites()
         pendingUploads = Self.loadPendingUploads()
@@ -150,12 +169,16 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
     }
 
     func activate() {
+        approvalSession?.delegate = self
+        approvalSession?.activate()
         audioRecorder.refresh()
         Task { await refreshAuthorizationStatus() }
 #if DEBUG
         if ProcessInfo.processInfo.environment["THINGTIME_WATCH_DIRECT_PREVIEW"] == "1" { return }
 #endif
-        if selectedAccount != nil {
+        if pendingPairing != nil || isPairing {
+            requestRefresh()
+        } else if selectedAccount != nil {
             requestRefresh()
             retryAttachmentTransfers()
         } else {
@@ -174,6 +197,11 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
             return
         }
 #endif
+        if pendingPairing != nil {
+            retryPairingApproval()
+            return
+        }
+        guard !isPairing else { return }
         guard refreshTask == nil else { return }
         guard let account = selectedAccount,
               let credential = ThingtimeWatchAccountStorage.credential(for: account.id) else {
@@ -196,6 +224,7 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
             } catch is CancellationError {
                 return
             } catch {
+                guard !Task.isCancelled else { return }
                 connectionState = (error as? ThingtimeWatchAPIError)?.isUnauthorized == true ? .failed : .offline
                 connectionMessage = error.localizedDescription
             }
@@ -203,45 +232,109 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
     }
 
     func setPairingDomain(_ domain: ThingtimeWatchDomain) {
+        guard domain != pairingDomain else { return }
+        pairingTask?.cancel()
+        pairingTask = nil
+        pendingPairing = nil
+        approvalDeliveryMessage = nil
+        isPairing = false
         pairingDomain = domain
         UserDefaults.standard.set(domain.rawValue, forKey: Self.domainKey)
+        connectionState = .ready
+        connectionMessage = "Create a new code for \(domain.host)."
     }
 
     func requestPairing() {
         pairingTask?.cancel()
+        refreshTask?.cancel()
+        let domain = pairingDomain
+        let method = approvalMethod
+        let targetUsername = pairingUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+        if method == .username && targetUsername.isEmpty {
+            connectionState = .failed
+            connectionMessage = "Enter your Thingtime username first."
+            return
+        }
         pendingPairing = nil
+        approvalDeliveryMessage = nil
         isPairing = true
         connectionState = .checking
         connectionMessage = "Creating a secure code on \(pairingDomain.host)…"
         pairingTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let client = try ThingtimeWatchAPIClient(origin: pairingDomain.origin)
-                let pairing = try await client.startPairing()
+                let client = try ThingtimeWatchAPIClient(origin: domain.origin)
+                let pairing = try await client.startPairing(targetUsername: method == .username ? targetUsername : nil)
                 guard !Task.isCancelled else { return }
                 pendingPairing = pairing
                 connectionState = .ready
-                connectionMessage = "Open Thingtime, sign in, and approve code \(pairing.userCode)."
+                connectionMessage = "On your phone or computer, open the address below and enter this code."
                 isPairing = false
-                openPairingPage()
-                await pollPairing(pairing, origin: pairingDomain.origin)
+                if method == .phone { sendPendingApproval() }
+                else if method == .username { approvalDeliveryMessage = "Sign in as \(targetUsername) on \(domain.host), then tap Approve Watch." }
+                await pollPairing(pairing, origin: domain.origin)
             } catch is CancellationError {
-                isPairing = false
+                return
             } catch {
+                guard !Task.isCancelled else { return }
                 isPairing = false
                 connectionState = .failed
-                connectionMessage = error.localizedDescription
+                if case .incompatible = error as? ThingtimeWatchAPIError {
+                    let hint = domain != .buildPreview && ThingtimeWatchDomain.availableCases.contains(.buildPreview)
+                        ? " Choose Build preview for this test build." : " Try again after the preview finishes updating."
+                    connectionMessage = "Direct Watch sign-in is not available on \(domain.host) yet.\(hint)"
+                } else {
+                    connectionMessage = error.localizedDescription
+                }
             }
         }
     }
 
-    func openPairingPage() {
+    func retryPairingApproval() {
         guard let pendingPairing else { return }
-        WKApplication.shared().openSystemURL(pendingPairing.verificationURL)
+        pairingTask?.cancel()
+        connectionState = .checking
+        connectionMessage = "Checking approval…"
+        pairingTask = Task { [weak self] in
+            await self?.pollPairing(pendingPairing, origin: pendingPairing.verificationURL.absoluteString)
+        }
+    }
+
+    func setApprovalMethod(_ method: ThingtimeWatchApprovalMethod) {
+        guard method != approvalMethod else { return }
+        pairingTask?.cancel()
+        pendingPairing = nil
+        isPairing = false
+        approvalDeliveryMessage = nil
+        approvalMethod = method
+        connectionState = .ready
+        connectionMessage = "Create a new code to connect this Watch."
+    }
+
+    func sendPendingApproval() {
+        guard approvalMethod == .phone, let pairing = pendingPairing, let session = approvalSession else { return }
+        approvalDeliveryMessage = "Open Thingtime on your paired iPhone, signed in on \(pairing.verificationURL.host ?? "the same domain"). Your sessions will show an Approve Watch button."
+        guard session.activationState == .activated else { return }
+        let handoff = ThingtimeWatchApprovalHandoff(pairingID: pairing.pairingID, userCode: pairing.userCode, approvalToken: pairing.approvalToken, origin: pairingDomain.origin, expiresAt: pairing.expiresAt)
+        do { try session.updateApplicationContext(handoff.message) }
+        catch { approvalDeliveryMessage = "Couldn’t send to iPhone. Retry below, or use the short link." }
+        if session.isReachable {
+            session.sendMessage(handoff.message, replyHandler: { [weak self] reply in
+                Task { @MainActor in
+                    guard let self, self.pendingPairing?.pairingID == pairing.pairingID else { return }
+                    if reply["ok"] as? Bool == true, let username = reply["username"] as? String {
+                        self.approvalDeliveryMessage = "Sent to @\(username). Tap Approve Watch in any signed-in session on the same domain."
+                    } else if let message = reply["message"] as? String { self.approvalDeliveryMessage = message }
+                }
+            }, errorHandler: { _ in /* Application context remains queued for the paired phone. */ })
+        }
     }
 
     func selectAccount(_ id: String) {
         guard accounts.contains(where: { $0.id == id }) else { return }
+        pairingTask?.cancel()
+        pendingPairing = nil
+        isPairing = false
         refreshTask?.cancel()
         selectedAccountID = id
         ThingtimeWatchAccountStorage.selectedAccountID = id
@@ -463,9 +556,18 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
     private func pollPairing(_ pairing: ThingtimeWatchPairingRequest, origin: String) async {
         do {
             let client = try ThingtimeWatchAPIClient(origin: origin)
+            let expiresAt = Self.parseDate(pairing.expiresAt) ?? Date().addingTimeInterval(600)
+            var retryDelay: Double = 3
             while !Task.isCancelled {
+                guard Date() < expiresAt else {
+                    pendingPairing = nil
+                    connectionState = .failed
+                    connectionMessage = "The code expired. Create a new code, then enter it on your phone or computer."
+                    return
+                }
                 do {
                     let account = try await client.claimPairing(pairing)
+                    try Task.checkCancellation()
                     try ThingtimeWatchAccountStorage.storeCredential(pairing.credential, for: account.id)
                     accounts.removeAll(where: { $0.id == account.id })
                     accounts.insert(account, at: 0)
@@ -480,17 +582,34 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
                     requestRefresh()
                     return
                 } catch let error as ThingtimeWatchAPIError where error.isAuthorizationPending {
-                    connectionMessage = "Waiting for approval of code \(pairing.userCode)…"
+                    try Task.checkCancellation()
+                    connectionState = .ready
+                    connectionMessage = "Waiting for approval on your phone or computer…"
+                    lastConnectionCheckAt = Date()
+                    retryDelay = 3
+                } catch {
+                    try Task.checkCancellation()
+                    guard (error as? ThingtimeWatchAPIError)?.isRetryablePairingError == true || error is URLError else { throw error }
+                    retryDelay = min(retryDelay * 2, 15)
+                    connectionState = .offline
+                    connectionMessage = "Connection interrupted. Retrying in \(Int(retryDelay)) seconds. Your code is still valid."
                 }
-                try await Task.sleep(for: .seconds(3))
+                try await Task.sleep(for: .seconds(retryDelay))
             }
         } catch is CancellationError {
             return
         } catch {
+            guard !Task.isCancelled else { return }
             isPairing = false
             connectionState = .failed
             connectionMessage = error.localizedDescription
         }
+    }
+
+    private static func parseDate(_ value: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.date(from: value) ?? ISO8601DateFormatter().date(from: value)
     }
 
     private func applySync(_ result: ThingtimeWatchSyncResult) {
@@ -610,6 +729,12 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
             throw ThingtimeWatchAPIError.fileChanged
         }
         return base.appendingPathComponent("ThingtimeWatchOutbox", isDirectory: true)
+    }
+}
+
+extension ThingtimeWatchStore: WCSessionDelegate {
+    nonisolated func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
+        Task { @MainActor in self.sendPendingApproval() }
     }
 }
 

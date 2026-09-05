@@ -39,6 +39,41 @@ stable endpoint directly.
 
 ## Setup
 
+### Connect the Watch during preview testing
+
+1. On the Watch, choose **Build preview**, then an **Approve using** option:
+   **Paired iPhone** (default), **Username**, or **Enter code**.
+2. With **Paired iPhone**, open Thingtime on the phone and sign in to the same
+   domain. The phone offers the request to its active account, without approving
+   it. **Username** instead sends the pending request to the entered account.
+   Any signed-in session for that account on that origin shows **Approve Watch**
+   with the four-digit code prefilled. Check the account/device/code before tapping.
+3. With **Enter code**, open the exact short address shown on the Watch, e.g.
+   `https://your-thingtime-origin.example/pair/1234`, in a phone/computer browser.
+   Sign in, select **Review Watch**, then **Connect**. You can also enter the PIN at
+   <https://pr-596.previews.dev.thingtime.com/watch/pair> for PR #596.
+4. Keep Thingtime open on the Watch until it connects. **Check approval** retries
+   the same code; **Create new code** replaces an expired attempt. Codes last
+   five minutes and cannot be entered at a different Thingtime domain. Leading
+   zeroes are significant. Older eight-character codes remain accepted.
+
+Watch sign-in requires the selected origin to advertise `api.watch-pairing`
+1.2.0 (same major) in its capability manifest. A preview-targeted fresh install
+defaults to the build preview; explicit saved choices remain respected. If
+production does not advertise the contract yet, the Watch gives a preview
+selection hint instead of calling a missing endpoint. Older full approval links
+remain supported, but no browser opening on watchOS is required. A short address
+at `thingtime.com/pair/1234` only works once that production origin has the matching
+server release; this preview build displays the preview origin instead.
+
+For independent local pairing QA, `pm2 start watch-pairing.ecosystem.config.cjs`
+from the repo root uses `http://127.0.0.1:18290/watch/pair` (HMR 18291, Nitro
+18292). This loopback-only fixture has a unique PM2 name and no automatic restart;
+it does not replace another worktree's dev process. Run
+`npm --prefix remix run test:api -- --base http://127.0.0.1:18290 --group watch`.
+Tailscale/Funnel is not available on this host while its configured CLI points
+to a missing Tailscale app; use the public PR preview for phone/Watch testing.
+
 ```sh
 cd iOS
 ./scripts/bootstrap.sh

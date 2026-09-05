@@ -589,8 +589,36 @@ email whose link points at the attacker.
 
 ## Apple Watch notifications
 
+- [ ] Code input: four evenly spaced squares backed by one native input. Paste
+      a complete PIN with Cmd/Ctrl+V into any square (including replacing a filled
+      PIN), test autofill, select-all, arrow keys and backspace, and preserve
+      leading zeroes. Pasting an older eight-character code expands all eight
+      squares; no paste/autofill may get trapped in the first square. Check both
+      desktop and 390px layouts, focus ring, keyboard submission and accessible label.
+- [ ] Start with **Paired iPhone** selected, open the signed-in companion, and
+      verify another session of the same account/domain shows the exact prefilled
+      Watch/device/PIN. No credential may be claimed before explicit approval.
+      A different account must not list, look up, approve, or rebind the request.
+- [ ] Repeat using **Username** (including `@username`, a typo and wrong domain)
+      and **Enter code**. A `/pair/1234` link preserves all four digits, including
+      leading zeroes, through login. Check the five-minute expiry, unique active
+      PIN reservation, and five guesses/account limit with a visible retry error.
+- [ ] Verify quick-approval cards at 390px and desktop widths through the full
+      scroll range, dismiss with **Not now**, and approve another request. Account
+      switching/sign-out must never flash the previous account's request.
+- [ ] Open `/watch/pair` without query parameters on desktop and a 390px phone.
+      Sign in, enter a fresh Watch code, review the matching device/account, and
+      approve. Confirm the Watch claims the credential and downloads notifications;
+      no hidden pairing ID or Watch web browser is required. Invalid, wrong-domain,
+      expired and already-consumed codes must offer recovery without logging secrets.
+- [ ] Leave code approval pending beyond 90 seconds (31 polls), approve, and
+      confirm pairing still completes. Interrupt network access, retry approval,
+      switch domains mid-request, and replace an expired code. Cancelled requests
+      must not restore an old code/account or overwrite the new connection state.
+- [ ] Select an origin without `api.watch-pairing` 1.2.0 and confirm the Watch
+      shows an actionable domain/preview hint rather than a missing-endpoint error.
 - [ ] Pair a fresh Watch directly against both `thingtime.com` and
-      `dev.thingtime.com`. Approve the eight-character browser code while
+      `dev.thingtime.com` once their manifests support the feature. Approve the four-digit code while
       signed in, confirm the Watch receives only its device credential, and
       verify notification refresh/read state works with the iPhone app closed.
       A second account must remain independently selectable after relaunch.

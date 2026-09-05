@@ -52,18 +52,10 @@ struct ThingtimeWatchAddAccountView: View {
                 }
             }
 
+            ThingtimeWatchPairingOptions()
+
             if let pairing = store.pendingPairing {
-                Section("Approval code") {
-                    Text(pairing.userCode)
-                        .font(.title2.monospaced().bold())
-                        .frame(maxWidth: .infinity)
-                    Button { store.openPairingPage() } label: {
-                        Label("Open Thingtime", systemImage: "safari")
-                    }
-                    Text(store.connectionMessage ?? "Approve this Watch in Thingtime.")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
+                ThingtimeWatchPairingSection(pairing: pairing)
             } else {
                 Section {
                     Button { store.requestPairing() } label: {
@@ -74,6 +66,9 @@ struct ThingtimeWatchAddAccountView: View {
                         }
                     }
                     .disabled(store.isPairing)
+                    if let message = store.connectionMessage {
+                        Text(message).font(.caption2).foregroundStyle(.secondary)
+                    }
                 }
             }
         }

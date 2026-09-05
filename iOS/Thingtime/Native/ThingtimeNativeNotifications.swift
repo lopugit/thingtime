@@ -14,6 +14,8 @@ final class ThingtimeNativeNotifications: NSObject {
     private var refreshTimer: Timer?
     private var isRefreshing = false
     private var requestedAuthorization = false
+    private var forwardedWatchApprovals: [String: String] = [:]
+    private var forwardingWatchApproval = false
     private let attachmentUploader = ThingtimeWatchAttachmentUploader()
 
     private let session: WCSession? = WCSession.isSupported() ? .default : nil
@@ -84,6 +86,9 @@ final class ThingtimeNativeNotifications: NSObject {
 
     @discardableResult
     private func refresh() async -> RefreshOutcome {
+        if let context = session?.receivedApplicationContext, !context.isEmpty {
+            _ = await offerWatchApproval(context)
+        }
         guard let webView else {
             return .failure("Open Thingtime on your iPhone to reconnect this Watch.")
         }
@@ -397,6 +402,9 @@ final class ThingtimeNativeNotifications: NSObject {
 
     private func handleWatchMessage(_ message: [String: Any], reply: (([String: Any]) -> Void)? = nil) {
         switch message["kind"] as? String {
+        case ThingtimeWatchApprovalHandoff.kind:
+            Task { reply?(await offerWatchApproval(message)) }
+            return
         case "register-device":
             if let token = message["token"] as? String {
                 watchDeviceToken = token
@@ -445,6 +453,54 @@ final class ThingtimeNativeNotifications: NSObject {
         reply?(["ok": true])
     }
 
+    private func offerWatchApproval(_ message: [String: Any]) async -> [String: Any] {
+        guard let handoff = ThingtimeWatchApprovalHandoff.decode(message) else {
+            return ["ok": false, "message": "This code expired. Create a new code on the Watch."]
+        }
+        if let username = forwardedWatchApprovals[handoff.pairingID] { return ["ok": true, "username": username] }
+        guard !forwardingWatchApproval else { return ["ok": false, "message": "Sending your request. Check again in a moment."] }
+        guard let webView, webView.url?.origin == handoff.origin else {
+            return ["ok": false, "message": "Open Thingtime on your iPhone and select \(URL(string: handoff.origin)?.host ?? "the same domain") first, or use the short link."]
+        }
+        forwardingWatchApproval = true
+        defer { forwardingWatchApproval = false }
+        do {
+            let manifest = try await fetchJSON(path: "/.well-known/thingtime-capabilities.json")
+            let feature = (manifest["features"] as? [String: Any])?["api.watch-pairing"]
+            let version = feature as? String ?? (feature as? [String: Any])?["version"] as? String ?? ""
+            guard ThingtimeWatchUploadRequirements.satisfies(actual: version, minimum: "1.2.0") else {
+                return ["ok": false, "message": "This iPhone domain needs the new Watch pairing service. Choose Build preview on both devices."]
+            }
+            let result = try await webView.callAsyncJavaScript(
+                """
+                if (location.origin !== expectedOrigin) return JSON.stringify({ok:false});
+                const response = await fetch('/api/v1/watch/pairing', {
+                  method: 'POST', credentials: 'same-origin', headers: {'Content-Type':'application/json'},
+                  body: JSON.stringify({op:'offer', pairingId, userCode, approvalToken})
+                });
+                const body = await response.json();
+                if (response.ok && body.ok) window.dispatchEvent(new Event('thingtime:watch-approval-offered'));
+                return JSON.stringify(body);
+                """,
+                arguments: ["expectedOrigin": handoff.origin, "pairingId": handoff.pairingID, "userCode": handoff.userCode, "approvalToken": handoff.approvalToken],
+                in: nil, contentWorld: .page
+            )
+            guard let raw = result as? String, let data = raw.data(using: .utf8),
+                  let body = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  body["ok"] as? Bool == true,
+                  let account = body["account"] as? [String: Any], let username = account["username"] as? String else {
+                return ["ok": false, "message": "Sign in to Thingtime on your iPhone, then tap Send to iPhone again. You can also use the short link."]
+            }
+            // Bounded in-memory acknowledgement only. WatchConnectivity keeps
+            // the latest handoff available across phone process relaunches.
+            if forwardedWatchApprovals.count >= 10 { forwardedWatchApprovals.removeAll() }
+            forwardedWatchApprovals[handoff.pairingID] = username
+            return ["ok": true, "username": username]
+        } catch {
+            return ["ok": false, "message": "Couldn’t send the approval yet. Open Thingtime on iPhone and retry, or use the short link."]
+        }
+    }
+
     private static var apnsEnvironment: String {
 #if DEBUG
         "sandbox"
@@ -481,6 +537,10 @@ extension ThingtimeNativeNotifications: WCSessionDelegate {
 
     nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
         Task { @MainActor in self.handleWatchMessage(userInfo) }
+    }
+
+    nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
+        Task { @MainActor in self.handleWatchMessage(applicationContext) }
     }
 
     nonisolated func session(_ session: WCSession, didReceive file: WCSessionFile) {

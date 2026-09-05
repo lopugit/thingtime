@@ -54,20 +54,10 @@ struct ThingtimeWatchRootView: View {
                 }
             }
 
+            ThingtimeWatchPairingOptions()
+
             if let pairing = store.pendingPairing {
-                Section("Approval code") {
-                    Text(pairing.userCode)
-                        .font(.title2.monospaced().bold())
-                        .frame(maxWidth: .infinity)
-                    Button {
-                        store.openPairingPage()
-                    } label: {
-                        Label("Open Thingtime", systemImage: "safari")
-                    }
-                    Text("Sign in and approve this Watch. Pairing continues automatically.")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
+                ThingtimeWatchPairingSection(pairing: pairing)
             } else {
                 Section {
                     Button {
