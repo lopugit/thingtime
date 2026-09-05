@@ -4,12 +4,12 @@
 - cluster-only mode — file stats not available
 
 ## Summary
-- 890 nodes · 1609 edges · 124 communities (51 shown, 73 thin omitted)
-- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 22 edges (avg confidence: 0.65)
+- 898 nodes · 1617 edges · 124 communities (51 shown, 73 thin omitted)
+- Extraction: 98% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 24 edges (avg confidence: 0.67)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `b7a5db2a`
+- Built from commit: `1dceef30`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -154,20 +154,21 @@
   CLAUDE.md → AGENTS.md
 - `Admin Controller Job` --calls--> `Admin PR Previews Deployment Script`  [AMBIGUOUS]
   .github/workflows/develop-pr-preview.yml → .github/scripts/deploy-admin-pr-previews.mjs
+- `Routing Dependency Graph Regression` --references--> `Lopu PR Manager Workflow`  [INFERRED]
+  PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md → .github/workflows/resolve-pr-conflicts.yml
 - `selfTest()` --calls--> `sha`  [INFERRED]
   .github/scripts/codeql-open-pr-backfill.mjs → .github/scripts/preview-labels.test.mjs
-- `Preview Status Section` --conceptually_related_to--> `PR Preview Publisher`  [INFERRED]
-  PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md → CHANGELOG.md
-- `mergeStandingSyncPullRequest()` --calls--> `request()`  [INFERRED]
-  .github/scripts/merge-main-develop-sync-pr.mjs → .github/scripts/provision-preview-fallback.mjs
+- `Control Plane Changelog` --references--> `PR #661: Conflict Scans and Visible Previews`  [EXTRACTED]
+  CHANGELOG.md → PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md
 
 ## Import Cycles
 - None detected.
 
 ## Hyperedges (group relationships)
+- **Lopu PR Management Flow** — github_workflows_resolve_pr_conflicts_lopu_pr_manager, github_workflows_resolve_pr_conflicts_conflict_detector, github_workflows_resolve_pr_conflicts_durable_model_fleet, github_workflows_resolve_pr_conflicts_workflow_dispatch [EXTRACTED 0.90]
+- **PR #661 Delivery Reliability Repairs** — prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_pr_661, prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_dependency_graph_regression, prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_bounded_pr_inventory, prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_ref_race_retry [EXTRACTED 0.95]
 - **Protected Develop Preview Delivery Flow** — github_workflows_develop_pr_preview_prepare, github_workflows_develop_pr_preview_build, github_workflows_develop_pr_preview_controller, concept_preview_publication [EXTRACTED 0.95]
 - **Admin Selected Preview Delivery Flow** — github_workflows_develop_pr_preview_admin_prepare, github_workflows_develop_pr_preview_admin_build, github_workflows_develop_pr_preview_admin_controller, concept_preview_publication [EXTRACTED 0.95]
-- **PR 661 Control-plane Reliability Repairs** — prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews, prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_preview_status_section, prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_conflict_scan_repair, github_workflows_resolve_pr_conflicts_lopu_pr_manager [EXTRACTED 0.90]
 - **Control-plane Validation Flow** — github_workflows_control_plane_ci_verify, github_workflows_control_plane_ci_contract_advisories, github_workflows_control_plane_ci_comment_contract_advisories [EXTRACTED 0.95]
 - **Protected PR Preview Publication** — github_scripts_deploy_develop_pr_preview, github_scripts_deploy_admin_pr_previews, vercel [EXTRACTED 0.95]
 - **Lopu Protected Automation** — github_workflows_resolve_pr_conflicts_lopu_pr_manager, github_actions_lopu_agent, lopu [EXTRACTED 0.95]
@@ -261,44 +262,44 @@ Cohesion: 0.12
 Nodes (16): BASE_REF, BASE_SHA, GITHUB_OUTPUT, PLAN_HASH, PROMOTION_BRANCH, reject_lineage_mismatch(), require_lineage_replay(), RESERVATION_SHA (+8 more)
 
 ### Community 18 - "deploy-develop-pr-preview.mjs"
+Cohesion: 0.13
+Nodes (17): Conflict Resolution, Control Plane Changelog, Graphify Content-Addressed Snapshot Router, Lopu PR Manager, PR Preview Publication, Conflict Detector, Durable Model Fleet, Lopu PR Manager Workflow (+9 more)
+
+### Community 19 - "promotion-worker.sh"
 Cohesion: 0.28
 Nodes (14): actionPath, copyTrustedTree(), extractVerifierScript(), filesUnder(), hashNamedFiles(), hashRebaseState(), hashTrustedTree(), makeStoppedRebase() (+6 more)
 
-### Community 19 - "promotion-worker.sh"
+### Community 20 - "promotion-worker-routing-contract.mjs"
 Cohesion: 0.26
 Nodes (14): assert_safe_regular_text_conflict(), clear_scratch(), emit(), emit_paths(), has_coherent_zdiff3_markers(), hash_index_entries(), hash_rebase_state(), rebase_in_progress() (+6 more)
 
-### Community 20 - "promotion-worker-routing-contract.mjs"
+### Community 21 - "feature-stack-progress.mjs"
 Cohesion: 0.35
 Nodes (12): classify_source_lineage(), emit(), emit_paths(), fail(), prepare(), require_environment(), require_reservation(), secure_git_environment() (+4 more)
 
-### Community 21 - "feature-stack-progress.mjs"
+### Community 22 - "recoverPromotionReviewCheckpoint"
 Cohesion: 0.14
 Nodes (13): action, allBranchWorkflow, developPromotionWorkflow, featurePromotionWorkflow, featureStackMergeIf, featureStackMergeJob, graphify, lopuAgent (+5 more)
 
-### Community 22 - "recoverPromotionReviewCheckpoint"
+### Community 23 - "control-plane-events.test.mjs"
 Cohesion: 0.15
 Nodes (12): Thingtime AI Instructions, Thingtime AI Instructions, Browser and UI validation, Canonical instruction file, Data and API conventions, Delivery messaging, Fundamentals (read first), GitHub push and PR publishing (+4 more)
 
-### Community 23 - "control-plane-events.test.mjs"
+### Community 24 - "queueTrustedPromotionWorker"
 Cohesion: 0.27
 Nodes (10): githubJobs(), postProgress(), progressSnapshot(), reconcile(), recoveryPayload(), run(), selfTest(), STEP_PHASES (+2 more)
 
-### Community 24 - "queueTrustedPromotionWorker"
+### Community 25 - "feature-stack-plan.mjs"
 Cohesion: 0.36
 Nodes (11): addExisting(), filesUnder(), git(), LEGACY_ROOT, missingFromWorktree(), PORTABLE, removeFromIndex(), restoreTrackedFromHead() (+3 more)
 
-### Community 25 - "feature-stack-plan.mjs"
+### Community 26 - "start.sh"
 Cohesion: 0.27
 Nodes (11): attestationMatches(), exactCheckpointPush(), inspectPromotionReviewCheckpoint(), isObjectId(), latestBotPromotionAttestationEvents(), liveRefShaWithActionsToken(), parsePromotionResolutionAttestations(), recoverPromotionReviewCheckpoint() (+3 more)
 
-### Community 26 - "start.sh"
+### Community 27 - "API Suite Job"
 Cohesion: 0.24
 Nodes (10): buildPromotionDispatchRequest(), dispatchPromotionResolution(), exactReservationDeleteArgs(), exactReservationPushArgs(), promotionBody(), promotionDispatchArgs(), queueTrustedPromotionWorker(), redispatchPromotionReservation() (+2 more)
-
-### Community 27 - "API Suite Job"
-Cohesion: 0.28
-Nodes (9): Control-plane Changelog, Graphify Snapshot Router, Lopu PR Manager, PR Preview Publisher, PR Conflict Detector, Lopu PR Manager Workflow, PR 661 Conflict Scans and Visible Previews, Conflict Scan Repair (+1 more)
 
 ### Community 28 - "verify-promotion-source-authority.sh"
 Cohesion: 0.64
@@ -389,7 +390,7 @@ Nodes (3): detect Job, Lopu Rebase Engine, route Job
   .github/workflows/develop-pr-preview.yml · relation: calls
 
 ## Knowledge Gaps
-- **262 isolated node(s):** `BASE_BRANCHES`, `completeRefspecs`, `MERGE_CONFIG`, `CAPACITY_PATTERNS`, `CREDENTIAL_PATTERNS` (+257 more)
+- **268 isolated node(s):** `BASE_BRANCHES`, `completeRefspecs`, `MERGE_CONFIG`, `CAPACITY_PATTERNS`, `CREDENTIAL_PATTERNS` (+263 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **73 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -405,7 +406,7 @@ _Questions this graph is uniquely positioned to answer:_
 - **Why does `mergeStandingSyncPullRequest()` connect `merge-main-develop-sync-pr.mjs` to `prepare-round.sh`?**
   _High betweenness centrality (0.024) - this node is a cross-community bridge._
 - **What connects `BASE_BRANCHES`, `completeRefspecs`, `MERGE_CONFIG` to the rest of the system?**
-  _262 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _268 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `graphify-cas.mjs` be split into smaller, more focused modules?**
   _Cohesion score 0.08892921960072596 - nodes in this community are weakly interconnected._
 - **Should `prepare-round.sh` be split into smaller, more focused modules?**

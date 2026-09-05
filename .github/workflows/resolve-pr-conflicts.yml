@@ -1780,10 +1780,6 @@ jobs:
                       mergeable
                       mergeStateStatus
                       labels(first: 100) { nodes { name } }
-                      files(first: 100) {
-                        totalCount
-                        nodes { path }
-                      }
                     }
                     pageInfo { hasNextPage endCursor }
                   }
@@ -1808,29 +1804,16 @@ jobs:
               | {number, headRefName, baseRefName, isCrossRepository,
                  isDraft, mergeable, mergeStateStatus,
                  labels:(.labels.nodes // []),
-                 files:[.files.nodes[]?.path],
-                 filesTotal:(.files.totalCount // 0)}]' "$response")"
+                 files:[], filesTotal:0, filesIncomplete:true}]' "$response")"
             rm -f "$response"
             printf '%s\n' "$inventory"
           }
 
-          # GraphQL provides the first 100 changed paths per PR in the shared
-          # inventory. Fetch the uncommon larger diffs once, after mergeability
-          # polling settles, so overlap labels never silently miss path 101+.
-          # This function's stdout IS the completed inventory document, so its
-          # diagnostics go to stderr like gh_read_retry's: a notice printed on
-          # stdout is captured as the first line of `$all_open`, and every later
-          # `jq` over that variable dies on it. A PR big enough for GitHub to
-          # refuse the file list (HTTP 422, "this diff is taking too long to
-          # generate") is the case that reaches this branch. That 422 is not
-          # always permanent for a given diff: #291's 2896-file list answered in
-          # full, all 29 pages, on a replay of the identical paginated read
-          # minutes after run 33565992797 lost the scan to it. gh_read_retry
-          # classifies it as non-transient all the same -- its retry set is
-          # 408/429/500/502/503/504 and deliberately excludes 422 -- so this
-          # branch is the only handler a 422 ever reaches, and one such PR must
-          # degrade to its first 100 paths instead of taking the whole
-          # repository-wide scan down for every open PR.
+          # Keep expensive diff generation out of the shared GraphQL query:
+          # one large PR can time out every otherwise healthy PR in the page.
+          # Hydrate changed paths independently after mergeability settles.
+          # Failure preserves explicit incomplete state and does not abort the
+          # repository scan. Diagnostics must stay on stderr, never JSON stdout.
           complete_large_pr_files() {
             local inventory="$1" encoded pr number pages
             while IFS= read -r encoded; do
@@ -1841,7 +1824,7 @@ jobs:
               if ! gh_read_retry --paginate \
                   "repos/$REPO/pulls/$number/files?per_page=100" --slurp >"$pages"; then
                 rm -f "$pages"
-                echo "::warning::Could not complete the changed-file inventory for #$number; overlap labels fall back to its first 100 changed paths." >&2
+                echo "::warning::Could not complete the changed-file inventory for #$number; overlap labels use only its available changed paths (inventory incomplete)." >&2
                 continue
               fi
               inventory="$(jq -c \
@@ -1849,10 +1832,10 @@ jobs:
                 --slurpfile response "$pages" \
                 '($response[0] | add // [] | map(.filename) | unique) as $files
                  | map(if .number == $number
-                       then . + {files:$files, filesTotal:($files | length)}
+                       then . + {files:$files, filesTotal:($files | length), filesIncomplete:false}
                        else . end)' <<<"$inventory")"
               rm -f "$pages"
-            done < <(jq -r '.[] | select(.filesTotal > (.files | length)) | @base64' <<<"$inventory")
+            done < <(jq -r '.[] | select(.filesIncomplete == true or .filesTotal > (.files | length)) | @base64' <<<"$inventory")
             printf '%s\n' "$inventory"
           }
 

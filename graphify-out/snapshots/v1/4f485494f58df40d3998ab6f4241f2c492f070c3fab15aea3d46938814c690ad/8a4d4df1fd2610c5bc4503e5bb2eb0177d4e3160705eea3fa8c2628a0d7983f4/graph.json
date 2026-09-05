@@ -4,6 +4,34 @@
   "graph": {
     "hyperedges": [
       {
+        "id": "lopu_pr_management_flow",
+        "label": "Lopu PR Management Flow",
+        "nodes": [
+          "github_workflows_resolve_pr_conflicts_lopu_pr_manager",
+          "github_workflows_resolve_pr_conflicts_conflict_detector",
+          "github_workflows_resolve_pr_conflicts_durable_model_fleet",
+          "github_workflows_resolve_pr_conflicts_workflow_dispatch"
+        ],
+        "relation": "participate_in",
+        "confidence": "EXTRACTED",
+        "confidence_score": 0.9,
+        "source_file": ".github/workflows/resolve-pr-conflicts.yml"
+      },
+      {
+        "id": "pr_661_delivery_reliability_repairs",
+        "label": "PR #661 Delivery Reliability Repairs",
+        "nodes": [
+          "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_pr_661",
+          "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_dependency_graph_regression",
+          "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_bounded_pr_inventory",
+          "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_ref_race_retry"
+        ],
+        "relation": "participate_in",
+        "confidence": "EXTRACTED",
+        "confidence_score": 0.95,
+        "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md"
+      },
+      {
         "id": "develop_preview_delivery_flow",
         "label": "Protected Develop Preview Delivery Flow",
         "nodes": [
@@ -30,20 +58,6 @@
         "confidence": "EXTRACTED",
         "confidence_score": 0.95,
         "source_file": ".github/workflows/develop-pr-preview.yml"
-      },
-      {
-        "id": "pr_661_control_plane_reliability",
-        "label": "PR 661 Control-plane Reliability Repairs",
-        "nodes": [
-          "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews",
-          "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_preview_status_section",
-          "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_conflict_scan_repair",
-          "github_workflows_resolve_pr_conflicts_lopu_pr_manager"
-        ],
-        "relation": "participate_in",
-        "confidence": "EXTRACTED",
-        "confidence_score": 0.9,
-        "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md"
       },
       {
         "id": "control_plane_validation",
@@ -1323,9 +1337,9 @@
       "source_file": ".github/scripts/feature-stack-progress.mjs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 23,
+      "community": 24,
       "norm_label": "feature-stack-progress.mjs",
-      "community_name": "control-plane-events.test.mjs",
+      "community_name": "queueTrustedPromotionWorker",
       "id": "github_scripts_feature_stack_progress"
     },
     {
@@ -1334,9 +1348,9 @@
       "source_file": ".github/scripts/feature-stack-progress.mjs",
       "source_location": "L6",
       "_origin": "ast",
-      "community": 23,
+      "community": 24,
       "norm_label": "terminal_conclusions",
-      "community_name": "control-plane-events.test.mjs",
+      "community_name": "queueTrustedPromotionWorker",
       "id": "github_scripts_feature_stack_progress_terminal_conclusions"
     },
     {
@@ -1345,9 +1359,9 @@
       "source_file": ".github/scripts/feature-stack-progress.mjs",
       "source_location": "L7",
       "_origin": "ast",
-      "community": 23,
+      "community": 24,
       "norm_label": "terminal_target_statuses",
-      "community_name": "control-plane-events.test.mjs",
+      "community_name": "queueTrustedPromotionWorker",
       "id": "github_scripts_feature_stack_progress_terminal_target_statuses"
     },
     {
@@ -1356,9 +1370,9 @@
       "source_file": ".github/scripts/feature-stack-progress.mjs",
       "source_location": "L8",
       "_origin": "ast",
-      "community": 23,
+      "community": 24,
       "norm_label": "step_phases",
-      "community_name": "control-plane-events.test.mjs",
+      "community_name": "queueTrustedPromotionWorker",
       "id": "github_scripts_feature_stack_progress_step_phases"
     },
     {
@@ -1367,9 +1381,9 @@
       "source_file": ".github/scripts/feature-stack-progress.mjs",
       "source_location": "L18",
       "_origin": "ast",
-      "community": 23,
+      "community": 24,
       "norm_label": "targetprogress()",
-      "community_name": "control-plane-events.test.mjs",
+      "community_name": "queueTrustedPromotionWorker",
       "id": "github_scripts_feature_stack_progress_targetprogress"
     },
     {
@@ -1378,9 +1392,9 @@
       "source_file": ".github/scripts/feature-stack-progress.mjs",
       "source_location": "L70",
       "_origin": "ast",
-      "community": 23,
+      "community": 24,
       "norm_label": "progresssnapshot()",
-      "community_name": "control-plane-events.test.mjs",
+      "community_name": "queueTrustedPromotionWorker",
       "id": "github_scripts_feature_stack_progress_progresssnapshot"
     },
     {
@@ -1389,9 +1403,9 @@
       "source_file": ".github/scripts/feature-stack-progress.mjs",
       "source_location": "L105",
       "_origin": "ast",
-      "community": 23,
+      "community": 24,
       "norm_label": "githubjobs()",
-      "community_name": "control-plane-events.test.mjs",
+      "community_name": "queueTrustedPromotionWorker",
       "id": "github_scripts_feature_stack_progress_githubjobs"
     },
     {
@@ -1400,9 +1414,9 @@
       "source_file": ".github/scripts/feature-stack-progress.mjs",
       "source_location": "L115",
       "_origin": "ast",
-      "community": 23,
+      "community": 24,
       "norm_label": "postprogress()",
-      "community_name": "control-plane-events.test.mjs",
+      "community_name": "queueTrustedPromotionWorker",
       "id": "github_scripts_feature_stack_progress_postprogress"
     },
     {
@@ -1411,9 +1425,9 @@
       "source_file": ".github/scripts/feature-stack-progress.mjs",
       "source_location": "L137",
       "_origin": "ast",
-      "community": 23,
+      "community": 24,
       "norm_label": "recoverypayload()",
-      "community_name": "control-plane-events.test.mjs",
+      "community_name": "queueTrustedPromotionWorker",
       "id": "github_scripts_feature_stack_progress_recoverypayload"
     },
     {
@@ -1422,9 +1436,9 @@
       "source_file": ".github/scripts/feature-stack-progress.mjs",
       "source_location": "L188",
       "_origin": "ast",
-      "community": 23,
+      "community": 24,
       "norm_label": "reconcile()",
-      "community_name": "control-plane-events.test.mjs",
+      "community_name": "queueTrustedPromotionWorker",
       "id": "github_scripts_feature_stack_progress_reconcile"
     },
     {
@@ -1433,9 +1447,9 @@
       "source_file": ".github/scripts/feature-stack-progress.mjs",
       "source_location": "L205",
       "_origin": "ast",
-      "community": 23,
+      "community": 24,
       "norm_label": "run()",
-      "community_name": "control-plane-events.test.mjs",
+      "community_name": "queueTrustedPromotionWorker",
       "id": "github_scripts_feature_stack_progress_run"
     },
     {
@@ -1444,9 +1458,9 @@
       "source_file": ".github/scripts/feature-stack-progress.mjs",
       "source_location": "L271",
       "_origin": "ast",
-      "community": 23,
+      "community": 24,
       "norm_label": "selftest()",
-      "community_name": "control-plane-events.test.mjs",
+      "community_name": "queueTrustedPromotionWorker",
       "id": "github_scripts_feature_stack_progress_selftest"
     },
     {
@@ -4051,9 +4065,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L660",
       "_origin": "ast",
-      "community": 26,
+      "community": 27,
       "norm_label": "sourcelineagestatus()",
-      "community_name": "start.sh",
+      "community_name": "API Suite Job",
       "id": "github_scripts_promote_features_to_main_sourcelineagestatus"
     },
     {
@@ -4062,9 +4076,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L665",
       "_origin": "ast",
-      "community": 26,
+      "community": 27,
       "norm_label": "sourcelineagereviewrequired()",
-      "community_name": "start.sh",
+      "community_name": "API Suite Job",
       "id": "github_scripts_promote_features_to_main_sourcelineagereviewrequired"
     },
     {
@@ -4106,9 +4120,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L704",
       "_origin": "ast",
-      "community": 25,
+      "community": 26,
       "norm_label": "isobjectid()",
-      "community_name": "feature-stack-plan.mjs",
+      "community_name": "start.sh",
       "id": "github_scripts_promote_features_to_main_isobjectid"
     },
     {
@@ -4205,9 +4219,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L971",
       "_origin": "ast",
-      "community": 25,
+      "community": 26,
       "norm_label": "parsepromotionresolutionattestations()",
-      "community_name": "feature-stack-plan.mjs",
+      "community_name": "start.sh",
       "id": "github_scripts_promote_features_to_main_parsepromotionresolutionattestations"
     },
     {
@@ -4238,9 +4252,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1028",
       "_origin": "ast",
-      "community": 25,
+      "community": 26,
       "norm_label": "latestbotpromotionattestationevents()",
-      "community_name": "feature-stack-plan.mjs",
+      "community_name": "start.sh",
       "id": "github_scripts_promote_features_to_main_latestbotpromotionattestationevents"
     },
     {
@@ -4337,9 +4351,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1127",
       "_origin": "ast",
-      "community": 25,
+      "community": 26,
       "norm_label": "attestationmatches()",
-      "community_name": "feature-stack-plan.mjs",
+      "community_name": "start.sh",
       "id": "github_scripts_promote_features_to_main_attestationmatches"
     },
     {
@@ -4348,9 +4362,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1147",
       "_origin": "ast",
-      "community": 25,
+      "community": 26,
       "norm_label": "inspectpromotionreviewcheckpoint()",
-      "community_name": "feature-stack-plan.mjs",
+      "community_name": "start.sh",
       "id": "github_scripts_promote_features_to_main_inspectpromotionreviewcheckpoint"
     },
     {
@@ -4359,9 +4373,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1194",
       "_origin": "ast",
-      "community": 25,
+      "community": 26,
       "norm_label": "validateairesolvedpromotionbranch()",
-      "community_name": "feature-stack-plan.mjs",
+      "community_name": "start.sh",
       "id": "github_scripts_promote_features_to_main_validateairesolvedpromotionbranch"
     },
     {
@@ -4370,9 +4384,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1300",
       "_origin": "ast",
-      "community": 25,
+      "community": 26,
       "norm_label": "validatestalependingaipromotionbranch()",
-      "community_name": "feature-stack-plan.mjs",
+      "community_name": "start.sh",
       "id": "github_scripts_promote_features_to_main_validatestalependingaipromotionbranch"
     },
     {
@@ -4381,9 +4395,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1374",
       "_origin": "ast",
-      "community": 26,
+      "community": 27,
       "norm_label": "buildpromotiondispatchrequest()",
-      "community_name": "start.sh",
+      "community_name": "API Suite Job",
       "id": "github_scripts_promote_features_to_main_buildpromotiondispatchrequest"
     },
     {
@@ -4392,9 +4406,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1428",
       "_origin": "ast",
-      "community": 26,
+      "community": 27,
       "norm_label": "promotiondispatchargs()",
-      "community_name": "start.sh",
+      "community_name": "API Suite Job",
       "id": "github_scripts_promote_features_to_main_promotiondispatchargs"
     },
     {
@@ -4403,9 +4417,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1432",
       "_origin": "ast",
-      "community": 26,
+      "community": 27,
       "norm_label": "dispatchpromotionresolution()",
-      "community_name": "start.sh",
+      "community_name": "API Suite Job",
       "id": "github_scripts_promote_features_to_main_dispatchpromotionresolution"
     },
     {
@@ -4414,9 +4428,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1452",
       "_origin": "ast",
-      "community": 26,
+      "community": 27,
       "norm_label": "exactreservationdeleteargs()",
-      "community_name": "start.sh",
+      "community_name": "API Suite Job",
       "id": "github_scripts_promote_features_to_main_exactreservationdeleteargs"
     },
     {
@@ -4425,9 +4439,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1461",
       "_origin": "ast",
-      "community": 26,
+      "community": 27,
       "norm_label": "exactreservationpushargs()",
-      "community_name": "start.sh",
+      "community_name": "API Suite Job",
       "id": "github_scripts_promote_features_to_main_exactreservationpushargs"
     },
     {
@@ -4436,9 +4450,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1470",
       "_origin": "ast",
-      "community": 26,
+      "community": 27,
       "norm_label": "queuetrustedpromotionworker()",
-      "community_name": "start.sh",
+      "community_name": "API Suite Job",
       "id": "github_scripts_promote_features_to_main_queuetrustedpromotionworker"
     },
     {
@@ -4447,9 +4461,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1552",
       "_origin": "ast",
-      "community": 26,
+      "community": 27,
       "norm_label": "redispatchpromotionreservation()",
-      "community_name": "start.sh",
+      "community_name": "API Suite Job",
       "id": "github_scripts_promote_features_to_main_redispatchpromotionreservation"
     },
     {
@@ -4513,9 +4527,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1692",
       "_origin": "ast",
-      "community": 25,
+      "community": 26,
       "norm_label": "liverefshawithactionstoken()",
-      "community_name": "feature-stack-plan.mjs",
+      "community_name": "start.sh",
       "id": "github_scripts_promote_features_to_main_liverefshawithactionstoken"
     },
     {
@@ -4546,9 +4560,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1742",
       "_origin": "ast",
-      "community": 25,
+      "community": 26,
       "norm_label": "exactcheckpointpush()",
-      "community_name": "feature-stack-plan.mjs",
+      "community_name": "start.sh",
       "id": "github_scripts_promote_features_to_main_exactcheckpointpush"
     },
     {
@@ -4568,9 +4582,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1831",
       "_origin": "ast",
-      "community": 25,
+      "community": 26,
       "norm_label": "revalidatecheckpointrefs()",
-      "community_name": "feature-stack-plan.mjs",
+      "community_name": "start.sh",
       "id": "github_scripts_promote_features_to_main_revalidatecheckpointrefs"
     },
     {
@@ -4601,9 +4615,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L1877",
       "_origin": "ast",
-      "community": 25,
+      "community": 26,
       "norm_label": "recoverpromotionreviewcheckpoint()",
-      "community_name": "feature-stack-plan.mjs",
+      "community_name": "start.sh",
       "id": "github_scripts_promote_features_to_main_recoverpromotionreviewcheckpoint"
     },
     {
@@ -4964,9 +4978,9 @@
       "source_file": ".github/scripts/promote-features-to-main.mjs",
       "source_location": "L4748",
       "_origin": "ast",
-      "community": 26,
+      "community": 27,
       "norm_label": "promotionbody()",
-      "community_name": "start.sh",
+      "community_name": "API Suite Job",
       "id": "github_scripts_promote_features_to_main_promotionbody"
     },
     {
@@ -5718,9 +5732,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 21,
+      "community": 22,
       "norm_label": "promotion-worker-routing-contract.mjs",
-      "community_name": "feature-stack-progress.mjs",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "github_scripts_promotion_worker_routing_contract"
     },
     {
@@ -5729,9 +5743,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L8",
       "_origin": "ast",
-      "community": 21,
+      "community": 22,
       "norm_label": "workflow",
-      "community_name": "feature-stack-progress.mjs",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "github_scripts_promotion_worker_routing_contract_workflow"
     },
     {
@@ -5740,9 +5754,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L12",
       "_origin": "ast",
-      "community": 21,
+      "community": 22,
       "norm_label": "rebaseworkflow",
-      "community_name": "feature-stack-progress.mjs",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "github_scripts_promotion_worker_routing_contract_rebaseworkflow"
     },
     {
@@ -5751,9 +5765,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L16",
       "_origin": "ast",
-      "community": 21,
+      "community": 22,
       "norm_label": "allbranchworkflow",
-      "community_name": "feature-stack-progress.mjs",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "github_scripts_promotion_worker_routing_contract_allbranchworkflow"
     },
     {
@@ -5762,9 +5776,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L20",
       "_origin": "ast",
-      "community": 21,
+      "community": 22,
       "norm_label": "developpromotionworkflow",
-      "community_name": "feature-stack-progress.mjs",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "github_scripts_promotion_worker_routing_contract_developpromotionworkflow"
     },
     {
@@ -5773,9 +5787,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L24",
       "_origin": "ast",
-      "community": 21,
+      "community": 22,
       "norm_label": "featurepromotionworkflow",
-      "community_name": "feature-stack-progress.mjs",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "github_scripts_promotion_worker_routing_contract_featurepromotionworkflow"
     },
     {
@@ -5784,9 +5798,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L28",
       "_origin": "ast",
-      "community": 21,
+      "community": 22,
       "norm_label": "maindevelopsyncworkflow",
-      "community_name": "feature-stack-progress.mjs",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "github_scripts_promotion_worker_routing_contract_maindevelopsyncworkflow"
     },
     {
@@ -5795,9 +5809,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L32",
       "_origin": "ast",
-      "community": 21,
+      "community": 22,
       "norm_label": "action",
-      "community_name": "feature-stack-progress.mjs",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "github_scripts_promotion_worker_routing_contract_action"
     },
     {
@@ -5806,9 +5820,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L36",
       "_origin": "ast",
-      "community": 21,
+      "community": 22,
       "norm_label": "lopuagent",
-      "community_name": "feature-stack-progress.mjs",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "github_scripts_promotion_worker_routing_contract_lopuagent"
     },
     {
@@ -5817,9 +5831,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L40",
       "_origin": "ast",
-      "community": 21,
+      "community": 22,
       "norm_label": "worker",
-      "community_name": "feature-stack-progress.mjs",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "github_scripts_promotion_worker_routing_contract_worker"
     },
     {
@@ -5828,9 +5842,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L44",
       "_origin": "ast",
-      "community": 21,
+      "community": 22,
       "norm_label": "graphify",
-      "community_name": "feature-stack-progress.mjs",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "github_scripts_promotion_worker_routing_contract_graphify"
     },
     {
@@ -5839,9 +5853,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L48",
       "_origin": "ast",
-      "community": 21,
+      "community": 22,
       "norm_label": "promoter",
-      "community_name": "feature-stack-progress.mjs",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "github_scripts_promotion_worker_routing_contract_promoter"
     },
     {
@@ -5850,9 +5864,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L126",
       "_origin": "ast",
-      "community": 21,
+      "community": 22,
       "norm_label": "featurestackmergejob",
-      "community_name": "feature-stack-progress.mjs",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "github_scripts_promotion_worker_routing_contract_featurestackmergejob"
     },
     {
@@ -5861,9 +5875,9 @@
       "source_file": ".github/scripts/promotion-worker-routing-contract.mjs",
       "source_location": "L128",
       "_origin": "ast",
-      "community": 21,
+      "community": 22,
       "norm_label": "featurestackmergeif",
-      "community_name": "feature-stack-progress.mjs",
+      "community_name": "recoverPromotionReviewCheckpoint",
       "id": "github_scripts_promotion_worker_routing_contract_featurestackmergeif"
     },
     {
@@ -6064,9 +6078,9 @@
       "source_file": ".github/scripts/rebase-related-edits.test.mjs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 18,
+      "community": 19,
       "norm_label": "rebase-related-edits.test.mjs",
-      "community_name": "deploy-develop-pr-preview.mjs",
+      "community_name": "promotion-worker.sh",
       "id": "github_scripts_rebase_related_edits_test"
     },
     {
@@ -6075,9 +6089,9 @@
       "source_file": ".github/scripts/rebase-related-edits.test.mjs",
       "source_location": "L22",
       "_origin": "ast",
-      "community": 18,
+      "community": 19,
       "norm_label": "scriptdir",
-      "community_name": "deploy-develop-pr-preview.mjs",
+      "community_name": "promotion-worker.sh",
       "id": "github_scripts_rebase_related_edits_test_scriptdir"
     },
     {
@@ -6086,9 +6100,9 @@
       "source_file": ".github/scripts/rebase-related-edits.test.mjs",
       "source_location": "L23",
       "_origin": "ast",
-      "community": 18,
+      "community": 19,
       "norm_label": "repositoryroot",
-      "community_name": "deploy-develop-pr-preview.mjs",
+      "community_name": "promotion-worker.sh",
       "id": "github_scripts_rebase_related_edits_test_repositoryroot"
     },
     {
@@ -6097,9 +6111,9 @@
       "source_file": ".github/scripts/rebase-related-edits.test.mjs",
       "source_location": "L24",
       "_origin": "ast",
-      "community": 18,
+      "community": 19,
       "norm_label": "actionpath",
-      "community_name": "deploy-develop-pr-preview.mjs",
+      "community_name": "promotion-worker.sh",
       "id": "github_scripts_rebase_related_edits_test_actionpath"
     },
     {
@@ -6108,9 +6122,9 @@
       "source_file": ".github/scripts/rebase-related-edits.test.mjs",
       "source_location": "L29",
       "_origin": "ast",
-      "community": 18,
+      "community": 19,
       "norm_label": "rungit()",
-      "community_name": "deploy-develop-pr-preview.mjs",
+      "community_name": "promotion-worker.sh",
       "id": "github_scripts_rebase_related_edits_test_rungit"
     },
     {
@@ -6119,9 +6133,9 @@
       "source_file": ".github/scripts/rebase-related-edits.test.mjs",
       "source_location": "L36",
       "_origin": "ast",
-      "community": 18,
+      "community": 19,
       "norm_label": "sha256()",
-      "community_name": "deploy-develop-pr-preview.mjs",
+      "community_name": "promotion-worker.sh",
       "id": "github_scripts_rebase_related_edits_test_sha256"
     },
     {
@@ -6130,9 +6144,9 @@
       "source_file": ".github/scripts/rebase-related-edits.test.mjs",
       "source_location": "L38",
       "_origin": "ast",
-      "community": 18,
+      "community": 19,
       "norm_label": "filesunder()",
-      "community_name": "deploy-develop-pr-preview.mjs",
+      "community_name": "promotion-worker.sh",
       "id": "github_scripts_rebase_related_edits_test_filesunder"
     },
     {
@@ -6141,9 +6155,9 @@
       "source_file": ".github/scripts/rebase-related-edits.test.mjs",
       "source_location": "L46",
       "_origin": "ast",
-      "community": 18,
+      "community": 19,
       "norm_label": "hashnamedfiles()",
-      "community_name": "deploy-develop-pr-preview.mjs",
+      "community_name": "promotion-worker.sh",
       "id": "github_scripts_rebase_related_edits_test_hashnamedfiles"
     },
     {
@@ -6152,9 +6166,9 @@
       "source_file": ".github/scripts/rebase-related-edits.test.mjs",
       "source_location": "L55",
       "_origin": "ast",
-      "community": 18,
+      "community": 19,
       "norm_label": "hashtrustedtree()",
-      "community_name": "deploy-develop-pr-preview.mjs",
+      "community_name": "promotion-worker.sh",
       "id": "github_scripts_rebase_related_edits_test_hashtrustedtree"
     },
     {
@@ -6163,9 +6177,9 @@
       "source_file": ".github/scripts/rebase-related-edits.test.mjs",
       "source_location": "L67",
       "_origin": "ast",
-      "community": 18,
+      "community": 19,
       "norm_label": "hashrebasestate()",
-      "community_name": "deploy-develop-pr-preview.mjs",
+      "community_name": "promotion-worker.sh",
       "id": "github_scripts_rebase_related_edits_test_hashrebasestate"
     },
     {
@@ -6174,9 +6188,9 @@
       "source_file": ".github/scripts/rebase-related-edits.test.mjs",
       "source_location": "L83",
       "_origin": "ast",
-      "community": 18,
+      "community": 19,
       "norm_label": "extractverifierscript()",
-      "community_name": "deploy-develop-pr-preview.mjs",
+      "community_name": "promotion-worker.sh",
       "id": "github_scripts_rebase_related_edits_test_extractverifierscript"
     },
     {
@@ -6185,9 +6199,9 @@
       "source_file": ".github/scripts/rebase-related-edits.test.mjs",
       "source_location": "L121",
       "_origin": "ast",
-      "community": 18,
+      "community": 19,
       "norm_label": "copytrustedtree()",
-      "community_name": "deploy-develop-pr-preview.mjs",
+      "community_name": "promotion-worker.sh",
       "id": "github_scripts_rebase_related_edits_test_copytrustedtree"
     },
     {
@@ -6196,9 +6210,9 @@
       "source_file": ".github/scripts/rebase-related-edits.test.mjs",
       "source_location": "L146",
       "_origin": "ast",
-      "community": 18,
+      "community": 19,
       "norm_label": "makestoppedrebase()",
-      "community_name": "deploy-develop-pr-preview.mjs",
+      "community_name": "promotion-worker.sh",
       "id": "github_scripts_rebase_related_edits_test_makestoppedrebase"
     },
     {
@@ -6207,9 +6221,9 @@
       "source_file": ".github/scripts/rebase-related-edits.test.mjs",
       "source_location": "L181",
       "_origin": "ast",
-      "community": 18,
+      "community": 19,
       "norm_label": "runverifier()",
-      "community_name": "deploy-develop-pr-preview.mjs",
+      "community_name": "promotion-worker.sh",
       "id": "github_scripts_rebase_related_edits_test_runverifier"
     },
     {
@@ -6218,9 +6232,9 @@
       "source_file": ".github/scripts/rebase-related-edits.test.mjs",
       "source_location": "L259",
       "_origin": "ast",
-      "community": 18,
+      "community": 19,
       "norm_label": "runprepareexecutableconflict()",
-      "community_name": "deploy-develop-pr-preview.mjs",
+      "community_name": "promotion-worker.sh",
       "id": "github_scripts_rebase_related_edits_test_runprepareexecutableconflict"
     },
     {
@@ -6233,9 +6247,9 @@
         "kind": "file"
       },
       "_origin": "ast",
-      "community": 19,
+      "community": 20,
       "norm_label": "prepare-round.sh",
-      "community_name": "promotion-worker.sh",
+      "community_name": "promotion-worker-routing-contract.mjs",
       "id": "github_scripts_rebase_stack_prepare_round"
     },
     {
@@ -6248,9 +6262,9 @@
         "kind": "bash_entrypoint"
       },
       "_origin": "ast",
-      "community": 19,
+      "community": 20,
       "norm_label": "prepare-round.sh script",
-      "community_name": "promotion-worker.sh",
+      "community_name": "promotion-worker-routing-contract.mjs",
       "id": "github_scripts_rebase_stack_prepare_round_sh__entry"
     },
     {
@@ -6263,9 +6277,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 19,
+      "community": 20,
       "norm_label": "emit()",
-      "community_name": "promotion-worker.sh",
+      "community_name": "promotion-worker-routing-contract.mjs",
       "id": "github_scripts_rebase_stack_prepare_round_emit"
     },
     {
@@ -6278,9 +6292,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 19,
+      "community": 20,
       "norm_label": "emit_paths()",
-      "community_name": "promotion-worker.sh",
+      "community_name": "promotion-worker-routing-contract.mjs",
       "id": "github_scripts_rebase_stack_prepare_round_emit_paths"
     },
     {
@@ -6293,9 +6307,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 19,
+      "community": 20,
       "norm_label": "secure_git_environment()",
-      "community_name": "promotion-worker.sh",
+      "community_name": "promotion-worker-routing-contract.mjs",
       "id": "github_scripts_rebase_stack_prepare_round_secure_git_environment"
     },
     {
@@ -6308,9 +6322,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 19,
+      "community": 20,
       "norm_label": "rebase_in_progress()",
-      "community_name": "promotion-worker.sh",
+      "community_name": "promotion-worker-routing-contract.mjs",
       "id": "github_scripts_rebase_stack_prepare_round_rebase_in_progress"
     },
     {
@@ -6323,9 +6337,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 19,
+      "community": 20,
       "norm_label": "unsafe_path_syntax()",
-      "community_name": "promotion-worker.sh",
+      "community_name": "promotion-worker-routing-contract.mjs",
       "id": "github_scripts_rebase_stack_prepare_round_unsafe_path_syntax"
     },
     {
@@ -6338,9 +6352,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 19,
+      "community": 20,
       "norm_label": "has_coherent_zdiff3_markers()",
-      "community_name": "promotion-worker.sh",
+      "community_name": "promotion-worker-routing-contract.mjs",
       "id": "github_scripts_rebase_stack_prepare_round_has_coherent_zdiff3_markers"
     },
     {
@@ -6353,9 +6367,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 19,
+      "community": 20,
       "norm_label": "assert_safe_regular_text_conflict()",
-      "community_name": "promotion-worker.sh",
+      "community_name": "promotion-worker-routing-contract.mjs",
       "id": "github_scripts_rebase_stack_prepare_round_assert_safe_regular_text_conflict"
     },
     {
@@ -6368,9 +6382,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 19,
+      "community": 20,
       "norm_label": "sha256_file()",
-      "community_name": "promotion-worker.sh",
+      "community_name": "promotion-worker-routing-contract.mjs",
       "id": "github_scripts_rebase_stack_prepare_round_sha256_file"
     },
     {
@@ -6383,9 +6397,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 19,
+      "community": 20,
       "norm_label": "sha256_stdin()",
-      "community_name": "promotion-worker.sh",
+      "community_name": "promotion-worker-routing-contract.mjs",
       "id": "github_scripts_rebase_stack_prepare_round_sha256_stdin"
     },
     {
@@ -6398,9 +6412,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 19,
+      "community": 20,
       "norm_label": "hash_index_entries()",
-      "community_name": "promotion-worker.sh",
+      "community_name": "promotion-worker-routing-contract.mjs",
       "id": "github_scripts_rebase_stack_prepare_round_hash_index_entries"
     },
     {
@@ -6413,9 +6427,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 19,
+      "community": 20,
       "norm_label": "hash_rebase_state()",
-      "community_name": "promotion-worker.sh",
+      "community_name": "promotion-worker-routing-contract.mjs",
       "id": "github_scripts_rebase_stack_prepare_round_hash_rebase_state"
     },
     {
@@ -6428,9 +6442,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 19,
+      "community": 20,
       "norm_label": "write_unmerged_paths()",
-      "community_name": "promotion-worker.sh",
+      "community_name": "promotion-worker-routing-contract.mjs",
       "id": "github_scripts_rebase_stack_prepare_round_write_unmerged_paths"
     },
     {
@@ -6443,9 +6457,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 19,
+      "community": 20,
       "norm_label": "clear_scratch()",
-      "community_name": "promotion-worker.sh",
+      "community_name": "promotion-worker-routing-contract.mjs",
       "id": "github_scripts_rebase_stack_prepare_round_clear_scratch"
     },
     {
@@ -6458,9 +6472,9 @@
         "kind": "file"
       },
       "_origin": "ast",
-      "community": 20,
+      "community": 21,
       "norm_label": "promotion-worker.sh",
-      "community_name": "promotion-worker-routing-contract.mjs",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_rebase_stack_promotion_worker"
     },
     {
@@ -6473,9 +6487,9 @@
         "kind": "bash_entrypoint"
       },
       "_origin": "ast",
-      "community": 20,
+      "community": 21,
       "norm_label": "promotion-worker.sh script",
-      "community_name": "promotion-worker-routing-contract.mjs",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_rebase_stack_promotion_worker_sh__entry"
     },
     {
@@ -6488,9 +6502,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 20,
+      "community": 21,
       "norm_label": "emit()",
-      "community_name": "promotion-worker-routing-contract.mjs",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_rebase_stack_promotion_worker_emit"
     },
     {
@@ -6503,9 +6517,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 20,
+      "community": 21,
       "norm_label": "emit_paths()",
-      "community_name": "promotion-worker-routing-contract.mjs",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_rebase_stack_promotion_worker_emit_paths"
     },
     {
@@ -6518,9 +6532,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 20,
+      "community": 21,
       "norm_label": "fail()",
-      "community_name": "promotion-worker-routing-contract.mjs",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_rebase_stack_promotion_worker_fail"
     },
     {
@@ -6533,9 +6547,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 20,
+      "community": 21,
       "norm_label": "sha256_stdin()",
-      "community_name": "promotion-worker-routing-contract.mjs",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_rebase_stack_promotion_worker_sha256_stdin"
     },
     {
@@ -6548,9 +6562,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 20,
+      "community": 21,
       "norm_label": "secure_git_environment()",
-      "community_name": "promotion-worker-routing-contract.mjs",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_rebase_stack_promotion_worker_secure_git_environment"
     },
     {
@@ -6563,9 +6577,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 20,
+      "community": 21,
       "norm_label": "require_environment()",
-      "community_name": "promotion-worker-routing-contract.mjs",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_rebase_stack_promotion_worker_require_environment"
     },
     {
@@ -6578,9 +6592,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 20,
+      "community": 21,
       "norm_label": "unsafe_path_syntax()",
-      "community_name": "promotion-worker-routing-contract.mjs",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_rebase_stack_promotion_worker_unsafe_path_syntax"
     },
     {
@@ -6593,9 +6607,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 20,
+      "community": 21,
       "norm_label": "classify_source_lineage()",
-      "community_name": "promotion-worker-routing-contract.mjs",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_rebase_stack_promotion_worker_classify_source_lineage"
     },
     {
@@ -6608,9 +6622,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 20,
+      "community": 21,
       "norm_label": "write_plan()",
-      "community_name": "promotion-worker-routing-contract.mjs",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_rebase_stack_promotion_worker_write_plan"
     },
     {
@@ -6623,9 +6637,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 20,
+      "community": 21,
       "norm_label": "require_reservation()",
-      "community_name": "promotion-worker-routing-contract.mjs",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_rebase_stack_promotion_worker_require_reservation"
     },
     {
@@ -6638,9 +6652,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 20,
+      "community": 21,
       "norm_label": "prepare()",
-      "community_name": "promotion-worker-routing-contract.mjs",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_rebase_stack_promotion_worker_prepare"
     },
     {
@@ -6653,9 +6667,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 20,
+      "community": 21,
       "norm_label": "note_discarded()",
-      "community_name": "promotion-worker-routing-contract.mjs",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_rebase_stack_promotion_worker_note_discarded"
     },
     {
@@ -6668,9 +6682,9 @@
         "kind": "bash_function"
       },
       "_origin": "ast",
-      "community": 20,
+      "community": 21,
       "norm_label": "verify()",
-      "community_name": "promotion-worker-routing-contract.mjs",
+      "community_name": "feature-stack-progress.mjs",
       "id": "github_scripts_rebase_stack_promotion_worker_verify"
     },
     {
@@ -7378,292 +7392,6 @@
       "id": "github_scripts_resolve_canonical_instruction_type_conflicts_test_write"
     },
     {
-      "label": "resolve-pr-conflicts-routing-contract.mjs",
-      "file_type": "code",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L1",
-      "_origin": "ast",
-      "community": 6,
-      "norm_label": "resolve-pr-conflicts-routing-contract.mjs",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
-      "id": "github_scripts_resolve_pr_conflicts_routing_contract"
-    },
-    {
-      "label": "WORKFLOW_URL",
-      "file_type": "code",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L17",
-      "_origin": "ast",
-      "community": 6,
-      "norm_label": "workflow_url",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
-      "id": "github_scripts_resolve_pr_conflicts_routing_contract_workflow_url"
-    },
-    {
-      "label": "REBASE_WORKFLOW_URL",
-      "file_type": "code",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L18",
-      "_origin": "ast",
-      "community": 6,
-      "norm_label": "rebase_workflow_url",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
-      "id": "github_scripts_resolve_pr_conflicts_routing_contract_rebase_workflow_url"
-    },
-    {
-      "label": "REBASE_ACTION_URL",
-      "file_type": "code",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L19",
-      "_origin": "ast",
-      "community": 6,
-      "norm_label": "rebase_action_url",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
-      "id": "github_scripts_resolve_pr_conflicts_routing_contract_rebase_action_url"
-    },
-    {
-      "label": "LOPU_ACTION_URL",
-      "file_type": "code",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L20",
-      "_origin": "ast",
-      "community": 6,
-      "norm_label": "lopu_action_url",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
-      "id": "github_scripts_resolve_pr_conflicts_routing_contract_lopu_action_url"
-    },
-    {
-      "label": "LOPU_STATUS_URL",
-      "file_type": "code",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L21",
-      "_origin": "ast",
-      "community": 6,
-      "norm_label": "lopu_status_url",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
-      "id": "github_scripts_resolve_pr_conflicts_routing_contract_lopu_status_url"
-    },
-    {
-      "label": "LOPU_STATUS_TEST_URL",
-      "file_type": "code",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L22",
-      "_origin": "ast",
-      "community": 6,
-      "norm_label": "lopu_status_test_url",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
-      "id": "github_scripts_resolve_pr_conflicts_routing_contract_lopu_status_test_url"
-    },
-    {
-      "label": "REPO_ROOT",
-      "file_type": "code",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L23",
-      "_origin": "ast",
-      "community": 6,
-      "norm_label": "repo_root",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
-      "id": "github_scripts_resolve_pr_conflicts_routing_contract_repo_root"
-    },
-    {
-      "label": "positiveDecimal()",
-      "file_type": "code",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L25",
-      "_origin": "ast",
-      "community": 6,
-      "norm_label": "positivedecimal()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
-      "id": "github_scripts_resolve_pr_conflicts_routing_contract_positivedecimal"
-    },
-    {
-      "label": "validDepth()",
-      "file_type": "code",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L26",
-      "_origin": "ast",
-      "community": 6,
-      "norm_label": "validdepth()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
-      "id": "github_scripts_resolve_pr_conflicts_routing_contract_validdepth"
-    },
-    {
-      "label": "encodeBatch()",
-      "file_type": "code",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L34",
-      "_origin": "ast",
-      "community": 6,
-      "norm_label": "encodebatch()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
-      "id": "github_scripts_resolve_pr_conflicts_routing_contract_encodebatch"
-    },
-    {
-      "label": "decodeBatch()",
-      "file_type": "code",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L41",
-      "_origin": "ast",
-      "community": 6,
-      "norm_label": "decodebatch()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
-      "id": "github_scripts_resolve_pr_conflicts_routing_contract_decodebatch"
-    },
-    {
-      "label": "route()",
-      "file_type": "code",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L72",
-      "_origin": "ast",
-      "community": 6,
-      "norm_label": "route()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
-      "id": "github_scripts_resolve_pr_conflicts_routing_contract_route"
-    },
-    {
-      "label": "assertRoute()",
-      "file_type": "code",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L189",
-      "_origin": "ast",
-      "community": 6,
-      "norm_label": "assertroute()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
-      "id": "github_scripts_resolve_pr_conflicts_routing_contract_assertroute"
-    },
-    {
-      "label": "CALLS_HELPER()",
-      "file_type": "code",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L240",
-      "_origin": "ast",
-      "community": 6,
-      "norm_label": "calls_helper()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
-      "id": "github_scripts_resolve_pr_conflicts_routing_contract_calls_helper"
-    },
-    {
-      "label": "shellFunctions()",
-      "file_type": "code",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L266",
-      "_origin": "ast",
-      "community": 6,
-      "norm_label": "shellfunctions()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
-      "id": "github_scripts_resolve_pr_conflicts_routing_contract_shellfunctions"
-    },
-    {
-      "label": "assertCapturedStdoutStaysClean()",
-      "file_type": "code",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L297",
-      "_origin": "ast",
-      "community": 6,
-      "norm_label": "assertcapturedstdoutstaysclean()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
-      "id": "github_scripts_resolve_pr_conflicts_routing_contract_assertcapturedstdoutstaysclean"
-    },
-    {
-      "label": "assertWorkflowSource()",
-      "file_type": "code",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L348",
-      "_origin": "ast",
-      "community": 6,
-      "norm_label": "assertworkflowsource()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
-      "id": "github_scripts_resolve_pr_conflicts_routing_contract_assertworkflowsource"
-    },
-    {
-      "label": "isStructuralYamlLine()",
-      "file_type": "code",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L1654",
-      "_origin": "ast",
-      "community": 6,
-      "norm_label": "isstructuralyamlline()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
-      "id": "github_scripts_resolve_pr_conflicts_routing_contract_isstructuralyamlline"
-    },
-    {
-      "label": "yamlIndent()",
-      "file_type": "code",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L1655",
-      "_origin": "ast",
-      "community": 6,
-      "norm_label": "yamlindent()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
-      "id": "github_scripts_resolve_pr_conflicts_routing_contract_yamlindent"
-    },
-    {
-      "label": "yamlScalarPattern()",
-      "file_type": "code",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L1663",
-      "_origin": "ast",
-      "community": 6,
-      "norm_label": "yamlscalarpattern()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
-      "id": "github_scripts_resolve_pr_conflicts_routing_contract_yamlscalarpattern"
-    },
-    {
-      "label": "yamlStepAt()",
-      "file_type": "code",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L1675",
-      "_origin": "ast",
-      "community": 6,
-      "norm_label": "yamlstepat()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
-      "id": "github_scripts_resolve_pr_conflicts_routing_contract_yamlstepat"
-    },
-    {
-      "label": "aiRuntimeSourceFiles()",
-      "file_type": "code",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L1710",
-      "_origin": "ast",
-      "community": 6,
-      "norm_label": "airuntimesourcefiles()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
-      "id": "github_scripts_resolve_pr_conflicts_routing_contract_airuntimesourcefiles"
-    },
-    {
-      "label": "assertAdminLoader()",
-      "file_type": "code",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L1720",
-      "_origin": "ast",
-      "community": 6,
-      "norm_label": "assertadminloader()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
-      "id": "github_scripts_resolve_pr_conflicts_routing_contract_assertadminloader"
-    },
-    {
-      "label": "assertAdminModelRouting()",
-      "file_type": "code",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L1735",
-      "_origin": "ast",
-      "community": 6,
-      "norm_label": "assertadminmodelrouting()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
-      "id": "github_scripts_resolve_pr_conflicts_routing_contract_assertadminmodelrouting"
-    },
-    {
-      "label": "selfTest()",
-      "file_type": "code",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L2127",
-      "_origin": "ast",
-      "community": 6,
-      "norm_label": "selftest()",
-      "community_name": "resolve-pr-conflicts-routing-contract.mjs",
-      "id": "github_scripts_resolve_pr_conflicts_routing_contract_selftest"
-    },
-    {
       "label": "resolve-pr-conflicts-routing-contract.test.mjs",
       "file_type": "code",
       "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.test.mjs",
@@ -7691,9 +7419,9 @@
       "source_file": ".github/scripts/stage-graphify-snapshots.mjs",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 24,
+      "community": 25,
       "norm_label": "stage-graphify-snapshots.mjs",
-      "community_name": "queueTrustedPromotionWorker",
+      "community_name": "feature-stack-plan.mjs",
       "id": "github_scripts_stage_graphify_snapshots"
     },
     {
@@ -7702,9 +7430,9 @@
       "source_file": ".github/scripts/stage-graphify-snapshots.mjs",
       "source_location": "L16",
       "_origin": "ast",
-      "community": 24,
+      "community": 25,
       "norm_label": "portable",
-      "community_name": "queueTrustedPromotionWorker",
+      "community_name": "feature-stack-plan.mjs",
       "id": "github_scripts_stage_graphify_snapshots_portable"
     },
     {
@@ -7713,9 +7441,9 @@
       "source_file": ".github/scripts/stage-graphify-snapshots.mjs",
       "source_location": "L23",
       "_origin": "ast",
-      "community": 24,
+      "community": 25,
       "norm_label": "legacy_root",
-      "community_name": "queueTrustedPromotionWorker",
+      "community_name": "feature-stack-plan.mjs",
       "id": "github_scripts_stage_graphify_snapshots_legacy_root"
     },
     {
@@ -7724,9 +7452,9 @@
       "source_file": ".github/scripts/stage-graphify-snapshots.mjs",
       "source_location": "L28",
       "_origin": "ast",
-      "community": 24,
+      "community": 25,
       "norm_label": "git()",
-      "community_name": "queueTrustedPromotionWorker",
+      "community_name": "feature-stack-plan.mjs",
       "id": "github_scripts_stage_graphify_snapshots_git"
     },
     {
@@ -7735,9 +7463,9 @@
       "source_file": ".github/scripts/stage-graphify-snapshots.mjs",
       "source_location": "L35",
       "_origin": "ast",
-      "community": 24,
+      "community": 25,
       "norm_label": "filesunder()",
-      "community_name": "queueTrustedPromotionWorker",
+      "community_name": "feature-stack-plan.mjs",
       "id": "github_scripts_stage_graphify_snapshots_filesunder"
     },
     {
@@ -7746,9 +7474,9 @@
       "source_file": ".github/scripts/stage-graphify-snapshots.mjs",
       "source_location": "L53",
       "_origin": "ast",
-      "community": 24,
+      "community": 25,
       "norm_label": "addexisting()",
-      "community_name": "queueTrustedPromotionWorker",
+      "community_name": "feature-stack-plan.mjs",
       "id": "github_scripts_stage_graphify_snapshots_addexisting"
     },
     {
@@ -7757,9 +7485,9 @@
       "source_file": ".github/scripts/stage-graphify-snapshots.mjs",
       "source_location": "L65",
       "_origin": "ast",
-      "community": 24,
+      "community": 25,
       "norm_label": "trackedunder()",
-      "community_name": "queueTrustedPromotionWorker",
+      "community_name": "feature-stack-plan.mjs",
       "id": "github_scripts_stage_graphify_snapshots_trackedunder"
     },
     {
@@ -7768,9 +7496,9 @@
       "source_file": ".github/scripts/stage-graphify-snapshots.mjs",
       "source_location": "L70",
       "_origin": "ast",
-      "community": 24,
+      "community": 25,
       "norm_label": "missingfromworktree()",
-      "community_name": "queueTrustedPromotionWorker",
+      "community_name": "feature-stack-plan.mjs",
       "id": "github_scripts_stage_graphify_snapshots_missingfromworktree"
     },
     {
@@ -7779,9 +7507,9 @@
       "source_file": ".github/scripts/stage-graphify-snapshots.mjs",
       "source_location": "L86",
       "_origin": "ast",
-      "community": 24,
+      "community": 25,
       "norm_label": "removefromindex()",
-      "community_name": "queueTrustedPromotionWorker",
+      "community_name": "feature-stack-plan.mjs",
       "id": "github_scripts_stage_graphify_snapshots_removefromindex"
     },
     {
@@ -7790,9 +7518,9 @@
       "source_file": ".github/scripts/stage-graphify-snapshots.mjs",
       "source_location": "L97",
       "_origin": "ast",
-      "community": 24,
+      "community": 25,
       "norm_label": "restoretrackedfromhead()",
-      "community_name": "queueTrustedPromotionWorker",
+      "community_name": "feature-stack-plan.mjs",
       "id": "github_scripts_stage_graphify_snapshots_restoretrackedfromhead"
     },
     {
@@ -7801,9 +7529,9 @@
       "source_file": ".github/scripts/stage-graphify-snapshots.mjs",
       "source_location": "L109",
       "_origin": "ast",
-      "community": 24,
+      "community": 25,
       "norm_label": "stagegraphifysnapshots()",
-      "community_name": "queueTrustedPromotionWorker",
+      "community_name": "feature-stack-plan.mjs",
       "id": "github_scripts_stage_graphify_snapshots_stagegraphifysnapshots"
     },
     {
@@ -7812,9 +7540,9 @@
       "source_file": ".github/scripts/stage-graphify-snapshots.mjs",
       "source_location": "L160",
       "_origin": "ast",
-      "community": 24,
+      "community": 25,
       "norm_label": "selftest()",
-      "community_name": "queueTrustedPromotionWorker",
+      "community_name": "feature-stack-plan.mjs",
       "id": "github_scripts_stage_graphify_snapshots_selftest"
     },
     {
@@ -7944,9 +7672,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 22,
+      "community": 23,
       "norm_label": "agents.md",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "control-plane-events.test.mjs",
       "id": "agents"
     },
     {
@@ -7955,9 +7683,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L3",
       "_origin": "ast",
-      "community": 22,
+      "community": 23,
       "norm_label": "canonical instruction file",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "control-plane-events.test.mjs",
       "id": "users_lopu_codex_tmp_thingtime_pr_delivery_repair_agents_canonical_instruction_file"
     },
     {
@@ -7966,9 +7694,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L19",
       "_origin": "ast",
-      "community": 22,
+      "community": 23,
       "norm_label": "fundamentals (read first)",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "control-plane-events.test.mjs",
       "id": "users_lopu_codex_tmp_thingtime_pr_delivery_repair_agents_fundamentals_read_first"
     },
     {
@@ -7977,9 +7705,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L60",
       "_origin": "ast",
-      "community": 22,
+      "community": 23,
       "norm_label": "local development and worktrees",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "control-plane-events.test.mjs",
       "id": "users_lopu_codex_tmp_thingtime_pr_delivery_repair_agents_local_development_and_worktrees"
     },
     {
@@ -7988,9 +7716,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L123",
       "_origin": "ast",
-      "community": 22,
+      "community": 23,
       "norm_label": "browser and ui validation",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "control-plane-events.test.mjs",
       "id": "users_lopu_codex_tmp_thingtime_pr_delivery_repair_agents_browser_and_ui_validation"
     },
     {
@@ -7999,9 +7727,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L145",
       "_origin": "ast",
-      "community": 22,
+      "community": 23,
       "norm_label": "data and api conventions",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "control-plane-events.test.mjs",
       "id": "users_lopu_codex_tmp_thingtime_pr_delivery_repair_agents_data_and_api_conventions"
     },
     {
@@ -8010,9 +7738,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L180",
       "_origin": "ast",
-      "community": 22,
+      "community": 23,
       "norm_label": "github push and pr publishing",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "control-plane-events.test.mjs",
       "id": "users_lopu_codex_tmp_thingtime_pr_delivery_repair_agents_github_push_and_pr_publishing"
     },
     {
@@ -8021,9 +7749,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L220",
       "_origin": "ast",
-      "community": 22,
+      "community": 23,
       "norm_label": "linting, type checks, and package managers",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "control-plane-events.test.mjs",
       "id": "users_lopu_codex_tmp_thingtime_pr_delivery_repair_agents_linting_type_checks_and_package_managers"
     },
     {
@@ -8032,9 +7760,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L244",
       "_origin": "ast",
-      "community": 22,
+      "community": 23,
       "norm_label": "ios development and releases",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "control-plane-events.test.mjs",
       "id": "users_lopu_codex_tmp_thingtime_pr_delivery_repair_agents_ios_development_and_releases"
     },
     {
@@ -8043,9 +7771,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L276",
       "_origin": "ast",
-      "community": 22,
+      "community": 23,
       "norm_label": "graphify",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "control-plane-events.test.mjs",
       "id": "users_lopu_codex_tmp_thingtime_pr_delivery_repair_agents_graphify"
     },
     {
@@ -8054,9 +7782,9 @@
       "source_file": "AGENTS.md",
       "source_location": "L326",
       "_origin": "ast",
-      "community": 22,
+      "community": 23,
       "norm_label": "delivery messaging",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "control-plane-events.test.mjs",
       "id": "users_lopu_codex_tmp_thingtime_pr_delivery_repair_agents_delivery_messaging"
     },
     {
@@ -9080,9 +8808,9 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 22,
+      "community": 23,
       "norm_label": "thingtime ai instructions",
-      "community_name": "recoverPromotionReviewCheckpoint",
+      "community_name": "control-plane-events.test.mjs",
       "id": "agents_thingtime_ai_instructions"
     },
     {
@@ -10501,6 +10229,132 @@
       "id": "github_scripts_extract_vercel_prebuilt"
     },
     {
+      "label": "Develop PR Preview Workflow",
+      "file_type": "code",
+      "source_file": ".github/workflows/develop-pr-preview.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 56,
+      "norm_label": "develop pr preview workflow",
+      "community_name": "Repository-Aware Graphify Router",
+      "id": "github_workflows_develop_pr_preview"
+    },
+    {
+      "label": "Dispatch Job",
+      "file_type": "code",
+      "source_file": ".github/workflows/develop-pr-preview.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 16,
+      "norm_label": "dispatch job",
+      "community_name": "promotion-worker-contract.sh",
+      "id": "github_workflows_develop_pr_preview_dispatch"
+    },
+    {
+      "label": "Prepare Job",
+      "file_type": "code",
+      "source_file": ".github/workflows/develop-pr-preview.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 16,
+      "norm_label": "prepare job",
+      "community_name": "promotion-worker-contract.sh",
+      "id": "github_workflows_develop_pr_preview_prepare"
+    },
+    {
+      "label": "Build Job",
+      "file_type": "code",
+      "source_file": ".github/workflows/develop-pr-preview.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 16,
+      "norm_label": "build job",
+      "community_name": "promotion-worker-contract.sh",
+      "id": "github_workflows_develop_pr_preview_build"
+    },
+    {
+      "label": "Controller Job",
+      "file_type": "code",
+      "source_file": ".github/workflows/develop-pr-preview.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 16,
+      "norm_label": "controller job",
+      "community_name": "promotion-worker-contract.sh",
+      "id": "github_workflows_develop_pr_preview_controller"
+    },
+    {
+      "label": "Admin Prepare Job",
+      "file_type": "code",
+      "source_file": ".github/workflows/develop-pr-preview.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 16,
+      "norm_label": "admin prepare job",
+      "community_name": "promotion-worker-contract.sh",
+      "id": "github_workflows_develop_pr_preview_admin_prepare"
+    },
+    {
+      "label": "Admin Build Job",
+      "file_type": "code",
+      "source_file": ".github/workflows/develop-pr-preview.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 16,
+      "norm_label": "admin build job",
+      "community_name": "promotion-worker-contract.sh",
+      "id": "github_workflows_develop_pr_preview_admin_build"
+    },
+    {
+      "label": "Admin Controller Job",
+      "file_type": "code",
+      "source_file": ".github/workflows/develop-pr-preview.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 16,
+      "norm_label": "admin controller job",
+      "community_name": "promotion-worker-contract.sh",
+      "id": "github_workflows_develop_pr_preview_admin_controller"
+    },
+    {
+      "label": "Exact Head Preview Publication",
+      "file_type": "concept",
+      "source_file": ".github/workflows/develop-pr-preview.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 56,
+      "norm_label": "exact head preview publication",
+      "community_name": "Repository-Aware Graphify Router",
+      "id": "concept_preview_publication"
+    },
+    {
       "label": "control-plane-events.test.mjs",
       "file_type": "code",
       "source_file": ".github/scripts/control-plane-events.test.mjs",
@@ -10515,7 +10369,7 @@
       "label": "workflow",
       "file_type": "code",
       "source_file": ".github/scripts/control-plane-events.test.mjs",
-      "source_location": "L7",
+      "source_location": "L10",
       "_origin": "ast",
       "community": 33,
       "norm_label": "workflow",
@@ -10526,7 +10380,7 @@
       "label": "ci",
       "file_type": "code",
       "source_file": ".github/scripts/control-plane-events.test.mjs",
-      "source_location": "L8",
+      "source_location": "L11",
       "_origin": "ast",
       "community": 33,
       "norm_label": "ci",
@@ -10537,7 +10391,7 @@
       "label": "event()",
       "file_type": "code",
       "source_file": ".github/scripts/control-plane-events.test.mjs",
-      "source_location": "L10",
+      "source_location": "L13",
       "_origin": "ast",
       "community": 33,
       "norm_label": "event()",
@@ -10548,7 +10402,7 @@
       "label": "gateExpression()",
       "file_type": "code",
       "source_file": ".github/scripts/control-plane-events.test.mjs",
-      "source_location": "L14",
+      "source_location": "L17",
       "_origin": "ast",
       "community": 33,
       "norm_label": "gateexpression()",
@@ -10559,7 +10413,7 @@
       "label": "evaluate()",
       "file_type": "code",
       "source_file": ".github/scripts/control-plane-events.test.mjs",
-      "source_location": "L20",
+      "source_location": "L23",
       "_origin": "ast",
       "community": 33,
       "norm_label": "evaluate()",
@@ -10567,130 +10421,290 @@
       "community_name": "PR #634: Lopu comment admission and idempotent preview writes"
     },
     {
-      "label": "Develop PR Preview Workflow",
+      "label": "resolve-pr-conflicts-routing-contract.mjs",
       "file_type": "code",
-      "source_file": ".github/workflows/develop-pr-preview.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 56,
-      "norm_label": "develop pr preview workflow",
-      "id": "github_workflows_develop_pr_preview",
-      "community_name": "Repository-Aware Graphify Router"
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L1",
+      "_origin": "ast",
+      "community": 6,
+      "norm_label": "resolve-pr-conflicts-routing-contract.mjs",
+      "id": "github_scripts_resolve_pr_conflicts_routing_contract",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs"
     },
     {
-      "label": "Dispatch Job",
+      "label": "WORKFLOW_URL",
       "file_type": "code",
-      "source_file": ".github/workflows/develop-pr-preview.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 16,
-      "norm_label": "dispatch job",
-      "id": "github_workflows_develop_pr_preview_dispatch",
-      "community_name": "promotion-worker-contract.sh"
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L17",
+      "_origin": "ast",
+      "community": 6,
+      "norm_label": "workflow_url",
+      "id": "github_scripts_resolve_pr_conflicts_routing_contract_workflow_url",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs"
     },
     {
-      "label": "Prepare Job",
+      "label": "REBASE_WORKFLOW_URL",
       "file_type": "code",
-      "source_file": ".github/workflows/develop-pr-preview.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 16,
-      "norm_label": "prepare job",
-      "id": "github_workflows_develop_pr_preview_prepare",
-      "community_name": "promotion-worker-contract.sh"
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L18",
+      "_origin": "ast",
+      "community": 6,
+      "norm_label": "rebase_workflow_url",
+      "id": "github_scripts_resolve_pr_conflicts_routing_contract_rebase_workflow_url",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs"
     },
     {
-      "label": "Build Job",
+      "label": "REBASE_ACTION_URL",
       "file_type": "code",
-      "source_file": ".github/workflows/develop-pr-preview.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 16,
-      "norm_label": "build job",
-      "id": "github_workflows_develop_pr_preview_build",
-      "community_name": "promotion-worker-contract.sh"
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L19",
+      "_origin": "ast",
+      "community": 6,
+      "norm_label": "rebase_action_url",
+      "id": "github_scripts_resolve_pr_conflicts_routing_contract_rebase_action_url",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs"
     },
     {
-      "label": "Controller Job",
+      "label": "LOPU_ACTION_URL",
       "file_type": "code",
-      "source_file": ".github/workflows/develop-pr-preview.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 16,
-      "norm_label": "controller job",
-      "id": "github_workflows_develop_pr_preview_controller",
-      "community_name": "promotion-worker-contract.sh"
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L20",
+      "_origin": "ast",
+      "community": 6,
+      "norm_label": "lopu_action_url",
+      "id": "github_scripts_resolve_pr_conflicts_routing_contract_lopu_action_url",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs"
     },
     {
-      "label": "Admin Prepare Job",
+      "label": "LOPU_STATUS_URL",
       "file_type": "code",
-      "source_file": ".github/workflows/develop-pr-preview.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 16,
-      "norm_label": "admin prepare job",
-      "id": "github_workflows_develop_pr_preview_admin_prepare",
-      "community_name": "promotion-worker-contract.sh"
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L21",
+      "_origin": "ast",
+      "community": 6,
+      "norm_label": "lopu_status_url",
+      "id": "github_scripts_resolve_pr_conflicts_routing_contract_lopu_status_url",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs"
     },
     {
-      "label": "Admin Build Job",
+      "label": "LOPU_STATUS_TEST_URL",
       "file_type": "code",
-      "source_file": ".github/workflows/develop-pr-preview.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 16,
-      "norm_label": "admin build job",
-      "id": "github_workflows_develop_pr_preview_admin_build",
-      "community_name": "promotion-worker-contract.sh"
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L22",
+      "_origin": "ast",
+      "community": 6,
+      "norm_label": "lopu_status_test_url",
+      "id": "github_scripts_resolve_pr_conflicts_routing_contract_lopu_status_test_url",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs"
     },
     {
-      "label": "Admin Controller Job",
+      "label": "REPO_ROOT",
       "file_type": "code",
-      "source_file": ".github/workflows/develop-pr-preview.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 16,
-      "norm_label": "admin controller job",
-      "id": "github_workflows_develop_pr_preview_admin_controller",
-      "community_name": "promotion-worker-contract.sh"
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L23",
+      "_origin": "ast",
+      "community": 6,
+      "norm_label": "repo_root",
+      "id": "github_scripts_resolve_pr_conflicts_routing_contract_repo_root",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs"
     },
     {
-      "label": "Exact Head Preview Publication",
-      "file_type": "concept",
-      "source_file": ".github/workflows/develop-pr-preview.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 56,
-      "norm_label": "exact head preview publication",
-      "id": "concept_preview_publication",
-      "community_name": "Repository-Aware Graphify Router"
+      "label": "positiveDecimal()",
+      "file_type": "code",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L25",
+      "_origin": "ast",
+      "community": 6,
+      "norm_label": "positivedecimal()",
+      "id": "github_scripts_resolve_pr_conflicts_routing_contract_positivedecimal",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs"
+    },
+    {
+      "label": "validDepth()",
+      "file_type": "code",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L26",
+      "_origin": "ast",
+      "community": 6,
+      "norm_label": "validdepth()",
+      "id": "github_scripts_resolve_pr_conflicts_routing_contract_validdepth",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs"
+    },
+    {
+      "label": "encodeBatch()",
+      "file_type": "code",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L34",
+      "_origin": "ast",
+      "community": 6,
+      "norm_label": "encodebatch()",
+      "id": "github_scripts_resolve_pr_conflicts_routing_contract_encodebatch",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs"
+    },
+    {
+      "label": "decodeBatch()",
+      "file_type": "code",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L41",
+      "_origin": "ast",
+      "community": 6,
+      "norm_label": "decodebatch()",
+      "id": "github_scripts_resolve_pr_conflicts_routing_contract_decodebatch",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs"
+    },
+    {
+      "label": "route()",
+      "file_type": "code",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L72",
+      "_origin": "ast",
+      "community": 6,
+      "norm_label": "route()",
+      "id": "github_scripts_resolve_pr_conflicts_routing_contract_route",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs"
+    },
+    {
+      "label": "assertRoute()",
+      "file_type": "code",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L189",
+      "_origin": "ast",
+      "community": 6,
+      "norm_label": "assertroute()",
+      "id": "github_scripts_resolve_pr_conflicts_routing_contract_assertroute",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs"
+    },
+    {
+      "label": "CALLS_HELPER()",
+      "file_type": "code",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L240",
+      "_origin": "ast",
+      "community": 6,
+      "norm_label": "calls_helper()",
+      "id": "github_scripts_resolve_pr_conflicts_routing_contract_calls_helper",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs"
+    },
+    {
+      "label": "shellFunctions()",
+      "file_type": "code",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L266",
+      "_origin": "ast",
+      "community": 6,
+      "norm_label": "shellfunctions()",
+      "id": "github_scripts_resolve_pr_conflicts_routing_contract_shellfunctions",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs"
+    },
+    {
+      "label": "assertCapturedStdoutStaysClean()",
+      "file_type": "code",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L297",
+      "_origin": "ast",
+      "community": 6,
+      "norm_label": "assertcapturedstdoutstaysclean()",
+      "id": "github_scripts_resolve_pr_conflicts_routing_contract_assertcapturedstdoutstaysclean",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs"
+    },
+    {
+      "label": "assertWorkflowSource()",
+      "file_type": "code",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L348",
+      "_origin": "ast",
+      "community": 6,
+      "norm_label": "assertworkflowsource()",
+      "id": "github_scripts_resolve_pr_conflicts_routing_contract_assertworkflowsource",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs"
+    },
+    {
+      "label": "isStructuralYamlLine()",
+      "file_type": "code",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L1654",
+      "_origin": "ast",
+      "community": 6,
+      "norm_label": "isstructuralyamlline()",
+      "id": "github_scripts_resolve_pr_conflicts_routing_contract_isstructuralyamlline",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs"
+    },
+    {
+      "label": "yamlIndent()",
+      "file_type": "code",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L1655",
+      "_origin": "ast",
+      "community": 6,
+      "norm_label": "yamlindent()",
+      "id": "github_scripts_resolve_pr_conflicts_routing_contract_yamlindent",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs"
+    },
+    {
+      "label": "yamlScalarPattern()",
+      "file_type": "code",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L1663",
+      "_origin": "ast",
+      "community": 6,
+      "norm_label": "yamlscalarpattern()",
+      "id": "github_scripts_resolve_pr_conflicts_routing_contract_yamlscalarpattern",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs"
+    },
+    {
+      "label": "yamlStepAt()",
+      "file_type": "code",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L1675",
+      "_origin": "ast",
+      "community": 6,
+      "norm_label": "yamlstepat()",
+      "id": "github_scripts_resolve_pr_conflicts_routing_contract_yamlstepat",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs"
+    },
+    {
+      "label": "aiRuntimeSourceFiles()",
+      "file_type": "code",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L1710",
+      "_origin": "ast",
+      "community": 6,
+      "norm_label": "airuntimesourcefiles()",
+      "id": "github_scripts_resolve_pr_conflicts_routing_contract_airuntimesourcefiles",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs"
+    },
+    {
+      "label": "assertAdminLoader()",
+      "file_type": "code",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L1720",
+      "_origin": "ast",
+      "community": 6,
+      "norm_label": "assertadminloader()",
+      "id": "github_scripts_resolve_pr_conflicts_routing_contract_assertadminloader",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs"
+    },
+    {
+      "label": "assertAdminModelRouting()",
+      "file_type": "code",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L1735",
+      "_origin": "ast",
+      "community": 6,
+      "norm_label": "assertadminmodelrouting()",
+      "id": "github_scripts_resolve_pr_conflicts_routing_contract_assertadminmodelrouting",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs"
+    },
+    {
+      "label": "selfTest()",
+      "file_type": "code",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L2127",
+      "_origin": "ast",
+      "community": 6,
+      "norm_label": "selftest()",
+      "id": "github_scripts_resolve_pr_conflicts_routing_contract_selftest",
+      "community_name": "resolve-pr-conflicts-routing-contract.mjs"
     },
     {
       "label": "Thingtime AI Instructions",
@@ -10701,13 +10715,13 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 22,
+      "community": 23,
       "norm_label": "thingtime ai instructions",
       "id": "claude_thingtime_ai_instructions",
-      "community_name": "recoverPromotionReviewCheckpoint"
+      "community_name": "control-plane-events.test.mjs"
     },
     {
-      "label": "Control-plane Changelog",
+      "label": "Control Plane Changelog",
       "file_type": "document",
       "source_file": "CHANGELOG.md",
       "source_location": null,
@@ -10715,10 +10729,10 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 27,
-      "norm_label": "control-plane changelog",
-      "id": "changelog",
-      "community_name": "API Suite Job"
+      "community": 18,
+      "norm_label": "control plane changelog",
+      "id": "changelog_control_plane",
+      "community_name": "deploy-develop-pr-preview.mjs"
     },
     {
       "label": "Lopu PR Manager",
@@ -10727,15 +10741,29 @@
       "source_location": null,
       "source_url": null,
       "captured_at": null,
-      "author": null,
+      "author": "Codex (AI)",
       "contributor": null,
-      "community": 27,
+      "community": 18,
       "norm_label": "lopu pr manager",
       "id": "changelog_lopu_pr_manager",
-      "community_name": "API Suite Job"
+      "community_name": "deploy-develop-pr-preview.mjs"
     },
     {
-      "label": "Graphify Snapshot Router",
+      "label": "Graphify Content-Addressed Snapshot Router",
+      "file_type": "concept",
+      "source_file": "CHANGELOG.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": "Codex (AI)",
+      "contributor": null,
+      "community": 18,
+      "norm_label": "graphify content-addressed snapshot router",
+      "id": "changelog_graphify_cas_router",
+      "community_name": "deploy-develop-pr-preview.mjs"
+    },
+    {
+      "label": "Conflict Resolution",
       "file_type": "concept",
       "source_file": "CHANGELOG.md",
       "source_location": null,
@@ -10743,24 +10771,24 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 27,
-      "norm_label": "graphify snapshot router",
-      "id": "changelog_graphify_snapshot_router",
-      "community_name": "API Suite Job"
+      "community": 18,
+      "norm_label": "conflict resolution",
+      "id": "changelog_conflict_resolution",
+      "community_name": "deploy-develop-pr-preview.mjs"
     },
     {
-      "label": "PR Preview Publisher",
+      "label": "PR Preview Publication",
       "file_type": "concept",
       "source_file": "CHANGELOG.md",
       "source_location": null,
       "source_url": null,
       "captured_at": null,
-      "author": null,
+      "author": "Codex (AI)",
       "contributor": null,
-      "community": 27,
-      "norm_label": "pr preview publisher",
-      "id": "changelog_preview_publisher",
-      "community_name": "API Suite Job"
+      "community": 18,
+      "norm_label": "pr preview publication",
+      "id": "changelog_preview_publication",
+      "community_name": "deploy-develop-pr-preview.mjs"
     },
     {
       "label": "Lopu PR Manager Workflow",
@@ -10771,13 +10799,13 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 27,
+      "community": 18,
       "norm_label": "lopu pr manager workflow",
       "id": "github_workflows_resolve_pr_conflicts_lopu_pr_manager",
-      "community_name": "API Suite Job"
+      "community_name": "deploy-develop-pr-preview.mjs"
     },
     {
-      "label": "PR Conflict Detector",
+      "label": "Workflow Call Trigger",
       "file_type": "concept",
       "source_file": ".github/workflows/resolve-pr-conflicts.yml",
       "source_location": null,
@@ -10785,13 +10813,69 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 27,
-      "norm_label": "pr conflict detector",
-      "id": "github_workflows_resolve_pr_conflicts_detector",
-      "community_name": "API Suite Job"
+      "community": 18,
+      "norm_label": "workflow call trigger",
+      "id": "github_workflows_resolve_pr_conflicts_workflow_call",
+      "community_name": "deploy-develop-pr-preview.mjs"
     },
     {
-      "label": "PR 661 Conflict Scans and Visible Previews",
+      "label": "Pull Request Target Trigger",
+      "file_type": "concept",
+      "source_file": ".github/workflows/resolve-pr-conflicts.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 18,
+      "norm_label": "pull request target trigger",
+      "id": "github_workflows_resolve_pr_conflicts_pull_request_target",
+      "community_name": "deploy-develop-pr-preview.mjs"
+    },
+    {
+      "label": "Workflow Dispatch Trigger",
+      "file_type": "concept",
+      "source_file": ".github/workflows/resolve-pr-conflicts.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 18,
+      "norm_label": "workflow dispatch trigger",
+      "id": "github_workflows_resolve_pr_conflicts_workflow_dispatch",
+      "community_name": "deploy-develop-pr-preview.mjs"
+    },
+    {
+      "label": "Conflict Detector",
+      "file_type": "concept",
+      "source_file": ".github/workflows/resolve-pr-conflicts.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 18,
+      "norm_label": "conflict detector",
+      "id": "github_workflows_resolve_pr_conflicts_conflict_detector",
+      "community_name": "deploy-develop-pr-preview.mjs"
+    },
+    {
+      "label": "Durable Model Fleet",
+      "file_type": "concept",
+      "source_file": ".github/workflows/resolve-pr-conflicts.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 18,
+      "norm_label": "durable model fleet",
+      "id": "github_workflows_resolve_pr_conflicts_durable_model_fleet",
+      "community_name": "deploy-develop-pr-preview.mjs"
+    },
+    {
+      "label": "PR #661: Conflict Scans and Visible Previews",
       "file_type": "document",
       "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md",
       "source_location": null,
@@ -10799,13 +10883,13 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 27,
-      "norm_label": "pr 661 conflict scans and visible previews",
-      "id": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews",
-      "community_name": "API Suite Job"
+      "community": 18,
+      "norm_label": "pr #661: conflict scans and visible previews",
+      "id": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_pr_661",
+      "community_name": "deploy-develop-pr-preview.mjs"
     },
     {
-      "label": "Preview Status Section",
+      "label": "PR #592",
       "file_type": "concept",
       "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md",
       "source_location": null,
@@ -10813,13 +10897,13 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 27,
-      "norm_label": "preview status section",
-      "id": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_preview_status_section",
-      "community_name": "API Suite Job"
+      "community": 18,
+      "norm_label": "pr #592",
+      "id": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_pr_592",
+      "community_name": "deploy-develop-pr-preview.mjs"
     },
     {
-      "label": "Conflict Scan Repair",
+      "label": "Routing Dependency Graph Regression",
       "file_type": "concept",
       "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md",
       "source_location": null,
@@ -10827,10 +10911,52 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 27,
-      "norm_label": "conflict scan repair",
-      "id": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_conflict_scan_repair",
-      "community_name": "API Suite Job"
+      "community": 18,
+      "norm_label": "routing dependency graph regression",
+      "id": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_dependency_graph_regression",
+      "community_name": "deploy-develop-pr-preview.mjs"
+    },
+    {
+      "label": "Preview Description Helper",
+      "file_type": "concept",
+      "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 18,
+      "norm_label": "preview description helper",
+      "id": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_preview_description_helper",
+      "community_name": "deploy-develop-pr-preview.mjs"
+    },
+    {
+      "label": "Bounded PR Inventory",
+      "file_type": "concept",
+      "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 18,
+      "norm_label": "bounded pr inventory",
+      "id": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_bounded_pr_inventory",
+      "community_name": "deploy-develop-pr-preview.mjs"
+    },
+    {
+      "label": "Target Ref Race Retry",
+      "file_type": "concept",
+      "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 18,
+      "norm_label": "target ref race retry",
+      "id": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_ref_race_retry",
+      "community_name": "deploy-develop-pr-preview.mjs"
     }
   ],
   "links": [
@@ -25187,256 +25313,6 @@
       "target": "github_scripts_resolve_canonical_instruction_type_conflicts_test_write"
     },
     {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L1710",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_airuntimesourcefiles"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L1720",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_assertadminloader"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L1735",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_assertadminmodelrouting"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L297",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_assertcapturedstdoutstaysclean"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L189",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_assertroute"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L348",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_assertworkflowsource"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L240",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_calls_helper"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L41",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_decodebatch"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L34",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_encodebatch"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L1654",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_isstructuralyamlline"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L20",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_lopu_action_url"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L22",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_lopu_status_test_url"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L21",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_lopu_status_url"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L25",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_positivedecimal"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L19",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_rebase_action_url"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L18",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_rebase_workflow_url"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L23",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_repo_root"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L72",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_route"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L2127",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_selftest"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L266",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_shellfunctions"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L26",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_validdepth"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L17",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_workflow_url"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L1655",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_yamlindent"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L1663",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_yamlscalarpattern"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L1675",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_yamlstepat"
-    },
-    {
       "relation": "imports_from",
       "context": "import",
       "confidence": "EXTRACTED",
@@ -25448,191 +25324,14 @@
       "target": "github_scripts_resolve_pr_conflicts_routing_contract"
     },
     {
-      "relation": "calls",
-      "context": "call",
+      "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L89",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.test.mjs",
+      "source_location": "L26",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract_route",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_positivedecimal"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L88",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract_route",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_validdepth"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L2128",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract_selftest",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_encodebatch"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L93",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract_route",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_decodebatch"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L190",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract_assertroute",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_route"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L2299",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract_selftest",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_route"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L2133",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract_selftest",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_assertroute"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L340",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract_assertcapturedstdoutstaysclean",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_calls_helper"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L299",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract_assertcapturedstdoutstaysclean",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_shellfunctions"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L376",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract_assertworkflowsource",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_assertcapturedstdoutstaysclean"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L372",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract_assertworkflowsource",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_airuntimesourcefiles"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L1639",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract_assertworkflowsource",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_assertadminmodelrouting"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L2361",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract_selftest",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_assertworkflowsource"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L1696",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract_yamlstepat",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_isstructuralyamlline"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L1676",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract_yamlstepat",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_yamlindent"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L2077",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract_assertadminmodelrouting",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_yamlscalarpattern"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L2076",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract_assertadminmodelrouting",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_yamlstepat"
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract_test",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_test_steparounduses"
     },
     {
       "relation": "imports",
@@ -25655,38 +25354,6 @@
       "confidence_score": 1.0,
       "source": "github_scripts_resolve_pr_conflicts_routing_contract_test_steparounduses",
       "target": "github_scripts_resolve_pr_conflicts_routing_contract_yamlstepat"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L1939",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract_assertadminmodelrouting",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_airuntimesourcefiles"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
-      "source_location": "L1747",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract_assertadminmodelrouting",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_assertadminloader"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.test.mjs",
-      "source_location": "L26",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_resolve_pr_conflicts_routing_contract_test",
-      "target": "github_scripts_resolve_pr_conflicts_routing_contract_test_steparounduses"
     },
     {
       "relation": "references",
@@ -27536,56 +27203,6 @@
       "target": "github_scripts_extract_vercel_prebuilt"
     },
     {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/control-plane-events.test.mjs",
-      "source_location": "L8",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_control_plane_events_test",
-      "target": "github_scripts_control_plane_events_test_ci"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/control-plane-events.test.mjs",
-      "source_location": "L20",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_control_plane_events_test",
-      "target": "github_scripts_control_plane_events_test_evaluate"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/control-plane-events.test.mjs",
-      "source_location": "L10",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_control_plane_events_test",
-      "target": "github_scripts_control_plane_events_test_event"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/control-plane-events.test.mjs",
-      "source_location": "L14",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_control_plane_events_test",
-      "target": "github_scripts_control_plane_events_test_gateexpression"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".github/scripts/control-plane-events.test.mjs",
-      "source_location": "L7",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "github_scripts_control_plane_events_test",
-      "target": "github_scripts_control_plane_events_test_workflow"
-    },
-    {
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -27666,34 +27283,513 @@
       "target": "github_workflows_develop_pr_preview_admin_build"
     },
     {
-      "relation": "references",
+      "relation": "contains",
       "confidence": "EXTRACTED",
-      "confidence_score": 0.9,
-      "source_file": "CHANGELOG.md",
-      "source_location": null,
+      "source_file": ".github/scripts/control-plane-events.test.mjs",
+      "source_location": "L11",
       "weight": 1.0,
-      "source": "changelog",
-      "target": "changelog_graphify_snapshot_router"
+      "confidence_score": 1.0,
+      "source": "github_scripts_control_plane_events_test",
+      "target": "github_scripts_control_plane_events_test_ci"
     },
     {
-      "relation": "references",
+      "relation": "contains",
       "confidence": "EXTRACTED",
-      "confidence_score": 0.95,
-      "source_file": "CHANGELOG.md",
-      "source_location": null,
+      "source_file": ".github/scripts/control-plane-events.test.mjs",
+      "source_location": "L23",
       "weight": 1.0,
-      "source": "changelog",
-      "target": "changelog_lopu_pr_manager"
+      "confidence_score": 1.0,
+      "source": "github_scripts_control_plane_events_test",
+      "target": "github_scripts_control_plane_events_test_evaluate"
     },
     {
-      "relation": "references",
+      "relation": "contains",
       "confidence": "EXTRACTED",
-      "confidence_score": 0.9,
-      "source_file": "CHANGELOG.md",
-      "source_location": null,
+      "source_file": ".github/scripts/control-plane-events.test.mjs",
+      "source_location": "L13",
       "weight": 1.0,
-      "source": "changelog",
-      "target": "changelog_preview_publisher"
+      "confidence_score": 1.0,
+      "source": "github_scripts_control_plane_events_test",
+      "target": "github_scripts_control_plane_events_test_event"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/control-plane-events.test.mjs",
+      "source_location": "L17",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_control_plane_events_test",
+      "target": "github_scripts_control_plane_events_test_gateexpression"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/control-plane-events.test.mjs",
+      "source_location": "L10",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_control_plane_events_test",
+      "target": "github_scripts_control_plane_events_test_workflow"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L1710",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_airuntimesourcefiles"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L1720",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_assertadminloader"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L1735",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_assertadminmodelrouting"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L297",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_assertcapturedstdoutstaysclean"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L189",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_assertroute"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L348",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_assertworkflowsource"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L240",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_calls_helper"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L41",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_decodebatch"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L34",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_encodebatch"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L1654",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_isstructuralyamlline"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L20",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_lopu_action_url"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L22",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_lopu_status_test_url"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L21",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_lopu_status_url"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L25",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_positivedecimal"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L19",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_rebase_action_url"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L18",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_rebase_workflow_url"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L23",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_repo_root"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L72",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_route"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L2127",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_selftest"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L266",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_shellfunctions"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L26",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_validdepth"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L17",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_workflow_url"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L1655",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_yamlindent"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L1663",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_yamlscalarpattern"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L1675",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_yamlstepat"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L89",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract_route",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_positivedecimal"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L88",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract_route",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_validdepth"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L2128",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract_selftest",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_encodebatch"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L93",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract_route",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_decodebatch"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L190",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract_assertroute",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_route"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L2299",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract_selftest",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_route"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L2133",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract_selftest",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_assertroute"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L340",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract_assertcapturedstdoutstaysclean",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_calls_helper"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L299",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract_assertcapturedstdoutstaysclean",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_shellfunctions"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L376",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract_assertworkflowsource",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_assertcapturedstdoutstaysclean"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L372",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract_assertworkflowsource",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_airuntimesourcefiles"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L1639",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract_assertworkflowsource",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_assertadminmodelrouting"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L2361",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract_selftest",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_assertworkflowsource"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L1696",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract_yamlstepat",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_isstructuralyamlline"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L1676",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract_yamlstepat",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_yamlindent"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L2077",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract_assertadminmodelrouting",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_yamlscalarpattern"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L2076",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract_assertadminmodelrouting",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_yamlstepat"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L1939",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract_assertadminmodelrouting",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_airuntimesourcefiles"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/resolve-pr-conflicts-routing-contract.mjs",
+      "source_location": "L1747",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "github_scripts_resolve_pr_conflicts_routing_contract_assertadminmodelrouting",
+      "target": "github_scripts_resolve_pr_conflicts_routing_contract_assertadminloader"
     },
     {
       "relation": "references",
@@ -27702,18 +27798,108 @@
       "source_file": "CHANGELOG.md",
       "source_location": null,
       "weight": 1.0,
-      "source": "changelog",
-      "target": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews"
+      "source": "changelog_control_plane",
+      "target": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_pr_661"
     },
     {
-      "relation": "references",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.95,
+      "source_file": "CHANGELOG.md",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "changelog_lopu_pr_manager",
+      "target": "changelog_conflict_resolution"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.9,
+      "source_file": "CHANGELOG.md",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "changelog_lopu_pr_manager",
+      "target": "changelog_graphify_cas_router"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.9,
+      "source_file": "CHANGELOG.md",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "changelog_lopu_pr_manager",
+      "target": "changelog_preview_publication"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.95,
+      "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_preview_description_helper",
+      "target": "changelog_preview_publication"
+    },
+    {
+      "relation": "conceptually_related_to",
       "confidence": "EXTRACTED",
       "confidence_score": 0.95,
       "source_file": ".github/workflows/resolve-pr-conflicts.yml",
       "source_location": null,
       "weight": 1.0,
       "source": "github_workflows_resolve_pr_conflicts_lopu_pr_manager",
-      "target": "changelog_lopu_pr_manager"
+      "target": "github_workflows_resolve_pr_conflicts_conflict_detector"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.95,
+      "source_file": ".github/workflows/resolve-pr-conflicts.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "github_workflows_resolve_pr_conflicts_lopu_pr_manager",
+      "target": "github_workflows_resolve_pr_conflicts_durable_model_fleet"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/workflows/resolve-pr-conflicts.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "github_workflows_resolve_pr_conflicts_lopu_pr_manager",
+      "target": "github_workflows_resolve_pr_conflicts_pull_request_target"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/workflows/resolve-pr-conflicts.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "github_workflows_resolve_pr_conflicts_lopu_pr_manager",
+      "target": "github_workflows_resolve_pr_conflicts_workflow_call"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".github/workflows/resolve-pr-conflicts.yml",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "github_workflows_resolve_pr_conflicts_lopu_pr_manager",
+      "target": "github_workflows_resolve_pr_conflicts_workflow_dispatch"
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md",
+      "source_location": null,
+      "weight": 0.8,
+      "source": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_dependency_graph_regression",
+      "target": "github_workflows_resolve_pr_conflicts_lopu_pr_manager"
     },
     {
       "relation": "conceptually_related_to",
@@ -27721,29 +27907,19 @@
       "confidence_score": 0.85,
       "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md",
       "source_location": null,
-      "weight": 1.0,
-      "source": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_preview_status_section",
-      "target": "changelog_preview_publisher"
-    },
-    {
-      "relation": "implements",
-      "confidence": "EXTRACTED",
-      "confidence_score": 0.9,
-      "source_file": ".github/workflows/resolve-pr-conflicts.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "github_workflows_resolve_pr_conflicts_lopu_pr_manager",
-      "target": "github_workflows_resolve_pr_conflicts_detector"
+      "weight": 0.9,
+      "source": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_ref_race_retry",
+      "target": "github_workflows_resolve_pr_conflicts_workflow_dispatch"
     },
     {
       "relation": "conceptually_related_to",
-      "confidence": "EXTRACTED",
-      "confidence_score": 0.9,
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
       "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md",
       "source_location": null,
-      "weight": 1.0,
-      "source": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_conflict_scan_repair",
-      "target": "github_workflows_resolve_pr_conflicts_detector"
+      "weight": 0.9,
+      "source": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_bounded_pr_inventory",
+      "target": "github_workflows_resolve_pr_conflicts_conflict_detector"
     },
     {
       "relation": "references",
@@ -27752,8 +27928,8 @@
       "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md",
       "source_location": null,
       "weight": 1.0,
-      "source": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews",
-      "target": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_conflict_scan_repair"
+      "source": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_pr_661",
+      "target": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_bounded_pr_inventory"
     },
     {
       "relation": "references",
@@ -27762,11 +27938,69 @@
       "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md",
       "source_location": null,
       "weight": 1.0,
-      "source": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews",
-      "target": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_preview_status_section"
+      "source": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_pr_661",
+      "target": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_dependency_graph_regression"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_pr_661",
+      "target": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_pr_592"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_pr_661",
+      "target": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_preview_description_helper"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_pr_661",
+      "target": "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_ref_race_retry"
     }
   ],
   "hyperedges": [
+    {
+      "id": "lopu_pr_management_flow",
+      "label": "Lopu PR Management Flow",
+      "nodes": [
+        "github_workflows_resolve_pr_conflicts_lopu_pr_manager",
+        "github_workflows_resolve_pr_conflicts_conflict_detector",
+        "github_workflows_resolve_pr_conflicts_durable_model_fleet",
+        "github_workflows_resolve_pr_conflicts_workflow_dispatch"
+      ],
+      "relation": "participate_in",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.9,
+      "source_file": ".github/workflows/resolve-pr-conflicts.yml"
+    },
+    {
+      "id": "pr_661_delivery_reliability_repairs",
+      "label": "PR #661 Delivery Reliability Repairs",
+      "nodes": [
+        "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_pr_661",
+        "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_dependency_graph_regression",
+        "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_bounded_pr_inventory",
+        "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_ref_race_retry"
+      ],
+      "relation": "participate_in",
+      "confidence": "EXTRACTED",
+      "confidence_score": 0.95,
+      "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md"
+    },
     {
       "id": "develop_preview_delivery_flow",
       "label": "Protected Develop Preview Delivery Flow",
@@ -27794,20 +28028,6 @@
       "confidence": "EXTRACTED",
       "confidence_score": 0.95,
       "source_file": ".github/workflows/develop-pr-preview.yml"
-    },
-    {
-      "id": "pr_661_control_plane_reliability",
-      "label": "PR 661 Control-plane Reliability Repairs",
-      "nodes": [
-        "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews",
-        "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_preview_status_section",
-        "prs_661_codex_pr_delivery_reliability_592_restore_conflict_scans_and_visible_previews_conflict_scan_repair",
-        "github_workflows_resolve_pr_conflicts_lopu_pr_manager"
-      ],
-      "relation": "participate_in",
-      "confidence": "EXTRACTED",
-      "confidence_score": 0.9,
-      "source_file": "PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md"
     },
     {
       "id": "control_plane_validation",
@@ -28045,5 +28265,5 @@
       "source_file": ".github/workflows/promote-features-to-main.yml"
     }
   ],
-  "built_at_commit": "b7a5db2a229cadc1eb1a710b096fe446e251e6f2"
+  "built_at_commit": "1dceef303df42125b2949b718baddb2baf1bc957"
 }

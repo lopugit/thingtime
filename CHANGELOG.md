@@ -25,7 +25,8 @@ Details: [PR #661](PRs/661-codex-pr-delivery-reliability-592--restore-conflict-s
   skipped non-comment conversation filter while requiring successful direct
   dependencies. Regression coverage checks the whole routing dependency graph.
 - Bound conflict-inventory GraphQL pages to ten PRs while paginating the full
-  queue; large nested inventories were repeatedly returning HTTP 502.
+  queue; isolate changed-file reads so one expensive diff cannot fail the
+  entire scan with HTTP 502.
 - Publish current-head preview status and links at the top of PR descriptions,
   preserving author content and refusing stale heads or ambiguous markers.
 - Recheck the live target ref after a resolver push and reuse the bounded retry
