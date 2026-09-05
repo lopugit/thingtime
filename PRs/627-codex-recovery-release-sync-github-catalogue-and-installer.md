@@ -49,7 +49,7 @@ partial configuration fails. Signed/notarized production remains a separate lane
 
 ## Validation
 
-- 17 Swift tests cover pagination, duplicate pages, architecture selection,
+- 19 Swift tests cover pagination, duplicate pages, architecture selection,
   rate-limit preservation, malformed ZIP cleanup, cache re-verification, large
   subprocess output, damaged installation repair, invalid replacement protection,
   installer notices, and trust boundaries.
@@ -70,8 +70,15 @@ partial configuration fails. Signed/notarized production remains a separate lane
 
 ## Delivery boundaries
 
-The protected builder repair is deployed. Product fixes remain reviewable in PR
-#627; no primary-branch promotion is performed by this work. The six cloud signing
+The owner subsequently authorized merging the changes into `main`. During that
+promotion, a new screenshot showed the damaged build 4 still looking installable.
+Both legacy builds 3 and 4 were inspected and have zero signature resource seals.
+Release notes now support a component-scoped withdrawal marker; Recovery retains
+the history with an UNAVAILABLE label and blocks the download before transfer.
+Regression coverage checks component isolation and the store's download guard.
+
+The protected builder repair is deployed and PR #627 is merged into develop. Its
+scoped main promotion also includes the unavailable-release follow-up. The six cloud signing
 secrets are absent, so the verified cloud build is explicitly unsigned rather than
 a Developer ID/notarized release. Legacy malformed public assets remain blocked.
 
@@ -79,3 +86,23 @@ No web UI changed. Vercel preview authorization is skipped for this native-only
 delivery; the PR checks contain the current deployment status. Graphify portable
 outputs are refreshed; a large semantic chunk exceeded the local proxy request
 limit during the initial refresh, while structural indexing completed.
+
+
+## Main promotion follow-up
+
+PR #633 also adds rich multiline release cards, explicit cached build identity,
+and a global Electron/Commander selector. Commander uses its own cache root and
+bundle identifier, and can save a verified installed build even before any
+Commander GitHub archive is published. Legacy Recovery cache titles are derived
+from the actual component. GitHub build numbers are passed into Electron's
+embedded metadata and bundle version.
+
+The user requested removal of the damaged downloads. Both build 3 and build 4
+ZIPs and DMGs failed strict code-signature verification. GitHub's immutable
+release policy prohibited deleting individual assets, so the two release records
+were deleted after retaining diagnostic copies; their git tags were preserved.
+
+Validation: 21 Recovery tests and 79 Electron tests pass; native verification
+includes legacy cached metadata, wrong-app handoff rejection, live app switching,
+and saving/verifying the installed Commander build. The cloud signing follow-up
+uses encrypted repository secrets and retains fail-closed partial setup checks.

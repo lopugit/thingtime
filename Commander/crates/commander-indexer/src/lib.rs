@@ -34,8 +34,6 @@ pub use resources::{EffectiveResourceLimits, IndexResourceLimits, IndexResourceU
 const SCHEMA_VERSION: i64 = 3;
 const MAX_SOURCES: usize = 128;
 const MAX_IGNORE_RULES: usize = 512;
-const MAX_QUERY_RESULTS: usize = 1_000;
-const MAX_COARSE_FUZZY_CANDIDATES: usize = 12_000;
 const MAX_COARSE_QUERY_CHARACTERS: usize = 16;
 const MAX_DIAGNOSTICS: usize = 20;
 const DATABASE_OPEN_RETRY_ATTEMPTS: usize = 100;
@@ -44,7 +42,6 @@ const STRICT_FTS_BUDGET: Duration = Duration::from_millis(200);
 const FUZZY_FTS_BUDGET: Duration = Duration::from_millis(350);
 const COARSE_FUZZY_BUDGET: Duration = Duration::from_millis(350);
 const PATH_FALLBACK_BUDGET: Duration = Duration::from_millis(250);
-const MIN_STRICT_FTS_CANDIDATES: usize = 1_024;
 const DATABASE_JOURNAL_SIZE_LIMIT_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_RESOURCE_MEMORY_MIB: usize = 131_072;
 
@@ -183,7 +180,8 @@ pub struct QueryRequest {
     #[serde(default)]
     pub kinds: Vec<IndexKind>,
     #[serde(default = "default_query_limit")]
-    pub limit: usize,
+    /// Maximum returned results, not a candidate-scan cap. Null returns all.
+    pub limit: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -391,39 +389,34 @@ impl IndexDatabase {
     }
 
     pub fn query(&self, request: &QueryRequest) -> Result<QueryResponse, IndexerError> {
-        if request.limit == 0 {
+        let limit = request.limit.unwrap_or(usize::MAX);
+        if limit == 0 {
             return Ok(QueryResponse {
                 records: Vec::new(),
             });
-        }
-        if request.limit > MAX_QUERY_RESULTS {
-            return Err(IndexerError::new(
-                "invalid_request",
-                format!("limit may not exceed {MAX_QUERY_RESULTS}"),
-            ));
         }
         let kinds = normalized_kinds(&request.kinds);
         let query = request.query.trim();
         let query_length = query.chars().count();
         let mut records = if query_length >= 3 {
-            let mut matches = self.query_fts(query, &kinds, request.limit)?;
+            let mut matches = self.query_fts(query, &kinds, limit)?;
             if matches.is_empty() {
-                matches = self.query_coarse_fuzzy(query, &kinds, request.limit)?;
+                matches = self.query_coarse_fuzzy(query, &kinds, limit)?;
                 rank_records(&mut matches, query);
             }
             if matches.is_empty() {
-                matches = self.query_path_fallback(query, &kinds, request.limit)?;
+                matches = self.query_path_fallback(query, &kinds, limit)?;
                 rank_records(&mut matches, query);
             }
             matches
         } else if query_length > 0 {
-            self.query_prefix(query, &kinds, request.limit)?
+            self.query_prefix(query, &kinds, limit)?
         } else {
-            let mut matches = self.query_like(query, &kinds, request.limit)?;
+            let mut matches = self.query_like(query, &kinds, limit)?;
             rank_records(&mut matches, query);
             matches
         };
-        deduplicate_records(&mut records, request.limit);
+        deduplicate_records(&mut records, limit);
         Ok(QueryResponse { records })
     }
 
@@ -676,10 +669,6 @@ impl IndexDatabase {
         let Some(fts_query) = strict_fts_query(query) else {
             return Ok(Vec::new());
         };
-        let candidate_limit = limit
-            .saturating_mul(32)
-            .max(MIN_STRICT_FTS_CANDIDATES)
-            .min(MAX_COARSE_FUZZY_CANDIDATES);
         let mut statement = self.connection.prepare(
             "SELECT r.path, r.name, r.parent, r.kind, r.modified_at_ms, r.size
              FROM records_fts
@@ -687,25 +676,12 @@ impl IndexDatabase {
              WHERE records_fts MATCH ?1
                AND ((?2 = 1 AND r.kind = 'application')
                  OR (?3 = 1 AND r.kind = 'file')
-                 OR (?4 = 1 AND r.kind = 'directory'))
-             ORDER BY bm25(records_fts)
-             LIMIT ?5",
+                 OR (?4 = 1 AND r.kind = 'directory'))",
         )?;
         let flags = kind_flags(kinds);
-        let rows = statement.query_map(
-            params![
-                fts_query,
-                flags.0,
-                flags.1,
-                flags.2,
-                i64::try_from(candidate_limit).unwrap_or(i64::MAX)
-            ],
-            row_to_record,
-        )?;
-        let mut records = rows.collect::<rusqlite::Result<Vec<_>>>()?;
-        rank_records(&mut records, query);
-        records.truncate(limit);
-        Ok(records)
+        let rows =
+            statement.query_map(params![fts_query, flags.0, flags.1, flags.2], row_to_record)?;
+        collect_ranked_rows(rows, query, limit)
     }
 
     fn query_fts_with_stats(
@@ -729,7 +705,7 @@ impl IndexDatabase {
         let flags = kind_flags(kinds);
         let rows =
             statement.query_map(params![fts_query, flags.0, flags.1, flags.2], row_to_record)?;
-        let mut records = Vec::with_capacity(limit);
+        let mut records = Vec::with_capacity(limit.min(1_024));
         let mut candidates_evaluated = 0;
         let prune_at = limit.saturating_mul(16).max(1_024);
         for row in rows {
@@ -753,20 +729,24 @@ impl IndexDatabase {
         limit: usize,
     ) -> Result<Vec<IndexRecord>, IndexerError> {
         let prefix = format!("{}%", escape_like(query));
-        let mut records = Vec::with_capacity(limit.saturating_mul(kinds.len()));
+        let mut records = Vec::with_capacity(limit.min(1_024));
         let mut statement = self.connection.prepare(
             "SELECT path, name, parent, kind, modified_at_ms, size
              FROM records
              WHERE kind = ?1
                AND name LIKE ?2 ESCAPE '\\' COLLATE NOCASE
-             ORDER BY name COLLATE NOCASE
-             LIMIT ?3",
+             ORDER BY CASE WHEN name = ?3 COLLATE NOCASE THEN 0 ELSE 1 END,
+                      length(name), name COLLATE NOCASE, path
+             LIMIT ?4",
         )?;
         for kind in kinds {
+            // This is an output page after SQL ranking, never a pre-ranking
+            // alphabetic candidate slice. An exact name anywhere wins.
             let rows = statement.query_map(
                 params![
                     kind.as_str(),
                     &prefix,
+                    query,
                     i64::try_from(limit).unwrap_or(i64::MAX)
                 ],
                 row_to_record,
@@ -796,7 +776,6 @@ impl IndexDatabase {
         kinds: &[IndexKind],
         limit: usize,
     ) -> Result<Vec<IndexRecord>, IndexerError> {
-        let expanded_limit = limit.saturating_mul(4).min(MAX_QUERY_RESULTS * 4);
         let contains = format!("%{}%", escape_like(query));
         let prefix = format!("{}%", escape_like(query));
         let mut statement = self.connection.prepare(
@@ -826,7 +805,7 @@ impl IndexDatabase {
                 flags.0,
                 flags.1,
                 flags.2,
-                i64::try_from(expanded_limit).unwrap_or(i64::MAX)
+                i64::try_from(limit).unwrap_or(i64::MAX)
             ],
             |row| {
                 let mut record = row_to_record(row)?;
@@ -855,10 +834,6 @@ impl IndexDatabase {
         if prefixes.is_empty() {
             return Ok(Vec::new());
         }
-        let query_length = query
-            .chars()
-            .filter(|character| character.is_alphanumeric())
-            .count();
         let prefix_matches = prefixes
             .iter()
             .enumerate()
@@ -871,34 +846,27 @@ impl IndexDatabase {
         let application_parameter = prefixes.len() + 1;
         let file_parameter = application_parameter + 1;
         let directory_parameter = file_parameter + 1;
-        let length_parameter = directory_parameter + 1;
-        let limit_parameter = length_parameter + 1;
         let sql = format!(
             "SELECT path, name, parent, kind, modified_at_ms, size
              FROM records
              WHERE ({prefix_matches})
                AND ((?{application_parameter} = 1 AND kind = 'application')
                  OR (?{file_parameter} = 1 AND kind = 'file')
-                 OR (?{directory_parameter} = 1 AND kind = 'directory'))
-             ORDER BY abs(length(name) - ?{length_parameter}), lower(name), path
-             LIMIT ?{limit_parameter}"
+                 OR (?{directory_parameter} = 1 AND kind = 'directory'))"
         );
         let flags = kind_flags(kinds);
-        let expanded_limit = limit.saturating_mul(12).min(MAX_COARSE_FUZZY_CANDIDATES);
         let mut parameters = prefixes.into_iter().map(SqlValue::Text).collect::<Vec<_>>();
         parameters.extend([
             SqlValue::Integer(flags.0),
             SqlValue::Integer(flags.1),
             SqlValue::Integer(flags.2),
-            SqlValue::Integer(i64::try_from(query_length).unwrap_or(i64::MAX)),
-            SqlValue::Integer(i64::try_from(expanded_limit).unwrap_or(i64::MAX)),
         ]);
         Ok(self
             .run_bounded_query(COARSE_FUZZY_BUDGET, || {
                 let mut statement = self.connection.prepare(&sql)?;
                 let rows =
                     statement.query_map(params_from_iter(parameters.iter()), row_to_record)?;
-                rows.collect()
+                collect_ranked_rows(rows, query, limit)
             })?
             .unwrap_or_default())
     }
@@ -912,7 +880,6 @@ impl IndexDatabase {
         Ok(self
             .run_bounded_query(PATH_FALLBACK_BUDGET, || {
                 let contains = format!("%{}%", escape_like(query));
-                let expanded_limit = limit.saturating_mul(4).min(MAX_QUERY_RESULTS * 4);
                 let flags = kind_flags(kinds);
                 let mut statement = self.connection.prepare(
                     "SELECT path, name, parent, kind, modified_at_ms, size
@@ -920,20 +887,11 @@ impl IndexDatabase {
                      WHERE path LIKE ?1 ESCAPE '\\' COLLATE NOCASE
                        AND ((?2 = 1 AND kind = 'application')
                          OR (?3 = 1 AND kind = 'file')
-                         OR (?4 = 1 AND kind = 'directory'))
-                     LIMIT ?5",
+                         OR (?4 = 1 AND kind = 'directory'))",
                 )?;
-                let rows = statement.query_map(
-                    params![
-                        contains,
-                        flags.0,
-                        flags.1,
-                        flags.2,
-                        i64::try_from(expanded_limit).unwrap_or(i64::MAX)
-                    ],
-                    row_to_record,
-                )?;
-                rows.collect()
+                let rows = statement
+                    .query_map(params![contains, flags.0, flags.1, flags.2], row_to_record)?;
+                collect_ranked_rows(rows, query, limit)
             })?
             .unwrap_or_default())
     }
@@ -1741,6 +1699,28 @@ fn collect_rows(
         .map_err(Into::into)
 }
 
+// Visit every matching row; retain only the best requested output page in
+// memory. A small page must never become an arbitrary pre-ranking scan cap.
+fn collect_ranked_rows(
+    rows: rusqlite::MappedRows<'_, impl FnMut(&rusqlite::Row<'_>) -> rusqlite::Result<IndexRecord>>,
+    query: &str,
+    limit: usize,
+) -> rusqlite::Result<Vec<IndexRecord>> {
+    let mut records = Vec::with_capacity(limit.min(1_024));
+    let prune_at = limit.saturating_mul(16).max(1_024);
+    for row in rows {
+        let mut record = row?;
+        if rank_record(&mut record, query) {
+            records.push(record);
+            if records.len() >= prune_at {
+                retain_best_ranked_records(&mut records, limit);
+            }
+        }
+    }
+    retain_best_ranked_records(&mut records, limit);
+    Ok(records)
+}
+
 fn deduplicate_records(records: &mut Vec<IndexRecord>, limit: usize) {
     let mut seen = HashSet::new();
     records.retain(|record| seen.insert((record.path.clone(), record.kind)));
@@ -1868,8 +1848,8 @@ fn default_true() -> bool {
     true
 }
 
-fn default_query_limit() -> usize {
-    50
+fn default_query_limit() -> Option<usize> {
+    Some(50)
 }
 
 #[cfg(unix)]
@@ -1996,7 +1976,7 @@ mod tests {
             .query(&QueryRequest {
                 query: String::new(),
                 kinds: vec![IndexKind::File],
-                limit: 20,
+                limit: Some(20),
             })
             .expect("query");
         assert_eq!(records.records.len(), 1);
@@ -2104,7 +2084,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "keep".to_owned(),
                 kinds: vec![IndexKind::File],
-                limit: 20,
+                limit: Some(20),
             })
             .expect("query");
         assert_eq!(results.records.len(), 1);
@@ -2149,7 +2129,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "keep".to_owned(),
                 kinds: vec![IndexKind::File],
-                limit: 20,
+                limit: Some(20),
             })
             .expect("query");
         assert_eq!(results.records.len(), 1);
@@ -2179,7 +2159,7 @@ mod tests {
             .query(&QueryRequest {
                 query: String::new(),
                 kinds: vec![IndexKind::File],
-                limit: 20,
+                limit: Some(20),
             })
             .expect("query");
         let names: Vec<_> = results
@@ -2215,7 +2195,7 @@ mod tests {
             .query(&QueryRequest {
                 query: String::new(),
                 kinds: vec![IndexKind::File],
-                limit: 20,
+                limit: Some(20),
             })
             .expect("query");
         assert_eq!(results.records.len(), 1);
@@ -2265,7 +2245,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "Example".to_owned(),
                 kinds: vec![IndexKind::Application],
-                limit: 20,
+                limit: Some(20),
             })
             .expect("query apps");
         assert_eq!(applications.records.len(), 1);
@@ -2274,7 +2254,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "example".to_owned(),
                 kinds: vec![IndexKind::File],
-                limit: 20,
+                limit: Some(20),
             })
             .expect("query files");
         assert!(files.records.is_empty());
@@ -2306,7 +2286,7 @@ mod tests {
             .query(&QueryRequest {
                 query: String::new(),
                 kinds: vec![IndexKind::File],
-                limit: 20,
+                limit: Some(20),
             })
             .expect("files")
             .records;
@@ -2323,7 +2303,7 @@ mod tests {
             .query(&QueryRequest {
                 query: String::new(),
                 kinds: vec![IndexKind::Directory],
-                limit: 20,
+                limit: Some(20),
             })
             .expect("directories")
             .records;
@@ -2354,7 +2334,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "Media".to_owned(),
                 kinds: vec![IndexKind::Directory],
-                limit: 20,
+                limit: Some(20),
             })
             .expect("directories");
         assert_eq!(directories.records.len(), 1);
@@ -2363,7 +2343,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "private".to_owned(),
                 kinds: vec![IndexKind::File],
-                limit: 20,
+                limit: Some(20),
             })
             .expect("files");
         assert!(files.records.is_empty());
@@ -2390,7 +2370,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "note".to_owned(),
                 kinds: vec![IndexKind::File],
-                limit: 20,
+                limit: Some(20),
             })
             .expect("query files")
             .records
@@ -2399,7 +2379,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "folder".to_owned(),
                 kinds: vec![IndexKind::Directory],
-                limit: 20,
+                limit: Some(20),
             })
             .expect("query dirs")
             .records
@@ -2419,11 +2399,110 @@ mod tests {
             .query(&QueryRequest {
                 query: "invoice.txt".to_owned(),
                 kinds: vec![IndexKind::File],
-                limit: 20,
+                limit: Some(20),
             })
             .expect("query")
             .records;
         assert_eq!(records[0].name, "invoice.txt");
+    }
+
+    #[test]
+    fn every_catalogue_can_return_more_than_one_thousand_records_without_reindexing() {
+        let temp = TempDir::new().expect("tempdir");
+        let mut database = database(&temp);
+        let transaction = database.connection.transaction().expect("transaction");
+        for kind in [
+            IndexKind::Application,
+            IndexKind::File,
+            IndexKind::Directory,
+        ] {
+            for index in 0..1_501 {
+                let name = format!("catalogue-{index:04}");
+                transaction
+                    .execute(
+                        "INSERT INTO records(source_id, path, name, parent, kind, generation)
+                     VALUES ('catalogue-test', ?1, ?2, '/tmp', ?3, 1)",
+                        params![
+                            format!("/tmp/{}/{name}", kind.as_str()),
+                            name,
+                            kind.as_str()
+                        ],
+                    )
+                    .expect("insert catalogue record");
+            }
+        }
+        transaction.commit().expect("commit catalogue");
+        let writes = database.connection.total_changes();
+        for kind in [
+            IndexKind::Application,
+            IndexKind::File,
+            IndexKind::Directory,
+        ] {
+            for limit in [None, Some(1_501)] {
+                for query in ["", "catalogue", "ca"] {
+                    let response = database
+                        .query(&QueryRequest {
+                            query: query.to_owned(),
+                            kinds: vec![kind],
+                            limit,
+                        })
+                        .expect("complete catalogue query");
+                    assert_eq!(response.records.len(), 1_501, "{kind:?}: {query}");
+                    assert!(response
+                        .records
+                        .iter()
+                        .any(|record| record.name == "catalogue-1500"));
+                }
+            }
+        }
+        assert_eq!(
+            database.connection.total_changes(),
+            writes,
+            "queries must not index or write"
+        );
+    }
+
+    #[test]
+    fn short_prefix_ranks_before_taking_the_output_page() {
+        let temp = TempDir::new().expect("tempdir");
+        let mut database = database(&temp);
+        let transaction = database.connection.transaction().expect("transaction");
+        for index in 0..1_501 {
+            let name = format!("aa-long-name-{index:04}");
+            transaction
+                .execute(
+                    "INSERT INTO records(source_id, path, name, parent, kind, generation)
+                 VALUES ('prefix-test', ?1, ?2, '/tmp', 'file', 1)",
+                    params![format!("/tmp/{name}"), name],
+                )
+                .expect("insert prefix noise");
+        }
+        transaction
+            .execute(
+                "INSERT INTO records(source_id, path, name, parent, kind, generation)
+             VALUES ('prefix-test', '/tmp/az', 'az', '/tmp', 'file', 1)",
+                [],
+            )
+            .expect("insert late best match");
+        transaction.commit().expect("commit");
+        let response = database
+            .query(&QueryRequest {
+                query: "a".to_owned(),
+                kinds: vec![IndexKind::File],
+                limit: Some(1),
+            })
+            .expect("prefix page");
+        assert_eq!(response.records[0].name, "az");
+    }
+
+    #[test]
+    fn query_limit_defaults_to_a_page_and_null_requests_all_results() {
+        let default: QueryRequest =
+            serde_json::from_value(serde_json::json!({"query": ""})).unwrap();
+        let all: QueryRequest =
+            serde_json::from_value(serde_json::json!({"query": "", "limit": null})).unwrap();
+        assert_eq!(default.limit, Some(50));
+        assert_eq!(all.limit, None);
     }
 
     #[test]
@@ -2444,7 +2523,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "thingtime recovery".to_owned(),
                 kinds: vec![IndexKind::Application, IndexKind::File],
-                limit: 20,
+                limit: Some(20),
             })
             .expect("query")
             .records;
@@ -2548,7 +2627,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "ea".to_owned(),
                 kinds: vec![IndexKind::File],
-                limit: 20,
+                limit: Some(20),
             })
             .expect("short prefix query")
             .records;
@@ -2575,7 +2654,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "raycsat".to_owned(),
                 kinds: vec![IndexKind::File],
-                limit: 20,
+                limit: Some(20),
             })
             .expect("transposition query")
             .records;
@@ -2585,7 +2664,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "settngs".to_owned(),
                 kinds: vec![IndexKind::File],
-                limit: 20,
+                limit: Some(20),
             })
             .expect("omission query")
             .records;
@@ -2595,7 +2674,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "nite".to_owned(),
                 kinds: vec![IndexKind::File],
-                limit: 20,
+                limit: Some(20),
             })
             .expect("short substitution query")
             .records;
@@ -2616,7 +2695,7 @@ mod tests {
             .query(&QueryRequest {
                 query: "invoices".to_owned(),
                 kinds: vec![IndexKind::File],
-                limit: 20,
+                limit: Some(20),
             })
             .expect("query")
             .records;
@@ -2720,7 +2799,7 @@ mod tests {
             .query(&QueryRequest {
                 query: String::new(),
                 kinds: vec![IndexKind::File],
-                limit: 20,
+                limit: Some(20),
             })
             .expect("query preserved index")
             .records;

@@ -35,7 +35,7 @@ public actor GitHubReleaseCatalog {
 
     public func fetch(component: RecoveryComponent) async throws -> [RecoveryRelease] {
         let snapshot = try await fetchAll()
-        return component == .desktop ? snapshot.desktop : snapshot.recovery
+        return snapshot.releases(for: component)
     }
 
     public func fetchAll() async throws -> RecoveryCatalogSnapshot {
@@ -64,7 +64,7 @@ public actor GitHubReleaseCatalog {
             guard release.draft != true, let key = release.id.map(String.init) ?? release.tagName else { return false }
             return seen.insert(key).inserted
         }
-        return RecoveryCatalogSnapshot(publishedReleaseCount: releases.count, desktop: project(releases, component: .desktop), recovery: project(releases, component: .recovery))
+        return RecoveryCatalogSnapshot(publishedReleaseCount: releases.count, desktop: project(releases, component: .desktop), recovery: project(releases, component: .recovery), commander: project(releases, component: .commander))
     }
 
     private func project(_ collected: [GitHubRelease], component: RecoveryComponent) -> [RecoveryRelease] {
@@ -81,7 +81,10 @@ public actor GitHubReleaseCatalog {
                 publishedAt: release.publishedAt.flatMap(ISO8601DateFormatter().date(from:)),
                 releaseURL: release.htmlURL.flatMap(URL.init(string:)),
                 tag: tag,
-                version: semanticVersion(in: tag)
+                version: semanticVersion(in: tag),
+                unavailableReason: unavailableReason(release, component: component),
+                branch: metadata("Branch", in: release.body),
+                commit: metadata("Commit", in: release.body)
             )
         }.sorted {
             ($0.publishedAt ?? .distantPast) > ($1.publishedAt ?? .distantPast)
@@ -110,6 +113,12 @@ public actor GitHubReleaseCatalog {
         return destination
     }
 
+    private func unavailableReason(_ release: GitHubRelease, component: RecoveryComponent) -> String? {
+        let marker = "<!-- thingtime-recovery-unavailable:v1:\(component.rawValue):missing-resource-seal -->"
+        guard release.body?.components(separatedBy: .newlines).contains(where: { $0.trimmingCharacters(in: .whitespaces) == marker }) == true else { return nil }
+        return "This older release was published with a damaged app archive and has been withdrawn from installation. Choose a newer release in the sidebar or use a cached version."
+    }
+
     private func selectAsset(_ assets: [GitHubAsset]?, component: RecoveryComponent, isUnsigned: Bool) -> RecoveryReleaseAsset? {
         (assets ?? [])
             .compactMap { asset -> RecoveryReleaseAsset? in
@@ -117,6 +126,8 @@ public actor GitHubReleaseCatalog {
                 let prefix: String
                 if component == .desktop {
                     prefix = isUnsigned ? "Thingtime-Electron-App-UNSIGNED-Release-" : "Thingtime-Electron-App-Release-"
+                } else if component == .commander {
+                    prefix = isUnsigned ? "Commander-App-UNSIGNED-Release-" : "Commander-App-Release-"
                 } else {
                     prefix = isUnsigned ? "Thingtime-Recovery-App-UNSIGNED-Release-" : "Thingtime-Recovery-App-Release-"
                 }
@@ -148,6 +159,15 @@ public actor GitHubReleaseCatalog {
         return nil
     }
 
+    private func metadata(_ field: String, in body: String?) -> String? {
+        let prefix = "- \(field): `"
+        guard let line = body?.components(separatedBy: .newlines).first(where: { $0.hasPrefix(prefix) && $0.hasSuffix("`") }) else { return nil }
+        let value = String(line.dropFirst(prefix.count).dropLast())
+        guard !value.isEmpty, value.count <= 200 else { return nil }
+        if field == "Commit", value.range(of: "^[a-f0-9]{7,40}$", options: .regularExpression) == nil { return nil }
+        return value
+    }
+
     private func semanticVersion(in value: String) -> String? {
         let pattern = "[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?"
         return value.range(of: pattern, options: .regularExpression).map { String(value[$0]) }
@@ -156,6 +176,7 @@ public actor GitHubReleaseCatalog {
 
 private struct GitHubRelease: Decodable {
     let assets: [GitHubAsset]?
+    let body: String?
     let draft: Bool?
     let htmlURL: String?
     let id: Int?
@@ -165,7 +186,7 @@ private struct GitHubRelease: Decodable {
     let tagName: String?
 
     enum CodingKeys: String, CodingKey {
-        case assets, draft, id, name, prerelease
+        case assets, body, draft, id, name, prerelease
         case htmlURL = "html_url"
         case publishedAt = "published_at"
         case tagName = "tag_name"

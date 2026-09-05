@@ -205,6 +205,9 @@ export const router = createBrowserRouter([
       // the viewer's Saved library — no loader guard: it renders its own
       // signed-out quiet state, like /apps
       { path: 'saved', element: <SavedRoute /> },
+      // the viewer's full notification history (search + category/type/
+      // unread/date filters in the URL) — same signed-out quiet state posture
+      { path: 'notifications', lazy: lazyRoute(() => import('./routes/notifications')) },
       // Subspaces — Reddit-style communities (components/Subspaces)
       { path: 's', lazy: lazyRoute(() => import('./routes/subspaces')) },
       { path: 's/:slug', lazy: lazyRoute(() => import('./routes/subspace')) },
