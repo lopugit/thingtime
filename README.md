@@ -2087,3 +2087,39 @@ iOS/scripts/testflight-beta.sh
 `iOS/.env` is ignored by git. The value is baked into that uploaded app build;
 future web changes on the same Vercel branch URL do not require a new iOS
 binary.
+
+### Passkey deployment and Apple app setup
+
+Passkeys use the `thingtime.com` relying-party ID on its subdomains, but the
+credential record belongs to the selected **account environment**. Production,
+development and custom databases can contain different accounts/passkeys. A
+shared domain does not replicate credentials. Localhost and custom domains have
+their own RP ID. If a saved passkey is unavailable, sign in with the password for
+that environment and check Settings → Security before creating another.
+
+The web client requires `api.auth-passkeys-register-options`,
+`api.auth-passkeys-register`, `api.auth-passkeys-login-options` and
+`api.auth-passkeys-login` version **1.1.0** for its respective ceremony. Deploy the
+server and client together. Challenges are independent, signed, origin-bound
+httpOnly cookies, capped at three pending per ceremony kind and expiring after
+ten minutes. Verified challenges are spent atomically in the existing `authOtps`
+TTL satellite; never disable its unique `challenge` index or verification checks.
+In-flight legacy cookies have a narrowly scoped compatibility read path.
+
+For the native iOS app, enable **Associated Domains** on your Apple App ID and
+regenerate the provisioning profile. `iOS/project.yml` declares
+`webcredentials:thingtime.com`; forks must change that to their actual RP domain.
+Set the server environment variable `THINGTIME_APPLE_APP_IDS` to the public
+application identifier from the app’s signed `application-identifier` entitlement
+(for example `ABCDEFGHIJ.com.example.app`; comma-separate additional intended app
+IDs). This is public association metadata, **not** a certificate or private key.
+The matching RP origin must serve `/.well-known/apple-app-site-association` over
+HTTPS without redirects or login. Missing or invalid configuration publishes an
+empty app list and deliberately grants no app access. Rebuild/distribute the
+signed app with its updated profile, then verify on a physical iPhone. Existing
+installed builds without the entitlement cannot be repaired by a web deploy alone.
+
+Passkey repair worktree validation: local web port **19040**, HMR **19041**, Nitro
+**19042**. Local URL: `http://localhost:19040`. Tailscale/Funnel was unavailable on
+2026-09-05 because its CLI points to a missing `/Applications/Tailscale.app`;
+no public Funnel mapping was changed.
