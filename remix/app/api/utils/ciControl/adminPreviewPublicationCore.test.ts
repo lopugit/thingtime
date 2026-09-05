@@ -4,9 +4,11 @@ import test from 'node:test';
 import {
   ADMIN_PREVIEW_COMMENT_MARKER,
   adminPreviewCommentBody,
+  adminPreviewDeploymentStatus,
   adminPreviewPersistentHostname,
   adminPreviewSnapshotUrl,
-  isOwnedAdminPreviewComment
+  isOwnedAdminPreviewComment,
+  isTerminalAdminPreviewStatus
 } from './adminPreviewPublicationCore';
 
 test('persistent preview hosts stay separated by selected environment', () => {
@@ -68,6 +70,33 @@ test('queued comments publish the expected persistent URL before Vercel returns 
   assert.match(body, /Develop \| 🟡 Queued \| 2026-09-03 03:20 UTC \| Waiting for Vercel/);
   assert.match(body, /\[Open persistent preview\]\(https:\/\/pr-505\.previews\.dev\.thingtime\.com\/\)/);
   assert.match(body, /Expected-ready times are estimates/);
+});
+
+test('a Vercel success delivery is a terminal READY receipt even without a readyState field', () => {
+  // regression: Vercel subscribes deployment.succeeded/promoted (see
+  // scripts/vercel/create-webhook.mjs) and those bodies carry no readyState, so
+  // reading the raw event token left the status as 'succeeded'. That failed the
+  // terminal gate, so the comment never left 🟡 and the persistent alias was
+  // never assigned for a build that had actually finished.
+  assert.equal(adminPreviewDeploymentStatus({ eventType: 'deployment.succeeded' }), 'ready');
+  assert.equal(adminPreviewDeploymentStatus({ eventType: 'deployment.promoted' }), 'ready');
+  assert.ok(isTerminalAdminPreviewStatus(adminPreviewDeploymentStatus({ eventType: 'deployment.succeeded' })));
+  assert.equal(adminPreviewDeploymentStatus({ eventType: 'deployment.error' }), 'error');
+  assert.equal(adminPreviewDeploymentStatus({ eventType: 'deployment.canceled' }), 'canceled');
+});
+
+test('an explicit deployment state still wins over the event type', () => {
+  assert.equal(adminPreviewDeploymentStatus({ readyState: 'READY', eventType: 'deployment.created' }), 'ready');
+  assert.equal(adminPreviewDeploymentStatus({ state: 'BUILDING', eventType: 'deployment.succeeded' }), 'building');
+  assert.equal(adminPreviewDeploymentStatus({ readyState: '  ', eventType: 'deployment.succeeded' }), 'ready');
+});
+
+test('non-terminal deliveries never satisfy the publication gate', () => {
+  for (const eventType of ['deployment.created', 'deployment.check-rerequested', 'deployment.unknown']) {
+    assert.equal(isTerminalAdminPreviewStatus(adminPreviewDeploymentStatus({ eventType })), false);
+  }
+  assert.equal(isTerminalAdminPreviewStatus('ready'), true);
+  assert.equal(isTerminalAdminPreviewStatus('cancelled'), true);
 });
 
 test('only the configured GitHub App can own the marker comment', () => {

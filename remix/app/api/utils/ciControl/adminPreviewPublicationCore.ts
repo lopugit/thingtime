@@ -42,6 +42,29 @@ export const adminPreviewSnapshotUrl = (value: unknown): string | null => {
   }
 };
 
+const TERMINAL_PREVIEW_STATUSES = new Set(['ready', 'error', 'failed', 'canceled', 'cancelled']);
+
+// A Vercel deployment webhook body carries no readyState/state field, so the
+// delivered event type is the only status signal: a finished build arrives as
+// `deployment.succeeded` and a re-pointed one as `deployment.promoted`. Both mean
+// READY, matching the EVENT_STATES map in vercel/webhookStore.ts. Without these
+// aliases the success receipt is dropped and the persistent alias is never moved.
+const EVENT_STATUS_ALIASES: Record<string, string> = { succeeded: 'ready', promoted: 'ready' };
+
+export const adminPreviewDeploymentStatus = (input: {
+  readyState?: unknown;
+  state?: unknown;
+  eventType?: string;
+}): string => {
+  const reported = input.readyState ?? input.state;
+  if (typeof reported === 'string' && reported.trim()) return reported.trim().toLowerCase();
+  const event = (input.eventType ?? '').split('.').pop()?.trim().toLowerCase() ?? '';
+  return EVENT_STATUS_ALIASES[event] ?? event;
+};
+
+export const isTerminalAdminPreviewStatus = (status: string): boolean =>
+  TERMINAL_PREVIEW_STATUSES.has(status.trim().toLowerCase());
+
 export type AdminPreviewCommentRow = {
   environment: CiPreviewEnvironment;
   status: string;

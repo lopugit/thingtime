@@ -5,6 +5,7 @@ import {
   adminPreviewRemovedCommentBody,
   adminPreviewSnapshotUrl,
   isOwnedAdminPreviewComment,
+  isTerminalAdminPreviewStatus,
   type AdminPreviewCommentRow
 } from './adminPreviewPublicationCore';
 import {
@@ -369,7 +370,7 @@ export const publishAdminPrPreviewComment = async (input: {
     const status = knownMatchesNewest || !deployment ? fromKnown?.status ?? deploymentStatus(deployment) : deploymentStatus(deployment);
     const snapshotUrl =
       knownMatchesNewest || !deployment ? fromKnown?.snapshotUrl ?? adminPreviewSnapshotUrl(deployment?.url) : adminPreviewSnapshotUrl(deployment?.url);
-    const terminal = ['ready', 'error', 'failed', 'canceled', 'cancelled'].includes(status);
+    const terminal = isTerminalAdminPreviewStatus(status);
     const expectedReadyAt = terminal
       ? null
       : fromKnown?.expectedReadyAt ?? expectedReadyAtFor(deploymentCreatedAt(deployment) || Date.now());

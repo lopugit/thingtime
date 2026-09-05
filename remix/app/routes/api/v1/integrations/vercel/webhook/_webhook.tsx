@@ -2,7 +2,11 @@ import { createHash } from 'node:crypto';
 
 import { json } from '~/api/http';
 import { refreshAdminPrPreviewPublicationForDeployment } from '~/api/utils/ciControl/adminPreviewDeployments';
-import { adminPreviewSnapshotUrl } from '~/api/utils/ciControl/adminPreviewPublicationCore';
+import {
+  adminPreviewDeploymentStatus,
+  adminPreviewSnapshotUrl,
+  isTerminalAdminPreviewStatus
+} from '~/api/utils/ciControl/adminPreviewPublicationCore';
 import { isCiPreviewEnvironment } from '~/api/utils/ciControl/previewPolicyCore';
 import { ingestVercelWebhook, verifyVercelWebhookSignature } from '~/api/utils/ciControl/webhooks';
 
@@ -38,7 +42,11 @@ export const action = async ({ request }: { request: Request }) => {
   const prNumber = Number(meta.githubPrId);
   const environment = String(meta.thingtimePreviewEnvironment ?? '');
   const sha = String(meta.githubCommitSha ?? '');
-  const status = String(deployment?.readyState ?? deployment?.state ?? eventType.split('.').pop() ?? '').toLowerCase();
+  const status = adminPreviewDeploymentStatus({
+    readyState: deployment?.readyState,
+    state: deployment?.state,
+    eventType
+  });
   const deploymentId = String(deployment?.id ?? data?.id ?? '');
   if (
     result.accepted &&
@@ -48,7 +56,7 @@ export const action = async ({ request }: { request: Request }) => {
     isCiPreviewEnvironment(environment) &&
     /^dpl_[A-Za-z0-9]+$/.test(deploymentId) &&
     /^[0-9a-f]{40}$/.test(sha) &&
-    ['ready', 'error', 'failed', 'canceled', 'cancelled'].includes(status)
+    isTerminalAdminPreviewStatus(status)
   ) {
     // The delivery is already ingested and durable at this point, so refreshing
     // the PR comment is best effort: a transient Vercel/GitHub failure must not
