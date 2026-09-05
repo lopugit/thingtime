@@ -13,7 +13,11 @@
 // the mod-only queues and counts, every 4xx wall, and the S2 review fixes
 // (a kicked approved poster can't post, a pending row takes only decisions,
 // withdrawn requests can't be decided, access flips resolve the queues, an
-// expired ban heals, the mods' bell is deduped).
+// expired ban heals, the mods' bell is deduped), and (section O) user flairs:
+// the settings, every self / moderator wall, template + custom + clear, the
+// batched authorFlair projection on posts, fresh comments, nested replies and
+// both feeds, live template renames, the mod-log rule, kicked / banned
+// wearers hidden, the manifest.
 //
 //   node scripts/verify-subspaces.mjs [baseUrl]
 //
@@ -325,7 +329,7 @@ const run = async () => {
 	const settings = await api('/api/v1/subspaces/update', { method: 'POST', cookie: mod.cookie, body: { slug, name: 'Verify Space ✨', description: 'Updated', branding: { accent: 'hotpink' }, rules: ['One'], flairs: [{ label: 'Meta' }] } });
 	check('mod edits identity/branding/rules/flairs', settings.status === 200 && settings.body.subspace.name === 'Verify Space ✨' && settings.body.subspace.branding.accent === 'hotpink' && settings.body.subspace.flairs[0].id === 'meta');
 	const manifest = await api('/api/v1/capabilities');
-	check('capability manifest advertises the new contracts', manifest.status === 200 && manifest.body.features?.['api.subspaces'] === '1.1.0' && manifest.body.features['api.things-updown'] === '1.0.0' && manifest.body.features['api.things-feed'] === '1.1.0', JSON.stringify({ s: manifest.body?.features?.['api.subspaces'], u: manifest.body?.features?.['api.things-updown'], f: manifest.body?.features?.['api.things-feed'] }));
+	check('capability manifest advertises the new contracts (subspaces 1.2.0, updown 1.0.0, things-feed 1.2.0 — authorFlair)', manifest.status === 200 && manifest.body.features?.['api.subspaces'] === '1.2.0' && manifest.body.features['api.things-updown'] === '1.0.0' && manifest.body.features['api.things-feed'] === '1.2.0', JSON.stringify({ s: manifest.body?.features?.['api.subspaces'], u: manifest.body?.features?.['api.things-updown'], f: manifest.body?.features?.['api.things-feed'] }));
 	const docs = await api('/api/v1/subspaces/moderate-docs');
 	check('docs routes answer for the family', docs.status === 200 && docs.body.docs?.endpoint === '/api/v1/subspaces/moderate');
 
@@ -433,8 +437,8 @@ const run = async () => {
 	check('refused deletes leave the subspace intact', stillThere.status === 200);
 	const manifest2 = await api('/api/v1/capabilities');
 	check(
-		'capability manifest advertises transfer (1.0.1, guarded writes) / delete (1.1.0, privatePosts + slug hold) and the bumped members (1.2.1, S2 queues + review fixes) / notifications contracts (1.1.0)',
-		manifest2.status === 200 && manifest2.body.features['api.subspaces-transfer'] === '1.0.1' && manifest2.body.features['api.subspaces-delete'] === '1.1.0' && manifest2.body.features['api.subspaces-members'] === '1.2.1' && manifest2.body.features['api.notifications-list'] === '1.1.0' && manifest2.body.features['api.notifications-settings'] === '1.1.0',
+		'capability manifest advertises transfer (1.0.1, guarded writes) / delete (1.1.0, privatePosts + slug hold) and the bumped members (1.3.0, S2 queues + review fixes + S3 user flairs) / notifications contracts (1.1.0)',
+		manifest2.status === 200 && manifest2.body.features['api.subspaces-transfer'] === '1.0.1' && manifest2.body.features['api.subspaces-delete'] === '1.1.0' && manifest2.body.features['api.subspaces-members'] === '1.3.0' && manifest2.body.features['api.notifications-list'] === '1.1.0' && manifest2.body.features['api.notifications-settings'] === '1.1.0',
 		JSON.stringify({ t: manifest2.body?.features?.['api.subspaces-transfer'], d: manifest2.body?.features?.['api.subspaces-delete'], m: manifest2.body?.features?.['api.subspaces-members'], n: manifest2.body?.features?.['api.notifications-list'] })
 	);
 	const deleteDocs = await api('/api/v1/subspaces/delete-docs');
@@ -767,8 +771,8 @@ const run = async () => {
 	check('unknown member action → 400', badAction.status === 400);
 	const manifest3 = await api('/api/v1/capabilities');
 	check(
-		'capability manifest advertises the request contracts (leave/get/list 1.1.0, join 1.1.1, members 1.2.1, update 1.1.0)',
-		manifest3.status === 200 && manifest3.body.features['api.subspaces-join'] === '1.1.1' && manifest3.body.features['api.subspaces-leave'] === '1.1.0' && manifest3.body.features['api.subspaces-get'] === '1.1.0' && manifest3.body.features['api.subspaces'] === '1.1.0' && manifest3.body.features['api.subspaces-members'] === '1.2.1' && manifest3.body.features['api.subspaces-update'] === '1.1.0',
+		'capability manifest advertises the request contracts (leave 1.1.0, join 1.1.1; get/list/update 1.2.0 + members 1.3.0 after the S3 user-flair bump)',
+		manifest3.status === 200 && manifest3.body.features['api.subspaces-join'] === '1.1.1' && manifest3.body.features['api.subspaces-leave'] === '1.1.0' && manifest3.body.features['api.subspaces-get'] === '1.2.0' && manifest3.body.features['api.subspaces'] === '1.2.0' && manifest3.body.features['api.subspaces-members'] === '1.3.0' && manifest3.body.features['api.subspaces-update'] === '1.2.0',
 		JSON.stringify({ j: manifest3.body?.features?.['api.subspaces-join'], l: manifest3.body?.features?.['api.subspaces-leave'], g: manifest3.body?.features?.['api.subspaces-get'], m: manifest3.body?.features?.['api.subspaces-members'], u: manifest3.body?.features?.['api.subspaces-update'] })
 	);
 
@@ -900,6 +904,207 @@ const run = async () => {
 	);
 	const cleanupN = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: owner.cookie, body: { slug: reqSlug, confirmSlug: reqSlug } });
 	check('(cleanup) owner deletes the request subspace', cleanupN.status === 200, `${cleanupN.status} ${JSON.stringify(cleanupN.body).slice(0, 200)}`);
+
+	console.log('\nO. user flairs');
+	// a fresh PUBLIC subspace: owner founds it, mod is promoted, member and
+	// stranger join later (the "not a member" walls run before they do)
+	const flairSlug = `flair_${suffix}`.slice(0, 30);
+	const foundedFlair = await api('/api/v1/subspaces', { method: 'POST', cookie: owner.cookie, body: { slug: flairSlug, name: 'Flair Space', access: 'public' } });
+	check('(setup) owner founds a public subspace', foundedFlair.status === 201, `${foundedFlair.status} ${JSON.stringify(foundedFlair.body).slice(0, 200)}`);
+	const flairSpace = foundedFlair.body.subspace;
+	check(
+		'defaults: userFlairs [], userFlairSelfAssign true, allowCustomUserFlair false, viewer.userFlair null',
+		Array.isArray(flairSpace?.userFlairs) && flairSpace.userFlairs.length === 0 && flairSpace.userFlairSelfAssign === true && flairSpace.allowCustomUserFlair === false && flairSpace.viewer?.userFlair === null,
+		JSON.stringify({ f: flairSpace?.userFlairs, s: flairSpace?.userFlairSelfAssign, c: flairSpace?.allowCustomUserFlair, v: flairSpace?.viewer?.userFlair })
+	);
+	const flairOf = (cookie, body) => api('/api/v1/subspaces/members', { method: 'POST', cookie, body: { slug: flairSlug, action: 'userFlair', ...body } });
+	const flairDetail = (cookie) => api(`/api/v1/subspaces/get?slug=${flairSlug}`, { cookie });
+	const flairUpdate = (cookie, body) => api('/api/v1/subspaces/update', { method: 'POST', cookie, body: { slug: flairSlug, ...body } });
+	await api('/api/v1/subspaces/join', { method: 'POST', cookie: mod.cookie, body: { slug: flairSlug } });
+	const promoteFlairMod = await api('/api/v1/subspaces/members', { method: 'POST', cookie: owner.cookie, body: { slug: flairSlug, userId: mod.id, action: 'role', role: 'moderator' } });
+	check('(setup) mod joins + is promoted', promoteFlairMod.status === 200 && promoteFlairMod.body.member?.role === 'moderator');
+
+	// walls before anyone joined / before any template exists
+	const anonFlair = await api('/api/v1/subspaces/members', { method: 'POST', body: { slug: flairSlug, action: 'userFlair', flairId: 'prism' } });
+	check('anonymous userFlair → 401', anonFlair.status === 401);
+	const outsiderFlair = await flairOf(member.cookie, { flairId: 'prism' });
+	check('a non-member setting their own flair → 403', outsiderFlair.status === 403, `${outsiderFlair.status} ${JSON.stringify(outsiderFlair.body)}`);
+	const dressOutsider = await flairOf(mod.cookie, { userId: member.id, flairId: 'prism' });
+	check('a mod dressing a non-member → 404', dressOutsider.status === 404, `${dressOutsider.status} ${JSON.stringify(dressOutsider.body)}`);
+	const memberJoinsFlair = await api('/api/v1/subspaces/join', { method: 'POST', cookie: member.cookie, body: { slug: flairSlug } });
+	const strangerJoinsFlair = await api('/api/v1/subspaces/join', { method: 'POST', cookie: stranger.cookie, body: { slug: flairSlug } });
+	check('(setup) member + stranger join', memberJoinsFlair.status === 200 && memberJoinsFlair.body.joined === true && strangerJoinsFlair.status === 200 && strangerJoinsFlair.body.joined === true);
+	const noTemplates = await flairOf(member.cookie, { flairId: 'prism' });
+	check('picking a template before any exists → 400', noTemplates.status === 400, `${noTemplates.status} ${JSON.stringify(noTemplates.body)}`);
+
+	// settings: a MODERATOR (not the owner) defines the templates
+	const templatesByMember = await flairUpdate(member.cookie, { userFlairs: [{ label: 'Prism' }] });
+	check('a plain member cannot edit user flairs → 403', templatesByMember.status === 403);
+	const badSwitch = await flairUpdate(mod.cookie, { userFlairSelfAssign: 'yes' });
+	check('a non-boolean switch → 400', badSwitch.status === 400, `${badSwitch.status} ${JSON.stringify(badSwitch.body)}`);
+	const tooMany = await flairUpdate(mod.cookie, { userFlairs: new Array(51).fill(0).map((_, i) => ({ label: `f${i}` })) });
+	check('more than 50 user-flair templates → 400', tooMany.status === 400);
+	const dupTemplates = await flairUpdate(mod.cookie, { userFlairs: [{ id: 'a', label: 'A' }, { id: 'a', label: 'B' }] });
+	check('duplicate template ids → 400', dupTemplates.status === 400);
+	const templates = await flairUpdate(mod.cookie, {
+		userFlairs: [{ label: 'Prism', emoji: '🔮', color: '#7c5cff' }, { id: 'staff', label: 'Staff', emoji: '🎩', modOnly: true, color: 'javascript:alert(1)' }],
+		allowCustomUserFlair: false
+	});
+	check(
+		'a moderator saves the templates (ids minted, modOnly kept, unsafe color dropped) and the switch',
+		templates.status === 200 && templates.body.subspace?.userFlairs?.[0]?.id === 'prism' && templates.body.subspace.userFlairs[0].emoji === '🔮' && templates.body.subspace.userFlairs[1]?.modOnly === true && templates.body.subspace.userFlairs[1].color === null && templates.body.subspace.allowCustomUserFlair === false && templates.body.subspace.userFlairSelfAssign === true,
+		`${templates.status} ${JSON.stringify(templates.body).slice(0, 300)}`
+	);
+	const settingsLog = await api(`/api/v1/subspaces/modlog?slug=${flairSlug}`, { cookie: mod.cookie });
+	check('the mod log records settings.update with the user-flair fields', settingsLog.body?.entries?.some((entry) => entry.action === 'settings.update' && Array.isArray(entry.detail?.fields) && entry.detail.fields.includes('userFlairs') && entry.detail.fields.includes('allowCustomUserFlair')), JSON.stringify(settingsLog.body?.entries?.map((entry) => entry.detail)));
+	const listRow = await api(`/api/v1/subspaces?q=${flairSlug.slice(0, 12)}`, { cookie: member.cookie });
+	check('the directory row carries the user-flair settings', listRow.status === 200 && listRow.body.subspaces.some((entry) => entry.slug === flairSlug && entry.userFlairs?.length === 2 && entry.userFlairSelfAssign === true && entry.allowCustomUserFlair === false));
+
+	// self-service: template picks
+	const pickPrism = await flairOf(member.cookie, { flairId: 'prism' });
+	check('a member picks a template → 200, member.userFlair { id prism, label Prism, emoji 🔮, color }', pickPrism.status === 200 && pickPrism.body.member?.userFlair?.id === 'prism' && pickPrism.body.member.userFlair.label === 'Prism' && pickPrism.body.member.userFlair.emoji === '🔮' && pickPrism.body.member.userFlair.color === '#7c5cff', `${pickPrism.status} ${JSON.stringify(pickPrism.body).slice(0, 300)}`);
+	const pickStaff = await flairOf(member.cookie, { flairId: 'staff' });
+	check('a member picking a mod-only template → 403', pickStaff.status === 403, `${pickStaff.status} ${JSON.stringify(pickStaff.body)}`);
+	const pickGhost = await flairOf(member.cookie, { flairId: 'ghost' });
+	check('an unknown template → 400', pickGhost.status === 400);
+	const customOff = await flairOf(member.cookie, { text: 'Rainbow hunter' });
+	check('custom text while allowCustomUserFlair is off → 403', customOff.status === 403, `${customOff.status} ${JSON.stringify(customOff.body)}`);
+	const dressAsMember = await flairOf(member.cookie, { userId: stranger.id, flairId: 'prism' });
+	check('a member dressing someone else → 403', dressAsMember.status === 403);
+	const memberDetail = await flairDetail(member.cookie);
+	check('the subspace detail reports viewer.userFlair', memberDetail.status === 200 && memberDetail.body.subspace.viewer.userFlair?.id === 'prism', JSON.stringify(memberDetail.body?.subspace?.viewer));
+	const strangerDetail = await flairDetail(stranger.cookie);
+	check('…and null for a member wearing none', strangerDetail.body.subspace.viewer.userFlair === null);
+
+	// projection: posts, fresh comments, nested replies, both feeds — one batched lookup
+	const flairPosted = await api('/api/v1/things', { method: 'POST', cookie: member.cookie, body: { type: 'text', text: 'wearing my flair', title: 'Flair post', subspaceId: flairSpace.id } });
+	check('a post by the wearer carries authorFlair (fresh create response)', flairPosted.status === 200 && flairPosted.body.post?.authorFlair?.id === 'prism' && flairPosted.body.post.authorFlair.label === 'Prism', `${flairPosted.status} ${JSON.stringify(flairPosted.body?.post?.authorFlair)}`);
+	const flairPost = flairPosted.body.post;
+	const plainPosted = await api('/api/v1/things', { method: 'POST', cookie: stranger.cookie, body: { type: 'text', text: 'no flair here', title: 'Plain post', subspaceId: flairSpace.id } });
+	check('a post by a member without a flair carries authorFlair null', plainPosted.status === 200 && plainPosted.body.post?.authorFlair === null);
+	const outsidePost = await api('/api/v1/things', { method: 'POST', cookie: member.cookie, body: { type: 'text', text: 'outside any subspace', visibility: 'public' } });
+	check('a post outside subspaces carries authorFlair null', outsidePost.status === 200 && outsidePost.body.post?.authorFlair === null);
+	const strangerComment = await api('/api/v1/things/comment', { method: 'POST', cookie: stranger.cookie, body: { id: flairPost.id, text: 'nice flair' } });
+	const memberComment = await api('/api/v1/things/comment', { method: 'POST', cookie: member.cookie, body: { id: flairPost.id, text: 'thanks!' } });
+	check('the fresh comment response carries authorFlair (wearer) / null (non-wearer)', strangerComment.status === 200 && strangerComment.body.comment?.authorFlair === null && memberComment.status === 200 && memberComment.body.comment?.authorFlair?.id === 'prism', `${strangerComment.status}/${memberComment.status} ${JSON.stringify([strangerComment.body?.comment?.authorFlair, memberComment.body?.comment?.authorFlair])}`);
+	const nestedReply = await api('/api/v1/things/comment', { method: 'POST', cookie: member.cookie, body: { id: strangerComment.body.comment.id, text: 'nested reply, still wearing it' } });
+	check('(setup) a nested reply by the wearer', nestedReply.status === 200 && nestedReply.body.comment?.authorFlair?.id === 'prism');
+	const flairRead = await api(`/api/v1/things?id=${flairPost.id}`, { cookie: stranger.cookie });
+	const readComments = flairRead.body?.post?.comments || [];
+	const strangerRow = readComments.find((entry) => entry.id === strangerComment.body.comment.id);
+	const memberRow = readComments.find((entry) => entry.id === memberComment.body.comment.id);
+	const nestedRow = strangerRow?.comments?.find((entry) => entry.id === nestedReply.body.comment.id);
+	check(
+		'GET /things?id projects authorFlair on the post, its comments and the nested reply (one batched lookup)',
+		flairRead.status === 200 && flairRead.body.post.authorFlair?.id === 'prism' && strangerRow?.authorFlair === null && memberRow?.authorFlair?.id === 'prism' && nestedRow?.authorFlair?.id === 'prism',
+		JSON.stringify({ post: flairRead.body?.post?.authorFlair, stranger: strangerRow?.authorFlair, member: memberRow?.authorFlair, nested: nestedRow?.authorFlair })
+	);
+	// a thread drill-down reads the COMMENT as the root doc (GET ?id=<comment>):
+	// its own authorFlair and its replies' still resolve through the root post
+	const commentAsRoot = await api(`/api/v1/things?id=${strangerComment.body.comment.id}`, { cookie: stranger.cookie });
+	const nestedUnderRoot = (commentAsRoot.body?.post?.comments || []).find((entry) => entry.id === nestedReply.body.comment.id);
+	const wearerCommentAsRoot = await api(`/api/v1/things?id=${memberComment.body.comment.id}`);
+	check(
+		'GET /things?id=<comment> resolves the ROOT post’s subspace: the comment doc and its nested replies carry authorFlair (a thread drill-down)',
+		commentAsRoot.status === 200 && commentAsRoot.body.post?.authorFlair === null && nestedUnderRoot?.authorFlair?.id === 'prism' && wearerCommentAsRoot.status === 200 && wearerCommentAsRoot.body.post?.authorFlair?.id === 'prism',
+		JSON.stringify({ root: commentAsRoot.body?.post?.authorFlair, nested: nestedUnderRoot?.authorFlair, wearer: wearerCommentAsRoot.body?.post?.authorFlair })
+	);
+	const flairHome = await api('/api/v1/things/feed?algorithm=latest&limit=50', { cookie: stranger.cookie });
+	check('the home feed carries authorFlair on the subspace post and null on the outside post', flairHome.body?.posts?.some((entry) => entry.id === flairPost.id && entry.authorFlair?.id === 'prism') && flairHome.body.posts.some((entry) => entry.id === outsidePost.body.post.id && entry.authorFlair === null), JSON.stringify(flairHome.body?.posts?.filter((entry) => [flairPost.id, outsidePost.body?.post?.id].includes(entry.id)).map((entry) => entry.authorFlair)));
+	const flairFeed = await api(`/api/v1/subspaces/feed?slug=${flairSlug}&sort=new`);
+	check('the subspace feed carries authorFlair (anonymous read) + the settings on its subspace block', flairFeed.status === 200 && flairFeed.body.posts.some((entry) => entry.id === flairPost.id && entry.authorFlair?.id === 'prism') && flairFeed.body.subspace.userFlairs?.length === 2);
+	const flairProfile = await api(`/api/v1/things/user?username=${member.username}&limit=20`, { cookie: stranger.cookie });
+	check('the profile feed carries authorFlair too', flairProfile.status === 200 && (flairProfile.body.posts || []).some((entry) => entry.id === flairPost.id && entry.authorFlair?.id === 'prism'), `${flairProfile.status} ${JSON.stringify(flairProfile.body).slice(0, 200)}`);
+
+	// a renamed template reaches every wearer; a deleted one keeps the snapshot
+	const renamed = await flairUpdate(mod.cookie, { userFlairs: [{ id: 'prism', label: 'Prism ✨', emoji: '🔮', color: 'hotpink' }, { id: 'staff', label: 'Staff', emoji: '🎩', modOnly: true }] });
+	const afterRename = await api(`/api/v1/things?id=${flairPost.id}`);
+	check('renaming a template updates the wearer’s chip (label + color follow)', renamed.status === 200 && afterRename.body?.post?.authorFlair?.label === 'Prism ✨' && afterRename.body.post.authorFlair.color === 'hotpink' && afterRename.body.post.authorFlair.id === 'prism', JSON.stringify(afterRename.body?.post?.authorFlair));
+	const dropped = await flairUpdate(mod.cookie, { userFlairs: [{ id: 'staff', label: 'Staff', emoji: '🎩', modOnly: true }] });
+	const afterDrop = await api(`/api/v1/things?id=${flairPost.id}`);
+	check('deleting a template keeps the wearer’s snapshot (the last label they were given)', dropped.status === 200 && afterDrop.body?.post?.authorFlair?.id === 'prism' && afterDrop.body.post.authorFlair.label === 'Prism', JSON.stringify(afterDrop.body?.post?.authorFlair));
+	await flairUpdate(mod.cookie, { userFlairs: [{ id: 'prism', label: 'Prism', emoji: '🔮', color: '#7c5cff' }, { id: 'staff', label: 'Staff', emoji: '🎩', modOnly: true }] });
+
+	// moderators dress anyone (but the owner), bound by neither switch; only THAT logs
+	const dressStaff = await flairOf(mod.cookie, { username: stranger.username, flairId: 'staff' });
+	check('a mod gives a member the mod-only template → 200', dressStaff.status === 200 && dressStaff.body.member?.userFlair?.id === 'staff' && dressStaff.body.member.userId === stranger.id, `${dressStaff.status} ${JSON.stringify(dressStaff.body).slice(0, 200)}`);
+	const strangerPostRead = await api(`/api/v1/things?id=${plainPosted.body.post.id}`);
+	check('…and their post now wears it', strangerPostRead.body?.post?.authorFlair?.id === 'staff');
+	const dressCustom = await flairOf(mod.cookie, { userId: stranger.id, text: 'Verified bee', emoji: '🐝' });
+	check('a mod sets custom text while allowCustomUserFlair is off → 200 (mods are bound by neither switch)', dressCustom.status === 200 && dressCustom.body.member?.userFlair?.id === null && dressCustom.body.member.userFlair.label === 'Verified bee' && dressCustom.body.member.userFlair.emoji === '🐝', `${dressCustom.status} ${JSON.stringify(dressCustom.body).slice(0, 200)}`);
+	const dressLong = await flairOf(mod.cookie, { userId: stranger.id, text: 'x'.repeat(41) });
+	check('custom text over 40 chars → 400 (mods too)', dressLong.status === 400);
+	const dressOwner = await flairOf(mod.cookie, { userId: owner.id, flairId: 'prism' });
+	check('a mod dressing the owner → 403', dressOwner.status === 403, `${dressOwner.status} ${JSON.stringify(dressOwner.body)}`);
+	const ownerSelf = await flairOf(owner.cookie, { flairId: 'staff' });
+	check('the owner dresses themselves, mod-only template included → 200', ownerSelf.status === 200 && ownerSelf.body.member?.userFlair?.id === 'staff');
+	const flairLog = await api(`/api/v1/subspaces/modlog?slug=${flairSlug}&limit=50`, { cookie: mod.cookie });
+	const flairLogRows = (flairLog.body?.entries || []).filter((entry) => entry.action === 'member.userFlair');
+	check(
+		'mod log: member.userFlair only when a mod dresses someone ELSE (stranger ×2 by the mod; nothing for the member’s or the owner’s own picks)',
+		flairLogRows.length === 2 && flairLogRows.every((entry) => entry.userId === stranger.id && entry.actor?.id === mod.id) && flairLogRows.some((entry) => entry.detail?.flairId === 'staff') && flairLogRows.some((entry) => entry.detail?.flairId === null && entry.detail?.text === 'Verified bee'),
+		JSON.stringify(flairLogRows.map((entry) => [entry.userId, entry.detail]))
+	);
+	const memberRows = await api(`/api/v1/subspaces/members?slug=${flairSlug}`, { cookie: mod.cookie });
+	check('the member list rows carry userFlair', memberRows.status === 200 && memberRows.body.members.some((entry) => entry.userId === member.id && entry.userFlair?.id === 'prism') && memberRows.body.members.some((entry) => entry.userId === stranger.id && entry.userFlair?.label === 'Verified bee'), JSON.stringify(memberRows.body?.members?.map((entry) => [entry.userId, entry.userFlair])));
+
+	// custom text for members, then clearing
+	const allowCustom = await flairUpdate(mod.cookie, { allowCustomUserFlair: true });
+	const memberCustom = await flairOf(member.cookie, { text: '  Rainbow   hunter ', emoji: '🌈', color: 'not-a-color!' });
+	check('with allowCustomUserFlair on a member types their own (whitespace collapsed, emoji kept, bad color dropped)', allowCustom.status === 200 && memberCustom.status === 200 && memberCustom.body.member?.userFlair?.id === null && memberCustom.body.member.userFlair.label === 'Rainbow hunter' && memberCustom.body.member.userFlair.emoji === '🌈' && memberCustom.body.member.userFlair.color === null, `${memberCustom.status} ${JSON.stringify(memberCustom.body).slice(0, 200)}`);
+	const memberLong = await flairOf(member.cookie, { text: 'y'.repeat(41) });
+	check('a member’s custom text over 40 chars → 400', memberLong.status === 400);
+	const customRead = await api(`/api/v1/things?id=${flairPost.id}`);
+	check('the post wears the custom text (id null)', customRead.body?.post?.authorFlair?.id === null && customRead.body.post.authorFlair.label === 'Rainbow hunter');
+	const clearedFlair = await flairOf(member.cookie, { flairId: null, text: '' });
+	const clearedRead = await api(`/api/v1/things?id=${flairPost.id}`);
+	const clearedDetail = await flairDetail(member.cookie);
+	check('flairId null + empty text clears: member.userFlair null, the post’s authorFlair null, viewer.userFlair null', clearedFlair.status === 200 && clearedFlair.body.member?.userFlair === null && clearedRead.body?.post?.authorFlair === null && clearedDetail.body.subspace.viewer.userFlair === null, `${clearedFlair.status} ${JSON.stringify([clearedFlair.body?.member?.userFlair, clearedRead.body?.post?.authorFlair])}`);
+
+	// self-assign off: members can't pick, may still clear; mods still dress
+	const selfOff = await flairUpdate(mod.cookie, { userFlairSelfAssign: false });
+	const pickWhileOff = await flairOf(member.cookie, { flairId: 'prism' });
+	const customWhileOff = await flairOf(member.cookie, { text: 'still?' });
+	const clearWhileOff = await flairOf(member.cookie, {});
+	const modWhileOff = await flairOf(mod.cookie, { userId: member.id, flairId: 'prism' });
+	const modSelfWhileOff = await flairOf(mod.cookie, { flairId: 'prism' });
+	check(
+		'userFlairSelfAssign off: a member’s template pick 403, custom text 403, clearing 200; a mod still dresses them (200) and themselves (200)',
+		selfOff.status === 200 && pickWhileOff.status === 403 && customWhileOff.status === 403 && clearWhileOff.status === 200 && clearWhileOff.body.member?.userFlair === null && modWhileOff.status === 200 && modWhileOff.body.member?.userFlair?.id === 'prism' && modSelfWhileOff.status === 200 && modSelfWhileOff.body.member?.userFlair?.id === 'prism',
+		`${selfOff.status}/${pickWhileOff.status}/${customWhileOff.status}/${clearWhileOff.status}/${modWhileOff.status}/${modSelfWhileOff.status}`
+	);
+	const memberClearsModPick = await flairOf(member.cookie, { flairId: null });
+	check('a member may take off the flair a mod gave them even while self-assign is off', memberClearsModPick.status === 200 && memberClearsModPick.body.member?.userFlair === null);
+	await flairUpdate(mod.cookie, { userFlairSelfAssign: true });
+
+	// kicked / banned wearers are hidden; a rejoin brings the flair back
+	const redress = await flairOf(member.cookie, { flairId: 'prism' });
+	const kickWearer = await api('/api/v1/subspaces/members', { method: 'POST', cookie: mod.cookie, body: { slug: flairSlug, userId: member.id, action: 'remove' } });
+	const kickedRead = await api(`/api/v1/things?id=${flairPost.id}`);
+	check('a kicked wearer’s chip disappears (authorFlair null while not a member)', redress.status === 200 && kickWearer.status === 200 && kickedRead.body?.post?.authorFlair === null, `${redress.status}/${kickWearer.status} ${JSON.stringify(kickedRead.body?.post?.authorFlair)}`);
+	const kickedSelf = await flairOf(member.cookie, { flairId: 'prism' });
+	check('…and they can’t set one while out → 403', kickedSelf.status === 403);
+	const rejoinWearer = await api('/api/v1/subspaces/join', { method: 'POST', cookie: member.cookie, body: { slug: flairSlug } });
+	const rejoinedRead = await api(`/api/v1/things?id=${flairPost.id}`);
+	check('rejoining brings the flair back (the pick was kept on the row)', rejoinWearer.status === 200 && rejoinWearer.body.joined === true && rejoinWearer.body.subspace.viewer.userFlair?.id === 'prism' && rejoinedRead.body?.post?.authorFlair?.id === 'prism', JSON.stringify([rejoinWearer.body?.subspace?.viewer?.userFlair, rejoinedRead.body?.post?.authorFlair]));
+	const banWearer = await api('/api/v1/subspaces/members', { method: 'POST', cookie: mod.cookie, body: { slug: flairSlug, userId: stranger.id, action: 'ban', reason: 'flair test' } });
+	const bannedRead = await api(`/api/v1/things?id=${plainPosted.body.post.id}`);
+	const dressBanned = await flairOf(mod.cookie, { userId: stranger.id, flairId: 'prism' });
+	check('a banned wearer’s chip disappears and a mod dressing a banned user → 400', banWearer.status === 200 && bannedRead.body?.post?.authorFlair === null && dressBanned.status === 400, `${banWearer.status}/${dressBanned.status} ${JSON.stringify(bannedRead.body?.post?.authorFlair)}`);
+	const bannedSelf = await flairOf(stranger.cookie, { flairId: 'prism' });
+	check('a banned member setting their own → 403', bannedSelf.status === 403);
+	await api('/api/v1/subspaces/members', { method: 'POST', cookie: mod.cookie, body: { slug: flairSlug, userId: stranger.id, action: 'unban' } });
+	const genericFlair = await api('/api/v1/things', { method: 'PATCH', cookie: member.cookie, body: { id: flairPost.id, crystal: { authorFlair: { label: 'sneaky' } } } });
+	const genericRead = await api(`/api/v1/things?id=${flairPost.id}`);
+	check('authorFlair is never client-writable (a PATCH smuggling it changes nothing)', genericFlair.status !== 500 && genericRead.body?.post?.authorFlair?.id === 'prism' && genericRead.body.post.authorFlair.label === 'Prism', `${genericFlair.status} ${JSON.stringify(genericRead.body?.post?.authorFlair)}`);
+	const manifestO = await api('/api/v1/capabilities');
+	check(
+		'capability manifest advertises the user-flair contracts (subspaces / get / update 1.2.0, members 1.3.0, subspaces-feed 1.1.0, things / things-comment / things-feed / things-user 1.2.0)',
+		manifestO.status === 200 && manifestO.body.features['api.subspaces'] === '1.2.0' && manifestO.body.features['api.subspaces-get'] === '1.2.0' && manifestO.body.features['api.subspaces-update'] === '1.2.0' && manifestO.body.features['api.subspaces-members'] === '1.3.0' && manifestO.body.features['api.subspaces-feed'] === '1.1.0' && ['api.things', 'api.things-comment', 'api.things-feed', 'api.things-user'].every((feature) => manifestO.body.features[feature] === '1.2.0'),
+		JSON.stringify({ s: manifestO.body?.features?.['api.subspaces'], g: manifestO.body?.features?.['api.subspaces-get'], u: manifestO.body?.features?.['api.subspaces-update'], m: manifestO.body?.features?.['api.subspaces-members'], f: manifestO.body?.features?.['api.subspaces-feed'], t: manifestO.body?.features?.['api.things'] })
+	);
+	const cleanupO = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: owner.cookie, body: { slug: flairSlug, confirmSlug: flairSlug } });
+	check('(cleanup) owner deletes the flair subspace', cleanupO.status === 200, `${cleanupO.status} ${JSON.stringify(cleanupO.body).slice(0, 200)}`);
 
 	console.log(`\n${passed} passed, ${failures.length} failed${skipped.length ? `, ${skipped.length} skipped (storage migration pending on this database)` : ''}`);
 	if (failures.length) {

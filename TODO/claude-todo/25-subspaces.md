@@ -57,8 +57,18 @@ reactions untouched.
   the queues, expired bans heal on `request-approval`, deduped mod bells +
   a `subspaces.join` rate key.
 
+- ✅ S3 — user flairs: `userFlairs` templates + `userFlairSelfAssign` /
+  `allowCustomUserFlair` on `/update` (mods), member action `userFlair`
+  (self under the two switches, mods dress anyone but the owner; modlog
+  `member.userFlair` only for someone else's), `authorFlair` on posts +
+  comments from ONE batched member-row lookup per page (live template
+  resolution, active members only), `viewer.userFlair` / `member.userFlair`;
+  chip after the author name everywhere inside subspaces, sidebar **Your
+  flair** card, mod page **User flairs** editor + **Set flair** modal;
+  verify section O.
+
 ## Follow-ups (not in this PR)
-- User flairs; per-subspace wiki +
+- Per-subspace wiki +
   sidebar widgets; crossposting; a "popular subspaces" board on /explore;
   notifications for a post's first upvotes; API-level "all subspaces I
   moderate" digest; subspace archive (read-only freeze, distinct from delete).

@@ -6,21 +6,27 @@ import {
 	canPostIn,
 	confirmSlugMatches,
 	isActiveMembershipState,
+	liveUserFlair,
 	privatizedPostUpdate,
 	requestKindOf,
 	rankSubspacePosts,
 	RELEASED_POST_UNSET,
 	releaseKindFor,
 	releasedPostUpdate,
+	resolveUserFlair,
 	sanitizeBranding,
 	sanitizeFlairs,
 	sanitizeRules,
 	sanitizeSlug,
 	sanitizeTopRange,
+	sanitizeUserFlairs,
 	slugHoldState,
 	slugifyFlairId,
 	SUBSPACE_SLUG_HOLD_MS,
-	topRangeSince
+	toPublicUserFlair,
+	topRangeSince,
+	userFlairOfCrystal,
+	userFlairSettingsOf
 } from './subspaceCore.ts';
 
 test('sanitizeSlug normalizes and enforces the /s/<slug> grammar', () => {
@@ -215,4 +221,74 @@ test('requestKindOf sorts a member row into the join queue, the approval queue, 
 	assert.equal(requestKindOf(row({ approvalRequested: true, left: true })), null);
 	assert.equal(requestKindOf(row()), null);
 	assert.equal(requestKindOf(null), null);
+});
+
+// ── S3: user flairs ─────────────────────────────────────────────────────────
+const templates = [
+	{ id: 'prism', label: 'Prism', emoji: '🔮', color: '#7c5cff', modOnly: false },
+	{ id: 'staff', label: 'Staff', emoji: '🎩', color: null, modOnly: true }
+];
+const settings = (patch: Partial<{ userFlairSelfAssign: boolean; allowCustomUserFlair: boolean }> = {}) => ({ userFlairs: templates, userFlairSelfAssign: true, allowCustomUserFlair: false, ...patch });
+const member = { moderator: false, self: true };
+const mod = { moderator: true, self: false };
+const failed = (value: unknown): { status: number } | null => (value && typeof value === 'object' && (value as any).ok === false ? (value as any) : null);
+
+test('userFlairSettingsOf defaults: self-assign on, custom text off, no templates', () => {
+	assert.deepEqual(userFlairSettingsOf(undefined), { userFlairs: [], userFlairSelfAssign: true, allowCustomUserFlair: false });
+	assert.deepEqual(userFlairSettingsOf({ userFlairSelfAssign: false, allowCustomUserFlair: true, userFlairs: templates }), { userFlairs: templates, userFlairSelfAssign: false, allowCustomUserFlair: true });
+	// junk reads as the defaults
+	assert.deepEqual(userFlairSettingsOf({ userFlairs: 'nope', userFlairSelfAssign: 'no', allowCustomUserFlair: 1 }), { userFlairs: [], userFlairSelfAssign: true, allowCustomUserFlair: false });
+});
+
+test('sanitizeUserFlairs shares the post-flair grammar and prefixes its errors', () => {
+	assert.deepEqual(sanitizeUserFlairs([{ label: 'Prism', emoji: '🔮' }]), [{ id: 'prism', label: 'Prism', emoji: '🔮', color: null, modOnly: false }]);
+	const bad = sanitizeUserFlairs([{ label: 'A' }, { id: 'a', label: 'B' }]) as any;
+	assert.equal(bad.ok, false);
+	assert.match(bad.error, /^User flairs: /);
+});
+
+test('resolveUserFlair: a member picks a template while self-assign is on, never a mod-only one', () => {
+	assert.deepEqual(resolveUserFlair({ flairId: 'prism' }, settings(), member), { id: 'prism', text: 'Prism', emoji: '🔮', color: '#7c5cff' });
+	assert.deepEqual(resolveUserFlair({ flairId: ' PRISM ' }, settings(), member), { id: 'prism', text: 'Prism', emoji: '🔮', color: '#7c5cff' }, 'ids are trimmed + lowercased');
+	assert.equal(failed(resolveUserFlair({ flairId: 'staff' }, settings(), member))?.status, 403, 'mod-only');
+	assert.equal(failed(resolveUserFlair({ flairId: 'ghost' }, settings(), member))?.status, 400, 'unknown template');
+	assert.equal(failed(resolveUserFlair({ flairId: 'prism' }, settings({ userFlairSelfAssign: false }), member))?.status, 403, 'self-assign off');
+});
+
+test('resolveUserFlair: custom text needs allowCustomUserFlair (members), is bounded, keeps icon/color rules', () => {
+	assert.equal(failed(resolveUserFlair({ text: 'Rainbow hunter' }, settings(), member))?.status, 403);
+	assert.deepEqual(resolveUserFlair({ text: '  Rainbow   hunter ', emoji: '🌈', color: 'hotpink' }, settings({ allowCustomUserFlair: true }), member), { id: null, text: 'Rainbow hunter', emoji: '🌈', color: 'hotpink' });
+	assert.deepEqual(resolveUserFlair({ text: 'x', emoji: '<img>', color: 'javascript:alert(1)' }, settings({ allowCustomUserFlair: true }), member), { id: null, text: 'x', emoji: null, color: null });
+	assert.equal(failed(resolveUserFlair({ text: 'x'.repeat(41) }, settings({ allowCustomUserFlair: true }), member))?.status, 400, 'over 40 chars');
+	assert.deepEqual(resolveUserFlair({ text: 'x'.repeat(40) }, settings({ allowCustomUserFlair: true }), member), { id: null, text: 'x'.repeat(40), emoji: null, color: null });
+	// a template id wins over stray text
+	assert.deepEqual(resolveUserFlair({ flairId: 'prism', text: 'ignored' }, settings(), member), { id: 'prism', text: 'Prism', emoji: '🔮', color: '#7c5cff' });
+});
+
+test('resolveUserFlair: clearing is always allowed; moderators are bound by neither switch', () => {
+	for (const request of [{}, { flairId: null }, { flairId: '', text: '' }, { text: '   ' }]) {
+		assert.equal(resolveUserFlair(request, settings({ userFlairSelfAssign: false }), member), null, JSON.stringify(request));
+	}
+	assert.deepEqual(resolveUserFlair({ flairId: 'staff' }, settings({ userFlairSelfAssign: false }), mod), { id: 'staff', text: 'Staff', emoji: '🎩', color: null });
+	assert.deepEqual(resolveUserFlair({ text: 'Verified bee' }, settings({ userFlairSelfAssign: false, allowCustomUserFlair: false }), mod), { id: null, text: 'Verified bee', emoji: null, color: null });
+	// a moderator dressing THEMSELVES is still a moderator
+	assert.deepEqual(resolveUserFlair({ flairId: 'staff' }, settings(), { moderator: true, self: true }), { id: 'staff', text: 'Staff', emoji: '🎩', color: null });
+	assert.equal(failed(resolveUserFlair({ flairId: 'ghost' }, settings(), mod))?.status, 400, 'unknown templates are unknown to mods too');
+});
+
+test('userFlairOfCrystal normalizes the stored pick and liveUserFlair follows the live template', () => {
+	assert.equal(userFlairOfCrystal({}), null);
+	assert.equal(userFlairOfCrystal({ userFlair: null }), null);
+	assert.equal(userFlairOfCrystal({ userFlair: { id: 'prism', text: '  ' } }), null, 'empty text reads as none');
+	assert.deepEqual(userFlairOfCrystal({ userFlair: { id: 'prism', text: 'Old label', emoji: '🔮', color: '#7c5cff' } }), { id: 'prism', text: 'Old label', emoji: '🔮', color: '#7c5cff' });
+	assert.deepEqual(userFlairOfCrystal({ userFlair: { text: 'Custom', color: 'not a color' } }), { id: null, text: 'Custom', emoji: null, color: null });
+	// a renamed template reaches every wearer; a deleted one keeps its snapshot; custom text is untouched
+	const stored = { id: 'prism', text: 'Old label', emoji: '🔮', color: '#7c5cff' };
+	assert.deepEqual(liveUserFlair(stored, [{ ...templates[0], label: 'Prism ✨', color: 'hotpink' }]), { id: 'prism', text: 'Prism ✨', emoji: '🔮', color: 'hotpink' });
+	assert.deepEqual(liveUserFlair(stored, []), stored);
+	assert.deepEqual(liveUserFlair({ id: null, text: 'Custom', emoji: null, color: null }, templates), { id: null, text: 'Custom', emoji: null, color: null });
+	assert.equal(liveUserFlair(null, templates), null);
+	// the wire shape renames text → label
+	assert.deepEqual(toPublicUserFlair(stored), { id: 'prism', label: 'Old label', emoji: '🔮', color: '#7c5cff' });
+	assert.equal(toPublicUserFlair(null), null);
 });

@@ -330,6 +330,8 @@ export const MAX_SUBSPACE_FLAIR_ID_CHARS = 40;
 export const MAX_SUBSPACE_FLAIR_LABEL_CHARS = 64;
 export const MAX_SUBSPACE_ACCENT_CHARS = 32;
 export const MAX_SUBSPACE_ICON_CHARS = 16;
+// custom user-flair text (allowCustomUserFlair) — shorter than a template label
+export const MAX_SUBSPACE_USER_FLAIR_TEXT_CHARS = 40;
 export const MAX_SUBSPACES_PER_USER = 25;
 export const MAX_SUBSPACE_MEMBERSHIPS_PER_USER = 500;
 export const MAX_SUBSPACE_MOD_REASON_CHARS = 300;
@@ -1593,14 +1595,17 @@ const subspaceSchema: ThingtimeSchema = {
   kind: 'crystal',
   collection: null,
   title: 'Subspace',
-  summary: 'A Reddit-style community: slug, branding, rules, post flairs, and an access mode.',
+  summary: 'A Reddit-style community: slug, branding, rules, post flairs, user flairs, and an access mode.',
   detail:
     'Created through POST /api/v1/subspaces; the creator becomes its owner and first member. The ' +
     'slug is unique (root uniqueKeys `subspaceSlug:<slug>`), lowercase [a-z0-9_] 3–30 chars, and is ' +
     'the /s/<slug> URL. Membership is relational subspace-member things (never an embedded member ' +
     'array); member counts are aggregated on read. access: public (anyone posts), restricted (only ' +
     'approved posters/mods post, everyone reads), private (members only — posts are hidden from ' +
-    'non-members everywhere). Subspace things themselves are always listable (acl ["tt:all"]).',
+    'non-members everywhere). Subspace things themselves are always listable (acl ["tt:all"]). userFlairs are ' +
+    'the templates members wear beside their name (stored on their subspace-member row as userFlair); ' +
+    'userFlairSelfAssign (default true) lets members pick one themselves, allowCustomUserFlair (default false) ' +
+    'lets them type their own text (≤40 chars) — moderators may set anyone’s, modOnly templates included.',
   createdVia: 'POST /api/v1/subspaces',
   fields: [
     { name: 'slug', type: 'string', required: true, max: MAX_SUBSPACE_SLUG_CHARS, description: 'Unique URL slug, lowercase [a-z0-9_], 3–30 chars.' },
@@ -1619,6 +1624,19 @@ const subspaceSchema: ThingtimeSchema = {
       type: 'record',
       required: false,
       description: `Post flairs authors (or mods, when modOnly) can tag posts with — a list of { id (slug ≤${MAX_SUBSPACE_FLAIR_ID_CHARS}), label (≤${MAX_SUBSPACE_FLAIR_LABEL_CHARS}), emoji, color, modOnly }, max ${MAX_SUBSPACE_FLAIRS}.`
+    },
+    {
+      name: 'userFlairs',
+      type: 'record',
+      required: false,
+      description: `User-flair templates members wear beside their name — the same shape as post flairs ({ id, label, emoji, color, modOnly }), max ${MAX_SUBSPACE_FLAIRS}; modOnly templates are assigned by moderators only.`
+    },
+    { name: 'userFlairSelfAssign', type: 'boolean', required: false, description: 'Members may pick their own user flair (default true; moderators always can, for anyone).' },
+    {
+      name: 'allowCustomUserFlair',
+      type: 'boolean',
+      required: false,
+      description: `Members may type a custom user-flair text (≤${MAX_SUBSPACE_USER_FLAIR_TEXT_CHARS} chars) instead of picking a template (default false; moderators always may).`
     },
     {
       name: 'branding',
@@ -1641,6 +1659,9 @@ const subspaceSchema: ThingtimeSchema = {
     nsfw: false,
     rules: [{ title: 'Be kind', text: 'No gatekeeping the spectrum.' }],
     flairs: [{ id: 'photo', label: 'Photo', emoji: '📸', color: '#7c5cff', modOnly: false }],
+    userFlairs: [{ id: 'prism', label: 'Prism', emoji: '🔮', color: '#7c5cff', modOnly: false }],
+    userFlairSelfAssign: true,
+    allowCustomUserFlair: false,
     branding: { icon: '🌈', iconUrl: null, bannerUrl: null, accent: '#7c5cff' }
   }
 };
@@ -1651,7 +1672,7 @@ const subspaceMemberSchema: ThingtimeSchema = {
   kind: 'crystal',
   collection: null,
   title: 'Subspace member',
-  summary: "One user's membership of one subspace — role, posting approval, ban state, and the two request flags (relational child doc).",
+  summary: "One user's membership of one subspace — role, posting approval, ban state, the two request flags and the user flair (relational child doc).",
   detail:
     'targetId = the subspace shareId, ownerId = the member. Uniqueness rides the root uniqueKeys ' +
     'namespace (`subspaceMemberKey:<subspaceId>:<userId>`). Roles: owner > moderator > member. A ' +
@@ -1660,7 +1681,9 @@ const subspaceMemberSchema: ThingtimeSchema = {
     'row with pending: true — not a membership (isActiveMember = row && !left && !banned && !pending; ' +
     'member counts exclude it) until a moderator accepts it (or adds the user); deny drops the row, ' +
     'leave cancels it. approvalRequested marks an active member of a restricted subspace who asked ' +
-    'for posting rights (approve grants + clears, unapprove/deny clear). Written only by ' +
+    'for posting rights (approve grants + clears, unapprove/deny clear). userFlair is the flair the member wears ' +
+    'beside their name in this subspace ({ id (template id or null for custom text), text, emoji, color } | null) — ' +
+    'projected as authorFlair on their posts and comments there while they are an active member. Written only by ' +
     '/api/v1/subspaces/join, /leave and /members.',
   createdVia: 'POST /api/v1/subspaces (creator) / POST /api/v1/subspaces/join',
   fields: [
@@ -1672,9 +1695,21 @@ const subspaceMemberSchema: ThingtimeSchema = {
     { name: 'banUntil', type: 'date', required: false, description: 'Temporary ban expiry (null = permanent).' },
     { name: 'left', type: 'boolean', required: false, description: 'True once the user left (kept for bans); rejoining clears it.' },
     { name: 'pending', type: 'boolean', required: false, description: 'A join request awaiting a moderator (private subspaces) — not yet a member.' },
-    { name: 'approvalRequested', type: 'boolean', required: false, description: 'An active member asked for posting approval (restricted subspaces).' }
+    { name: 'approvalRequested', type: 'boolean', required: false, description: 'An active member asked for posting approval (restricted subspaces).' },
+    {
+      name: 'userFlair',
+      type: 'object',
+      required: false,
+      description: 'The flair worn beside the member’s name in this subspace (null = none).',
+      children: [
+        { name: 'id', type: 'string', required: false, max: MAX_SUBSPACE_FLAIR_ID_CHARS, description: 'Template id (null for custom text).' },
+        { name: 'text', type: 'string', required: true, max: MAX_SUBSPACE_FLAIR_LABEL_CHARS, description: 'The text shown (a template’s label snapshot, or the custom text ≤40).' },
+        { name: 'emoji', type: 'string', required: false, max: MAX_SUBSPACE_ICON_CHARS, description: 'Optional emoji.' },
+        { name: 'color', type: 'string', required: false, max: MAX_SUBSPACE_ACCENT_CHARS, description: 'Optional CSS color (hex or named).' }
+      ]
+    }
   ],
-  example: { memberKey: 'c0ffee…:5eed…', role: 'member', approved: false, banned: false, pending: false, approvalRequested: false }
+  example: { memberKey: 'c0ffee…:5eed…', role: 'member', approved: false, banned: false, pending: false, approvalRequested: false, userFlair: { id: 'prism', text: 'Prism', emoji: '🔮', color: '#7c5cff' } }
 };
 
 const subspaceModlogSchema: ThingtimeSchema = {

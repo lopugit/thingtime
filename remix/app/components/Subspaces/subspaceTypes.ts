@@ -1,9 +1,9 @@
 // Client-side shapes for the subspace APIs. Mirrors the public projections in
 // remix/app/api/utils/subspaces/subspaces.ts — the API utils are the source
 // of truth; keep this file in sync with them.
-import type { FeedAuthor, PublicPost, SubspaceAccess, SubspaceRole } from '~/components/Feed/feedTypes';
+import type { FeedAuthor, PublicAuthorFlair, PublicPost, SubspaceAccess, SubspaceRole } from '~/components/Feed/feedTypes';
 
-export type { SubspaceAccess, SubspaceRole };
+export type { PublicAuthorFlair, SubspaceAccess, SubspaceRole };
 
 export type SubspaceRule = { title: string; text: string | null };
 export type SubspaceFlair = { id: string; label: string; emoji: string | null; color: string | null; modOnly: boolean };
@@ -22,6 +22,8 @@ export type PublicSubspaceViewer = {
 	pending: boolean;
 	// asked the mods for posting approval (restricted subspaces)
 	approvalRequested: boolean;
+	// the flair the viewer wears here (active members only)
+	userFlair: PublicAuthorFlair | null;
 };
 
 export type PublicSubspace = {
@@ -33,6 +35,11 @@ export type PublicSubspace = {
 	nsfw: boolean;
 	rules: SubspaceRule[];
 	flairs: SubspaceFlair[];
+	// user flairs: the templates members wear beside their name + the two
+	// self-service switches (moderators are bound by neither)
+	userFlairs: SubspaceFlair[];
+	userFlairSelfAssign: boolean;
+	allowCustomUserFlair: boolean;
 	branding: SubspaceBranding;
 	ownerId: string;
 	memberCount: number;
@@ -60,7 +67,18 @@ export type PublicSubspaceMember = {
 	left: boolean;
 	pending: boolean;
 	approvalRequested: boolean;
+	// the flair they wear here (null when none)
+	userFlair: PublicAuthorFlair | null;
 	joinedAt: string;
+};
+
+// what a viewer may do about their own flair here: pick a template (any
+// non-modOnly one while self-assign is on), type custom text (while allowed),
+// or nothing but clear. Moderators are bound by neither switch.
+export const userFlairChoices = (subspace: Pick<PublicSubspace, 'userFlairs' | 'userFlairSelfAssign' | 'allowCustomUserFlair' | 'viewer'>) => {
+	const moderator = subspace.viewer.canModerate;
+	const templates = moderator ? subspace.userFlairs : subspace.userFlairSelfAssign ? subspace.userFlairs.filter((flair) => !flair.modOnly) : [];
+	return { templates, custom: moderator || (subspace.userFlairSelfAssign && subspace.allowCustomUserFlair) };
 };
 
 // POST /api/v1/subspaces/join — joined: true for public/restricted;

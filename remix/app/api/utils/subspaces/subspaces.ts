@@ -63,16 +63,19 @@ import {
 	SUBSPACE_MEMBER_KEY_FIELD,
 	SUBSPACE_SLUG_KEY_FIELD,
 	subspaceMemberKeyOf,
+	userFlairsOf,
 	type SubspaceMembership
 } from './gate';
 import {
 	canPostIn,
 	confirmSlugMatches,
 	flairById,
+	liveUserFlair,
 	privatizedPostUpdate,
 	rankSubspacePosts,
 	releaseKindFor,
 	releasedPostUpdate,
+	resolveUserFlair,
 	sanitizeAccess,
 	sanitizeBranding,
 	sanitizeDescription,
@@ -83,8 +86,12 @@ import {
 	sanitizeSlug,
 	sanitizeSort,
 	sanitizeTopRange,
+	sanitizeUserFlairs,
 	slugHoldState,
 	topRangeSince,
+	toPublicUserFlair,
+	userFlairSettingsOf,
+	type PublicUserFlair,
 	type RankCandidate,
 	type SubspaceBranding,
 	type SubspaceFlair,
@@ -135,6 +142,9 @@ export type PublicSubspaceViewer = {
 	pending: boolean;
 	// asked the mods for posting approval (restricted subspaces)
 	approvalRequested: boolean;
+	// the flair the viewer wears here (active members only; live template
+	// label/emoji/color, or their custom text)
+	userFlair: PublicUserFlair | null;
 };
 
 export type PublicSubspace = {
@@ -146,6 +156,11 @@ export type PublicSubspace = {
 	nsfw: boolean;
 	rules: SubspaceRule[];
 	flairs: SubspaceFlair[];
+	// user flairs: the templates members wear beside their name + the two
+	// self-service switches (moderators are bound by neither)
+	userFlairs: SubspaceFlair[];
+	userFlairSelfAssign: boolean;
+	allowCustomUserFlair: boolean;
 	branding: SubspaceBranding;
 	ownerId: string;
 	memberCount: number;
@@ -170,6 +185,8 @@ export type PublicSubspaceMember = {
 	left: boolean;
 	pending: boolean;
 	approvalRequested: boolean;
+	// the flair they wear here (null when none / not an active member)
+	userFlair: PublicUserFlair | null;
 	joinedAt: string;
 };
 
@@ -199,7 +216,8 @@ const viewerStateOf = (subspace: any, membership: SubspaceMembership | null): Pu
 		canModerate: moderator,
 		canPost: canPostIn(accessOf(subspace), membership),
 		pending: !!membership && membership.pending && !membership.left && !membership.banned,
-		approvalRequested: member && membership!.approvalRequested && !membership!.approved
+		approvalRequested: member && membership!.approvalRequested && !membership!.approved,
+		userFlair: member ? toPublicUserFlair(liveUserFlair(membership!.userFlair, userFlairsOf(subspace))) : null
 	};
 };
 
@@ -222,6 +240,7 @@ export const toPublicSubspace = (
 	nsfw: doc.crystal?.nsfw === true,
 	rules: Array.isArray(doc.crystal?.rules) ? doc.crystal.rules : [],
 	flairs: flairsOf(doc),
+	...userFlairSettingsOf(doc.crystal),
 	branding: brandingOf(doc),
 	ownerId: String(doc.ownerId),
 	memberCount: options.memberCount,
@@ -232,8 +251,11 @@ export const toPublicSubspace = (
 	viewer: viewerStateOf(doc, options.membership)
 });
 
-const toPublicMember = (doc: any, profile: FeedAuthor | null): PublicSubspaceMember => {
+// `subspace` supplies the live user-flair templates the member's pick resolves
+// against (a renamed template shows its current label)
+const toPublicMember = (doc: any, profile: FeedAuthor | null, subspace: any): PublicSubspaceMember => {
 	const membership = membershipOfDoc(doc);
+	const active = isActiveMember(membership);
 	return {
 		userId: String(doc.ownerId),
 		profile,
@@ -244,7 +266,8 @@ const toPublicMember = (doc: any, profile: FeedAuthor | null): PublicSubspaceMem
 		banUntil: membership.banned && membership.banUntil ? membership.banUntil.toISOString() : null,
 		left: membership.left,
 		pending: membership.pending && !membership.left && !membership.banned,
-		approvalRequested: membership.approvalRequested && !membership.approved && isActiveMember(membership),
+		approvalRequested: membership.approvalRequested && !membership.approved && active,
+		userFlair: active ? toPublicUserFlair(liveUserFlair(membership.userFlair, userFlairsOf(subspace))) : null,
 		joinedAt: new Date(doc.createdAt).toISOString()
 	};
 };
@@ -628,6 +651,10 @@ export type UpdateSubspaceInput = SubspaceRef & {
 	rules?: unknown;
 	flairs?: unknown;
 	branding?: unknown;
+	// user flairs (moderators): the templates + the two self-service switches
+	userFlairs?: unknown;
+	userFlairSelfAssign?: unknown;
+	allowCustomUserFlair?: unknown;
 };
 
 export const updateSubspace = async (viewerInput: string | Viewer, input: UpdateSubspaceInput): Promise<Fail | { ok: true; subspace: PublicSubspace }> => {
@@ -672,6 +699,24 @@ export const updateSubspace = async (viewerInput: string | Viewer, input: Update
 		if (isFail(branding)) return branding;
 		set['crystal.branding'] = branding;
 		changed.push('branding');
+	}
+	// user flairs — any moderator (the templates are the post-flair grammar;
+	// the switches gate MEMBERS' self-service only, never moderators)
+	if (input.userFlairs !== undefined) {
+		const userFlairs = sanitizeUserFlairs(input.userFlairs);
+		if (isFail(userFlairs)) return userFlairs;
+		set['crystal.userFlairs'] = userFlairs;
+		changed.push('userFlairs');
+	}
+	if (input.userFlairSelfAssign !== undefined) {
+		if (typeof input.userFlairSelfAssign !== 'boolean') return fail(400, 'userFlairSelfAssign must be true or false');
+		set['crystal.userFlairSelfAssign'] = input.userFlairSelfAssign;
+		changed.push('userFlairSelfAssign');
+	}
+	if (input.allowCustomUserFlair !== undefined) {
+		if (typeof input.allowCustomUserFlair !== 'boolean') return fail(400, 'allowCustomUserFlair must be true or false');
+		set['crystal.allowCustomUserFlair'] = input.allowCustomUserFlair;
+		changed.push('allowCustomUserFlair');
 	}
 	if (input.access !== undefined) {
 		if (!isOwner) return fail(403, 'Only the owner can change who may join or post');
@@ -891,11 +936,11 @@ export const listMembers = async (
 	const last = page[page.length - 1];
 	const nextCursor = docs.length > limit && last ? `${new Date(last.createdAt).getTime()}_${last.shareId}` : null;
 	const profiles = await resolveProfiles(page.map((doc) => String(doc.ownerId)));
-	return { ok: true, members: page.map((doc) => toPublicMember(doc, profiles.get(String(doc.ownerId)) || null)), nextCursor };
+	return { ok: true, members: page.map((doc) => toPublicMember(doc, profiles.get(String(doc.ownerId)) || null, found.subspace)), nextCursor };
 };
 
-export type MemberAction = 'add' | 'remove' | 'approve' | 'unapprove' | 'ban' | 'unban' | 'role' | 'accept' | 'deny' | 'request-approval';
-const MEMBER_ACTIONS: MemberAction[] = ['add', 'remove', 'approve', 'unapprove', 'ban', 'unban', 'role', 'accept', 'deny', 'request-approval'];
+export type MemberAction = 'add' | 'remove' | 'approve' | 'unapprove' | 'ban' | 'unban' | 'role' | 'accept' | 'deny' | 'request-approval' | 'userFlair';
+const MEMBER_ACTIONS: MemberAction[] = ['add', 'remove', 'approve', 'unapprove', 'ban', 'unban', 'role', 'accept', 'deny', 'request-approval', 'userFlair'];
 
 export type MutateMemberInput = SubspaceRef & {
 	userId?: unknown;
@@ -904,6 +949,12 @@ export type MutateMemberInput = SubspaceRef & {
 	role?: unknown;
 	reason?: unknown;
 	banDays?: unknown;
+	// userFlair: a template id, or custom text (+ optional emoji/color);
+	// neither clears
+	flairId?: unknown;
+	text?: unknown;
+	emoji?: unknown;
+	color?: unknown;
 };
 
 const resolveTargetUserId = async (input: { userId?: unknown; username?: unknown }): Promise<string | Fail> => {
@@ -951,7 +1002,51 @@ const requestPostingApproval = async (
 		await things.updateOne({ _id: existing._id } as any, { $set: { ...heal, updatedAt: new Date() } });
 	}
 	const [fresh, profiles] = await Promise.all([findSubspaceMemberDoc(id, userId), resolveProfiles([userId])]);
-	return { ok: true, member: toPublicMember(fresh, profiles.get(userId) || null) };
+	return { ok: true, member: toPublicMember(fresh, profiles.get(userId) || null, subspace) };
+};
+
+// `userFlair` — the flair beside a member's name. Self-service (no userId /
+// username, or your own): an ACTIVE member picks a template (not modOnly)
+// while userFlairSelfAssign is on, types custom text while
+// allowCustomUserFlair is on, and may always clear their own. Moderators
+// dress anyone (the owner excepted, unless it is themselves) with any
+// template, modOnly included, or custom text — and only THAT (a mod setting
+// someone else's) writes a member.userFlair mod-log entry. The decision is
+// subspaceCore's resolveUserFlair, so the UI and the server agree.
+const setUserFlair = async (viewer: NonNullable<Viewer>, subspace: any, input: MutateMemberInput): Promise<Fail | { ok: true; member: PublicSubspaceMember }> => {
+	const id = String(subspace.shareId);
+	const slug = String(subspace.crystal?.slug || id);
+	const actorId = viewer.id;
+	const explicitTarget = (typeof input.userId === 'string' && input.userId.trim()) || (typeof input.username === 'string' && input.username.trim());
+	const targetUserId = explicitTarget ? await resolveTargetUserId(input) : actorId;
+	if (isFail(targetUserId)) return targetUserId;
+	const self = targetUserId === actorId;
+	const actorMembership = self ? null : await membershipOf(id, actorId);
+	const moderator = self ? false : canModerate(actorMembership);
+	if (!self && !moderator) return fail(403, 'Only moderators can set someone else’s flair 🎩');
+	const existing = await findSubspaceMemberDoc(id, targetUserId);
+	const target = existing ? membershipOfDoc(existing) : null;
+	if (self) {
+		if (target?.banned) return fail(403, `You are banned from s/${slug} 🚫`);
+		if (!isActiveMember(target)) return fail(403, `Join s/${slug} first to wear a flair there`);
+	} else {
+		if (target?.role === 'owner') return fail(403, 'The owner picks their own flair 👑');
+		if (target?.banned) return fail(400, 'Lift the ban first — a banned user wears no flair');
+		if (!isActiveMember(target)) return fail(404, target?.pending ? 'Accept the join request first — they are not a member yet' : 'Not a member');
+	}
+	// moderators are bound by neither switch — for themselves included (they
+	// may dress anyone, themselves too)
+	const actorIsModerator = self ? canModerate(target) : moderator;
+	const flair = resolveUserFlair({ flairId: input.flairId, text: input.text, emoji: input.emoji, color: input.color }, userFlairSettingsOf(subspace.crystal), { moderator: actorIsModerator, self });
+	if (isFail(flair)) return flair;
+	const things = await getThingsCollection();
+	const now = new Date();
+	await things.updateOne({ _id: existing._id } as any, { $set: { 'crystal.userFlair': flair, updatedAt: now } });
+	if (!self) {
+		await writeModlog(id, actorId, 'member.userFlair', { userId: targetUserId, detail: { flairId: flair?.id ?? null, text: flair?.text ?? null } });
+	}
+	const [fresh, profiles] = await Promise.all([findSubspaceMemberDoc(id, targetUserId), resolveProfiles([targetUserId])]);
+	return { ok: true, member: toPublicMember(fresh, profiles.get(targetUserId) || null, subspace) };
 };
 
 export const mutateMember = async (viewerInput: string | Viewer, input: MutateMemberInput): Promise<Fail | { ok: true; member: PublicSubspaceMember }> => {
@@ -966,6 +1061,7 @@ export const mutateMember = async (viewerInput: string | Viewer, input: MutateMe
 	const action = MEMBER_ACTIONS.includes(input.action as MemberAction) ? (input.action as MemberAction) : null;
 	if (!action) return fail(400, `action must be one of ${MEMBER_ACTIONS.join(', ')}`);
 	if (action === 'request-approval') return requestPostingApproval(auth.viewer, subspace, input);
+	if (action === 'userFlair') return setUserFlair(auth.viewer, subspace, input);
 	const gate = await requireModerator(id, actorId);
 	if (gate.ok === false) return gate;
 	const actorIsOwner = gate.membership.role === 'owner';
@@ -1136,7 +1232,7 @@ export const mutateMember = async (viewerInput: string | Viewer, input: MutateMe
 	// flagged left so a client drops it from every list
 	const profile = profiles.get(targetUserId) || null;
 	if (!fresh && !existing) return fail(404, 'Not a member');
-	const member = fresh ? toPublicMember(fresh, profile) : { ...toPublicMember(existing, profile), pending: false, approvalRequested: false, left: true };
+	const member = fresh ? toPublicMember(fresh, profile, subspace) : { ...toPublicMember(existing, profile, subspace), pending: false, approvalRequested: false, left: true };
 	return { ok: true, member };
 };
 
@@ -1225,7 +1321,7 @@ export const transferSubspace = async (
 	return {
 		ok: true,
 		subspace: toPublicSubspace(fresh, { memberCount: counts.get(id) || 0, membership: actorMembership }),
-		newOwner: toPublicMember(newOwnerDoc, profiles.get(targetUserId) || null)
+		newOwner: toPublicMember(newOwnerDoc, profiles.get(targetUserId) || null, fresh)
 	};
 };
 

@@ -1353,6 +1353,34 @@ email whose link points at the attacker.
       ring the mods again while their earlier 🙋 bell is unread (it rings
       once more after they read it); `/join` has its own rate key
       (`subspaces.join`, 20/min → 429).
+- [ ] User flairs 🏷️: Mod page → Flairs → **User flairs** card (templates
+      with emoji/label/color/mods-only, ids minted on save, ≤50; switches
+      "Members pick their own flair" (default on) and "Members may type their
+      own text" (default off; ≤40 chars)); any moderator may save it. On
+      `/s/<slug>` an active member sees the sidebar **Your flair** card:
+      template pills (mod-only ones 🎩 only for mods; the active one shows ✓
+      and clicking it again takes it off), a custom-text input when allowed,
+      and **Take it off ✕** — the pick paints instantly on the card, the
+      header state and every post/comment of theirs on the page, and reverts
+      with a toast on failure. The chip (`data-testid="author-flair"`)
+      appears right after the author name on post cards, comment rows (all
+      shipped levels), the shared-post sub-card and the mod page's member
+      rows — only inside subspaces (`authorFlair` is null elsewhere), and
+      only while the author is an active member (a kicked / banned / pending
+      wearer's chip disappears, a rejoin brings it back). Renaming a template
+      updates every wearer's chip; deleting one keeps their snapshot. Mod
+      page → Members → **Set flair** opens a Chakra modal (template select
+      incl. 🎩 mod-only ones / Custom text… + emoji / No flair) — a mod may
+      dress anyone but the owner, bound by neither switch, and only dressing
+      someone ELSE writes a `member.userFlair` mod-log entry. API walls:
+      anonymous 401, a non-member setting their own 403, someone else's
+      without a mod hat 403, unknown template 400, mod-only template as a
+      member 403, custom text while it is off 403 / over 40 chars 400,
+      self-assign off → a member's pick 403 but clearing still 200, a mod
+      dressing the owner 403 / a non-member 404 / a banned user 400. The
+      fresh comment `POST /api/v1/things/comment` answers with already carries
+      `authorFlair`; the projection resolves every page in ONE member-row
+      lookup (posts, shared originals, every comment level).
 - [ ] Bell 🔔 + Settings → Notifications: six subspace rows (roles 🎩,
       bans 🚫, join accepted 🎉, posts removed 🧹, join requests 🙋,
       reports 🚩 — the last two default email OFF). The bell's verb keys off

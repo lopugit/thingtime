@@ -66,6 +66,9 @@ export type PostComment = {
   // up/down votes — the separate focused reaction kind (POST /api/v1/things/updown).
   // Optional while older deployments roll out; treat absence as no votes.
   votes?: PublicUpdownVotes;
+  // the author's USER flair in the root post's subspace (null outside
+  // subspaces / when they wear none). Optional during rollout.
+  authorFlair?: PublicAuthorFlair | null;
   // direct replies — the comment's own /post/:id page shows the thread
   commentCount: number;
   // nested replies (threads ship two levels deep, ≤ 5 per level, oldest →
@@ -108,6 +111,9 @@ export type PublicPost = {
   title?: string | null;
   subspace?: PublicPostSubspace | null;
   flair?: PublicPostFlair | null;
+  // the author's USER flair in this post's subspace (their pick beside their
+  // name — a template or custom text). Optional during rollout.
+  authorFlair?: PublicAuthorFlair | null;
   subspaceMod?: PublicSubspaceMod | null;
   commentCount: number;
   // Viewer-relative count layers. Optional while older deployments roll out;
@@ -161,6 +167,9 @@ export type PublicPostSubspace = {
   viewerRole: SubspaceRole | null;
 };
 export type PublicPostFlair = { id: string; label: string; emoji: string | null; color: string | null };
+// a user flair beside an author's name (mirrors PublicAuthorFlair in
+// api/utils/things/things.ts): a template pick (id) or custom text (id null)
+export type PublicAuthorFlair = { id: string | null; label: string; emoji: string | null; color: string | null };
 export type PublicSubspaceMod = {
   status: 'approved' | 'removed';
   removed: boolean;

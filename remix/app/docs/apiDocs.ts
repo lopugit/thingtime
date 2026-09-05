@@ -7570,8 +7570,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things',
-    featureVersion: '1.2.0',
-    contractVersion: '1.1.0',
+    // 1.3.0 / contract 1.2.0: post + comment projections carry authorFlair —
+    // the author's USER flair in the post's subspace (additive)
+    featureVersion: '1.3.0',
+    contractVersion: '1.2.0',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
@@ -8080,8 +8082,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-comment',
-    featureVersion: '1.2.0',
-    contractVersion: '1.1.0',
+    // 1.3.0 / contract 1.2.0: post + comment projections carry authorFlair —
+    // the author's USER flair in the post's subspace (additive)
+    featureVersion: '1.3.0',
+    contractVersion: '1.2.0',
     group: 'things',
     title: 'Comment on post',
     endpoint: '/api/v1/things/comment',
@@ -8270,8 +8274,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-feed',
-    featureVersion: '1.2.0',
-    contractVersion: '1.1.0',
+    // 1.3.0 / contract 1.2.0: post + comment projections carry authorFlair —
+    // the author's USER flair in the post's subspace (additive)
+    featureVersion: '1.3.0',
+    contractVersion: '1.2.0',
     group: 'things',
     title: 'Feed page',
     endpoint: '/api/v1/things/feed',
@@ -8519,15 +8525,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.1.0: every row's `viewer` carries pending (an open join request to a
     // private subspace) + approvalRequested; memberCount excludes pending
     // requesters and `mine=1` lists only ACTIVE memberships (additive)
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    // 1.2.0: rows carry userFlairs / userFlairSelfAssign / allowCustomUserFlair
+    // and viewer.userFlair — the user-flair vocabulary (additive)
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'subspaces',
     title: 'Subspaces',
     endpoint: '/api/v1/subspaces',
     summary: 'Browses the subspace directory or founds a new subspace.',
     detail:
       'GET lists subspaces newest-first (public; each row carries memberCount and the caller’s own membership ' +
-      'state under `viewer` — role, member, approved, banned, canModerate, canPost, pending, approvalRequested) — ' +
+      'state under `viewer` — role, member, approved, banned, canModerate, canPost, pending, approvalRequested, ' +
+      'userFlair) plus the user-flair settings (userFlairs templates, userFlairSelfAssign, allowCustomUserFlair) — ' +
       '`?q=` searches slug/name, `?mine=1` narrows to the caller’s ACTIVE memberships (a pending join request is ' +
       'not one). POST ' +
       'creates a subspace from a unique slug (3–30 chars of [a-z0-9_], the /s/<slug> URL) plus name, ' +
@@ -8589,19 +8598,24 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'subspaces-get',
     // 1.1.0: viewer.pending / viewer.approvalRequested, and for moderators
     // pendingCount + approvalRequestCount (the Requests queue sizes) — additive
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    // 1.2.0: userFlairs / userFlairSelfAssign / allowCustomUserFlair on the
+    // subspace and viewer.userFlair (the flair the caller wears here) — additive
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'subspaces',
     title: 'Subspace detail',
     endpoint: '/api/v1/subspaces/get',
     summary: 'Reads one subspace by slug or id with counts, the moderator roster, and the caller’s permissions.',
     detail:
-      'Returns the subspace (branding, rules, flairs, access), memberCount (active members — pending requesters ' +
-      'excluded) + postCount (live posts only), the public moderator roster, and `viewer` — the caller’s role, ' +
-      'membership, approval, ban state, canModerate, canPost, pending (an open join request to a private ' +
-      'subspace) and approvalRequested (asked for posting rights in a restricted one) — so the /s/<slug> page can ' +
-      'render its header, sidebar and post button from one call. Moderators additionally get pendingCount and ' +
-      'approvalRequestCount, the sizes of the two request queues (the badge on Mod tools 🎩 / the Requests tab).',
+      'Returns the subspace (branding, rules, flairs, access, and the user-flair vocabulary: userFlairs templates, ' +
+      'userFlairSelfAssign, allowCustomUserFlair), memberCount (active members — pending requesters excluded) + ' +
+      'postCount (live posts only), the public moderator roster, and `viewer` — the caller’s role, membership, ' +
+      'approval, ban state, canModerate, canPost, pending (an open join request to a private subspace), ' +
+      'approvalRequested (asked for posting rights in a restricted one) and userFlair (the flair they wear here: ' +
+      '{ id (template id or null for custom text), label, emoji, color } | null) — so the /s/<slug> page can ' +
+      'render its header, sidebar, Your flair card and post button from one call. Moderators additionally get ' +
+      'pendingCount and approvalRequestCount, the sizes of the two request queues (the badge on Mod tools 🎩 / ' +
+      'the Requests tab).',
     auth: { mode: 'optional', description: 'Works logged out; the viewer block is empty for anonymous callers.' },
     methods: ['GET'],
     steps: ['GET with ?slug=<slug> (or ?id=<shareId>).', 'Unknown subspaces answer 404.'],
@@ -8630,15 +8644,22 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // activates every pending join request (and notifies them,
     // subspace-join-accepted), leaving restricted clears open posting-approval
     // requests; the settings.update mod-log detail reports the counts (additive)
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    // 1.2.0: user flairs — userFlairs (templates), userFlairSelfAssign,
+    // allowCustomUserFlair (moderators) — additive
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'subspaces',
     title: 'Subspace settings',
     endpoint: '/api/v1/subspaces/update',
-    summary: 'Moderators edit branding, rules and flairs; the owner changes access and the 18+ flag.',
+    summary: 'Moderators edit branding, rules, post flairs and user flairs; the owner changes access and the 18+ flag.',
     detail:
-      'POST { id|slug, name?, description?, rules?, flairs?, branding? } as a moderator, plus access? and nsfw? ' +
-      'as the owner. Flipping access to/from private re-stamps the subspace’s posts so feeds fence them ' +
+      'POST { id|slug, name?, description?, rules?, flairs?, branding?, userFlairs?, userFlairSelfAssign?, ' +
+      'allowCustomUserFlair? } as a moderator, plus access? and nsfw? as the owner. userFlairs are the templates ' +
+      'members wear beside their name (the post-flair shape — { id, label, emoji, color, modOnly }, ≤50; modOnly ' +
+      'ones are assigned by moderators only); userFlairSelfAssign (default true) lets members pick one themselves ' +
+      'and allowCustomUserFlair (default false) lets them type their own text (≤40 chars) — both switches gate ' +
+      'members only, moderators may always dress anyone (POST /api/v1/subspaces/members action userFlair). ' +
+      'Flipping access to/from private re-stamps the subspace’s posts so feeds fence them ' +
       'correctly. The request queues follow the access mode: switching AWAY from private turns every open join ' +
       'request into an active membership (the doors are open to everyone now; the requesters are notified with ' +
       'subspace-join-accepted, the first 200 of them), and switching away from restricted clears open ' +
@@ -8650,6 +8671,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: ['POST the fields to change.', 'Non-moderators receive 403; owner-only fields 403 for moderators.'],
     requestExamples: [
       { name: 'Add a flair', description: 'Replace the flair list.', method: 'POST', body: { slug: 'rainbows', flairs: [{ id: 'photo', label: 'Photo' }, { label: 'Question' }] } },
+      {
+        name: 'User flairs',
+        description: 'Two templates (one mod-only), members may self-assign and type their own text.',
+        method: 'POST',
+        body: { slug: 'rainbows', userFlairs: [{ label: 'Prism', emoji: '🔮', color: '#7c5cff' }, { id: 'staff', label: 'Staff', modOnly: true }], userFlairSelfAssign: true, allowCustomUserFlair: true }
+      },
       { name: 'Go private', description: 'Owner locks the subspace to members.', method: 'POST', body: { slug: 'rainbows', access: 'private' } }
     ],
     responseExamples: [{ status: 200, description: 'Updated.', body: { ok: true, subspace: { slug: 'rainbows', access: 'private' } } }]
@@ -8730,19 +8757,23 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // role member on a pending row answer 400, remove on one 404; `remove`
     // clears restricted posting approval; request-approval heals an expired
     // temporary ban so the request reaches the queue — compatible corrections
-    featureVersion: '1.2.1',
-    contractVersion: '1.2.1',
+    // 1.3.0: user flairs — rows carry userFlair; POST action userFlair
+    // (self, or any member as a moderator) picks a template / sets custom
+    // text / clears (additive)
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
     group: 'subspaces',
     title: 'Subspace members',
     endpoint: '/api/v1/subspaces/members',
-    summary: 'Lists members and the two request queues (mod roster public, everything else mod-only) and applies member actions.',
+    summary: 'Lists members and the two request queues (mod roster public, everything else mod-only) and applies member actions — including user flairs.',
     detail:
       'GET ?slug=&role=owner|moderator|member&banned=1&pending=1&approvalRequests=1&cursor=&limit= — the moderator ' +
       'roster is public; the full member list (active members, oldest-first), the ban list, the JOIN REQUEST ' +
       'queue (pending=1: users who asked to join a private subspace, newest-first) and the POSTING-APPROVAL ' +
       'queue (approvalRequests=1: active members of a restricted subspace who asked for posting rights) require a ' +
-      'moderator. Every row carries pending + approvalRequested. POST { id|slug, userId|username, action, role?, ' +
-      'reason?, banDays? } with action add (also accepts a pending join request), accept (pending → active member; ' +
+      'moderator. Every row carries pending + approvalRequested + userFlair ({ id, label, emoji, color } | null — ' +
+      'the flair they wear here). POST { id|slug, userId|username, action, role?, reason?, banDays?, flairId?, ' +
+      'text?, emoji?, color? } with action add (also accepts a pending join request), accept (pending → active member; ' +
       'notifies subspace-join-accepted; 404 without a request), deny (drops a pending join request, or clears a ' +
       'posting-approval request; optional reason; 404 without one), remove (kick — also revokes restricted ' +
       'posting approval), approve/unapprove (restricted posting rights — both settle an open approval request), ' +
@@ -8751,7 +8782,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'an active, unapproved member of a RESTRICTED subspace asks the mods for posting rights (approvalRequested: ' +
       'true; notifies the mods with subspace-join-request "s/<slug> · wants to post ✋", deduped against each ' +
       'mod’s unread copy; 400 unless the subspace is restricted, 403 for non-members / for someone else; an ' +
-      'expired temporary ban is healed on the row so the request reaches the queue). A pending join request is ' +
+      'expired temporary ban is healed on the row so the request reaches the queue), or userFlair — the flair ' +
+      'beside a member’s name: without userId/username (or naming yourself) an ACTIVE member picks a template ' +
+      '(flairId; not a modOnly one → 403) while the subspace’s userFlairSelfAssign is on, types custom text ' +
+      '(text ≤40 chars, optional emoji/color under the icon/color rules) while allowCustomUserFlair is on, and may ' +
+      'always clear their own (flairId null + empty text); a non-member answers 403, an unknown template 400. ' +
+      'Moderators set anyone’s (the owner’s excepted → 403), any template incl. modOnly or custom text, bound by ' +
+      'neither switch — a banned target answers 400, a pending requester / non-member 404 — and only a moderator ' +
+      'dressing someone ELSE writes a member.userFlair mod-log entry. Posts and comments project the flair as ' +
+      'authorFlair while the wearer is an active member. A pending join request is ' +
       'not a membership: only accept, deny, add, ban and role moderator apply to one — approve, unapprove and ' +
       'role member answer 400 ("accept the join request first"), remove answers 404. accept, deny and add on a ' +
       'pending row are guarded writes: if the requester cancelled or re-filed meanwhile the decision answers 409 ' +
@@ -8772,11 +8811,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       { name: 'Join requests', description: 'Who is waiting to get into s/secret.', method: 'GET', query: { slug: 'secret', pending: 1 } },
       { name: 'Accept a request', description: 'Let a requester in.', method: 'POST', body: { slug: 'secret', username: 'newcomer', action: 'accept' } },
       { name: 'Ask to post', description: 'A member of restricted s/rainbows asks for posting rights.', method: 'POST', body: { slug: 'rainbows', action: 'request-approval' } },
+      { name: 'Wear a flair', description: 'Pick the "prism" user-flair template for yourself.', method: 'POST', body: { slug: 'rainbows', action: 'userFlair', flairId: 'prism' } },
+      { name: 'Custom flair text', description: 'Type your own flair (allowCustomUserFlair must be on for members).', method: 'POST', body: { slug: 'rainbows', action: 'userFlair', text: 'Double rainbow hunter', emoji: '🌈' } },
+      { name: 'Dress a member', description: 'A moderator gives someone the mod-only "staff" template.', method: 'POST', body: { slug: 'rainbows', username: 'helper', action: 'userFlair', flairId: 'staff' } },
+      { name: 'Clear a flair', description: 'Take your flair off.', method: 'POST', body: { slug: 'rainbows', action: 'userFlair', flairId: null } },
       { name: 'Ban for a week', description: 'Temporary ban with a reason.', method: 'POST', body: { slug: 'rainbows', username: 'spammer', action: 'ban', reason: 'Rule 2', banDays: 7 } },
       { name: 'Promote', description: 'Owner makes someone a moderator.', method: 'POST', body: { slug: 'rainbows', username: 'helper', action: 'role', role: 'moderator' } }
     ],
     responseExamples: [
-      { status: 200, description: 'Members page.', body: { ok: true, members: [{ userId: '664f…', profile: { username: 'lopu' }, role: 'owner', approved: true, banned: false, pending: false, approvalRequested: false, joinedAt: '2026-09-05T00:00:00.000Z' }], nextCursor: null } },
+      { status: 200, description: 'Members page.', body: { ok: true, members: [{ userId: '664f…', profile: { username: 'lopu' }, role: 'owner', approved: true, banned: false, pending: false, approvalRequested: false, userFlair: { id: 'prism', label: 'Prism', emoji: '🔮', color: '#7c5cff' }, joinedAt: '2026-09-05T00:00:00.000Z' }], nextCursor: null } },
+      { status: 200, description: 'Flair set — the row reads back with it.', body: { ok: true, member: { userId: '664f…', profile: { username: 'lopu' }, role: 'member', userFlair: { id: null, label: 'Double rainbow hunter', emoji: '🌈', color: null } } } },
+      { status: 403, description: 'Self-assign is off / a mod-only template / custom text while it is off.', body: { ok: false, error: 'Members can’t pick their own flair here — ask a moderator 🎩' } },
       { status: 200, description: 'Accepted — the requester is a member now.', body: { ok: true, member: { userId: '664f…', profile: { username: 'newcomer' }, role: 'member', pending: false, left: false } } },
       { status: 403, description: 'Not a moderator.', body: { ok: false, error: 'Moderators only — you need a mod hat for that 🎩' } },
       { status: 404, description: 'accept/deny without an open request.', body: { ok: false, error: 'No pending join request from that user' } },
@@ -8826,6 +8871,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'subspaces-feed',
+    // 1.1.0: posts (and their comments) carry authorFlair; the subspace block
+    // carries the user-flair settings — additive
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'subspaces',
     title: 'Subspace feed',
     endpoint: '/api/v1/subspaces/feed',
@@ -8836,7 +8885,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'bounded newest-first window with the relational up/down tallies (Reddit’s hot/controversy formulas, ' +
       'HN-style rising) and page by offset — deterministic for a fixed dataset + timestamp. Removed posts are ' +
       'excluded (moderators may pass includeRemoved=1 to review them); private subspaces answer 403 to ' +
-      'non-members. Posts project exactly like the home feed plus title, flair, subspace, subspaceMod and votes.',
+      'non-members. Posts project exactly like the home feed plus title, flair, subspace, subspaceMod, votes and ' +
+      'authorFlair (the author’s user flair here — one batched member-row lookup per page, comments included).',
     auth: { mode: 'optional', description: 'Works logged out for public/restricted subspaces; votes/viewerVote need a session.' },
     methods: ['GET'],
     steps: ['GET with the slug and a sort.', 'Feed nextCursor back until it is null.', 'Handle 403 for private subspaces you have not joined.'],
@@ -9136,8 +9186,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-user',
-    featureVersion: '1.2.0',
-    contractVersion: '1.1.0',
+    // 1.3.0 / contract 1.2.0: post + comment projections carry authorFlair —
+    // the author's USER flair in the post's subspace (additive)
+    featureVersion: '1.3.0',
+    contractVersion: '1.2.0',
     group: 'things',
     title: 'User posts',
     endpoint: '/api/v1/things/user',

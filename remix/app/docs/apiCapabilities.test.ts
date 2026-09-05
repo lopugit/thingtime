@@ -80,13 +80,27 @@ test('subspace join requests + posting-approval requests publish their contract 
 	// carry viewer.pending/approvalRequested (+ mods' queue counts), members
 	// grew pending=1 / approvalRequests=1 + accept / deny / request-approval
 	assert.equal(manifest.features['api.subspaces-leave'], '1.1.0');
-	assert.equal(manifest.features['api.subspaces'], '1.1.0');
-	assert.equal(manifest.features['api.subspaces-get'], '1.1.0');
 	// S2 review: join re-requests start clean + deduped mod bells + own rate
 	// key (1.1.1), decisions on a withdrawn request answer 409 / pending-row
 	// walls / remove revokes approval (members 1.2.1), an access change
 	// resolves the queues (update 1.1.0)
 	assert.equal(manifest.features['api.subspaces-join'], '1.1.1');
-	assert.equal(manifest.features['api.subspaces-members'], '1.2.1');
-	assert.equal(manifest.features['api.subspaces-update'], '1.1.0');
+});
+
+test('subspace user flairs publish their contract versions', () => {
+	const manifest = createApiCapabilitiesManifest();
+	// S3: the subspace projection carries userFlairs / userFlairSelfAssign /
+	// allowCustomUserFlair + viewer.userFlair (list + get 1.2.0), update takes
+	// the three settings (1.2.0), members rows carry userFlair + the userFlair
+	// action (1.2.1 → 1.3.0), the subspace feed's posts wear authorFlair
+	// (1.1.0), and every post/comment projection carries authorFlair (things,
+	// things-comment, things-feed, things-user contract 1.1.0 → 1.2.0)
+	assert.equal(manifest.features['api.subspaces'], '1.2.0');
+	assert.equal(manifest.features['api.subspaces-get'], '1.2.0');
+	assert.equal(manifest.features['api.subspaces-update'], '1.2.0');
+	assert.equal(manifest.features['api.subspaces-members'], '1.3.0');
+	assert.equal(manifest.features['api.subspaces-feed'], '1.1.0');
+	for (const feature of ['api.things', 'api.things-comment', 'api.things-feed', 'api.things-user']) {
+		assert.equal(manifest.features[feature], '1.2.0', feature);
+	}
 });

@@ -203,6 +203,33 @@ score field.
   once read), a withdrawn request refusing accept / deny with no log / bell,
   and private → public activating the request (member, `pendingCount` 0,
   "opened up" bell, modlog `acceptedRequests` 1); cleanup delete).
+- Round 2 S3 — user flairs 🏷️: subspace `crystal.userFlairs` (templates,
+  the post-flair sanitizer), `userFlairSelfAssign` (default true),
+  `allowCustomUserFlair` (default false, custom text ≤40) via `/update`
+  (any moderator); member row `crystal.userFlair { id | null, text, emoji,
+  color }` via `POST /api/v1/subspaces/members action: 'userFlair'` —
+  self (active member; template not modOnly while self-assign is on, custom
+  text while allowed, clearing always) or, as a moderator, anyone but the
+  owner (any template incl. modOnly, custom text, bound by neither switch;
+  `member.userFlair` mod-log only when dressing someone else). Projection:
+  `authorFlair` on posts AND comments (the root post's subspace) from ONE
+  `uniqueKeys $in` over the page's (subspace, author) pairs — page docs,
+  shared originals, every shipped comment level — resolved against the live
+  templates (rename follows, delete keeps the snapshot), hidden unless the
+  wearer is an active member; the fresh comment `POST /things/comment`
+  answers with carries it too. `viewer.userFlair`, `member.userFlair`, the
+  three settings on every subspace projection. UI: `AuthorFlairChip` after
+  the author name (cards, comment rows, shared sub-card, mod member rows),
+  the `/s/<slug>` sidebar **Your flair** card (template pills / custom text
+  / take it off; optimistic across the page's own posts + comments), mod
+  page Flairs → **User flairs** editor + the two switches, Members → **Set
+  flair** modal. Capabilities: subspaces / get / update 1.2.0, members
+  1.3.0, subspaces-feed 1.1.0, things / things-comment / things-feed /
+  things-user feature 1.3.0 · contract 1.2.0. Verify section O (defaults,
+  every 4xx wall, template + custom + clear, batched authorFlair on posts /
+  fresh comments / nested replies / home + subspace feeds, live template
+  rename, mod dressing + mod-log rule, self-assign off, kicked / banned
+  wearers hidden + rejoin, manifest).
 - S1 review fixes (same branch): `NotificationsBell` keys its verb off
   `subspaceNotificationDetail` (slug head stripped) so `s/deleted_scenes` /
   `s/uplifted_minds` never mislabel a row; the mod page keeps the Danger
@@ -215,8 +242,8 @@ score field.
 
 - Owners can't leave while they own the subspace — transfer first (the
   previous owner may leave right after).
-- No user flairs (post flairs only); no per-subspace wiki/sidebar widgets
-  beyond About/Rules/Flairs/Mods.
+- No per-subspace wiki/sidebar widgets beyond About/Rules/Flairs/Your
+  flair/Mods.
 - Deny (join or posting request) does not notify the requester (Reddit
   parity — they simply may ask again).
 - Removal reasons are collected with a browser prompt in the card menu (the

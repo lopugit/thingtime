@@ -37,9 +37,10 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   save: [], // marker schema
   vote: ['optionIndex', 'voteKey'],
   updown: ['direction', 'updownKey'],
-  // rules + flairs: records → dropped; branding is a closed object → mirrored
-  subspace: ['slug', 'name', 'description', 'access', 'nsfw', 'branding'],
-  'subspace-member': ['memberKey', 'role', 'approved', 'banned', 'banReason', 'banUntil', 'left', 'pending', 'approvalRequested'],
+  // rules + flairs + userFlairs: records → dropped; branding is a closed object → mirrored
+  subspace: ['slug', 'name', 'description', 'access', 'nsfw', 'userFlairSelfAssign', 'allowCustomUserFlair', 'branding'],
+  // userFlair is a closed object → mirrored
+  'subspace-member': ['memberKey', 'role', 'approved', 'banned', 'banReason', 'banUntil', 'left', 'pending', 'approvalRequested', 'userFlair'],
   'subspace-modlog': ['action', 'postId', 'userId', 'reason'], // detail: record → dropped
   'subspace-tombstone': ['slug', 'subspaceId', 'previousOwnerId', 'deletedAt'],
   folder: ['name', 'icon', 'description'],

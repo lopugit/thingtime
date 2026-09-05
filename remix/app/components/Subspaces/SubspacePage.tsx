@@ -1,11 +1,12 @@
 import React from 'react';
-import { Box, Button, Flex, Select, Text } from '@chakra-ui/react';
+import { Box, Button, Flex, Input, Select, Text } from '@chakra-ui/react';
 import { Link, useParams, useSearchParams } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { clearLocalCache, readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { AuthorFlairChip } from '~/components/Feed/PostCard';
 import { PostComposer } from '~/components/Feed/PostComposer';
 import { PostList } from '~/components/Feed/PostList';
 import { mergeReactionOverlays } from '~/components/Feed/reactionOverlay';
@@ -19,6 +20,8 @@ import {
 	subspaceAccent,
 	SUBSPACE_SORTS,
 	TOP_RANGES,
+	userFlairChoices,
+	type PublicAuthorFlair,
 	type PublicSubspace,
 	type SubspaceFeedResponse,
 	type SubspaceFeedSort,
@@ -56,11 +59,128 @@ const SidebarCard = ({ title, children }: { title: string; children: React.React
 	</Flex>
 );
 
-export const SubspaceSidebar = (props: { subspace: PublicSubspace; moderators: { userId: string; profile: any; role: string }[] }) => {
-	const { subspace, moderators } = props;
+// ── Your flair ───────────────────────────────────────────────────────────
+// Members pick the flair worn beside their name in THIS subspace: one of the
+// templates (mod-only ones for moderators), custom text when the mods allow
+// it, or none. Paints the pick first (viewer.userFlair), reconciles from the
+// member row the API answers, reverts on failure. Hidden for non-members and
+// when the subspace offers nothing to pick (no templates, no custom text) —
+// unless the viewer already wears one, so they can still take it off.
+const MAX_CUSTOM_FLAIR_CHARS = 40;
+const UserFlairCard = ({ subspace, onViewerFlair }: { subspace: PublicSubspace; onViewerFlair: (flair: PublicAuthorFlair | null) => void }) => {
+	const api = useApi();
+	const lopu = useLopu();
+	const { viewer } = subspace;
+	const choices = userFlairChoices(subspace);
+	const current = viewer.userFlair;
+	const [custom, setCustom] = React.useState(current && !current.id ? current.label : '');
+	const [busy, setBusy] = React.useState(false);
+	React.useEffect(() => {
+		setCustom(current && !current.id ? current.label : '');
+	}, [current?.id, current?.label]); // eslint-disable-line react-hooks/exhaustive-deps
+	if (!viewer.member || (!choices.templates.length && !choices.custom && !current)) return null;
+
+	const apply = async (request: { flairId?: string | null; text?: string | null }, optimistic: PublicAuthorFlair | null) => {
+		if (busy) return;
+		setBusy(true);
+		const before = current;
+		onViewerFlair(optimistic);
+		try {
+			const resp = (await api.v1.subspaces.setUserFlair({ id: subspace.id, ...request })) as SubspaceMemberResponse;
+			onViewerFlair(resp.member?.userFlair ?? null);
+			lopu({ title: resp.member?.userFlair ? `Flair on — ${resp.member.userFlair.emoji ? `${resp.member.userFlair.emoji} ` : ''}${resp.member.userFlair.label} 🏷️` : 'Flair removed', status: 'success', duration: 3500 });
+		} catch (err: any) {
+			onViewerFlair(before ?? null);
+			lopu({ title: err?.error || 'Could not change your flair 😞', status: 'error' });
+		} finally {
+			setBusy(false);
+		}
+	};
+	const pickTemplate = (flair: { id: string; label: string; emoji: string | null; color: string | null }) =>
+		current?.id === flair.id ? apply({ flairId: null, text: '' }, null) : apply({ flairId: flair.id }, { id: flair.id, label: flair.label, emoji: flair.emoji, color: flair.color });
+	const saveCustom = () => {
+		const text = custom.replace(/\s+/g, ' ').trim();
+		if (!text) return apply({ flairId: null, text: '' }, null);
+		return apply({ flairId: null, text }, { id: null, label: text, emoji: null, color: null });
+	};
+
+	return (
+		<SidebarCard title="Your flair">
+			<Flex alignItems="center" columnGap={2} flexWrap="wrap" minHeight="22px" data-testid="user-flair-current" data-flair-id={current?.id || (current ? 'custom' : 'none')}>
+				<Text fontSize="xs" color={MUTED}>
+					{current ? 'You wear' : 'You wear no flair here yet'}
+				</Text>
+				{current && <AuthorFlairChip flair={current} />}
+				{current && (
+					<Button size="xs" variant="ghost" borderRadius="999px" color={MUTED} isDisabled={busy} onClick={() => apply({ flairId: null, text: '' }, null)} data-testid="user-flair-clear">
+						Take it off ✕
+					</Button>
+				)}
+			</Flex>
+			{choices.templates.length > 0 && (
+				<Flex columnGap={1} rowGap={1} flexWrap="wrap" data-testid="user-flair-templates">
+					{choices.templates.map((flair) => {
+						const active = current?.id === flair.id;
+						return (
+							<Button
+								key={flair.id}
+								size="xs"
+								variant="outline"
+								borderRadius="999px"
+								fontWeight={600}
+								border={`1px solid ${flair.color || 'var(--tt-border, #ececef)'}`}
+								color={flair.color || TEXT}
+								background={active ? 'var(--tt-surface-hover, #ececee)' : 'transparent'}
+								aria-pressed={active}
+								isDisabled={busy}
+								onClick={() => pickTemplate(flair)}
+								title={flair.modOnly ? 'Moderator-only flair' : active ? 'Click to take it off' : `Wear ${flair.label}`}
+								data-testid="user-flair-template"
+								data-flair-id={flair.id}
+							>
+								{flair.emoji ? `${flair.emoji} ` : ''}
+								{flair.label}
+								{flair.modOnly ? ' 🎩' : ''}
+								{active ? ' ✓' : ''}
+							</Button>
+						);
+					})}
+				</Flex>
+			)}
+			{choices.custom && (
+				<Flex columnGap={2} alignItems="center">
+					<Input
+						size="xs"
+						borderRadius="999px"
+						placeholder="Your own words…"
+						value={custom}
+						maxLength={MAX_CUSTOM_FLAIR_CHARS}
+						onChange={(event) => setCustom(event.target.value)}
+						onKeyDown={(event) => {
+							if (event.key === 'Enter') saveCustom();
+						}}
+						data-testid="user-flair-custom"
+					/>
+					<Button size="xs" borderRadius="999px" flexShrink={0} isDisabled={busy || (!custom.trim() && !(current && !current.id))} onClick={saveCustom} data-testid="user-flair-custom-save">
+						Wear it
+					</Button>
+				</Flex>
+			)}
+			{!choices.templates.length && !choices.custom && (
+				<Text fontSize="xs" color={MUTED}>
+					The moderators turned self-service flairs off here.
+				</Text>
+			)}
+		</SidebarCard>
+	);
+};
+
+export const SubspaceSidebar = (props: { subspace: PublicSubspace; moderators: { userId: string; profile: any; role: string }[]; onViewerFlair?: (flair: PublicAuthorFlair | null) => void }) => {
+	const { subspace, moderators, onViewerFlair } = props;
 	const access = ACCESS_META[subspace.access];
 	return (
 		<Flex flexDirection="column" rowGap={3} width="100%">
+			{onViewerFlair && <UserFlairCard subspace={subspace} onViewerFlair={onViewerFlair} />}
 			<SidebarCard title="About">
 				<Text fontSize="sm" color={TEXT} whiteSpace="pre-wrap">
 					{subspace.description || 'No description yet.'}
@@ -259,6 +379,18 @@ export const SubspacePage = () => {
 		setPosts((prev) => [post, ...prev]);
 		setSubspace((prev) => (prev && typeof prev.postCount === 'number' ? { ...prev, postCount: prev.postCount + 1 } : prev));
 	}, []);
+
+	// the viewer's own flair changed (Your flair card): the header state and
+	// every card of theirs on this page repaint at once
+	const handleViewerFlair = React.useCallback(
+		(flair: PublicAuthorFlair | null) => {
+			setSubspace((prev) => (prev ? { ...prev, viewer: { ...prev.viewer, userFlair: flair } } : prev));
+			if (!user?.id) return;
+			const paintComment = (comment: any): any => (comment?.author?.id === user.id ? { ...comment, authorFlair: flair, comments: comment.comments?.map(paintComment) } : comment?.comments ? { ...comment, comments: comment.comments.map(paintComment) } : comment);
+			setPosts((prev) => prev.map((post) => ({ ...(post.author?.id === user.id ? { ...post, authorFlair: flair } : post), comments: (post.comments || []).map(paintComment) })));
+		},
+		[user?.id]
+	);
 
 	// Join / leave — and, for a PRIVATE subspace, request to join / cancel the
 	// request. Paints first (count ±1, button flips), reconciles from the
@@ -582,7 +714,7 @@ export const SubspacePage = () => {
 						overflowY={['visible', 'visible', 'visible', 'auto']}
 						data-testid="subspace-sidebar"
 					>
-						{subspace && <SubspaceSidebar subspace={subspace} moderators={moderators} />}
+						{subspace && <SubspaceSidebar subspace={subspace} moderators={moderators} onViewerFlair={user ? handleViewerFlair : undefined} />}
 					</Box>
 				</Flex>
 			</Flex>

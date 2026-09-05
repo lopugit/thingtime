@@ -28,6 +28,7 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { clearLocalCachePrefix } from '~/hooks/localCache';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { SUBSPACE_SLUG_HOLD_DAYS } from '~/schemas/registry';
+import { AuthorFlairChip } from '~/components/Feed/PostCard';
 import { PostList } from '~/components/Feed/PostList';
 import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
 import { SubspaceIcon } from './SubspaceCard';
@@ -49,9 +50,9 @@ import {
 // /s/:slug/mod — moderator tools: the queue (newest posts incl. removed ones,
 // every card carrying its mod menu), requests (join requests to a private
 // subspace + posting-approval requests in a restricted one: accept/deny),
-// members (search + actions), the ban list, settings (identity/branding/
-// access + the owner's Danger zone: transfer ownership / delete), rules,
-// flairs, and the mod log.
+// members (search + actions, incl. Set flair), the ban list, settings
+// (identity/branding/access + the owner's Danger zone: transfer ownership /
+// delete), rules, flairs (post flairs + user flairs), and the mod log.
 // Every mutation goes through /api/v1/subspaces/* and re-projects in place.
 
 const INK = 'var(--tt-ink, #16161a)';
@@ -323,14 +324,123 @@ const RequestsPanel = ({ subspace, onCounts }: { subspace: PublicSubspace; onCou
 };
 
 // ── Members / banned ───────────────────────────────────────────────────────
-const MemberRow = (props: { member: PublicSubspaceMember; isOwner: boolean; onAction: (member: PublicSubspaceMember, action: string, extra?: Record<string, unknown>) => void }) => {
-	const { member, isOwner, onAction } = props;
+// ── Set flair (moderator → member) ─────────────────────────────────────────
+// A moderator dresses one member: a template (mod-only ones included), custom
+// text (+ optional emoji), or none. Chakra modal — no window.prompt anywhere.
+const MemberFlairModal = ({
+	member,
+	subspace,
+	onClose,
+	onApply
+}: {
+	member: PublicSubspaceMember | null;
+	subspace: PublicSubspace;
+	onClose: () => void;
+	onApply: (member: PublicSubspaceMember, request: { flairId: string | null; text: string; emoji: string | null }) => Promise<void>;
+}) => {
+	const current = member?.userFlair || null;
+	const [flairId, setFlairId] = React.useState<string>(current?.id || (current ? 'custom' : ''));
+	const [text, setText] = React.useState(current && !current.id ? current.label : '');
+	const [emoji, setEmoji] = React.useState(current && !current.id ? current.emoji || '' : '');
+	const [saving, setSaving] = React.useState(false);
+	// a different member (or a fresh row for the same one) reseeds the form
+	React.useEffect(() => {
+		const flair = member?.userFlair || null;
+		setFlairId(flair?.id || (flair ? 'custom' : ''));
+		setText(flair && !flair.id ? flair.label : '');
+		setEmoji(flair && !flair.id ? flair.emoji || '' : '');
+	}, [member]);
+	const custom = flairId === 'custom';
+	const canSave = !!member && (!custom || !!text.trim());
+	const submit = async () => {
+		if (!member || !canSave || saving) return;
+		setSaving(true);
+		try {
+			await onApply(member, custom ? { flairId: null, text: text.trim(), emoji: emoji.trim() || null } : { flairId: flairId || null, text: '', emoji: null });
+			onClose();
+		} finally {
+			setSaving(false);
+		}
+	};
+	return (
+		<Modal isOpen={!!member} onClose={() => !saving && onClose()} isCentered size="md">
+			<ModalOverlay />
+			<ModalContent borderRadius={RADIUS_LG} background="var(--tt-card, #ffffff)" marginX={4} data-testid="member-flair-modal">
+				<ModalHeader fontFamily="heading" fontSize="lg" color={INK} paddingBottom={1}>
+					Flair for {member ? memberName(member) : ''} 🏷️
+				</ModalHeader>
+				<ModalCloseButton isDisabled={saving} />
+				<ModalBody>
+					<Flex flexDirection="column" rowGap={3}>
+						<Flex alignItems="center" columnGap={2} fontSize="xs" color={MUTED} minHeight="20px">
+							{current ? 'Wears' : 'Wears no flair here'}
+							{current && <AuthorFlairChip flair={current} />}
+						</Flex>
+						<Box>
+							<Label>Flair</Label>
+							<Select size="sm" borderRadius={RADIUS_MD} value={flairId} onChange={(event) => setFlairId(event.target.value)} data-testid="member-flair-select">
+								<option value="">No flair</option>
+								{subspace.userFlairs.map((flair) => (
+									<option key={flair.id} value={flair.id}>
+										{flair.emoji ? `${flair.emoji} ` : ''}
+										{flair.label}
+										{flair.modOnly ? ' 🎩' : ''}
+									</option>
+								))}
+								<option value="custom">Custom text…</option>
+							</Select>
+						</Box>
+						{custom && (
+							<Flex columnGap={2} rowGap={2} flexWrap="wrap">
+								<Input size="sm" width="64px" textAlign="center" borderRadius={RADIUS_MD} placeholder="🏷️" value={emoji} maxLength={8} onChange={(event) => setEmoji(event.target.value)} data-testid="member-flair-emoji" />
+								<Input
+									size="sm"
+									flex="1"
+									minWidth="160px"
+									borderRadius={RADIUS_MD}
+									placeholder="Flair text (≤ 40 chars)"
+									value={text}
+									maxLength={40}
+									autoFocus
+									onChange={(event) => setText(event.target.value)}
+									onKeyDown={(event) => {
+										if (event.key === 'Enter') submit();
+									}}
+									data-testid="member-flair-text"
+								/>
+							</Flex>
+						)}
+						{subspace.userFlairs.length === 0 && !custom && (
+							<Text fontSize="xs" color={MUTED}>
+								No templates yet — add some under Flairs → User flairs, or pick Custom text.
+							</Text>
+						)}
+					</Flex>
+				</ModalBody>
+				<ModalFooter columnGap={2}>
+					<Button size="sm" variant="ghost" borderRadius={RADIUS_MD} onClick={onClose} isDisabled={saving}>
+						Cancel
+					</Button>
+					<Button size="sm" borderRadius={RADIUS_MD} isDisabled={!canSave} isLoading={saving} onClick={submit} data-testid="member-flair-save">
+						{flairId ? 'Set flair 🏷️' : 'Remove flair'}
+					</Button>
+				</ModalFooter>
+			</ModalContent>
+		</Modal>
+	);
+};
+
+const MemberRow = (props: { member: PublicSubspaceMember; isOwner: boolean; onAction: (member: PublicSubspaceMember, action: string, extra?: Record<string, unknown>) => void; onFlair?: (member: PublicSubspaceMember) => void }) => {
+	const { member, isOwner, onAction, onFlair } = props;
 	return (
 		<Flex alignItems="center" columnGap={2} rowGap={1} flexWrap="wrap" paddingY={2} borderBottom={BORDER} _last={{ borderBottom: 'none' }} data-member={member.userId}>
 			<Box minWidth={0} flex="1">
-				<Text as={Link} to={member.profile?.username ? `/profile/${member.profile.username}` : '#'} fontSize="sm" fontWeight={600} color={INK} _hover={{ textDecoration: 'underline' }}>
-					{memberName(member)}
-				</Text>
+				<Flex alignItems="center" columnGap={1.5} flexWrap="wrap">
+					<Text as={Link} to={member.profile?.username ? `/profile/${member.profile.username}` : '#'} fontSize="sm" fontWeight={600} color={INK} _hover={{ textDecoration: 'underline' }}>
+						{memberName(member)}
+					</Text>
+					<AuthorFlairChip flair={member.userFlair} size="xs" />
+				</Flex>
 				<Text fontSize="xs" color={MUTED}>
 					{member.role === 'owner' ? '👑 owner' : member.role === 'moderator' ? '🎩 moderator' : 'member'}
 					{member.approved && member.role === 'member' ? ' · ✅ approved poster' : ''}
@@ -348,6 +458,11 @@ const MemberRow = (props: { member: PublicSubspaceMember; isOwner: boolean; onAc
 						</Button>
 					) : (
 						<>
+							{onFlair && (
+								<Button size="xs" borderRadius="999px" variant="outline" onClick={() => onFlair(member)} data-testid="member-set-flair">
+									{member.userFlair ? 'Flair 🏷️' : 'Set flair'}
+								</Button>
+							)}
 							<Button size="xs" borderRadius="999px" variant="outline" onClick={() => onAction(member, member.approved ? 'unapprove' : 'approve')}>
 								{member.approved ? 'Unapprove' : 'Approve poster'}
 							</Button>
@@ -384,7 +499,7 @@ const MemberRow = (props: { member: PublicSubspaceMember; isOwner: boolean; onAc
 	);
 };
 
-const MembersPanel = ({ slug, banned, isOwner }: { slug: string; banned: boolean; isOwner: boolean }) => {
+const MembersPanel = ({ slug, banned, isOwner, subspace }: { slug: string; banned: boolean; isOwner: boolean; subspace: PublicSubspace }) => {
 	const api = useApi();
 	const lopu = useLopu();
 	const [members, setMembers] = React.useState<PublicSubspaceMember[]>([]);
@@ -393,6 +508,7 @@ const MembersPanel = ({ slug, banned, isOwner }: { slug: string; banned: boolean
 	const [username, setUsername] = React.useState('');
 	const [action, setAction] = React.useState('add');
 	const [busy, setBusy] = React.useState(false);
+	const [flairTarget, setFlairTarget] = React.useState<PublicSubspaceMember | null>(null);
 
 	const load = React.useCallback(
 		async (cursor?: string | null) => {
@@ -427,11 +543,29 @@ const MembersPanel = ({ slug, banned, isOwner }: { slug: string; banned: boolean
 				// list, kicked/banned in the member list) drops out
 				return next.filter((entry) => (banned ? entry.banned : !entry.banned && !entry.left));
 			});
-			lopu({ title: `${act} → ${memberName(member)} ✓`, status: 'success', duration: 4000 });
+			lopu({ title: act === 'userFlair' ? (member.userFlair ? `${memberName(member)} now wears ${member.userFlair.emoji ? `${member.userFlair.emoji} ` : ''}${member.userFlair.label} 🏷️` : `Flair removed from ${memberName(member)}`) : `${act} → ${memberName(member)} ✓`, status: 'success', duration: 4000 });
 		} catch (err: any) {
 			lopu({ title: err?.error || 'Member action failed 😞', status: 'error' });
+			throw err;
 		} finally {
 			setBusy(false);
+		}
+	};
+	// the flair modal paints the row first and puts it back if the API says no
+	const applyFlair = async (member: PublicSubspaceMember, request: { flairId: string | null; text: string; emoji: string | null }) => {
+		const optimistic = request.flairId
+			? (() => {
+					const template = subspace.userFlairs.find((flair) => flair.id === request.flairId);
+					return template ? { id: template.id, label: template.label, emoji: template.emoji, color: template.color } : member.userFlair;
+				})()
+			: request.text
+				? { id: null, label: request.text, emoji: request.emoji, color: null }
+				: null;
+		setMembers((prev) => prev.map((entry) => (entry.userId === member.userId ? { ...entry, userFlair: optimistic } : entry)));
+		try {
+			await mutate({ userId: member.userId }, 'userFlair', request);
+		} catch {
+			setMembers((prev) => prev.map((entry) => (entry.userId === member.userId ? { ...entry, userFlair: member.userFlair } : entry)));
 		}
 	};
 
@@ -460,9 +594,9 @@ const MembersPanel = ({ slug, banned, isOwner }: { slug: string; banned: boolean
 							if (banned) {
 								const reason = window.prompt('Ban reason (shown to the user)') || undefined;
 								const days = window.prompt('Ban length in days (blank = permanent)') || '';
-								mutate({ username }, 'ban', { reason, banDays: days ? Number(days) : undefined });
-							} else if (action.startsWith('role:')) mutate({ username }, 'role', { role: action.split(':')[1] });
-							else mutate({ username }, action);
+								mutate({ username }, 'ban', { reason, banDays: days ? Number(days) : undefined }).catch(() => undefined);
+							} else if (action.startsWith('role:')) mutate({ username }, 'role', { role: action.split(':')[1] }).catch(() => undefined);
+							else mutate({ username }, action).catch(() => undefined);
 						}}
 					>
 						{banned ? 'Ban 🚫' : 'Apply'}
@@ -482,7 +616,13 @@ const MembersPanel = ({ slug, banned, isOwner }: { slug: string; banned: boolean
 					</Text>
 				)}
 				{members.map((member) => (
-					<MemberRow key={member.userId} member={member} isOwner={isOwner} onAction={(target, act, extra) => mutate({ userId: target.userId }, act, extra)} />
+					<MemberRow
+						key={member.userId}
+						member={member}
+						isOwner={isOwner}
+						onAction={(target, act, extra) => mutate({ userId: target.userId }, act, extra).catch(() => undefined)}
+						onFlair={banned ? undefined : setFlairTarget}
+					/>
 				))}
 				{nextCursor && (
 					<Button size="sm" variant="outline" borderRadius={RADIUS_MD} alignSelf="center" onClick={() => load(nextCursor)}>
@@ -490,6 +630,7 @@ const MembersPanel = ({ slug, banned, isOwner }: { slug: string; banned: boolean
 					</Button>
 				)}
 			</Card>
+			{!banned && <MemberFlairModal member={flairTarget} subspace={subspace} onClose={() => setFlairTarget(null)} onApply={applyFlair} />}
 		</Flex>
 	);
 };
@@ -953,6 +1094,87 @@ const FlairsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSaved:
 	);
 };
 
+// ── User flairs ────────────────────────────────────────────────────────────
+// The templates members wear beside their name (the post-flair editor again;
+// mod-only templates are handed out by moderators only) plus the two
+// self-service switches. Moderators are bound by neither switch.
+const UserFlairsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSaved: (next: PublicSubspace) => void }) => {
+	const api = useApi();
+	const lopu = useLopu();
+	const [flairs, setFlairs] = React.useState<SubspaceFlair[]>(subspace.userFlairs);
+	const [selfAssign, setSelfAssign] = React.useState(subspace.userFlairSelfAssign);
+	const [allowCustom, setAllowCustom] = React.useState(subspace.allowCustomUserFlair);
+	const [saving, setSaving] = React.useState(false);
+	const update = (index: number, patch: Partial<SubspaceFlair>) => setFlairs((prev) => prev.map((flair, i) => (i === index ? { ...flair, ...patch } : flair)));
+	const save = async () => {
+		setSaving(true);
+		try {
+			const resp: any = await api.v1.subspaces.update({
+				id: subspace.id,
+				userFlairs: flairs.filter((flair) => flair.label.trim()).map((flair) => ({ ...flair, id: flair.id || undefined })),
+				userFlairSelfAssign: selfAssign,
+				allowCustomUserFlair: allowCustom
+			});
+			onSaved(resp.subspace);
+			setFlairs(resp.subspace.userFlairs);
+			setSelfAssign(resp.subspace.userFlairSelfAssign);
+			setAllowCustom(resp.subspace.allowCustomUserFlair);
+			lopu({ title: 'User flairs saved 🏷️', status: 'success', duration: 4000 });
+		} catch (err: any) {
+			lopu({ title: err?.error || 'Could not save user flairs 😞', status: 'error' });
+		} finally {
+			setSaving(false);
+		}
+	};
+	return (
+		<Card>
+			<Box>
+				<Label>User flairs · {flairs.length}/50</Label>
+				<Text fontSize="xs" color={MUTED}>
+					What members wear beside their name here — on their posts and comments in s/{subspace.slug}. Set one for a member from the Members tab.
+				</Text>
+			</Box>
+			<Flex flexDirection="column" rowGap={2} data-testid="mod-user-flairs">
+				{flairs.map((flair, index) => (
+					<Flex key={index} columnGap={2} rowGap={2} alignItems="center" flexWrap="wrap" border={BORDER} borderRadius={RADIUS_MD} padding={2} data-user-flair-index={index}>
+						<Input size="sm" width="56px" textAlign="center" borderRadius={RADIUS_MD} placeholder="🏷️" value={flair.emoji || ''} maxLength={8} onChange={(event) => update(index, { emoji: event.target.value || null })} />
+						<Input size="sm" flex="1" minWidth="140px" borderRadius={RADIUS_MD} placeholder="Label" value={flair.label} maxLength={64} onChange={(event) => update(index, { label: event.target.value })} />
+						<Input size="sm" width="110px" fontFamily="mono" borderRadius={RADIUS_MD} placeholder="#color" value={flair.color || ''} maxLength={32} onChange={(event) => update(index, { color: event.target.value || null })} />
+						<Flex as="label" alignItems="center" columnGap={1} fontSize="xs" color={MUTED} cursor="pointer" title="Only moderators can give this flair to someone">
+							<Switch size="sm" isChecked={flair.modOnly} onChange={(event) => update(index, { modOnly: event.target.checked })} />
+							mods only
+						</Flex>
+						<Text fontSize="10px" fontFamily="mono" color={MUTED} title="Flair id (set on first save)">
+							{flair.id || 'new'}
+						</Text>
+						<Button size="xs" variant="ghost" color="var(--tt-danger, #e5484d)" onClick={() => setFlairs((prev) => prev.filter((_, i) => i !== index))} aria-label="Remove user flair">
+							✕
+						</Button>
+					</Flex>
+				))}
+			</Flex>
+			<Flex columnGap={4} rowGap={2} flexWrap="wrap">
+				<Flex as="label" alignItems="center" columnGap={2} fontSize="sm" color={INK} cursor="pointer">
+					<Switch size="sm" isChecked={selfAssign} onChange={(event) => setSelfAssign(event.target.checked)} data-testid="mod-user-flair-self-assign" />
+					Members pick their own flair
+				</Flex>
+				<Flex as="label" alignItems="center" columnGap={2} fontSize="sm" color={INK} cursor="pointer" opacity={selfAssign ? 1 : 0.55}>
+					<Switch size="sm" isChecked={allowCustom} onChange={(event) => setAllowCustom(event.target.checked)} data-testid="mod-user-flair-allow-custom" />
+					Members may type their own text (≤ 40 chars)
+				</Flex>
+			</Flex>
+			<Flex columnGap={2}>
+				<Button size="sm" variant="outline" borderRadius={RADIUS_MD} isDisabled={flairs.length >= 50} onClick={() => setFlairs((prev) => [...prev, { id: '', label: '', emoji: null, color: null, modOnly: false }])}>
+					Add user flair ➕
+				</Button>
+				<Button marginLeft="auto" size="sm" borderRadius={RADIUS_MD} isLoading={saving} onClick={save} data-testid="mod-save-user-flairs">
+					Save 🏷️
+				</Button>
+			</Flex>
+		</Card>
+	);
+};
+
 // ── Mod log ────────────────────────────────────────────────────────────────
 const LogPanel = ({ slug }: { slug: string }) => {
 	const api = useApi();
@@ -1127,10 +1349,10 @@ export const SubspaceModPage = () => {
 								<RequestsPanel subspace={subspace} onCounts={(patch) => setSubspace((prev) => (prev ? { ...prev, ...patch } : prev))} />
 							</TabPanel>
 							<TabPanel paddingX={0}>
-								<MembersPanel slug={slug} banned={false} isOwner={subspace.viewer.role === 'owner'} />
+								<MembersPanel slug={slug} banned={false} isOwner={subspace.viewer.role === 'owner'} subspace={subspace} />
 							</TabPanel>
 							<TabPanel paddingX={0}>
-								<MembersPanel slug={slug} banned isOwner={subspace.viewer.role === 'owner'} />
+								<MembersPanel slug={slug} banned isOwner={subspace.viewer.role === 'owner'} subspace={subspace} />
 							</TabPanel>
 							<TabPanel paddingX={0}>
 								<Flex flexDirection="column" rowGap={4}>
@@ -1150,7 +1372,10 @@ export const SubspaceModPage = () => {
 								<RulesPanel subspace={subspace} onSaved={setSubspace} />
 							</TabPanel>
 							<TabPanel paddingX={0}>
-								<FlairsPanel subspace={subspace} onSaved={setSubspace} />
+								<Flex flexDirection="column" rowGap={4}>
+									<FlairsPanel subspace={subspace} onSaved={setSubspace} />
+									<UserFlairsPanel subspace={subspace} onSaved={setSubspace} />
+								</Flex>
 							</TabPanel>
 							<TabPanel paddingX={0}>
 								<LogPanel slug={slug} />

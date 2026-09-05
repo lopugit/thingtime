@@ -641,6 +641,14 @@ export function useApi() {
           asyncFetcher.submit({ ...args, action: 'request-approval' }, { action: '/api/v1/subspaces/members', errorContext: 'request posting approval' }),
         [asyncFetcher]
       ),
+      // user flair beside a member's name: no userId → your own (a template
+      // id, or custom text + optional emoji/color; neither clears); mods may
+      // name anyone
+      setUserFlair: useCallback(
+        async (args: { slug?: string; id?: string; userId?: string; username?: string; flairId?: string | null; text?: string | null; emoji?: string | null; color?: string | null }) =>
+          asyncFetcher.submit({ ...args, action: 'userFlair' }, { action: '/api/v1/subspaces/members', errorContext: 'set the flair' }),
+        [asyncFetcher]
+      ),
       moderate: useCallback(
         async (body: { id: string; action: string; reason?: string; value?: boolean; flairId?: string | null }) =>
           asyncFetcher.submit(body, { action: '/api/v1/subspaces/moderate', errorContext: 'moderate the post' }),

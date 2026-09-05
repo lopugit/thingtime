@@ -23,11 +23,13 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.things-search']?.version, '1.1.1');
   assert.equal(manifest.features['api.things-share']?.version, '1.1.0');
   // subspaces + up/down votes: posts/comments gained title/subspace/flair/
-  // subspaceMod/votes and the feeds honour subspace fences (additive → minor)
+  // subspaceMod/votes and the feeds honour subspace fences (1.2.0, additive);
+  // round 2 S3 — user flairs: posts + comments carry authorFlair, the
+  // author's user flair in the post's subspace (1.3.0, additive)
   for (const feature of ['api.things', 'api.things-comment', 'api.things-feed', 'api.things-user']) {
-    assert.equal(manifest.features[feature]?.version, '1.2.0', feature);
+    assert.equal(manifest.features[feature]?.version, '1.3.0', feature);
   }
-  for (const feature of ['api.subspaces-moderate', 'api.subspaces-modlog', 'api.subspaces-feed', 'api.things-updown']) {
+  for (const feature of ['api.subspaces-moderate', 'api.subspaces-modlog', 'api.things-updown']) {
     assert.equal(manifest.features[feature]?.version, '1.0.0', feature);
   }
   // round 2 S2 — join requests + posting-approval requests: private join
@@ -35,9 +37,17 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // detail carry viewer.pending + approvalRequested and mods get the queue
   // sizes (subspaces + get 1.1.0), and members grew the two queues + accept /
   // deny / request-approval (1.1.0 → 1.2.0; 1.1.0 was the role/ban notify)
-  for (const feature of ['api.subspaces', 'api.subspaces-get', 'api.subspaces-leave']) {
-    assert.equal(manifest.features[feature]?.version, '1.1.0', feature);
+  assert.equal(manifest.features['api.subspaces-leave']?.version, '1.1.0');
+  // round 2 S3 — user flairs: the subspace projection carries userFlairs /
+  // userFlairSelfAssign / allowCustomUserFlair + viewer.userFlair (list + get
+  // 1.2.0), update takes the three settings (1.2.0), members rows carry
+  // userFlair + the userFlair action (1.3.0), the subspace feed's posts wear
+  // authorFlair (1.1.0) — all additive
+  for (const feature of ['api.subspaces', 'api.subspaces-get', 'api.subspaces-update']) {
+    assert.equal(manifest.features[feature]?.version, '1.2.0', feature);
   }
+  assert.equal(manifest.features['api.subspaces-members']?.version, '1.3.0');
+  assert.equal(manifest.features['api.subspaces-feed']?.version, '1.1.0');
   // S2 review: a re-request starts from a clean row + the mods' bell is
   // deduped + join has its own rate key (join 1.1.1, corrections); decisions
   // on a withdrawn request answer 409, unrelated actions on a pending row
@@ -45,8 +55,6 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // change resolves the request queues and tells the requesters (update
   // 1.1.0, additive side effect)
   assert.equal(manifest.features['api.subspaces-join']?.version, '1.1.1');
-  assert.equal(manifest.features['api.subspaces-members']?.version, '1.2.1');
-  assert.equal(manifest.features['api.subspaces-update']?.version, '1.1.0');
   // S1 review: transfer's writes are guarded (a racing transfer answers 409 —
   // compatible correction); delete answers { privatePosts } beside
   // releasedPosts, holds the slug for its previous owner and refuses (409)

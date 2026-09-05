@@ -59,7 +59,7 @@ import { canonicalPostTags } from '~/components/Attachments/attachmentUiCore';
 import { profileMentionHref, splitMentionSegments, type MentionSegment } from '~/utils/mentions';
 import { extractInlineHashtags, searchTagHref, splitHashtagSegments, type HashtagSegment } from './hashtags';
 import { CIRCLE_META, MARKETPLACE_CATEGORY_META, REACTION_EMOJIS, applyUpdownVote, timeAgo } from './feedTypes';
-import type { EngagementEvent, FeedAuthor, PostChange, PostComment, PostVisibility, PublicPost, UpdownDirection } from './feedTypes';
+import type { EngagementEvent, FeedAuthor, PostChange, PostComment, PostVisibility, PublicAuthorFlair, PublicPost, UpdownDirection } from './feedTypes';
 import type { PollRenderPollContext } from '~/components/Kinds';
 
 // Apply one token's toggle to a post, idempotently (a no-op if the post already
@@ -218,6 +218,38 @@ export type PostCardProps = {
 };
 
 const authorName = (author: FeedAuthor | null) => (author ? getUserDisplayName(author) : 'Anonymous 👻');
+
+// The author's USER flair in the post's subspace (api/utils/subspaces — a
+// template they picked or custom text a mod allowed): a small pill right
+// after the name on cards and comment rows. `authorFlair` is null outside
+// subspaces, so nothing renders anywhere else.
+export const AuthorFlairChip = ({ flair, size = 'sm' }: { flair: PublicAuthorFlair | null | undefined; size?: 'sm' | 'xs' }) => {
+  if (!flair?.label) return null;
+  const label = `${flair.emoji ? `${flair.emoji} ` : ''}${flair.label}`;
+  return (
+    <Text
+      as="span"
+      display="inline-block"
+      verticalAlign="middle"
+      fontSize={size === 'xs' ? '9px' : '10px'}
+      fontWeight={600}
+      lineHeight="1.3"
+      paddingX={1.5}
+      borderRadius="999px"
+      border={`1px solid ${flair.color || 'var(--tt-border, #ececef)'}`}
+      color={flair.color || TEXT}
+      maxWidth="160px"
+      whiteSpace="nowrap"
+      overflow="hidden"
+      textOverflow="ellipsis"
+      title={label}
+      data-testid="author-flair"
+      data-flair-id={flair.id || 'custom'}
+    >
+      {label}
+    </Text>
+  );
+};
 
 // 1234 → "1.2k" — view counts stay one glyph-cluster wide however popular a
 // post gets (the other counters stay raw; they cap out far lower)
@@ -533,6 +565,7 @@ const SharedPostCard = ({ post }: { post: PublicPost }) => (
       <Text fontSize="xs" fontWeight={700} color={INK} noOfLines={1}>
         {authorName(post.author)}
       </Text>
+      <AuthorFlairChip flair={post.authorFlair} size="xs" />
       <Text fontSize="xs" color={MUTED} flexShrink={0}>
         ·
       </Text>
@@ -1102,10 +1135,11 @@ const CommentRow = (props: {
         <Flex columnGap={1.5} alignItems="flex-start">
           <Box flex="1" minWidth={0}>
             <Box background="var(--tt-surface-alt, #f5f5f7)" borderRadius={RADIUS_MD} paddingX={3} paddingY={2}>
-              <Flex alignItems="baseline" columnGap={2}>
+              <Flex alignItems="center" columnGap={1.5} flexWrap="wrap">
                 <Text fontSize="xs" fontWeight={700} color={INK} noOfLines={1}>
                   {authorName(comment.author)}
                 </Text>
+                <AuthorFlairChip flair={comment.authorFlair} size="xs" />
                 <Box flexShrink={0}>
                   <TimestampLink id={comment.id} createdAt={comment.createdAt} fontSize="10px" />
                 </Box>
@@ -1837,6 +1871,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                   Anonymous 👻
                 </Text>
               )}
+              <AuthorFlairChip flair={post.authorFlair} />
               <Text as="span" fontSize="xs" color={MUTED}>
                 {post.author ? `${getUserIdentityDetail(post.author)} · ` : ''}
               </Text>

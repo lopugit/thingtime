@@ -73,14 +73,21 @@ import { emptyUpdownVotes, tallyUpdown, type PublicUpdownVotes, type UpdownEntry
 import {
 	assertSubspaceInteraction,
 	assertSubspacePosting,
+	authorFlairKey,
 	canModerate as canModerateSubspace,
 	isActiveMember as isActiveSubspaceMember,
+	loadAuthorFlairs,
 	loadSubspaceEmbeds,
 	loadViewerSubspaceRoles,
+	membershipOf as subspaceMembershipOf,
+	resolveRootPost,
 	subspaceFeedClauses,
 	subspaceIdOfDoc,
+	type AuthorFlairs,
+	type SubspaceEmbed,
 	type ViewerSubspaceRoles
 } from '../subspaces/gate';
+import { liveUserFlair, toPublicUserFlair, type PublicUserFlair } from '../subspaces/subspaceCore';
 import { resolveInheritChain } from './aclChainCore';
 import {
   appAclEntry,
@@ -291,6 +298,9 @@ export type PublicComment = {
   viewerReactions: string[];
   // up/down votes — the separate focused reaction kind (things/updown.ts)
   votes: PublicUpdownVotes;
+  // the author's user flair in the ROOT post's subspace (null outside
+  // subspaces / when they wear none / when they are no longer a member)
+  authorFlair: PublicAuthorFlair | null;
   // direct replies (comments are commentable — their own /post/:id page shows
   // the thread)
   commentCount: number;
@@ -330,6 +340,9 @@ export type PublicPost = {
   title: string | null;
   subspace: PublicPostSubspace | null;
   flair: PublicPostFlair | null;
+  // the author's USER flair in this post's subspace (api/utils/subspaces —
+  // one batched member-row lookup per page); null outside subspaces
+  authorFlair: PublicAuthorFlair | null;
   subspaceMod: PublicSubspaceMod | null;
   commentCount: number;
   // Viewer-relative layers: never disclose comments hidden by ACL/moderation.
@@ -369,6 +382,9 @@ export type PublicPostSubspace = {
 	viewerRole: 'owner' | 'moderator' | 'member' | null;
 };
 export type PublicPostFlair = { id: string; label: string; emoji: string | null; color: string | null };
+// a user flair beside an author's name: a template pick (id) or custom text
+// (id null) — the post-flair shape with a nullable id
+export type PublicAuthorFlair = PublicUserFlair;
 export type PublicSubspaceMod = {
 	status: 'approved' | 'removed';
 	removed: boolean;
@@ -2095,6 +2111,52 @@ const viewerReactionsOf = (entries: ReactionEntry[], viewerId: string | null): s
 
 const liveShareCountOf = (doc: ThingDoc, related: RelatedThings): number => related.shareCountByTarget.get(doc.shareId) || 0;
 
+// The root post's subspace for every COMMENT doc on a page that carries no
+// crystal.subspaceId of its own: parents are fetched one reply level at a
+// time ({ shareId: $in } per hop, bounded), so a page of N comment docs costs
+// at most MAX_ROOT_HOPS queries instead of N walks. Docs that are not
+// comments, or already carry a subspaceId, are skipped.
+const MAX_ROOT_HOPS = 16;
+const resolveCommentRootSubspaces = async (things: Awaited<ReturnType<typeof getThingsCollection>>, docs: ThingDoc[]): Promise<Map<string, string | null>> => {
+  const roots = new Map<string, string | null>();
+  // parentId → the comment docs waiting on it
+  let frontier = new Map<string, string[]>();
+  const waitOn = (map: Map<string, string[]>, parentId: string, docId: string) => map.set(parentId, [...(map.get(parentId) || []), docId]);
+  for (const doc of docs) {
+    const parentId = targetIdOf(doc);
+    if (parentId && thingtimeOf(doc).includes('comment') && !subspaceIdOfDoc(doc)) waitOn(frontier, parentId, doc.shareId);
+  }
+  const seen = new Set<string>();
+  for (let hop = 0; hop < MAX_ROOT_HOPS && frontier.size; hop++) {
+    const parentIds = [...frontier.keys()].filter((id) => !seen.has(id));
+    if (!parentIds.length) break;
+    parentIds.forEach((id) => seen.add(id));
+    const parents = (await things
+      .find({ shareId: { $in: parentIds } } as any)
+      .project({ shareId: 1, thingtime: 1, targetId: 1, 'crystal.subspaceId': 1 })
+      .toArray()) as any[];
+    const next = new Map<string, string[]>();
+    for (const parent of parents) {
+      const waiting = frontier.get(String(parent.shareId)) || [];
+      const grandparentId = typeof parent.targetId === 'string' ? parent.targetId : null;
+      const subspaceId = subspaceIdOfDoc(parent);
+      if (!subspaceId && grandparentId && thingtimeOf(parent).includes('comment')) {
+        for (const docId of waiting) waitOn(next, grandparentId, docId);
+      } else {
+        for (const docId of waiting) roots.set(docId, subspaceId);
+      }
+    }
+    frontier = next;
+  }
+  return roots;
+};
+
+// an author's user flair in one subspace, from the page's batched member-row
+// lookup, resolved against the embed's live templates (a renamed template
+// updates every wearer; a deleted one keeps its snapshot)
+const authorFlairFor = (flairs: AuthorFlairs, embed: SubspaceEmbed | null, subspaceId: string, userId: string): PublicAuthorFlair | null =>
+  toPublicUserFlair(liveUserFlair(flairs.get(authorFlairKey(subspaceId, userId)) || null, embed?.userFlairs));
+
 export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | Viewer): Promise<PublicPost[]> => {
   const viewer = await withFriendIds(asViewer(viewerInput));
   const viewerId = viewer?.id || null;
@@ -2141,20 +2203,48 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   for (const entries of related.commentsByTarget.values()) {
     entries.forEach((entry) => userIds.push(entry.userId));
   }
+  // Comments wear the ROOT POST's subspace flair. A comment doc projected as
+  // a root here (GET ?id=<comment> — a thread drill-down, a comment's own
+  // /post/:id page) carries no crystal.subspaceId of its own, so its root
+  // post is resolved in bounded batched hops — one $in per level up the
+  // reply chain for the whole page, never a per-doc walk.
+  const rootSubspaceByDocId = await resolveCommentRootSubspaces(things, allDocs);
+  const rootSubspaceOf = (doc: ThingDoc): string | null => subspaceIdOfDoc(doc) ?? rootSubspaceByDocId.get(doc.shareId) ?? null;
+  // author flairs: every (subspace, author) pair on the page — the post's
+  // author plus every shipped comment level under it — ONE uniqueKeys $in,
+  // never per doc
+  const flairPairs: { subspaceId: string; userId: string }[] = [];
+  const collectCommentAuthors = (parentId: string, subspaceId: string, depth: number) => {
+    if (depth > 8) return;
+    for (const entry of related.commentsByTarget.get(parentId) || []) {
+      flairPairs.push({ subspaceId, userId: entry.userId });
+      collectCommentAuthors(entry.id, subspaceId, depth + 1);
+    }
+  };
+  for (const doc of allDocs) {
+    const subspaceId = rootSubspaceOf(doc);
+    if (!subspaceId) continue;
+    flairPairs.push({ subspaceId, userId: doc.ownerId });
+    (doc.comments || []).slice(-RETURNED_COMMENTS).forEach((comment) => flairPairs.push({ subspaceId, userId: comment.userId }));
+    collectCommentAuthors(doc.shareId, subspaceId, 1);
+  }
   // Attachments and profiles both derive from `related`, but NOT from each
   // other — running them together keeps the second off the critical path.
-  const [attachmentsByTarget, profiles, subspaces] = await Promise.all([
+  const [attachmentsByTarget, profiles, subspaces, authorFlairs] = await Promise.all([
     resolvePostAttachments(attachmentTargetIds, expectedAttachmentTargets, viewerId),
     resolveProfiles(userIds),
     // subspace embeds for the page — one $in over the subspace kind
-    loadSubspaceEmbeds(allDocs.map((doc) => subspaceIdOfDoc(doc)).filter(Boolean) as string[])
+    loadSubspaceEmbeds(allDocs.map((doc) => subspaceIdOfDoc(doc)).filter(Boolean) as string[]),
+    loadAuthorFlairs(flairPairs)
   ]);
+  const authorFlairOf = (subspaceId: string | null, userId: string): PublicAuthorFlair | null =>
+    subspaceId ? authorFlairFor(authorFlairs, subspaces.get(subspaceId) || null, subspaceId, userId) : null;
 
   // comments share the post schema — surface the post vocabulary (rich
   // ["post","comment"] bodies, reactions, reply counts); legacy-era entries
   // (no doc) fall back to the text-only defaults. Recurses through the
   // preloaded reply levels (resolveRelated ships two).
-  const buildComment = (comment: CommentEntry, parentId: string): PublicComment => {
+  const buildComment = (comment: CommentEntry, parentId: string, rootSubspaceId: string | null): PublicComment => {
     const commentCrystal = comment.doc ? crystalOf(comment.doc) : {};
     const commentReactions = related.reactionsByTarget.get(comment.id) || [];
     const replies = related.commentsByTarget.get(comment.id) || [];
@@ -2180,8 +2270,9 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       reactionCounts: reactionCountsOf(commentReactions),
       viewerReactions: viewerReactionsOf(commentReactions, viewerId),
       votes: tallyUpdown(related.updownByTarget.get(comment.id) || [], viewerId),
+      authorFlair: authorFlairOf(rootSubspaceId, comment.userId),
       commentCount: related.commentCountByTarget.get(comment.id) || 0,
-      comments: replies.map((reply) => buildComment(reply, comment.id)),
+      comments: replies.map((reply) => buildComment(reply, comment.id, rootSubspaceId)),
       targetId: parentId,
       createdAt: comment.createdAt.toISOString()
     };
@@ -2190,7 +2281,8 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   const project = (doc: ThingDoc, withShare: boolean): PublicPost => {
     const crystal = crystalOf(doc);
     const allComments = mergedCommentsOf(doc, related);
-    const comments = allComments.slice(-RETURNED_COMMENTS).map((comment) => buildComment(comment, doc.shareId));
+    const rootSubspaceId = rootSubspaceOf(doc);
+    const comments = allComments.slice(-RETURNED_COMMENTS).map((comment) => buildComment(comment, doc.shareId, rootSubspaceId));
     // the counter reports the WHOLE thread: v2 descendants via $graphLookup
     // plus the legacy-era entries (no doc) that graph traversal can't see
     const totalComments = (threadCounts.get(doc.shareId) ?? 0) + allComments.filter((entry) => !entry.doc).length;
@@ -2272,6 +2364,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
           }
         : null,
       flair: flairEntry ? { id: flairEntry.id, label: flairEntry.label, emoji: flairEntry.emoji, color: flairEntry.color } : null,
+      authorFlair: authorFlairOf(rootSubspaceId, doc.ownerId),
       subspaceMod,
       commentCount: totalComments,
       commentCounts: layeredPostCommentCounts(allComments.length, totalComments, comments.length),
@@ -3501,6 +3594,18 @@ const transactionOutcomeUnknown = (error: unknown): boolean =>
 	((error as { errorLabels: unknown[] }).errorLabels.includes('UnknownTransactionCommitResult') ||
 		(error as { errorLabels: unknown[] }).errorLabels.includes('TransientTransactionError'));
 
+// the commenter's own user flair in a subspace, for the single fresh comment
+// addComment answers with (one membership read — the viewer's preloaded
+// roster when withFriendIds already ran — plus the subspace embed only when
+// they actually wear one)
+const freshCommentAuthorFlair = async (viewer: NonNullable<Viewer>, subspaceId: string | null): Promise<PublicAuthorFlair | null> => {
+  if (!subspaceId || !viewer.id) return null;
+  const membership = viewer.subspaceRoles ? viewer.subspaceRoles.get(subspaceId) || null : await subspaceMembershipOf(subspaceId, viewer.id);
+  if (!membership?.userFlair || !isActiveSubspaceMember(membership)) return null;
+  const embeds = await loadSubspaceEmbeds([subspaceId]);
+  return toPublicUserFlair(liveUserFlair(membership.userFlair, embeds.get(subspaceId)?.userFlairs));
+};
+
 export const addComment = async (
   viewerInput: string | Viewer,
   shareId: unknown,
@@ -3619,7 +3724,10 @@ export const addComment = async (
 
   const doc = created.doc;
   const crystal = crystalOf(doc);
-  const profiles = await resolveProfiles([viewerId]);
+  // the fresh comment wears the author's user flair in the ROOT post's
+  // subspace (the same resolution the page projection runs)
+  const rootSubspaceId = subspaceIdOfDoc(await resolveRootPost(target));
+  const [profiles, authorFlair] = await Promise.all([resolveProfiles([viewerId]), freshCommentAuthorFlair(viewer, rootSubspaceId)]);
   const comment: PublicComment = {
     id: doc.shareId,
     thingtime: thingtimeOf(doc),
@@ -3639,6 +3747,7 @@ export const addComment = async (
     reactionCounts: {},
     viewerReactions: [],
     votes: emptyUpdownVotes(),
+    authorFlair,
     commentCount: 0,
     targetId: target.shareId,
     createdAt: new Date(doc.createdAt).toISOString()

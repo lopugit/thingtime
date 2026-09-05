@@ -8,9 +8,9 @@
 // removed and private-subspace posts, and the root-post walk comment writes
 // use to honour post locks and bans.
 import { getThingsCollection } from '../mongodb/collections';
-import { thingUniqueKeyFilter } from '../mongodb/uniqueKeys';
+import { thingUniqueKeyFilter, thingUniqueKeysFilter } from '../mongodb/uniqueKeys';
 import { MAX_SUBSPACE_MEMBERSHIPS_PER_USER, type SubspaceAccessMode, type SubspaceRole } from '~/schemas/registry';
-import { canPostIn, flairById, isActiveMembershipState, isModeratorRole, type SubspaceFlair } from './subspaceCore';
+import { canPostIn, flairById, isActiveMembershipState, isModeratorRole, userFlairOfCrystal, type SubspaceFlair, type SubspaceUserFlair } from './subspaceCore';
 
 export type Fail = { ok: false; status: number; error: string };
 const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
@@ -36,6 +36,9 @@ export type SubspaceMembership = {
 	pending: boolean;
 	// an active member of a restricted subspace asking for posting approval
 	approvalRequested: boolean;
+	// the flair worn beside the member's name here (template snapshot or
+	// custom text) — resolved against the live templates on read
+	userFlair: SubspaceUserFlair | null;
 };
 export type ViewerSubspaceRoles = ReadonlyMap<string, SubspaceMembership>;
 
@@ -56,7 +59,8 @@ export const membershipOfDoc = (doc: any, nowMs = Date.now()): SubspaceMembershi
 		banUntil: banUntil && Number.isFinite(banUntil.getTime()) ? banUntil : null,
 		left: crystal.left === true,
 		pending: crystal.pending === true,
-		approvalRequested: crystal.approvalRequested === true
+		approvalRequested: crystal.approvalRequested === true,
+		userFlair: userFlairOfCrystal(crystal)
 	};
 };
 
@@ -123,6 +127,33 @@ export const accessOf = (subspace: any): SubspaceAccessMode => {
 };
 
 export const flairsOf = (subspace: any): SubspaceFlair[] => (Array.isArray(subspace?.crystal?.flairs) ? subspace.crystal.flairs : []);
+export const userFlairsOf = (subspace: any): SubspaceFlair[] => (Array.isArray(subspace?.crystal?.userFlairs) ? subspace.crystal.userFlairs : []);
+
+// The author flairs a projected page needs — ONE indexed query for every
+// (subspace, author) pair across the page's posts, shared originals and every
+// shipped comment level (never per doc): the pairs become subspaceMemberKey
+// uniqueKeys and ride the root uniqueKeys index. Only ACTIVE members wear a
+// flair (a kicked / banned / pending row's pick stays stored but hidden).
+export type AuthorFlairs = ReadonlyMap<string, SubspaceUserFlair>;
+export const authorFlairKey = subspaceMemberKeyOf;
+export const loadAuthorFlairs = async (pairs: readonly { subspaceId: string; userId: string }[]): Promise<AuthorFlairs> => {
+	const flairs = new Map<string, SubspaceUserFlair>();
+	const keys = [...new Set(pairs.filter((pair) => pair.subspaceId && pair.userId).map((pair) => subspaceMemberKeyOf(pair.subspaceId, pair.userId)))];
+	if (!keys.length) return flairs;
+	const things = await getThingsCollection();
+	const docs = await things
+		.find({ thingtime: 'subspace-member', ...thingUniqueKeysFilter(SUBSPACE_MEMBER_KEY_FIELD, keys), 'crystal.userFlair': { $type: 'object' } } as any)
+		.project({ targetId: 1, ownerId: 1, crystal: 1 })
+		.limit(keys.length)
+		.toArray();
+	const now = Date.now();
+	for (const doc of docs) {
+		const membership = membershipOfDoc(doc, now);
+		if (!membership.userFlair || !isActiveMember(membership)) continue;
+		flairs.set(subspaceMemberKeyOf(membership.subspaceId, String(doc.ownerId)), membership.userFlair);
+	}
+	return flairs;
+};
 
 const banMessage = (slug: string, membership: SubspaceMembership): string => {
 	const until = membership.banUntil ? ` until ${membership.banUntil.toISOString().slice(0, 10)}` : '';
@@ -235,6 +266,9 @@ export type SubspaceEmbed = {
 	access: SubspaceAccessMode;
 	nsfw: boolean;
 	flairs: SubspaceFlair[];
+	// user-flair templates, so a member's template pick projects its CURRENT
+	// label/emoji/color beside their name
+	userFlairs: SubspaceFlair[];
 };
 
 export const toSubspaceEmbed = (doc: any): SubspaceEmbed => ({
@@ -246,7 +280,8 @@ export const toSubspaceEmbed = (doc: any): SubspaceEmbed => ({
 	accent: doc.crystal?.branding?.accent ?? null,
 	access: accessOf(doc),
 	nsfw: doc.crystal?.nsfw === true,
-	flairs: flairsOf(doc)
+	flairs: flairsOf(doc),
+	userFlairs: userFlairsOf(doc)
 });
 
 export const loadSubspaceEmbeds = async (subspaceIds: readonly string[]): Promise<Map<string, SubspaceEmbed>> => {
@@ -256,7 +291,7 @@ export const loadSubspaceEmbeds = async (subspaceIds: readonly string[]): Promis
 	const things = await getThingsCollection();
 	const docs = await things
 		.find({ thingtime: 'subspace', shareId: { $in: wanted } } as any)
-		.project({ shareId: 1, 'crystal.slug': 1, 'crystal.name': 1, 'crystal.branding': 1, 'crystal.access': 1, 'crystal.nsfw': 1, 'crystal.flairs': 1 })
+		.project({ shareId: 1, 'crystal.slug': 1, 'crystal.name': 1, 'crystal.branding': 1, 'crystal.access': 1, 'crystal.nsfw': 1, 'crystal.flairs': 1, 'crystal.userFlairs': 1 })
 		.toArray();
 	for (const doc of docs) embeds.set(String(doc.shareId), toSubspaceEmbed(doc));
 	return embeds;

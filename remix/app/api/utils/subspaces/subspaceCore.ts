@@ -15,6 +15,7 @@ import {
 	MAX_SUBSPACE_RULE_TEXT_CHARS,
 	MAX_SUBSPACE_RULE_TITLE_CHARS,
 	MAX_SUBSPACE_RULES,
+	MAX_SUBSPACE_USER_FLAIR_TEXT_CHARS,
 	SUBSPACE_ACCESS_MODES,
 	SUBSPACE_FEED_SORTS,
 	SUBSPACE_SLUG_HOLD_DAYS,
@@ -182,6 +183,85 @@ export const sanitizeBranding = (value: unknown, previous: SubspaceBranding | nu
 
 export const flairById = (flairs: readonly SubspaceFlair[] | null | undefined, id: string | null | undefined): SubspaceFlair | null =>
 	id ? (flairs || []).find((flair) => flair.id === id) || null : null;
+
+// ---------------------------------------------------------------------------
+// User flairs — the flair a member wears beside their name in ONE subspace.
+// Templates live on the subspace (`userFlairs`, the post-flair shape); the
+// member's pick lives on their subspace-member row as `userFlair`: a template
+// id + a snapshot of its text/emoji/color, or id null + custom text. Posts and
+// comments project it as `authorFlair`, resolved against the live templates
+// (a renamed template updates every wearer; a deleted one keeps the snapshot).
+export type SubspaceUserFlair = { id: string | null; text: string; emoji: string | null; color: string | null };
+// the wire shape (PublicPost.authorFlair / viewer.userFlair / member.userFlair)
+export type PublicUserFlair = { id: string | null; label: string; emoji: string | null; color: string | null };
+export type UserFlairSettings = { userFlairs: SubspaceFlair[]; userFlairSelfAssign: boolean; allowCustomUserFlair: boolean };
+
+// user-flair templates share the post-flair grammar and cap
+export const sanitizeUserFlairs = (value: unknown): SubspaceFlair[] | Fail => {
+	const flairs = sanitizeFlairs(value);
+	if (isFail(flairs)) return fail(flairs.status, `User flairs: ${flairs.error}`);
+	return flairs;
+};
+
+// the three settings with their defaults (self-assign ON, custom text OFF)
+export const userFlairSettingsOf = (crystal: Record<string, any> | null | undefined): UserFlairSettings => ({
+	userFlairs: Array.isArray(crystal?.userFlairs) ? crystal!.userFlairs : [],
+	userFlairSelfAssign: crystal?.userFlairSelfAssign !== false,
+	allowCustomUserFlair: crystal?.allowCustomUserFlair === true
+});
+
+// a stored member row's flair, normalized (anything malformed reads as none)
+export const userFlairOfCrystal = (crystal: Record<string, any> | null | undefined): SubspaceUserFlair | null => {
+	const raw = crystal?.userFlair;
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+	const text = typeof raw.text === 'string' ? raw.text.trim() : '';
+	if (!text) return null;
+	return {
+		id: typeof raw.id === 'string' && raw.id ? raw.id : null,
+		text: text.slice(0, MAX_SUBSPACE_FLAIR_LABEL_CHARS),
+		emoji: sanitizeIcon(raw.emoji),
+		color: sanitizeColor(raw.color)
+	};
+};
+
+// The stored pick resolved against the subspace's CURRENT templates: a
+// template pick follows the template (label/emoji/color edits reach every
+// wearer, and a template the mods deleted keeps its snapshot rather than
+// vanishing mid-thread); custom text is what it is.
+export const liveUserFlair = (stored: SubspaceUserFlair | null, templates: readonly SubspaceFlair[] | null | undefined): SubspaceUserFlair | null => {
+	if (!stored) return null;
+	const template = flairById(templates, stored.id);
+	return template ? { id: template.id, text: template.label, emoji: template.emoji, color: template.color } : stored;
+};
+
+export const toPublicUserFlair = (flair: SubspaceUserFlair | null): PublicUserFlair | null =>
+	flair ? { id: flair.id, label: flair.text, emoji: flair.emoji, color: flair.color } : null;
+
+export type UserFlairRequest = { flairId?: unknown; text?: unknown; emoji?: unknown; color?: unknown };
+export type UserFlairActor = { moderator: boolean; self: boolean };
+
+// The one decision every user-flair write runs. `flairId` picks a template
+// (unknown → 400; modOnly → moderators only, 403); `text` without an id is
+// custom text (≤ MAX_SUBSPACE_USER_FLAIR_TEXT_CHARS, optional emoji/color
+// under the icon/color rules); neither (null id + empty text) clears. A
+// member may only serve themselves while userFlairSelfAssign is on and, for
+// custom text, allowCustomUserFlair is on — clearing their own is always
+// allowed. Moderators are bound by neither switch and may dress anyone.
+export const resolveUserFlair = (request: UserFlairRequest, settings: UserFlairSettings, actor: UserFlairActor): SubspaceUserFlair | null | Fail => {
+	const flairId = typeof request.flairId === 'string' ? request.flairId.trim().toLowerCase() : '';
+	const text = boundedText(request.text, MAX_SUBSPACE_FLAIR_LABEL_CHARS);
+	if (!flairId && !text) return null; // clear
+	if (!actor.moderator && !settings.userFlairSelfAssign) return fail(403, 'Members can’t pick their own flair here — ask a moderator 🎩');
+	if (flairId) {
+		const template = flairById(settings.userFlairs, flairId);
+		if (!template) return fail(400, `No user flair "${flairId}" here`);
+		if (template.modOnly && !actor.moderator) return fail(403, `The "${template.label}" flair is moderator-only`);
+		return { id: template.id, text: template.label, emoji: template.emoji, color: template.color };
+	}
+	if (!actor.moderator && !settings.allowCustomUserFlair) return fail(403, 'Custom flair text is off here — pick one of the templates');
+	if (text.length > MAX_SUBSPACE_USER_FLAIR_TEXT_CHARS) return fail(400, `Flair text is too long (max ${MAX_SUBSPACE_USER_FLAIR_TEXT_CHARS} characters)`);
+	return { id: null, text, emoji: sanitizeIcon(request.emoji), color: sanitizeColor(request.color) };
+};
 
 export const sanitizeSort = (value: unknown): SubspaceFeedSort => ((SUBSPACE_FEED_SORTS as readonly string[]).includes(value as string) ? (value as SubspaceFeedSort) : 'hot');
 
