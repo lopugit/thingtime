@@ -1427,8 +1427,13 @@ function assertWorkflowSource() {
   );
   assert.match(
     reviewHandoffBlock,
-    /actions\/workflows\/resolve-pr-conflicts\.yml\/runs\?event=workflow_dispatch&per_page=100[\s\S]*?\.display_title == \$title[\s\S]*?\.status == "pending"[\s\S]*?Skipping duplicate Lopu review handoff/u,
-    "simultaneous check and PR events coalesce behind one unstarted Lopu review for the same scope",
+    /pending_review_url="\$\(node \.github\/scripts\/lopu-review-queue\.mjs\)"[\s\S]*?Skipping duplicate Lopu review handoff/u,
+    "review handoffs use the age-independent native queue and verify the worker has not started",
+  );
+  assert.match(
+    reviewHandoffBlock,
+    /name: Check out the trusted review queue helper[\s\S]*?ref: github-actions[\s\S]*?persist-credentials: false/u,
+    "the queue helper comes only from the protected control plane without persisted credentials",
   );
   assert.match(
     reviewHandoffBlock,

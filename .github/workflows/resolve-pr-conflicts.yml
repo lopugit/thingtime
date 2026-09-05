@@ -3181,7 +3181,15 @@ jobs:
       cancel-in-progress: false
     permissions:
       actions: write
+      contents: read
     steps:
+      - name: Check out the trusted review queue helper
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: github-actions
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
       - name: Dispatch the single serialized Lopu review worker
         env:
           GH_TOKEN: ${{ github.token }}
@@ -3240,18 +3248,10 @@ jobs:
           # An already-running review is deliberately not suppressed: a head
           # move during that session needs one newest waiter behind it.
           if [ "$coalescible" = true ]; then
-            workflow_runs="$(gh api \
-              "repos/$REPO/actions/workflows/resolve-pr-conflicts.yml/runs?event=workflow_dispatch&per_page=100")"
-            pending_review_url="$(jq -r --arg title "$review_title" '
-              [.workflow_runs[]
-                | select(.display_title == $title)
-                | select(.status == "pending"
-                         or .status == "queued"
-                         or .status == "waiting"
-                         or .status == "requested")]
-              | sort_by(.created_at)
-              | .[0].html_url // empty
-            ' <<<"$workflow_runs")"
+            # History-window scans lose older waiters during an event storm.
+            # The native scope queue is age-independent. The helper checks the
+            # actual review job, not just the enclosing workflow's status.
+            pending_review_url="$(node .github/scripts/lopu-review-queue.mjs)"
             if [ -n "$pending_review_url" ]; then
               echo "::notice::Skipping duplicate Lopu review handoff; an unstarted review for this exact scope is already queued: $pending_review_url"
               {

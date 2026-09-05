@@ -141,6 +141,25 @@ preserved. Only the shared model fleet uses durable `queue: max`, so admitted
 work remains serialized while event storms cannot fill the pending-job limit
 with obsolete immutable snapshots.
 
+Queue recovery (2026-09-05): review handoffs inspect GitHub's native `lopu-review-<scope>` concurrency
+group instead of only the most recent 100 workflow dispatches. They verify the
+trusted run's actual review job is unstarted before reusing that waiter; an
+active review still permits one follow-up for newer changes. Human comment
+events retain their own comment-id-bearing handoffs. Controller status comments
+carry the hidden `thingtime-` marker and do not trigger another model review,
+even when a PAT makes their author look like a human. Control-plane CI uses
+separate concurrency groups per PR/ref so unrelated PRs cannot cancel each
+other's validation.
+
+Queue regression checks: `node --test .github/scripts/lopu-review-queue.test.mjs`.
+After deployment, inspect the native concurrency groups and job states: a
+pending Lopu fleet member is waiting for serialized mutation access, not
+necessarily consuming a runner or blocking the separate preview pipeline.
+Confirm that an old unstarted review coalesces a new automated signal, a running
+review allows a follow-up, and ordinary human comments still reach Lopu.
+The helper needs only Actions read access (the handoff already needs Actions
+write for dispatch) and fails closed on unavailable or incomplete queue data.
+
 The stack rebase/cascade implementation is internal in the same way. Existing
 `rebase-pr-stack-ai` exact-worker events enter through **Lopu PR manager**, keep
 their `rebase-stack` provider policy and immutable snapshot payload, and are
