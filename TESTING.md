@@ -4478,6 +4478,10 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       its PID/daemon remain unchanged. A failed notarization must not stop or
       replace the installed app. Run `node --test Commander/script/release-packaging.test.mjs`.
 
+- [ ] Commander production verification passes the Mach-O file before `lipo
+      -verify_arch` and exercises the real tool against a native fixture before
+      cloud signing. A verifier failure must publish no incomplete release.
+
 ## Persistent media and progressive image regression
 
 - [ ] At desktop and 390px mobile widths, scroll the feed/attachment fixture

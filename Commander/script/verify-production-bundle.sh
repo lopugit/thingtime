@@ -11,7 +11,7 @@ test "$(/usr/bin/plutil -extract CFBundleVersion raw -o - "$app/Contents/Info.pl
 test "$(/usr/bin/plutil -extract ThingtimeGitCommit raw -o - "$app/Contents/Info.plist")" = "$COMMANDER_GIT_COMMIT"
 for relative in Contents/MacOS/Commander Contents/Resources/commander-core Contents/Resources/commander-indexer; do
   test -x "$app/$relative"
-  /usr/bin/lipo -verify_arch "$(uname -m)" "$app/$relative"
+  /usr/bin/lipo "$app/$relative" -verify_arch "$(uname -m)"
   /usr/bin/codesign --verify --strict "$app/$relative"
   details="$(/usr/bin/codesign -dvv "$app/$relative" 2>&1)"
   printf '%s\n' "$details" | grep -Fx "TeamIdentifier=$APPLE_TEAM_ID" >/dev/null
@@ -20,11 +20,12 @@ done
 # The pinned Node runtime retains the Node.js Foundation signature and JIT
 # entitlements. The outer resource seal protects the exact bundled runtime.
 test -x "$app/Contents/Resources/node/bin/node"
-/usr/bin/lipo -verify_arch "$(uname -m)" "$app/Contents/Resources/node/bin/node"
+/usr/bin/lipo "$app/Contents/Resources/node/bin/node" -verify_arch "$(uname -m)"
 /usr/bin/codesign --verify --strict "$app/Contents/Resources/node/bin/node"
 test -s "$app/Contents/Resources/commander-daemon.mjs"
 test -s "$app/Contents/Resources/worker.js"
-test -s "$app/Contents/Resources/ui/index.html"
+test -s "$app/Contents/Resources/ui/launcher.html"
+test -s "$app/Contents/Resources/ui/settings.html"
 /usr/bin/codesign --verify --deep --strict "$app"
 details="$(/usr/bin/codesign -dvv "$app" 2>&1)"
 printf '%s\n' "$details" | grep -Fx "TeamIdentifier=$APPLE_TEAM_ID" >/dev/null
