@@ -153,7 +153,7 @@ const directIndex = routes.findIndex((route) => route.src === '^/index\\.html$' 
 const spaIndex = routes.findIndex((route) => route.src === '/(?:.*)' && route.dest === '/index.html');
 const wellKnownDiscoveryIndex = routes.findIndex(
 	(route) =>
-		route.src === '^/\\.well-known/(?:oauth-protected-resource|oauth-authorization-server|thingtime-chatgpt-capabilities\\.json|thingtime-capabilities\\.json)$' &&
+		route.src === '^/\\.well-known/(?:apple-app-site-association(?:-docs)?|oauth-protected-resource|oauth-authorization-server|thingtime-chatgpt-capabilities\\.json|thingtime-capabilities\\.json)$' &&
 		route.dest === '/__server'
 );
 const socialCardIndex = routes.findIndex((route) => route.src === '^/social-card$' && route.dest === '/__server');

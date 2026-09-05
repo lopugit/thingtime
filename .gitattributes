@@ -4,3 +4,7 @@
 graphify-out/snapshots/** -merge
 graphify-out/cache/semantic-cas/** -merge
 graphify-out/graph.json merge=graphify
+# Large immutable graph snapshots are consumed as whole artifacts. Line-by-line
+# JSON diffs can time out GitHub comparisons and prevent PR synchronization.
+graphify-out/snapshots/**/graph.json -diff linguist-generated
+graphify-out/snapshots/**/manifest.json -diff linguist-generated

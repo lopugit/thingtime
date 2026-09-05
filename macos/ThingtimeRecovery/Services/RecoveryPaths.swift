@@ -30,6 +30,7 @@ public struct RecoveryPaths: Hashable {
         switch component {
         case .desktop: desktopCacheRoot
         case .recovery: recoveryCacheRoot
+        case .commander: homeDirectory.appendingPathComponent("Library/Application Support/com.thingtime.Commander/release-cache", isDirectory: true)
         }
     }
 

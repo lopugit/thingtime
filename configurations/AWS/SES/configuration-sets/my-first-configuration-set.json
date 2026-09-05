@@ -1,0 +1,9 @@
+{
+  "ConfigurationSetName": "my-first-configuration-set",
+  "SendingOptions": {
+    "SendingEnabled": true
+  },
+  "ReputationOptions": {
+    "ReputationMetricsEnabled": true
+  }
+}
