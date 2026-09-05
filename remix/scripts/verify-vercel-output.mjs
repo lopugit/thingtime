@@ -147,7 +147,7 @@ const postPermalinkIndex = routes.findIndex((route) => route.src === '^/post/[^/
 const profilePermalinkIndex = routes.findIndex((route) => route.src === '^/profile/[^/]+/?$' && route.dest === '/__server');
 const wellKnownDiscoveryIndex = routes.findIndex(
 	(route) =>
-		route.src === '^/\\.well-known/(?:apple-app-site-association|oauth-protected-resource|oauth-authorization-server|thingtime-chatgpt-capabilities\\.json|thingtime-capabilities\\.json)$' &&
+		route.src === '^/\\.well-known/(?:apple-app-site-association(?:-docs)?|oauth-protected-resource|oauth-authorization-server|thingtime-chatgpt-capabilities\\.json|thingtime-capabilities\\.json)$' &&
 		route.dest === '/__server'
 );
 const serverFallbackIndex = routes.findIndex(

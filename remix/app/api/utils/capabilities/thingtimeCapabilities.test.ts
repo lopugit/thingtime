@@ -63,4 +63,5 @@ test('both manifests publish passkey concurrency and Apple association contracts
   assert.equal(originManifest.features['api.apple-app-association']?.version, '1.0.0');
   assert.equal(apiManifest.features['api.apple-app-association'], '1.0.0');
   assert.ok(originManifest.operations.some((operation) => operation.path === '/.well-known/apple-app-site-association'));
+  assert.ok(originManifest.operations.some((operation) => operation.path === '/.well-known/apple-app-site-association-docs'));
 });
