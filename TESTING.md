@@ -4405,6 +4405,19 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Design system + builder (`/builder`, `/p/:id`, `/docs/design-system`, `remix/app/components/Builder/`, `/api/v1/webpages/resolve`, `/api/v1/admin/webpages/seed`)
 
+- [ ] At desktop, 390px and 320px widths, select a short centred text block,
+      a large heading and right-aligned text. The selection toolbar stays above
+      the selection, separate from the block label and history buttons; no
+      controls cross the viewport, inspector or scrolling-container edges.
+      Resize the container and scroll from top to bottom with menus open.
+      Native settings and Convert to submenus fit, including with reduced
+      keyboard space. Large document fonts do not enlarge toolbar icons, and
+      narrow desktop text has no unused 50px editor gutter.
+- [ ] Move the pointer from an edited block through the empty space to Undo,
+      Redo and Changes. All remain reachable; Changes opens, its controls work,
+      and its Close button returns to the same editor (portal clicks must not
+      be intercepted by the builder frame).
+
 - [ ] Every restyled page (status, mongodb-status, tests, vercel, crypto,
       migrations, apps, raw, admin + sub-panels) renders the PageShell surface
       wash, clears the fixed nav (no underlap at 54px), and shows the mono

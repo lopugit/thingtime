@@ -435,6 +435,7 @@ const BlockFrame = ({
 		<Box
 			{...dropProps}
 			className="ttBlockFrame"
+			zIndex={selected ? 10 : undefined}
 			data-block-id={block.id}
 			position="relative"
 			{...selfPlacement(block, parentDirection)}
@@ -487,6 +488,9 @@ const BlockFrame = ({
 				// own their clicks — capturing them would select the container
 				// instead of opening the menu
 				const target = event.target as HTMLElement;
+				// React portals bubble through their owner frame. A modal's close,
+				// history or style controls must receive their own clicks.
+				if (!event.currentTarget.contains(target)) return;
 				if (
 					target.closest?.(
 						'.ttInsertZone, .ttDropWell, .ttChipAction, .ttInlineRichTextEditor, .codex-editor, .ce-toolbar, .ce-popover, .ce-inline-toolbar, .ttArgEditPopover, .ttBlockContextMenu'
@@ -506,6 +510,7 @@ const BlockFrame = ({
 		>
 			{(hovered || selected) && (
 				<Flex
+					className="ttBlockChip"
 					position="absolute"
 					top="-14px"
 					left="6px"

@@ -46,7 +46,7 @@ rendered content.
 
 ## Verification
 
-- 75 Editor.js/kind tests and 31 builder/webpage tests pass.
+- 79 Editor.js/kind tests and 31 builder/webpage tests pass.
 - Targeted ESLint has no errors or warnings in the changed implementation.
 - Vite client and single-file embed builds pass; embed stays within its budget.
 - Chrome desktop and 390px mobile checks: live preview/cancel, 50% default,
@@ -75,3 +75,31 @@ Tailscale shim references a missing app binary. No Funnel mapping was changed.
 The repository Graphify wrapper completed incremental code and semantic indexing
 through the local proxy (all three semantic chunks succeeded), then regenerated
 cluster/report/HTML outputs. Portable snapshots and the semantic cache are current.
+
+## Adaptive toolbar follow-up (2026-09-05)
+
+Selection formatting gets the closest available space above selected text.
+Builder labels, history and native block actions then place themselves around
+that reservation and nearby content. The shared geometry respects the visual
+viewport, fixed header/inspector and clipping ancestors; ResizeObserver and
+scroll/viewport events keep positions current. Placement candidates are bounded
+so large documents cannot create an unbounded search. Native settings panels
+and nested conversion menus also clamp their dimensions and position to the
+available space. Open native menus cover the history controls beneath them.
+Toolbar typography stays independent of large document fonts, and the unused
+50px Editor.js desktop gutter no longer forces narrow headings to wrap.
+
+History remains visible for mounted editors while their content is on screen,
+so moving through a gap outside a narrow block no longer hides the controls.
+Selected frames and editor chrome stack above decorative outlines. Portal
+controls bypass the builder frame's click capture: Changes can now close and
+its timeline actions receive clicks.
+
+Regression checks cover narrow centred text, large headings, right-edge text,
+viewport panning/shrinking and stable placement. The browser fixture now uses
+actual builder frames with ephemeral data. Desktop and 390/320px browser checks
+covered selection separation, zero horizontal overflow, pointer travel to
+Undo/Redo/Changes, picker scrolling and Changes close/return to editing.
+After Chrome disconnected, the in-app browser completed native and nested menu
+checks at desktop, 320px and 320x430px, plus container and viewport resizing.
+The fixture disposes its React root during hot reload to avoid duplicate roots.

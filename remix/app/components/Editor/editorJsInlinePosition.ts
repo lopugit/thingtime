@@ -1,3 +1,5 @@
+import { editorOverlayBounds, editorTextObstacles, moveEditorOverlay, placeEditorOverlay, setEditorOverlayStyle } from './editorOverlayLayout';
+
 export const inlineToolbarPosition = (
 	selection: { left: number; top: number; width: number },
 	toolbar: { width: number; height: number },
@@ -10,42 +12,46 @@ export const inlineToolbarPosition = (
 	top: Math.max(viewport.top + 8, selection.top - toolbar.height - 12)
 });
 
+/** Selection gets the closest available space; secondary chrome works around it. */
+export const layoutEditorJsInlineToolbar = (holder: HTMLElement) => {
+	const selection = window.getSelection();
+	if (!selection?.rangeCount || selection.isCollapsed || !holder.contains(selection.anchorNode)) return;
+	const toolbar = holder.querySelector<HTMLElement>('.ce-inline-toolbar');
+	const panel = toolbar?.querySelector<HTMLElement>('.ce-popover--inline.ce-popover--opened > .ce-popover__container');
+	if (!toolbar || !panel) return;
+	const range = selection.getRangeAt(0),
+		rect = range.getBoundingClientRect();
+	const bounds = editorOverlayBounds(holder);
+	setEditorOverlayStyle(panel, { maxWidth: `${bounds.width}px`, minWidth: '0px', height: 'auto', bottom: 'auto', minHeight: '46px' });
+	const items = panel.querySelector<HTMLElement>(':scope > .ce-popover__items');
+	if (items) {
+		setEditorOverlayStyle(items, { flexWrap: 'wrap', flexShrink: '0' });
+	}
+	// Position the container itself; transformed builder ancestors still use their own containing block.
+	const old = panel.getBoundingClientRect();
+	const obstacles = editorTextObstacles(holder);
+
+	const above = { ...bounds, height: Math.max(0, Math.min(bounds.height, rect.top - 12 - bounds.top)) };
+	const placementBounds = above.height >= old.height ? above : bounds;
+	const pos = placeEditorOverlay(
+		old,
+		{
+			left: rect.left + rect.width / 2 - old.width / 2,
+			top: rect.top - old.height - 12
+		},
+		placementBounds,
+		obstacles
+	);
+	moveEditorOverlay(panel, pos, toolbar);
+	return pos;
+};
+
 /** Follow the selection and visual viewport, including keyboard pans and nested scrolling. */
 export const watchEditorJsInlinePosition = (holder: HTMLElement): (() => void) => {
 	let frame = 0;
 	const sync = () => {
 		frame = 0;
-		const selection = window.getSelection();
-		if (!selection?.rangeCount || selection.isCollapsed || !holder.contains(selection.anchorNode)) return;
-		const toolbar = holder.querySelector<HTMLElement>('.ce-inline-toolbar');
-		const panel = toolbar?.querySelector<HTMLElement>('.ce-popover--inline.ce-popover--opened > .ce-popover__container');
-		if (!toolbar || !panel) return;
-		const range = selection.getRangeAt(0),
-			rect = range.getBoundingClientRect();
-		const vv = window.visualViewport;
-		panel.style.maxWidth = `${(vv?.width || window.innerWidth) - 16}px`;
-		panel.style.minWidth = '0';
-		panel.style.height = 'auto';
-		panel.style.bottom = 'auto';
-		panel.style.minHeight = '46px';
-		const items = panel.querySelector<HTMLElement>(':scope > .ce-popover__items');
-		if (items) {
-			items.style.flexWrap = 'wrap';
-			items.style.flexShrink = '0';
-		}
-		// Position the container itself; transformed builder ancestors still use their own containing block.
-		const old = panel.getBoundingClientRect();
-		const pos = inlineToolbarPosition(
-			rect,
-			{ width: old.width, height: old.height },
-			{ left: vv?.offsetLeft || 0, top: vv?.offsetTop || 0, width: vv?.width || window.innerWidth }
-		);
-		const left = parseFloat(toolbar.style.left) || 0,
-			top = parseFloat(toolbar.style.top) || 0;
-		const nextLeft = `${left + pos.left - old.left}px`,
-			nextTop = `${top + pos.top - old.top}px`;
-		if (Math.abs(pos.left - old.left) > 0.5) toolbar.style.left = nextLeft;
-		if (Math.abs(pos.top - old.top) > 0.5) toolbar.style.top = nextTop;
+		layoutEditorJsInlineToolbar(holder);
 	};
 	const schedule = () => {
 		if (!frame) frame = requestAnimationFrame(sync);

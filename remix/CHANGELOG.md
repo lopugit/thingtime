@@ -17,6 +17,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-05: Coordinate builder labels, history and selection controls using
+  measured free space; adapt to narrow blocks, viewport/inspector edges and
+  scrolling containers. Keep history reachable across hover gaps and fix
+  builder frames intercepting Changes-dialog clicks. [PR #635 verification](../PRs/635-editor-rich-text-controls-complete-editorjs-rich-text-styling.md). — Codex (AI)
+
 - 2026-09-05: Share full selected-text/block styling across Editor.js and builder
   editors: colour wheel, alpha, HEX/RGB(A)/HSL(A), highlights, decorations and
   custom font sizes/units. Preserve styles through builder HTML round trips and

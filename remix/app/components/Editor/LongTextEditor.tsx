@@ -713,20 +713,32 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle & EditorHistor
 				'--tt-editor-popover-edge-gap': '8px',
 				// keep editor.js chrome inside our card look
 				'.codex-editor': { paddingInlineStart: '0 !important' },
+				// Raise open menus above history without blocking history while typing.
+				'.codex-editor:has(.ce-popover--opened:not(.ce-popover--inline))': { zIndex: 9 },
+				// Document typography must not enlarge or decorate editor controls.
+				'.ce-toolbar, .ce-inline-toolbar': {
+					fontSize: '14px',
+					fontWeight: 400,
+					lineHeight: 1.4,
+					textAlign: 'left',
+					letterSpacing: 'normal',
+					textTransform: 'none'
+				},
+				'.ce-inline-toolbar button[aria-label="Text style"]': { fontSize: '20px', lineHeight: 1 },
 				'.codex-editor .ce-toolbar': { left: '0 !important', right: '0 !important', width: '100% !important' },
 				'.ce-toolbar__content': { position: 'relative' },
 				'.codex-editor .ce-toolbar__actions': {
 					position: 'absolute',
-					left: 'auto !important',
-					right: '0 !important',
+					left: '0',
+					right: 'auto',
 					top: '-30px',
 					bottom: 'auto',
 					padding: '0 !important',
 					background: 'var(--tt-card,#fff)',
 					borderRadius: '8px'
 				},
-				'&[data-tt-controls-side="left"] .codex-editor .ce-toolbar__actions': { left: '0 !important', right: 'auto !important' },
-				'.codex-editor__redactor': { paddingBottom: '0 !important' },
+				// Our actions float, so narrow desktop editors need no 50px gutter.
+				'.codex-editor__redactor': { paddingBottom: '0 !important', margin: '0 !important' },
 				'.ce-block__content, .ce-toolbar__content': { maxWidth: '100%' },
 				'.ce-toolbar__plus, .ce-toolbar__settings-btn': { color: 'var(--tt-muted, #9a9aa6)' },
 				// the grip doubles as the block-drag handle: keep the browser from
@@ -998,6 +1010,7 @@ const EditableLongTextEditor = React.forwardRef<LongTextEditorHandle, LongTextEd
 			ref={hostRef}
 			className="tt-editor-session"
 			position="relative"
+			zIndex={8}
 			onKeyDownCapture={(event) => {
 				if (
 					(event.metaKey || event.ctrlKey) &&
@@ -1016,12 +1029,14 @@ const EditableLongTextEditor = React.forwardRef<LongTextEditorHandle, LongTextEd
 					position: 'absolute',
 					left: '4px',
 					top: 'var(--tt-editor-chrome-top,-29px)',
-					zIndex: 4,
-					opacity: 0,
-					pointerEvents: 'none'
-				},
-				'&[data-tt-controls-side="left"] > .tt-editor-history-controls': { left: 'auto', right: '4px' },
-				'&:focus-within > .tt-editor-history-controls, &:hover > .tt-editor-history-controls': { opacity: 1, pointerEvents: 'auto' }
+					zIndex: 8,
+					width: 'max-content',
+					maxWidth: 'calc(100vw - 16px)',
+					flexWrap: 'wrap',
+					background: 'var(--tt-card, #fff)',
+					borderRadius: '8px',
+					pointerEvents: 'auto'
+				}
 			}}
 		>
 			{/* Editor.js leaves hidden tooltips at their last desktop coordinates. */}

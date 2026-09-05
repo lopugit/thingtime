@@ -1,3 +1,5 @@
+import { WebpageBlocksRenderer } from '../app/components/Builder/WebpageBlocksRenderer';
+import { updateBlock, type WebpageBlock } from '../app/components/Builder/webpageBlocks';
 import { InlineRichTextEditor } from '../app/components/Builder/InlineRichTextEditor';
 import { editorJsToHtml, htmlToEditorJs } from '../app/components/Builder/editorJsHtml';
 import React from 'react';
@@ -54,6 +56,42 @@ function BuilderCheck() {
 				<pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{html}</pre>
 			</details>
 			<button onClick={() => setHtml(editorJsToHtml(htmlToEditorJs(html)))}>Round trip builder HTML</button>
+		</section>
+	);
+}
+function TightBuilderCheck() {
+	const [blocks, setBlocks] = React.useState<WebpageBlock[]>([
+		{ id: 'tight-heading', type: 'text', text: 'Love', style: 'heading', align: 'center', css: { 'font-size': '80px', color: 'hotpink' } },
+		{ id: 'tight-text', type: 'text', text: 'hehe 😌', align: 'center', css: { padding: '55px 0' } },
+		{ id: 'edge-text', type: 'text', text: 'Right edge text', align: 'end', css: { 'text-align': 'right' } }
+	]);
+	const [selectedId, setSelectedId] = React.useState<string | null>(null);
+	const [hoverId, setHoverId] = React.useState<string | null>(null);
+	const [narrow, setNarrow] = React.useState(false);
+	return (
+		<section
+			data-testid="tight-builder-check"
+			style={{ margin: '80px 0', border: '1px solid #ddd', padding: 16, width: narrow ? 240 : '100%', maxWidth: '100%' }}
+		>
+			<h2>Tight builder spaces</h2>
+			<button onClick={() => setNarrow(!narrow)}>Resize builder container</button>
+			<button onClick={() => setSelectedId(null)}>Deselect block</button>
+			<div style={{ marginTop: 80 }}>
+				<WebpageBlocksRenderer
+					blocks={blocks}
+					componentsByRef={{}}
+					chrome={{
+						selectedId,
+						hoverId,
+						onSelect: setSelectedId,
+						onHover: setHoverId,
+						onUpdate: (id, patch) => setBlocks((current) => updateBlock(current, id, patch)),
+						onInsert: () => {},
+						onMove: () => {},
+						onContextMenu: () => {}
+					}}
+				/>
+			</div>
 		</section>
 	);
 }
@@ -119,6 +157,7 @@ function App() {
 				</div>
 				<pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{result}</pre>
 				<BuilderCheck />
+				<TightBuilderCheck />
 				<h2>Saved rendering</h2>
 				<RichTextBlocks blocks={doc.blocks} />
 				<details>
@@ -130,4 +169,6 @@ function App() {
 		</ChakraProvider>
 	);
 }
-createRoot(document.getElementById('root')!).render(<App />);
+const root = createRoot(document.getElementById('root')!);
+root.render(<App />);
+import.meta.hot?.dispose(() => root.unmount());
