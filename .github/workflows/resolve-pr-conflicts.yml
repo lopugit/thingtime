@@ -707,7 +707,9 @@ jobs:
     # The public Lopu manager owns every external scan. Exact resolver and
     # promotion handoffs must not recursively launch another rebase detector.
     if: >-
-      needs.route.outputs.execute == 'true'
+      !cancelled()
+      && needs.route.result == 'success'
+      && needs.route.outputs.execute == 'true'
       && inputs.promotion_source_pr == ''
       && inputs.promotion_plan_b64 == ''
       && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
@@ -1030,7 +1032,9 @@ jobs:
     # repository events have one owner: merge cascades enter this detector,
     # while exact rebase workers stay exclusively in manage_rebases.
     if: >-
-      needs.route.outputs.execute == 'true'
+      !cancelled()
+      && needs.route.result == 'success'
+      && needs.route.outputs.execute == 'true'
       && inputs.promotion_source_pr == ''
       && inputs.promotion_plan_b64 == ''
       && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
@@ -2563,7 +2567,10 @@ jobs:
     name: Hand off the selected PR batch to the github-actions resolver control plane
     needs: [route, detect]
     if: >-
-      needs.detect.outputs.any == 'true'
+      !cancelled()
+      && needs.route.result == 'success'
+      && needs.detect.result == 'success'
+      && needs.detect.outputs.any == 'true'
       && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
       && (github.event_name != 'workflow_dispatch'
           || inputs.detector_handoff != true
@@ -2903,7 +2910,9 @@ jobs:
     # owner, and the scheduled conflict backstop deliberately does not re-review
     # unchanged clean PRs over and over.
     if: >-
-      needs.route.outputs.execute == 'true'
+      !cancelled()
+      && needs.route.result == 'success'
+      && needs.route.outputs.execute == 'true'
       && inputs.promotion_source_pr == ''
       && inputs.promotion_plan_b64 == ''
       && !startsWith(inputs.control_dispatch_id, 'lopu-review:')
@@ -3160,7 +3169,10 @@ jobs:
     name: Hand off one Lopu repository review session
     needs: [route, review_detect]
     if: >-
-      needs.review_detect.outputs.any == 'true'
+      !cancelled()
+      && needs.route.result == 'success'
+      && needs.review_detect.result == 'success'
+      && needs.review_detect.outputs.any == 'true'
       && (github.ref_name == 'github-actions'
           || github.workflow_ref
           == format('{0}/.github/workflows/resolve-pr-conflicts.yml@refs/heads/develop', github.repository)
@@ -9262,16 +9274,25 @@ jobs:
             gh api "repos/$REPO/issues/$PR_NUMBER/comments" -F "body=@$body" >/dev/null
           fi
 
+      - name: Recheck target after publication
+        id: post_publish
+        if: steps.push.outputs.remote_state == 'published'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISHED_SHA: ${{ steps.push.outputs.remote_sha }}
+        run: node trusted/.github/scripts/post-publish-ref-race.mjs
+
       - name: Requeue after a moving-ref race
         if: >-
           steps.user_merge_pause.outputs.paused != 'true'
           && steps.admission.outputs.current == 'true'
-          && steps.push.outputs.remote_state == 'retry'
+          && (steps.push.outputs.remote_state == 'retry' || steps.post_publish.outputs.retry == 'true')
         env:
           GH_TOKEN: ${{ github.token }}
           RACE_RETRY_ATTEMPT: ${{ inputs.ref_race_retry || '0' }}
-          RACE_REASON: ${{ steps.push.outputs.retry_reason }}
-          RACE_LIVE_SHA: ${{ steps.push.outputs.live_sha }}
+          RACE_REASON: ${{ steps.push.outputs.retry_reason || 'base' }}
+          RACE_LIVE_SHA: ${{ steps.push.outputs.live_sha || steps.post_publish.outputs.live_sha }}
+          POST_PUBLISH_RETRY: ${{ steps.post_publish.outputs.retry }}
           DEPTH: ${{ inputs.depth || '0' }}
         run: |
           set -euo pipefail
@@ -9336,7 +9357,11 @@ jobs:
           {
             echo "🔄 Lopu preserved the live \`$RACE_REASON\` ref at \`$RACE_LIVE_SHA\` because it moved beside publication, then queued retry $next_attempt/3 from fresh PR refs."
             echo
-            echo "No stale merge commit was pushed. [View this guarded attempt]($RUN_URL)."
+            if [ "$POST_PUBLISH_RETRY" = true ]; then
+              echo "The selected merge was published, then the target advanced again. Delivery remains pending until the new target is reconciled. [View this attempt]($RUN_URL)."
+            else
+              echo "No stale merge commit was pushed. [View this guarded attempt]($RUN_URL)."
+            fi
             echo
             echo "$RUN_STATUS_MARKER"
           } > "$body"
@@ -9370,6 +9395,7 @@ jobs:
           steps.user_merge_pause.outputs.paused != 'true'
           && steps.admission.outputs.current == 'true'
           && steps.push.outputs.remote_state == 'published'
+          && steps.post_publish.outputs.retry != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GRAPHIFY_RESET: ${{ steps.merge.outputs.graphify_reset }}

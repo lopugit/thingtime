@@ -21,7 +21,7 @@ function evaluate(expression, eventName, payload, eligible = 'true', result = 's
   return runInNewContext(expression, {
     github: { event_name: eventName, event: payload, actor: 'lopugit', ref_name: 'main' },
     inputs: { promotion_source_pr: '', promotion_plan_b64: '', maintenance_operation: '', control_dispatch_id: '', ref_race_handoff: false },
-    needs: { conversation_gate: { result, outputs: { eligible } }, route: { outputs: { execute: 'true' } } },
+    needs: { conversation_gate: { result, outputs: { eligible } }, route: { result: 'success', outputs: { execute: 'true' } } },
     cancelled: () => false,
     startsWith: (value, prefix) => String(value ?? '').toLowerCase().startsWith(prefix.toLowerCase()),
   });
@@ -118,4 +118,23 @@ test('queued legacy signals recheck the live comment before spending on a model'
     await assert.rejects(classifyQueuedConversation({ ...args, readComment: async () => { throw new Error('transport'); } }));
     await assert.rejects(classifyQueuedConversation({ ...args, prNumber: '625', readComment }));
   }
+});
+
+test('every routing descendant handles an intentionally skipped conversation ancestor', () => {
+  // Actions injects success() when no status function is present. A skipped
+  // conversation_gate propagates through a successful route to its descendants.
+  // Test the dependency graph, not only route's own expression (PR #592).
+  const blocks = [...workflow.matchAll(/^  ([a-z_]+):\n([\s\S]*?)(?=^  [a-z_]+:\n|$(?![\s\S]))/gm)];
+  const descendants = new Set(['conversation_gate']);
+  const pending = blocks.map(([,name,block]) => ({name,block}));
+  for (let pass = 0; pass < pending.length; pass++) {
+    for (const {name,block} of pending) {
+      const needs = block.match(/^    needs: (.+)$/m)?.[1]?.match(/[a-z_]+/g) ?? [];
+      if (!needs.some(name => descendants.has(name))) continue;
+      descendants.add(name);
+      assert.match(gateExpression(name), /\b(?:always|cancelled|failure|success)\s*\(/,
+        `${name} silently skips after the non-comment admission job`);
+    }
+  }
+  assert.ok(descendants.has('detect') && descendants.has('handoff') && descendants.has('resolve'));
 });

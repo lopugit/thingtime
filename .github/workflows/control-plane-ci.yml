@@ -82,10 +82,10 @@ jobs:
       # window its credential-probe exemption is scoped to is pure and cheap to
       # pin, and a wrong window there misreports rather than under-reports.
       - name: Validate the conflict-resolver routing step window
-        run: node --test .github/scripts/resolve-pr-conflicts-routing-contract.test.mjs
+        run: node --test .github/scripts/resolve-pr-conflicts-routing-contract.test.mjs .github/scripts/post-publish-ref-race.test.mjs
 
       - name: Validate event admission, CI isolation, and preview writes
-        run: node --test .github/scripts/control-plane-events.test.mjs .github/scripts/preview-comments.test.mjs .github/scripts/preview-labels.test.mjs .github/scripts/preview-recovery.test.mjs .github/scripts/preview-fallback.test.mjs
+        run: node --test .github/scripts/control-plane-events.test.mjs .github/scripts/preview-comments.test.mjs .github/scripts/preview-labels.test.mjs .github/scripts/preview-recovery.test.mjs .github/scripts/preview-fallback.test.mjs .github/scripts/preview-pr-summary.test.mjs
 
       - name: Validate all-branch event and doctor contracts
         run: node .github/scripts/build-all-branch.mjs --self-test

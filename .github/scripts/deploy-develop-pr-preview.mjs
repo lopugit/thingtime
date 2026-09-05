@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { isManagedPreviewComment as isManagedComment, upsertPreviewComment, publishPreviewNotifications } from './preview-comments.mjs';
 import { syncPreviewLabels, deploymentBuiltAt, previewBuildTime } from './preview-labels.mjs';
 import { recoverySourceIssue, previewWorkActive, recoveryAttempt, reconcilePreviewInventory } from './preview-recovery.mjs';
+import { publishPreviewSummary } from './preview-pr-summary.mjs';
 import { FALLBACK_BRANCH, fallbackResponseIssue, verifyPublishedPreview } from './preview-fallback.mjs';
 import { execFile } from 'node:child_process';
 import { resolveCname } from 'node:dns/promises';
@@ -1191,6 +1192,8 @@ const upsertComment = (repository, number, body) => upsertPreviewComment({
 
 const publishDevelopStatus = (config, pullRequest, fields, { bestEffort = false } = {}) =>
 	publishPreviewNotifications([
+		() => publishPreviewSummary({ request: githubRequest, repository: config.repository, number: pullRequest.number,
+			sha: pullRequest.head.sha, summary: deploymentComment({ pullRequest, ...fields }) }),
 		() => upsertComment(config.repository, pullRequest.number, deploymentComment({ pullRequest, ...fields })),
 		() => syncPreviewLabels({ request: githubRequest, repository: config.repository, number: pullRequest.number,
 			sha: pullRequest.head.sha, status: fields.state === 'deploying' ? 'building' : fields.state,

@@ -1849,8 +1849,8 @@ export function assertControlPlaneContract() {
   );
   assert.equal(
     resolver.match(/steps\.push\.outputs\.remote_state == 'published'/gu)?.length,
-    3,
-    "only a live-ref-proven publication may post success, merge the standing sync PR, or cascade a stack",
+    4,
+    "only a live-ref-proven publication may recheck the target, post success, merge the standing sync PR, or cascade a stack",
   );
 
   assertUserControlledMergePause(resolver, rebase);
