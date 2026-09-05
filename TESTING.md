@@ -3413,6 +3413,30 @@ default` unsets it, and runtime usage reports the effective cap. A custom
 
 ## Thingtime desktop mesh packaging (`electron/`, `MCP/`, `macos/ThingtimeNode/`)
 
+- [ ] Refresh Recovery and compare its published-release count with GitHub, including
+      prereleases and older pages. Desktop and Recovery rows must arrive as one
+      snapshot; a later-page rate limit keeps the previous complete list visible.
+      Intel Macs must never select arm64-only archives.
+- [ ] Publish desktop and Recovery assets in the same GitHub release, then select
+      each row. Exactly one row must select, and its title and download filename
+      must match that component even though the GitHub release ID is shared.
+- [ ] Download the legacy build 4 ZIP: its missing code-signature resource seal
+      must produce an actionable error, remove extraction staging, and preserve
+      installed apps and caches. During valid ZIP extraction the window remains
+      responsive and duplicate cache/install actions stay disabled.
+- [ ] A release with the documented component withdrawal marker remains in the
+      catalogue as UNAVAILABLE, explains that its archive is damaged, and cannot
+      start a download. Its unmarked companion and newer releases remain usable.
+- [ ] Run Recovery unsigned packaging with an absent cache root. It must build
+      and verify the archive round-trip on a fresh machine, without requiring a
+      previous local build. Corrupt an existing cached app and repeat the cache
+      request: verification must reject it rather than reusing the stale entry.
+- [ ] Replace a damaged installed app with a valid cached bundle. Preserve the
+      damaged bundle separately, never add it to the verified cache, and report
+      its backup path. An invalid replacement must leave the current app intact.
+      A detached installer failure must reopen Recovery with a visible error;
+      the automatic catalogue refresh must not erase that explanation.
+
 - [ ] Build and open the signed `Thingtime Recovery.app`; it must remain running
       after launch without an `App.init()` nil-optional crash, and its recovery
       store must render before the first refresh completes.
@@ -4416,3 +4440,21 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       Sides control (paren-aware tokenizer) and a multi-token shorthand is
       shown raw in uniform mode, never as an empty field.
 - [ ] Verification: `node remix/scripts/verify-webpages.mjs http://127.0.0.1:<nitro-port>`.
+
+
+### Recovery cards, build IDs and app selection
+
+- [ ] In both This Mac views, confirm build IDs come from the bundle or manifest,
+      old Electron bundles expose their embedded commit, and Recovery cards use
+      the Recovery component name even if old metadata used a desktop title.
+- [ ] Open the App selector, switch Electron → Commander → Electron, and verify
+      cached entries and release selections stay with their app. Save installed
+      Commander, verify its cached signature, and confirm Electron's cache is unchanged.
+- [ ] Inspect release cards and detail metadata at narrow and wide macOS window
+      sizes, scroll every list to the bottom, and open/cancel unsigned acknowledgement.
+      Dates, badges, long versions and archive names must wrap without clipping.
+- [ ] A Commander handoff rejects an Electron path and vice versa. Unknown or
+      incomplete build metadata must not fabricate a numeric build number.
+- [ ] Cloud archives contain their run number in both app build metadata and
+      `CFBundleVersion`; signed releases pass strict codesign, Gatekeeper and
+      stapler checks after downloading the actual published ZIP.

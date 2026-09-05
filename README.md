@@ -2029,3 +2029,50 @@ iOS/scripts/testflight-beta.sh
 `iOS/.env` is ignored by git. The value is baked into that uploaded app build;
 future web changes on the same Vercel branch URL do not require a new iOS
 binary.
+
+### Recovery release catalogue and cloud publishing
+
+Recovery reads all published GitHub release pages (including prereleases) in one
+refresh, then selects desktop and companion Recovery ZIPs for the current Mac.
+Its sidebar reports GitHub's published count separately from compatible archives;
+Actions runs and source commits are not downloadable releases. The legacy build 4
+archive has no resource seal and must not be installed or re-signed by the client.
+A failed download, verification, or refresh preserves the installed app and caches.
+Publishers can withdraw a damaged component without removing release history by
+placing `<!-- thingtime-recovery-unavailable:v1:desktop:missing-resource-seal -->`
+on its own line in that GitHub release's notes (`recovery` replaces `desktop` for
+the companion app). Recovery labels that component unavailable and disables its
+download before transferring the archive. Other components remain available.
+Installing a valid replacement can repair a damaged current app: when the old app
+cannot enter the verified cache, Recovery preserves it separately and reports its
+backup path. Installer failures reopen Recovery with a persistent explanation.
+
+Main and approved PR release builds use the protected `github-actions` pipeline.
+The main listener requires `contents: write` and `pull-requests: read` so its nested
+worker can run; product changes reach it through the normal main promotion process.
+The macOS signing inputs are `MAC_CSC_LINK` (base64 encrypted Developer ID P12),
+`MAC_CSC_KEY_PASSWORD`, and `APPLE_TEAM_ID`, stored in GitHub Actions secrets.
+Notarization uses `APPLE_API_KEY_BASE64`, `APPLE_API_KEY_ID`, and
+`APPLE_API_ISSUER`, or the already configured `ASC_KEY_CONTENT`, `ASC_KEY_ID`,
+and `ASC_ISSUER_ID` equivalents. API-key content is base64 encoded. The ASC
+fallback is considered only after macOS signing is explicitly configured, so an
+unrelated iOS setup does not change the unsigned lane. An entirely absent macOS
+secret set produces clearly marked `.unsigned` prereleases containing both
+apps; partial configuration fails closed. Unsigned archives never become the latest trusted release. Forks
+must configure their own release origin and signing setup rather than reusing
+Thingtime's account credentials.
+
+
+Recovery's app selector switches between Thingtime Electron and Commander, with
+separate cache roots and fixed bundle identifiers. The shared Recovery launcher
+can update itself from either view. Commander archives use
+`Commander-App-Release-<version>-macos-<arch>.zip` (or the explicit
+`Commander-App-UNSIGNED-Release-` prefix and `.unsigned` tag). A Commander view
+with no published compatible archive says so; **Save installed build** verifies
+and caches `~/Applications/Commander.app` for offline recovery.
+
+GitHub cards show component, channel, date, architecture, size and release/build
+identity. **This Mac** cards read build numbers from cache metadata and bundled
+`Info.plist`, with embedded Electron commit metadata as a fallback for old apps.
+Unknown IDs remain explicitly unknown. The cloud workflow passes its numeric
+build number to both apps, and Electron writes it to `CFBundleVersion`.
