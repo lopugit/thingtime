@@ -27,6 +27,7 @@ import {
 	subspaceNotificationPreview,
 	type SubspaceAccessMode,
 	type SubspaceFeedSort,
+	type SubspaceListSort,
 	type SubspaceReportResolution,
 	type SubspaceReportStatus,
 	type SubspaceRole
@@ -78,9 +79,12 @@ import {
 import {
 	canPostIn,
 	confirmSlugMatches,
+	DIRECTORY_RANK_WINDOW,
 	flairById,
+	isRankedListSort,
 	liveUserFlair,
 	privatizedPostUpdate,
+	rankSubspaceDirectory,
 	rankSubspacePosts,
 	releaseKindFor,
 	releasedPostUpdate,
@@ -92,6 +96,7 @@ import {
 	sanitizeBranding,
 	sanitizeDescription,
 	sanitizeFlairs,
+	sanitizeListSort,
 	sanitizeName,
 	sanitizeReason,
 	sanitizeRemovalReasons,
@@ -102,13 +107,16 @@ import {
 	sanitizeSort,
 	sanitizeTopRange,
 	sanitizeUserFlairs,
+	sliceRankedPage,
 	slugHoldState,
 	pickReportQueueSubspace,
+	SUBSPACE_ACTIVE_WINDOW_MS,
 	tallyReportReasons,
 	topRangeSince,
 	toPublicUserFlair,
 	userFlairSettingsOf,
 	userFlairSurvivesDemotion,
+	type DirectoryCandidate,
 	type PublicUserFlair,
 	type RankCandidate,
 	type ReportReasonTally,
@@ -194,6 +202,9 @@ export type PublicSubspace = {
 	ownerId: string;
 	memberCount: number;
 	postCount?: number;
+	// directory rows under sort=active: live posts in the last
+	// SUBSPACE_ACTIVE_WINDOW_DAYS (the measure that sort ranks by)
+	recentPostCount?: number;
 	// moderators only (subspace detail): open join requests / posting-approval
 	// requests waiting in the Requests queue
 	pendingCount?: number;
@@ -261,7 +272,14 @@ const brandingOf = (doc: any): SubspaceBranding => ({
 
 export const toPublicSubspace = (
 	doc: any,
-	options: { memberCount: number; postCount?: number; membership: SubspaceMembership | null; requestCounts?: RequestCounts | null; openReportCount?: number | null }
+	options: {
+		memberCount: number;
+		postCount?: number;
+		recentPostCount?: number;
+		membership: SubspaceMembership | null;
+		requestCounts?: RequestCounts | null;
+		openReportCount?: number | null;
+	}
 ): PublicSubspace => ({
 	id: String(doc.shareId),
 	slug: String(doc.crystal?.slug || ''),
@@ -277,6 +295,7 @@ export const toPublicSubspace = (
 	ownerId: String(doc.ownerId),
 	memberCount: options.memberCount,
 	...(options.postCount === undefined ? {} : { postCount: options.postCount }),
+	...(options.recentPostCount === undefined ? {} : { recentPostCount: options.recentPostCount }),
 	...(options.requestCounts ? { pendingCount: options.requestCounts.pending, approvalRequestCount: options.requestCounts.approvalRequests } : {}),
 	...(typeof options.openReportCount === 'number' ? { openReportCount: options.openReportCount } : {}),
 	createdAt: new Date(doc.createdAt).toISOString(),
@@ -369,6 +388,22 @@ const memberCountsFor = async (subspaceIds: string[]): Promise<Map<string, numbe
 			// pending join requests are not members (isActiveMember)
 			{ $match: { thingtime: 'subspace-member', targetId: { $in: subspaceIds }, 'crystal.left': { $ne: true }, 'crystal.banned': { $ne: true }, 'crystal.pending': { $ne: true } } },
 			{ $group: { _id: '$targetId', count: { $sum: 1 } } }
+		])
+		.toArray()) as any[];
+	for (const row of rows) counts.set(String(row._id), Number(row.count) || 0);
+	return counts;
+};
+
+// Live (not mod-removed) posts per subspace since `since` — ONE $group over
+// the candidates' ids, the measure behind the directory's sort=active.
+const recentPostCountsFor = async (subspaceIds: string[], since: Date): Promise<Map<string, number>> => {
+	const counts = new Map<string, number>();
+	if (!subspaceIds.length) return counts;
+	const things = await getThingsCollection();
+	const rows = (await things
+		.aggregate([
+			{ $match: withMatch(postMatch(), { 'crystal.subspaceId': { $in: subspaceIds }, 'subspaceMod.status': { $ne: 'removed' }, createdAt: { $gte: since } }) },
+			{ $group: { _id: '$crystal.subspaceId', count: { $sum: 1 } } }
 		])
 		.toArray()) as any[];
 	for (const row of rows) counts.set(String(row._id), Number(row.count) || 0);
@@ -610,15 +645,23 @@ export const createSubspace = async (viewerInput: string | Viewer, input: Create
 	return { ok: true, subspace: toPublicSubspace(subspace, { memberCount: 1, postCount: 0, membership: membershipOfDoc(owner) }) };
 };
 
-export type ListSubspacesQuery = { q?: unknown; mine?: unknown; cursor?: unknown; limit?: unknown };
+export type ListSubspacesQuery = { q?: unknown; mine?: unknown; sort?: unknown; cursor?: unknown; limit?: unknown };
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+// The /s directory. sort=new (default) walks newest-first on a stable
+// (createdAt, shareId) cursor; sort=members / sort=active rank the newest
+// DIRECTORY_RANK_WINDOW matching subspaces in memory by member count / live
+// posts in the last SUBSPACE_ACTIVE_WINDOW_DAYS (one $group each over the
+// window) and page by offset — see subspaceCore.ts. q / mine narrow the
+// candidates for every sort.
 export const listSubspaces = async (
 	viewerInput: string | Viewer,
 	query: ListSubspacesQuery
-): Promise<Fail | { ok: true; subspaces: PublicSubspace[]; nextCursor: string | null }> => {
+): Promise<Fail | { ok: true; subspaces: PublicSubspace[]; nextCursor: string | null; sort: SubspaceListSort }> => {
 	const viewer = asViewer(viewerInput);
+	const sort = sanitizeListSort(query.sort);
+	if (isFail(sort)) return sort;
 	const limit = Math.min(Math.max(1, Number(query.limit) || DEFAULT_PAGE), MAX_PAGE);
 	const roles = viewer?.subspaceRoles || (await loadViewerSubspaceRoles(viewer?.id));
 	const things = await getThingsCollection();
@@ -627,7 +670,7 @@ export const listSubspaces = async (
 	if (query.mine === true || query.mine === 'true' || query.mine === '1') {
 		if (!viewer?.id) return fail(401, 'Unauthorized');
 		const ids = [...roles.values()].filter(isActiveMember).map((membership) => membership.subspaceId);
-		if (!ids.length) return { ok: true, subspaces: [], nextCursor: null };
+		if (!ids.length) return { ok: true, subspaces: [], nextCursor: null, sort };
 		match = withMatch(match, { shareId: { $in: ids } });
 	}
 	const q = typeof query.q === 'string' ? query.q.trim().slice(0, MAX_QUERY_CHARS) : '';
@@ -635,6 +678,45 @@ export const listSubspaces = async (
 		const pattern = new RegExp(escapeRegex(q.toLowerCase().replace(/^s\//, '')), 'i');
 		match = withMatch(match, { $or: [{ 'crystal.slug': pattern }, { 'crystal.name': pattern }] });
 	}
+	const project = (docs: any[], counts: Map<string, number>, recent: Map<string, number> | null): PublicSubspace[] =>
+		docs.map((doc) =>
+			toPublicSubspace(doc, {
+				memberCount: counts.get(String(doc.shareId)) || 0,
+				...(recent ? { recentPostCount: recent.get(String(doc.shareId)) || 0 } : {}),
+				membership: roles.get(String(doc.shareId)) || null
+			})
+		);
+
+	if (isRankedListSort(sort)) {
+		// ranked: count a lean projection of the newest candidate window, page
+		// by offset within it, then fetch full docs only for the page slice
+		const candidates = (await things
+			.find(match as any)
+			.sort({ createdAt: -1, shareId: 1 })
+			.limit(DIRECTORY_RANK_WINDOW)
+			.project({ shareId: 1, createdAt: 1 })
+			.toArray()) as any[];
+		const candidateIds = candidates.map((doc) => String(doc.shareId));
+		const since = new Date(Date.now() - SUBSPACE_ACTIVE_WINDOW_MS);
+		const [counts, recent] = await Promise.all([memberCountsFor(candidateIds), sort === 'active' ? recentPostCountsFor(candidateIds, since) : Promise.resolve(null)]);
+		const ranked = rankSubspaceDirectory(
+			candidates.map(
+				(doc): DirectoryCandidate => ({
+					id: String(doc.shareId),
+					createdAtMs: new Date(doc.createdAt).getTime(),
+					memberCount: counts.get(String(doc.shareId)) || 0,
+					recentPostCount: recent?.get(String(doc.shareId)) || 0
+				})
+			),
+			sort
+		);
+		const { ids, nextCursor } = sliceRankedPage(ranked, query.cursor, limit);
+		const pageDocs = ids.length ? ((await things.find({ thingtime: 'subspace', shareId: { $in: ids } } as any).toArray()) as any[]) : [];
+		const docsById = new Map(pageDocs.map((doc) => [String(doc.shareId), doc]));
+		const page = ids.map((id) => docsById.get(id)).filter(Boolean);
+		return { ok: true, subspaces: project(page, counts, recent), nextCursor, sort };
+	}
+
 	const cursor = parseChronoCursor(typeof query.cursor === 'string' ? query.cursor : null);
 	const pageMatch = cursor ? withMatch(match, chronoCursorClause(cursor)) : match;
 	const docs = (await things
@@ -646,13 +728,7 @@ export const listSubspaces = async (
 	const last = page[page.length - 1];
 	const nextCursor = docs.length > limit && last ? `${new Date(last.createdAt).getTime()}_${last.shareId}` : null;
 	const counts = await memberCountsFor(page.map((doc) => String(doc.shareId)));
-	return {
-		ok: true,
-		subspaces: page.map((doc) =>
-			toPublicSubspace(doc, { memberCount: counts.get(String(doc.shareId)) || 0, membership: roles.get(String(doc.shareId)) || null })
-		),
-		nextCursor
-	};
+	return { ok: true, subspaces: project(page, counts, null), nextCursor, sort };
 };
 
 export type SubspaceDetail = {

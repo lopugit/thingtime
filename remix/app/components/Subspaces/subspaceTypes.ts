@@ -49,6 +49,8 @@ export type PublicSubspace = {
 	ownerId: string;
 	memberCount: number;
 	postCount?: number;
+	// directory rows under sort=active: live posts in the last 7 days
+	recentPostCount?: number;
 	// moderators only (detail): sizes of the Requests queues
 	pendingCount?: number;
 	approvalRequestCount?: number;
@@ -163,6 +165,23 @@ export type SubspaceTransferResponse = { ok: true; subspace: PublicSubspace; new
 // the owner's click never publishes them) and how many member rows (incl.
 // ban records) were removed
 export type SubspaceDeleteResponse = { ok: true; releasedPosts: number; privatePosts: number; removedMembers: number };
+
+// GET /api/v1/subspaces?sort= — the directory's orders. new walks newest
+// first on a cursor; members / active are ranked server-side over the newest
+// 200 matching subspaces (most members / most live posts in the last 7 days)
+// and paged by offset — the chips on /s and the /explore strip's query.
+export type SubspaceListSort = 'new' | 'members' | 'active';
+export const SUBSPACE_LIST_SORTS: { id: SubspaceListSort; label: string; emoji: string; hint: string }[] = [
+	{ id: 'new', label: 'New', emoji: '✨', hint: 'Newest subspaces first' },
+	{ id: 'members', label: 'Most members', emoji: '👥', hint: 'Biggest communities first' },
+	{ id: 'active', label: 'Most active', emoji: '🔥', hint: 'Most posts in the last 7 days first' }
+];
+export const subspaceListSortOf = (value: unknown): SubspaceListSort => (value === 'members' || value === 'active' ? value : 'new');
+export type SubspaceListResponse = { ok: true; subspaces: PublicSubspace[]; nextCursor: string | null; sort: SubspaceListSort };
+// how many subspaces the /explore "Popular subspaces" strip shows (top by members)
+export const EXPLORE_POPULAR_SUBSPACES = 8;
+// how many subspaces the /search "Subspaces" section shows above the posts
+export const SEARCH_SUBSPACE_RESULTS = 6;
 
 export type SubspaceFeedSort = 'hot' | 'new' | 'top' | 'rising' | 'controversial';
 export const SUBSPACE_SORTS: { id: SubspaceFeedSort; label: string; emoji: string }[] = [

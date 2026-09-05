@@ -600,9 +600,11 @@ export function useApi() {
     // plain GETs (guest-visible); every mutation goes through the fetcher so
     // failures surface through the shared API-failure path.
     subspaces: {
+      // sort: new (default, cursor-paged) | members | active (ranked over a
+      // bounded window, offset-paged; rows under active carry recentPostCount)
       list: useCallback(
-        async (args?: { q?: string; mine?: boolean; cursor?: string; limit?: number }) =>
-          getJson(`/api/v1/subspaces${toQuery({ q: args?.q, mine: args?.mine ? 1 : undefined, cursor: args?.cursor, limit: args?.limit })}`),
+        async (args?: { q?: string; mine?: boolean; sort?: 'new' | 'members' | 'active'; cursor?: string; limit?: number }) =>
+          getJson(`/api/v1/subspaces${toQuery({ q: args?.q, mine: args?.mine ? 1 : undefined, sort: args?.sort, cursor: args?.cursor, limit: args?.limit })}`),
         []
       ),
       get: useCallback(async (args: { slug?: string; id?: string }) => getJson(`/api/v1/subspaces/get${toQuery(args)}`), []),
@@ -701,6 +703,8 @@ export function useApi() {
       )
     },
     things: {
+      // scope: 'subspaces' narrows the page to posts from the viewer's ACTIVE
+      // subspaces (the "🪐 My subspaces" chip); default all
       feed: useCallback(async (args) => getJson(`/api/v1/things/feed${toQuery(args)}`), []),
       // the explore board — public trending posts; `anon: 1` keeps logged-out
       // requests edge-cacheable, mirroring feed

@@ -28,9 +28,13 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // author's user flair in the post's subspace (1.3.0, additive)
   // round 2 S5 — reports: a subspace post's subspaceMod.reportCount for its
   // moderators (1.4.0, additive)
-  for (const feature of ['api.things', 'api.things-comment', 'api.things-feed', 'api.things-user']) {
+  for (const feature of ['api.things', 'api.things-comment', 'api.things-user']) {
     assert.equal(manifest.features[feature]?.version, '1.4.0', feature);
   }
+  // round 2 S6 — discovery: the home feed takes scope=all|subspaces ("My
+  // subspaces" — only the viewer's ACTIVE subspaces, empty for guests) and
+  // echoes it (1.5.0, additive)
+  assert.equal(manifest.features['api.things-feed']?.version, '1.5.0');
   for (const feature of ['api.subspaces-modlog', 'api.things-updown']) {
     assert.equal(manifest.features[feature]?.version, '1.0.0', feature);
   }
@@ -69,9 +73,11 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // removalReasons (list / get 1.3.0), update takes the list (1.3.0) — additive
   // round 2 S5 — reports: moderators get openReportCount on the detail (get
   // 1.4.0, additive)
-  for (const feature of ['api.subspaces', 'api.subspaces-update']) {
-    assert.equal(manifest.features[feature]?.version, '1.3.0', feature);
-  }
+  // round 2 S6 — discovery: the directory takes sort=new|members|active
+  // (members / active ranked over a bounded window, rows under active carry
+  // recentPostCount, the response echoes sort) (list 1.4.0, additive)
+  assert.equal(manifest.features['api.subspaces']?.version, '1.4.0');
+  assert.equal(manifest.features['api.subspaces-update']?.version, '1.3.0');
   assert.equal(manifest.features['api.subspaces-get']?.version, '1.4.0');
   // S3 review: kick / ban strip the flair, demotion strips a mod-only pick,
   // mods may dress the owner (members 1.3.1, corrections)

@@ -366,6 +366,16 @@ export const SUBSPACE_ROLES = ['owner', 'moderator', 'member'] as const;
 export type SubspaceRole = (typeof SUBSPACE_ROLES)[number];
 export const SUBSPACE_FEED_SORTS = ['hot', 'new', 'top', 'rising', 'controversial'] as const;
 export type SubspaceFeedSort = (typeof SUBSPACE_FEED_SORTS)[number];
+// the /s directory's orders: newest first (cursor-paged), most members, most
+// active (posts in the last SUBSPACE_ACTIVE_WINDOW_DAYS) — the last two are
+// ranked in memory over a bounded newest-first window (subspaceCore.ts)
+export const SUBSPACE_LIST_SORTS = ['new', 'members', 'active'] as const;
+export type SubspaceListSort = (typeof SUBSPACE_LIST_SORTS)[number];
+export const SUBSPACE_ACTIVE_WINDOW_DAYS = 7;
+// the home feed's scope: every visible post, or only posts from the viewer's
+// ACTIVE subspaces (empty for guests / non-members)
+export const FEED_SCOPES = ['all', 'subspaces'] as const;
+export type FeedScope = (typeof FEED_SCOPES)[number];
 export const UPDOWN_DIRECTIONS = ['up', 'down'] as const;
 export type UpdownDirection = (typeof UPDOWN_DIRECTIONS)[number];
 // A deleted subspace leaves a slug tombstone (kind `subspace-tombstone`) that

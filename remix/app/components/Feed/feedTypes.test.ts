@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { appendPostsDeduped } from './feedTypes';
+import { appendPostsDeduped, FEED_SCOPE_CACHE_KEY, feedScopeOf } from './feedTypes';
 import type { PublicPost } from './feedTypes';
 
 // Minimal PublicPost stand-in: appendPostsDeduped only ever reads `id`, so the
@@ -84,4 +84,16 @@ test('a reset page is deduped, not trusted verbatim', () => {
 
 test('a reset with an empty page clears the list', () => {
   assert.deepEqual(appendPostsDeduped([], []), []);
+});
+
+// S6 — the "🪐 My subspaces" chip's persisted choice: only a logged-in viewer
+// can be scoped (a guest has nothing to scope to), anything else reads all
+test('feedScopeOf reads a cached subspaces scope only for a logged-in viewer', () => {
+  assert.equal(FEED_SCOPE_CACHE_KEY, 'tt-feed-scope');
+  assert.equal(feedScopeOf('subspaces', true), 'subspaces');
+  assert.equal(feedScopeOf('subspaces', false), 'all');
+  assert.equal(feedScopeOf('all', true), 'all');
+  for (const junk of [null, undefined, '', 'mine', 42, { scope: 'subspaces' }]) {
+    assert.equal(feedScopeOf(junk, true), 'all', JSON.stringify(junk));
+  }
 });

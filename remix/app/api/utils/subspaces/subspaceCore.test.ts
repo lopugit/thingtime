@@ -5,11 +5,14 @@ import test from 'node:test';
 import {
 	canPostIn,
 	confirmSlugMatches,
+	DIRECTORY_RANK_WINDOW,
 	isActiveMembershipState,
+	isRankedListSort,
 	liveUserFlair,
 	pickReportQueueSubspace,
 	privatizedPostUpdate,
 	requestKindOf,
+	rankSubspaceDirectory,
 	rankSubspacePosts,
 	RELEASED_POST_UNSET,
 	releaseKindFor,
@@ -22,6 +25,7 @@ import {
 	rulesOf,
 	sanitizeBranding,
 	sanitizeFlairs,
+	sanitizeListSort,
 	sanitizeRemovalReasons,
 	sanitizeReportNote,
 	sanitizeReportReason,
@@ -29,8 +33,10 @@ import {
 	sanitizeSlug,
 	sanitizeTopRange,
 	sanitizeUserFlairs,
+	sliceRankedPage,
 	slugHoldState,
 	slugifyFlairId,
+	SUBSPACE_ACTIVE_WINDOW_MS,
 	SUBSPACE_SLUG_HOLD_MS,
 	tallyReportReasons,
 	toPublicUserFlair,
@@ -489,4 +495,54 @@ test('pickReportQueueSubspace prefers the post’s current subspace when open ro
 	assert.equal(pickReportQueueSubspace(null, []), null);
 	// deterministic across two old queues (lowest-sorted wins), blanks dropped
 	assert.equal(pickReportQueueSubspace('z', ['q', 'c', '', 'c']), 'c');
+});
+
+// S6 — the directory's sorts: new is the cursor walk, members / active are
+// ranked in memory over a bounded window; a typo must not silently reorder
+test('sanitizeListSort defaults to new, accepts the three sorts, 400s anything else', () => {
+	assert.equal(sanitizeListSort(undefined), 'new');
+	assert.equal(sanitizeListSort(null), 'new');
+	assert.equal(sanitizeListSort(''), 'new');
+	assert.equal(sanitizeListSort('members'), 'members');
+	assert.equal(sanitizeListSort('active'), 'active');
+	assert.equal(sanitizeListSort('new'), 'new');
+	for (const bad of ['hot', 'Members', 'popular', 42, {}]) {
+		const result = sanitizeListSort(bad);
+		assert.equal(typeof result === 'object' && result.ok === false && result.status === 400, true, JSON.stringify(bad));
+	}
+	assert.equal(isRankedListSort('new'), false);
+	assert.equal(isRankedListSort('members'), true);
+	assert.equal(isRankedListSort('active'), true);
+	assert.equal(DIRECTORY_RANK_WINDOW, 200);
+	assert.equal(SUBSPACE_ACTIVE_WINDOW_MS, 7 * 86_400_000);
+});
+
+test('rankSubspaceDirectory orders by the sort’s measure, then newer, then id — deterministic', () => {
+	const candidates = [
+		{ id: 'b', createdAtMs: 200, memberCount: 3, recentPostCount: 0 },
+		{ id: 'a', createdAtMs: 100, memberCount: 3, recentPostCount: 9 },
+		{ id: 'c', createdAtMs: 300, memberCount: 1, recentPostCount: 4 },
+		{ id: 'd', createdAtMs: 300, memberCount: 1, recentPostCount: 4 }
+	];
+	// members: 3 (b newer than a) → 1 (c/d tie on time → id)
+	assert.deepEqual(rankSubspaceDirectory(candidates, 'members'), ['b', 'a', 'c', 'd']);
+	// active: 9, 4 (c before d by id), 0
+	assert.deepEqual(rankSubspaceDirectory(candidates, 'active'), ['a', 'c', 'd', 'b']);
+	// new: pure createdAt desc with the id tie-break
+	assert.deepEqual(rankSubspaceDirectory(candidates, 'new'), ['c', 'd', 'b', 'a']);
+	// the input is never mutated
+	assert.equal(candidates[0].id, 'b');
+	assert.deepEqual(rankSubspaceDirectory([], 'members'), []);
+});
+
+test('sliceRankedPage pages a ranked id list by offset and reports the next offset', () => {
+	const ids = ['a', 'b', 'c', 'd', 'e'];
+	assert.deepEqual(sliceRankedPage(ids, undefined, 2), { ids: ['a', 'b'], nextCursor: '2' });
+	assert.deepEqual(sliceRankedPage(ids, '2', 2), { ids: ['c', 'd'], nextCursor: '4' });
+	assert.deepEqual(sliceRankedPage(ids, '4', 2), { ids: ['e'], nextCursor: null });
+	assert.deepEqual(sliceRankedPage(ids, '5', 2), { ids: [], nextCursor: null });
+	// garbage / negative cursors start over
+	assert.deepEqual(sliceRankedPage(ids, 'nope', 3), { ids: ['a', 'b', 'c'], nextCursor: '3' });
+	assert.deepEqual(sliceRankedPage(ids, '-4', 3), { ids: ['a', 'b', 'c'], nextCursor: '3' });
+	assert.deepEqual(sliceRankedPage([], '0', 3), { ids: [], nextCursor: null });
 });

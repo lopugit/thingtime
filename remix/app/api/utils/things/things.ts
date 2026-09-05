@@ -61,6 +61,7 @@ import {
   sanitizeExtended,
   validateThingtimeCrystal,
   visibilityFromAcl,
+  type FeedScope,
   type NotificationType,
   type PostMediaLayout,
   type ThingVisibility,
@@ -2853,7 +2854,17 @@ export type FeedQuery = {
   cursor?: string | null;
   limit?: number;
   weights?: AlgorithmWeights | null;
+  // 'subspaces' narrows to posts from the viewer's ACTIVE subspaces (a
+  // guest / non-member gets an empty page); default 'all'. The route
+  // validates the raw param — an unknown scope is its 400.
+  scope?: FeedScope | null;
 };
+
+// The subspace ids an enriched viewer is an ACTIVE member of — what
+// scope=subspaces narrows the home feed to (pending / left / banned rows
+// are not memberships, same predicate as the private-subspace fence).
+export const activeSubspaceIdsOf = (viewer: Viewer): string[] =>
+  viewer?.subspaceRoles ? [...viewer.subspaceRoles.values()].filter(isActiveSubspaceMember).map((membership) => membership.subspaceId) : [];
 
 export const parseChronoCursor = (cursor: string | null | undefined): { createdAt: Date; id: string } | null => {
   if (!cursor) return null;
@@ -2880,8 +2891,9 @@ export const typeClause = (types: PostType[]) => (types.length ? { $or: [{ 'crys
 export const getFeed = async (
   viewerInput: string | Viewer,
   query: FeedQuery
-): Promise<{ ok: true; posts: PublicPost[]; nextCursor: string | null; ranked: boolean } | Fail> => {
+): Promise<{ ok: true; posts: PublicPost[]; nextCursor: string | null; ranked: boolean; scope: FeedScope } | Fail> => {
   const viewer = await withFriendIds(asViewer(viewerInput));
+  const scope: FeedScope = query.scope === 'subspaces' ? 'subspaces' : 'all';
   const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_LIMIT), MAX_FEED_LIMIT);
   const types = (query.types || []).filter((type) => POST_TYPES.includes(type));
   const circles = (query.circles || []).filter((circle) => VISIBILITIES.includes(circle));
@@ -2891,7 +2903,14 @@ export const getFeed = async (
   const tag = typeof query.tag === 'string' ? query.tag.trim().toLowerCase().slice(0, MAX_TAG_CHARS) : '';
 
   const visibility = visibilityQueryFor(viewer, circles);
-  if (!visibility) return { ok: true, posts: [], nextCursor: null, ranked: false };
+  if (!visibility) return { ok: true, posts: [], nextCursor: null, ranked: false, scope };
+
+  // "My subspaces": only posts from the viewer's ACTIVE subspaces, on top of
+  // (never instead of) every fence below — removed posts stay out, private
+  // subspaces still need the membership. Nobody to scope to → an empty page,
+  // not the whole feed.
+  const scopedSubspaceIds = scope === 'subspaces' ? activeSubspaceIdsOf(viewer) : null;
+  if (scopedSubspaceIds && !scopedSubspaceIds.length) return { ok: true, posts: [], nextCursor: null, ranked: false, scope };
 
   const range: any = {};
   if (query.from || query.to) {
@@ -2899,7 +2918,15 @@ export const getFeed = async (
     if (query.from) range.createdAt.$gte = query.from;
     if (query.to) range.createdAt.$lte = query.to;
   }
-  const match = withMatch(postMatch(), visibility, typeClause(types), tag ? { tags: tag } : {}, range, ...subspaceFeedClauses(viewer));
+  const match = withMatch(
+    postMatch(),
+    visibility,
+    typeClause(types),
+    tag ? { tags: tag } : {},
+    range,
+    scopedSubspaceIds ? { 'crystal.subspaceId': { $in: scopedSubspaceIds } } : {},
+    ...subspaceFeedClauses(viewer)
+  );
 
   const things = await getThingsCollection();
   const weights = query.weights || null;
@@ -2922,7 +2949,7 @@ export const getFeed = async (
     // is only a superset; the cursor advances over the raw page so filtered
     // docs are skipped, not resurfaced
     const visible = page.filter((doc) => canView(doc, viewer));
-    return { ok: true, posts: await toPublicPosts(visible, viewer), nextCursor, ranked: false };
+    return { ok: true, posts: await toPublicPosts(visible, viewer), nextCursor, ranked: false, scope };
   }
 
   // ranked: score a lean projection of the newest candidate window, page by
@@ -2954,7 +2981,7 @@ export const getFeed = async (
   const page = pageIds.map((id) => docsById.get(id)).filter(Boolean) as ThingDoc[];
   const visible = page.filter((doc) => canView(doc, viewer));
   const nextCursor = offset + limit < scored.length ? String(offset + limit) : null;
-  return { ok: true, posts: await toPublicPosts(visible, viewer), nextCursor, ranked: true };
+  return { ok: true, posts: await toPublicPosts(visible, viewer), nextCursor, ranked: true, scope };
 };
 
 export const featuresOf = (doc: ThingDoc): PostFeatures => ({

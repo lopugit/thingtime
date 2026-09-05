@@ -30,7 +30,23 @@ score field.
 
 - `api/utils/subspaces/subspaceCore.ts` — pure sanitizers (slug/rules/flairs/
   branding), ranking (`hot`/`top`/`rising`/`controversial`/`new` with pins
-  leading hot+new), unit-tested.
+  leading hot+new), unit-tested. Round 2 S6 adds the directory sorts:
+  `sanitizeListSort` (`new` | `members` | `active`, unknown → 400),
+  `rankSubspaceDirectory` (measure desc → newer → id) and `sliceRankedPage`
+  (offset paging) over `DIRECTORY_RANK_WINDOW` = 200 candidates.
+- Discovery (S6): `listSubspaces` takes `sort` — `new` keeps the
+  (createdAt, shareId) cursor walk; `members` / `active` count the newest
+  200 subspaces matching `q` / `mine` (ONE `$group` over member rows, ONE
+  over live posts since `SUBSPACE_ACTIVE_WINDOW_DAYS` = 7 — no denormalized
+  counters on the subspace doc) and page by offset; rows under `active`
+  carry `recentPostCount`; the response echoes `sort`. `getFeed` takes
+  `scope` (`all` | `subspaces`): `subspaces` conjoins
+  `crystal.subspaceId $in <the viewer's ACTIVE subspace ids>` on top of every
+  existing fence (removed posts hidden, private subspaces members-only) for
+  both the chronological and the ranked path, answers an empty page for a
+  guest / a viewer in no subspace, and echoes `scope`; the route 400s an
+  unknown scope. Contracts `api.subspaces` 1.3.0 → 1.4.0 and
+  `api.things-feed` 1.3.0 → 1.4.0 (feature 1.5.0), both additive.
 - `api/utils/subspaces/gate.ts` — things.ts-safe half: membership lookups,
   `assertSubspacePosting` (run on every post create AND PATCH touching
   subspaceId/flairId), `assertSubspaceInteraction` (bans block comments +
@@ -169,6 +185,20 @@ score field.
 - Drawer: Feed ▸ Subspaces + a top-level Subspaces group; Settings →
   Subspaces 🪐 (vote pills on posts/comments, default sort) via the sync
   localCache tier.
+- Discovery (S6): `/feed` gains the **🪐 My subspaces** chip beside the
+  algorithm menu (`scope=subspaces`; persisted in the sync tier under
+  `tt-feed-scope`, seeded on first render, guests nudged to log in, dropped
+  to all on logout, resting while Advanced search is applied; the eyebrow
+  reads "Your subspaces 🪐 · …" and the empty state points at `/s`). `/s`
+  gains **New ✨ / Most members 👥 / Most active 🔥** sort chips (`?sort=`,
+  per-sort cache slots, "· N posts this week" on Most active rows).
+  `/explore` opens with a **Popular subspaces 🪐** strip (top 8 by members,
+  `SubspaceCard compact` in a self-scrolling row, "All subspaces →", cached
+  per viewer in `tt-explore-subspaces-<viewer>`). `/search` shows a
+  **Subspaces 🪐** section (first 6 slug/name matches via
+  `api.v1.subspaces.list({ q })`, fetched beside People, cached with the
+  result snapshot) above the post results — `search.ts` untouched. Profile
+  pages deliberately show no "member of" line (member lists are private).
 
 ## Verification
 
@@ -424,6 +454,24 @@ score field.
   can never land under the other heading (`data-status` on
   `mod-reports`). Contracts: `subspaces-report` + `subspaces-reports`
   1.0.1 (compatible corrections) in the docs and both pin files.
+- Round 2 S6 — discovery: verify section R walks `scope=subspaces` (a
+  member sees only their subspaces' posts — every row carries a subspace
+  they belong to, none from a subspace they are not in, a mod-removed post
+  stays out, a private subspace's post shows to its member only; a
+  stranger in no subspace gets an empty page; anonymous gets an empty
+  page; `scope=all` and no scope still carry the post; `scope=bogus` →
+  400; the response echoes `scope`; ranked + scoped agree with
+  chronological + scoped), the directory sorts (`sort=members` orders the
+  two-member subspace before the one-member one and pages by offset with
+  `limit=1` → cursor `1` → last page null; `sort=active` orders by posts in
+  the window and rows carry `recentPostCount`; `sort=new` puts the newer
+  subspace first; `mine=1&sort=members` narrows to the caller's; `q` +
+  sort narrow; `sort=bogus` → 400; the response echoes `sort`; the
+  /explore query `sort=members&limit=8` answers ≤ 8 rows in non-increasing
+  member count), and the manifest (`api.subspaces` 1.4.0,
+  `api.things-feed` 1.4.0). Unit pins: `sanitizeListSort` /
+  `rankSubspaceDirectory` / `sliceRankedPage` (subspaceCore.test.ts),
+  `feedScopeOf` (feedTypes.test.ts), both capability pin files.
 - Browser: see the run log in the PR description / TESTING.md checklists.
 
 ## Known limits (stated, not hidden)

@@ -309,3 +309,12 @@ export const appendPostsDeduped = (prev: PublicPost[], page: PublicPost[]): Publ
   });
   return fresh.length ? [...prev, ...fresh] : prev;
 };
+
+// The home feed's scope (GET /api/v1/things/feed?scope=): every visible post,
+// or only posts from the viewer's ACTIVE subspaces — the "🪐 My subspaces"
+// chip beside the algorithm menu. Persisted per browser in the sync
+// localCache tier under FEED_SCOPE_CACHE_KEY so the choice paints on first
+// render; guests always read `all` (they have no subspaces to scope to).
+export type FeedScope = 'all' | 'subspaces';
+export const FEED_SCOPE_CACHE_KEY = 'tt-feed-scope';
+export const feedScopeOf = (value: unknown, loggedIn: boolean): FeedScope => (loggedIn && value === 'subspaces' ? 'subspaces' : 'all');

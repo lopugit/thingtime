@@ -23,11 +23,14 @@ import {
 	MAX_SUBSPACE_RULES,
 	MAX_SUBSPACE_USER_FLAIR_TEXT_CHARS,
 	SUBSPACE_ACCESS_MODES,
+	SUBSPACE_ACTIVE_WINDOW_DAYS,
 	SUBSPACE_FEED_SORTS,
+	SUBSPACE_LIST_SORTS,
 	SUBSPACE_SLUG_HOLD_DAYS,
 	SUBSPACE_SLUG_PATTERN,
 	type SubspaceAccessMode,
 	type SubspaceFeedSort,
+	type SubspaceListSort,
 	type SubspaceRole
 } from '~/schemas/registry';
 import { controversyScore, hotScore, risingScore } from '../things/updownCore';
@@ -443,6 +446,45 @@ export const pickReportQueueSubspace = (currentSubspaceId: string | null, openTa
 };
 
 export const sanitizeSort =(value: unknown): SubspaceFeedSort => ((SUBSPACE_FEED_SORTS as readonly string[]).includes(value as string) ? (value as SubspaceFeedSort) : 'hot');
+
+// ---------------------------------------------------------------------------
+// Directory sorts (GET /api/v1/subspaces?sort=). `new` is the cursor-paged
+// newest-first walk; `members` (highest member count) and `active` (most
+// posts in the last SUBSPACE_ACTIVE_WINDOW_DAYS) are RANKED sorts: the newest
+// DIRECTORY_RANK_WINDOW candidates that match the query are counted in
+// memory and paged by offset — deterministic for a fixed dataset, no
+// denormalized counters on the subspace doc (the ranked-feed pattern). A
+// directory deeper than the window is thousands of subspaces old; its
+// first pages are the ones a browser opens. An unknown sort is a 400 (a
+// typo must not silently reorder the directory).
+export const DIRECTORY_RANK_WINDOW = 200;
+export const SUBSPACE_ACTIVE_WINDOW_MS = SUBSPACE_ACTIVE_WINDOW_DAYS * 86_400_000;
+export const sanitizeListSort = (value: unknown): SubspaceListSort | Fail => {
+	if (value === undefined || value === null || value === '') return 'new';
+	if ((SUBSPACE_LIST_SORTS as readonly string[]).includes(value as string)) return value as SubspaceListSort;
+	return fail(400, `sort must be one of ${SUBSPACE_LIST_SORTS.join(', ')}`);
+};
+export const isRankedListSort = (sort: SubspaceListSort): boolean => sort !== 'new';
+
+// Orders directory candidates for a ranked sort: the counted measure first
+// (members / recent posts), then newer first, then id — the same deterministic
+// tie-break chain as rankSubspacePosts so offset pages never overlap.
+export type DirectoryCandidate = { id: string; createdAtMs: number; memberCount: number; recentPostCount: number };
+export const rankSubspaceDirectory = (candidates: readonly DirectoryCandidate[], sort: SubspaceListSort): string[] => {
+	const measureOf = (candidate: DirectoryCandidate): number => (sort === 'members' ? candidate.memberCount : sort === 'active' ? candidate.recentPostCount : candidate.createdAtMs);
+	return [...candidates]
+		.map((candidate) => ({ candidate, measure: measureOf(candidate) }))
+		.sort((a, b) => b.measure - a.measure || b.candidate.createdAtMs - a.candidate.createdAtMs || a.candidate.id.localeCompare(b.candidate.id))
+		.map((entry) => entry.candidate.id);
+};
+
+// Offset paging over a ranked id list: the page slice plus the next offset
+// (null past the end). A negative / non-numeric cursor starts over.
+export const sliceRankedPage = (orderedIds: readonly string[], cursor: unknown, limit: number): { ids: string[]; nextCursor: string | null } => {
+	const offset = Math.max(0, Math.floor(Number(cursor)) || 0);
+	const ids = orderedIds.slice(offset, offset + limit);
+	return { ids, nextCursor: offset + limit < orderedIds.length ? String(offset + limit) : null };
+};
 
 export const TOP_RANGES = ['hour', 'day', 'week', 'month', 'year', 'all'] as const;
 export type TopRange = (typeof TOP_RANGES)[number];

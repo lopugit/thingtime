@@ -5,15 +5,18 @@ import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit
 import { createSubspace, listSubspaces } from '~/api/utils/subspaces/subspaces';
 import { viewerOf } from '~/api/utils/things/things';
 
-// GET /api/v1/subspaces?q=&mine=&cursor=&limit= — the subspace directory
-// (public, newest first, with the caller's membership state on each row);
-// `mine=1` narrows to the caller's own memberships.
+// GET /api/v1/subspaces?q=&mine=&sort=&cursor=&limit= — the subspace
+// directory (public, with the caller's membership state on each row);
+// `mine=1` narrows to the caller's own memberships; `sort` is new (default,
+// cursor-paged) | members | active (ranked over a bounded window, offset-
+// paged — an unknown value answers 400).
 export const loader = async ({ request }: { request: Request }) => {
   const user = await getCurrentUser(request);
   const params = new URL(request.url).searchParams;
   const result = await listSubspaces(viewerOf(user), {
     q: params.get('q'),
     mine: params.get('mine'),
+    sort: params.get('sort'),
     cursor: params.get('cursor'),
     limit: params.get('limit')
   });

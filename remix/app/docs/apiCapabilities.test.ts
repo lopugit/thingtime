@@ -102,8 +102,9 @@ test('subspace user flairs publish their contract versions', () => {
 	// action (1.2.1 → 1.3.0), the subspace feed's posts wear authorFlair
 	// (1.1.0), and every post/comment projection carries authorFlair (things,
 	// things-comment, things-feed, things-user contract 1.1.0 → 1.2.0)
-	// (S4 moved list / get / update on to 1.3.0 — see the removal-reasons test)
-	assert.equal(manifest.features['api.subspaces'], '1.3.0');
+	// (S4 moved list / get / update on to 1.3.0 — see the removal-reasons test;
+	// S6 moved list on to 1.4.0 — sort=new|members|active)
+	assert.equal(manifest.features['api.subspaces'], '1.4.0');
 	// (S5 moved get on to 1.4.0 — openReportCount for moderators)
 	assert.equal(manifest.features['api.subspaces-get'], '1.4.0');
 	assert.equal(manifest.features['api.subspaces-update'], '1.3.0');
@@ -119,10 +120,12 @@ test('subspace user flairs publish their contract versions', () => {
 	assert.equal(manifest.features['api.subspaces-moderate'], '1.4.0');
 	assert.equal(manifest.features['api.subspaces-feed'], '1.3.0');
 	// (S5 moved the shared post projection's contract on to 1.3.0 —
-	// subspaceMod.reportCount for the post's moderators)
-	for (const feature of ['api.things', 'api.things-comment', 'api.things-feed', 'api.things-user']) {
+	// subspaceMod.reportCount for the post's moderators; S6 moved the feed on
+	// to 1.4.0 — scope=all|subspaces)
+	for (const feature of ['api.things', 'api.things-comment', 'api.things-user']) {
 		assert.equal(manifest.features[feature], '1.3.0', feature);
 	}
+	assert.equal(manifest.features['api.things-feed'], '1.4.0');
 });
 
 test('subspace removal reasons + moderation modals publish their contract versions', () => {
@@ -132,9 +135,10 @@ test('subspace removal reasons + moderation modals publish their contract versio
 	// feed + transfer 1.2.0, all additive); moderate remove takes reasonId and
 	// notifies the author (1.2.0, additive); ban takes a private mod-log note
 	// (members 1.4.0, additive)
-	for (const feature of ['api.subspaces', 'api.subspaces-update', 'api.subspaces-join', 'api.subspaces-leave']) {
+	for (const feature of ['api.subspaces-update', 'api.subspaces-join', 'api.subspaces-leave']) {
 		assert.equal(manifest.features[feature], '1.3.0', feature);
 	}
+	assert.equal(manifest.features['api.subspaces'], '1.4.0'); // S6: sort=new|members|active
 	assert.equal(manifest.features['api.subspaces-get'], '1.4.0'); // S5: openReportCount
 	assert.equal(manifest.features['api.subspaces-feed'], '1.3.0'); // S5: subspaceMod.reportCount
 	assert.equal(manifest.features['api.subspaces-transfer'], '1.2.0');
@@ -164,7 +168,27 @@ test('subspace reports publish their contract versions', () => {
 	assert.equal(manifest.features['api.subspaces-get'], '1.4.0');
 	assert.equal(manifest.features['api.subspaces-moderate'], '1.4.0');
 	assert.equal(manifest.features['api.subspaces-feed'], '1.3.0');
-	for (const feature of ['api.things', 'api.things-comment', 'api.things-feed', 'api.things-user']) {
+	for (const feature of ['api.things', 'api.things-comment', 'api.things-user']) {
 		assert.equal(manifest.features[feature], '1.3.0', feature);
 	}
+	assert.equal(manifest.features['api.things-feed'], '1.4.0'); // S6: scope
+});
+
+test('subspace discovery publishes its contract versions', () => {
+	const manifest = createApiCapabilitiesManifest();
+	// S6: the directory takes sort=new|members|active (members / active are
+	// ranked in memory over the newest 200 matching subspaces and paged by
+	// offset; rows under active carry recentPostCount; the response echoes
+	// sort; an unknown sort → 400) — list 1.3.0 → 1.4.0, additive. The home
+	// feed takes scope=all|subspaces (only the viewer's ACTIVE subspaces —
+	// empty for guests / non-members — with every other fence intact; the
+	// response echoes scope; an unknown scope → 400) — feed 1.3.0 → 1.4.0,
+	// additive. The rest of the family is untouched.
+	assert.equal(manifest.features['api.subspaces'], '1.4.0');
+	assert.equal(manifest.features['api.things-feed'], '1.4.0');
+	for (const feature of ['api.things', 'api.things-comment', 'api.things-user']) {
+		assert.equal(manifest.features[feature], '1.3.0', feature);
+	}
+	assert.equal(manifest.features['api.subspaces-feed'], '1.3.0');
+	assert.equal(manifest.features['api.subspaces-get'], '1.4.0');
 });

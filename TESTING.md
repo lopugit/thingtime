@@ -1475,6 +1475,29 @@ email whose link points at the attacker.
       through the card's own ··· menu drops the group too, and flipping
       Open / Resolved paints the list it already knows while the fresh page
       loads — a slow page can never land under the other heading.
+- [ ] Discovery 🪐 (S6): `/feed` shows a **🪐 My subspaces** chip beside
+      the algorithm menu — on, the eyebrow reads "Your subspaces 🪐 · …" and
+      the column holds ONLY posts from subspaces the viewer is an ACTIVE
+      member of (`GET /api/v1/things/feed?scope=subspaces`; a pending join
+      request is not a membership; removed posts and other people's private
+      subspaces stay out; a member of no subspace sees the "join a few on
+      /s" empty state, never the whole feed). The choice persists per
+      browser (`tt-feed-scope`) and paints on first render; logging out
+      drops back to all; a guest tapping the chip gets a "Log in" Lopu toast;
+      the chip rests (disabled) while Filters ▸ Advanced is applied.
+      `?scope=anything-else` answers 400. `/s` has sort chips **New ✨ /
+      Most members 👥 / Most active 🔥** (`?sort=` shareable; New is the
+      cursor walk, the other two rank the newest 200 matching subspaces in
+      memory — most members / most live posts in the last 7 days — and page
+      by offset; Most active rows read "· N posts this week"; `?sort=bogus`
+      → 400; q / Mine narrow every sort). `/explore` opens with a
+      **Popular subspaces 🪐** strip (top 8 by members, compact cards,
+      "All subspaces →" to `/s?sort=members`) that scrolls inside its own
+      box at 375px — no page-level horizontal scroll — and is simply absent
+      while there are no subspaces. `/search` with a non-empty query shows
+      a **Subspaces 🪐** section (slug/name matches, first 6, compact cards)
+      above People and the post results; a query with no matching subspace
+      shows no section; `search.ts` is untouched.
 - [ ] Bell 🔔 + Settings → Notifications: six subspace rows (roles 🎩,
       bans 🚫, join accepted 🎉, posts removed 🧹, join requests 🙋,
       reports 🚩 — the last two default email OFF). The bell's verb keys off

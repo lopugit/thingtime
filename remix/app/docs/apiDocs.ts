@@ -8286,22 +8286,27 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // the author's USER flair in the post's subspace (additive)
     // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
     // subspace post, for that subspace's moderators only (S5, additive)
-    featureVersion: '1.4.0',
-    contractVersion: '1.3.0',
+    // 1.5.0 / contract 1.4.0: scope=all|subspaces — "My subspaces" narrows
+    // the page to posts from the viewer's ACTIVE subspaces (empty for guests /
+    // non-members, every other fence intact); the response echoes scope; an
+    // unknown scope answers 400 (S6, additive)
+    featureVersion: '1.5.0',
+    contractVersion: '1.4.0',
     group: 'things',
     title: 'Feed page',
     endpoint: '/api/v1/things/feed',
     summary: 'Returns public and viewer-visible feed posts with optional algorithm ranking.',
     detail:
-      'The feed reads recent posts whose acl admits the viewer (tt:all for logged-out callers, plus your own things when authenticated — acl exclusions like -tt:user/<you> are honoured), applies filters, then optionally ranks them with the selected or active feed algorithm. tag narrows to posts carrying one tag (normalized to the stored trim/lowercase form) — the public tag feeds behind /feed?tag=<tag>.',
+      'The feed reads recent posts whose acl admits the viewer (tt:all for logged-out callers, plus your own things when authenticated — acl exclusions like -tt:user/<you> are honoured), applies filters, then optionally ranks them with the selected or active feed algorithm. tag narrows to posts carrying one tag (normalized to the stored trim/lowercase form) — the public tag feeds behind /feed?tag=<tag>. scope=subspaces narrows the page to posts from the subspaces the viewer is an ACTIVE member of (the "🪐 My subspaces" chip on /feed) — a pending join request is not a membership, a guest or someone in no subspace gets an empty page, and the usual fences (removed posts hidden, private subspaces members-only) still apply on top; scope=all is the default and the response echoes the scope it served.',
     auth: {
       mode: 'optional',
       description: 'Anonymous callers see public posts; authenticated callers may also see their own visible circles.'
     },
     methods: ['GET'],
     steps: [
-      'Send optional types, circles, tag, from, to, algorithm, cursor, and limit query parameters.',
+      'Send optional types, circles, tag, from, to, algorithm, scope, cursor, and limit query parameters.',
       'Use algorithm=latest to force chronological ordering.',
+      'Use scope=subspaces for only the viewer’s subspaces (default all); anything else answers 400.',
       'Use nextCursor for infinite scrolling.',
       'Read ranked to know whether algorithm scoring affected the page.'
     ],
@@ -8311,13 +8316,24 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Fetch a public feed page.',
         method: 'GET',
         query: { types: 'marketplace', circles: 'public', limit: 5 }
+      },
+      {
+        name: 'My subspaces',
+        description: 'Only posts from the subspaces the caller belongs to, newest first.',
+        method: 'GET',
+        query: { scope: 'subspaces', algorithm: 'latest', limit: 20 }
       }
     ],
     responseExamples: [
       {
         status: 200,
         description: 'Feed page returned.',
-        body: { ok: true, posts: [], nextCursor: null, ranked: false }
+        body: { ok: true, posts: [], nextCursor: null, ranked: false, scope: 'all' }
+      },
+      {
+        status: 400,
+        description: 'Unknown scope.',
+        body: { ok: false, error: 'scope must be one of all, subspaces' }
       }
     ]
   }),
@@ -8539,18 +8555,27 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // and viewer.userFlair — the user-flair vocabulary (additive)
     // 1.3.0: rows carry removalReasons — the canned { id, title, message }
     // reasons moderators remove posts with (S4, additive)
-    featureVersion: '1.3.0',
-    contractVersion: '1.3.0',
+    // 1.4.0: ?sort=new|members|active — the directory's orders (members /
+    // active rank the newest 200 matching subspaces in memory by member count
+    // / live posts in the last 7 days and page by offset; rows under active
+    // carry recentPostCount); the response echoes sort; an unknown sort
+    // answers 400 (S6, additive)
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
     group: 'subspaces',
     title: 'Subspaces',
     endpoint: '/api/v1/subspaces',
     summary: 'Browses the subspace directory or founds a new subspace.',
     detail:
-      'GET lists subspaces newest-first (public; each row carries memberCount and the caller’s own membership ' +
+      'GET lists subspaces (public; each row carries memberCount and the caller’s own membership ' +
       'state under `viewer` — role, member, approved, banned, canModerate, canPost, pending, approvalRequested, ' +
       'userFlair) plus the user-flair settings (userFlairs templates, userFlairSelfAssign, allowCustomUserFlair) — ' +
       '`?q=` searches slug/name, `?mine=1` narrows to the caller’s ACTIVE memberships (a pending join request is ' +
-      'not one). POST ' +
+      'not one), `?sort=` orders them: new (default — newest first on a stable createdAt cursor), members ' +
+      '(highest member count) or active (most live posts in the last 7 days; rows carry recentPostCount). The ' +
+      'two ranked sorts are computed in memory over a bounded window — the newest 200 subspaces matching q / mine ' +
+      '— and paged by offset cursor, so a directory deeper than that ranks its newest 200; the response echoes ' +
+      '`sort`, and an unknown sort answers 400. POST ' +
       'creates a subspace from a unique slug (3–30 chars of [a-z0-9_], the /s/<slug> URL) plus name, ' +
       'description, access (public | restricted | private), nsfw, rules, flairs and branding; the creator ' +
       'becomes owner and first member. Subspaces are things (thingtime ["subspace"]) with relational ' +
@@ -8558,7 +8583,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: { mode: 'optional', description: 'GET works logged out; POST requires an auth cookie or Bearer token.' },
     methods: ['GET', 'POST'],
     steps: [
-      'GET to browse; pass q to search and cursor/limit to page (nextCursor is null on the last page).',
+      'GET to browse; pass q to search, sort=new|members|active to order, and cursor/limit to page (nextCursor is null on the last page).',
       'POST slug + name (+ description, access, nsfw, rules, flairs, branding) to found one.',
       'A taken slug answers 409; a reserved or malformed slug answers 400. The slug of a recently deleted subspace is ' +
         'held for its previous owner (who may re-found it at once) and answers 409 to everyone else until the hold lapses.',
@@ -8567,6 +8592,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     requestExamples: [
       { name: 'Browse', description: 'Newest subspaces.', method: 'GET', query: { q: 'rain', limit: 20 } },
       { name: 'My subspaces', description: 'Only the ones the caller joined.', method: 'GET', query: { mine: 1 } },
+      { name: 'Popular', description: 'The eight subspaces with the most members (the /explore strip).', method: 'GET', query: { sort: 'members', limit: 8 } },
+      { name: 'Most active', description: 'Most live posts in the last 7 days; rows carry recentPostCount.', method: 'GET', query: { sort: 'active', limit: 20 } },
       {
         name: 'Found a subspace',
         description: 'Create s/rainbows with a rule, a flair and branding.',
@@ -8598,6 +8625,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           }
         }
       },
+      {
+        status: 200,
+        description: 'Directory page (sort=active).',
+        body: {
+          ok: true,
+          subspaces: [{ id: 'c0ffee12-dddd-4ddd-8ddd-000000000004', slug: 'rainbows', name: 'Rainbows', access: 'public', memberCount: 12, recentPostCount: 5, viewer: { role: null, member: false, pending: false } }],
+          nextCursor: null,
+          sort: 'active'
+        }
+      },
+      { status: 400, description: 'Unknown sort.', body: { ok: false, error: 'sort must be one of new, members, active' } },
       { status: 409, description: 'Slug taken.', body: { ok: false, error: 's/rainbows is taken — pick another slug' } },
       {
         status: 409,

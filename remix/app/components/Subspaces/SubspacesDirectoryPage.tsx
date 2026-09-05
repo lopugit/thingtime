@@ -9,12 +9,14 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { RAINBOW, RAINBOW_TEXT } from '~/theme/rainbow';
 import { CreateSubspaceModal } from './CreateSubspaceModal';
 import { SubspaceCard } from './SubspaceCard';
-import type { PublicSubspace } from './subspaceTypes';
+import { SUBSPACE_LIST_SORTS, subspaceListSortOf, type PublicSubspace, type SubspaceListSort } from './subspaceTypes';
 
-// The /s directory: search + browse every subspace (newest first), a "Mine"
-// filter for the viewer's memberships, join/leave straight from the row, and
-// the create modal (?create=1 deep-links it, e.g. from the drawer). Optimistic
-// first paint from the sync localCache tier (tt-subspaces-<viewer>-<mode>).
+// The /s directory: search + browse every subspace, sort chips (New / Most
+// members / Most active — the server ranks the latter two over a bounded
+// window), a "Mine" filter for the viewer's memberships, join/leave straight
+// from the row, and the create modal (?create=1 deep-links it, e.g. from the
+// drawer). Optimistic first paint from the sync localCache tier
+// (tt-subspaces-<viewer>-<mode>[-<sort>]); ?sort= keeps the order shareable.
 
 const INK = 'var(--tt-ink, #16161a)';
 const MUTED = 'var(--tt-muted, #9a9aa6)';
@@ -22,7 +24,9 @@ const BORDER = '1px solid var(--tt-border, #ececef)';
 const RADIUS_MD = 'var(--tt-radius-md, 12px)';
 
 type CachedDirectory = { at: number; subspaces: PublicSubspace[] };
-const cacheKeyFor = (viewerId: string | null | undefined, mine: boolean) => `tt-subspaces-${viewerId || 'anon'}-${mine ? 'mine' : 'all'}`;
+// the default (new) keeps the key it always had; a ranked sort gets its own slot
+const cacheKeyFor = (viewerId: string | null | undefined, mine: boolean, sort: SubspaceListSort) =>
+	`tt-subspaces-${viewerId || 'anon'}-${mine ? 'mine' : 'all'}${sort === 'new' ? '' : `-${sort}`}`;
 
 export const SubspacesDirectoryPage = () => {
 	const api = useApi();
@@ -30,10 +34,11 @@ export const SubspacesDirectoryPage = () => {
 	const lopu = useLopu();
 	const [searchParams, setSearchParams] = useSearchParams();
 	const mine = searchParams.get('mine') === '1' && !!user;
+	const sort = subspaceListSortOf(searchParams.get('sort'));
 	const createOpen = searchParams.get('create') === '1' && !!user;
 
 	const [query, setQuery] = React.useState(searchParams.get('q') || '');
-	const cacheKey = cacheKeyFor(user?.id, mine);
+	const cacheKey = cacheKeyFor(user?.id, mine, sort);
 	const [subspaces, setSubspaces] = React.useState<PublicSubspace[]>(() => readLocalCache<CachedDirectory>(cacheKey)?.subspaces || []);
 	const [nextCursor, setNextCursor] = React.useState<string | null>(null);
 	const [loading, setLoading] = React.useState(subspaces.length === 0);
@@ -49,7 +54,7 @@ export const SubspacesDirectoryPage = () => {
 			const q = options.q ?? query;
 			if (options.reset && !subspaces.length) setLoading(true);
 			try {
-				const resp: any = await apiRef.current.v1.subspaces.list({ q: q || undefined, mine, cursor: options.cursor || undefined, limit: 30 });
+				const resp: any = await apiRef.current.v1.subspaces.list({ q: q || undefined, mine, sort, cursor: options.cursor || undefined, limit: 30 });
 				if (seq !== requestSeqRef.current) return;
 				const page: PublicSubspace[] = resp.subspaces || [];
 				setSubspaces((prev) => {
@@ -66,10 +71,10 @@ export const SubspacesDirectoryPage = () => {
 			}
 		},
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[mine, cacheKey, query]
+		[mine, sort, cacheKey, query]
 	);
 
-	// initial + mode/viewer change: re-seed from that slot's cache, then refetch
+	// initial + mode/sort/viewer change: re-seed from that slot's cache, then refetch
 	React.useEffect(() => {
 		const seeded = readLocalCache<CachedDirectory>(cacheKey)?.subspaces || [];
 		setSubspaces(seeded);
@@ -199,6 +204,29 @@ export const SubspacesDirectoryPage = () => {
 						}}
 						aria-label="Search subspaces"
 					/>
+					{/* sort chips — New walks newest first; Most members / Most active are
+					ranked server-side over the newest 200 matching subspaces */}
+					<Flex border={BORDER} borderRadius="999px" padding="2px" columnGap="2px" role="group" aria-label="Sort subspaces" data-testid="subspaces-sort">
+						{SUBSPACE_LIST_SORTS.map((option) => {
+							const active = option.id === sort;
+							return (
+								<Button
+									key={option.id}
+									size="xs"
+									borderRadius="999px"
+									variant="ghost"
+									background={active ? 'var(--tt-surface-hover, #ececee)' : 'transparent'}
+									color={active ? INK : MUTED}
+									onClick={() => setParam('sort', option.id === 'new' ? null : option.id)}
+									aria-pressed={active}
+									title={option.hint}
+									data-testid={`subspaces-sort-${option.id}`}
+								>
+									{option.label} {option.emoji}
+								</Button>
+							);
+						})}
+					</Flex>
 					{user && (
 						<Flex border={BORDER} borderRadius="999px" padding="2px" columnGap="2px">
 							{[
@@ -242,7 +270,7 @@ export const SubspacesDirectoryPage = () => {
 						>
 							<Text fontSize="3xl">🪐</Text>
 							<Text fontSize="sm" color={MUTED} textAlign="center" whiteSpace="normal" paddingX={6}>
-								{mine ? 'You haven’t joined any subspaces yet — browse All and jump in ✨' : query ? 'No subspace matches that — found one yourself? ✨' : 'No subspaces yet — be the first to found one ✨'}
+								{mine ? 'You haven’t joined any subspaces yet — browse All and jump in ✨' : query ? 'No subspace matches that — found one yourself? ✨' : sort === 'active' ? 'Nothing posted in any subspace this week — be the spark 🔥' : 'No subspaces yet — be the first to found one ✨'}
 							</Text>
 						</Flex>
 					)}

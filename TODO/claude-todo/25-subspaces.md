@@ -105,8 +105,25 @@ reactions untouched.
   after Remove / card-menu verdicts and sequences its two lists
   (report + reports 1.0.1).
 
+- ✅ S6 — discovery + home integration: `GET /api/v1/things/feed?scope=
+  subspaces` (only posts from the viewer's ACTIVE subspaces, every existing
+  fence intact, empty for guests / non-members, unknown scope → 400, the
+  response echoes `scope`; things-feed 1.4.0) + the `/feed` **🪐 My
+  subspaces** chip beside the algorithm menu (persisted in the sync tier
+  under `tt-feed-scope`, eyebrow "Your subspaces 🪐", guest login nudge,
+  resting under Advanced search); `GET /api/v1/subspaces?sort=new|members|
+  active` (`members` / `active` ranked in memory over the newest 200
+  matching subspaces — one `$group` each, `recentPostCount` on `active`
+  rows, offset paging, unknown sort → 400, the response echoes `sort`;
+  subspaces 1.4.0) + `/s` sort chips **New / Most members / Most active**;
+  `/explore` **Popular subspaces 🪐** strip (top 8 by members, compact
+  cards, self-scrolling at 375px); `/search` **Subspaces 🪐** section (first
+  6 slug/name matches, client-side, `search.ts` untouched). Profile pages
+  show no member-of line by design (member lists are private). Verify
+  section R.
+
 ## Follow-ups (not in this PR)
 - Per-subspace wiki +
-  sidebar widgets; crossposting; a "popular subspaces" board on /explore;
+  sidebar widgets; crossposting;
   notifications for a post's first upvotes; API-level "all subspaces I
   moderate" digest; subspace archive (read-only freeze, distinct from delete).

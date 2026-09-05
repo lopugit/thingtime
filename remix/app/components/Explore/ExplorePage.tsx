@@ -1,5 +1,6 @@
 import React from 'react';
-import { Box, Flex } from '@chakra-ui/react';
+import { Box, Flex, Text } from '@chakra-ui/react';
+import { Link } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -11,14 +12,20 @@ import { FeedShortcutsHelp } from '~/components/Feed/FeedShortcutsHelp';
 import { PostList } from '~/components/Feed/PostList';
 import { mergeReactionOverlays } from '~/components/Feed/reactionOverlay';
 import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
+import { SubspaceCard } from '~/components/Subspaces/SubspaceCard';
+import { EXPLORE_POPULAR_SUBSPACES, type PublicSubspace } from '~/components/Subspaces/subspaceTypes';
 
-// The /explore page: the trending board — public posts from the last week
+// The /explore page: a "Popular subspaces" strip (the top
+// EXPLORE_POPULAR_SUBSPACES by member count — GET /api/v1/subspaces?sort=
+// members) above the trending board — public posts from the last week
 // ranked by time-decayed engagement (GET /api/v1/things/trending). Guest-
 // visible by design (the pool is public-only either way); cards are the SAME
 // PostCards the feed renders, so reactions, comments, and polls all work in
 // place. Optimistic first paint: the last-known board seeds synchronously
 // from localStorage (tt-explore-<viewer>) and the fresh board reconciles in
-// the background — a skeleton only ever shows on a true cold start.
+// the background — a skeleton only ever shows on a true cold start. The strip
+// seeds the same way (tt-explore-subspaces-<viewer>: rows carry the viewer's
+// own membership state) and simply stays away when there is nothing to show.
 
 // Cached entries are per-viewer AND timestamped. Per-viewer because the
 // projection carries personalised fields (viewerReactions, poll viewerVote) —
@@ -31,6 +38,12 @@ import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
 type CachedBoard = { at: number; posts: PublicPost[] };
 
 const cacheKeyFor = (viewerId: string | null | undefined) => `tt-explore-${viewerId || 'anon'}`;
+type CachedStrip = { at: number; subspaces: PublicSubspace[] };
+const stripCacheKeyFor = (viewerId: string | null | undefined) => `tt-explore-subspaces-${viewerId || 'anon'}`;
+const readCachedStrip = (key: string): PublicSubspace[] => {
+  const entry = readLocalCache<CachedStrip>(key);
+  return entry && Array.isArray(entry.subspaces) ? entry.subspaces : [];
+};
 
 const readCachedBoard = (key: string): PublicPost[] => {
   const entry = readLocalCache<CachedBoard>(key);
@@ -49,6 +62,9 @@ export const ExplorePage = () => {
   const cacheKey = cacheKeyFor(user?.id);
   const [posts, setPosts] = React.useState<PublicPost[]>(() => readCachedBoard(cacheKey));
   const [loading, setLoading] = React.useState(posts.length === 0);
+  // the Popular subspaces strip — same per-viewer, flash-free seeding
+  const stripCacheKey = stripCacheKeyFor(user?.id);
+  const [popular, setPopular] = React.useState<PublicSubspace[]>(() => readCachedStrip(stripCacheKey));
 
   // a sequence guard drops stale responses when the viewer changes mid-flight
   const requestSeqRef = React.useRef(0);
@@ -65,6 +81,24 @@ export const ExplorePage = () => {
   // always-current cache key so load() writes the right viewer's slot
   const cacheKeyRef = React.useRef(cacheKey);
   cacheKeyRef.current = cacheKey;
+  const stripCacheKeyRef = React.useRef(stripCacheKey);
+  stripCacheKeyRef.current = stripCacheKey;
+
+  // the strip loads beside the board and fails quietly — trending's own toast
+  // already says the page isn't refreshing, and a stale strip beats none
+  const loadPopular = React.useCallback(async () => {
+    const seq = requestSeqRef.current;
+    const targetCacheKey = stripCacheKeyRef.current;
+    try {
+      const resp: any = await apiRef.current.v1.subspaces.list({ sort: 'members', limit: EXPLORE_POPULAR_SUBSPACES });
+      if (seq !== requestSeqRef.current) return;
+      const fresh: PublicSubspace[] = Array.isArray(resp?.subspaces) ? resp.subspaces : [];
+      setPopular(fresh);
+      writeLocalCache(targetCacheKey, { at: Date.now(), subspaces: fresh } satisfies CachedStrip);
+    } catch {
+      // keep whatever strip is painted
+    }
+  }, []);
 
   const load = React.useCallback(async () => {
     const seq = ++requestSeqRef.current;
@@ -113,9 +147,11 @@ export const ExplorePage = () => {
       // skeleton from the re-seeded board, not the dropped one
       postsRef.current = seeded;
       setLoading(seeded.length === 0);
+      setPopular(readCachedStrip(stripCacheKeyFor(user?.id)));
     }
     load();
-  }, [load, cacheKey]);
+    loadPopular();
+  }, [load, loadPopular, cacheKey, user?.id]);
 
   const handlePostChanged = React.useCallback((id: string, next: PostChange) => {
     setPosts((prev) =>
@@ -179,6 +215,44 @@ export const ExplorePage = () => {
             Trending 🔥
           </Box>
         </Flex>
+
+        {popular.length > 0 && (
+          <Flex flexDirection="column" rowGap={2} data-testid="explore-popular-subspaces">
+            <Flex alignItems="baseline" columnGap={2}>
+              <Text fontFamily="mono" fontSize="11px" fontWeight={700} color="var(--tt-muted, #9a9aa6)">
+                Popular subspaces 🪐
+              </Text>
+              <Box
+                as={Link}
+                to="/s?sort=members"
+                marginLeft="auto"
+                fontSize="12px"
+                fontWeight={600}
+                color="var(--tt-muted, #9a9aa6)"
+                _hover={{ color: 'var(--tt-ink, #16161a)' }}
+                data-testid="explore-popular-subspaces-all"
+              >
+                All subspaces →
+              </Box>
+            </Flex>
+            {/* a horizontal strip that scrolls INSIDE its own box — the page
+                never grows a horizontal scrollbar at 375px */}
+            <Flex
+              columnGap={2}
+              overflowX="auto"
+              paddingBottom={1}
+              marginX={-1}
+              paddingX={1}
+              sx={{ scrollbarWidth: 'thin', scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch' }}
+            >
+              {popular.map((subspace) => (
+                <Box key={subspace.id} width="260px" minWidth="220px" flexShrink={0} sx={{ scrollSnapAlign: 'start' }}>
+                  <SubspaceCard subspace={subspace} compact />
+                </Box>
+              ))}
+            </Flex>
+          </Flex>
+        )}
 
         <FeedShortcutsContext.Provider value={shortcuts.registry}>
           <PostList

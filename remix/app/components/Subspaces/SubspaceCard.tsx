@@ -89,6 +89,8 @@ export const SubspaceCard = (props: {
 				<Text fontSize="xs" color={MUTED} marginTop={compact ? 0 : 1}>
 					{subspace.memberCount.toLocaleString()} {subspace.memberCount === 1 ? 'member' : 'members'}
 					{typeof subspace.postCount === 'number' ? ` · ${subspace.postCount.toLocaleString()} posts` : ''}
+					{/* the directory's Most active order shows the measure it ranked by */}
+					{typeof subspace.recentPostCount === 'number' ? ` · ${subspace.recentPostCount.toLocaleString()} ${subspace.recentPostCount === 1 ? 'post' : 'posts'} this week` : ''}
 				</Text>
 			</Box>
 			{onToggleMembership && !isOwner && (
