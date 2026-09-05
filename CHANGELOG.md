@@ -17,6 +17,18 @@ every entry is attributed the same way the app changelog attributes them.
 
 ---
 
+## 2026-09-05 — Desktop and Recovery cloud release repair
+
+- Main releases share the approved PR worker's dependency checks, trust-lane
+  selection, Electron/Recovery packaging and archive verification. The obsolete
+  unsigned invocation with a signed-looking version is removed.
+- Gate reusable jobs on the original push, dispatch or pull_request_target event;
+  revalidate source repository, owner, label and immutable SHA before checkout.
+- GitHub release-list failures stop publication instead of pretending no release
+  exists. Unsigned and PR artifacts remain prereleases and never replace latest.
+- Validation: actionlint, release contracts, actual shell version generation,
+  and allowed/denied caller-event regression cases.
+
 ## [Unreleased]
 
 - Restored Lopu PR manager admission after its protected workflow crossed

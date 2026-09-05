@@ -85,7 +85,9 @@ jobs:
         run: node .github/scripts/classify-claude-credential-failure.mjs --self-test
 
       - name: Validate signed Electron PR release contract
-        run: node .github/scripts/electron-pr-release-contract.mjs
+        run: |
+          node .github/scripts/electron-pr-release-contract.mjs
+          node --test .github/scripts/electron-release-gates.test.mjs
 
   contract-advisories:
     name: Contract advisories (non-blocking)
