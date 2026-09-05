@@ -222,7 +222,16 @@ test('content loader treats service credentials as anonymous and keeps signed re
 		enforceLimit: allowed as any,
 		download: async (inputViewer) => {
 			viewer = inputViewer;
-			return { ok: true, url: 'https://s3.example/private?signature=secret', expiresAt: nowIso };
+			return {
+				ok: true,
+				url: 'https://s3.example/private?signature=secret',
+				expiresAt: nowIso,
+				cacheKey: 'a'.repeat(64),
+				size: 500,
+				contentType: 'image/png',
+				disposition: 'inline',
+				image: true
+			};
 		}
 	});
 	const nowIso = new Date().toISOString();
@@ -303,7 +312,7 @@ test('detection backfill route is admin-only, same-origin JSON, and forwards one
 	const serviceInputs: unknown[] = [];
 	const handler = (overrides: Record<string, unknown> = {}) =>
 		createAttachmentDetectionBackfillAction({
-			admin: async () => ({ user: { id: 'admin-1' } }) as any,
+			admin: async () => ({ user: { id: 'admin-1' } } as any),
 			enforceLimit: allowed as any,
 			service: async (input: unknown) => {
 				serviceInputs.push(input);
@@ -386,4 +395,66 @@ test('cleanup route fails closed when CRON_SECRET is unavailable', async () => {
 		})
 	});
 	assert.equal(response.status, 503);
+});
+
+test('cache receipts authorize every request without exposing signed URLs, and reject unsupported previews', async () => {
+	let allowedNow = true;
+	const route = createAttachmentContentLoader({
+		getUser: async () => user,
+		enforceLimit: allowed as any,
+		download: async () =>
+			allowedNow
+				? {
+						ok: true,
+						url: 'https://private.example/secret',
+						expiresAt: 'later',
+						cacheKey: 'a'.repeat(64),
+						size: 500,
+						contentType: 'image/png',
+						disposition: 'inline',
+						image: true
+				  }
+				: { ok: false, status: 404, error: 'Attachment not found' }
+	});
+	const request = new Request('https://thingtime.example/api/v1/attachments/content?id=example&cache=validate&width=64');
+	const response = await route({ request });
+	assert.deepEqual(await response.json(), { ok: true, cacheKey: 'a'.repeat(64) + ':64', size: 500 });
+	assert.match(response.headers.get('Cache-Control')!, /no-store/);
+	allowedNow = false;
+	assert.equal((await route({ request })).status, 404);
+	assert.equal((await route({ request: new Request(request.url.replace('width=64', 'width=99999')) })).status, 400);
+});
+
+test('conditional byte reuse authorizes before returning a cacheable 304', async () => {
+	let authorized = true;
+	let checks = 0;
+	const route = createAttachmentContentLoader({
+		getUser: async () => user,
+		enforceLimit: allowed as any,
+		download: async () => {
+			checks++;
+			return authorized
+				? {
+						ok: true,
+						url: 'https://private.example/not-fetched',
+						expiresAt: 'later',
+						cacheKey: 'a'.repeat(64),
+						size: 500,
+						contentType: 'image/png',
+						disposition: 'inline',
+						image: true
+				  }
+				: { ok: false, status: 404, error: 'Attachment not found' };
+		}
+	});
+	const request = new Request('https://thingtime.example/api/v1/attachments/content?id=example&width=64', {
+		headers: { 'If-None-Match': '"' + 'a'.repeat(64) + ':64:v1"' }
+	});
+	const response = await route({ request });
+	assert.equal(response.status, 304);
+	assert.equal(response.headers.get('Cache-Control'), 'private, no-cache');
+	assert.equal(response.headers.get('ETag'), request.headers.get('If-None-Match'));
+	authorized = false;
+	assert.equal((await route({ request })).status, 404);
+	assert.equal(checks, 2);
 });

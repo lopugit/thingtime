@@ -4577,3 +4577,18 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 - [ ] Commander production verification passes the Mach-O file before `lipo
       -verify_arch` and exercises the real tool against a native fixture before
       cloud signing. A verifier failure must publish no incomplete release.
+
+## Persistent media and progressive image regression
+
+- [ ] At desktop and 390px mobile widths, scroll the feed/attachment fixture
+      top to bottom: below-fold images stay lazy, low-resolution previews
+      appear before responsive images, and no horizontal overflow appears.
+- [ ] Leave and revisit a managed image: authorization checks increase while
+      downloaded byte requests stay unchanged. Revoke access and revisit:
+      cached pixels must not render. Restore access and verify loading resumes.
+- [ ] Open and close the image lightbox, verify contained sizing, and inspect
+      Media settings toggles and clear action at desktop and mobile sizes.
+- [ ] Disable caching, clear storage, and disable previews; original loading
+      remains usable. Unsupported image formats fall back without retry loops.
+- [ ] Confirm partial/large files use native streaming and cached range reads
+      cannot bypass authorization. Verify storage failure degrades to HTTP.

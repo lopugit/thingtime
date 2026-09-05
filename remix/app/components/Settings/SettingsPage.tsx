@@ -1,3 +1,4 @@
+import { MediaCacheSettings } from './MediaCacheSettings';
 import React from 'react';
 import { Badge, Box, Button, Flex, Input, Progress, Switch, Text, Textarea } from '@chakra-ui/react';
 import { useNavigate } from 'react-router';
@@ -483,6 +484,8 @@ export const SettingsPage = () => {
 						</Flex>
           )}
         </SettingsSection>
+
+        <MediaCacheSettings />
 
         {/* security (auth only) — email 2FA + the reset flow's home */}
         {user && !user.temporary && (
