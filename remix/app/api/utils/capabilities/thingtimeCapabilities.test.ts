@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { apiEndpointDocs, apiV1DocsRouteKeys, apiV1RouteKeys } from '../../../docs/apiDocs';
+import { apiEndpointDocs, apiV1DocsRouteKeys, apiV1RouteKeys, createApiCapabilitiesManifest } from '../../../docs/apiDocs';
 import { capabilitySatisfies } from './capabilityContract';
 import { THINGTIME_CAPABILITY_MANIFEST_PATH, thingtimeCapabilityManifest } from './thingtimeCapabilities';
 
@@ -14,8 +14,8 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.admin-ci-credentials']?.version, '2.0.0');
   assert.equal(manifest.features['api.admin-ci-feature-stacks']?.version, '1.3.0');
   assert.equal(manifest.features['api.admin-ci-previews']?.version, '1.2.0');
-  assert.equal(manifest.features['api.auth-passkeys-register-options']?.version, '1.0.1');
-  assert.equal(manifest.features['api.auth-passkeys-login-options']?.version, '1.0.1');
+  assert.equal(manifest.features['api.auth-passkeys-register-options']?.version, '1.1.0');
+  assert.equal(manifest.features['api.auth-passkeys-login-options']?.version, '1.1.0');
   assert.equal(manifest.features['api.integration-ci-credentials']?.version, '1.1.0');
   assert.equal(manifest.features['api.integration-ci-progress']?.version, '1.0.0');
   assert.equal(manifest.features['api.things-search']?.version, '1.1.1');
@@ -48,4 +48,27 @@ test('capability negotiation accepts compatible updates and rejects missing or b
   assert.equal(capabilitySatisfies('1.0.9', '1.1.0'), false);
   assert.equal(capabilitySatisfies('2.0.0', '1.1.0'), false);
   assert.equal(capabilitySatisfies('', '1.1.0'), false);
+});
+
+test('both manifests publish passkey concurrency and Apple association contracts', () => {
+  const originManifest = thingtimeCapabilityManifest('https://thingtime.com');
+  const apiManifest = createApiCapabilitiesManifest();
+  for (const operation of ['login-options', 'login', 'register-options', 'register']) {
+    const feature = `api.auth-passkeys-${operation}`;
+    assert.equal(originManifest.features[feature]?.version, '1.1.0');
+    assert.equal(apiManifest.features[feature], '1.1.0');
+  }
+  assert.equal(originManifest.features['api.apple-app-association']?.version, '1.0.0');
+  assert.equal(apiManifest.features['api.apple-app-association'], '1.0.0');
+  assert.ok(originManifest.operations.some((operation) => operation.path === '/.well-known/apple-app-site-association'));
+  assert.ok(originManifest.operations.some((operation) => operation.path === '/.well-known/apple-app-site-association-docs'));
+});
+
+test('both manifests publish notification history and system notification contracts', () => {
+  const originManifest = thingtimeCapabilityManifest('https://thingtime.com');
+  const apiManifest = createApiCapabilitiesManifest();
+  for (const feature of ['api.notifications-list', 'api.notifications-settings']) {
+    assert.equal(originManifest.features[feature]?.version, '1.1.0');
+    assert.equal(apiManifest.features[feature], '1.1.0');
+  }
 });
