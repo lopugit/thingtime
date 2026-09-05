@@ -20,8 +20,14 @@ on:
 permissions:
   contents: read
 
+# Supersede only runs that share a subject. A constant group made every new
+# control-plane run cancel the in-flight run of an unrelated PR: the older run
+# finished every step successfully and was still reported `cancelled`, which
+# `gh pr checks` renders as `fail`. PRs then showed a red control-plane check
+# for work they had not broken. Keep `cancel-in-progress` — superseding an
+# earlier push on the same PR or branch is the intended behavior.
 concurrency:
-  group: workflow-control-plane-ci
+  group: workflow-control-plane-ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
