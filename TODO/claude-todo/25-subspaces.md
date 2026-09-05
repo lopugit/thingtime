@@ -29,8 +29,16 @@ reactions untouched.
   shows the ▲ score ▼ pill beside the react button; Settings → Subspaces can
   hide the pills and set the default sort (per-browser, sync cache tier).
 
+## Round 2 (in progress on the same branch)
+- ✅ S1 — six `subspace-*` notification types (role/ban emitted; the rest
+  wired for later slices), `POST /api/v1/subspaces/transfer` (owner → active
+  member; old owner becomes moderator and may leave), `POST
+  /api/v1/subspaces/delete` (confirmSlug; posts survive as plain posts via
+  the accounted bulk `$unset`; members/modlog rows removed; former mods
+  notified), mod-page **Danger zone** with Chakra modals; verify section M.
+
 ## Follow-ups (not in this PR)
-- Join-request queue for private subspaces; user flairs; subspace transfer /
-  archive; per-subspace wiki + sidebar widgets; crossposting; a "popular
-  subspaces" board on /explore; notifications for mod actions and for a
-  post's first upvotes; API-level "all subspaces I moderate" digest.
+- Join-request queue for private subspaces; user flairs; per-subspace wiki +
+  sidebar widgets; crossposting; a "popular subspaces" board on /explore;
+  notifications for a post's first upvotes; API-level "all subspaces I
+  moderate" digest; subspace archive (read-only freeze, distinct from delete).

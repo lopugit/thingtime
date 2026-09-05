@@ -2,7 +2,19 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
-import { rankSubspacePosts, sanitizeBranding, sanitizeFlairs, sanitizeRules, sanitizeSlug, sanitizeTopRange, slugifyFlairId, topRangeSince } from './subspaceCore.ts';
+import {
+	confirmSlugMatches,
+	rankSubspacePosts,
+	RELEASED_POST_UNSET,
+	releasedPostUpdate,
+	sanitizeBranding,
+	sanitizeFlairs,
+	sanitizeRules,
+	sanitizeSlug,
+	sanitizeTopRange,
+	slugifyFlairId,
+	topRangeSince
+} from './subspaceCore.ts';
 
 test('sanitizeSlug normalizes and enforces the /s/<slug> grammar', () => {
 	assert.equal(sanitizeSlug(' Rainbow Makers '), 'rainbow_makers');
@@ -84,4 +96,25 @@ test('top ranges resolve to a since-date, all/unknown to null', () => {
 	assert.equal(sanitizeTopRange('century'), 'all');
 	assert.equal(topRangeSince('all', now), null);
 	assert.equal(topRangeSince('day', now)?.getTime(), now - 24 * 3_600_000);
+});
+
+test('confirmSlugMatches forgives the s/ prefix, case and whitespace but nothing else', () => {
+	assert.equal(confirmSlugMatches('rainbows', 'rainbows'), true);
+	assert.equal(confirmSlugMatches(' s/Rainbows ', 'rainbows'), true);
+	for (const bad of ['rainbow', 'rainbows2', '', undefined, null, 42, ['rainbows'], 's/']) {
+		assert.equal(confirmSlugMatches(bad, 'rainbows'), false, JSON.stringify(bad));
+	}
+	// an empty slug never matches (a missing subspace can't be "confirmed")
+	assert.equal(confirmSlugMatches('', ''), false);
+});
+
+test('releasedPostUpdate strips exactly the subspace pointer, flair, mod state and private fence', () => {
+	const now = new Date('2026-09-05T00:00:00.000Z');
+	assert.deepEqual(releasedPostUpdate(now), {
+		$unset: { 'crystal.subspaceId': '', 'crystal.flairId': '', subspaceMod: '', subspacePrivate: '' },
+		$set: { updatedAt: now }
+	});
+	// the shared template is frozen so no caller can widen the strip list
+	assert.equal(Object.isFrozen(RELEASED_POST_UNSET), true);
+	assert.deepEqual(Object.keys(RELEASED_POST_UNSET), ['crystal.subspaceId', 'crystal.flairId', 'subspaceMod', 'subspacePrivate']);
 });

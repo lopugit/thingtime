@@ -5,8 +5,10 @@
 // posts and comments (flip/clear/one-per-user), reads every sort, moderates
 // (remove → redaction, approve, pin, lock → 423, flair), bans (posting +
 // voting blocked, ban outlives leaving), restricted/private access walls,
-// the generic-things escape hatches staying closed, and the capability
-// manifest advertising the new contracts.
+// the generic-things escape hatches staying closed, the capability
+// manifest advertising the new contracts, and (round 2, section M) the
+// lifecycle: role/ban notifications, ownership transfer and deletion with
+// every 4xx wall.
 //
 //   node scripts/verify-subspaces.mjs [baseUrl]
 //
@@ -321,6 +323,164 @@ const run = async () => {
 	check('author deletes a voted post', del.status === 200);
 	const goneVote = await api('/api/v1/things/updown', { method: 'POST', cookie: stranger.cookie, body: { id: ownerPost.id, direction: 'up' } });
 	check('votes on a deleted post 404', goneVote.status === 404);
+
+	console.log('\nM. lifecycle — notifications, transfer, delete');
+	const SUBSPACE_NOTIFICATION_TYPES = ['subspace-join-request', 'subspace-join-accepted', 'subspace-post-removed', 'subspace-report', 'subspace-role', 'subspace-ban'];
+	const notifsOf = async (cookie) => {
+		const resp = await api('/api/v1/notifications?limit=50', { cookie });
+		return { status: resp.status, items: resp.body?.notifications || [] };
+	};
+	const summarize = (items) => JSON.stringify(items.filter((n) => String(n.type).startsWith('subspace-')).map((n) => [n.type, n.preview]));
+	// earlier sections already rang the bell: D promoted the mod, I banned + unbanned the stranger
+	const modNotifs = await notifsOf(mod.cookie);
+	check(
+		'promotion rang subspace-role for the new mod (targetId = subspace, preview leads with s/<slug>)',
+		modNotifs.status === 200 && modNotifs.items.some((n) => n.type === 'subspace-role' && n.targetId === subspace.id && String(n.preview || '').startsWith(`s/${slug} ·`) && /moderator/.test(n.preview || '')),
+		summarize(modNotifs.items)
+	);
+	const strangerNotifs = await notifsOf(stranger.cookie);
+	check(
+		'ban + unban rang subspace-ban twice for the user',
+		strangerNotifs.status === 200 && strangerNotifs.items.filter((n) => n.type === 'subspace-ban' && n.targetId === subspace.id).length >= 2 && strangerNotifs.items.some((n) => n.type === 'subspace-ban' && /lifted/.test(n.preview || '')),
+		summarize(strangerNotifs.items)
+	);
+	const prefs = await api('/api/v1/notifications/settings', { cookie: owner.cookie });
+	check(
+		'notification settings expose the six subspace types (push on; join-request/report email opt-in)',
+		prefs.status === 200 && SUBSPACE_NOTIFICATION_TYPES.every((type) => prefs.body.prefs?.push?.[type] === true) && prefs.body.prefs.email['subspace-report'] === false && prefs.body.prefs.email['subspace-join-request'] === false && prefs.body.prefs.email['subspace-role'] === true,
+		JSON.stringify(prefs.body?.prefs?.push)
+	);
+	const muteRole = await api('/api/v1/notifications/settings', { method: 'POST', cookie: mod.cookie, body: { prefs: { push: { 'subspace-role': false } } } });
+	const mutedList = await notifsOf(mod.cookie);
+	check('switching subspace-role off hides existing rows immediately', muteRole.status === 200 && !mutedList.items.some((n) => n.type === 'subspace-role'));
+	await api('/api/v1/notifications/settings', { method: 'POST', cookie: mod.cookie, body: { prefs: { push: { 'subspace-role': true } } } });
+
+	// transfer walls
+	const anonTransfer = await api('/api/v1/subspaces/transfer', { method: 'POST', body: { slug, username: mod.username } });
+	check('anonymous transfer → 401', anonTransfer.status === 401);
+	const modTransfer = await api('/api/v1/subspaces/transfer', { method: 'POST', cookie: mod.cookie, body: { slug, username: mod.username } });
+	check('moderator cannot transfer → 403', modTransfer.status === 403, `${modTransfer.status} ${JSON.stringify(modTransfer.body)}`);
+	const memberTransfer = await api('/api/v1/subspaces/transfer', { method: 'POST', cookie: stranger.cookie, body: { slug, username: stranger.username } });
+	check('plain member cannot transfer → 403', memberTransfer.status === 403);
+	const selfTransfer = await api('/api/v1/subspaces/transfer', { method: 'POST', cookie: owner.cookie, body: { slug, username: owner.username } });
+	check('transfer to yourself → 400', selfTransfer.status === 400);
+	const nonMemberTransfer = await api('/api/v1/subspaces/transfer', { method: 'POST', cookie: owner.cookie, body: { slug, username: member.username } });
+	check('transfer to someone who left → 404', nonMemberTransfer.status === 404, `${nonMemberTransfer.status} ${JSON.stringify(nonMemberTransfer.body)}`);
+	const unknownTransfer = await api('/api/v1/subspaces/transfer', { method: 'POST', cookie: owner.cookie, body: { slug, username: `nobody_${suffix}` } });
+	check('transfer to an unknown username → 404', unknownTransfer.status === 404);
+	const noTargetTransfer = await api('/api/v1/subspaces/transfer', { method: 'POST', cookie: owner.cookie, body: { slug } });
+	check('transfer without a target → 400', noTargetTransfer.status === 400);
+	const ghostTransfer = await api('/api/v1/subspaces/transfer', { method: 'POST', cookie: owner.cookie, body: { slug: `ghost_${suffix}`.slice(0, 30), username: mod.username } });
+	check('transfer on an unknown subspace → 404', ghostTransfer.status === 404);
+	const banForTransfer = await api('/api/v1/subspaces/members', { method: 'POST', cookie: owner.cookie, body: { slug, username: stranger.username, action: 'ban', reason: 'brb' } });
+	const bannedTransfer = await api('/api/v1/subspaces/transfer', { method: 'POST', cookie: owner.cookie, body: { slug, username: stranger.username } });
+	check('transfer to a banned member → 403', banForTransfer.status === 200 && bannedTransfer.status === 403, `${bannedTransfer.status} ${JSON.stringify(bannedTransfer.body)}`);
+	const unbanForTransfer = await api('/api/v1/subspaces/members', { method: 'POST', cookie: owner.cookie, body: { slug, username: stranger.username, action: 'unban' } });
+	check('(unban restores the member)', unbanForTransfer.status === 200 && unbanForTransfer.body.member.banned === false && unbanForTransfer.body.member.left === false);
+	const untouched = await api(`/api/v1/subspaces/get?slug=${slug}`, { cookie: owner.cookie });
+	check('refused transfers leave ownership alone', untouched.status === 200 && untouched.body.subspace.ownerId === owner.id && untouched.body.subspace.viewer.role === 'owner');
+
+	// transfer success
+	const transferred = await api('/api/v1/subspaces/transfer', { method: 'POST', cookie: owner.cookie, body: { slug, username: mod.username } });
+	check(
+		'owner transfers to a moderator → ownerId flips, caller becomes moderator, newOwner row is owner',
+		transferred.status === 200 && transferred.body.subspace?.ownerId === mod.id && transferred.body.subspace.viewer.role === 'moderator' && transferred.body.subspace.viewer.canModerate === true && transferred.body.newOwner?.userId === mod.id && transferred.body.newOwner.role === 'owner' && transferred.body.newOwner.approved === true,
+		`${transferred.status} ${JSON.stringify(transferred.body).slice(0, 400)}`
+	);
+	const asNewOwner = await api(`/api/v1/subspaces/get?slug=${slug}`, { cookie: mod.cookie });
+	check(
+		'new owner reads role owner; the roster has exactly one owner and the old owner as moderator',
+		asNewOwner.status === 200 && asNewOwner.body.subspace.viewer.role === 'owner' && asNewOwner.body.subspace.ownerId === mod.id && asNewOwner.body.moderators.filter((entry) => entry.role === 'owner').length === 1 && asNewOwner.body.moderators.some((entry) => entry.userId === owner.id && entry.role === 'moderator')
+	);
+	const oldOwnerAccess = await api('/api/v1/subspaces/update', { method: 'POST', cookie: owner.cookie, body: { slug, access: 'public' } });
+	check('previous owner lost the owner-only powers (access change → 403)', oldOwnerAccess.status === 403);
+	const transferLog = await api(`/api/v1/subspaces/modlog?slug=${slug}`, { cookie: mod.cookie });
+	check('mod log records owner.transfer against the new owner', transferLog.status === 200 && transferLog.body.entries.some((entry) => entry.action === 'owner.transfer' && entry.userId === mod.id && entry.detail?.previousOwnerId === owner.id));
+	const newOwnerNotifs = await notifsOf(mod.cookie);
+	check('new owner is notified (subspace-role · "now the owner")', newOwnerNotifs.items.some((n) => n.type === 'subspace-role' && n.targetId === subspace.id && /owner/.test(n.preview || '')), summarize(newOwnerNotifs.items));
+	const promoteStranger = await api('/api/v1/subspaces/members', { method: 'POST', cookie: mod.cookie, body: { slug, username: stranger.username, action: 'role', role: 'moderator' } });
+	check('the new owner can promote (owner powers moved with the crown)', promoteStranger.status === 200 && promoteStranger.body.member.role === 'moderator');
+	const oldOwnerLeaves = await api('/api/v1/subspaces/leave', { method: 'POST', cookie: owner.cookie, body: { slug } });
+	check('previous owner can now leave', oldOwnerLeaves.status === 200 && oldOwnerLeaves.body.subspace.viewer.member === false, `${oldOwnerLeaves.status} ${JSON.stringify(oldOwnerLeaves.body).slice(0, 200)}`);
+	const newOwnerLeaves = await api('/api/v1/subspaces/leave', { method: 'POST', cookie: mod.cookie, body: { slug } });
+	check('the new owner cannot leave → 409', newOwnerLeaves.status === 409);
+
+	// delete walls
+	const anonDelete = await api('/api/v1/subspaces/delete', { method: 'POST', body: { slug, confirmSlug: slug } });
+	check('anonymous delete → 401', anonDelete.status === 401);
+	const modDelete = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: stranger.cookie, body: { slug, confirmSlug: slug } });
+	check('moderator cannot delete → 403', modDelete.status === 403, `${modDelete.status} ${JSON.stringify(modDelete.body)}`);
+	const oldOwnerDelete = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: owner.cookie, body: { slug, confirmSlug: slug } });
+	check('previous owner cannot delete → 403', oldOwnerDelete.status === 403);
+	const wrongConfirm = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: mod.cookie, body: { slug, confirmSlug: `${slug}x` } });
+	check('wrong confirmSlug → 400', wrongConfirm.status === 400, `${wrongConfirm.status} ${JSON.stringify(wrongConfirm.body)}`);
+	const noConfirm = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: mod.cookie, body: { slug } });
+	check('missing confirmSlug → 400', noConfirm.status === 400);
+	const ghostDelete = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: mod.cookie, body: { slug: `ghost_${suffix}`.slice(0, 30), confirmSlug: `ghost_${suffix}`.slice(0, 30) } });
+	check('delete on an unknown subspace → 404', ghostDelete.status === 404);
+	const stillThere = await api(`/api/v1/subspaces/get?slug=${slug}`);
+	check('refused deletes leave the subspace intact', stillThere.status === 200);
+	const manifest2 = await api('/api/v1/capabilities');
+	check(
+		'capability manifest advertises transfer/delete (1.0.0) and the bumped members/notifications contracts (1.1.0)',
+		manifest2.status === 200 && manifest2.body.features['api.subspaces-transfer'] === '1.0.0' && manifest2.body.features['api.subspaces-delete'] === '1.0.0' && manifest2.body.features['api.subspaces-members'] === '1.1.0' && manifest2.body.features['api.notifications-list'] === '1.1.0' && manifest2.body.features['api.notifications-settings'] === '1.1.0',
+		JSON.stringify({ t: manifest2.body?.features?.['api.subspaces-transfer'], d: manifest2.body?.features?.['api.subspaces-delete'], m: manifest2.body?.features?.['api.subspaces-members'], n: manifest2.body?.features?.['api.notifications-list'] })
+	);
+	const deleteDocs = await api('/api/v1/subspaces/delete-docs');
+	const transferDocs = await api('/api/v1/subspaces/transfer-docs');
+	check('docs routes answer for transfer + delete', deleteDocs.status === 200 && deleteDocs.body.docs?.endpoint === '/api/v1/subspaces/delete' && transferDocs.status === 200 && transferDocs.body.docs?.endpoint === '/api/v1/subspaces/transfer');
+
+	// delete success
+	const feedBeforeDelete = await api(`/api/v1/subspaces/feed?slug=${slug}&sort=new&limit=50`, { cookie: mod.cookie });
+	const livePosts = feedBeforeDelete.body?.posts?.length || 0;
+	// `owner` left after the transfer and did not write `post` (member did — an
+	// author always sees their own post), so they are the honest "outsider"
+	const privateBefore = await api(`/api/v1/things?id=${post.id}`, { cookie: owner.cookie });
+	check('(pre-check) the private fence still hides the post from a non-member non-author', privateBefore.status === 404, String(privateBefore.status));
+	const deleted = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: mod.cookie, body: { slug, confirmSlug: `s/${slug.toUpperCase()}` } });
+	check(
+		'owner deletes with the retyped slug (s/ prefix + case forgiven) → releasedPosts + removedMembers',
+		deleted.status === 200 && deleted.body.releasedPosts >= livePosts && livePosts >= 3 && deleted.body.removedMembers === 2,
+		`${deleted.status} ${JSON.stringify(deleted.body)} live=${livePosts}`
+	);
+	const goneDetail = await api(`/api/v1/subspaces/get?slug=${slug}`, { cookie: mod.cookie });
+	check('detail → 404 after deletion', goneDetail.status === 404);
+	const goneFeed = await api(`/api/v1/subspaces/feed?slug=${slug}`, { cookie: mod.cookie });
+	check('feed → 404 after deletion', goneFeed.status === 404);
+	const goneMembers = await api(`/api/v1/subspaces/members?slug=${slug}`, { cookie: mod.cookie });
+	check('members → 404 after deletion', goneMembers.status === 404);
+	const goneModlog = await api(`/api/v1/subspaces/modlog?slug=${slug}`, { cookie: mod.cookie });
+	check('mod log → 404 after deletion', goneModlog.status === 404);
+	const released = await api(`/api/v1/things?id=${post.id}`, { cookie: owner.cookie });
+	check(
+		'posts survive as plain posts: subspace/flair/subspaceMod null, title kept, private fence lifted for a non-member non-author',
+		released.status === 200 && released.body.post?.subspace === null && released.body.post.flair === null && released.body.post.subspaceMod === null && released.body.post.title === 'Hello subspace 👋' && released.body.post.text === 'First thread body',
+		`${released.status} ${JSON.stringify(released.body).slice(0, 300)}`
+	);
+	const releasedAnon = await api(`/api/v1/things?id=${strayPost.id}`);
+	check('a formerly-removed-then-approved post also reads plain and public', releasedAnon.status === 200 && releasedAnon.body.post?.subspace === null && releasedAnon.body.post.subspaceMod === null && releasedAnon.body.post.text === 'not a member but public');
+	const releasedComments = released.body.post?.comments || [];
+	check('comments + their votes rode along', releasedComments.some((entry) => entry.id === comment.id && entry.votes?.score === 1));
+	const homeAfterDelete = await api('/api/v1/things/feed?algorithm=latest&limit=50', { cookie: owner.cookie });
+	check('released posts are back on a non-member home feed without a subspace embed', homeAfterDelete.body.posts.some((entry) => entry.id === post.id && !entry.subspace));
+	const voteReleased = await api('/api/v1/things/updown', { method: 'POST', cookie: member.cookie, body: { id: post.id, direction: 'up' } });
+	check('released posts keep working (vote → 200)', voteReleased.status === 200 && voteReleased.body.votes?.viewerVote === 'up');
+	const mineAfter = await api('/api/v1/subspaces?mine=1', { cookie: stranger.cookie });
+	check('memberships are gone (mine=1 no longer lists it)', mineAfter.status === 200 && !mineAfter.body.subspaces.some((entry) => entry.slug === slug));
+	const listAfter = await api(`/api/v1/subspaces?q=${slug.slice(0, 12)}`);
+	check('directory no longer lists it', listAfter.status === 200 && !listAfter.body.subspaces.some((entry) => entry.slug === slug));
+	const formerModNotifs = await notifsOf(stranger.cookie);
+	check('former moderator is told the subspace was deleted (subspace-role · deleted)', formerModNotifs.items.some((n) => n.type === 'subspace-role' && n.targetId === subspace.id && /deleted/.test(n.preview || '')), summarize(formerModNotifs.items));
+	const actorNotifs = await notifsOf(mod.cookie);
+	check('the deleting owner does not notify themselves', !actorNotifs.items.some((n) => n.type === 'subspace-role' && /deleted/.test(n.preview || '')));
+	const deleteAgain = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: mod.cookie, body: { slug, confirmSlug: slug } });
+	check('deleting a deleted subspace → 404', deleteAgain.status === 404);
+	const reclaim = await api('/api/v1/subspaces', { method: 'POST', cookie: member.cookie, body: { slug, name: 'Reclaimed' } });
+	check('the slug is free again after deletion', reclaim.status === 201, `${reclaim.status} ${JSON.stringify(reclaim.body).slice(0, 200)}`);
+	if (reclaim.status === 201) {
+		const cleanup = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: member.cookie, body: { slug, confirmSlug: slug } });
+		check('cleanup: a fresh subspace deletes cleanly (0 posts released, 1 membership removed)', cleanup.status === 200 && cleanup.body.releasedPosts === 0 && cleanup.body.removedMembers === 1, JSON.stringify(cleanup.body));
+	}
 
 	console.log(`\n${passed} passed, ${failures.length} failed${skipped.length ? `, ${skipped.length} skipped (storage migration pending on this database)` : ''}`);
 	if (failures.length) {

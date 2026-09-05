@@ -62,6 +62,13 @@ export type PublicModlogEntry = {
 	createdAt: string;
 };
 
+// POST /api/v1/subspaces/transfer — the subspace as the (now moderator)
+// caller sees it + the new owner's member row
+export type SubspaceTransferResponse = { ok: true; subspace: PublicSubspace; newOwner: PublicSubspaceMember };
+// POST /api/v1/subspaces/delete — how many posts were released as plain
+// posts and how many member rows (incl. ban records) were removed
+export type SubspaceDeleteResponse = { ok: true; releasedPosts: number; removedMembers: number };
+
 export type SubspaceFeedSort = 'hot' | 'new' | 'top' | 'rising' | 'controversial';
 export const SUBSPACE_SORTS: { id: SubspaceFeedSort; label: string; emoji: string }[] = [
 	{ id: 'hot', label: 'Hot', emoji: '🔥' },

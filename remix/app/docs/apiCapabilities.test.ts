@@ -62,3 +62,12 @@ test('storage-aware health and the corrected email environment gate publish thei
 	assert.equal(manifest.features['api.health-nitro'], '1.1.0');
 	assert.equal(manifest.features['api.email-config'], '1.0.1');
 });
+
+test('subspace lifecycle + notification type additions publish their contract versions', () => {
+	const manifest = createApiCapabilitiesManifest();
+	assert.equal(manifest.features['api.subspaces-transfer'], '1.0.0');
+	assert.equal(manifest.features['api.subspaces-delete'], '1.0.0');
+	assert.equal(manifest.features['api.subspaces-members'], '1.1.0');
+	assert.equal(manifest.features['api.notifications-list'], '1.1.0');
+	assert.equal(manifest.features['api.notifications-settings'], '1.1.0');
+});

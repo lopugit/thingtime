@@ -1,9 +1,31 @@
 import React from 'react';
-import { Box, Button, Flex, Input, Select, Switch, Tab, TabList, TabPanel, TabPanels, Tabs, Text, Textarea } from '@chakra-ui/react';
-import { Link, useParams, useSearchParams } from 'react-router';
+import {
+	Box,
+	Button,
+	Flex,
+	Input,
+	Modal,
+	ModalBody,
+	ModalCloseButton,
+	ModalContent,
+	ModalFooter,
+	ModalHeader,
+	ModalOverlay,
+	Select,
+	Switch,
+	Tab,
+	TabList,
+	TabPanel,
+	TabPanels,
+	Tabs,
+	Text,
+	Textarea
+} from '@chakra-ui/react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { clearLocalCachePrefix } from '~/hooks/localCache';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { PostList } from '~/components/Feed/PostList';
 import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
@@ -14,14 +36,17 @@ import {
 	type PublicSubspace,
 	type PublicSubspaceMember,
 	type SubspaceAccess,
+	type SubspaceDeleteResponse,
 	type SubspaceFeedResponse,
 	type SubspaceFlair,
-	type SubspaceRule
+	type SubspaceRule,
+	type SubspaceTransferResponse
 } from './subspaceTypes';
 
 // /s/:slug/mod — moderator tools: the queue (newest posts incl. removed ones,
 // every card carrying its mod menu), members (search + actions), the ban
-// list, settings (identity/branding/access), rules, flairs, and the mod log.
+// list, settings (identity/branding/access + the owner's Danger zone:
+// transfer ownership / delete), rules, flairs, and the mod log.
 // Every mutation goes through /api/v1/subspaces/* and re-projects in place.
 
 const INK = 'var(--tt-ink, #16161a)';
@@ -364,6 +389,215 @@ const SettingsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSave
 	);
 };
 
+// ── Danger zone (owner only) ───────────────────────────────────────────────
+// Transfer ownership to an active member (username → confirm modal; the
+// owner steps down to moderator and may then leave) and delete the subspace
+// (modal: retype the slug to arm the red button; posts survive as plain
+// posts). Both are Chakra modals — no window.prompt/confirm anywhere here.
+const DANGER = 'var(--tt-danger, #e5484d)';
+const normalizeSlugInput = (value: string) => value.trim().toLowerCase().replace(/^s\//, '');
+
+const DangerZonePanel = ({ subspace, onTransferred }: { subspace: PublicSubspace; onTransferred: (next: PublicSubspace) => void }) => {
+	const api = useApi();
+	const lopu = useLopu();
+	const navigate = useNavigate();
+	const [username, setUsername] = React.useState('');
+	const [transferOpen, setTransferOpen] = React.useState(false);
+	const [transferring, setTransferring] = React.useState(false);
+	const [deleteOpen, setDeleteOpen] = React.useState(false);
+	const [confirmSlug, setConfirmSlug] = React.useState('');
+	const [deleting, setDeleting] = React.useState(false);
+	const cleanUsername = username.trim().replace(/^@/, '');
+	const deleteArmed = normalizeSlugInput(confirmSlug) === subspace.slug;
+
+	const transfer = async () => {
+		if (!cleanUsername || transferring) return;
+		setTransferring(true);
+		// optimistic: the crown moves now (the owner-only controls on this page
+		// dim instantly); a failure puts it straight back
+		const before = subspace;
+		onTransferred({ ...subspace, viewer: { ...subspace.viewer, role: 'moderator' } });
+		try {
+			const resp = (await api.v1.subspaces.transfer({ id: subspace.id, username: cleanUsername })) as SubspaceTransferResponse;
+			onTransferred(resp.subspace);
+			// the viewer's cached /s/<slug> copy still says owner — drop it
+			clearLocalCachePrefix(`tt-subspace-${subspace.slug}-`);
+			setTransferOpen(false);
+			setUsername('');
+			lopu({
+				title: `s/${subspace.slug} now belongs to @${resp.newOwner.profile?.username || cleanUsername} 👑`,
+				description: 'You stay on as a moderator — and can leave whenever you like.',
+				status: 'success',
+				duration: 8000
+			});
+		} catch (err: any) {
+			onTransferred(before);
+			lopu({ title: err?.error || 'Could not transfer the subspace 😞', status: 'error' });
+		} finally {
+			setTransferring(false);
+		}
+	};
+
+	const remove = async () => {
+		if (!deleteArmed || deleting) return;
+		setDeleting(true);
+		try {
+			const resp = (await api.v1.subspaces.delete({ id: subspace.id, confirmSlug: normalizeSlugInput(confirmSlug) })) as SubspaceDeleteResponse;
+			// nothing may repaint the dead subspace from cache: its page copies
+			// (every viewer key) and the directory lists go
+			clearLocalCachePrefix(`tt-subspace-${subspace.slug}-`);
+			clearLocalCachePrefix('tt-subspaces-');
+			setDeleteOpen(false);
+			lopu({
+				title: `s/${subspace.slug} is gone 🗑️`,
+				description: `${resp.releasedPosts} post${resp.releasedPosts === 1 ? '' : 's'} live on as plain posts · ${resp.removedMembers} membership${resp.removedMembers === 1 ? '' : 's'} removed.`,
+				status: 'success',
+				duration: 8000
+			});
+			navigate('/s');
+		} catch (err: any) {
+			lopu({ title: err?.error || 'Could not delete the subspace 😞', status: 'error' });
+		} finally {
+			setDeleting(false);
+		}
+	};
+
+	return (
+		<Flex flexDirection="column" rowGap={3} background="var(--tt-card, #ffffff)" border={`1px solid ${DANGER}`} borderRadius={RADIUS_LG} padding={4} data-testid="mod-danger-zone">
+			<Box>
+				<Text fontFamily="mono" fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" color={DANGER}>
+					Danger zone ⚠️
+				</Text>
+				<Text fontSize="xs" color={MUTED}>
+					Owner only. Neither of these can be undone from here.
+				</Text>
+			</Box>
+			<Flex flexDirection="column" rowGap={2} paddingTop={2} borderTop={BORDER}>
+				<Text fontSize="sm" fontWeight={600} color={INK}>
+					Transfer ownership 👑
+				</Text>
+				<Text fontSize="xs" color={TEXT}>
+					Hand s/{subspace.slug} to an active member. They become the owner; you stay on as a moderator (and can leave afterwards).
+				</Text>
+				<Flex columnGap={2} rowGap={2} flexWrap="wrap" alignItems="center">
+					<Input
+						size="sm"
+						width="220px"
+						maxWidth="100%"
+						borderRadius={RADIUS_MD}
+						placeholder="username of the new owner"
+						value={username}
+						onChange={(event) => setUsername(event.target.value)}
+						data-testid="mod-transfer-username"
+					/>
+					<Button size="sm" variant="outline" borderRadius={RADIUS_MD} borderColor={DANGER} color={DANGER} isDisabled={!cleanUsername} onClick={() => setTransferOpen(true)} data-testid="mod-transfer-open">
+						Transfer ownership →
+					</Button>
+				</Flex>
+			</Flex>
+			<Flex flexDirection="column" rowGap={2} paddingTop={2} borderTop={BORDER}>
+				<Text fontSize="sm" fontWeight={600} color={INK}>
+					Delete subspace 🗑️
+				</Text>
+				<Text fontSize="xs" color={TEXT}>
+					Removes s/{subspace.slug}, its members, rules, flairs and mod log. Posts are NOT deleted — they live on as plain posts without the subspace, flair or moderation state.
+				</Text>
+				<Button size="sm" alignSelf="flex-start" borderRadius={RADIUS_MD} colorScheme="red" variant="outline" onClick={() => setDeleteOpen(true)} data-testid="mod-delete-open">
+					Delete subspace…
+				</Button>
+			</Flex>
+
+			<Modal isOpen={transferOpen} onClose={() => !transferring && setTransferOpen(false)} isCentered size="md">
+				<ModalOverlay />
+				<ModalContent borderRadius={RADIUS_LG} background="var(--tt-card, #ffffff)" marginX={4}>
+					<ModalHeader fontFamily="heading" fontSize="lg" color={INK} paddingBottom={1}>
+						Hand over s/{subspace.slug}? 👑
+					</ModalHeader>
+					<ModalCloseButton isDisabled={transferring} />
+					<ModalBody>
+						<Text fontSize="sm" color={TEXT} whiteSpace="normal">
+							<Text as="span" fontWeight={700} color={INK}>
+								@{cleanUsername}
+							</Text>{' '}
+							becomes the owner of s/{subspace.slug} — they can change access, promote and demote moderators, transfer it again or delete it. You stay on as a moderator. Only the new owner can give it back.
+						</Text>
+					</ModalBody>
+					<ModalFooter columnGap={2}>
+						<Button size="sm" variant="ghost" borderRadius={RADIUS_MD} onClick={() => setTransferOpen(false)} isDisabled={transferring}>
+							Keep it
+						</Button>
+						<Button size="sm" colorScheme="red" borderRadius={RADIUS_MD} isLoading={transferring} onClick={transfer} data-testid="mod-transfer-confirm">
+							Transfer to @{cleanUsername}
+						</Button>
+					</ModalFooter>
+				</ModalContent>
+			</Modal>
+
+			<Modal
+				isOpen={deleteOpen}
+				onClose={() => {
+					if (deleting) return;
+					setDeleteOpen(false);
+					setConfirmSlug('');
+				}}
+				isCentered
+				size="md"
+			>
+				<ModalOverlay />
+				<ModalContent borderRadius={RADIUS_LG} background="var(--tt-card, #ffffff)" marginX={4}>
+					<ModalHeader fontFamily="heading" fontSize="lg" color={INK} paddingBottom={1}>
+						Delete s/{subspace.slug}? 🗑️
+					</ModalHeader>
+					<ModalCloseButton isDisabled={deleting} />
+					<ModalBody>
+						<Flex flexDirection="column" rowGap={3}>
+							<Text fontSize="sm" color={TEXT} whiteSpace="normal">
+								This removes the subspace, every membership and ban, the rules, flairs and the mod log. The {typeof subspace.postCount === 'number' ? `${subspace.postCount.toLocaleString()} ` : ''}
+								posts stay on Thingtime as plain posts. The slug becomes free again.
+							</Text>
+							<Box>
+								<Label>
+									Type <Text as="span" fontFamily="mono" textTransform="none" letterSpacing="0" color={INK}>s/{subspace.slug}</Text> to confirm
+								</Label>
+								<Input
+									size="sm"
+									fontFamily="mono"
+									borderRadius={RADIUS_MD}
+									placeholder={`s/${subspace.slug}`}
+									value={confirmSlug}
+									onChange={(event) => setConfirmSlug(event.target.value)}
+									onKeyDown={(event) => {
+										if (event.key === 'Enter') remove();
+									}}
+									autoFocus
+									data-testid="mod-delete-confirm-input"
+								/>
+							</Box>
+						</Flex>
+					</ModalBody>
+					<ModalFooter columnGap={2}>
+						<Button
+							size="sm"
+							variant="ghost"
+							borderRadius={RADIUS_MD}
+							onClick={() => {
+								setDeleteOpen(false);
+								setConfirmSlug('');
+							}}
+							isDisabled={deleting}
+						>
+							Cancel
+						</Button>
+						<Button size="sm" colorScheme="red" borderRadius={RADIUS_MD} isDisabled={!deleteArmed} isLoading={deleting} onClick={remove} data-testid="mod-delete-confirm">
+							Delete s/{subspace.slug} forever
+						</Button>
+					</ModalFooter>
+				</ModalContent>
+			</Modal>
+		</Flex>
+	);
+};
+
 // ── Rules ──────────────────────────────────────────────────────────────────
 const RulesPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSaved: (next: PublicSubspace) => void }) => {
 	const api = useApi();
@@ -637,7 +871,16 @@ export const SubspaceModPage = () => {
 								<MembersPanel slug={slug} banned isOwner={subspace.viewer.role === 'owner'} />
 							</TabPanel>
 							<TabPanel paddingX={0}>
-								<SettingsPanel subspace={subspace} onSaved={setSubspace} />
+								<Flex flexDirection="column" rowGap={4}>
+									<SettingsPanel subspace={subspace} onSaved={setSubspace} />
+									{subspace.viewer.role === 'owner' ? (
+										<DangerZonePanel subspace={subspace} onTransferred={setSubspace} />
+									) : (
+										<Text fontSize="xs" color={MUTED} paddingX={1}>
+											Transferring or deleting s/{slug} is up to its owner 👑
+										</Text>
+									)}
+								</Flex>
 							</TabPanel>
 							<TabPanel paddingX={0}>
 								<RulesPanel subspace={subspace} onSaved={setSubspace} />

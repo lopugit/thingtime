@@ -632,6 +632,18 @@ export function useApi() {
         async (args: { slug?: string; id?: string; sort?: string; range?: string; cursor?: string; limit?: number; includeRemoved?: boolean }) =>
           getJson(`/api/v1/subspaces/feed${toQuery({ ...args, includeRemoved: args?.includeRemoved ? 1 : undefined })}`),
         []
+      ),
+      // owner-only lifecycle: hand the subspace to an active member / delete
+      // it (posts survive as plain posts) after retyping the slug
+      transfer: useCallback(
+        async (body: { slug?: string; id?: string; userId?: string; username?: string }) =>
+          asyncFetcher.submit(body, { action: '/api/v1/subspaces/transfer', errorContext: 'transfer the subspace' }),
+        [asyncFetcher]
+      ),
+      delete: useCallback(
+        async (body: { slug?: string; id?: string; confirmSlug: string }) =>
+          asyncFetcher.submit(body, { action: '/api/v1/subspaces/delete', errorContext: 'delete the subspace' }),
+        [asyncFetcher]
       )
     },
     things: {

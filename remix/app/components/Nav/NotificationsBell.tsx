@@ -8,6 +8,7 @@ import { ProfileAvatarCircle } from '~/components/Profile/ProfilePage';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { subspaceSlugFromNotificationPreview } from '~/schemas/registry';
 
 // The nav bell 🔔: unread badge + a popover of recent notifications. The
 // badge count seeds from the per-user localCache (no flash), reconciles on
@@ -44,11 +45,33 @@ const TYPE_EMOJI: Record<string, string> = {
   reaction: '🤣',
   share: '🔁',
   mention: '📣',
-  groups: '👥'
+  groups: '👥',
+  'subspace-join-request': '🙋',
+  'subspace-join-accepted': '🎉',
+  'subspace-post-removed': '🧹',
+  'subspace-report': '🚩',
+  'subspace-role': '🎩',
+  'subspace-ban': '🚫'
 };
+
+const hasPreview = (item: BellNotification, pattern: RegExp) => pattern.test(item.preview || '');
 
 const verbOf = (item: BellNotification): string => {
   switch (item.type) {
+    // subspace moderation — the preview line ("s/<slug> · …") carries the
+    // specifics, the verb names the event family
+    case 'subspace-join-request':
+      return hasPreview(item, /wants to post/i) ? 'asked for posting approval' : 'asked to join your subspace';
+    case 'subspace-join-accepted':
+      return 'accepted you into a subspace';
+    case 'subspace-post-removed':
+      return 'removed your post';
+    case 'subspace-report':
+      return 'reported a post to the mods';
+    case 'subspace-role':
+      return hasPreview(item, /deleted/i) ? 'deleted a subspace you moderated' : 'changed your role in a subspace';
+    case 'subspace-ban':
+      return hasPreview(item, /lifted/i) ? 'lifted your ban' : 'banned you from a subspace';
     case 'friend-request':
       return 'sent you a friend request';
     case 'friend-accepted':
@@ -157,6 +180,14 @@ export const NotificationsBell = () => {
     if (item.postId) {
       navigate(`/post/${item.postId}`);
       return;
+    }
+    // subspace-scoped rows deep-link to the subspace (slug leads the preview)
+    if (item.type.startsWith('subspace-')) {
+      const slug = subspaceSlugFromNotificationPreview(item.preview);
+      if (slug) {
+        navigate(`/s/${slug}`);
+        return;
+      }
     }
     if (item.actorUsername) {
       navigate(`/profile/${item.actorUsername}`);

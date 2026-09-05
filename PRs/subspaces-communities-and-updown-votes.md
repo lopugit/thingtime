@@ -37,7 +37,26 @@ score field.
   a root-post walk), feed clauses (removed + private fences), lean embeds.
 - `api/utils/subspaces/subspaces.ts` — create/list/get/update/join/leave/
   members (add/remove/approve/unapprove/ban/unban/role)/moderate (remove/
-  approve/pin/unpin/lock/unlock/nsfw/spoiler/flair)/modlog/feed.
+  approve/pin/unpin/lock/unlock/nsfw/spoiler/flair)/modlog/feed, plus the
+  owner-only lifecycle: `transferSubspace` (target must be an ACTIVE member;
+  they become owner, the caller steps down to moderator, the subspace doc
+  changes hands through `updateAccountedThing` so its bytes move ledgers in
+  the same transaction; modlog `owner.transfer`) and `deleteSubspace`
+  (`confirmSlug` must equal the slug; posts are RELEASED as plain posts by a
+  bounded-batch accounted `$unset` of `crystal.subspaceId` / `crystal.flairId`
+  / `subspaceMod` / `subspacePrivate`, member + modlog (+ report) rows are
+  deleted, the subspace doc last via `deleteAccountedThing`; returns
+  `{ releasedPosts, removedMembers }`).
+- Notifications (round 2): six `subspace-*` types in `NOTIFICATION_TYPES`
+  (`subspace-join-request`, `-join-accepted`, `-post-removed`, `-report`,
+  `-role`, `-ban`) with prefs rows, bell copy, email copy and CTA. Subspace-
+  scoped rows carry the subspace shareId in `targetId` and lead their
+  `preview` with `s/<slug> · …` (`subspaceNotificationPreview` /
+  `subspaceSlugFromNotificationPreview` in `registry.ts`) so the bell and the
+  email deep-link to `/s/<slug>`; post-scoped rows set `postId`. Emitted so
+  far: `subspace-role` on promote/demote/transfer/deletion (former mods, bulk
+  ≤200), `subspace-ban` on ban/unban. `subspace-join-request` and
+  `subspace-report` default email OFF (mod-queue firehose).
 - `api/utils/things/updownCore.ts` + `updown.ts` — tally + vote toggle
   (same/other-direction/clear semantics as poll votes), batched tallies.
 - `things.ts` — `Viewer.subspaceRoles` loaded beside `friendIds`; `canView`
@@ -49,18 +68,24 @@ score field.
   the fences.
 - Endpoints (route + Nitro map + `apiDocs` + capability manifest):
   `/api/v1/subspaces` (GET/POST), `/get`, `/update`, `/join`, `/leave`,
-  `/members` (GET/POST), `/moderate`, `/modlog`, `/feed`,
-  `/api/v1/things/updown`. Rate-limit keys `subspaces.write`,
+  `/members` (GET/POST), `/moderate`, `/modlog`, `/feed`, `/transfer`,
+  `/delete`, `/api/v1/things/updown`. Rate-limit keys `subspaces.write`,
   `things.updown`; PAT scope `things.updown`. Contracts `api.things`,
   `api.things-feed`, `api.things-comment`, `api.things-user` → 1.2.0
-  (additive fields).
+  (additive fields); `api.subspaces-members`, `api.notifications-list`,
+  `api.notifications-settings` → 1.1.0 (member actions notify; the
+  notification type enum grew).
 
 ### Client
 
 - `/s` directory (search, Mine, create modal), `/s/:slug` (banner/icon/join,
   sort tabs + range, subspace-locked composer with title + flair, sidebar
-  About/Rules/Flairs/Moderators, private wall), `/s/:slug/mod` (Queue,
-  Members, Banned, Settings, Rules, Flairs, Log).
+  About/Rules/Flairs/Moderators, private wall; a 404 evicts the cached copy),
+  `/s/:slug/mod` (Queue, Members, Banned, Settings + the owner's **Danger
+  zone** — Transfer ownership with a confirm modal, Delete subspace with a
+  retype-the-slug modal that navigates to `/s` — Rules, Flairs, Log).
+- Bell + Settings → Notifications carry the six subspace types; subspace
+  rows click through to `/s/<slug>`.
 - `PostCard`: `🪐 s/<slug>` chip + flair chip + 📌/🔒/18+/⚠️ badges, title h2,
   "Removed by moderators" notice, the ▲ score ▼ `UpdownControl` beside the
   react button on posts and (compact) comments with optimistic
@@ -85,13 +110,19 @@ score field.
   → approve, pin, lock (423 incl. nested), flair by mod/author, mod log, bans
   (post/vote/comment/join blocked, pre-emptive, unban), restricted +
   private access (feed/home/direct-read fences, mod-added members), settings,
-  capability manifest, cascade).
+  capability manifest, cascade, and — round 2 section M — the lifecycle:
+  role/ban notifications, transfer walls (401/403/400/404, banned target
+  403) + success (ownerId flips, old owner demoted and may leave, modlog
+  `owner.transfer`, new-owner notification), delete walls (401/403/400) +
+  success (get/feed/members 404, posts readable as plain posts with the
+  private fence lifted, memberships gone, former-mod notification, slug
+  reusable)).
 - Browser: see the run log in the PR description / TESTING.md checklists.
 
 ## Known limits (stated, not hidden)
 
-- Subspaces can't be deleted or transferred yet (Reddit doesn't allow
-  deletion either); owners can't leave.
+- Owners can't leave while they own the subspace — transfer first (the
+  previous owner may leave right after).
 - No join-request queue for private subspaces — mods add members by
   username; no user flairs (post flairs only); no per-subspace wiki/sidebar
   widgets beyond About/Rules/Flairs/Mods.

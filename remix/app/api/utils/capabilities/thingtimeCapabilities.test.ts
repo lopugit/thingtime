@@ -33,14 +33,20 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
     'api.subspaces-update',
     'api.subspaces-join',
     'api.subspaces-leave',
-    'api.subspaces-members',
     'api.subspaces-moderate',
     'api.subspaces-modlog',
     'api.subspaces-feed',
+    'api.subspaces-transfer',
+    'api.subspaces-delete',
     'api.things-updown'
   ]) {
     assert.equal(manifest.features[feature]?.version, '1.0.0', feature);
   }
+  // round 2: member role/ban actions notify (additive side effect), and the
+  // notification type enum gained the subspace-* family
+  assert.equal(manifest.features['api.subspaces-members']?.version, '1.1.0');
+  assert.equal(manifest.features['api.notifications-list']?.version, '1.1.0');
+  assert.equal(manifest.features['api.notifications-settings']?.version, '1.1.0');
   assert.equal(manifest.features['api.things-update']?.version, '1.2.0');
   assert.ok(manifest.operations.some((operation) => operation.path === THINGTIME_CAPABILITY_MANIFEST_PATH));
   const operationPaths = new Set(manifest.operations.map((operation) => operation.path));

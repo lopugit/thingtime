@@ -140,6 +140,32 @@ const NOTIFICATION_EMAIL_COPY: Record<string, { subject: (actor: string) => stri
   groups: {
     subject: (actor) => `${actor} — group activity on Thingtime 👥`,
     line: (actor) => `${actor} did something in a group you're in.`
+  },
+  // subspace moderation (api/utils/subspaces) — the preview line carries the
+  // specifics ("s/<slug> · you are now a moderator"), these stay generic
+  'subspace-join-request': {
+    subject: (actor) => `${actor} asked to join your subspace 🙋`,
+    line: (actor) => `${actor} sent a request in a subspace you moderate.`
+  },
+  'subspace-join-accepted': {
+    subject: (actor) => `${actor} accepted you into a subspace 🎉`,
+    line: (actor) => `${actor} accepted your request — you're in.`
+  },
+  'subspace-post-removed': {
+    subject: (actor) => `A moderator removed your post 🧹`,
+    line: (actor) => `${actor} removed one of your posts from a subspace.`
+  },
+  'subspace-report': {
+    subject: (actor) => `${actor} reported a post in your subspace 🚩`,
+    line: (actor) => `${actor} reported a post to the moderators.`
+  },
+  'subspace-role': {
+    subject: (actor) => `${actor} changed your role in a subspace 🎩`,
+    line: (actor) => `${actor} updated your role in a subspace.`
+  },
+  'subspace-ban': {
+    subject: (actor) => `${actor} changed your access to a subspace 🚫`,
+    line: (actor) => `${actor} changed your access to a subspace.`
   }
 };
 

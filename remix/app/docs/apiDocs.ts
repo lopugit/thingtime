@@ -8655,6 +8655,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'subspaces-members',
+    // 1.1.0: role / ban / unban now notify the affected member (subspace-role,
+    // subspace-ban) — an additive side effect
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'subspaces',
     title: 'Subspace members',
     endpoint: '/api/v1/subspaces/members',
@@ -8664,7 +8668,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'member list and the ban list require a moderator. POST { id|slug, userId|username, action, role?, ' +
       'reason?, banDays? } with action add (private subspaces), remove (kick), approve/unapprove (restricted ' +
       'posting rights), ban/unban (banDays for a temporary ban; bans on non-members are pre-emptive), or role ' +
-      '(owner only: moderator | member). Moderators can’t moderate other moderators or the owner; every action ' +
+      '(owner only: moderator | member). role, ban and unban notify the affected user (bell types ' +
+      'subspace-role / subspace-ban, preview "s/<slug> · …", targetId = the subspace). ' +
+      'Moderators can’t moderate other moderators or the owner; every action ' +
       'writes a member.<action> mod-log entry.',
     auth: { mode: 'optional', description: 'GET of the mod roster works logged out; everything else needs a moderator session.' },
     methods: ['GET', 'POST'],
@@ -8746,6 +8752,58 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [
       { status: 200, description: 'A page.', body: { ok: true, sort: 'hot', subspace: { slug: 'rainbows' }, posts: [{ id: '4f6b2c1e-…', title: 'Double rainbow', votes: { up: 12, down: 1, score: 11, viewerVote: 'up' }, subspaceMod: { pinned: true } }], nextCursor: '20' } },
       { status: 403, description: 'Private.', body: { ok: false, error: 's/secret is private — members only 🔒' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-transfer',
+    group: 'subspaces',
+    title: 'Transfer subspace ownership',
+    endpoint: '/api/v1/subspaces/transfer',
+    summary: 'The owner hands the subspace to an active member; the previous owner becomes a moderator.',
+    detail:
+      'POST { id|slug, userId|username } as the owner. The target must be an ACTIVE member (joined, not banned, ' +
+      'not left; banned → 403, otherwise not a member → 404) and may not already run the per-user maximum of ' +
+      'subspaces. The target becomes owner (approved), the previous owner steps down to moderator — and may now ' +
+      'leave — and the subspace thing changes hands (its accounted bytes move ledgers in the same transaction). ' +
+      'Writes an owner.transfer mod-log entry and notifies the new owner (subspace-role, preview ' +
+      '"s/<slug> · you are now the owner 👑"). Returns the subspace as the caller now sees it plus the new owner’s ' +
+      'member row.',
+    auth: { mode: 'session-or-bearer', description: 'Requires the subspace owner.' },
+    methods: ['POST'],
+    steps: ['POST the subspace and the new owner (username or userId).', 'Non-owners receive 403; a non-member target 404; yourself 400.'],
+    requestExamples: [{ name: 'Hand over', description: 'Make @helper the owner of s/rainbows.', method: 'POST', body: { slug: 'rainbows', username: 'helper' } }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Transferred.',
+        body: { ok: true, subspace: { slug: 'rainbows', ownerId: '664f…helper', viewer: { role: 'moderator', member: true, canModerate: true } }, newOwner: { userId: '664f…helper', role: 'owner', approved: true } }
+      },
+      { status: 403, description: 'Not the owner.', body: { ok: false, error: 'Only the owner can transfer ownership 👑' } },
+      { status: 404, description: 'Target is not an active member.', body: { ok: false, error: 'The new owner has to be an active member of s/rainbows first' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-delete',
+    group: 'subspaces',
+    title: 'Delete subspace',
+    endpoint: '/api/v1/subspaces/delete',
+    summary: 'The owner deletes the subspace after retyping its slug; posts survive as plain posts.',
+    detail:
+      'POST { id|slug, confirmSlug } as the owner; confirmSlug must equal the slug (a leading "s/" and case are ' +
+      'forgiven) or the call answers 400. Cascade: every post of the subspace is released as a plain post — ' +
+      'crystal.subspaceId, crystal.flairId, the root subspaceMod state and the subspacePrivate fence are ' +
+      'stripped in bounded accounted batches (titles stay) — every subspace-member, subspace-modlog and ' +
+      'subspace-report row is deleted, then the subspace thing itself (accounted delete). Former moderators ' +
+      'are notified (subspace-role, "s/<slug> · was deleted by its owner"). Afterwards the slug is free again ' +
+      'and GET /api/v1/subspaces/get answers 404.',
+    auth: { mode: 'session-or-bearer', description: 'Requires the subspace owner.' },
+    methods: ['POST'],
+    steps: ['POST the subspace with confirmSlug equal to its slug.', 'Moderators receive 403; a mismatching confirmSlug 400.'],
+    requestExamples: [{ name: 'Delete', description: 'Delete s/rainbows for good.', method: 'POST', body: { slug: 'rainbows', confirmSlug: 'rainbows' } }],
+    responseExamples: [
+      { status: 200, description: 'Deleted.', body: { ok: true, releasedPosts: 42, removedMembers: 128 } },
+      { status: 400, description: 'Confirmation mismatch.', body: { ok: false, error: 'Type the slug to confirm — s/rainbows' } },
+      { status: 403, description: 'Not the owner.', body: { ok: false, error: 'Only the owner can delete a subspace 👑' } }
     ]
   }),
   endpoint({
@@ -9487,16 +9545,24 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'notifications-list',
+    // 1.1.0: the subspace-* types (join-request, join-accepted, post-removed,
+    // report, role, ban) joined the type enum — additive
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'notifications',
     title: 'List notifications',
     endpoint: '/api/v1/notifications',
     summary: 'Your notifications, newest first, filtered by your notification prefs — plus the unread count.',
     detail:
       'Notifications are server-minted things (new followers, friend requests/accepts, comments, ' +
-      'replies, reactions, shares, and capped posts-from-followed/friends fan-out). The list is ' +
+      'replies, reactions, shares, capped posts-from-followed/friends fan-out, and subspace ' +
+      'moderation: subspace-join-request, subspace-join-accepted, subspace-post-removed, ' +
+      'subspace-report, subspace-role, subspace-ban). The list is ' +
       'ALWAYS filtered by your current notification settings, so disabling a type hides even ' +
       'already-written notifications of that type. unreadCount backs the bell badge. Cursor ' +
-      'pagination via before=<nextBefore>.',
+      'pagination via before=<nextBefore>. Subspace-scoped rows (role, ban, join…) carry the subspace ' +
+      'shareId in targetId and lead their preview with "s/<slug> · …" so clients can link to /s/<slug>; ' +
+      'post-scoped ones (post-removed, report) set postId like every other post notification.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -9505,7 +9571,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'GET ?limit=&before= — newest first.',
       'Show unreadCount on the bell; refetch on window focus.',
-      'Click-through: postId → /post/<id>, otherwise actor → /profile/<username>.',
+      'Click-through: postId → /post/<id>; a subspace-* row without postId → /s/<slug> (slug from the preview); otherwise actor → /profile/<username>.',
       'Handle 401 unauthenticated and 429 rate-limited.'
     ],
     requestExamples: [
@@ -9580,6 +9646,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'notifications-settings',
+    // 1.1.0: six subspace-* switches joined the matrix — additive
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'notifications',
     title: 'Notification settings',
     endpoint: '/api/v1/notifications/settings',
@@ -9588,8 +9657,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Two channels: push (the bell/in-app channel) and email (SES-backed notification emails), each ' +
       'with a master switch and per-type switches. Types: friend-request, friend-accepted, ' +
       'new-follower, post-from-followed, post-from-friend, comment, reply, reaction, share, mention, groups ' +
-      '(reserved), plus the email-only weekly-summary digest. Defaults ON, except email for the two ' +
-      'high-volume post types (post-from-followed / post-from-friend), which are opt-in. GET always ' +
+      '(reserved), the subspace family subspace-join-request, subspace-join-accepted, subspace-post-removed, ' +
+      'subspace-report, subspace-role, subspace-ban, plus the email-only weekly-summary digest. Defaults ON, ' +
+      'except email for the high-volume types (post-from-followed / post-from-friend and the mod-queue pair ' +
+      'subspace-join-request / subspace-report), which are opt-in. GET always ' +
       'returns the full matrix. POST merges only the keys you send — the new channel shape ' +
       '{ prefs: { push?, email?, masters? } } or the original flat { prefs: { <type>: boolean } } ' +
       '(which patches the push channel); unknown keys 400. A disabled push type is hidden from your ' +

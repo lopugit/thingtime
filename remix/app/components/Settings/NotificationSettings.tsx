@@ -40,6 +40,18 @@ const PREF_ROWS: PrefRow[] = [
   { type: 'share', label: 'Shares 🔁', hint: 'Your posts get reposted' },
   { type: 'mention', label: 'Mentions 📣', hint: 'Someone @mentions you in a post or comment' },
   { type: 'groups', label: 'Groups 👥', hint: 'Group activity — ready for when groups arrive ✨' },
+  // subspaces 🪐 — the member-facing four first, then the two mod-queue types
+  // (those default to email OFF: a busy subspace is a firehose)
+  { type: 'subspace-role', label: 'Subspace roles 🎩', hint: 'You are made a moderator or owner, demoted, or a subspace you moderate is deleted' },
+  { type: 'subspace-ban', label: 'Subspace bans 🚫', hint: 'You are banned from, or unbanned in, a subspace' },
+  { type: 'subspace-join-accepted', label: 'Join requests accepted 🎉', hint: 'A private subspace lets you in' },
+  { type: 'subspace-post-removed', label: 'Posts removed by mods 🧹', hint: 'A moderator removes one of your posts — with the reason' },
+  {
+    type: 'subspace-join-request',
+    label: 'Join requests (mods) 🙋',
+    hint: 'Someone asks to join or post in a subspace you moderate — email is opt-in'
+  },
+  { type: 'subspace-report', label: 'Reports (mods) 🚩', hint: 'Someone reports a post in a subspace you moderate — email is opt-in' },
   {
     type: 'weekly-summary',
     label: 'Weekly summary ✨',

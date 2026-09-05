@@ -5,7 +5,7 @@ import type { EmailNotificationTarget } from '../auth/users';
 import { sendEmail } from '../email/service';
 import { renderNotificationEmailTemplate } from '../email/templates';
 import { getEmailMessagesCollection } from '../mongodb/collections';
-import { normalizeNotificationPrefs } from '~/schemas/registry';
+import { normalizeNotificationPrefs, subspaceSlugFromNotificationPreview } from '~/schemas/registry';
 import type { NotificationType } from '~/schemas/registry';
 import { clampPreview } from './notifications';
 import type { EmitNotificationInput } from './notifications';
@@ -71,12 +71,17 @@ const sendToTarget = async (target: EmailNotificationTarget, input: EmitNotifica
   }
   const origin = notificationEmailOrigin();
   const actorUsername = input.actor.username || null;
+  // subspace-scoped notifications (role/ban/join…) deep-link to the subspace
+  // — the slug rides at the head of the preview (registry.ts)
+  const subspaceSlug = input.type.startsWith('subspace-') && !input.postId ? subspaceSlugFromNotificationPreview(input.preview) : null;
   const ctaUrl = input.postId
     ? `${origin}/post/${encodeURIComponent(String(input.postId))}`
-    : actorUsername
-      ? `${origin}/profile/${encodeURIComponent(actorUsername)}`
-      : origin;
-  const ctaLabel = input.postId ? 'Open the post' : actorUsername ? `View @${actorUsername}` : 'Open Thingtime';
+    : subspaceSlug
+      ? `${origin}/s/${encodeURIComponent(subspaceSlug)}`
+      : actorUsername
+        ? `${origin}/profile/${encodeURIComponent(actorUsername)}`
+        : origin;
+  const ctaLabel = input.postId ? 'Open the post' : subspaceSlug ? `Open s/${subspaceSlug}` : actorUsername ? `View @${actorUsername}` : 'Open Thingtime';
   const rendered = renderNotificationEmailTemplate({
     type: input.type,
     actorName: input.actor.displayName || input.actor.username || null,

@@ -14,13 +14,15 @@ import { randomUUID } from 'node:crypto';
 
 import { getThingsCollection } from '../mongodb/collections';
 import { thingUniqueKey } from '../mongodb/uniqueKeys';
-import { insertAccountedThing, updateAccountedThing, withAccountedThingsTransaction } from '../storage/accountedThings';
+import { deleteAccountedThing, insertAccountedThing, updateAccountedThing, updateAccountedThings, withAccountedThingsTransaction } from '../storage/accountedThings';
 import { findUserByUsername } from '../auth/users';
+import { emitNotification, emitNotificationsBulk } from '../notifications/notifications';
 import {
 	COLLECTION_SCHEMA_VERSIONS,
 	MAX_SUBSPACE_MEMBERSHIPS_PER_USER,
 	MAX_SUBSPACES_PER_USER,
 	SUBSPACE_ROLES,
+	subspaceNotificationPreview,
 	type SubspaceAccessMode,
 	type SubspaceFeedSort,
 	type SubspaceRole
@@ -62,8 +64,10 @@ import {
 	type SubspaceMembership
 } from './gate';
 import {
+	confirmSlugMatches,
 	flairById,
 	rankSubspacePosts,
+	releasedPostUpdate,
 	sanitizeAccess,
 	sanitizeBranding,
 	sanitizeDescription,
@@ -94,6 +98,13 @@ const MAX_PINNED = 5;
 const RANKED_WINDOW = 400;
 const MAX_QUERY_CHARS = 60;
 const MAX_BAN_DAYS = 3650;
+// "the mods" as notification recipients = active owner + moderators, bounded
+const MAX_NOTIFIED_MODERATORS = 200;
+// deleting a subspace releases its posts in bounded accounted batches (each
+// batch is one storage transaction); the pass cap only guards against a
+// pathological loop, real subspaces drain in a handful of passes
+const RELEASE_BATCH = 200;
+const MAX_RELEASE_PASSES = 2_000;
 
 // ---------------------------------------------------------------------------
 // Projections
@@ -318,6 +329,31 @@ const requireModerator = async (subspaceId: string, userId: string): Promise<Fai
 	const membership = await membershipOf(subspaceId, userId);
 	if (!canModerate(membership)) return fail(403, 'Moderators only — you need a mod hat for that 🎩');
 	return { ok: true, membership: membership! };
+};
+
+// owner-only lifecycle actions (transfer / delete) — returns the owner's own
+// member doc too, since transfer rewrites it
+const requireOwner = async (subspaceId: string, userId: string, verb: string): Promise<Fail | { ok: true; membership: SubspaceMembership; doc: any }> => {
+	const doc = await findSubspaceMemberDoc(subspaceId, userId);
+	const membership = doc ? membershipOfDoc(doc) : null;
+	if (!canModerate(membership) || membership!.role !== 'owner') return fail(403, `Only the owner can ${verb} 👑`);
+	return { ok: true, membership: membership!, doc };
+};
+
+// the actor snapshot every subspace notification carries (notifications.ts
+// re-resolves live profile data on read)
+const notificationActorOf = (viewer: NonNullable<Viewer>) => ({ id: viewer.id, username: viewer.username || null });
+
+// active owner + moderators of a subspace, minus the acting user — the
+// bounded recipient list for "notify the mods" emits
+const moderatorRecipientIds = async (subspaceId: string, exceptUserId: string | null): Promise<string[]> => {
+	const things = await getThingsCollection();
+	const rows = (await things
+		.find({ thingtime: 'subspace-member', targetId: subspaceId, 'crystal.role': { $in: ['owner', 'moderator'] }, 'crystal.left': { $ne: true }, 'crystal.banned': { $ne: true } } as any)
+		.project({ ownerId: 1 })
+		.limit(MAX_NOTIFIED_MODERATORS)
+		.toArray()) as any[];
+	return rows.map((row) => String(row.ownerId)).filter((userId) => userId && userId !== exceptUserId);
 };
 
 // ---------------------------------------------------------------------------
@@ -694,6 +730,7 @@ export const mutateMember = async (viewerInput: string | Viewer, input: MutateMe
 	if (found.ok === false) return found;
 	const { subspace } = found;
 	const id = String(subspace.shareId);
+	const slug = String(subspace.crystal?.slug || id);
 	const action = MEMBER_ACTIONS.includes(input.action as MemberAction) ? (input.action as MemberAction) : null;
 	if (!action) return fail(400, `action must be one of ${MEMBER_ACTIONS.join(', ')}`);
 	const gate = await requireModerator(id, actorId);
@@ -770,9 +807,164 @@ export const mutateMember = async (viewerInput: string | Viewer, input: MutateMe
 		}
 	}
 	await writeModlog(id, actorId, `member.${action}`, { userId: targetUserId, reason, detail });
+	// the affected user hears about role + ban changes (never throws; prefs
+	// gate delivery). The preview leads with s/<slug> so the bell deep-links.
+	const notice =
+		action === 'role'
+			? { type: 'subspace-role' as const, text: set['crystal.role'] === 'moderator' ? 'you are now a moderator 🎩' : 'you are no longer a moderator' }
+			: action === 'ban'
+				? {
+						type: 'subspace-ban' as const,
+						text: `you were banned${typeof detail?.banUntil === 'string' ? ` until ${(detail.banUntil as string).slice(0, 10)}` : ''}${reason ? ` — ${reason}` : ''} 🚫`
+					}
+				: action === 'unban'
+					? { type: 'subspace-ban' as const, text: 'your ban was lifted 🕊️' }
+					: null;
+	if (notice) {
+		await emitNotification({
+			recipientId: targetUserId,
+			type: notice.type,
+			actor: notificationActorOf(auth.viewer),
+			targetId: id,
+			preview: subspaceNotificationPreview(slug, notice.text)
+		});
+	}
 	const fresh = await findSubspaceMemberDoc(id, targetUserId);
 	const profiles = await resolveProfiles([targetUserId]);
 	return { ok: true, member: toPublicMember(fresh, profiles.get(targetUserId) || null) };
+};
+
+// ---------------------------------------------------------------------------
+// Lifecycle: ownership transfer + deletion (owner only)
+
+export type TransferSubspaceInput = SubspaceRef & { userId?: unknown; username?: unknown };
+
+// The owner hands s/<slug> to an ACTIVE member: they become owner (approved),
+// the previous owner steps down to moderator (and may now leave), the
+// subspace doc changes hands — through the accounted updater, so its bytes
+// move ledgers in the same transaction — and the new owner is notified.
+export const transferSubspace = async (
+	viewerInput: string | Viewer,
+	input: TransferSubspaceInput
+): Promise<Fail | { ok: true; subspace: PublicSubspace; newOwner: PublicSubspaceMember }> => {
+	const auth = requireViewer(viewerInput);
+	if (auth.ok === false) return auth;
+	const actorId = auth.viewer.id;
+	const found = await resolveSubspace(input);
+	if (found.ok === false) return found;
+	const { subspace } = found;
+	const id = String(subspace.shareId);
+	const slug = String(subspace.crystal?.slug || id);
+	const gate = await requireOwner(id, actorId, 'transfer ownership');
+	if (gate.ok === false) return gate;
+	const targetUserId = await resolveTargetUserId(input);
+	if (isFail(targetUserId)) return targetUserId;
+	if (targetUserId === actorId) return fail(400, 'You already own this subspace 👑');
+	const targetDoc = await findSubspaceMemberDoc(id, targetUserId);
+	const target = targetDoc ? membershipOfDoc(targetDoc) : null;
+	if (target?.banned) return fail(403, `A banned user can’t take over s/${slug} — lift the ban first`);
+	if (!isActiveMember(target)) return fail(404, `The new owner has to be an active member of s/${slug} first`);
+	if ((await ownedSubspaceCount(targetUserId)) >= MAX_SUBSPACES_PER_USER) {
+		return fail(400, `They already run ${MAX_SUBSPACES_PER_USER} subspaces — the cap applies to owners too`);
+	}
+
+	const things = await getThingsCollection();
+	const now = new Date();
+	await withAccountedThingsTransaction(async (session) => {
+		await updateAccountedThing(things, { shareId: id, thingtime: 'subspace' }, { $set: { ownerId: targetUserId, updatedAt: now } }, { session });
+		await things.updateOne(
+			{ _id: targetDoc._id } as any,
+			{ $set: { 'crystal.role': 'owner', 'crystal.approved': true, 'crystal.left': false, 'crystal.banned': false, 'crystal.banReason': null, 'crystal.banUntil': null, updatedAt: now } },
+			{ session }
+		);
+		await things.updateOne({ _id: gate.doc._id } as any, { $set: { 'crystal.role': 'moderator', updatedAt: now } }, { session });
+	});
+	await writeModlog(id, actorId, 'owner.transfer', { userId: targetUserId, detail: { previousOwnerId: actorId } });
+	await emitNotification({
+		recipientId: targetUserId,
+		type: 'subspace-role',
+		actor: notificationActorOf(auth.viewer),
+		targetId: id,
+		preview: subspaceNotificationPreview(slug, 'you are now the owner 👑')
+	});
+	const [fresh, counts, actorMembership, newOwnerDoc, profiles] = await Promise.all([
+		findSubspace({ id }),
+		memberCountsFor([id]),
+		membershipOf(id, actorId),
+		findSubspaceMemberDoc(id, targetUserId),
+		resolveProfiles([targetUserId])
+	]);
+	return {
+		ok: true,
+		subspace: toPublicSubspace(fresh, { memberCount: counts.get(id) || 0, membership: actorMembership }),
+		newOwner: toPublicMember(newOwnerDoc, profiles.get(targetUserId) || null)
+	};
+};
+
+// Posts survive their subspace: strip the pointer/flair/mod state/private
+// fence in bounded accounted batches (each batch one storage transaction) so a
+// large subspace never becomes one giant transaction. Returns how many posts
+// were released.
+const releaseSubspacePosts = async (things: any, subspaceId: string): Promise<number> => {
+	let released = 0;
+	for (let pass = 0; pass < MAX_RELEASE_PASSES; pass++) {
+		const rows = (await things
+			.find(withMatch(postMatch(), { 'crystal.subspaceId': subspaceId }) as any)
+			.project({ shareId: 1 })
+			.limit(RELEASE_BATCH)
+			.toArray()) as any[];
+		if (!rows.length) break;
+		const shareIds = rows.map((row) => String(row.shareId));
+		const result = await updateAccountedThings(things, { shareId: { $in: shareIds }, 'crystal.subspaceId': subspaceId }, releasedPostUpdate(new Date()));
+		const matched = Number(result?.matchedCount) || 0;
+		released += matched;
+		if (!matched) break; // raced away underneath us — never spin
+	}
+	return released;
+};
+
+export type DeleteSubspaceInput = SubspaceRef & { confirmSlug?: unknown };
+
+// Owner deletes s/<slug> after retyping its slug. Cascade order matters for
+// retries: posts are released first (a failure here leaves everything intact
+// — the owner simply retries; posts are never left fenced behind a missing
+// subspace), then the subspace doc itself (accounted delete — it is billable
+// content), then the member / mod-log / report plumbing rows (unbilled; the
+// owner's row must outlive the doc delete or a failed attempt could strand a
+// subspace nobody may delete). Former moderators are told.
+export const deleteSubspace = async (
+	viewerInput: string | Viewer,
+	input: DeleteSubspaceInput
+): Promise<Fail | { ok: true; releasedPosts: number; removedMembers: number }> => {
+	const auth = requireViewer(viewerInput);
+	if (auth.ok === false) return auth;
+	const actorId = auth.viewer.id;
+	const found = await resolveSubspace(input);
+	if (found.ok === false) return found;
+	const { subspace } = found;
+	const id = String(subspace.shareId);
+	const slug = String(subspace.crystal?.slug || id);
+	const gate = await requireOwner(id, actorId, 'delete a subspace');
+	if (gate.ok === false) return gate;
+	if (!confirmSlugMatches(input.confirmSlug, slug)) return fail(400, `Type the slug to confirm — s/${slug}`);
+
+	const things = await getThingsCollection();
+	const formerModeratorIds = await moderatorRecipientIds(id, actorId);
+	let releasedPosts = await releaseSubspacePosts(things, id);
+	await deleteAccountedThing(things, { shareId: id, thingtime: 'subspace' });
+	const memberResult = await things.deleteMany({ thingtime: 'subspace-member', targetId: id } as any);
+	await things.deleteMany({ thingtime: { $in: ['subspace-modlog', 'subspace-report'] }, targetId: id } as any);
+	// a post that landed between the release pass and the doc delete would
+	// keep a dangling pointer — one more (usually empty) pass catches it
+	releasedPosts += await releaseSubspacePosts(things, id);
+
+	if (formerModeratorIds.length) {
+		await emitNotificationsBulk(
+			formerModeratorIds.map((recipientId) => ({ recipientId, type: 'subspace-role' as const })),
+			{ actor: notificationActorOf(auth.viewer), targetId: id, preview: subspaceNotificationPreview(slug, 'was deleted by its owner 🗑️') }
+		);
+	}
+	return { ok: true, releasedPosts, removedMembers: Number(memberResult?.deletedCount) || 0 };
 };
 
 // ---------------------------------------------------------------------------

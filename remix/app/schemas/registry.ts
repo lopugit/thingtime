@@ -2148,6 +2148,12 @@ const friendThingSchema: ThingtimeSchema = {
 // 'groups' is reserved for the future groups feature (the pref persists, no
 // emitter exists yet). Reads ALWAYS filter by the recipient's prefs, so a
 // fanned-out notification written before a pref flip stays hidden.
+//
+// The subspace-* family (api/utils/subspaces): join-request (a private-subspace
+// join request or a restricted-subspace "wants to post" request, to the mods),
+// join-accepted (to the requester), post-removed (to the author, preview =
+// the removal reason), report (a post report, to the mods), role (promoted /
+// demoted / made owner / "s/<slug> was deleted"), ban (banned / unbanned).
 export const NOTIFICATION_TYPES = [
   'friend-request',
   'friend-accepted',
@@ -2159,9 +2165,39 @@ export const NOTIFICATION_TYPES = [
   'reaction',
   'share',
   'mention',
-  'groups'
+  'groups',
+  'subspace-join-request',
+  'subspace-join-accepted',
+  'subspace-post-removed',
+  'subspace-report',
+  'subspace-role',
+  'subspace-ban'
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+// Subspace notifications that are about the SUBSPACE (not a post) link to
+// /s/<slug>: the slug rides at the head of the preview ("s/<slug> · …") while
+// targetId carries the subspace shareId, so the bell, the email CTA and API
+// clients can all deep-link without a projection change. Post-scoped
+// subspace notifications (post-removed, report) set postId like every other
+// post notification and link to /post/<id>.
+export const SUBSPACE_NOTIFICATION_TYPES: readonly NotificationType[] = [
+  'subspace-join-request',
+  'subspace-join-accepted',
+  'subspace-post-removed',
+  'subspace-report',
+  'subspace-role',
+  'subspace-ban'
+];
+export const subspaceNotificationPreview = (slug: string, detail: string): string => {
+  const text = String(detail || '').replace(/\s+/g, ' ').trim();
+  return text ? `s/${slug} · ${text}` : `s/${slug}`;
+};
+const SUBSPACE_PREVIEW_SLUG_PATTERN = /^s\/([a-z0-9_]{1,30})(?=\s|$)/;
+export const subspaceSlugFromNotificationPreview = (preview: unknown): string | null => {
+  const match = SUBSPACE_PREVIEW_SLUG_PATTERN.exec(typeof preview === 'string' ? preview.trim() : '');
+  return match ? match[1] : null;
+};
 
 // Email-channel notification switches. Every bell type can also send an email,
 // plus email-only types (weekly-summary) that never mint a bell notification.
@@ -2170,8 +2206,10 @@ export const EMAIL_NOTIFICATION_TYPES = [...NOTIFICATION_TYPES, ...EMAIL_ONLY_NO
 export type EmailNotificationType = (typeof EMAIL_NOTIFICATION_TYPES)[number];
 
 // High-volume types whose EMAIL channel defaults OFF (the bell stays ON): a
-// busy follow graph would otherwise turn every post into an email.
-export const EMAIL_DEFAULT_OFF_TYPES: readonly string[] = ['post-from-followed', 'post-from-friend'];
+// busy follow graph would otherwise turn every post into an email, and the
+// mod-queue traffic of a big subspace (join requests, reports) is the same
+// class of firehose — moderators opt in per type.
+export const EMAIL_DEFAULT_OFF_TYPES: readonly string[] = ['post-from-followed', 'post-from-friend', 'subspace-join-request', 'subspace-report'];
 
 export type NotificationChannelMasters = { push: boolean; email: boolean };
 export type NormalizedNotificationPrefs = {
@@ -2217,8 +2255,11 @@ const notificationThingSchema: ThingtimeSchema = {
   detail:
     'Minted by the server when someone else follows you, sends/accepts a friend request, ' +
     'comments, replies, reacts, shares, @mentions you in a post or comment, or (fan-out, ' +
-    'capped) posts while you follow them. ' +
-    'ownerId is the recipient, targetId the subject thing (post/comment/user), root readAt ' +
+    'capped) posts while you follow them — and by subspace moderation (subspace-* types: ' +
+    'join requests/accepts, post removals, reports, role changes incl. ownership transfer and ' +
+    'deletion, bans; subspace-scoped ones put "s/<slug> · …" in preview and the subspace ' +
+    'shareId in targetId, post-scoped ones set postId). ' +
+    'ownerId is the recipient, targetId the subject thing (post/comment/user/subspace), root readAt ' +
 		"flips when read. Listed via GET /api/v1/notifications (filtered by the recipient's " +
     'meta.notificationPrefs), marked via POST /api/v1/notifications/read. Always acl ' +
     '["tt:user"]; the generic things CRUD refuses this kind.',

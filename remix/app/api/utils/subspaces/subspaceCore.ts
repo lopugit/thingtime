@@ -244,4 +244,20 @@ export const rankSubspacePosts = (candidates: readonly RankCandidate[], sort: Su
 export const ROLE_RANK: Record<SubspaceRole, number> = { member: 0, moderator: 1, owner: 2 };
 export const isModeratorRole = (role: SubspaceRole | null | undefined): boolean => role === 'owner' || role === 'moderator';
 
+// ---------------------------------------------------------------------------
+// Lifecycle (transfer / delete).
+
+// Deleting a subspace asks the owner to retype its slug. Intent is the point,
+// not typing precision: a leading "s/", case and surrounding whitespace are
+// forgiven, anything else (another slug, empty, non-string) is a mismatch.
+export const confirmSlugMatches = (confirm: unknown, slug: string): boolean =>
+	typeof confirm === 'string' && !!slug && confirm.trim().toLowerCase().replace(/^s\//, '') === slug;
+
+// What a post loses when its subspace is deleted — it survives as a plain
+// post (the title stays: any post may carry one), so the subspace pointer +
+// flair and the server-owned moderation state + private fence go. These are
+// the exact Mongo paths the accounted bulk updater $unsets.
+export const RELEASED_POST_UNSET = Object.freeze({ 'crystal.subspaceId': '', 'crystal.flairId': '', subspaceMod: '', subspacePrivate: '' });
+export const releasedPostUpdate = (now: Date) => ({ $unset: { ...RELEASED_POST_UNSET }, $set: { updatedAt: now } });
+
 export const isFailValue = isFail;

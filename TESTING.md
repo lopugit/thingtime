@@ -1266,6 +1266,31 @@ email whose link points at the attacker.
       default sort applies when a `/s/<slug>` link carries no `?sort=`.
 - [ ] Deleting a post removes its `updown` votes (cascade); a subspace's
       posts survive it losing a flair (chip simply disappears).
+- [ ] Mod page → Settings → **Danger zone ⚠️** (owner only; mods see a
+      one-line "up to its owner" note): **Transfer ownership** takes a
+      username, opens a confirm modal, and on success the crown moves (the
+      old owner's owner-only controls dim instantly, `viewer.role` becomes
+      `moderator`, the Lopu toast names the new owner, the new owner gets a
+      🎩 `subspace-role` bell entry "s/<slug> · you are now the owner 👑"
+      that deep-links to `/s/<slug>`); the API refuses non-owners (403),
+      yourself (400), non-members / unknown users (404) and banned members
+      (403), and the previous owner can now Leave. **Delete subspace** opens
+      a modal whose red button arms only once `s/<slug>` is retyped (prefix
+      and case forgiven); success navigates to `/s` with a toast counting
+      released posts + removed memberships, `/s/<slug>` shows "doesn't
+      exist" (its cached copy is evicted, never repainted), the slug is free
+      again, members/mod log are gone, and every former post still opens on
+      `/post/:id` as a plain post (no subspace chip, flair or mod state;
+      title kept; private-fence lifted). Moderators (403) and a wrong
+      `confirmSlug` (400) are refused; former mods get a
+      "s/<slug> · was deleted by its owner 🗑️" bell entry.
+- [ ] Bell 🔔 + Settings → Notifications: six subspace rows (roles 🎩,
+      bans 🚫, join accepted 🎉, posts removed 🧹, join requests 🙋,
+      reports 🚩 — the last two default email OFF). Promote/demote rings
+      `subspace-role`, ban/unban rings `subspace-ban`; each row reads
+      "<actor> changed your role in a subspace" with the `s/<slug> · …`
+      preview beneath and clicking it opens `/s/<slug>`. Switching a type off
+      hides its existing rows immediately.
 
 ## Up/down votes (`remix/app/api/utils/things/updown.ts`, `remix/app/components/Feed/UpdownControl.tsx`)
 

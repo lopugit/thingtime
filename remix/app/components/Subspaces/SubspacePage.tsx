@@ -4,7 +4,7 @@ import { Link, useParams, useSearchParams } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
-import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
+import { clearLocalCache, readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { PostComposer } from '~/components/Feed/PostComposer';
 import { PostList } from '~/components/Feed/PostList';
@@ -175,8 +175,11 @@ export const SubspacePage = () => {
 			})
 			.catch((err: any) => {
 				if (cancelled) return;
-				if (Number(err?.status) === 404) setNotFound(true);
-				else lopu({ title: err?.error || 'Could not load the subspace 😞', status: 'error' });
+				if (Number(err?.status) === 404) {
+					// a deleted subspace must not keep repainting from its cached copy
+					clearLocalCache(cacheKey);
+					setNotFound(true);
+				} else lopu({ title: err?.error || 'Could not load the subspace 😞', status: 'error' });
 			});
 		return () => {
 			cancelled = true;
@@ -213,6 +216,7 @@ export const SubspacePage = () => {
 					setWall(err?.error || 'This subspace is private 🔒');
 					setPosts([]);
 				} else if (Number(err?.status) === 404) {
+					clearLocalCache(cacheKey);
 					setNotFound(true);
 				} else {
 					lopu({ title: err?.error || 'Could not load posts 😞', status: 'error' });
