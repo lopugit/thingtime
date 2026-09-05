@@ -1,3 +1,4 @@
+import { APPLE_APP_ASSOCIATION_PATH } from './app/api/utils/auth/appleAppAssociation';
 import { defineNitroConfig } from 'nitro/config';
 
 import { apiV1DocsRouteKeys, apiV1RouteKeys } from './app/docs/apiDocs.ts';
@@ -27,6 +28,7 @@ export default defineNitroConfig({
   routes: {
     ...Object.fromEntries(apiRoutes.map((route) => [`/api/${route}`, apiHandler])),
     [THINGTIME_CAPABILITY_MANIFEST_PATH]: thingtimeCapabilitiesHandler,
+    [APPLE_APP_ASSOCIATION_PATH]: './server/handlers/apple-app-association.ts',
     [CHATGPT_PROTECTED_RESOURCE_METADATA_PATH]: chatGptDiscoveryHandler,
     [CHATGPT_AUTHORIZATION_SERVER_METADATA_PATH]: chatGptDiscoveryHandler,
     [CHATGPT_CAPABILITY_MANIFEST_PATH]: chatGptDiscoveryHandler
