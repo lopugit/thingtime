@@ -3,6 +3,25 @@
 This branch contains no application. Its rollout target is `github-actions`;
 do not merge it into the permanently separate product branches to test it.
 
+## Cooperative review handover
+
+- Run `node --test .github/scripts/lopu-cooperative-review.test.mjs`.
+- Verify a real pending fleet member signals only the active reviewer, after
+  five minutes; API errors, malformed inventories and unrelated jobs do not.
+- Verify parallel hook calls serialize, requests latch, and polling is bounded.
+- Verify Claude hook delivery in a harmless local fixture; preserve settings on
+  exact-session continuation and the same protocol in the Codex prompt.
+- Finish at least one PR before yielding. Completed reports permit the existing
+  publisher; dirty/unreported work and active Git operations block handover.
+- Only completed records feed publication, comments, and CodeQL dispositions.
+  Untouched PRs must not receive a successful-review comment.
+- Preserve only PR-number metadata in the artifact, and queue the remainder
+  after successful publication. Resume against fresh eligibility and heads.
+- Never cancel an active worker or publish an incomplete PR to test handover.
+- Preview recovery: an initial comment-write 403 must be retried through the
+  corrected protected controller, not by editing product code or loosening the
+  secretless build boundary. Verify the final exact-SHA comment and both URLs.
+
 ## Event feedback and CI cancellation
 
 - Run `node --test .github/scripts/control-plane-events.test.mjs .github/scripts/preview-comments.test.mjs`.

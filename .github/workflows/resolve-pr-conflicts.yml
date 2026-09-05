@@ -44,6 +44,12 @@ run-name: >-
       && 'Lopu resolves a fully materialized PR batch from the control plane'
       || github.event_name == 'workflow_dispatch'
       && inputs.detector_handoff == true
+      && startsWith(inputs.control_dispatch_id, 'lopu-review:yield:')
+      && github.actor == 'github-actions[bot]'
+      && github.ref_name == 'github-actions'
+      && 'Lopu continues a checkpointed PR review'
+      || github.event_name == 'workflow_dispatch'
+      && inputs.detector_handoff == true
       && github.actor == 'github-actions[bot]'
       && github.ref_name == 'github-actions'
       && inputs.pr_number != ''
@@ -4431,6 +4437,7 @@ jobs:
               | select([.labels[].name] | index("ai-rebase-in-progress") == null)
               | select([.labels[].name] | index("ai-merge-paused") == null)]
           ' <<<"$candidates")"
+          candidates="$(CANDIDATES="$candidates" node ./trusted/.github/scripts/lopu-cooperative-review.mjs select)"
           if [ "$(jq 'length' <<<"$candidates")" -eq 0 ]; then
             echo 'No eligible same-repository PR remains in this Lopu review scope.'
             {
@@ -4640,6 +4647,7 @@ jobs:
         continue-on-error: true
         uses: ./trusted/.github/actions/lopu-agent
         with:
+          cooperative-review: 'true'
           backend: ${{ needs.model_config.outputs.agent_backend }}
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -4845,8 +4853,9 @@ jobs:
             stderr="$RUNNER_TEMP/thingtime-lopu-review-continuation.stderr"
             status=0
             claude --resume "$session_id" --print \
-              "Continue Lopu's repository-review task from this exact session. Finish the review and reports for every candidate in the original manifest, retaining the original task objective and full repository access." \
+              "Continue this exact review session. Honor the cooperative handover protocol: when requested, finish and validate only the current PR, report it, and return normally for publication and continuation." \
               "${model_args[@]}" \
+              --settings "$RUNNER_TEMP/lopu-review-cooperative-settings.json" \
               --max-turns 500 \
               --output-format json \
               --dangerously-skip-permissions \
@@ -4864,6 +4873,11 @@ jobs:
             session_id="$RESULT_SESSION"
           done
 
+      - name: Checkpoint completed reviews before publishing
+        id: review_checkpoint
+        if: steps.prepare.outputs.any == 'true'
+        run: node ./trusted/.github/scripts/lopu-cooperative-review.mjs finalize
+
       - name: Commit and push Lopu's justified PR improvements
         id: publish
         if: steps.prepare.outputs.any == 'true'
@@ -4871,7 +4885,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PUSH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
-          MANIFEST: ${{ steps.prepare.outputs.manifest }}
+          MANIFEST: ${{ steps.review_checkpoint.outputs.manifest }}
         run: |
           set -euo pipefail
 
@@ -4924,7 +4938,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          MANIFEST: ${{ steps.prepare.outputs.manifest }}
+          MANIFEST: ${{ steps.review_checkpoint.outputs.manifest }}
           RESULTS: ${{ steps.publish.outputs.results }}
           CODEQL_AUTHORITY_B64: ${{ steps.prepare.outputs.codeql_authority_b64 }}
         run: |
@@ -5347,11 +5361,11 @@ jobs:
           printf 'outcome=opened\n' >>"$GITHUB_OUTPUT"
 
       - name: Publish Lopu's PR review updates
-        if: always() && steps.prepare.outputs.any == 'true'
+        if: always() && steps.review_checkpoint.outcome == 'success'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          MANIFEST: ${{ steps.prepare.outputs.manifest }}
+          MANIFEST: ${{ steps.review_checkpoint.outputs.manifest }}
           RESULTS: ${{ steps.publish.outputs.results }}
           WORKFLOW_FIX_URL: ${{ steps.workflow_fix.outputs.url }}
         run: |
@@ -5397,6 +5411,21 @@ jobs:
               gh api "repos/$REPO/issues/$number/comments" -F "body=@$body" >/dev/null
             fi
           done < <(jq -r ".[] | @base64" "$MANIFEST")
+
+      - name: Preserve the cooperative handover receipt
+        if: always() && steps.review_checkpoint.outputs.remaining != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: lopu-review-handoff-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.review_checkpoint.outputs.receipt }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Queue remaining reviews behind waiting work
+        if: always() && steps.publish.outcome == 'success' && steps.review_checkpoint.outputs.remaining != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node ./trusted/.github/scripts/lopu-cooperative-review.mjs requeue
 
   codeql_dispositions:
     name: Apply Lopu CodeQL dispositions
