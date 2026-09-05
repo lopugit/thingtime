@@ -1,3 +1,4 @@
+import { ProgressiveImage } from './ProgressiveImage';
 import React from 'react';
 // Grid/Image are gone: the owner-chosen layouts below render their own
 // masonry/rows/grid containers, and each image tile is a Box `as="img"`.
@@ -13,6 +14,7 @@ import {
 	normalizePublicAttachment
 } from './attachmentUiCore';
 import { MediaLightbox } from './MediaLightbox';
+import { AudioAttachmentPlayer } from './AudioAttachmentPlayer';
 import type { PublicAttachment } from './attachmentTypes';
 import type { MediaLayoutSpan, PostMediaLayout } from '~/schemas/registry';
 
@@ -110,7 +112,8 @@ const NsfwShield = ({
 // images-per-row pattern (extras repeat the last row size); grid = uniform
 // columns with per-image spans (wide/tall/big). Clicking any image opens the
 // MediaLightbox at that image's ATTACHMENT-ORDER index — layout never changes
-// lightbox order. Videos keep inline players; generic files stay download rows.
+// lightbox order. Videos and audio keep inline native players; generic files
+// stay download rows.
 
 // chunk images into row sizes per the pattern, repeating the last row size
 export const mediaLayoutRows = (count: number, pattern: number[]): number[] => {
@@ -258,8 +261,7 @@ export const PostAttachments = ({
 
 	const images = normalized.filter((attachment) => attachment.mediaKind === 'image');
 	const videos = normalized.filter((attachment) => attachment.mediaKind === 'video');
-	// The public normalizer deliberately maps audio to the generic file kind so
-	// it stays a safe download row rather than an autoplay-capable player.
+	const audio = normalized.filter((attachment) => attachment.mediaKind === 'audio');
 	const files = normalized.filter((attachment) => attachment.mediaKind === 'file');
 
 	const layout: PostMediaLayout = mediaLayout && images.length > 1 ? mediaLayout : { mode: 'masonry' };
@@ -277,12 +279,10 @@ export const PostAttachments = ({
 		// before the viewer opts in. Revealing turns it back into a normal tile.
 		const shielded = attachment.nsfw === true && !revealedIds.has(attachment.id);
 		const image = (
-			<Box
-				as="img"
+			<ProgressiveImage
 				src={attachmentMediaSrc(attachment)}
 				alt={attachment.title || attachmentDisplayName(attachment) || `Post image ${index + 1}`}
 				loading="lazy"
-				referrerPolicy="no-referrer"
 				width="100%"
 				display="block"
 				// fill mode: the tile's aspect-ratio owns the box, the image covers it
@@ -416,6 +416,8 @@ export const PostAttachments = ({
 					video
 				);
 			})}
+
+			{audio.length > 0 ? <AudioAttachmentPlayer attachments={audio} compact={compact} /> : null}
 
 			{files.length > 0 && (
 				<Flex flexDirection="column" rowGap={1.5}>

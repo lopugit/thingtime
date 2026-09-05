@@ -1,12 +1,14 @@
 import React from 'react';
-import { Box, Divider, Flex, Switch, Text } from '@chakra-ui/react';
+import { Box, Button, Divider, Flex, Switch, Text } from '@chakra-ui/react';
+import { useNavigate } from 'react-router';
 
 import { SettingsSection } from './SettingsSection';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { NOTIFICATION_TYPE_META } from '~/components/Notifications/notificationCore';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import type { CurrentUser } from '~/hooks/useCurrentUser';
-import { normalizeNotificationPrefs } from '~/schemas/registry';
+import { NOTIFICATION_TYPES, normalizeNotificationPrefs } from '~/schemas/registry';
 import type { NormalizedNotificationPrefs } from '~/schemas/registry';
 
 // Settings → Notifications: a per-type switch matrix with two channels —
@@ -20,26 +22,15 @@ import type { NormalizedNotificationPrefs } from '~/schemas/registry';
 
 type PrefRow = { type: string; label: string; hint: string; emailOnly?: boolean };
 
+// One row per bell type (copy shared with the bell + /notifications via
+// NOTIFICATION_TYPE_META, so a new type shows up here automatically), plus the
+// email-only weekly digest.
 const PREF_ROWS: PrefRow[] = [
-  { type: 'friend-request', label: 'Friend requests 🤝', hint: 'Someone asks to be your friend' },
-  { type: 'friend-accepted', label: 'Request accepted 💚', hint: 'A friend request you sent is accepted' },
-  { type: 'new-follower', label: 'New followers 👀', hint: 'Someone starts following you' },
-  {
-    type: 'post-from-followed',
-    label: 'Posts from people you follow 📰',
-    hint: 'New posts by accounts you follow — email is opt-in'
-  },
-  {
-    type: 'post-from-friend',
-    label: 'Posts from friends 🫶',
-    hint: 'New posts by your friends — email is opt-in'
-  },
-  { type: 'comment', label: 'Comments 💬', hint: 'Comments on your posts' },
-  { type: 'reply', label: 'Replies ↩️', hint: 'Replies to your comments' },
-  { type: 'reaction', label: 'Reactions 🤣', hint: 'Reactions on your posts and comments' },
-  { type: 'share', label: 'Shares 🔁', hint: 'Your posts get reposted' },
-  { type: 'mention', label: 'Mentions 📣', hint: 'Someone @mentions you in a post or comment' },
-  { type: 'groups', label: 'Groups 👥', hint: 'Group activity — ready for when groups arrive ✨' },
+  ...NOTIFICATION_TYPES.map((type) => ({
+    type,
+    label: `${NOTIFICATION_TYPE_META[type].label} ${NOTIFICATION_TYPE_META[type].emoji}`,
+    hint: NOTIFICATION_TYPE_META[type].hint
+  })),
   {
     type: 'weekly-summary',
     label: 'Weekly summary ✨',
@@ -92,6 +83,7 @@ export const NotificationSettingsSection = (props: { user: NonNullable<CurrentUs
   const { user } = props;
   const api = useApi();
   const lopu = useLopu();
+  const navigate = useNavigate();
 
   const cacheKey = `tt-notif-prefs-v2-${user.id}`;
   const [prefs, setPrefs] = React.useState<NormalizedNotificationPrefs>(() =>
@@ -169,6 +161,14 @@ export const NotificationSettingsSection = (props: { user: NonNullable<CurrentUs
       description="Pick what lands in your bell 🔔 and your inbox 📬 — each type has its own push and email switch, and the top row mutes a whole channel."
     >
       <Flex flexDirection="column">
+        <RowShell label="History 📜" hint="Everything you've received — search it, filter by category or type, jump back in">
+          <Button size="xs" variant="outline" onClick={() => navigate('/notifications')}>
+            Open
+          </Button>
+        </RowShell>
+
+        <Divider marginY={1} borderColor="var(--tt-border, #ececef)" />
+
         <Flex alignItems="center" columnGap={3} paddingBottom={1}>
           <Box minWidth={0} flex="1" />
           <Flex columnGap={2} flexShrink={0}>

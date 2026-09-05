@@ -51,8 +51,8 @@ interface ScheduledIndexRun {
   reject(error: Error): void;
 }
 
-const FILESYSTEM_RESULT_LIMIT = 160;
-const APPLICATION_RESULT_LIMIT = 1_000;
+// Output page size only: the indexer ranks matching records before returning it.
+const FILESYSTEM_RESULT_PAGE_SIZE = 160;
 const COMMANDER_INDEX_TIMEOUT_MS = 90_000;
 const COMMANDER_MAX_INDEX_TIMEOUT_MS = 15 * 60_000;
 const INDEX_STATUS_CACHE_MS = 30_000;
@@ -117,10 +117,8 @@ export class IndexingService {
         this.#disableRust(error);
       }
     }
-    // The fallback is deliberately quick and gives the launcher current
-    // top-level/managed applications immediately. The full Rust index below
-    // keeps scanning in the background; never hold Commander startup or the
-    // first search request behind a disk scan.
+    // The fallback gives the launcher freshly installed top-level applications
+    // while a missing/stale index is refreshed independently in the background.
     applications = mergeApplications(applications, await discoverApplicationsQuick());
     this.#callbacks.applications(applications);
     this.#timer = setInterval(() => void this.#automaticRefresh(), 60_000);
@@ -129,7 +127,8 @@ export class IndexingService {
     // Search always reads the latest committed catalog snapshot. Indexing runs
     // independently and swaps that catalog when its atomic database update
     // completes, so new searches remain live without a startup race.
-    void this.start('applications').catch(() => undefined);
+    // Reuse a fresh persisted index on launch, rather than scanning every time
+    // Commander starts. Watchers and the reconciliation schedule keep it fresh.
     void this.#automaticRefresh();
     return applications;
   }
@@ -142,15 +141,16 @@ export class IndexingService {
     }
   }
 
-  async queryItems(query: string, limit = FILESYSTEM_RESULT_LIMIT): Promise<SearchItem[]> {
-    // The Rust index has a bounded prefix path for one-character queries, so
-    // do not silently remove filesystem results while a user is still typing.
+  async queryItems(query: string, limit = FILESYSTEM_RESULT_PAGE_SIZE): Promise<SearchItem[]> {
     if (!this.#reader || !this.#settings.enabled || !query.trim()) return [];
     try {
+      // All apps are already in the in-memory catalogue. Only read files and
+      // folders here: a crowded filename page cannot exclude a matching app,
+      // and search never needs to initiate an indexing run or discovery scan.
       const response = await this.#reader.query({
         query,
-        kinds: ['application', 'file', 'directory'],
-        limit: Math.min(FILESYSTEM_RESULT_LIMIT, Math.max(1, limit)),
+        kinds: ['file', 'directory'],
+        limit: Math.max(1, limit),
       });
       return response.records.map(indexRecordToSearchItem);
     } catch (error) {
@@ -462,12 +462,13 @@ export class IndexingService {
 
   async #queryApplications(): Promise<SearchItem[]> {
     if (!this.#reader) return [];
-    const response = await this.#reader.query({
-      query: '',
-      kinds: ['application'],
-      limit: APPLICATION_RESULT_LIMIT,
-    });
-    return deduplicateSearchItems(response.records.map(indexRecordToSearchItem));
+    const response = await this.#reader.catalogue(['application']);
+    // Read the complete persistent app catalogue, including freshly installed
+    // apps that the bounded direct scan can see before the index catches up.
+    return mergeApplications(
+      response.records.map(indexRecordToSearchItem),
+      await discoverApplicationsQuick(),
+    );
   }
 
   async #automaticRefresh(): Promise<void> {

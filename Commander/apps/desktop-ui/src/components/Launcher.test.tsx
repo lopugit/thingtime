@@ -586,6 +586,21 @@ describe('Launcher keyboard navigation', () => {
     expect(commander.executeCommand).not.toHaveBeenCalled();
   });
 
+  it('keeps one fixed loading spinner mounted while search results stream', () => {
+    const commander = state({ hits: [], searchPending: true });
+    const view = render(<Launcher state={commander} />);
+
+    const spinner = screen.getByLabelText('Updating results');
+    expect(spinner).toHaveClass('search-spinner');
+    expect(view.container.querySelectorAll('.search-spinner')).toHaveLength(1);
+    expect(screen.getByText('Searching…')).toBeVisible();
+
+    view.rerender(<Launcher state={{ ...commander, hits }} />);
+
+    expect(screen.getByLabelText('Updating results')).toBe(spinner);
+    expect(view.container.querySelectorAll('.search-spinner')).toHaveLength(1);
+  });
+
   it('shows live index progress in the footer', () => {
     render(
       <Launcher
@@ -634,4 +649,59 @@ describe('Launcher keyboard navigation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open New Window' }));
     await waitFor(() => expect(nativeRequest).toHaveBeenCalledWith('launcher.openNewWindow'));
   });
+
+  it.each([false, true])(
+    'toggles the shared new-window pin default from %s without pinning this window',
+    async (defaultPinned) => {
+      const settings = {
+        ...DEFAULT_SETTINGS,
+        windowPinning: { ...DEFAULT_SETTINGS.windowPinning, defaultPinned },
+      };
+      vi.mocked(nativeRequest).mockImplementation(async (method) =>
+        method === 'launcher.state'
+          ? { windowId: 'window-1', pinned: false, pinningEnabled: true }
+          : undefined,
+      );
+      const commander = state({ bootstrap: { ...bootstrap, settings } });
+      const view = render(<Launcher state={commander} />);
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Pin Commander window' })).toHaveAttribute(
+          'aria-pressed',
+          'false',
+        ),
+      );
+      fireEvent.contextMenu(screen.getByRole('button', { name: 'Pin Commander window' }));
+      const toggle = screen.getByRole('switch', { name: 'Open New Windows Pinned' });
+      expect(toggle).toHaveAttribute('aria-checked', String(defaultPinned));
+      fireEvent.click(toggle);
+      const nextSettings = {
+        ...settings,
+        windowPinning: { ...settings.windowPinning, defaultPinned: !defaultPinned },
+      };
+      expect(commander.saveSettings).toHaveBeenCalledExactlyOnceWith(nextSettings);
+      expect(nativeRequest).not.toHaveBeenCalledWith('launcher.pin', expect.anything());
+      expect(screen.queryByRole('switch', { name: 'Open New Windows Pinned' })).not.toBeInTheDocument();
+
+      view.rerender(
+        <Launcher state={{ ...commander, bootstrap: { ...bootstrap, settings: nextSettings } }} />,
+      );
+      fireEvent.contextMenu(screen.getByRole('button', { name: 'Pin Commander window' }));
+      expect(screen.getByRole('switch', { name: 'Open New Windows Pinned' })).toHaveAttribute(
+        'aria-checked',
+        String(!defaultPinned),
+      );
+      expect(screen.getByRole('button', { name: 'Pin Commander window' })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      );
+
+      // A failed save/refetch (or a change from General settings) must update the
+      // checkmark from the shared settings, not leave a separate local toggle.
+      view.rerender(<Launcher state={commander} />);
+      expect(screen.getByRole('switch', { name: 'Open New Windows Pinned' })).toHaveAttribute(
+        'aria-checked',
+        String(defaultPinned),
+      );
+    },
+  );
 });

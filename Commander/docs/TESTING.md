@@ -22,16 +22,24 @@
       and verify the learned ordering persists locally.
 - [ ] With a large mixed application/file index containing many one-token matches, search `raycast stop`; verify the
       separator-equivalent `raycast-stop` application is surfaced above `raycast-start`, `raycast-status`, and noisy
-      files. Run the indexer regression with a one-result output limit and verify all 129 matching FTS candidates are
-      evaluated before ranking. Type several refinements quickly and verify only the active and latest query complete.
+      files. Run the broad-fuzzy indexer regression with a one-result output limit and verify all 129 matching FTS
+      candidates are evaluated before ranking. Type several refinements quickly and verify only the active and latest
+      query complete.
+- [ ] With an index above one million records, search a separator-equivalent multiword application such as
+      `thingtime recovery`; verify the strict FTS path returns the application promptly. Then search a long,
+      nonexistent multiword phrase and verify the bounded fuzzy/path fallbacks reach No results in under two seconds
+      rather than leaving the centered Searching spinner visible until the five-second client timeout.
 - [ ] Create an extensionless executable named `raycast-start`, a hidden file, a broken symlink, and a nested `.app`
       bundle beneath a disposable root. Index All and verify each reference is searchable without crawling the app
       bundle or following the link.
 - [ ] With more results than fit in the launcher, use a mouse wheel or trackpad over the rows and confirm the list scrolls while the header and footer remain fixed.
-- [ ] Start from populated results, type a different query, and verify the prior rows remain visually unchanged but
-      non-executable until cached/live batches stream in. No dim, empty-state, or catalog-only flash may appear; the
-      first exact or nearest-prefix cached batch must paint before the live filesystem batch, and an identical final
-      batch must not remount the rows.
+- [ ] Start from populated results, type a different query, and verify the prior rows disappear immediately rather
+      than being presented as matches for the new input. The first exact or nearest-prefix cached batch for the new
+      query may paint before the live filesystem batch; it must be query-relevant, and an identical final batch must
+      not remount the rows.
+- [ ] Start a search that takes long enough to show progress and verify exactly one loading spinner remains beside
+      the result count. It must rotate smoothly at one fixed speed without wobbling, stacking, accelerating, or
+      restarting as cached and live result batches stream into the list.
 - [ ] With an index above one million records, time cold and repeated two-character filesystem searches such as `ea`.
       Verify the cold path uses the bounded indexed prefix lookup rather than a whole-database contains scan, then
       type a refinement and repeat the query to confirm warmed candidate and exact-result cache frames paint promptly.
@@ -202,3 +210,12 @@
 - [ ] Inspect every settings tab and the open Actions state at native window sizes.
 - [ ] Resize Settings to its minimum and a large desktop size; no clipping, overlap, or horizontal overflow.
 - [ ] Verify keyboard focus, VoiceOver labels, reduced motion, and high-contrast/dark appearance.
+
+
+## Signed releases
+
+- [ ] Follow the root TESTING.md Commander release checklist. Verify the downloaded
+      archive with `script/verify-production-bundle.sh`, then check the installed
+      copy's signature, bundled executable, daemon health, and launcher search.
+- [ ] Confirm Recovery lists the GitHub build and commit in Commander and Recovery
+      caches, preserves the previous app, and leaves Electron's cache unchanged.

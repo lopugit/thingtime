@@ -4,7 +4,7 @@ import { serviceAccountAuthenticationAllowed } from './getCurrentUser';
 import { isKnownPatScope, isKnownPatVisibility, patScopeCovers } from './patScopes';
 import type { PatVisibilityMode } from './patScopes';
 import { signJwt, verifyJwt } from './jwt';
-import { createSession, getLiveSession } from './sessions';
+import { createSession, getLiveSession, REVOKED_SESSION_REAP_MS } from './sessions';
 import type { SessionDoc } from './sessions';
 import { findUserById, toPublicUserWithStorage } from './users';
 import type { PublicUser } from './users';
@@ -44,7 +44,10 @@ export const PAT_MIN_EXPIRY_MS = 1;
 export const PAT_MAX_EXPIRY_MS = 1000 * 60 * 60 * 24 * 365 * 100; // 100 years ≈ never, but finite
 export const PAT_MIN_USES = 1;
 export const PAT_MAX_USES = 1_000_000_000;
-const REVOKED_PAT_REAP_MS = 1000 * 60 * 60 * 24 * 30;
+// One reap window for every revoked never-expiring session, owned by
+// sessions.ts. PATs and the bridge/service purposes are the same TTL problem —
+// two copies of the same 30 days could drift apart silently, and the drift
+// would only ever show up as rows lingering in Mongo.
 
 export type PublicPatToken = {
   id: string; // the session jti — what list/revoke exchange
@@ -110,6 +113,9 @@ export type MintPatInput = {
   maxUses?: unknown;
   onlyCreatedThings?: unknown;
   visibility?: unknown;
+  // Internal mint sites can identify a generated credential without exposing
+  // the provenance knob on the public token-minter API.
+  createdVia?: 'chatgpt-oauth';
 };
 
 export type MintPatResult =
@@ -168,7 +174,9 @@ export const mintPatToken = async (userId: string, input: MintPatInput): Promise
   // free mirrors MAX_PAT_TOKENS_PER_USER.
   const maxPats = (await getSubscription('user', userId)).effective.maxPats;
   if (maxPats !== null) {
-    const existing = await sessions.countDocuments({ userId, purpose: 'pat' });
+    // Revoked credentials are no longer usable and already have a bounded
+    // reap date, so they must not prevent a user from replacing a token.
+    const existing = await sessions.countDocuments({ userId, purpose: 'pat', revokedAt: null });
     if (existing >= maxPats) {
       return {
         ok: false,
@@ -192,7 +200,7 @@ export const mintPatToken = async (userId: string, input: MintPatInput): Promise
       // only restrictions are stored — absent means 'all', matching every
       // token minted before the field existed
       ...(visibility !== 'all' ? { visibility } : {}),
-      createdVia: 'token-minter'
+      createdVia: input.createdVia === 'chatgpt-oauth' ? 'chatgpt-oauth' : 'token-minter'
     }
   });
 
@@ -233,7 +241,7 @@ export const revokePatToken = async (userId: string, id: unknown): Promise<Revok
   if (!session.revokedAt) {
     const revokedAt = new Date();
     const patch: Record<string, any> = { revokedAt };
-    if (!session.expiresAt) patch.expiresAt = new Date(revokedAt.getTime() + REVOKED_PAT_REAP_MS);
+    if (!session.expiresAt) patch.expiresAt = new Date(revokedAt.getTime() + REVOKED_SESSION_REAP_MS);
     await sessions.updateOne({ jti: session.jti }, { $set: patch });
     Object.assign(session, patch);
   }

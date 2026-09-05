@@ -387,9 +387,11 @@
   width: 13px;
   height: 13px;
 }
-.result-count.updating svg,
 .search-spinner {
-  animation: commander-spin 900ms linear infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: commander-spin 1s linear infinite;
+  will-change: transform;
 }
 .category-heading {
   min-height: 30px;
@@ -535,7 +537,8 @@
   z-index: 22;
   right: 0;
   bottom: 28px;
-  width: 190px;
+  width: 240px;
+  max-width: calc(100vw - 24px);
   padding: 5px;
   border: 1px solid var(--line);
   border-radius: 11px;
@@ -560,6 +563,7 @@
   background: var(--selected);
 }
 .pin-menu svg {
+  flex-shrink: 0;
   width: 14px;
   height: 14px;
   color: var(--muted);
