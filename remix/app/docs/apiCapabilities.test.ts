@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { apiEndpointDocs, apiRouteCapabilityId, createApiCapabilitiesManifest } from './apiDocs';
 import { routeModules } from '../../server/routes/api/[...]';
+import { thingtimeCapabilityManifest } from '../api/utils/capabilities/thingtimeCapabilities';
 
 test('capabilities advertise every documented semantic contract', () => {
 	const manifest = createApiCapabilitiesManifest();
@@ -10,6 +11,13 @@ test('capabilities advertise every documented semantic contract', () => {
 	for (const doc of apiEndpointDocs) {
 		assert.equal(manifest.features[`api.${doc.id}`], doc.contractVersion, doc.endpoint);
 	}
+});
+
+test('both capability manifests advertise the bounded upload v2 contract', () => {
+	assert.equal(createApiCapabilitiesManifest().features['api.network-probe-upload'], '2.0.0');
+	const manifest = thingtimeCapabilityManifest('https://thingtime.test');
+	assert.equal(manifest.features['api.network-probe-upload'].version, '2.0.0');
+	assert.ok(manifest.operations.some((operation) => operation.feature === 'api.network-probe-upload' && operation.path === '/api/v1/network-probe/upload' && operation.methods.includes('POST')));
 });
 
 test('capabilities advertise every executable API route, including undocumented routes', () => {
@@ -57,6 +65,10 @@ test('the storage census and ciControl workbench allowlist publish their minor c
 	const manifest = createApiCapabilitiesManifest();
 	assert.equal(manifest.features['api.admin-migrations'], '1.1.0');
 	assert.equal(manifest.features['api.mongodb-raw-results'], '1.1.0');
+});
+
+test('persistent attachment content and resized previews advertise their additive contract', () => {
+	assert.equal(createApiCapabilitiesManifest().features['api.attachment-content'], '1.1.0');
 });
 
 test('admin preview dispatch publishes its protected-controller contract version', () => {

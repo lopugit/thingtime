@@ -64,3 +64,12 @@ CLI wrapper points to a missing /Applications/Tailscale.app executable.
 Graphify's installed incremental command supports code extraction only; the
 semantic backend option was rejected, so documentation changes were not
 semantically re-indexed. The available structural graph was refreshed.
+
+## Main promotion (2026-09-05)
+
+Promotes only the notification feature and drawer adjustment onto current main.
+Preserves main's passkey cache cleanup and regression suite. The message input
+type now accepts the warning status already exposed by the notification hook.
+Notification, client-error, capability, schema, nav, settings, Lopu, and passkey
+test groups pass. The production build and Vercel output verification pass;
+targeted lint has no errors.

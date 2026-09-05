@@ -11,6 +11,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - **Lopu** — change made manually by the developer.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
+
 > `— Lopu, YYYY-MM-DD`. Keep the newest entries at the top.
 
 ---
@@ -19,12 +20,51 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-09-05: Align Lopu notifications with the desktop content area as the drawer opens, closes, or resizes; keep mobile messages readable. — Codex (AI)
 
-- 2026-09-05: Repair Recovery catalogue refresh/architecture selection, malformed
-  archive handling, background verification, rollback preservation, and cold
-  cloud packaging. Share the protected main/PR release builder and correct its
-  caller-event gate; legacy malformed archives remain blocked. Valid replacements
-  can repair damaged installs, and detached installer errors reopen Recovery.
-  See the [PR #627 engineering note](../PRs/627-codex-recovery-release-sync-github-catalogue-and-installer.md). — Codex (AI)
+- 2026-09-05: Add bounded persistent media caching with access revalidation,
+  responsive low-resolution image previews, and cache controls in Settings.
+  Preserve restorable non-secret AWS S3 and SES customizations under
+  `configurations/`, with live observations separated from templates. See the
+  [PR #650 note](../PRs/650-codex-persistent-media-cache-responsive-previews-and-aws-configurations.md).
+  Main promotion: [PR #654](../PRs/654-codex-persistent-media-cache-main-production-promotion.md), explicitly authorized by the owner. — Codex (AI)
+
+- 2026-09-05: Promote PR #611 notification history and placement settings to main, including drawer-relative toast alignment. — Codex (AI)
+
+- 2026-09-05: Correct Commander archive architecture and UI resource verification after Apple's successful notarization; add real macOS lipo and Vite output regression checks. [Release notes](../../PRs/648-commander-cloud-releases-publish-installable-signed-commander-builds-with-recovery-provenance.md).
+- 2026-09-05: Repair passkey request cancellation across login, account switching and settings; isolate concurrent challenges and reject saved-cookie replay; add native Apple domain association support and account-scoped settings caches. Verified a signed iOS Release build and configured the matching public Apple application ID in Vercel; production code rollout and device acceptance remain pending. See `PRs/641-passkey-reliability-fix-passkey-cancellation-concurrent-challenges-and-native-app-association.md` for validation and rollout requirements.
+
+- 2026-09-05: Repair native Commander speed tests with proxy-safe exact-byte
+  validation, upload v2 chunks below Vercel's request limit, explicit capability
+  negotiation, single-flight execution, and retained/labelled partial results.
+  Latency refreshes no longer erase throughput readings. See the
+  [main release note](../PRs/657-codex-commander-main-fixes-search-and-network-repairs.md). — Codex (AI)
+
+- 2026-09-05: Keep native Commander search catalogues complete, reuse fresh saved
+  indexes, improve matching app-name ranking, and add the pin menu's new-window
+  default toggle. See the [PR #652 verification note](../PRs/652-codex-commander-app-name-ranking-complete-search-catalogues-and-pin-toggle.md). — Codex (AI)
+
+- 2026-09-05: Repair Commander GitHub release packaging, preserve build/commit metadata in Recovery, and keep build-only checks from stopping the installed Commander app.
+
+- 2026-09-05: Fix the signed Electron builder's certificate selector: give
+  electron-builder the unprefixed name while preserving the exact Developer ID
+  identity for native code signing. — Codex (AI)
+
+- 2026-09-05: Add Recovery release cards, readable cached build IDs, and an app
+  selector with isolated Commander recovery. Pass cloud build numbers into
+  Electron and reuse the approved CI Apple API key for macOS notarization.
+  Remove the confirmed damaged legacy downloads. — Codex (AI)
+
+- 2026-09-05: Repair Recovery catalogue refresh and architecture selection,
+  malformed archive handling, background verification, damaged app replacement,
+  rollback preservation, installer failure notices, and cold cloud packaging.
+  Share the protected main/PR release builder and correct its caller-event gate
+  so desktop and Recovery publish together. Withdraw damaged legacy archives
+  from installation while keeping their history visible. See the
+  [PR #627 engineering note](../PRs/627-codex-recovery-release-sync-github-catalogue-and-installer.md). — Codex (AI)
+
+- 2026-09-05: Publish Graphify lock ownership atomically and remove only the
+  releasing owner's record. Concurrent queries retain their snapshot lock
+  through completion; regression tests cover stale cleanup, writer death,
+  contention, malformed ownership, and timeout cleanup. — Codex (AI)
 
 - 2026-09-03: Keep `/api/v1/capabilities` aligned with the protected admin preview dispatcher by publishing `api.admin-ci-previews` 2.0.0 from the canonical endpoint contract.
 

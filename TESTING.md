@@ -6,6 +6,19 @@ see `AI_ALL.md`). Each list is the distilled regression history of that area:
 every line exists because it broke once. Add a line whenever a new bug class
 is fixed, and cite the checklist you ran in the PR description.
 
+## Native Commander network speed test
+
+- [ ] Activity: run one 17.6 MiB each-way test against the deployed origin;
+      confirm 5/5 download and upload samples, no 400/413, and no upload request
+      exceeds 2 MiB. Wait through a latency refresh: both speed values remain.
+- [ ] A streamed upload without Content-Length succeeds only for the exact
+      allowlisted byte count; short, oversized, and false-length bodies fail.
+- [ ] Interrupt a direction or hit its cooldown: completed measurements remain
+      visible, partial results are labelled, and Retry-After is actionable.
+      Opening a second Commander window must not duplicate an in-flight test.
+- [ ] Both capability manifests advertise upload 2.0.0; incompatible/missing
+      capabilities are rejected before transferring the speed-test payloads.
+
 ## ChatGPT / Codex MCP connector
 
 - [ ] `GET /.well-known/oauth-protected-resource`, `GET
@@ -129,6 +142,13 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Passkeys + cross-deployment auto-login
 
+- [ ] Slow login-options response + immediate passkey click or navigation: the old autofill request never opens a sheet or submits an assertion. Repeat with account-switcher login and the auto-login popup.
+- [ ] With 1Password enabled, click passkey sign-in, then Cancel: the button becomes usable immediately even if the extension ignores AbortSignal. Retry once; navigate away and verify no stale sign-in completes. Check desktop and 390px mobile through the footer.
+- [ ] Two login tabs can finish independently. Replaying a saved challenge cookie and zero-counter assertion fails. Wrong origin, missing UV and mismatched userHandle all fail.
+- [ ] Switching accounts in Security immediately shows only that account’s cached passkeys; failed list fetches show a retry action, not a misleading empty list.
+- [ ] Both capability manifests advertise passkey register/options and login/options at 1.1.0; the client rejects missing, older, wrong-origin or breaking contracts.
+- [ ] iOS release: the signed app includes `webcredentials:thingtime.com`; the HTTPS AASA response includes its exact application identifier. Verify Face ID sign-in and registration on a physical device after installing the rebuilt signed app. A simulator build alone is not acceptance evidence.
+
 - [ ] Passkey app-link dedupe rides root `uniqueKeys`, never a crystal-path
       unique index: `node scripts/verify-passkeys.mjs` covers it (two data
       things may share one `crystal.linkKey`; the real link still dedupes to
@@ -151,7 +171,7 @@ is fixed, and cite the checklist you ran in the PR description.
       completed Face ID/Touch ID/1Password ceremony must not return a generic
       verification failure.
 - [ ] `node scripts/verify-passkeys.mjs` (from `remix/`, dev stack up) passes
-      49/49 — full software-authenticator ceremony: registration, duplicate
+      every check — full software-authenticator ceremony: registration, duplicate
       409, challenge replay refusals, usernameless login, lastUsed + linked
       apps, revocation blocking login, revoke-before-delete, hint liveness.
 - [ ] Login page: "Sign in with a passkey 🔑" completes a login (platform
@@ -1447,6 +1467,12 @@ email whose link points at the attacker.
 - [ ] Start two local mutation commands together. Confirm the repository writer
       lock serializes them, a live writer is never stolen during owner-file
       creation, and a dead writer lock is recoverable.
+- [ ] Run the lock regression cases in `npm run test:graphify-cas`: pause a
+      stale reaper while a replacement writer acquires, then resume cleanup.
+      Confirm it cannot delete or enter the replacement lock. Verify six
+      processes complete 30 writes without overlap, SIGKILL recovery, timeout
+      cleanup, callback-error release, and a query retaining its snapshot lock
+      until its subprocess exits.
 - [ ] With a legacy root graph present, run `scripts/graphify update .`, remove
       the four mutable root outputs from tracking, and run
       `scripts/graphify ensure`. Confirm root paths become ignored symlinks,
@@ -2023,6 +2049,12 @@ halves.
       default. A component Thing resolves its sanitised live preview; turning
       either switch off hides only that section, and either/both sections may
       be disabled without overflow at desktop and 390px mobile widths.
+- [ ] Turn `Thing data` OFF on a normal `/thing/:id`, then navigate — without
+      reloading — to a `/thing/migration-diagnostic-*` permalink. The redacted
+      error still renders: a diagnostic shows no `Views` card, so it must never
+      be gated by a switch carried over from a Thing, or the page would be
+      blank with no control left to bring it back. Navigating back to a Thing
+      still honours the remembered OFF state.
 - [ ] Visiting plain `/search` fires NO search request (check the network
       tab): last-cached results still paint instantly, and with no cache the
       empty state invites a search ("then hit Search"), never claims
@@ -2324,10 +2356,26 @@ halves.
 - [ ] In General settings, turn “Open new Commander windows pinned” off, use
       Open New Window, and verify that launcher dismisses on focus loss; turn
       it on, open another window, and verify it remains visible on focus loss.
+- [ ] Right-click the launcher pin icon and toggle “Open New Windows Pinned”
+      both ways. Its checkmark must agree with General settings after reopening
+      the menu and relaunching; existing windows keep their own pin state and
+      Open New Window uses the newly selected default.
 - [ ] Search apps with prefix, substring, keyword, and fuzzy queries; navigate
       with arrows, execute with Return, open Command-K, traverse actions, and
       dismiss actions/launcher with Escape. Long names must not clip or create
       horizontal scroll in default or compact mode.
+- [ ] With Apps first in search category order, search `magician` and `recovery`:
+      SamsungMagician and Thingtime Recovery should lead even with over 30
+      matching files/folders. Full app names must still match; `Magician.png`
+      and `recovery.c` must prefer their exact files. File-first category order
+      and learned preferences must still work, and `emoji` must retain its
+      built-in picker priority. Repeat after relaunch to check cached ranking.
+- [ ] With over 1,000 indexed apps, files, and folders, verify complete catalogue
+      reads include records beyond the former cutoff. Repeat short app searches
+      after background indexing completes: apps must not disappear. Relaunch
+      with a fresh saved index and type several queries; neither action should
+      start an indexing run. A numeric result-page size must not truncate the
+      stored catalogue or discard candidates before the indexer ranks them.
 - [ ] Run a broad query with at least 30 path-backed results and move selection
       quickly through the list. Results must stay interactive, rendering generic
       or cached icons immediately and progressively resolving every visible
@@ -3516,6 +3564,9 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       must produce an actionable error, remove extraction staging, and preserve
       installed apps and caches. During valid ZIP extraction the window remains
       responsive and duplicate cache/install actions stay disabled.
+- [ ] A release with the documented component withdrawal marker remains in the
+      catalogue as UNAVAILABLE, explains that its archive is damaged, and cannot
+      start a download. Its unmarked companion and newer releases remain usable.
 - [ ] Run Recovery unsigned packaging with an absent cache root. It must build
       and verify the archive round-trip on a fresh machine, without requiring a
       previous local build. Corrupt an existing cached app and repeat the cache
@@ -4529,3 +4580,52 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       Sides control (paren-aware tokenizer) and a multi-token shorthand is
       shown raw in uniform mode, never as an empty field.
 - [ ] Verification: `node remix/scripts/verify-webpages.mjs http://127.0.0.1:<nitro-port>`.
+
+
+### Recovery cards, build IDs and app selection
+
+- [ ] In both This Mac views, confirm build IDs come from the bundle or manifest,
+      old Electron bundles expose their embedded commit, and Recovery cards use
+      the Recovery component name even if old metadata used a desktop title.
+- [ ] Open the App selector, switch Electron → Commander → Electron, and verify
+      cached entries and release selections stay with their app. Save installed
+      Commander, verify its cached signature, and confirm Electron's cache is unchanged.
+- [ ] Inspect release cards and detail metadata at narrow and wide macOS window
+      sizes, scroll every list to the bottom, and open/cancel unsigned acknowledgement.
+      Dates, badges, long versions and archive names must wrap without clipping.
+- [ ] A Commander handoff rejects an Electron path and vice versa. Unknown or
+      incomplete build metadata must not fabricate a numeric build number.
+- [ ] Cloud archives contain their run number in both app build metadata and
+      `CFBundleVersion`; signed releases pass strict codesign, Gatekeeper and
+      stapler checks after downloading the actual published ZIP.
+- [ ] With a Developer ID certificate in the signing keychain, the production
+      packager passes its unprefixed name and team to electron-builder, while
+      native helpers keep the full certificate name. Missing or development-only
+      identities fail before building; no unsigned fallback is allowed.
+
+- [ ] Dispatch Commander on the protected controller; confirm its exact main SHA,
+      signed Commander and Recovery ZIPs, checksums, and `latest=false`. Switch
+      Recovery to Commander, download/verify both cards, install with rollback
+      preserved, and verify build number, commit and branch still appear offline.
+- [ ] Run Commander `--prepare` and `--build-only` with an installed app running;
+      its PID/daemon remain unchanged. A failed notarization must not stop or
+      replace the installed app. Run `node --test Commander/script/release-packaging.test.mjs`.
+
+- [ ] Commander production verification passes the Mach-O file before `lipo
+      -verify_arch` and exercises the real tool against a native fixture before
+      cloud signing. A verifier failure must publish no incomplete release.
+
+## Persistent media and progressive image regression
+
+- [ ] At desktop and 390px mobile widths, scroll the feed/attachment fixture
+      top to bottom: below-fold images stay lazy, low-resolution previews
+      appear before responsive images, and no horizontal overflow appears.
+- [ ] Leave and revisit a managed image: authorization checks increase while
+      downloaded byte requests stay unchanged. Revoke access and revisit:
+      cached pixels must not render. Restore access and verify loading resumes.
+- [ ] Open and close the image lightbox, verify contained sizing, and inspect
+      Media settings toggles and clear action at desktop and mobile sizes.
+- [ ] Disable caching, clear storage, and disable previews; original loading
+      remains usable. Unsupported image formats fall back without retry loops.
+- [ ] Confirm partial/large files use native streaming and cached range reads
+      cannot bypass authorization. Verify storage failure degrades to HTTP.

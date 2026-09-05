@@ -52,8 +52,8 @@ import { CALCULATOR_RESULT_ITEM_ID, calculatorSearchHit } from './services/calcu
 
 // Bump these whenever ranking or result-presentation semantics change so an
 // installed Commander never replays results produced by an older search core.
-const SEARCH_CONTEXT_VERSION = 3;
-const SEARCH_CACHE_KEY_VERSION = 2;
+const SEARCH_CONTEXT_VERSION = 4;
+const SEARCH_CACHE_KEY_VERSION = 3;
 const COMMANDER_NATIVE_REDIRECT_URI = 'com.thingtime.commander://oauth/callback';
 
 const MIME: Record<string, string> = {
