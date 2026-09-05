@@ -24,7 +24,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-09-05: Repair native Commander speed tests with proxy-safe exact-byte
   validation, upload v2 chunks below Vercel's request limit, explicit capability
   negotiation, single-flight execution, and retained/labelled partial results.
-  Latency refreshes no longer erase throughput readings. — Codex (AI)
+  Latency refreshes no longer erase throughput readings. See the
+  [main release note](../PRs/657-codex-commander-main-fixes-search-and-network-repairs.md). — Codex (AI)
 
 - 2026-09-05: Keep native Commander search catalogues complete, reuse fresh saved
   indexes, improve matching app-name ranking, and add the pin menu's new-window
