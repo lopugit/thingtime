@@ -49,8 +49,13 @@ const wrap = (value: string, width: number, maxLines: number): string[] => {
 		}
 	}
 	if (line && lines.length < maxLines) lines.push(line);
-	if (words.join(' ').length > lines.join(' ').length && lines.length)
-		lines[lines.length - 1] = truncateSocialText(lines[lines.length - 1], Math.max(2, width - 1));
+	// Dropped words must stay visible as an ellipsis. A last line that already
+	// fits the column is not shortened by truncateSocialText, so mark it here
+	// rather than letting a cut-off headline read like a complete one.
+	if (words.join(' ').length > lines.join(' ').length && lines.length) {
+		const last = truncateSocialText(lines[lines.length - 1], Math.max(2, width - 1));
+		lines[lines.length - 1] = last.endsWith('…') ? last : `${last}…`;
+	}
 	return lines;
 };
 
@@ -208,7 +213,11 @@ const mediaLayout = (preview: SocialPreview, images: readonly (string | null)[],
 };
 
 export const buildSocialCardSvg = (preview: SocialPreview, imageDataUris: readonly (string | null)[] = []): string => {
-	const titleLines = wrap(preview.title, 38, 3);
+	// The text column ends where the media/art panel starts (x=700), so ~594px
+	// at x=86. A heavy 38px sans averages a little over 21px per glyph there,
+	// and the 42px profile title a little over 24px, so the headline has to
+	// wrap well before the 38 characters the description column allows.
+	const titleLines = wrap(preview.title, preview.kind === 'profile' ? 24 : 27, 3);
 	const descriptionLines = wrap(preview.description, 54, preview.options.length ? 2 : 3);
 	const badges = preview.badges.slice(0, 3);
 	const pollRows = preview.options.slice(0, 3);
@@ -249,7 +258,7 @@ export const buildSocialCardSvg = (preview: SocialPreview, imageDataUris: readon
 	${titleLines
 		.map(
 			(line, index) =>
-				`<text x="86" y="${preview.author ? 246 : 198 + index * 50}" fill="#17112D" font-family="Arial, sans-serif" font-size="${
+				`<text x="86" y="${(preview.author ? 246 : 198) + index * 50}" fill="#17112D" font-family="Arial, sans-serif" font-size="${
 					preview.kind === 'profile' ? 42 : 38
 				}" font-weight="800">${escapeXml(line)}</text>`
 		)

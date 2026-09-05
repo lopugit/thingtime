@@ -69,6 +69,20 @@ test('every post-shaped card variant gets its own deliberate visual panel', () =
 	}
 });
 
+const titleLinesOf = (svg: string): Array<{ y: number; text: string }> =>
+	[...svg.matchAll(/<text x="86" y="(\d+)" fill="#17112D"[^>]*>([^<]*)<\/text>/g)].map((match) => ({ y: Number(match[1]), text: match[2] }));
+
+test('multi-line titles stack instead of overprinting, with and without an author', () => {
+	const longTitle = 'Nikolaj Lopusanschi: we spent the whole weekend rebuilding the little garden bed out the back';
+	for (const author of ['Nikolaj Lopusanschi', undefined]) {
+		const lines = titleLinesOf(buildSocialCardSvg({ ...gallery, title: longTitle, author, images: [], imageCount: 0 }));
+		assert.ok(lines.length > 1, `expected a wrapped title (author: ${String(author)})`);
+		assert.equal(new Set(lines.map((line) => line.y)).size, lines.length, `title lines share a baseline (author: ${String(author)})`);
+		// the media/art panel starts at x=700; the headline column must not run under it
+		for (const line of lines) assert.ok(line.text.length <= 27, `title line too wide for the card column: ${line.text}`);
+	}
+});
+
 test('the social-card renderer emits a real multi-image collage PNG', async () => {
 	const png = await renderSocialCardPng(gallery, [ONE_PIXEL_PNG, ONE_PIXEL_PNG, ONE_PIXEL_PNG, ONE_PIXEL_PNG]);
 	assert.deepEqual([...png.slice(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
