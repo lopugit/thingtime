@@ -25,8 +25,9 @@ With an authenticated profile and the intended account selected:
 4. Enable email feedback forwarding. No SNS feedback topics were configured
    on the verified domain. Its default configuration set is
    `my-first-configuration-set` with the `default` IP pool. Recreate the set
-   before assigning it to the identity. Its destinations, authorization policies,
-   VDM and deployed environment bindings were not fully audited in this snapshot;
+   before assigning it to the identity. Both configured sets have no event
+   destinations. Authorization policies, account-level VDM and deployed
+   environment bindings were not fully audited in this snapshot;
    inspect them before restoring a production sender.
 5. Add the selected template's non-secret settings to the deployment. Provision
    least-privilege sending credentials separately through the approved secret
@@ -42,3 +43,22 @@ AWS CLI v2 equivalents include `sesv2 create-email-identity`,
 `put-email-identity-mail-from-attributes` and
 `put-email-identity-feedback-attributes`. The corresponding JSON fields are in
 `domain.json`; its provenance keys are documentation, not CLI input fields.
+
+## Configuration sets
+
+`configuration-sets/my-first-configuration-set.json` and `thingtime.json` are
+AWS `create-configuration-set --cli-input-json file://...` input documents.
+The companion observations file records inherited/unset settings and provenance.
+Both enable sending and reputation metrics; neither has event destinations.
+The `thingtime` set selects a dedicated IP pool named `thingtime` and optional
+TLS. Its pool must already exist; pool allocation and account-level inherited
+settings require a separate inventory. The domain defaults to the first set,
+while applications can explicitly select the other through their configuration
+set environment variable. Existing sets should be compared with
+`get-configuration-set`, then updated using the matching `put-configuration-set-*`
+operations instead of being deleted and recreated.
+
+References: [AWS configuration sets](https://docs.aws.amazon.com/ses/latest/dg/creating-configuration-sets.html)
+and [DKIM signing attributes](https://docs.aws.amazon.com/cli/latest/reference/sesv2/put-email-identity-dkim-signing-attributes.html).
+Use `SigningAttributesOrigin=AWS_SES` at the top level when updating Easy DKIM;
+the signing-attributes structure supplies `NextSigningKeyLength` only.

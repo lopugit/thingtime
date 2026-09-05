@@ -20,7 +20,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-09-05: Add bounded persistent media caching with access revalidation,
   responsive low-resolution image previews, and cache controls in Settings.
   Preserve restorable non-secret AWS S3 and SES customizations under
-  `configurations/`, with live observations separated from templates. — Codex (AI)
+  `configurations/`, with live observations separated from templates. See the
+  [PR #650 note](../PRs/650-codex-persistent-media-cache-responsive-previews-and-aws-configurations.md). — Codex (AI)
 
 - 2026-09-05: Repair Recovery catalogue refresh/architecture selection, malformed
   archive handling, background verification, rollback preservation, and cold
