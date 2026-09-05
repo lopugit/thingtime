@@ -30,10 +30,12 @@ export const detectedAttachmentType = (
 
 	// file-type can identify many active or browser-executable formats. Only a
 	// deliberately curated passive raster/video set is ever allowed to render
-	// inline: every container a mainstream browser can natively play, and
-	// nothing sniffable into an active document. Codec support inside an
-	// allowed container still varies per browser; the client degrades an
-	// unplayable video to its download row.
+	// inline. Audio is a separate safe sink: keeping its detected MIME gives the
+	// native decoder the information it needs for recordings such as M4A, FLAC,
+	// and Ogg instead of forcing the bytes through as application/octet-stream.
+	if (mime.startsWith('audio/') && isCanonicalAttachmentContentType(mime)) {
+		return { contentType: mime, mediaKind: 'audio' };
+	}
 	if (ATTACHMENT_INLINE_CONTENT_TYPES.has(mime)) {
 		return { contentType: mime, mediaKind: mime.startsWith('image/') ? 'image' : 'video' };
 	}
@@ -68,7 +70,8 @@ export const attachmentContentDisposition = (name: string, inline: boolean) =>
 	`${inline ? 'inline' : 'attachment'}; filename="${asciiFilename(name)}"; filename*=UTF-8''${encodeRfc5987(name)}`;
 
 export const attachmentMayRenderInline = (crystal: AttachmentCrystal): boolean =>
-	(crystal.mediaKind === 'image' || crystal.mediaKind === 'video') && ATTACHMENT_INLINE_CONTENT_TYPES.has(crystal.contentType);
+	(crystal.mediaKind === 'audio' && crystal.contentType.startsWith('audio/') && isCanonicalAttachmentContentType(crystal.contentType)) ||
+	((crystal.mediaKind === 'image' || crystal.mediaKind === 'video') && ATTACHMENT_INLINE_CONTENT_TYPES.has(crystal.contentType));
 
 export const attachmentPublicProjection = (id: string, crystal: AttachmentCrystal) => ({
 	id,

@@ -17,12 +17,186 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+### 2026-09-03 — Host-native Thingtime login bootstrap — Codex (AI)
+
+- `@Thingtime login` is now callable before authentication and returns its
+  OAuth challenge as a successful MCP tool response, allowing the invoking
+  ChatGPT/Codex task to own PKCE, browser launch, callback, and subsequent
+  authenticated requests without a separate CLI transport.
+- Account and data tools remain OAuth-only and continue to fail closed at the
+  HTTP authorization boundary.
+
+### 2026-09-02 — CI telemetry satellite + things index storage reclaim (PR #583) — Claude (AI)
+
+- Grouped summary; details in the PR note
+  (`PRs/583-claude-thingtime-mongodb-index-storage-dffe19--ci-control-satellite-index-storage.md`)
+  and the audit report (`docs/architecture/mongodb-index-storage-audit.md`).
+- **Production audit**: `things_v2` was 1.82 M docs / 3.15 GB of index at the
+  64-index cap, 99.75 % of it `ci-*` webhook telemetry with no retention.
+- **New `ciControl` satellite collection** (`ciControl_v1`) for every `ci-*`
+  Thing, six-index plan, TTL retention on root `expiresAt`
+  (`THINGTIME_CI_{EVENT,JOB,ACTIVITY}_RETENTION_DAYS`, defaults 14/30/90,
+  `0` = forever); the repository row records events only on real transitions.
+- **`things` index plan**: seven dead/moved indexes retired at boot, `kind_*`
+  and the sandbox TTL made partial, cap-safe swaps, leftover rebuild twins
+  pruned.
+- **Admin migrations** `relocate-ci-control-telemetry` and
+  `rebuild-things-indexes`; `/migrations` shows a per-collection storage
+  census (`api.admin-migrations` 1.1.0); `ciControl` queryable in the
+  workbench (`api.mongodb-raw-results` 1.1.0).
+- **Deployment note**: after deploying, run the two migrations from
+  `/migrations` (dry run, then confirm) to move existing rows and reclaim the
+  index files; boot alone only frees the retired indexes.
+
+
+### 2026-09-01 — Builder round 8: saved-media lifecycle + 17-finding review batch — Claude (AI)
+
+- Grouped summary; details in the PR note (`PRs/485-…`, round 8).
+- **Saved pages own their media now**: webpage saves bind the owner's
+  referenced builder uploads to the page thing (`webpageAttachments.ts`,
+  wired into things create + PATCH), so the draft reaper stops eating media
+  off saved pages and a public `/p/` page serves its images anonymously via
+  acl inherit. A live-preview E2E caught TWO buried blockers: the id capture
+  truncated real 68-char attachment ids (`{8,64}` → `{8,128}`), and the
+  content endpoint's target authorization only recognized post targets —
+  `attachmentAccess.ts` now accepts exactly-`['webpage']` targets alongside
+  exactly-`['post']`, still failing closed otherwise. Verified end-to-end on
+  the preview: drop-upload → public save → bind stamped → anonymous 200.
+- **Adversarial review batch (49 agents, 16 confirmed findings fixed)**:
+  edit/view WYSIWYG parity (root gaps, placeholder leaks, edit-only border
+  radius), inspector typography actually reaching text, rendered-seam drag
+  convention (downward off-by-one), acl-preserving public toggle +
+  `expectedUpdatedAt` concurrency on saves, foreign-page fork fallback,
+  touch access to the full block menu (⋯ chip) + 28px coarse hit bands,
+  authored-html `data-tt-*`/`on*` scrubbing, per-account view caches, and
+  a confirm before discarding unsaved edits.
+- **Mobile edit mode**: the drawer starts closed under 768px (selecting a
+  block still opens it) and the 🌐 hint text hides on phones.
+
+### 2026-09-01 — Builder round 6: true-WYSIWYG canvas, inline Editor.js, wrap-with-block — Claude (AI)
+
+- Grouped summary; details in the PR note (`PRs/485-…`, round 6).
+- **Rendered rich-text typography**: Chakra's reset made sanitised
+  h1-h6/lists/quotes/tables render as plain body text — `RichHtmlView` +
+  `richHtmlStyles.ts` restore a real document scale (heading sizes match the
+  Editor.js editing scale) and memoise the parse.
+- **Inline Editor.js**: selected text blocks edit in place with the FULL
+  Editor.js block editor; the modal stays as the "advanced" surface (drawer
+  button + new right-click menu, shared `RichTextModal`). The old
+  contentEditable inline editor was retired.
+- **Block context menu + wrap-with-block**: right-click any frame (or the
+  chip's ⊞) for Advanced editor / Wrap with block (searchable drill-down;
+  containers are the only block kind with a children slot) / Duplicate /
+  move / delete. New pure ops `wrapBlock` + `duplicateBlock` (tested).
+- **True-WYSIWYG edit canvas**: insert affordances became absolute overlay
+  edge strips — edit-mode geometry is pixel-identical to view mode
+  (measured across the mode toggle). The 🌐 Global label floats in the nav
+  breathing band; the region separator is a zero-height overlay; the
+  trailing add affordance is a spacious dashed well.
+- **Input UX**: numeric clamps commit on blur/Enter (typing "300" no longer
+  snaps to the minimum at "3"); sides/corners inputs stop trimming per
+  keystroke.
+
+### 2026-08-31 — Builder round 5: media drop/paste everywhere, Figma-parity controls, resizable drawer — Claude (AI)
+
+- Grouped summary; details in the PR note (`PRs/485-…`, round 5).
+- **Media lands anywhere**: dropping a file ONTO any block frame uploads it
+  (media blocks swap their src in place, containers take it inside, others
+  get it inserted after); window-level edit-mode guards stop the browser
+  from opening dropped files — unhandled drops append to the page;
+  ⌘/Ctrl+V of clipboard files uploads at the selected block (text paste is
+  never hijacked). Media inspector gains ⬆️ Upload file + URL input.
+- **Figma-parity inspector controls** (`FigmaControls.tsx` + pure
+  `figmaControlValues.ts`, node-tested): padding/margin with uniform ▢ /
+  linked-axes ⬍⬌ / independent-sides ⛶ modes, per-corner radius, border
+  (style/width/color) and shadow (X/Y/blur/spread/color) composers,
+  segmented text-align — all writing css shorthands into the bounded
+  per-block css record. Min width/height fields added.
+- **Alignment actually visible**: aligned blocks shrink to fit-content and
+  use justify-self in grid cells (align-self alone was invisible on
+  100%-wide blocks and wrong-axis in grids).
+- **Editor.js rich editing**: 📝 Rich editor modal on text blocks — full
+  Editor.js block vocabulary, converted doc↔html (`editorJsHtml.ts`);
+  rendered html still passes only through the sanitising allowlist
+  renderer. Component blocks: double-click any rendered text to edit the
+  matching arg in an inline popover.
+- **Drawer**: drag-resizable via the left edge (persisted width shared with
+  the canvas padding); paired fields wrap instead of crushing selects
+  ("imag/e" cutoff fixed); placeholders muted; inline editor no longer
+  draws a second outline inside the selected frame.
+
+### 2026-08-31 — Builder round 4: Figma-layer styling, WYSIWYG, layout fixes — Claude (AI)
+
+- Grouped summary; full detail in the PR note
+  (`PRs/485-thingtime-design-system-01d6ee-design-system-builder.md`, PR #485
+  round 4).
+- **Layout/selection fixes**: nested blocks are clickable (innermost frame
+  wins the capture-phase click, ancestors no longer steal selection); grid
+  containers place children in cells correctly (insert zones no longer occupy
+  grid cells — side-by-side blocks work; trailing add-tile cell instead); row
+  children share the line via flex sizing; global strip gets breathing room
+  below the nav and the edit canvas paints the surface wash (no white body
+  bar between regions).
+- **Figma-layer styling**: every block carries a bounded `css` record edited
+  through inspector Layout/Appearance/Typography panels + a raw Custom CSS
+  editor; text blocks gain tag overrides + rich `html`; new `media` and
+  `html` block types; OS file drops upload via the attachments API into
+  media blocks. Server gate: `sanitizeWebpageBlock` bounds css keys/values
+  and blocks `expression()`/`@import`/`javascript:`/non-https `url()`;
+  coverage in `app/schemas/webpageBlockGate.test.ts`.
+- **Inline WYSIWYG**: selected text blocks edit in place (contentEditable,
+  Enter/Shift+Enter soft breaks, rich paste, floating B/I/U/S/link toolbar);
+  rendered rich text passes only through the sanitising allowlist renderer
+  (`htmlToNode` + `HtmlThingRenderer`, which gained the pure formatting tags
+  b/i/u/s/mark/sub/sup).
+- **Stale-chunk self-heal**: after each preview alias flip, already-open tabs
+  died on "Failed to fetch dynamically imported module" (old HTML → replaced
+  hashed chunks). `entry.client` (vite:preloadError) and `lazyRoute` now
+  recover with one session-guarded hard reload.
+- **Component catalog seeded**: the 2800-component catalog
+  (lopugit/thingtime-components) now lives in the dev DB behind
+  `*.previews.dev.thingtime.com` via `POST /api/v1/admin/components/seed`
+  (census 2800) — the builder's component search returns real results.
+
+### 2026-08-30 — Design system alignment + block-based site builder — Claude (AI)
+
+- Grouped summary; full detail in the PR note
+  (`PRs/485-thingtime-design-system-01d6ee-design-system-builder.md`, PR #485).
+- **Design system**: new shared `PageShell`/`PageHeader` primitives
+  (`remix/app/components/Layout/PageShell.tsx`) extracted from the canonical
+  hand-copied idiom; every off-system page aligned (status, mongodb-status,
+  tests, vercel, crypto, migrations, apps, raw, ode, reset-password,
+  catch-all shell, admin dashboard + TierManager/IntegrationManager/
+  ModerationTab/AdminPanel/CIControlDashboard) plus a token nit sweep.
+  `/docs/design-system` gains foundations/page-scaffold/brutal-button/
+  builder-blocks entries; `/design-system` redirects there.
+- **Builder**: new `webpage` thing kind (bounded block tree, sanitized in the
+  registry write gate), `GET /api/v1/webpages/resolve`, admin
+  `POST /api/v1/admin/webpages/seed` (26 site docs + site-global), `/builder`
+  canvas (hover boundaries, inline + add-block menu with Mongo-backed
+  component search, drag/drop, right-side inspector drawer), `/p/:id`
+  published pages, and site-wide ✏️ edit mode with viewer-owned
+  personalisation forks + memoised global blocks.
+- **Round 3 (limitless builder)**: builder mode is full-bleed on every page
+  (dual-region 🌐 global + page editing, one drawer, collapsible), touch UX is
+  Squarespace-grade (44px zones, dropwells, bottom-sheet insert menu, chrome
+  unselectable), and built-in pages decompose into PIXEL-IDENTICAL native
+  sections via the new registry (`components/Builder/nativeSections.tsx`):
+  status, home landing, welcome, ode, mongodb-status so far — the route, the
+  seed table, and the builder all share one section list.
+- **Catalog eviction**: the components-db catalog + pipeline moved to the
+  public repo <https://github.com/lopugit/thingtime-components> (2800
+  components); this repo ships only the runtime — components live in MongoDB
+  and the frontend fetches them via `/api/v1/components/browse`.
+- Local runbook: seed site pages with an admin session via
+  `POST /api/v1/admin/webpages/seed`; smoke with
+  `node remix/scripts/verify-webpages.mjs http://127.0.0.1:<nitro-port>`.
+
 ### 2026-09-01 — ChatGPT OAuth production credential vault
 
 - Production ChatGPT connector credentials now use a dedicated sensitive Vercel
   encryption key, allowing the OAuth connection screen to create and retain
   independently encrypted multi-account credentials. — Codex (AI), 2026-09-01
-
 ### 2026-09-01 — Self-draining moderation safety sweep
 
 - A successful full moderation sweep batch now immediately starts a durable

@@ -211,6 +211,28 @@ THINGTIME_VERCEL_WEBHOOK_SECRET="secret-returned-when-the-webhook-is-created"
 THINGTIME_CI_ROUTER_SECRET="another-independent-long-random-secret"
 ```
 
+CI control-plane rows (every `ci-*` Thing, including the append-only
+`ci-event` history) live in their own `ciControl` satellite collection, never
+in `things`, and are TTL-reaped by a root `expiresAt` stamp. The retention
+windows are optional, in days; `0` keeps that class forever, and unset means
+the default:
+
+```sh
+# append-only ci-event history (default 14)
+THINGTIME_CI_EVENT_RETENTION_DAYS="14"
+# per-job workflow rows — ci-workflow-run with a job: external id (default 30)
+THINGTIME_CI_JOB_RETENTION_DAYS="30"
+# top-level workflow runs, deployments, and previews (default 90)
+THINGTIME_CI_ACTIVITY_RETENTION_DAYS="90"
+```
+
+Repository, feature, branch, pull-request, policy, dispatch, and feature-stack
+projections never expire. A GitHub delivery that changes nothing on the
+repository row records no `ci-event` for it. Deployments that predate the
+satellite still hold their CI rows in `things`: run the admin migration
+`relocate-ci-control-telemetry` (repeat until it reports nothing left) and then
+`rebuild-things-indexes` from **/migrations** — see the MongoDB section.
+
 Create a repository-installed GitHub App with repository metadata read,
 Actions read/write (workflow dispatch and run/job observation), Administration
 read/write (short-lived self-hosted runner registration and deletion), Contents
@@ -786,6 +808,20 @@ placeholder:
 MONGODB_CONNECTION_STRING="mongodb://localhost:27017/thingtime"
 ```
 
+### Index and storage hygiene
+
+The boot-time `ensureIndexes` converges every collection to the index plan in
+`remix/app/api/utils/mongodb/collections.ts` and prunes the names listed in
+`RETIRED_THINGS_INDEXES`. Index files never shrink on their own: after a mass
+delete (for example relocating CI telemetry out of `things`), each index keeps
+its old on-disk size until it is dropped and recreated. The admin migrations
+page (**/migrations**) shows a storage census per physical collection —
+document bytes, on-disk bytes, index bytes, and index count — and flags a
+generation whose index total is far above its document bytes. Reclaim it with
+the `rebuild-things-indexes` migration (unique constraints stay enforced by a
+twin index throughout). The audit that produced this runbook, with the
+production measurements, is in `docs/architecture/mongodb-index-storage-audit.md`.
+
 Vercel functions and the Atlas cluster are both pinned to Sydney (`syd1` in the
 root `vercel.json`). For how that becomes region-local latency worldwide without
 splitting the database or the URL, see
@@ -815,6 +851,7 @@ and no `x-thingtime-api-fallback` response header. Compare the same endpoint on
 host. The current Thingtime hostnames and deployment state are recorded in
 `VERCEL_DEPLOYMENTS.md`; forks should substitute infrastructure they control.
 
+## Components library (`/components` + the external catalog)
 ## Components library (`/components` + `components-db/`)
 
 `/components` is the UI-first sibling of `/schemas`: component things
@@ -823,12 +860,15 @@ through the sanitising allowlist renderers) plus arg descriptors the page
 turns into a live tester. "Save version" stores the current tester state as a
 user-owned component thing in your Things.
 
-The 1000-component platform catalog (styled after Ant Design, Bootstrap, MUI,
+The platform component catalog (styled after Ant Design, Bootstrap, MUI,
 shadcn/ui, Untitled UI, daisyUI, React Flow, and the Thingtime house style)
-lives in the repo as a folder database: one JSON file per component under
-`components-db/components/<library>/<slug>.json` plus an `index.json`
-manifest, produced deterministically by `scripts/components-db/generate.mjs`
-from archetype builders in `scripts/components-db/lib/archetypes/`.
+lives in its own public repository —
+[lopugit/thingtime-components](https://github.com/lopugit/thingtime-components)
+— as a folder database (one JSON per component + manifest) alongside the
+deterministic generator/validator/seeder pipeline. This app repo ships only
+the component runtime and the Thingtime-required components; catalog
+components live in MongoDB as system `component` things and the frontend
+fetches them from there (`GET /api/v1/components/browse`).
 
 Fork-safe seeding into your own dev DB (real API only — no direct Mongo):
 
@@ -837,15 +877,17 @@ Fork-safe seeding into your own dev DB (real API only — no direct Mongo):
 #    that user on the admin allowlist:
 ADMIN_USERNAMES="<your-seed-user>" npm run web-pms
 
-# 2. Put the credentials where the seeder finds them (untracked file):
+# 2. Clone the catalog repo and put credentials where the seeder finds them:
+git clone https://github.com/lopugit/thingtime-components.git
+cd thingtime-components
 cat > scripts/components-db/.seed-env <<'ENV'
 TT_SEED_BASE=http://127.0.0.1:<nitro-port>
 TT_SEED_ADMIN_USER=<your-seed-user>
 TT_SEED_ADMIN_PASS=<your-seed-password>
 ENV
 
-# 3. Regenerate + validate the catalog, then seed (idempotent, batched):
-node scripts/components-db/generate.mjs
+# 3. Validate the catalog, then seed (idempotent, batched):
+node scripts/components-db/generate.mjs --check
 node scripts/components-db/seed.mjs
 ```
 

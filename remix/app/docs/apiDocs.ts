@@ -1,5 +1,5 @@
 import type { DeploymentDataEnvironment } from '~/api/utils/deployment/dataEnvironment';
-import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATGPT_MCP_PATH, CHATGPT_TOKEN_PATH } from '../api/utils/chatgpt/pluginCore';
+import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATGPT_MCP_PATH, CHATGPT_OAUTH_RELAY_PATH, CHATGPT_TOKEN_PATH } from '../api/utils/chatgpt/pluginCore';
 
 export type ApiHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -684,7 +684,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     featureVersion: '1.0.2',
     summary: 'Read the protected GitHub/Vercel CI entity graph and immutable status history.',
     detail:
-      'Returns repositories, features, branches, pull requests, workflow runs, deployments, previews, audited dispatches, and relational ci-event history stored as protected Things. The response also reports integration readiness and freshness without exposing credentials.',
+      'Returns repositories, features, branches, pull requests, workflow runs, deployments, previews, audited dispatches, and relational ci-event history stored as protected Things on the ciControl satellite collection (never in things). Events, workflow job rows, and run/deployment/preview rows carry root expiresAt retention (THINGTIME_CI_EVENT_RETENTION_DAYS 14, THINGTIME_CI_JOB_RETENTION_DAYS 30, THINGTIME_CI_ACTIVITY_RETENTION_DAYS 90 by default; 0 keeps a class forever) and a delivery that changes nothing on the repository row records no event. The response also reports integration readiness and freshness without exposing credentials.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET'],
     steps: ['GET with an admin session.', 'Render cached entities immediately, then reconcile in the background when freshness is stale.'],
@@ -912,8 +912,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: CHATGPT_MCP_PATH,
     summary: 'A streamable HTTP Model Context Protocol gateway for ChatGPT and Codex.',
     detail:
-      'Implements 32 bounded MCP tools plus prompts, account-scoped resources, and a sandboxed review UI for connected Thingtime accounts. `login_thingtime` maps @Thingtime login to the host’s OAuth browser and registered callback; `list_thingtime_accounts` maps @Thingtime list accounts to safe multi-account metadata. The read surface includes exact single/batch IDs, target-specific comments, browse/search, schema discovery and validation, relationship/thread traversal, ACL-aware change polling, history, and workflows. Composed writes must produce a signed before/after preview first; apply rechecks token scopes and optimistic updatedAt preconditions, stops after the first failed operation, and persists an honest encrypted receipt with a bounded undo plan. Thingtime Capability data Things compile only the registered create/update/delete grammar with explicit input placeholders — no arbitrary URLs, API paths, database queries, or code. tools/list, prompts/list, resources/list, and static UI/contract resources are public metadata and never return account data. Account resources and every tool call require a revocable MCP-only bridge token; underlying scoped PATs stay AES-256-GCM encrypted in one origin-bound connection record. Discovery begins at /.well-known/oauth-protected-resource and the semantic capability manifest lives at /.well-known/thingtime-chatgpt-capabilities.json.',
-    auth: { mode: 'bearer', description: 'OAuth 2.1 ChatGPT bridge Bearer token for tools/call. tools/list is public metadata; unauthenticated tool calls return an MCP OAuth challenge.' },
+      'Implements 32 bounded MCP tools plus prompts, account-scoped resources, and a sandboxed review UI for connected Thingtime accounts. `login_thingtime` is an anonymous bootstrap that maps @Thingtime login to a successful MCP tool response carrying `mcp/www_authenticate`; the invoking ChatGPT or Codex host then owns the OAuth browser, PKCE exchange, registered callback, and credentials for subsequent requests in the same task. `list_thingtime_accounts` maps @Thingtime list accounts to safe multi-account metadata. The read surface includes exact single/batch IDs, target-specific comments, browse/search, schema discovery and validation, relationship/thread traversal, ACL-aware change polling, history, and workflows. Composed writes must produce a signed before/after preview first; apply rechecks token scopes and optimistic updatedAt preconditions, stops after the first failed operation, and persists an honest encrypted receipt with a bounded undo plan. Thingtime Capability data Things compile only the registered create/update/delete grammar with explicit input placeholders — no arbitrary URLs, API paths, database queries, or code. tools/list, prompts/list, resources/list, static UI/contract resources, and the login bootstrap are public metadata/control surfaces and never return account data. Every account/data tool and account-scoped resource requires a revocable MCP-only bridge token; underlying scoped PATs stay AES-256-GCM encrypted in one origin-bound connection record. Discovery begins at /.well-known/oauth-protected-resource and the semantic capability manifest lives at /.well-known/thingtime-chatgpt-capabilities.json.',
+    auth: { mode: 'bearer', description: 'OAuth 2.1 ChatGPT bridge Bearer token for account/data tools. tools/list and login_thingtime are public; unauthenticated login returns a tool-level MCP OAuth challenge without failing the HTTP transport.' },
     methods: ['POST'],
     steps: [
       'Discover protected-resource metadata and complete the authorization-code flow with S256 PKCE.',
@@ -933,12 +933,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'Public tool metadata, including each tool’s OAuth requirement and precise action annotations.',
-        body: { jsonrpc: '2.0', id: 1, result: { tools: [{ name: 'get_thingtime_thing', securitySchemes: [{ type: 'oauth2', scopes: ['thingtime'] }], annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }] } }
+        body: { jsonrpc: '2.0', id: 1, result: { tools: [{ name: 'login_thingtime', securitySchemes: [{ type: 'noauth' }, { type: 'oauth2', scopes: ['thingtime'] }], annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false } }, { name: 'get_thingtime_thing', securitySchemes: [{ type: 'oauth2', scopes: ['thingtime'] }], annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }] } }
       },
       {
-        status: 401,
-        description: 'MCP OAuth challenge.',
-        headers: { 'WWW-Authenticate': 'Bearer resource_metadata="https://thingtime.com/.well-known/oauth-protected-resource", error="invalid_token", error_description="A Thingtime connection is required"' },
+        status: 200,
+        description: 'Tool-level OAuth challenge returned by login_thingtime so the invoking host can authenticate without a transport error.',
         body: { jsonrpc: '2.0', id: 1, result: { isError: true, _meta: { 'mcp/www_authenticate': ['Bearer resource_metadata="https://thingtime.com/.well-known/oauth-protected-resource", error="invalid_token", error_description="A Thingtime connection is required"'] } } }
       }
     ],
@@ -953,15 +952,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'integrations',
     title: 'ChatGPT OAuth authorization',
     endpoint: CHATGPT_AUTHORIZE_PATH,
-    summary: 'First-party browser connection page for one or more scoped Thingtime accounts.',
+    summary: 'First-party SSO connection page for one or more scoped Thingtime accounts.',
     detail:
-      'GET is the OAuth 2.1 authorization endpoint. It requires response_type=code, a configured ChatGPT client ID, or a bounded Codex CIMD/DCR client ID, its matching registered callback, resource equal to this origin’s MCP endpoint, state, and an S256 PKCE challenge. The `thingtime` scope is mandatory; clients may additionally request `offline_access` for rotating refresh credentials. The resulting form accepts one or more named Thingtime API endpoints and personal access tokens, validates every token using /api/v1/tokens/self, encrypts the connection bundle before persistence, then redirects only a five-minute single-use authorization code back to the approved callback. POST submits that form; credentials are never included in the redirect, OAuth code, or client transcript.',
-    auth: { mode: 'none', description: 'OAuth public-client request plus user-entered scoped personal access tokens on the first-party connection page.' },
+      'GET is the OAuth 2.1 authorization endpoint. It requires response_type=code, a configured ChatGPT client ID, or a bounded Codex CIMD/DCR client ID, its matching registered callback, resource equal to this origin’s MCP endpoint, state, and an S256 PKCE challenge. The `thingtime` scope is mandatory; clients may additionally request `offline_access` for rotating refresh credentials. The first-party page first uses the existing Thingtime SSO handoff: a signed-in account receives a generated, revocable, non-expiring personal access token with the `things` (read/write all) scope and unrestricted visibility. The generated token is returned only to the same-origin page, then encrypted before the connection bundle is persisted; it never enters ChatGPT, Codex, a redirect, OAuth code, or a chat transcript. Advanced settings can narrow scopes, regenerate the generated token (revoking the prior generated token), edit the primary token, or add a manually supplied scoped token for another approved endpoint. POST `intent=prepare` is the same-origin SSO preparation request; ordinary POST submits the encrypted account bundle and redirects only a five-minute single-use authorization code to the approved callback.',
+    auth: { mode: 'none', description: 'OAuth public-client request. The first-party page authenticates the account with Thingtime SSO and generates the default scoped credential server-side.' },
     methods: ['GET', 'POST'],
     steps: [
-      'Create least-privilege personal access tokens in each Thingtime account.',
-      'Let ChatGPT open this endpoint with its OAuth parameters and approve the accounts in the first-party browser page.',
-      'The browser redirects to ChatGPT with a short-lived code and original state.'
+      'Let ChatGPT or Codex open this endpoint with its OAuth parameters and sign in with the existing Thingtime SSO page when prompted.',
+      'Review the default read/write-all connection or open Advanced settings to narrow scopes, regenerate the generated credential, or add another approved account.',
+      'The page sends an explicit completion request, reports any server-side error in place, then deliberately navigates to the registered callback with a short-lived code and original state.'
     ],
     requestExamples: [
       {
@@ -981,8 +980,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       }
     ],
     responseExamples: [
-      { status: 200, description: 'First-party form requesting named endpoint/token pairs.', headers: { 'Content-Type': 'text/html; charset=utf-8' } },
-      { status: 302, description: 'After validation, redirects to the ChatGPT callback with code, state, and issuer.' },
+      { status: 200, description: 'First-party SSO connection page. It prepares the default encrypted read/write-all account without exposing a token in the client host or chat.', headers: { 'Content-Type': 'text/html; charset=utf-8' } },
+      { status: 200, description: 'The explicit completion request returns the exact registered callback URL only after validating and encrypting the selected account; the page then navigates there with code, state, and issuer.' },
+      { status: 302, description: 'Legacy form submission redirects to the ChatGPT callback with code, state, and issuer.' },
       { status: 400, description: 'Invalid OAuth request or account form.', body: 'An HTML error page with no credentials echoed.' }
     ]
   }),
@@ -1008,6 +1008,24 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [
       { status: 201, description: 'A signed public client ID bound to the supplied loopback callback.', body: { client_id: '<signed-opaque-client-id>', redirect_uris: ['http://127.0.0.1:49152/callback/thingtime_mcp_AbC123'], token_endpoint_auth_method: 'none' } },
       { status: 400, description: 'The client attempted an unsupported redirect URI.' }
+    ]
+  }),
+  endpoint({
+    id: 'chatgpt-oauth-relay',
+    group: 'integrations',
+    title: 'ChatGPT OAuth mobile relay',
+    endpoint: CHATGPT_OAUTH_RELAY_PATH,
+    summary: 'One-time first-party relay for completing a Codex OAuth login from another device.',
+    detail:
+      'POST creates a five-minute handoff with an opaque callback URL and a separate polling secret. After the user completes the Thingtime connection page on mobile, GET records the PKCE-bound authorization response without exposing it in the success page. Only the helper holding the polling secret can retrieve that response and forward it to Codex’s OAuth listener.',
+    auth: { mode: 'none', description: 'The handoff identifier is random and the polling response additionally requires a separate 256-bit secret.' },
+    methods: ['GET', 'POST'],
+    steps: ['Create a one-time relay from the remote Codex helper.', 'Open the returned authorization URL on mobile or scan its QR code.', 'The helper polls with its private secret and forwards the response to Codex for the normal PKCE exchange.'],
+    requestExamples: [],
+    responseExamples: [
+      { status: 201, description: 'A short-lived handoff for the local helper.', body: { handoffId: '<opaque-id>', pollToken: '<private-helper-secret>', callbackUrl: 'https://thingtime.com/api/v1/integrations/chatgpt/oauth/relay?handoff=<opaque-id>' } },
+      { status: 200, description: 'A pending or completed relay response.', body: { status: 'pending' } },
+      { status: 401, description: 'Polling secret is missing or invalid.', body: { error: 'unauthorized' } }
     ]
   }),
   endpoint({
@@ -3983,6 +4001,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'mongodb',
     title: 'MongoDB query workbench',
     endpoint: '/api/v1/mongodb/raw-results',
+    // 1.1.0: the collection allowlist gained `ciControl` (additive).
+    // contractVersion is what the capabilities manifest publishes.
+    contractVersion: '1.1.0',
     summary: 'Advertises and runs bounded, read-only MongoDB queries for the no-code admin workbench.',
     detail:
       'GET returns the server-owned capability catalogue. POST accepts a structured query built from filters, typed Extended JSON values, projection, sort, collation, index hints, or a read-only aggregation pipeline. Results are capped by document count, response bytes, and execution time. Mutations, change streams, operational/session inspection, server-side JavaScript, arbitrary databases, and unknown collections are rejected recursively.',
@@ -8567,13 +8588,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-update',
-    featureVersion: '1.1.0',
+    featureVersion: '1.2.0',
     group: 'things',
     title: 'Update thing',
     endpoint: '/api/v1/things/update',
     summary: 'Updates one of the current user things — crystal payload, acl audience, or tags.',
     detail:
-      'Sugar over PATCH /api/v1/things: crystal patches merge over the existing crystal and are re-validated against the thing schemas in its thingtime array; replaceCrystal=true takes the supplied crystal whole. expectedUpdatedAt provides an atomic optimistic-concurrency precondition for signed MCP previews and other safe clients. acl (or a legacy visibility name) retargets the audience. Updating a pre-unification post upgrades it to the v2 doc shape in place. Attached things keep their inherited audience.',
+      'Sugar over PATCH /api/v1/things: crystal patches merge over the existing crystal and are re-validated against the thing schemas in its thingtime array; replaceCrystal=true takes the supplied crystal whole. expectedUpdatedAt provides an atomic optimistic-concurrency precondition for signed MCP previews and other safe clients. acl (or a legacy visibility name) retargets the audience. Updating a pre-unification post upgrades it to the v2 doc shape in place. Attached things keep their inherited audience. Saving a webpage thing (create or update) additionally binds the owner\'s own ready builder uploads referenced by its media blocks to the page — clearing their draft expiry and inheriting the page\'s audience; foreign or external references are left untouched.',
     auth: {
       mode: 'session-or-bearer',
       description:
@@ -10004,6 +10025,72 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'webpages-resolve',
+    group: 'webpages',
+    title: 'Resolve a webpage',
+    endpoint: '/api/v1/webpages/resolve',
+    summary: 'Resolve one block-based webpage plus every component thing its blocks reference — the read model behind /p/ pages, the builder, and site pages.',
+    detail:
+      'Webpage things (thingtime ["webpage"]) hold a bounded ordered block tree: component blocks reference ' +
+      'component things by componentKey or shareId, container blocks lay children out, text blocks carry short ' +
+      'copy, and native blocks mark where a built-in Thingtime screen sits on a site page. This endpoint resolves ' +
+      'ONE page — by id (a standalone /p/ page), by path (the site page bound to an app route, where a ' +
+      'viewer-owned personalised doc outranks the seeded system default), or global=1 (the site-global block ' +
+      'doc) — together with every referenced component in one batched query. Component refs resolve exact ' +
+      'visible shareIds first, then the seeded platform doc (component-<ref>), then the caller’s own latest ' +
+      'componentKey match; the refs map records each resolution. Pages are created and edited through the ' +
+      'ordinary /api/v1/things write path (the webpage crystal sanitizer is the write gate) — this endpoint ' +
+      'only reads.',
+    auth: {
+      mode: 'optional',
+      description: 'Anonymous callers resolve public pages and the seeded site defaults; signed-in callers also get their own pages and personalised site docs.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET with exactly one of id=<shareId>, path=</route>, or global=1.',
+      'Read page (null when no doc matches a path/global lookup) and source ("user" | "system").',
+      'Render blocks by looking each component block’s ref up in the refs map, then in components[].',
+      'Treat a null refs entry as an unresolvable component (render a placeholder).',
+      'Handle 400 for a malformed query, 404 for an id that doesn’t resolve, and 429 when rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Resolve a standalone page',
+        description: 'The read behind /p/<id>.',
+        method: 'GET',
+        query: { id: 'my-launch-page' }
+      },
+      {
+        name: 'Resolve a site page',
+        description: 'The block doc bound to an app route (viewer-personalised when a fork exists).',
+        method: 'GET',
+        query: { path: '/status' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Page and referenced components returned.',
+        body: {
+          ok: true,
+          page: {
+            id: 'webpage-route-status',
+            thingtime: ['webpage'],
+            crystal: {
+              name: 'Status',
+              pageKey: 'route-status',
+              siteRoute: '/status',
+              blocks: [{ id: 'native-status', type: 'native', native: 'status' }]
+            }
+          },
+          source: 'system',
+          components: [],
+          refs: {}
+        }
+      }
+    ]
+  }),
+  endpoint({
     id: 'admin-components-seed',
     group: 'admin',
     title: 'Seed component library',
@@ -10058,10 +10145,58 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'admin-webpages-seed',
+    group: 'admin',
+    title: 'Seed site webpages',
+    endpoint: '/api/v1/admin/webpages/seed',
+    summary: 'Upserts the built-in site-page docs (one webpage thing per app route, native-block bodies) plus the site-global doc.',
+    detail:
+      'The write path that makes every built-in Thingtime route a block-based site: a deterministic server-side ' +
+      'table seeds one system-owned webpage thing per app route (shareId webpage-route-<key>, the prefix is ' +
+      'reserved against squatters) whose block list is the locked native block for that screen, plus the empty ' +
+      'site-global doc (webpage-site-global). storageClass "control", acl ["tt:all"], hashed webpage:<slug> ' +
+      'uniqueKeys. Crystals pass validateThingtimeCrystal(["webpage"]) — the exact write gate user pages clear. ' +
+      'Idempotent and self-healing: re-runs leave matching docs unchanged, refresh drifted crystals/tags in ' +
+      'place, and skip (never touch) foreign docs squatting a destination id. Viewers personalise site pages by ' +
+      'saving their own webpage twin (same pageKey/siteRoute) through the builder — the seeds themselves never ' +
+      'change per user. GET returns the seed census without writing.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'POST with an empty body — the seed table is server-side and deterministic.',
+      'Read created/refreshed/unchanged/skipped and notes for per-slug outcomes.',
+      'GET the same path for { totalSeeded } to check the census without writing.',
+      'Re-run after adding routes to the seed table — converges, never duplicates.',
+      'Handle 401/403 for non-admins and 429 when the fail-closed rate limit trips.'
+    ],
+    requestExamples: [
+      {
+        name: 'Seed the site pages',
+        description: 'Upsert every built-in route doc + the global doc.',
+        method: 'POST',
+        body: {}
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Seed report returned.',
+        body: { ok: true, received: 26, created: 26, refreshed: 0, unchanged: 0, skipped: 0, notes: [], totalSeeded: 26 }
+      }
+    ]
+  }),
+  endpoint({
     id: 'admin-migrations',
     group: 'admin',
     title: 'Migration status',
     endpoint: '/api/v1/admin/migrations',
+    // 1.1.0: every generation row carries its storage census (dataBytes,
+    // storageBytes, indexBytes, indexes) — additive. contractVersion is what
+    // the capabilities manifest publishes.
+    contractVersion: '1.1.0',
     summary: 'Per-collection schema-version census, storage generations, and registered migrations with pending counts.',
     detail:
       'Every doc stores the root-level schemaVersion it was written at (docs without one count as version 1), and every ' +
@@ -10105,8 +10240,30 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             }
           ],
           generations: [
-            { collection: 'things', physical: 'things_v2', version: 2, docs: 42, current: true, stale: false },
-            { collection: 'things', physical: 'things', version: null, docs: 42, current: false, stale: true }
+            {
+              collection: 'things',
+              physical: 'things_v2',
+              version: 2,
+              docs: 42,
+              current: true,
+              stale: false,
+              dataBytes: 118_784,
+              storageBytes: 61_440,
+              indexBytes: 1_310_720,
+              indexes: 57
+            },
+            {
+              collection: 'things',
+              physical: 'things',
+              version: null,
+              docs: 42,
+              current: false,
+              stale: true,
+              dataBytes: 118_784,
+              storageBytes: 61_440,
+              indexBytes: 274_432,
+              indexes: 19
+            }
           ],
           adoptionIssues: [],
           migrations: [{ id: 'things-v1-to-v2', collection: 'things', fromVersion: 1, toVersion: 2, destructive: false, pending: 24 }]
@@ -10257,7 +10414,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       '["post","share"], moves post payloads under crystal, and stamps schemaVersion; the other collections stamp the ' +
       'version they already conform to. merge-legacy-collections folds leftover unversioned collections into their ' +
       'versioned successors, and drop-stale-collection-generations removes superseded physical collections — that one ' +
-			'is destructive and additionally requires confirm: true on the non-dry run. Failed real runs may return a private ' +
+      'is destructive and additionally requires confirm: true on the non-dry run. relocate-ci-control-telemetry moves ' +
+      'every ci-* Thing out of things into the ciControl satellite (applying CI retention; time-budgeted, re-run until ' +
+      'pending is 0) and rebuild-things-indexes then drops and recreates the plan-owned things indexes so the storage ' +
+      'the deleted rows occupied is actually released — both destructive, both confirm: true. Failed real runs may return a private ' +
 			'diagnosticThingId for the same admin to open at /thing/:id; failed dry runs never create diagnostics and instead return ' +
 			'bounded redacted adminDetail inline.',
     auth: {
@@ -10285,6 +10445,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Migrate v1 posts to unified v2 things.',
         method: 'POST',
         body: { migration: 'things-v1-to-v2' }
+      },
+      {
+        name: 'Relocate CI telemetry, then reclaim index storage',
+        description:
+          'Drain ci-* rows from things into ciControl (repeat until the report stops saying more rows remain), then rebuild the things indexes.',
+        method: 'POST',
+        body: { migration: 'relocate-ci-control-telemetry', confirm: true }
       }
     ],
     responseExamples: [

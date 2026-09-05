@@ -47,6 +47,27 @@ These patterns show up again and again — default to them when unsure:
 - **One Mongo connection source:** `mongodb/config.ts` `getMongoUri()`
   (`MONGODB_CONNECTION_STRING` + `MONGO_PASS`), no fallbacks.
 - **Seed via the real API**, not direct DB writes (cohesion, principle #3).
+- **Machine telemetry gets a satellite, not a seat in `things`** (2026-09-02).
+  The CI control plane (`ci-*` Things, incl. the append-only `ci-event`
+  history) had become 99.75% of `things_v2` — 1.82M rows since August, growing
+  ~270k/day — and every one paid an entry in each of the collection's 64
+  indexes (3.15 GB of index for ~4.5k real content docs, at the 64-index cap,
+  wildcard text index tokenizing CI payloads). Decision: keep
+  everything-is-a-thing at the DOCUMENT level (same envelope, same
+  deterministic shareIds), but give high-volume, short-lived, never-searched
+  control-plane rows their own home-pinned physical collection (`ciControl`)
+  with a purpose-sized index plan and TTL retention (`expiresAt`: events 14d,
+  job rows 30d, runs/deployments/previews 90d, entities never). Storage
+  history that is not a transition is not history: a delivery that changes
+  nothing on the repository row records no event (it was half of all events).
+  `things` keeps only what users read and search. Audit + measurements:
+  `docs/architecture/mongodb-index-storage-audit.md`.
+- **Indexes are a budget, and dead ones are retired by name.** Five indexes on
+  production served fields no code has ever written (a pre-Things data model);
+  they are pruned at boot via `RETIRED_THINGS_INDEXES`, v1-era `kind_*` indexes
+  are partial on `kind`'s existence, and index files are reclaimed after mass
+  deletes by an explicit rebuild migration (unique constraints held by a twin
+  throughout) — never by hoping WiredTiger shrinks a file.
 
 **Auth**
 - Model: **httpOnly cookie carrying a signed JWT** (`sub`/`jti`/`exp`) **+ a

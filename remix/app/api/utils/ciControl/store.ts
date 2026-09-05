@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 
-import { getHomeThingsCollection } from '../mongodb/collections';
+import { getCiControlCollection } from '../mongodb/collections';
+import { shouldRecordEntityEvent, type CiEntityEventPolicy } from './ingestPolicyCore';
+import { ciExpiresAt } from './retentionCore';
 import {
   CI_AUTOMATION_DEFINITIONS,
   ciAutomationDefinition,
@@ -84,7 +86,7 @@ const publicCrystal = (doc: any) => {
 };
 
 export const recordCiEvent = async (input: CiEventInput): Promise<{ id: string; inserted: boolean }> => {
-  const things = await getHomeThingsCollection();
+  const things = await getCiControlCollection();
   const eventKey = [
     input.provider,
     input.repository,
@@ -95,12 +97,16 @@ export const recordCiEvent = async (input: CiEventInput): Promise<{ id: string; 
   const shareId = stableShareId(eventKey);
   const occurredAt = dateFrom(input.occurredAt);
   const now = new Date();
+  // Retention rides root expiresAt (ciControl TTL index); events are
+  // immutable, so the window is fixed at insert.
+  const expiresAt = ciExpiresAt('ci-event', null, now);
   try {
     const result = await things.updateOne(
       { shareId, thingtime: 'ci-event' },
       {
         $setOnInsert: {
-          schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+          schemaVersion: COLLECTION_SCHEMA_VERSIONS.ciControl,
+          ...(expiresAt ? { expiresAt } : {}),
           shareId,
           thingtime: ['ci-event'],
           crystal: {
@@ -134,15 +140,29 @@ export const recordCiEvent = async (input: CiEventInput): Promise<{ id: string; 
   }
 };
 
+export type UpsertCiEntityOptions = {
+  // 'always' (default): every accepted delivery records a ci-event on this
+  // entity. 'on-change': only an insert or a status transition does — the
+  // repository row is upserted by EVERY GitHub delivery and was the parent of
+  // half of all production events as "active → active" noise
+  // (ingestPolicyCore.ts).
+  eventPolicy?: CiEntityEventPolicy;
+};
+
 export const upsertCiEntity = async (
   input: CiEntityInput,
-  event?: Omit<CiEventInput, 'parentId' | 'statusFrom' | 'statusTo'>
+  event?: Omit<CiEventInput, 'parentId' | 'statusFrom' | 'statusTo'>,
+  options?: UpsertCiEntityOptions
 ): Promise<{ id: string; changed: boolean; ignoredAsOlder: boolean }> => {
-  const things = await getHomeThingsCollection();
+  const things = await getCiControlCollection();
   const entityKey = ciEntityKey(input);
   const shareId = stableShareId(entityKey);
   const occurredAt = dateFrom(input.occurredAt);
   const now = new Date();
+  // Retention window measured from THIS accepted update (retentionCore):
+  // permanent kinds carry no stamp, and a stale one is unset so a row can
+  // never keep an expiry from a policy that no longer applies to it.
+  const expiresAt = ciExpiresAt(input.kind, input.externalId, now);
   const current = await things.findOne(
     { shareId, thingtime: input.kind },
     { projection: { 'crystal.status': 1, 'crystal.sourceUpdatedAt': 1 } }
@@ -177,10 +197,12 @@ export const upsertCiEntity = async (
           sourceUpdatedAt: occurredAt
         },
         parentId: input.parentId ?? null,
-        updatedAt: now
+        updatedAt: now,
+        ...(expiresAt ? { expiresAt } : {})
       },
+      ...(expiresAt ? {} : { $unset: { expiresAt: '' } }),
       $setOnInsert: {
-        schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+        schemaVersion: COLLECTION_SCHEMA_VERSIONS.ciControl,
         shareId,
         thingtime: [input.kind],
         ownerId: 'system',
@@ -215,7 +237,15 @@ export const upsertCiEntity = async (
     }
   }
 
-  if (event) {
+  if (
+    event &&
+    shouldRecordEntityEvent(options?.eventPolicy ?? 'always', {
+      inserted: !current,
+      previousStatus,
+      nextStatus,
+      ignoredAsOlder
+    })
+  ) {
     await recordCiEvent({
       ...event,
       parentId: shareId,
@@ -294,7 +324,7 @@ export const setCiPreviewPolicy = async (input: {
 };
 
 const readKind = async (kind: CiThingtime, limit: number, repository: string) => {
-  const things = await getHomeThingsCollection();
+  const things = await getCiControlCollection();
   const docs = await things
     .find(ciDashboardKindFilter(kind, repository))
     .sort(CI_DASHBOARD_UPDATED_SORT)
@@ -304,7 +334,7 @@ const readKind = async (kind: CiThingtime, limit: number, repository: string) =>
 };
 
 const countCiDashboardStats = async (repository: string) => {
-  const things = await getHomeThingsCollection();
+  const things = await getCiControlCollection();
   const [openPullRequests, conflicting, activeRuns, readyPreviews] = await Promise.all([
     things.countDocuments(ciDashboardFieldFilter('ci-pull-request', repository, 'state', ['OPEN', 'open'])),
     things.countDocuments(
@@ -361,7 +391,7 @@ const policyFromEntity = (workflow: CiWorkflowKey, entity: any | null): CiAutoma
 };
 
 export const listCiAutomationPolicies = async (repository: string): Promise<CiAutomationPolicy[]> => {
-  const things = await getHomeThingsCollection();
+  const things = await getCiControlCollection();
   const docs = await things
     .find({ thingtime: 'ci-automation', 'crystal.repository': boundedText(repository, 300) })
     .limit(CI_AUTOMATION_DEFINITIONS.length)
@@ -381,7 +411,7 @@ export const getCiAutomationPolicy = async (
   repository: string,
   workflow: CiWorkflowKey
 ): Promise<CiAutomationPolicy> => {
-  const things = await getHomeThingsCollection();
+  const things = await getCiControlCollection();
   const doc = await things.findOne({
     thingtime: 'ci-automation',
     'crystal.repository': boundedText(repository, 300),
@@ -430,7 +460,7 @@ export const setCiAutomationPolicy = async (input: {
       data: { executionProvider: input.executionProvider, enabled: input.enabled }
     }
   );
-  const things = await getHomeThingsCollection();
+  const things = await getCiControlCollection();
   const saved = await things.findOne({ shareId: entity.id, thingtime: 'ci-automation' });
   return policyFromEntity(input.workflow, saved ? publicCrystal(saved) : null);
 };
@@ -442,7 +472,7 @@ export const claimCiDispatchRoute = async (input: {
   actorId: string;
   occurredAt: Date;
 }): Promise<{ id: string; externalId: string; claimed: boolean; status: string }> => {
-  const things = await getHomeThingsCollection();
+  const things = await getCiControlCollection();
   const externalId = `automatic:${input.workflow}:${boundedText(input.deliveryKey, 300)}`;
   const shareId = stableShareId(
     ciEntityKey({ provider: 'thingtime', repository: input.repository, kind: 'ci-dispatch', externalId })
@@ -452,7 +482,7 @@ export const claimCiDispatchRoute = async (input: {
     { shareId, thingtime: 'ci-dispatch' },
     {
       $setOnInsert: {
-        schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+        schemaVersion: COLLECTION_SCHEMA_VERSIONS.ciControl,
         shareId,
         thingtime: ['ci-dispatch'],
         crystal: {
@@ -546,7 +576,7 @@ export const listCiEventsForParents = async (
   const perParentLimit = Math.min(50, Math.max(1, Math.floor(options?.perParentLimit ?? 20)));
   const ids = [...new Set(parentIds.map((value) => boundedText(value, 180)).filter(Boolean))].slice(0, 50);
   if (!ids.length) return [];
-  const things = await getHomeThingsCollection();
+  const things = await getCiControlCollection();
   const groups = await Promise.all(
     ids.map((parentId) =>
       things
@@ -564,6 +594,6 @@ export const listCiEventsForParents = async (
 
 export const clearCiControlForTests = async () => {
   if (process.env.NODE_ENV !== 'test') throw new Error('CI control data can only be cleared in tests');
-  const things = await getHomeThingsCollection();
+  const things = await getCiControlCollection();
   await things.deleteMany({ thingtime: { $in: [...CI_THINGTIME] } });
 };
