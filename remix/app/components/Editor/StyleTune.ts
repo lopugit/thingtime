@@ -1,11 +1,5 @@
-import {
-	FONT_STACKS,
-	SIZE_PRESETS,
-	STYLE_PALETTE,
-	hasStyleTokens,
-	sanitizeStyleTokens,
-	styleTokensToCss
-} from './styleTokens';
+import { openStyleDialog } from './StyleDialog';
+import { FONT_STACKS, SIZE_PRESETS, STYLE_PALETTE, hasStyleTokens, sanitizeStyleTokens, styleTokensToCss } from './styleTokens';
 import type { AlignKey, FontKey, TextStyleTokens } from './styleTokens';
 
 // 🎨 Style — an Editor.js block tune (the official per-block settings
@@ -46,7 +40,7 @@ const bindDelegation = () => {
 		(event) => {
 			const target = event.target as HTMLElement | null;
 			const button = target?.closest?.(
-				'[data-tt-style-color], [data-tt-style-size], [data-tt-style-font], [data-tt-style-align], [data-tt-style-reset]'
+				'[data-tt-style-color], [data-tt-style-size], [data-tt-style-font], [data-tt-style-align], [data-tt-style-reset], [data-tt-style-custom]'
 			) as HTMLElement | null;
 			if (!button) return;
 
@@ -58,8 +52,10 @@ const bindDelegation = () => {
 			event.preventDefault();
 			event.stopPropagation();
 
-			if (button.hasAttribute('data-tt-style-reset')) {
-				tune.set({ color: undefined, size: undefined, font: undefined, align: undefined });
+			if (button.hasAttribute('data-tt-style-custom')) {
+				tune.openCustom();
+			} else if (button.hasAttribute('data-tt-style-reset')) {
+				tune.replace({});
 			} else if (button.hasAttribute('data-tt-style-color')) {
 				const css = button.getAttribute('data-tt-style-css') || '';
 				tune.set({ color: tune.data.color === css ? undefined : css });
@@ -114,6 +110,7 @@ export class StyleTune {
 	block: any;
 	data: TextStyleTokens;
 	wrapper: HTMLElement | null = null;
+	closeDialog?: () => void;
 
 	constructor({ api, data, block }: TuneParams) {
 		this.api = api;
@@ -148,12 +145,27 @@ export class StyleTune {
 	applyStyles() {
 		if (!this.wrapper) return;
 		const css = styleTokensToCss(this.data);
-		this.wrapper.style.color = (css.color as string) || '';
-		this.wrapper.style.fontSize = (css.fontSize as string) || '';
-		if (css.fontSize) this.wrapper.style.setProperty('--tt-editor-heading-font-size', css.fontSize as string);
-		else this.wrapper.style.removeProperty('--tt-editor-heading-font-size');
-		this.wrapper.style.fontFamily = (css.fontFamily as string) || '';
-		this.wrapper.style.textAlign = (css.textAlign as string) || '';
+		// Apply to text fields themselves: relative units must resolve once, not at both wrapper and heading.
+		this.wrapper.querySelectorAll<HTMLElement>('[contenteditable], textarea').forEach((field) => {
+			for (const key of ['color', 'fontSize', 'fontFamily', 'textAlign', 'backgroundColor', 'fontWeight', 'fontStyle', 'textDecoration'] as const)
+				field.style[key] = String(css[key] ?? '');
+		});
+	}
+	replace(tokens: TextStyleTokens) {
+		this.data = sanitizeStyleTokens(tokens);
+		this.applyStyles();
+		this.block?.dispatchChange?.();
+		this.wrapper?.dispatchEvent(new Event('input', { bubbles: true }));
+	}
+	openCustom() {
+		this.closeDialog?.();
+		this.closeDialog = openStyleDialog({
+			initial: this.data,
+			title: 'Block text style',
+			alignment: true,
+			emPixels: this.wrapper ? parseFloat(getComputedStyle(this.wrapper).fontSize) || 16 : 16,
+			apply: (tokens) => this.replace(tokens)
+		});
 	}
 
 	set(partial: Partial<Record<keyof TextStyleTokens, unknown>>) {
@@ -247,11 +259,18 @@ export class StyleTune {
 		});
 		panel.appendChild(aligns);
 
+		const custom = document.createElement('button');
+		custom.type = 'button';
+		custom.textContent = '🎨 More text styles…';
+		custom.setAttribute('data-tt-style-custom', '');
+		custom.style.cssText = BUTTON_BASE + 'min-height:36px;width:100%;';
+		panel.appendChild(custom);
 		paintPanel(panel, this.data);
 		return panel;
 	}
 
 	destroy() {
+		this.closeDialog?.();
 		const blockId = this.blockId();
 		if (blockId && TUNE_REGISTRY.get(blockId) === this) TUNE_REGISTRY.delete(blockId);
 	}

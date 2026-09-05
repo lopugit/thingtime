@@ -1087,6 +1087,27 @@ email whose link points at the attacker.
       Editor section still lists/saves/restores layouts (embedded composer
       editors must never appear there).
 
+## Editor.js rich text styles
+
+- [ ] In builder inline/modal editors and the post composer, select paragraph,
+      heading, list/checklist, quote/caption, table-cell and warning text. The
+      palette button opens the same full styling panel for every rich-text field.
+- [ ] Test wheel dragging/keyboard controls, HEX/RGB/RGBA/HSL/HSLA input,
+      transparent colours and highlights, all decorations, font family, and
+      px/em/rem/pt/% sizes with both direct input and minus/plus controls.
+- [ ] Apply, save, reopen, and read the rendered content. Builder HTML round trips
+      retain selected-text styles and block colours, alignment and custom sizes.
+      Changing a substring keeps neighbouring and mixed formatting; Cancel leaves
+      the document unchanged, Reset clears styling, and Undo restores the edit.
+- [ ] At desktop and 390px mobile widths, select text near each viewport edge and
+      scroll top to bottom. The toolbar stays above the selection, wraps within
+      the viewport, and remains usable. Scroll the colour panel to both ends;
+      controls and Apply/Cancel stay reachable without horizontal overflow.
+- [ ] On physical iOS, repeat selection with the native context menu and keyboard
+      open, including keyboard viewport panning and text near the screen top.
+- [ ] Local regression fixture: `/tests/editor-rich-text.html` under Vite uses the
+      real editor and builder components with ephemeral data and no API writes.
+
 ## Multi-editor focus (`remix/app/components/Editor/LongTextEditor.tsx`)
 
 - [ ] With the popout open (same path in two editors), click into an

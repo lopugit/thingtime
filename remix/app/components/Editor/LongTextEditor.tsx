@@ -20,6 +20,8 @@ import { watchEditorJsPopoverViewport } from './editorJsPopoverViewport';
 import { filterListV2ChecklistToolbox } from './editorJsToolbox';
 import { getEditorJsTouchFocusTarget } from './editorJsTouchFocus';
 import { StyleTune } from './StyleTune';
+import { InlineStyle } from './InlineStyle';
+import { watchEditorJsInlinePosition } from './editorJsInlinePosition';
 
 export { getEditorJsDoc, isEditorJsDoc, parseEditorJsDocString } from './editorJsValue';
 export type { EditorJsBlock, EditorJsDoc } from './editorJsValue';
@@ -328,6 +330,7 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle, LongTextEdito
 		let cancelled = false;
 		let textFieldKeyboardCleanup: (() => void) | undefined;
 		let blockReorderCleanup: (() => void) | undefined;
+		let inlinePositionCleanup: (() => void) | undefined;
 		let popoverViewportCleanup: (() => void) | undefined;
 		let editorChangeQueue: OrderedEditorJsChangeQueue<SequencedLongTextValue> | undefined;
 		let saveEditorValue: (() => void) | undefined;
@@ -336,6 +339,7 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle, LongTextEdito
 		(async () => {
 			if (!holderRef.current) return;
 			popoverViewportCleanup = watchEditorJsPopoverViewport(holderRef.current);
+			inlinePositionCleanup = watchEditorJsInlinePosition(holderRef.current);
 
 			const [
 				{ default: EditorJS },
@@ -400,12 +404,12 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle, LongTextEdito
 							}
 					  }
 					: {}),
-				...(enabled('embed') ? { embed: Embed as any } : {}),
-				...(enabled('image') ? { image: SimpleImage as any } : {}),
+				...(enabled('embed') ? { embed: { class: Embed as any, inlineToolbar: true } } : {}),
+				...(enabled('image') ? { image: { class: SimpleImage as any, inlineToolbar: true } } : {}),
 				...(enabled('marker') ? { marker: Marker as any } : {}),
 				...(enabled('inlineCode') ? { inlineCode: InlineCode as any } : {}),
 				...(enabled('underline') ? { underline: Underline as any } : {}),
-				...(enabled('style') ? { style: StyleTune as any } : {})
+				...(enabled('style') ? { style: StyleTune as any, textStyle: InlineStyle as any } : {})
 			};
 
 			// Editor.js's ReadOnly module clears the DOCUMENT selection while a new
@@ -471,6 +475,15 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle, LongTextEdito
 				minHeight: 0,
 				readOnly: readonlyRef.current,
 				tools: tools as any,
+				inlineToolbar: [
+					'bold',
+					'italic',
+					'link',
+					...(enabled('style') ? ['textStyle'] : []),
+					...(enabled('underline') ? ['underline'] : []),
+					...(enabled('marker') ? ['marker'] : []),
+					...(enabled('inlineCode') ? ['inlineCode'] : [])
+				],
 				// the 🎨 Style tune rides every block's settings menu
 				...(enabled('style') ? { tunes: ['style'] } : {}),
 				onChange: () => {
@@ -534,6 +547,7 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle, LongTextEdito
 			cancelled = true;
 			saveCurrentValueRef.current = async () => valueRef.current;
 			popoverViewportCleanup?.();
+			inlinePositionCleanup?.();
 			// Capture the final DOM state before teardown, then allow already-started
 			// saves to drain. The outer wrapper rejects stale results after an explicit
 			// value replacement while preserving edits across tool-config remounts.
@@ -709,11 +723,9 @@ const EditableLongTextEditor = React.forwardRef<LongTextEditorHandle, LongTextEd
 		changeSequenceRef.current += 1;
 		return changeSequenceRef.current;
 	}, []);
-	React.useImperativeHandle(
-		ref,
-		() => ({ save: () => innerRef.current?.save() ?? Promise.resolve(latestRef.current ?? props.value) }),
-		[props.value]
-	);
+	React.useImperativeHandle(ref, () => ({ save: () => innerRef.current?.save() ?? Promise.resolve(latestRef.current ?? props.value) }), [
+		props.value
+	]);
 
 	// A caller can explicitly convert string <-> Editor.js while this wrapper
 	// remains mounted. Reset the carried value and remount the inner editor so

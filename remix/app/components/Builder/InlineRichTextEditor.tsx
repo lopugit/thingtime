@@ -127,7 +127,7 @@ export const InlineRichTextEditor = ({
 				onValueChange={handleChange}
 				placeholder="Write something lovely ✨"
 				minHeight="1.6em"
-				blockTypes={{ style: false, embed: false, warning: false, image: false }}
+				blockTypes={{ embed: false, warning: false, image: false }}
 			/>
 		</Box>
 	);

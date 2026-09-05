@@ -61,7 +61,7 @@ export const RichTextModal = ({
 							onValueChange={setValue}
 							placeholder="Write something lovely ✨"
 							minHeight="280px"
-							blockTypes={{ style: false, embed: false, warning: false }}
+							blockTypes={{ embed: false, warning: false }}
 						/>
 					) : null}
 				</ModalBody>

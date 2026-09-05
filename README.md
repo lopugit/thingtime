@@ -2070,3 +2070,20 @@ prereleases containing both desktop and Recovery archives; partial configuration
 fails closed. Unsigned archives never become the latest trusted release. Forks
 must configure their own release origin and signing setup rather than reusing
 Thingtime's account credentials.
+
+### Rich text controls development
+
+The isolated `thingtime-editor-rich-text` worktree uses the deterministic Vite
+port **14870**, HMR **14871**, and Nitro **14872**. The ephemeral verification
+page is `http://localhost:14870/tests/editor-rich-text.html`; it mounts the real
+Editor.js and builder components without saving account data. Run
+`npm run web-ports` in other checkouts to resolve their own ports.
+
+The full colour/size panel is available from the inline palette button and
+**More text styles…** in block settings. Sizes support px, em, rem, pt and %;
+relative units retain CSS semantics. Existing numeric sizes remain px.
+No additional configuration or credentials are required.
+
+Tailscale/Funnel could not be configured on 2026-09-05: the local CLI shim points
+to an absent `/Applications/Tailscale.app/Contents/MacOS/tailscale` binary. No
+public Funnel URL or allowed-host entry was added for this worktree.

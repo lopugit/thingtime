@@ -17,6 +17,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-05: Share full selected-text/block styling across Editor.js and builder
+  editors: colour wheel, alpha, HEX/RGB(A)/HSL(A), highlights, decorations and
+  custom font sizes/units. Preserve styles through builder HTML round trips and
+  saved rendering; position the selection toolbar above text within the visual
+  viewport. — Codex (AI)
+
 - 2026-09-05: Repair Recovery catalogue refresh/architecture selection, malformed
   archive handling, background verification, rollback preservation, and cold
   cloud packaging. Share the protected main/PR release builder and correct its
