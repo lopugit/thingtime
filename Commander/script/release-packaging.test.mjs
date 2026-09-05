@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, copyFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 
@@ -45,4 +47,28 @@ test('published archive preserves and verifies the resource seal after extractio
   assert.match(production, /ditto -x -k/);
   assert.match(production, /verify-production-bundle.sh" "\$work\/extracted\/Commander.app"/);
   assert.doesNotMatch(production, /codesign.*--sign -|SIGNING_MODE=development/);
+});
+
+
+test('the real architecture verification commands accept a native Mach-O bundle fixture', { skip: process.platform !== 'darwin' }, () => {
+  const app = mkdtempSync(path.join(tmpdir(), 'commander-architecture-'));
+  try {
+    const architecture = spawnSync('/usr/bin/uname', ['-m'], { encoding: 'utf8' }).stdout.trim();
+    const nativeFixture = path.join(app, 'native-fixture');
+    const compile = spawnSync('/usr/bin/clang', ['-arch', architecture, '-x', 'c', '-', '-o', nativeFixture], {
+      encoding: 'utf8', input: 'int main(void) { return 0; }\n',
+    });
+    assert.equal(compile.status, 0, compile.stderr);
+    for (const name of ['Contents/MacOS/Commander', 'Contents/Resources/node/bin/node']) {
+      mkdirSync(path.dirname(path.join(app, name)), { recursive: true });
+      copyFileSync(nativeFixture, path.join(app, name));
+    }
+    const verification = readFileSync(new URL('./verify-production-bundle.sh', import.meta.url), 'utf8');
+    const commands = verification.split('\n').filter(line => line.includes('/usr/bin/lipo'));
+    assert.equal(commands.length, 2);
+    const result = spawnSync('bash', ['-ec', commands.join('\n')], {
+      encoding: 'utf8', env: { ...process.env, app, relative: 'Contents/MacOS/Commander' },
+    });
+    assert.equal(result.status, 0, result.stderr);
+  } finally { rmSync(app, { recursive: true, force: true }); }
 });
