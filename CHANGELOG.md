@@ -728,3 +728,12 @@ Details: [PR #637](PRs/637-codex-lopu-cooperative-handoff--safely-hand-batch-rev
   content to different bases, so the per-base replay and the worker decide.
   Off by default; set the `PROMOTION_TARGET_BRANCHES` repository variable to
   enable. — Claude (AI), 2026-08-10
+
+
+## 2026-09-05 — Signed Commander releases and Recovery pairing
+
+Repair the Commander controller's main-commit selection, signing secret fallback,
+and archive naming. Compile/test before credential import, publish notarized
+Commander and Recovery archives with verified extraction and SHA-256 checksums,
+retain exact build provenance, and keep Electron as the repository latest release.
+Caller gates, GitHub failures and publication boundaries have executable coverage.

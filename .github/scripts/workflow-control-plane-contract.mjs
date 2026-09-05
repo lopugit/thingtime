@@ -15,6 +15,7 @@ const scripts = resolve(githubRoot, "scripts");
 const codeqlBackfillScriptPath = resolve(scripts, "codeql-open-pr-backfill.mjs");
 
 const IMPLEMENTATIONS = [
+  "commander-release.yml",
   "codeql-analysis.yml",
   "codeql-pr-handoff.yml",
   "develop-pr-preview.yml",
