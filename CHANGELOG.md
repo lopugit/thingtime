@@ -31,6 +31,14 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## [Unreleased]
 
+- Prevented owner-PAT preview status comments from recursively waking Lopu,
+  preserved human quote replies, and revalidated queued comments before model
+  work. Added markers to all rebase result paths and made both preview comment
+  writers skip unchanged content. Scoped control-plane CI cancellation per PR
+  or ref and skipped product builds for controller-only heads. The targeted
+  event and comment regression suites now block `verify`. Incorporates and
+  hardens repairs #624, #625, and #626. — Codex (AI), 2026-09-05
+
 - Restored Lopu PR manager admission after its protected workflow crossed
   GitHub's workflow-size boundary and began accumulating permanently pre-queued
   runs with no jobs or logs. The controller is compact again and its contract

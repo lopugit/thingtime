@@ -71,6 +71,28 @@ syntax-checks every script, runs each `--self-test`, and asserts this branch's
 shape (see below). Web CI does not run — its path filters are `remix/**`, which
 cannot exist here.
 
+CI concurrency is scoped to the PR number or pushed/dispatched ref. A newer
+run may supersede the same subject, but unrelated PRs never share a cancellation
+slot. Event-admission and preview-comment regression tests run in the required
+`verify` job, independently of the broader advisory contracts.
+
+Automated comments must begin with their canonical `<!-- thingtime-... -->`
+marker. The owner PAT is deliberately retained where GitHub's integration token
+lacks permission; its `User` identity is not treated as proof of human authorship.
+Bot and marker-prefixed comments stop before a runner starts. Other user comments
+pass a read-only protected classifier that recognizes legacy standalone markers,
+preserves quoted replies and fenced code examples, and suppresses unchanged edits.
+Queued comment review workers fetch and reclassify the exact live comment before
+creating PR worktrees or invoking a model. Missing comments stop cleanly; failed
+metadata reads fail closed. Both preview publishers edit their owned comment only
+when its content changes and never adopt a human's quoted status as their own.
+
+Preview eligibility also requires a real `remix/package.json` file at the exact
+authorized head SHA. A controller-only head follows the existing skip/cleanup
+path instead of entering dependency installation. Only a contents 404 means the
+file is missing; authentication, rate-limit, and server errors remain errors.
+See [.github/TESTING.md](.github/TESTING.md) for regression and rollout checks.
+
 ## Lopu principal repository manager
 
 Lopu is the repository-facing identity for every model-backed automation in

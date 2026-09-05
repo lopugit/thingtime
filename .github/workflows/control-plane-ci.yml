@@ -84,6 +84,9 @@ jobs:
       - name: Validate the conflict-resolver routing step window
         run: node --test .github/scripts/resolve-pr-conflicts-routing-contract.test.mjs
 
+      - name: Validate event admission, CI isolation, and preview writes
+        run: node --test .github/scripts/control-plane-events.test.mjs .github/scripts/preview-comments.test.mjs
+
       - name: Validate all-branch event and doctor contracts
         run: node .github/scripts/build-all-branch.mjs --self-test
 
