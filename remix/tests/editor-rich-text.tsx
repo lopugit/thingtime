@@ -68,6 +68,7 @@ function TightBuilderCheck() {
 	const [selectedId, setSelectedId] = React.useState<string | null>(null);
 	const [hoverId, setHoverId] = React.useState<string | null>(null);
 	const [narrow, setNarrow] = React.useState(false);
+	const [fixedChrome, setFixedChrome] = React.useState(false);
 	return (
 		<section
 			data-testid="tight-builder-check"
@@ -76,6 +77,17 @@ function TightBuilderCheck() {
 			<h2>Tight builder spaces</h2>
 			<button onClick={() => setNarrow(!narrow)}>Resize builder container</button>
 			<button onClick={() => setSelectedId(null)}>Deselect block</button>
+			<button onClick={() => setFixedChrome(!fixedChrome)}>Toggle fixed chrome</button>
+			{fixedChrome ? (
+				<>
+					<div className="thingtimeTopNav" style={{ position: 'fixed', top: 0, left: 0, right: 0, height: 52, zIndex: 9999, background: '#eee' }}>
+						Fixed header
+					</div>
+					<div data-testid="builder-drawer" style={{ position: 'fixed', top: 52, right: 0, bottom: 0, width: 96, zIndex: 9999, background: '#eee' }}>
+						Inspector
+					</div>
+				</>
+			) : null}
 			<div style={{ marginTop: 80 }}>
 				<WebpageBlocksRenderer
 					blocks={blocks}

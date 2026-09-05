@@ -55,16 +55,19 @@ export const editorOverlayBounds = (holder: HTMLElement): OverlayRect => {
 		}
 	}
 	// Account for fixed application chrome, including the builder inspector.
-	document.querySelectorAll<HTMLElement>('header, [data-testid="builder-drawer"], [data-editor-overlay-obstacle]').forEach((element) => {
-		if (element.contains(holder)) return;
-		const css = getComputedStyle(element),
-			rect = element.getBoundingClientRect();
-		if (!['fixed', 'sticky'].includes(css.position) || !rect.width || !rect.height) return;
-		if (rect.height > (bottom - top) * 0.6) {
-			if (rect.right >= right && rect.left < right) right = Math.max(left, rect.left - 8);
-			else if (rect.left <= left && rect.right > left) left = Math.min(right, rect.right + 8);
-		} else if (rect.width > (right - left) * 0.6 && rect.top <= top && rect.bottom > top) top = Math.min(bottom, rect.bottom + 8);
-	});
+	document
+		.querySelectorAll<HTMLElement>('header, .thingtimeTopNav, [data-testid="builder-drawer"], [data-editor-overlay-obstacle]')
+		.forEach((element) => {
+			if (element.contains(holder)) return;
+			const css = getComputedStyle(element),
+				rect = element.getBoundingClientRect();
+			if (!['fixed', 'sticky'].includes(css.position) || !rect.width || !rect.height) return;
+			if (rect.height > (bottom - top) * 0.6) {
+				if (rect.right >= right && rect.left < right) right = Math.max(left, rect.left - 8);
+				else if (rect.left <= left && rect.right > left) left = Math.min(right, rect.right + 8);
+			} else if (rect.width > (right - left) * 0.6 && (rect.top <= top || element.classList.contains('thingtimeTopNav')) && rect.bottom > top)
+				top = Math.min(bottom, rect.bottom + 8);
+		});
 	return { left, top, width: Math.max(0, right - left), height: Math.max(0, bottom - top) };
 };
 
