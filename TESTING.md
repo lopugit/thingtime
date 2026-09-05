@@ -502,6 +502,10 @@ email whose link points at the attacker.
       reaches success, and the comment links
       `https://pr-<number>.previews.dev.thingtime.com`; verify the deployed SHA again
       after the build completes.
+- [ ] Open the deployed PR preview's footer and confirm it shows the exact PR
+      branch plus the complete 40-character head SHA, with each linking to the
+      matching GitHub tree/commit. Confirm `/api/root-data` reports the same
+      values and neither label falls back to `git/unknown`.
 - [ ] For an exact SHA that already has a READY generic Preview, run the
       controller again and confirm its `develop` Custom Environment deployment
       builds instead of ending `CANCELED`; the PR alias, GitHub Deployment, and
