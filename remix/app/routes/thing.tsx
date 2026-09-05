@@ -20,6 +20,7 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { CARD_STYLES } from '~/theme/card';
 import { ThingAttachmentDetail } from '~/components/Things/ThingAttachmentDetail';
 import { attachmentFromThing, directAttachmentReferences } from '~/components/Things/thingAttachmentDetailCore';
+import { thingDetailSections } from '~/components/Things/thingDetailSectionsCore';
 
 const DIAGNOSTIC_ID_PATTERN = /^migration-diagnostic-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MUTED = 'var(--tt-muted, #9a9aa6)';
@@ -212,6 +213,7 @@ export default function ThingPage() {
 		  )
 		: '';
 	const detail = diagnostic?.detail || genericDetail;
+	const sections = thingDetailSections({ hasThing: !!thing, showPreview, showData });
 	const isThingOwner = !!thing && !!currentUser?.id && thing.author?.id === currentUser.id;
 	const thingPreview = thing ? (
 		thing.thingtime?.includes('component') ? (
@@ -332,7 +334,7 @@ export default function ThingPage() {
 							</Flex>
 						</Box>
 
-						{thing ? (
+						{sections.viewToggles ? (
 							<Flex
 								{...CARD_STYLES}
 								align={{ base: 'flex-start', sm: 'center' }}
@@ -362,9 +364,9 @@ export default function ThingPage() {
 							</Flex>
 						) : null}
 
-						{showPreview && attachment ? <ThingAttachmentDetail attachment={attachment} references={references} /> : null}
+						{sections.preview && attachment ? <ThingAttachmentDetail attachment={attachment} references={references} /> : null}
 
-						{showPreview && post ? (
+						{sections.preview && post ? (
 							<Stack spacing={3} minW={0}>
 								<Flex align="center" justify="space-between" gap={3} wrap="wrap" px={1}>
 									<Heading as="h2" fontSize="md">
@@ -386,7 +388,7 @@ export default function ThingPage() {
 							</Stack>
 						) : null}
 
-						{showPreview && thing && !post ? (
+						{sections.preview && thing && !post ? (
 							<Box {...CARD_STYLES} p={{ base: 4, md: 6 }} minW={0}>
 								<Heading as="h2" fontSize="md" mb={3}>
 									Rendered preview
@@ -395,7 +397,11 @@ export default function ThingPage() {
 							</Box>
 						) : null}
 
-						{showData ? (
+						{/* `thingDetailSectionsCore` owns why a diagnostic ignores the
+						    `Thing data` switch: it renders no Views card, so a remembered
+						    `false` would hide the redacted error with no control left to
+						    bring it back. */}
+						{sections.detail ? (
 							<Box {...CARD_STYLES} p={{ base: 4, md: 6 }} minW={0}>
 								<Flex align="center" justify="space-between" gap={3} mb={3}>
 									<Heading as="h2" fontSize="md">
