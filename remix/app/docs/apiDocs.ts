@@ -11675,6 +11675,102 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         body: { ok: false, error: 'Unknown migration' }
       }
     ]
+  }),
+  endpoint({
+    id: 'marketing-publications',
+    group: 'marketing',
+    title: 'Marketing publish state',
+    endpoint: '/api/v1/marketing/publications',
+    summary: 'Which parts of the generated /marketing suite an admin has published — the read the client gates every marketing surface on.',
+    detail:
+      'Everything under /marketing (the hub, each category index, every generated page, each section inside a page, ' +
+      'the social-image suite and each feature\u2019s image set) is admin-only until an admin publishes it, one key at a ' +
+      'time. This endpoint returns the two key lists that decide what a visitor sees: `published` (keys switched on — ' +
+      'hub, social, social:<feature>, category:<key>, page:<slug>) and `hidden` (section:<slug>#<id> keys switched off ' +
+      'inside a published page). Publishing a category never cascades to its pages: an index lists whatever pages ' +
+      'are published. Admin sessions additionally receive `audit`, the username and timestamp behind every key. The ' +
+      'response is never cached so a publish shows on the next navigation.',
+    auth: {
+      mode: 'optional',
+      description: 'Anonymous-readable (the client needs it before first paint). Admin sessions also receive the per-key audit trail.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET without parameters.',
+      'Gate each marketing surface on publications.published containing its key; drop sections whose key is in publications.hidden.',
+      'Admins skip the gate client-side (they preview the unpublished suite) but still read the same lists to render publish controls.',
+      'Handle 429 when rate-limited (anonymous callers key by IP).'
+    ],
+    requestExamples: [{ name: 'Read the publish state', description: 'The lists every /marketing route reads.', method: 'GET' }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Two published pages inside a published category, one hidden section, hub open.',
+        body: {
+          ok: true,
+          publications: {
+            published: ['hub', 'category:landing', 'page:landing/feed', 'page:landing/messages'],
+            hidden: ['section:landing/feed#social'],
+            updatedAt: '2026-09-05T09:12:44.000Z'
+          }
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'admin-marketing-publications',
+    group: 'admin',
+    title: 'Publish / unpublish marketing surfaces',
+    endpoint: '/api/v1/admin/marketing/publications',
+    summary: 'Switch marketing hub, categories, pages, page sections and social image sets on or off, one key or a whole sweep at a time (admin only).',
+    detail:
+      'POST { changes: [{ key, state }] } applies up to 2,000 changes in one atomic write to the marketing-publications ' +
+      'settings singleton. Every key is validated against the generated catalog (unknown keys 400 the whole batch, ' +
+      'nothing is written), and each target accepts only its own state: hub, social, social:<feature>, category:<key> ' +
+      'and page:<slug> take "published"; section:<slug>#<id> takes "hidden"; null clears either. Duplicate keys ' +
+      'collapse to the last entry. GET returns the same state the public endpoint serves plus the per-key audit ' +
+      'trail (who, when). Both respond with the full new state so the client reconciles in one hop.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin); the POST rate limit fails closed.' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET to read the current state with audit.',
+      'POST changes:[{ key: "page:landing/feed", state: "published" }] to publish one page; state null to unpublish.',
+      'Hide a section of a published page with { key: "section:landing/feed#social", state: "hidden" }; null shows it again.',
+      'Sweep a category with one request carrying every page:<slug> key in it (categoryPageKeys in marketing/publishing.ts).',
+      'Non-admins receive 401/403; an unknown key or a wrong state 400s the whole batch; 429 when rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Publish the hub and one page',
+        description: 'Two switches in one atomic write.',
+        method: 'POST',
+        body: { changes: [{ key: 'hub', state: 'published' }, { key: 'page:landing/feed', state: 'published' }] }
+      },
+      {
+        name: 'Hide a section',
+        description: 'Keep the page published but drop its social block for visitors.',
+        method: 'POST',
+        body: { changes: [{ key: 'section:landing/feed#social', state: 'hidden' }] }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Applied; full state with audit returned.',
+        body: {
+          ok: true,
+          applied: 2,
+          publications: {
+            published: ['hub', 'page:landing/feed'],
+            hidden: [],
+            updatedAt: '2026-09-05T09:12:44.000Z',
+            audit: { hub: { at: '2026-09-05T09:12:44.000Z', by: 'nik' }, 'page:landing/feed': { at: '2026-09-05T09:12:44.000Z', by: 'nik' } }
+          }
+        }
+      },
+      { status: 400, description: 'A key the catalog does not generate.', body: { ok: false, error: 'Unknown page: landing/nope' } },
+      { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } }
+    ]
   })
 ];
 

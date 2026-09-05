@@ -5,10 +5,13 @@ import React from 'react';
 import { Link as RouterLink } from 'react-router';
 
 import { MK, RAINBOW_TEXT_STYLE } from '~/components/Marketing/marketingTheme';
+import { SectionAdminFrame } from '~/components/Marketing/MarketingPublishing';
 import { RAINBOW, SampleTree, highlightTitle } from '~/components/Marketing/SampleTree';
 import { SocialImageCard } from '~/components/Marketing/SocialImage';
+import { useMarketingVisibility } from '~/components/Marketing/useMarketingPublications';
 import { WalkthroughPlayer } from '~/components/Marketing/WalkthroughPlayer';
 import { MARKETING_BASE } from '~/marketing/catalog';
+import { pageSections } from '~/marketing/publishing';
 import type { BuiltPage, SectionBlock, Walkthrough } from '~/marketing/types';
 import { getWalkthrough } from '~/marketing/walkthroughs';
 
@@ -352,7 +355,10 @@ const HeroOrnament = () => {
 	);
 };
 
-export const MarketingHero = ({ section }: { section: Block<'hero'> }) => (
+export const MarketingHero = ({ section }: { section: Block<'hero'> }) => {
+	const visibility = useMarketingVisibility();
+	const secondary = section.secondary && visibility.href(section.secondary.to) ? section.secondary : null;
+	return (
 	<MkSection type="hero" hero>
 		<Grid
 			gap={{ base: 8, md: 12 }}
@@ -383,9 +389,9 @@ export const MarketingHero = ({ section }: { section: Block<'hero'> }) => (
 					<MkButton to={section.cta.to} variant="primary" size="lg" data-testid="marketing-hero-cta">
 						{section.cta.label}
 					</MkButton>
-					{section.secondary ? (
-						<MkButton to={section.secondary.to} variant="secondary" size="lg">
-							{section.secondary.label}
+					{secondary ? (
+						<MkButton to={secondary.to} variant="secondary" size="lg">
+							{secondary.label}
 						</MkButton>
 					) : null}
 				</Flex>
@@ -417,7 +423,8 @@ export const MarketingHero = ({ section }: { section: Block<'hero'> }) => (
 			<HeroOrnament />
 		</Grid>
 	</MkSection>
-);
+	);
+};
 
 // ------------------------------------------------------------- bullets
 
@@ -825,7 +832,10 @@ const SocialSection = ({ section }: { section: Block<'social'> }) => (
 
 // ----------------------------------------------------------------- cta
 
-export const MarketingCta = ({ section }: { section: Block<'cta'> }) => (
+export const MarketingCta = ({ section }: { section: Block<'cta'> }) => {
+	const visibility = useMarketingVisibility();
+	const secondary = section.secondary && visibility.href(section.secondary.to) ? section.secondary : null;
+	return (
 	<MkSection type="cta">
 		<Box
 			position="relative"
@@ -858,23 +868,29 @@ export const MarketingCta = ({ section }: { section: Block<'cta'> }) => (
 				<MkButton to={section.cta.to} variant="primary" size="lg">
 					{section.cta.label}
 				</MkButton>
-				{section.secondary ? (
-					<MkButton to={section.secondary.to} variant="secondary" size="lg" background={MK.bg} color={MK.ink}>
-						{section.secondary.label}
+				{secondary ? (
+					<MkButton to={secondary.to} variant="secondary" size="lg" background={MK.bg} color={MK.ink}>
+						{secondary.label}
 					</MkButton>
 				) : null}
 			</Flex>
 		</Box>
 	</MkSection>
-);
+	);
+};
 
 // --------------------------------------------------------------- links
 
-const LinksSection = ({ section }: { section: Block<'links'> }) => (
+const LinksSection = ({ section }: { section: Block<'links'> }) => {
+	const visibility = useMarketingVisibility();
+	// visitors never get a link into an unpublished page; an emptied block drops out
+	const links = section.links.filter((link) => visibility.href(link.to));
+	if (!links.length) return null;
+	return (
 	<MkSection type="links">
 		<SectionHeader eyebrow={section.eyebrow} title={section.title} />
 		<Flex as="ul" listStyleType="none" margin={0} padding={0} gap={2.5} flexWrap="wrap">
-			{section.links.map((link, index) => (
+			{links.map((link, index) => (
 				<Box as="li" key={`${link.to}-${index}`} minWidth={0} maxWidth="100%">
 					<Box
 						{...linkProps(link.to)}
@@ -907,7 +923,8 @@ const LinksSection = ({ section }: { section: Block<'links'> }) => (
 			))}
 		</Flex>
 	</MkSection>
-);
+	);
+};
 
 // -------------------------------------------------------------- render
 
@@ -942,11 +959,28 @@ const SectionRenderer = ({ section }: { section: SectionBlock }) => {
 	}
 };
 
-/** Renders a built page's sections in order, one renderer per block type. */
-export const MarketingSections = ({ page }: { page: BuiltPage }) => (
-	<>
-		{page.sections.map((section, index) => (
-			<SectionRenderer key={`${section.type}-${index}`} section={section} />
-		))}
-	</>
-);
+/**
+ * Renders a built page's sections in order, one renderer per block type.
+ * Sections an admin hid (marketing/publishing.ts) are skipped for visitors;
+ * admins see them dimmed inside a frame with the hide/show switch.
+ */
+export const MarketingSections = ({ page }: { page: BuiltPage }) => {
+	const visibility = useMarketingVisibility();
+	const sections = React.useMemo(() => pageSections(page), [page]);
+	return (
+		<>
+			{sections.map((entry) => {
+				const hidden = visibility.isHidden(entry.key);
+				if (!visibility.everything && hidden) return null;
+				const rendered = <SectionRenderer section={entry.section} />;
+				return visibility.everything ? (
+					<SectionAdminFrame key={entry.key} section={entry} hidden={hidden}>
+						{rendered}
+					</SectionAdminFrame>
+				) : (
+					<React.Fragment key={entry.key}>{rendered}</React.Fragment>
+				);
+			})}
+		</>
+	);
+};

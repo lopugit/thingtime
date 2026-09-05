@@ -8,7 +8,10 @@ import { RAINBOW } from '~/theme/rainbow';
 import { ROOT_THING_PATH, buildThingModeUrl, parseThingMode, parseThingPath } from '../../Thingtime/thingRoute';
 import { EditorDrawerSection } from './EditorDrawerSection';
 import { ReorderableList } from './ReorderableList';
-import { applyDrawerOrdering, buildDrawerSubSections, drawerMenuItems, filterDrawerItemsByAuth } from './drawerMenu';
+import { useMarketingPublications } from '~/components/Marketing/marketingPublicationsStore';
+import { isKeyPublished } from '~/marketing/publishingCore';
+
+import { applyDrawerOrdering, buildDrawerSubSections, drawerMenuItems, filterDrawerItemsByAuth, filterDrawerTopItems } from './drawerMenu';
 import { useDrawer, useIsMobileViewport } from './useDrawer';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { MessengerUnreadBadge } from '../../Messenger/MessengerNotifications';
@@ -107,12 +110,18 @@ export const DrawerContent = (props: DrawerContentProps) => {
 		}
 	}, [variant, open]);
 
+	// publication-gated sections (Marketing) read the shared publish state —
+	// catalog-free, one fetch per page load, cached for the first paint
+	const { publications } = useMarketingPublications();
+	const isPublished = React.useCallback((key: string) => isKeyPublished(publications, key), [publications]);
+
 	const orderedTopItems = React.useMemo(() => {
-		const defaultIds = drawerMenuItems.map((item) => item.id);
+		const visibleItems = filterDrawerTopItems(drawerMenuItems, !!user, !!user?.isAdmin, isPublished);
+		const defaultIds = visibleItems.map((item) => item.id);
 		const orderedIds = applyDrawerOrdering(defaultIds, ordering?.toplevel);
 
-		return orderedIds.map((id) => drawerMenuItems.find((item) => item.id === id)).filter(Boolean);
-	}, [ordering?.toplevel]);
+		return orderedIds.map((id) => visibleItems.find((item) => item.id === id)).filter(Boolean);
+	}, [ordering?.toplevel, user, isPublished]);
 
 	const visibleTopItems = React.useMemo(() => {
 		const finiteTopLevelLimit = typeof topLevelLimit === 'number' ? topLevelLimit : orderedTopItems.length;
@@ -198,12 +207,12 @@ export const DrawerContent = (props: DrawerContentProps) => {
 	}, [pathname, loading, variant, open]);
 
 	const subItems = React.useMemo(() => {
-		const children = filterDrawerItemsByAuth(selectedTopItem?.children || [], !!user, !!user?.isAdmin);
+		const children = filterDrawerItemsByAuth(selectedTopItem?.children || [], !!user, !!user?.isAdmin, isPublished);
 		const defaultIds = children.map((item) => item.id);
 		const orderedIds = applyDrawerOrdering(defaultIds, ordering?.[selectedTopItem?.id]);
 
 		return orderedIds.map((id) => children.find((item) => item.id === id)).filter(Boolean);
-	}, [selectedTopItem, ordering, user]);
+	}, [selectedTopItem, ordering, user, isPublished]);
 
 	const subSections = React.useMemo(() => {
 		return buildDrawerSubSections(subItems);

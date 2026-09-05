@@ -122,3 +122,11 @@ test('storage-aware health and the corrected email environment gate publish thei
 	assert.equal(manifest.features['api.health-nitro'], '1.1.0');
 	assert.equal(manifest.features['api.email-config'], '1.0.1');
 });
+
+test('marketing publishing publishes its public read and admin write contracts', () => {
+	const manifest = createApiCapabilitiesManifest(Object.keys(routeModules));
+	assert.equal(manifest.features['api.marketing-publications'], '1.0.0');
+	assert.equal(manifest.features['api.admin-marketing-publications'], '1.0.0');
+	assert.match(manifest.features[apiRouteCapabilityId('v1/marketing/publications')] || '', /^\d+\.\d+\.\d+$/);
+	assert.match(manifest.features[apiRouteCapabilityId('v1/admin/marketing/publications')] || '', /^\d+\.\d+\.\d+$/);
+});
