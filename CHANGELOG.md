@@ -19,6 +19,8 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## 2026-09-05 — Visible previews and conflict detector recovery
 
+Details: [PR #661](PRs/661-codex-pr-delivery-reliability-592--restore-conflict-scans-and-visible-previews.md).
+
 - Fix PR #592's missed conflict scans: downstream jobs explicitly tolerate the
   skipped non-comment conversation filter while requiring successful direct
   dependencies. Regression coverage checks the whole routing dependency graph.

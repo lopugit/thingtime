@@ -1,3 +1,5 @@
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { previewSummaryBody, publishPreviewSummary } from './preview-pr-summary.mjs';
@@ -29,4 +31,14 @@ test('closed and moved heads are read-only; fresh body edits survive publication
     request: async (path, options) => { calls.push({path, options}); return {state:'open',head:{sha},body:'Fresh human edit'}; } });
   assert.ok(calls[1].options.body.body.endsWith('Fresh human edit'));
   assert.equal(calls[1].options.retries, 0);
+});
+
+test('summary and title edits cannot recursively dispatch builds; base edits still do', () => {
+  const workflow = readFileSync(new URL('../workflows/develop-pr-preview.yml',import.meta.url),'utf8');
+  const expression = workflow.split('\n  dispatch:\n')[1].match(/^    if: (.*)$/m)[1];
+  const evaluate = (action,changes) => !!runInNewContext(expression,{github:{event_name:'pull_request_target',event:{action,changes}}});
+  assert.equal(evaluate('edited',{body:{from:'old'}}),false);
+  assert.equal(evaluate('edited',{title:{from:'old'}}),false);
+  assert.equal(evaluate('edited',{base:{ref:{from:'develop'}}}),true);
+  for (const action of ['opened','synchronize','reopened','ready_for_review','converted_to_draft','closed']) assert.equal(evaluate(action,{}),true);
 });

@@ -132,7 +132,7 @@ test('every routing descendant handles an intentionally skipped conversation anc
       const needs = block.match(/^    needs: (.+)$/m)?.[1]?.match(/[a-z_]+/g) ?? [];
       if (!needs.some(name => descendants.has(name))) continue;
       descendants.add(name);
-      assert.match(gateExpression(name), /\b(?:always|cancelled|failure|success)\s*\(/,
+      assert.match(gateExpression(name), /\b(?:always|cancelled)\s*\(/,
         `${name} silently skips after the non-comment admission job`);
     }
   }

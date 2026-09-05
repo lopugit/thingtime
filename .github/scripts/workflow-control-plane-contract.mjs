@@ -1080,8 +1080,8 @@ export function assertControlPlaneContract() {
   );
   assert.match(
     developPreview,
-    /^    if: github\.event_name == 'pull_request_target'$/mu,
-    "develop preview dispatches every PR event so the protected controller can resolve a bounded stack",
+    /^    if: github\.event_name == 'pull_request_target' && \(github\.event\.action != 'edited' \|\| github\.event\.changes\.base\)$/mu,
+    "develop preview dispatches source and eligibility events but cannot recurse on its own description edits",
   );
   assert.match(
     developPreview,
