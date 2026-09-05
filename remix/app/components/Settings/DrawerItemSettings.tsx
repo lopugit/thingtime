@@ -1,7 +1,7 @@
 import React from 'react';
 import { Flex, Switch, Text } from '@chakra-ui/react';
 import { useDrawer } from '~/components/Nav/Drawer/useDrawer';
-import { drawerItemClosesOnClick, drawerMenuItems, filterDrawerItemsByAuth } from '~/components/Nav/Drawer/drawerMenu';
+import { drawerItemClosesOnClick, drawerMenuItems, filterDrawerItemsByAuth, filterDrawerTopItems } from '~/components/Nav/Drawer/drawerMenu';
 import { useMarketingPublications } from '~/components/Marketing/marketingPublicationsStore';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { isKeyPublished } from '~/marketing/publishingCore';
@@ -10,7 +10,11 @@ export function DrawerItemSettings() {
 	// the "Close after click" list mirrors the drawer, so it needs the same
 	// publish state DrawerContent reads — without it every publication-gated
 	// item (Marketing) fails closed here and a visitor can no longer configure
-	// a section they can actually see
+	// a section they can actually see. It must also use the drawer's own pair
+	// of filters (filterDrawerTopItems for the sections, filterDrawerItemsByAuth
+	// for their children): a top-level section is listed as soon as ANY child is
+	// visible, so gating it on its own key would hide Marketing here while the
+	// drawer still shows it (published `category:landing`, unpublished `hub`).
 	const { publications } = useMarketingPublications();
 	const isPublished = React.useCallback((key: string) => isKeyPublished(publications, key), [publications]);
 	const { closeOnClick, setCloseOnClickFor } = useDrawer();
@@ -24,7 +28,7 @@ export function DrawerItemSettings() {
 					Which menu items close the drawer when clicked (desktop and mobile)
 				</Text>
 				<Flex flexDirection="column" paddingTop={2}>
-					{filterDrawerItemsByAuth(drawerMenuItems, !!user, !!user?.isAdmin, isPublished).map((top) => (
+					{filterDrawerTopItems(drawerMenuItems, !!user, !!user?.isAdmin, isPublished).map((top) => (
 						<React.Fragment key={top.id}>
 							<Flex alignItems="center" columnGap={4} paddingY={1}>
 								<Text fontSize="sm">
