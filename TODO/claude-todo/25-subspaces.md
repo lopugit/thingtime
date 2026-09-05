@@ -79,7 +79,12 @@ reactions untouched.
   with the card menu's flair list) in the PostCard menu, **BanModal**
   (reason / days / note) on the mod page's member rows + Banned tab, Rules
   tab **Removal reasons** card. No `window.prompt`/`confirm` left in the
-  subspace UI. Verify section P.
+  subspace UI. Verify section P. Review fixes: idempotent remove (no second
+  mod-log row / bell), `ruleIndex` composed + bounded server-side, removal
+  and ban bells from "s/<slug> mods" with the reason's headline, untouched-
+  only default pick, short ban reason, hashed ids for non-Latin titles,
+  375px-safe reasons row (moderate 1.3.0, members 1.4.1, notifications-list
+  1.2.0).
 
 ## Follow-ups (not in this PR)
 - Per-subspace wiki +

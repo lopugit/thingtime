@@ -1178,24 +1178,30 @@ const RemovalReasonsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; 
 			<Flex flexDirection="column" rowGap={2} data-testid="mod-removal-reasons">
 				{reasons.map((reason, index) => (
 					<Flex key={index} flexDirection="column" rowGap={1} border={BORDER} borderRadius={RADIUS_MD} padding={3} data-removal-reason-index={index}>
-						<Flex columnGap={2} alignItems="center">
-							<Text fontSize="xs" color={MUTED} width="18px">
+						{/* the title row: number · title (takes the width) · the three
+						    buttons; the id (up to 40 mono chars) sits on its own
+						    truncating line below so it never squeezes the title
+						    input at 375px */}
+						<Flex columnGap={2} alignItems="center" minWidth={0}>
+							<Text fontSize="xs" color={MUTED} width="18px" flexShrink={0}>
 								{index + 1}.
 							</Text>
-							<Input size="sm" borderRadius={RADIUS_MD} placeholder="Title (e.g. No spam)" value={reason.title} maxLength={80} onChange={(event) => update(index, { title: event.target.value })} data-testid="mod-removal-reason-title" />
-							<Text fontSize="10px" fontFamily="mono" color={MUTED} title="Reason id (set on first save)" flexShrink={0}>
-								{reason.id || 'new'}
-							</Text>
-							<Button size="xs" variant="ghost" onClick={() => move(index, -1)} aria-label="Move up">
-								▲
-							</Button>
-							<Button size="xs" variant="ghost" onClick={() => move(index, 1)} aria-label="Move down">
-								▼
-							</Button>
-							<Button size="xs" variant="ghost" color="var(--tt-danger, #e5484d)" onClick={() => setReasons((prev) => prev.filter((_, i) => i !== index))} aria-label="Remove removal reason">
-								✕
-							</Button>
+							<Input size="sm" flex="1" minWidth={0} borderRadius={RADIUS_MD} placeholder="Title (e.g. No spam)" value={reason.title} maxLength={80} onChange={(event) => update(index, { title: event.target.value })} data-testid="mod-removal-reason-title" />
+							<Flex alignItems="center" flexShrink={0}>
+								<Button size="xs" variant="ghost" onClick={() => move(index, -1)} aria-label="Move up">
+									▲
+								</Button>
+								<Button size="xs" variant="ghost" onClick={() => move(index, 1)} aria-label="Move down">
+									▼
+								</Button>
+								<Button size="xs" variant="ghost" color="var(--tt-danger, #e5484d)" onClick={() => setReasons((prev) => prev.filter((_, i) => i !== index))} aria-label="Remove removal reason">
+									✕
+								</Button>
+							</Flex>
 						</Flex>
+						<Text fontSize="10px" fontFamily="mono" color={MUTED} title="Reason id (set on first save)" isTruncated maxWidth="100%" paddingLeft="26px" data-testid="mod-removal-reason-id">
+							id · {reason.id || 'new'}
+						</Text>
 						<Textarea size="sm" borderRadius={RADIUS_MD} rows={2} placeholder="Message to the author (optional, ≤ 500)" value={reason.message} maxLength={500} onChange={(event) => update(index, { message: event.target.value })} data-testid="mod-removal-reason-message" />
 					</Flex>
 				))}

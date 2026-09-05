@@ -19,6 +19,7 @@ import {
 } from '@chakra-ui/react';
 
 import type { useApi } from '~/hooks/useApi';
+import { buildRemoveChoice, CUSTOM_PICK, noteMaxFor, reasonValue, ruleValue, type RemoveChoice } from './moderationModalsCore';
 import type { SubspaceFlair, SubspaceRemovalReason, SubspaceRule } from './subspaceTypes';
 
 // Moderation modals — Chakra modals replacing every window.prompt/confirm in
@@ -90,50 +91,10 @@ export const forgetModerationSubspace = (subspaceId: string) => {
 };
 
 // ── RemoveModal ────────────────────────────────────────────────────────────
-// the pick's radio value: a rule ("rule:<index>"), a removal reason
-// ("reason:<id>") or custom text
-const CUSTOM = 'custom';
-const ruleValue = (index: number) => `rule:${index}`;
-const reasonValue = (id: string) => `reason:${id}`;
-
-export type RemoveChoice = {
-	// free text sent as `reason` (a rule's "Rule N: title" line, or the
-	// custom / note text); null when nothing was written
-	reason: string | null;
-	// a removal reason's id (its title — message become the stored reason)
-	reasonId: string | null;
-	// what the card should paint while the request is in flight
-	previewReason: string | null;
-	lock: boolean;
-	ban: boolean;
-	banDays: number | null;
-};
-
-export const buildRemoveChoice = (
-	pick: string,
-	note: string,
-	detail: { rules: SubspaceRule[]; removalReasons: SubspaceRemovalReason[] } | null,
-	extras: { lock: boolean; ban: boolean; banDays: string }
-): RemoveChoice => {
-	const trimmedNote = note.replace(/\s+/g, ' ').trim();
-	const days = Number(extras.banDays);
-	const banDays = extras.ban && Number.isFinite(days) && days > 0 ? Math.floor(days) : null;
-	const base = { lock: extras.lock, ban: extras.ban, banDays };
-	if (pick.startsWith('reason:')) {
-		const id = pick.slice('reason:'.length);
-		const canned = detail?.removalReasons.find((reason) => reason.id === id) || null;
-		const preview = canned ? [canned.message ? `${canned.title} — ${canned.message}` : canned.title, trimmedNote].filter(Boolean).join(' · ') : trimmedNote || null;
-		return { reason: trimmedNote || null, reasonId: id, previewReason: preview, ...base };
-	}
-	if (pick.startsWith('rule:')) {
-		const index = Number(pick.slice('rule:'.length));
-		const rule = detail?.rules[index] || null;
-		const head = rule ? `Rule ${index + 1}: ${rule.title}` : null;
-		const reason = [head, trimmedNote].filter(Boolean).join(' · ') || null;
-		return { reason, reasonId: null, previewReason: reason, ...base };
-	}
-	return { reason: trimmedNote || null, reasonId: null, previewReason: trimmedNote || null, ...base };
-};
+// the pick grammar, the note bound and the request shape live in
+// moderationModalsCore.ts (pure, unit-tested); re-exported for the card
+export { buildRemoveChoice, noteMaxFor, type RemoveChoice } from './moderationModalsCore';
+const CUSTOM = CUSTOM_PICK;
 
 export const RemoveModal = ({
 	isOpen,
@@ -168,6 +129,11 @@ export const RemoveModal = ({
 	const [ban, setBan] = React.useState(false);
 	const [banDays, setBanDays] = React.useState('');
 	const [saving, setSaving] = React.useState(false);
+	// whether the mod has touched the reason (picked a radio or typed) — the
+	// lazy load's default pick must never flip the radio under someone who
+	// already chose Custom or started writing (a cold load lands 100–500 ms
+	// after the modal opens, well within typing time)
+	const touchedRef = React.useRef(false);
 
 	// lazy: the subspace's rules + reasons load when the modal opens (cached
 	// across the card menu's flair list and re-opens); the form paints at once
@@ -181,8 +147,9 @@ export const RemoveModal = ({
 				if (cancelled) return;
 				setDetail(loaded);
 				// default to the first removal reason when there is one — the
-				// most common removal is a canned one
-				setPick((current) => (current === CUSTOM && loaded.removalReasons.length ? reasonValue(loaded.removalReasons[0].id) : current));
+				// most common removal is a canned one — but only while the form
+				// is untouched
+				setPick((current) => (!touchedRef.current && current === CUSTOM && loaded.removalReasons.length ? reasonValue(loaded.removalReasons[0].id) : current));
 			})
 			.catch(() => {
 				if (!cancelled) setLoadFailed(true);
@@ -199,6 +166,18 @@ export const RemoveModal = ({
 		setLock(false);
 		setBan(false);
 		setBanDays('');
+		touchedRef.current = false;
+	};
+	// the note's bound follows the pick: beside a canned reason / a rule only
+	// what the composed cap leaves is allowed, so what the mod sees in the
+	// preview is exactly what gets stored (a longer note written under Custom
+	// is trimmed to fit when the pick changes)
+	const noteMax = noteMaxFor(pick, detail);
+	const choosePick = (value: string) => {
+		touchedRef.current = true;
+		setPick(value);
+		const nextMax = noteMaxFor(value, detail);
+		setNote((current) => (current.length > nextMax ? current.slice(0, nextMax) : current));
 	};
 	const close = () => {
 		if (saving) return;
@@ -236,7 +215,7 @@ export const RemoveModal = ({
 						<Text fontSize="xs" color={MUTED}>
 							The author sees the reason on their post and in their bell; it lands in the mod log too.
 						</Text>
-						<RadioGroup value={pick} onChange={(value) => setPick(String(value))}>
+						<RadioGroup value={pick} onChange={(value) => choosePick(String(value))}>
 							<Flex flexDirection="column" rowGap={1.5} data-testid="remove-reason-list">
 								{reasons.map((reason) => (
 									<Radio borderColor={CONTROL_BORDER} key={reason.id} value={reasonValue(reason.id)} size="sm" alignItems="flex-start" data-testid="remove-reason-option" data-reason-id={reason.id}>
@@ -284,16 +263,24 @@ export const RemoveModal = ({
 								)}
 							</Flex>
 						</RadioGroup>
-						<Textarea
-							size="sm"
-							borderRadius={RADIUS_MD}
-							rows={2}
-							placeholder={custom ? 'Reason (shown to the author) — optional' : 'Add a note for the author — optional'}
-							value={note}
-							maxLength={300}
-							onChange={(event) => setNote(event.target.value)}
-							data-testid="remove-note"
-						/>
+						<Box>
+							<Textarea
+								size="sm"
+								borderRadius={RADIUS_MD}
+								rows={2}
+								placeholder={custom ? 'Reason (shown to the author) — optional' : 'Add a note for the author — optional'}
+								value={note}
+								maxLength={noteMax}
+								onChange={(event) => {
+									touchedRef.current = true;
+									setNote(event.target.value.slice(0, noteMax));
+								}}
+								data-testid="remove-note"
+							/>
+							<Text fontSize="10px" fontFamily="mono" color={MUTED} textAlign="right" marginTop={0.5} data-testid="remove-note-count">
+								{note.length}/{noteMax}
+							</Text>
+						</Box>
 						<Flex flexDirection="column" rowGap={2} paddingTop={1} borderTop={BORDER}>
 							<Checkbox sx={CONTROL_SX} size="sm" isChecked={lock || alreadyLocked} isDisabled={alreadyLocked} onChange={(event) => setLock(event.target.checked)} data-testid="remove-also-lock">
 								<Text fontSize="sm" color={INK}>

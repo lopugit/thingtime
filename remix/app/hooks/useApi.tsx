@@ -652,9 +652,11 @@ export function useApi() {
       ),
       // remove: reason (free text) and/or reasonId (one of the subspace's
       // removalReasons — title — message become the stored reason, the free
-      // text rides along as a note); the author is notified
+      // text rides along as a note) or ruleIndex (cites a rule the same way,
+      // 0-based); the author is notified; a second remove on a removed post
+      // is a no-op
       moderate: useCallback(
-        async (body: { id: string; action: string; reason?: string; reasonId?: string | null; value?: boolean; flairId?: string | null }) =>
+        async (body: { id: string; action: string; reason?: string; reasonId?: string | null; ruleIndex?: number | null; value?: boolean; flairId?: string | null }) =>
           asyncFetcher.submit(body, { action: '/api/v1/subspaces/moderate', errorContext: 'moderate the post' }),
         [asyncFetcher]
       ),

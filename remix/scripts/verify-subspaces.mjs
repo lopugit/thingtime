@@ -25,7 +25,13 @@
 // reasonId → the composed stored reason the author and mods see, the
 // author's subspace-post-removed bell row, approve clearing it silently, a
 // mod's own post ringing nobody, edits never rewriting history, the ban
-// note landing in the mod log only, and the manifest.
+// note landing in the mod log only, and the manifest — plus the S4 review
+// fixes: a second remove on a removed post is a no-op (no second mod-log row
+// or bell), remove cites a rule through ruleIndex (composed + bounded
+// server-side, every wall), the author's bell comes from the subspace's
+// mod team with the reason's headline (never the moderator the projection
+// hides), so does the ban bell, and a title with no Latin characters still
+// mints a (hashed) removal-reason id.
 //
 //   node scripts/verify-subspaces.mjs [baseUrl]
 //
@@ -462,8 +468,8 @@ const run = async () => {
 	check('refused deletes leave the subspace intact', stillThere.status === 200);
 	const manifest2 = await api('/api/v1/capabilities');
 	check(
-		'capability manifest advertises transfer (1.2.0, guarded writes + newOwner.userFlair + removalReasons) / delete (1.1.0, privatePosts + slug hold) and the bumped members (1.4.0, S2 queues + review fixes + S3 user flairs + S3 review + S4 ban note) / notifications contracts (1.1.0)',
-		manifest2.status === 200 && manifest2.body.features['api.subspaces-transfer'] === '1.2.0' && manifest2.body.features['api.subspaces-delete'] === '1.1.0' && manifest2.body.features['api.subspaces-members'] === '1.4.0' && manifest2.body.features['api.notifications-list'] === '1.1.0' && manifest2.body.features['api.notifications-settings'] === '1.1.0',
+		'capability manifest advertises transfer (1.2.0, guarded writes + newOwner.userFlair + removalReasons) / delete (1.1.0, privatePosts + slug hold) and the bumped members (1.4.1, S2 queues + review fixes + S3 user flairs + S3 review + S4 ban note + S4 review mod-team ban bell) / notifications contracts (list 1.2.0 — mod-team actor rows; settings 1.1.0)',
+		manifest2.status === 200 && manifest2.body.features['api.subspaces-transfer'] === '1.2.0' && manifest2.body.features['api.subspaces-delete'] === '1.1.0' && manifest2.body.features['api.subspaces-members'] === '1.4.1' && manifest2.body.features['api.notifications-list'] === '1.2.0' && manifest2.body.features['api.notifications-settings'] === '1.1.0',
 		JSON.stringify({ t: manifest2.body?.features?.['api.subspaces-transfer'], d: manifest2.body?.features?.['api.subspaces-delete'], m: manifest2.body?.features?.['api.subspaces-members'], n: manifest2.body?.features?.['api.notifications-list'] })
 	);
 	const deleteDocs = await api('/api/v1/subspaces/delete-docs');
@@ -796,8 +802,8 @@ const run = async () => {
 	check('unknown member action → 400', badAction.status === 400);
 	const manifest3 = await api('/api/v1/capabilities');
 	check(
-		'capability manifest advertises the request contracts (leave / join 1.2.0 → 1.3.0 after the S3 review + S4 removalReasons bumps; get/list/update 1.3.0 + members 1.4.0 after the S3 user-flair bump + review + the S4 ban note)',
-		manifest3.status === 200 && manifest3.body.features['api.subspaces-join'] === '1.3.0' && manifest3.body.features['api.subspaces-leave'] === '1.3.0' && manifest3.body.features['api.subspaces-get'] === '1.3.0' && manifest3.body.features['api.subspaces'] === '1.3.0' && manifest3.body.features['api.subspaces-members'] === '1.4.0' && manifest3.body.features['api.subspaces-update'] === '1.3.0',
+		'capability manifest advertises the request contracts (leave / join 1.2.0 → 1.3.0 after the S3 review + S4 removalReasons bumps; get/list/update 1.3.0 + members 1.4.1 after the S3 user-flair bump + review + the S4 ban note + the S4 review mod-team ban bell)',
+		manifest3.status === 200 && manifest3.body.features['api.subspaces-join'] === '1.3.0' && manifest3.body.features['api.subspaces-leave'] === '1.3.0' && manifest3.body.features['api.subspaces-get'] === '1.3.0' && manifest3.body.features['api.subspaces'] === '1.3.0' && manifest3.body.features['api.subspaces-members'] === '1.4.1' && manifest3.body.features['api.subspaces-update'] === '1.3.0',
 		JSON.stringify({ j: manifest3.body?.features?.['api.subspaces-join'], l: manifest3.body?.features?.['api.subspaces-leave'], g: manifest3.body?.features?.['api.subspaces-get'], m: manifest3.body?.features?.['api.subspaces-members'], u: manifest3.body?.features?.['api.subspaces-update'] })
 	);
 
@@ -1174,13 +1180,13 @@ const run = async () => {
 	check('authorFlair is never client-writable (a PATCH smuggling it changes nothing)', genericFlair.status !== 500 && genericRead.body?.post?.authorFlair?.id === 'prism' && genericRead.body.post.authorFlair.label === 'Prism', `${genericFlair.status} ${JSON.stringify(genericRead.body?.post?.authorFlair)}`);
 	const manifestO = await api('/api/v1/capabilities');
 	check(
-		'capability manifest advertises the user-flair contracts (subspaces / get / update 1.2.0 → 1.3.0 with S4 removalReasons, members 1.3.1 → 1.4.0 with the S4 ban note, subspaces-feed 1.1.0 → 1.2.0, things / things-comment / things-feed / things-user 1.2.0)',
-		manifestO.status === 200 && manifestO.body.features['api.subspaces'] === '1.3.0' && manifestO.body.features['api.subspaces-get'] === '1.3.0' && manifestO.body.features['api.subspaces-update'] === '1.3.0' && manifestO.body.features['api.subspaces-members'] === '1.4.0' && manifestO.body.features['api.subspaces-feed'] === '1.2.0' && ['api.things', 'api.things-comment', 'api.things-feed', 'api.things-user'].every((feature) => manifestO.body.features[feature] === '1.2.0'),
+		'capability manifest advertises the user-flair contracts (subspaces / get / update 1.2.0 → 1.3.0 with S4 removalReasons, members 1.3.1 → 1.4.1 with the S4 ban note + S4 review, subspaces-feed 1.1.0 → 1.2.0, things / things-comment / things-feed / things-user 1.2.0)',
+		manifestO.status === 200 && manifestO.body.features['api.subspaces'] === '1.3.0' && manifestO.body.features['api.subspaces-get'] === '1.3.0' && manifestO.body.features['api.subspaces-update'] === '1.3.0' && manifestO.body.features['api.subspaces-members'] === '1.4.1' && manifestO.body.features['api.subspaces-feed'] === '1.2.0' && ['api.things', 'api.things-comment', 'api.things-feed', 'api.things-user'].every((feature) => manifestO.body.features[feature] === '1.2.0'),
 		JSON.stringify({ s: manifestO.body?.features?.['api.subspaces'], g: manifestO.body?.features?.['api.subspaces-get'], u: manifestO.body?.features?.['api.subspaces-update'], m: manifestO.body?.features?.['api.subspaces-members'], f: manifestO.body?.features?.['api.subspaces-feed'], t: manifestO.body?.features?.['api.things'] })
 	);
 	check(
-		'S3 review: every other contract whose shape grew user flairs is bumped (join / leave 1.2.0 → 1.3.0 with S4 removalReasons — subspace block + viewer.userFlair; transfer 1.1.0 → 1.2.0 — newOwner.userFlair; moderate 1.1.0 → 1.2.0 — post.authorFlair + S4 reasonId; members 1.3.1 → 1.4.0 — kick / ban / demotion strip + the owner dressable + S4 ban note)',
-		manifestO.body?.features?.['api.subspaces-join'] === '1.3.0' && manifestO.body.features['api.subspaces-leave'] === '1.3.0' && manifestO.body.features['api.subspaces-transfer'] === '1.2.0' && manifestO.body.features['api.subspaces-moderate'] === '1.2.0' && manifestO.body.features['api.subspaces-members'] === '1.4.0',
+		'S3 review: every other contract whose shape grew user flairs is bumped (join / leave 1.2.0 → 1.3.0 with S4 removalReasons — subspace block + viewer.userFlair; transfer 1.1.0 → 1.2.0 — newOwner.userFlair; moderate 1.1.0 → 1.3.0 — post.authorFlair + S4 reasonId + S4 review ruleIndex; members 1.3.1 → 1.4.1 — kick / ban / demotion strip + the owner dressable + S4 ban note + S4 review)',
+		manifestO.body?.features?.['api.subspaces-join'] === '1.3.0' && manifestO.body.features['api.subspaces-leave'] === '1.3.0' && manifestO.body.features['api.subspaces-transfer'] === '1.2.0' && manifestO.body.features['api.subspaces-moderate'] === '1.3.0' && manifestO.body.features['api.subspaces-members'] === '1.4.1',
 		JSON.stringify({ j: manifestO.body?.features?.['api.subspaces-join'], l: manifestO.body?.features?.['api.subspaces-leave'], t: manifestO.body?.features?.['api.subspaces-transfer'], mo: manifestO.body?.features?.['api.subspaces-moderate'], m: manifestO.body?.features?.['api.subspaces-members'] })
 	);
 	const cleanupO = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: owner.cookie, body: { slug: flairSlug, confirmSlug: flairSlug } });
@@ -1265,13 +1271,34 @@ const run = async () => {
 	const rrRemoveLog = (await rrLog(mod.cookie)).filter((entry) => entry.action === 'post.remove' && entry.postId === rrPost.id);
 	check('the post.remove mod-log entry carries the composed reason and detail.reasonId', rrRemoveLog.length === 1 && rrRemoveLog[0].reason === COMPOSED && rrRemoveLog[0].detail?.reasonId === 'no-spam' && rrRemoveLog[0].actor?.id === mod.id, JSON.stringify(rrRemoveLog));
 	const rrAuthorBell = await removedNotifsOf(member.cookie, rrPost.id);
+	const MOD_TEAM = `s/${rrSlug} mods`;
+	// S4 review: the row comes from the subspace's mod team (actorId = the
+	// subspace, actorName "s/<slug> mods", no username → no profile link) and
+	// carries the reason's HEADLINE (the canned title; previews clamp at 140)
 	check(
-		'the author’s bell has a subspace-post-removed row (postId + targetId = the post, actor = the mod, preview "s/<slug> · <reason>")',
-		rrAuthorBell.length === beforeRemoved + 1 && rrAuthorBell.some((n) => n.targetId === rrPost.id && n.actorId === mod.id && String(n.preview || '').startsWith(`s/${rrSlug} · No Spam! — Posts that only advertise are removed.`)),
-		JSON.stringify(rrAuthorBell.map((n) => [n.postId, n.targetId, n.preview]))
+		'the author’s bell has a subspace-post-removed row (postId + targetId = the post; actor = the subspace’s mod team, never the moderator; preview "s/<slug> · <title>")',
+		rrAuthorBell.length === beforeRemoved + 1 && rrAuthorBell.some((n) => n.targetId === rrPost.id && n.actorId === rrSpace.id && n.actorName === MOD_TEAM && n.actorUsername === null && n.preview === `s/${rrSlug} · No Spam!`),
+		JSON.stringify(rrAuthorBell.map((n) => [n.postId, n.targetId, n.actorId === rrSpace.id, n.actorName, n.actorUsername, n.preview]))
 	);
+	check('…the bell never names the moderator (no row carries the mod’s id or username)', !rrAuthorBell.some((n) => n.actorId === mod.id || n.actorUsername === mod.username), JSON.stringify(rrAuthorBell.map((n) => [n.actorId, n.actorUsername])));
 	const rrModBell = await notifsOf(mod.cookie);
 	check('…and nobody else hears about it (no subspace-post-removed row for the mod)', !rrModBell.items.some((n) => n.type === 'subspace-post-removed' && n.postId === rrPost.id));
+
+	// S4 review: a second remove on a removed post is a no-op — a retried
+	// request or two mods racing must not rewrite the removal, write another
+	// mod-log row or ring the author again (approve first to re-remove)
+	const rrRemovedAt = rrRemoved.body?.post?.subspaceMod?.removedAt;
+	const rrAgain = await rrModerate(mod.cookie, { id: rrPost.id, action: 'remove', reasonId: 'no-spam', reason: 'third time' });
+	const rrAgainOther = await rrModerate(owner.cookie, { id: rrPost.id, action: 'remove', reason: 'a different reason entirely' });
+	check(
+		'removing an already-removed post again (same reason, then a different mod with a different reason) → 200 with the post exactly as it was (reason + removedAt untouched)',
+		rrAgain.status === 200 && rrAgain.body.post?.subspaceMod?.removed === true && rrAgain.body.post.subspaceMod.reason === COMPOSED && rrAgain.body.post.subspaceMod.removedAt === rrRemovedAt && rrAgainOther.status === 200 && rrAgainOther.body.post?.subspaceMod?.reason === COMPOSED && rrAgainOther.body.post.subspaceMod.removedAt === rrRemovedAt,
+		`${rrAgain.status}/${rrAgainOther.status} ${JSON.stringify([rrAgain.body?.post?.subspaceMod, rrAgainOther.body?.post?.subspaceMod])}`
+	);
+	const rrRemoveLogAgain = (await rrLog(mod.cookie)).filter((entry) => entry.action === 'post.remove' && entry.postId === rrPost.id);
+	check('…no second post.remove mod-log row and no second bell for the author', rrRemoveLogAgain.length === 1 && (await removedNotifsOf(member.cookie, rrPost.id)).length === beforeRemoved + 1, JSON.stringify([rrRemoveLogAgain.length, (await removedNotifsOf(member.cookie, rrPost.id)).length - beforeRemoved]));
+	const rrAgainBadId = await rrModerate(mod.cookie, { id: rrPost.id, action: 'remove', reasonId: 'ghost' });
+	check('…but bad input on a removed post is still refused (unknown reasonId → 400, validated before the no-op)', rrAgainBadId.status === 400, `${rrAgainBadId.status}`);
 
 	// approve clears the reason and rings nobody
 	const rrApproved = await rrModerate(mod.cookie, { id: rrPost.id, action: 'approve' });
@@ -1283,17 +1310,45 @@ const run = async () => {
 	const rrFreeLog = (await rrLog(mod.cookie)).filter((entry) => entry.action === 'post.remove' && entry.postId === rrPost.id && entry.actor?.id === owner.id);
 	check('remove with free text alone → the text is the reason (mod log detail carries no reasonId)', rrFree.status === 200 && rrFree.body.post?.subspaceMod?.reason === 'Rule 1: Be kind' && rrFreeLog.length === 1 && rrFreeLog[0].reason === 'Rule 1: Be kind' && !rrFreeLog[0].detail?.reasonId, `${rrFree.status} ${JSON.stringify([rrFree.body?.post?.subspaceMod?.reason, rrFreeLog.map((entry) => entry.detail)])}`);
 	const rrFreeBell = await removedNotifsOf(member.cookie, rrPost.id);
-	check('…the author’s second bell row names the owner and the free-text reason', rrFreeBell.length === beforeRemoved + 2 && rrFreeBell.some((n) => n.actorId === owner.id && n.preview === `s/${rrSlug} · Rule 1: Be kind`), JSON.stringify(rrFreeBell.map((n) => [n.actorId, n.preview])));
+	check('…the author’s second bell row (the owner’s removal) still comes from the mod team and carries the free-text reason whole', rrFreeBell.length === beforeRemoved + 2 && rrFreeBell.some((n) => n.actorId === rrSpace.id && n.actorName === MOD_TEAM && n.preview === `s/${rrSlug} · Rule 1: Be kind`) && !rrFreeBell.some((n) => n.actorId === owner.id), JSON.stringify(rrFreeBell.map((n) => [n.actorName, n.preview])));
 	await rrModerate(mod.cookie, { id: rrPost.id, action: 'approve' });
 	const rrBare = await rrModerate(mod.cookie, { id: rrPost.id, action: 'remove' });
 	const rrBareBell = await removedNotifsOf(member.cookie, rrPost.id);
 	check('remove with no reason at all → reason null; the bell row still says "s/<slug> · removed by the moderators 🧹"', rrBare.status === 200 && rrBare.body.post?.subspaceMod?.reason === null && rrBareBell.length === beforeRemoved + 3 && rrBareBell.some((n) => n.preview === `s/${rrSlug} · removed by the moderators 🧹`), `${rrBare.status} ${JSON.stringify(rrBareBell.map((n) => n.preview))}`);
 	await rrModerate(mod.cookie, { id: rrPost.id, action: 'approve' });
 
+	// S4 review: citing a rule (ruleIndex) — composed and bounded server-side
+	// like a canned reason, so the client never guesses the stored text
+	const rrRuleTooFar = await rrModerate(mod.cookie, { id: rrPost.id, action: 'remove', ruleIndex: 5 });
+	const rrRuleNegative = await rrModerate(mod.cookie, { id: rrPost.id, action: 'remove', ruleIndex: -1 });
+	const rrRuleGarbage = await rrModerate(mod.cookie, { id: rrPost.id, action: 'remove', ruleIndex: 'two' });
+	const rrRuleAndReason = await rrModerate(mod.cookie, { id: rrPost.id, action: 'remove', ruleIndex: 0, reasonId: 'no-spam' });
+	const rrAfterRuleWalls = await api(`/api/v1/things?id=${rrPost.id}`, { cookie: mod.cookie });
+	check(
+		'ruleIndex walls: out of range / negative / not a number / together with reasonId → 400, the post stays up',
+		rrRuleTooFar.status === 400 && /2 rules/.test(rrRuleTooFar.body?.error || '') && rrRuleNegative.status === 400 && rrRuleGarbage.status === 400 && rrRuleAndReason.status === 400 && rrAfterRuleWalls.body?.post?.subspaceMod?.removed === false,
+		JSON.stringify([rrRuleTooFar.status, rrRuleTooFar.body?.error, rrRuleNegative.status, rrRuleGarbage.status, rrRuleAndReason.status, rrRuleAndReason.body?.error, rrAfterRuleWalls.body?.post?.subspaceMod?.removed])
+	);
+	const rrRuled = await rrModerate(mod.cookie, { id: rrPost.id, action: 'remove', ruleIndex: '1', reason: '  duplicate   thread ' });
+	const RULED = 'Rule 2: No spam — Ads go elsewhere. · duplicate thread';
+	check('remove with ruleIndex (0-based, a numeric string accepted) + a note → 200, subspaceMod.reason = "Rule N: title — text · note"', rrRuled.status === 200 && rrRuled.body.post?.subspaceMod?.removed === true && rrRuled.body.post.subspaceMod.reason === RULED, `${rrRuled.status} ${JSON.stringify(rrRuled.body?.post?.subspaceMod)}`);
+	const rrRuledLog = (await rrLog(mod.cookie)).filter((entry) => entry.action === 'post.remove' && entry.postId === rrPost.id && entry.reason === RULED);
+	check('the post.remove mod-log entry carries the composed citation and detail.ruleIndex (no reasonId)', rrRuledLog.length === 1 && rrRuledLog[0].detail?.ruleIndex === 1 && !rrRuledLog[0].detail?.reasonId, JSON.stringify(rrRuledLog.map((entry) => entry.detail)));
+	const rrRuledBell = await removedNotifsOf(member.cookie, rrPost.id);
+	check('…the author’s bell headline is the rule citation alone ("s/<slug> · Rule 2: No spam"), from the mod team', rrRuledBell.length === beforeRemoved + 4 && rrRuledBell.some((n) => n.preview === `s/${rrSlug} · Rule 2: No spam` && n.actorId === rrSpace.id), JSON.stringify(rrRuledBell.map((n) => n.preview)));
+	const rrRuledAuthorRead = await api(`/api/v1/things?id=${rrPost.id}`, { cookie: member.cookie });
+	check('…the author reads the full citation on the post', rrRuledAuthorRead.body?.post?.subspaceMod?.reason === RULED, JSON.stringify(rrRuledAuthorRead.body?.post?.subspaceMod?.reason));
+	const rrRuledApproved = await rrModerate(mod.cookie, { id: rrPost.id, action: 'approve' });
+	check('approve after a rule citation → removed false, reason null', rrRuledApproved.status === 200 && rrRuledApproved.body.post?.subspaceMod?.removed === false && rrRuledApproved.body.post.subspaceMod.reason === null);
+	const rrNoRulesSpace = await api('/api/v1/subspaces/update', { method: 'POST', cookie: owner.cookie, body: { slug: rrSlug, rules: [] } });
+	const rrRuleNone = await rrModerate(mod.cookie, { id: rrPost.id, action: 'remove', ruleIndex: 0 });
+	const rrRulesBack = await api('/api/v1/subspaces/update', { method: 'POST', cookie: owner.cookie, body: { slug: rrSlug, rules: [{ title: 'Be kind' }, { title: 'No spam', text: 'Ads go elsewhere.' }] } });
+	check('ruleIndex on a subspace with no rules → 400 ("no rules to cite")', rrNoRulesSpace.status === 200 && rrRuleNone.status === 400 && /no rules/i.test(rrRuleNone.body?.error || '') && rrRulesBack.status === 200, `${rrNoRulesSpace.status}/${rrRuleNone.status}/${rrRulesBack.status} ${JSON.stringify(rrRuleNone.body)}`);
+
 	// a mod removing their OWN post tells nobody
 	const rrModPosted = await api('/api/v1/things', { method: 'POST', cookie: mod.cookie, body: { type: 'text', text: 'oops, wrong subspace', title: 'Mod post', subspaceId: rrSpace.id } });
 	const rrSelfRemove = await rrModerate(mod.cookie, { id: rrModPosted.body?.post?.id, action: 'remove', reasonId: 'off-topic' });
-	check('a mod removing their own post → 200 with the canned reason and NO bell row for themselves', rrModPosted.status === 200 && rrSelfRemove.status === 200 && rrSelfRemove.body.post?.subspaceMod?.reason === 'Off topic' && (await removedNotifsOf(mod.cookie, rrModPosted.body.post.id)).length === 0, `${rrModPosted.status}/${rrSelfRemove.status} ${JSON.stringify(rrSelfRemove.body?.post?.subspaceMod?.reason)}`);
+	check('a mod removing their own post → 200 with the canned reason and NO bell row for themselves (the skip is explicit now that the actor is the mod team, not the mod)', rrModPosted.status === 200 && rrSelfRemove.status === 200 && rrSelfRemove.body.post?.subspaceMod?.reason === 'Off topic' && (await removedNotifsOf(mod.cookie, rrModPosted.body.post.id)).length === 0, `${rrModPosted.status}/${rrSelfRemove.status} ${JSON.stringify(rrSelfRemove.body?.post?.subspaceMod?.reason)}`);
 
 	// editing the list never rewrites history; a deleted id can't be used
 	const rrRenamed = await rrUpdate(mod.cookie, { removalReasons: [{ id: 'no-spam', title: 'No spam' }, { id: 'off-topic', title: 'Off-topic posts', message: 'Take it to the right subspace.' }] });
@@ -1305,6 +1360,19 @@ const run = async () => {
 	const rrCleared = await rrUpdate(mod.cookie, { removalReasons: [] });
 	check('an empty list clears the removal reasons', rrCleared.status === 200 && Array.isArray(rrCleared.body.subspace?.removalReasons) && rrCleared.body.subspace.removalReasons.length === 0);
 
+	// S4 review: a title with no Latin letters / digits (CJK here) used to
+	// slug to '' and be refused — it mints a stable hashed reason-… id now
+	const rrCjk = await rrUpdate(mod.cookie, { removalReasons: [{ title: '宣伝禁止', message: '広告は禁止です。' }, { title: '荒らし禁止' }] });
+	const rrCjkList = rrCjk.body?.subspace?.removalReasons || [];
+	check('a removal reason titled in Japanese saves with a minted reason-<hash> id (distinct per title)', rrCjk.status === 200 && rrCjkList.length === 2 && /^reason-[0-9a-z]{1,7}$/.test(rrCjkList[0]?.id || '') && /^reason-[0-9a-z]{1,7}$/.test(rrCjkList[1]?.id || '') && rrCjkList[0].id !== rrCjkList[1].id && rrCjkList[0].title === '宣伝禁止', `${rrCjk.status} ${JSON.stringify(rrCjk.body?.error || rrCjkList)}`);
+	const rrCjkAgain = await rrUpdate(mod.cookie, { removalReasons: [{ title: '宣伝禁止', message: '広告は禁止です。' }] });
+	check('…re-saving the same title without an id mints the same id (stable)', rrCjkAgain.status === 200 && rrCjkAgain.body.subspace?.removalReasons?.[0]?.id === rrCjkList[0]?.id, JSON.stringify([rrCjkList[0]?.id, rrCjkAgain.body?.subspace?.removalReasons?.[0]?.id]));
+	const rrCjkRemove = await rrModerate(mod.cookie, { id: rrPost.id, action: 'remove', reasonId: rrCjkList[0]?.id });
+	const rrCjkBell = await removedNotifsOf(member.cookie, rrPost.id);
+	check('…and the minted id works as a reasonId (reason "宣伝禁止 — 広告は禁止です。", bell headline "s/<slug> · 宣伝禁止")', rrCjkRemove.status === 200 && rrCjkRemove.body.post?.subspaceMod?.reason === '宣伝禁止 — 広告は禁止です。' && rrCjkBell.some((n) => n.preview === `s/${rrSlug} · 宣伝禁止`), `${rrCjkRemove.status} ${JSON.stringify([rrCjkRemove.body?.post?.subspaceMod?.reason, rrCjkBell.map((n) => n.preview)])}`);
+	await rrModerate(mod.cookie, { id: rrPost.id, action: 'approve' });
+	await rrUpdate(mod.cookie, { removalReasons: [] });
+
 	// the ban note: mod log only
 	const rrBan = await rrMembers(mod.cookie, { userId: stranger.id, action: 'ban', reason: 'Rule 2', banDays: 7, note: '  second   strike — next one is permanent ' });
 	check('ban with reason + days + a private note → 200; the row’s banReason is the reason alone, banUntil ~7 days out', rrBan.status === 200 && rrBan.body.member?.banned === true && rrBan.body.member.banReason === 'Rule 2' && !!rrBan.body.member.banUntil && Math.abs(new Date(rrBan.body.member.banUntil).getTime() - Date.now() - 7 * 86_400_000) < 60_000, `${rrBan.status} ${JSON.stringify(rrBan.body?.member)}`);
@@ -1312,17 +1380,22 @@ const run = async () => {
 	check('the member.ban mod-log entry carries detail.note (collapsed) beside banUntil', rrBanLog.length === 1 && rrBanLog[0].detail?.note === 'second strike — next one is permanent' && typeof rrBanLog[0].detail.banUntil === 'string' && rrBanLog[0].reason === 'Rule 2', JSON.stringify(rrBanLog.map((entry) => [entry.reason, entry.detail])));
 	const rrStrangerBell = (await notifsOf(stranger.cookie)).items.filter((n) => n.type === 'subspace-ban' && String(n.preview || '').startsWith(`s/${rrSlug}`));
 	check('the banned user’s bell carries the reason, never the note', rrStrangerBell.length >= 1 && rrStrangerBell.some((n) => /Rule 2/.test(n.preview || '')) && rrStrangerBell.every((n) => !/second strike/.test(n.preview || '')), JSON.stringify(rrStrangerBell.map((n) => n.preview)));
+	// S4 review: the ban bell comes from the mod team too (family-wide: the
+	// punitive pair never names the individual moderator)
+	check('…and comes from the subspace’s mod team (actorId = the subspace, actorName "s/<slug> mods", no username), never the moderator', rrStrangerBell.every((n) => n.actorId === rrSpace.id && n.actorName === MOD_TEAM && n.actorUsername === null) && !rrStrangerBell.some((n) => n.actorId === mod.id), JSON.stringify(rrStrangerBell.map((n) => [n.actorId === rrSpace.id, n.actorName, n.actorUsername])));
 	const rrBanRow = await api(`/api/v1/subspaces/members?slug=${rrSlug}&banned=1`, { cookie: mod.cookie });
 	check('the ban list row never leaks the note', rrBanRow.status === 200 && rrBanRow.body.members.some((entry) => entry.userId === stranger.id && entry.banReason === 'Rule 2') && !JSON.stringify(rrBanRow.body).includes('second strike'));
 	const rrUnban = await rrMembers(mod.cookie, { userId: stranger.id, action: 'unban' });
 	check('(cleanup) unban', rrUnban.status === 200 && rrUnban.body.member?.banned === false);
+	const rrUnbanBell = (await notifsOf(stranger.cookie)).items.filter((n) => n.type === 'subspace-ban' && String(n.preview || '').startsWith(`s/${rrSlug}`) && /lifted/.test(n.preview || ''));
+	check('…the lifted-ban row comes from the mod team as well', rrUnbanBell.length >= 1 && rrUnbanBell.every((n) => n.actorId === rrSpace.id && n.actorName === MOD_TEAM), JSON.stringify(rrUnbanBell.map((n) => [n.actorName, n.preview])));
 
 	// the manifest
 	const manifestP = await api('/api/v1/capabilities');
 	check(
-		'capability manifest advertises the S4 contracts (subspaces / get / update / join / leave 1.3.0 — removalReasons; feed / transfer 1.2.0; moderate 1.2.0 — reasonId + the author notification; members 1.4.0 — ban note)',
-		manifestP.status === 200 && ['api.subspaces', 'api.subspaces-get', 'api.subspaces-update', 'api.subspaces-join', 'api.subspaces-leave'].every((feature) => manifestP.body.features[feature] === '1.3.0') && ['api.subspaces-feed', 'api.subspaces-transfer', 'api.subspaces-moderate'].every((feature) => manifestP.body.features[feature] === '1.2.0') && manifestP.body.features['api.subspaces-members'] === '1.4.0',
-		JSON.stringify({ s: manifestP.body?.features?.['api.subspaces'], u: manifestP.body?.features?.['api.subspaces-update'], mo: manifestP.body?.features?.['api.subspaces-moderate'], m: manifestP.body?.features?.['api.subspaces-members'], f: manifestP.body?.features?.['api.subspaces-feed'], t: manifestP.body?.features?.['api.subspaces-transfer'] })
+		'capability manifest advertises the S4 contracts (subspaces / get / update / join / leave 1.3.0 — removalReasons; feed / transfer 1.2.0; moderate 1.3.0 — reasonId + ruleIndex + idempotent remove + the mod-team author notification; members 1.4.1 — ban note + mod-team ban bell; notifications-list 1.2.0 — mod-team actor rows)',
+		manifestP.status === 200 && ['api.subspaces', 'api.subspaces-get', 'api.subspaces-update', 'api.subspaces-join', 'api.subspaces-leave'].every((feature) => manifestP.body.features[feature] === '1.3.0') && ['api.subspaces-feed', 'api.subspaces-transfer'].every((feature) => manifestP.body.features[feature] === '1.2.0') && manifestP.body.features['api.subspaces-moderate'] === '1.3.0' && manifestP.body.features['api.subspaces-members'] === '1.4.1' && manifestP.body.features['api.notifications-list'] === '1.2.0',
+		JSON.stringify({ s: manifestP.body?.features?.['api.subspaces'], u: manifestP.body?.features?.['api.subspaces-update'], mo: manifestP.body?.features?.['api.subspaces-moderate'], m: manifestP.body?.features?.['api.subspaces-members'], f: manifestP.body?.features?.['api.subspaces-feed'], t: manifestP.body?.features?.['api.subspaces-transfer'], n: manifestP.body?.features?.['api.notifications-list'] })
 	);
 	const cleanupP = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: owner.cookie, body: { slug: rrSlug, confirmSlug: rrSlug } });
 	check('(cleanup) owner deletes the removal-reasons subspace', cleanupP.status === 200, `${cleanupP.status} ${JSON.stringify(cleanupP.body).slice(0, 200)}`);

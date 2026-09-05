@@ -121,12 +121,31 @@ const FLAIR_ID_PATTERN = /^[a-z0-9_-]{1,40}$/;
 // lands in a style attribute)
 const CSS_COLOR_PATTERN = /^(#[0-9a-f]{3,8}|[a-z]{3,20})$/i;
 
-export const slugifyFlairId = (label: string): string =>
-	label
+// A short, stable id for a label whose Latin slug is empty (a CJK, Cyrillic,
+// Arabic or emoji-only title): <prefix>-<base36 of a 32-bit FNV-1a hash of
+// the label>. Deterministic (the same title always mints the same id, so a
+// re-save without ids keeps pointing at the same reason) and inside the
+// flair-id grammar; the caller's dedupe still refuses a collision.
+const hashedId = (label: string, prefix: string): string => {
+	let hash = 0x811c9dc5;
+	for (const char of label) {
+		hash ^= char.codePointAt(0) || 0;
+		hash = Math.imul(hash, 0x01000193) >>> 0;
+	}
+	return `${prefix}-${hash.toString(36)}`;
+};
+
+// The id minted from a label: its lowercase Latin slug, or — when the label
+// has no [a-z0-9] at all — a hashed `<fallbackPrefix>-…` id, so a title in
+// any script can be saved without the editor exposing an id field.
+export const slugifyFlairId = (label: string, fallbackPrefix = 'id'): string => {
+	const slug = label
 		.toLowerCase()
 		.replace(/[^a-z0-9]+/g, '-')
 		.replace(/^-+|-+$/g, '')
 		.slice(0, MAX_SUBSPACE_FLAIR_ID_CHARS);
+	return slug || hashedId(label, fallbackPrefix);
+};
 
 export const sanitizeColor = (value: unknown): string | null => {
 	if (typeof value !== 'string') return null;
@@ -156,7 +175,7 @@ export const sanitizeFlairs = (value: unknown): SubspaceFlair[] | Fail => {
 		const label = boundedText(raw.label, MAX_SUBSPACE_FLAIR_LABEL_CHARS);
 		if (!label) return fail(400, 'Each flair needs a label');
 		const requestedId = typeof raw.id === 'string' ? raw.id.trim().toLowerCase() : '';
-		const id = requestedId || slugifyFlairId(label);
+		const id = requestedId || slugifyFlairId(label, 'flair');
 		if (!FLAIR_ID_PATTERN.test(id)) return fail(400, `Flair ids are 1–${MAX_SUBSPACE_FLAIR_ID_CHARS} lowercase letters, numbers, - or _ (got ${id || label})`);
 		if (seen.has(id)) return fail(400, `Duplicate flair id: ${id}`);
 		seen.add(id);
@@ -211,7 +230,9 @@ export const sanitizeRemovalReasons = (value: unknown): SubspaceRemovalReason[] 
 		const message = typeof raw.message === 'string' ? raw.message.replace(/\s+/g, ' ').trim() : '';
 		if (message.length > MAX_SUBSPACE_REMOVAL_REASON_MESSAGE_CHARS) return fail(400, `Removal reason message is too long (max ${MAX_SUBSPACE_REMOVAL_REASON_MESSAGE_CHARS})`);
 		const requestedId = typeof raw.id === 'string' ? raw.id.trim().toLowerCase() : '';
-		const id = requestedId || slugifyFlairId(title);
+		// minted from the title: its slug, or a hashed reason-… id when the
+		// title has no Latin letters / digits (the editor exposes no id field)
+		const id = requestedId || slugifyFlairId(title, 'reason');
 		if (!FLAIR_ID_PATTERN.test(id)) return fail(400, `Removal reason ids are 1–${MAX_SUBSPACE_FLAIR_ID_CHARS} lowercase letters, numbers, - or _ (got ${id || title})`);
 		if (seen.has(id)) return fail(400, `Duplicate removal reason id: ${id}`);
 		seen.add(id);
@@ -232,21 +253,56 @@ export const removalReasonsOf = (crystal: Record<string, any> | null | undefined
 export const removalReasonById = (reasons: readonly SubspaceRemovalReason[] | null | undefined, id: string | null | undefined): SubspaceRemovalReason | null =>
 	id ? (reasons || []).find((reason) => reason.id === id) || null : null;
 
+// a stored subspace crystal's rules (anything malformed reads as none) — the
+// list `moderate remove { ruleIndex }` cites from, in display order
+export const rulesOf = (crystal: Record<string, any> | null | undefined): SubspaceRule[] => {
+	const raw = crystal?.rules;
+	if (!Array.isArray(raw)) return [];
+	return raw
+		.filter((entry) => entry && typeof entry === 'object' && typeof entry.title === 'string' && entry.title)
+		.map((entry) => ({ title: entry.title, text: typeof entry.text === 'string' && entry.text ? entry.text : null }));
+};
+
+// The head of a rule citation ("Rule 2: No spam") — what the Remove modal
+// lists, what the author's bell headline and a ban reason carry
+export const ruleCitation = (index: number, rule: Pick<SubspaceRule, 'title'>): string => `Rule ${index + 1}: ${rule.title}`;
+
 // What `moderate remove` stores. `reasonId` names one of the subspace's
-// removal reasons (unknown → 400): its title — message becomes the reason,
-// with the mod's free-text `reason` appended as a note ("· note"). Without a
-// reasonId the free text alone is the reason (≤ MAX_SUBSPACE_MOD_REASON_CHARS,
-// the pre-S4 behaviour); neither → null (a removal with no stated reason).
-// The composed text is bounded by MAX_SUBSPACE_POST_REMOVAL_REASON_CHARS.
-export type ResolvedRemovalReason = { reason: string | null; reasonId: string | null };
-export const resolveRemovalReason = (input: { reason?: unknown; reasonId?: unknown }, reasons: readonly SubspaceRemovalReason[]): ResolvedRemovalReason | Fail => {
+// removal reasons (unknown → 400): its title — message becomes the reason;
+// `ruleIndex` (0-based, into the subspace's rules; out of range → 400) cites
+// a rule: "Rule N: title — text". Either way the mod's free-text `reason` is
+// appended as a note ("· note"); naming both answers 400. Without either the
+// free text alone is the reason (≤ MAX_SUBSPACE_MOD_REASON_CHARS, the pre-S4
+// behaviour); neither → null (a removal with no stated reason). The composed
+// text is bounded by MAX_SUBSPACE_POST_REMOVAL_REASON_CHARS and composed
+// SERVER-side so a client never has to guess the bound. `headline` is the
+// short form for the author's bell (the reason's title / the rule citation /
+// the free text) — the bell clamps previews to 140 chars, the full reason is
+// on the post the row deep-links to.
+export type ResolvedRemovalReason = { reason: string | null; reasonId: string | null; ruleIndex: number | null; headline: string | null };
+export const resolveRemovalReason = (
+	input: { reason?: unknown; reasonId?: unknown; ruleIndex?: unknown },
+	reasons: readonly SubspaceRemovalReason[],
+	rules: readonly SubspaceRule[] = []
+): ResolvedRemovalReason | Fail => {
 	const note = sanitizeReason(input.reason);
 	const reasonId = typeof input.reasonId === 'string' ? input.reasonId.trim().toLowerCase() : '';
-	if (!reasonId) return { reason: note, reasonId: null };
-	const canned = removalReasonById(reasons, reasonId);
-	if (!canned) return fail(400, `No removal reason "${reasonId}" here — pick one of the subspace’s reasons or write your own`);
-	const text = [canned.message ? `${canned.title} — ${canned.message}` : canned.title, note].filter(Boolean).join(' · ');
-	return { reason: text.slice(0, MAX_SUBSPACE_POST_REMOVAL_REASON_CHARS), reasonId: canned.id };
+	const ruleIndexRaw = input.ruleIndex === undefined || input.ruleIndex === null || input.ruleIndex === '' ? null : Number(input.ruleIndex);
+	if (ruleIndexRaw !== null && (!Number.isInteger(ruleIndexRaw) || ruleIndexRaw < 0)) return fail(400, 'ruleIndex must be a whole number — the 0-based position of one of the subspace’s rules');
+	if (reasonId && ruleIndexRaw !== null) return fail(400, 'Pick a removal reason (reasonId) or cite a rule (ruleIndex), not both');
+	const compose = (head: string) => [head, note].filter(Boolean).join(' · ').slice(0, MAX_SUBSPACE_POST_REMOVAL_REASON_CHARS);
+	if (reasonId) {
+		const canned = removalReasonById(reasons, reasonId);
+		if (!canned) return fail(400, `No removal reason "${reasonId}" here — pick one of the subspace’s reasons or write your own`);
+		return { reason: compose(canned.message ? `${canned.title} — ${canned.message}` : canned.title), reasonId: canned.id, ruleIndex: null, headline: canned.title };
+	}
+	if (ruleIndexRaw !== null) {
+		const rule = rules[ruleIndexRaw];
+		if (!rule) return fail(400, rules.length ? `No rule ${ruleIndexRaw + 1} here — the subspace has ${rules.length} rule${rules.length === 1 ? '' : 's'}` : 'This subspace has no rules to cite — write a reason instead');
+		const citation = ruleCitation(ruleIndexRaw, rule);
+		return { reason: compose(rule.text ? `${citation} — ${rule.text}` : citation), reasonId: null, ruleIndex: ruleIndexRaw, headline: citation };
+	}
+	return { reason: note, reasonId: null, ruleIndex: null, headline: note };
 };
 
 // ---------------------------------------------------------------------------

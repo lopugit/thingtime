@@ -597,7 +597,7 @@ const rootThingSchema: ThingtimeSchema = {
 			required: false,
 			system: true,
 			description:
-				'Protected subspace moderation state on posts: { status: approved|removed, removedById, removedAt, reason, pinned, locked, nsfw, spoiler }. Written only by subspace moderators through POST /api/v1/subspaces/moderate; removed posts are redacted for everyone but the author and mods and hidden from feeds.'
+				'Protected subspace moderation state on posts: { status: approved|removed, removedById, removedAt, reason, reasonId?, ruleIndex?, pinned, locked, nsfw, spoiler }. Written only by subspace moderators through POST /api/v1/subspaces/moderate (a remove on an already-removed post changes nothing); removed posts are redacted for everyone but the author and mods and hidden from feeds. The projection shows the author the reason, never removedById.'
 		},
 		{
 			name: 'subspacePrivate',

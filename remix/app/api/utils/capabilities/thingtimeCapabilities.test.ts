@@ -35,7 +35,10 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // S3 review: moderate's re-projected post carries authorFlair (1.1.0, additive)
   // round 2 S4 — removal reasons: remove takes reasonId (a canned reason →
   // the composed stored reason) and notifies the author (1.2.0, additive)
-  assert.equal(manifest.features['api.subspaces-moderate']?.version, '1.2.0');
+  // S4 review: remove takes ruleIndex (a cited rule, composed server-side),
+  // is idempotent on a removed post, and the author's bell comes from the
+  // mod team with the reason's headline (1.3.0, additive)
+  assert.equal(manifest.features['api.subspaces-moderate']?.version, '1.3.0');
   // round 2 S2 — join requests + posting-approval requests: private join
   // files a request (join 1.1.0), leave cancels it (1.1.0), the list rows /
   // detail carry viewer.pending + approvalRequested and mods get the queue
@@ -58,7 +61,8 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // S3 review: kick / ban strip the flair, demotion strips a mod-only pick,
   // mods may dress the owner (members 1.3.1, corrections)
   // S4: ban takes a private mod-log `note` (members 1.4.0, additive)
-  assert.equal(manifest.features['api.subspaces-members']?.version, '1.4.0');
+  // S4 review: the ban / unban bell comes from the mod team (1.4.1, correction)
+  assert.equal(manifest.features['api.subspaces-members']?.version, '1.4.1');
   // S4: the feed's subspace block carries removalReasons (1.2.0, additive)
   assert.equal(manifest.features['api.subspaces-feed']?.version, '1.2.0');
   // S2 review: a re-request starts from a clean row + the mods' bell is
@@ -76,7 +80,8 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // S4: the returned subspace carries removalReasons (1.2.0, additive)
   assert.equal(manifest.features['api.subspaces-transfer']?.version, '1.2.0');
   assert.equal(manifest.features['api.subspaces-delete']?.version, '1.1.0');
-  assert.equal(manifest.features['api.notifications-list']?.version, '1.1.0');
+  // S4 review: post-removed / ban rows carry the subspace's mod team as actor (1.2.0, additive)
+  assert.equal(manifest.features['api.notifications-list']?.version, '1.2.0');
   assert.equal(manifest.features['api.notifications-settings']?.version, '1.1.0');
   assert.equal(manifest.features['api.things-update']?.version, '1.2.0');
   assert.ok(manifest.operations.some((operation) => operation.path === THINGTIME_CAPABILITY_MANIFEST_PATH));

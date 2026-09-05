@@ -8792,8 +8792,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // "mods may set anyone's") — compatible corrections
     // 1.4.0: ban takes an optional private `note` (mod log detail only, never
     // shown to the banned user) — S4 BanModal (additive)
-    featureVersion: '1.4.0',
-    contractVersion: '1.4.0',
+    // 1.4.1 (S4 review): the ban / unban bell comes from the subspace's mod
+    // team (actorId = the subspace, actorName "s/<slug> mods") rather than
+    // the individual moderator — the same posture as a post removal; role
+    // changes and accepted requests still name the acting mod — a
+    // compatible correction
+    featureVersion: '1.4.1',
+    contractVersion: '1.4.1',
     group: 'subspaces',
     title: 'Subspace members',
     endpoint: '/api/v1/subspaces/members',
@@ -8832,7 +8837,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'pending row are guarded writes: if the requester cancelled or re-filed meanwhile the decision answers 409 ' +
       '("withdrawn — reload the queue") and logs / notifies nothing. role, ban, unban and accept notify the ' +
       'affected user (bell types subspace-role / subspace-ban / subspace-join-accepted, preview "s/<slug> · …", ' +
-      'targetId = the subspace); join and approval requests notify the moderators (subspace-join-request). ' +
+      'targetId = the subspace); a ban / unban row comes from the subspace’s mod team (actorId = the subspace ' +
+      'shareId, actorName "s/<slug> mods", actorUsername null — never the individual moderator, whom only the mod ' +
+      'log names), a role change / an accepted request from the acting moderator; join and approval requests notify ' +
+      'the moderators (subspace-join-request). ' +
       'Moderators can’t moderate other moderators or the owner; every moderator action writes a member.<action> ' +
       'mod-log entry (request-approval writes none).',
     auth: { mode: 'optional', description: 'GET of the mod roster works logged out; request-approval needs the member’s own session; everything else needs a moderator session.' },
@@ -8873,21 +8881,38 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // title — message · note become the stored reason; unknown → 400) and
     // notifies the author (subspace-post-removed, preview = the reason,
     // postId deep-links to the post); approve notifies nothing (S4, additive)
-    featureVersion: '1.2.0',
-    contractVersion: '1.2.0',
+    // 1.3.0 (S4 review): remove takes ruleIndex (cites one of the subspace's
+    // rules — "Rule N: title — text · note", composed and bounded server-side
+    // like a canned reason; both → 400), a remove on an already-removed post
+    // is a no-op (200 with the post as it is — no second mod-log row, no
+    // second bell), the author's bell comes from the subspace's mod team
+    // (actorId = the subspace, actorName "s/<slug> mods") rather than the
+    // individual moderator, and its preview carries the reason's HEADLINE
+    // (title / rule citation / free text; previews clamp at 140 chars)
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
     group: 'subspaces',
     title: 'Moderate post',
     endpoint: '/api/v1/subspaces/moderate',
-    summary: 'Moderator actions on a post in a subspace: remove (with a reason / canned removal reason), approve, pin, lock, nsfw, spoiler, flair.',
+    summary: 'Moderator actions on a post in a subspace: remove (with a reason / canned removal reason / cited rule), approve, pin, lock, nsfw, spoiler, flair.',
     detail:
-      'POST { id (post shareId), action, reason?, reasonId?, value?, flairId? }. Writes the server-owned root subspaceMod ' +
+      'POST { id (post shareId), action, reason?, reasonId?, ruleIndex?, value?, flairId? }. Writes the server-owned root subspaceMod ' +
       'state (never client-writable) and a post.<action> mod-log entry, then returns the re-projected post. ' +
-      'remove takes `reason` (free text, ≤300) and/or `reasonId` — one of the subspace’s removalReasons (see ' +
+      'remove takes `reason` (free text, ≤300) and/or ONE of `reasonId` — one of the subspace’s removalReasons (see ' +
       '/api/v1/subspaces/update): its title — message become the stored reason with the free text appended as a ' +
-      'note ("No spam — Posts that only advertise are removed. · third time"); an unknown reasonId answers 400. ' +
-      'The author is notified (subspace-post-removed; preview "s/<slug> · <reason>", postId = the post so the bell ' +
-      'opens /post/<id>; a moderator removing their own post tells nobody), the mod-log entry carries the composed ' +
-      'reason and detail.reasonId, and the post’s subspaceMod.reason shows the author and moderators the reason. ' +
+      'note ("No spam — Posts that only advertise are removed. · third time"); an unknown reasonId answers 400 — or ' +
+      '`ruleIndex` (0-based, into the subspace’s rules): the citation "Rule N: title — text · note" is composed the same ' +
+      'way (out of range → 400; naming both → 400). The composed text is bounded server-side at 900 chars (title / ' +
+      'message / rule text / note never overflow it), so a client never guesses what got stored. ' +
+      'The author is notified (subspace-post-removed; preview "s/<slug> · <headline>" — the canned reason’s title, ' +
+      'the rule citation, or the free text; bell previews clamp at 140 chars and the full reason is on the post the row ' +
+      'opens; postId = the post so the bell opens /post/<id>). The row comes from the subspace’s MOD TEAM, not the ' +
+      'moderator: actorId = the subspace shareId, actorName "s/<slug> mods", actorUsername null — the projection hides ' +
+      'removedById from the author and the bell hides it too (the mod log still names the moderator); a moderator ' +
+      'removing their own post tells nobody. The mod-log entry carries the composed ' +
+      'reason and detail.reasonId / detail.ruleIndex, and the post’s subspaceMod.reason shows the author and moderators the reason. ' +
+      'A remove on a post that is already removed is idempotent: 200 with the post as it is — its reason, removedAt, ' +
+      'mod-log row and the author’s bell are left alone (approve first to remove it again with a different reason). ' +
       'approve restores the post and notifies nothing. ' +
       'Removed posts are redacted for everyone but their author and the subspace’s moderators and vanish from ' +
       'every feed; locked posts refuse new comments (423) from everyone but moderators; at most 5 posts are ' +
@@ -8898,13 +8923,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     requestExamples: [
       { name: 'Remove', description: 'Remove a post citing rule 1.', method: 'POST', body: { id: '4f6b2c1e-…', action: 'remove', reason: 'Rule 1' } },
       { name: 'Remove with a canned reason', description: 'Pick the subspace’s "no-spam" removal reason and add a note.', method: 'POST', body: { id: '4f6b2c1e-…', action: 'remove', reasonId: 'no-spam', reason: 'third time this week' } },
+      { name: 'Remove citing a rule', description: 'Cite the subspace’s second rule (0-based ruleIndex) with a note — the server composes "Rule 2: <title> — <text> · <note>".', method: 'POST', body: { id: '4f6b2c1e-…', action: 'remove', ruleIndex: 1, reason: 'duplicate of yesterday’s thread' } },
       { name: 'Pin', description: 'Pin to the top of hot/new.', method: 'POST', body: { id: '4f6b2c1e-…', action: 'pin' } },
       { name: 'Flair', description: 'Set (or clear with null) the post flair.', method: 'POST', body: { id: '4f6b2c1e-…', action: 'flair', flairId: 'photo' } }
     ],
     responseExamples: [
       { status: 200, description: 'Applied.', body: { ok: true, post: { id: '4f6b2c1e-…', subspaceMod: { status: 'removed', removed: true, reason: 'Rule 1', pinned: false, locked: false } } } },
       { status: 200, description: 'Removed with a canned reason — the composed text is what the author sees.', body: { ok: true, post: { id: '4f6b2c1e-…', subspaceMod: { status: 'removed', removed: true, reason: 'No spam — Posts that only advertise are removed. · third time this week' } } } },
+      { status: 200, description: 'Removed citing a rule — the citation, the rule’s text and the note make up the stored reason.', body: { ok: true, post: { id: '4f6b2c1e-…', subspaceMod: { status: 'removed', removed: true, reason: 'Rule 2: No spam — Ads go elsewhere. · duplicate of yesterday’s thread' } } } },
       { status: 400, description: 'Unknown removal reason id.', body: { ok: false, error: 'No removal reason "ghost" here — pick one of the subspace’s reasons or write your own' } },
+      { status: 400, description: 'A rule index the subspace does not have.', body: { ok: false, error: 'No rule 4 here — the subspace has 2 rules' } },
       { status: 404, description: 'Not a subspace post.', body: { ok: false, error: 'Post not found in a subspace' } }
     ]
   }),
@@ -9780,8 +9808,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'notifications-list',
     // 1.1.0: the subspace-* types (join-request, join-accepted, post-removed,
     // report, role, ban) joined the type enum — additive
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    // 1.2.0: subspace-post-removed and subspace-ban rows carry the subspace's
+    // MOD TEAM as their actor (actorId = the subspace shareId, actorName
+    // "s/<slug> mods", actorUsername / actorAvatarUrl null) — the individual
+    // moderator is never named to the person they acted on; additive (actorId
+    // was always an opaque id; clients navigate by actorUsername, which is
+    // null here, and by postId / the preview slug as before)
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'notifications',
     title: 'List notifications',
     endpoint: '/api/v1/notifications',
@@ -9795,7 +9829,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'already-written notifications of that type. unreadCount backs the bell badge. Cursor ' +
       'pagination via before=<nextBefore>. Subspace-scoped rows (role, ban, join…) carry the subspace ' +
       'shareId in targetId and lead their preview with "s/<slug> · …" so clients can link to /s/<slug>; ' +
-      'post-scoped ones (post-removed, report) set postId like every other post notification.',
+      'post-scoped ones (post-removed, report) set postId like every other post notification. The punitive pair ' +
+      '(subspace-post-removed, subspace-ban) is sent by the subspace’s mod team: actorId is the SUBSPACE shareId, ' +
+      'actorName "s/<slug> mods", actorUsername and actorAvatarUrl null — the moderator who acted is named only ' +
+      'in the mod log; every other subspace row names the acting moderator.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'

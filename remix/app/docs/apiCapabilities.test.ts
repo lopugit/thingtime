@@ -72,7 +72,9 @@ test('subspace lifecycle + notification type additions publish their contract ve
 	// S4: the returned subspace carries removalReasons (1.2.0, additive)
 	assert.equal(manifest.features['api.subspaces-transfer'], '1.2.0');
 	assert.equal(manifest.features['api.subspaces-delete'], '1.1.0');
-	assert.equal(manifest.features['api.notifications-list'], '1.1.0');
+	// S4 review: subspace-post-removed / subspace-ban rows carry the subspace's
+	// mod team as their actor (1.2.0, additive)
+	assert.equal(manifest.features['api.notifications-list'], '1.2.0');
 	assert.equal(manifest.features['api.notifications-settings'], '1.1.0');
 });
 
@@ -108,8 +110,10 @@ test('subspace user flairs publish their contract versions', () => {
 	// mods may dress the owner (members 1.3.1, corrections); moderate's
 	// re-projected post carries authorFlair (1.1.0, additive) — S4 moved both
 	// on (members 1.4.0, moderate 1.2.0, feed 1.2.0)
-	assert.equal(manifest.features['api.subspaces-members'], '1.4.0');
-	assert.equal(manifest.features['api.subspaces-moderate'], '1.2.0');
+	// (S4 review moved members on to 1.4.1 — mod-team ban bell — and moderate
+	// to 1.3.0 — ruleIndex, idempotent remove, mod-team bell headline)
+	assert.equal(manifest.features['api.subspaces-members'], '1.4.1');
+	assert.equal(manifest.features['api.subspaces-moderate'], '1.3.0');
 	assert.equal(manifest.features['api.subspaces-feed'], '1.2.0');
 	for (const feature of ['api.things', 'api.things-comment', 'api.things-feed', 'api.things-user']) {
 		assert.equal(manifest.features[feature], '1.2.0', feature);
@@ -126,8 +130,14 @@ test('subspace removal reasons + moderation modals publish their contract versio
 	for (const feature of ['api.subspaces', 'api.subspaces-get', 'api.subspaces-update', 'api.subspaces-join', 'api.subspaces-leave']) {
 		assert.equal(manifest.features[feature], '1.3.0', feature);
 	}
-	for (const feature of ['api.subspaces-feed', 'api.subspaces-transfer', 'api.subspaces-moderate']) {
+	for (const feature of ['api.subspaces-feed', 'api.subspaces-transfer']) {
 		assert.equal(manifest.features[feature], '1.2.0', feature);
 	}
-	assert.equal(manifest.features['api.subspaces-members'], '1.4.0');
+	// S4 review: moderate remove takes ruleIndex (a cited rule composed and
+	// bounded server-side), is a no-op on an already-removed post, and the
+	// author's bell comes from the mod team with the reason's headline (1.3.0,
+	// additive); the ban / unban bell comes from the mod team too (members
+	// 1.4.1, correction)
+	assert.equal(manifest.features['api.subspaces-moderate'], '1.3.0');
+	assert.equal(manifest.features['api.subspaces-members'], '1.4.1');
 });

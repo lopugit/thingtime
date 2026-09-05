@@ -17,6 +17,8 @@ import {
 	removalReasonsOf,
 	resolveRemovalReason,
 	resolveUserFlair,
+	ruleCitation,
+	rulesOf,
 	sanitizeBranding,
 	sanitizeFlairs,
 	sanitizeRemovalReasons,
@@ -71,6 +73,39 @@ test('sanitizeFlairs mints slug ids, dedupes, and validates colors', () => {
 	assert.equal((sanitizeFlairs([{ label: 'A' }, { id: 'a', label: 'B' }]) as any).ok, false, 'duplicate ids rejected');
 	assert.equal((sanitizeFlairs(new Array(51).fill({ label: 'x' })) as any).ok, false);
 	assert.equal(slugifyFlairId('  Hello, World!  '), 'hello-world');
+});
+
+test('slugifyFlairId falls back to a stable hashed id when the label has no Latin letters or digits (S4 review)', () => {
+	// CJK / Cyrillic / Arabic / emoji-only titles used to slug to '' and be
+	// refused with 400 — the editors expose no id field, so they mint one
+	for (const label of ['宣伝禁止', 'Без спама', 'ممنوع الإعلانات', '🚫🚫', '---']) {
+		const id = slugifyFlairId(label, 'reason');
+		assert.match(id, /^reason-[0-9a-z]{1,7}$/, label);
+		assert.equal(slugifyFlairId(label, 'reason'), id, 'deterministic');
+	}
+	assert.notEqual(slugifyFlairId('宣伝禁止', 'reason'), slugifyFlairId('荒らし禁止', 'reason'));
+	assert.match(slugifyFlairId('😀'), /^id-[0-9a-z]+$/, 'default prefix');
+	// a label with any Latin content keeps its slug
+	assert.equal(slugifyFlairId('宣伝禁止 (no ads)', 'reason'), 'no-ads');
+	// through the sanitizers: saved with the minted id, deduped like any other
+	const flairs = sanitizeFlairs([{ label: '写真' }]) as any;
+	assert.match(flairs[0].id, /^flair-[0-9a-z]+$/);
+	const reasons = sanitizeRemovalReasons([{ title: '宣伝禁止', message: '広告は禁止です。' }, { title: '荒らし禁止' }]) as any;
+	assert.match(reasons[0].id, /^reason-[0-9a-z]+$/);
+	assert.equal(reasons[0].title, '宣伝禁止');
+	assert.notEqual(reasons[0].id, reasons[1].id);
+	assert.equal((sanitizeRemovalReasons([{ title: '宣伝禁止' }, { title: '宣伝禁止' }]) as any).ok, false, 'the same title twice is still a duplicate id');
+});
+
+test('rulesOf reads a stored crystal defensively (titles required, empty text → null)', () => {
+	assert.deepEqual(rulesOf(undefined), []);
+	assert.deepEqual(rulesOf({ rules: 'nope' }), []);
+	assert.deepEqual(rulesOf({ rules: [{ title: 'Be kind' }, { title: 'No spam', text: 'Ads go elsewhere.' }, { text: 'no title' }, null, { title: '', text: 'x' }, { title: 'Bare', text: '' }] }), [
+		{ title: 'Be kind', text: null },
+		{ title: 'No spam', text: 'Ads go elsewhere.' },
+		{ title: 'Bare', text: null }
+	]);
+	assert.equal(ruleCitation(1, { title: 'No spam' }), 'Rule 2: No spam');
 });
 
 test('sanitizeBranding merges over previous branding and rejects non-http URLs', () => {
@@ -342,17 +377,24 @@ test('removalReasonsOf reads a stored crystal defensively and removalReasonById 
 	assert.equal(removalReasonById(reasons, null), null);
 });
 
-test('resolveRemovalReason: reasonId → title — message · note; free text alone; neither → null; unknown → 400', () => {
+test('resolveRemovalReason: reasonId → title — message · note (headline = the title); free text alone; neither → null; unknown → 400', () => {
 	const reasons = [
 		{ id: 'no-spam', title: 'No spam', message: 'Posts that only advertise are removed.' },
 		{ id: 'bare', title: 'Bare', message: '' }
 	];
-	assert.deepEqual(resolveRemovalReason({ reasonId: 'no-spam' }, reasons), { reason: 'No spam — Posts that only advertise are removed.', reasonId: 'no-spam' });
-	assert.deepEqual(resolveRemovalReason({ reasonId: ' NO-SPAM ', reason: '  third   time ' }, reasons), { reason: 'No spam — Posts that only advertise are removed. · third time', reasonId: 'no-spam' });
-	assert.deepEqual(resolveRemovalReason({ reasonId: 'bare', reason: 'note' }, reasons), { reason: 'Bare · note', reasonId: 'bare' });
-	assert.deepEqual(resolveRemovalReason({ reason: 'Rule 2' }, reasons), { reason: 'Rule 2', reasonId: null });
-	assert.deepEqual(resolveRemovalReason({}, reasons), { reason: null, reasonId: null });
-	assert.deepEqual(resolveRemovalReason({ reasonId: null, reason: '' }, reasons), { reason: null, reasonId: null });
+	const none = { reasonId: null, ruleIndex: null };
+	assert.deepEqual(resolveRemovalReason({ reasonId: 'no-spam' }, reasons), { reason: 'No spam — Posts that only advertise are removed.', reasonId: 'no-spam', ruleIndex: null, headline: 'No spam' });
+	assert.deepEqual(resolveRemovalReason({ reasonId: ' NO-SPAM ', reason: '  third   time ' }, reasons), {
+		reason: 'No spam — Posts that only advertise are removed. · third time',
+		reasonId: 'no-spam',
+		ruleIndex: null,
+		headline: 'No spam'
+	});
+	assert.deepEqual(resolveRemovalReason({ reasonId: 'bare', reason: 'note' }, reasons), { reason: 'Bare · note', reasonId: 'bare', ruleIndex: null, headline: 'Bare' });
+	// free text: the whole text is the reason AND the headline
+	assert.deepEqual(resolveRemovalReason({ reason: 'Rule 2' }, reasons), { ...none, reason: 'Rule 2', headline: 'Rule 2' });
+	assert.deepEqual(resolveRemovalReason({}, reasons), { ...none, reason: null, headline: null });
+	assert.deepEqual(resolveRemovalReason({ reasonId: null, reason: '', ruleIndex: null }, reasons), { ...none, reason: null, headline: null });
 	const unknown = resolveRemovalReason({ reasonId: 'ghost' }, reasons) as any;
 	assert.equal(unknown.ok, false);
 	assert.equal(unknown.status, 400);
@@ -361,4 +403,37 @@ test('resolveRemovalReason: reasonId → title — message · note; free text al
 	const long = resolveRemovalReason({ reasonId: 'long', reason: 'n'.repeat(300) }, [{ id: 'long', title: 't'.repeat(80), message: 'm'.repeat(500) }]) as any;
 	assert.equal(long.reason.length, 80 + 3 + 500 + 3 + 300);
 	assert.ok(long.reason.length <= 900);
+});
+
+test('resolveRemovalReason: ruleIndex cites a rule server-side — "Rule N: title — text · note", bounded like a canned reason (S4 review)', () => {
+	const rules = [
+		{ title: 'Be kind', text: null },
+		{ title: 'No spam', text: 'Ads go elsewhere.' }
+	];
+	assert.deepEqual(resolveRemovalReason({ ruleIndex: 0 }, [], rules), { reason: 'Rule 1: Be kind', reasonId: null, ruleIndex: 0, headline: 'Rule 1: Be kind' });
+	assert.deepEqual(resolveRemovalReason({ ruleIndex: '1', reason: ' duplicate  thread ' }, [], rules), {
+		reason: 'Rule 2: No spam — Ads go elsewhere. · duplicate thread',
+		reasonId: null,
+		ruleIndex: 1,
+		headline: 'Rule 2: No spam'
+	});
+	// walls: out of range, no rules at all, garbage, and naming both a reason and a rule
+	for (const [input, ruleList] of [
+		[{ ruleIndex: 2 }, rules],
+		[{ ruleIndex: -1 }, rules],
+		[{ ruleIndex: 1.5 }, rules],
+		[{ ruleIndex: 'two' }, rules],
+		[{ ruleIndex: 0 }, []],
+		[{ ruleIndex: 0, reasonId: 'bare' }, rules]
+	] as const) {
+		const result = resolveRemovalReason(input, [{ id: 'bare', title: 'Bare', message: '' }], ruleList) as any;
+		assert.equal(result.ok, false, JSON.stringify(input));
+		assert.equal(result.status, 400, JSON.stringify(input));
+	}
+	// the composed text is bounded by the post-removal cap, never the 300 free-text one
+	const long = resolveRemovalReason({ ruleIndex: 0, reason: 'n'.repeat(300) }, [], [{ title: 't'.repeat(100), text: 'x'.repeat(500) }]) as any;
+	assert.equal(long.reason.length, 900);
+	assert.ok(long.reason.startsWith('Rule 1: tttt'));
+	// the omitted list reads as no rules
+	assert.equal((resolveRemovalReason({ ruleIndex: 0 }, []) as any).status, 400);
 });

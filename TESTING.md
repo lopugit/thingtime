@@ -1248,9 +1248,24 @@ email whose link points at the attacker.
       feed. The card paints removed + the reason the instant you confirm and
       reverts with a toast if the API refuses; lock/ban follow-ups that fail
       keep the removal and toast on their own. A canned reason stores
-      `title — message · note`, a rule stores `Rule N: title · note`. The
-      author gets a 🧹 `subspace-post-removed` bell entry ("s/<slug> · <reason>")
-      that opens `/post/:id`; removing your own post rings nobody; Approve
+      `title — message · note`; a rule pick is sent as `ruleIndex` and the
+      SERVER composes `Rule N: title — text · note` (both bounded at 900
+      server-side — the note field's `n/max` counter shrinks beside a canned
+      reason / rule so nothing you type is sliced off; a note written under
+      Custom is trimmed to fit when you switch picks). The lazy default pick
+      (first canned reason) only lands while the form is untouched — click
+      Custom or start typing before the rules load and nothing flips under
+      you. "Also ban" sends the SHORT reason (the canned title / `Rule N:
+      title` / your custom text), never the full composed text. The author
+      gets a 🧹 `subspace-post-removed` bell entry ("s/<slug> · <headline>" —
+      the canned title / the rule citation / the free text; bell previews
+      clamp at 140 chars, the full reason is on the post) that opens
+      `/post/:id`; the row — like the 🚫 ban / unban rows — comes from
+      "s/<slug> mods" (actorId = the subspace, no profile link), never the
+      individual moderator, whom only the mod log names; removing your own
+      post rings nobody; a second Remove on an already-removed post (a retry,
+      two mods racing, an API caller) is a no-op: 200, same reason /
+      removedAt, no second mod-log row, no second bell. Approve
       restores it silently. No `window.prompt`/`confirm` anywhere in the
       subspace UI. Approve restores it;
       Pin leads Hot/New with a 📌 badge (max 5); Lock shows 🔒 and makes

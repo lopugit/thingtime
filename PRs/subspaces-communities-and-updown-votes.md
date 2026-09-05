@@ -282,7 +282,34 @@ score field.
   No `window.prompt`/`confirm` remains in the subspace UI. Capabilities:
   subspaces / get / update / join / leave 1.3.0, feed / transfer 1.2.0
   (their subspace block grew `removalReasons`), moderate 1.2.0 (reasonId +
-  the author notification), members 1.4.0 (ban note). Verify section P
+  the author notification), members 1.4.0 (ban note). Verify section P.
+  S4 review fixes: `moderate remove` is idempotent — an already-removed post
+  answers 200 as it is (no rewrite of removedById / removedAt / reason, no
+  second `post.remove` mod-log row, no second bell; approve first to
+  re-remove); `remove` also takes `ruleIndex` (0-based; the server composes
+  `Rule N: title — text · note` through `resolveRemovalReason`, bounded at
+  900 like a canned reason — out of range / both with reasonId → 400;
+  `subspaceMod.ruleIndex` + `detail.ruleIndex`), so the client never guesses
+  what got stored and the RemoveModal's note counter shrinks to what fits
+  (`noteMaxFor`); the author's `subspace-post-removed` bell and the
+  `subspace-ban` rows come from the SUBSPACE'S MOD TEAM
+  (`subspaceModTeamActor`: actorId = the subspace shareId, actorName
+  "s/<slug> mods", actorUsername null — the projection hides `removedById`
+  from the author and the bell no longer hands them the name; role / accept
+  rows still name the acting mod; the own-post skip is explicit) with the
+  reason's HEADLINE as preview (canned title / rule citation / free text —
+  previews clamp at 140 chars); the RemoveModal's lazy default pick only
+  lands while the form is untouched (`touchedRef`); "Also ban" sends the
+  short `banReason` (title / citation / custom text), never the composed
+  removal text; `slugifyFlairId` falls back to a stable hashed
+  `reason-…` / `flair-…` id when a title has no Latin letters or digits
+  (CJK / Cyrillic / Arabic / emoji titles save from the id-less editors);
+  the Removal reasons row wraps at 375px (id on its own truncating line).
+  Capabilities: moderate 1.3.0 (ruleIndex, additive), members 1.4.1
+  (mod-team ban bell, correction), notifications-list 1.2.0 (mod-team actor
+  rows, additive). Verify section P extended (idempotent remove, ruleIndex +
+  walls, mod-team actors on removal / ban / unban rows, headline previews,
+  CJK reason ids)
   (settings walls 403 / 400 ×6 + a moderator's save with minted ids and a
   sliced title, public / anonymous / directory reads, the mod-log fields,
   moderate walls 401 / 403 / 400 unknown reasonId — post stays up — / 404

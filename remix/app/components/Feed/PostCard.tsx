@@ -1411,7 +1411,13 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     }));
     let latest: PublicPost | null = null;
     try {
-      const resp: any = await api.v1.subspaces.moderate({ id: post.id, action: 'remove', ...(choice.reason ? { reason: choice.reason } : {}), ...(choice.reasonId ? { reasonId: choice.reasonId } : {}) });
+      const resp: any = await api.v1.subspaces.moderate({
+        id: post.id,
+        action: 'remove',
+        ...(choice.reason ? { reason: choice.reason } : {}),
+        ...(choice.reasonId ? { reasonId: choice.reasonId } : {}),
+        ...(choice.ruleIndex !== null ? { ruleIndex: choice.ruleIndex } : {})
+      });
       latest = resp?.post || null;
     } catch (err: any) {
       onChanged?.(post.id, (current) => ({ ...current, subspaceMod: before }));
@@ -1431,7 +1437,10 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     if (latest) onChanged?.(post.id, latest);
     if (choice.ban && post.subspace && post.author) {
       try {
-        await api.v1.subspaces.mutateMember({ id: post.subspace.id, userId: post.author.id, action: 'ban', ...(latest?.subspaceMod?.reason || choice.previewReason ? { reason: latest?.subspaceMod?.reason || choice.previewReason } : {}), ...(choice.banDays ? { banDays: choice.banDays } : {}) });
+        // the ban reason is the SHORT form (the canned reason's title / the
+        // rule citation / the custom text) — the full composed removal text
+        // would be sliced at 300 in banReason and the user's ban bell
+        await api.v1.subspaces.mutateMember({ id: post.subspace.id, userId: post.author.id, action: 'ban', ...(choice.banReason ? { reason: choice.banReason } : {}), ...(choice.banDays ? { banDays: choice.banDays } : {}) });
         followUps.push(`@${post.author.username} banned${choice.banDays ? ` for ${choice.banDays}d` : ''} 🚫`);
       } catch (err: any) {
         lopu({ title: err?.error || 'Removed, but the ban did not go through 😞', status: 'error' });

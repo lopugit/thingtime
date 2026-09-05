@@ -78,6 +78,7 @@ import {
 	removalReasonsOf,
 	resolveRemovalReason,
 	resolveUserFlair,
+	rulesOf,
 	sanitizeAccess,
 	sanitizeBranding,
 	sanitizeDescription,
@@ -459,6 +460,21 @@ const findSubspaceTombstone = async (things: any, slug: string): Promise<any | n
 // the actor snapshot every subspace notification carries (notifications.ts
 // re-resolves live profile data on read)
 const notificationActorOf = (viewer: NonNullable<Viewer>) => ({ id: viewer.id, username: viewer.username || null });
+
+// The PUNITIVE notifications (a post removal, a ban / unban) come from the
+// subspace's mod team, not from the individual moderator — the post
+// projection deliberately hides removedById from the author, and the bell
+// must not hand them the name the card withholds (Reddit sends removals and
+// bans from the subreddit's mod team for the same reason: a single mod is a
+// target). actorId = the subspace shareId (no user has it: notifications.ts
+// finds no live profile and keeps this snapshot — actorUsername null, so the
+// bell never links to a profile; the row deep-links to the post / subspace
+// like every subspace notification). The mod log still names the moderator.
+// Role changes and accepted requests keep naming the acting mod — nothing to
+// retaliate against there. emitNotification's self-check compares the
+// recipient against THIS id, so callers skip the author-is-the-actor case
+// themselves.
+const subspaceModTeamActor = (subspaceId: string, slug: string) => ({ id: subspaceId, username: null, displayName: `s/${slug} mods` });
 
 // active owner + moderators of a subspace, minus the acting user — the
 // bounded recipient list for "notify the mods" emits
@@ -1237,25 +1253,29 @@ export const mutateMember = async (viewerInput: string | Viewer, input: MutateMe
 	await writeModlog(id, actorId, `member.${action}`, { userId: targetUserId, reason, detail });
 	// the affected user hears about role + ban changes and an accepted join
 	// request (never throws; prefs gate delivery). The preview leads with
-	// s/<slug> so the bell deep-links.
+	// s/<slug> so the bell deep-links. A ban / unban comes from the mod team
+	// (subspaceModTeamActor), a role change / an accepted request from the mod.
 	const notice =
 		action === 'role'
-			? { type: 'subspace-role' as const, text: set['crystal.role'] === 'moderator' ? 'you are now a moderator 🎩' : 'you are no longer a moderator' }
+			? { type: 'subspace-role' as const, text: set['crystal.role'] === 'moderator' ? 'you are now a moderator 🎩' : 'you are no longer a moderator', fromModTeam: false }
 			: action === 'ban'
 				? {
 						type: 'subspace-ban' as const,
-						text: `you were banned${typeof detail?.banUntil === 'string' ? ` until ${(detail.banUntil as string).slice(0, 10)}` : ''}${reason ? ` — ${reason}` : ''} 🚫`
+						text: `you were banned${typeof detail?.banUntil === 'string' ? ` until ${(detail.banUntil as string).slice(0, 10)}` : ''}${reason ? ` — ${reason}` : ''} 🚫`,
+						fromModTeam: true
 					}
 				: action === 'unban'
-					? { type: 'subspace-ban' as const, text: 'your ban was lifted 🕊️' }
+					? { type: 'subspace-ban' as const, text: 'your ban was lifted 🕊️', fromModTeam: true }
 					: action === 'accept' || (action === 'add' && targetPending)
-						? { type: 'subspace-join-accepted' as const, text: 'your request to join was accepted — welcome in 🎉' }
+						? { type: 'subspace-join-accepted' as const, text: 'your request to join was accepted — welcome in 🎉', fromModTeam: false }
 						: null;
+	// (a mod can't ban themselves — 400 above — so the mod-team actor never
+	// needs a self-skip here)
 	if (notice) {
 		await emitNotification({
 			recipientId: targetUserId,
 			type: notice.type,
-			actor: notificationActorOf(auth.viewer),
+			actor: notice.fromModTeam ? subspaceModTeamActor(id, slug) : notificationActorOf(auth.viewer),
 			targetId: id,
 			preview: subspaceNotificationPreview(slug, notice.text)
 		});
@@ -1488,8 +1508,8 @@ const POST_MOD_ACTIONS: PostModAction[] = ['remove', 'approve', 'pin', 'unpin', 
 
 // remove: `reason` (free text) and/or `reasonId` (one of the subspace's
 // removal reasons — its title + message become the stored reason, the free
-// text rides along as a note)
-export type ModeratePostInput = { id?: unknown; action?: unknown; reason?: unknown; reasonId?: unknown; value?: unknown; flairId?: unknown };
+// text rides along as a note) or `ruleIndex` (cites a rule the same way)
+export type ModeratePostInput = { id?: unknown; action?: unknown; reason?: unknown; reasonId?: unknown; ruleIndex?: unknown; value?: unknown; flairId?: unknown };
 
 export const moderatePost = async (viewerInput: string | Viewer, input: ModeratePostInput): Promise<Fail | { ok: true; post: PublicPost }> => {
 	const auth = requireViewer(viewerInput);
@@ -1509,6 +1529,9 @@ export const moderatePost = async (viewerInput: string | Viewer, input: Moderate
 	if (!subspace) return fail(404, 'Subspace not found');
 
 	let reason = sanitizeReason(input.reason);
+	// the short form of a removal reason for the author's bell (the title of a
+	// canned reason / the rule citation / the free text) — set by `remove`
+	let headline: string | null = null;
 	const now = new Date();
 	const current = (post as any).subspaceMod || {};
 	const set: Record<string, unknown> = { updatedAt: now };
@@ -1516,11 +1539,23 @@ export const moderatePost = async (viewerInput: string | Viewer, input: Moderate
 	let detail: Record<string, unknown> | null = null;
 	switch (action) {
 		case 'remove': {
-			// a canned removal reason (reasonId) composes the stored reason:
-			// title — message · note; unknown ids answer 400
-			const resolved = resolveRemovalReason(input, removalReasonsOf(subspace.crystal));
+			// a canned removal reason (reasonId) or a cited rule (ruleIndex)
+			// composes the stored reason: title — message · note; unknown ids /
+			// out-of-range indexes answer 400 before anything is touched
+			const resolved = resolveRemovalReason(input, removalReasonsOf(subspace.crystal), rulesOf(subspace.crystal));
 			if (isFail(resolved)) return resolved;
+			// idempotent: a post that is already removed stays exactly as it is
+			// — no rewrite of removedById / removedAt / reason, no second
+			// post.remove mod-log row and, above all, no second bell for the
+			// author (a request retried after a timeout, or two mods racing on
+			// the same post, must not ring twice). Approve first to remove it
+			// again with a different reason.
+			if (current.status === 'removed') {
+				const [unchanged] = await toPublicPosts([post], auth.viewer);
+				return { ok: true, post: unchanged };
+			}
 			reason = resolved.reason;
+			headline = resolved.headline;
 			set['subspaceMod.status'] = 'removed';
 			set['subspaceMod.removedById'] = actorId;
 			set['subspaceMod.removedAt'] = now;
@@ -1529,6 +1564,10 @@ export const moderatePost = async (viewerInput: string | Viewer, input: Moderate
 				set['subspaceMod.reasonId'] = resolved.reasonId;
 				detail = { reasonId: resolved.reasonId };
 			} else unset['subspaceMod.reasonId'] = '';
+			if (resolved.ruleIndex !== null) {
+				set['subspaceMod.ruleIndex'] = resolved.ruleIndex;
+				detail = { ruleIndex: resolved.ruleIndex };
+			} else unset['subspaceMod.ruleIndex'] = '';
 			break;
 		}
 		case 'approve':
@@ -1539,6 +1578,7 @@ export const moderatePost = async (viewerInput: string | Viewer, input: Moderate
 			unset['subspaceMod.removedAt'] = '';
 			unset['subspaceMod.reason'] = '';
 			unset['subspaceMod.reasonId'] = '';
+			unset['subspaceMod.ruleIndex'] = '';
 			break;
 		case 'pin': {
 			const pinned = await things.countDocuments({ ...livePostMatch(subspaceId), 'subspaceMod.pinned': true } as any);
@@ -1586,18 +1626,25 @@ export const moderatePost = async (viewerInput: string | Viewer, input: Moderate
 	// outside the stamp, so this is a no-op delta for the other actions.
 	await updateAccountedThing(things, { shareId: post.shareId }, update);
 	await writeModlog(subspaceId, actorId, `post.${action}`, { postId: post.shareId, reason, detail });
-	// the author hears about a removal (never throws; prefs gate delivery; a
-	// moderator removing their own post tells nobody). Post-scoped: postId
-	// deep-links to /post/<id>, the preview leads with s/<slug> and carries
-	// the reason — approve notifies nothing (the post simply comes back).
-	if (action === 'remove') {
+	// the author hears about a removal (never throws; prefs gate delivery).
+	// Post-scoped: postId deep-links to /post/<id>; the preview leads with
+	// s/<slug> and carries the HEADLINE (a canned reason's title / the rule
+	// citation / the free text — previews clamp at 140 chars and the full
+	// composed reason is on the post the row opens); it comes from the mod
+	// team, never the individual moderator (subspaceModTeamActor — the
+	// projection hides removedById from the author for the same reason), so
+	// the author-is-the-actor skip is explicit here: a moderator removing
+	// their own post tells nobody. approve notifies nothing (the post simply
+	// comes back).
+	if (action === 'remove' && String(post.ownerId) !== actorId) {
+		const slug = String(subspace.crystal?.slug || subspaceId);
 		await emitNotification({
 			recipientId: String(post.ownerId),
 			type: 'subspace-post-removed',
-			actor: notificationActorOf(auth.viewer),
+			actor: subspaceModTeamActor(subspaceId, slug),
 			targetId: post.shareId,
 			postId: post.shareId,
-			preview: subspaceNotificationPreview(String(subspace.crystal?.slug || subspaceId), reason || 'removed by the moderators 🧹')
+			preview: subspaceNotificationPreview(slug, headline || 'removed by the moderators 🧹')
 		});
 	}
 	const fresh = (await things.findOne({ shareId: post.shareId } as any)) as any as ThingDoc;
