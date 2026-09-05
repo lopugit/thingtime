@@ -484,8 +484,12 @@ test('consuming a rotated refresh grant also leaves a reap date, not just revoke
     ...revokedSessionPipeline(now),
     { $set: { 'meta.consumedAt': now } }
   ]);
-  // It must be an aggregation pipeline — $ifNull only resolves in one — and the
-  // reap stage must come first so 'meta.consumedAt' can't be dropped by it.
+  // It must be an aggregation pipeline — $ifNull only resolves in one. Stage
+  // order is NOT what makes this safe: aggregation $set never drops fields, so
+  // reap-then-consumedAt and consumedAt-then-reap are equivalent. What is
+  // load-bearing is the dotted path — 'meta.consumedAt' merges into meta,
+  // where a nested { meta: { consumedAt } } would replace the whole record and
+  // strip clientId/resource/connectionId off every rotated grant.
   assert.ok(Array.isArray(pipeline));
-  assert.deepEqual(Object.keys(pipeline[0].$set).sort(), ['expiresAt', 'revokedAt']);
+  assert.deepEqual(Object.keys(pipeline[1].$set), ['meta.consumedAt']);
 });
