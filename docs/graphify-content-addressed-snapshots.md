@@ -87,7 +87,6 @@ closed. `scripts/graphify prune` applies the same policy without rebuilding.
 `extract --no-cluster` is rejected because Graphify has historically been able
 to replace a large graph with only the newly extracted nodes in that mode.
 
-
 Lock ownership is published as a populated directory in one atomic rename.
 Each attempt has a unique owner filename; cleanup removes only that record
 and uses non-recursive directory removal, so a delayed cleanup cannot delete
