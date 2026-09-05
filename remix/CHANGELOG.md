@@ -17,6 +17,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-05: Repair native Commander speed tests with proxy-safe exact-byte
+  validation, upload v2 chunks below Vercel's request limit, explicit capability
+  negotiation, single-flight execution, and retained/labelled partial results.
+  Latency refreshes no longer erase throughput readings. — Codex (AI)
+
 - 2026-09-05: Keep native Commander search catalogues complete, reuse fresh saved
   indexes, improve matching app-name ranking, and add the pin menu's new-window
   default toggle. See the [PR #652 verification note](../PRs/652-codex-commander-app-name-ranking-complete-search-catalogues-and-pin-toggle.md). — Codex (AI)

@@ -25,6 +25,27 @@ Date: 2026-09-05. Branch: `codex/commander-app-name-ranking`. Base: `develop`.
 
 ## Verification
 
+### Speed-test follow-up (2026-09-05)
+
+- Reproduced HTTP 400 on an exact 56 KiB upload, both through thingtime.com and
+  its direct Vercel alias; a 5 MiB upload separately returned Vercel HTTP 413.
+- Upload v2 counts actual streamed bytes, permits an absent Content-Length,
+  rejects false lengths, and accepts only 56 KiB, 500 KiB, 1 MiB, and 2 MiB
+  requests. The daemon splits the original 5/10 MiB samples and keeps the
+  original 17.6 MiB each-way total. Both server capability registries publish
+  2.0.0; Commander checks the selected origin's required contracts first.
+- The versioned upload limiter counts eleven chunks per 15 minutes (maximum
+  22 MiB, below v1's 50 MiB ceiling). The v2 key prevents saved v1 logical-packet
+  limits from being mistaken for chunk limits. Automatic tests remain opt-in.
+- One daemon run serves simultaneous windows. Completed samples survive a
+  direction failure, cooldown errors include Retry-After, aggregate throughput
+  is weighted by actual bytes/time, and periodic pings preserve speed results.
+- Added transport-byte, packet-plan, quota, capability, single-flight, partial
+  error, and UI-refresh regressions. Release/runtime evidence will be recorded
+  after the authorized main promotion and installed-app check.
+
+### Catalogue and pin verification
+
 - Canonical development build, typechecks, all 185 TypeScript tests, packaging,
   installation, and runtime verification passed with
   `COMMANDER_SIGNING_MODE=development ./script/build_and_run.sh --verify`.

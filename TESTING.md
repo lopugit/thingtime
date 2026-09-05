@@ -6,6 +6,19 @@ see `AI_ALL.md`). Each list is the distilled regression history of that area:
 every line exists because it broke once. Add a line whenever a new bug class
 is fixed, and cite the checklist you ran in the PR description.
 
+## Native Commander network speed test
+
+- [ ] Activity: run one 17.6 MiB each-way test against the deployed origin;
+      confirm 5/5 download and upload samples, no 400/413, and no upload request
+      exceeds 2 MiB. Wait through a latency refresh: both speed values remain.
+- [ ] A streamed upload without Content-Length succeeds only for the exact
+      allowlisted byte count; short, oversized, and false-length bodies fail.
+- [ ] Interrupt a direction or hit its cooldown: completed measurements remain
+      visible, partial results are labelled, and Retry-After is actionable.
+      Opening a second Commander window must not duplicate an in-flight test.
+- [ ] Both capability manifests advertise upload 2.0.0; incompatible/missing
+      capabilities are rejected before transferring the speed-test payloads.
+
 ## ChatGPT / Codex MCP connector
 
 - [ ] `GET /.well-known/oauth-protected-resource`, `GET
