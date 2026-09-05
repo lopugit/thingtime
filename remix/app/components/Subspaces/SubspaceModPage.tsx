@@ -36,7 +36,9 @@ import { BanModal, RemoveModal, forgetModerationSubspace, type BanInput, type Re
 import {
 	ACCESS_META,
 	openReportCount,
+	openReportCountWithout,
 	openRequestCount,
+	reportsSettledByCard,
 	type PublicAuthorFlair,
 	type PublicModlogEntry,
 	type PublicReportedPost,
@@ -50,6 +52,7 @@ import {
 	type SubspaceMemberResponse,
 	type SubspaceRemovalReason,
 	type SubspaceReportsResponse,
+	type SubspaceReportStatus,
 	type SubspaceRule,
 	type SubspaceTransferResponse
 } from './subspaceTypes';
@@ -1454,66 +1457,120 @@ const timeAgo = (iso: string): string => {
 };
 const RESOLUTION_LABEL: Record<string, string> = { removed: 'Removed 🧹', approved: 'Approved ✅', dismissed: 'Dismissed ✓' };
 
+// one Reports list (open or resolved) as the panel keeps it: the last page
+// set it knows, its paging cursor, whether a first page ever landed
+type ReportList = { groups: PublicReportedPost[]; nextCursor: string | null; loaded: boolean; loading: boolean };
+const EMPTY_REPORT_LIST: ReportList = { groups: [], nextCursor: null, loaded: false, loading: false };
+
 const ReportsPanel = ({ subspace, onCounts }: { subspace: PublicSubspace; onCounts: (patch: { openReportCount?: number }) => void }) => {
 	const api = useApi();
 	const lopu = useLopu();
 	const user = useCurrentUser();
 	const { slug } = subspace;
-	const [status, setStatus] = React.useState<'open' | 'resolved'>('open');
-	const [groups, setGroups] = React.useState<PublicReportedPost[]>([]);
-	const [nextCursor, setNextCursor] = React.useState<string | null>(null);
-	const [loading, setLoading] = React.useState(true);
+	const [status, setStatus] = React.useState<SubspaceReportStatus>('open');
+	// both lists live side by side: flipping Open / Resolved paints the list
+	// it already knows at once (optimistic — no loading flash over known
+	// state) while a fresh page loads into ITS slot, so a slow "resolved"
+	// page can never land under the Open heading
+	const [lists, setLists] = React.useState<Record<SubspaceReportStatus, ReportList>>({ open: EMPTY_REPORT_LIST, resolved: EMPTY_REPORT_LIST });
+	const list = lists[status];
 	const [busyId, setBusyId] = React.useState<string | null>(null);
 	const [removeTarget, setRemoveTarget] = React.useState<PublicReportedPost | null>(null);
 	const onCountsRef = React.useRef(onCounts);
 	onCountsRef.current = onCounts;
+	const subspaceRef = React.useRef(subspace);
+	subspaceRef.current = subspace;
+	const patchList = React.useCallback((key: SubspaceReportStatus, patch: (prev: ReportList) => Partial<ReportList>) => {
+		setLists((prev) => ({ ...prev, [key]: { ...prev[key], ...patch(prev[key]) } }));
+	}, []);
 
+	// request sequencing: a page applies only when no later request for the
+	// same list was issued (a reload outruns a stale load-more and vice versa),
+	// and the server's count only moves forward in issue order
+	const seqRef = React.useRef(0);
+	const latestSeqRef = React.useRef<Record<SubspaceReportStatus, number>>({ open: 0, resolved: 0 });
+	const countSeqRef = React.useRef(0);
 	const load = React.useCallback(
-		async (cursor?: string | null) => {
-			setLoading(true);
+		async (key: SubspaceReportStatus, cursor?: string | null) => {
+			const seq = ++seqRef.current;
+			latestSeqRef.current[key] = seq;
+			patchList(key, () => ({ loading: true }));
 			try {
-				const resp = (await api.v1.subspaces.reports({ slug, status, cursor: cursor || undefined, limit: 20 })) as SubspaceReportsResponse;
-				setGroups((prev) => (cursor ? [...prev, ...resp.reports.filter((entry) => !prev.some((known) => known.postId === entry.postId))] : resp.reports));
-				setNextCursor(resp.nextCursor ?? null);
+				const resp = (await api.v1.subspaces.reports({ slug, status: key, cursor: cursor || undefined, limit: 20 })) as SubspaceReportsResponse;
+				if (seq < latestSeqRef.current[key]) return; // a newer request owns this list now
+				patchList(key, (prev) => ({
+					groups: cursor ? [...prev.groups, ...resp.reports.filter((entry) => !prev.groups.some((known) => known.postId === entry.postId))] : resp.reports,
+					nextCursor: resp.nextCursor ?? null,
+					loaded: true,
+					loading: false
+				}));
 				// the server's count is the truth for the badges
-				onCountsRef.current({ openReportCount: resp.openReportCount });
+				if (seq > countSeqRef.current) {
+					countSeqRef.current = seq;
+					onCountsRef.current({ openReportCount: resp.openReportCount });
+				}
 			} catch (err: any) {
+				if (seq < latestSeqRef.current[key]) return;
+				patchList(key, () => ({ loading: false }));
 				lopu({ title: err?.error || 'Could not load the reports 😞', status: 'error' });
-			} finally {
-				setLoading(false);
 			}
 		},
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[slug, status]
+		[slug, patchList]
+	);
+	const loadRef = React.useRef(load);
+	loadRef.current = load;
+	React.useEffect(() => {
+		load(status);
+	}, [load, status]);
+
+	// a card's own optimistic changes (reactions, the ··· menu) land in place.
+	// When the card's own Remove / Approve settled the open reports server-side
+	// (the re-projection reads reportCount 0) the group leaves the open list;
+	// the follow-up (badge, server reconcile) runs after the commit
+	const settledByCardRef = React.useRef(new Map<string, PublicReportedPost>());
+	const handlePostChanged = React.useCallback(
+		(id: string, next: PostChange) => {
+			setLists((prev) => {
+				const remap = (key: SubspaceReportStatus) =>
+					prev[key].groups.flatMap((group) => {
+						if (group.postId !== id || !group.post) return [group];
+						const resolved = typeof next === 'function' ? next(group.post) : next;
+						if (key === 'open' && reportsSettledByCard(group, resolved)) {
+							settledByCardRef.current.set(group.postId, group);
+							return [];
+						}
+						return [{ ...group, post: resolved }];
+					});
+				return { open: { ...prev.open, groups: remap('open') }, resolved: { ...prev.resolved, groups: remap('resolved') } };
+			});
+		},
+		[]
 	);
 	React.useEffect(() => {
-		load();
-	}, [load]);
+		if (!settledByCardRef.current.size) return;
+		const settled = [...settledByCardRef.current.values()];
+		settledByCardRef.current.clear();
+		const rows = settled.reduce((sum, group) => sum + group.reportCount, 0);
+		onCountsRef.current({ openReportCount: openReportCountWithout(openReportCount(subspaceRef.current), { reportCount: rows }) });
+		loadRef.current('open');
+	}, [lists]);
 
-	// a card's own optimistic changes (reactions, the ··· menu) land in place
-	const handlePostChanged = React.useCallback((id: string, next: PostChange) => {
-		setGroups((prev) =>
-			prev.map((group) => {
-				if (group.postId !== id || !group.post) return group;
-				const resolved = typeof next === 'function' ? next(group.post) : next;
-				return { ...group, post: resolved };
-			})
-		);
-	}, []);
-
-	// optimistic: the group leaves and the badge drops now; on failure both come back
+	// optimistic: the group leaves and the badge drops by its ROWS now; on
+	// failure both come back (the count the caller saw before it went)
 	const takeOut = (group: PublicReportedPost) => {
-		setGroups((prev) => prev.filter((entry) => entry.postId !== group.postId));
-		onCounts({ openReportCount: Math.max(0, (subspace.openReportCount || 0) - 1) });
+		patchList('open', (prev) => ({ groups: prev.groups.filter((entry) => entry.postId !== group.postId) }));
+		onCounts({ openReportCount: openReportCountWithout(openReportCount(subspace), group) });
 	};
-	const putBack = (group: PublicReportedPost) => {
-		setGroups((prev) => (prev.some((entry) => entry.postId === group.postId) ? prev : [group, ...prev]));
-		onCounts({ openReportCount: subspace.openReportCount || 0 });
+	const putBack = (group: PublicReportedPost, countBefore: number) => {
+		patchList('open', (prev) => ({ groups: prev.groups.some((entry) => entry.postId === group.postId) ? prev.groups : [group, ...prev.groups] }));
+		onCounts({ openReportCount: countBefore });
 	};
 
 	const dismiss = async (group: PublicReportedPost) => {
 		if (busyId) return;
 		setBusyId(group.postId);
+		const countBefore = openReportCount(subspace);
 		takeOut(group);
 		try {
 			const resp = (await api.v1.subspaces.dismissReports({ postId: group.postId, slug })) as SubspaceDismissReportsResponse;
@@ -1523,10 +1580,10 @@ const ReportsPanel = ({ subspace, onCounts }: { subspace: PublicSubspace; onCoun
 			if (err?.status === 404) {
 				// settled meanwhile (another mod, or a removal) — the queue just needs a fresh read
 				lopu({ title: 'Those reports were already settled — refreshing the queue', status: 'info', duration: 4000 });
-				load();
+				load('open');
 				return;
 			}
-			putBack(group);
+			putBack(group, countBefore);
 			lopu({ title: err?.error || 'Could not dismiss those reports 😞', status: 'error' });
 		} finally {
 			setBusyId(null);
@@ -1535,8 +1592,11 @@ const ReportsPanel = ({ subspace, onCounts }: { subspace: PublicSubspace; onCoun
 
 	// Remove 🧹 through the RemoveModal: moderate(remove) settles the reports
 	// server-side; [+ lock] [+ ban] follow like the card menu's flow. A refused
-	// REMOVE puts the group back and keeps the modal open (it rejects).
+	// REMOVE puts the group back and keeps the modal open (it rejects); a
+	// successful one reconciles the list + the badge from the server (the
+	// moderate response carries no openReportCount)
 	const removeReported = async (group: PublicReportedPost, choice: RemoveChoice) => {
+		const countBefore = openReportCount(subspace);
 		takeOut(group);
 		let latest: PublicPost | null = null;
 		try {
@@ -1549,10 +1609,11 @@ const ReportsPanel = ({ subspace, onCounts }: { subspace: PublicSubspace; onCoun
 			});
 			latest = resp?.post || null;
 		} catch (err: any) {
-			putBack(group);
+			putBack(group, countBefore);
 			lopu({ title: err?.error || 'Could not remove that post 😞', status: 'error' });
 			throw err;
 		}
+		void load('open');
 		const followUps: string[] = [];
 		if (choice.lock && !latest?.subspaceMod?.locked) {
 			try {
@@ -1574,9 +1635,13 @@ const ReportsPanel = ({ subspace, onCounts }: { subspace: PublicSubspace; onCoun
 		lopu({ title: `Removed 🧹 — ${group.reportCount} report${group.reportCount === 1 ? '' : 's'} settled${followUps.length ? ` · ${followUps.join(' · ')}` : ''}`, description: latest?.subspaceMod?.reason || undefined, status: 'success', duration: 5000 });
 	};
 
-	const empty = !loading && groups.length === 0;
+	const groups = list.groups;
+	// a cold start with nothing known shows the placeholder; a known list
+	// (even an empty one) stays painted through a background reload
+	const coldLoading = list.loading && !list.loaded && groups.length === 0;
+	const empty = list.loaded && groups.length === 0;
 	return (
-		<Flex flexDirection="column" rowGap={3} data-testid="mod-reports">
+		<Flex flexDirection="column" rowGap={3} data-testid="mod-reports" data-status={status}>
 			<Flex alignItems="center" columnGap={2} flexWrap="wrap" rowGap={2}>
 				<Text fontSize="sm" color={TEXT} flex="1" minWidth="200px">
 					{status === 'open' ? 'Posts your members flagged, newest activity first — remove them or dismiss the reports.' : 'Reports that were settled — by a removal, an approval or a dismissal.'}
@@ -1589,7 +1654,7 @@ const ReportsPanel = ({ subspace, onCounts }: { subspace: PublicSubspace; onCoun
 					))}
 				</Flex>
 			</Flex>
-			{loading && groups.length === 0 && (
+			{coldLoading && (
 				<Text fontSize="sm" color={MUTED}>
 					Loading…
 				</Text>
@@ -1624,7 +1689,7 @@ const ReportsPanel = ({ subspace, onCounts }: { subspace: PublicSubspace; onCoun
 								</Text>
 							))}
 							<Text fontSize="xs" color={MUTED} marginLeft="auto">
-								{status === 'open' ? `latest ${timeAgo(group.latestAt)}` : RESOLUTION_LABEL[group.resolution || ''] || 'Settled'}
+								{group.status === 'open' ? `latest ${timeAgo(group.latestAt)}` : RESOLUTION_LABEL[group.resolution || ''] || 'Settled'}
 							</Text>
 						</Flex>
 						<Flex flexDirection="column" rowGap={1}>
@@ -1655,7 +1720,7 @@ const ReportsPanel = ({ subspace, onCounts }: { subspace: PublicSubspace; onCoun
 								</Text>
 							)}
 						</Flex>
-						{status === 'open' && (
+						{status === 'open' && group.status === 'open' && (
 							<Flex columnGap={2} flexWrap="wrap" rowGap={1}>
 								{group.post && !group.post.subspaceMod?.removed && (
 									<Button size="xs" colorScheme="red" borderRadius="999px" isDisabled={busyId === group.postId} onClick={() => setRemoveTarget(group)} data-testid="report-remove">
@@ -1670,8 +1735,8 @@ const ReportsPanel = ({ subspace, onCounts }: { subspace: PublicSubspace; onCoun
 					</Card>
 				</Flex>
 			))}
-			{nextCursor && (
-				<Button size="sm" variant="outline" borderRadius={RADIUS_MD} alignSelf="center" onClick={() => load(nextCursor)}>
+			{list.nextCursor && (
+				<Button size="sm" variant="outline" borderRadius={RADIUS_MD} alignSelf="center" onClick={() => load(status, list.nextCursor)}>
 					Load more ⬇️
 				</Button>
 			)}

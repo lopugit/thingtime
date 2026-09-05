@@ -8968,6 +8968,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'subspaces-report',
+    // 1.0.1 (S5 review): a post the moderators already removed answers 409
+    // (no row, no bell — the mods can't act on it again); a repeat after the
+    // post MOVED to another subspace re-files the row there (targetId follows
+    // the post) and rings the new subspace's mods; deleting a reported
+    // comment deletes the rows that flagged it — compatible corrections
+    featureVersion: '1.0.1',
+    contractVersion: '1.0.1',
     group: 'subspaces',
     title: 'Report a post to the moderators',
     endpoint: '/api/v1/subspaces/report',
@@ -8975,19 +8982,24 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     detail:
       'POST { id (a post or comment shareId), reason (≤120 — a rule title, a removal-reason id, or free text), note? (≤500) }. ' +
       'Any logged-in viewer who can SEE the target may report it (an invisible or unknown id answers 404, never ' +
-      'disclosing existence); a user banned in the subspace answers 403; a post outside any subspace 400. A ' +
-      'comment resolves to its ROOT post: the report hangs off the post (commentId remembers which comment). One ' +
-      'report per (post, reporter) — a repeat by the same reporter updates the reason / note on their row (and ' +
-      're-opens it when the mods had settled it) and answers { updated: true }. Every new or re-opened report ' +
-      'notifies the subspace’s active owner + moderators (subspace-report; preview "s/<slug> · <reason>", postId = ' +
-      'the post so the bell opens /post/<id>; deduped against each moderator’s unread bell, so one reporter cannot ' +
-      'ring the mods twice about one post). Reports are subspace-report things (targetId = the subspace, ownerId = ' +
-      'the reporter, control-plane storage) that the moderators’ Reports queue (GET /api/v1/subspaces/reports) ' +
-      'groups by post; moderate remove / approve settles them (resolution removed / approved), POST ' +
-      '/api/v1/subspaces/reports dismisses them. Rate-limited per user (subspaces.report, 30 / min).',
+      'disclosing existence — a private subspace’s posts and comments are invisible to strangers, pending ' +
+      'requesters and banned members alike); a user banned in a public subspace answers 403; a post outside any ' +
+      'subspace 400; a post the moderators already removed 409 (no row, no bell — there is nothing left for the ' +
+      'mods to do). A comment resolves to its ROOT post: the report hangs off the post (commentId remembers which ' +
+      'comment). One report per (post, reporter) — a repeat by the same reporter updates the reason / note on ' +
+      'their row (and re-opens it when the mods had settled it) and answers { updated: true }; when the post moved ' +
+      'to another subspace since, the repeat re-files the row THERE (its subspaceId follows the post) and counts as ' +
+      'new for that subspace’s mods. Every new or re-opened report notifies the subspace’s active owner + moderators ' +
+      '(subspace-report; preview "s/<slug> · <reason>", postId = the post so the bell opens /post/<id>; deduped ' +
+      'against each moderator’s unread bell, so one reporter cannot ring the mods twice about one post). Reports ' +
+      'are subspace-report things (targetId = the subspace, ownerId = the reporter, control-plane storage; the ' +
+      'reporter alone can read their own row through GET /api/v1/things?id=) that the moderators’ Reports queue ' +
+      '(GET /api/v1/subspaces/reports) groups by post; moderate remove / approve settles them (resolution removed ' +
+      '/ approved), POST /api/v1/subspaces/reports dismisses them; deleting the post deletes them, deleting a ' +
+      'reported comment deletes the rows that flagged it. Rate-limited per user (subspaces.report, 30 / min).',
     auth: { mode: 'session-or-bearer', description: 'Requires a logged-in viewer who can see the post; banned users are refused.' },
     methods: ['POST'],
-    steps: ['POST the post (or comment) id with a reason.', 'A 200 with updated: true means you had already reported it — your reason was refreshed.'],
+    steps: ['POST the post (or comment) id with a reason.', 'A 200 with updated: true means you had already reported it — your reason was refreshed.', 'A 409 means the moderators already removed it — nothing more to report.'],
     requestExamples: [
       { name: 'Report a post', description: 'Cite a rule.', method: 'POST', body: { id: '4f6b2c1e-…', reason: 'Rule 2: No spam', note: 'Third ad from this account this week' } },
       { name: 'Report a comment', description: 'The report lands on the root post; commentId names the comment.', method: 'POST', body: { id: '9a1c-comment-…', reason: 'Harassment' } }
@@ -8997,11 +9009,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       { status: 200, description: 'Reported again — the existing row was refreshed.', body: { ok: true, updated: true, report: { id: 'r3p0…', postId: '4f6b2c1e-…', reason: 'Spam, again', status: 'open' } } },
       { status: 400, description: 'Not a subspace post.', body: { ok: false, error: 'Only posts in a subspace can be reported to its moderators 🚩' } },
       { status: 403, description: 'Banned in the subspace.', body: { ok: false, error: 'You are banned from s/rainbows 🚫' } },
-      { status: 404, description: 'Unknown or invisible.', body: { ok: false, error: 'Post not found' } }
+      { status: 404, description: 'Unknown or invisible.', body: { ok: false, error: 'Post not found' } },
+      { status: 409, description: 'The moderators already removed it.', body: { ok: false, error: 'That post was already removed by the moderators 🧹' } }
     ]
   }),
   endpoint({
     id: 'subspaces-reports',
+    // 1.0.1 (S5 review): a dismiss without id | slug resolves the queue from
+    // the open rows' own targetId first (a post that moved after it was
+    // reported keeps its rows dismissable in the old subspace), the post's
+    // current subspace only when open rows sit there — a compatible correction
+    featureVersion: '1.0.1',
+    contractVersion: '1.0.1',
     group: 'subspaces',
     title: 'Reports queue',
     endpoint: '/api/v1/subspaces/reports',
@@ -9016,8 +9035,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'ranked-feed pattern — deterministic for a fixed dataset). ' +
       'POST { postId, action: "dismiss", id|slug? } settles every OPEN report on the post with resolution dismissed ' +
       '(the post stays), writes a report.dismiss mod-log entry (detail.count) and answers { dismissed, openReportCount }; ' +
-      'nothing open → 404. The subspace is the post’s; when the post is gone the reports’ own targetId names it, and an ' +
-      'explicit id | slug in the body wins over both. moderate remove / approve settle open reports implicitly.',
+      'nothing open → 404. Without id | slug the queue is the one the OPEN rows sit in (their own targetId — a post that ' +
+      'moved to another subspace after it was reported leaves its rows dismissable in the old one, listed there with ' +
+      'post null); the post’s current subspace decides when open rows sit there (or none exist anywhere, so a ' +
+      'non-moderator still meets the 403 wall); an explicit id | slug in the body wins over both. moderate remove / ' +
+      'approve settle open reports implicitly.',
     auth: { mode: 'session-or-bearer', description: 'Requires a moderator of the subspace.' },
     methods: ['GET', 'POST'],
     steps: ['GET the open queue (status defaults to open).', 'Remove / approve the post through /moderate, or POST a dismiss when it may stay.', 'Feed nextCursor back until it is null.'],

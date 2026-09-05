@@ -103,6 +103,7 @@ import {
 	sanitizeTopRange,
 	sanitizeUserFlairs,
 	slugHoldState,
+	pickReportQueueSubspace,
 	tallyReportReasons,
 	topRangeSince,
 	toPublicUserFlair,
@@ -1792,11 +1793,19 @@ export const reportPost = async (viewerInput: string | Viewer, input: ReportPost
 	const slug = String(subspace.crystal?.slug || subspaceId);
 	const membership = viewer.subspaceRoles?.get(subspaceId) || (await membershipOf(subspaceId, viewer.id));
 	if (membership?.banned) return fail(403, `You are banned from s/${slug} 🚫`);
+	// a post the moderators have already taken down is not reportable: the
+	// mods can't act on it again (only Dismiss would be left in the queue) and
+	// every fresh row would re-ring the whole mod team about content that is
+	// already off the feeds — an unbounded nuisance loop. The redacted
+	// placeholder card is visible to everyone, so a 409 discloses nothing new.
+	if (root.subspaceMod?.status === 'removed') return fail(409, 'That post was already removed by the moderators 🧹');
 	const postId = String(root.shareId);
 	const commentId = String(target.shareId) !== postId ? String(target.shareId) : null;
 	const now = new Date();
 	const keyFilter = { thingtime: 'subspace-report', ...thingUniqueKeyFilter(SUBSPACE_REPORT_KEY_FIELD, subspaceReportKeyOf(postId, viewer.id)) };
-	const reopenSet = { 'crystal.reason': reason, 'crystal.note': note, 'crystal.commentId': commentId, 'crystal.status': 'open', 'crystal.resolution': null, 'crystal.resolvedById': null, 'crystal.resolvedAt': null, updatedAt: now };
+	// targetId rides along so a repeat files in the subspace the post lives in
+	// NOW — the row is keyed on (post, reporter), and a post can move
+	const reopenSet = { targetId: subspaceId, 'crystal.reason': reason, 'crystal.note': note, 'crystal.commentId': commentId, 'crystal.status': 'open', 'crystal.resolution': null, 'crystal.resolvedById': null, 'crystal.resolvedAt': null, updatedAt: now };
 	const existing = await things.findOne(keyFilter as any);
 	let updated = false;
 	// a brand-new or re-opened report rings the mods; a repeat on an open row
@@ -1804,7 +1813,9 @@ export const reportPost = async (viewerInput: string | Viewer, input: ReportPost
 	let rings = false;
 	if (existing) {
 		updated = true;
-		const reopened = existing.crystal?.status !== 'open';
+		// settled by the mods, or filed in a subspace the post has since left
+		// (its new mods have not heard about it) — both count as a fresh report
+		const reopened = existing.crystal?.status !== 'open' || String(existing.targetId) !== subspaceId;
 		rings = reopened;
 		// a re-opened row restarts its clock so the queue lists it as new
 		await things.updateOne({ _id: existing._id } as any, { $set: { ...reopenSet, ...(reopened ? { createdAt: now } : {}) } });
@@ -1936,9 +1947,10 @@ export type MutateReportsResult = { ok: true; postId: string; dismissed: number;
 
 // POST /reports { postId, action: 'dismiss' } — the mods looked and the post
 // stays: every open report on it is settled with resolution dismissed (mod
-// log report.dismiss). The subspace is the post's; when the post is gone (or
-// left the subspace) the reports' own targetId names it, and an explicit
-// id | slug in the body wins over both.
+// log report.dismiss). The queue the reports sit in is THEIR targetId (a post
+// that moved after it was reported leaves its open rows in the old subspace,
+// dismissable from there); the post's current subspace decides when it has
+// open rows itself, and an explicit id | slug in the body wins over both.
 export const mutateReports = async (viewerInput: string | Viewer, input: MutateReportsInput): Promise<Fail | MutateReportsResult> => {
 	const auth = requireViewer(viewerInput);
 	if (auth.ok === false) return auth;
@@ -1953,12 +1965,12 @@ export const mutateReports = async (viewerInput: string | Viewer, input: MutateR
 		if (found.ok === false) return found;
 		subspaceId = String(found.subspace.shareId);
 	} else {
+		// the open rows name their own queue; the post's current subspace is
+		// the fallback so a non-moderator still meets the 403 wall and a
+		// moderator the 404 when nothing is open anywhere
 		const post = (await things.findOne(withMatch(postThingMatch(), { shareId: postId }) as any)) as any;
-		subspaceId = subspaceIdOfDoc(post);
-		if (!subspaceId) {
-			const orphan = (await things.findOne({ ...OPEN_REPORT_MATCH, 'crystal.postId': postId } as any, { projection: { targetId: 1 } })) as any;
-			subspaceId = orphan?.targetId ? String(orphan.targetId) : null;
-		}
+		const openTargets = ((await things.distinct('targetId', { ...OPEN_REPORT_MATCH, 'crystal.postId': postId } as any)) as unknown[]).map(String);
+		subspaceId = pickReportQueueSubspace(subspaceIdOfDoc(post), openTargets);
 	}
 	if (!subspaceId) return fail(404, 'No open reports on that post');
 	const gate = await requireModerator(subspaceId, actorId);

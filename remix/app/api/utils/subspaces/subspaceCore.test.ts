@@ -7,6 +7,7 @@ import {
 	confirmSlugMatches,
 	isActiveMembershipState,
 	liveUserFlair,
+	pickReportQueueSubspace,
 	privatizedPostUpdate,
 	requestKindOf,
 	rankSubspacePosts,
@@ -474,4 +475,18 @@ test('tallyReportReasons counts reasons most-cited first, ties alphabetical, bla
 			{ reason: 'Abuse', count: 1 }
 		]
 	);
+});
+
+// S5 review: a dismiss without id | slug follows the OPEN rows' own targetId —
+// a post that moved after it was reported keeps its rows dismissable in the
+// old queue; the post's current subspace decides only when open rows sit
+// there, or when none exist anywhere (so the moderator gate still answers)
+test('pickReportQueueSubspace prefers the post’s current subspace when open rows sit there, else the queue that holds them, else the post’s', () => {
+	assert.equal(pickReportQueueSubspace('b', ['a', 'b']), 'b');
+	assert.equal(pickReportQueueSubspace('b', ['a']), 'a');
+	assert.equal(pickReportQueueSubspace(null, ['a']), 'a');
+	assert.equal(pickReportQueueSubspace('b', []), 'b');
+	assert.equal(pickReportQueueSubspace(null, []), null);
+	// deterministic across two old queues (lowest-sorted wins), blanks dropped
+	assert.equal(pickReportQueueSubspace('z', ['q', 'c', '', 'c']), 'c');
 });

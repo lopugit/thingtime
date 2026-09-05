@@ -1798,15 +1798,18 @@ const subspaceReportSchema: ThingtimeSchema = {
   title: 'Subspace report',
   summary: 'One viewer’s report of a post to a subspace’s moderators (relational row; the Reports queue groups them by post).',
   detail:
-    'targetId = the subspace shareId, ownerId = the reporter, acl ["tt:user"] (only the dedicated moderator ' +
-    'endpoints read it). One row per (post, reporter) — uniqueness rides the root uniqueKeys namespace ' +
-    '(`subspaceReportKey:<postId>:<reporterId>`): reporting the same post again updates the reason / note (and ' +
-    're-opens a resolved row). Reports of a COMMENT resolve to the root post (postId = the post; commentId keeps ' +
-    'which comment was flagged). status open → resolved with a resolution: removed / approved (a moderator’s ' +
-    '`moderate` remove / approve settles every open report on the post) or dismissed (POST ' +
-    '/api/v1/subspaces/reports { postId, action: "dismiss" }). Control-plane storage — never billable content. ' +
-    'Written only by POST /api/v1/subspaces/report and settled by /moderate and /reports; deleted with the ' +
-    'subspace and with the post.',
+    'targetId = the subspace the report sits in (the post’s subspace when it was filed — a repeat re-files a row ' +
+    'in the subspace the post lives in now), ownerId = the reporter, acl ["tt:user"] — the OWNER acl: the ' +
+    'reporter can read their own row through the generic single read, every other viewer gets 404; the ' +
+    'moderators read the collection through the dedicated /reports endpoint, never through canView. One row per ' +
+    '(post, reporter) — uniqueness rides the root uniqueKeys namespace (`subspaceReportKey:<postId>:<reporterId>`): ' +
+    'reporting the same post again updates the reason / note (and re-opens a resolved row). Reports of a COMMENT ' +
+    'resolve to the root post (postId = the post; commentId keeps which comment was flagged). A post the ' +
+    'moderators already removed takes no new report (409). status open → resolved with a resolution: removed / ' +
+    'approved (a moderator’s `moderate` remove / approve settles every open report on the post) or dismissed ' +
+    '(POST /api/v1/subspaces/reports { postId, action: "dismiss" }). Control-plane storage — never billable ' +
+    'content. Written only by POST /api/v1/subspaces/report and settled by /moderate and /reports; deleted with ' +
+    'the subspace, with the post, and (the rows that flagged it) with a deleted comment.',
   createdVia: 'POST /api/v1/subspaces/report',
   fields: [
     { name: 'postId', type: 'id', required: true, description: 'The reported (root) post’s shareId.' },

@@ -67,6 +67,16 @@ export const openReportCount = (subspace: Pick<PublicSubspace, 'openReportCount'
 // everything waiting for a moderator — requests + reports (the badge on Mod tools 🎩)
 export const modQueueCount = (subspace: Pick<PublicSubspace, 'pendingCount' | 'approvalRequestCount' | 'openReportCount'> | null | undefined): number =>
 	openRequestCount(subspace) + openReportCount(subspace);
+// The open-report badge after a queue group leaves (or comes back): the count
+// is report ROWS, a group carries reportCount of them — never "one per group".
+export const openReportCountWithout = (count: number, group: { reportCount: number }): number => Math.max(0, (count || 0) - Math.max(0, group.reportCount || 0));
+// Did a card's OWN action inside the queue settle its open reports? Only the
+// server's re-projection after a moderator's remove / approve reads
+// subspaceMod.reportCount 0 on a post that had open rows (mods always get the
+// key; the card's optimistic paints spread the previous value or omit it), so
+// the group can leave the open list and the badge follow without a guess.
+export const reportsSettledByCard = (group: { status: SubspaceReportStatus; reportCount: number }, next: { subspaceMod?: { reportCount?: number } | null } | null | undefined): boolean =>
+	group.status === 'open' && group.reportCount > 0 && next?.subspaceMod?.reportCount === 0;
 
 // --- reports (POST /api/v1/subspaces/report, GET+POST /api/v1/subspaces/reports)
 export type SubspaceReportStatus = 'open' | 'resolved';

@@ -1385,8 +1385,9 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   const canModerate = !!post.subspaceMod?.viewerCanModerate;
   // Report to moderators 🚩: logged-in viewers who are neither the author nor
   // a moderator, on a subspace post (mods remove instead; media cards defer
-  // to their parent post)
-  const canReport = !!user && !isOwner && !canModerate && !!post.subspace && !mediaThing;
+  // to their parent post). A post the mods already removed offers no 🚩 —
+  // the server answers 409 there (nothing left for the mods to do)
+  const canReport = !!user && !isOwner && !canModerate && !!post.subspace && !mediaThing && !post.subspaceMod?.removed;
   const [reportOpen, setReportOpen] = React.useState(false);
   const handleReport = async (choice: ReportChoice) => {
     lopu(REPORTED_TOAST);
@@ -1396,10 +1397,12 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
       lopu({ title: err?.error || 'The report did not go through 😞', status: 'error' });
     }
   };
-  // the comment rows' 🚩 context (null outside subspaces)
+  // the comment rows' 🚩 context (null outside subspaces, and under a post
+  // the mods already removed — a comment report lands on the root post)
+  const rootRemoved = post.subspaceMod?.removed === true;
   const subspaceReportContext = React.useMemo(
-    () => (post.subspace ? { subspaceId: post.subspace.id, subspaceSlug: post.subspace.slug, viewerCanModerate: canModerate } : null),
-    [post.subspace, canModerate]
+    () => (post.subspace && !rootRemoved ? { subspaceId: post.subspace.id, subspaceSlug: post.subspace.slug, viewerCanModerate: canModerate } : null),
+    [post.subspace, rootRemoved, canModerate]
   );
   const [subspacePrefs] = useSubspacePrefs();
   const showVotes = subspacePrefs.showVotes;

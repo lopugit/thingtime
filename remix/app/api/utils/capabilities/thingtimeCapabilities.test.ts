@@ -31,9 +31,16 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   for (const feature of ['api.things', 'api.things-comment', 'api.things-feed', 'api.things-user']) {
     assert.equal(manifest.features[feature]?.version, '1.4.0', feature);
   }
-  // S5: the report endpoint + the mods' Reports queue are new contracts
-  for (const feature of ['api.subspaces-modlog', 'api.things-updown', 'api.subspaces-report', 'api.subspaces-reports']) {
+  for (const feature of ['api.subspaces-modlog', 'api.things-updown']) {
     assert.equal(manifest.features[feature]?.version, '1.0.0', feature);
+  }
+  // S5: the report endpoint + the mods' Reports queue are new contracts;
+  // S5 review moved both to 1.0.1 — a removed post takes no report (409), a
+  // repeat after a move re-files in the new subspace, a deleted comment
+  // takes its report rows; dismiss without a slug follows the open rows'
+  // own targetId (compatible corrections)
+  for (const feature of ['api.subspaces-report', 'api.subspaces-reports']) {
+    assert.equal(manifest.features[feature]?.version, '1.0.1', feature);
   }
   // S3 review: moderate's re-projected post carries authorFlair (1.1.0, additive)
   // round 2 S4 — removal reasons: remove takes reasonId (a canned reason →

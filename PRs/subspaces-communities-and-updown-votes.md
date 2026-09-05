@@ -397,6 +397,33 @@ score field.
   reports (`resolvedReports`), a foreign-subspace dismiss 404, the author's
   delete clearing the reports, the generic-things wall, docs routes and
   the manifest.
+- S5 review fixes (same branch): `reportPost` refuses a post the mods
+  already removed (409 "already removed by the moderators" — no row
+  re-opened, no bell; the redacted card is public so nothing is disclosed)
+  and PostCard hides the 🚩 on such a card and on its comment rows
+  (`SubspaceReportContext` null); a repeat report carries
+  `targetId: subspaceId` and counts as re-opened when the post MOVED, so it
+  re-files in the new subspace and rings its mods; `mutateReports` without
+  `id | slug` resolves the queue from the open rows' own `targetId`
+  (`pickReportQueueSubspace`, pure + unit-tested: the post's current
+  subspace only when open rows sit there) so a moved post's old rows stay
+  dismissable as the docs promised; `deleteThing` clears the rows that
+  flagged a deleted COMMENT (and its cascaded replies — `commentId $in`,
+  `clearSubspaceReportsFor`), not only a deleted post's; the registry text
+  no longer claims "only the moderator endpoints read it" — `tt:user` is
+  the OWNER acl, so the reporter can read their own row through the
+  generic single read and nobody else can (verified live, pinned in
+  section Q). Reports tab: `takeOut` / `putBack` move the badge by the
+  group's `reportCount` (rows, not groups — `openReportCountWithout`),
+  Remove 🧹 reconciles the list + count from the server (`moderate`
+  answers no `openReportCount`), a removal / approval through the card's
+  own ··· menu drops the group (`reportsSettledByCard`: the server's
+  re-projection reads `reportCount 0`) and reconciles, and the panel keeps
+  the Open and Resolved lists side by side with per-list request
+  sequencing — flipping paints the known list at once and a slow response
+  can never land under the other heading (`data-status` on
+  `mod-reports`). Contracts: `subspaces-report` + `subspaces-reports`
+  1.0.1 (compatible corrections) in the docs and both pin files.
 - Browser: see the run log in the PR description / TESTING.md checklists.
 
 ## Known limits (stated, not hidden)

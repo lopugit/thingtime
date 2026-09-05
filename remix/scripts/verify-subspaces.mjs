@@ -1468,6 +1468,58 @@ const run = async () => {
 	check('report of a post the reporter cannot see → 404 (never 400 — existence is not disclosed)', rpInvisible.status === 404, `${rpInvisible.status} ${JSON.stringify(rpInvisible.body)}`);
 	const rpOutside = await rpReport(stranger.cookie, { id: outsidePost.body.post.id, reason: 'Spam' });
 	check('report of a visible post outside any subspace → 400', rpOutside.status === 400, `${rpOutside.status} ${JSON.stringify(rpOutside.body)}`);
+
+	// S5 review — the PRIVATE-subspace fence on /report: a stranger, a pending
+	// requester and a banned member can't SEE a private post, so the post and
+	// a comment under it both answer 404 (existence never disclosed); an
+	// active member may report either. The report row itself is the
+	// reporter's own private thing (owner acl).
+	const rppSlug = `rpp_${suffix}`.slice(0, 30);
+	const foundedRPP = await api('/api/v1/subspaces', { method: 'POST', cookie: owner.cookie, body: { slug: rppSlug, name: 'Private Report Park', access: 'private', rules: [{ title: 'Be kind' }] } });
+	const rppSpace = foundedRPP.body?.subspace;
+	const rppMembers = (cookie, body) => api('/api/v1/subspaces/members', { method: 'POST', cookie, body: { slug: rppSlug, ...body } });
+	const rppJoin = (cookie) => api('/api/v1/subspaces/join', { method: 'POST', cookie, body: { slug: rppSlug } });
+	await rppJoin(member.cookie);
+	const rppAcceptMember = await rppMembers(owner.cookie, { userId: member.id, action: 'accept' });
+	const rppPosted = await api('/api/v1/things', { method: 'POST', cookie: member.cookie, body: { type: 'text', text: 'members only', title: 'Private post', subspaceId: rppSpace?.id } });
+	const rppPost = rppPosted.body?.post;
+	const rppCommented = await api('/api/v1/things/comment', { method: 'POST', cookie: owner.cookie, body: { id: rppPost?.id, text: 'quiet in here' } });
+	const rppComment = rppCommented.body?.comment;
+	check('(setup) a private subspace with an accepted member, their post and a comment under it', foundedRPP.status === 201 && rppAcceptMember.status === 200 && rppPosted.status === 200 && !!rppPost?.id && rppCommented.status === 200 && !!rppComment?.id, `${foundedRPP.status}/${rppAcceptMember.status}/${rppPosted.status}/${rppCommented.status}`);
+	const rppStrangerPost = await rpReport(stranger.cookie, { id: rppPost.id, reason: 'Spam' });
+	const rppStrangerComment = await rpReport(stranger.cookie, { id: rppComment.id, reason: 'Spam' });
+	check('a stranger reporting a private-subspace post / a comment under it → 404 both (invisible — never 400 or 403)', rppStrangerPost.status === 404 && rppStrangerComment.status === 404, `${rppStrangerPost.status}/${rppStrangerComment.status} ${JSON.stringify(rppStrangerPost.body)}`);
+	const rppRequest = await rppJoin(stranger.cookie);
+	const rppPendingPost = await rpReport(stranger.cookie, { id: rppPost.id, reason: 'Spam' });
+	const rppPendingComment = await rpReport(stranger.cookie, { id: rppComment.id, reason: 'Spam' });
+	const rppCancel = await api('/api/v1/subspaces/leave', { method: 'POST', cookie: stranger.cookie, body: { slug: rppSlug } });
+	check('a pending requester is no member either: post / comment report → 404 (the request is cancelled after)', rppRequest.status === 200 && rppRequest.body.pending === true && rppPendingPost.status === 404 && rppPendingComment.status === 404 && rppCancel.status === 200, `${rppRequest.status}/${rppPendingPost.status}/${rppPendingComment.status}/${rppCancel.status}`);
+	await rppJoin(mod.cookie);
+	const rppAcceptMod = await rppMembers(owner.cookie, { userId: mod.id, action: 'accept' });
+	const rppBanMod = await rppMembers(owner.cookie, { userId: mod.id, action: 'ban', reason: 'timeout' });
+	const rppBannedPost = await rpReport(mod.cookie, { id: rppPost.id, reason: 'Spam' });
+	const rppBannedComment = await rpReport(mod.cookie, { id: rppComment.id, reason: 'Spam' });
+	const rppUnbanMod = await rppMembers(owner.cookie, { userId: mod.id, action: 'unban' });
+	check('a member banned in a PRIVATE subspace → 404 for the post and the comment (invisible to them — unlike the public 403)', rppAcceptMod.status === 200 && rppBanMod.status === 200 && rppBannedPost.status === 404 && rppBannedComment.status === 404 && rppUnbanMod.status === 200, `${rppAcceptMod.status}/${rppBanMod.status}/${rppBannedPost.status}/${rppBannedComment.status}/${rppUnbanMod.status}`);
+	const rppMemberPost = await rpReport(mod.cookie, { id: rppPost.id, reason: 'Rule 1: Be kind', note: 'seen it' });
+	const rppMemberComment = await rpReport(mod.cookie, { id: rppComment.id, reason: 'Harassment' });
+	const rppQueue = await api(`/api/v1/subspaces/reports?slug=${rppSlug}`, { cookie: owner.cookie });
+	check(
+		'an active member of the private subspace reports the post (200) and then the comment (200, updated — same root post): the owner’s queue lists one group, reportCount 1, the post projected, the row naming the comment',
+		rppMemberPost.status === 200 && rppMemberPost.body.updated === false && rppMemberComment.status === 200 && rppMemberComment.body.updated === true && rppMemberComment.body.report?.commentId === rppComment.id && rppQueue.status === 200 && rppQueue.body.reports?.length === 1 && rppQueue.body.reports[0].reportCount === 1 && rppQueue.body.reports[0].post?.id === rppPost.id && rppQueue.body.reports[0].reporters?.[0]?.commentId === rppComment.id,
+		`${rppMemberPost.status}/${rppMemberComment.status}/${rppQueue.status} ${JSON.stringify([rppMemberComment.body, rppQueue.body?.reports?.[0]?.reporters]).slice(0, 300)}`
+	);
+	const rppRowSelf = await api(`/api/v1/things?id=${rppMemberPost.body.report?.id}`, { cookie: mod.cookie });
+	const rppRowOther = await api(`/api/v1/things?id=${rppMemberPost.body.report?.id}`, { cookie: member.cookie });
+	const rppRowOwner = await api(`/api/v1/things?id=${rppMemberPost.body.report?.id}`, { cookie: owner.cookie });
+	check(
+		'a report row is the reporter’s own private thing (acl tt:user = owner): the generic GET /things?id= answers the reporter 200 and every other user — the subspace owner included — 404',
+		rppRowSelf.status === 200 && rppRowSelf.body.thing?.thingtime?.includes('subspace-report') && rppRowOther.status === 404 && rppRowOwner.status === 404,
+		`${rppRowSelf.status}/${rppRowOther.status}/${rppRowOwner.status}`
+	);
+	const cleanupRPP = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: owner.cookie, body: { slug: rppSlug, confirmSlug: rppSlug } });
+	check('(cleanup) owner deletes the private report subspace', cleanupRPP.status === 200, `${cleanupRPP.status} ${JSON.stringify(cleanupRPP.body).slice(0, 200)}`);
+
 	const rpBanStranger = await rpMembers(mod.cookie, { userId: stranger.id, action: 'ban', reason: 'timeout' });
 	const rpBannedReport = await rpReport(stranger.cookie, { id: rpPost.id, reason: 'Spam' });
 	const rpUnbanStranger = await rpMembers(mod.cookie, { userId: stranger.id, action: 'unban' });
@@ -1585,6 +1637,17 @@ const run = async () => {
 	);
 	const rpRemoveLog = (await rpLog(mod.cookie)).filter((entry) => entry.action === 'post.remove' && entry.postId === rpPost.id);
 	check('the post.remove mod-log entry carries detail.resolvedReports 1', rpRemoveLog.length === 1 && rpRemoveLog[0].detail?.resolvedReports === 1, JSON.stringify(rpRemoveLog.map((entry) => entry.detail)));
+	// S5 review: a post the mods took down is not reportable — 409, no row
+	// re-opened, nobody rings (a comment under it neither)
+	const modReportBellsRemoved = (await reportNotifsOf(mod.cookie, rpPost.id)).length;
+	const rpReportRemoved = await rpReport(owner.cookie, { id: rpPost.id, reason: 'Spam' });
+	const rpReportRemovedComment = await rpReport(stranger.cookie, { id: rpReply.id, reason: 'Spam' });
+	const rpQueueStillEmpty = await rpQueue(mod.cookie);
+	check(
+		'reporting a post the moderators already removed → 409 (a comment under it too): the open queue stays empty (openReportCount 0) and the mods do not ring',
+		rpReportRemoved.status === 409 && rpReportRemovedComment.status === 409 && rpQueueStillEmpty.body?.reports?.length === 0 && rpQueueStillEmpty.body.openReportCount === 0 && (await reportNotifsOf(mod.cookie, rpPost.id)).length === modReportBellsRemoved,
+		`${rpReportRemoved.status}/${rpReportRemovedComment.status} ${JSON.stringify([rpReportRemoved.body, rpQueueStillEmpty.body?.openReportCount])}`
+	);
 	// approve settles them too (resolution approved)
 	const rpApproved = await rpModerate(mod.cookie, { id: rpPost.id, action: 'approve' });
 	const rpReopen2 = await rpReport(stranger.cookie, { id: rpPost.id, reason: 'Spam' });
@@ -1600,6 +1663,64 @@ const run = async () => {
 	const rpReopen3 = await rpReport(stranger.cookie, { id: rpPost.id, reason: 'Spam' });
 	const rpForeignDismiss = await rpDismiss(mod.cookie, { postId: rpPost.id, action: 'dismiss', slug });
 	check('dismiss naming a different subspace than the post’s (slug in the body wins) → 404 there, the report stays open here', rpReopen3.status === 200 && rpForeignDismiss.status === 404 && (await rpQueue(mod.cookie)).body?.openReportCount === 1, `${rpReopen3.status}/${rpForeignDismiss.status} ${JSON.stringify(rpForeignDismiss.body)}`);
+
+	// S5 review — a post that MOVES to another subspace after it was reported:
+	// its open rows stay in the old queue (listed with post null, dismissable
+	// there WITHOUT a slug — the rows' own targetId names the queue), and the
+	// reporter's next report re-files in the new subspace and rings ITS mods.
+	// The move is a PATCH, so a database still waiting for the storage
+	// migration skips the three moved-post checks instead of failing them.
+	const rp2Slug = `rp2_${suffix}`.slice(0, 30);
+	const foundedRP2 = await api('/api/v1/subspaces', { method: 'POST', cookie: owner.cookie, body: { slug: rp2Slug, name: 'Report Park II', access: 'public' } });
+	const rp2Space = foundedRP2.body?.subspace;
+	await api('/api/v1/subspaces/join', { method: 'POST', cookie: member.cookie, body: { slug: rp2Slug } });
+	const rpMovingPosted = await api('/api/v1/things', { method: 'POST', cookie: member.cookie, body: { type: 'text', text: 'wanderer', title: 'Moving post', subspaceId: rpSpace.id } });
+	const rpMoving = rpMovingPosted.body?.post;
+	const rpMovingReport = await rpReport(stranger.cookie, { id: rpMoving?.id, reason: 'Spam' });
+	check('(setup) a second public subspace (owner mods it alone) and a fresh post in the first one, reported once there', foundedRP2.status === 201 && rpMovingPosted.status === 200 && !!rpMoving?.id && rpMovingReport.status === 200 && rpMovingReport.body.report?.subspaceId === rpSpace.id, `${foundedRP2.status}/${rpMovingPosted.status}/${rpMovingReport.status}`);
+	const rpMoved = await api('/api/v1/things', { method: 'PATCH', cookie: member.cookie, body: { id: rpMoving.id, crystal: { subspaceId: rp2Space.id } } });
+	if (isStorageGate(rpMoved)) {
+		checkOrSkip('the author moves the reported post to the second subspace', rpMoved, false);
+		checkOrSkip('dismiss without a slug reaches the moved post’s reports where they sit (the old queue)', rpMoved, false);
+		checkOrSkip('re-reporting the moved post re-files the row in the NEW subspace and rings its mods', rpMoved, false);
+	} else {
+		check('the author moves the reported post to the second subspace', rpMoved.status === 200 && rpMoved.body.post?.subspace?.id === rp2Space.id, `${rpMoved.status} ${JSON.stringify(rpMoved.body).slice(0, 200)}`);
+		const rpOldQueue = await rpQueue(mod.cookie);
+		const rpOldGroup = rpOldQueue.body?.reports?.find((group) => group.postId === rpMoving.id);
+		const rpDismissMoved = await rpDismiss(mod.cookie, { postId: rpMoving.id, action: 'dismiss' });
+		check(
+			'dismiss without a slug reaches the moved post’s reports where they sit: the old queue listed the group with post null, a mod of the OLD subspace only dismisses 1 (no 403 / 404) and the group leaves that queue',
+			!!rpOldGroup && rpOldGroup.post === null && rpOldGroup.reportCount === 1 && rpDismissMoved.status === 200 && rpDismissMoved.body.dismissed === 1 && !(await rpQueue(mod.cookie)).body?.reports?.some((group) => group.postId === rpMoving.id),
+			`${rpDismissMoved.status} ${JSON.stringify([rpOldGroup && { post: rpOldGroup.post, c: rpOldGroup.reportCount }, rpDismissMoved.body])}`
+		);
+		const ownerBellsRP2 = (await reportNotifsOf(owner.cookie, rpMoving.id)).length;
+		const rpReportMoved = await rpReport(stranger.cookie, { id: rpMoving.id, reason: 'Spam again' });
+		const rp2Queue = await api(`/api/v1/subspaces/reports?slug=${rp2Slug}`, { cookie: owner.cookie });
+		check(
+			're-reporting the moved post → 200 updated true: the row now names the NEW subspace, whose queue lists the post (reportCount 1, projected) while the old queue does not, and the new subspace’s mods ring',
+			rpReportMoved.status === 200 && rpReportMoved.body.updated === true && rpReportMoved.body.report?.subspaceId === rp2Space.id && rpReportMoved.body.report.status === 'open' && rp2Queue.status === 200 && rp2Queue.body.reports?.length === 1 && rp2Queue.body.reports[0].postId === rpMoving.id && rp2Queue.body.reports[0].reportCount === 1 && rp2Queue.body.reports[0].post?.id === rpMoving.id && rp2Queue.body.openReportCount === 1 && !(await rpQueue(mod.cookie)).body?.reports?.some((group) => group.postId === rpMoving.id) && (await reportNotifsOf(owner.cookie, rpMoving.id)).length === ownerBellsRP2 + 1,
+			`${rpReportMoved.status} ${JSON.stringify([rpReportMoved.body?.report, rp2Queue.body?.reports?.map((group) => [group.postId, group.reportCount, !!group.post]), rp2Queue.body?.openReportCount])}`
+		);
+	}
+	// the wanderer goes (its rows with it, wherever they sit) before the second subspace does
+	const rpMovingDeleted = await api(`/api/v1/things?id=${rpMoving.id}`, { method: 'DELETE', cookie: member.cookie });
+	const cleanupRP2 = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: owner.cookie, body: { slug: rp2Slug, confirmSlug: rp2Slug } });
+	check('(cleanup) the moving post is deleted and the owner deletes the second subspace; the first queue is back to its one open report', rpMovingDeleted.status === 200 && cleanupRP2.status === 200 && (await rpQueue(mod.cookie)).body?.openReportCount === 1, `${rpMovingDeleted.status}/${cleanupRP2.status} ${JSON.stringify((await rpQueue(mod.cookie)).body?.openReportCount)}`);
+
+	// S5 review — deleting a reported COMMENT takes the rows that flagged it
+	// (the queue must not keep asking the mods about a comment that is gone)
+	const rpFlaggedCommented = await api('/api/v1/things/comment', { method: 'POST', cookie: stranger.cookie, body: { id: rpPost.id, text: 'one more' } });
+	const rpFlaggedComment = rpFlaggedCommented.body?.comment;
+	const rpOwnerFlagsComment = await rpReport(owner.cookie, { id: rpFlaggedComment?.id, reason: 'Rule 1: Be kind' });
+	const rpQueueWithComment = await rpQueue(mod.cookie);
+	const rpCommentDeleted = await api(`/api/v1/things?id=${rpFlaggedComment?.id}`, { method: 'DELETE', cookie: stranger.cookie });
+	const rpQueueAfterCommentDelete = await rpQueue(mod.cookie);
+	const rpGroupAfterCommentDelete = rpQueueAfterCommentDelete.body?.reports?.find((group) => group.postId === rpPost.id);
+	check(
+		'the owner flags a fresh comment (2 open on the post); its author deleting the comment removes THAT row only: reportCount 1, openReportCount 1, no reporter names the comment, the post’s own report stays, and reporting the deleted comment → 404',
+		rpFlaggedCommented.status === 200 && rpOwnerFlagsComment.status === 200 && rpOwnerFlagsComment.body.report?.commentId === rpFlaggedComment.id && rpQueueWithComment.body?.openReportCount === 2 && rpCommentDeleted.status === 200 && rpQueueAfterCommentDelete.body?.openReportCount === 1 && rpGroupAfterCommentDelete?.reportCount === 1 && rpGroupAfterCommentDelete.reporters.length === 1 && rpGroupAfterCommentDelete.reporters[0].userId === stranger.id && rpGroupAfterCommentDelete.reporters.every((reporter) => reporter.commentId !== rpFlaggedComment.id) && (await rpReport(owner.cookie, { id: rpFlaggedComment.id, reason: 'Spam' })).status === 404,
+		`${rpFlaggedCommented.status}/${rpOwnerFlagsComment.status}/${rpCommentDeleted.status} ${JSON.stringify([rpQueueWithComment.body?.openReportCount, rpQueueAfterCommentDelete.body?.openReportCount, rpGroupAfterCommentDelete && { c: rpGroupAfterCommentDelete.reportCount, r: rpGroupAfterCommentDelete.reporters.map((reporter) => [reporter.userId === stranger.id, reporter.commentId]) }])}`
+	);
 
 	// deleting the post takes its reports with it
 	const rpDeleted = await api(`/api/v1/things?id=${rpPost.id}`, { method: 'DELETE', cookie: member.cookie });
@@ -1623,8 +1744,8 @@ const run = async () => {
 	// the manifest
 	const manifestQ = await api('/api/v1/capabilities');
 	check(
-		'capability manifest advertises the S5 contracts (subspaces-report + subspaces-reports 1.0.0; get 1.4.0 — openReportCount; moderate 1.4.0 — report settlement; feed 1.3.0 and things / things-comment / things-feed / things-user 1.3.0 — subspaceMod.reportCount)',
-		manifestQ.status === 200 && manifestQ.body.features['api.subspaces-report'] === '1.0.0' && manifestQ.body.features['api.subspaces-reports'] === '1.0.0' && manifestQ.body.features['api.subspaces-get'] === '1.4.0' && manifestQ.body.features['api.subspaces-moderate'] === '1.4.0' && manifestQ.body.features['api.subspaces-feed'] === '1.3.0' && ['api.things', 'api.things-comment', 'api.things-feed', 'api.things-user'].every((feature) => manifestQ.body.features[feature] === '1.3.0'),
+		'capability manifest advertises the S5 contracts (subspaces-report + subspaces-reports 1.0.1 after the S5 review — a removed post → 409, a repeat after a move re-files, a deleted comment takes its rows, dismiss follows the open rows’ targetId; get 1.4.0 — openReportCount; moderate 1.4.0 — report settlement; feed 1.3.0 and things / things-comment / things-feed / things-user 1.3.0 — subspaceMod.reportCount)',
+		manifestQ.status === 200 && manifestQ.body.features['api.subspaces-report'] === '1.0.1' && manifestQ.body.features['api.subspaces-reports'] === '1.0.1' && manifestQ.body.features['api.subspaces-get'] === '1.4.0' && manifestQ.body.features['api.subspaces-moderate'] === '1.4.0' && manifestQ.body.features['api.subspaces-feed'] === '1.3.0' && ['api.things', 'api.things-comment', 'api.things-feed', 'api.things-user'].every((feature) => manifestQ.body.features[feature] === '1.3.0'),
 		JSON.stringify({ r: manifestQ.body?.features?.['api.subspaces-report'], rs: manifestQ.body?.features?.['api.subspaces-reports'], g: manifestQ.body?.features?.['api.subspaces-get'], mo: manifestQ.body?.features?.['api.subspaces-moderate'], f: manifestQ.body?.features?.['api.subspaces-feed'], t: manifestQ.body?.features?.['api.things'] })
 	);
 	const cleanupQ = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: owner.cookie, body: { slug: rpSlug, confirmSlug: rpSlug } });

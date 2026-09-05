@@ -155,9 +155,12 @@ test('subspace reports publish their contract versions', () => {
 	// for moderators (get 1.4.0), moderate remove / approve settle the post's
 	// open reports (1.4.0), and every post projection carries
 	// subspaceMod.reportCount for the post's moderators (things family 1.3.0,
-	// subspaces-feed 1.3.0) — all additive
-	assert.equal(manifest.features['api.subspaces-report'], '1.0.0');
-	assert.equal(manifest.features['api.subspaces-reports'], '1.0.0');
+	// subspaces-feed 1.3.0) — all additive. S5 review: report 1.0.1 (a removed
+	// post → 409, a repeat after a move re-files in the new subspace, a deleted
+	// comment takes its rows) and reports 1.0.1 (dismiss without a slug follows
+	// the open rows' own targetId) — compatible corrections
+	assert.equal(manifest.features['api.subspaces-report'], '1.0.1');
+	assert.equal(manifest.features['api.subspaces-reports'], '1.0.1');
 	assert.equal(manifest.features['api.subspaces-get'], '1.4.0');
 	assert.equal(manifest.features['api.subspaces-moderate'], '1.4.0');
 	assert.equal(manifest.features['api.subspaces-feed'], '1.3.0');

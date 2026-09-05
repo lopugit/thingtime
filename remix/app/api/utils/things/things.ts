@@ -4179,6 +4179,30 @@ const deleteDrainedRootAtomically = async (deleteFilter: Record<string, any>): P
 	});
 };
 
+// Subspace report rows hang off the ROOT post by crystal.postId (targetId =
+// the subspace), so the targetId cascade never sees them; they are plumbing
+// rows with nothing to refund. A deleted subspace post takes every report
+// against it. A deleted COMMENT under a subspace post (with the replies that
+// went with it) takes the rows that flagged one of those comments — left
+// behind, the queue would keep asking the mods to judge a comment that no
+// longer exists ("(a comment ↗)" 404s, and Remove would hit the innocent
+// parent post). A reported comment's other rows (the post itself, other
+// comments) stay.
+const clearSubspaceReportsFor = async (root: ThingDoc, deletedCommentIds: ReadonlySet<string>): Promise<void> => {
+	const things = await getThingsCollection();
+	const kinds = thingtimeOf(root);
+	if (kinds.includes('comment')) {
+		const commentIds = [...new Set([root.shareId, ...deletedCommentIds])].filter(Boolean);
+		const post = await resolveRootPost(root);
+		const subspaceId = subspaceIdOfDoc(post);
+		if (!post?.shareId || !subspaceId || !commentIds.length) return;
+		await things.deleteMany({ thingtime: 'subspace-report', targetId: subspaceId, 'crystal.postId': post.shareId, 'crystal.commentId': { $in: commentIds } } as any);
+		return;
+	}
+	const subspaceId = kinds.includes('post') ? subspaceIdOfDoc(root) : null;
+	if (subspaceId) await things.deleteMany({ thingtime: 'subspace-report', targetId: subspaceId, 'crystal.postId': root.shareId } as any);
+};
+
 export type DeleteThingHooks = {
 	// External objects must become inaccessible before their protected source
 	// Things are removed and quota is refunded. A failure leaves the root and
@@ -4266,6 +4290,9 @@ export const deleteThing = async (
 			);
 			if (attachmentChild) return fail(409, 'Attachment cleanup must finish before this Thing can be deleted');
 		}
+		// the comments deleted along the way (a reported comment takes the rows
+		// that flagged it — clearSubspaceReportsFor below)
+		const deletedCommentIds = new Set<string>();
 		// Descendants commit leaf-first in deterministic <=100-row transactions;
 		// the root remains as a durable retry anchor until the closure is empty.
 		// Each batch uses exact findOneAndDelete before-images, so Mongo callback
@@ -4302,6 +4329,7 @@ export const deleteThing = async (
 					break;
 				}
 				await refundDeletedNamespaceDocs(result.deleted);
+				for (const gone of result.deleted) if (thingtimeOf(gone).includes('comment') && gone.shareId) deletedCommentIds.add(gone.shareId);
 			}
 			if (rewalk) continue;
 
@@ -4309,13 +4337,7 @@ export const deleteThing = async (
 			if (rootResult.state === 'blocked') continue;
 			if (rootResult.state === 'deleted') {
 				await refundDeletedNamespaceDocs([rootResult.doc]);
-				// a subspace post takes its reports with it: they hang off the post by
-				// crystal.postId (targetId = the subspace), so the targetId cascade
-				// above never sees them — plumbing rows, no accounting to refund
-				const deletedSubspaceId = thingtimeOf(rootResult.doc).includes('post') ? subspaceIdOfDoc(rootResult.doc) : null;
-				if (deletedSubspaceId) {
-					await things.deleteMany({ thingtime: 'subspace-report', targetId: deletedSubspaceId, 'crystal.postId': rootResult.doc.shareId } as any);
-				}
+				await clearSubspaceReportsFor(rootResult.doc, deletedCommentIds);
 				// deleting a folder never deletes what's inside it — contents (and
 				// subfolders) re-parent to the deleted folder's own parent, so the
 				// worst a folder delete can do to your things is flatten them one level

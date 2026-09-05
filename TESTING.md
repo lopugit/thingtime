@@ -1460,6 +1460,21 @@ email whose link points at the attacker.
       403 / 400 (no postId, bad action) / 404 (nothing open). Generic
       `POST /api/v1/things` with `thingtime: ["subspace-report"]` answers
       403. Rate key `subspaces.report` (30/min).
+      S5 review fixes: a post the mods already removed offers no 🚩 (card
+      menu and comment rows) and `/report` answers 409 for it — no row, no
+      bell; in a PRIVATE subspace a stranger, a pending requester and a
+      banned member get 404 for the post and its comments (an active member
+      200); a report row is the reporter's own private thing (generic
+      `GET /things?id=` 200 for them, 404 for everyone else); a post that
+      MOVED to another subspace keeps its open rows dismissable in the old
+      queue without a slug, and the reporter's next report re-files in the
+      new subspace and rings its mods; deleting a reported COMMENT deletes
+      the rows that flagged it (the post's other reports stay). Reports tab:
+      the badge / `Open · N` drop by the group's ROWS (not one per group)
+      and reconcile from the server after Remove 🧹, a removal or approval
+      through the card's own ··· menu drops the group too, and flipping
+      Open / Resolved paints the list it already knows while the fresh page
+      loads — a slow page can never land under the other heading.
 - [ ] Bell 🔔 + Settings → Notifications: six subspace rows (roles 🎩,
       bans 🚫, join accepted 🎉, posts removed 🧹, join requests 🙋,
       reports 🚩 — the last two default email OFF). The bell's verb keys off

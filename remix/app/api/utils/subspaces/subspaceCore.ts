@@ -429,7 +429,20 @@ export const tallyReportReasons = (reports: readonly { reason: string }[]): Repo
 	return [...counts.entries()].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason));
 };
 
-export const sanitizeSort = (value: unknown): SubspaceFeedSort => ((SUBSPACE_FEED_SORTS as readonly string[]).includes(value as string) ? (value as SubspaceFeedSort) : 'hot');
+// Which subspace's queue a dismiss WITHOUT an explicit id | slug targets. The
+// rows name their queue themselves (targetId): a post that moved to another
+// subspace after it was reported leaves its open rows behind in the OLD
+// queue, and those must stay dismissable from there. The post's current
+// subspace decides when open rows sit there; else the (lowest-sorted)
+// subspace that still holds open rows; else the post's subspace, so the
+// moderator gate still answers 403 / 404 the same way; else null.
+export const pickReportQueueSubspace = (currentSubspaceId: string | null, openTargetIds: readonly string[]): string | null => {
+	const open = [...new Set(openTargetIds.filter((id) => typeof id === 'string' && id))].sort();
+	if (currentSubspaceId && open.includes(currentSubspaceId)) return currentSubspaceId;
+	return open[0] || currentSubspaceId || null;
+};
+
+export const sanitizeSort =(value: unknown): SubspaceFeedSort => ((SUBSPACE_FEED_SORTS as readonly string[]).includes(value as string) ? (value as SubspaceFeedSort) : 'hot');
 
 export const TOP_RANGES = ['hour', 'day', 'week', 'month', 'year', 'all'] as const;
 export type TopRange = (typeof TOP_RANGES)[number];

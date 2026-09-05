@@ -98,6 +98,12 @@ reactions untouched.
   moderators 🚩** + ReportModal (comment rows too), the mods' `🚩 N` badge,
   mod page **Reports** tab (Remove via RemoveModal / Dismiss, Open /
   Resolved), badges on the tab and Mod tools 🎩; verify section Q.
+  Review fixes: a removed post takes no report (409, no 🚩 offered), a
+  repeat after a move re-files in the new subspace, dismiss without a slug
+  follows the open rows' own targetId, a deleted comment takes the rows
+  that flagged it, the Reports tab counts rows (not groups), reconciles
+  after Remove / card-menu verdicts and sequences its two lists
+  (report + reports 1.0.1).
 
 ## Follow-ups (not in this PR)
 - Per-subspace wiki +
