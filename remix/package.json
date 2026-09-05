@@ -82,7 +82,7 @@
     "test:storage": "node --import tsx --test app/api/utils/storage/*.test.ts",
     "test:storage-recovery": "node --import tsx --test app/api/utils/apps/namespaceStorageRecovery.test.ts",
     "test:temporary-user": "node --import tsx --test app/api/utils/auth/temporaryUser.test.ts app/utils/temporaryUserBootstrap.test.ts app/utils/userIdentity.test.ts",
-    "test:things": "node --import tsx --test app/api/utils/things/emojiSearch.test.ts app/api/utils/things/relatedProjection.test.ts app/api/utils/things/patVisibility.test.ts app/components/Things/thingAttachmentDetailCore.test.ts app/components/Things/thingIcon.test.ts app/components/Things/thingsCore.test.ts",
+    "test:things": "node --import tsx --test app/api/utils/things/emojiSearch.test.ts app/api/utils/things/relatedProjection.test.ts app/api/utils/things/patVisibility.test.ts app/components/Things/thingAttachmentDetailCore.test.ts app/components/Things/thingDetailSectionsCore.test.ts app/components/Things/thingIcon.test.ts app/components/Things/thingsCore.test.ts",
     "test:theme": "node --import tsx --test app/components/Profile/themeTryOnCore.test.ts",
     "test:typecheck-ratchet": "node --test scripts/typecheck-ratchet.test.mjs",
     "test:vercel-status": "node --import tsx --test app/api/utils/vercel/*.test.ts",

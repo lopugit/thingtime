@@ -70,3 +70,14 @@ test('the storage census and ciControl workbench allowlist publish their minor c
 test('persistent attachment content and resized previews advertise their additive contract', () => {
 	assert.equal(createApiCapabilitiesManifest().features['api.attachment-content'], '1.1.0');
 });
+
+test('admin preview dispatch publishes its protected-controller contract version', () => {
+	const manifest = createApiCapabilitiesManifest();
+	assert.equal(manifest.features['api.admin-ci-previews'], '2.0.0');
+});
+
+test('storage-aware health and the corrected email environment gate publish their contract updates', () => {
+	const manifest = createApiCapabilitiesManifest();
+	assert.equal(manifest.features['api.health-nitro'], '1.1.0');
+	assert.equal(manifest.features['api.email-config'], '1.0.1');
+});

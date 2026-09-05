@@ -522,6 +522,10 @@ email whose link points at the attacker.
       reaches success, and the comment links
       `https://pr-<number>.previews.dev.thingtime.com`; verify the deployed SHA again
       after the build completes.
+- [ ] Open the deployed PR preview's footer and confirm it shows the exact PR
+      branch plus the complete 40-character head SHA, with each linking to the
+      matching GitHub tree/commit. Confirm `/api/root-data` reports the same
+      values and neither label falls back to `git/unknown`.
 - [ ] For an exact SHA that already has a READY generic Preview, run the
       controller again and confirm its `develop` Custom Environment deployment
       builds instead of ending `CANCELED`; the PR alias, GitHub Deployment, and
@@ -1463,6 +1467,12 @@ email whose link points at the attacker.
 - [ ] Start two local mutation commands together. Confirm the repository writer
       lock serializes them, a live writer is never stolen during owner-file
       creation, and a dead writer lock is recoverable.
+- [ ] Run the lock regression cases in `npm run test:graphify-cas`: pause a
+      stale reaper while a replacement writer acquires, then resume cleanup.
+      Confirm it cannot delete or enter the replacement lock. Verify six
+      processes complete 30 writes without overlap, SIGKILL recovery, timeout
+      cleanup, callback-error release, and a query retaining its snapshot lock
+      until its subprocess exits.
 - [ ] With a legacy root graph present, run `scripts/graphify update .`, remove
       the four mutable root outputs from tracking, and run
       `scripts/graphify ensure`. Confirm root paths become ignored symlinks,
@@ -2039,6 +2049,12 @@ halves.
       default. A component Thing resolves its sanitised live preview; turning
       either switch off hides only that section, and either/both sections may
       be disabled without overflow at desktop and 390px mobile widths.
+- [ ] Turn `Thing data` OFF on a normal `/thing/:id`, then navigate — without
+      reloading — to a `/thing/migration-diagnostic-*` permalink. The redacted
+      error still renders: a diagnostic shows no `Views` card, so it must never
+      be gated by a switch carried over from a Thing, or the page would be
+      blank with no control left to bring it back. Navigating back to a Thing
+      still honours the remembered OFF state.
 - [ ] Visiting plain `/search` fires NO search request (check the network
       tab): last-cached results still paint instantly, and with no cache the
       empty state invites a search ("then hit Search"), never claims
@@ -2118,6 +2134,14 @@ halves.
 
 ## Admin migrations & collection generations (`remix/app/components/Schemas/MigrationsPanel.tsx`)
 
+- [ ] Before and after deploying any `USER_STORAGE_ACCOUNTING_VERSION` bump,
+      call `/api/v1/health/nitro`: it reports `degraded` with
+      `storageAccounting.state: "migration-required"` while any current user
+      ledger is missing, malformed, non-ready, or on the old version. Dry-run,
+      then run the named `backfill-user-storage-accounting` migration; confirm
+      health becomes `ready`, a tiny image upload completes instead of returning
+      `accounting_unavailable`/503, and a second migration dry-run reports 0
+      pending.
 - [ ] As an admin (register a throwaway user, restart dev with
       `ADMIN_USERNAMES=<user>`), the census table shows every registry
       collection with its logical name AND physical `<name>_v<N>` name.
@@ -3133,7 +3157,7 @@ which 99.75% were `ci-*` telemetry, paying an entry in each of its 64 indexes
       and `-docs` route has one semantic feature, `api.admin-ci-dispatch` is
       `2.1.0`, the CI snapshot is `1.0.1`, passkey registration/login options
       are `1.0.1`, admin credentials are `2.0.0`, signed credential delivery is
-      `1.1.0`, signed stack progress is `1.0.0`, saved stacks are `1.3.0`, admin PR previews are `1.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
+      `1.1.0`, signed stack progress is `1.0.0`, saved stacks are `1.3.0`, admin PR previews are `2.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
       breaking-major manifest before dispatch. CI dispatch 2.1 adds
       compatible-pair omission during automatic Feature Stack routing.
 - [ ] Start a saved Feature Stack, then use its Pause control while the linked
@@ -3148,10 +3172,23 @@ which 99.75% were `ci-*` telemetry, paying an entry in each of its 64 indexes
 - [ ] Select one trusted open PR and independently enable Develop and
       Production/Main previews, including both at once. Develop must use only
       the configured Custom Environment; Production must require the explicit
-      warning acknowledgement, use Production values server-side, expose only
-      a generated immutable Vercel URL, and never assign `thingtime.com` or
-      another custom domain. Neither response, browser state, log, nor status
-      event may contain a credential value.
+      warning acknowledgement, and use Production values server-side. Confirm
+      one GitHub Actions-owned marker comment appears before either deployment starts,
+      with a row for each enabled environment, its expected persistent URL, and
+      a clearly labelled estimated ready time. Confirm the same comment updates
+      each row with the immutable `*.vercel.app` snapshot and its distinct
+      PR-scoped persistent URL. A READY receipt must move only that environment's
+      alias to the verified current SHA; synchronize must update both rows
+      without adding another marker comment. Disable one environment and close
+      the PR to prove only owned aliases/deployments are removed, while `thingtime.com` and
+      `dev.thingtime.com` never move. Neither response, browser state, log,
+      comment, nor status event may contain a credential value.
+- [ ] Inspect both selected-environment build jobs and confirm they check out
+      the exact controller-authorized SHA, receive no GitHub Environment or
+      Vercel token, and upload only a symlink-preserving prebuilt archive. The
+      protected publisher must validate each archive, use `--prebuilt` plus
+      `--skip-domain`, and reject a deployment whose actual Custom Environment
+      or production target does not match its selected row.
 - [ ] Push a new commit to that PR and verify the signed `synchronize` delivery
       rebuilds each enabled environment at exactly the new live head SHA.
       Drafts, forks, moved heads, another repository, and closed PRs fail

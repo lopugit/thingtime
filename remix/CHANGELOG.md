@@ -81,11 +81,48 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Electron and reuse the approved CI Apple API key for macOS notarization.
   Remove the confirmed damaged legacy downloads. — Codex (AI)
 
-- 2026-09-05: Repair Recovery catalogue selection, archive verification, damaged
-  app replacement, and installer failure notices. Publish desktop and Recovery
-  together through the repaired protected cloud builder. Withdraw damaged legacy
-  archives from installation while keeping their history visible. See the
+- 2026-09-05: Repair Recovery catalogue refresh and architecture selection,
+  malformed archive handling, background verification, damaged app replacement,
+  rollback preservation, installer failure notices, and cold cloud packaging.
+  Share the protected main/PR release builder and correct its caller-event gate
+  so desktop and Recovery publish together. Withdraw damaged legacy archives
+  from installation while keeping their history visible. See the
   [PR #627 engineering note](../PRs/627-codex-recovery-release-sync-github-catalogue-and-installer.md). — Codex (AI)
+
+- 2026-09-05: Publish Graphify lock ownership atomically and remove only the
+  releasing owner's record. Concurrent queries retain their snapshot lock
+  through completion; regression tests cover stale cleanup, writer death,
+  contention, malformed ownership, and timeout cleanup. — Codex (AI)
+
+- 2026-09-03: Keep `/api/v1/capabilities` aligned with the protected admin preview dispatcher by publishing `api.admin-ci-previews` 2.0.0 from the canonical endpoint contract.
+
+### 2026-09-03 — Multi-environment PR preview links — Codex (AI)
+
+- Admin-selected Develop and Production/Main preview settings now dispatch only
+  their bounded full policy to the protected `github-actions` controller; the
+  product backend no longer creates, aliases, deletes, or comments on Vercel
+  deployments. GitHub Actions maintains one PR comment, posted before build
+  launch with every
+  selected environment's expected persistent URL and estimated ready time, then
+  updated with each immutable snapshot URL and final status. READY receipts move
+  only the matching alias to the verified current deployment, while
+  disable/close cleanup remains bounded to Thingtime-owned preview resources.
+  Each exact-SHA environment build runs without deployment credentials and only
+  its validated prebuilt artifact reaches the protected publisher.
+  See the [PR #597 engineering note](../PRs/597-codex-preview-pr-environment-links-publish-multi-environment-preview-links-on-prs.md).
+
+### 2026-09-03 — Storage migration readiness and API sweep correction — Codex (AI)
+
+- Detailed diagnosis, migration receipts, and validation:
+  [`PRs/601-codex-fix-image-upload-migrations--storage-migration-readiness.md`](../PRs/601-codex-fix-image-upload-migrations--storage-migration-readiness.md).
+- Nitro health now reports `degraded` and names
+  `backfill-user-storage-accounting` whenever current user ledgers are absent,
+  malformed, non-ready, or behind `USER_STORAGE_ACCOUNTING_VERSION`, making
+  the same fail-closed condition that blocks image uploads visible to deploy
+  monitoring before users encounter it.
+- Corrected the email-config API docs and live test contract: sanitized email
+  diagnostics remain available in local development and Vercel previews, while
+  production's intentional 403 environment gate is now documented and tested.
 
 ### 2026-09-03 — Host-native Thingtime login bootstrap — Codex (AI)
 
@@ -357,6 +394,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Components runtime split, PR #382).
 
 ### Changed
+
+- **PR previews now show their exact source identity in the footer.** Protected
+  prebuilt deployments carry the PR branch and complete 40-character head SHA
+  into the runtime, where the footer links both values to the matching GitHub
+  tree and commit. — Codex (AI), 2026-09-05
 
 - **Saved Feature Stacks now have Pause, Stop, and Restart controls.** Pause
   and Stop cancel only the exact linked GitHub Actions run while retaining the
