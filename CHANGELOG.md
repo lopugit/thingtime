@@ -19,6 +19,8 @@ every entry is attributed the same way the app changelog attributes them.
 
 ## 2026-09-05 — Cooperative review handover and preview recovery
 
+Details: [PR #637](PRs/637-codex-lopu-cooperative-handoff--safely-hand-batch-reviews-over-to-waiting-work.md).
+
 - Batch reviews can finish their current PR, publish through the existing
   exact-head gate, and queue a bounded remainder when other fleet work waits.
   No hard cancellation or incomplete-review publication; atomic repairs and
