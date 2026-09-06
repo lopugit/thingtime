@@ -824,6 +824,67 @@ export function assertControlPlaneContract() {
     /if open_prs="\$\(gh pr list[\s\S]*?\)"; then[\s\S]*?\n          else\n\s+echo "::warning::Could not re-confirm PR ownership/u,
     "a transient ownership lookup keeps the prepared analysis instead of failing the CodeQL check it exists to protect",
   );
+  // The ordering hold below makes `javascript-typescript` the FIRST uploader,
+  // which moves this barrier from a redundancy to a load-bearing guard. GHAS
+  // also closes the aggregate check on the spot when the first configuration
+  // uploads with no sibling configuration in flight -- PR #610 @780c81f9 opened
+  // at 06:09:39 and closed `timed_out` at 06:09:41 because the slow leg had not
+  // been allocated a runner yet, and the clean analysis that landed at 06:18:17
+  // never reopened it. The per-language concurrency group cannot see that shape
+  // (`matrix.language` is part of its key, so the legs never queue against each
+  // other), and the hold cannot either, because the hold exempts exactly the
+  // leg that now uploads first. Deleting this step would therefore trade the
+  // `timed_out` failure for the "1 configuration not found" one, silently. Pin
+  // the properties that prevent that, not the wording.
+  const siblingStartBarrier =
+    /^      - name: Wait for every sibling language leg to start\n(?:(?!^      - name: ).*\n)*/mu.exec(
+      codeql,
+    )?.[0] ?? "";
+  assert.notEqual(
+    siblingStartBarrier,
+    "",
+    "every analysis leg still waits for its siblings to start, so the first upload never lands alone",
+  );
+  assert.match(
+    codeql,
+    /- name: Wait for every sibling language leg to start[\s\S]*?- name: Initialize CodeQL[\s\S]*?- name: Hold the faster analysis until the slowest language lands/u,
+    "the barrier waits before init, so each leg still spends its own init and build after the barrier lifts instead of uploading the moment it clears",
+  );
+  // The gate and the expected count must come from one source. A hardcoded
+  // count silently over- or under-waits the moment a language is added or
+  // removed, and either mistake reintroduces a lone first uploader.
+  assert.match(
+    siblingStartBarrier,
+    /if: strategy\.job-total > 1\n[\s\S]*?EXPECTED_LEGS: \$\{\{ strategy\.job-total \}\}/u,
+    "the barrier is gated on, and counts, the live matrix size, so adding or removing a language cannot leave it waiting for the wrong number of legs",
+  );
+  // "Started" is the whole point: #662 passed while its js-ts analysis was
+  // still running, so the sibling's presence -- not its result -- is what the
+  // aggregate check needs. Waiting for completion instead would deadlock the
+  // legs against each other once the hold below also waits on the analysis.
+  assert.match(
+    siblingStartBarrier,
+    /map\(select\(\. != "queued"\)\) \| length/u,
+    "the barrier releases when its siblings have left the queue, never when they have finished, so no leg can ever wait on a leg that is waiting for it",
+  );
+  // A re-run must not count the previous attempt's finished legs and skip the
+  // barrier outright, which is exactly what the unscoped run-level jobs list
+  // would report while this attempt's siblings were still queued.
+  assert.match(
+    siblingStartBarrier,
+    /attempts\/\$RUN_ATTEMPT\/jobs/u,
+    "the barrier counts only this attempt's legs, so a re-run cannot be released by the previous attempt's completed jobs",
+  );
+  assert.match(
+    siblingStartBarrier,
+    /\[ "\$SECONDS" -ge "\$deadline" \]/u,
+    "the barrier is bounded, so a sibling that never gets a runner cannot strand this leg up to its own 60-minute job timeout",
+  );
+  assert.doesNotMatch(
+    siblingStartBarrier,
+    /\bexit [1-9]/u,
+    "every path through the barrier exits 0: a red analysis job is precisely the check state it exists to prevent",
+  );
   // Advanced Security opens a PR's aggregate `CodeQL` check on the FIRST
   // category's analysis and closes it `timed_out` about 6m30s later if the
   // rest have not been PROCESSED by then. This matrix uploads `actions` in
