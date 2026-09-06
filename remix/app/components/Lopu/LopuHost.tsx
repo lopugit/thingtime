@@ -100,7 +100,7 @@ class LopuHostBoundary extends React.Component<{ children: React.ReactNode }, { 
 			return (
 				<Flex flexDirection="column" alignItems="center" justifyContent="center" rowGap={2} flex="1" padding={6} textAlign="center">
 					<Text fontSize="sm" fontWeight={600}>
-						Lopu tripped over her horn 🌧️
+						Lopu tripped over its horn 🌧️
 					</Text>
 					<Text fontSize="xs" color={LOPU_UI.muted}>
 						{this.state.error.message || 'Something went wrong while drawing the chat.'}
@@ -365,7 +365,7 @@ export const LopuSettingsRows = (props: { renderRow: (label: string, control: Re
 			{renderRow(
 				'Apply builder changes live',
 				<Switch isChecked={settings.applyPatches} onChange={(event) => setApplyPatches(event.target.checked)} aria-label="Apply builder changes live" />,
-				'Lopu’s page and component edits paint into the open draft while she is still typing'
+				'Lopu’s page and component edits paint into the open draft while it is still typing'
 			)}
 			{renderRow(
 				'Confirm conversation deletes',

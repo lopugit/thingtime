@@ -192,7 +192,7 @@ export const action = async ({ request }: { request: Request }) => {
   const limit = await enforceRateLimit(request, 'lopu.chat', `user:${user.id}`, { failClosed: true });
   if (!limit.allowed) {
     return json(
-      { ok: false, error: limit.unavailable ? 'Lopu cannot check her rate limit right now — try again shortly' : 'Lopu needs a breather — try again in a few minutes 🦄' },
+      { ok: false, error: limit.unavailable ? 'Lopu cannot check its rate limit right now — try again shortly' : 'Lopu needs a breather — try again in a few minutes 🦄' },
       rateLimitedResponseInit(limit)
     );
   }

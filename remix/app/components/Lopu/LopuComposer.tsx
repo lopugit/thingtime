@@ -215,7 +215,7 @@ export const LopuComposer = ({
 					value={value}
 					onChange={(event) => onChange(event.target.value.slice(0, LOPU_MAX_MESSAGE_CHARS))}
 					onKeyDown={onKeyDown}
-					placeholder={placeholder || (streaming ? 'Lopu is replying…' : 'Ask Lopu anything, or tell her what to build…')}
+					placeholder={placeholder || (streaming ? 'Lopu is replying…' : 'Ask Lopu anything, or tell it what to build…')}
 					aria-label="Message Lopu"
 					rows={1}
 					width="100%"

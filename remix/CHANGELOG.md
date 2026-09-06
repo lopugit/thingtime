@@ -18,6 +18,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-07: Bring recording automation up to date with the released Lopu/Builder/rich-text work and the verified production storage-ledger repair. See the [PR #665 verification note](../PRs/665-codex-watch-lopu-recording-automation-private-transcripts-todos-reminders.md). — Codex (AI)
+
 - 2026-09-06: Integrate recording automation with the merged Watch foundation;
   send daily reminders through its native push channel after durable commit,
   preserving a bounded title and safe recordings link. — Codex (AI)
@@ -29,6 +31,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   provider setup. Browser checks cover persisted settings and mobile layout;
   live audio and native push acceptance remain release gates. See the
   [PR #665 verification note](../PRs/665-codex-watch-lopu-recording-automation-private-transcripts-todos-reminders.md). — Codex (AI)
+- Fix production storage-ledger validation to accept the catalog's optional speed-test quota without coercion, subscription rewrites, or allowance resets; retain legacy snapshots and fail closed on malformed quotas. — Codex (AI), 2026-09-06
+
+- 2026-09-06: Add bounded, value-free admin dry-run diagnostics for malformed protected storage ledgers; preserve fail-closed validation and all subscription allowances.
 
 - 2026-09-06: Include #612's final detail-page review follow-up in the main
   release: reject inherited/unknown `from` parameters and keep the Back link

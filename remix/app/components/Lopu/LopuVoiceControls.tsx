@@ -26,7 +26,7 @@ import { useLopuSettings } from './useLopuSettings';
 // bridge (the app owns audio + recognition and posts its own turns while the
 // WebView is backgrounded), speechSynthesis for spoken replies, and the
 // feedback-loop guard — listening pauses for the whole turn and for Lopu's
-// speech so she never transcribes her own voice, then resumes.
+// speech so it never transcribes its own voice, then resumes.
 //
 // Unified mode: every final utterance is one normal chat turn through
 // `onFinalTranscript` (the surface routes it through useLopuChat().send — the

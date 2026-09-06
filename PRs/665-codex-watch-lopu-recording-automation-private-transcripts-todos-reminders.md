@@ -1,6 +1,6 @@
 # PR #665 — private Watch recording automation
 
-Updated 2026-09-06. [Pull request](https://github.com/lopugit/thingtime/pull/665).
+Updated 2026-09-07. [Pull request](https://github.com/lopugit/thingtime/pull/665).
 Branch: `codex/watch-lopu-recording-automation`.
 
 ## Implemented
@@ -38,6 +38,17 @@ Branch: `codex/watch-lopu-recording-automation`.
   Tailscale/Funnel is unavailable: its CLI shim points to a missing app binary.
 
 ## Delivery gates still open
+
+Update 2026-09-07: the historical foundation/APNs/storage blockers below are resolved.
+The selected Watch, Lopu, Builder and rich-text releases are merged into main,
+and this branch incorporates main through `6ad5ef21b7a89fa54b4932809c0f17359124beab`.
+The topic-specific production APNs key is in Keychain and the production Vercel
+secret store. PRs #674/#676 repaired storage-ledger compatibility; the authorized
+production migration reconciled 53 accounts and health now reports accounting
+ready. One synthetic private recording/reminder test in Nikk/@lopu's account is
+authorized. Exact-SHA CI, provider-backed acceptance, and actual native receipt
+remain to verify. The list below is retained as historical context, not current
+evidence of an unresolved foundation dependency.
 
 The PR is regular OPEN and labelled `ai-merge-paused` intentionally while these
 checks remain. Do not remove that hold merely because CI or a preview is green.
