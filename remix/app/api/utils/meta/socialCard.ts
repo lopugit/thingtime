@@ -1,0 +1,712 @@
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { Resvg } from '@resvg/resvg-js';
+
+import { SOCIAL_CARD_FONTS, SOCIAL_CARD_FONT_FAMILY } from './socialCardFontData';
+import type { SocialPreview, SocialPreviewVariant } from './socialPreview';
+import { SOCIAL_PREVIEW_HEIGHT, SOCIAL_PREVIEW_WIDTH, cleanSocialText } from './socialPreview';
+
+const SAFE_IMAGE_TYPES = new Set(['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp']);
+const MAX_CARD_IMAGE_BYTES = 2 * 1024 * 1024;
+// A byte cap is not a memory cap. resvg decodes an embedded raster to RGBA8
+// before it scales it into the tile, and every one of these formats compresses
+// uniform pixels to almost nothing: a 1.5 MiB PNG of 40000×40000 zero bytes
+// passes SAFE_IMAGE_TYPES and MAX_CARD_IMAGE_BYTES and then asks for 5.96 GiB.
+// resvg-js exposes no input-pixel limit of its own, so the bound has to be
+// applied before the bytes reach it — the same order `readBodyWithin` exists
+// for. 40 MP matches the `limitInputPixels` that attachments/imageVariants.ts
+// already imposes on the very same user images, so a photo the resize endpoint
+// refuses cannot slip in here instead. The collage budget is separate because
+// the loader fetches up to four tiles at once, which would otherwise multiply
+// the per-image ceiling by four on a public, unauthenticated request.
+const MAX_CARD_IMAGE_PIXELS = 40_000_000;
+const MAX_CARD_COLLAGE_PIXELS = 80_000_000;
+
+// The badge pills are pinned to the bottom of the white panel, so the poll
+// strip above them cannot shift with the author line: three rows at this pitch
+// end exactly one pixel above the pills, and an author-offset copy of these
+// numbers overprinted them on any tagged poll. Two lines of description (the
+// cap whenever options exist) end near y=444, which clears POLL_ROW_TOP.
+const POLL_ROW_TOP = 454;
+const POLL_ROW_PITCH = 34;
+const POLL_ROW_HEIGHT = 25;
+const BADGE_ROW_TOP = 548;
+// Inner label widths: the poll row runs x=86..616 with its text inset at x=98,
+// and each badge is a 150px pill. Both labels were budgeted in characters, so
+// "Build with Thingtime" (exactly the 20 allowed) printed 187px wide and hung
+// out of both ends of its pill.
+const POLL_LABEL_WIDTH = 506;
+const BADGE_LABEL_WIDTH = 134;
+// The eyebrow starts at x=86 and the author name at x=136 (clear of the avatar
+// disc); both run at the media/art panel, which is drawn last and therefore
+// paints over anything that reaches x=700. Neither line is wrapped, so — like
+// the pills above — the cap has to be a measured width. A display name is
+// allowed 80 characters (MAX_DISPLAY_NAME_CHARS) and anything past ~41 was
+// sliced off mid-word by the panel with no ellipsis, so a card for
+// "Bartholomew Featherstonehaugh-Cholmondeley" read as a complete, wrong name.
+const AUTHOR_LABEL_WIDTH = 564;
+const EYEBROW_LETTER_SPACING = 2;
+
+type CardTheme = { primary: string; end: string; panelStart: string; panelEnd: string };
+
+const CARD_THEMES: Record<SocialPreviewVariant, CardTheme> = {
+	app: { primary: '#5B3CC4', end: '#EC4899', panelStart: '#46308C', panelEnd: '#E060B6' },
+	feed: { primary: '#7C3AED', end: '#EC4899', panelStart: '#6D3EC7', panelEnd: '#EC71BA' },
+	explore: { primary: '#0E7490', end: '#7C3AED', panelStart: '#0F766E', panelEnd: '#7C3AED' },
+	docs: { primary: '#2563EB', end: '#7C3AED', panelStart: '#1D4ED8', panelEnd: '#8B5CF6' },
+	collection: { primary: '#0F766E', end: '#2563EB', panelStart: '#047857', panelEnd: '#2563EB' },
+	'text-post': { primary: '#7C3AED', end: '#DB2777', panelStart: '#5B21B6', panelEnd: '#DB2777' },
+	'image-post': { primary: '#DB2777', end: '#7C3AED', panelStart: '#BE185D', panelEnd: '#7C3AED' },
+	gallery: { primary: '#C026D3', end: '#2563EB', panelStart: '#A21CAF', panelEnd: '#2563EB' },
+	poll: { primary: '#2563EB', end: '#06B6D4', panelStart: '#1D4ED8', panelEnd: '#0891B2' },
+	listing: { primary: '#EC4899', end: '#F97316', panelStart: '#DB2777', panelEnd: '#EA580C' },
+	thingtime: { primary: '#0F766E', end: '#7C3AED', panelStart: '#047857', panelEnd: '#6D28D9' },
+	share: { primary: '#D97706', end: '#DB2777', panelStart: '#B45309', panelEnd: '#DB2777' },
+	comment: { primary: '#DB2777', end: '#7C3AED', panelStart: '#BE185D', panelEnd: '#7C3AED' },
+	reply: { primary: '#7C3AED', end: '#2563EB', panelStart: '#6D28D9', panelEnd: '#2563EB' },
+	'media-image': { primary: '#C026D3', end: '#2563EB', panelStart: '#A21CAF', panelEnd: '#2563EB' },
+	'media-video': { primary: '#2563EB', end: '#DB2777', panelStart: '#1D4ED8', panelEnd: '#BE185D' },
+	'media-audio': { primary: '#0891B2', end: '#7C3AED', panelStart: '#0E7490', panelEnd: '#6D28D9' },
+	'media-file': { primary: '#475569', end: '#2563EB', panelStart: '#334155', panelEnd: '#2563EB' },
+	webpage: { primary: '#0F766E', end: '#0891B2', panelStart: '#047857', panelEnd: '#0E7490' },
+	profile: { primary: '#7C3AED', end: '#EC4899', panelStart: '#6D28D9', panelEnd: '#DB2777' },
+	thing: { primary: '#4F46E5', end: '#0F766E', panelStart: '#4338CA', panelEnd: '#047857' }
+};
+
+// The bundled face is a Latin/Greek/Cyrillic text font with no pictographs, and
+// resvg draws a missing glyph as `.notdef` — a literal tofu box. Emoji are
+// common in post titles, so strip them from the PNG rather than print squares
+// in a headline. The Open Graph text tags keep them: the unfurler renders those
+// with its own fonts, and only the image is limited to what we ship.
+const CARD_UNRENDERABLE = /[\p{Extended_Pictographic}\u{200D}\u{FE0E}\u{FE0F}\u{20E3}\u{1F3FB}-\u{1F3FF}]/gu;
+
+// Single choke point for every user-authored value entering the SVG, so the
+// drop and the escape can never be applied to one field and skipped on another.
+const escapeXml = (value: string): string =>
+	value
+		.replace(CARD_UNRENDERABLE, '')
+		.replace(/\s+/g, ' ')
+		.trim()
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&apos;');
+
+// A character budget cannot express "must not run under the art panel": the
+// same 27 characters are 470px of narrow letters or 700px of capitals, and the
+// card is drawn where `Arial` does not exist (Vercel/CI resolve the
+// `sans-serif` fallback), which is wider again than the Arial these numbers
+// were first eyeballed against. So measure instead, with the widest advance
+// resvg reported per class for that Linux fallback face — an estimate that is
+// never under the real width, and comfortably over it on a machine with real
+// Arial. Unknown scripts and emoji bill at a full em.
+const glyphEm = (character: string): number => {
+	if (character === ' ') return 0.35;
+	if (/[iljI.,;:!'|]/.test(character)) return 0.46;
+	if (/[MWmw@%]/.test(character)) return 1.11;
+	if (/[A-Z]/.test(character)) return 0.85;
+	if (/[a-z0-9]/.test(character)) return 0.72;
+	return 1.1;
+};
+
+export const socialTextWidth = (value: string, fontSize: number): number =>
+	Array.from(value).reduce((total, character) => total + glyphEm(character) * fontSize, 0);
+
+// The text column runs from x=86 to the media/art panel at x=700.
+const TEXT_COLUMN_WIDTH = 594;
+
+// Drop what the bundled face cannot draw before anything is measured, so wrap
+// and clamp budget the column against the glyphs that actually get painted.
+const cardText = (value: string): string => value.replace(CARD_UNRENDERABLE, '').replace(/\s+/g, ' ').trim();
+
+// The strip above runs inside `cardText`/`escapeXml` — downstream of every
+// decision about WHAT to draw — so a value that is entirely unrenderable still
+// claimed its slot and then painted nothing into it. Two places chose before
+// they measured, and both are common rather than exotic:
+//
+//   - `🌸 Rosie` put a blank disc where the avatar letter goes. The `|| 'T'`
+//     fallback cannot catch it: the emoji is a perfectly truthy `initial`, and
+//     only the escape at paint time drops it.
+//   - An emoji tag or structured status spent a badge pill on an empty pill,
+//     and — because the slice to three happens first — pushed a real `#garden`
+//     off the card to do it.
+//
+// Both now choose from what survives the strip.
+const cardInitial = (preview: SocialPreview): string => {
+	const explicit = cardText(preview.initial || '');
+	if (explicit) return explicit;
+	return (Array.from(cardText(preview.author || ''))[0] || 'T').toUpperCase();
+};
+
+// A badge that strips to a bare hashtag marker (`#🎉`) is as empty as one that
+// strips to nothing at all.
+const badgeRenders = (badge: string): boolean => cardText(badge).replace(/^#/, '').length > 0;
+
+// `letterSpacing` is the SVG attribute of the same name: resvg adds it after
+// every glyph but the last, so a label the width estimate calls safe is really
+// that much wider on the eyebrow line.
+const clampToWidth = (input: string, maxWidth: number, fontSize: number, letterSpacing = 0): string => {
+	const width = (text: string): number => socialTextWidth(text, fontSize) + Math.max(0, Array.from(text).length - 1) * letterSpacing;
+	const value = cardText(input);
+	if (width(value) <= maxWidth) return value;
+	const codePoints = Array.from(value);
+	while (codePoints.length && width(`${codePoints.join('')}…`) > maxWidth) codePoints.pop();
+	return `${codePoints.join('').trimEnd()}…`;
+};
+
+const wrap = (value: string, fontSize: number, maxLines: number, maxWidth = TEXT_COLUMN_WIDTH): string[] => {
+	const words = cardText(cleanSocialText(value)).split(' ').filter(Boolean);
+	const lines: string[] = [];
+	let line = '';
+	for (const word of words) {
+		const next = line ? `${line} ${word}` : word;
+		if (socialTextWidth(next, fontSize) <= maxWidth || !line) line = next;
+		else {
+			lines.push(line);
+			line = word;
+			if (lines.length === maxLines) break;
+		}
+	}
+	if (line && lines.length < maxLines) lines.push(line);
+	// Dropped words must stay visible as an ellipsis. A last line that already
+	// fits the column is not shortened by the clamp, so mark it here rather than
+	// letting a cut-off headline read like a complete one. Every line is clamped
+	// because a single unbroken word (a pasted URL, say) is never wrapped above
+	// and would otherwise print straight through the panel.
+	const dropped = words.join(' ').length > lines.join(' ').length;
+	return lines.map((entry, index) => {
+		const clamped = clampToWidth(entry, maxWidth, fontSize);
+		if (index < lines.length - 1 || !dropped || clamped.endsWith('…')) return clamped;
+		return clampToWidth(`${clamped}…`, maxWidth, fontSize);
+	});
+};
+
+const plusMark = (x: number, y: number, size = 22): string => {
+	const cells = [
+		[1, 0],
+		[0, 1],
+		[1, 1],
+		[2, 1],
+		[1, 2]
+	];
+	const colours = ['#FFFFFF', '#FDE047', '#FDA4AF', '#C4B5FD', '#86EFAC'];
+	return `<g>${cells
+		.map(
+			([cx, cy], index) =>
+				`<rect x="${x + cx * size}" y="${y + cy * size}" width="${size - 3}" height="${size - 3}" rx="${Math.max(4, size / 4)}" fill="${
+					colours[index]
+				}" />`
+		)
+		.join('')}</g>`;
+};
+
+const colourTile = (index: number, x: number, y: number, width: number, height: number): string => {
+	const palettes = [
+		['#F5B4E3', '#E589CE'],
+		['#B8A3FF', '#8067E8'],
+		['#7DD3FC', '#3B82F6'],
+		['#86EFAC', '#22C55E']
+	];
+	const [start, end] = palettes[index % palettes.length];
+	return `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="24" fill="url(#tile-${index})" /><defs><linearGradient id="tile-${index}" x1="0" y1="0" x2="1" y2="1"><stop stop-color="${start}"/><stop offset="1" stop-color="${end}"/></linearGradient></defs>`;
+};
+
+// The branded tile is painted first and the photo lands on top of it, so a
+// href resvg cannot decode degrades to exactly the treatment the no-image
+// case already uses. SVG has no "image failed" hook: an <image> whose bytes
+// will not decode simply draws nothing, and what showed through was the white
+// card panel — a blank slab where a photo was promised. The loader only
+// checks the Content-Type header and a size bound, so any object whose stored
+// bytes do not match their declared type reaches the renderer, as does any
+// SAFE_IMAGE_TYPES spelling this resvg build happens not to decode.
+const imageTile = (href: string | undefined, index: number, x: number, y: number, width: number, height: number): string => {
+	const tile = colourTile(index, x, y, width, height);
+	if (!href) return tile;
+	const clip = `clip-${index}`;
+	return `${tile}<clipPath id="${clip}"><rect x="${x}" y="${y}" width="${width}" height="${height}" rx="24"/></clipPath><image href="${href}" x="${x}" y="${y}" width="${width}" height="${height}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clip})"/>`;
+};
+
+const panelArt = (variant: SocialPreviewVariant): string => {
+	switch (variant) {
+		case 'text-post':
+			return '<path d="M796 226h190a28 28 0 0 1 28 28v104a28 28 0 0 1-28 28h-93l-44 37v-37h-53a28 28 0 0 1-28-28V254a28 28 0 0 1 28-28Z" fill="#FDE047" opacity=".96"/><path d="M812 282h150M812 316h112" stroke="#5B21B6" stroke-width="14" stroke-linecap="round"/>';
+		case 'image-post':
+		case 'gallery':
+		case 'media-image':
+			return '<rect x="764" y="178" width="132" height="144" rx="20" fill="#F9A8D4"/><rect x="912" y="212" width="150" height="170" rx="20" fill="#FDE047"/><path d="m780 300 42-45 32 32 18-20 46 48" stroke="#5B21B6" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" fill="none"/><circle cx="854" cy="224" r="15" fill="#FFFFFF"/>';
+		case 'poll':
+			return '<rect x="774" y="250" width="86" height="148" rx="22" fill="#67E8F9"/><rect x="884" y="196" width="86" height="202" rx="22" fill="#FDE047"/><rect x="994" y="228" width="86" height="170" rx="22" fill="#F9A8D4"/><path d="M786 430h286" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round"/>';
+		case 'listing':
+			return '<path d="M812 188h174l88 88-174 174-88-88V188Z" fill="#FDE047"/><circle cx="868" cy="244" r="18" fill="#DB2777"/><text x="936" y="350" fill="#DB2777" font-family="Arial, sans-serif" font-size="92" font-weight="800" text-anchor="middle">$</text>';
+		case 'thingtime':
+		case 'thing':
+			return '<circle cx="912" cy="296" r="66" fill="#FDE047"/><circle cx="786" cy="212" r="30" fill="#67E8F9"/><circle cx="1032" cy="208" r="30" fill="#F9A8D4"/><circle cx="1024" cy="412" r="30" fill="#86EFAC"/><path d="M812 228 862 268m104 0 46-42m-52 82 44 82m-158-82-38 4" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round"/>';
+		case 'share':
+			return '<path d="M788 262h176l-36-36m36 36-36 36M1036 358H860l36-36m-36 36 36 36" fill="none" stroke="#FDE047" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/><circle cx="798" cy="358" r="28" fill="#F9A8D4"/><circle cx="1044" cy="262" r="28" fill="#67E8F9"/>';
+		case 'comment':
+		case 'reply':
+			return '<path d="M780 226h174a26 26 0 0 1 26 26v92a26 26 0 0 1-26 26h-80l-38 30v-30h-56a26 26 0 0 1-26-26v-92a26 26 0 0 1 26-26Z" fill="#FDE047"/><path d="M902 330h126a26 26 0 0 1 26 26v76a26 26 0 0 1-26 26h-48l-32 26v-26h-46a26 26 0 0 1-26-26v-76a26 26 0 0 1 26-26Z" fill="#F9A8D4"/><path d="M796 280h110m-110 30h74m48 78h86" stroke="#5B21B6" stroke-width="12" stroke-linecap="round"/>';
+		case 'media-video':
+			return '<rect x="768" y="198" width="344" height="238" rx="34" fill="#111827" opacity=".82"/><path d="m912 258 92 58-92 58Z" fill="#FDE047"/><circle cx="794" cy="222" r="10" fill="#F9A8D4"/>';
+		case 'media-audio':
+			return '<path d="M770 322h36v-72h32v144h32V216h32v212h32V250h32v144h32V206h32v232h32v-116h36" fill="none" stroke="#FDE047" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>';
+		case 'media-file':
+			return '<path d="M818 184h166l80 80v186a26 26 0 0 1-26 26H818a26 26 0 0 1-26-26V210a26 26 0 0 1 26-26Z" fill="#FDE047"/><path d="M984 184v80h80M836 326h170m-170 40h138m-138 40h100" stroke="#334155" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" fill="none"/>';
+		case 'webpage':
+		case 'docs':
+			return '<rect x="786" y="172" width="280" height="310" rx="28" fill="#FDE047"/><path d="M832 240h176m-176 48h150m-150 48h176m-176 48h122" stroke="#0F766E" stroke-width="16" stroke-linecap="round"/>';
+		case 'collection':
+			return '<rect x="778" y="196" width="116" height="116" rx="28" fill="#FDE047"/><rect x="924" y="196" width="116" height="116" rx="28" fill="#F9A8D4"/><rect x="778" y="342" width="116" height="116" rx="28" fill="#67E8F9"/><rect x="924" y="342" width="116" height="116" rx="28" fill="#86EFAC"/>';
+		case 'profile':
+			return '<circle cx="918" cy="278" r="104" fill="#FDE047"/><circle cx="918" cy="258" r="39" fill="#7C3AED"/><path d="M838 366c16-60 144-60 160 0" fill="#7C3AED"/>';
+		case 'feed':
+		case 'explore':
+			return '<circle cx="820" cy="232" r="52" fill="#FDE047"/><circle cx="1008" cy="224" r="42" fill="#F9A8D4"/><circle cx="936" cy="400" r="76" fill="#67E8F9"/><path d="M820 284 914 354m74-88-34 74" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round"/>';
+		case 'app':
+		default:
+			return `${plusMark(
+				824,
+				200,
+				40
+			)}<circle cx="1070" cy="164" r="42" fill="#FDE047" opacity=".88"/><circle cx="760" cy="488" r="56" fill="#F9A8D4" opacity=".84"/>`;
+	}
+};
+
+const panelCopy = (variant: SocialPreviewVariant): [string, string] => {
+	switch (variant) {
+		case 'text-post':
+			return ['A thought,', 'with its context.'];
+		case 'poll':
+			return ['A question worth', 'answering together.'];
+		case 'listing':
+			return ['A good find,', 'ready to share.'];
+		case 'thingtime':
+		case 'thing':
+			return ['A thing with', 'its own little world.'];
+		case 'share':
+			return ['Pass the good', 'things along.'];
+		case 'comment':
+		case 'reply':
+			return ['A conversation', 'keeps its thread.'];
+		case 'media-video':
+			return ['Press play on', 'the full moment.'];
+		case 'media-audio':
+			return ['Listen to the', 'little details.'];
+		case 'media-file':
+			return ['The file, with', 'its useful context.'];
+		case 'webpage':
+		case 'docs':
+			return ['A page made', 'to be shared.'];
+		default:
+			return ['Every thing deserves', 'a little context.'];
+	}
+};
+
+const mediaLayout = (preview: SocialPreview, images: readonly (string | null)[], theme: CardTheme): string => {
+	const x = 700;
+	const y = 92;
+	const width = 430;
+	const height = 446;
+	const available = images.filter(Boolean);
+	const tiles = Math.max(preview.imageCount, available.length);
+	if (!tiles) {
+		const [firstLine, secondLine] = panelCopy(preview.variant);
+		// Each variant positions its illustration independently, but the copy sits
+		// at two fixed baselines — so the poll's white axis stroke ran through
+		// "answering together" and the docs page rect put white text on yellow.
+		// A scrim is the one treatment that works for every variant without
+		// pinning twenty pieces of art to a shared bottom edge; it is clipped to
+		// the panel so it cannot square off the panel's rounded corners.
+		const scrimTop = y + height - 220;
+		return `<g data-preview-panel="${
+			preview.variant
+		}"><rect x="${x}" y="${y}" width="${width}" height="${height}" rx="34" fill="url(#empty-panel)" opacity=".95"/>
+		${panelArt(preview.variant)}
+		<defs><clipPath id="empty-panel-clip"><rect x="${x}" y="${y}" width="${width}" height="${height}" rx="34"/></clipPath>
+		<linearGradient id="panel-scrim" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#160A35" stop-opacity="0"/><stop offset=".55" stop-color="#160A35" stop-opacity=".62"/><stop offset="1" stop-color="#160A35" stop-opacity=".78"/></linearGradient></defs>
+		<rect data-preview-scrim="1" x="${x}" y="${scrimTop}" width="${width}" height="${
+			y + height - scrimTop
+		}" fill="url(#panel-scrim)" clip-path="url(#empty-panel-clip)"/>
+		<text x="${x + 46}" y="410" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="30" font-weight="700">${escapeXml(firstLine)}</text>
+		<text x="${x + 46}" y="450" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="30" font-weight="700">${escapeXml(secondLine)}</text></g>`;
+	}
+	const count = Math.min(4, Math.max(1, tiles));
+	if (count === 1) return imageTile(images[0] || undefined, 0, x, y, width, height);
+	if (count === 2)
+		return `${imageTile(images[0] || undefined, 0, x, y, width / 2 - 8, height)}${imageTile(
+			images[1] || undefined,
+			1,
+			x + width / 2 + 8,
+			y,
+			width / 2 - 8,
+			height
+		)}`;
+	const tileWidth = width / 2 - 8;
+	const tileHeight = height / 2 - 8;
+	// Three photos get a tall-left/stacked-right collage rather than the 2×2 grid
+	// with its fourth cell left undrawn. An undrawn cell is not "empty": nothing
+	// is painted there, so the white card panel shows through as a blank slab in
+	// the corner of the collage — the exact treatment `imageTile` paints its
+	// branded tile to avoid, and the only count that had it (1, 2 and 4 all fill
+	// the panel). Exactly three photos is an ordinary post, not an edge case.
+	if (count === 3) {
+		return `${imageTile(images[0] || undefined, 0, x, y, tileWidth, height)}${imageTile(
+			images[1] || undefined,
+			1,
+			x + tileWidth + 16,
+			y,
+			tileWidth,
+			tileHeight
+		)}${imageTile(images[2] || undefined, 2, x + tileWidth + 16, y + tileHeight + 16, tileWidth, tileHeight)}`;
+	}
+	return Array.from({ length: count }, (_, index) =>
+		imageTile(
+			images[index] || undefined,
+			index,
+			x + (index % 2) * (tileWidth + 16),
+			y + Math.floor(index / 2) * (tileHeight + 16),
+			tileWidth,
+			tileHeight
+		)
+	).join('');
+};
+
+export const buildSocialCardSvg = (preview: SocialPreview, imageDataUris: readonly (string | null)[] = []): string => {
+	const titleFontSize = preview.kind === 'profile' ? 42 : 38;
+	const titleLines = wrap(preview.title, titleFontSize, 3);
+	const descriptionLines = wrap(preview.description, 21, preview.options.length ? 2 : 3);
+	const badges = preview.badges.filter(badgeRenders).slice(0, 3);
+	const pollRows = preview.options.slice(0, 3);
+	const theme = CARD_THEMES[preview.variant];
+	const primary = theme.primary;
+	return `<svg xmlns="http://www.w3.org/2000/svg" data-preview-variant="${
+		preview.variant
+	}" width="${SOCIAL_PREVIEW_WIDTH}" height="${SOCIAL_PREVIEW_HEIGHT}" viewBox="0 0 ${SOCIAL_PREVIEW_WIDTH} ${SOCIAL_PREVIEW_HEIGHT}">
+	<defs>
+		<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#2E1065"/><stop offset=".42" stop-color="${primary}"/><stop offset="1" stop-color="${
+		theme.end
+	}"/></linearGradient>
+		<linearGradient id="empty-panel" x1="0" y1="0" x2="1" y2="1"><stop stop-color="${theme.panelStart}"/><stop offset="1" stop-color="${
+		theme.panelEnd
+	}"/></linearGradient>
+		<filter id="shadow" x="-15%" y="-15%" width="130%" height="140%"><feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#160A35" flood-opacity=".32"/></filter>
+	</defs>
+	<rect width="1200" height="630" fill="url(#bg)"/>
+	<circle cx="1145" cy="-16" r="188" fill="#FDE047" opacity=".30"/><circle cx="100" cy="615" r="190" fill="#67E8F9" opacity=".27"/><circle cx="640" cy="48" r="105" fill="#F9A8D4" opacity=".22"/>
+	<rect x="44" y="38" width="1112" height="554" rx="42" fill="#FFFFFF" filter="url(#shadow)"/>
+	<rect x="44" y="38" width="1112" height="54" rx="42" fill="#17112D"/>
+	<rect x="44" y="70" width="1112" height="22" fill="#17112D"/>
+	${plusMark(74, 49, 13)}
+	<text x="140" y="72" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="18" font-weight="700" letter-spacing="2">THINGTIME</text>
+	<!-- The chrome's star/smiley/plus motifs are drawn, not typed: Liberation Sans
+	     has no U+2726 or U+271A, so as text they were two .notdef boxes. -->
+	<g opacity=".85">
+		<path d="M1006 55.5 1009 62 1015.5 65 1009 68 1006 74.5 1003 68 996.5 65 1003 62Z" fill="#FFFFFF"/>
+		<circle cx="1052" cy="65" r="8.5" fill="none" stroke="#FFFFFF" stroke-width="2.2"/>
+		<circle cx="1048.8" cy="62.4" r="1.3" fill="#FFFFFF"/><circle cx="1055.2" cy="62.4" r="1.3" fill="#FFFFFF"/>
+		<path d="M1048.4 67.6a4.4 4.4 0 0 0 7.2 0" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round"/>
+		<path d="M1098 57.5v15M1090.5 65h15" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round"/>
+	</g>
+	<text x="86" y="134" fill="#7C3AED" font-family="Arial, sans-serif" font-size="15" font-weight="700" letter-spacing="${EYEBROW_LETTER_SPACING}">${escapeXml(
+		clampToWidth(preview.eyebrow, TEXT_COLUMN_WIDTH, 15, EYEBROW_LETTER_SPACING)
+	)}</text>
+	${
+		preview.author
+			? `<circle cx="102" cy="178" r="22" fill="${primary}"/><text x="102" y="186" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="20" font-weight="700" text-anchor="middle">${escapeXml(
+					cardInitial(preview)
+			  )}</text><text x="136" y="184" fill="#2B2440" font-family="Arial, sans-serif" font-size="19" font-weight="700">${escapeXml(
+					clampToWidth(preview.author, AUTHOR_LABEL_WIDTH, 19)
+			  )}</text>`
+			: ''
+	}
+	${titleLines
+		.map(
+			(line, index) =>
+				`<text x="86" y="${
+					(preview.author ? 246 : 198) + index * 50
+				}" fill="#17112D" font-family="Arial, sans-serif" font-size="${titleFontSize}" font-weight="800">${escapeXml(line)}</text>`
+		)
+		.join('')}
+	${descriptionLines
+		.map(
+			(line, index) =>
+				`<text x="86" y="${
+					preview.author ? 408 + index * 30 : 368 + index * 30
+				}" fill="#5F5872" font-family="Arial, sans-serif" font-size="21">${escapeXml(line)}</text>`
+		)
+		.join('')}
+	${pollRows
+		.map(
+			(option, index) =>
+				`<rect x="86" y="${POLL_ROW_TOP + index * POLL_ROW_PITCH}" width="530" height="${POLL_ROW_HEIGHT}" rx="12" fill="#F0EAFF"/><rect x="86" y="${
+					POLL_ROW_TOP + index * POLL_ROW_PITCH
+				}" width="${260 + index * 58}" height="${POLL_ROW_HEIGHT}" rx="12" fill="${primary}" opacity=".85"/><text x="98" y="${
+					POLL_ROW_TOP + 19 + index * POLL_ROW_PITCH
+				}" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="14" font-weight="700">${escapeXml(
+					clampToWidth(option, POLL_LABEL_WIDTH, 14)
+				)}</text>`
+		)
+		.join('')}
+	${badges
+		.map(
+			(badge, index) =>
+				`<rect x="${86 + index * 164}" y="${BADGE_ROW_TOP}" width="150" height="28" rx="14" fill="#F2EEF9"/><text x="${
+					161 + index * 164
+				}" y="${BADGE_ROW_TOP + 19}" fill="#5D5275" font-family="Arial, sans-serif" font-size="13" font-weight="700" text-anchor="middle">${escapeXml(
+					clampToWidth(badge, BADGE_LABEL_WIDTH, 13)
+				)}</text>`
+		)
+		.join('')}
+	${mediaLayout(preview, imageDataUris, theme)}
+	</svg>`;
+};
+
+// resvg only loads fonts from a path, so the embedded faces are materialised
+// once per process into the runtime's temp dir (writable on Vercel) and reused.
+// `loadSystemFonts` is then off deliberately: it keeps the deployed card
+// byte-identical to the one CI renders, so the width estimate in
+// `socialTextWidth` is calibrated against the face that actually draws.
+let cardFontFiles: string[] | null = null;
+
+export const socialCardFontFiles = (): string[] => {
+	if (cardFontFiles) return cardFontFiles;
+	const directory = join(tmpdir(), 'thingtime-social-card-fonts');
+	const files: string[] = [];
+	try {
+		mkdirSync(directory, { recursive: true });
+		for (const font of SOCIAL_CARD_FONTS) {
+			const path = join(directory, font.file);
+			if (!existsSync(path)) writeFileSync(path, Buffer.from(font.base64, 'base64'));
+			files.push(path);
+		}
+	} catch (error) {
+		// Never fail a card over this: fall back to whatever the host provides.
+		// That is nothing on Vercel — hence the loud log — but it is a full font
+		// set on a developer machine, so local rendering still works.
+		console.error('[social-card] could not materialise the bundled card font; falling back to system fonts:', error);
+		cardFontFiles = [];
+		return cardFontFiles;
+	}
+	cardFontFiles = files;
+	return cardFontFiles;
+};
+
+export const socialCardRenderOptions = (): ConstructorParameters<typeof Resvg>[1] => {
+	const fontFiles = socialCardFontFiles();
+	return {
+		fitTo: { mode: 'width', value: SOCIAL_PREVIEW_WIDTH },
+		font: {
+			loadSystemFonts: fontFiles.length === 0,
+			fontFiles,
+			// `Arial` does not exist on Linux and the card markup asks for
+			// `Arial, sans-serif`, so both the generic fallback and the
+			// nothing-matched default have to land on the bundled face.
+			defaultFontFamily: SOCIAL_CARD_FONT_FAMILY,
+			sansSerifFamily: SOCIAL_CARD_FONT_FAMILY
+		}
+	};
+};
+
+/**
+ * Read at most `limit` bytes of a response body, giving up the moment the cap
+ * is passed.
+ *
+ * `arrayBuffer()` cannot enforce a cap: it buffers the whole body first and can
+ * only be measured afterwards, which is the opposite order from what a limit
+ * means. A `content-length` pre-check does not stand in for it either — the
+ * header is absent on a chunked response, so the check silently passes and the
+ * bound stops existing exactly when it is load-bearing. This endpoint is public
+ * and unauthenticated and renders up to four images at once, so the read is
+ * bounded as it happens instead.
+ *
+ * Exported for the unit suite: the caller reaches S3 and cannot be tested here.
+ */
+export const readBodyWithin = async (response: Response, limit: number): Promise<Uint8Array | null> => {
+	const reader = response.body?.getReader();
+	if (!reader) return null;
+	const chunks: Uint8Array[] = [];
+	let total = 0;
+	for (;;) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		if (!value) continue;
+		total += value.byteLength;
+		if (total > limit) {
+			// Cancelling closes the connection rather than draining bytes we have
+			// already decided to throw away.
+			await reader.cancel();
+			return null;
+		}
+		chunks.push(value);
+	}
+	const bytes = new Uint8Array(total);
+	let offset = 0;
+	for (const chunk of chunks) {
+		bytes.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+	return bytes;
+};
+
+const readUint32BE = (bytes: Uint8Array, offset: number): number =>
+	bytes[offset] * 0x1000000 + ((bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3]);
+const readUint16BE = (bytes: Uint8Array, offset: number): number => (bytes[offset] << 8) | bytes[offset + 1];
+const readUint16LE = (bytes: Uint8Array, offset: number): number => bytes[offset] | (bytes[offset + 1] << 8);
+const readUint24LE = (bytes: Uint8Array, offset: number): number => bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16);
+const asciiAt = (bytes: Uint8Array, offset: number, length: number): string =>
+	Array.from(bytes.subarray(offset, offset + length), (byte) => String.fromCharCode(byte)).join('');
+
+type ImageExtent = { width: number; height: number };
+const larger = (a: ImageExtent | null, b: ImageExtent | null): ImageExtent | null =>
+	!a ? b : !b ? a : b.width * b.height > a.width * a.height ? b : a;
+
+// AVIF keeps its intrinsic size in an `ispe` box nested meta → iprp → ipco.
+// Walk the boxes rather than scanning the file for the fourcc: a raw scan can
+// match inside compressed image data and read a bogus — possibly small — size,
+// and under-reading is the one direction this guard must never fail in. The
+// largest `ispe` wins for the same reason (a multi-item file can describe
+// thumbnails alongside the full-size item).
+const AVIF_CONTAINER_BOXES = new Set(['meta', 'iprp', 'ipco']);
+const avifExtent = (bytes: Uint8Array, start: number, end: number, depth = 0): ImageExtent | null => {
+	let offset = start;
+	let found: ImageExtent | null = null;
+	while (offset + 8 <= end && depth < 6) {
+		const size = readUint32BE(bytes, offset);
+		const type = asciiAt(bytes, offset + 4, 4);
+		// size 0 means "runs to the end of the file"; size 1 means a 64-bit
+		// length, which no `ispe` ancestor needs, so stop rather than guess.
+		const boxEnd = size === 0 ? end : offset + size;
+		if (size === 1 || size < 8 || boxEnd > end) break;
+		if (type === 'ispe' && offset + 20 <= end) {
+			found = larger(found, { width: readUint32BE(bytes, offset + 12), height: readUint32BE(bytes, offset + 16) });
+		} else if (AVIF_CONTAINER_BOXES.has(type)) {
+			// `meta` is a full box: a version/flags word precedes its children.
+			found = larger(found, avifExtent(bytes, offset + 8 + (type === 'meta' ? 4 : 0), boxEnd, depth + 1));
+		}
+		offset = boxEnd;
+	}
+	return found;
+};
+
+const jpegExtent = (bytes: Uint8Array): ImageExtent | null => {
+	let offset = 2;
+	while (offset + 9 <= bytes.length) {
+		if (bytes[offset] !== 0xff) return null;
+		const marker = bytes[offset + 1];
+		// Padding, standalone markers (RSTn/TEM/SOI) carry no length word.
+		if (marker === 0xff) {
+			offset += 1;
+			continue;
+		}
+		if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd8)) {
+			offset += 2;
+			continue;
+		}
+		// SOS begins entropy-coded data and EOI ends the image; a frame header
+		// always precedes both, so anything not found by here is not there.
+		if (marker === 0xda || marker === 0xd9) return null;
+		// SOFn — every frame flavour except DHT (C4), JPG (C8) and DAC (CC).
+		if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+			return { width: readUint16BE(bytes, offset + 7), height: readUint16BE(bytes, offset + 5) };
+		}
+		const segment = readUint16BE(bytes, offset + 2);
+		if (segment < 2) return null;
+		offset += 2 + segment;
+	}
+	return null;
+};
+
+const webpExtent = (bytes: Uint8Array): ImageExtent | null => {
+	const chunk = asciiAt(bytes, 12, 4);
+	if (chunk === 'VP8X' && bytes.length >= 30) {
+		// The extended header stores canvas dimensions minus one.
+		return { width: readUint24LE(bytes, 24) + 1, height: readUint24LE(bytes, 27) + 1 };
+	}
+	if (chunk === 'VP8L' && bytes.length >= 25 && bytes[20] === 0x2f) {
+		// 14 bits of width-1 then 14 bits of height-1, little-endian.
+		const packed = readUint16LE(bytes, 21) + readUint16LE(bytes, 23) * 0x10000;
+		return { width: (packed & 0x3fff) + 1, height: ((packed >>> 14) & 0x3fff) + 1 };
+	}
+	if (chunk === 'VP8 ' && bytes.length >= 30 && bytes[23] === 0x9d && bytes[24] === 0x01 && bytes[25] === 0x2a) {
+		return { width: readUint16LE(bytes, 26) & 0x3fff, height: readUint16LE(bytes, 28) & 0x3fff };
+	}
+	return null;
+};
+
+/**
+ * Intrinsic pixel dimensions of an encoded image, read from its own header.
+ *
+ * Dispatched on the magic bytes, never on the declared Content-Type: the type
+ * a stored attachment serves is author-supplied metadata, so trusting it is
+ * exactly the gap that lets un-measured bytes reach the decoder. Returns null
+ * for anything this cannot measure with certainty, and every caller treats
+ * null as "do not render" — the branded tile that `imageTile` already paints
+ * for an undecodable href.
+ *
+ * Exported for the unit suite.
+ */
+export const socialCardImageExtent = (bytes: Uint8Array): ImageExtent | null => {
+	const extent =
+		bytes.length >= 24 && asciiAt(bytes, 0, 8) === '\x89PNG\r\n\x1a\n' && asciiAt(bytes, 12, 4) === 'IHDR'
+			? { width: readUint32BE(bytes, 16), height: readUint32BE(bytes, 20) }
+			: bytes.length >= 10 && asciiAt(bytes, 0, 4) === 'GIF8'
+			? { width: readUint16LE(bytes, 6), height: readUint16LE(bytes, 8) }
+			: bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8
+			? jpegExtent(bytes)
+			: bytes.length >= 16 && asciiAt(bytes, 0, 4) === 'RIFF' && asciiAt(bytes, 8, 4) === 'WEBP'
+			? webpExtent(bytes)
+			: bytes.length >= 12 && asciiAt(bytes, 4, 4) === 'ftyp'
+			? avifExtent(bytes, 0, bytes.length)
+			: null;
+	return extent && Number.isFinite(extent.width) && Number.isFinite(extent.height) && extent.width > 0 && extent.height > 0 ? extent : null;
+};
+
+type CardImage = { uri: string; pixels: number };
+
+const loadAttachmentDataUri = async (attachmentId: string): Promise<CardImage | null> => {
+	try {
+		const { getAttachmentDownload } = await import('../attachments/attachments');
+		const download = await getAttachmentDownload(null, attachmentId, false);
+		if (!download.ok) return null;
+		// The record's own size is verified against the stored object's head and
+		// pinned to an immutable objectVersionId, so a known-oversize attachment
+		// can be dropped before a byte is fetched. Only a definite overage skips
+		// the fetch — anything else still goes through the bounded read below.
+		if (Number.isFinite(download.size) && download.size > MAX_CARD_IMAGE_BYTES) return null;
+		const response = await fetch(download.url, { signal: AbortSignal.timeout(5_000) });
+		const contentType = response.headers.get('content-type')?.split(';')[0]?.toLowerCase() || '';
+		if (!response.ok || !SAFE_IMAGE_TYPES.has(contentType)) return null;
+		const bytes = await readBodyWithin(response, MAX_CARD_IMAGE_BYTES);
+		if (!bytes || bytes.byteLength === 0) return null;
+		const extent = socialCardImageExtent(bytes);
+		if (!extent) return null;
+		const pixels = extent.width * extent.height;
+		if (pixels > MAX_CARD_IMAGE_PIXELS) return null;
+		return { uri: `data:${contentType};base64,${Buffer.from(bytes).toString('base64')}`, pixels };
+	} catch {
+		return null;
+	}
+};
+
+export const renderSocialCardPng = async (preview: SocialPreview, providedImageDataUris?: readonly (string | null)[]): Promise<Uint8Array> => {
+	let imageDataUris = providedImageDataUris;
+	if (!imageDataUris) {
+		// The fetches stay concurrent — they are S3 round trips — but the decode
+		// budget is spent in tile order afterwards, so four in-budget photos still
+		// cannot hand the renderer four times the per-image ceiling at once. A
+		// dropped tile is not a blank slab: `imageTile` paints its branded tile
+		// wherever an href is missing.
+		const loaded = await Promise.all(preview.images.slice(0, 4).map((image) => loadAttachmentDataUri(image.attachmentId)));
+		let budget = MAX_CARD_COLLAGE_PIXELS;
+		imageDataUris = loaded.map((image) => {
+			if (!image || image.pixels > budget) return null;
+			budget -= image.pixels;
+			return image.uri;
+		});
+	}
+	const svg = buildSocialCardSvg(preview, imageDataUris);
+	return new Resvg(svg, socialCardRenderOptions()).render().asPng();
+};
