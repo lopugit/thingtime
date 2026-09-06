@@ -1,5 +1,9 @@
 # TESTING.md — per-area manual test checklists
 
+- Thing detail back links accept only `things`, `actions`, or `feed` as `from`.
+  Unknown values and prototype keys such as `toString` must display a working
+  Back to feed link on desktop and mobile.
+
 - Rich-text editors initialize when a browser omits `crypto.randomUUID`.
   Multiple mounted editors of the same saved block keep independent tune IDs;
   plain registry identifiers are never treated as credentials.
