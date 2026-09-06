@@ -18,6 +18,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-06: Integrate recording automation with the merged Watch foundation;
+  send daily reminders through its native push channel after durable commit,
+  preserving a bounded title and safe recordings link. — Codex (AI)
+
 - 2026-09-06: Add opt-in private Watch recording transcription, relational
   transcript comments, grounded notes/todos, durable retry checkpoints and
   daily local-time reminders. Add account settings/activity at

@@ -44,7 +44,7 @@ test('capabilities publish the native Apple notification device contract', () =>
 	const manifest = createApiCapabilitiesManifest();
 
 	assert.equal(manifest.features['api.notifications-devices'], '1.1.0');
-	assert.equal(manifest.features['api.notifications-list'], '1.2.0');
+	assert.equal(manifest.features['api.notifications-list'], '1.3.0');
 	assert.equal(manifest.features['api.watch-pairing'], '1.2.0');
 	assert.equal(manifest.features['api.watch-sync'], '1.0.0');
 	assert.equal(manifest.features['api.watch-things'], '1.0.0');

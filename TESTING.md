@@ -1,5 +1,10 @@
 # TESTING.md — per-area manual test checklists
 
+- Recording reminders fan out to native push only after their private todo and
+  daily notification transaction commits. Retries never send another push for
+  the same daily ID; blocked preferences/checkpoints send none. A push transport
+  failure does not erase or duplicate the durable bell reminder.
+
 - Signed-out first paint: `/`, `/builder/demos`, and `/watch/pair` must render
   without a Watch approval banner exception. Account switching and temporary
   sessions never show another account's cached Watch requests; expired and

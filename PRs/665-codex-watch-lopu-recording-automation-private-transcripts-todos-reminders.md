@@ -82,3 +82,25 @@ Do not duplicate active runs or touch the original checkout's unrelated merge.
 CI found that the three protected recording schemas needed explicit empty
 entries in the pinned builtin-schema projection test. Those fixtures were added;
 the privacy/schema gate itself was not weakened.
+
+## Watch integration — 2026-09-06
+
+Watch #667 merged to main at `2e945e8d8e8958c1b7ed7b368107fa00dc7781d6` after
+all four required contexts passed. This feature now includes that ancestry.
+The notification list combines Watch pagination with the new reminder family
+at 1.3.0; settings remain 1.2.0. Native push runs only after the unique daily
+bell row commits, uses a bounded reminder title, and links safely to recordings.
+Three collaborator tests prove post-commit fan-out, duplicate suppression,
+preference/private-checkpoint suppression, and best-effort failure behavior.
+Notification payload tests: 32 passed; capability/health tests: 12; recording
+core/worker/reminder tests: 24. No real APNs/device delivery is claimed.
+
+Production now advertises Watch pairing 1.2.0 and sync 1.0.0, but its new
+readiness check reports storage migration required. The documented production
+migration ran successfully on September 3; new or stale account ledgers need
+a current admin census before deciding whether to run it again. The available
+signed-in Chrome tab cannot currently be controlled reliably. No migration,
+scope grant, credential fabrication or direct database bypass was performed.
+Lopu/Builder integration #668 and real provider-backed audio acceptance remain
+release gates. The user was asked which account to use for synthetic private
+test items; no answer has been received yet.

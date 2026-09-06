@@ -225,8 +225,9 @@ export const emitSystemNotificationOnce = async (
 	});
 	if (!inserted) return false;
 	await trimRecipient(input.recipientId).catch(() => {});
-	// Native push is wired through the shared notification sender when the
-	// Watch foundation is integrated; the bell row is already durable here.
+	// Fan out only after the deduplicated bell/checkpoint transaction commits.
+	// Push is best-effort; a delivery failure must not duplicate the daily row.
+	await sendNotificationPush({ ...fullInput, notificationId: uniqueId }).catch(() => {});
 	await maybeEmailNotification(fullInput).catch(() => {});
 	return true;
 };
