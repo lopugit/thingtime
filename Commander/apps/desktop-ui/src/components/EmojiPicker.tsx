@@ -198,6 +198,15 @@ export function EmojiPicker({
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (actionsOpen && ['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) return;
+      // Recovery controls are reached by keyboard precisely when paste is denied.
+      // Cancelling their Enter would retry the failing paste instead of activating them.
+      if (
+        event.key === 'Enter' &&
+        !event.metaKey &&
+        event.target instanceof HTMLElement &&
+        event.target.closest('.emoji-recovery-actions')
+      )
+        return;
       if (event.key === 'Escape') {
         event.preventDefault();
         if (actionsOpen) setActionsOpen(false);

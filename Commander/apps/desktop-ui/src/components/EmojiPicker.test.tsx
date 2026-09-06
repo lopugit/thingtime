@@ -182,6 +182,34 @@ describe('EmojiPicker', () => {
     expect(screen.queryByRole('button', { name: 'Open Accessibility Settings' })).not.toBeInTheDocument();
   });
 
+  it('leaves Return to a focused recovery control instead of retrying the denied paste', async () => {
+    vi.mocked(nativeRequest).mockImplementation(async (method) => {
+      if (method === 'clipboard.paste') return { copied: false, pasted: false, requiresAccessibility: true };
+      return undefined;
+    });
+    const onBack = vi.fn();
+    render(<EmojiPicker platform="macos" defaultAction="paste" onBack={onBack} />);
+
+    fireEvent.keyDown(window, { key: 'Enter' });
+    await screen.findByRole('status');
+    const pasteAttempts = () =>
+      vi.mocked(nativeRequest).mock.calls.filter(([method]) => method === 'clipboard.paste').length;
+    expect(pasteAttempts()).toBe(1);
+
+    const copyEmoji = screen.getByRole('button', { name: 'Copy Emoji' });
+    copyEmoji.focus();
+    fireEvent.keyDown(copyEmoji, { key: 'Enter', bubbles: true });
+    expect(pasteAttempts()).toBe(1);
+
+    // Escape and Command-Return must still reach the picker while a control holds focus.
+    fireEvent.keyDown(copyEmoji, { key: 'Escape', bubbles: true });
+    expect(onBack).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(copyEmoji, { key: 'Enter', metaKey: true, bubbles: true });
+    await waitFor(() =>
+      expect(vi.mocked(nativeRequest).mock.calls.some(([method]) => method === 'clipboard.write')).toBe(true),
+    );
+  });
+
   it('does not reorder the unfiltered grid after repeated denied double clicks', async () => {
     vi.mocked(nativeRequest).mockImplementation(async (method) => {
       if (method === 'clipboard.paste') return { copied: false, pasted: false, requiresAccessibility: true };
