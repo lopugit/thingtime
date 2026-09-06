@@ -21,6 +21,7 @@ export type ApiTestGroup =
   | 'things'
   | 'vercel'
   | 'waitlist'
+  | 'watch'
   | 'webpages';
 
 export type ApiTestResultStatus = 'pass' | 'fail';
@@ -201,6 +202,10 @@ const redactPreviewValue = (value: unknown): unknown => {
           lowerKey.includes('token') ||
           lowerKey.includes('secret') ||
           lowerKey.includes('password') ||
+          lowerKey.includes('credential') ||
+          lowerKey === 'devicecode' ||
+          lowerKey === 'usercode' ||
+          lowerKey === 'verificationpath' ||
           lowerKey === 'authorization';
 
         return [key, isSensitive ? '[redacted]' : redactPreviewValue(entryValue)];

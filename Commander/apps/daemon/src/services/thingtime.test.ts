@@ -125,6 +125,31 @@ describe('ThingtimeService OAuth', () => {
 });
 
 describe('ThingtimeService network probe', () => {
+  it('sends the active credential on every transfer, never follows redirects, and isolates accounts in flight', async () => {
+    const fetchMock = vi.fn(async (input: URL, init?: RequestInit) => {
+      const url = new URL(input);
+      if (url.pathname.endsWith('thingtime-capabilities.json')) return manifest();
+      expect(init?.headers).toMatchObject({ authorization: 'Bearer test-token' });
+      expect(init?.redirect).toBe('error');
+      if (url.pathname.endsWith('/ping')) return new Response(new Uint8Array(256));
+      const bytes = Number(url.searchParams.get('bytes'));
+      return url.pathname.endsWith('/download')
+        ? new Response(new Uint8Array(bytes))
+        : jsonResponse({ ok: true, bytes });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const service = new ThingtimeService();
+    const first = service.networkProbe(configuredSettings({ activeAccountId: 'one' }), true, 'test-token');
+    await expect(
+      service.networkProbe(configuredSettings({ activeAccountId: 'two' }), true, 'other-token'),
+    ).rejects.toThrow(/another.*account/);
+    const result = await first;
+    expect(result.speed?.errors).toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(18);
+    await expect(service.networkProbe(configuredSettings({ activeAccountId: 'one' }), true)).rejects.toThrow(
+      /Unlock/,
+    );
+  });
   const manifest = () =>
     jsonResponse({
       schemaVersion: 1,
@@ -241,7 +266,7 @@ describe('ThingtimeService network probe', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
     await expect(new ThingtimeService().networkProbe(configuredSettings(), true)).rejects.toThrow(
-      'api.network-probe-upload 2.0.0',
+      'api.network-probe-ping 1.1.0',
     );
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

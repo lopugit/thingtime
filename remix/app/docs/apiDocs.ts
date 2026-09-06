@@ -66,13 +66,14 @@ const endpoint = (doc: Omit<ApiEndpointDoc, 'docsEndpoint' | 'contractVersion'> 
 const deviceEndpointDocs: ApiEndpointDoc[] = [
 	endpoint({
 		id: 'devices',
-		contractVersion: '1.8.0',
+		contractVersion: '1.9.0',
+		featureVersion: '1.9.0',
 		group: 'devices',
 		title: 'Paired devices',
 		endpoint: '/api/v1/devices',
-		summary: 'Lists safe paired-computer summaries or one detailed mirror.',
+		summary: 'Lists safe paired-device summaries or one detailed computer mirror.',
 		detail:
-			'Returns protected dedicated projections for the caller’s devices, state and connectors. Generic /things never exposes these kinds. Credentials, hashes, paths, arguments and screen transport data are omitted.',
+			'Returns protected dedicated projections for the caller’s computers and Apple Watches. Watch summaries include bounded last-sync health, the number of Things created by that Watch, and up to ten recent created Things. Generic /things never exposes protected device credentials, hashes, paths, arguments, or screen transport data.',
 		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
 		methods: ['GET'],
 		steps: ['GET to list devices.', 'Pass id to retrieve one device detail.'],
@@ -84,6 +85,82 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 				body: { ok: true, devices: [{ id: 'device-id', name: 'MacBook Pro', online: true, locked: false, connectors: [] }] }
 			}
 		]
+	}),
+	endpoint({
+		id: 'watch-pairing',
+		contractVersion: '1.2.0',
+		featureVersion: '1.2.0',
+		group: 'devices',
+		title: 'Pair Apple Watch directly',
+		endpoint: '/api/v1/watch/pairing',
+		summary: 'Starts, approves, inspects, and claims a short-lived direct Apple Watch pairing.',
+		detail:
+			'The Watch starts with optional codeFormat numeric-4 (legacy default: eight characters) and optional targetUsername. Four-digit PINs are uniquely reserved for five minutes. A separate high-entropy approvalToken lets the paired phone offer the request to its signed-in account WITHOUT approving it. GET op=pending lists only that account’s requests, with the PIN prefilled for explicit approval in any same-origin session. Username targets never grant access by themselves. Secret values are stored only as domain-separated hashes; offered human codes are retained for owner-only display. Claim requires the separate Watch-held device secret and credential. Polling allows 60/minute per IP. Lookup allows five/account and ten/IP per five minutes; start/offer/approve have separate ceilings and username targets accept five requests per five minutes. The short /pair/:code page supports manual approval; old full links remain valid.',
+		auth: { mode: 'none', description: 'Start/inspect/claim are code-bound and fail-closed rate limited. Pending requires a full user session. Lookup/offer/approve also require same-origin. Offered requests are bound to their recipient account.' },
+		methods: ['GET', 'POST'],
+		steps: [
+			'POST { op: "start", device, codeFormat: "numeric-4", targetUsername? } from the Watch.',
+			'Optionally relay pairingId, userCode and approvalToken to the paired phone; its signed-in session POSTs op: "offer". Never relay deviceCode or credential.',
+			'Any signed-in session can GET ?op=pending, show the Watch/account/code, and explicitly approve. No automatic approval occurs.',
+			'On a phone or computer open verificationEntryPath, sign in, and POST { op: "lookup", userCode } to retrieve the pairingId and safe device details.',
+			'Open verificationPath on a signed-in browser and POST { op: "approve", pairingId, userCode }.',
+			'Poll POST { op: "claim", pairingId, deviceCode, credential } until approved, then store the credential in Watch Keychain.'
+		],
+		requestExamples: [
+			{ name: 'Find a Watch by code', description: 'Authenticated, rate-limited lookup; never returns a device credential or device code.', method: 'POST', body: { op: 'lookup', userCode: '1234' } },
+			{ name: 'Pending Watch approvals', description: 'At most five unexpired, unapproved requests addressed to the current account.', method: 'GET', query: { op: 'pending' } },
+			{ name: 'Offer from paired phone', description: 'Attach to this account without approving.', method: 'POST', body: { op: 'offer', pairingId: 'pairing-jti', userCode: '1234', approvalToken: 'ttapprove_…' } },
+			{
+				name: 'Start Watch pairing',
+				description: 'Create a five-minute direct pairing request.',
+				method: 'POST',
+				body: { op: 'start', codeFormat: 'numeric-4', device: { name: 'Lopu’s Apple Watch', platform: 'watchos', model: 'Watch', osVersion: 'watchOS 26', appVersion: '24' } }
+			},
+			{
+				name: 'Claim approved Watch',
+				description: 'The secret values are generated and retained by the Watch.',
+				method: 'POST',
+				body: { op: 'claim', pairingId: 'pairing-jti', deviceCode: 'ttwatch_…', credential: 'ttnode_…' }
+			}
+		],
+		responseExamples: [
+			{
+				status: 201,
+				description: 'Pairing started.',
+				body: { ok: true, pairing: { pairingId: 'pairing-jti', userCode: '1234', deviceCode: 'ttwatch_…', approvalToken: 'ttapprove_…', verificationEntryPath: '/watch/pair', verificationPath: '/watch/pair?pairing=…&code=1234', expiresAt: '2026-09-05T01:00:00.000Z' } }
+			},
+			{ status: 428, description: 'Awaiting user approval.', body: { ok: false, code: 'authorization_pending', error: 'Approve this Watch in Thingtime first' } }
+		]
+	}),
+	endpoint({
+		id: 'watch-sync',
+		featureVersion: '1.0.0',
+		group: 'devices',
+		title: 'Sync Apple Watch directly',
+		endpoint: '/api/v1/watch/sync',
+		summary: 'Refreshes account identity and notifications directly from a paired Apple Watch.',
+		detail:
+			'Returns the paired account username, display name, avatar URL, paginated notifications, unread count, server time, and Watch device id. A successful call stamps live last-seen, last-sync, status, battery, and low-power health on the server-visible device.',
+		auth: { mode: 'session-or-bearer', description: 'Requires the paired Watch ttnode_ Bearer credential and watch.notifications.read capability.' },
+		methods: ['POST'],
+		steps: ['POST current battery and low-power state.', 'Render cached data immediately and reconcile with the response.', 'Use op mark-read for bounded ids or all notifications.'],
+		requestExamples: [{ name: 'Refresh Watch', description: 'Fetch the newest notifications and account identity.', method: 'POST', body: { limit: 25, batteryLevel: 0.72, lowPowerMode: false } }],
+		responseExamples: [{ status: 200, description: 'Watch is healthy and current.', body: { ok: true, account: { username: 'lopu', displayName: 'Lopu', avatarUrl: '/api/v1/attachments/content?id=…' }, device: { id: 'watch-device-id' }, notifications: [], unreadCount: 0, serverTime: '2026-09-05T01:00:00.000Z' } }]
+	}),
+	endpoint({
+		id: 'watch-things',
+		featureVersion: '1.0.0',
+		group: 'devices',
+		title: 'Create a private Thing from Apple Watch',
+		endpoint: '/api/v1/watch/things',
+		summary: 'Binds completed Watch uploads into a private Thing with server-owned device provenance.',
+		detail:
+			'Accepts one to ten completed post-purpose attachment ids belonging to the paired account, or stable upload request ids that the server resolves for retry recovery. Thingtime creates a private top-level post, atomically binds the attachments, and stamps sourceDeviceId from the authenticated Watch session; clients cannot forge another device id.',
+		auth: { mode: 'session-or-bearer', description: 'Requires the paired Watch ttnode_ Bearer credential and watch.things.create capability.' },
+		methods: ['POST'],
+		steps: ['Complete direct multipart uploads with the same Watch credential.', 'POST their attachmentIds with a stable shareId.', 'After an ambiguous completion, retry with requestIds so Thingtime resolves the completed upload without duplicating it.'],
+		requestExamples: [{ name: 'Create recording Thing', description: 'Bind one completed Watch recording.', method: 'POST', body: { shareId: 'watch-upload-uuid', attachmentIds: ['attachment-id'], filenames: ['Recording.m4a'] } }],
+		responseExamples: [{ status: 201, description: 'Private Thing created.', body: { ok: true, post: { id: 'thing-id', attachments: [{ id: 'attachment-id', name: 'Recording.m4a' }] } } }]
 	}),
 	endpoint({
 		id: 'devices-permissions',
@@ -1506,6 +1583,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'admin-subscriptions',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'admin',
     title: 'Subscription tiers & quota overrides',
     endpoint: '/api/v1/admin/subscriptions',
@@ -1583,6 +1662,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'admin-tiers',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'admin',
     title: 'Manage subscription tiers',
     endpoint: '/api/v1/admin/tiers',
@@ -1665,6 +1746,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'tiers',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'subscriptions',
     title: 'Live subscription tiers',
     endpoint: '/api/v1/tiers',
@@ -1672,7 +1755,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     detail:
       'Public read-only catalog. Each item includes a stable id, immutable versionId/version, name, tagline, ' +
       'optional banner image, daily/weekly/monthly/yearly minor-unit prices, six computed-or-custom discounts, ' +
-      'Editor.js inclusions, and quota defaults. Draft and archived revisions are excluded.',
+      'Editor.js inclusions, and quota defaults including speedTestsPerHour (null means unlimited). Defaults: Free 4/hour, Plus 20/hour, Pro and Pay as you go unlimited. Historical revisions without the field inherit the built-in tier allowance; custom tiers inherit Free unless configured. Draft and archived revisions are excluded.',
     auth: { mode: 'none', description: 'Public catalog; no credentials required.' },
     methods: ['GET'],
     steps: ['GET and render each returned live revision as a tier option.'],
@@ -2545,6 +2628,266 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       { status: 403, description: 'POST caller is not an admin.', body: { ok: false, error: 'Admins only' } }
     ],
     notes: ['Responses set Cache-Control: no-store. Storage audit fields are never exposed by this endpoint.']
+  }),
+  endpoint({
+    id: 'ai-models',
+    group: 'lopu',
+    title: 'Lopu model catalog',
+    endpoint: '/api/v1/ai/models',
+    // 1.1.0: a session also gets `vaultProviders` + `vault` (additive, design note §1.3);
+    // 1.2.0: `models[].verified` + `providers.<p>.{verified, checkedAt, reason}` from the key
+    // probe (additive); 1.3.0: `vaultProviders[].realtimeModels` (the kind’s direct-voice models, design
+    // note §6.1) and a row without a model reports its kind’s first catalog model (additive).
+    // contractVersion feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
+    contractVersion: '1.3.0',
+    featureVersion: '1.3.0',
+    summary: 'Lists every AI model Lopu can chat with, its availability (provider keys verified, not merely detected), the resolved chat defaults, and (for a session) the caller’s own Secure Vault providers.',
+    detail:
+      'The public projection of the protected `ai-model` Things — one per base model in the Thingtime Admin catalog, ' +
+      'seeded idempotently from code on the first read (the `default` sentinel is routing, not a model, so it is never ' +
+      'listed). Each model carries its provider, the reasoning-effort tiers it offers, the speed lanes it sells (fast = ' +
+      'Anthropic fast mode / OpenAI priority processing), a derived family, the admin `enabled` toggle, `verified` (the ' +
+      'provider key’s probe verdict: true accepted, false rejected, null unknown), and `available` = enabled AND the provider ' +
+      'key is configured on the server (ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN; OPENAI_API_KEY) AND that key has not been ' +
+      'rejected. Keys are verified, not merely detected: a bounded server-side probe (GET /v1/models on each configured ' +
+      'provider — ANTHROPIC_BASE_URL / OPENAI_BASE_URL honoured — 5 s cap, no retries, no redirects, cached in-process for ' +
+      '10 minutes, 2 after a failure) answers `providers.<provider>` = { configured, verified, checkedAt, reason? }; 401/403 ' +
+      'marks the key invalid and hides its models, while an unreachable provider, a timeout, or an unexpected status leaves ' +
+      '`verified: null` and the models offered. `defaults` is the Thingtime.LopuChatDefaults singleton after availability is ' +
+      'applied — the stored model when it is available, else the first available model in catalog order with its effort ' +
+      'clamped (preferring high), else `model: null` when no provider is usable (Lopu then answers from the canned fallback). ' +
+      '`providers` reports presence and verdicts only; no value ever leaves the server. Model ids compose into the same ' +
+      '`<model>[:effort][:fast]` option ids ' +
+      'the AI workflow waterfall stores, and the chat reply endpoint accepts either form. A signed-in viewer additionally ' +
+      'receives `vaultProviders` — their own Secure Vault AI connections (Settings → Secure Vault), redacted to ' +
+      '{ id, name, kind, model, endpointHost, available, reason? }: never a token and never an endpoint beyond its hostname; ' +
+      '`available` is false (with a reason) when the vault key is not configured, the host is outside the server allowlist, ' +
+      'or the connection has no model — and `vault: { configured }`. Anonymous callers get an empty list. Send a ' +
+      'connection’s id as providerId to /api/v1/lopu/chats (pin it to a conversation) or /api/v1/lopu/chats/reply (run a ' +
+      'turn on it) — the turn then runs on the caller’s own provider instead of the server keys.',
+    auth: {
+      mode: 'optional',
+      description: 'Public. A session, when present, keys the ai.models rate limit by user instead of by IP and unlocks vaultProviders.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET to load the catalog before rendering a model picker (cache it locally; the list carries no secrets).',
+      'Offer only models with available: true; show the rest disabled with a "needs <provider> key" hint — or "<provider> key invalid" when verified is false.',
+      'Seed a new conversation from defaults (model, effort, speed); a null model means no provider is configured.',
+      'Send the chosen model as { model, effort, speed } or as a composed id such as claude-opus-5:high:fast.',
+      'For a session, list vaultProviders ("Your own providers") beside the catalog; send one as providerId to pin it to a chat or run a turn on it, and show reason for an unavailable one.'
+    ],
+    requestExamples: [{ name: 'Load the catalog', description: 'Read every model with availability and defaults.', method: 'GET' }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Catalog projection (truncated to two models).',
+        body: {
+          ok: true,
+          models: [
+            {
+              id: 'claude-opus-5',
+              label: 'Claude Opus 5',
+              provider: 'anthropic',
+              efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+              speeds: ['normal', 'fast'],
+              family: 'claude',
+              enabled: true,
+              available: true,
+              verified: true,
+              isDefault: true
+            },
+            {
+              id: 'gpt-5.6-sol',
+              label: 'GPT-5.6 Sol',
+              provider: 'openai',
+              efforts: ['none', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+              speeds: ['normal', 'fast'],
+              family: 'gpt',
+              enabled: true,
+              available: false,
+              verified: null,
+              isDefault: false
+            }
+          ],
+          defaults: { model: 'claude-opus-5', effort: 'high', speed: 'normal' },
+          providers: {
+            anthropic: { configured: true, verified: true, checkedAt: '2026-09-04T02:10:00.000Z' },
+            openai: { configured: false, verified: null, checkedAt: null }
+          },
+          vaultProviders: [
+            { id: 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', name: 'My Claude', kind: 'anthropic', model: 'claude-sonnet-4-6', endpointHost: 'api.anthropic.com', available: true },
+            {
+              id: 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e',
+              name: 'Home lab',
+              kind: 'compatible',
+              model: 'llama-3.3-70b',
+              endpointHost: 'llm.example.com',
+              available: false,
+              reason: 'This endpoint host is not enabled by the Thingtime administrator.'
+            }
+          ],
+          vault: { configured: true }
+        }
+      },
+      { status: 429, description: 'Rate limited (ai.models).', body: { ok: false, error: 'The model catalog is being read too quickly — try again in a moment 🦄' } }
+    ],
+    notes: [
+      'Responses set Cache-Control: no-store so admin toggles and key changes are visible immediately.',
+      'providers.<provider>.verified is the cached probe verdict (10 minutes after a success, 2 after anything else); administrators force a fresh check with POST /api/v1/admin/ai/models { probe: true }. A probe never blocks the catalog for more than its 5 s cap and never fails it.',
+      'vaultProviders is empty for anonymous callers and when the Secure Vault key is not configured; a vault read failure degrades to an empty list, never a failed catalog.'
+    ]
+  }),
+  endpoint({
+    id: 'admin-ai-models',
+    group: 'admin',
+    title: 'Admin Lopu model catalog',
+    endpoint: '/api/v1/admin/ai/models',
+    // 1.1.0: POST { probe: true } re-checks the provider keys (additive).
+    // contractVersion feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
+    summary: 'Enables or disables one catalog model, re-seeds the ai-model Things from the code catalog, or re-checks the provider keys.',
+    detail:
+      'The only writer of the `ai-model` kind besides the boot-time seed. POST { id, enabled } flips `crystal.enabled` on ' +
+      'the genuine system-owned row (a disabled model stays listed but is never selectable and never becomes the default). ' +
+      'POST { seed: true } re-runs the idempotent catalog seed: inserts rows for models newly added to the code catalog, ' +
+      'heals drifted catalog fields and envelopes, skips (never edits) a foreign doc squatting a catalog shareId, and never ' +
+      'touches `enabled`. POST { probe: true } forces a fresh provider-key probe — the cached verdict is bypassed and each ' +
+      'configured provider’s GET /v1/models is dialed once more (5 s cap, no retries) — and answers { ok, probed: true, ' +
+      'providers, models, defaults } with the fresh `providers.<provider>` = { configured, verified, checkedAt, reason? } and ' +
+      'the re-projected catalog; sent together with { seed: true } the seed report carries the fresh status too. GET returns ' +
+      'the same list the public catalog serves, for the editor. Responses are private and uncacheable; the POST rate limit ' +
+      '(admin.ai.models) fails closed because the seed is a batch write and the probe dials the providers.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET to load the catalog with enabled/available flags and the resolved defaults.',
+      'POST { id, enabled } to toggle one model; read model + defaults back from the response.',
+      'POST { seed: true } after a catalog code change to insert new rows and heal drift; read report for counts and notes.',
+      'POST { probe: true } after rotating a key, or when the editor shows "key invalid", to re-check every configured provider; read providers back and expect verified: true.',
+      'Handle 401/403 for non-admins, 404 for an unknown id, and 429 when the fail-closed limit trips.'
+    ],
+    requestExamples: [
+      { name: 'Disable a model', description: 'Hide GPT-5.6 Sol from every picker.', method: 'POST', body: { id: 'gpt-5.6-sol', enabled: false } },
+      { name: 'Re-seed the catalog', description: 'Insert new catalog models and heal drifted rows.', method: 'POST', body: { seed: true } },
+      { name: 'Re-check the provider keys', description: 'Bypass the cached verdict and dial each configured provider once.', method: 'POST', body: { probe: true } }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Toggle applied.',
+        body: {
+          ok: true,
+          model: {
+            id: 'gpt-5.6-sol',
+            label: 'GPT-5.6 Sol',
+            provider: 'openai',
+            efforts: ['none', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+            speeds: ['normal', 'fast'],
+            family: 'gpt',
+            enabled: false,
+            available: false,
+            verified: true,
+            isDefault: false
+          },
+          defaults: { model: 'claude-opus-5', effort: 'high', speed: 'normal' }
+        }
+      },
+      {
+        status: 200,
+        description: 'Catalog re-seeded.',
+        body: {
+          ok: true,
+          seeded: 33,
+          report: { ok: true, total: 33, created: 1, refreshed: 0, unchanged: 32, skipped: 0, notes: [] },
+          models: [],
+          defaults: { model: 'claude-opus-5', effort: 'high', speed: 'normal' },
+          providers: {
+            anthropic: { configured: true, verified: true, checkedAt: '2026-09-04T02:10:00.000Z' },
+            openai: { configured: false, verified: null, checkedAt: null }
+          }
+        }
+      },
+      {
+        status: 200,
+        description: 'Provider keys re-checked (models omitted here). OpenAI’s key was rejected, so its models are listed unavailable until it is fixed.',
+        body: {
+          ok: true,
+          probed: true,
+          providers: {
+            anthropic: { configured: true, verified: true, checkedAt: '2026-09-04T02:10:00.000Z' },
+            openai: { configured: true, verified: false, checkedAt: '2026-09-04T02:10:00.000Z', reason: 'the provider rejected the key (HTTP 401)' }
+          },
+          models: [],
+          defaults: { model: 'claude-opus-5', effort: 'high', speed: 'normal' }
+        }
+      },
+      { status: 404, description: 'Unknown model id.', body: { ok: false, error: 'Unknown model — id must be a catalog model id' } }
+    ]
+  }),
+  endpoint({
+    id: 'settings-lopu-chat-defaults',
+    group: 'settings',
+    title: 'Lopu chat defaults',
+    endpoint: '/api/v1/settings/lopu-chat-defaults',
+    // 1.1.0: `resolved` + the provider key status carry the probe's verified verdict
+    // (additive). contractVersion feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
+    summary: 'Read or administratively set the model, effort, and speed a fresh Lopu conversation starts from.',
+    detail:
+      'The Thingtime.LopuChatDefaults settings singleton, same store posture as the AI workflow waterfall: GET publicly ' +
+      'returns the stored non-secret preference plus `resolved`, the same availability-applied defaults ' +
+      '/api/v1/ai/models reports (so an editor can show "you chose X, users get Y because X needs a key"). POST replaces ' +
+      'the preference for administrators only and validates strictly: `model` must be a catalog model id (never the ' +
+      'default sentinel), `effort` must be a tier that model offers (null, an empty string, or "default" selects the ' +
+      'provider-default effort; omitting it selects the model\'s high tier), and `speed` may be fast only where the model ' +
+      'sells a fast lane. Missing or corrupt stored settings read forgivingly — unknown models collapse to claude-opus-5, ' +
+      'unoffered efforts are clamped, unsold fast lanes drop to normal.',
+    auth: {
+      mode: 'optional',
+      description: 'GET is public. POST requires an authenticated administrator session.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET to read defaults (stored), resolved (effective), the catalog, and provider key status (configured + the probe’s verified verdict).',
+      'Administrators POST { model, effort?, speed? } to replace the preference.',
+      'Pick effort from the model\'s efforts list (null for the provider default) and speed from its speeds list.',
+      'Read resolved back to confirm the stored choice is actually reachable with the keys configured.'
+    ],
+    requestExamples: [
+      { name: 'Read the Lopu defaults', description: 'Load the stored and resolved defaults.', method: 'GET' },
+      {
+        name: 'Prefer fast high-effort Opus 5',
+        description: 'Replace the defaults as an administrator.',
+        method: 'POST',
+        body: { model: 'claude-opus-5', effort: 'high', speed: 'fast' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Current defaults. models is the full catalog projection (omitted here).',
+        body: {
+          ok: true,
+          key: 'Thingtime.LopuChatDefaults',
+          defaults: { model: 'claude-opus-5', effort: 'high', speed: 'fast' },
+          resolved: { model: 'claude-opus-5', effort: 'high', speed: 'fast' },
+          models: [],
+          providers: {
+            anthropic: { configured: true, verified: true, checkedAt: '2026-09-04T02:10:00.000Z' },
+            openai: { configured: false, verified: null, checkedAt: null }
+          }
+        }
+      },
+      { status: 400, description: 'Invalid defaults.', body: { ok: false, error: 'effort for Claude Opus 5 must be one of low, medium, high, xhigh, max (or null for the provider default)' } },
+      { status: 403, description: 'POST caller is not an admin.', body: { ok: false, error: 'Admins only' } }
+    ],
+    notes: ['Responses set Cache-Control: no-store. Storage audit fields (updatedAt/updatedBy) are never exposed by this endpoint.']
   }),
   endpoint({
     id: 'root-data',
@@ -3738,6 +4081,430 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'lopu-chats',
+    group: 'lopu',
+    title: 'Lopu conversations',
+    endpoint: '/api/v1/lopu/chats',
+    // 1.1.0: `providerId` (a Secure Vault provider) on create + in every list entry's
+    // `lopu` settings (additive). 1.1.1: POST fails closed on a limiter outage (429 with the
+    // unavailable copy instead of an unthrottled write). contractVersion feeds
+    // /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
+    contractVersion: '1.1.1',
+    featureVersion: '1.1.1',
+    summary: 'Lists the caller’s conversations with Lopu, or starts a new one.',
+    detail:
+      'A Lopu conversation is an ordinary messenger chat (a one-member group owned by the caller) whose ' +
+      'externalSource carries { access: "lopu", provider: "lopu" }, so it also appears in /api/v1/chats and its ' +
+      'messages page through /api/v1/chats/messages. GET returns the caller’s Lopu chats newest activity first in ' +
+      'the same list-entry shape as /api/v1/chats (unread count, lastMessage preview, membership). POST creates ' +
+      'one: title (defaults to "Lopu") plus the model settings the conversation should use — model (a catalog ' +
+      'model id or a composed id such as claude-opus-5:high:fast), effort and speed are validated against the ' +
+      'model catalog; omitted or null fields mean "catalog default", which the reply route resolves through the ' +
+      'admin defaults and provider availability on every turn. `providerId` pins one of the caller’s own Secure Vault ' +
+      'AI connections (see vaultProviders on /api/v1/ai/models) so turns run on it instead of the server keys — it must be ' +
+      'the caller’s own (400 otherwise), null means Thingtime’s models — and every list/get entry carries the chat’s ' +
+      'settings under `lopu` ({ model, effort, speed, providerId, turns, lastModel }). Lopu’s replies are rows owned by ' +
+      'the caller that carry a read-only assistant externalSource; the user’s own rows stay editable and deletable.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token. POST bodies must be application/json.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET with credentials to list Lopu conversations (limit caps the page, default 100, max 300).',
+      'POST { title?, model?, effort?, speed?, providerId? } with Content-Type: application/json to start a conversation.',
+      'Use chat.id from the response as chatId for /api/v1/lopu/chats/reply, /update and /delete.',
+      'Read the transcript through /api/v1/chats/messages?chatId= like any other chat.',
+      'Handle 400 for an unknown model, an effort/speed the model does not offer, or a providerId that is not one of your vault connections, and 415 for a non-JSON body.'
+    ],
+    requestExamples: [
+      {
+        name: 'List conversations',
+        description: 'Read every Lopu conversation for the current account.',
+        method: 'GET'
+      },
+      {
+        name: 'Start a conversation',
+        description: 'Create a titled conversation pinned to a catalog model.',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { title: 'Landing page ideas', model: 'claude-opus-5', effort: 'high', speed: 'normal' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Conversation created.',
+        body: {
+          ok: true,
+          chat: {
+            id: 'lopu-chat-7d1f2c1a-3b7e-4d0a-9c1d-000000000001',
+            chatType: 'group',
+            name: 'Landing page ideas',
+            topic: 'Lopu, the Thingtime assistant',
+            externalSource: { access: 'lopu', provider: 'lopu', sourceId: 'lopu', label: 'Lopu', connector: 'thingtime', readOnly: false },
+            myMember: { role: 'owner', state: 'active', muted: false },
+            memberCount: 1,
+            unreadCount: 0,
+            lastMessage: null
+          }
+        }
+      },
+      {
+        status: 400,
+        description: 'The requested model is not in the catalog.',
+        body: { ok: false, error: 'Unknown model "gpt-9"' }
+      }
+    ],
+    notes: [
+      'GET draws from the lopu.chats rate-limit bucket (120 per minute); POST from lopu.chats.write (30 per minute), enforced fail-closed — a limiter outage answers 429 rather than an unthrottled write.',
+      'The generic /api/v1/things paths refuse messenger kinds, so a Lopu chat can only be changed through this family.'
+    ]
+  }),
+  endpoint({
+    id: 'lopu-chats-update',
+    group: 'lopu',
+    title: 'Update Lopu conversation',
+    endpoint: '/api/v1/lopu/chats/update',
+    // 1.1.0: `providerId` retunes / clears the chat's pinned Secure Vault provider
+    // (additive). 1.1.1: fails closed on a limiter outage. contractVersion feeds
+    // /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
+    contractVersion: '1.1.1',
+    featureVersion: '1.1.1',
+    summary: 'Renames a Lopu conversation or retunes its model, effort, speed and pinned provider.',
+    detail:
+      'POST { chatId, title?, model?, effort?, speed?, providerId? }. Only the conversation’s member (its owner) may update it. ' +
+      'Settings follow the same catalog validation as creation: a composed model id carries its own effort/fast ' +
+      'segments, null resets a field to the catalog default, and an effort or speed the chosen model does not ' +
+      'offer is a 400 when asked for explicitly (an inherited setting is clamped when the model changes). ' +
+      '`providerId` pins one of the caller’s own Secure Vault AI connections (400 when it is not theirs); null returns the ' +
+      'conversation to Thingtime’s models. Unlike /api/v1/chats/update no system message is inserted — the conversation ' +
+      'is a private notebook, not a room.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token. Bodies must be application/json.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the chatId with any of title, model, effort, speed, or providerId.',
+      'Send null to reset model, effort, or speed to the catalog default, or providerId: null to leave your own provider.',
+      'Expect 400 when nothing changes, the title is empty, or the model rejects the effort/speed.',
+      'Read the updated settings back from the returned chat entry or GET /api/v1/lopu/chats.'
+    ],
+    requestExamples: [
+      {
+        name: 'Rename',
+        description: 'Give the conversation a title.',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { chatId: 'lopu-chat-7d1f2c1a-3b7e-4d0a-9c1d-000000000001', title: 'Pricing table' }
+      },
+      {
+        name: 'Switch model',
+        description: 'Move the conversation to a fast Opus 5 with max effort.',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { chatId: 'lopu-chat-7d1f2c1a-3b7e-4d0a-9c1d-000000000001', model: 'claude-opus-5:max:fast' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Conversation updated.',
+        body: { ok: true, chat: { id: 'lopu-chat-7d1f2c1a-3b7e-4d0a-9c1d-000000000001', name: 'Pricing table' } }
+      },
+      {
+        status: 400,
+        description: 'The chat is not a Lopu conversation, or nothing changed.',
+        body: { ok: false, error: 'Nothing to update' }
+      }
+    ],
+    notes: ['Shares the lopu.chats.write rate-limit bucket (30 per minute), enforced fail-closed.']
+  }),
+  endpoint({
+    id: 'lopu-chats-delete',
+    group: 'lopu',
+    title: 'Delete Lopu conversation',
+    endpoint: '/api/v1/lopu/chats/delete',
+    // 1.0.1: fails closed on a limiter outage (compatible correction).
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
+    summary: 'Deletes a Lopu conversation with every message in it.',
+    detail:
+      'POST { chatId }. Owner only. The chat, its membership row, every message and their reactions are removed ' +
+      'in one accounted transaction, so storage quota is refunded together with the rows; attachments bound to ' +
+      'the caller’s own rows release their objects first. This is a hard delete — unlike ' +
+      '/api/v1/chats/messages/delete nothing stays behind as a placeholder.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie or Authorization: Bearer token. Bodies must be application/json.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST the chatId to delete.',
+      'Expect 404 for an unknown chat, 403 when the caller is not the owner, and 400 for a chat that is not a Lopu conversation.',
+      'Drop the conversation from local caches on ok: true — it is gone from /api/v1/chats too.'
+    ],
+    requestExamples: [
+      {
+        name: 'Delete a conversation',
+        description: 'Remove one Lopu conversation and its transcript.',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { chatId: 'lopu-chat-7d1f2c1a-3b7e-4d0a-9c1d-000000000001' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Conversation deleted.',
+        body: { ok: true }
+      },
+      {
+        status: 404,
+        description: 'No such chat.',
+        body: { ok: false, error: 'Chat not found' }
+      }
+    ],
+    notes: ['Shares the lopu.chats.write rate-limit bucket (30 per minute), enforced fail-closed.']
+  }),
+  endpoint({
+    id: 'lopu-chats-reply',
+    group: 'lopu',
+    title: 'Lopu reply stream',
+    endpoint: '/api/v1/lopu/chats/reply',
+    // 1.1.0: `providerId` runs the turn on the caller's own Secure Vault provider; meta
+    // gains provider 'vault' + providerLabel (additive). 1.2.0: server-verified confirmations —
+    // `confirmations: [{ key, token }]` in, the `confirm` event + tool_result.needsConfirmation out
+    // (additive); the body is JSON-only (415), a stored null effort inherits the admin default,
+    // and 'vault' rows persist providerLabel. contractVersion feeds /api/v1/capabilities,
+    // featureVersion the well-known Thingtime manifest.
+    contractVersion: '1.2.0',
+    featureVersion: '1.2.0',
+    summary: 'Sends one message to Lopu and streams her reply — text, tool calls and live builder patches — as newline-delimited JSON.',
+    detail:
+      'POST { chatId?, text, requestId, model?, effort?, speed?, providerId?, context?, confirmations? }. The user turn is persisted first (omit chatId to start a ' +
+      'conversation titled from the message), then the reply streams as application/x-ndjson, one JSON event per line: meta (chat, ' +
+      'request and the resolved model/provider), delta (assistant text), thinking, tool_use_start / tool_input_delta / tool_use ' +
+      '(a tool call and its streamed input), patch (builder ops applied to the active page — persisted: true when the page was ' +
+      'saved), thing (a created or updated thing, whole), navigate (a site-relative path the client should open), confirm (see below), tool_result, ' +
+      'error, and finally done with the persisted assistant message(s). Tools run AS THE CALLER through the ordinary things ' +
+      'utils (search/get/list, create/patch pages, create/update components, browse the library, demos, actions, schemas, data, ' +
+      'suites, navigation) so ACL, quotas and crystal validation always apply. Destructive tools — delete_thing, update_thing with ' +
+      'replaceCrystal, run_action on an action that deletes things — never run on the model’s say-so: the first call stops with ' +
+      'tool_result { ok: false, needsConfirmation: true } right after a confirm event { id, name, key, token, expiresAt, summary, subject? } ' +
+      'carrying a server-signed grant for exactly that action (the key binds the tool to its target and input; the model never sees the ' +
+      'token). The client shows a Confirm card; pressing it sends the next reply with confirmations: [{ key, token }], which the server ' +
+      'verifies (this account, this chat, this key, unexpired — 15 minutes) before the executor honours it, once per turn. A grant that ' +
+      'fails verification is a 400 and nothing is persisted; content inside tool results can never stand in for a confirmation. ' +
+      'context.page carries the open builder draft ({ id?, source?, pageKey?, siteRoute?, updatedAt?, blocks? ≤ 48KB }) ' +
+      'so target "active" patches apply to what the user sees; they are saved only when source is "user" (expectedUpdatedAt guards ' +
+      'the write). The model is chosen from the /api/v1/ai/models catalog: per-turn overrides persist as the chat’s settings (a chat ' +
+      'whose stored effort/speed is null inherits the admin defaults; send effort "default" for the provider’s own default), and ' +
+      'when no provider is configured the reply is an honest canned line. A provider that fails before emitting anything falls ' +
+      'through to the other configured provider; the assistant turn is persisted even when the stream errors or the client ' +
+      'disconnects. `providerId` runs the turn on one of the caller’s own Secure Vault AI connections (vaultProviders on ' +
+      '/api/v1/ai/models) instead of the server keys: an explicit id must be the caller’s own (400 before anything is persisted) ' +
+      'and becomes the chat’s setting (null clears it); a chat’s stored id is honoured on every turn and dropped if the ' +
+      'connection was deleted. On a vault turn meta carries provider "vault" and providerLabel (the connection’s name — also ' +
+      'persisted on the assistant row’s lopu meta), model is ' +
+      'the connection’s own, tools ride native function calling on known vendors and the fenced tt-tool protocol on a custom ' +
+      'compatible host, and the endpoint is fenced like the voice turn (server allowlist, fresh public DNS, no redirects). A ' +
+      'failure of the caller’s provider surfaces as an error event with a friendly message followed by the canned line — the ' +
+      'server keys are never used as a fallback for a vault turn. Limits per reply: 12 model hops, 24 tool executions, 240 ' +
+      'seconds, 96KB per tool input.',
+    auth: {
+      mode: 'session',
+      description: 'Requires an auth cookie for a full (non-temporary) account. Bodies must be application/json (415 otherwise — the CSRF fence, checked before the rate limit) and at most 256KB.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST { text, requestId } (plus chatId to continue a conversation) with Content-Type: application/json.',
+      'Read the response line by line; each line is one JSON event and meta always comes first.',
+      'Append delta.text values; render tool_use_start/tool_result as activity; apply patch.ops to the open builder draft.',
+      'On a confirm event, show the summary (and subject.id) with Confirm / Cancel; on Confirm, POST the next message with confirmations: [{ key, token }] (chatId required) — send a grant once, and expect 400 once it expired or when it was minted for another account, chat or action.',
+      'Treat done as the end of the turn — it carries assistantMessageId and the persisted messages.',
+      'Reuse of a requestId answers 409; 429 means the lopu.chat budget (40 replies per 10 minutes) is spent — vault turns count against the same budget.',
+      'Send providerId (a vaultProviders id from /api/v1/ai/models) to run the turn on your own provider, or providerId: null to clear the chat’s pin explicitly; expect 400 for an id that is not yours and an error event + canned line when your provider fails.'
+    ],
+    requestExamples: [
+      {
+        name: 'Ask Lopu to build a section',
+        description: 'Continue a conversation with the builder draft attached as context.',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          chatId: 'lopu-chat-7d1f2c1a-3b7e-4d0a-9c1d-000000000001',
+          text: 'Add a hero section with a headline and a call-to-action button',
+          requestId: '0f7d2c3a-8b1e-4c2d-9a4f-000000000002',
+          model: 'claude-opus-5',
+          effort: 'high',
+          speed: 'normal',
+          context: {
+            route: '/builder',
+            page: { id: 'my-landing-page', source: 'user', updatedAt: '2026-09-03T00:00:00.000Z', blocks: [{ id: 'title', type: 'text', text: 'Hello', style: 'heading' }] },
+            viewport: 'desktop'
+          }
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'NDJSON stream events (one per line).',
+        body: [
+          { type: 'meta', chatId: 'lopu-chat-…', userMessageId: 'msg-…', requestId: '0f7d2c3a-…', model: 'claude-opus-5', effort: 'high', speed: 'normal', provider: 'claude', label: 'Claude Opus 5' },
+          { type: 'delta', text: 'Adding a hero now ✨' },
+          { type: 'tool_use_start', id: 'toolu_01', name: 'patch_page' },
+          { type: 'tool_input_delta', id: 'toolu_01', name: 'patch_page', partial: '{"target":"active","ops":[{"op":"insert"' },
+          { type: 'tool_use', id: 'toolu_01', name: 'patch_page', input: { target: 'active', ops: [{ op: 'insert', containerId: null, index: 'end', block: { id: 'hero', type: 'container', direction: 'column', children: [] } }] } },
+          { type: 'patch', id: 'toolu_01', target: 'active', ops: [{ op: 'insert', containerId: null, index: 1, block: { id: 'hero', type: 'container', direction: 'column', children: [] } }], pageId: 'my-landing-page', persisted: true },
+          { type: 'tool_result', id: 'toolu_01', name: 'patch_page', ok: true, summary: 'Applied 1/1 op(s) to "Landing" and saved it' },
+          { type: 'delta', text: 'Done — your hero is on the page 🦄' },
+          { type: 'done', assistantMessageId: 'msg-…', messages: [], stopReason: 'end_turn' }
+        ]
+      },
+      {
+        status: 200,
+        description: 'A destructive tool stops for the caller’s confirmation (NDJSON, one event per line).',
+        body: [
+          { type: 'meta', chatId: 'lopu-chat-…', userMessageId: 'msg-…', requestId: '0f7d2c3a-…', model: 'claude-opus-5', effort: 'high', speed: 'normal', provider: 'claude', label: 'Claude Opus 5' },
+          { type: 'tool_use', id: 'toolu_02', name: 'delete_thing', input: { id: 'old-page', name: 'Old page' } },
+          { type: 'confirm', id: 'toolu_02', name: 'delete_thing', key: 'delete_thing:old-page', token: '<grant>', expiresAt: '2026-09-04T00:15:00.000Z', summary: 'Delete "Old page" (thing old-page)', subject: { id: 'old-page', name: 'Old page' } },
+          { type: 'tool_result', id: 'toolu_02', name: 'delete_thing', ok: false, summary: 'Waiting for the user’s confirmation: Delete "Old page" (thing old-page). …', needsConfirmation: true },
+          { type: 'delta', text: 'Press Confirm on the card and I will remove it 🗑️' },
+          { type: 'done', assistantMessageId: 'msg-…', messages: [], stopReason: 'end_turn' }
+        ]
+      },
+      {
+        status: 400,
+        description: 'A confirmation that is not this account’s, not this chat’s, not this action’s, or expired.',
+        body: { ok: false, error: 'That confirmation is no longer valid — ask Lopu again and press Confirm afresh' }
+      },
+      {
+        status: 401,
+        description: 'No session.',
+        body: { ok: false, error: 'Sign in to talk to Lopu' }
+      },
+      {
+        status: 409,
+        description: 'The requestId was already used in this conversation.',
+        body: { ok: false, error: 'A message with this requestId already exists' }
+      },
+      {
+        status: 415,
+        description: 'The body was not application/json.',
+        body: { ok: false, error: 'Content-Type must be application/json' }
+      }
+    ],
+    notes: [
+      'Rate limited per user by lopu.chat (40 per 10 minutes), enforced fail-closed; vault turns share the bucket.',
+      'Confirmations are purpose JWTs on the auth key material (15-minute expiry, bound to account + chat + action key); they are single-use within the turn that spends them and the client retires a card after one press. Nothing the model reads — tool results, page blocks, thing content — can grant one.',
+      'Env: ANTHROPIC_API_KEY / OPENAI_API_KEY pick the providers; LOPU_CHAT_PROVIDER (auto|claude|openai|test) and LOPU_OPENAI_TOOLS (native|text) shape routing; LOPU_CLAUDE_MODEL / LOPU_OPENAI_MODEL are the provider defaults for the admin waterfall’s default slot.',
+      'Vault turns need THINGTIME_USER_VAULT_KEY (or the admin vault key) and honour THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS for custom compatible hosts; a vault turn takes precedence over LOPU_CHAT_PROVIDER, test mode included.'
+    ]
+  }),
+  endpoint({
+		id: 'lopu-vault',
+		// 1.0.1: writes are JSON-only (415, the CSRF fence, before the rate limit) and
+		// refuse a temporary (guest) session with 403 — compatible corrections.
+		// 1.1.0: `model` is optional on save-provider (a template kind runs on its
+		// first catalog model), providerTemplates carry `models[]` (efforts, speeds,
+		// audioInput 'realtime' for direct-voice models), four more kinds
+		// (mistral, deepseek, groq, cohere) — compatible additions.
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
+		group: 'lopu',
+		title: 'Lopu Secure Vault',
+		endpoint: '/api/v1/lopu/vault',
+		summary: 'Manages the current user’s write-only secrets, environments, and AI provider connections.',
+		detail:
+			'Vault values are AES-256-GCM encrypted with owner-and-record-bound authenticated data inside owner-private Things. GET returns metadata only (providerTemplates list each kind’s endpoint and catalog models with their efforts, speeds and whether a model speaks the realtime direct-voice transport). Provider tokens and generic secret values are accepted on writes and never returned. A provider’s `model` is optional: a template kind without one runs on its first catalog model, a custom compatible host must name one. Custom AI hosts must also be admitted by the server allowlist before Lopu can call them.',
+		auth: { mode: 'session', description: 'Requires the current full Thingtime user session (a temporary guest session is a 403 on writes). POST bodies must be application/json (415 otherwise).' },
+		methods: ['GET', 'POST'],
+		steps: [
+			'GET the provider templates, environments, and redacted entry metadata.',
+			'POST create-group, save-secret, or save-provider to create write-only records.',
+			'POST delete with an owner-scoped record id to remove it.'
+		],
+		requestExamples: [
+			{
+				name: 'Save an AI provider',
+				description: 'The token is write-only and omitted from every response; `model` is optional (omit it to run on the kind’s first catalog model).',
+				method: 'POST',
+				body: {
+					action: 'save-provider',
+					name: 'My Claude',
+					provider: 'anthropic',
+					endpoint: 'https://api.anthropic.com',
+					model: 'claude-sonnet-4-6',
+					token: '<provider-token>',
+					groupId: '<environment-id>'
+				}
+			}
+		],
+		responseExamples: [
+			{ status: 200, description: 'Redacted metadata.', body: { ok: true, vaultConfigured: true, groups: [], entries: [{ id: '<id>', kind: 'provider', name: 'My Claude', provider: 'anthropic', model: 'claude-sonnet-4-6', hasValue: true }] } },
+			{ status: 401, description: 'No live user session.', body: { ok: false, error: 'Unauthorized' } }
+		]
+	}),
+  endpoint({
+		id: 'lopu-voice-reply',
+		// 1.0.1: JSON-only bodies (415, the CSRF fence, before the rate limit) and 403 for a
+		// temporary (guest) session — compatible corrections.
+		// 1.1.0: optional per-turn `model`, `effort`, `speed` (validated against the
+		// provider’s catalog when it lists the model) — compatible additions.
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
+		group: 'lopu',
+		title: 'Lopu voice turn',
+		endpoint: '/api/v1/lopu/voice/reply',
+		summary: 'Streams one Lopu conversation turn or persists one private transcription page.',
+		detail:
+			'Conversation mode decrypts only the selected owner-scoped provider token in server memory, calls the fixed provider endpoint through the shared SSRF fence, and streams NDJSON text deltas. The model is the connection’s own, else the kind’s first catalog model, else the optional `model` in the body; optional `effort` and `speed` map onto the vendor’s own request fields and must be ones the catalog lists for that model. Transcribe mode makes no provider call: it stores the final speech transcript as a timestamped, numbered, owner-private data Thing and returns it as a quote event.',
+		auth: { mode: 'session', description: 'Requires the current full Thingtime user session (a temporary guest session is a 403). Bodies must be application/json (415 otherwise).' },
+		methods: ['POST'],
+		steps: [
+			'Choose one provider entry for conversation mode, or enable transcribeMode.',
+			'POST a final speech transcript and stable sessionId.',
+			'Read NDJSON events through done; speak delta text only when the client’s Text response setting is off.'
+		],
+		requestExamples: [
+			{ name: 'Conversation turn', description: 'Use one write-only provider connection; effort and speed are optional.', method: 'POST', body: { sessionId: 'voice-session-1', transcript: 'What should I focus on?', providerId: '<vault-provider-id>', effort: 'high', speed: 'normal', transcribeMode: false, history: [] } },
+			{ name: 'Transcription page', description: 'Persist and quote without an AI call.', method: 'POST', body: { sessionId: 'voice-session-1', transcript: 'Meeting note.', transcribeMode: true } }
+		],
+		responseExamples: [
+			{ status: 200, description: 'NDJSON conversation events.', body: [{ type: 'meta', mode: 'conversation', provider: 'My Claude' }, { type: 'delta', text: 'Start ' }, { type: 'done' }] },
+			{ status: 200, description: 'NDJSON transcribe events.', body: [{ type: 'meta', mode: 'transcribe' }, { type: 'quote', text: 'Meeting note.', page: { id: '<thing-id>', title: 'Lopu voice transcript · …', pageNumber: 1 } }, { type: 'done' }] }
+		]
+	}),
+  endpoint({
+		id: 'lopu-voice-session',
+		contractVersion: '1.0.0',
+		group: 'lopu',
+		title: 'Lopu direct voice session',
+		endpoint: '/api/v1/lopu/voice/session',
+		summary: 'Mints a short-lived provider credential for a direct (realtime speech-to-speech) Lopu voice session.',
+		detail:
+			'Direct voice streams the microphone straight to one of the caller’s own Secure Vault providers that offers realtime speech (xAI Grok Voice today: the kind’s catalog lists the model with audioInput "realtime"). The server decrypts the selected owner-scoped token in memory, exchanges it through the shared SSRF fence (allowlist, fresh public DNS, redirects refused, bounded timeout and response) for a five-minute ephemeral client secret, and returns that secret with the fixed realtime WebSocket URL. The long-lived token never reaches the browser or the native app; a credential that echoes it is refused. `model` is optional (the kind’s first realtime model, or the connection’s own when that is one); `effort` must be one the model lists; `textResponse` asks the client to show the reply without playing audio.',
+		auth: { mode: 'session', description: 'Requires the current full Thingtime user session (a temporary guest session is a 403). Bodies must be application/json (415 otherwise).' },
+		methods: ['POST'],
+		steps: [
+			'Pick a Secure Vault connection whose kind lists a realtime model (GET /api/v1/ai/models → vaultProviders[].realtimeModels).',
+			'POST its providerId with an optional model, effort and textResponse.',
+			'Open the returned webSocketUrl with the ephemeral token as the client secret; it expires after five minutes and is single-session.'
+		],
+		requestExamples: [
+			{ name: 'Start direct voice', description: 'The stored provider token stays server-side.', method: 'POST', body: { providerId: '<vault-provider-id>', model: 'grok-voice-latest', effort: 'none', textResponse: false } }
+		],
+		responseExamples: [
+			{ status: 200, description: 'The short-lived realtime session.', body: { ok: true, session: { provider: 'xai', model: 'grok-voice-latest', token: '<ephemeral-token>', expiresAt: 1800000000, webSocketUrl: 'wss://api.x.ai/v1/realtime?model=grok-voice-latest', effort: 'none', textResponse: false } } },
+			{ status: 400, description: 'The connection is not the caller’s, its kind has no realtime model, or the model/effort is not eligible.', body: { ok: false, error: 'Direct voice needs a provider with realtime speech (xAI Grok Voice) — this connection has none.' } },
+			{ status: 401, description: 'No live user session.', body: { ok: false, error: 'Unauthorized' } }
+		],
+		notes: ['Rate limited per user by lopu.voiceReply (30 per minute), enforced fail-closed and shared with the voice turn.']
+	}),
+  endpoint({
     id: 'deployment-links',
     group: 'deployments',
     title: 'Linked deployments',
@@ -4227,6 +4994,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
 	endpoint({
 		id: 'attachment-uploads',
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
 		group: 'attachments',
 		title: 'Start attachment upload',
 		endpoint: '/api/v1/attachments/uploads',
@@ -4237,7 +5006,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		auth: {
 			mode: 'session-or-bearer',
 			description:
-				'Requires a full revocable user session (httpOnly cookie or its Bearer session JWT); PAT, app, and service-account tokens are rejected.'
+				'Requires a full revocable user session (httpOnly cookie or its Bearer session JWT), or a paired Watch credential with watch.things.create for post-purpose uploads. PAT, app, and service-account tokens are rejected.'
 		},
 		methods: ['POST'],
 		steps: [
@@ -4295,6 +5064,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-upload-parts',
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
 		group: 'attachments',
 		title: 'Sign attachment parts',
 		endpoint: '/api/v1/attachments/uploads/parts',
@@ -4303,7 +5074,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			'Each returned URL is short-lived and signs the exact server-derived Content-Length plus x-amz-checksum-sha256 header. The browser uploads the raw slice directly to S3, lets the browser set Content-Length, and must send the returned checksum header unchanged. The server never proxies large file bodies.',
 		auth: {
 			mode: 'session-or-bearer',
-			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+			description: 'Requires the owning full user session, or its paired Watch credential for a post-purpose upload; PAT, app, and service-account tokens are rejected.'
 		},
 		methods: ['POST'],
 		steps: [
@@ -4346,6 +5117,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-upload-complete',
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
 		group: 'attachments',
 		title: 'Complete attachment upload',
 		endpoint: '/api/v1/attachments/uploads/complete',
@@ -4356,7 +5129,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			'Active and generic formats stay application/octet-stream downloads, with the sniffed container preserved as detectedContentType display metadata when one was recognized. Repeating a successful request is safe.',
 		auth: {
 			mode: 'session-or-bearer',
-			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+			description: 'Requires the owning full user session, or its paired Watch credential for a post-purpose upload; PAT, app, and service-account tokens are rejected.'
 		},
 		methods: ['POST'],
 		steps: [
@@ -4402,6 +5175,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-upload-abort',
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
 		group: 'attachments',
 		title: 'Cancel attachment upload',
 		endpoint: '/api/v1/attachments/uploads/abort',
@@ -4410,7 +5185,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			'Aborts any open MPU and deletes a completed draft object before removing the billable source record. Because a signed UploadPart may finish after Abort, an MPU that issued a part URL stays billed through a lifecycle-backed settlement window and two separated empty checks; deferred and retryAt report that honestly. An MPU that never issued a part URL can refund promptly after one empty Abort/ListParts/HEAD verification. Missing uploads are an idempotent success. Bound files must be removed through their owning post, comment, message, profile, or custom-emoji lifecycle.',
 		auth: {
 			mode: 'session-or-bearer',
-			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+			description: 'Requires the owning full user session, or its paired Watch credential for a post-purpose upload; PAT, app, and service-account tokens are rejected.'
 		},
 		methods: ['POST'],
 		steps: [
@@ -9241,8 +10016,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'notifications-list',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    // 1.1.0 added the history filters, 1.2.0 the stable cursor, from/to window
+    // and viewer object — this endpoint now ships both, so it publishes 1.2.0.
+    contractVersion: '1.2.0',
+    featureVersion: '1.2.0',
     group: 'notifications',
     title: 'List notifications',
     endpoint: '/api/v1/notifications',
@@ -9262,14 +10039,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'actor username / system title>, since=<ISO> and until=<ISO> (inclusive createdAt bounds), ' +
       'and withTotal=1 to also return total — the count of everything matching the filters, cursor ' +
       'ignored. unreadCount is always the badge count (every enabled type, filters ignored). Cursor ' +
-      'pagination via before=<nextBefore>. A recipient keeps their newest 10,000 notifications.',
+      'pagination uses the opaque cursor=<nextCursor> so notifications sharing the same timestamp ' +
+      'are never skipped; legacy before=<nextBefore> remains supported. Optional from (inclusive) ' +
+      'and to (exclusive) ISO timestamps bound historical pages and exports, alongside since/until. ' +
+      'The viewer object identifies the authenticated account by username so native companions can ' +
+      'visibly confirm which account is connected. A recipient keeps their newest 10,000 notifications.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
     },
     methods: ['GET'],
     steps: [
-      'GET ?limit=&before= — newest first.',
+      'GET ?limit=&cursor=&from=&to= — newest first. Use cursor for stable 10-at-a-time history; from is inclusive and to is exclusive.',
       'Show unreadCount on the bell; refetch on window focus.',
       'History page: add category / types / unread / q / since / until and withTotal=1; keep the filter set in the URL.',
       'Click-through: href (system notes) → that path, else postId → /post/<id>, else actor → /profile/<username>.',
@@ -9280,7 +10061,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         name: 'Bell dropdown',
         description: 'First page for the notifications popover.',
         method: 'GET',
-        query: { limit: 20 }
+        query: { limit: 10 }
       },
       {
         name: 'History — unread system notes this month',
@@ -9301,6 +10082,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Notifications + unread count (a person row and a system note).',
         body: {
           ok: true,
+          viewer: { username: 'lopu' },
           notifications: [
             {
               id: 'a1b2…',
@@ -9339,7 +10121,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           ],
           unreadCount: 2,
           total: 2,
-          nextBefore: null
+          nextBefore: null,
+          nextCursor: null
         }
       }
     ]
@@ -9376,6 +10159,67 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 200,
         description: 'Marked.',
         body: { ok: true, updated: 3 }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'notifications-devices',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
+    group: 'notifications',
+    title: 'Register notification devices',
+    endpoint: '/api/v1/notifications/devices',
+    summary: 'Register iPhone and Apple Watch APNs targets for the signed-in Thingtime account.',
+    detail:
+      'POST accepts one to four variable-length hexadecimal APNs tokens. The server selects the bundle topic, ' +
+      'stores each token in a protected binary secure field, keeps at most twelve recent devices per account, ' +
+      'and returns only non-secret registration metadata. DELETE removes one registration by id. Thingtime sends ' +
+      'the same notification payload to paired iPhone and watchOS targets so Apple can suppress duplicate alerts.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie, full-session Bearer token, or a paired Watch credential with watch.push capability.'
+    },
+    methods: ['POST', 'DELETE'],
+    steps: [
+      'Register for remote notifications on every app launch and preserve the APNs token as variable-length data.',
+      'POST the current iOS and/or watchOS token after the Thingtime session is authenticated.',
+      'DELETE a stale device id when the user explicitly disconnects that device.'
+    ],
+    requestExamples: [
+      {
+        name: 'Register paired Apple devices',
+        description: 'Register current sandbox tokens from an iPhone and its paired watch.',
+        method: 'POST',
+        body: {
+          devices: [
+            { token: '<hex APNs token>', platform: 'ios', environment: 'sandbox' },
+            { token: '<hex APNs token>', platform: 'watchos', environment: 'sandbox' }
+          ]
+        }
+      },
+      {
+        name: 'Disconnect one device',
+        description: 'Remove a registration owned by the current account.',
+        method: 'DELETE',
+        body: { id: 'device-registration-id' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Registered; tokens are intentionally omitted.',
+        body: {
+          ok: true,
+          devices: [
+            {
+              id: 'device-registration-id',
+              platform: 'watchos',
+              environment: 'sandbox',
+              topic: 'com.thingtime.appletime.watchkitapp',
+              updatedAt: '2026-09-03T00:00:00.000Z'
+            }
+          ]
+        }
       }
     ]
   }),
@@ -9840,13 +10684,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'network-probe-ping',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'system',
     title: 'Network probe ping',
     endpoint: '/api/v1/network-probe/ping',
     summary: 'A tiny uncached response for measuring round-trip latency to Thingtime.',
     detail:
-      'Commander Activity uses this public endpoint while its Activity view is open. It returns a fixed 256-byte payload, never stores request data, and is rate limited per client IP.',
-    auth: { mode: 'none', description: 'Public diagnostic endpoint.' },
+      'Commander Activity uses this endpoint while its Activity view is open. It returns a fixed 256-byte payload. Guests are limited per IP; valid account-session or non-sandbox OAuth credentials bypass that guest bucket without spending a speed-test allowance. This keeps the tiny latency preflight from blocking unrestricted account tests. Invalid credentials return 401/403 instead of falling back to guests. Guest limiter outages return 503.',
+    auth: { mode: 'none', description: 'Public diagnostic; optionally authenticate to avoid the guest IP bucket.' },
     methods: ['GET'],
     steps: ['Time the complete request and response.', 'Treat 429 as a temporary network-probe cooldown.'],
     requestExamples: [{ name: 'Measure latency', description: 'Fetch the fixed ping payload.', method: 'GET' }],
@@ -9854,13 +10700,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'network-probe-download',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'system',
     title: 'Network probe download',
     endpoint: '/api/v1/network-probe/download',
     summary: 'Returns one fixed, non-cacheable packet for an opt-in throughput measurement.',
     detail:
-      'Only 56 KiB, 500 KiB, 2 MiB, 5 MiB, and 10 MiB packets are accepted. The exact allowlist and per-IP rate limit prevent this endpoint from becoming a general transfer service.',
-    auth: { mode: 'none', description: 'Public bounded diagnostic endpoint.' },
+      'Only 56 KiB, 500 KiB, 2 MiB, 5 MiB, and 10 MiB packets are accepted. Optional full-account or non-sandbox OAuth profile.username authentication applies the protected account subscription allowance: five packets per allowed test in a rolling hour, shared across sessions/devices/IPs. Pro defaults to unlimited. Anonymous callers retain five packets per 15 minutes per IP. Invalid credentials return 401/403, not a guest fallback. Limiter unavailability returns 503.',
+    auth: { mode: 'none', description: 'Public guest allowance; optionally send an account session or OAuth Bearer token for account-tier limits.' },
     methods: ['GET'],
     steps: ['Pass one documented bytes value.', 'Measure the response body only after a successful 200.', 'Respect 429 before retrying.'],
     requestExamples: [
@@ -9872,15 +10720,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'network-probe-upload',
-    contractVersion: '2.0.0',
-    featureVersion: '2.0.0',
+    contractVersion: '2.1.0',
+    featureVersion: '2.1.0',
     group: 'system',
     title: 'Network probe upload',
     endpoint: '/api/v1/network-probe/upload',
     summary: 'Consumes one exact fixed-size packet for an opt-in upload measurement.',
     detail:
-      'Upload v2 accepts only 56 KiB, 500 KiB, 1 MiB, or 2 MiB per request. Split larger logical samples into serial chunks below the hosting request limit. Content-Length may be absent on streamed/proxied requests; when supplied it must match, and actual received bytes are always counted exactly without retaining the body. Nothing is persisted or reflected. The per-IP default is 11 requests per 15 minutes (at most 22 MiB). V1 clients must update their packet ladder before using v2.',
-    auth: { mode: 'none', description: 'Public bounded diagnostic endpoint.' },
+      'Upload v2 accepts only 56 KiB, 500 KiB, 1 MiB, or 2 MiB per request. Split larger logical samples into serial chunks. Content-Length may be absent; when supplied it must match, and actual received bytes are always counted exactly without retaining or reflecting the body. With optional account/OAuth authentication, the protected account speedTestsPerHour allowance admits eleven chunks per test in a rolling hour; null means unlimited. Anonymous callers retain 11 chunks per 15 minutes per IP. Each direction has its own attempt budget, so partial attempts consume only their packets. Invalid credentials fail 401/403; unavailable accounting fails 503. V1 clients must update their packet ladder before using v2.',
+    auth: { mode: 'none', description: 'Public guest allowance; optionally send an account session or OAuth Bearer token for account-tier limits.' },
     methods: ['POST'],
     steps: [
       'Pass one documented bytes value.',
@@ -10215,6 +11063,168 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'webpages-demos',
+    // brand-new capability: everything this PR adds to the response is its 1.0.0 shape
+    contractVersion: '1.0.0',
+    group: 'webpages',
+    title: 'Browse the builder demo library',
+    endpoint: '/api/v1/webpages/demos',
+    summary: 'Lists the deterministic catalog of builder demos (sections, full pages, component-block pages) and behaviour suites (schemas + components + actions + data + page), with a seeded flag per entry.',
+    detail:
+      'The demo library is code: schemas/webpageDemos generates a few hundred example webpages from family × ' +
+      'layout × tone tables, each of which clears the webpage write gate unchanged. This endpoint lists that ' +
+      'catalog — id (the seeded shareId webpage-demo-<slug>), slug, name, family, kind, tone, layout, tags, ' +
+      'description, blockCount — plus families with counts and, per demo, whether its system doc is seeded on ' +
+      'this deployment (then /p/<id> and /builder?page=<id> open it directly; the builder forks a viewer’s edits ' +
+      'into their own twin). Pass slug=<slug> to also get that one demo’s full crystal (blocks included) — the ' +
+      'payload a client posts to /api/v1/things to make its own copy, seeded or not. Every response also lists ' +
+      'suites[] — the behaviour suites (schemas/behaviourSuites): bundles of schema things, ttAction-bound ' +
+      'component things, action things (the closed-vocabulary programs), sample data things, and a page, each ' +
+      'with counts, the system copy’s pageId/actionIds/schemaIds, and a seeded flag. Pass suite=<key> for ' +
+      'suite.bundle — the OWN-mode materialisation (schemas referenced by name, child actions by actionKey) a ' +
+      'client posts part by part to /api/v1/things (schemas, then components, actions, data stamped with the ' +
+      'created schema ids, then the page) so the page’s controls run the caller’s own programs end to end. ' +
+      'Every response also carries components[] + refs — the platform library component things the ' +
+      'component-kind demos reference, resolved exactly as /api/v1/webpages/resolve resolves a page’s blocks, ' +
+      'so a client can draw those demos without a second round trip; a null ref means that componentKey is not ' +
+      'seeded here and the block draws nothing. Read-only and public; two bounded queries, no per-viewer state.',
+    auth: {
+      mode: 'optional',
+      description: 'Anonymous callers see the same catalog and seeded flags — nothing here is per-viewer.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET with no query for the whole catalog, or family=<key> / kind=section|page|component to filter.',
+      'Read families[] (key, title, emoji, kind, description, count), total, seededCount, and suites[].',
+      'Draw kind=component demos by folding components[] + refs into a ref → component map (buildComponentsByRef).',
+      'Pass slug=<slug> to receive demo.crystal — POST it to /api/v1/things with thingtime ["webpage"] to copy it.',
+      'Pass suite=<key> to receive suite.bundle and install it: POST each schema, component, action, data (add schemaId), then the page.',
+      'Treat seeded: true as “/p/<id> and the builder open this demo directly” (suites: /actions/<actionId> runs the seeded program).',
+      'Handle 400 for an unknown family/kind/slug/suite shape, 404 for an unknown slug or suite, and 429 when rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Browse one family',
+        description: 'Every hero demo.',
+        method: 'GET',
+        query: { family: 'hero' }
+      },
+      {
+        name: 'Fetch one demo with blocks',
+        description: 'The crystal to clone.',
+        method: 'GET',
+        query: { slug: 'hero-centered-paper' }
+      },
+      {
+        name: 'Fetch a behaviour suite bundle',
+        description: 'Everything needed to install the guestbook suite into your own things.',
+        method: 'GET',
+        query: { suite: 'guestbook' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Catalog slice returned.',
+        body: {
+          ok: true,
+          total: 322,
+          seededCount: 322,
+          families: [{ key: 'hero', title: 'Hero', emoji: '🌅', kind: 'section', description: 'Opening statements — centered, split, with stats, and minimal.', count: 24 }],
+          demos: [
+            {
+              id: 'webpage-demo-hero-centered-paper',
+              slug: 'hero-centered-paper',
+              name: 'Hero · Centered · Paper',
+              family: 'hero',
+              kind: 'section',
+              tone: 'paper',
+              layout: 'centered',
+              tags: ['webpage', 'demo', 'hero', 'section', 'paper', 'centered'],
+              description: 'Opening statements — centered, split, with stats, and minimal. Centered layout in the paper tone, copy from Thingtime.',
+              previewBg: '#fafafb',
+              blockCount: 7,
+              seeded: true
+            }
+          ],
+          suites: [
+            {
+              key: 'guestbook',
+              title: 'Guestbook',
+              emoji: '📖',
+              description: 'Sign a guestbook, then read the signatures back.',
+              story: ['The simplest program: one schema, one create action, one search action.'],
+              tone: 'paper',
+              counts: { schemas: 1, components: 2, actions: 2, data: 3 },
+              pageId: 'webpage-demo-suite-guestbook',
+              actionIds: ['action-demo-guestbook-sign', 'action-demo-guestbook-recent'],
+              schemaIds: ['schema-demo-guestbook-entry'],
+              seeded: true
+            }
+          ],
+          refs: { 'thingtime-button-solid': 'component-thingtime-button-solid', 'thingtime-card-basic': 'component-thingtime-card-basic' },
+          components: [{ id: 'component-thingtime-button-solid', thingtime: ['component'], visibility: 'public', crystal: { name: 'Solid Button', componentKey: 'thingtime-button-solid', args: [], render: {} } }]
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'webpages-suites-install',
+    contractVersion: '1.0.0',
+    group: 'webpages',
+    title: 'Install a behaviour suite or app suite',
+    endpoint: '/api/v1/webpages/suites/install',
+    summary: 'Installs (or re-installs) one suite — schemas, components, actions, sample data, and every page — into the caller’s own things in one idempotent request.',
+    detail:
+      'A suite is an installable program bundle (schemas/behaviourSuites): schema things, ttAction-bound component ' +
+      'things, action things, sample data things, and one or more builder pages. App suites (Pokeworld, StarsAlign) are ' +
+      'multi-page suites whose pages link to each other by pageKey. This endpoint writes the OWN-mode bundle through the ' +
+      'ordinary create/update utils as the caller — the same things the part-by-part client install creates — but ' +
+      'IDEMPOTENTLY: each part has a stable key inside the caller’s things (schema name, componentKey, actionKey, ' +
+      'pageKey, sample stamp), so a second call updates the existing copy in place instead of duplicating it, and sample ' +
+      'data is seeded once and never clobbered. Pages keep their pageKey, which is what makes /p/<pageKey> resolve the ' +
+      'caller’s copy ahead of the seeded one. Session-only, like actions.run: an install creates programs the caller ' +
+      'will run as themselves; delegated controls on the installed pages resolve owner-only.',
+    auth: {
+      mode: 'session',
+      description: 'A signed-in session. App tokens and personal access tokens are refused — installing programs is a first-party act.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST { key } where key is a suite key from GET /api/v1/webpages/demos (suites[].key).',
+      'Read created / updated counts, the per-part id maps (schemaIds, componentIds, actionIds, pageIds, dataIds), and entryPageKey.',
+      'Open /p/<entryPageKey> — the resolver now answers with the caller’s own copy; every control runs their own programs.',
+      'Call again after the catalog changes to refresh the copy in place (data things are never touched).',
+      'Handle 401 signed out, 404 for an unknown key, 422 when a part refuses to save (the message names the part), 429 when rate-limited (12/min).'
+    ],
+    requestExamples: [
+      { name: 'Install Pokeworld', description: 'Every page, control, and program of the game into your things.', method: 'POST', body: { key: 'pokeworld' } },
+      { name: 'Install the guestbook demo suite', description: 'A single-page behaviour suite.', method: 'POST', body: { key: 'guestbook' } }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Installed (first call).',
+        body: {
+          ok: true,
+          suite: 'pokeworld',
+          title: 'Pokeworld',
+          created: 31,
+          updated: 0,
+          schemaIds: { trainer: 'a1b2…' },
+          componentIds: { map: 'c3d4…' },
+          actionIds: { move: 'e5f6…' },
+          pageIds: { play: 'g7h8…' },
+          dataIds: [],
+          entryPageId: 'g7h8…',
+          entryPageKey: 'pokeworld'
+        }
+      },
+      { status: 200, description: 'Re-installed after a catalog update — refreshed in place.', body: { ok: true, suite: 'pokeworld', title: 'Pokeworld', created: 0, updated: 4, schemaIds: {}, componentIds: {}, actionIds: {}, pageIds: {}, dataIds: [], entryPageId: 'g7h8…', entryPageKey: 'pokeworld' } },
+      { status: 404, description: 'Unknown suite.', body: { ok: false, error: 'No suite matches "nope"' } }
+    ]
+  }),
+  endpoint({
     id: 'admin-components-seed',
     group: 'admin',
     title: 'Seed component library',
@@ -10269,7 +11279,67 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'admin-webpages-seed-demos',
+    group: 'admin',
+    title: 'Seed the builder demo library',
+    endpoint: '/api/v1/admin/webpages/seed-demos',
+    summary: 'Upserts every builder demo page and every behaviour-suite part (schemas, components, actions, data, pages) as system-owned public things.',
+    detail:
+      'The write path for the builder demo library: the deterministic schemas/webpageDemos catalog seeds one ' +
+      'system-owned webpage thing per demo (shareId webpage-demo-<slug>, reserved prefix, pageKey demo-<slug>, ' +
+      'tags webpage/demo/<family>/<kind>), and the schemas/behaviourSuites catalog seeds every suite part — ' +
+      'schema-demo-<suite>-<key>, component-demo-<suite>-<key> (ttAction-bound controls), ' +
+      'action-demo-<suite>-<key> (programs whose schema refs are the seeded schema ids and whose child refs are ' +
+      'the seeded action ids), data-demo-<suite>-<n> (stamped schema/schemaId like executor-minted things), and ' +
+      'webpage-demo-suite-<suite>. All carry storageClass "control", acl ["tt:all"], and per-kind hashed ' +
+      'uniqueKeys — the same envelope and reconciling upsert as the site-page seed. Every crystal passes its ' +
+      'kind’s validateThingtimeCrystal gate, the exact gate user things clear. Idempotent and self-healing: ' +
+      're-runs leave matching docs unchanged, refresh drifted crystals/tags in place, and skip (never touch) ' +
+      'foreign docs squatting a destination id. Once seeded, every demo opens at /p/ and in the builder (edits ' +
+      'fork), suite parts are browsable on /schemas, /components and /actions, and a signed-in viewer can run a ' +
+      'seeded action from its /actions page (it mints THEIR data things). The report sums both passes and ' +
+      'carries the suite pass as `suites`. GET returns the seed census (site + demo + suite counts) without writing.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'POST with an empty body — the demo catalog is server-side and deterministic.',
+      'Read created/refreshed/unchanged/skipped and notes for per-slug outcomes.',
+      'GET the same path for { totalSeeded, siteSeeded, demosSeeded, demosTotal, suitesSeeded, suitesTotal } to check the census without writing — the three seeded counts are disjoint, so a suite page counts once, under suitesSeeded.',
+      'Re-run after the catalogs change — converges, never duplicates.',
+      'Handle 401/403 for non-admins and 429 when the fail-closed rate limit trips.'
+    ],
+    requestExamples: [
+      {
+        name: 'Seed the demo library',
+        description: 'Upsert every catalog demo.',
+        method: 'POST',
+        body: {}
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Seed report returned.',
+        body: {
+          ok: true,
+          received: 447,
+          created: 447,
+          refreshed: 0,
+          unchanged: 0,
+          skipped: 0,
+          notes: [],
+          totalSeeded: 364,
+          suites: { ok: true, received: 125, created: 125, refreshed: 0, unchanged: 0, skipped: 0, notes: [], totalSeeded: 364 }
+        }
+      }
+    ]
+  }),
+  endpoint({
     id: 'admin-webpages-seed',
+    contractVersion: '1.1.0',
     group: 'admin',
     title: 'Seed site webpages',
     endpoint: '/api/v1/admin/webpages/seed',
@@ -10292,7 +11362,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'POST with an empty body — the seed table is server-side and deterministic.',
       'Read created/refreshed/unchanged/skipped and notes for per-slug outcomes.',
-      'GET the same path for { totalSeeded } to check the census without writing.',
+      'GET the same path for { totalSeeded, siteSeeded, demosSeeded, demosTotal, suitesSeeded, suitesTotal } — totalSeeded counts every system webpage (site pages, the global doc, and demo-library pages), and the three seeded counts partition it.',
       'Re-run after adding routes to the seed table — converges, never duplicates.',
       'Handle 401/403 for non-admins and 429 when the fail-closed rate limit trips.'
     ],
@@ -10308,7 +11378,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'Seed report returned.',
-        body: { ok: true, received: 26, created: 26, refreshed: 0, unchanged: 0, skipped: 0, notes: [], totalSeeded: 26 }
+        body: { ok: true, received: 28, created: 28, refreshed: 0, unchanged: 0, skipped: 0, notes: [], totalSeeded: 28 }
       }
     ]
   }),

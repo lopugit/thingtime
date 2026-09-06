@@ -11,13 +11,20 @@ import { drawerItemClosesOnClick } from './drawerMenu';
 //   9900+   editor windows sent below the drawer
 //   10000   drawer panel
 //   10040+  editor windows above the drawer (their default)
+//   10060   Lopu's floating chat window (LOPU_WINDOW_Z — rides with the
+//           editor windows: above the panel, below the hovered drawer,
+//           popups and modals)
 //   10120   drawer panel while hovered (takes the front, hands it back)
 //   10130   Electron titlebar (keeps its controls above the hovered drawer)
 //   10190   window drag ghosts / drop previews
+//   10200   Lopu launcher bubble (LOPU_LAUNCHER_Z — always reachable above
+//           the drawer and every window, below popups/modals/DevKit)
 //   10220   dropdowns & popups   10230 drawer trigger
 //   10240/10250   modal overlay / modal
 //   10260   Lopu toasts (--toast-z-index in GlobalStyles) — always visible
 export const DRAWER_Z = 10000;
+export const LOPU_WINDOW_Z = DRAWER_Z + 60;
+export const LOPU_LAUNCHER_Z = DRAWER_Z + 200;
 export const DRAWER_POPUP_Z = 10220;
 export const DRAWER_TRIGGER_Z = 10230;
 export const DRAWER_MODAL_OVERLAY_Z = 10240;
