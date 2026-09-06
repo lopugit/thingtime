@@ -404,14 +404,27 @@ jobs:
             # already failed or been cancelled, must release this leg at once
             # instead of idling out the full deadline.
             if jobs_json="$(gh api "repos/$REPO/actions/runs/$RUN_ID/jobs?per_page=100")"; then
-              sibling="$(jq -r --arg name "$SLOWEST_LANGUAGE" '
-                [.jobs[] | select(.name | contains("(" + $name + ")"))] as $legs
+              # `gh api` exits 0 on any 2xx, so the body is not guaranteed to be
+              # the shape this classifier expects — an edge-served HTML page, a
+              # truncated body, or a payload without `.jobs` all reach here. An
+              # unguarded assignment would abort the step under `set -e` and
+              # fail the job, which is precisely the red CodeQL check and
+              # unscanned `actions` snapshot this step exists to avoid. Guard it
+              # the way the analyses lookup above and the ownership re-check
+              # below already guard theirs: an unclassifiable payload matches no
+              # release branch, so this leg simply keeps waiting for the
+              # analysis itself, which remains the authoritative signal.
+              if ! sibling="$(jq -r --arg name "$SLOWEST_LANGUAGE" '
+                [.jobs[] | select(.name? | strings | contains("(" + $name + ")"))] as $legs
                 | if ($legs | length) == 0 then "missing"
                   elif any($legs[]; .status != "completed") then "pending"
                   elif any($legs[]; .conclusion == "success") then "done"
                   else "unusable"
                   end
-              ' <<<"$jobs_json")"
+              ' <<<"$jobs_json")" || [ -z "$sibling" ]; then
+                sibling=unreadable
+                echo "::warning::Could not classify the $SLOWEST_LANGUAGE leg from this run's jobs payload; continuing to wait for the $SLOWEST_LANGUAGE analysis."
+              fi
               case "$sibling" in
                 missing)
                   echo "::notice::This run carries no $SLOWEST_LANGUAGE leg to order against; uploading $LANGUAGE now."
