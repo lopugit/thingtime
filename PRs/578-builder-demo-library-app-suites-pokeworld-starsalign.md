@@ -217,3 +217,52 @@ Validation (this round): `test:schemas` 148 ✓ (+1), `test:action-packs`
 68 ✓. The suite-crystal test validates every materialized app-suite crystal
 in both `system` and `own` mode, so the `school-entry` scope change is
 covered end to end at save time.
+
+## Round 3 — every card opens a dedicated live page
+
+Request: "make all components / snippets / webpages etc. clickable so they
+open a dedicated page which loads up their preview and a live interactable
+version". There is no separate "snippets" surface; the card surfaces are the
+components library, the builder demo library (sections, pages, component
+compositions, behaviour suites, apps), schemas, `/things` tiles and
+`/actions` cards.
+
+### One live path
+
+- `remix/app/components/Builder/liveComponent.tsx` — `useThingSource`
+  (the data binding: runs `source.action` as the viewer on load, after every
+  control run, and on an interval; localStorage-first paint; identical sources
+  share one request per runtime version) and `LiveTemplate` (resolve + draw
+  through the sanitising renderers + arm `onClickCapture` ONLY when
+  `interactive`). `useBlockSource` in `WebpageBlocksRenderer` is now a thin
+  alias, so a component renders live the same way inside a page, on
+  `/components/:key`, on `/thing/:id`, and in the demo library.
+- `useTtActionClicks({ onUnowned, confirm })` — the optional confirm gate
+  runs before the delegated run. `useActionRunConfirm`
+  (`components/Actions/ActionRunConfirm.tsx`) is the shared dialog: it names
+  the action reference and inputs (the button label is never the source of
+  truth), offers a per-action skip that lasts one page session, and lets
+  pseudo-actions (`$refresh`, `$install`) through.
+- Trust ladder (unchanged, now written down in one place): interactivity comes
+  from ownership or platform curation, never from markup. Own thing → live,
+  no confirm. Seeded platform/demo/app thing (reserved-prefix id, suite in
+  `ALL_SUITES`) → live for a signed-in viewer with confirm + run-or-install.
+  Stranger's thing → inert with a label. Browse cards and `/things` tiles are
+  links, never armed; `UNTRUSTED_SAFE_KINDS` and the renderer allowlists are
+  untouched.
+
+### Surfaces
+
+| Surface | Card → page | Dedicated page |
+| --- | --- | --- |
+| `/components` | whole card links to `/components/<deepLinkKey>`; card buttons stop propagation; previews inert | `/components/:key` gains a live pane (runtime provider, trust ladder, run-or-install for suite components, `?source=` data binding for source-driven components) beside preview + args tester + docs |
+| `/builder/demos` | demo / suite / app cards link to `/builder/demos/<slug|key>`; Preview modal wrapped in the runtime provider (live for signed-in viewers); 🧮 Interactive chip | NEW `/builder/demos/:slug` — catalog-first paint, PREVIEW (inert + metadata rail) and LIVE panes over one block tree, app pages as tabs, Install / Open /p/ / Use template / Open in builder |
+| `/schemas` | cards link to `/schemas/<builtin:id | shareId>` (`schemaDetailKeyFor`) | NEW `/schemas/:key` — header, field tree, on-create shape, render preview, INLINE create-a-thing (extracted from `SchemaThingForm`), "your things with this shape" |
+| `/things` | `openThing` + `thingLink` route each kind to its page (`/p/`, `/thing/`, `/schemas/`, `/actions/`, `/post/`); tile titles are keyboard links; PreviewModal stays the quick-look | `/thing/:id` is the universal live page: component via `LiveTemplate`, webpage inline via `/api/v1/webpages/resolve`, action/schema link out, data through its schema render; back link honours `?from=` |
+| `/actions` | cards are real links | (existing `/actions/:id`) |
+
+### Verification
+
+See the "Dedicated live pages" checklist in `TESTING.md`; unit groups
+`test:components`, `test:webpages`, `test:schemas`, `test:things`,
+`test:actions`; browser pass on desktop + 375px against the local stack.

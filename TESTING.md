@@ -4934,3 +4934,124 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
   refused them as unknown inputs); a profile whose place was cleared
   (`placeName ''`, `tz ''`, lat/lon 0) must read as a solar chart, not a
   refusal; nested `ttEach` must flatten (the tile grid rendered empty).
+
+## Dedicated live pages — every card opens one (`/components/:key`, `/builder/demos/:slug`, `/schemas/:key`, `/thing/:id`, `/actions/:id`)
+
+Shared pieces: `remix/app/components/Builder/liveComponent.tsx` (`useThingSource`
++ `LiveTemplate` — the ONE live-render path; `useBlockSource` in the page
+renderer delegates to it), `remix/app/components/Actions/ActionRunConfirm.tsx`
+(`useActionRunConfirm` → the confirm gate `useTtActionClicks` accepts), and the
+route stubs in `remix/app/routes.tsx`. Trust never comes from markup: own thing
+→ live, no confirm; seeded platform/demo/app thing → live for a signed-in
+viewer with the confirm dialog + run-or-install; a stranger's thing → inert with
+a label. Browse cards and `/things` tiles are LINKS, never armed controls.
+
+- [ ] `/components`: the whole card (title, preview area) opens
+      `/components/<key>` in every view mode (feed / grid / columns); the
+      buttons on the card (design pills, args/schema, react, Add to library,
+      Save version, Docs) still work in place without navigating; middle-click
+      on the title opens a new tab; the browse previews stay inert (a
+      `data-tt-action` control in a preview does nothing).
+- [ ] `/components/<key>` (e.g. `/components/app-pokeworld-hud`,
+      `/components/demo-guestbook-signer`): preview + args tester + docs are
+      still there; a LIVE pane renders the same component inside the page
+      runtime. Own component → controls run with no dialog. Seeded suite/app
+      component (signed in) → first press shows the "Run …?" confirm naming the
+      action + inputs, approve runs it (or installs the suite, then re-runs);
+      "Don't ask again for this action on this page" skips only for that
+      action and only until reload. Stranger's component → inert + "🔒
+      Controls belong to @author" label next to Save version. Signed out →
+      "Sign in to run controls" hint; a press toasts and routes to /login.
+      Data source control (`?source=<actionKey>&refresh=…`) renders the real
+      data (`app-pokeworld-hud` + `app-pokeworld-state`) and never persists to
+      the thing.
+- [ ] `/components/<key>?source=<actionKey>` opened from a PASTED link asks the
+      "Run …?" confirm BEFORE the source runs — for the owner of the component
+      too, not just on a seeded one (the URL binding is nobody's authored
+      markup, so it is gated even where the click path is not). Cancel leaves
+      the live pane with no source chip and runs nothing, while the source
+      control keeps the binding so it can be edited or cleared; approve runs it
+      once and, for `refresh=interval`, starts the ticking. Same rule as
+      `/thing/:id?source=` — a link must never start a program by surprise.
+- [ ] `/builder/demos`: every demo / suite / app card opens
+      `/builder/demos/<slug|key>`; the Preview button still opens the modal;
+      the modal is live for a signed-in viewer (runtime provider present —
+      source blocks load, `$refresh` works); the kind chip row shows every
+      kind including "🧮 Interactive" and "🧪 Behaviour suites"
+      (= not app, not interactive).
+- [ ] `/builder/demos/<slug>` (`hero-centered-paper`, `guestbook`,
+      `pokeworld`): paints instantly from the code catalog (no spinner), then
+      reconciles the seeded flag; PREVIEW pane inert with the metadata rail;
+      LIVE pane interactive for a signed-in viewer (platform-curated rule) and
+      a sign-in card when signed out; app suites render the entry page live
+      with the other pages as tabs (+ `/p/<pageKey>` links when seeded);
+      Install / Open /p/ / Use template / Open in builder do what they say;
+      unknown slug → "This demo isn't here" with a link back.
+- [ ] `/schemas`: every card opens `/schemas/<builtin:id | shareId>`; card
+      buttons (react, Add to library, Create a thing, Fork, Search things,
+      Docs) still work in place.
+- [ ] `/schemas/<key>` (`/schemas/builtin:post`,
+      `/schemas/schema-app-pokeworld-trainer`): header + badges + full field
+      tree + on-create crystal chips + render preview; the create-a-thing
+      form is INLINE and posts through `things.create`; "Your things with this
+      shape" lists the viewer's own data things and refreshes after a create;
+      honest empty states; a `builtin:` key that is also seeded shows the
+      registry entry.
+- [ ] `/things`: single-click still selects; the tile title is a keyboard
+      link to the dedicated page (webpage → `/p/:id`, component/data →
+      `/thing/:id`, schema → `/schemas/:id`, action → `/actions/:id`, post →
+      `/post/:id`, folder opens the folder); open (double-click / Enter) goes
+      to the same page; context-menu Preview + `?preview=<id>` still open the
+      quick-look modal; Copy link / Share produce the real permalink;
+      previews stay `pointer-events: none`.
+- [ ] `/thing/:id`: component → LiveTemplate with the trust ladder above
+      (`?source=<actionKey>` optional binding); webpage → inline live render +
+      "Open /p/…" link; action → summary + "Run it on /actions/…"; schema →
+      link to `/schemas/…` + field chips; data → rendered through its schema's
+      render template when one exists; raw JSON still available; the back link
+      honours `?from=things|actions|feed`.
+- [ ] `/actions`: each card is a real link (middle-click works); nested
+      buttons don't navigate.
+- [ ] Mobile (375px): none of the pages above scroll horizontally; the live
+      panes and tabs wrap.
+- [ ] `/thing/:id?source=…` rejects a key the server would reject rather than
+      confirming it first: `?source=Foo/Bar@baz`, `?source=My_Action.v2`, and a
+      120-character key must show NO "Run …?" dialog at all (the binding is
+      simply ignored). `?source=app-pokeworld-state` on a live component still
+      confirms once, then loads the real data.
+- [ ] Switching `?source=` never leaves the PREVIOUS program running while the
+      new one is still being confirmed. From a live `/thing/<A>?source=<x>`
+      that you approved, navigate in-app to `/thing/<B>?source=<y>` (and
+      separately, just edit `?source=` on the same thing). While the "Run
+      <y>?" dialog is open the live pane must show NO source result and fire
+      no request for `<x>` — check the Network tab for an action run of `<x>`
+      against `<B>`. The clearing branch is skipped whenever `<B>` repaints
+      instantly from the `tt-thing-*` cache, which is the normal path, so the
+      approval has to be dropped explicitly before re-asking (same order as
+      `/components/:key`). A viewer approved `<x>` for one surface, never for
+      the next one.
+- [ ] `/thing/:id` cache stays bounded and session-scoped: open 45+ different
+      things, then in DevTools → Application → Local Storage confirm at most 40
+      `tt-thing-*` keys survive and the oldest were dropped, not the newest.
+      Sign out and confirm every `tt-thing-*` key is gone — the projections are
+      ACL-gated (private posts, circle data) and must not outlive the session,
+      the same bar as `tt-activity-` / `tt-saved-` / `tt-page-source:`.
+- [ ] Every per-entity localStorage namespace is bounded, not just
+      `tt-thing-*`. Open 20+ different component families
+      (`/components/<key>`) and 20+ schemas (`/schemas/<key>`), then in
+      DevTools → Application → Local Storage confirm at most 12
+      `tt-component-family-*` and 16 `tt-schema-things-*` keys survive, oldest
+      dropped first, and the page you are ON still paints instantly from cache
+      on reload. These namespaces grow one key per entity visited and each
+      entry is large (a family is up to 16 component crystals with their
+      render trees), so unbounded they fill the origin quota — and because
+      `writeLocalCache` swallows the quota error by design, the symptom is not
+      an error but every OTHER `tt-*` optimistic cache silently going cold.
+      Regression covered by `remix/app/hooks/localCache.test.ts`
+      (`pnpm --dir remix run test:hooks`).
+- [ ] `remix/app/routes/thing.tsx` contains no raw NUL byte. Check with
+      `python3 -c "import sys;print(open(sys.argv[1],'rb').read().count(bytes([0])))" remix/app/routes/thing.tsx`
+      — it must print 0, and the two requestKey separators must stay written as
+      the six-character escape sequence in the source. An embedded NUL makes
+      git, grep and ripgrep treat the whole file as binary and silently skip
+      it, which costs a reviewer real time.
