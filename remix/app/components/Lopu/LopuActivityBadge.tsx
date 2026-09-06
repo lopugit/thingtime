@@ -14,7 +14,7 @@ import { isLopuTurnActive } from './lopuTurnCore';
 //   (the drawer's "Lopu" row, the launcher, the nav button, the window
 //   header) while one of her turns is still streaming. Reads the shared chat
 //   store so the badge stays in sync whether the turn was started from the
-//   floating window or the /lopu page. Renders nothing while she is idle, so
+//   floating window or the /lopu page. Renders nothing while it is idle, so
 //   callers can drop it in unconditionally.
 
 const pulse = keyframes`

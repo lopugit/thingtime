@@ -10,6 +10,7 @@ import {
   EMPTY_TIER_PRICES,
   DEFAULT_SUBSCRIPTION_TIER,
   QUOTA_OVERRIDE_FIELDS,
+  REQUIRED_TIER_QUOTA_FIELDS,
   SUBSCRIPTION_TIER_CATALOG,
   TIER_DISCOUNT_COMPARISONS,
   computeTierDiscounts,
@@ -893,5 +894,5 @@ export const tierAssignmentSnapshot = (tier: SubscriptionTierDescriptor) => ({
 
 export const isCompleteTierQuotas = (value: unknown): value is TierQuotas => {
   const quotas = tierQuotasFromUnknown(value);
-  return !!quotas && QUOTA_OVERRIDE_FIELDS.every((field) => field === 'speedTestsPerHour' || field in quotas);
+  return !!quotas && REQUIRED_TIER_QUOTA_FIELDS.every((field) => field in quotas);
 };
