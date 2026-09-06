@@ -183,6 +183,11 @@ export const loader = async ({ request }: { request: Request }) => {
   }
   // thingtime commonly arrives as a bare csv ("post,comment") — normalize
   if (typeof args.thingtime === 'string') args.thingtime = csv(args.thingtime);
+  // tags the same way: sanitizeTags (things.ts) hard-400s a non-array, so a
+  // plain ?tags=a,b — the natural spelling on a URL-only surface — would fail
+  // every create/update/share instead of meaning what it looks like. A JSON
+  // ?tags=["a","b"] already arrives parsed and passes through untouched.
+  if (typeof args.tags === 'string') args.tags = csv(args.tags);
 
   // scope check + use consumption happen inside the resolver (403s are free,
   // exactly like the Bearer path)
@@ -288,8 +293,10 @@ export const loader = async ({ request }: { request: Request }) => {
     return respond({ ok: true, saved: result.saved });
   }
 
-  // share
-  const result = await sharePost(viewer, args.id, { text: args.text, acl: args.acl, visibility: args.visibility });
+  // share — `tags` carries the quoter's own hashtags exactly like the body on
+  // POST /api/v1/things/share; without it the bridge silently dropped them and
+  // the share kept only the original's tags (sharePost sanitizes input.tags)
+  const result = await sharePost(viewer, args.id, { text: args.text, tags: args.tags, acl: args.acl, visibility: args.visibility });
   if (result.ok === false) return respond({ ok: false, error: result.error }, { status: result.status });
   return respond({ ok: true, post: result.post });
 };
