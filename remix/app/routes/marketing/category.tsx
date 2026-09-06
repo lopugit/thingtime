@@ -2,18 +2,23 @@ import { Box, Flex, Input, SimpleGrid, Text } from '@chakra-ui/react';
 import React from 'react';
 import { Link as RouterLink, useParams, useSearchParams } from 'react-router';
 
-import { Crumbs, MarketingShell, formatCount, useMarketingSeo } from '~/components/Marketing/MarketingShell';
+import { MarketingColdStart, MarketingUnpublished } from '~/components/Marketing/MarketingGate';
+import { PublishToggle, type AdminSurface } from '~/components/Marketing/MarketingPublishing';
+import { Crumbs, MarketingShell, formatCount, formatPages, useMarketingSeo, useVisibleCounts } from '~/components/Marketing/MarketingShell';
 import { MK } from '~/components/Marketing/marketingTheme';
 import { MkButton, SectionEyebrow } from '~/components/Marketing/Sections';
-import { CATEGORY_BY_KEY, MARKETING_BASE, PAGES, pageHref, pagesInCategory, searchPages } from '~/marketing/catalog';
+import { useMarketingVisibility } from '~/components/Marketing/useMarketingPublications';
+import { CATEGORY_BY_KEY, MARKETING_BASE, pageHref, pagesInCategory, searchPages } from '~/marketing/catalog';
 import { groupPages } from '~/marketing/pageGroups';
+import { HUB_KEY, categoryKey, categoryPageKeys, pageKey } from '~/marketing/publishing';
 import type { MarketingPage, TrendKey } from '~/marketing/types';
 
 // /marketing/:category — the index of one category (and /marketing/search).
 // Pages are grouped by the reference that best explains them (persona,
 // competitor, trend, use case, feature family) and filtered client-side; big
 // categories paginate with "show more" so the styles index (500+ pages) stays
-// light.
+// light. Visitors only get the pages an admin published; the index itself is
+// its own publishable surface (marketing/publishing.ts) and never cascades.
 
 const PAGE_SIZE = 60;
 
@@ -32,42 +37,55 @@ const CATEGORY_TREND: Record<string, TrendKey> = {
 	search: 'bold-brutal'
 };
 
-const PageCard = ({ entry }: { entry: MarketingPage }) => (
-	<Box
-		as={RouterLink}
-		to={pageHref(entry.slug)}
-		display="flex"
-		flexDirection="column"
-		gap={1.5}
-		padding={4}
-		background={MK.cardSolid}
-		border={MK.border}
-		borderRadius={MK.radius}
-		boxShadow={MK.shadow}
-		color={MK.ink}
-		minHeight="132px"
-		_hover={{ transform: 'translate(-2px, -2px)', boxShadow: MK.shadowLg }}
-		transition="transform 140ms ease, box-shadow 140ms ease"
-		data-testid="marketing-page-card"
-	>
-		<Text fontSize="11px" fontFamily={MK.mono} color={MK.muted} noOfLines={1}>
-			{entry.eyebrow}
-		</Text>
-		<Text fontWeight={800} fontSize="16px" lineHeight={1.25} letterSpacing="-0.01em" sx={{ overflowWrap: 'anywhere' }}>
-			{entry.title}
-		</Text>
-		<Text fontSize="13px" color={MK.text} lineHeight={1.5} noOfLines={3}>
-			{entry.description}
-		</Text>
+// `admin` is passed rather than read inside PublishToggle: an index renders up
+// to a few hundred cards ("show more" over the 500-page styles category), and
+// each mounted toggle subscribes to the publications store twice and registers
+// a window listener. A visitor would pay all of that for a control that only
+// ever renders null, and every publish would re-render the whole grid.
+const PageCard = ({ entry, admin, dimmed }: { entry: MarketingPage; admin: boolean; dimmed: boolean }) => (
+	<Box position="relative" minWidth={0}>
+		<Box
+			as={RouterLink}
+			to={pageHref(entry.slug)}
+			display="flex"
+			flexDirection="column"
+			gap={1.5}
+			padding={4}
+			background={MK.cardSolid}
+			border={MK.border}
+			borderRadius={MK.radius}
+			boxShadow={MK.shadow}
+			color={MK.ink}
+			minHeight="132px"
+			height="100%"
+			opacity={dimmed ? 0.72 : 1}
+			_hover={{ transform: 'translate(-2px, -2px)', boxShadow: MK.shadowLg }}
+			transition="transform 140ms ease, box-shadow 140ms ease"
+			data-testid="marketing-page-card"
+			data-published={dimmed ? 'false' : 'true'}
+		>
+			<Text fontSize="11px" fontFamily={MK.mono} color={MK.muted} noOfLines={1} paddingRight="36px">
+				{entry.eyebrow}
+			</Text>
+			<Text fontWeight={800} fontSize="16px" lineHeight={1.25} letterSpacing="-0.01em" sx={{ overflowWrap: 'anywhere' }}>
+				{entry.title}
+			</Text>
+			<Text fontSize="13px" color={MK.text} lineHeight={1.5} noOfLines={3}>
+				{entry.description}
+			</Text>
+		</Box>
+		{admin ? <PublishToggle publicationKey={pageKey(entry.slug)} label={entry.title} iconOnly position="absolute" top="10px" right="10px" /> : null}
 	</Box>
 );
 
 export default function MarketingCategory() {
 	const params = useParams();
 	const [searchParams, setSearchParams] = useSearchParams();
-	const categoryKey = params.category ?? '';
-	const isSearch = categoryKey === 'search';
-	const category = CATEGORY_BY_KEY[categoryKey];
+	const visibility = useMarketingVisibility();
+	const counts = useVisibleCounts();
+	const categoryKeyParam = params.category ?? '';
+	const isSearch = categoryKeyParam === 'search';
+	const category = CATEGORY_BY_KEY[categoryKeyParam];
 	const query = searchParams.get('q') ?? '';
 	const [filter, setFilter] = React.useState('');
 	const [limit, setLimit] = React.useState(PAGE_SIZE);
@@ -75,13 +93,13 @@ export default function MarketingCategory() {
 	React.useEffect(() => {
 		setLimit(PAGE_SIZE);
 		setFilter('');
-	}, [categoryKey, query]);
+	}, [categoryKeyParam, query]);
 
 	const pages = React.useMemo(() => {
-		if (isSearch) return searchPages(query, 400);
+		if (isSearch) return visibility.pages(searchPages(query, 400));
 		if (!category) return [];
-		return pagesInCategory(category.key);
-	}, [category, isSearch, query]);
+		return visibility.pages(pagesInCategory(category.key));
+	}, [category, isSearch, query, visibility]);
 
 	const filtered = React.useMemo(() => {
 		const needle = filter.trim().toLowerCase();
@@ -93,17 +111,23 @@ export default function MarketingCategory() {
 
 	const title = isSearch ? (query ? `Search: ${query}` : 'Search') : (category?.name ?? 'Not found');
 	const description = isSearch
-		? `${formatCount(pages.length)} marketing pages match “${query}”.`
+		? `${formatPages(pages.length)} match “${query}”.`
 		: category
-			? `${category.blurb} ${formatCount(pages.length)} pages.`
+			? `${category.blurb} ${formatPages(pages.length)}.`
 			: 'This marketing section does not exist.';
 
-	useMarketingSeo({ title, description });
+	const gated = visibility.ready && (isSearch ? !visibility.hub : !!category && !visibility.category(category.key));
+	useMarketingSeo({
+		title: gated ? 'Not published yet' : title,
+		description: gated ? 'This part of the Thingtime marketing site is not published yet.' : description,
+		// unknown publish state writes nothing; "no such section" needs none
+		enabled: (!category && !isSearch) || visibility.ready
+	});
 
 	if (!category && !isSearch) {
 		return (
 			<MarketingShell trend="bold-brutal">
-				<Crumbs items={[{ to: MARKETING_BASE, label: 'Marketing' }, { label: 'Not found' }]} />
+				<Crumbs items={[visibility.hub ? { to: MARKETING_BASE, label: 'Marketing' } : { label: 'Marketing' }, { label: 'Not found' }]} />
 				<Box paddingY={12} textAlign="center">
 					<Text fontSize="48px" aria-hidden="true">
 						🫥
@@ -115,8 +139,8 @@ export default function MarketingCategory() {
 						Try one of the categories in the bar above.
 					</Text>
 					<Flex justifyContent="center" marginTop={6}>
-						<MkButton to={MARKETING_BASE} variant="primary">
-							Back to marketing
+						<MkButton to={visibility.hub ? MARKETING_BASE : '/'} variant="primary">
+							{visibility.hub ? 'Back to marketing' : 'Back to Thingtime'}
 						</MkButton>
 					</Flex>
 				</Box>
@@ -124,12 +148,31 @@ export default function MarketingCategory() {
 		);
 	}
 
+	// the surface an admin publishes from here: the category index (with a
+	// bulk switch over its pages), or the hub for the search view
+	const surface: AdminSurface = category
+		? { key: categoryKey(category.key), label: `${category.name} index`, bulk: { noun: 'pages', keys: categoryPageKeys(category.key) } }
+		: { key: HUB_KEY, label: 'Marketing hub' };
+	const trend = CATEGORY_TREND[categoryKeyParam] ?? 'bold-brutal';
+
+	if (!visibility.ready) return <MarketingColdStart />;
+	if (isSearch ? !visibility.hub : !visibility.category(category!.key)) {
+		return (
+			<MarketingUnpublished
+				surface={surface}
+				trend={trend}
+				active={categoryKeyParam}
+				crumbs={[visibility.hub ? { to: MARKETING_BASE, label: 'Marketing' } : { label: 'Marketing' }, { label: category?.name ?? 'Search' }]}
+			/>
+		);
+	}
+
 	return (
-		<MarketingShell trend={CATEGORY_TREND[categoryKey] ?? 'bold-brutal'} active={categoryKey} query={query}>
-			<Crumbs items={[{ to: MARKETING_BASE, label: 'Marketing' }, { label: title }]} />
+		<MarketingShell trend={trend} active={categoryKeyParam} query={query} publication={surface}>
+			<Crumbs items={[visibility.hub ? { to: MARKETING_BASE, label: 'Marketing' } : { label: 'Marketing' }, { label: title }]} />
 			<Box as="header" paddingTop={6} paddingBottom={6} data-testid="marketing-category-header">
 				<SectionEyebrow>
-					{isSearch ? '🔍 Search' : `${category!.emoji} ${category!.name}`} · {formatCount(pages.length)} pages
+					{isSearch ? '🔍 Search' : `${category!.emoji} ${category!.name}`} · {formatPages(pages.length)}
 				</SectionEyebrow>
 				<Text as="h1" fontSize="clamp(34px, 5.5vw, 64px)" fontWeight={900} letterSpacing="-0.03em" lineHeight={1.02} color={MK.ink} margin={0} sx={{ overflowWrap: 'anywhere' }}>
 					{isSearch ? (query ? `“${query}”` : 'Search the suite') : category!.name}
@@ -167,7 +210,7 @@ export default function MarketingCategory() {
 						<Input
 							value={filter}
 							onChange={(event) => setFilter(event.target.value)}
-							placeholder={`Filter ${formatCount(pages.length)} pages…`}
+							placeholder={`Filter ${formatPages(pages.length)}…`}
 							aria-label={`Filter ${category!.name}`}
 							flex="1 1 240px"
 							minHeight="44px"
@@ -183,15 +226,17 @@ export default function MarketingCategory() {
 			</Box>
 
 			{filtered.length === 0 ? (
-				<Box paddingY={10} textAlign="center" border={MK.border} borderRadius={MK.radius} background={MK.cardSolid}>
+				<Box paddingY={10} textAlign="center" border={MK.border} borderRadius={MK.radius} background={MK.cardSolid} data-testid="marketing-category-empty">
 					<Text fontSize="40px" aria-hidden="true">
-						🔎
+						{pages.length === 0 && !isSearch ? '🌱' : '🔎'}
 					</Text>
 					<Text fontWeight={800} fontSize="18px">
-						Nothing matches yet
+						{pages.length === 0 && !isSearch ? 'Pages are on their way' : 'Nothing matches yet'}
 					</Text>
 					<Text color={MK.text} fontSize="14px" marginTop={1}>
-						Try a feature name, a competitor, or an audience. There are {formatCount(PAGES.length)} pages to find.
+						{pages.length === 0 && !isSearch
+							? 'Nothing in this section is published yet — check back soon.'
+							: `Try a feature name, a competitor, or an audience. There ${counts.pages === 1 ? 'is' : 'are'} ${formatPages(counts.pages)} to find.`}
 					</Text>
 				</Box>
 			) : (
@@ -207,7 +252,7 @@ export default function MarketingCategory() {
 						</Flex>
 						<SimpleGrid columns={[1, 2, 3]} gap={3}>
 							{group.pages.map((entry) => (
-								<PageCard key={entry.slug} entry={entry} />
+								<PageCard key={entry.slug} entry={entry} admin={visibility.everything} dimmed={visibility.everything && !visibility.isPublished(pageKey(entry.slug))} />
 							))}
 						</SimpleGrid>
 					</Box>
