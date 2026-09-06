@@ -8,6 +8,31 @@ With Thingtime, you can create and share any abstract data structure you want, o
 
 At Thingtime, we believe that data and knowledge should be open, accessible, and empowering. We are building Thingtime to make this vision a reality. Join us and start exploring the limitless possibilities of data!
 
+## Account speed-test allowances
+
+Commander speed tests use the signed-in account's protected subscription and
+admin quota overrides. Defaults are Free: 4 complete tests/hour, Plus: 20/hour,
+Pro: unlimited, and Pay as you go: unlimited. This adds no speed-test billing.
+Usage is shared across account sessions, devices, and IP addresses; authenticated
+requests do not also spend a guest IP bucket. Partial attempts consume the
+corresponding part of a test. Anonymous callers retain one test per 15 minutes.
+Fixed payload sizes, serial upload chunks, and transfer timeouts still apply.
+
+Settings → Account compares the live published tiers. Existing immutable tier
+revisions remain readable without a data migration. Admin tier and account
+override editors expose `speedTestsPerHour` (`null` = unlimited, `0` = disabled).
+Commander sends only the selected origin/account's credential and requires
+`api.network-probe-ping` 1.1.0, `api.network-probe-download` 1.1.0, and `api.network-probe-upload` 2.1.0 before
+transferring payloads. Deploy the compatible server before updating Commander;
+an old server fails compatibility checks rather than silently using guest limits.
+Forks use their own normal account/OAuth setup; no new secret or environment
+variable is required for this feature.
+
+Local validation worktree `speed-test-tier-allowances` uses Vite 18580, HMR 18581,
+and Nitro 18582 via the canonical PM2 ecosystem config. Its comparison is at
+http://localhost:18580/settings#plan-features. No public Funnel mapping was
+verified: the local Tailscale launcher currently points to a missing app binary.
+
 ## Embed Thingtime on any website
 
 Thingtime now builds as a single minified browser file with shared state,

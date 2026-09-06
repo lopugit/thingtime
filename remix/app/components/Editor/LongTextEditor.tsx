@@ -1026,7 +1026,7 @@ const EditableLongTextEditor = React.forwardRef<LongTextEditorHandle, LongTextEd
 			className="tt-editor-session"
 			data-editor-presentation={props.presentation ?? 'field'}
 			position="relative"
-			minWidth={0}
+			minWidth={props.presentation === 'inline' ? '136px' : 0}
 			width="100%"
 			zIndex={8}
 			_focusWithin={{ zIndex: 9 }}
