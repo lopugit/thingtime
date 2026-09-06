@@ -18,6 +18,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Validation and rollout notes for account-tier speed-test allowances: [PR #664](../PRs/664-speed-test-tier-allowances-account-tier-speed-test-allowances-and-feature-comparison.md).
+
 - 2026-09-06: Tie Commander speed-test allowances to protected account-tier
   quotas (Free 4/hour, Plus 20/hour, Pro/PAYG unlimited), add the live account
   feature comparison and admin quota controls, and preserve readings after a
