@@ -59,7 +59,7 @@ import { fetchThreadInto, getCachedThread, prefetchNextDepth, setCachedThread, w
 import { canonicalPostTags } from '~/components/Attachments/attachmentUiCore';
 import { profileMentionHref, splitMentionSegments, type MentionSegment } from '~/utils/mentions';
 import { extractInlineHashtags, searchTagHref, splitHashtagSegments, type HashtagSegment } from './hashtags';
-import { CIRCLE_META, COMMENT_SORTS, COMMENT_SORT_META, MARKETPLACE_CATEGORY_META, REACTION_EMOJIS, applyUpdownVote, isCommentSort, sortCommentPage, timeAgo } from './feedTypes';
+import { CIRCLE_META, COMMENT_SORTS, COMMENT_SORT_META, MARKETPLACE_CATEGORY_META, REACTION_EMOJIS, applyUpdownVote, isCommentSort, isPendingComment, mergeCommentPage, sortCommentPage, timeAgo, windowCommentPage } from './feedTypes';
 import type { CommentSort, EngagementEvent, FeedAuthor, PostChange, PostComment, PostVisibility, PublicAuthorFlair, PublicPost, UpdownDirection } from './feedTypes';
 import type { PollRenderPollContext } from '~/components/Kinds';
 
@@ -730,7 +730,37 @@ const buildPendingComment = (user: any, targetId: string, text: string): PostCom
   createdAt: new Date().toISOString()
 });
 
-const isPendingComment = (comment: PostComment) => comment.id.startsWith('pending-');
+// The card's comment order (round 2 S7: Top / New / Old, null = the default
+// page) for every row in its tree: rows order their replies the same way,
+// window them top-down under a sort, and read a thread's own sorted page
+// (threadCache keys a sorted read apart from the default one).
+const CommentSortContext = React.createContext<CommentSort | null>(null);
+
+// The comments the viewer sent from one list (a post's level or a reply
+// thread): a pending id swaps to the server's on ack, a failed send drops out.
+// Under a sort these stay on screen (windowCommentPage pins them below the
+// window) and survive a sorted page landing (mergeCommentPage keeps them). The
+// ref mirrors the state so an async closure — a sort read resolving — always
+// reads the latest set, and every change goes through commit so the two never
+// drift.
+const useFreshCommentIds = () => {
+  const [ids, setIds] = React.useState<string[]>([]);
+  const ref = React.useRef(ids);
+  const commit = React.useCallback((next: string[]) => {
+    ref.current = next;
+    setIds(next);
+  }, []);
+  return React.useMemo(
+    () => ({
+      ids,
+      ref,
+      note: (id: string) => commit([...ref.current, id]),
+      swap: (from: string, to: string) => commit(ref.current.map((id) => (id === from ? to : id))),
+      drop: (id: string) => commit(ref.current.filter((entry) => entry !== id))
+    }),
+    [ids, commit]
+  );
+};
 
 // Left-to-right shimmer placeholder shaped like comment rows — the ONLY
 // loading state threads show, and only on a cold open with nothing cached.
@@ -782,6 +812,9 @@ const CommentRow = (props: {
   const reactAnchorRef = React.useRef<HTMLDivElement | null>(null);
   const replyFocus = React.useContext(ReplyFocusContext);
   const threadFocus = React.useContext(ThreadFocusContext);
+  // the card's Top / New / Old pick (null = default) — this row's replies
+  // follow it: same order, same top-down window, same sorted thread read
+  const commentSort = React.useContext(CommentSortContext);
   // at the cap, reveals hand over to the drill-down panel instead of nesting
   const atVisualCap = !!threadFocus && depth >= threadFocus.maxDepth;
   // Report to moderators 🚩 — logged-in non-mods on someone else's comment
@@ -807,13 +840,17 @@ const CommentRow = (props: {
     // both seeds are older than any tap this session: the cache merges its
     // own write-time through the reaction overlay, payload copies merge at
     // epoch 0 so a remount can't resurrect pre-tap reaction state
-    () => getCachedThread(comment.id) ?? (comment.comments?.length ? mergeReactionOverlays(0, comment.comments) : null)
+    // under a sort the thread's sorted read is preferred, but a default-order
+    // copy still seeds (the rows re-order client-side) rather than a skeleton
+    () => getCachedThread(comment.id, commentSort) ?? (commentSort ? getCachedThread(comment.id) : null) ?? (comment.comments?.length ? mergeReactionOverlays(0, comment.comments) : null)
   );
   const [repliesOpen, setRepliesOpen] = React.useState((depth === 1 && !!comment.comments?.length) || !!defaultOpen);
   // the reply INPUT is separate from thread visibility: threads stay open,
   // but only one empty input exists at a time (ReplyFocusContext)
   const [replyInputOpen, setReplyInputOpen] = React.useState(false);
   const [visibleReplies, setVisibleReplies] = React.useState(5);
+  // the replies the viewer sent from this row — kept visible under a sort
+  const freshReplies = useFreshCommentIds();
   const [richReplyOpen, setRichReplyOpen] = React.useState(false);
   const [repliesLoading, setRepliesLoading] = React.useState(false);
   // reply text persists as a per-user draft — leave and pick it up later
@@ -933,14 +970,14 @@ const CommentRow = (props: {
       fetchingRef.current = true;
       // skeleton only when there is truly nothing to paint
       if (repliesStateRef.current === null && comment.commentCount > 0) setRepliesLoading(true);
-      fetchThreadInto(api, comment.id)
+      fetchThreadInto(api, comment.id, commentSort)
         .then((fetched) => {
           if (fetched === null) {
             setReplies((prev) => prev ?? []);
             return;
           }
           // stay one depth ahead: pull the level BELOW what just arrived
-          prefetchNextDepth(api, fetched);
+          prefetchNextDepth(api, fetched, commentSort);
           setReplies((prev) => {
             // keep optimistic sends that raced the fetch, drop ones the
             // server copy now covers
@@ -955,7 +992,7 @@ const CommentRow = (props: {
           setRepliesLoading(false);
         });
     },
-    [api, comment.id, comment.commentCount, pending]
+    [api, comment.id, comment.commentCount, pending, commentSort]
   );
 
   // prefetch-ahead: fill this row's missing depth as soon as it renders —
@@ -970,6 +1007,17 @@ const CommentRow = (props: {
     fetchThread({ force: repliesOpen });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchThread]);
+
+  // the card's sort changed while this thread is open: the rows re-order
+  // client-side at once (orderedReplies below), then the thread's own sorted
+  // read lands and reconciles — closed threads read it when they open
+  const seenSortRef = React.useRef(commentSort);
+  React.useEffect(() => {
+    if (seenSortRef.current === commentSort) return;
+    seenSortRef.current = commentSort;
+    if (repliesOpen && !pending) fetchThread({ force: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commentSort]);
 
   const openThread = () => {
     setRepliesOpen(true);
@@ -1019,22 +1067,26 @@ const CommentRow = (props: {
 
     const pendingReply = buildPendingComment(user, comment.id, text);
     clearReplyDraft();
+    freshReplies.note(pendingReply.id);
     setReplies((prev) => [...(prev || []), pendingReply]);
     onChanged(comment.id, (current) => ({ ...current, commentCount: current.commentCount + 1 }));
     onEngagement?.({ thingId: comment.id, signal: 'comment' });
 
     try {
       const resp = await api.v1.things.comment({ id: comment.id, text });
+      freshReplies.swap(pendingReply.id, resp.comment.id);
       setReplies((prev) => {
         const mapped = (prev || []).map((reply) => (reply.id === pendingReply.id ? resp.comment : reply));
         const deduped = mapped.filter((reply, index) => mapped.findIndex((entry) => entry.id === reply.id) === index);
-				setCachedThread(
-					comment.id,
-					deduped.filter((reply) => !isPendingComment(reply))
-				);
+        setCachedThread(
+          comment.id,
+          deduped.filter((reply) => !isPendingComment(reply)),
+          { sort: commentSort }
+        );
         return deduped;
       });
     } catch (err: any) {
+      freshReplies.drop(pendingReply.id);
       setReplies((prev) => (prev || []).filter((reply) => reply.id !== pendingReply.id));
       onChanged(comment.id, (current) => ({ ...current, commentCount: Math.max(0, current.commentCount - 1) }));
       setReplyText(text); // give the draft back
@@ -1045,12 +1097,14 @@ const CommentRow = (props: {
   // the rich composer posts through api.v1.things.comment itself and hands
   // back the created reply (post-shaped)
   const handleRichReplied = (reply: PostComment) => {
+    freshReplies.note(reply.id);
     setReplies((prev) => {
       const next = [...(prev || []), reply];
-			setCachedThread(
-				comment.id,
-				next.filter((entry) => !isPendingComment(entry))
-			);
+      setCachedThread(
+        comment.id,
+        next.filter((entry) => !isPendingComment(entry)),
+        { sort: commentSort }
+      );
       return next;
     });
     setRepliesOpen(true);
@@ -1062,6 +1116,13 @@ const CommentRow = (props: {
   const handleReplyChanged = (id: string, change: CommentChange) => {
     setReplies((prev) => (prev || []).map((reply) => (reply.id === id ? applyCommentChange(reply, change) : reply)));
   };
+
+  // the replies in the card's order: the default page as the server shipped
+  // it (oldest → newest, revealed upwards), a sort re-ordered client-side
+  // (exact — a thread page is at most 20 wide) and windowed top-down with the
+  // viewer's own fresh replies kept on screen
+  const orderedReplies = commentSort ? sortCommentPage(replies || [], commentSort) : replies || [];
+  const shownReplies = windowCommentPage(orderedReplies, commentSort, visibleReplies, freshReplies.ids);
 
   // parent comments carry the bigger avatar; replies step down (IG-style)
   const avatarSize = depth === 1 ? '28px' : '20px';
@@ -1242,14 +1303,12 @@ const CommentRow = (props: {
           <Flex flexDirection="column" rowGap={2} paddingTop={2}>
             {repliesLoading && replies === null && <ReplySkeleton />}
             {repliesOpen &&
-							(replies || [])
-								.slice(-visibleReplies)
-								.map((reply) => (
-									<CommentRow key={reply.id} comment={reply} onChanged={handleReplyChanged} onEngagement={onEngagement} depth={depth + 1} />
+              shownReplies.map((reply) => (
+                <CommentRow key={reply.id} comment={reply} onChanged={handleReplyChanged} onEngagement={onEngagement} depth={depth + 1} />
               ))}
             {repliesOpen &&
               !(repliesLoading && replies === null) &&
-              ((replies?.length || 0) > visibleReplies || comment.commentCount > (replies?.length || 0)) && (
+              (shownReplies.length < orderedReplies.length || comment.commentCount > orderedReplies.length) && (
               <Box
                 as="button"
                 type="button"
@@ -1260,7 +1319,7 @@ const CommentRow = (props: {
                 _hover={{ color: INK }}
                 onClick={showMoreReplies}
               >
-                Show previous replies 💬
+                {commentSort ? 'Show more replies 💬' : 'Show previous replies 💬'}
               </Box>
             )}
             {replyInputOpen &&
@@ -1353,6 +1412,9 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   // oldest 20 of the level) replaces them and the list reveals downwards.
   const [commentSort, setCommentSort] = React.useState<CommentSort | null>(null);
   const commentSortSeqRef = React.useRef(0);
+  // the comments the viewer sent from this card — always on screen under a
+  // sort, never dropped by a sorted page landing
+  const freshComments = useFreshCommentIds();
 
   // stay a depth ahead from the moment the post arrives: warm shipped
   // avatars and prefetch the first HIDDEN depth (short level-1 threads and
@@ -1768,28 +1830,41 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   };
 
   // Top / New / Old: paint first (the client comparator mirrors the server's),
-  // then fetch the sorted page and swap it in; a stale response (the viewer
-  // picked again meanwhile) is dropped; a refusal keeps the painted order and
-  // toasts. Offered on subspace posts only (media cards defer to their post).
+  // then fetch the sorted page and MERGE it in — the page wins the order, a
+  // comment the viewer sent that the page does not carry (still pending, or
+  // saved after the read) is kept, so a sort swap never loses it and its ack
+  // still finds the pending row; a stale response (the viewer picked again
+  // meanwhile) is dropped; a refusal toasts and REVERTS the pick, so the menu
+  // never claims an order the server page never delivered. Offered on
+  // subspace posts only (media cards defer to their post).
   const commentSortAvailable = !!post.subspace && !mediaThing;
   const changeCommentSort = async (value: string | string[]) => {
     const next = Array.isArray(value) ? value[0] : value;
     if (!isCommentSort(next) || next === commentSort) return;
+    const previous = commentSort;
     setCommentSort(next);
     setVisibleComments(5);
     const seq = ++commentSortSeqRef.current;
+    const startedAt = Date.now();
     try {
       const resp = await api.v1.things.get({ id: post.id, commentSort: next });
       if (seq !== commentSortSeqRef.current || !resp?.post) return;
       const fresh = resp.post as PublicPost;
-      onChanged?.(post.id, (prev) => ({ ...prev, comments: fresh.comments, commentCount: fresh.commentCount, commentCounts: fresh.commentCounts }));
+      onChanged?.(post.id, (prev) => {
+        const merged = mergeCommentPage(fresh.comments, prev.comments, freshComments.ref.current, startedAt);
+        return { ...prev, comments: merged.comments, commentCount: fresh.commentCount + merged.unseen, commentCounts: fresh.commentCounts };
+      });
     } catch (err: any) {
       if (seq !== commentSortSeqRef.current) return;
+      setCommentSort(previous);
       lopu({ title: err?.error || 'Could not re-sort the comments 😞', status: 'error' });
     }
   };
   const orderedComments = commentSort ? sortCommentPage(post.comments, commentSort) : post.comments;
-  const shownComments = commentSort ? orderedComments.slice(0, visibleComments) : orderedComments.slice(-visibleComments);
+  // under a sort the viewer's own fresh comments stay on screen even when the
+  // order puts them below the window (a new comment scores 0 and is the
+  // newest — Top and Old would otherwise hide the comment they just posted)
+  const shownComments = windowCommentPage(orderedComments, commentSort, visibleComments, freshComments.ids);
 
   // Feed keyboard shortcuts (useFeedShortcuts): inside a shortcuts-enabled
   // page (feed/explore mount the provider) the card lends its OWN handlers —
@@ -1834,6 +1909,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
 
     const pendingComment = buildPendingComment(user, post.id, text);
     clearCommentDraft();
+    freshComments.note(pendingComment.id);
     onChanged?.(post.id, (prev) => ({
       ...prev,
       comments: [...prev.comments, pendingComment],
@@ -1843,12 +1919,14 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
 
     try {
       const resp = await api.v1.things.comment({ id: post.id, text });
+      freshComments.swap(pendingComment.id, resp.comment.id);
       onChanged?.(post.id, (prev) => ({
         ...prev,
         comments: prev.comments.map((comment) => (comment.id === pendingComment.id ? resp.comment : comment)),
         commentCount: resp.commentCount
       }));
     } catch (err: any) {
+      freshComments.drop(pendingComment.id);
       onChanged?.(post.id, (prev) => ({
         ...prev,
         comments: prev.comments.filter((comment) => comment.id !== pendingComment.id),
@@ -1862,6 +1940,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   // the rich composer posts through api.v1.things.comment itself and hands
   // back the created comment (post-shaped — comments share the post schema)
   const handleRichCommented = (comment: PostComment) => {
+    freshComments.note(comment.id);
     onChanged?.(post.id, (prev) => ({
       ...prev,
       comments: [...prev.comments, comment],
@@ -2575,9 +2654,11 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                   Thread 🧵
                 </Text>
               </Flex>
-								<SubspaceReportContext.Provider value={subspaceReportContext}>
-									<CommentRow comment={focusedComment} onChanged={handleFocusedChanged} onEngagement={onEngagement} defaultOpen />
-								</SubspaceReportContext.Provider>
+              <CommentSortContext.Provider value={commentSort}>
+                <SubspaceReportContext.Provider value={subspaceReportContext}>
+                  <CommentRow comment={focusedComment} onChanged={handleFocusedChanged} onEngagement={onEngagement} defaultOpen />
+                </SubspaceReportContext.Provider>
+              </CommentSortContext.Provider>
             </Flex>
           </ThreadFocusContext.Provider>
         )}
@@ -2612,16 +2693,18 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                 </Menu>
               </Flex>
             )}
-            <SubspaceReportContext.Provider value={subspaceReportContext}>
-              {shownComments.map((comment) => (
-                <CommentRow key={comment.id} comment={comment} onChanged={handleCommentChanged} onEngagement={onEngagement} />
-              ))}
-            </SubspaceReportContext.Provider>
+            <CommentSortContext.Provider value={commentSort}>
+              <SubspaceReportContext.Provider value={subspaceReportContext}>
+                {shownComments.map((comment) => (
+                  <CommentRow key={comment.id} comment={comment} onChanged={handleCommentChanged} onEngagement={onEngagement} />
+                ))}
+              </SubspaceReportContext.Provider>
+            </CommentSortContext.Provider>
 
             {/* the reveal control sits BELOW the conversation (FB-style);
             the OLDER comments it reveals render above the visible list — under
             a sort the page reads top-down, so the reveal appends below */}
-            {orderedComments.length > visibleComments && (
+            {shownComments.length < orderedComments.length && (
               <Box
                 as="button"
                 type="button"

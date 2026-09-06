@@ -1524,8 +1524,17 @@ email whose link points at the attacker.
       **🕰️ Old** order by age; the reveal control reads "Show more comments"
       and appends BELOW under a sort (the default page keeps "Show previous
       comments" revealing upwards); nested replies re-order among the replies
-      already shipped; a fresh comment you post keeps its place in the chosen
-      order; `commentSort=bogus` → 400 and the response echoes `commentSort`
+      already shipped, and opening or expanding a thread under a sort reads
+      that comment's own sorted page (`GET ?id=<comment>&commentSort=` — the
+      Network tab shows it; the reveal reads "Show more replies") so deeper
+      levels keep the card's order; a fresh comment you post is ALWAYS on
+      screen — under ▲ Top / 🕰️ Old, where a new zero-score comment sorts
+      below the fold, it stays pinned at the end of the shown list right
+      above the composer (the count grows by one, the row is there); pick a
+      sort while a comment is still sending and it is never dropped (the
+      page lands, your comment stays, its ack still swaps in); a refused
+      sort read (offline) toasts AND the menu reverts to the previous pick;
+      `commentSort=bogus` → 400 and the response echoes `commentSort`
       (null on the default read). Guest nudges: logged out, every subspace
       action toasts a Lopu login nudge instead of doing nothing — Join /
       Request to join, ▲▼ votes, react, reply, the ··· menu's **Report to

@@ -250,12 +250,30 @@ score field.
   `comment-sort`, `comment-sort-<sort>`): it paints the chosen order over
   the comments already held first (`sortCommentPage` in `feedTypes.ts`
   mirrors the server comparator, unit-tested), then swaps in the server
-  page (`api.v1.things.get({ id, commentSort })`), drops a stale response
-  when the viewer picked again, keeps the painted order + toasts on a
-  refusal; under a sort the page reads top-down and the reveal control
-  becomes "Show more comments 💬" appending below (the default page keeps
-  "Show previous comments" revealing upwards); a comment you post keeps its
-  place in the chosen order. Guest nudges audited: votes / react / reply /
+  page (`api.v1.things.get({ id, commentSort })`) — MERGED over the
+  comments held (`mergeCommentPage`, unit-tested: the page wins the order;
+  a comment the viewer sent that the page does not carry — still pending,
+  or saved after the read — is kept after it, so a sort swap never loses it
+  and its ack still finds the pending row; `commentCount` = the page's plus
+  the kept rows it could not count yet), drops a stale response when the
+  viewer picked again, and on a refusal toasts AND reverts the pick (the
+  menu never claims an order the server page never delivered); under a
+  sort the page reads top-down and the reveal control becomes "Show more
+  comments 💬" appending below (the default page keeps "Show previous
+  comments" revealing upwards); a comment you post is always on screen —
+  under Top / Old, where a new zero-score comment sorts below the window,
+  it stays pinned at the end of the shown list right above the composer
+  (`windowCommentPage`, unit-tested; the ids come from `useFreshCommentIds`,
+  pending → saved on ack, dropped on failure). The comment rows follow the
+  card's pick through `CommentSortContext`: replies are ordered client-side
+  the same way (exact — a thread page is ≤ 20 wide), windowed top-down
+  under a sort with the sender's fresh replies pinned ("Show more replies"),
+  and every thread read goes through `threadCache` keyed by `(id, sort)` —
+  `fetchThreadInto(api, id, sort)` issues the thread's own
+  `GET ?id=<comment>&commentSort=`, so drilling into a thread reads it in
+  the card's order, a sorted page never poisons the default cache, and an
+  open thread refetches when the pick changes (S7 review). Guest nudges
+  audited: votes / react / reply /
   join / request approval already toasted; new — the ··· menu now shows
   **Report to moderators 🚩** to guests too and toasts "Log in to report
   🚩" (`post-report-guest`), the comment rows' flag does the same
@@ -554,7 +572,15 @@ score field.
   top read, `bogus` / `TOP` → 400, an anonymous top read on a public
   subspace post, nested replies re-ordering (r2 +2 before r1) while the
   default keeps them oldest → newest, a comment-as-root read sorting its
-  replies and the root's comments, a plain post taking `new`; deleting a
+  replies and the root's comments, a plain post taking `new`; S7 review —
+  a comment posted under a sort sorting last under `old` and below every
+  non-negative comment under `top` (the order the card pins the sender's
+  fresh comment against), the comment ack's `commentCount` = the earlier
+  sorted read's + 1 with the next read agreeing, the drill-down read
+  (`GET ?id=<comment>&commentSort=new|old`) ordering the replies and
+  echoing the sort beside the unchanged default read of the same comment,
+  the 400 body (`ok:false` + the error the card toasts before reverting);
+  deleting a
   reported post clearing the open and resolved queues + `openReportCount`;
   banning a pending requester (queue empty, `pendingCount` 0, the stranger
   reads banned + not pending, re-request 403); transfer to banned 403 /
@@ -570,7 +596,8 @@ score field.
   (contract 1.4.0 / feature 1.5.0, the commentSort step + example);
   cleanup. Unit pins: `parseCommentSort` / `orderCommentPage` /
   `compareCommentsFor` (updownCore.test.ts), `sortCommentPage` /
-  `isCommentSort` (feedTypes.test.ts), both capability pin files.
+  `isCommentSort` / `isPendingComment` / `windowCommentPage` /
+  `mergeCommentPage` (feedTypes.test.ts), both capability pin files.
 - Browser: see the run log in the PR description / TESTING.md checklists.
 
 ## Known limits (stated, not hidden)
@@ -583,7 +610,11 @@ score field.
 - Deny (join or posting request) does not notify the requester (Reddit
   parity — they simply may ask again).
 - Comment sort is a per-read view: the card's Top / New / Old pick is local
-  to that card (not a persisted preference), and under a sort the nested
-  reply levels re-order among the replies that already ship (the newest 5
-  per parent) — the full order of a deep thread comes from that comment's
-  own read (`GET ?id=<comment>&commentSort=`).
+  to that card (not a persisted preference). Under a sort the reply levels
+  that SHIP with the post re-order among the replies that already ship (the
+  newest 5 per parent) until a thread is opened or expanded — then the card
+  reads that comment's own sorted page (`GET ?id=<comment>&commentSort=`,
+  the thread cache keyed by `(id, sort)`) and the level is the true top /
+  newest / oldest 20 of that thread; a thread with more than 20 replies
+  shows its best 20 under Top (the rest stay reachable through the
+  chronological cursor read).

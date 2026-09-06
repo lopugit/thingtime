@@ -139,7 +139,13 @@ reactions untouched.
   requester drops the request, transfer refuses banned / pending /
   outsider targets, pending → `canPost false` + composer select excludes
   it, a demoted mod is 403 on every queue next request, private / removed
-  posts never in rss / trending); PR note Known limits made truthful.
+  posts never in rss / trending); PR note Known limits made truthful. S7
+  review: a fresh comment stays on screen under Top / Old (pinned below
+  the window, `windowCommentPage`), a sort swap merges the server page over
+  the held comments instead of replacing them (pending / just-saved rows
+  survive, `mergeCommentPage`), a refused sort read reverts the pick, and
+  thread drill-downs read the thread's own sorted page (thread cache keyed
+  by id + sort, rows ordered / windowed client-side to match).
 
 ## Follow-ups (not in this PR)
 - Per-subspace wiki +

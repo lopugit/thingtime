@@ -60,8 +60,11 @@
 // and (section S) the completeness sweep: GET /things?id=&commentSort=
 // top|new|old (score-desc-then-older / newest / oldest orders, the default
 // page unchanged, counts untouched, 400 on a typo, anonymous reads, nested
-// replies + comment-as-root reads, a plain post), deleting a post clearing
-// its reports, banning a pending requester dropping the request, transfer
+// replies + comment-as-root reads, a plain post; S7 review: a comment posted
+// under a sort landing last / below every non-negative comment, the ack's
+// commentCount over an earlier sorted read, the drill-down read on every
+// sort beside the unchanged default read, the 400 body), deleting a post
+// clearing its reports, banning a pending requester dropping the request, transfer
 // refused for banned / pending / outsider targets, a pending requester's
 // canPost false + the composer query excluding the pending subspace, a
 // demoted mod losing every queue on the next request, private-subspace and
@@ -2009,6 +2012,35 @@ const run = async () => {
 	const ssPlainC2 = (await ssComment(stranger.cookie, ssPlain.id, 'plain two')).body?.comment;
 	const ssPlainNew = await ssRead(ssPlain.id, null, '&commentSort=new');
 	check('commentSort=new on a post outside any subspace → newest first (the option is a read option of the single read, not a subspace feature)', ssPlainNew.status === 200 && JSON.stringify(ssIdsOf(ssPlainNew.body.post?.comments)) === JSON.stringify([ssPlainC2.id, ssPlainC1.id]), `${ssPlainNew.status} ${JSON.stringify(ssIdsOf(ssPlainNew.body?.post?.comments))}`);
+
+	// --- S7 review: the contracts the card's comment-sort fixes lean on ---
+	// A comment posted under a sort scores 0 and is the newest, so it sorts
+	// LAST under old and below every non-negative comment under top — the
+	// page order the card's fresh-comment pin (windowCommentPage) exists for:
+	// the sender always sees the comment they just posted, right above the
+	// composer, whatever the sort put below the window.
+	const ssTopBefore = await ssRead(ssPost.id, member.cookie, '&commentSort=top');
+	const ssC5Ack = await ssComment(member.cookie, ssPost.id, 'fifth, posted under a sort');
+	const ssC5 = ssC5Ack.body?.comment;
+	const [ssTopAfter, ssOldAfter] = await Promise.all([ssRead(ssPost.id, member.cookie, '&commentSort=top'), ssRead(ssPost.id, member.cookie, '&commentSort=old')]);
+	check('a comment posted under a sort (score 0, the newest) sorts last under old and below every non-negative comment under top (c2, c3, c4, c5, c1) — the order the card pins the sender’s fresh comment against', ssC5Ack.status === 200 && !!ssC5?.id && ssC5.votes?.score === 0 && JSON.stringify(ssIdsOf(ssOldAfter.body?.post?.comments)) === JSON.stringify([ssC1.id, ssC2.id, ssC3.id, ssC4.id, ssC5.id]) && JSON.stringify(ssIdsOf(ssTopAfter.body?.post?.comments)) === JSON.stringify([ssC2.id, ssC3.id, ssC4.id, ssC5.id, ssC1.id]), `${ssC5Ack.status} old=${JSON.stringify(ssIdsOf(ssOldAfter.body?.post?.comments))} top=${JSON.stringify(ssIdsOf(ssTopAfter.body?.post?.comments))}`);
+	// A sorted page read BEFORE a write cannot count it; the write's ack can —
+	// the card keeps a pending row the page does not carry (mergeCommentPage),
+	// counts it as unseen (page total + 1), and an authoritative count takes
+	// over when it lands. The ack's commentCount is the level's DIRECT count
+	// (countCommentsOf the target — the documented "use it to update the
+	// card" value); the post projection's commentCount is the thread total.
+	check('the comment ack’s commentCount is the level’s direct count after the write (the earlier sorted read’s commentCounts.direct + 1) and the next sorted read’s total grew by exactly one (the card counts a kept pending row as unseen until an authoritative count lands)', ssC5Ack.body?.commentCount === ssTopBefore.body?.post?.commentCounts?.direct + 1 && ssTopAfter.body?.post?.commentCounts?.direct === ssC5Ack.body?.commentCount && ssTopAfter.body?.post?.commentCount === ssTopBefore.body?.post?.commentCount + 1, JSON.stringify({ beforeDirect: ssTopBefore.body?.post?.commentCounts?.direct, beforeTotal: ssTopBefore.body?.post?.commentCount, ack: ssC5Ack.body?.commentCount, afterDirect: ssTopAfter.body?.post?.commentCounts?.direct, afterTotal: ssTopAfter.body?.post?.commentCount }));
+	// The thread drill-down: the card reads a thread in ITS order through the
+	// comment's own read (threadCache keys a sorted read apart from the
+	// default one), so every sort must work on a comment-as-root and the
+	// default read of the same comment must stay what it was.
+	const [ssC1New, ssC1Old, ssC1DefaultRead] = await Promise.all([ssRead(ssC1.id, member.cookie, '&commentSort=new'), ssRead(ssC1.id, member.cookie, '&commentSort=old'), ssRead(ssC1.id, member.cookie)]);
+	check('the thread drill-down read (GET ?id=<comment>&commentSort=new|old) orders the replies newest / oldest first and echoes the sort, while the default read of the same comment is unchanged (r1, r2; echoed null)', ssC1New.status === 200 && JSON.stringify(ssIdsOf(ssC1New.body.post?.comments)) === JSON.stringify([ssR2.id, ssR1.id]) && ssC1New.body.commentSort === 'new' && ssC1Old.status === 200 && JSON.stringify(ssIdsOf(ssC1Old.body.post?.comments)) === JSON.stringify([ssR1.id, ssR2.id]) && ssC1Old.body.commentSort === 'old' && ssC1DefaultRead.status === 200 && JSON.stringify(ssIdsOf(ssC1DefaultRead.body.post?.comments)) === JSON.stringify([ssR1.id, ssR2.id]) && ssC1DefaultRead.body.commentSort === null, JSON.stringify({ new: ssIdsOf(ssC1New.body?.post?.comments), old: ssIdsOf(ssC1Old.body?.post?.comments), def: ssIdsOf(ssC1DefaultRead.body?.post?.comments), echo: [ssC1New.body?.commentSort, ssC1Old.body?.commentSort, ssC1DefaultRead.body?.commentSort] }));
+	// A refused sort read is a clean refusal the card can act on: it toasts
+	// the reason and REVERTS the menu to the previous pick, never leaving a
+	// "▲ Top" label over a page the server never delivered.
+	check('a refused sort read answers ok:false + an error naming commentSort (the card toasts it and reverts the menu to the previous pick)', ssBogus.status === 400 && ssBogus.body?.ok === false && /commentSort/.test(ssBogus.body?.error || ''), `${ssBogus.status} ${JSON.stringify(ssBogus.body)}`);
 
 	// --- edge case: deleting a post clears its reports ---
 	const ssReported = (await ssPostIn(owner.cookie, ssSpace.id, 'Sweep reported post')).body?.post;

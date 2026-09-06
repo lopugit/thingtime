@@ -234,6 +234,48 @@ export const sortCommentPage = <T extends Pick<PostComment, 'id' | 'createdAt' |
   });
 };
 
+// An optimistic comment's provisional id (PostCard's buildPendingComment)
+// until the server copy swaps in.
+export const isPendingComment = (comment: Pick<PostComment, 'id'>): boolean => comment.id.startsWith('pending-');
+
+// The slice of an ORDERED level a card shows. The default page reveals
+// upwards — the LAST `visible`, newest at the bottom next to the composer —
+// and a sort reads top-down, the FIRST `visible`. Under a sort the viewer's
+// own fresh comments (`pinnedIds`: the ones sent from this list) that fall
+// outside the window stay shown, appended after it in order: a new comment
+// scores 0 and is the newest, so Top and Old would otherwise bury the comment
+// the viewer just posted below the fold with nothing on screen to confirm it
+// landed (the optimistic-render rule: paint first).
+export const windowCommentPage = <T extends Pick<PostComment, 'id'>>(ordered: readonly T[], sort: CommentSort | null, visible: number, pinnedIds: readonly string[] = []): T[] => {
+  if (!sort) return ordered.slice(-visible);
+  const shown = ordered.slice(0, visible);
+  if (!pinnedIds.length || shown.length === ordered.length) return shown;
+  const pinned = new Set(pinnedIds);
+  const below = ordered.slice(visible).filter((comment) => pinned.has(comment.id));
+  return below.length ? [...shown, ...below] : shown;
+};
+
+// A freshly read (sorted) page landing over the comments a card already
+// holds. The page wins the order, and the viewer's own comments the page does
+// not carry survive it — a pending row (its POST still in flight, so the ack
+// still finds it to replace) or a saved one (`keepIds`) written after the read
+// or left out of the sorted 20 — appended after the page; everything else the
+// card held gives way to the page. `unseen` counts the kept rows the page's
+// counts cannot include yet (pending, or created at / after the read started)
+// so commentCount stays honest until the next authoritative count lands.
+export const mergeCommentPage = <T extends Pick<PostComment, 'id' | 'createdAt'>>(
+  page: readonly T[],
+  held: readonly T[],
+  keepIds: readonly string[],
+  readStartedAt: number
+): { comments: T[]; unseen: number } => {
+  const onPage = new Set(page.map((comment) => comment.id));
+  const keep = new Set(keepIds);
+  const kept = held.filter((comment) => !onPage.has(comment.id) && (isPendingComment(comment) || keep.has(comment.id)));
+  const unseen = kept.filter((comment) => isPendingComment(comment) || commentTimeOf(comment) >= readStartedAt).length;
+  return { comments: kept.length ? [...page, ...kept] : [...page], unseen };
+};
+
 // A post update bubbled up from a card. A value replaces the post (null removes
 // it); a function applies a delta to the FRESHEST post in the list — the form
 // optimistic reactions use so concurrent toggles reconcile per-token instead of
