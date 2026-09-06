@@ -4735,19 +4735,29 @@ jobs:
             Before you write that controller fix, inventory the Lopu controller
             repairs already open against `github-actions` with
             `gh pr list --repo $REPO --state open --base github-actions
-            --json number,title,url,body` and read every one whose body carries
-            `<!-- thingtime-lopu-controller-repair:v1`; use
+            --limit 100 --json number,title,url,body` and read every one whose
+            body carries `<!-- thingtime-lopu-controller-repair:v1`; use
             `gh pr diff <number> --name-only` to see which protected files each
             one touches. The publisher can only fold your patch into an open
             repair when it applies cleanly on top of it, so a second
             independent rewrite of the same file does not update that PR — it
             opens a rival one that conflicts with it and neither can merge
             until a human picks. If an open repair already covers the defect,
-            do not restate it: leave `$RUNNER_TEMP/lopu-workflow-fix.md`
-            unwritten, and record the pending PR number in the review report
-            and PR conversation instead. Author a controller fix only for a
-            defect no open repair covers, or as a patch that applies on top of
-            the existing one.
+            do not restate it: revert your edits so the trusted checkout is
+            clean again, leave `$RUNNER_TEMP/lopu-workflow-fix.md` unwritten,
+            and record the pending PR number in the review report and PR
+            conversation instead. A dirty trusted checkout without that report
+            fails the publish step outright.
+
+            Author a controller fix only for a defect no open repair covers, or
+            as one that stacks on an open repair. To stack, keep editing
+            `$GITHUB_WORKSPACE/trusted` at the `github-actions` head it is
+            already checked out on and write hunks that do not overlap the open
+            repair's — the publisher stacks for you, detaching onto that PR's
+            head and 3-way applying your patch. Never move that checkout's
+            `HEAD` onto another branch or PR: the publisher compares it against
+            the live `github-actions` ref and drops your repair with only a
+            warning when they differ.
 
             These worktrees start detached at immutable PR heads. Do not merge,
             rebase, delete branches, or push target/default branches. Leave any
