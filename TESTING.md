@@ -11,6 +11,11 @@
   must not execute template-shaped action result data. Confirm logout clears
   Watch history, passkeys, Builder source/detail data and Lopu chat caches.
 
+- Signed-out first paint: `/`, `/builder/demos`, and `/watch/pair` must render
+  without a Watch approval banner exception. Account switching and temporary
+  sessions never show another account's cached Watch requests; expired and
+  dismissed requests stay hidden.
+
 - Watch release integration: the Nitro health contract smoke accepts documented
   `degraded` / `migration-required` responses, but rejects contradictory readiness
   or unavailable storage. Separately require `ready` on the release deployment;
