@@ -897,7 +897,6 @@ host. The current Thingtime hostnames and deployment state are recorded in
 `VERCEL_DEPLOYMENTS.md`; forks should substitute infrastructure they control.
 
 ## Components library (`/components` + the external catalog)
-## Components library (`/components` + `components-db/`)
 
 `/components` is the UI-first sibling of `/schemas`: component things
 (thingtime `["component"]`) carry an arg-templated render tree (drawn only
@@ -913,7 +912,10 @@ lives in its own public repository —
 deterministic generator/validator/seeder pipeline. This app repo ships only
 the component runtime and the Thingtime-required components; catalog
 components live in MongoDB as system `component` things and the frontend
-fetches them from there (`GET /api/v1/components/browse`).
+fetches them from there (`GET /api/v1/components/browse`). That catalog
+repo's `components-db/index.json` `count`/`target` are the source of truth
+for the catalog size — tranche 2 grew it to 70 archetypes / 350 families /
+2800 components.
 
 Fork-safe seeding into your own dev DB (real API only — no direct Mongo):
 

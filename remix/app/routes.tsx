@@ -218,7 +218,8 @@ export const router = createBrowserRouter([
       { path: 'actions', lazy: lazyRoute(() => import('./routes/actions')) },
       { path: 'actions/:key', lazy: lazyRoute(() => import('./routes/action-detail')) },
       // UI component library: /schemas' UI-first sibling; every component
-      // family gets its own deep-linked page + /docs twin
+      // family gets its own deep-linked page + /docs twin. The twin is a named
+      // export of the detail module, so it reuses that same chunk.
       { path: 'components', lazy: lazyRoute(() => import('./routes/components')) },
       { path: 'components/:key', lazy: lazyRoute(() => import('./routes/component-detail')) },
       {

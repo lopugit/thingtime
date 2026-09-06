@@ -1854,14 +1854,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   [PR #308 implementation notes](../PRs/308-claude-nsfw-tos-media-moderation--nsfw-tos-media-moderation-pipeline.md).
   — Claude (AI), 2026-08-18
 
-- **Components library (/components) + 1000-component catalog**: new
+- **Components library (/components) + 2800-component catalog**: new
   first-class `component` thing kind (arg-templated render trees drawn through
   the sanitising allowlist renderers), a /components browse page with a live
   args tester, a hidden per-card Schema expander, and "Save version" (stores
   the tester snapshot as a user-owned component thing). The platform catalog —
-  1000 components styled after Ant Design, Bootstrap, MUI, shadcn/ui,
+  2800 components styled after Ant Design, Bootstrap, MUI, shadcn/ui,
   Untitled UI, daisyUI, React Flow, and the Thingtime house style — lives in
-  the repo `components-db/` folder database (deterministic generator under
+  its own public repo
+  [lopugit/thingtime-components](https://github.com/lopugit/thingtime-components)
+  as a `components-db/` folder database (deterministic generator under
   `scripts/components-db/`) and seeds into the dev DB as system things via the
   admin `POST /api/v1/admin/components/seed` endpoint (idempotent,
   self-healing, `component-` shareId prefix reserved). Drawer: Schemas moved
