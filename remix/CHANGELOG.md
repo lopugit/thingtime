@@ -18,7 +18,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- Make rich-text history controls small, muted and bottom-right inside editors. Keep selected-text formatting above the line, reserving temporary space instead of falling below into the native iOS menu. — Codex (AI), 2026-09-06
+- Make rich-text history controls small, muted absolute overlays near the bottom-right, without adding padding or changing content dimensions. Keep selected-text formatting above the line, reserving temporary space instead of falling below into the native iOS menu. — Codex (AI), 2026-09-06
 
 - 2026-09-06: Share editor presentation across posts, replies, Thing fields, tiers and builder; reserve field history space and avoid neighbouring controls. See [PR #635 notes](../PRs/635-editor-rich-text-controls-complete-editorjs-rich-text-styling.md).
 

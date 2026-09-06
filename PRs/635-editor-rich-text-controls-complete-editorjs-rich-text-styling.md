@@ -123,3 +123,9 @@ The iOS screenshots confirmed that the previous below-selection fallback still c
 Undo, Redo and Changes now use transparent backgrounds, muted grey 11px labels and compact 28px buttons inside the bottom-right corner of field and inline editors. Bottom padding keeps content clear of the controls; there is no separate top history row. The history timeline and keyboard shortcuts are unchanged. The field minimum returns to 96px because below-selection fallback space is no longer needed.
 
 Chrome checks cover 390px and 320px widths, a 600px-high viewport, selection separation, footer Undo/Redo/Changes, and large inline builder headings. Physical iOS native-menu positioning remains device acceptance.
+
+## History without layout spacing — 2026-09-06
+
+History remains a small, muted absolute overlay, but no longer reserves bottom padding or forces minimum editor width/height. The content and preview keep their natural dimensions while editing. The controls prefer the bottom-right corner and move to nearby clear space when a tiny block cannot contain them; they never wrap into a taller row. Collision checks exclude the history overlay itself to avoid unstable placement.
+
+Chrome verification covered desktop, 390px and 320px widths, the shared field and tier adapters, a 56px-wide builder text block, Changes open/close, above-line selection formatting, and scrolling to the page bottom without horizontal overflow. The compact builder editor retained its 56 × 25.6px content size and the tier editor retained its requested 72px height. All 84 editor tests and focused lint passed. The separate temporary space for the selected-text toolbar is unchanged.

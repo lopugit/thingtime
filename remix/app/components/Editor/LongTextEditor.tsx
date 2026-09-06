@@ -700,10 +700,9 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle & EditorHistor
 				editable?.focus({ preventScroll: true });
 			}}
 			width="100%"
-			minHeight={props.presentation === 'inline' ? props.minHeight || '96px' : `max(96px, ${props.minHeight || '96px'})`}
+			minHeight={props.minHeight || '96px'}
 			padding={props.presentation === 'inline' ? '0' : '10px 12px'}
 			paddingTop={`calc(${props.presentation === 'inline' ? '0px' : '10px'} + var(--tt-editor-selection-space, 0px))`}
-			paddingBottom={props.readonly ? undefined : '38px'}
 			background={props.presentation === 'inline' ? 'transparent' : 'var(--tt-card, #ffffff)'}
 			border={props.presentation === 'inline' ? '0' : '1px solid var(--tt-border, #ececef)'}
 			borderRadius="var(--tt-radius-md, 12px)"
@@ -1026,7 +1025,7 @@ const EditableLongTextEditor = React.forwardRef<LongTextEditorHandle, LongTextEd
 			className="tt-editor-session"
 			data-editor-presentation={props.presentation ?? 'field'}
 			position="relative"
-			minWidth={props.presentation === 'inline' ? '136px' : 0}
+			minWidth={0}
 			width="100%"
 			zIndex={8}
 			_focusWithin={{ zIndex: 9 }}
@@ -1050,8 +1049,8 @@ const EditableLongTextEditor = React.forwardRef<LongTextEditorHandle, LongTextEd
 					bottom: '5px',
 					zIndex: 8,
 					width: 'max-content',
-					maxWidth: 'calc(100% - 16px)',
-					flexWrap: 'wrap',
+					maxWidth: 'calc(100vw - 16px)',
+					flexWrap: 'nowrap',
 					pointerEvents: 'auto'
 				}
 			}}

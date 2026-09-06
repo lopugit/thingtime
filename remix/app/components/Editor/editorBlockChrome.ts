@@ -23,7 +23,7 @@ export const watchEditorBlockChrome = (holder: HTMLElement, getEditor: () => any
 		const session = holder.closest<HTMLElement>('.tt-editor-session');
 		if (session) session.dataset.ttControlsSide = holder.dataset.ttControlsSide;
 		const bounds = editorOverlayBounds(holder);
-		const obstacles = editorTextObstacles(holder);
+		const obstacles = editorTextObstacles(holder, false);
 		const inline = layoutEditorJsInlineToolbar(holder);
 		if (inline) obstacles.push(inline);
 		const chip = holder.closest('.ttBlockFrame')?.querySelector<HTMLElement>(':scope > .ttBlockChip');
@@ -38,9 +38,16 @@ export const watchEditorBlockChrome = (holder: HTMLElement, getEditor: () => any
 		const history = session?.querySelector<HTMLElement>(':scope > .tt-editor-history-controls');
 		const visible = bounds.width > 0 && bounds.height > 0 && overlayIntersects(holder.getBoundingClientRect(), bounds, 0);
 		if (history) {
-			setEditorOverlayStyle(holder, { paddingBottom: `${history.offsetHeight + 10}px` });
-			setEditorOverlayStyle(history, { visibility: visible ? 'visible' : 'hidden' });
-			obstacles.push(history.getBoundingClientRect());
+			// This overlay must never resize the content or its preview frame.
+			if (history.style.right !== 'auto') {
+				setEditorOverlayStyle(history, { left: '0px', top: '0px', right: 'auto', bottom: 'auto' });
+			}
+			setEditorOverlayStyle(history, { maxWidth: `${bounds.width}px`, visibility: visible ? 'visible' : 'hidden' });
+			const box = holder.getBoundingClientRect(),
+				size = history.getBoundingClientRect();
+			const placement = placeEditorOverlay(size, { left: box.right - size.width - 8, top: box.bottom - size.height - 5 }, bounds, obstacles);
+			moveEditorOverlay(history, placement);
+			obstacles.push(placement);
 		}
 		const actions = holder.querySelector<HTMLElement>('.ce-toolbar__actions');
 		if (field && actions?.offsetParent) {
@@ -113,7 +120,6 @@ export const watchEditorBlockChrome = (holder: HTMLElement, getEditor: () => any
 	window.visualViewport?.addEventListener('resize', schedule);
 	window.visualViewport?.addEventListener('scroll', schedule);
 	return () => {
-		holder.style.paddingBottom = '';
 		observer.disconnect();
 		resize.disconnect();
 		cancelAnimationFrame(frame);
