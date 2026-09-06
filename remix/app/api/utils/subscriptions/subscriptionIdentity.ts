@@ -114,6 +114,63 @@ export const userSubscriptionLedgerEnvelopeIsTrusted = (doc: any, subjectId: str
 export const legacyUserSubscriptionLedgerEnvelopeCanUpgrade = (doc: any, subjectId: string): boolean =>
 	userSubscriptionIdentityIsTrusted(doc, subjectId, false);
 
+// Operator diagnostics contain only fixed field labels, never stored values or
+// arbitrary key names. This does not relax the validator or authorize a repair.
+export const userSubscriptionLedgerEnvelopeIssues = (doc: any, subjectId: string): string[] => {
+	if (!isPlainObject(doc)) return ['root.object'];
+	const issues: string[] = [];
+	const check = (field: string, valid: boolean) => {
+		if (!valid) issues.push(field);
+	};
+	check('root.fields', hasOnlyKeys(doc, USER_SUBSCRIPTION_ROOT_KEYS));
+	for (const key of ['extended', 'storageClass', 'sizeBytes', 'storageAccountingVersion', 'kind', 'parentId', 'secure', 'uniqueKeys']) {
+		if (Object.prototype.hasOwnProperty.call(doc, key)) issues.push(`root.unexpected.${key}`);
+	}
+	check('root.shareId', typeof subjectId === 'string' && !!subjectId && doc.shareId === subscriptionShareId('user', subjectId));
+	check('root.schemaVersion', doc.schemaVersion === COLLECTION_SCHEMA_VERSIONS.things);
+	check('root.thingtime', Array.isArray(doc.thingtime) && doc.thingtime.length === 1 && doc.thingtime[0] === 'subscription');
+	check('root.ownerId', doc.ownerId === subjectId);
+	check('root.acl', Array.isArray(doc.acl) && doc.acl.length === 1 && doc.acl[0] === ACL_OWNER);
+	check('root.targetId', doc.targetId === null);
+	check('root.tags', Array.isArray(doc.tags) && doc.tags.length === 0);
+	check(
+		'root.storageLedgerEnvelopeVersion',
+		!Object.prototype.hasOwnProperty.call(doc, 'storageLedgerEnvelopeVersion') ||
+			doc.storageLedgerEnvelopeVersion === USER_STORAGE_LEDGER_ENVELOPE_VERSION
+	);
+	check('root.createdAt', validDate(doc.createdAt));
+	check('root.updatedAt', validDate(doc.updatedAt));
+	if (!isPlainObject(doc.crystal)) return [...issues, 'crystal.object'];
+	const c = doc.crystal;
+	check('crystal.fields', hasOnlyKeys(c, USER_SUBSCRIPTION_CRYSTAL_KEYS));
+	check('crystal.quotaKind', c.quotaKind === 'subscription');
+	check('crystal.subjectType', c.subjectType === 'user');
+	check('crystal.subjectId', c.subjectId === subjectId);
+	check('crystal.tier', typeof c.tier === 'string' && !!c.tier.trim());
+	check('crystal.tierVersionId', typeof c.tierVersionId === 'string' && !!c.tierVersionId.trim());
+	check('crystal.tierVersion', Number.isSafeInteger(c.tierVersion) && Number(c.tierVersion) >= 1);
+	check('crystal.tierName', typeof c.tierName === 'string');
+	check('crystal.tierMetered', typeof c.tierMetered === 'boolean');
+	check(
+		'crystal.tierQuotas',
+		isPlainObject(c.tierQuotas) &&
+			hasOnlyKeys(c.tierQuotas, TIER_QUOTA_KEYS) &&
+			TIER_QUOTA_KEYS.every((key) => Object.prototype.hasOwnProperty.call(c.tierQuotas, key) && validNullableQuota(c.tierQuotas[key]))
+	);
+	check(
+		'crystal.overrides',
+		c.overrides === null ||
+			(isPlainObject(c.overrides) && hasOnlyKeys(c.overrides, TIER_QUOTA_KEYS) && Object.values(c.overrides).every(validNullableQuota))
+	);
+	check('crystal.note', c.note === null || typeof c.note === 'string');
+	check('crystal.updatedBy', c.updatedBy === null || typeof c.updatedBy === 'string');
+	check('crystal.isDefaultAssignment', typeof c.isDefaultAssignment === 'boolean');
+	// Keep diagnostics fail-closed if the canonical validator gains a rule.
+	if (!issues.length && !userSubscriptionLedgerEnvelopeIsTrusted(doc, subjectId) && !legacyUserSubscriptionLedgerEnvelopeCanUpgrade(doc, subjectId))
+		issues.push('envelope.unclassified');
+	return issues;
+};
+
 const objectKeysSubsetExpression = (value: string, allowed: readonly string[]) => ({
 	$setIsSubset: [
 		{
