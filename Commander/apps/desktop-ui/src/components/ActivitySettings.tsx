@@ -107,7 +107,7 @@ export function ActivitySettings({
       networkGeneration.current += 1;
       window.clearInterval(timer);
     };
-  }, [settings.thingtimeBaseUrl]);
+  }, [settings.thingtimeBaseUrl, settings.activeAccountId]);
 
   const runSpeedTest = useCallback(async () => {
     if (speedTestInFlight.current) return;
@@ -117,9 +117,14 @@ export function ActivitySettings({
     try {
       const next = await api.activityNetworkSpeed();
       if (generation !== networkGeneration.current) return;
-      setNetwork(next);
+      const hasSamples = Boolean(next.speed?.downloads.length || next.speed?.uploads.length);
+      setNetwork((previous) => (hasSamples || !previous?.speed ? next : { ...next, speed: previous.speed }));
       setNetworkError(undefined);
-      setSpeedError(undefined);
+      setSpeedError(
+        !hasSamples && next.speed?.errors?.length
+          ? next.speed.errors.map((error) => error.message).join(' ')
+          : undefined,
+      );
     } catch (error) {
       if (generation === networkGeneration.current)
         setSpeedError(error instanceof Error ? error.message : 'Thingtime speed test failed');

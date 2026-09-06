@@ -8,6 +8,18 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Native Commander network speed test
 
+- [ ] Account allowances: Free 4/hour, Plus 20/hour, Pro/PAYG unlimited by
+      default; admin overrides and historical tier snapshots remain effective.
+      Back-to-back tests work within the budget. Changing IP or session never
+      resets an account budget; different accounts do not share an IP quota.
+- [ ] Invalid/revoked or wrong-origin account tokens fail without guest fallback.
+      A selected locked account must prompt sign-in/unlock, not run anonymously.
+- [ ] A quota-denied zero-sample retry preserves the previous speed readings.
+      Switching accounts clears prior-account results and rejects stale replies.
+- [ ] Settings → Account → Compare account features shows the live tier
+      allowances at desktop/mobile widths. Admin tier and subscription editors
+      expose speedTestsPerHour, with null for unlimited and 0 for disabled.
+
 - [ ] Activity: run one 17.6 MiB each-way test against the deployed origin;
       confirm 5/5 download and upload samples, no 400/413, and no upload request
       exceeds 2 MiB. Wait through a latency refresh: both speed values remain.
@@ -16,7 +28,7 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Interrupt a direction or hit its cooldown: completed measurements remain
       visible, partial results are labelled, and Retry-After is actionable.
       Opening a second Commander window must not duplicate an in-flight test.
-- [ ] Both capability manifests advertise upload 2.0.0; incompatible/missing
+- [ ] Both capability manifests advertise download 1.1.0 and upload 2.1.0; incompatible/missing
       capabilities are rejected before transferring the speed-test payloads.
 
 ## ChatGPT / Codex MCP connector

@@ -1506,6 +1506,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'admin-subscriptions',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'admin',
     title: 'Subscription tiers & quota overrides',
     endpoint: '/api/v1/admin/subscriptions',
@@ -1583,6 +1585,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'admin-tiers',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'admin',
     title: 'Manage subscription tiers',
     endpoint: '/api/v1/admin/tiers',
@@ -1665,6 +1669,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'tiers',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'subscriptions',
     title: 'Live subscription tiers',
     endpoint: '/api/v1/tiers',
@@ -1672,7 +1678,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     detail:
       'Public read-only catalog. Each item includes a stable id, immutable versionId/version, name, tagline, ' +
       'optional banner image, daily/weekly/monthly/yearly minor-unit prices, six computed-or-custom discounts, ' +
-      'Editor.js inclusions, and quota defaults. Draft and archived revisions are excluded.',
+      'Editor.js inclusions, and quota defaults including speedTestsPerHour (null means unlimited). Defaults: Free 4/hour, Plus 20/hour, Pro and Pay as you go unlimited. Historical revisions without the field inherit the built-in tier allowance; custom tiers inherit Free unless configured. Draft and archived revisions are excluded.',
     auth: { mode: 'none', description: 'Public catalog; no credentials required.' },
     methods: ['GET'],
     steps: ['GET and render each returned live revision as a tier option.'],
@@ -9840,13 +9846,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'network-probe-ping',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'system',
     title: 'Network probe ping',
     endpoint: '/api/v1/network-probe/ping',
     summary: 'A tiny uncached response for measuring round-trip latency to Thingtime.',
     detail:
-      'Commander Activity uses this public endpoint while its Activity view is open. It returns a fixed 256-byte payload, never stores request data, and is rate limited per client IP.',
-    auth: { mode: 'none', description: 'Public diagnostic endpoint.' },
+      'Commander Activity uses this endpoint while its Activity view is open. It returns a fixed 256-byte payload. Guests are limited per IP; valid account-session or non-sandbox OAuth credentials bypass that guest bucket without spending a speed-test allowance. This keeps the tiny latency preflight from blocking unrestricted account tests. Invalid credentials return 401/403 instead of falling back to guests. Guest limiter outages return 503.',
+    auth: { mode: 'none', description: 'Public diagnostic; optionally authenticate to avoid the guest IP bucket.' },
     methods: ['GET'],
     steps: ['Time the complete request and response.', 'Treat 429 as a temporary network-probe cooldown.'],
     requestExamples: [{ name: 'Measure latency', description: 'Fetch the fixed ping payload.', method: 'GET' }],
@@ -9854,13 +9862,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'network-probe-download',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'system',
     title: 'Network probe download',
     endpoint: '/api/v1/network-probe/download',
     summary: 'Returns one fixed, non-cacheable packet for an opt-in throughput measurement.',
     detail:
-      'Only 56 KiB, 500 KiB, 2 MiB, 5 MiB, and 10 MiB packets are accepted. The exact allowlist and per-IP rate limit prevent this endpoint from becoming a general transfer service.',
-    auth: { mode: 'none', description: 'Public bounded diagnostic endpoint.' },
+      'Only 56 KiB, 500 KiB, 2 MiB, 5 MiB, and 10 MiB packets are accepted. Optional full-account or non-sandbox OAuth profile.username authentication applies the protected account subscription allowance: five packets per allowed test in a rolling hour, shared across sessions/devices/IPs. Pro defaults to unlimited. Anonymous callers retain five packets per 15 minutes per IP. Invalid credentials return 401/403, not a guest fallback. Limiter unavailability returns 503.',
+    auth: { mode: 'none', description: 'Public guest allowance; optionally send an account session or OAuth Bearer token for account-tier limits.' },
     methods: ['GET'],
     steps: ['Pass one documented bytes value.', 'Measure the response body only after a successful 200.', 'Respect 429 before retrying.'],
     requestExamples: [
@@ -9872,15 +9882,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'network-probe-upload',
-    contractVersion: '2.0.0',
-    featureVersion: '2.0.0',
+    contractVersion: '2.1.0',
+    featureVersion: '2.1.0',
     group: 'system',
     title: 'Network probe upload',
     endpoint: '/api/v1/network-probe/upload',
     summary: 'Consumes one exact fixed-size packet for an opt-in upload measurement.',
     detail:
-      'Upload v2 accepts only 56 KiB, 500 KiB, 1 MiB, or 2 MiB per request. Split larger logical samples into serial chunks below the hosting request limit. Content-Length may be absent on streamed/proxied requests; when supplied it must match, and actual received bytes are always counted exactly without retaining the body. Nothing is persisted or reflected. The per-IP default is 11 requests per 15 minutes (at most 22 MiB). V1 clients must update their packet ladder before using v2.',
-    auth: { mode: 'none', description: 'Public bounded diagnostic endpoint.' },
+      'Upload v2 accepts only 56 KiB, 500 KiB, 1 MiB, or 2 MiB per request. Split larger logical samples into serial chunks. Content-Length may be absent; when supplied it must match, and actual received bytes are always counted exactly without retaining or reflecting the body. With optional account/OAuth authentication, the protected account speedTestsPerHour allowance admits eleven chunks per test in a rolling hour; null means unlimited. Anonymous callers retain 11 chunks per 15 minutes per IP. Each direction has its own attempt budget, so partial attempts consume only their packets. Invalid credentials fail 401/403; unavailable accounting fails 503. V1 clients must update their packet ladder before using v2.',
+    auth: { mode: 'none', description: 'Public guest allowance; optionally send an account session or OAuth Bearer token for account-tier limits.' },
     methods: ['POST'],
     steps: [
       'Pass one documented bytes value.',
