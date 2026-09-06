@@ -92,6 +92,19 @@ export const ThemeHost = () => {
 	const snapshotTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	React.useEffect(() => {
+		// Nothing may be written until the localforage blob resolves. Until then
+		// `theme` is still the built-in default, and writing it here would
+		// overwrite — inline, so at the highest priority — the pre-paint snapshot
+		// tt-boot.js just applied, undoing the whole no-flash path: a custom
+		// theme (or a switched-off pet) paints correctly, flips to the defaults
+		// for as long as hydration takes, then flips back. The snapshot write
+		// below is debounced 200ms, so a slow hydration would also persist those
+		// defaults over the good snapshot and carry the flash into the next load.
+		// Nothing is missing meanwhile: GlobalStyles declares this same default
+		// --tt-* set on :root, so a first-ever visit still resolves every token,
+		// and so do the getComputedStyle readers (eggs.ts, ConfettiCanvas).
+		if (loading) return;
+
 		const root = document.documentElement;
 		for (const [key, value] of Object.entries(vars)) {
 			root.style.setProperty(key, value);
@@ -113,7 +126,7 @@ export const ThemeHost = () => {
 		return () => {
 			if (snapshotTimerRef.current) clearTimeout(snapshotTimerRef.current);
 		};
-	}, [vars]);
+	}, [vars, loading]);
 
 	// Load non-default Google fonts the active theme references.
 	const wantedFamilies = React.useMemo(() => {

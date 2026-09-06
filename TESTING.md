@@ -1756,6 +1756,43 @@ email whose link points at the attacker.
       with ordinary visual spacing, not a large blank/dead-scroll region; its
       links and controls remain reachable without horizontal overflow.
 
+## Decorative pet (`remix/app/components/Pets/`, `general.pet`)
+
+- [ ] The pet sits bottom-right on ordinary pages and is absent from
+      full-bleed surfaces (chat/Commander), where it would land on the
+      composer. It never blocks a click or a focus ring anywhere it shows.
+- [ ] On a non-production build the pet sits CLEAR of the DevKit bubble
+      rather than behind it (regression: a raw-corner inset rendered a 74px
+      unicorn underneath the dev trigger on every preview and local run).
+- [ ] Settings → Pet off, then RELOAD: the pet is absent from the very first
+      painted frame — it must not appear and then disappear (regression: the
+      switch was read from the async localforage blob, which resolves after
+      first paint, so every load flashed the pet at users who turned it off).
+      With it on, reload and confirm it does NOT pop in a beat late either.
+- [ ] Settings → Motion off leaves the pet visible but completely still, and
+      Pet off removes it while the rest of the app keeps animating — the two
+      switches are independent in both directions.
+- [ ] Settings → Motion off, then RELOAD: the pet is already still on the very
+      first painted frame — it must not bob/sparkle for a beat and then stop
+      (same Tier-2 trap as the Pet switch; the pet is the only decorative
+      surface not already covered by --tt-rainbow-anim/--tt-motion).
+- [ ] OS "reduce motion" freezes the pet on first paint, without toggling
+      anything in Settings.
+- [ ] Theme Studio → Pet → Customise applies CSS to the pet ONLY (try
+      `opacity: 0.4`) — the rest of the page is untouched.
+- [ ] The pre-paint snapshot survives hydration, for EVERY token and not just
+      the pet: pick a loud non-default theme (Fable, or a hot-pink page
+      background), reload, and watch the first second. The page must never
+      show the Thingtime defaults in between — ThemeHost writes `--tt-*`
+      inline on `<html>`, which outranks the snapshot, so it has to wait for
+      the localforage blob rather than publishing the built-in default theme
+      first (regression: it published immediately, so a custom theme painted
+      right, flipped to defaults for the length of hydration, then flipped
+      back; on a slow hydration the debounced snapshot write also persisted
+      those defaults and carried the flash into the next load).
+- [ ] Throttle the network/CPU hard and reload with a custom theme: still no
+      default-theme flash, and the theme is not lost on the NEXT reload either.
+
 ## Profile page (`remix/app/components/Profile/ProfilePage.tsx`)
 
 - [ ] The self-profile action row is Edit profile ✏️ / All settings ⚙️ /

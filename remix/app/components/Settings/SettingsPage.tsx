@@ -639,6 +639,10 @@ export const SettingsPage = () => {
               <LopuPositionSelect />
             </SettingRow>
 
+            <SettingRow label="Pet" hint="Lopuuu, the floating unicorn 🦄">
+              <Switch isChecked={theme.general.pet} onChange={(e) => setGeneral('pet', e.target.checked)}></Switch>
+            </SettingRow>
+
             <SettingRow label="Theme Studio" hint="Full editor: colours, fonts, save + share themes">
               <Button size="xs" variant="outline" onClick={() => navigate('/themes')}>
                 Open 🎨
