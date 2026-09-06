@@ -1,4 +1,5 @@
 import { MediaCacheSettings } from './MediaCacheSettings';
+import { TierFeatureComparison } from '~/components/Subscriptions/TierFeatureComparison';
 import React from 'react';
 import { Badge, Box, Button, Flex, Input, Progress, Switch, Text, Textarea } from '@chakra-ui/react';
 import { useNavigate } from 'react-router';
@@ -457,6 +458,7 @@ export const SettingsPage = () => {
             the add / register-new inline forms */}
         <SettingsSection eyebrow="Account">
           <AccountSwitcher />
+          <TierFeatureComparison />
           {user && (
 						<Flex flexDirection="column" rowGap={3} width="100%">
 							<AccountStorageSummary user={user} />

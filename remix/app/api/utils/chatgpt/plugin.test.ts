@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { beginChatGptAuthorization, callThingtimeTool, handleChatGptMcp, registerChatGptOAuthClient } from './plugin';
+import { beginChatGptAuthorization, callThingtimeTool, consumedSessionPipeline, handleChatGptMcp, registerChatGptOAuthClient } from './plugin';
 import { CHATGPT_MCP_INSTRUCTIONS, CHATGPT_MCP_TOOL_FEATURES, normalizeRegisteredClientRedirectUri, renderConnectionPage } from './pluginCore';
+import { REVOKED_SESSION_REAP_MS, revokedSessionPipeline } from '~/api/utils/auth/sessions';
 
 const connectedContext = {
   session: {},
@@ -451,4 +452,44 @@ test('OAuth dynamic client registration signs only exact local, ChatGPT, or firs
     })
   });
   assert.equal(invalid.status, 400);
+});
+
+test('revoking a never-expiring bridge session leaves a reap date for the sessions TTL index', () => {
+  const revokedAt = new Date('2026-01-01T00:00:00.000Z');
+  const [stage, ...rest] = revokedSessionPipeline(revokedAt);
+
+  // Already a pipeline, so no caller has to remember to wrap it — passed to a
+  // plain update the $ifNull would be STORED as a literal sub-document, which
+  // is not a Date, which the TTL index skips: the exact leak this fixes,
+  // silently back.
+  assert.equal(rest.length, 0);
+  // TTL skips expiresAt: null, so a disconnect must fill one in or the revoked
+  // bridge sessions accumulate in Mongo forever.
+  assert.equal(stage.$set.revokedAt, revokedAt);
+  assert.deepEqual(stage.$set.expiresAt, {
+    $ifNull: ['$expiresAt', new Date(revokedAt.getTime() + REVOKED_SESSION_REAP_MS)]
+  });
+  // A session that already carries a real expiry keeps it.
+  assert.equal(stage.$set.expiresAt.$ifNull[0], '$expiresAt');
+});
+
+test('consuming a rotated refresh grant also leaves a reap date, not just revokedAt', () => {
+  const now = new Date('2026-01-01T00:00:00.000Z');
+  const pipeline = consumedSessionPipeline(now);
+
+  // Refresh rotation burns one never-expiring session per refresh. Stamping
+  // only revokedAt would strand every consumed row: the TTL index skips
+  // expiresAt: null, so the sessions collection would grow without bound.
+  assert.deepEqual(pipeline, [
+    ...revokedSessionPipeline(now),
+    { $set: { 'meta.consumedAt': now } }
+  ]);
+  // It must be an aggregation pipeline — $ifNull only resolves in one. Stage
+  // order is NOT what makes this safe: aggregation $set never drops fields, so
+  // reap-then-consumedAt and consumedAt-then-reap are equivalent. What is
+  // load-bearing is the dotted path — 'meta.consumedAt' merges into meta,
+  // where a nested { meta: { consumedAt } } would replace the whole record and
+  // strip clientId/resource/connectionId off every rotated grant.
+  assert.ok(Array.isArray(pipeline));
+  assert.deepEqual(Object.keys(pipeline[1].$set), ['meta.consumedAt']);
 });

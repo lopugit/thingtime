@@ -1,5 +1,6 @@
 import type { DeploymentDataEnvironment } from '~/api/utils/deployment/dataEnvironment';
 import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATGPT_MCP_PATH, CHATGPT_OAUTH_RELAY_PATH, CHATGPT_TOKEN_PATH } from '../api/utils/chatgpt/pluginCore';
+import { USER_STORAGE_ACCOUNTING_VERSION } from '../schemas/registry';
 
 export type ApiHttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -65,13 +66,14 @@ const endpoint = (doc: Omit<ApiEndpointDoc, 'docsEndpoint' | 'contractVersion'> 
 const deviceEndpointDocs: ApiEndpointDoc[] = [
 	endpoint({
 		id: 'devices',
-		contractVersion: '1.8.0',
+		contractVersion: '1.9.0',
+		featureVersion: '1.9.0',
 		group: 'devices',
 		title: 'Paired devices',
 		endpoint: '/api/v1/devices',
-		summary: 'Lists safe paired-computer summaries or one detailed mirror.',
+		summary: 'Lists safe paired-device summaries or one detailed computer mirror.',
 		detail:
-			'Returns protected dedicated projections for the caller’s devices, state and connectors. Generic /things never exposes these kinds. Credentials, hashes, paths, arguments and screen transport data are omitted.',
+			'Returns protected dedicated projections for the caller’s computers and Apple Watches. Watch summaries include bounded last-sync health, the number of Things created by that Watch, and up to ten recent created Things. Generic /things never exposes protected device credentials, hashes, paths, arguments, or screen transport data.',
 		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session.' },
 		methods: ['GET'],
 		steps: ['GET to list devices.', 'Pass id to retrieve one device detail.'],
@@ -83,6 +85,82 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 				body: { ok: true, devices: [{ id: 'device-id', name: 'MacBook Pro', online: true, locked: false, connectors: [] }] }
 			}
 		]
+	}),
+	endpoint({
+		id: 'watch-pairing',
+		contractVersion: '1.2.0',
+		featureVersion: '1.2.0',
+		group: 'devices',
+		title: 'Pair Apple Watch directly',
+		endpoint: '/api/v1/watch/pairing',
+		summary: 'Starts, approves, inspects, and claims a short-lived direct Apple Watch pairing.',
+		detail:
+			'The Watch starts with optional codeFormat numeric-4 (legacy default: eight characters) and optional targetUsername. Four-digit PINs are uniquely reserved for five minutes. A separate high-entropy approvalToken lets the paired phone offer the request to its signed-in account WITHOUT approving it. GET op=pending lists only that account’s requests, with the PIN prefilled for explicit approval in any same-origin session. Username targets never grant access by themselves. Secret values are stored only as domain-separated hashes; offered human codes are retained for owner-only display. Claim requires the separate Watch-held device secret and credential. Polling allows 60/minute per IP. Lookup allows five/account and ten/IP per five minutes; start/offer/approve have separate ceilings and username targets accept five requests per five minutes. The short /pair/:code page supports manual approval; old full links remain valid.',
+		auth: { mode: 'none', description: 'Start/inspect/claim are code-bound and fail-closed rate limited. Pending requires a full user session. Lookup/offer/approve also require same-origin. Offered requests are bound to their recipient account.' },
+		methods: ['GET', 'POST'],
+		steps: [
+			'POST { op: "start", device, codeFormat: "numeric-4", targetUsername? } from the Watch.',
+			'Optionally relay pairingId, userCode and approvalToken to the paired phone; its signed-in session POSTs op: "offer". Never relay deviceCode or credential.',
+			'Any signed-in session can GET ?op=pending, show the Watch/account/code, and explicitly approve. No automatic approval occurs.',
+			'On a phone or computer open verificationEntryPath, sign in, and POST { op: "lookup", userCode } to retrieve the pairingId and safe device details.',
+			'Open verificationPath on a signed-in browser and POST { op: "approve", pairingId, userCode }.',
+			'Poll POST { op: "claim", pairingId, deviceCode, credential } until approved, then store the credential in Watch Keychain.'
+		],
+		requestExamples: [
+			{ name: 'Find a Watch by code', description: 'Authenticated, rate-limited lookup; never returns a device credential or device code.', method: 'POST', body: { op: 'lookup', userCode: '1234' } },
+			{ name: 'Pending Watch approvals', description: 'At most five unexpired, unapproved requests addressed to the current account.', method: 'GET', query: { op: 'pending' } },
+			{ name: 'Offer from paired phone', description: 'Attach to this account without approving.', method: 'POST', body: { op: 'offer', pairingId: 'pairing-jti', userCode: '1234', approvalToken: 'ttapprove_…' } },
+			{
+				name: 'Start Watch pairing',
+				description: 'Create a five-minute direct pairing request.',
+				method: 'POST',
+				body: { op: 'start', codeFormat: 'numeric-4', device: { name: 'Lopu’s Apple Watch', platform: 'watchos', model: 'Watch', osVersion: 'watchOS 26', appVersion: '24' } }
+			},
+			{
+				name: 'Claim approved Watch',
+				description: 'The secret values are generated and retained by the Watch.',
+				method: 'POST',
+				body: { op: 'claim', pairingId: 'pairing-jti', deviceCode: 'ttwatch_…', credential: 'ttnode_…' }
+			}
+		],
+		responseExamples: [
+			{
+				status: 201,
+				description: 'Pairing started.',
+				body: { ok: true, pairing: { pairingId: 'pairing-jti', userCode: '1234', deviceCode: 'ttwatch_…', approvalToken: 'ttapprove_…', verificationEntryPath: '/watch/pair', verificationPath: '/watch/pair?pairing=…&code=1234', expiresAt: '2026-09-05T01:00:00.000Z' } }
+			},
+			{ status: 428, description: 'Awaiting user approval.', body: { ok: false, code: 'authorization_pending', error: 'Approve this Watch in Thingtime first' } }
+		]
+	}),
+	endpoint({
+		id: 'watch-sync',
+		featureVersion: '1.0.0',
+		group: 'devices',
+		title: 'Sync Apple Watch directly',
+		endpoint: '/api/v1/watch/sync',
+		summary: 'Refreshes account identity and notifications directly from a paired Apple Watch.',
+		detail:
+			'Returns the paired account username, display name, avatar URL, paginated notifications, unread count, server time, and Watch device id. A successful call stamps live last-seen, last-sync, status, battery, and low-power health on the server-visible device.',
+		auth: { mode: 'session-or-bearer', description: 'Requires the paired Watch ttnode_ Bearer credential and watch.notifications.read capability.' },
+		methods: ['POST'],
+		steps: ['POST current battery and low-power state.', 'Render cached data immediately and reconcile with the response.', 'Use op mark-read for bounded ids or all notifications.'],
+		requestExamples: [{ name: 'Refresh Watch', description: 'Fetch the newest notifications and account identity.', method: 'POST', body: { limit: 25, batteryLevel: 0.72, lowPowerMode: false } }],
+		responseExamples: [{ status: 200, description: 'Watch is healthy and current.', body: { ok: true, account: { username: 'lopu', displayName: 'Lopu', avatarUrl: '/api/v1/attachments/content?id=…' }, device: { id: 'watch-device-id' }, notifications: [], unreadCount: 0, serverTime: '2026-09-05T01:00:00.000Z' } }]
+	}),
+	endpoint({
+		id: 'watch-things',
+		featureVersion: '1.0.0',
+		group: 'devices',
+		title: 'Create a private Thing from Apple Watch',
+		endpoint: '/api/v1/watch/things',
+		summary: 'Binds completed Watch uploads into a private Thing with server-owned device provenance.',
+		detail:
+			'Accepts one to ten completed post-purpose attachment ids belonging to the paired account, or stable upload request ids that the server resolves for retry recovery. Thingtime creates a private top-level post, atomically binds the attachments, and stamps sourceDeviceId from the authenticated Watch session; clients cannot forge another device id.',
+		auth: { mode: 'session-or-bearer', description: 'Requires the paired Watch ttnode_ Bearer credential and watch.things.create capability.' },
+		methods: ['POST'],
+		steps: ['Complete direct multipart uploads with the same Watch credential.', 'POST their attachmentIds with a stable shareId.', 'After an ambiguous completion, retry with requestIds so Thingtime resolves the completed upload without duplicating it.'],
+		requestExamples: [{ name: 'Create recording Thing', description: 'Bind one completed Watch recording.', method: 'POST', body: { shareId: 'watch-upload-uuid', attachmentIds: ['attachment-id'], filenames: ['Recording.m4a'] } }],
+		responseExamples: [{ status: 201, description: 'Private Thing created.', body: { ok: true, post: { id: 'thing-id', attachments: [{ id: 'attachment-id', name: 'Recording.m4a' }] } } }]
 	}),
 	endpoint({
 		id: 'devices-permissions',
@@ -818,19 +896,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'admin-ci-previews',
+    contractVersion: '2.0.0',
     group: 'admin',
     title: 'Manage opt-in PR preview environments',
     endpoint: '/api/v1/admin/ci/previews',
-    featureVersion: '1.0.0',
-    summary: 'Enable or disable exact-SHA develop and production-environment previews for one trusted pull request.',
+    featureVersion: '2.0.0',
+    summary: 'Store exact-SHA Develop and Production/Main preview choices and dispatch the protected github-actions publisher.',
     detail:
-      'This admin-only controller validates a live, open, non-draft pull request from the configured repository before enabling a preview. Develop and production are independent durable policy switches and may both be enabled. The server creates an immutable Vercel deployment for the current head SHA using either the configured develop Custom Environment or the production environment. Production enabling requires an explicit acknowledgement. Credential values remain server-only, custom-domain assignment is always disabled, and disabling removes only deployments carrying Thingtime\'s PR-and-environment ownership markers.',
+      'This admin-only endpoint validates a live, open, non-draft pull request from the configured repository, stores independent Develop and Production/Main switches, then sends the full selected set through the installed GitHub App to the protected github-actions branch. The product server never receives or uses a Vercel deployment credential. Protected controller code authenticates the App sender, revalidates the exact live ref and SHA, immediately writes one GitHub Actions-owned marker comment with every expected persistent URL and estimated ready time, and builds each selected environment on GitHub without environment secrets. Only validated prebuilt output reaches the credentialed publisher. The same comment receives each immutable snapshot URL and terminal status; READY receipts move only that environment\'s PR-scoped alias. Production enabling requires an explicit acknowledgement, automatic domain assignment stays disabled, primary domains never move, and disable/close cleanup is limited to controller-marked resources.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['POST'],
     steps: [
       'Select a same-repository open pull request.',
       'Enable develop, production, or both; acknowledge production-environment access when enabling production.',
-      'Follow the returned immutable Vercel URL and the signed webhook status in CI Control.'
+      'Follow the immediate estimate and then each URL pair in the single updated PR comment and the signed webhook status in CI Control.'
     ],
     requestExamples: [
       {
@@ -849,10 +928,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [
       {
         status: 200,
-        description: 'Policy stored and the exact-SHA deployment created or reused.',
-        body: { ok: true, policy: { prNumber: 496, develop: true, production: true }, deployment: { deploymentId: 'dpl_example', status: 'queued', url: 'https://thingtime-example.vercel.app/' } }
+        description: 'Policy stored and its complete environment set dispatched to the protected github-actions controller.',
+        body: { ok: true, policy: { prNumber: 496, develop: true, production: true }, controller: { status: 'dispatched', controllerRef: 'github-actions', environments: ['develop', 'production'] }, expectedEnvironments: ['develop', 'production'] }
       },
-      { status: 409, description: 'The PR is not a trusted live source, acknowledgement is absent, or the preview provider rejected the build.', body: { ok: false, error: 'Preview policy could not be updated' } }
+      { status: 409, description: 'The PR is not a trusted live source, acknowledgement is absent, or the GitHub App could not dispatch the protected controller.', body: { ok: false, error: 'Preview policy could not be updated' } }
     ]
   }),
   endpoint({
@@ -1524,6 +1603,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'admin-subscriptions',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'admin',
     title: 'Subscription tiers & quota overrides',
     endpoint: '/api/v1/admin/subscriptions',
@@ -1601,6 +1682,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'admin-tiers',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'admin',
     title: 'Manage subscription tiers',
     endpoint: '/api/v1/admin/tiers',
@@ -1683,6 +1766,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'tiers',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'subscriptions',
     title: 'Live subscription tiers',
     endpoint: '/api/v1/tiers',
@@ -1690,7 +1775,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     detail:
       'Public read-only catalog. Each item includes a stable id, immutable versionId/version, name, tagline, ' +
       'optional banner image, daily/weekly/monthly/yearly minor-unit prices, six computed-or-custom discounts, ' +
-      'Editor.js inclusions, and quota defaults. Draft and archived revisions are excluded.',
+      'Editor.js inclusions, and quota defaults including speedTestsPerHour (null means unlimited). Defaults: Free 4/hour, Plus 20/hour, Pro and Pay as you go unlimited. Historical revisions without the field inherit the built-in tier allowance; custom tiers inherit Free unless configured. Draft and archived revisions are excluded.',
     auth: { mode: 'none', description: 'Public catalog; no credentials required.' },
     methods: ['GET'],
     steps: ['GET and render each returned live revision as a tier option.'],
@@ -3419,19 +3504,22 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'email-config',
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     group: 'email',
     title: 'Email delivery config',
     endpoint: '/api/v1/email/config',
-    summary: 'Returns the sanitized email delivery configuration for diagnostics.',
+    summary: 'Returns sanitized email delivery configuration in local development and Vercel previews.',
     detail:
-      'Use this to check which provider (console or SES), region, sender addresses, and sandbox settings the runtime resolved — no credentials are ever included.',
+      'Dev/preview-only helper for the /tests page. Use it to check which provider (console or SES), region, sender addresses, and sandbox settings the runtime resolved. Production and unknown production-like hosts return 403, and credentials are never included.',
     auth: {
       mode: 'none',
-      description: 'Public diagnostic endpoint returning non-secret configuration only.'
+      description: 'Gated by environment (local development and Vercel previews), not by session.'
     },
     methods: ['GET', 'POST'],
     steps: [
       'GET the endpoint (POST behaves identically).',
+      'Use it only in local development or a Vercel preview; production returns 403.',
       'Read provider to confirm whether real SES delivery or console logging is active.',
       'Use sesSandbox and testRecipient to plan /tests email checks.'
     ],
@@ -3460,6 +3548,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
             testRecipientDomain: 'thingtime.com'
           }
         }
+      },
+      {
+        status: 403,
+        description: 'Production and unknown production-like environments do not expose email diagnostics.',
+        body: { ok: false, error: 'Email config is available only in local development and Vercel previews.' }
       }
     ]
   }),
@@ -3570,11 +3663,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'health-nitro',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'health',
     title: 'Nitro health',
     endpoint: '/api/v1/health/nitro',
-    summary: 'Reports Nitro API runtime readiness.',
-    detail: 'Use this endpoint to confirm the API server is alive and to compare local versus remote runtime status.',
+    summary: 'Reports Nitro API runtime and critical storage-accounting readiness.',
+    detail:
+      'Use this endpoint to confirm the API server is alive, verify that account storage ledgers match the current accounting version, and compare local versus remote runtime status. It reports degraded while backfill-user-storage-accounting is required, because uploads and other positive storage writes intentionally fail closed in that state.',
     auth: {
       mode: 'none',
       description: 'Public health endpoint.'
@@ -3583,7 +3679,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'Call without query parameters for current runtime status.',
       'Pass target or origin query parameters to check a remote Thingtime runtime when supported.',
-      'Read service, state, runtime, nodeEnv, and responseMs.',
+      'Read service, state, runtime, nodeEnv, responseMs, and storageAccounting.',
+      'If state is degraded, run the named migration from the admin migrations console and recheck until ready.',
       'Use this before deeper API tests to separate server availability from endpoint behavior.'
     ],
     requestExamples: [
@@ -3597,7 +3694,31 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'Nitro is ready.',
-        body: { ok: true, service: 'nitro', state: 'ready', runtime: 'nitro' }
+        body: {
+          ok: true,
+          service: 'nitro',
+          state: 'ready',
+          runtime: 'nitro',
+          storageAccounting: {
+            state: 'ready',
+            expectedVersion: USER_STORAGE_ACCOUNTING_VERSION,
+            migrationId: 'backfill-user-storage-accounting'
+          }
+        }
+      },
+      {
+        status: 200,
+        description: 'Nitro is reachable but positive storage writes are fenced until the migration completes.',
+        body: {
+          ok: false,
+          service: 'nitro',
+          state: 'degraded',
+          storageAccounting: {
+            state: 'migration-required',
+            expectedVersion: USER_STORAGE_ACCOUNTING_VERSION,
+            migrationId: 'backfill-user-storage-accounting'
+          }
+        }
       }
     ]
   }),
@@ -4209,6 +4330,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
 	endpoint({
 		id: 'attachment-uploads',
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
 		group: 'attachments',
 		title: 'Start attachment upload',
 		endpoint: '/api/v1/attachments/uploads',
@@ -4219,7 +4342,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		auth: {
 			mode: 'session-or-bearer',
 			description:
-				'Requires a full revocable user session (httpOnly cookie or its Bearer session JWT); PAT, app, and service-account tokens are rejected.'
+				'Requires a full revocable user session (httpOnly cookie or its Bearer session JWT), or a paired Watch credential with watch.things.create for post-purpose uploads. PAT, app, and service-account tokens are rejected.'
 		},
 		methods: ['POST'],
 		steps: [
@@ -4277,6 +4400,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-upload-parts',
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
 		group: 'attachments',
 		title: 'Sign attachment parts',
 		endpoint: '/api/v1/attachments/uploads/parts',
@@ -4285,7 +4410,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			'Each returned URL is short-lived and signs the exact server-derived Content-Length plus x-amz-checksum-sha256 header. The browser uploads the raw slice directly to S3, lets the browser set Content-Length, and must send the returned checksum header unchanged. The server never proxies large file bodies.',
 		auth: {
 			mode: 'session-or-bearer',
-			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+			description: 'Requires the owning full user session, or its paired Watch credential for a post-purpose upload; PAT, app, and service-account tokens are rejected.'
 		},
 		methods: ['POST'],
 		steps: [
@@ -4328,6 +4453,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-upload-complete',
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
 		group: 'attachments',
 		title: 'Complete attachment upload',
 		endpoint: '/api/v1/attachments/uploads/complete',
@@ -4338,7 +4465,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			'Active and generic formats stay application/octet-stream downloads, with the sniffed container preserved as detectedContentType display metadata when one was recognized. Repeating a successful request is safe.',
 		auth: {
 			mode: 'session-or-bearer',
-			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+			description: 'Requires the owning full user session, or its paired Watch credential for a post-purpose upload; PAT, app, and service-account tokens are rejected.'
 		},
 		methods: ['POST'],
 		steps: [
@@ -4384,6 +4511,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-upload-abort',
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
 		group: 'attachments',
 		title: 'Cancel attachment upload',
 		endpoint: '/api/v1/attachments/uploads/abort',
@@ -4392,7 +4521,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			'Aborts any open MPU and deletes a completed draft object before removing the billable source record. Because a signed UploadPart may finish after Abort, an MPU that issued a part URL stays billed through a lifecycle-backed settlement window and two separated empty checks; deferred and retryAt report that honestly. An MPU that never issued a part URL can refund promptly after one empty Abort/ListParts/HEAD verification. Missing uploads are an idempotent success. Bound files must be removed through their owning post, comment, message, profile, or custom-emoji lifecycle.',
 		auth: {
 			mode: 'session-or-bearer',
-			description: 'Requires the owning full user session; PAT, app, and service-account tokens are rejected.'
+			description: 'Requires the owning full user session, or its paired Watch credential for a post-purpose upload; PAT, app, and service-account tokens are rejected.'
 		},
 		methods: ['POST'],
 		steps: [
@@ -9223,8 +9352,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'notifications-list',
-    contractVersion: '1.2.0',
-    featureVersion: '1.2.0',
+    // 1.1.0 added the history filters, 1.2.0 the stable cursor, from/to window
+    // and viewer object; 1.3.0 adds private recording-reminder notifications.
+    contractVersion: '1.3.0',
+    featureVersion: '1.3.0',
     group: 'notifications',
     title: 'List notifications',
     endpoint: '/api/v1/notifications',
@@ -9244,14 +9375,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'actor username / system title>, since=<ISO> and until=<ISO> (inclusive createdAt bounds), ' +
       'and withTotal=1 to also return total — the count of everything matching the filters, cursor ' +
       'ignored. unreadCount is always the badge count (every enabled type, filters ignored). Cursor ' +
-      'pagination via before=<nextBefore>. A recipient keeps their newest 10,000 notifications.',
+      'pagination uses the opaque cursor=<nextCursor> so notifications sharing the same timestamp ' +
+      'are never skipped; legacy before=<nextBefore> remains supported. Optional from (inclusive) ' +
+      'and to (exclusive) ISO timestamps bound historical pages and exports, alongside since/until. ' +
+      'The viewer object identifies the authenticated account by username so native companions can ' +
+      'visibly confirm which account is connected. A recipient keeps their newest 10,000 notifications.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
     },
     methods: ['GET'],
     steps: [
-      'GET ?limit=&before= — newest first.',
+      'GET ?limit=&cursor=&from=&to= — newest first. Use cursor for stable 10-at-a-time history; from is inclusive and to is exclusive.',
       'Show unreadCount on the bell; refetch on window focus.',
       'History page: add category / types / unread / q / since / until and withTotal=1; keep the filter set in the URL.',
       'Click-through: href (system notes) → that path, else postId → /post/<id>, else actor → /profile/<username>.',
@@ -9262,7 +9397,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         name: 'Bell dropdown',
         description: 'First page for the notifications popover.',
         method: 'GET',
-        query: { limit: 20 }
+        query: { limit: 10 }
       },
       {
         name: 'History — unread system notes this month',
@@ -9283,6 +9418,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Notifications + unread count (a person row and a system note).',
         body: {
           ok: true,
+          viewer: { username: 'lopu' },
           notifications: [
             {
               id: 'a1b2…',
@@ -9321,7 +9457,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           ],
           unreadCount: 2,
           total: 2,
-          nextBefore: null
+          nextBefore: null,
+          nextCursor: null
         }
       }
     ]
@@ -9358,6 +9495,67 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 200,
         description: 'Marked.',
         body: { ok: true, updated: 3 }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'notifications-devices',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
+    group: 'notifications',
+    title: 'Register notification devices',
+    endpoint: '/api/v1/notifications/devices',
+    summary: 'Register iPhone and Apple Watch APNs targets for the signed-in Thingtime account.',
+    detail:
+      'POST accepts one to four variable-length hexadecimal APNs tokens. The server selects the bundle topic, ' +
+      'stores each token in a protected binary secure field, keeps at most twelve recent devices per account, ' +
+      'and returns only non-secret registration metadata. DELETE removes one registration by id. Thingtime sends ' +
+      'the same notification payload to paired iPhone and watchOS targets so Apple can suppress duplicate alerts.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Requires an auth cookie, full-session Bearer token, or a paired Watch credential with watch.push capability.'
+    },
+    methods: ['POST', 'DELETE'],
+    steps: [
+      'Register for remote notifications on every app launch and preserve the APNs token as variable-length data.',
+      'POST the current iOS and/or watchOS token after the Thingtime session is authenticated.',
+      'DELETE a stale device id when the user explicitly disconnects that device.'
+    ],
+    requestExamples: [
+      {
+        name: 'Register paired Apple devices',
+        description: 'Register current sandbox tokens from an iPhone and its paired watch.',
+        method: 'POST',
+        body: {
+          devices: [
+            { token: '<hex APNs token>', platform: 'ios', environment: 'sandbox' },
+            { token: '<hex APNs token>', platform: 'watchos', environment: 'sandbox' }
+          ]
+        }
+      },
+      {
+        name: 'Disconnect one device',
+        description: 'Remove a registration owned by the current account.',
+        method: 'DELETE',
+        body: { id: 'device-registration-id' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Registered; tokens are intentionally omitted.',
+        body: {
+          ok: true,
+          devices: [
+            {
+              id: 'device-registration-id',
+              platform: 'watchos',
+              environment: 'sandbox',
+              topic: 'com.thingtime.appletime.watchkitapp',
+              updatedAt: '2026-09-03T00:00:00.000Z'
+            }
+          ]
+        }
       }
     ]
   }),
@@ -9822,13 +10020,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'network-probe-ping',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'system',
     title: 'Network probe ping',
     endpoint: '/api/v1/network-probe/ping',
     summary: 'A tiny uncached response for measuring round-trip latency to Thingtime.',
     detail:
-      'Commander Activity uses this public endpoint while its Activity view is open. It returns a fixed 256-byte payload, never stores request data, and is rate limited per client IP.',
-    auth: { mode: 'none', description: 'Public diagnostic endpoint.' },
+      'Commander Activity uses this endpoint while its Activity view is open. It returns a fixed 256-byte payload. Guests are limited per IP; valid account-session or non-sandbox OAuth credentials bypass that guest bucket without spending a speed-test allowance. This keeps the tiny latency preflight from blocking unrestricted account tests. Invalid credentials return 401/403 instead of falling back to guests. Guest limiter outages return 503.',
+    auth: { mode: 'none', description: 'Public diagnostic; optionally authenticate to avoid the guest IP bucket.' },
     methods: ['GET'],
     steps: ['Time the complete request and response.', 'Treat 429 as a temporary network-probe cooldown.'],
     requestExamples: [{ name: 'Measure latency', description: 'Fetch the fixed ping payload.', method: 'GET' }],
@@ -9836,13 +10036,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'network-probe-download',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'system',
     title: 'Network probe download',
     endpoint: '/api/v1/network-probe/download',
     summary: 'Returns one fixed, non-cacheable packet for an opt-in throughput measurement.',
     detail:
-      'Only 56 KiB, 500 KiB, 2 MiB, 5 MiB, and 10 MiB packets are accepted. The exact allowlist and per-IP rate limit prevent this endpoint from becoming a general transfer service.',
-    auth: { mode: 'none', description: 'Public bounded diagnostic endpoint.' },
+      'Only 56 KiB, 500 KiB, 2 MiB, 5 MiB, and 10 MiB packets are accepted. Optional full-account or non-sandbox OAuth profile.username authentication applies the protected account subscription allowance: five packets per allowed test in a rolling hour, shared across sessions/devices/IPs. Pro defaults to unlimited. Anonymous callers retain five packets per 15 minutes per IP. Invalid credentials return 401/403, not a guest fallback. Limiter unavailability returns 503.',
+    auth: { mode: 'none', description: 'Public guest allowance; optionally send an account session or OAuth Bearer token for account-tier limits.' },
     methods: ['GET'],
     steps: ['Pass one documented bytes value.', 'Measure the response body only after a successful 200.', 'Respect 429 before retrying.'],
     requestExamples: [
@@ -9854,15 +10056,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'network-probe-upload',
-    contractVersion: '2.0.0',
-    featureVersion: '2.0.0',
+    contractVersion: '2.1.0',
+    featureVersion: '2.1.0',
     group: 'system',
     title: 'Network probe upload',
     endpoint: '/api/v1/network-probe/upload',
     summary: 'Consumes one exact fixed-size packet for an opt-in upload measurement.',
     detail:
-      'Upload v2 accepts only 56 KiB, 500 KiB, 1 MiB, or 2 MiB per request. Split larger logical samples into serial chunks below the hosting request limit. Content-Length may be absent on streamed/proxied requests; when supplied it must match, and actual received bytes are always counted exactly without retaining the body. Nothing is persisted or reflected. The per-IP default is 11 requests per 15 minutes (at most 22 MiB). V1 clients must update their packet ladder before using v2.',
-    auth: { mode: 'none', description: 'Public bounded diagnostic endpoint.' },
+      'Upload v2 accepts only 56 KiB, 500 KiB, 1 MiB, or 2 MiB per request. Split larger logical samples into serial chunks. Content-Length may be absent; when supplied it must match, and actual received bytes are always counted exactly without retaining or reflecting the body. With optional account/OAuth authentication, the protected account speedTestsPerHour allowance admits eleven chunks per test in a rolling hour; null means unlimited. Anonymous callers retain 11 chunks per 15 minutes per IP. Each direction has its own attempt budget, so partial attempts consume only their packets. Invalid credentials fail 401/403; unavailable accounting fails 503. V1 clients must update their packet ladder before using v2.',
+    auth: { mode: 'none', description: 'Public guest allowance; optionally send an account session or OAuth Bearer token for account-tier limits.' },
     methods: ['POST'],
     steps: [
       'Pass one documented bytes value.',

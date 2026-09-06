@@ -433,6 +433,13 @@ const rootThingSchema: ThingtimeSchema = {
       description: `Schema-free sidecar: any JSON up to ${EXTENDED_MAX_BYTES} bytes, stored untouched, never validated, structured-searchable, or interpreted. Replace-on-write; null clears it.`
     },
     { name: 'ownerId', type: 'id', required: true, system: true, description: 'The owning user id.' },
+		{
+			name: 'sourceDeviceId',
+			type: 'id',
+			required: false,
+			system: true,
+			description: 'Paired device that created this Thing. Server-stamped and never accepted from generic Thing input.'
+		},
     {
       name: 'acl',
       type: 'string[]',
@@ -2079,6 +2086,26 @@ const notificationThingSchema: ThingtimeSchema = {
   example: { type: 'new-follower', actorId: '664f1c2a9d3e5b0012345678', actorName: 'Rick Deckard' }
 };
 
+const pushDeviceThingSchema: ThingtimeSchema = {
+  id: 'push-device',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Push Device',
+  summary: 'A protected APNs delivery target owned by one Thingtime account.',
+  detail:
+    'Registered only through /api/v1/notifications/devices. The public crystal contains platform, ' +
+    'environment, and server-selected topic metadata; the APNs token is encrypted-at-rest-compatible ' +
+    'binary secure data and is never returned by the API or exposed through generic Thing CRUD.',
+  createdVia: 'POST /api/v1/notifications/devices',
+  fields: [
+    { name: 'platform', type: 'enum', required: true, values: ['ios', 'watchos'], description: 'Apple device family.' },
+    { name: 'environment', type: 'enum', required: true, values: ['sandbox', 'production'], description: 'APNs gateway environment.' },
+    { name: 'topic', type: 'string', required: true, description: 'Server-selected application bundle topic.' }
+  ],
+  example: { platform: 'watchos', environment: 'sandbox', topic: 'com.thingtime.appletime.watchkitapp' }
+};
+
 // Folders: the Drive-style organization kind behind /things. A folder is an
 // ordinary thing (thingtime ["folder"]) whose crystal names it; containment is
 // a `folderId` pointer ON THE CHILD (FUNDAMENTALS §3 — never an embedded list
@@ -2133,7 +2160,13 @@ const sessionSchema: ThingtimeSchema = {
       description:
         'Browser cookie session, service Bearer token, app-scoped grant, sandbox grant, personal access token, or one-time desktop OAuth code.'
     },
-    { name: 'expiresAt', type: 'date', required: false, description: 'Expiry (null = non-expiring service token).' },
+    {
+      name: 'expiresAt',
+      type: 'date',
+      required: false,
+      description:
+        'Expiry (null = non-expiring service token). Revoking a non-expiring session stamps a reap date here so the TTL index can clear the dead row; an existing expiry is never overwritten.'
+    },
     { name: 'revokedAt', type: 'date', required: false, description: 'Set when revoked — token stops working immediately.' },
     { name: 'meta', type: 'record', required: false, description: 'Session metadata.' },
     { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' },
@@ -2798,7 +2831,7 @@ const deviceSchema: ThingtimeSchema = {
 	fields: [
 		{ name: 'deviceKey', type: 'string', required: true, description: 'Server-hashed unique owner/device key.' },
 		{ name: 'name', type: 'string', required: true, max: 120, description: 'User-facing computer name.' },
-		{ name: 'platform', type: 'enum', required: true, values: ['macos', 'windows', 'linux'], description: 'Operating-system family.' },
+		{ name: 'platform', type: 'enum', required: true, values: ['macos', 'windows', 'linux', 'watchos'], description: 'Operating-system family.' },
 		{ name: 'model', type: 'string', required: false, max: 160, description: 'Bounded hardware model label.' },
 		{ name: 'osVersion', type: 'string', required: false, max: 80, description: 'Bounded OS version label.' },
 		{ name: 'appVersion', type: 'string', required: false, max: 80, description: 'Thingtime node version.' },
@@ -3202,6 +3235,7 @@ export const PROTECTED_THINGTIME = [
   'follow',
   'friend',
   'notification',
+  'push-device',
   // auth-plane credentials: a forged passkey doc would BE a working login
   // credential, so these are server-minted end to end (auth/passkeys.ts)
   'passkey',
@@ -3396,6 +3430,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   // supersedes the earlier followThingSchema (crystal.follow marker) draft.
   friendThingSchema,
   notificationThingSchema,
+  pushDeviceThingSchema,
   // auth-plane credentials (protected, server-minted by auth/passkeys.ts)
   passkeyThingSchema,
   passkeyAppLinkThingSchema,
