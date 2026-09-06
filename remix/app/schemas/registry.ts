@@ -171,6 +171,15 @@ export const ACL_CUSTOM = 'tt:custom';
 export const ACL_USER_PREFIX = 'tt:user/';
 export const ACL_APP_PREFIX = 'tt:app/';
 export const ACL_GROUP_PREFIX = 'tt:group/';
+// Synced external posts (api/utils/connections). tt:extsourced is a CONSTANT
+// audience: the acl names no account, and membership is resolved live per
+// (post, viewer) against the viewer's account links → that post's
+// external-post-source rows, so unlinking revokes instantly and no reader
+// learns who else sources the post. tt:extacct/<accountId> is the legacy
+// per-source grant it replaced (relational-external-post-sources migration),
+// still honoured for rows the migration has not reached.
+export const ACL_EXT_SOURCED = 'tt:extsourced';
+export const ACL_EXTACCT_PREFIX = 'tt:extacct/';
 
 const ACL_ENTRY_PATTERN = /^-?tt:[A-Za-z0-9][A-Za-z0-9._/-]*$/;
 // raised from 16 for custom audiences (a hand-picked user list + groups);
@@ -267,6 +276,11 @@ export type AclViewer = {
   username?: string | null;
   friendIds?: ReadonlySet<string>;
   groupIds?: ReadonlySet<string>;
+  // external posts this viewer sources / external accounts they have linked,
+  // loaded lazily by the read path (things.ts) and memoised on the viewer
+  // object. An absent set = not loaded = that audience denies, like friendIds.
+  extSourcedPostIds?: ReadonlySet<string>;
+  extAccountIds?: ReadonlySet<string>;
 } | null;
 
 // Custom-audience capabilities: write ⊃ comment ⊃ read. A grant entry may
@@ -306,7 +320,7 @@ const aclSpecificity = (id: string): number => {
   return 1; // circles + groups
 };
 
-const aclEntryMatches = (id: string, viewer: AclViewer, ownerId: string): boolean => {
+const aclEntryMatches = (id: string, viewer: AclViewer, ownerId: string, docId?: string | null): boolean => {
   const { base } = splitCapability(id);
   if (base === ACL_ALL) return true;
   if (!viewer?.id) return false;
@@ -319,6 +333,14 @@ const aclEntryMatches = (id: string, viewer: AclViewer, ownerId: string): boolea
   if (base.startsWith(ACL_GROUP_PREFIX)) {
     const groupId = base.slice(ACL_GROUP_PREFIX.length);
     return viewer.id === ownerId || viewer.groupIds?.has(groupId) === true;
+  }
+  // constant external-sourced audience: membership is per-(post, viewer), so
+  // it can only match when the caller named the doc AND the viewer's
+  // membership answer for it is loaded — both absent cases fail closed
+  if (base === ACL_EXT_SOURCED) return !!docId && viewer.extSourcedPostIds?.has(docId) === true;
+  // legacy per-source grant: the viewer's linked external accounts answer
+  if (base.startsWith(ACL_EXTACCT_PREFIX)) {
+    return viewer.extAccountIds?.has(base.slice(ACL_EXTACCT_PREFIX.length)) === true;
   }
   // friends circle: real graph — the viewer sees it when they're an accepted
   // friend of the owner (friendship is mutual, so the viewer's own friend set

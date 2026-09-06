@@ -41,6 +41,8 @@ import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
 import {
   ACL_ALL,
   ACL_CUSTOM,
+  ACL_EXTACCT_PREFIX,
+  ACL_EXT_SOURCED,
   ACL_FAMILY,
   ACL_FRIENDS,
   ACL_GROUP_PREFIX,
@@ -462,9 +464,18 @@ export type Viewer = {
   username?: string | null;
   pat?: { tokenId: string; onlyCreatedThings: boolean; visibility?: 'all' | 'public' | 'private' | 'hidden' } | null;
   friendIds?: ReadonlySet<string>;
+  // group memberships behind tt:group/<id> grants, and the hidden-link keys
+  // the caller presented (withLinkKeys) — both read by the acl path below
+  groupIds?: ReadonlySet<string>;
+  linkKeys?: ReadonlySet<string>;
   // the viewer's subspace memberships (api/utils/subspaces/gate.ts), loaded
   // beside friendIds so private-subspace posts resolve for real members
   subspaceRoles?: ViewerSubspaceRoles;
+  // synced external posts this viewer sources / external accounts they have
+  // linked — loaded lazily by the acl path below (never up front: most reads
+  // never meet an external post) and memoised on the viewer object
+  extSourcedPostIds?: ReadonlySet<string>;
+  extAccountIds?: ReadonlySet<string>;
 } | null;
 export const asViewer = (value: string | Viewer | null | undefined): Viewer => (typeof value === 'string' ? { id: value } : value || null);
 
@@ -2670,7 +2681,9 @@ export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
     const membership = subspaceId ? viewer?.subspaceRoles?.get(subspaceId) || null : null;
     if (!isActiveSubspaceMember(membership) && !canModerateSubspace(membership)) return false;
   }
-  return aclAllows(aclOf(doc), viewer, doc.ownerId);
+  // the doc's own shareId rides along for the constant tt:extsourced audience,
+  // whose membership is per-(post, viewer) rather than per-entry
+  return aclAllows(aclOf(doc), viewer, doc.ownerId, doc.shareId);
 };
 
 // ---------------------------------------------------------------------------
@@ -2704,6 +2717,107 @@ const customEngageBlocks = async (viewer: Viewer, doc: ThingDoc): Promise<boolea
 
 const customEngageFail = (): Fail =>
   fail(403, 'This thing has a custom audience — you don’t have comment access here 🎭');
+
+// ---------------------------------------------------------------------------
+// External-sourced audiences (api/utils/connections). A synced personal
+// external post carries the CONSTANT acl entry tt:extsourced: the acl names no
+// account, and membership is resolved LIVE per (post, viewer) against the
+// viewer's account links → that post's external-post-source rows, so unlinking
+// revokes instantly with no grant sweep to run. Rows the
+// relational-external-post-sources migration has not reached still carry the
+// legacy per-source tt:extacct/<accountId> grants, answered by the viewer's
+// linked account ids.
+//
+// Both answers load lazily (most reads never meet an external post) and
+// memoise ON THE VIEWER OBJECT — one request path — so a page of posts, and a
+// whole comment chain converging on one external post, cost one links query
+// plus one membership probe per post. The memo holds the in-flight PROMISE,
+// never a bare "already asked" flag: canView reads the resolved set
+// synchronously and an unloaded set denies (deliberately, like friendIds), so
+// a second caller arriving mid-query must await the same answer instead of
+// evaluating against a set that has not landed yet.
+
+// connections.ts owns these kind names; spelling them out here keeps the acl
+// path free of an import cycle (connections.ts imports this module).
+const EXTERNAL_LINK_THINGTIME = 'external-account-link';
+const EXTERNAL_POST_SOURCE_THINGTIME = 'external-post-source';
+
+type ExtAudienceMemo = { accountIds?: Promise<ReadonlySet<string>>; posts: Map<string, Promise<boolean>> };
+const extAudienceMemos = new WeakMap<object, ExtAudienceMemo>();
+const extAudienceMemoOf = (viewer: object): ExtAudienceMemo => {
+  const existing = extAudienceMemos.get(viewer);
+  if (existing) return existing;
+  const created: ExtAudienceMemo = { posts: new Map() };
+  extAudienceMemos.set(viewer, created);
+  return created;
+};
+
+const hasExtSourcedAudience = (doc: ThingDoc): boolean => aclOf(doc).includes(ACL_EXT_SOURCED);
+const hasExtacctAudience = (doc: ThingDoc): boolean => aclOf(doc).some((entry) => entry.includes(ACL_EXTACCT_PREFIX));
+
+// The external accounts this viewer has linked — HOME collection, because the
+// links are authorization records that must not follow a custom data plane.
+const ensureExtAccountIds = async (viewer: Viewer): Promise<ReadonlySet<string>> => {
+  if (!viewer?.id) return new Set<string>();
+  const memo = extAudienceMemoOf(viewer);
+  if (!memo.accountIds) {
+    memo.accountIds = (async () => {
+      const home = await getHomeThingsCollection();
+      const links = (await home
+        .find({ thingtime: EXTERNAL_LINK_THINGTIME, ownerId: viewer.id } as any, {
+          projection: { parentId: 1, 'crystal.accountId': 1 }
+        } as any)
+        .toArray()) as any[];
+      // the account rides both the relational parentId and crystal.accountId
+      return new Set(links.map((link) => String(link?.crystal?.accountId || link?.parentId || '')).filter(Boolean));
+    })();
+  }
+  const accountIds = await memo.accountIds;
+  viewer.extAccountIds = accountIds;
+  return accountIds;
+};
+
+// Does this viewer source THIS external post? One membership probe per post,
+// shared by every concurrent caller through the memoised promise.
+const ensureExtSourced = async (viewer: Viewer, postShareId: string | null | undefined): Promise<void> => {
+  if (!viewer?.id || !postShareId) return;
+  const memo = extAudienceMemoOf(viewer);
+  let answer = memo.posts.get(postShareId);
+  if (!answer) {
+    answer = (async () => {
+      const accountIds = await ensureExtAccountIds(viewer);
+      // links are the authorization: no links, no membership, no probe
+      if (!accountIds.size) return false;
+      const things = await getThingsCollection();
+      const row = await things.findOne(
+        {
+          targetId: postShareId,
+          thingtime: EXTERNAL_POST_SOURCE_THINGTIME,
+          parentId: { $in: [...accountIds] }
+        } as any,
+        { projection: { _id: 1 } } as any
+      );
+      return !!row;
+    })();
+    memo.posts.set(postShareId, answer);
+  }
+  if (await answer) primeExtSourcedPostIds(viewer, [postShareId]);
+};
+
+// The connections feed pages the membership rows itself, so it already knows
+// the viewer sources every post on the page — priming the viewer with that
+// answer keeps acl evaluation query-free on the way out.
+export const primeExtSourcedPostIds = (viewer: Viewer, postShareIds: readonly string[]): void => {
+  if (!viewer?.id || !postShareIds.length) return;
+  const sourced = new Set(viewer.extSourcedPostIds || []);
+  const memo = extAudienceMemoOf(viewer);
+  for (const postShareId of postShareIds) {
+    if (!postShareId) continue;
+    sourced.add(postShareId);
+    memo.posts.set(postShareId, Promise.resolve(true));
+  }
+  viewer.extSourcedPostIds = sourced;
+};
 
 // Target-attached things resolve visibility through their inherit chain (see
 // aclChainCore for the cycle-safe walk — legitimate deep comment chains must
