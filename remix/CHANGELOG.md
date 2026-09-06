@@ -18,6 +18,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-06: Include #612's final detail-page review follow-up in the main
+  release: reject inherited/unknown `from` parameters and keep the Back link
+  functional. This completes the source revision beyond the initial #668 merge.
+
 - 2026-09-06: Let rich-text style controls initialize in embedded browsers that
   omit `crypto.randomUUID`; use independent local registry IDs as a fallback.
 
