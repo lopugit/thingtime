@@ -2,8 +2,6 @@
 // projection powers both the Open Graph text tags and the image-card renderer,
 // so a social preview cannot reveal anything the public page does not reveal.
 
-import { getRequestOrigin } from '../health/statusTarget';
-
 export type SocialPreviewKind =
 	| 'home'
 	| 'feed'
@@ -679,15 +677,4 @@ export const resolveSocialPreview = async (origin: string, pathInput: string): P
 		// A malformed or unavailable public target receives the safe generic card.
 	}
 	return staticSocialPreview(path);
-};
-
-export const socialPreviewFromRequest = async (request: Request): Promise<{ origin: string; preview: SocialPreview }> => {
-	const origin = getRequestOrigin(request);
-	let path = '/';
-	try {
-		path = new URL(request.url, origin).pathname || '/';
-	} catch {
-		// keep the generic root card
-	}
-	return { origin, preview: await resolveSocialPreview(origin, path) };
 };

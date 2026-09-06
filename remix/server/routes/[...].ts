@@ -18,9 +18,23 @@ export default defineHandler(async (event) => {
 	// projection, and then draws a PNG — there is no arbitrary remote-image
 	// proxy hidden behind a social-card URL.
 	if (requestUrl.pathname === '/social-card') {
-		if (!['GET', 'HEAD'].includes(event.req.method.toUpperCase())) {
+		const method = event.req.method.toUpperCase();
+		if (!['GET', 'HEAD'].includes(method)) {
 			return new Response('Method not allowed', { status: 405, headers: { Allow: 'GET, HEAD' } });
 		}
+		const cardHeaders = {
+			'Content-Type': 'image/png',
+			'Cache-Control': 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400',
+			'X-Content-Type-Options': 'nosniff'
+		};
+		// A HEAD carries no body, and none of these headers depend on which card
+		// would be drawn — so resolving one is work nothing can consume. Worth
+		// skipping rather than tidying: this endpoint is public and
+		// unauthenticated, `?v=` is part of the CDN key but is never read back
+		// here, and a content path costs a full anonymous `getThing` projection
+		// (uncapped parent walk on a comment or attachment). HEAD therefore bought
+		// that projection with no PNG to make the miss worth caching.
+		if (method === 'HEAD') return new Response(null, { headers: cardHeaders });
 		const path = normaliseSocialPreviewPath(requestUrl.searchParams.get('path'));
 		try {
 			// Deliberately NOT runWithMongoEndpoint. This response is shared-cacheable
@@ -35,20 +49,16 @@ export default defineHandler(async (event) => {
 			// The HTML shell below still honours the override: it is private/no-store
 			// and has to agree with the SPA's own follow-up API reads.
 			const preview = await resolveSocialPreview(requestUrl.origin, path);
-			const headers = {
-				'Content-Type': 'image/png',
-				'Cache-Control': 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400',
-				'X-Content-Type-Options': 'nosniff'
-			};
-			if (event.req.method.toUpperCase() === 'HEAD') return new Response(null, { headers });
 			const png = await renderSocialCardPng(preview);
-			return new Response(png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength) as ArrayBuffer, { headers });
+			return new Response(png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength) as ArrayBuffer, { headers: cardHeaders });
 		} catch (error) {
 			console.error('[social-card] rendering a safe fallback card:', error);
-			const headers = { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=300', 'X-Content-Type-Options': 'nosniff' };
-			if (event.req.method.toUpperCase() === 'HEAD') return new Response(null, { headers });
 			const png = await renderSocialCardPng(staticSocialPreview(path));
-			return new Response(png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength) as ArrayBuffer, { headers });
+			// Deliberately not the shared s-maxage: a card drawn from a failure must
+			// not sit in the CDN for an hour after the cause is fixed.
+			return new Response(png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength) as ArrayBuffer, {
+				headers: { ...cardHeaders, 'Cache-Control': 'public, max-age=300' }
+			});
 		}
 	}
 
