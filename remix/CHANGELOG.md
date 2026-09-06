@@ -18,6 +18,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-06: Combined Lopu, Builder and rich-text release validation is recorded
+  in [PR #668 notes](../PRs/668-codex-lopu-builder-main-release-integrate-assistant-builder-rich-text.md).
+
 - 2026-09-06: Integration browser checks fixed signed-out Watch approval
   rendering and Lopu composer clipping. Keep textarea padding inside its card;
   verify mobile/desktop nested previews and whole-code clipboard paste. — Codex (AI)
