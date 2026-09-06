@@ -18,6 +18,22 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Make rich-text history controls small, muted and bottom-right inside editors. Keep selected-text formatting above the line, reserving temporary space instead of falling below into the native iOS menu. — Codex (AI), 2026-09-06
+
+- 2026-09-06: Share editor presentation across posts, replies, Thing fields, tiers and builder; reserve field history space and avoid neighbouring controls. See [PR #635 notes](../PRs/635-editor-rich-text-controls-complete-editorjs-rich-text-styling.md).
+
+- 2026-09-05: Coordinate builder labels, history and selection controls using
+  measured free space; adapt to narrow blocks, viewport/inspector edges and
+  scrolling containers. Keep history reachable across hover gaps and fix
+  builder frames intercepting Changes-dialog clicks. [PR #635 verification](../PRs/635-editor-rich-text-controls-complete-editorjs-rich-text-styling.md). — Codex (AI)
+
+- 2026-09-05: Share full selected-text/block styling across Editor.js and builder
+  editors: colour wheel, alpha, HEX/RGB(A)/HSL(A), highlights, decorations and
+  custom font sizes/units. Preserve styles through builder HTML round trips and
+  saved rendering; position the selection toolbar above text within the visual
+  viewport. Add live previews with Save/Cancel, conversion style preferences,
+  branching Undo/Redo and a Changes timeline, larger resizable panels, and
+  floating controls that preserve the document width. [PR #635 verification](../PRs/635-editor-rich-text-controls-complete-editorjs-rich-text-styling.md). — Codex (AI)
 - Validation and rollout notes for account-tier speed-test allowances: [PR #664](../PRs/664-speed-test-tier-allowances-account-tier-speed-test-allowances-and-feature-comparison.md).
 
 - 2026-09-06: Tie Commander speed-test allowances to protected account-tier

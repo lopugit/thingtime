@@ -1370,6 +1370,62 @@ email whose link points at the attacker.
       Editor section still lists/saves/restores layouts (embedded composer
       editors must never appear there).
 
+## Editor.js rich text styles
+
+- [ ] In builder inline/modal editors and the post composer, select paragraph,
+      heading, list/checklist, quote/caption, table-cell and warning text. The
+      palette button opens the same full styling panel for every rich-text field.
+- [ ] Test wheel dragging/keyboard controls, HEX/RGB/RGBA/HSL/HSLA input,
+      transparent colours and highlights, all decorations, font family, and
+      px/em/rem/pt/% sizes with both direct input and minus/plus controls.
+- [ ] Apply, save, reopen, and read the rendered content. Builder HTML round trips
+      retain selected-text styles and block colours, alignment and custom sizes.
+      Changing a substring keeps neighbouring and mixed formatting; Cancel leaves
+      the document unchanged, Reset clears styling, and Undo restores the edit.
+- [ ] At desktop and 390px mobile widths, select text near each viewport edge and
+      scroll top to bottom. The toolbar stays above the selection, wraps within
+      the viewport, and remains usable. Scroll the colour panel to both ends;
+      controls and Save/Cancel stay reachable without horizontal overflow.
+      Hover a desktop toolbar hint then shrink to mobile: hidden hints must not
+      leave a horizontal scrollbar.
+- [ ] Change a styled heading to paragraph, list/checklist or quote. Text colour,
+      size, decoration and alignment carry by default. In Changes, uncheck a
+      carry property and confirm only that whole-block property is omitted.
+- [ ] Open an unstyled colour picker: lightness starts at 50%. Change colour,
+      opacity, size and decoration while watching the actual text. Save keeps
+      the preview; Cancel restores the original without losing the preview events.
+- [ ] Type, style, insert an empty block, check a checklist item, add a table row,
+      convert, move and delete blocks. Undo/Redo buttons and Cmd/Ctrl+Z / Shift+Z
+      restore the complete draft, including unfinished blocks and focus.
+- [ ] Undo twice and type a different edit. Changes retains both futures with
+      their parent events; Restore point revisits either. Revert/reapply a colour
+      event preserves later text/size changes; overlapping field edits display a
+      conflict without overwriting the current document. Expand Changed properties.
+- [ ] Reopen the builder floating editor and toggle inline editing off/on: their
+      session histories remain available. Keep two editors with the same block
+      IDs open; styling one does not change the other's tune registry or focus.
+- [ ] Resize block settings, the style picker and the advanced editor using the
+      corner handle and arrow keys. Move the style picker by its title; resize
+      the viewport and scroll each panel to both ends. Controls remain reachable.
+- [ ] Compare edit/view text bounds with left, centre and right alignment at
+      desktop and mobile widths. There is no reserved toolbar gutter; +/dots
+      float right for left/centre text and left for right text, using clear space
+      beside the text or above the editor. Previous headings and history controls
+      remain visible, including inside the advanced modal.
+- [ ] On physical iOS, repeat selection with the native context menu and keyboard
+      open, including keyboard viewport panning and text near the screen top.
+- [ ] Local regression fixture: `/tests/editor-rich-text.html` under Vite uses the
+      real editor and builder components with ephemeral data and no API writes.
+- [ ] Editor-sink style scrub (`editorJsHtml.ts` `scrubElement`): save a block whose
+      stored html carries raw CSS on a NON-span inline carrier — for example
+      `<b style="position:fixed;inset:0;z-index:99999">` or
+      `<mark style="background-image:url(https://example.invalid/x)">` — then reopen
+      it in the inline and advanced editors. Editor.js renders `data.text` as live
+      innerHTML there without the render-side allowlist, so every element's style
+      must be re-validated through the style-token gate: no fixed-position overlay
+      and no outbound `url()` request on open. Legitimate `<span>` colour/size
+      styles and block-level `text-align` must still survive the round trip.
+
 ## Multi-editor focus (`remix/app/components/Editor/LongTextEditor.tsx`)
 
 - [ ] With the popout open (same path in two editors), click into an
@@ -1426,7 +1482,7 @@ email whose link points at the attacker.
       is contained to the sandbox (native field undo still works).
 - [ ] Global undo/redo shortcut guard (`useThingtimeMachine.tsx` `keyListener`):
       inside the post composer, a comment box, the login form, and any
-      contentEditable (Editor.js block), Cmd/Ctrl+Z performs NATIVE text undo —
+      contentEditable (Editor.js block), Cmd/Ctrl+Z performs the editor's own text/history undo —
       no thingtime state changes. With focus on the page background (no editable
       focused), Cmd/Ctrl+Z undoes and Cmd/Ctrl+Shift+Z REDOES (Shift reports
       `e.key === 'Z'`, so redo was unreachable before this guard normalised
@@ -4749,6 +4805,19 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Design system + builder (`/builder`, `/p/:id`, `/docs/design-system`, `remix/app/components/Builder/`, `/api/v1/webpages/resolve`, `/api/v1/admin/webpages/seed`)
 
+- [ ] At desktop, 390px and 320px widths, select a short centred text block,
+      a large heading and right-aligned text. The selection toolbar stays above
+      the selection, separate from the block label and history buttons; no
+      controls cross the viewport, inspector or scrolling-container edges.
+      Resize the container and scroll from top to bottom with menus open.
+      Native settings and Convert to submenus fit, including with reduced
+      keyboard space. Large document fonts do not enlarge toolbar icons, and
+      narrow desktop text has no unused 50px editor gutter.
+- [ ] Move the pointer from an edited block through the empty space to Undo,
+      Redo and Changes. All remain reachable; Changes opens, its controls work,
+      and its Close button returns to the same editor (portal clicks must not
+      be intercepted by the builder frame).
+
 - [ ] Every restyled page (status, mongodb-status, tests, vercel, crypto,
       migrations, apps, raw, admin + sub-panels) renders the PageShell surface
       wash, clears the fixed nav (no underlap at 54px), and shows the mono
@@ -5307,3 +5376,9 @@ Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Auto
 ### PR #592 integration regression
 
 - After merging passkey and Lopu changes, verify logout clears `tt-passkeys`, `tt-page-source:`, and `tt-lopu-`; capability tests cover both families, and the iOS app retains both associated domains and its Lopu widget dependency.
+### Shared rich-text surfaces (PR #635)
+
+- In new posts, post edits, comments/replies and poll questions, select paragraph and heading text; confirm colour/alpha, size/units, decorations and history use the same controls as the builder. Never submit QA content to another person.
+- In Thing rich-text fields, tier inclusions and the advanced modal, check neighbouring labels/actions stay visible. History uses small grey controls inside the bottom-right of both field and inline editors; text must never run underneath them.
+- At desktop, 390px and 320px widths, select/style text, undo/redo, open/close Changes, toggle view/edit and scroll top to bottom. Ensure formatting survives and the active editor overlays do not hide a neighbouring editor.
+- In a crowded mobile composer, select text and verify the formatting toolbar stays above the line. A temporary space opens above the text when needed and closes on deselection. Check Undo/Redo/Changes at bottom right, nearby feed filters/tags, keyboard-sized viewports, and repeated selection without growing gaps.
