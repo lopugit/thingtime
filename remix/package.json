@@ -67,7 +67,7 @@
     "test:editable-target": "node --import tsx --test app/utils/editableTarget.test.ts",
     "test:graphify-cas": "node --test ../scripts/graphify-cas.test.mjs",
     "test:lopu": "node --import tsx --test app/api/utils/lopu/*.test.ts",
-    "test:lopu-streaming": "node --experimental-test-module-mocks --import tsx --test app/api/utils/lopu/*.test.mts",
+    "test:lopu-streaming": "node --experimental-test-module-mocks --import tsx --test app/api/utils/lopu/musing*.test.mts",
     "test:lopu-chat-streaming": "node --experimental-test-module-mocks --import tsx --test app/api/utils/lopu/chat.streaming.test.mts",
     "test:lopu-ui": "node --import tsx --test app/components/Lopu/*.test.ts",
     "test:partial-json": "node --import tsx --test app/utils/partialJson.test.ts",
