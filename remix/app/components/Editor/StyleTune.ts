@@ -28,6 +28,7 @@ const ACTIVE_RING = '0 0 0 2px var(--tt-accent-tint, #fff5fa), 0 0 0 3px var(--t
 
 // Per-instance ids keep two editors of the same saved block independent.
 const TUNE_REGISTRY = new Map<string, StyleTune>();
+let nextTuneId = 0;
 
 let delegationBound = false;
 
@@ -116,7 +117,9 @@ export class StyleTune {
 		}
 	}
 	owner?: HTMLElement;
-	readonly tuneId = crypto.randomUUID();
+	// Registry identity only, never an authentication or persisted identifier.
+	// Some embedded browsers omit randomUUID even in a secure context.
+	readonly tuneId = globalThis.crypto?.randomUUID?.() ?? `tt-style-tune-${++nextTuneId}`;
 	static get isTune() {
 		return true;
 	}

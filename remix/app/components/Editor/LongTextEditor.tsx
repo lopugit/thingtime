@@ -700,6 +700,8 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle & EditorHistor
 				editable?.focus({ preventScroll: true });
 			}}
 			width="100%"
+			maxWidth="100%"
+			boxSizing="border-box"
 			minHeight={props.minHeight || '96px'}
 			padding={props.presentation === 'inline' ? '0' : '10px 12px'}
 			paddingTop={`calc(${props.presentation === 'inline' ? '0px' : '10px'} + var(--tt-editor-selection-space, 0px))`}

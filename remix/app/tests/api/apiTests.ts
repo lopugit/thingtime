@@ -1,5 +1,8 @@
 import { expectJson, expectNdjson, expectRedirectedTo, expectStatus, type ApiTestContext, type ApiTestDefinition } from './apiTestRunner';
 import { apiEndpointDocs } from '~/docs/apiDocs';
+import { watchPairingTests } from './watchPairingTests';
+import { watchQuickApprovalTests } from './watchQuickApprovalTests';
+import { nitroHealthResponseIsConsistent } from './healthResponse';
 
 // crypto-sourced randomness: these suffixes end up in registered usernames /
 // email aliases, and Web Crypto is available everywhere this runs (browser
@@ -656,18 +659,14 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'health-nitro',
     name: 'Nitro health',
-    description: 'Nitro health returns local API readiness.',
+    description: 'Nitro health reports consistent ready or migration-required storage status; a contract smoke does not certify deployment readiness.',
     group: 'health',
     method: 'GET',
     path: '/api/v1/health/nitro',
     expect: expectJson(
       [200],
-      (body) =>
-        body?.service === 'nitro' &&
-        body?.state === 'ready' &&
-        body?.storageAccounting?.state === 'ready' &&
-        Number.isSafeInteger(body?.storageAccounting?.expectedVersion),
-      'Nitro health returned ready with current storage accounting.'
+      nitroHealthResponseIsConsistent,
+      'Nitro health reported a consistent storage readiness state.'
     )
   },
   {
@@ -681,6 +680,146 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([200], (body) => isObject(body) && typeof body?.state === 'string', 'Vercel health returned a status shape.')
   },
   {
+    id: 'ai-models-catalog',
+    name: 'AI model catalog',
+    description:
+      'GET /api/v1/ai/models returns the Lopu model catalog with per-model availability, the resolved chat defaults, and per-provider key status (configured + the bounded probe’s verified verdict; a rejected key never lists an available model).',
+    group: 'lopu',
+    method: 'GET',
+    path: '/api/v1/ai/models',
+    timeoutMs: 15000,
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        Array.isArray(body?.models) &&
+        body.models.length > 0 &&
+        body.models.every(
+          (model: any) =>
+            typeof model?.id === 'string' &&
+            model.id !== 'default' &&
+            typeof model?.label === 'string' &&
+            (model?.provider === 'anthropic' || model?.provider === 'openai') &&
+            Array.isArray(model?.efforts) &&
+            Array.isArray(model?.speeds) &&
+            typeof model?.family === 'string' &&
+            typeof model?.enabled === 'boolean' &&
+            typeof model?.available === 'boolean' &&
+            (model?.verified === null || typeof model?.verified === 'boolean') &&
+            typeof model?.isDefault === 'boolean' &&
+            (!model.available || model.enabled) &&
+            (!model.available || model.verified !== false)
+        ) &&
+        isObject(body?.defaults) &&
+        (body.defaults.model === null || typeof body.defaults.model === 'string') &&
+        (body.defaults.speed === 'normal' || body.defaults.speed === 'fast') &&
+        isObject(body?.providers) &&
+        ['anthropic', 'openai'].every((provider) => {
+          const entry = body.providers?.[provider];
+          return (
+            isObject(entry) &&
+            typeof entry.configured === 'boolean' &&
+            (entry.verified === null || typeof entry.verified === 'boolean') &&
+            (entry.checkedAt === null || typeof entry.checkedAt === 'string') &&
+            (entry.configured || entry.verified === null) &&
+            (entry.reason === undefined || typeof entry.reason === 'string')
+          );
+        }) &&
+        body.models.every((model: any) => model.verified === (body.providers?.[model.provider]?.verified ?? null)) &&
+        !JSON.stringify(body).includes('sk-'),
+      'AI model catalog returned with availability, defaults, and verified provider status.'
+    )
+  },
+  {
+    id: 'ai-models-vault-providers',
+    name: 'AI model catalog lists your own providers',
+    description:
+      'GET /api/v1/ai/models carries vault.configured and vaultProviders — the caller’s own Secure Vault AI connections redacted to id/name/kind/model/endpointHost/availability (empty anonymously); no token or endpoint ever appears.',
+    group: 'lopu',
+    method: 'GET',
+    path: '/api/v1/ai/models',
+    timeoutMs: 15000,
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        isObject(body?.vault) &&
+        typeof body.vault.configured === 'boolean' &&
+        Array.isArray(body?.vaultProviders) &&
+        body.vaultProviders.every(
+          (provider: any) =>
+            isObject(provider) &&
+            typeof provider.id === 'string' &&
+            typeof provider.name === 'string' &&
+            ['anthropic', 'openai', 'google', 'xai', 'openrouter', 'compatible'].includes(provider.kind) &&
+            (provider.model === null || typeof provider.model === 'string') &&
+            (provider.endpointHost === null || typeof provider.endpointHost === 'string') &&
+            typeof provider.available === 'boolean' &&
+            (provider.available || typeof provider.reason === 'string') &&
+            !('token' in provider) &&
+            !('endpoint' in provider) &&
+            !('encryptedValue' in provider)
+        ) &&
+        !/token|cipherText|encryptedValue/.test(JSON.stringify(body.vaultProviders)),
+      'AI model catalog carried the redacted Secure Vault provider list and vault status.'
+    )
+  },
+  {
+    id: 'admin-ai-models-anonymous',
+    name: 'Admin AI model toggle requires auth',
+    description: 'POST /api/v1/admin/ai/models refuses anonymous callers before touching the catalog.',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/admin/ai/models',
+    anonymous: true,
+    body: { id: 'claude-opus-5', enabled: true },
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous admin catalog toggle refused.')
+  },
+  {
+    id: 'admin-ai-models-probe-anonymous',
+    name: 'Admin AI provider key re-check requires auth',
+    description: 'POST /api/v1/admin/ai/models { probe: true } refuses anonymous callers before dialing any provider.',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/admin/ai/models',
+    anonymous: true,
+    body: { probe: true },
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous provider key re-check refused.')
+  },
+  {
+    id: 'settings-lopu-chat-defaults-read',
+    name: 'Lopu chat defaults',
+    description: 'GET /api/v1/settings/lopu-chat-defaults publicly returns the stored Lopu default model plus its availability-resolved form.',
+    group: 'lopu',
+    method: 'GET',
+    path: '/api/v1/settings/lopu-chat-defaults',
+    timeoutMs: 15000,
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        body?.key === 'Thingtime.LopuChatDefaults' &&
+        isObject(body?.defaults) &&
+        typeof body.defaults.model === 'string' &&
+        isObject(body?.resolved) &&
+        (body.resolved.model === null || typeof body.resolved.model === 'string') &&
+        Array.isArray(body?.models) &&
+        !JSON.stringify(body).includes('updatedBy'),
+      'Lopu chat defaults returned without storage audit fields.'
+    )
+  },
+  {
+    id: 'settings-lopu-chat-defaults-anonymous',
+    name: 'Lopu chat defaults save requires auth',
+    description: 'POST /api/v1/settings/lopu-chat-defaults refuses anonymous callers before writing.',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/settings/lopu-chat-defaults',
+    anonymous: true,
+    body: { model: 'claude-opus-5', effort: 'high', speed: 'normal' },
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous Lopu defaults save refused.')
+  },
+  {
     id: 'lopu-musing-stream',
     name: 'Lopu musing stream',
     description: 'Lopu musing streams NDJSON fallback or provider events.',
@@ -689,6 +828,266 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/lopu/musing',
     timeoutMs: 20000,
     expect: expectNdjson()
+  },
+  {
+    id: 'lopu-chats-list-guarded',
+    name: 'Lopu chats list requires auth',
+    description: 'GET /api/v1/lopu/chats without a session is rejected with a 401 error shape.',
+    group: 'lopu',
+    method: 'GET',
+    path: '/api/v1/lopu/chats',
+    anonymous: true,
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous Lopu chats list was rejected with a 401 error shape.')
+  },
+  {
+    id: 'lopu-chats-list',
+    name: 'Lopu chats list',
+    description: 'GET /api/v1/lopu/chats lists the caller’s Lopu conversations for a session (every entry carries the lopu externalSource discriminator).',
+    group: 'lopu',
+    method: 'GET',
+    path: '/api/v1/lopu/chats',
+    expect: expectJson(
+      [200, 401],
+      (body) =>
+        (body?.ok === true &&
+          Array.isArray(body?.chats) &&
+          body.chats.every((chat: any) => chat?.externalSource?.access === 'lopu' && chat?.externalSource?.provider === 'lopu')) ||
+        (body?.ok === false && typeof body?.error === 'string'),
+      'Lopu chats listed for the session (or rejected with a 401 error shape anonymously).'
+    )
+  },
+  {
+    id: 'lopu-chats-create',
+    name: 'Lopu chat create',
+    description: 'POST /api/v1/lopu/chats creates a one-member Lopu conversation for a session (or answers 401 anonymously).',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/chats',
+    mutates: true,
+    body: { title: 'API test chat with Lopu', model: 'claude-opus-5', effort: 'high' },
+    expect: expectJson(
+      [200, 401],
+      (body) =>
+        (body?.ok === true &&
+          typeof body?.chat?.id === 'string' &&
+          body.chat.id.startsWith('lopu-chat-') &&
+          body?.chat?.externalSource?.access === 'lopu' &&
+          body?.chat?.externalSource?.readOnly === false &&
+          body?.chat?.myMember?.role === 'owner' &&
+          body?.chat?.memberCount === 1) ||
+        (body?.ok === false && typeof body?.error === 'string'),
+      'Lopu chat was created as a one-member owner conversation (or rejected with a 401 error shape anonymously).'
+    )
+  },
+  {
+    id: 'lopu-chats-create-unknown-model',
+    name: 'Lopu chat create validates the model',
+    description: 'POST /api/v1/lopu/chats with a model outside the catalog is a 400 error shape for a session (401 anonymously).',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/chats',
+    body: { model: 'definitely-not-a-catalog-model' },
+    expect: expectJson([400, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown model was rejected with an error shape.')
+  },
+  {
+    id: 'lopu-chats-create-unknown-provider',
+    name: 'Lopu chat create validates the pinned provider',
+    description: 'POST /api/v1/lopu/chats with a providerId that is not one of the caller’s Secure Vault connections is a 400 error shape for a session (401 anonymously).',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/chats',
+    body: { providerId: 'tt-api-test-missing-provider' },
+    expect: expectJson([400, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'A foreign providerId was rejected with an error shape.')
+  },
+  {
+    id: 'lopu-chats-reply-unknown-provider',
+    name: 'Lopu reply validates the provider before persisting',
+    description:
+      'POST /api/v1/lopu/chats/reply with a providerId that is not one of the caller’s Secure Vault connections (or with the vault unconfigured) fails cleanly with a 400 error shape before any turn is persisted (401 anonymously, 403 for a temporary account).',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/chats/reply',
+    timeoutMs: 20000,
+    body: () => ({ text: 'hello Lopu', requestId: `tt-api-test-${uniqueSuffix()}`, providerId: 'tt-api-test-missing-provider' }),
+    expect: expectJson([400, 401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'The unknown providerId was refused with an error shape and nothing streamed.')
+  },
+  {
+    id: 'lopu-chats-update-validation',
+    name: 'Lopu chat update validates its chat id',
+    description: 'POST /api/v1/lopu/chats/update without a chatId is a 400 error shape for a session (401 anonymously).',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/chats/update',
+    body: { title: 'Renamed' },
+    expect: expectJson([400, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'Update without a chat id was rejected with an error shape.')
+  },
+  {
+    id: 'lopu-chats-delete-unknown',
+    name: 'Lopu chat delete rejects unknown chats',
+    description: 'POST /api/v1/lopu/chats/delete for a chat that does not exist is a 404 error shape for a session (401 anonymously).',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/chats/delete',
+    body: { chatId: 'lopu-chat-definitely-missing' },
+    expect: expectJson([404, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'Delete of an unknown Lopu chat was rejected with an error shape.')
+  },
+  {
+    id: 'lopu-chats-reply-guarded',
+    name: 'Lopu reply requires a session',
+    description: 'POST /api/v1/lopu/chats/reply without a session is rejected with a 401 error shape before anything is persisted.',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/chats/reply',
+    body: { text: 'hello', requestId: 'tt-api-test-anonymous' },
+    anonymous: true,
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous Lopu reply was rejected with a 401 error shape.')
+  },
+  {
+    id: 'lopu-chats-reply-stream',
+    name: 'Lopu reply stream',
+    description:
+      'POST /api/v1/lopu/chats/reply with a session starts a conversation and streams NDJSON events (meta first, done last) — from the scripted test provider, a real provider, or the canned fallback when no key is configured.',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/chats/reply',
+    mutates: true,
+    timeoutMs: 60000,
+    body: () => ({ text: 'hello Lopu', requestId: `tt-api-test-${uniqueSuffix()}`, context: { route: '/tests' } }),
+    expect: ({ response, textBody }) => {
+      const contentType = response.headers.get('Content-Type') || '';
+      if (response.status === 401 || response.status === 403 || response.status === 429) {
+        let body: any = null;
+        try {
+          body = JSON.parse(textBody);
+        } catch {
+          body = null;
+        }
+        const pass = body?.ok === false && typeof body?.error === 'string';
+        return { pass, details: pass ? 'Lopu reply was refused with an error shape (no session / temporary account / rate limited).' : 'Expected a JSON error shape.' };
+      }
+      const lines = textBody
+        .trim()
+        .split('\n')
+        .map((line) => {
+          try {
+            return JSON.parse(line);
+          } catch {
+            return null;
+          }
+        });
+      const pass =
+        response.status === 200 &&
+        contentType.includes('application/x-ndjson') &&
+        lines[0]?.type === 'meta' &&
+        typeof lines[0]?.chatId === 'string' &&
+        lines.some((line) => line?.type === 'delta') &&
+        lines[lines.length - 1]?.type === 'done';
+      return { pass, details: pass ? 'Lopu streamed meta → delta → done as NDJSON.' : 'Expected a 200 NDJSON stream starting with meta and ending with done.' };
+    }
+  },
+  {
+    id: 'lopu-chats-reply-json-only',
+    name: 'Lopu reply requires JSON',
+    description:
+      'POST /api/v1/lopu/chats/reply with a safelisted text/plain body is refused with 415 for a session before any turn is persisted or the reply budget is spent (401 anonymously, 403 for a temporary account) — the simple-request CSRF path stays closed.',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/chats/reply',
+    body: { text: 'hello', requestId: 'tt-api-test-json-only' },
+    headers: { 'Content-Type': 'text/plain' },
+    expect: expectJson([415, 401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'A non-JSON Lopu reply body was refused with an error shape.')
+  },
+  {
+    id: 'lopu-chats-reply-forged-confirmation',
+    name: 'Lopu reply verifies confirmations',
+    description:
+      'POST /api/v1/lopu/chats/reply carrying a confirmation grant that cannot be verified (here: one without the conversation it was minted for) is a 400 error shape for a session before anything is persisted (401 anonymously, 403 for a temporary account) — a destructive tool never runs on an unverified grant.',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/chats/reply',
+    body: () => ({ text: 'Confirmed: delete', requestId: `tt-api-test-${uniqueSuffix()}`, confirmations: [{ key: 'delete_thing:tt-api-test-thing', token: 'forged.grant.value' }] }),
+    expect: expectJson([400, 401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'The unverifiable confirmation was refused with an error shape and nothing streamed.')
+  },
+  {
+    id: 'lopu-vault-guarded',
+    name: 'Lopu Secure Vault requires a session',
+    description: 'GET /api/v1/lopu/vault without a session is rejected with a 401 error shape and never lists vault metadata.',
+    group: 'lopu',
+    method: 'GET',
+    path: '/api/v1/lopu/vault',
+    anonymous: true,
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous vault read was rejected with a 401 error shape.')
+  },
+  {
+    id: 'lopu-vault-json-only',
+    name: 'Lopu Secure Vault writes require JSON',
+    description: 'POST /api/v1/lopu/vault with a safelisted text/plain body is refused with 415 for a session before the rate limit is spent (401 anonymously, 403 for a temporary account).',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/vault',
+    body: { action: 'delete', id: 'tt-api-test-missing' },
+    headers: { 'Content-Type': 'text/plain' },
+    expect: expectJson([415, 401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'A non-JSON vault write was refused with an error shape.')
+  },
+  {
+    id: 'lopu-voice-reply-guarded',
+    name: 'Lopu voice turn requires a session',
+    description: 'POST /api/v1/lopu/voice/reply without a session is rejected with a 401 error shape before any transcript page or provider call.',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/voice/reply',
+    body: { transcript: 'hello', sessionId: 'tt-api-test', transcribeMode: true },
+    anonymous: true,
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous voice turn was rejected with a 401 error shape.')
+  },
+  {
+    id: 'lopu-voice-reply-json-only',
+    name: 'Lopu voice turn requires JSON',
+    description: 'POST /api/v1/lopu/voice/reply with a safelisted text/plain body is refused with 415 for a session before the rate limit is spent (401 anonymously, 403 for a temporary account).',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/voice/reply',
+    body: { transcript: 'hello', sessionId: 'tt-api-test', transcribeMode: true },
+    headers: { 'Content-Type': 'text/plain' },
+    expect: expectJson([415, 401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'A non-JSON voice body was refused with an error shape.')
+  },
+  {
+    id: 'lopu-voice-session-guarded',
+    name: 'Lopu direct voice session requires a session',
+    description: 'POST /api/v1/lopu/voice/session without a session is rejected with a 401 error shape before any provider key is touched.',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/voice/session',
+    body: { providerId: 'tt-api-test-missing-provider' },
+    anonymous: true,
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string' && !('session' in (body || {})), 'Anonymous direct voice session was rejected with a 401 error shape.')
+  },
+  {
+    id: 'lopu-voice-session-json-only',
+    name: 'Lopu direct voice session requires JSON',
+    description: 'POST /api/v1/lopu/voice/session with a safelisted text/plain body is refused with 415 for a session before the rate limit is spent (401 anonymously, 403 for a temporary account).',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/voice/session',
+    body: { providerId: 'tt-api-test-missing-provider' },
+    headers: { 'Content-Type': 'text/plain' },
+    expect: expectJson([415, 401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'A non-JSON direct voice body was refused with an error shape.')
+  },
+  {
+    id: 'lopu-voice-session-unknown-provider',
+    name: 'Lopu direct voice session validates the connection',
+    description:
+      'POST /api/v1/lopu/voice/session with a providerId that is not one of the caller’s Secure Vault connections (or with the vault unconfigured) is a 400 error shape that carries no session or token (401 anonymously, 403 for a temporary account).',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/voice/session',
+    timeoutMs: 20000,
+    body: { providerId: 'tt-api-test-missing-provider' },
+    expect: expectJson(
+      [400, 401, 403],
+      (body) => body?.ok === false && typeof body?.error === 'string' && !('session' in (body || {})) && !JSON.stringify(body).includes('"token"'),
+      'The unknown connection was refused with an error shape and no credential.'
+    )
   },
   {
     id: 'mongodb-status',
@@ -2258,6 +2657,311 @@ export const apiTests: ApiTestDefinition[] = [
       [200, 401, 404],
       (body, response) => (response.status === 200 ? body?.ok === true : body?.ok === false && typeof body?.error === 'string'),
       'Created webpage was deleted (or was never created and the guard answered).'
+    )
+  },
+  ...watchPairingTests,
+  ...watchQuickApprovalTests,
+  // ---- webpages demo library (catalog is code; seeded flags are per-deploy) --
+  {
+    id: 'webpages-demos-catalog',
+    name: 'Demo library lists the catalog anonymously',
+    description:
+      'GET /webpages/demos answers the whole deterministic catalog (200–500 demos, families with counts, seededCount) for anonymous callers — the seeded census may be 0 on a fresh DB, which is correct.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos',
+    anonymous: true,
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        Array.isArray(body?.demos) &&
+        body.demos.length >= 200 &&
+        body.demos.length <= 500 &&
+        body.demos.length === body.total &&
+        Array.isArray(body?.families) &&
+        body.families.every((family: any) => typeof family?.key === 'string' && typeof family?.count === 'number') &&
+        typeof body?.seededCount === 'number' &&
+        body.demos.every((demo: any) => typeof demo?.id === 'string' && demo.id.startsWith('webpage-demo-') && typeof demo?.seeded === 'boolean' && typeof demo?.blockCount === 'number'),
+      'Demo catalog listed with families, seeded flags, and bounded size.'
+    )
+  },
+  {
+    id: 'webpages-demos-library-components',
+    name: 'Demo library resolves every component key it references',
+    description:
+      'Component-kind demos reference platform library component things by componentKey, and the response carries components[] + refs so a client can draw them. Resolution is all-or-nothing: on a deployment where the library is seeded every ref resolves, so a partially-null refs map means the catalog names a componentKey the library does not have (a demo that renders empty). A fresh DB with no library seeded resolves none, which is also correct.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos',
+    anonymous: true,
+    expect: expectJson(
+      [200],
+      (body) => {
+        if (body?.ok !== true || !body?.refs || typeof body.refs !== 'object' || !Array.isArray(body?.components)) return false;
+        const entries = Object.entries(body.refs as Record<string, unknown>);
+        if (!entries.length) return false;
+        const resolved = entries.filter(([, id]) => typeof id === 'string' && id);
+        if (resolved.length && resolved.length !== entries.length) return false;
+        const byId = new Set(body.components.map((component: any) => component?.id));
+        return entries.every(([ref, id]) => typeof ref === 'string' && (id === null || (typeof id === 'string' && byId.has(id))));
+      },
+      'Every referenced library componentKey resolved (or the library is not seeded here and none did).'
+    )
+  },
+  {
+    id: 'webpages-demos-family-filter',
+    name: 'Demo library filters by family',
+    description: 'family=hero returns only hero demos, and every family entry keeps its catalog-wide count.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos?family=hero&kind=section',
+    anonymous: true,
+    expect: expectJson(
+      [200],
+      (body) => body?.ok === true && Array.isArray(body?.demos) && body.demos.length > 0 && body.demos.every((demo: any) => demo?.family === 'hero' && demo?.kind === 'section'),
+      'Family filter returned only hero sections.'
+    )
+  },
+  {
+    id: 'webpages-demos-single-with-crystal',
+    name: 'Demo library returns one demo with its crystal',
+    description: 'slug=hero-centered-paper adds demo.crystal (name, pageKey demo-<slug>, blocks) — the payload a client posts to /things to copy it.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos?slug=hero-centered-paper',
+    anonymous: true,
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        body?.demo?.slug === 'hero-centered-paper' &&
+        body.demo?.crystal?.pageKey === 'demo-hero-centered-paper' &&
+        Array.isArray(body.demo?.crystal?.blocks) &&
+        body.demo.crystal.blocks.length > 0,
+      'Single demo carried its crystal with blocks.'
+    )
+  },
+  {
+    id: 'webpages-demos-suites-listed',
+    name: 'Demo library lists behaviour suites',
+    description: 'Every response carries suites[] — bundles of schema/component/action/data/page things — with counts, the system ids, and a seeded flag.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos?family=video',
+    anonymous: true,
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        Array.isArray(body?.suites) &&
+        body.suites.length >= 10 &&
+        // the demo suites seed at webpage-demo-suite-<key>; app suites
+        // (Pokeworld, StarsAlign) keep their own keyed page ids under the
+        // same reserved webpage- prefix
+        body.suites.filter((suite: any) => typeof suite?.pageId === 'string' && suite.pageId.startsWith('webpage-demo-suite-')).length >= 10 &&
+        body.suites.every(
+          (suite: any) =>
+            typeof suite?.key === 'string' &&
+            typeof suite?.pageId === 'string' &&
+            suite.pageId.startsWith('webpage-') &&
+            Array.isArray(suite?.actionIds) &&
+            suite.actionIds.length > 0 &&
+            typeof suite?.counts?.actions === 'number' &&
+            typeof suite?.seeded === 'boolean'
+        ),
+      'Behaviour suites listed with counts, ids, and seeded flags.'
+    )
+  },
+  {
+    id: 'webpages-demos-suite-bundle',
+    name: 'Demo library returns an installable suite bundle',
+    description: 'suite=guestbook adds suite.bundle in OWN mode: schemas by name, actions by actionKey, data carrying schema names, and the page — the parts a client posts to /things to install.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos?suite=guestbook',
+    anonymous: true,
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        body?.suite?.key === 'guestbook' &&
+        body.suite?.bundle?.mode === 'own' &&
+        Array.isArray(body.suite.bundle?.schemas) &&
+        body.suite.bundle.schemas.length >= 1 &&
+        Array.isArray(body.suite.bundle?.actions) &&
+        body.suite.bundle.actions.every((action: any) => typeof action?.crystal?.actionKey === 'string' && Array.isArray(action.crystal?.steps)) &&
+        body.suite.bundle.actions.some((action: any) => JSON.stringify(action.crystal.steps).includes('"demo-guestbook-entry"')) &&
+        Array.isArray(body.suite.bundle?.data) &&
+        body.suite.bundle.data.every((entry: any) => entry?.crystal?.schema === 'demo-guestbook-entry') &&
+        Array.isArray(body.suite.bundle?.page?.crystal?.blocks),
+      'Suite bundle carried own-mode schemas, actions, data, and page.'
+    )
+  },
+  {
+    id: 'webpages-demos-unknown-suite',
+    name: 'Demo library unknown suite',
+    description: 'suite=definitely-missing-suite resolves to a 404 error shape.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos?suite=definitely-missing-suite',
+    anonymous: true,
+    expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown suite returned a 404 error shape.')
+  },
+  {
+    id: 'webpages-demos-unknown-family',
+    name: 'Demo library validates the family filter',
+    description: 'An unknown family is a 400 error shape; an unknown slug is a 404.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos?family=not-a-family',
+    anonymous: true,
+    expect: expectJson([400], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown family was rejected with a 400 error shape.')
+  },
+  {
+    id: 'webpages-demos-unknown-slug',
+    name: 'Demo library unknown slug',
+    description: 'slug=definitely-missing-demo resolves to a 404 error shape.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos?slug=definitely-missing-demo',
+    anonymous: true,
+    expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown demo slug returned a 404 error shape.')
+  },
+  {
+    id: 'webpages-demos-seed-admin-only',
+    name: 'Demo seed is admin-only',
+    description: 'POST /admin/webpages/seed-demos refuses anonymous (401) and non-admin (403) callers without writing; an admin session seeds (200) — all three are correct shapes.',
+    group: WEBPAGES_GROUP,
+    method: 'POST',
+    path: '/api/v1/admin/webpages/seed-demos',
+    body: {},
+    mutates: true,
+    expect: expectJson(
+      [200, 401, 403, 429],
+      (body, response) => (response.status === 200 ? body?.ok === true && typeof body?.received === 'number' && body.received >= 200 : body?.ok === false && typeof body?.error === 'string'),
+      'Demo seed answered the admin gate (or seeded as an admin).'
+    )
+  },
+  {
+    id: 'webpages-demos-census',
+    name: 'Demo seed census counts each catalog once',
+    description:
+      'GET /admin/webpages/seed-demos reports the census without writing. Suite pages carry both the demo and suite tags, so the two counts must stay disjoint: demosSeeded never exceeds demosTotal and suitesSeeded never exceeds suitesTotal, however much of the library is seeded.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/admin/webpages/seed-demos',
+    expect: expectJson(
+      [200, 401, 403],
+      (body, response) =>
+        response.status === 200
+          ? body?.ok === true &&
+            typeof body?.demosTotal === 'number' &&
+            body.demosTotal >= 200 &&
+            typeof body?.demosSeeded === 'number' &&
+            body.demosSeeded <= body.demosTotal &&
+            typeof body?.suitesTotal === 'number' &&
+            body.suitesTotal >= 10 &&
+            typeof body?.suitesSeeded === 'number' &&
+            body.suitesSeeded <= body.suitesTotal &&
+            typeof body?.siteSeeded === 'number' &&
+            typeof body?.totalSeeded === 'number' &&
+            body.totalSeeded >= body.demosSeeded + body.suitesSeeded + body.siteSeeded
+          : body?.ok === false && typeof body?.error === 'string',
+      'Census kept the demo and suite counts disjoint and inside their catalog totals.'
+    )
+  },
+  // ---- suite install (the one MUTATING endpoint the library adds) ----------
+  // The read side above is covered nine ways; the write side needs its own
+  // assertions because it creates programs (schemas, controls, actions, data,
+  // pages) in the caller's own things. The three claims the docs entry makes —
+  // session-only, 404 on an unknown key, idempotent by key — are asserted here
+  // in order: the install below runs before the re-install that checks it did
+  // not duplicate.
+  {
+    id: 'webpages-suites-install-anonymous',
+    name: 'Suite install requires a session',
+    description:
+      'POST /webpages/suites/install refuses an anonymous caller with 401 before reading the body. Installing writes programs the caller then runs as themselves, so it is session-only like actions.run — app tokens and PATs never resolve through getCurrentUser.',
+    group: WEBPAGES_GROUP,
+    method: 'POST',
+    path: '/api/v1/webpages/suites/install',
+    body: { key: 'guestbook' },
+    anonymous: true,
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous install was refused with a 401 error shape.')
+  },
+  {
+    id: 'webpages-suites-install-unknown',
+    name: 'Suite install rejects an unknown key',
+    description: 'An unknown suite key is a 404 error shape and writes nothing (401 when the run carries no session, 429 when rate-limited).',
+    group: WEBPAGES_GROUP,
+    method: 'POST',
+    path: '/api/v1/webpages/suites/install',
+    body: { key: 'definitely-missing-suite' },
+    expect: expectJson(
+      [404, 401, 429],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Unknown suite key was refused with an error shape.'
+    )
+  },
+  {
+    id: 'webpages-suites-install-own-things',
+    name: 'Suite install writes the bundle into the caller’s own things',
+    description:
+      'POST { key: guestbook } installs the own-mode bundle through the ordinary create path and answers with a per-part id map. Every id is a real thing id, so the page’s controls resolve owner-only against the caller’s own actions rather than the seeded copies.',
+    group: WEBPAGES_GROUP,
+    method: 'POST',
+    path: '/api/v1/webpages/suites/install',
+    body: { key: 'guestbook' },
+    mutates: true,
+    timeoutMs: 30000,
+    expect: expectJson(
+      [200, 401, 429],
+      (body, response) =>
+        response.status === 200
+          ? body?.ok === true &&
+            body?.suite === 'guestbook' &&
+            typeof body?.created === 'number' &&
+            typeof body?.updated === 'number' &&
+            body?.entryPageKey === 'demo-suite-guestbook' &&
+            typeof body?.entryPageId === 'string' &&
+            body.entryPageId.length > 0 &&
+            // the seed's reserved ids are the SYSTEM copies; an install must
+            // hand back the caller's own things, never the seeded shareIds
+            !body.entryPageId.startsWith('webpage-') &&
+            Object.values(body?.schemaIds || {}).length >= 1 &&
+            Object.values(body?.actionIds || {}).length >= 1 &&
+            // CONCAT the four maps rather than spreading them into one object:
+            // suite part keys are per-kind, so a suite with a `sign` control
+            // AND a `sign` action collides on merge and a dropped id would go
+            // unchecked. Every returned id must be one of the caller's own
+            // things — never a seeded shareId, which carries a reserved prefix
+            // that generic thing creation refuses outright.
+            [body?.schemaIds, body?.componentIds, body?.actionIds, body?.pageIds]
+              .flatMap((map: any) => Object.values(map || {}))
+              .every((id: any) => typeof id === 'string' && id.length > 0 && !/^(schema|component|action|webpage)-/.test(id))
+          : body?.ok === false && typeof body?.error === 'string',
+      'Suite install created the caller’s own bundle (or was correctly session-gated).'
+    )
+  },
+  {
+    id: 'webpages-suites-install-idempotent',
+    name: 'Re-installing a suite updates in place instead of duplicating',
+    description:
+      'The second identical install of the same suite must create nothing: every part is keyed inside the caller’s things (schema name, componentKey, actionKey, pageKey, sample stamp), so a re-install reconciles rather than minting a second copy. Runs straight after the install above and shares its session.',
+    group: WEBPAGES_GROUP,
+    method: 'POST',
+    path: '/api/v1/webpages/suites/install',
+    body: { key: 'guestbook' },
+    mutates: true,
+    timeoutMs: 30000,
+    expect: expectJson(
+      [200, 401, 429],
+      (body, response) =>
+        response.status === 200
+          ? body?.ok === true && body?.created === 0 && typeof body?.updated === 'number' && typeof body?.entryPageId === 'string'
+          : body?.ok === false && typeof body?.error === 'string',
+      'Re-install created nothing new (or was correctly session-gated).'
     )
   },
   ...apiDocsSmokeTests
