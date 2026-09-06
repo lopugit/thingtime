@@ -288,13 +288,19 @@ export const filterDrawerItemsByAuth = <T extends DrawerItemVisibility>(
 // A publication-gated top-level section stays listed for admins, and for
 // visitors as soon as ANY of its children is visible (a published category
 // index is reachable even while the hub itself is still unpublished).
+//
+// A section's OWN authOnly/guestOnly/adminOnly rules still decide first — this
+// is the only filter both DrawerContent and the UserSettingsModal mirror run
+// over the top level, so dropping them here would silently list an admin-only
+// section for everyone. Only the publication gate is answered by the children.
 export const filterDrawerTopItems = (
 	items: DrawerTopItem[],
 	loggedIn: boolean,
 	isAdmin = false,
 	isPublished?: (key: string) => boolean
 ): DrawerTopItem[] => {
-	return items.filter((item) => {
+	const allowed = filterDrawerItemsByAuth(items, loggedIn, isAdmin, () => true);
+	return allowed.filter((item) => {
 		if (!item.publication || isAdmin) {
 			return true;
 		}

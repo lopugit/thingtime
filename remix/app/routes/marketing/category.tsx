@@ -37,7 +37,12 @@ const CATEGORY_TREND: Record<string, TrendKey> = {
 	search: 'bold-brutal'
 };
 
-const PageCard = ({ entry, dimmed }: { entry: MarketingPage; dimmed: boolean }) => (
+// `admin` is passed rather than read inside PublishToggle: an index renders up
+// to a few hundred cards ("show more" over the 500-page styles category), and
+// each mounted toggle subscribes to the publications store twice and registers
+// a window listener. A visitor would pay all of that for a control that only
+// ever renders null, and every publish would re-render the whole grid.
+const PageCard = ({ entry, admin, dimmed }: { entry: MarketingPage; admin: boolean; dimmed: boolean }) => (
 	<Box position="relative" minWidth={0}>
 		<Box
 			as={RouterLink}
@@ -69,7 +74,7 @@ const PageCard = ({ entry, dimmed }: { entry: MarketingPage; dimmed: boolean }) 
 				{entry.description}
 			</Text>
 		</Box>
-		<PublishToggle publicationKey={pageKey(entry.slug)} label={entry.title} iconOnly position="absolute" top="10px" right="10px" />
+		{admin ? <PublishToggle publicationKey={pageKey(entry.slug)} label={entry.title} iconOnly position="absolute" top="10px" right="10px" /> : null}
 	</Box>
 );
 
@@ -247,7 +252,7 @@ export default function MarketingCategory() {
 						</Flex>
 						<SimpleGrid columns={[1, 2, 3]} gap={3}>
 							{group.pages.map((entry) => (
-								<PageCard key={entry.slug} entry={entry} dimmed={visibility.everything && !visibility.isPublished(pageKey(entry.slug))} />
+								<PageCard key={entry.slug} entry={entry} admin={visibility.everything} dimmed={visibility.everything && !visibility.isPublished(pageKey(entry.slug))} />
 							))}
 						</SimpleGrid>
 					</Box>
