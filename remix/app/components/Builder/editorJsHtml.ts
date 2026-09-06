@@ -1,4 +1,5 @@
 import { normalizeEditorJsHeadingLevel, type EditorJsBlock, type EditorJsDoc } from '../Editor/editorJsValue';
+import { inlineStyleToTokens, sanitizeStyleTokens, tokensToInlineStyle, sanitizeInlineStyle, hasStyleTokens } from '../Editor/styleTokens';
 import { isSafeUrl } from '../Kinds/safeUrl';
 
 // Editor.js doc ↔ HTML for builder text blocks: the rich-editor modal edits an
@@ -15,8 +16,9 @@ const escapeHtml = (text: string): string =>
 // Editor.js paragraphs render data.text as LIVE innerHTML inside the modal —
 // unlike the canvas, that render does NOT pass the allowlist renderer, so
 // every fragment handed to the editor is scrubbed first: executable/embed
-// tags are dropped, on* handler attributes are stripped, and href/src values
-// must clear the same `isSafeUrl` gate the render-side allowlist uses. That
+// tags are dropped, on* handler attributes are stripped, style attributes are
+// re-validated through the shared style-token gate, and href/src values must
+// clear the same `isSafeUrl` gate the render-side allowlist uses. That
 // gate is an ALLOWLIST parsed by the URL parser (http/https/mailto/tel), not a
 // scheme prefix test: a denylist misses vbscript:, non-text data: payloads,
 // and whitespace-obfuscated schemes like `java&#9;script:`, which browsers
@@ -34,6 +36,16 @@ const scrubElement = (el: Element): void => {
 		for (const attr of Array.from(child.attributes)) {
 			const name = attr.name.toLowerCase();
 			const isUrlAttribute = name === 'href' || name === 'src' || name === 'xlink:href';
+			if (name === 'style') {
+				// Every element, not just the span the style tools write: this sink
+				// renders as live innerHTML, so raw CSS on a b/i/a/mark/code carrier
+				// would reach the editor DOM verbatim (fixed-position overlays,
+				// url() fetches). The token gate is the same one the render-side
+				// allowlist uses, and it drops anything it cannot revalidate.
+				const safe = sanitizeInlineStyle(attr.value);
+				if (safe) child.setAttribute('style', safe);
+				else child.removeAttribute(attr.name);
+			}
 			if (name.startsWith('on') || (isUrlAttribute && !isSafeUrl(attr.value))) {
 				child.removeAttribute(attr.name);
 			}
@@ -85,9 +97,7 @@ const blockToHtml = (block: EditorJsBlock): string => {
 		}
 		case 'checklist': {
 			const items = Array.isArray(data.items) ? data.items : [];
-			return `<ul>${items
-				.map((item: any) => `<li>${item?.checked ? '✅' : '⬜'} ${item?.text || ''}</li>`)
-				.join('')}</ul>`;
+			return `<ul>${items.map((item: any) => `<li>${item?.checked ? '✅' : '⬜'} ${item?.text || ''}</li>`).join('')}</ul>`;
 		}
 		case 'quote': {
 			const caption = data.caption ? `<footer>${data.caption}</footer>` : '';
@@ -125,11 +135,31 @@ const blockToHtml = (block: EditorJsBlock): string => {
 };
 
 export const editorJsToHtml = (doc: EditorJsDoc): string =>
-	(doc.blocks || []).map(blockToHtml).filter(Boolean).join('\n');
+	(doc.blocks || [])
+		.map((block) => {
+			const html = blockToHtml(block);
+			const tokens = sanitizeStyleTokens(block.tunes?.style);
+			const style = [tokensToInlineStyle(tokens), tokens.align ? `text-align:${tokens.align}` : ''].filter(Boolean).join(';');
+			return style ? html.replace(/^<([a-z][a-z0-9]*)/i, (_, tag) => `<${tag} style="${escapeHtml(style)}"`) : html;
+		})
+		.filter(Boolean)
+		.join('\n');
 
 // ——— html → Editor.js ————————————————————————————————————————————————————
 
 const elementToBlocks = (el: Element): EditorJsBlock[] => {
+	const blocks = elementToUnstyledBlocks(el);
+	const style = el.getAttribute('style') || '';
+	const tokens = sanitizeStyleTokens({
+		...inlineStyleToTokens(style),
+		align: /(?:^|;)\s*text-align\s*:\s*(left|center|right)\s*(?:;|$)/i.exec(style)?.[1].toLowerCase()
+	});
+	return hasStyleTokens(tokens)
+		? blocks.map((block) => ({ ...block, tunes: { ...block.tunes, style: { ...tokens, ...sanitizeStyleTokens(block.tunes?.style) } } }))
+		: blocks;
+};
+
+const elementToUnstyledBlocks = (el: Element): EditorJsBlock[] => {
 	const tag = el.tagName.toLowerCase();
 	if (/^h[1-6]$/.test(tag)) {
 		return [{ type: 'header', data: { text: scrubbedInnerHtml(el), level: Number(tag[1]) } }];
@@ -164,7 +194,10 @@ const elementToBlocks = (el: Element): EditorJsBlock[] => {
 		const img = el.querySelector('img');
 		if (img?.getAttribute('src')) {
 			return [
-				{ type: 'image', data: { url: img.getAttribute('src'), caption: scrubbedInnerHtml(el.querySelector('figcaption') || el.ownerDocument.createElement('span')) } }
+				{
+					type: 'image',
+					data: { url: img.getAttribute('src'), caption: scrubbedInnerHtml(el.querySelector('figcaption') || el.ownerDocument.createElement('span')) }
+				}
 			];
 		}
 		return [{ type: 'paragraph', data: { text: scrubbedInnerHtml(el) } }];

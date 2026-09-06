@@ -29,3 +29,20 @@ Remaining: merge and deploy the web change to production, then distribute/instal
 Local web: http://localhost:19040 (Nitro 19042, HMR 19041). Tailscale/Funnel could not be verified: the local launcher points to a missing /Applications/Tailscale.app executable.
 
 Graphify retains earlier successful semantic chunks. The latest semantic refresh had two image/document requests rejected by the proxy body limit (413), and a remaining slow request was stopped after five minutes. Structural refresh and portable report/HTML generation completed instead; the latest rollout notes are not fully semantically indexed.
+
+## Native TestFlight follow-up (2026-09-05)
+
+The web repair is merged into develop (#641) and production main (#651). The
+native follow-up starts from the current Watch build 24 source and backports
+the same passkey repair to its preview, preserving the Watch companion and
+notification support. Build 25 retains `https://pr-596.previews.dev.thingtime.com`
+and adds `webcredentials:thingtime.com` to the phone entitlement.
+
+Validation: 13 passkey, 8 API registry, 3 runtime capability, 57 device and
+8 notification tests pass. The Vite/Nitro build and Vercel output verification
+pass. Both signed build-25 bundles retain production APNs entitlements and
+matching versions/origins; the phone association matches Apple's live CDN.
+Simulator tests, TestFlight processing and real-device acceptance are separate
+checks; a signed archive alone does not establish credential-provider success.
+The structural Graphify refresh completed; the local semantic proxy was
+unavailable, so new documentation was not semantically indexed.

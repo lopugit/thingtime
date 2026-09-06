@@ -1,3 +1,5 @@
+import type { CommanderAccount, CommanderSettings } from '@commander/protocol';
+
 export const NETWORK_PROBE_PACKET_BYTES = [
   56 * 1024,
   500 * 1024,
@@ -7,10 +9,31 @@ export const NETWORK_PROBE_PACKET_BYTES = [
 ] as const;
 export const NETWORK_PROBE_MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
 export const NETWORK_PROBE_REQUIREMENTS = {
-  'api.network-probe-ping': '1.0.0',
-  'api.network-probe-download': '1.0.0',
-  'api.network-probe-upload': '2.0.0',
+  'api.network-probe-ping': '1.1.0',
+  'api.network-probe-download': '1.1.0',
+  'api.network-probe-upload': '2.1.0',
 } as const;
+
+export function networkProbeCredential(
+  settings: CommanderSettings,
+  accounts: CommanderAccount[],
+  credentials: ReadonlyMap<string, string>,
+): string | undefined {
+  if (!settings.activeAccountId) return undefined;
+  const account = accounts.find((entry) => entry.id === settings.activeAccountId);
+  if (
+    !account?.environment ||
+    account.environment.baseUrl !== new URL(settings.thingtimeBaseUrl).origin ||
+    account.environment.clientId !== settings.thingtimeClientId
+  )
+    throw new Error(
+      'The active account belongs to a different Thingtime environment. Select or sign in to an account for this server.',
+    );
+  const token = credentials.get(account.id);
+  if (!token)
+    throw new Error('Unlock or sign in to the active Thingtime account before running a speed test');
+  return token;
+}
 
 export function networkProbeUploadChunks(bytes: number): number[] {
   if (!NETWORK_PROBE_PACKET_BYTES.includes(bytes as (typeof NETWORK_PROBE_PACKET_BYTES)[number])) {
