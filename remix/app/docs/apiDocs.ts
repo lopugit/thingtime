@@ -1583,8 +1583,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'admin-subscriptions',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    contractVersion: '1.1.1',
+    featureVersion: '1.1.1',
     group: 'admin',
     title: 'Subscription tiers & quota overrides',
     endpoint: '/api/v1/admin/subscriptions',
@@ -1595,7 +1595,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'users or apps. Per-field admin overrides win over the snapshot (explicit null = unlimited). GET without ' +
       "params returns live revisions; with ?subjectType=user|app&subjectId= it also returns that subject's " +
       'assignment and its archived current revision when needed. POST { subjectType, subjectId, tier, ' +
-      'tierVersionId, overrides?, note? } assigns; clear pins the current default revision.',
+      'tierVersionId, overrides?, note? } assigns; clear pins the current default revision. Protected storage ledgers accept ' +
+      'the optional speedTestsPerHour quota in snapshots and overrides while preserving older four-field revisions.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET', 'POST'],
     steps: [
@@ -11598,7 +11599,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
   endpoint({
     id: 'admin-migrations-run',
-    featureVersion: '1.1.0',
+    contractVersion: '1.0.1',
+    featureVersion: '1.1.1',
     group: 'admin',
     title: 'Run migration',
     endpoint: '/api/v1/admin/migrations/run',
@@ -11614,7 +11616,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'pending is 0) and rebuild-things-indexes then drops and recreates the plan-owned things indexes so the storage ' +
       'the deleted rows occupied is actually released — both destructive, both confirm: true. Failed real runs may return a private ' +
 			'diagnosticThingId for the same admin to open at /thing/:id; failed dry runs never create diagnostics and instead return ' +
-			'bounded redacted adminDetail inline.',
+			'bounded redacted adminDetail inline. Storage-ledger validation accepts valid optional speedTestsPerHour quotas ' +
+      'without rewriting immutable tier snapshots, overrides, ownership, or allowances.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
