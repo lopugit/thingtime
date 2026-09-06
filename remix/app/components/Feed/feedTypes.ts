@@ -21,12 +21,15 @@ export type PublicProfile = {
 
 // Lean author embed on posts/comments — identity only (the API never sends
 // bio/bannerUrl inside feed payloads).
+// externalUrl is set ONLY for third-party authors of synced external posts
+// (connections feeds) — consumers link there instead of a dead /profile route
 export type FeedAuthor = {
   id: string;
   username: string;
   displayName: string | null;
   temporary?: boolean;
   avatarUrl: string | null;
+  externalUrl?: string | null;
 };
 
 export type PostType = 'text' | 'image' | 'marketplace' | 'thingtime';
@@ -116,6 +119,11 @@ export type PublicPost = {
   // logged-in viewers only: has the viewer saved this post to their library?
   // (absent for anonymous projections — the bookmark button hides with it)
   viewerSaved?: boolean;
+  // free-form extended JSON; connections posts carry `extended.external`
+  // (provider, url, original author, stats) — see api/utils/connections
+  extended?: Record<string, any> | null;
+  // connections feed only: the viewer's AI feed-filter matches for this post
+  feedFilterMatches?: FeedFilterMatch[];
   createdAt: string;
 };
 
@@ -124,6 +132,16 @@ export type PublicPost = {
 // viewer's own option (null = hasn't voted). Mirrors PublicPollVotes in
 // api/utils/things/pollCore.ts.
 export type PublicPollVotes = { counts: number[]; totalVotes: number; viewerVote: number | null };
+
+// A matched AI feed filter on a connections-feed post: 'warn' veils the post
+// behind a Show button, 'hide' drops it from the rendered feed.
+export type FeedFilterMatch = {
+  filterId: string;
+  name: string;
+  action: 'warn' | 'hide';
+  reason: string;
+  source: 'claude' | 'openai' | 'heuristic';
+};
 
 // A post update bubbled up from a card. A value replaces the post (null removes
 // it); a function applies a delta to the FRESHEST post in the list — the form

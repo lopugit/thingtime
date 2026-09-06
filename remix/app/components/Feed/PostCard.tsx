@@ -274,6 +274,16 @@ export const AuthorAvatar = (props: { author: FeedAuthor | null; size?: string; 
 
   if (!author?.username) return circle;
 
+  // third-party authors (synced external posts) link to their real profile on
+  // the source platform — /profile/<handle> would be a dead native route
+  if (author.externalUrl) {
+    return (
+      <a href={author.externalUrl} target="_blank" rel="noreferrer noopener">
+        {circle}
+      </a>
+    );
+  }
+
   return <Link to={`/profile/${author.username}`}>{circle}</Link>;
 };
 
@@ -1733,7 +1743,13 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
           <AuthorAvatar author={post.author} />
           <Box minWidth={0} flex="1">
             <Flex alignItems="baseline" columnGap={1.5} flexWrap="wrap" whiteSpace="normal">
-              {post.author?.username ? (
+              {post.author?.username && post.author.externalUrl ? (
+                <a href={post.author.externalUrl} target="_blank" rel="noreferrer noopener">
+                  <Text as="span" fontSize="sm" fontWeight={700} color={INK} _hover={{ textDecoration: 'underline' }}>
+                    {authorName(post.author)}
+                  </Text>
+                </a>
+              ) : post.author?.username ? (
                 <Link to={`/profile/${post.author.username}`}>
                   <Text as="span" fontSize="sm" fontWeight={700} color={INK} _hover={{ textDecoration: 'underline' }}>
                     {authorName(post.author)}

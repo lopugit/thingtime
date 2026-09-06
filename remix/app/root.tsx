@@ -109,9 +109,11 @@ export default function App() {
                       ? `${baseTitle} - Actions`
                       : pathname.startsWith('/components')
                         ? `${baseTitle} - Components`
-                        : pathname === '/branding'
-                          ? `${baseTitle} - Brand resources`
-                          : baseTitle;
+                        : pathname.startsWith('/connections')
+                          ? `${baseTitle} - Connections`
+                          : pathname === '/branding'
+                            ? `${baseTitle} - Brand resources`
+                            : baseTitle;
 
       document.title = routeTitle;
     }

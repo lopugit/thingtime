@@ -1596,6 +1596,35 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   the Electron bundle uses adaptive light/dark Icon Composer artwork. — Codex
   (AI), 2026-08-21
 
+- **Third-party connections: a viral external post could grow without bound,
+  and leaked who else was reading it** (PR #295). A synced `external-post`
+  carried its source membership as an embedded root `sourceIds` array plus, for
+  personal-timeline providers, one `tt:extacct/<accountId>` ACL entry per
+  sourcing account. Because personal providers give each user their own
+  external account, "per source" meant *per user*: a post that surfaced in
+  10k home timelines accumulated 10k array elements and 10k ACL entries on one
+  document — monotonic growth toward Mongo's 16 MB cap on exactly the hottest
+  documents, a whole-document rewrite on every sync, and a privacy leak, since
+  `toPublicPosts` projects `acl` verbatim, so every reader received the
+  external-account ids of everyone else who sourced the post. Membership is now
+  relational per FUNDAMENTALS §3: one `external-post-source` thing per (post,
+  sourcing account), a canonical root-`targetId` child of the post,
+  `uniqueKeys`-deduped, with the post's publish time denormalized onto the row
+  so the connections feed pages membership directly on the existing
+  `(thingtime, parentId, createdAt, shareId)` index (the sourcing account is
+  the row's root `parentId` — the Things index budget is at its ceiling, so
+  connections adds no index of its own). The post's own
+  ACL is now a CONSTANT — `tt:all` for public providers, `tt:extsourced` for
+  personal ones — resolved live against the reader's links, so it names no
+  account, discloses nothing, and never grows. Unlinking still revokes
+  instantly (links, not materialized grants, are the authorization truth), and
+  retiring an account's last link now drains its membership rows instead of
+  leaving dead index entries. Legacy rows keep resolving through the
+  compatibility path; the admin `relational-external-post-sources` migration
+  converts them (drilled end-to-end: 20/20, including that a legacy post stays
+  visible to its member both before and after, and that a re-run is a no-op).
+  `verify:connections` is now 94/94. — Claude (AI), 2026-08-21
+
 - **Media layout selections now reach the Things API**: the shared client API
   transport preserves `mediaLayout` for post creation and rich comments, so a
   Rows/Grid preview no longer silently reopens as Auto after save. — Codex
@@ -1906,150 +1935,37 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   both API keys are present. Cost basis: `docs/ai-api-cost-analysis.md`
   (PR #308 note has details).
 
-- **iOS build 14 TestFlight delivery**: rebuilt the production native shell
-  with the drawer and media-capture fixes, verified the signed IPA metadata and
-  privacy descriptions, and published build 14 for internal TestFlight testing.
-  — Codex (AI), 2026-08-18
-
-### Performance
-
-- **PR #299 performance audit — findings, notes and fixes**: full ten-dimension
-  audit of the codebase with every finding adversarially verified against the
-  real source (74 raw → 63 confirmed, 11 refuted); see
-  `PRs/299-claude-thingtime-performance-optimization-55ea95-performance-audit-findings-notes-and-fixes.md`
-  for the complete record. Landed this round: route-level code splitting plus
-  removal of the never-rendered FontAwesome solid set, taking the entry chunk
-  from 1,165 KB to 168 KB gzipped (−86%); `resolveSessionUser` now resolves
-  session, user and subscription concurrently, turning three sequential Mongo
-  round trips into one on every authenticated request; `useRecentReactions`
-  shares a single fetch across all consumers (8 → 1 identical requests per page,
-  ~40 → 1 on a 20-post feed); chat-member writes batch into one `insertMany`
-  (50 → 1 round trips per add); `toPublicPosts` overlaps attachment and profile
-  resolution; and the notifications bell no longer polls hidden tabs.
+- **Connections: real SSO account linking + virtual YouTube subscriptions.**
+  OAuth begin/callback endpoints (state = short-lived signed JWT bound to the
+  starting session; token responses sealed in the external-account secure
+  BinData blob, refreshed near expiry) with config-gated SSO providers:
+  Facebook (`FACEBOOK_APP_ID/SECRET`), Instagram (`INSTAGRAM_APP_ID/SECRET`),
+  TikTok (`TIKTOK_CLIENT_KEY/SECRET`), and YouTube account via Google
+  (`GOOGLE_CLIENT_ID/SECRET` — syncs your real subscriptions). Plus the
+  Thingtime-managed **virtual YouTube subscription list** (ytsubber-style):
+  per-user multi-channel list with add/remove + channel name search
+  (`YOUTUBE_API_KEY`/`GOOGLE_API_KEY`; ids/URLs/@handles keyless via RSS),
+  merged uploads feed. External posts now carry a root `sourceIds` array (one
+  video through many sources stays ONE post with unified comments) and the
+  feed deepens on scroll (`deepen=1`, per-account depth cap). Redirect origin
+  pin: `CONNECTIONS_OAUTH_REDIRECT_BASE`. `verify:connections` now 64 checks.
   — Claude (AI), 2026-08-18
-- **PR #299 performance audit, round two**: content-hashed `/assets/` now ship
-  `immutable` caching (index.html's ~80 eagerly-referenced chunks stopped costing
-  a conditional GET per repeat visit, restoring the zero-network disk-cache
-  path); the comment permalink's ancestor ACL checks share one batched lookup
-  (was n + n(n-1)/2 sequential round trips at nesting depth n); search result
-  pages use the same batched walk; a partial index backs the unread-notification
-  badge so the count no longer fetches every notification a user ever received;
-  `buildSummaryContext` resolves in 3 dependency stages instead of 6 serial ones;
-  the messenger access gate resolves chat and membership together; and the
-  `/api/docs` render cache is LRU-bounded (it was keyed by the caller-controlled
-  Host header). — Claude (AI), 2026-08-18
-- **PR #299 performance audit, round three**: `resolveRelated`'s child reads are
-  projected (dropping each comment's `extended` sidecar, up to 512KB per doc)
-  and the reply aggregate projects before `$group`, removing a 100MB
-  `$group`-cap failure mode on large threads; a `{kind, createdAt, shareId}`
-  index gives the dual-era post match a sortable v1 branch, so the feed stops
-  fetching every visible post and sorting in memory; a sparse `shareOfId` index
-  turns the live share-count aggregation from a full collection scan into an
-  indexed lookup on every feed page, post read and reaction toggle; chat member
-  existence checks batch into two queries; and the feed's post row is memoized
-  so `PostCard`'s `React.memo` actually hits. — Claude (AI), 2026-08-18
-- **PR #299 independent review**: every push was re-reviewed by a second
-  session (verification record in the PR note's "Review record" section);
-  no invalid changes found. One hardening landed from review:
-  `insertChatMembers` rethrows bulk write-concern failures instead of
-  swallowing them with the benign duplicate-key races, matching the old
-  per-id `insertOne` semantics. The `readAt: null` partial-index spec was
-  confirmed against the production cluster's MongoDB 8.0.1.
-  — Claude (AI), 2026-08-18
-- **PR #299 follow-up review**: `resolveRelated`'s narrow child projection now
-  retains `crystal.mediaLayout`, so rich comments keep their selected Rows/Grid
-  layout across feed, profile, and permalink reloads instead of silently
-  falling back to masonry. A focused projection-contract regression test covers
-  every direct-comment and eagerly shipped reply-level use of that field.
-  — Codex (AI), 2026-08-24
 
-### Added
-
-- **Login with Thingtime anywhere (federated hints + SSO handoff + FedCM).**
-  Three layers, all powered by the browser's own sessions — never a central
-  session store. (1) _Federated hint resolution_: `/api/v1/auth/account-hints`
-  now reports foreign-database origins as `unresolved`, and the client fans
-  out to each origin's new `/account-hints/resolve` (CORS restricted to the
-  Thingtime family, credentialed, read-only) so every environment vouches
-  only for its own sessions. (2) _Cross-origin session handoff_: a signed-in
-  surface mints a 2-minute, aud-bound, single-use code
-  (`POST /api/v1/auth/sso-handoff`) that a Thingtime deployment OUTSIDE the
-  cookie family (immutable `*.vercel.app` previews) redeems at its own
-  `POST /api/v1/auth/sso-session` for a first-class session — replay revokes
-  the session (theft signal), different-environment redemption fails closed;
-  the `/authorize?self=1` popup ("Continue to <host>?") and a
-  "Sign in with Thingtime 🌈" card on foreign origins drive it. (3) _FedCM
-  identity provider_: `/.well-known/web-identity` + config/accounts/
-  client-metadata/assertion endpoints let Chromium render its native
-  "Continue as…" sheet on any domain from the switcher roster
-  (`Sec-Fetch-Dest: webidentity` enforced, roster ownership re-checked,
-  assertion mints handoff codes for Thingtime-self or baseline app tokens for
-  registered clients). E2E: `remix/scripts/verify-federated-login.mjs` — 31
-  checks against two stacks on separate mongods, including the full
-  FedCM→assertion→session loop. — Claude (AI), 2026-08-19
-
-- **Passkeys (WebAuthn) + cross-deployment auto-login.** Full passkey support:
-  password-confirmed registration (`POST /api/v1/auth/passkeys/register-options`
-  → `/register`), usernameless discoverable login (`/login-options` → `/login`,
-  bypasses email-OTP by design, sessions carry `meta.method: "passkey"`), and a
-  Settings → Security manager (nicknames, descriptions, provider names derived
-  from authenticator AAGUIDs, created/last-used dates, linked apps, revoke +
-  delete, both password-confirmed). rpID is `thingtime.com` for every
-  `*.thingtime.com` deployment so one passkey works on production, dev, and
-  previews; conditional-UI autofill (`autocomplete="username webauthn"` +
-  `mediation: conditional`) surfaces the native iCloud Keychain / 1Password
-  popups on the login form. Credentials are protected `passkey` things (secure
-  blob + uniqueKeys, HOME collection — a `tt_mongo` override can never capture
-  or plant credentials); usage records are `passkey-app-link` child things.
-  Auto-login: every sign-in writes a `{rosterId, origin}` pointer into the
-  `Domain=.thingtime.com` `tt_hints` cookie; `GET /api/v1/auth/account-hints`
-  resolves pointers live (same roster/session chokepoints as the switcher) so
-  signed-out visitors get a "Continue as…" popup listing accounts with live
-  sessions on other deployments — picking one still requires that account's
-  password or passkey. E2E-verified by `remix/scripts/verify-passkeys.mjs`, a
-  software WebAuthn authenticator (P-256 + CBOR) driving the real API (44
-  checks). — Claude (AI), 2026-08-19
-
-- **Admin AI-moderation settings + free omni text moderation (2026-08-19,
-  Claude (AI))**: `/admin` → Moderation gains an "AI moderation settings"
-  card choosing the provider per surface — media uploads (default / tiered /
-  free openai-only / claude / off) and post/comment text (default / free
-  openai / off) — stored under `Thingtime.ModerationSettings` and overriding
-  the env default. New text pipeline: post/comment/share `crystal.text` is
-  screened by the free omni endpoint on create and on edit; block-worthy
-  categories quarantine the thing (hidden from feeds/threads/search via
-  `canView` + thread loading), other flags queue an advisory `moderationFlag`
-  with a bounded excerpt; admin review (clear / nsfw / block) covers text rows
-  and its stamps are final for the pipeline. A new hourly cron
-  (`GET /api/v1/moderation/sweep`, `CRON_SECRET` bearer, vercel.json minute 29) retries text moderation lost to mid-flight process deaths or provider
-  outages and drains off-era backlog for free, plus the standard attachment
-  sweep; the admin sweep button runs both batches and the tab shows the text
-  backlog count. Post creation adds a hybrid sync gate: the free omni screen
-  races `TT_TEXT_SCREEN_BUDGET_MS` (default 600ms, `0` disables) before the
-  insert so flagged posts are born stamped (blocked content never renders,
-  even briefly), while timeouts/outages produce owner-private pending posts
-  for the async pipeline — moderation can never break posting; a per-instance circuit breaker
-  (3 failures → open, 60s cooldown) skips the omni call during confirmed
-  outages. Fail-closed (owner decision 2026-08-19): when no sync verdict is
-  obtainable while the surface is on, posts are born PENDING — owner-private
-  until the async queue / hourly cron screens and releases them (creation
-  notifications fire at release); `TT_TEXT_SCREEN_BUDGET_MS=0` becomes
-  async-release mode, and the off sweep releases stranded pending docs. Screening now covers ALL omni-judgeable post content in one
-  combined free request: prose + listing text + tags + legacy external image
-  URLs (`crystal.images`, cap 8), closing the unmoderated URL-photos gap.
-
-- **Free omni-moderation first-pass gate (2026-08-19, Claude (AI))**: the
-  moderation pipeline gains a tiered `openai+claude` provider — OpenAI's free
-  `omni-moderation-latest` endpoint screens every image first; clean images
-  stamp `clear` at $0 and only flagged/borderline images escalate to the paid
-  Claude vision call (fail-safes: omni outage → straight to Claude; Claude
-  outage → omni-flagged images stamp `nsfw`/blur instead of pending). New env:
-  `OPENAI_API_KEY` reused for the screen, optional
-  `TT_MODERATION_ESCALATION_SCORE` (default 0.2);
-  `THINGTIME_MODERATION_PROVIDER` accepts `openai+claude` (alias `tiered`) and
-  standalone `openai`, and the unset default picks the tiered pipeline when
-  both API keys are present. Cost basis: `docs/ai-api-cost-analysis.md`
-  (PR #308 note has details).
+- **Third-party app connections** (`/connections`, `/connections/feed`, API
+  family `/api/v1/connections/*`): link external accounts (Reddit, YouTube,
+  Mastodon, Bluesky, Lemmy, Hacker News, GitHub, generic RSS/Atom, and a
+  deterministic demo personal-algorithm provider) to a Thingtime account —
+  one external account is linkable from MULTIPLE Thingtime accounts
+  (deterministic shared `external-account` things). Feeds sync idempotently
+  into `external-post` things (reserved `ext-` shareId namespace, CI-style
+  not-older upserts, per-account cooldown), so native Thingtime comments and
+  reactions attach by `targetId` and `/post/:id` permalinks resolve with the
+  third-party author. AI feed filters ("warn for sad news" → veil + Show
+  button, or hide) classify feeds server-side via the shared Lopu provider
+  waterfall (`generateAiCompletion` in `musing.ts`) with cached per-revision
+  verdicts and a deterministic keyword fallback when no AI key is set.
+  E2E: `pnpm --dir remix run verify:connections` (45 checks; +2 live with
+  `TT_VERIFY_LIVE=1`). — Claude (AI), 2026-08-17
 
 ### Security
 

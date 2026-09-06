@@ -51,8 +51,19 @@ export const drawerMenuItems: DrawerTopItem[] = [
 			{ id: 'feed-home', label: 'Feed', icon: '📰', to: '/feed' },
 			{ id: 'feed-explore', label: 'Explore', icon: '🔥', to: '/explore' },
 			{ id: 'feed-saved', label: 'Saved', icon: '🔖', to: '/saved', authOnly: true },
+			{ id: 'feed-connections', label: 'Connected feed', icon: '📡', to: '/connections/feed', authOnly: true },
 			{ id: 'feed-profile', label: 'Profile', icon: '👤', to: '/profile', authOnly: true },
 			{ id: 'feed-settings', label: 'Settings', icon: '⚙️', to: '/settings' }
+		]
+	},
+	{
+		id: 'connections',
+		label: 'Connections',
+		icon: '🔗',
+		to: '/connections',
+		children: [
+			{ id: 'connections-manage', label: 'Connections', icon: '🔗', to: '/connections' },
+			{ id: 'connections-feed', label: 'Connected feed', icon: '📡', to: '/connections/feed' }
 		]
 	},
 	{
