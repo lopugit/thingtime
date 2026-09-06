@@ -10,7 +10,9 @@ import { CustomEmojiImage, renderTextWithEmojis } from './CustomEmojiImage';
 import { MessengerEmojiPicker } from './MessengerEmojiPicker';
 import {
   customTokenId,
+  externalSourceAvatar,
   isCustomToken,
+  isLopuAiSource,
   memberDisplayName,
   systemMessageText,
   type ChatMember,
@@ -33,6 +35,8 @@ const Avatar = ({
   size?: number;
 }) => {
   if (externalSource) {
+    // ChatGPT/Claude keep their brand discs; Lopu is the unicorn on a rainbow disc
+    const look = externalSourceAvatar(externalSource);
     return (
       <Flex
         width={`${size}px`}
@@ -40,14 +44,14 @@ const Avatar = ({
         borderRadius="full"
         align="center"
         justify="center"
-        background={externalSource.provider === 'chatgpt' ? '#17171c' : '#d97757'}
-        color="white"
+        background={look.background}
+        color={look.color}
         fontSize={`${Math.round(size * 0.48)}px`}
         fontWeight={700}
         flexShrink={0}
         title={externalSource.label}
       >
-        {externalSource.provider === 'chatgpt' ? '◎' : '✦'}
+        {look.glyph}
       </Flex>
     );
   }
@@ -201,6 +205,11 @@ export const MessageRow = (props: MessageRowProps) => {
     </Box>
   );
 
+  // imported/live AI rows are locked; Lopu's assistant rows stay non-editable
+  // but the user may delete them (the whole conversation is theirs)
+  const sourceLocked = !!message.externalSource && !isLopuAiSource(message.externalSource);
+  const canEdit = isMine && !!props.onEdit && !message.externalSource;
+
   const toolbar = message.deleted ? null : (
 		<Flex gap={0} opacity={{ base: 1, md: hovered ? 1 : 0 }} transition="opacity 0.12s ease" align="center" flexShrink={0}>
       <ReactionControl
@@ -223,14 +232,14 @@ export const MessageRow = (props: MessageRowProps) => {
           🧵
         </Button>
       ) : null}
-      {!message.externalSource && ((isMine && props.onEdit) || props.onDelete) ? (
+      {!sourceLocked && (canEdit || props.onDelete) ? (
         <Menu isLazy placement="bottom-end">
           <MenuButton as={Button} size="xs" variant="ghost" color="var(--tt-muted, #9a9aa6)">
             ⋯
           </MenuButton>
           <Portal>
             <MenuList zIndex={10260} minWidth="140px" fontSize="13px">
-              {isMine && props.onEdit ? <MenuItem onClick={() => props.onEdit!(message)}>✏️ Edit</MenuItem> : null}
+              {canEdit ? <MenuItem onClick={() => props.onEdit!(message)}>✏️ Edit</MenuItem> : null}
               {props.onDelete ? (
                 <MenuItem color="var(--tt-danger, #e5484d)" onClick={() => props.onDelete!(message)}>
                   🗑️ Delete
@@ -366,7 +375,7 @@ export const MessageRow = (props: MessageRowProps) => {
                   background="var(--tt-surface-alt, #f2f2f5)"
                   color="var(--tt-muted, #777782)"
                 >
-                  imported
+                  {isLopuAiSource(message.externalSource) ? 'assistant' : 'imported'}
                 </Box>
               ) : null}
               <Box fontSize="11px" color="var(--tt-faint, #b9b9c3)">

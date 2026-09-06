@@ -30,6 +30,29 @@ const renderActivity = () =>
   render(<ActivitySettings settings={DEFAULT_SETTINGS} onChange={vi.fn()} onError={vi.fn()} />);
 
 describe('Activity network measurements', () => {
+  it('does not erase prior readings when a quota-denied retry returns zero samples', async () => {
+    renderActivity();
+    await act(async () => {});
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Run 17.6/ }));
+    });
+    vi.mocked(api.activityNetworkSpeed).mockResolvedValue({
+      ...ping,
+      speed: {
+        ...speed.speed!,
+        downloads: [],
+        uploads: [],
+        errors: [{ direction: 'download', message: 'Quota reached' }],
+      },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Run 17.6/ }));
+    });
+    expect(screen.getByText('14.4 Mbps')).toBeVisible();
+    expect(screen.getByText('8.0 Mbps')).toBeVisible();
+    expect(screen.queryByText(/0\/2 download/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Quota reached/)).toBeVisible();
+  });
   beforeEach(() => {
     vi.useFakeTimers();
     vi.mocked(api.activityNetwork).mockResolvedValue(ping);

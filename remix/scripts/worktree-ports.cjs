@@ -142,6 +142,7 @@ const pm2AppConfig = (remixDir = __dirname, opts = {}) => {
     cwd: remixDir,
     name: context.pm2Name,
     namespace: 'thingtime',
+    autorestart: false,
     watch: ['ecosystem.config.js'],
     env: {
       TT_WEB_PORT: String(context.ports.web),
