@@ -259,7 +259,7 @@ export const LopuModelPicker = ({ models, vaultProviders, vault, value, defaults
 							<Box maxH="272px" overflowY="auto" px={1.5} pb={1.5} role="listbox" aria-label="Models and providers">
 								{groups.length === 0 ? (
 									<Text fontSize={LOPU_UI.fontSmall} color={LOPU_UI.muted} px={2} py={2} lineHeight="1.5">
-										No models in the catalog yet — Lopu answers from her little book until an admin adds a provider key.
+										No models in the catalog yet — Lopu answers from its little book until an admin adds a provider key.
 									</Text>
 								) : null}
 								{groups.map((group) => (
