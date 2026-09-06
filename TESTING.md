@@ -1,5 +1,15 @@
 # TESTING.md — per-area manual test checklists
 
+- Signed-out first paint: `/`, `/builder/demos`, and `/watch/pair` must render
+  without a Watch approval banner exception. Account switching and temporary
+  sessions never show another account's cached Watch requests; expired and
+  dismissed requests stay hidden.
+
+- Watch release integration: the Nitro health contract smoke accepts documented
+  `degraded` / `migration-required` responses, but rejects contradictory readiness
+  or unavailable storage. Separately require `ready` on the release deployment;
+  passing the contract smoke alone is not proof that uploads are enabled.
+
 Run the checklist for every area a PR touches, in a live browser against the
 local dev stack (`npm run web-pms`, worktree stacks get their own port trio —
 see `AI_ALL.md`). Each list is the distilled regression history of that area:
@@ -154,6 +164,7 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Passkeys + cross-deployment auto-login
 
+- [ ] TestFlight passkey updates preserve the embedded Watch companion, both production push entitlements, the configured preview origin and matching phone/Watch build numbers; the signed phone includes `webcredentials:thingtime.com` and Apple CDN association matches it. Verify saved-key sign-in on a real device.
 - [ ] Slow login-options response + immediate passkey click or navigation: the old autofill request never opens a sheet or submits an assertion. Repeat with account-switcher login and the auto-login popup.
 - [ ] With 1Password enabled, click passkey sign-in, then Cancel: the button becomes usable immediately even if the extension ignores AbortSignal. Retry once; navigate away and verify no stale sign-in completes. Check desktop and 390px mobile through the footer.
 - [ ] Two login tabs can finish independently. Replaying a saved challenge cookie and zero-counter assertion fails. Wrong origin, missing UV and mismatched userHandle all fail.
@@ -534,6 +545,10 @@ email whose link points at the attacker.
       reaches success, and the comment links
       `https://pr-<number>.previews.dev.thingtime.com`; verify the deployed SHA again
       after the build completes.
+- [ ] Open the deployed PR preview's footer and confirm it shows the exact PR
+      branch plus the complete 40-character head SHA, with each linking to the
+      matching GitHub tree/commit. Confirm `/api/root-data` reports the same
+      values and neither label falls back to `git/unknown`.
 - [ ] For an exact SHA that already has a READY generic Preview, run the
       controller again and confirm its `develop` Custom Environment deployment
       builds instead of ending `CANCELED`; the PR alias, GitHub Deployment, and
@@ -618,6 +633,188 @@ email whose link points at the attacker.
       back in portrait and landscape. Nested deployment rows remain inside
       their branch cards, disclosure controls stay tappable, and vertical
       scrolling never triggers the horizontal drawer-close gesture.
+
+## Apple Watch notifications
+
+- [ ] Code input: four evenly spaced squares backed by one native input. Paste
+      a complete PIN with Cmd/Ctrl+V into any square (including replacing a filled
+      PIN), test autofill, select-all, arrow keys and backspace, and preserve
+      leading zeroes. Pasting an older eight-character code expands all eight
+      squares; no paste/autofill may get trapped in the first square. Check both
+      desktop and 390px layouts, focus ring, keyboard submission and accessible label.
+- [ ] With 1Password installed, focus the approval input and fill all digits.
+      Its saved-password badge must not cover the last square. Native
+      `one-time-code` autofill and Cmd/Ctrl+V must still fill the complete code.
+- [ ] Start with **Paired iPhone** selected, open the signed-in companion, and
+      verify another session of the same account/domain shows the exact prefilled
+      Watch/device/PIN. No credential may be claimed before explicit approval.
+      A different account must not list, look up, approve, or rebind the request.
+- [ ] Repeat using **Username** (including `@username`, a typo and wrong domain)
+      and **Enter code**. A `/pair/1234` link preserves all four digits, including
+      leading zeroes, through login. Check the five-minute expiry, unique active
+      PIN reservation, and five guesses/account limit with a visible retry error.
+- [ ] Verify quick-approval cards at 390px and desktop widths through the full
+      scroll range, dismiss with **Not now**, and approve another request. Account
+      switching/sign-out must never flash the previous account's request.
+- [ ] Open `/watch/pair` without query parameters on desktop and a 390px phone.
+      Sign in, enter a fresh Watch code, review the matching device/account, and
+      approve. Confirm the Watch claims the credential and downloads notifications;
+      no hidden pairing ID or Watch web browser is required. Invalid, wrong-domain,
+      expired and already-consumed codes must offer recovery without logging secrets.
+- [ ] Leave code approval pending beyond 90 seconds (31 polls), approve, and
+      confirm pairing still completes. Interrupt network access, retry approval,
+      switch domains mid-request, and replace an expired code. Cancelled requests
+      must not restore an old code/account or overwrite the new connection state.
+- [ ] Select an origin without `api.watch-pairing` 1.2.0 and confirm the Watch
+      shows an actionable domain/preview hint rather than a missing-endpoint error.
+- [ ] Pair a fresh Watch directly against both `thingtime.com` and
+      `dev.thingtime.com` once their manifests support the feature. Approve the four-digit code while
+      signed in, confirm the Watch receives only its device credential, and
+      verify notification refresh/read state works with the iPhone app closed.
+      A second account must remain independently selectable after relaunch.
+- [ ] On the smallest supported Watch, confirm the signed-in header shows the
+      selected account's avatar, **@username**, domain, and live status. Scroll
+      through the whole screen, tap the toolbar refresh and **Check & refresh**,
+      and verify checking/success/error states plus Last check and Last live
+      reply remain readable without clipping.
+- [ ] Open Settings, switch between production and development accounts, add
+      another account, and remove only the selected account. Confirm no account
+      reuses another origin's credential, snapshots, upload outbox, or inbox.
+- [ ] Under **Add private Thing**, confirm **Record** is the default first
+      favourite and that Settings can enable/disable the available favourites
+      while preserving their stable system order and the main Add action.
+- [ ] Create a private audio or photo Thing directly from the Watch, interrupt
+      the upload at each stage, and confirm retry uses the same request/Thing
+      identity without duplicate Things. The created record remains owner-only
+      and the Watch retains its local source until completion.
+- [ ] In `/things`, open the paired Apple Watch device. Confirm last sync,
+      status, battery/low-power health, last error, created-Thing count, and the
+      owner-only recent Things created by that exact Watch update after refresh.
+- [ ] On a signed-in paired Watch, confirm the connection section identifies
+      the active account as **@username**, keeps the current connection state
+      visible, and always shows **Check & refresh**. Tap it and confirm the
+      control changes to **Checking…**, then returns with updated **Last check**
+      and **Last reply** times without exposing a reusable session credential.
+- [ ] Regression class (2026-09): install a TestFlight build configured for a
+      preview over an older install that implicitly retained `thingtime.com`.
+      Confirm the iPhone migrates to the configured origin, the Watch displays
+      that origin plus matching iPhone/Watch build numbers, and notification
+      history downloads. Then explicitly select production and confirm a
+      relaunch preserves that deliberate choice.
+- [ ] Update only the iPhone app while leaving an older companion on the Watch.
+      Confirm the Watch connection section displays both build numbers, warns
+      that they differ, and clears the warning after the Watch app updates.
+
+- [ ] Launch the Watch app with the paired iPhone app closed, then open
+      Thingtime on iPhone. Confirm the Watch visibly moves through **Waiting for
+      iPhone** / **Checking Thingtime sign-in** to **Connected to iPhone**,
+      displays the last reply time, and reconnects without exposing or copying a
+      reusable web session credential. Repeat while signed out and confirm it
+      settles on **Sign in on iPhone**.
+- [ ] Leave the iPhone unreachable through the Watch's bounded 2, 5, and
+      10-second retry sequence. Confirm loading stops with an actionable status,
+      **Retry connection** starts a fresh attempt, and opening the iPhone later
+      consumes the safely queued refresh without duplicate work.
+- [ ] On a signed-in paired Watch, confirm the inbox initially shows the newest
+      10 notifications. Tap **Load previous 10** repeatedly and verify each page
+      appends in newest-first order without duplicates or gaps, including when
+      two notifications have the same `createdAt` timestamp.
+- [ ] Open **Notification history**, choose **One date**, and fetch the first
+      10. Confirm only notifications inside that local calendar day appear.
+      Switch to **Date range**, choose inclusive From and Through dates, and
+      confirm **Fetch 10 more** pages through that full period without crossing
+      either day boundary.
+- [ ] Tap **Download whole period**, background or close both apps while the
+      transfer completes, then reopen the Watch app offline. Confirm the archive
+      persists, initially reveals 10 rows, and **Show 10 more** reveals the rest
+      without network access. Mark an archived row read, relaunch, and confirm
+      its read state remains saved. The archive must contain no more than the
+      service-retained latest 500 notifications.
+- [ ] Queue both a historical page request and a period download while the
+      iPhone is unreachable, then open the signed-in iPhone app. Confirm each
+      request resumes once, a stale response cannot overwrite a newer selected
+      period, and malformed or metadata-mismatched archive files are rejected.
+
+- [ ] On a signed-in paired Watch, open **Add private Thing**, pick one and five
+      Photos-library screenshots, and record a short audio clip. Confirm every
+      item remains queued across a Watch app relaunch until the iPhone reports
+      success, then appears as a searchable owner-only Thing with exactly one
+      bound attachment and `acl: ["tt:user"]`.
+- [ ] Put the iPhone offline before choosing a Watch screenshot, then restore
+      connectivity and open the signed-in iPhone app. Confirm the same stable
+      request resumes without duplicate attachment Things; repeat while signed
+      out and confirm the Watch explains that Thingtime must be opened and
+      signed in, without losing the queued bytes.
+- [ ] Tap **Record**, deny microphone access, and confirm Apple's
+      native recorder returns safely without crashing. Grant access, save a
+      several-second recording, and confirm the completion callback does not
+      falsely report that Thingtime could not prepare it while the file is still
+      finalizing. Confirm the `.m4a` appears under **Saved recordings**
+      after relaunch. With **Upload after saving** enabled, confirm it queues
+      automatically; disable that preference, save another recording, and
+      confirm it waits for selection in the saved-recording screen.
+- [ ] Open **Saved recordings**, tap one retained Watch recording, and
+      confirm it creates a new private Thing without altering the retained
+      original. Swipe-delete another saved
+      recording and confirm only that on-watch copy disappears. Confirm the
+      explanatory copy does not claim third-party access to Apple's sandboxed
+      Voice Memos library and directs existing Watch Voice Memos to the synced
+      iPhone Thingtime upload flow.
+- [ ] Against an origin missing or breaking any required attachment/Things
+      capability, confirm the iPhone fails closed before reserving storage and
+      the Watch shows the compatibility error. Verify normal uploads use the
+      active WebView origin and never copy its session credential to watchOS.
+- [ ] Regression class (2026-09): `WCSessionFile` is temporary on receipt. Kill
+      the iPhone app immediately after delivery and confirm the inbox copy still
+      resumes on next launch; the Watch must retain its original until the
+      private Thing creation result arrives.
+
+- [ ] Regression class (2026-09): build the signed iPhone + Watch IPA with
+      Xcode 26.2, verify the locally exported IPA, and upload the same archive
+      through `xcodebuild -exportArchive` with `destination: upload` and the App
+      Store Connect API key. Confirm App Store Connect accepts the upload
+      without relying on Xcode 26 `altool`, which can report a platform error
+      while incorrectly exiting with status 0.
+- [ ] Regression class (2026-09): inspect the exported IPA and confirm the
+      companion watchOS app is under `Payload/Thingtime.app/Watch/`, not
+      `PlugIns/`; App Store Connect rejects the latter as an invalid directory.
+- [ ] With an iPhone paired to an Apple Watch, open Thingtime on the iPhone and
+      sign in. Launch the watch app and confirm it leaves “Pair Thingtime” without
+      asking for a password or exposing a session credential on the watch.
+- [ ] Tap Enable alerts on the watch, approve the system prompt, relaunch both
+      apps, and confirm the iPhone and watch APNs registrations appear through
+      `/api/v1/notifications/devices` without either token appearing in the JSON
+      response or generic Thing APIs.
+- [ ] From a second account, create a friend request, follow, comment, reply,
+      reaction, share, and mention. Confirm the watch alert names the actor, the
+      inbox refreshes, the unread count matches Thingtime, and tapping an unread
+      row marks that same notification read on the phone/web inbox.
+- [ ] Send the same payload to the paired iPhone and watch registration and
+      confirm only one user-visible alert appears. Repeat in Debug/sandbox and a
+      signed Release/production build so each token uses the matching APNs host.
+- [ ] Disable a push type and then the push master in Settings → Notifications;
+      confirm new events of those types produce neither a watch alert nor a
+      watch inbox row. Re-enable them and verify delivery resumes.
+- [ ] Sign out on the paired iPhone and confirm the watch returns to the pairing
+      screen and later activity for that account produces no device alert. The
+      registration may await cleanup, but its revoked/expired session binding
+      must make it immediately ineligible. Then sign in as another account and
+      confirm both device tokens move to the new owner without leaking the prior
+      inbox.
+- [ ] Exercise signed-out, empty, unread/read, denied-alert, long actor name, and
+      two-line preview states on the smallest supported watch. Scroll top to
+      bottom; no row, badge, toolbar item, or permission message clips or overlaps.
+- [ ] Regression class (2026-09): APNs device tokens are variable-length binary
+      values. Register a token longer than 32 bytes and confirm it is accepted,
+      deduplicated by hash, retained only in protected secure storage, and removed
+      after APNs reports `BadDeviceToken`, `Unregistered`, or HTTP 410.
+- [ ] Regression class (2026-09): a device row is keyed by token alone, so
+      re-registering must REBIND it to the caller. Sign in, register the device,
+      sign out (revoking that session), sign back in, and re-register the same
+      token: the alert must still arrive. Repeat as a different account on the
+      same device and confirm alerts follow the new owner. Pinning `ownerId` or
+      `targetId` at insert makes both cases permanently undeliverable — the row
+      keeps a dead session id and re-registration cannot heal it.
 
 ## Worktree dependency bootstrap (`remix/scripts/ensure-dependencies.js`)
 
@@ -1475,6 +1672,12 @@ email whose link points at the attacker.
 - [ ] Start two local mutation commands together. Confirm the repository writer
       lock serializes them, a live writer is never stolen during owner-file
       creation, and a dead writer lock is recoverable.
+- [ ] Run the lock regression cases in `npm run test:graphify-cas`: pause a
+      stale reaper while a replacement writer acquires, then resume cleanup.
+      Confirm it cannot delete or enter the replacement lock. Verify six
+      processes complete 30 writes without overlap, SIGKILL recovery, timeout
+      cleanup, callback-error release, and a query retaining its snapshot lock
+      until its subprocess exits.
 - [ ] With a legacy root graph present, run `scripts/graphify update .`, remove
       the four mutable root outputs from tracking, and run
       `scripts/graphify ensure`. Confirm root paths become ignored symlinks,
@@ -2051,6 +2254,12 @@ halves.
       default. A component Thing resolves its sanitised live preview; turning
       either switch off hides only that section, and either/both sections may
       be disabled without overflow at desktop and 390px mobile widths.
+- [ ] Turn `Thing data` OFF on a normal `/thing/:id`, then navigate — without
+      reloading — to a `/thing/migration-diagnostic-*` permalink. The redacted
+      error still renders: a diagnostic shows no `Views` card, so it must never
+      be gated by a switch carried over from a Thing, or the page would be
+      blank with no control left to bring it back. Navigating back to a Thing
+      still honours the remembered OFF state.
 - [ ] Visiting plain `/search` fires NO search request (check the network
       tab): last-cached results still paint instantly, and with no cache the
       empty state invites a search ("then hit Search"), never claims
@@ -2130,6 +2339,14 @@ halves.
 
 ## Admin migrations & collection generations (`remix/app/components/Schemas/MigrationsPanel.tsx`)
 
+- [ ] Before and after deploying any `USER_STORAGE_ACCOUNTING_VERSION` bump,
+      call `/api/v1/health/nitro`: it reports `degraded` with
+      `storageAccounting.state: "migration-required"` while any current user
+      ledger is missing, malformed, non-ready, or on the old version. Dry-run,
+      then run the named `backfill-user-storage-accounting` migration; confirm
+      health becomes `ready`, a tiny image upload completes instead of returning
+      `accounting_unavailable`/503, and a second migration dry-run reports 0
+      pending.
 - [ ] As an admin (register a throwaway user, restart dev with
       `ADMIN_USERNAMES=<user>`), the census table shows every registry
       collection with its logical name AND physical `<name>_v<N>` name.
@@ -3145,7 +3362,7 @@ which 99.75% were `ci-*` telemetry, paying an entry in each of its 64 indexes
       and `-docs` route has one semantic feature, `api.admin-ci-dispatch` is
       `2.1.0`, the CI snapshot is `1.0.1`, passkey registration/login options
       are `1.0.1`, admin credentials are `2.0.0`, signed credential delivery is
-      `1.1.0`, signed stack progress is `1.0.0`, saved stacks are `1.3.0`, admin PR previews are `1.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
+      `1.1.0`, signed stack progress is `1.0.0`, saved stacks are `1.3.0`, admin PR previews are `2.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
       breaking-major manifest before dispatch. CI dispatch 2.1 adds
       compatible-pair omission during automatic Feature Stack routing.
 - [ ] Start a saved Feature Stack, then use its Pause control while the linked
@@ -3160,10 +3377,23 @@ which 99.75% were `ci-*` telemetry, paying an entry in each of its 64 indexes
 - [ ] Select one trusted open PR and independently enable Develop and
       Production/Main previews, including both at once. Develop must use only
       the configured Custom Environment; Production must require the explicit
-      warning acknowledgement, use Production values server-side, expose only
-      a generated immutable Vercel URL, and never assign `thingtime.com` or
-      another custom domain. Neither response, browser state, log, nor status
-      event may contain a credential value.
+      warning acknowledgement, and use Production values server-side. Confirm
+      one GitHub Actions-owned marker comment appears before either deployment starts,
+      with a row for each enabled environment, its expected persistent URL, and
+      a clearly labelled estimated ready time. Confirm the same comment updates
+      each row with the immutable `*.vercel.app` snapshot and its distinct
+      PR-scoped persistent URL. A READY receipt must move only that environment's
+      alias to the verified current SHA; synchronize must update both rows
+      without adding another marker comment. Disable one environment and close
+      the PR to prove only owned aliases/deployments are removed, while `thingtime.com` and
+      `dev.thingtime.com` never move. Neither response, browser state, log,
+      comment, nor status event may contain a credential value.
+- [ ] Inspect both selected-environment build jobs and confirm they check out
+      the exact controller-authorized SHA, receive no GitHub Environment or
+      Vercel token, and upload only a symlink-preserving prebuilt archive. The
+      protected publisher must validate each archive, use `--prebuilt` plus
+      `--skip-domain`, and reject a deployment whose actual Custom Environment
+      or production target does not match its selected row.
 - [ ] Push a new commit to that PR and verify the signed `synchronize` delivery
       rebuilds each enabled environment at exactly the new live head SHA.
       Drafts, forks, moved heads, another repository, and closed PRs fail

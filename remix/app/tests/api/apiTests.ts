@@ -1,5 +1,8 @@
 import { expectJson, expectNdjson, expectRedirectedTo, expectStatus, type ApiTestContext, type ApiTestDefinition } from './apiTestRunner';
 import { apiEndpointDocs } from '~/docs/apiDocs';
+import { watchPairingTests } from './watchPairingTests';
+import { watchQuickApprovalTests } from './watchQuickApprovalTests';
+import { nitroHealthResponseIsConsistent } from './healthResponse';
 
 // crypto-sourced randomness: these suffixes end up in registered usernames /
 // email aliases, and Web Crypto is available everywhere this runs (browser
@@ -503,14 +506,16 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'GET',
     path: '/api/v1/email/config',
     expect: expectJson(
-      [200],
-      (body) =>
-        body?.ok === true &&
-        isObject(body?.email) &&
-        ['console', 'ses'].includes(body.email.provider) &&
-        typeof body.email.sesSandbox === 'boolean' &&
-        typeof body.email.testRecipient === 'string',
-      'Email config returned provider, sandbox, and test-recipient metadata.'
+      [200, 403],
+      (body, response) =>
+        response.status === 403
+          ? body?.ok === false && body?.error === 'Email config is available only in local development and Vercel previews.'
+          : body?.ok === true &&
+            isObject(body?.email) &&
+            ['console', 'ses'].includes(body.email.provider) &&
+            typeof body.email.sesSandbox === 'boolean' &&
+            typeof body.email.testRecipient === 'string',
+      'Email config returned safe dev/preview metadata or the exact production environment gate.'
     )
   },
   {
@@ -654,11 +659,15 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'health-nitro',
     name: 'Nitro health',
-    description: 'Nitro health returns local API readiness.',
+    description: 'Nitro health reports consistent ready or migration-required storage status; a contract smoke does not certify deployment readiness.',
     group: 'health',
     method: 'GET',
     path: '/api/v1/health/nitro',
-    expect: expectJson([200], (body) => body?.service === 'nitro' && body?.state === 'ready', 'Nitro health returned ready.')
+    expect: expectJson(
+      [200],
+      nitroHealthResponseIsConsistent,
+      'Nitro health reported a consistent storage readiness state.'
+    )
   },
   {
     id: 'health-vercel',
@@ -2250,6 +2259,8 @@ export const apiTests: ApiTestDefinition[] = [
       'Created webpage was deleted (or was never created and the guard answered).'
     )
   },
+  ...watchPairingTests,
+  ...watchQuickApprovalTests,
   ...apiDocsSmokeTests
 ];
 

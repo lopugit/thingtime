@@ -110,9 +110,12 @@ struct WebView: UIViewRepresentable {
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             (webView as? ThingtimeWKWebView)?.applyThingtimeScrollInsets(forceSafeAreaUpdate: true)
 
+            ThingtimeNativeNotifications.shared.attach(webView: webView)
+
             sendToWeb(type: "native-ready", payload: [
                 "platform": "ios",
-                "version": "1.0.0"
+                "version": "1.1.0",
+                "watchNotifications": true
             ])
         }
 

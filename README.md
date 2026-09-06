@@ -80,9 +80,10 @@ branch artifacts cannot grow `develop` without bound.
 
 Use `scripts/graphify query`, `scripts/graphify update .`, or
 `scripts/graphify extract . --backend openai`; the wrapper serializes local
-writers, validates each atomic output set, deduplicates identical artifacts,
-regenerates the report/HTML, and converts Graphify's mutable semantic cache into
-coexisting immutable variants. `scripts/graphify prune` applies the bounded
+writers, holds query snapshots until their reader exits, validates each atomic
+output set, deduplicates identical artifacts, regenerates the report/HTML, and
+converts Graphify's mutable semantic cache into coexisting immutable
+variants. `scripts/graphify prune` applies the bounded
 retention policy without rebuilding; set `GRAPHIFY_SNAPSHOT_RETENTION` to a
 positive integer only when a local workflow deliberately needs more than one
 portable snapshot. See
@@ -317,27 +318,46 @@ is ready. An already-saved Vercel policy still fails over safely to GitHub if a
 dependency later disappears.
 
 The selected-PR detail panel also has independent, durable **Develop** and
-**Production / main** preview switches. Enabling either switch deploys the
-exact current same-repository PR SHA through Vercel; later `synchronize`,
-reopen, and ready-for-review deliveries rebuild every enabled environment.
-Production access requires an explicit admin acknowledgement and uses the
-project's Production environment values, but `autoAssignCustomDomains` remains
-false: the generated immutable `*.vercel.app` URL never replaces or aliases
-`thingtime.com`. Closing the PR removes only deployments carrying Thingtime's
-PR/environment ownership markers. Configure these server-only deployment
-values in every origin that hosts CI Control (placeholders only):
+**Production / main** preview switches. The product backend validates the live
+same-repository PR, stores the full policy, and sends only that bounded policy
+through the installed `thingtime-ci-control[bot]` GitHub App. It does not build,
+publish, alias, clean up, or hold a Vercel deployment credential. The protected
+`github-actions` controller revalidates the exact ref/SHA and writes one PR
+comment immediately with every selected environment's expected persistent URL
+and estimated ready time. Each selected environment is compiled on GitHub
+without environment secrets; only the validated prebuilt output enters the
+credentialed publisher. The same comment gains each immutable `*.vercel.app`
+snapshot URL and terminal status. A READY deployment moves only its PR-scoped
+alias and never replaces `thingtime.com` or `dev.thingtime.com`.
+
+Production access still requires an explicit admin acknowledgement. Later
+`synchronize`, reopen, and ready-for-review webhooks redispatch every enabled
+environment; disable and close dispatch marker-scoped cleanup. The backend
+therefore needs only the existing GitHub App credentials. Configure the
+following non-secret values and dedicated deployment token on the protected
+`vercel-develop-pr-control` GitHub Environment (placeholders only):
 
 ```sh
-VERCEL_API_TOKEN="<Vercel-API-token>"
+VERCEL_DEVELOP_DEPLOY_TOKEN="<dedicated-Vercel-deployment-token>"
 VERCEL_TEAM_ID="<Vercel-team-id>"
 VERCEL_PROJECT_ID="<Vercel-project-id>"
 VERCEL_PROJECT_NAME="<Vercel-project-name>"
 VERCEL_GITHUB_REPO_ID="<Vercel-linked-GitHub-repository-id>"
 VERCEL_CUSTOM_ENVIRONMENT_ID="<develop-Custom-Environment-id>"
+PREVIEW_ALIAS_SUFFIX="previews.dev.example.com"
+PRODUCTION_PREVIEW_ALIAS_SUFFIX="previews.example.com"
+PREVIEW_EXPECTED_BUILD_MINUTES="5"
+ADMIN_PREVIEW_DISPATCHER_LOGIN="your-ci-control-app[bot]"
 ```
 
-Never expose these as `PUBLIC_*`. `VERCEL_CUSTOM_ENVIRONMENT_ID` is required
-only for the Develop switch; the other five values are required for both.
+Never expose these as `PUBLIC_*` or copy them into the product deployment.
+`VERCEL_CUSTOM_ENVIRONMENT_ID` is required only for the Develop switch. The
+alias suffixes default to Thingtime's two preview namespaces, so forks must set
+both to verified wildcard domains owned by their own Vercel project.
+`PREVIEW_EXPECTED_BUILD_MINUTES` is optional, defaults to 5, and accepts a whole
+number from 1 through 60 for the PR comment's clearly labelled estimate.
+The GitHub App needs Contents write permission to create the repository
+dispatch. GitHub Actions owns and updates the marker comment.
 
 After deployment and App installation, create both provider webhooks and click
 **Admin → CI Control → Reconcile** once. Reconcile imports existing branches,
@@ -1539,6 +1559,45 @@ Signed-in admins can run the same endpoint manually (`?dryRun=1` or
 a six-day per-recipient lookback in the `email_messages` outbox prevents
 double-sends.
 
+### Native Apple push notifications (iPhone + Apple Watch)
+
+The native targets register their current APNs tokens through the authenticated
+`POST /api/v1/notifications/devices` session. Thingtime chooses the application
+topics server-side, stores tokens only in protected binary `secure` data, and
+never returns token values from the API. The Watch pairs directly using an
+four-digit code entered at the selected origin's `/watch/pair` or `/pair/1234`
+page on an iPhone or computer. Alternatively the paired phone offers the request
+to its active account, or the Watch targets an entered username; matching signed-in
+sessions show an explicit, prefilled **Approve Watch** button. Codes expire after
+five minutes; sending a request never auto-approves it. The phone handoff uses a
+separate one-request proof, never the Watch's private claim secret. The Watch
+stores only a scoped device credential in Watch Keychain,
+not the browser session or password, and downloads notifications without an
+iPhone relay. Deploy `api.watch-pairing` 1.2.0 alongside the Watch build before
+enabling this flow on an origin; the client checks the origin's capability
+manifest. See [Watch preview setup](iOS/README.md#connect-the-watch-during-preview-testing)
+for code-entry, domain selection, and local test instructions. Each push
+registration is bound to its browser/device session so revocation or expiry
+makes that target ineligible for delivery even if cleanup is delayed.
+
+Configure the APNs provider in each Vercel environment that should deliver
+native alerts:
+
+```sh
+APNS_KEY_ID="<Apple push key id>"
+APNS_TEAM_ID="<Apple developer team id>"
+APNS_PRIVATE_KEY="<base64-encoded .p8 contents>"
+APNS_IOS_BUNDLE_ID="com.thingtime.appletime"
+APNS_WATCH_BUNDLE_ID="com.thingtime.appletime.watchkitapp"
+```
+
+Keep the `.p8` key in Vercel or another approved secret store only. Never add it
+to `.env.example`, the repository, build logs, or client configuration. The two
+bundle identifiers need Push Notifications capability and matching development
+and distribution provisioning before a real device can receive alerts. If the
+APNs variables are absent, the in-app notification remains durable and the
+provider send is intentionally skipped.
+
 ### Service account provisioning
 
 Apps and backend services can create service-owned Thingtime accounts through:
@@ -1979,15 +2038,15 @@ private integration values as `dev.thingtime.com`. Treat all branches Vercel is
 allowed to build as trusted development code, use disposable data, and keep
 production MongoDB/JWT/S3 credentials out of Preview.
 
-`*.previews.thingtime.com` remains unassigned. Admin CI Control can now create
-an opt-in production-environment preview for a trusted same-repository PR, but
-it deliberately keeps `autoAssignCustomDomains: false` and exposes only the
-generated immutable `*.vercel.app` deployment URL. Do not point the develop
-controller at that suffix, copy the production S3 role into generic Preview,
-or let ordinary Vercel feature/fork previews assume the production AWS role.
-Any future custom production-preview namespace still needs its own protected
-identity, exact production OIDC trust, cleanup, CORS probe, and bucket CORS
-rule before activation.
+`*.previews.thingtime.com` remains detached from the production branch and
+primary domains. Admin CI Control may assign only the exact
+`pr-<number>.previews.thingtime.com` alias to an owned, marker-verified READY
+production-environment preview. Its immutable `*.vercel.app` snapshot remains
+available beside that persistent URL. Do not point the develop controller at
+the production suffix, copy the production S3 role into generic Preview, or let
+ordinary Vercel feature/fork previews assume the production AWS role. The
+production-preview wildcard, exact production OIDC trust, cleanup, and bucket
+CORS rules must remain independently protected.
 
 Every generic Preview and eligible controller deployment intentionally shares
 the same development MongoDB, S3 bucket, quotas, and other runtime state as

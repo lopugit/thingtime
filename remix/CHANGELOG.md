@@ -18,12 +18,125 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-06: Fix the global Watch approval banner crashing signed-out first
+  paint when both account IDs were absent; add account/expiry/dismissal
+  regression coverage to the notification suite. — Codex (AI)
+
+- 2026-09-06: Watch-to-main integration [PR #667](https://github.com/lopugit/thingtime/pull/667)
+  passes native compilation, web build and focused tests. Align the Nitro health
+  smoke with its documented migration-required response without calling a
+  degraded deployment ready. — Codex (AI)
+
 - Validation and rollout notes for account-tier speed-test allowances: [PR #664](../PRs/664-speed-test-tier-allowances-account-tier-speed-test-allowances-and-feature-comparison.md).
 
 - 2026-09-06: Tie Commander speed-test allowances to protected account-tier
   quotas (Free 4/hour, Plus 20/hour, Pro/PAYG unlimited), add the live account
   feature comparison and admin quota controls, and preserve readings after a
   rejected retry. Versioned API capabilities prevent old-server fallback. — Codex (AI)
+
+### 2026-09-05 — Native passkey entitlement — Codex (AI)
+
+- Backport the production passkey cancellation, challenge replay and settings fixes to the Watch preview used by TestFlight. Build 25 adds `webcredentials:thingtime.com` while preserving the embedded Watch app and production push entitlements. Native credential acceptance still requires a real device. Details: [PR #656](../PRs/656-codex-passkey-ios-release-restore-native-passkeys-with-watch-companion.md).
+- The web repair is released in PRs #641 and #651; the native build retains the existing PR #596 preview origin so Watch pairing continues using its compatible API.
+
+### 2026-09-05 — Watch code-entry and pairing recovery — Codex (AI)
+
+- Added four-digit, five-minute codes, `/pair/1234` links, and a phone/computer
+  `/watch/pair` form. Paired-iPhone account handoff (default) and username targeting
+  show a prefilled **Approve Watch** card in matching signed-in sessions; delivery
+  never approves automatically. Older complete approval links still work.
+  `api.watch-pairing` is now 1.2.0. Watch build 24 displays the
+  exact address and retry/new-code controls without opening a watchOS web sheet.
+- The approval PIN has evenly spaced squares backed by one accessible native
+  input, preserving whole-code paste, autofill, selection and legacy-code support.
+  Keep 1Password's saved-password badge off the final square without turning off
+  native one-time-code autofill; fixture passwords are generated directly at runtime.
+- Split claim-poll and human-code rate limits, recover from transient network
+  errors, reserve unique active PINs, and reject unsupported origins before pairing. Added full HTTP flow
+  coverage through direct notification sync; details in
+  [PR #596](../PRs/596-codex-watch-app--add-native-apple-watch-notifications.md).
+
+### 2026-09-05 — Direct Apple Watch accounts, sync, and private Things — Codex (AI)
+
+- Replaced the Watch's iPhone-relay session dependency with direct HTTPS device
+  pairing, capability negotiation, notification sync, read receipts, push
+  registration, and idempotent private attachment Thing creation.
+- Added on-Watch production/development account pairing, account switching,
+  username/avatar identity, live connection health, last-check/last-reply
+  timestamps, and a manual **Check & refresh** action.
+- Added configurable **Add private Thing** favourites with **Record** enabled by
+  default, retained Thingtime recordings, and direct retryable uploads.
+- Apple Watches now appear in `/things` as devices with sync/battery/error
+  health, a created-Thing count, and an owner-only recent-Things list.
+
+### 2026-09-04 — Visible Watch account and live connection checks — Codex (AI)
+
+- The Apple Watch connection card now shows the authenticated Thingtime
+  username, live checking/connected/error state, last check and reply times,
+  and an always-visible **Check & refresh** action.
+- Notification pages now include a minimal viewer username projection for
+  native account confirmation; the `api.notifications-list` capability is
+  versioned at 1.2.0 for this additive response contract.
+
+### 2026-09-04 — Watch origin migration and visible build diagnostics — Codex (AI)
+
+- TestFlight builds now migrate a legacy persisted production selection to the
+  build's configured Thingtime origin unless the user explicitly chose another
+  destination, preventing the Watch from silently using an older API contract.
+- The Watch connection UI now shows its own build, the paired iPhone build, and
+  the active Thingtime origin, warns when companion builds differ, and reports
+  the actual notification-history capability version when an origin is stale.
+
+### 2026-09-04 — Resilient Watch pairing and saved-recording chooser — Codex (AI)
+
+- Added acknowledged Watch-to-iPhone authentication refreshes with visible
+  connection state, bounded automatic retries, durable unreachable-phone
+  fallback, response timeouts, and manual retry actions across pairing,
+  notification history, and attachment transfer screens.
+- Added a dedicated **Choose saved recording** screen for Thingtime recordings
+  retained on the Watch, and made Apple-recorder completion tolerate delayed
+  file finalization so a successfully saved `.m4a` is not falsely rejected.
+
+### 2026-09-04 — Apple-native Watch recordings and upload-later library — Codex (AI)
+
+- Replaced the custom Watch recording controls with Apple's native high-quality
+  recorder, retained saved `.m4a` recordings in Thingtime's on-watch library,
+  added manual re-upload and swipe-to-delete actions, and added a persistent
+  **Upload after saving** preference. Existing Apple Voice Memos remain isolated
+  by watchOS and are directed to the synced iPhone Thingtime upload path.
+
+### 2026-09-04 — Apple Watch notification history and offline archives — Codex (AI)
+
+- Added stable opaque notification cursors, 10-at-a-time Watch inbox/history
+  paging, one-date and inclusive date-range selection, and full-period offline
+  archive downloads to the paired Watch. Historical transfers remain bounded
+  by Thingtime's retained latest 500 notifications and fail closed when the
+  selected origin lacks the `api.notifications-list` 1.1 capability.
+
+### 2026-09-04 — Apple Watch private attachment Things — Codex (AI)
+
+- Added an authenticated **Add private Thing** Watch flow for selecting up to
+  five Photos-library screenshots/images or recording an audio clip. Files use
+  a durable Watch-to-iPhone queue, capability-gated checksummed multipart upload,
+  and owner-only Thing creation without copying the iPhone session to watchOS.
+
+### 2026-09-04 — Watch-enabled TestFlight release path — Codex (AI)
+
+- Added target-specific App Store profile mapping for the iPhone and embedded
+  Watch apps, bumped the native build to `16`, and added an encrypted
+  `macos-15`/Xcode 26.2 TestFlight workflow for release builds when a developer
+  machine is running an incompatible beta macOS host. Apple accepted the
+  signed iPhone app with its companion under `Watch/`; build 16 is valid and
+  in internal beta testing.
+
+### 2026-09-03 — Native Apple Watch notification companion — Codex (AI)
+
+- Added a native watchOS 10 SwiftUI companion that pairs through the signed-in
+  iPhone app, mirrors the notification inbox and unread count, marks rows read,
+  and registers for watch alerts without copying a Thingtime credential.
+- Added protected iPhone/watch APNs device registration, a versioned
+  `api.notifications-devices` capability contract, token-based APNs delivery,
+  invalid-token cleanup, configuration docs, and focused contract tests.
 
 - 2026-09-05: Add bounded persistent media caching with access revalidation,
   responsive low-resolution image previews, and cache controls in Settings.
@@ -88,11 +201,48 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Electron and reuse the approved CI Apple API key for macOS notarization.
   Remove the confirmed damaged legacy downloads. — Codex (AI)
 
-- 2026-09-05: Repair Recovery catalogue selection, archive verification, damaged
-  app replacement, and installer failure notices. Publish desktop and Recovery
-  together through the repaired protected cloud builder. Withdraw damaged legacy
-  archives from installation while keeping their history visible. See the
+- 2026-09-05: Repair Recovery catalogue refresh and architecture selection,
+  malformed archive handling, background verification, damaged app replacement,
+  rollback preservation, installer failure notices, and cold cloud packaging.
+  Share the protected main/PR release builder and correct its caller-event gate
+  so desktop and Recovery publish together. Withdraw damaged legacy archives
+  from installation while keeping their history visible. See the
   [PR #627 engineering note](../PRs/627-codex-recovery-release-sync-github-catalogue-and-installer.md). — Codex (AI)
+
+- 2026-09-05: Publish Graphify lock ownership atomically and remove only the
+  releasing owner's record. Concurrent queries retain their snapshot lock
+  through completion; regression tests cover stale cleanup, writer death,
+  contention, malformed ownership, and timeout cleanup. — Codex (AI)
+
+- 2026-09-03: Keep `/api/v1/capabilities` aligned with the protected admin preview dispatcher by publishing `api.admin-ci-previews` 2.0.0 from the canonical endpoint contract.
+
+### 2026-09-03 — Multi-environment PR preview links — Codex (AI)
+
+- Admin-selected Develop and Production/Main preview settings now dispatch only
+  their bounded full policy to the protected `github-actions` controller; the
+  product backend no longer creates, aliases, deletes, or comments on Vercel
+  deployments. GitHub Actions maintains one PR comment, posted before build
+  launch with every
+  selected environment's expected persistent URL and estimated ready time, then
+  updated with each immutable snapshot URL and final status. READY receipts move
+  only the matching alias to the verified current deployment, while
+  disable/close cleanup remains bounded to Thingtime-owned preview resources.
+  Each exact-SHA environment build runs without deployment credentials and only
+  its validated prebuilt artifact reaches the protected publisher.
+  See the [PR #597 engineering note](../PRs/597-codex-preview-pr-environment-links-publish-multi-environment-preview-links-on-prs.md).
+
+### 2026-09-03 — Storage migration readiness and API sweep correction — Codex (AI)
+
+- Detailed diagnosis, migration receipts, and validation:
+  [`PRs/601-codex-fix-image-upload-migrations--storage-migration-readiness.md`](../PRs/601-codex-fix-image-upload-migrations--storage-migration-readiness.md).
+- Nitro health now reports `degraded` and names
+  `backfill-user-storage-accounting` whenever current user ledgers are absent,
+  malformed, non-ready, or behind `USER_STORAGE_ACCOUNTING_VERSION`, making
+  the same fail-closed condition that blocks image uploads visible to deploy
+  monitoring before users encounter it.
+- Corrected the email-config API docs and live test contract: sanitized email
+  diagnostics remain available in local development and Vercel previews, while
+  production's intentional 403 environment gate is now documented and tested.
 
 ### 2026-09-03 — Host-native Thingtime login bootstrap — Codex (AI)
 
@@ -364,6 +514,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Components runtime split, PR #382).
 
 ### Changed
+
+- **PR previews now show their exact source identity in the footer.** Protected
+  prebuilt deployments carry the PR branch and complete 40-character head SHA
+  into the runtime, where the footer links both values to the matching GitHub
+  tree and commit. — Codex (AI), 2026-09-05
 
 - **Saved Feature Stacks now have Pause, Stop, and Restart controls.** Pause
   and Stop cancel only the exact linked GitHub Actions run while retaining the
