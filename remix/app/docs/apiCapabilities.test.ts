@@ -14,9 +14,13 @@ test('capabilities advertise every documented semantic contract', () => {
 });
 
 test('both capability manifests advertise the bounded upload v2 contract', () => {
-	assert.equal(createApiCapabilitiesManifest().features['api.network-probe-upload'], '2.0.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.network-probe-upload'], '2.1.0');
 	const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-	assert.equal(manifest.features['api.network-probe-upload'].version, '2.0.0');
+	assert.equal(manifest.features['api.network-probe-upload'].version, '2.1.0');
+	for (const feature of ['api.network-probe-ping', 'api.network-probe-download', 'api.tiers', 'api.admin-tiers', 'api.admin-subscriptions']) {
+		assert.equal(manifest.features[feature].version, '1.1.0');
+		assert.equal(createApiCapabilitiesManifest().features[feature], '1.1.0');
+	}
 	assert.ok(manifest.operations.some((operation) => operation.feature === 'api.network-probe-upload' && operation.path === '/api/v1/network-probe/upload' && operation.methods.includes('POST')));
 });
 
@@ -36,10 +40,26 @@ test('account-hint privacy contracts publish their patch-level capability update
 	assert.equal(manifest.features['api.auth-account-hints-resolve'], '1.0.1');
 });
 
+test('capabilities publish the native Apple notification device contract', () => {
+	const manifest = createApiCapabilitiesManifest();
+
+	assert.equal(manifest.features['api.notifications-devices'], '1.1.0');
+	assert.equal(manifest.features['api.notifications-list'], '1.2.0');
+	assert.equal(manifest.features['api.watch-pairing'], '1.2.0');
+	assert.equal(manifest.features['api.watch-sync'], '1.0.0');
+	assert.equal(manifest.features['api.watch-things'], '1.0.0');
+	assert.equal(manifest.features['api.devices'], '1.9.0');
+	assert.equal(manifest.features['api.attachment-uploads'], '1.1.0');
+	assert.equal(manifest.features['api.attachment-upload-parts'], '1.1.0');
+	assert.equal(manifest.features['api.attachment-upload-complete'], '1.1.0');
+});
+
 test('notification contracts publish the history filters and the system family as compatible minors', () => {
 	const manifest = createApiCapabilitiesManifest();
 
-	assert.equal(manifest.features['api.notifications-list'], '1.1.0');
+	// the history filters landed as 1.1.0; the list then took the cursor,
+	// from/to window and viewer object on top, so it publishes 1.2.0
+	assert.equal(manifest.features['api.notifications-list'], '1.2.0');
 	assert.equal(manifest.features['api.notifications-settings'], '1.1.0');
 });
 
@@ -67,6 +87,38 @@ test('the storage census and ciControl workbench allowlist publish their minor c
 	assert.equal(manifest.features['api.mongodb-raw-results'], '1.1.0');
 });
 
+test('the Lopu family publishes its minor capability updates (own providers, verified keys)', () => {
+	const manifest = createApiCapabilitiesManifest();
+	// 1.3.0: vaultProviders[].realtimeModels + the kind-default model for a row saved without one
+	assert.equal(manifest.features['api.ai-models'], '1.3.0');
+	assert.equal(manifest.features['api.admin-ai-models'], '1.1.0');
+	assert.equal(manifest.features['api.settings-lopu-chat-defaults'], '1.1.0');
+	// 1.1.1 / 1.0.1: the chat write buckets fail closed on a limiter outage
+	assert.equal(manifest.features['api.lopu-chats'], '1.1.1');
+	assert.equal(manifest.features['api.lopu-chats-update'], '1.1.1');
+	assert.equal(manifest.features['api.lopu-chats-delete'], '1.0.1');
+	// 1.2.0: server-verified confirmations (confirmations[] in, confirm event +
+	// tool_result.needsConfirmation out) and the JSON-only fence (415)
+	assert.equal(manifest.features['api.lopu-chats-reply'], '1.2.0');
+	// 1.1.0: optional provider `model` + templates with catalog models / more kinds (vault);
+	// optional per-turn model, effort, speed (voice turn) — on top of the 1.0.1 fences
+	assert.equal(manifest.features['api.lopu-vault'], '1.1.0');
+	assert.equal(manifest.features['api.lopu-voice-reply'], '1.1.0');
+	// direct voice (§6.1): the ephemeral realtime credential
+	assert.equal(manifest.features['api.lopu-voice-session'], '1.0.0');
+});
+
 test('persistent attachment content and resized previews advertise their additive contract', () => {
 	assert.equal(createApiCapabilitiesManifest().features['api.attachment-content'], '1.1.0');
+});
+
+test('admin preview dispatch publishes its protected-controller contract version', () => {
+	const manifest = createApiCapabilitiesManifest();
+	assert.equal(manifest.features['api.admin-ci-previews'], '2.0.0');
+});
+
+test('storage-aware health and the corrected email environment gate publish their contract updates', () => {
+	const manifest = createApiCapabilitiesManifest();
+	assert.equal(manifest.features['api.health-nitro'], '1.1.0');
+	assert.equal(manifest.features['api.email-config'], '1.0.1');
 });

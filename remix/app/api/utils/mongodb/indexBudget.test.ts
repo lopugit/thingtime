@@ -7,6 +7,7 @@ import {
 	RETIRED_THINGS_INDEXES,
 	backfillConsolidatedThingUniqueKeys,
 	createCiControlIndexes,
+	createWatchPairingIndexes,
 	createIndexReplacingForTests,
 	createThingsDataIndexes,
 	pruneRebuildTwins,
@@ -51,6 +52,16 @@ const fakeThingsDb = () => {
 		options
 	};
 };
+
+test('Watch PIN reservations are unique only for active requests and inboxes are indexed by recipient', async () => {
+	const fixture = fakeThingsDb();
+	await Promise.all(createWatchPairingIndexes(fixture.db.collection()));
+	const unique = fixture.options.find((index) => index.name === 'watch_active_pin_unique');
+	assert.equal(unique?.options.unique, true);
+	assert.deepEqual(unique?.keys, { 'meta.userCodeHash': 1 });
+	assert.deepEqual(unique?.options.partialFilterExpression, { purpose: 'watch-pairing', 'meta.shortCodeActive': true });
+	assert.ok(fixture.options.some((index) => index.keys['meta.recipientUserId'] === 1 && index.keys.createdAt === -1));
+});
 
 test('current Things index plan keeps four slots free below MongoDB hard limit', async () => {
 	const fixture = fakeThingsDb();

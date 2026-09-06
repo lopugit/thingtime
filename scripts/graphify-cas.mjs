@@ -14,6 +14,7 @@ import {
   rmSync,
   statSync,
   symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs"
 import { mkdtempSync } from "node:fs"
@@ -129,58 +130,101 @@ function sleep(milliseconds) {
   Atomics.wait(signal, 0, 0, milliseconds)
 }
 
-function lockOwnerAlive(lockPath) {
-  const owner = safeJson(path.join(lockPath, "owner.json"))
-  if (!owner || !Number.isSafeInteger(owner.pid) || owner.pid <= 0) {
-    // Another writer can observe the directory between atomic mkdir and the
-    // owner-file write. Give that tiny acquisition window time to settle.
-    try {
-      return Date.now() - statSync(lockPath).mtimeMs < 30_000
-    } catch {
-      return false
-    }
-  }
+const OWNER_FILE = /^owner-[0-9a-f-]{36}\.json$/
+
+function ownerAlive(owner) {
+  // Unknown ownership is never grounds for deleting somebody else's lock.
+  if (!owner || !Number.isSafeInteger(owner.pid) || owner.pid <= 0) return true
   try {
     process.kill(owner.pid, 0)
     return true
   } catch (error) {
-    return error.code === "EPERM"
+    return error.code !== "ESRCH"
+  }
+}
+
+function removeEmptyLock(lockPath) {
+  try {
+    rmdirSync(lockPath)
+  } catch (error) {
+    if (!["ENOENT", "ENOTEMPTY", "EEXIST"].includes(error.code)) throw error
+  }
+}
+
+function releaseOwner(lockPath, ownerFile) {
+  // A delayed reaper/releaser may now be looking at a replacement directory.
+  // Only its uniquely named record can be removed; rmdir cannot remove a new
+  // owner's populated directory. Never recursively remove the shared path.
+  try {
+    unlinkSync(path.join(lockPath, ownerFile))
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error
+  }
+  removeEmptyLock(lockPath)
+}
+
+function reapExitedOwner(lockPath) {
+  let entries
+  try {
+    entries = readdirSync(lockPath)
+  } catch (error) {
+    if (error.code === "ENOENT") return
+    throw error
+  }
+  for (const entry of entries) {
+    // Recognize an exited pre-upgrade writer, but never recursively delete it.
+    if (entry !== "owner.json" && !OWNER_FILE.test(entry)) continue
+    if (!ownerAlive(safeJson(path.join(lockPath, entry)))) {
+      releaseOwner(lockPath, entry)
+    }
   }
 }
 
 export function withRepositoryLock(root, callback) {
   const lockPath = path.join(graphifyRoot(root), ".locks", "writer")
   const timeout = Number(
-    process.env.GRAPHIFY_CAS_LOCK_TIMEOUT_MS || DEFAULT_LOCK_TIMEOUT_MS,
+    process.env.GRAPHIFY_CAS_LOCK_TIMEOUT_MS ?? DEFAULT_LOCK_TIMEOUT_MS,
   )
+  if (!Number.isFinite(timeout) || timeout < 0) {
+    fail("GRAPHIFY_CAS_LOCK_TIMEOUT_MS must be a finite non-negative number")
+  }
   const deadline = Date.now() + timeout
   mkdirSync(path.dirname(lockPath), { recursive: true })
-
-  while (true) {
-    try {
-      mkdirSync(lockPath)
-      writeFileSync(
-        path.join(lockPath, "owner.json"),
-        `${JSON.stringify({ pid: process.pid })}\n`,
-      )
-      break
-    } catch (error) {
-      if (error.code !== "EEXIST") throw error
-      if (!lockOwnerAlive(lockPath)) {
-        rmSync(lockPath, { recursive: true, force: true })
-        continue
-      }
-      if (Date.now() >= deadline) {
-        fail(`Timed out waiting for Graphify snapshot writer ${lockPath}`)
-      }
-      sleep(250)
-    }
-  }
+  const token = randomUUID()
+  const ownerFile = `owner-${token}.json`
+  const candidate = path.join(path.dirname(lockPath), `.writer-${token}`)
+  mkdirSync(candidate)
 
   try {
-    return callback()
+    writeFileSync(
+      path.join(candidate, ownerFile),
+      `${JSON.stringify({ pid: process.pid, token })}\n`,
+      { flag: "wx" },
+    )
+    while (true) {
+      try {
+        // Publish ownership atomically. There is never a visible new-format
+        // writer directory waiting for its owner record to be written.
+        // rename cannot replace a populated directory owned by another writer.
+        renameSync(candidate, lockPath)
+        break
+      } catch (error) {
+        if (!["EEXIST", "ENOTEMPTY"].includes(error.code)) throw error
+        reapExitedOwner(lockPath)
+        if (Date.now() >= deadline) {
+          fail(`Timed out waiting for Graphify snapshot writer ${lockPath}`)
+        }
+        sleep(50)
+      }
+    }
+    try {
+      return callback()
+    } finally {
+      releaseOwner(lockPath, ownerFile)
+    }
   } finally {
-    rmSync(lockPath, { recursive: true, force: true })
+    // This path is private to this attempt, never the shared lock pathname.
+    rmSync(candidate, { recursive: true, force: true })
   }
 }
 
@@ -733,7 +777,7 @@ function runMutation(root, args) {
   })
 }
 
-function ensureSnapshot(root) {
+function ensureSnapshot(root, consume = (snapshot) => snapshot) {
   const retention = snapshotRetentionLimit()
   return withRepositoryLock(root, () => {
     const current = computeSourceFingerprint(root)
@@ -741,7 +785,7 @@ function ensureSnapshot(root) {
     if (existing) {
       activateSnapshot(root, existing)
       pruneSnapshots(root, existing, retention)
-      return existing
+      return consume(existing)
     }
 
     const workingOutput = prepareWorkingOutput(
@@ -765,7 +809,7 @@ function ensureSnapshot(root) {
       })
       activateSnapshot(root, snapshot)
       pruneSnapshots(root, snapshot, retention)
-      return snapshot
+      return consume(snapshot)
     } catch (error) {
       rmSync(workingOutput, { recursive: true, force: true })
       throw error
@@ -843,9 +887,8 @@ function runRouted(root, args) {
     return
   }
 
-  const snapshot = ensureSnapshot(root)
-  activateSnapshot(root, snapshot)
-  invokeGraphify(root, snapshot.path, args)
+  // Keep the selected snapshot and its aliases pinned until the reader exits.
+  ensureSnapshot(root, (snapshot) => invokeGraphify(root, snapshot.path, args))
 }
 
 export function main(argv = process.argv.slice(2)) {
