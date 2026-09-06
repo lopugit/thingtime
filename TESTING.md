@@ -1,5 +1,16 @@
 # TESTING.md — per-area manual test checklists
 
+- At 390px and desktop widths, the Lopu message input stays inside its composer
+  card after typing and resizing. Measure the textarea and card bounds, not
+  just document width (a clipped ancestor can hide overflow). Open/close chat
+  settings and inspect the bottom controls after scrolling.
+
+- Combined Watch/Lopu/Builder release: build both embedded native targets;
+  iOS-only ActivityKit source must not compile into watchOS. Nested Builder
+  `ttArg` and `ttFormat` data must share the existing output-size budget and
+  must not execute template-shaped action result data. Confirm logout clears
+  Watch history, passkeys, Builder source/detail data and Lopu chat caches.
+
 - Watch release integration: the Nitro health contract smoke accepts documented
   `degraded` / `migration-required` responses, but rejects contradictory readiness
   or unavailable storage. Separately require `ready` on the release deployment;

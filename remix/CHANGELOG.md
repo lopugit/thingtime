@@ -18,6 +18,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-06: Integration browser checks fixed signed-out Watch approval
+  rendering and Lopu composer clipping. Keep textarea padding inside its card;
+  verify mobile/desktop nested previews and whole-code clipboard paste. — Codex (AI)
+
+- 2026-09-06: Integrate component catalog #291, Builder suites #578 and live
+  detail pages #612, Lopu assistant #592, and rich-text controls #635 alongside
+  the Watch release. Preserve shared text/node expansion budgets and all
+  account-cache logout cleanup; keep ActivityKit out of the Watch target while
+  embedding both Watch and Lopu widget. Validation uses worktree ports
+  17890/17891/17892 with automatic restart disabled. — Codex (AI)
+
 - Make rich-text history controls small, muted and bottom-right inside editors. Keep selected-text formatting above the line, reserving temporary space instead of falling below into the native iOS menu. — Codex (AI), 2026-09-06
 
 - 2026-09-06: Share editor presentation across posts, replies, Thing fields, tiers and builder; reserve field history space and avoid neighbouring controls. See [PR #635 notes](../PRs/635-editor-rich-text-controls-complete-editorjs-rich-text-styling.md).

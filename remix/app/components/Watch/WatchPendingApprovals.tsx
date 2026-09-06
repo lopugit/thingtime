@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { supportsWatchApproval, WATCH_QUICK_APPROVAL_REQUIREMENTS } from './watchApprovalCapabilities';
+import { visibleWatchRequests } from './watchPendingCore';
 
 type Viewer = { id: string; username: string; temporary?: boolean };
 type PendingWatch = { pairingId: string; userCode: string; device: { name: string }; expiresAt: string };
@@ -81,10 +82,7 @@ export const WatchPendingApprovals = ({ user: explicitUser, embedded = false }: 
 		}
 	};
 
-	const requests =
-		snapshot?.accountId === user?.id
-			? snapshot.requests.filter((request) => !dismissed.has(request.pairingId) && Date.parse(request.expiresAt) > Date.now())
-			: [];
+	const requests = visibleWatchRequests(snapshot, user, dismissed);
 	if (!requests.length) return null;
 	return (
 		<Box

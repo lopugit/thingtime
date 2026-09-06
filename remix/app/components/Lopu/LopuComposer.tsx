@@ -197,7 +197,7 @@ export const LopuComposer = ({
 	const showSettings = !hideSettings && (!!preferences || !!settingsContent);
 
 	return (
-		<Box className="lopuComposerWrap" minW={0}>
+		<Box className="lopuComposerWrap" minW={0} maxW="100%" sx={{ '&, & *': { boxSizing: 'border-box' } }}>
 			<Box
 				className="lopuComposer"
 				data-compact={compact ? 'true' : 'false'}
@@ -218,6 +218,10 @@ export const LopuComposer = ({
 					placeholder={placeholder || (streaming ? 'Lopu is replying…' : 'Ask Lopu anything, or tell her what to build…')}
 					aria-label="Message Lopu"
 					rows={1}
+					width="100%"
+					maxW="100%"
+					minW={0}
+					boxSizing="border-box"
 					minH={compact ? '40px' : '46px'}
 					maxH={`${MAX_TEXTAREA_HEIGHT}px`}
 					resize="none"
