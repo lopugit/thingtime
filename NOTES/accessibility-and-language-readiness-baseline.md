@@ -19,6 +19,9 @@ person.
 **Proposed plan:**
 [Accessibility and language-readiness roadmap](../PLAN/accessibility-and-language-readiness-roadmap.md)
 
+**Execution epic:**
+[TODO 25 — Accessibility and language readiness](../TODO/claude-todo/25-accessibility-and-language-readiness.md)
+
 ## Why this belongs in the garden
 
 Thingtime cannot be extraordinarily useful or widely adopted if core work is
