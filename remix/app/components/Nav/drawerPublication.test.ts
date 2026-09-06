@@ -45,6 +45,19 @@ test('the marketing section itself follows its children for visitors', () => {
 	assert.deepEqual(filterDrawerItemsByAuth(messages.children, false, false, nothing), []);
 });
 
+test('a top-level section keeps its own auth rules under the publication filter', () => {
+	const ids = (items: { id: string }[]) => items.map((item) => item.id);
+	// both call sites moved from filterDrawerItemsByAuth to filterDrawerTopItems,
+	// so the section's own authOnly/guestOnly/adminOnly must survive the move
+	const adminSection = { ...drawerMenuItems[0], id: 'admin-only-section', adminOnly: true };
+	const guestSection = { ...drawerMenuItems[0], id: 'guest-only-section', guestOnly: true };
+	const authSection = { ...drawerMenuItems[0], id: 'auth-only-section', authOnly: true };
+	const items = [adminSection, guestSection, authSection];
+	assert.deepEqual(ids(filterDrawerTopItems(items, false, false, nothing)), ['guest-only-section']);
+	assert.deepEqual(ids(filterDrawerTopItems(items, true, false, nothing)), ['auth-only-section']);
+	assert.deepEqual(ids(filterDrawerTopItems(items, true, true, nothing)), ['admin-only-section', 'auth-only-section']);
+});
+
 // UserSettingsModal's "Close after click" list mirrors the drawer, so it must
 // use the SAME pair of filters. Gating a top-level section on its own key
 // (filterDrawerItemsByAuth over drawerMenuItems) would hide Marketing from the
