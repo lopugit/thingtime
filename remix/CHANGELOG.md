@@ -18,6 +18,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Fix production storage-ledger validation to accept the catalog's optional speed-test quota without coercion, subscription rewrites, or allowance resets; retain legacy snapshots and fail closed on malformed quotas. — Codex (AI), 2026-09-06
+
 - 2026-09-06: Add bounded, value-free admin dry-run diagnostics for malformed protected storage ledgers; preserve fail-closed validation and all subscription allowances.
 
 - 2026-09-06: Include #612's final detail-page review follow-up in the main
