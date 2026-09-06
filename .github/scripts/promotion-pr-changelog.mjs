@@ -721,6 +721,15 @@ function main() {
 
   verifyFlags(prs);
   const contentEmpty = treesMatch(CFG.gitBase, CFG.gitHead);
+  // The job summary is the only place an operator reliably learns the
+  // promotion is a no-op. The body carries the ⚠️ warning, but only the run
+  // that flips the state actually rewrites it — every later push finds the
+  // body already current and returns early. The delta comment is gated on the
+  // PR set changing, and "Sync main into develop" empties the content without
+  // touching that set, so buildComment's note effectively never fires here.
+  // Tagging the summary lines keeps "carrying N PRs / M commits" from reading
+  // as a pending release in exactly the state this whole change is about.
+  const noopNote = contentEmpty ? ", no file changes vs base" : "";
   const section = buildSection({
     prs, directs, totalCommits, headShort, headDate, base: CFG.base, head: CFG.head,
     contentEmpty,
@@ -747,7 +756,7 @@ function main() {
         console.log(url);
       }
       summary(
-        `Opened a promotion PR (${CFG.head} → ${CFG.base}) carrying ${prs.length} PRs / ${totalCommits} commits.`,
+        `Opened a promotion PR (${CFG.head} → ${CFG.base}) carrying ${prs.length} PRs / ${totalCommits} commits${noopNote}.`,
       );
       return;
     }
@@ -755,7 +764,7 @@ function main() {
     const oldBody = String(openPr.body ?? "").replace(/\r\n/g, "\n");
     const newBody = spliceSection(oldBody, section);
     if (newBody === oldBody) {
-      summary(`Changelog on PR #${openPr.number} is already current (${prs.length} PRs / ${totalCommits} commits).`);
+      summary(`Changelog on PR #${openPr.number} is already current (${prs.length} PRs / ${totalCommits} commits${noopNote}).`);
       return;
     }
 
@@ -788,12 +797,12 @@ function main() {
         ]);
       }
       summary(
-        `Refreshed the changelog on PR #${openPr.number} (${prs.length} PRs / ${totalCommits} commits); ` +
+        `Refreshed the changelog on PR #${openPr.number} (${prs.length} PRs / ${totalCommits} commits${noopNote}); ` +
         `delta comment ${CFG.dryRun ? "planned" : "posted"} (+${delta.added.length} / −${delta.removed.length}${initialized ? ", initialized" : ""}).`,
       );
     } else {
       summary(
-        `Refreshed the changelog on PR #${openPr.number} (${prs.length} PRs / ${totalCommits} commits); PR set unchanged, no comment.`,
+        `Refreshed the changelog on PR #${openPr.number} (${prs.length} PRs / ${totalCommits} commits${noopNote}); PR set unchanged, no comment.`,
       );
     }
   } finally {
