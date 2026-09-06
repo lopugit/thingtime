@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import { Resvg } from '@resvg/resvg-js';
 
-import { buildSocialCardSvg, renderSocialCardPng, socialCardRenderOptions, socialTextWidth } from './socialCard';
+import { buildSocialCardSvg, readBodyWithin, renderSocialCardPng, socialCardRenderOptions, socialTextWidth } from './socialCard';
 import type { SocialPreview } from './socialPreview';
 
 const gallery: SocialPreview = {
@@ -283,4 +283,39 @@ test('a photo tile whose bytes will not decode falls back to the branded tile', 
 	// labelled image/png, impossible for the renderer to draw.
 	const truncated = `data:image/png;base64,${ONE_PIXEL_PNG.split(',')[1].slice(0, 24)}`;
 	assert.ok(!tileIsBlank(truncated), 'an undecodable photo must fall back to the branded tile, not a blank white slab');
+});
+
+// The cap on card imagery has to survive a response that declines to say how
+// big it is. S3 sends content-length today, so a header-only check looks fine
+// in production right up until a proxy, a range response or a compressed
+// transfer drops it — and then the only bound on a public, unauthenticated
+// endpoint is gone. These pin the bound to the read itself.
+const streamed = (chunks: readonly Uint8Array[]): Response =>
+	new Response(
+		new ReadableStream({
+			start(controller) {
+				for (const chunk of chunks) controller.enqueue(chunk);
+				controller.close();
+			}
+		})
+	);
+
+test('a body that never declares its length is still cut off at the cap', async () => {
+	const oversize = [new Uint8Array(600), new Uint8Array(600)];
+	assert.equal(streamed(oversize).headers.get('content-length'), null, 'the case only bites when the header is absent');
+	assert.equal(await readBodyWithin(streamed(oversize), 1_000), null);
+});
+
+test('a body inside the cap is returned whole and in order', async () => {
+	const bytes = await readBodyWithin(streamed([new Uint8Array([1, 2, 3]), new Uint8Array([4, 5])]), 1_000);
+	assert.deepEqual(bytes && Array.from(bytes), [1, 2, 3, 4, 5]);
+});
+
+test('a body exactly at the cap is kept, not rejected off by one', async () => {
+	const bytes = await readBodyWithin(streamed([new Uint8Array(1_000)]), 1_000);
+	assert.equal(bytes?.byteLength, 1_000);
+});
+
+test('a response with no body at all reads as nothing rather than throwing', async () => {
+	assert.equal(await readBodyWithin(new Response(null, { status: 204 }), 1_000), null);
 });

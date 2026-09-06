@@ -445,17 +445,62 @@ export const socialCardRenderOptions = (): ConstructorParameters<typeof Resvg>[1
 	};
 };
 
+/**
+ * Read at most `limit` bytes of a response body, giving up the moment the cap
+ * is passed.
+ *
+ * `arrayBuffer()` cannot enforce a cap: it buffers the whole body first and can
+ * only be measured afterwards, which is the opposite order from what a limit
+ * means. A `content-length` pre-check does not stand in for it either — the
+ * header is absent on a chunked response, so the check silently passes and the
+ * bound stops existing exactly when it is load-bearing. This endpoint is public
+ * and unauthenticated and renders up to four images at once, so the read is
+ * bounded as it happens instead.
+ *
+ * Exported for the unit suite: the caller reaches S3 and cannot be tested here.
+ */
+export const readBodyWithin = async (response: Response, limit: number): Promise<Uint8Array | null> => {
+	const reader = response.body?.getReader();
+	if (!reader) return null;
+	const chunks: Uint8Array[] = [];
+	let total = 0;
+	for (;;) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		if (!value) continue;
+		total += value.byteLength;
+		if (total > limit) {
+			// Cancelling closes the connection rather than draining bytes we have
+			// already decided to throw away.
+			await reader.cancel();
+			return null;
+		}
+		chunks.push(value);
+	}
+	const bytes = new Uint8Array(total);
+	let offset = 0;
+	for (const chunk of chunks) {
+		bytes.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+	return bytes;
+};
+
 const loadAttachmentDataUri = async (attachmentId: string): Promise<string | null> => {
 	try {
 		const { getAttachmentDownload } = await import('../attachments/attachments');
 		const download = await getAttachmentDownload(null, attachmentId, false);
 		if (!download.ok) return null;
+		// The record's own size is verified against the stored object's head and
+		// pinned to an immutable objectVersionId, so a known-oversize attachment
+		// can be dropped before a byte is fetched. Only a definite overage skips
+		// the fetch — anything else still goes through the bounded read below.
+		if (Number.isFinite(download.size) && download.size > MAX_CARD_IMAGE_BYTES) return null;
 		const response = await fetch(download.url, { signal: AbortSignal.timeout(5_000) });
 		const contentType = response.headers.get('content-type')?.split(';')[0]?.toLowerCase() || '';
-		const length = Number(response.headers.get('content-length') || 0);
-		if (!response.ok || !SAFE_IMAGE_TYPES.has(contentType) || (Number.isFinite(length) && length > MAX_CARD_IMAGE_BYTES)) return null;
-		const bytes = new Uint8Array(await response.arrayBuffer());
-		if (bytes.byteLength === 0 || bytes.byteLength > MAX_CARD_IMAGE_BYTES) return null;
+		if (!response.ok || !SAFE_IMAGE_TYPES.has(contentType)) return null;
+		const bytes = await readBodyWithin(response, MAX_CARD_IMAGE_BYTES);
+		if (!bytes || bytes.byteLength === 0) return null;
 		return `data:${contentType};base64,${Buffer.from(bytes).toString('base64')}`;
 	} catch {
 		return null;
