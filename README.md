@@ -1147,7 +1147,7 @@ for the vault key and allowlist. Design note:
 providers, §6 voice + vault).
 
 ```sh
-# at least one provider key makes Lopu think; with neither she answers with an
+# at least one provider key makes Lopu think; with neither it answers with an
 # honest canned line instead of failing
 ANTHROPIC_API_KEY="<anthropic-api-key>"          # or ANTHROPIC_AUTH_TOKEN
 OPENAI_API_KEY="<openai-api-key>"

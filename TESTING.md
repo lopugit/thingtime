@@ -4883,7 +4883,7 @@ Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Auto
   Lopu…" field whose Enter sends a normal chat turn (the same brain, tools
   included). With no SpeechRecognition (the in-app Browser pane) the mic
   click toasts "No microphone here" and the typed path still works; with a
-  mic, listening pauses for the whole turn and for Lopu's speech (never her
+  mic, listening pauses for the whole turn and for Lopu's speech (never its
   own voice back), then resumes. The gear popover (never a full-width card)
   holds Spoken replies, Transcribe mode, Direct voice (enabled only for a
   vault provider whose kind lists a realtime model — the hint reads the
@@ -4963,7 +4963,7 @@ Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Auto
   `/chats/reply`, `/voice/reply`, `/vault` — refuses a non-JSON body with 415
   before the body is read or a bucket is spent; `/voice/reply` and `/vault`
   writes refuse a temporary session (403); the chat write buckets fail closed
-  (a limiter outage answers 429 "cannot check her rate limit", never an
+  (a limiter outage answers 429 "cannot check its rate limit", never an
   unthrottled write). `verify-lopu.mjs` §A + `apiTests` (`lopu-*-json-only`,
   `lopu-vault-guarded`, `lopu-voice-reply-guarded`,
   `lopu-chats-reply-forged-confirmation`).

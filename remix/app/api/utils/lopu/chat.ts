@@ -1052,7 +1052,7 @@ async function* runToolLoop(options: LoopOptions): AsyncGenerator<LopuChatStream
 const chunkWords = (text: string): string[] => text.match(/\S+\s*/g) || [text];
 
 export const LOPU_FALLBACK_UNCONFIGURED =
-  'Lopu is resting her horn — no AI provider is configured yet. Ask an admin to add ANTHROPIC_API_KEY (or OPENAI_API_KEY) to this deployment and I will come alive 🦄';
+  'Lopu is resting its horn — no AI provider is configured yet. Ask an admin to add ANTHROPIC_API_KEY (or OPENAI_API_KEY) to this deployment and I will come alive 🦄';
 export const LOPU_FALLBACK_FAILED = 'Lopu is daydreaming… every AI provider stumbled just now. Give it a moment and try again 🔮';
 // A vault turn never falls back to the server keys — the user chose their own
 // provider — so its canned line points at the connection instead.
