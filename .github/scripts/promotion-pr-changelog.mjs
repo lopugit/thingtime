@@ -21,8 +21,8 @@
 // already has. The spine is non-empty but the merge would change no files, so
 // the section leads with an explicit no-op warning (see contentEmpty in
 // buildSection) instead of claiming those PRs "will land in main". The no-op
-// test is a tree comparison (git diff --quiet base head), which holds whether
-// or not main is an ancestor of develop. Each spine commit is attributed to a
+// test compares the two root tree OIDs, which holds whether or not main is an
+// ancestor of develop and needs no blobs. Each spine commit is attributed to a
 // merged develop-based PR by, in order:
 //   1. its subject ("Merge pull request #N ..." and squash-style "... (#N)");
 //   2. content matching against recently merged develop-based PRs — merge
@@ -129,14 +129,27 @@ function run(cmd, args, opts = {}) {
 }
 const git = (...args) => run("git", args).trim();
 
-// True when merging the promotion would change no files. Compares trees rather
-// than ancestry: develop can sit several commits ahead of main while carrying
-// content main already has (work merged straight to main, then synced back into
-// develop). Identical trees mean any merge of the two produces main's current
-// tree, so this holds whether or not main is an ancestor of develop.
+// True when merging the promotion would change no files. Compares the two
+// commits' root tree OIDs rather than ancestry: develop can sit several commits
+// ahead of main while carrying content main already has (work merged straight
+// to main, then synced back into develop). Equal root trees mean any merge of
+// the two produces main's current tree, so this holds whether or not main is an
+// ancestor of develop.
 //
-// One-sided on purpose: identical trees always mean a no-op merge, but a no-op
-// merge does not always mean identical trees — main strictly ahead in content
+// rev-parse and not `git diff --quiet`, deliberately: promote-develop-to-main
+// checks out with filter=blob:none, and on differing trees — the normal case on
+// every real promotion — `git diff` lazily fetches the differing blobs from the
+// promisor remote. That is a needless network round trip on a 1.7 GB repo, and
+// it exits 128 rather than 1 whenever the remote is unreachable or the checkout
+// dropped its credentials (persist-credentials: false), which this function
+// rethrows and nothing above catches — a promisor hiccup would fail the whole
+// promotion job. Tree OIDs are already local in a blobless clone, so this needs
+// no blobs and no network. Same primitive build-all-branch.mjs uses to detect a
+// no-op rebuild. A missing rev still throws, so genuine git failures are never
+// silently read as "differs".
+//
+// One-sided on purpose: equal trees always mean a no-op merge, but a no-op
+// merge does not always mean equal trees — main strictly ahead in content
 // (a hotfix landed before "Sync main into develop" runs) still merges to main's
 // own tree while this reports "differs". A miss only falls back to the plain
 // carrying wording, never to a false no-op claim. Deciding it exactly needs
@@ -145,13 +158,7 @@ const git = (...args) => run("git", args).trim();
 // drivers are arbitrary code execution; that is not worth it for a transient
 // state the sync workflow collapses on every push to main.
 function treesMatch(base, head) {
-  try {
-    run("git", ["diff", "--quiet", base, head]);
-    return true; // exit 0 — no differences
-  } catch (error) {
-    if (error?.status === 1) return false; // exit 1 — real differences
-    throw error; // 128 and friends are genuine git failures, not "differs"
-  }
+  return git("rev-parse", `${base}^{tree}`) === git("rev-parse", `${head}^{tree}`);
 }
 const gh = (args, opts = {}) => run("gh", args, opts);
 const ghJson = (args, opts = {}) => JSON.parse(gh(args, opts) || "null");
