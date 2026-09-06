@@ -70,7 +70,7 @@ import {
 } from '~/schemas/registry';
 import { scorePost, type AlgorithmWeights, type PostFeatures } from './feedRanking';
 import { pollShapeOfCrystal, tallyPollVotes, type PollVoteEntry, type PublicPollVotes } from './pollCore';
-import { emptyUpdownVotes, tallyUpdown, type PublicUpdownVotes, type UpdownEntry } from './updownCore';
+import { emptyUpdownVotes, orderCommentPage, tallyUpdown, type CommentSort, type PublicUpdownVotes, type UpdownEntry } from './updownCore';
 import {
 	assertSubspaceInteraction,
 	assertSubspacePosting,
@@ -2170,10 +2170,26 @@ const resolveCommentRootSubspaces = async (things: Awaited<ReturnType<typeof get
 const authorFlairFor = (flairs: AuthorFlairs, embed: SubspaceEmbed | null, subspaceId: string, userId: string): PublicAuthorFlair | null =>
   toPublicUserFlair(liveUserFlair(flairs.get(authorFlairKey(subspaceId, userId)) || null, embed?.userFlairs));
 
-export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | Viewer): Promise<PublicPost[]> => {
+// Per-read projection options. `commentSort` (GET /api/v1/things?id=…&
+// commentSort=top|new|old — round 2 S7) re-orders the SHIPPED comment page:
+// null keeps the default (the newest RETURNED_COMMENTS, oldest → newest);
+// `top` = votes.score desc then older-first, `new` / `old` = by createdAt.
+// Level 1 is loaded whole per post (MAX_COMMENTS_PER_POST bounds it), so a
+// sorted page is the true best / newest / oldest of the level. The deeper
+// shipped levels are DB-sliced to the newest REPLIES_PER_LEVEL per parent
+// before any score is known (resolveRelated), so they re-order among the
+// replies that already ship rather than re-querying per parent — the
+// non-intrusive half the spec allowed; the docs say so.
+export type PostProjectionOptions = { commentSort?: CommentSort | null };
+
+export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | Viewer, options: PostProjectionOptions = {}): Promise<PublicPost[]> => {
   const viewer = await withFriendIds(asViewer(viewerInput));
   const viewerId = viewer?.id || null;
   if (!docs.length) return [];
+  const commentSort = options.commentSort ?? null;
+  // a sorted page can ship ANY of the level's comments, so the legacy
+  // embedded entries (a bounded v1 array) all need their authors resolved
+  const embeddedPage = (doc: ThingDoc) => (commentSort ? doc.comments || [] : (doc.comments || []).slice(-RETURNED_COMMENTS));
   const things = await getThingsCollection();
 
   // one level of share resolution
@@ -2210,7 +2226,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   const userIds: string[] = [];
   [...docs, ...originals].forEach((doc) => {
     userIds.push(doc.ownerId);
-    (doc.comments || []).slice(-RETURNED_COMMENTS).forEach((comment) => userIds.push(comment.userId));
+    embeddedPage(doc).forEach((comment) => userIds.push(comment.userId));
   });
   // every standalone comment entry across all levels (level-2 replies included)
   for (const entries of related.commentsByTarget.values()) {
@@ -2238,7 +2254,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
     const subspaceId = rootSubspaceOf(doc);
     if (!subspaceId) continue;
     flairPairs.push({ subspaceId, userId: doc.ownerId });
-    (doc.comments || []).slice(-RETURNED_COMMENTS).forEach((comment) => flairPairs.push({ subspaceId, userId: comment.userId }));
+    embeddedPage(doc).forEach((comment) => flairPairs.push({ subspaceId, userId: comment.userId }));
     collectCommentAuthors(doc.shareId, subspaceId, 1);
   }
   // open-report counts: only for the subspace posts this viewer MODERATES
@@ -2270,10 +2286,22 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   // ["post","comment"] bodies, reactions, reply counts); legacy-era entries
   // (no doc) fall back to the text-only defaults. Recurses through the
   // preloaded reply levels (resolveRelated ships two).
+  // the sort key of a loaded comment: its relational net score + age
+  const sortableOf = (entry: CommentEntry) => ({
+    entry,
+    id: entry.id,
+    createdAtMs: entry.createdAt.getTime(),
+    score: commentSort === 'top' ? tallyUpdown(related.updownByTarget.get(entry.id) || [], null).score : 0
+  });
+  // one level's shipped page in the requested order (null = today's page)
+  const pageOf = (entries: CommentEntry[], limit: number): CommentEntry[] =>
+    commentSort ? orderCommentPage(entries.map(sortableOf), commentSort, limit).map((row) => row.entry) : entries.slice(-limit);
   const buildComment = (comment: CommentEntry, parentId: string, rootSubspaceId: string | null): PublicComment => {
     const commentCrystal = comment.doc ? crystalOf(comment.doc) : {};
     const commentReactions = related.reactionsByTarget.get(comment.id) || [];
-    const replies = related.commentsByTarget.get(comment.id) || [];
+    const loadedReplies = related.commentsByTarget.get(comment.id) || [];
+    // every shipped reply stays shipped — a sort only re-orders the level
+    const replies = commentSort ? pageOf(loadedReplies, loadedReplies.length) : loadedReplies;
     return {
       id: comment.id,
       thingtime: comment.doc ? thingtimeOf(comment.doc) : ['comment'],
@@ -2308,7 +2336,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
     const crystal = crystalOf(doc);
     const allComments = mergedCommentsOf(doc, related);
     const rootSubspaceId = rootSubspaceOf(doc);
-    const comments = allComments.slice(-RETURNED_COMMENTS).map((comment) => buildComment(comment, doc.shareId, rootSubspaceId));
+    const comments = pageOf(allComments, RETURNED_COMMENTS).map((comment) => buildComment(comment, doc.shareId, rootSubspaceId));
     // the counter reports the WHOLE thread: v2 descendants via $graphLookup
     // plus the legacy-era entries (no doc) that graph traversal can't see
     const totalComments = (threadCounts.get(doc.shareId) ?? 0) + allComments.filter((entry) => !entry.doc).length;
@@ -3053,7 +3081,8 @@ export const listUserPosts = async (
 export const getThing = async (
   viewerInput: string | Viewer,
   shareId: unknown,
-  app: AppLens = null
+  app: AppLens = null,
+  options: PostProjectionOptions = {}
 ): Promise<Fail | { ok: true; thing: PublicThing; post: PublicPost | null; parent: PublicPost | null; root: PublicPost | null }> => {
   const viewer = await withFriendIds(asViewer(viewerInput));
   const doc = await findViewableThingAs(shareId, viewer, app);
@@ -3075,7 +3104,7 @@ export const getThing = async (
 	// aggregates (those resolvers are target-generic), and the parent walk
 	// links the page back to the post the media is bound to.
 	const isMediaAttachment = thingtimeOf(doc).includes('attachment');
-	const post = isPostThing(doc) || isComment || isMediaAttachment ? (await toPublicPosts([doc], viewer))[0] : null;
+	const post = isPostThing(doc) || isComment || isMediaAttachment ? (await toPublicPosts([doc], viewer, options))[0] : null;
 
   let parent: PublicPost | null = null;
   let root: PublicPost | null = null;
@@ -3105,7 +3134,7 @@ export const getThing = async (
     const verdicts = await Promise.all(chain.map((entry) => canViewInherited(entry, viewer, lookup)));
     const visibleChain = chain.filter((_, index) => verdicts[index]);
     if (visibleChain.length) {
-      const projected = await toPublicPosts([...new Map(visibleChain.map((entry) => [entry.shareId, entry])).values()], viewer);
+      const projected = await toPublicPosts([...new Map(visibleChain.map((entry) => [entry.shareId, entry])).values()], viewer, options);
       const byId = new Map(projected.map((entry) => [entry.id, entry]));
       parent = byId.get(chain[0]?.shareId) || null;
       const last = chain[chain.length - 1];

@@ -7578,8 +7578,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // title / subspace / votes — see PRs/subspaces-communities-and-updown-votes.md)
     // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
     // subspace post, for that subspace's moderators only (S5, additive)
-    featureVersion: '1.4.0',
-    contractVersion: '1.3.0',
+    // 1.5.0 / contract 1.4.0: GET ?id= takes commentSort=top|new|old — the
+    // shipped comment page in Reddit's three orders (top = votes.score desc,
+    // then older first) and the response echoes commentSort; an unknown value
+    // is a 400. Only this read grew — the shared projection is unchanged, so
+    // things-comment / -feed / -user stay put (S7, additive)
+    featureVersion: '1.5.0',
+    contractVersion: '1.4.0',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
@@ -7601,6 +7606,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Optionally add extended: any JSON up to 512KB, stored untouched and returned as-is — replace-on-write, null clears it. It is not structured-searchable (/search field conditions can’t target it), though its string content is indexed by the wildcard text index like any field.',
       'Attached kinds (comment, reaction) require targetId and carry acl ["tt:inherit"]; shares carry thingtime ["post","share"]. tt:inherit is stamped by the SERVER on target-attached things — sending it yourself is a 400 on create and update alike, because a thing whose audience is detached from its own acl can never be judged or re-edited.',
       "GET ?id= reads one thing; post projections include viewer-relative commentCounts { direct, replies, total, loaded } while commentCount remains the backward-compatible total. Hidden ACL/moderation rows are never counted or disclosed. GET ?target=&thingtime=comment lists a visible thing’s comments; GET ?thingtime=&cursor=&limit= lists your own things. Session callers may add appId=<clientId> to the own-things list to browse ONE app's namespace (see /api/v1/apps/data-summary).",
+      "GET ?id=&commentSort=top|new|old orders the shipped comment page (the post’s direct comments, 20 per read): top = net up/down score descending, ties older first; new = newest first; old = oldest first. Absent keeps the default page — the newest 20 shown oldest → newest — and any other value is a 400. The response echoes commentSort (null when absent). The whole first level is ordered before the page is cut, so top is the highest-scoring comments of the post, not the newest ones re-shuffled; the nested reply levels that ship with a comment (the newest 5 per parent) are re-ordered among themselves the same way, never re-fetched per parent — a deeper thread’s full order comes from its own GET ?id=<comment>&commentSort=.",
       'PUT { id, thingtime, crystal, acl? } creates the thing at that id (201) or replaces the owned thing’s crystal whole (200); PATCH { id, crystal?, extended?, acl?, tags? } merges crystal fields (extended still replaces whole).',
       'PATCH { id, attachmentIds } syncs a post’s (or rich comment’s) private attachments: the list is the full desired display order — it must include every id already bound to that thing (removals are rejected; 409 when the bound set changed) and may append the ids of newly uploaded ready drafts, which are bound to the post with the same fences create-time binding uses. Same-origin JSON from a full user session only, like attachment creation.',
       'PATCH/PUT may include expectedUpdatedAt to fail with 409 if the Thing changed after a preview. PATCH may set replaceCrystal true for whole-crystal replacement.',
@@ -7703,6 +7709,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           'Fetch a thing by id (posts AND comments include the full post projection; comments also return parent and root for thread navigation — the /post/:id permalink pages are backed by this).',
         method: 'GET',
         query: { id: 'post_123' }
+      },
+      {
+        name: 'Read a post with its top comments',
+        description: 'commentSort=top ships the post’s highest-scoring comments first (net up/down score, ties older first); new / old order by age. The response echoes commentSort.',
+        method: 'GET',
+        query: { id: 'post_123', commentSort: 'top' }
       },
       {
         name: 'List comments of a post',
@@ -7810,6 +7822,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Every doc stores the root schemaVersion it was written at; admins migrate older docs via /api/v1/admin/migrations.',
       'Browse every schema kind at /schemas or GET /api/v1/schemas.',
       'The comment/react/share/update/delete sub-routes remain as sugar over this endpoint.',
+      'commentSort is a per-read view of the same thread — it changes the ORDER of the shipped comment page (and which 20 direct comments make it), never the counts: commentCounts.total / direct still describe the whole thread and loaded is the page size. Comments left out of a sorted page are still reachable through GET ?target=<post>&thingtime=comment (chronological, cursor-paged).',
       "App-token behaviour in one line: same verbs, own namespace only — a thing without the app's root appId stamp 404s for reads, writes, and deletes alike. Apps read children (comments/reactions) relationally via GET ?target=… inside the namespace; child counts never mix in first-party or other-app children."
     ]
   }),

@@ -78,3 +78,44 @@ export const risingScore = (score: number, createdAtMs: number, nowMs: number): 
 	const ageHours = Math.max(0, (nowMs - createdAtMs) / 3_600_000);
 	return (Math.max(score, 0) + 1) / Math.pow(ageHours + 2, 1.5);
 };
+
+// ---------------------------------------------------------------------------
+// Comment sort for a single post read (GET /api/v1/things?id=…&commentSort=).
+// Reddit's three comment orders over the RELATIONAL tallies — pure so the
+// route, the projection and the client's optimistic re-order agree.
+
+export const COMMENT_SORTS = ['top', 'new', 'old'] as const;
+export type CommentSort = (typeof COMMENT_SORTS)[number];
+
+export const isCommentSort = (value: unknown): value is CommentSort => (COMMENT_SORTS as readonly string[]).includes(value as string);
+
+// Query parsing: absent / empty → null (the default page: the newest comments,
+// oldest → newest — unchanged), a known sort → itself, anything else → an
+// error the route answers 400 with (a typo must never silently reorder).
+export const parseCommentSort = (value: unknown): { ok: true; sort: CommentSort | null } | { ok: false; error: string } => {
+	if (value === null || value === undefined || value === '') return { ok: true, sort: null };
+	if (isCommentSort(value)) return { ok: true, sort: value };
+	return { ok: false, error: 'commentSort must be "top", "new", or "old"' };
+};
+
+export type SortableComment = { id: string; createdAtMs: number; score: number };
+
+// top: net score desc, then older first (an early comment keeps its place
+// against a later one at the same score — the chronological merge's own tie
+// order), then id; new: newest first; old: oldest first. Deterministic for a
+// fixed dataset, whatever order the entries arrive in.
+export const compareCommentsFor = (sort: CommentSort) => (a: SortableComment, b: SortableComment): number => {
+	if (sort === 'top' && a.score !== b.score) return b.score - a.score;
+	if (sort === 'new') return b.createdAtMs - a.createdAtMs || a.id.localeCompare(b.id);
+	return a.createdAtMs - b.createdAtMs || a.id.localeCompare(b.id);
+};
+
+// The shipped page of one level: `null` keeps today's contract — the LAST
+// `limit` entries of the chronological (oldest → newest) list, i.e. the newest
+// comments shown oldest-first; a sort orders the whole loaded level and ships
+// the FIRST `limit` — so `top` is the highest-scoring comments of the level,
+// not the newest ones re-shuffled.
+export const orderCommentPage = <T extends SortableComment>(entries: readonly T[], sort: CommentSort | null, limit: number): T[] => {
+	if (!sort) return entries.slice(-limit);
+	return [...entries].sort(compareCommentsFor(sort)).slice(0, limit);
+};

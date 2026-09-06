@@ -647,6 +647,24 @@ export const SubspacePage = () => {
 							</Flex>
 						)}
 						{user && subspace && subspace.viewer.canPost && !wall && <PostComposer onPosted={handlePosted} subspace={composerContextOf(subspace)} />}
+						{!user && subspace && !wall && (
+							<Flex alignItems="center" columnGap={2} rowGap={1} flexWrap="wrap" paddingX={1} data-testid="subspace-guest-post-hint">
+								<Text fontSize="xs" color={MUTED}>
+									{subspace.access === 'restricted' ? '✋ Only approved posters can post here — log in and join first.' : `🗝️ Log in to post in s/${subspace.slug}.`}
+								</Text>
+								<Button
+									size="xs"
+									borderRadius="999px"
+									variant="outline"
+									color={INK}
+									borderColor="var(--tt-border, #ececef)"
+									onClick={() => lopu({ title: `Log in to post in s/${subspace.slug} 🗝️`, status: 'info', duration: 6000 })}
+									data-testid="subspace-guest-post"
+								>
+									Log in to post ✍️
+								</Button>
+							</Flex>
+						)}
 						{user && subspace && viewer && !viewer.canPost && !viewer.banned && !wall && (
 							<Flex alignItems="center" columnGap={2} rowGap={1} flexWrap="wrap" paddingX={1} data-testid="subspace-post-hint">
 								<Text fontSize="xs" color={MUTED}>

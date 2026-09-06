@@ -122,9 +122,12 @@ test('subspace user flairs publish their contract versions', () => {
 	// (S5 moved the shared post projection's contract on to 1.3.0 —
 	// subspaceMod.reportCount for the post's moderators; S6 moved the feed on
 	// to 1.4.0 — scope=all|subspaces)
-	for (const feature of ['api.things', 'api.things-comment', 'api.things-user']) {
+	for (const feature of ['api.things-comment', 'api.things-user']) {
 		assert.equal(manifest.features[feature], '1.3.0', feature);
 	}
+	// (S7 moved the single read on to 1.4.0 — commentSort=top|new|old; the
+	// shared projection's other three ids are untouched)
+	assert.equal(manifest.features['api.things'], '1.4.0');
 	assert.equal(manifest.features['api.things-feed'], '1.4.0');
 });
 
@@ -168,9 +171,12 @@ test('subspace reports publish their contract versions', () => {
 	assert.equal(manifest.features['api.subspaces-get'], '1.4.0');
 	assert.equal(manifest.features['api.subspaces-moderate'], '1.4.0');
 	assert.equal(manifest.features['api.subspaces-feed'], '1.3.0');
-	for (const feature of ['api.things', 'api.things-comment', 'api.things-user']) {
+	for (const feature of ['api.things-comment', 'api.things-user']) {
 		assert.equal(manifest.features[feature], '1.3.0', feature);
 	}
+	// (S7 moved the single read on to 1.4.0 — commentSort=top|new|old; the
+	// shared projection's other three ids are untouched)
+	assert.equal(manifest.features['api.things'], '1.4.0');
 	assert.equal(manifest.features['api.things-feed'], '1.4.0'); // S6: scope
 });
 
@@ -189,9 +195,12 @@ test('subspace discovery publishes its contract versions', () => {
 	// its ACTIVE members (compatible corrections) — 1.4.0 → 1.5.0.
 	assert.equal(manifest.features['api.subspaces'], '1.5.0');
 	assert.equal(manifest.features['api.things-feed'], '1.4.0');
-	for (const feature of ['api.things', 'api.things-comment', 'api.things-user']) {
+	for (const feature of ['api.things-comment', 'api.things-user']) {
 		assert.equal(manifest.features[feature], '1.3.0', feature);
 	}
+	// (S7 moved the single read on to 1.4.0 — commentSort=top|new|old; the
+	// shared projection's other three ids are untouched)
+	assert.equal(manifest.features['api.things'], '1.4.0');
 	assert.equal(manifest.features['api.subspaces-feed'], '1.3.0');
 	assert.equal(manifest.features['api.subspaces-get'], '1.4.0');
 });

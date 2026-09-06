@@ -204,6 +204,36 @@ export const applyUpdownVote = <T extends { votes?: PublicUpdownVotes }>(prev: T
   return { ...prev, votes: { up, down, score: up - down, viewerVote: next } };
 };
 
+// Comment sort inside a post (round 2 S7): GET /api/v1/things?id=&commentSort=
+// ships the page in one of Reddit's three orders; the card paints the SAME
+// order over the comments it already holds first (and keeps a fresh comment
+// in its place after the server page lands), so this comparator mirrors the
+// server's (things/updownCore.ts orderCommentPage): top = net score desc,
+// ties older first; new = newest first; old = oldest first.
+export const COMMENT_SORTS = ['top', 'new', 'old'] as const;
+export type CommentSort = (typeof COMMENT_SORTS)[number];
+export const COMMENT_SORT_META: Record<CommentSort, { label: string; emoji: string; hint: string }> = {
+  top: { label: 'Top', emoji: '▲', hint: 'Highest score first' },
+  new: { label: 'New', emoji: '✨', hint: 'Newest first' },
+  old: { label: 'Old', emoji: '🕰️', hint: 'Oldest first' }
+};
+export const isCommentSort = (value: unknown): value is CommentSort => (COMMENT_SORTS as readonly string[]).includes(value as string);
+const commentTimeOf = (comment: Pick<PostComment, 'createdAt'>): number => {
+  const time = new Date(comment.createdAt).getTime();
+  return Number.isFinite(time) ? time : 0;
+};
+export const sortCommentPage = <T extends Pick<PostComment, 'id' | 'createdAt' | 'votes'>>(comments: readonly T[], sort: CommentSort | null): T[] => {
+  if (!sort) return [...comments];
+  return [...comments].sort((a, b) => {
+    if (sort === 'top') {
+      const scoreDelta = (b.votes?.score ?? 0) - (a.votes?.score ?? 0);
+      if (scoreDelta !== 0) return scoreDelta;
+    }
+    if (sort === 'new') return commentTimeOf(b) - commentTimeOf(a) || a.id.localeCompare(b.id);
+    return commentTimeOf(a) - commentTimeOf(b) || a.id.localeCompare(b.id);
+  });
+};
+
 // A post update bubbled up from a card. A value replaces the post (null removes
 // it); a function applies a delta to the FRESHEST post in the list — the form
 // optimistic reactions use so concurrent toggles reconcile per-token instead of

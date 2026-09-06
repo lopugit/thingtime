@@ -59,8 +59,8 @@ import { fetchThreadInto, getCachedThread, prefetchNextDepth, setCachedThread, w
 import { canonicalPostTags } from '~/components/Attachments/attachmentUiCore';
 import { profileMentionHref, splitMentionSegments, type MentionSegment } from '~/utils/mentions';
 import { extractInlineHashtags, searchTagHref, splitHashtagSegments, type HashtagSegment } from './hashtags';
-import { CIRCLE_META, MARKETPLACE_CATEGORY_META, REACTION_EMOJIS, applyUpdownVote, timeAgo } from './feedTypes';
-import type { EngagementEvent, FeedAuthor, PostChange, PostComment, PostVisibility, PublicAuthorFlair, PublicPost, UpdownDirection } from './feedTypes';
+import { CIRCLE_META, COMMENT_SORTS, COMMENT_SORT_META, MARKETPLACE_CATEGORY_META, REACTION_EMOJIS, applyUpdownVote, isCommentSort, sortCommentPage, timeAgo } from './feedTypes';
+import type { CommentSort, EngagementEvent, FeedAuthor, PostChange, PostComment, PostVisibility, PublicAuthorFlair, PublicPost, UpdownDirection } from './feedTypes';
 import type { PollRenderPollContext } from '~/components/Kinds';
 
 // Apply one token's toggle to a post, idempotently (a no-op if the post already
@@ -788,6 +788,9 @@ const CommentRow = (props: {
   // under a subspace post (the report lands on the root post)
   const subspaceReport = React.useContext(SubspaceReportContext);
   const canReportComment = !!subspaceReport && !subspaceReport.viewerCanModerate && !!user && (!comment.author || comment.author.id !== user.id) && !isPendingComment(comment);
+  // a guest sees the same 🚩 and is nudged to log in (every subspace action
+  // nudges — join, vote, react, reply, report)
+  const guestReportComment = !!subspaceReport && !user && !isPendingComment(comment);
   const [reportOpen, setReportOpen] = React.useState(false);
   const handleReportComment = async (choice: ReportChoice) => {
     lopu(REPORTED_TOAST);
@@ -1191,7 +1194,7 @@ const CommentRow = (props: {
               </Flex>
               {reactControl}
               {showVotesOnComments && commentUpdown}
-              {canReportComment && (
+              {(canReportComment || guestReportComment) && (
                 <Flex
                   as="button"
                   type="button"
@@ -1202,8 +1205,8 @@ const CommentRow = (props: {
                   _hover={{ color: 'var(--tt-danger, #e5484d)' }}
                   aria-label="Report this comment to the moderators"
                   title="Report to moderators 🚩"
-                  onClick={() => setReportOpen(true)}
-                  data-testid="comment-report"
+                  onClick={() => (user ? setReportOpen(true) : lopu({ title: 'Log in to report 🚩', status: 'info', duration: 6000 }))}
+                  data-testid={user ? 'comment-report' : 'comment-report-guest'}
                 >
                   <Flag size={12} strokeWidth={2.2} />
                 </Flex>
@@ -1343,6 +1346,13 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   const [openReplyId, setOpenReplyId] = React.useState<string | null>(null);
   // comments page 5 at a time — "show more" reveals 5 older ones per click
   const [visibleComments, setVisibleComments] = React.useState(5);
+  // Comment sort (round 2 S7) — local to the card, offered on subspace posts:
+  // null is the server's default page (newest 20, oldest → newest, revealed
+  // upwards FB-style); top / new / old paint the SAME order over the comments
+  // already here at once, then the server page (the true top / newest /
+  // oldest 20 of the level) replaces them and the list reveals downwards.
+  const [commentSort, setCommentSort] = React.useState<CommentSort | null>(null);
+  const commentSortSeqRef = React.useRef(0);
 
   // stay a depth ahead from the moment the post arrives: warm shipped
   // avatars and prefetch the first HIDDEN depth (short level-1 threads and
@@ -1388,6 +1398,8 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   // to their parent post). A post the mods already removed offers no 🚩 —
   // the server answers 409 there (nothing left for the mods to do)
   const canReport = !!user && !isOwner && !canModerate && !!post.subspace && !mediaThing && !post.subspaceMod?.removed;
+  // a guest gets the same menu entry and a login nudge instead of the modal
+  const guestReport = !user && !!post.subspace && !mediaThing && !post.subspaceMod?.removed;
   const [reportOpen, setReportOpen] = React.useState(false);
   const handleReport = async (choice: ReportChoice) => {
     lopu(REPORTED_TOAST);
@@ -1755,6 +1767,30 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     }
   };
 
+  // Top / New / Old: paint first (the client comparator mirrors the server's),
+  // then fetch the sorted page and swap it in; a stale response (the viewer
+  // picked again meanwhile) is dropped; a refusal keeps the painted order and
+  // toasts. Offered on subspace posts only (media cards defer to their post).
+  const commentSortAvailable = !!post.subspace && !mediaThing;
+  const changeCommentSort = async (value: string | string[]) => {
+    const next = Array.isArray(value) ? value[0] : value;
+    if (!isCommentSort(next) || next === commentSort) return;
+    setCommentSort(next);
+    setVisibleComments(5);
+    const seq = ++commentSortSeqRef.current;
+    try {
+      const resp = await api.v1.things.get({ id: post.id, commentSort: next });
+      if (seq !== commentSortSeqRef.current || !resp?.post) return;
+      const fresh = resp.post as PublicPost;
+      onChanged?.(post.id, (prev) => ({ ...prev, comments: fresh.comments, commentCount: fresh.commentCount, commentCounts: fresh.commentCounts }));
+    } catch (err: any) {
+      if (seq !== commentSortSeqRef.current) return;
+      lopu({ title: err?.error || 'Could not re-sort the comments 😞', status: 'error' });
+    }
+  };
+  const orderedComments = commentSort ? sortCommentPage(post.comments, commentSort) : post.comments;
+  const shownComments = commentSort ? orderedComments.slice(0, visibleComments) : orderedComments.slice(-visibleComments);
+
   // Feed keyboard shortcuts (useFeedShortcuts): inside a shortcuts-enabled
   // page (feed/explore mount the provider) the card lends its OWN handlers —
   // handleReact for `l`, toggleComments for `c` — through a ref, so the hook
@@ -2006,7 +2042,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
               </Tooltip>
             </Flex>
           </Box>
-          {(isOwner || canModerate || canReport) && (
+          {(isOwner || canModerate || canReport || guestReport) && (
             <Menu placement="bottom-end" autoSelect={false} onOpen={isOwner || canModerate ? loadFlairs : undefined}>
               <MenuButton
                 as={IconButton}
@@ -2051,6 +2087,14 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                   <>
                     <MenuDivider />
                     <MenuItem fontSize="sm" onClick={() => setReportOpen(true)} data-testid="post-report">
+                      Report to moderators 🚩
+                    </MenuItem>
+                  </>
+                )}
+                {guestReport && (
+                  <>
+                    <MenuDivider />
+                    <MenuItem fontSize="sm" onClick={() => lopu({ title: 'Log in to report 🚩', status: 'info', duration: 6000 })} data-testid="post-report-guest">
                       Report to moderators 🚩
                     </MenuItem>
                   </>
@@ -2540,15 +2584,44 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
         {commentsOpen && !focusedComment && (
           <ThreadFocusContext.Provider value={threadFocusValue}>
 							<Flex flexDirection="column" rowGap={3} sx={threadNavCount > 0 ? { animation: `${SLIDE_IN_LEFT} 0.22s ease-out` } : undefined}>
+            {commentSortAvailable && post.comments.length > 1 && (
+              <Flex alignItems="center" columnGap={2} data-testid="comment-sort" data-comment-sort={commentSort || 'default'}>
+                <Menu placement="bottom-start" autoSelect={false}>
+                  <MenuButton
+                    as={Button}
+                    size="xs"
+                    variant="ghost"
+                    borderRadius="999px"
+                    color={commentSort ? INK : MUTED}
+                    fontWeight={600}
+                    paddingX={2}
+                    aria-label="Sort comments"
+                    data-testid="comment-sort-button"
+                  >
+                    {commentSort ? `${COMMENT_SORT_META[commentSort].emoji} ${COMMENT_SORT_META[commentSort].label}` : 'Sort 💬'} ▾
+                  </MenuButton>
+                  <MenuList minWidth="150px" borderRadius={RADIUS_MD} zIndex={10}>
+                    <MenuOptionGroup title="Sort comments" type="radio" value={commentSort || ''} onChange={changeCommentSort}>
+                      {COMMENT_SORTS.map((sort) => (
+                        <MenuItemOption key={sort} value={sort} fontSize="sm" data-testid={`comment-sort-${sort}`} title={COMMENT_SORT_META[sort].hint}>
+                          {COMMENT_SORT_META[sort].emoji} {COMMENT_SORT_META[sort].label}
+                        </MenuItemOption>
+                      ))}
+                    </MenuOptionGroup>
+                  </MenuList>
+                </Menu>
+              </Flex>
+            )}
             <SubspaceReportContext.Provider value={subspaceReportContext}>
-              {post.comments.slice(-visibleComments).map((comment) => (
+              {shownComments.map((comment) => (
                 <CommentRow key={comment.id} comment={comment} onChanged={handleCommentChanged} onEngagement={onEngagement} />
               ))}
             </SubspaceReportContext.Provider>
 
             {/* the reveal control sits BELOW the conversation (FB-style);
-            the OLDER comments it reveals render above the visible list */}
-            {post.comments.length > visibleComments && (
+            the OLDER comments it reveals render above the visible list — under
+            a sort the page reads top-down, so the reveal appends below */}
+            {orderedComments.length > visibleComments && (
               <Box
                 as="button"
                 type="button"
@@ -2558,8 +2631,9 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                 color={MUTED}
                 _hover={{ color: INK }}
                 onClick={() => setVisibleComments((count) => count + 5)}
+                data-testid="comments-reveal"
               >
-                Show previous comments 💬
+                {commentSort ? 'Show more comments 💬' : 'Show previous comments 💬'}
               </Box>
             )}
 

@@ -56,7 +56,16 @@
 // + Vary: Authorization with null viewer state, cookies ignored on the
 // cacheable URL, no public header without the flag, private / no-store when
 // authed, a Bearer credential answered as itself, anon=1&mine=1 → 401) and
-// the directory docs naming the subspaces.list rate key + the contract.
+// the directory docs naming the subspaces.list rate key + the contract —
+// and (section S) the completeness sweep: GET /things?id=&commentSort=
+// top|new|old (score-desc-then-older / newest / oldest orders, the default
+// page unchanged, counts untouched, 400 on a typo, anonymous reads, nested
+// replies + comment-as-root reads, a plain post), deleting a post clearing
+// its reports, banning a pending requester dropping the request, transfer
+// refused for banned / pending / outsider targets, a pending requester's
+// canPost false + the composer query excluding the pending subspace, a
+// demoted mod losing every queue on the next request, private-subspace and
+// removed posts never in rss / trending, the manifest + docs.
 //
 //   node scripts/verify-subspaces.mjs [baseUrl]
 //
@@ -1206,7 +1215,7 @@ const run = async () => {
 	const manifestO = await api('/api/v1/capabilities');
 	check(
 		'capability manifest advertises the user-flair contracts (subspaces 1.2.0 → 1.3.0 with S4 removalReasons → 1.4.0 with S6 sort → 1.5.0 after the S6 review / update 1.3.0, get → 1.4.0 with S5 openReportCount, members 1.3.1 → 1.4.1 with the S4 ban note + S4 review, subspaces-feed 1.1.0 → 1.3.0 with S4 + S5 reportCount, things / things-comment / things-feed / things-user 1.2.0 → 1.3.0 with S5 reportCount)',
-		manifestO.status === 200 && manifestO.body.features['api.subspaces'] === '1.5.0' && manifestO.body.features['api.subspaces-get'] === '1.4.0' && manifestO.body.features['api.subspaces-update'] === '1.3.0' && manifestO.body.features['api.subspaces-members'] === '1.4.1' && manifestO.body.features['api.subspaces-feed'] === '1.3.0' && ['api.things', 'api.things-comment', 'api.things-user'].every((feature) => manifestO.body.features[feature] === '1.3.0') && manifestO.body.features['api.things-feed'] === '1.4.0',
+		manifestO.status === 200 && manifestO.body.features['api.subspaces'] === '1.5.0' && manifestO.body.features['api.subspaces-get'] === '1.4.0' && manifestO.body.features['api.subspaces-update'] === '1.3.0' && manifestO.body.features['api.subspaces-members'] === '1.4.1' && manifestO.body.features['api.subspaces-feed'] === '1.3.0' && ['api.things-comment', 'api.things-user'].every((feature) => manifestO.body.features[feature] === '1.3.0') && manifestO.body.features['api.things'] === '1.4.0' /* S7: the single read moved on to 1.4.0 — commentSort — see section S */ && manifestO.body.features['api.things-feed'] === '1.4.0',
 		JSON.stringify({ s: manifestO.body?.features?.['api.subspaces'], g: manifestO.body?.features?.['api.subspaces-get'], u: manifestO.body?.features?.['api.subspaces-update'], m: manifestO.body?.features?.['api.subspaces-members'], f: manifestO.body?.features?.['api.subspaces-feed'], t: manifestO.body?.features?.['api.things'] })
 	);
 	check(
@@ -1761,7 +1770,7 @@ const run = async () => {
 	const manifestQ = await api('/api/v1/capabilities');
 	check(
 		'capability manifest advertises the S5 contracts (subspaces-report + subspaces-reports 1.0.1 after the S5 review — a removed post → 409, a repeat after a move re-files, a deleted comment takes its rows, dismiss follows the open rows’ targetId; get 1.4.0 — openReportCount; moderate 1.4.0 — report settlement; feed 1.3.0 and things / things-comment / things-user 1.3.0 — subspaceMod.reportCount; things-feed moved on to 1.4.0 in S6 — see section R)',
-		manifestQ.status === 200 && manifestQ.body.features['api.subspaces-report'] === '1.0.1' && manifestQ.body.features['api.subspaces-reports'] === '1.0.1' && manifestQ.body.features['api.subspaces-get'] === '1.4.0' && manifestQ.body.features['api.subspaces-moderate'] === '1.4.0' && manifestQ.body.features['api.subspaces-feed'] === '1.3.0' && ['api.things', 'api.things-comment', 'api.things-user'].every((feature) => manifestQ.body.features[feature] === '1.3.0') && manifestQ.body.features['api.things-feed'] === '1.4.0',
+		manifestQ.status === 200 && manifestQ.body.features['api.subspaces-report'] === '1.0.1' && manifestQ.body.features['api.subspaces-reports'] === '1.0.1' && manifestQ.body.features['api.subspaces-get'] === '1.4.0' && manifestQ.body.features['api.subspaces-moderate'] === '1.4.0' && manifestQ.body.features['api.subspaces-feed'] === '1.3.0' && ['api.things-comment', 'api.things-user'].every((feature) => manifestQ.body.features[feature] === '1.3.0') && manifestQ.body.features['api.things'] === '1.4.0' /* S7: the single read moved on to 1.4.0 — commentSort — see section S */ && manifestQ.body.features['api.things-feed'] === '1.4.0',
 		JSON.stringify({ r: manifestQ.body?.features?.['api.subspaces-report'], rs: manifestQ.body?.features?.['api.subspaces-reports'], g: manifestQ.body?.features?.['api.subspaces-get'], mo: manifestQ.body?.features?.['api.subspaces-moderate'], f: manifestQ.body?.features?.['api.subspaces-feed'], t: manifestQ.body?.features?.['api.things'] })
 	);
 	const cleanupQ = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: owner.cookie, body: { slug: rpSlug, confirmSlug: rpSlug } });
@@ -1919,7 +1928,7 @@ const run = async () => {
 	check('a query matching no subspace answers an empty list (the section simply stays away)', rsSearchMiss.status === 200 && rsSearchMiss.body.subspaces.length === 0);
 	// the manifest
 	const manifestR = await api('/api/v1/capabilities');
-	check('capability manifest advertises the S6 contracts (subspaces 1.5.0 — sort, then the review’s anon=1 / subspaces.list rate key / private-activity fence; things-feed 1.4.0 — scope) with the rest of the family untouched', manifestR.status === 200 && manifestR.body.features['api.subspaces'] === '1.5.0' && manifestR.body.features['api.things-feed'] === '1.4.0' && manifestR.body.features['api.subspaces-update'] === '1.3.0' && manifestR.body.features['api.things'] === '1.3.0', JSON.stringify({ s: manifestR.body?.features?.['api.subspaces'], f: manifestR.body?.features?.['api.things-feed'] }));
+	check('capability manifest advertises the S6 contracts (subspaces 1.5.0 — sort, then the review’s anon=1 / subspaces.list rate key / private-activity fence; things-feed 1.4.0 — scope) with the rest of the family untouched', manifestR.status === 200 && manifestR.body.features['api.subspaces'] === '1.5.0' && manifestR.body.features['api.things-feed'] === '1.4.0' && manifestR.body.features['api.subspaces-update'] === '1.3.0' && manifestR.body.features['api.things'] === '1.4.0' /* S7: commentSort — see section S */, JSON.stringify({ s: manifestR.body?.features?.['api.subspaces'], f: manifestR.body?.features?.['api.things-feed'] }));
 	const rsDocs = await api('/api/v1/subspaces-docs');
 	const rsFeedDocs = await api('/api/v1/things/feed-docs');
 	check('docs routes answer for the two extended endpoints', rsDocs.status === 200 && rsDocs.body.docs?.endpoint === '/api/v1/subspaces' && rsFeedDocs.status === 200 && rsFeedDocs.body.docs?.endpoint === '/api/v1/things/feed');
@@ -1929,6 +1938,161 @@ const run = async () => {
 	const cleanupR = await Promise.all([rsSlug, rs2Slug, rsPrivSlug].map((slugToDelete) => api('/api/v1/subspaces/delete', { method: 'POST', cookie: owner.cookie, body: { slug: slugToDelete, confirmSlug: slugToDelete } })));
 	const rsAfterCleanup = await rsDir('&sort=members');
 	check('(cleanup) the plain post is deleted and the owner deletes the three discovery subspaces; the directory query no longer lists them', rsPlainDeleted.status === 200 && cleanupR.every((result) => result.status === 200) && rsAfterCleanup.status === 200 && rsAfterCleanup.body.subspaces.length === 0, `${rsPlainDeleted.status} ${JSON.stringify(cleanupR.map((result) => result.status))} ${JSON.stringify(rsSlugsOf(rsAfterCleanup))}`);
+
+	console.log('\nS. completeness sweep — comment sort, edge cases, truthful docs');
+	// Fixtures: S (public; owner + member + mod-as-moderator + stranger), P
+	// (private; owner + member added by the owner). `nobody` (section R) is in
+	// no subspace and plays the pending requester.
+	const ssSlug = `sss_${suffix}`.slice(0, 30);
+	const ssPrivSlug = `ssp_${suffix}`.slice(0, 30);
+	const ssCreated = await api('/api/v1/subspaces', { method: 'POST', cookie: owner.cookie, body: { slug: ssSlug, name: `Sweep ${suffix}`, access: 'public', rules: [{ title: 'Be kind', text: 'No gatekeeping.' }] } });
+	const ssPrivCreated = await api('/api/v1/subspaces', { method: 'POST', cookie: owner.cookie, body: { slug: ssPrivSlug, name: `Sweep private ${suffix}`, access: 'private' } });
+	const ssSpace = ssCreated.body?.subspace;
+	const ssPriv = ssPrivCreated.body?.subspace;
+	const ssJoins = await Promise.all([member, mod, stranger].map((who) => api('/api/v1/subspaces/join', { method: 'POST', cookie: who.cookie, body: { slug: ssSlug } })));
+	const ssPromote = await api('/api/v1/subspaces/members', { method: 'POST', cookie: owner.cookie, body: { slug: ssSlug, username: mod.username, action: 'role', role: 'moderator' } });
+	const ssPrivAdd = await api('/api/v1/subspaces/members', { method: 'POST', cookie: owner.cookie, body: { slug: ssPrivSlug, username: member.username, action: 'add' } });
+	check('(fixtures) S public + P private founded; member / mod / stranger join S, the mod is promoted, the owner adds the member to P', ssCreated.status === 201 && ssPrivCreated.status === 201 && ssJoins.every((result) => result.status === 200) && ssPromote.status === 200 && ssPrivAdd.status === 200, `${ssCreated.status}/${ssPrivCreated.status} ${JSON.stringify(ssJoins.map((result) => result.status))} ${ssPromote.status} ${ssPrivAdd.status}`);
+	const ssPostIn = (cookie, subspaceId, title) => api('/api/v1/things', { method: 'POST', cookie, body: { type: 'text', text: `${title} body`, title, ...(subspaceId ? { subspaceId } : {}), visibility: 'public' } });
+	const ssComment = (cookie, id, text) => api('/api/v1/things/comment', { method: 'POST', cookie, body: { id, text } });
+	const ssVote = (cookie, id, direction) => api('/api/v1/things/updown', { method: 'POST', cookie, body: { id, direction } });
+	const ssRead = (id, cookie, extra = '') => api(`/api/v1/things?id=${id}${extra}`, cookie ? { cookie } : {});
+	const ssIdsOf = (comments) => (comments || []).map((entry) => entry.id);
+
+	// --- comment sort: GET /api/v1/things?id=&commentSort=top|new|old ---
+	const ssPost = (await ssPostIn(owner.cookie, ssSpace.id, 'Sweep sort post')).body?.post;
+	// four direct comments in this order (sequential → ascending createdAt)
+	const ssC1 = (await ssComment(member.cookie, ssPost.id, 'first')).body?.comment;
+	const ssC2 = (await ssComment(stranger.cookie, ssPost.id, 'second')).body?.comment;
+	const ssC3 = (await ssComment(mod.cookie, ssPost.id, 'third')).body?.comment;
+	const ssC4 = (await ssComment(member.cookie, ssPost.id, 'fourth')).body?.comment;
+	check('(fixtures) a subspace post with four direct comments', !!ssPost?.id && !!ssC1?.id && !!ssC2?.id && !!ssC3?.id && !!ssC4?.id, JSON.stringify([ssPost?.id, ssC1?.id, ssC2?.id, ssC3?.id, ssC4?.id]));
+	// scores: c1 −1, c2 +2, c3 +1, c4 +1 (a tie with the older c3)
+	const ssVotes = await Promise.all([
+		ssVote(owner.cookie, ssC1.id, 'down'),
+		ssVote(owner.cookie, ssC2.id, 'up'),
+		ssVote(member.cookie, ssC2.id, 'up'),
+		ssVote(owner.cookie, ssC3.id, 'up'),
+		ssVote(owner.cookie, ssC4.id, 'up')
+	]);
+	check('(fixtures) votes land: c1 −1, c2 +2, c3 +1, c4 +1', ssVotes.every((result) => result.status === 200), JSON.stringify(ssVotes.map((result) => result.status)));
+	const ssDefault = await ssRead(ssPost.id, member.cookie);
+	check('default read (no commentSort) is unchanged: the comments ship oldest → newest and the response echoes commentSort null', ssDefault.status === 200 && JSON.stringify(ssIdsOf(ssDefault.body.post?.comments)) === JSON.stringify([ssC1.id, ssC2.id, ssC3.id, ssC4.id]) && ssDefault.body.commentSort === null, `${ssDefault.status} ${JSON.stringify(ssIdsOf(ssDefault.body?.post?.comments))} echo=${ssDefault.body?.commentSort}`);
+	const ssTop = await ssRead(ssPost.id, member.cookie, '&commentSort=top');
+	check('commentSort=top orders by net score desc, a tie older-first: c2 (+2), c3 (+1, older), c4 (+1), c1 (−1); echoed', ssTop.status === 200 && JSON.stringify(ssIdsOf(ssTop.body.post?.comments)) === JSON.stringify([ssC2.id, ssC3.id, ssC4.id, ssC1.id]) && ssTop.body.commentSort === 'top', `${ssTop.status} ${JSON.stringify(ssIdsOf(ssTop.body?.post?.comments))} scores=${JSON.stringify((ssTop.body?.post?.comments || []).map((entry) => entry.votes?.score))}`);
+	const ssNew = await ssRead(ssPost.id, member.cookie, '&commentSort=new');
+	check('commentSort=new ships newest first', ssNew.status === 200 && JSON.stringify(ssIdsOf(ssNew.body.post?.comments)) === JSON.stringify([ssC4.id, ssC3.id, ssC2.id, ssC1.id]) && ssNew.body.commentSort === 'new', `${ssNew.status} ${JSON.stringify(ssIdsOf(ssNew.body?.post?.comments))}`);
+	const ssOld = await ssRead(ssPost.id, member.cookie, '&commentSort=old');
+	check('commentSort=old ships oldest first', ssOld.status === 200 && JSON.stringify(ssIdsOf(ssOld.body.post?.comments)) === JSON.stringify([ssC1.id, ssC2.id, ssC3.id, ssC4.id]) && ssOld.body.commentSort === 'old', `${ssOld.status} ${JSON.stringify(ssIdsOf(ssOld.body?.post?.comments))}`);
+	check('a sort never changes the counts: commentCount / commentCounts.direct / loaded agree between the default and the top read', ssTop.body?.post?.commentCount === ssDefault.body?.post?.commentCount && ssTop.body?.post?.commentCounts?.direct === 4 && ssTop.body?.post?.commentCounts?.loaded === 4 && ssDefault.body?.post?.commentCounts?.loaded === 4, JSON.stringify([ssDefault.body?.post?.commentCounts, ssTop.body?.post?.commentCounts]));
+	const ssBogus = await ssRead(ssPost.id, member.cookie, '&commentSort=bogus');
+	check('commentSort=bogus → 400 (a typo never silently reorders a thread)', ssBogus.status === 400 && /commentSort/.test(ssBogus.body?.error || ''), `${ssBogus.status} ${JSON.stringify(ssBogus.body)}`);
+	const ssUpper = await ssRead(ssPost.id, member.cookie, '&commentSort=TOP');
+	check('commentSort is case-sensitive: TOP → 400', ssUpper.status === 400);
+	const ssAnonTop = await ssRead(ssPost.id, null, '&commentSort=top');
+	check('anonymous commentSort=top on a public subspace post → 200 in the same order, no viewer vote', ssAnonTop.status === 200 && JSON.stringify(ssIdsOf(ssAnonTop.body.post?.comments)) === JSON.stringify([ssC2.id, ssC3.id, ssC4.id, ssC1.id]) && ssAnonTop.body.post.comments.every((entry) => entry.votes?.viewerVote === null) && ssAnonTop.body.commentSort === 'top', `${ssAnonTop.status} ${JSON.stringify(ssIdsOf(ssAnonTop.body?.post?.comments))}`);
+	// nested replies re-order among the replies that ship (the newest 5 per parent)
+	const ssR1 = (await ssComment(member.cookie, ssC1.id, 'reply one')).body?.comment;
+	const ssR2 = (await ssComment(stranger.cookie, ssC1.id, 'reply two')).body?.comment;
+	const ssReplyVotes = await Promise.all([ssVote(owner.cookie, ssR2.id, 'up'), ssVote(member.cookie, ssR2.id, 'up')]);
+	check('(fixtures) two replies under c1, the newer one at +2', !!ssR1?.id && !!ssR2?.id && ssReplyVotes.every((result) => result.status === 200));
+	const ssTopNested = await ssRead(ssPost.id, member.cookie, '&commentSort=top');
+	const ssDefaultNested = await ssRead(ssPost.id, member.cookie);
+	const ssC1Top = (ssTopNested.body?.post?.comments || []).find((entry) => entry.id === ssC1.id);
+	const ssC1Default = (ssDefaultNested.body?.post?.comments || []).find((entry) => entry.id === ssC1.id);
+	check('under top the shipped replies re-order too (r2 +2 before r1 0); the default page keeps them oldest → newest; both replies still ship', JSON.stringify(ssIdsOf(ssC1Top?.comments)) === JSON.stringify([ssR2.id, ssR1.id]) && JSON.stringify(ssIdsOf(ssC1Default?.comments)) === JSON.stringify([ssR1.id, ssR2.id]), JSON.stringify([ssIdsOf(ssC1Top?.comments), ssIdsOf(ssC1Default?.comments)]));
+	const ssCommentRoot = await ssRead(ssC1.id, member.cookie, '&commentSort=top');
+	check('a comment-as-root read (GET ?id=<comment>&commentSort=top) sorts ITS replies and the root post’s comments the same way', ssCommentRoot.status === 200 && JSON.stringify(ssIdsOf(ssCommentRoot.body.post?.comments)) === JSON.stringify([ssR2.id, ssR1.id]) && JSON.stringify(ssIdsOf(ssCommentRoot.body.root?.comments)) === JSON.stringify([ssC2.id, ssC3.id, ssC4.id, ssC1.id]) && ssCommentRoot.body.commentSort === 'top', `${ssCommentRoot.status} ${JSON.stringify([ssIdsOf(ssCommentRoot.body?.post?.comments), ssIdsOf(ssCommentRoot.body?.root?.comments)])}`);
+	// the parameter is a things-level read option — a plain post takes it too
+	const ssPlain = (await ssPostIn(owner.cookie, null, 'Sweep plain post')).body?.post;
+	const ssPlainC1 = (await ssComment(member.cookie, ssPlain.id, 'plain one')).body?.comment;
+	const ssPlainC2 = (await ssComment(stranger.cookie, ssPlain.id, 'plain two')).body?.comment;
+	const ssPlainNew = await ssRead(ssPlain.id, null, '&commentSort=new');
+	check('commentSort=new on a post outside any subspace → newest first (the option is a read option of the single read, not a subspace feature)', ssPlainNew.status === 200 && JSON.stringify(ssIdsOf(ssPlainNew.body.post?.comments)) === JSON.stringify([ssPlainC2.id, ssPlainC1.id]), `${ssPlainNew.status} ${JSON.stringify(ssIdsOf(ssPlainNew.body?.post?.comments))}`);
+
+	// --- edge case: deleting a post clears its reports ---
+	const ssReported = (await ssPostIn(owner.cookie, ssSpace.id, 'Sweep reported post')).body?.post;
+	const ssReport = await api('/api/v1/subspaces/report', { method: 'POST', cookie: member.cookie, body: { id: ssReported.id, reason: 'Rule 1: Be kind', note: 'sweep' } });
+	const ssQueueBefore = await api(`/api/v1/subspaces/reports?slug=${ssSlug}`, { cookie: owner.cookie });
+	check('(fixtures) the member reports a post; the owner’s open queue groups it', ssReport.status === 200 && ssQueueBefore.status === 200 && ssQueueBefore.body.reports?.some((group) => group.postId === ssReported.id) && ssQueueBefore.body.openReportCount === 1, `${ssReport.status} ${ssQueueBefore.status} ${JSON.stringify(ssQueueBefore.body?.reports?.map((group) => group.postId))} open=${ssQueueBefore.body?.openReportCount}`);
+	const ssDeleteReported = await api(`/api/v1/things?id=${ssReported.id}`, { method: 'DELETE', cookie: owner.cookie });
+	const ssQueueAfter = await api(`/api/v1/subspaces/reports?slug=${ssSlug}`, { cookie: owner.cookie });
+	const ssQueueResolved = await api(`/api/v1/subspaces/reports?slug=${ssSlug}&status=resolved`, { cookie: owner.cookie });
+	const ssDetailAfterDelete = await api(`/api/v1/subspaces/get?slug=${ssSlug}`, { cookie: owner.cookie });
+	check('deleting the post clears its reports: gone from the open AND the resolved queue, openReportCount 0 on the queue and the detail', ssDeleteReported.status === 200 && ssQueueAfter.status === 200 && !ssQueueAfter.body.reports?.some((group) => group.postId === ssReported.id) && ssQueueAfter.body.openReportCount === 0 && !ssQueueResolved.body?.reports?.some((group) => group.postId === ssReported.id) && ssDetailAfterDelete.body?.subspace?.openReportCount === 0, `${ssDeleteReported.status} open=${JSON.stringify(ssQueueAfter.body?.reports?.map((group) => group.postId))} resolved=${JSON.stringify(ssQueueResolved.body?.reports?.map((group) => group.postId))} detail=${ssDetailAfterDelete.body?.subspace?.openReportCount}`);
+
+	// --- edge case: banning a pending requester removes the request ---
+	const ssPendingJoin = await api('/api/v1/subspaces/join', { method: 'POST', cookie: stranger.cookie, body: { slug: ssPrivSlug } });
+	const ssPendingQueue = await api(`/api/v1/subspaces/members?slug=${ssPrivSlug}&pending=1`, { cookie: owner.cookie });
+	const ssPendingNames = (resp) => (resp.body?.members || []).filter((entry) => entry.pending === true).map((entry) => entry.userId);
+	check('(fixtures) the stranger requests to join private P; the request sits in the owner’s queue', ssPendingJoin.status === 200 && ssPendingJoin.body.pending === true && ssPendingJoin.body.joined === false && ssPendingQueue.status === 200 && ssPendingNames(ssPendingQueue).includes(stranger.id), `${ssPendingJoin.status} ${JSON.stringify(ssPendingJoin.body).slice(0, 120)} queue=${JSON.stringify(ssPendingNames(ssPendingQueue))}`);
+	const ssBanPending = await api('/api/v1/subspaces/members', { method: 'POST', cookie: owner.cookie, body: { slug: ssPrivSlug, username: stranger.username, action: 'ban', reason: 'sweep' } });
+	const ssPendingQueueAfter = await api(`/api/v1/subspaces/members?slug=${ssPrivSlug}&pending=1`, { cookie: owner.cookie });
+	const ssPrivDetailOwner = await api(`/api/v1/subspaces/get?slug=${ssPrivSlug}`, { cookie: owner.cookie });
+	const ssPrivDetailStranger = await api(`/api/v1/subspaces/get?slug=${ssPrivSlug}`, { cookie: stranger.cookie });
+	const ssRejoinBanned = await api('/api/v1/subspaces/join', { method: 'POST', cookie: stranger.cookie, body: { slug: ssPrivSlug } });
+	check('banning the pending requester removes the request: queue empty, pendingCount 0, the stranger reads banned + not pending, a re-request → 403', ssBanPending.status === 200 && ssPendingQueueAfter.status === 200 && !ssPendingNames(ssPendingQueueAfter).includes(stranger.id) && ssPrivDetailOwner.body?.subspace?.pendingCount === 0 && ssPrivDetailStranger.body?.subspace?.viewer?.banned === true && ssPrivDetailStranger.body.subspace.viewer.pending === false && ssPrivDetailStranger.body.subspace.viewer.member === false && ssRejoinBanned.status === 403, `${ssBanPending.status} queue=${JSON.stringify(ssPendingNames(ssPendingQueueAfter))} pendingCount=${ssPrivDetailOwner.body?.subspace?.pendingCount} viewer=${JSON.stringify(ssPrivDetailStranger.body?.subspace?.viewer)} rejoin=${ssRejoinBanned.status}`);
+
+	// --- edge case: transferring ownership to a banned / pending / non-member user is refused ---
+	const ssNobodyJoin = await api('/api/v1/subspaces/join', { method: 'POST', cookie: nobody.cookie, body: { slug: ssPrivSlug } });
+	const ssTransferBanned = await api('/api/v1/subspaces/transfer', { method: 'POST', cookie: owner.cookie, body: { slug: ssPrivSlug, username: stranger.username } });
+	const ssTransferPending = await api('/api/v1/subspaces/transfer', { method: 'POST', cookie: owner.cookie, body: { slug: ssPrivSlug, username: nobody.username } });
+	const ssTransferOutsider = await api('/api/v1/subspaces/transfer', { method: 'POST', cookie: owner.cookie, body: { slug: ssPrivSlug, username: mod.username } });
+	const ssPrivAfterTransfers = await api(`/api/v1/subspaces/get?slug=${ssPrivSlug}`, { cookie: owner.cookie });
+	check('transfer to a banned user → 403, to a pending requester → 404, to a non-member → 404; the owner keeps the crown', ssNobodyJoin.status === 200 && ssNobodyJoin.body.pending === true && ssTransferBanned.status === 403 && ssTransferPending.status === 404 && ssTransferOutsider.status === 404 && ssPrivAfterTransfers.body?.subspace?.viewer?.role === 'owner', `${ssNobodyJoin.status} ${ssTransferBanned.status}/${ssTransferPending.status}/${ssTransferOutsider.status} role=${ssPrivAfterTransfers.body?.subspace?.viewer?.role}`);
+
+	// --- edge case: viewer.canPost is false for a pending member; the composer's select excludes pending memberships ---
+	const ssNobodyDetail = await api(`/api/v1/subspaces/get?slug=${ssPrivSlug}`, { cookie: nobody.cookie });
+	const ssNobodyPost = await ssPostIn(nobody.cookie, ssPriv.id, 'Sweep pending post');
+	check('a pending requester reads viewer.pending true, member false, canPost false — and posting → 403', ssNobodyDetail.status === 200 && ssNobodyDetail.body.subspace.viewer.pending === true && ssNobodyDetail.body.subspace.viewer.member === false && ssNobodyDetail.body.subspace.viewer.canPost === false && ssNobodyPost.status === 403, `${ssNobodyDetail.status} ${JSON.stringify(ssNobodyDetail.body?.subspace?.viewer)} post=${ssNobodyPost.status}`);
+	const ssNobodyJoinS = await api('/api/v1/subspaces/join', { method: 'POST', cookie: nobody.cookie, body: { slug: ssSlug } });
+	const ssNobodyMine = await api('/api/v1/subspaces?mine=1&limit=50', { cookie: nobody.cookie });
+	const ssNobodyMineSlugs = (ssNobodyMine.body?.subspaces || []).map((entry) => entry.slug);
+	const ssMemberMine = await api('/api/v1/subspaces?mine=1&limit=50', { cookie: member.cookie });
+	const ssMemberPriv = (ssMemberMine.body?.subspaces || []).find((entry) => entry.slug === ssPrivSlug);
+	check('the composer’s query (mine=1&limit=50) lists S (canPost true) and NOT the pending P for the requester; the member added to P gets P with canPost true', ssNobodyJoinS.status === 200 && ssNobodyMine.status === 200 && ssNobodyMineSlugs.includes(ssSlug) && !ssNobodyMineSlugs.includes(ssPrivSlug) && ssNobodyMine.body.subspaces.find((entry) => entry.slug === ssSlug)?.viewer?.canPost === true && ssMemberMine.status === 200 && ssMemberPriv?.viewer?.canPost === true && ssMemberPriv.viewer.member === true, `${ssNobodyJoinS.status} nobody=${JSON.stringify(ssNobodyMineSlugs)} memberP=${JSON.stringify(ssMemberPriv?.viewer)}`);
+
+	// --- edge case: a demoted mod loses queue access on the next request ---
+	const ssModQueues = async (cookie) =>
+		Promise.all([
+			api(`/api/v1/subspaces/members?slug=${ssSlug}&pending=1`, { cookie }),
+			api(`/api/v1/subspaces/members?slug=${ssSlug}&approvalRequests=1`, { cookie }),
+			api(`/api/v1/subspaces/reports?slug=${ssSlug}`, { cookie }),
+			api(`/api/v1/subspaces/modlog?slug=${ssSlug}`, { cookie })
+		]);
+	const ssModBefore = await ssModQueues(mod.cookie);
+	check('(fixtures) the moderator reads the join-request, approval-request, report queues and the mod log (200 ×4)', ssModBefore.every((result) => result.status === 200), JSON.stringify(ssModBefore.map((result) => result.status)));
+	const ssDemote = await api('/api/v1/subspaces/members', { method: 'POST', cookie: owner.cookie, body: { slug: ssSlug, username: mod.username, action: 'role', role: 'member' } });
+	const ssModAfter = await ssModQueues(mod.cookie);
+	const ssDemotedModerate = await api('/api/v1/subspaces/moderate', { method: 'POST', cookie: mod.cookie, body: { id: ssPost.id, action: 'pin' } });
+	const ssDemotedDismiss = await api('/api/v1/subspaces/reports', { method: 'POST', cookie: mod.cookie, body: { slug: ssSlug, postId: ssPost.id, action: 'dismiss' } });
+	const ssDemotedRead = await ssRead(ssPost.id, mod.cookie);
+	check('demoted → every queue answers 403 on the very next request (pending / approvalRequests / reports / modlog), moderate → 403, dismiss → 403, and the post projection drops viewerCanModerate', ssDemote.status === 200 && ssModAfter.every((result) => result.status === 403) && ssDemotedModerate.status === 403 && ssDemotedDismiss.status === 403 && ssDemotedRead.status === 200 && ssDemotedRead.body.post?.subspaceMod?.viewerCanModerate === false && ssDemotedRead.body.post.subspaceMod.reportCount === undefined, `${ssDemote.status} ${JSON.stringify(ssModAfter.map((result) => result.status))} moderate=${ssDemotedModerate.status} dismiss=${ssDemotedDismiss.status} mod=${JSON.stringify(ssDemotedRead.body?.post?.subspaceMod)}`);
+
+	// --- edge case: subspacePrivate posts (and removed posts) never syndicate or trend ---
+	const ssPrivPost = (await ssPostIn(owner.cookie, ssPriv.id, 'Sweep private post')).body?.post;
+	const ssRemovedPost = (await ssPostIn(owner.cookie, ssSpace.id, 'Sweep removed post')).body?.post;
+	const ssRemoveIt = await api('/api/v1/subspaces/moderate', { method: 'POST', cookie: owner.cookie, body: { id: ssRemovedPost?.id, action: 'remove', reason: 'sweep' } });
+	const ssRssResponse = await fetch(`${BASE}/api/v1/things/rss`);
+	const ssRss = await ssRssResponse.text();
+	const ssTrending = await api('/api/v1/things/trending');
+	const ssTrendingIds = (ssTrending.body?.posts || []).map((entry) => entry.id);
+	check('(fixtures) a private-subspace post and a mod-removed public post exist', !!ssPrivPost?.id && !!ssRemovedPost?.id && ssRemoveIt.status === 200, `${ssRemoveIt.status}`);
+	check('GET /api/v1/things/rss (atom) syndicates the public subspace post and NEVER the private-subspace post or the removed post', ssRssResponse.status === 200 && /atom\+xml/.test(ssRssResponse.headers.get('content-type') || '') && ssRss.includes(`/post/${ssPost.id}`) && !ssRss.includes(`/post/${ssPrivPost.id}`) && !ssRss.includes(`/post/${ssRemovedPost.id}`), `${ssRssResponse.status} ct=${ssRssResponse.headers.get('content-type')} pub=${ssRss.includes(`/post/${ssPost.id}`)} priv=${ssRss.includes(`/post/${ssPrivPost.id}`)} removed=${ssRss.includes(`/post/${ssRemovedPost.id}`)}`);
+	check('GET /api/v1/things/trending never lists the private-subspace post or the removed post', ssTrending.status === 200 && Array.isArray(ssTrending.body.posts) && !ssTrendingIds.includes(ssPrivPost.id) && !ssTrendingIds.includes(ssRemovedPost.id), `${ssTrending.status} ${JSON.stringify(ssTrendingIds.slice(0, 5))}`);
+	const ssTrendingMember = await api('/api/v1/things/trending', { cookie: member.cookie });
+	check('…even for a member of the private subspace (trending is the public board)', ssTrendingMember.status === 200 && !(ssTrendingMember.body?.posts || []).some((entry) => entry.id === ssPrivPost.id));
+
+	// --- the manifest + docs ---
+	const manifestS = await api('/api/v1/capabilities');
+	check('capability manifest: api.things 1.4.0 (commentSort) while things-comment / things-user stay 1.3.0 and things-feed 1.4.0 — only the single read grew', manifestS.status === 200 && manifestS.body.features['api.things'] === '1.4.0' && manifestS.body.features['api.things-comment'] === '1.3.0' && manifestS.body.features['api.things-user'] === '1.3.0' && manifestS.body.features['api.things-feed'] === '1.4.0', JSON.stringify({ t: manifestS.body?.features?.['api.things'], c: manifestS.body?.features?.['api.things-comment'], f: manifestS.body?.features?.['api.things-feed'] }));
+	const ssDocs = await api('/api/v1/things-docs');
+	check('the things docs name commentSort (top / new / old, the default page, the 400) at contract 1.4.0 / feature 1.5.0', ssDocs.status === 200 && ssDocs.body.docs?.contractVersion === '1.4.0' && ssDocs.body.docs?.featureVersion === '1.5.0' && (ssDocs.body.docs?.steps || []).some((step) => /commentSort=top\|new\|old/.test(step)) && (ssDocs.body.docs?.requestExamples || []).some((example) => example.query?.commentSort === 'top'), JSON.stringify({ cv: ssDocs.body?.docs?.contractVersion, fv: ssDocs.body?.docs?.featureVersion }));
+	// cleanup: the plain post, then both subspaces
+	const ssPlainDeleted = await api(`/api/v1/things?id=${ssPlain.id}`, { method: 'DELETE', cookie: owner.cookie });
+	const cleanupS = await Promise.all([ssSlug, ssPrivSlug].map((slugToDelete) => api('/api/v1/subspaces/delete', { method: 'POST', cookie: owner.cookie, body: { slug: slugToDelete, confirmSlug: slugToDelete } })));
+	const ssGone = await api(`/api/v1/subspaces/get?slug=${ssSlug}`);
+	check('(cleanup) the plain post is deleted and the owner deletes S and P (get → 404)', ssPlainDeleted.status === 200 && cleanupS.every((result) => result.status === 200) && ssGone.status === 404, `${ssPlainDeleted.status} ${JSON.stringify(cleanupS.map((result) => result.status))} ${ssGone.status}`);
 
 	console.log(`\n${passed} passed, ${failures.length} failed${skipped.length ? `, ${skipped.length} skipped (storage migration pending on this database)` : ''}`);
 	if (failures.length) {

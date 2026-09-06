@@ -28,9 +28,14 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // author's user flair in the post's subspace (1.3.0, additive)
   // round 2 S5 — reports: a subspace post's subspaceMod.reportCount for its
   // moderators (1.4.0, additive)
-  for (const feature of ['api.things', 'api.things-comment', 'api.things-user']) {
+  for (const feature of ['api.things-comment', 'api.things-user']) {
     assert.equal(manifest.features[feature]?.version, '1.4.0', feature);
   }
+  // round 2 S7 — comment sort: GET /api/v1/things?id= takes commentSort=
+  // top|new|old (the shipped comment page in Reddit's three orders; the
+  // response echoes it; unknown → 400) — the single read only, the shared
+  // projection is untouched (1.5.0, additive)
+  assert.equal(manifest.features['api.things']?.version, '1.5.0');
   // round 2 S6 — discovery: the home feed takes scope=all|subspaces ("My
   // subspaces" — only the viewer's ACTIVE subspaces, empty for guests) and
   // echoes it (1.5.0, additive)

@@ -126,6 +126,20 @@ reactions untouched.
   subspace's activity to its ACTIVE members (`canSeeSubspaceActivity` —
   ranked at zero, no `recentPostCount`, for everyone else); subspaces
   1.5.0.
+- ✅ S7 — completeness sweep: comment sort inside a post (`GET
+  /api/v1/things?id=&commentSort=top|new|old` — score-desc-then-older /
+  newest / oldest over the whole loaded level, default page unchanged,
+  echoed, 400 on a typo; nested levels re-order among the shipped replies;
+  things 1.5.0 / contract 1.4.0) + the PostCard **Sort 💬** menu (Top / New
+  / Old, optimistic client order mirroring the server comparator, local to
+  the card); guest nudges audited and closed (··· Report to moderators 🚩
+  for guests, the comment flag, the `/s/<slug>` "Log in to post" row —
+  every subspace action now toasts a login nudge); the edge cases walked
+  in verify section S (deleted post clears its reports, banning a pending
+  requester drops the request, transfer refuses banned / pending /
+  outsider targets, pending → `canPost false` + composer select excludes
+  it, a demoted mod is 403 on every queue next request, private / removed
+  posts never in rss / trending); PR note Known limits made truthful.
 
 ## Follow-ups (not in this PR)
 - Per-subspace wiki +

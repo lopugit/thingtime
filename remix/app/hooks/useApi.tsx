@@ -736,7 +736,10 @@ export function useApi() {
         [asyncFetcher]
       ),
       userPosts: useCallback(async (args) => getJson(`/api/v1/things/user${toQuery(args)}`), []),
-			get: useCallback(async (args, options?: { signal?: AbortSignal }) => getJson(`/api/v1/things${toQuery({ id: args?.id })}`, options), []),
+			// commentSort: 'top' | 'new' | 'old' re-orders the shipped comment page
+			// of the post projection (PostCard's Top / New / Old menu); omit for
+			// the default page
+			get: useCallback(async (args, options?: { signal?: AbortSignal }) => getJson(`/api/v1/things${toQuery({ id: args?.id, commentSort: args?.commentSort })}`, options), []),
       list: useCallback(
         async (args) =>
           getJson(

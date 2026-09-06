@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
-import { controversyScore, hotScore, parseUpdownDirection, risingScore, tallyUpdown, updownKeyOf } from './updownCore.ts';
+import { compareCommentsFor, controversyScore, hotScore, orderCommentPage, parseCommentSort, parseUpdownDirection, risingScore, tallyUpdown, updownKeyOf } from './updownCore.ts';
 
 test('tallyUpdown counts ups/downs, nets the score, and reports the viewer vote', () => {
 	const votes = tallyUpdown(
@@ -53,4 +53,42 @@ test('risingScore decays with age and never rewards negative scores', () => {
 	assert.ok(risingScore(5, now, now) > risingScore(5, now - 6 * 3_600_000, now));
 	assert.equal(risingScore(-3, now, now), risingScore(0, now, now));
 	assert.ok(risingScore(0, now, now) > 0);
+});
+
+test('parseCommentSort: absent → the default page (null), top/new/old → itself, anything else → an error the route 400s', () => {
+	for (const empty of [null, undefined, '']) assert.deepEqual(parseCommentSort(empty), { ok: true, sort: null });
+	for (const sort of ['top', 'new', 'old']) assert.deepEqual(parseCommentSort(sort), { ok: true, sort });
+	for (const bad of ['best', 'TOP', 'hot', 1, {}]) assert.equal(parseCommentSort(bad).ok, false, String(bad));
+});
+
+test('orderCommentPage: null ships the newest `limit` oldest-first (unchanged), old/new/top order the WHOLE level and ship the first `limit`', () => {
+	// arrival order is chronological (the merge's order); scores are the
+	// relational tallies — the highest-scoring comment is the OLDEST here so a
+	// "top" page can never be the newest page re-shuffled
+	const level = [
+		{ id: 'c1', createdAtMs: 1000, score: 5 },
+		{ id: 'c2', createdAtMs: 2000, score: -1 },
+		{ id: 'c3', createdAtMs: 3000, score: 2 },
+		{ id: 'c4', createdAtMs: 4000, score: 2 },
+		{ id: 'c5', createdAtMs: 5000, score: 0 }
+	];
+	const ids = (entries: { id: string }[]) => entries.map((entry) => entry.id);
+	assert.deepEqual(ids(orderCommentPage(level, null, 3)), ['c3', 'c4', 'c5'], 'default: the trailing slice, oldest → newest');
+	assert.deepEqual(ids(orderCommentPage(level, 'old', 3)), ['c1', 'c2', 'c3']);
+	assert.deepEqual(ids(orderCommentPage(level, 'new', 3)), ['c5', 'c4', 'c3']);
+	// top: score desc, then the older of a tie first, then id — c1 (5), c3 (2, older), c4 (2), c5 (0), c2 (-1)
+	assert.deepEqual(ids(orderCommentPage(level, 'top', 5)), ['c1', 'c3', 'c4', 'c5', 'c2']);
+	assert.deepEqual(ids(orderCommentPage(level, 'top', 2)), ['c1', 'c3'], 'top ships the best of the level, not the newest');
+	// the input is never mutated and the order does not depend on arrival order
+	const shuffled = [level[4], level[1], level[3], level[0], level[2]];
+	assert.deepEqual(ids(orderCommentPage(shuffled, 'top', 5)), ['c1', 'c3', 'c4', 'c5', 'c2']);
+	assert.deepEqual(ids(shuffled), ['c5', 'c2', 'c4', 'c1', 'c3']);
+	assert.deepEqual(ids(orderCommentPage([], 'top', 20)), []);
+});
+
+test('compareCommentsFor(top) breaks a score tie by age, never by arrival', () => {
+	const compare = compareCommentsFor('top');
+	assert.ok(compare({ id: 'b', createdAtMs: 1, score: 1 }, { id: 'a', createdAtMs: 2, score: 1 }) < 0, 'older first at equal score');
+	assert.ok(compare({ id: 'a', createdAtMs: 9, score: 3 }, { id: 'b', createdAtMs: 1, score: 1 }) < 0, 'higher score first regardless of age');
+	assert.ok(compare({ id: 'a', createdAtMs: 1, score: 0 }, { id: 'b', createdAtMs: 1, score: 0 }) < 0, 'id is the last resort');
 });

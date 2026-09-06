@@ -62,6 +62,36 @@ score field.
   (`recentPostCountsFor` never even counts a private subspace the viewer is
   not in), everyone else ranks it at zero with no `recentPostCount`.
   `api.subspaces` 1.4.0 → 1.5.0 (additive `anon` + compatible corrections).
+- Completeness sweep (round 2, S7) — comment sort: `GET /api/v1/things?id=…
+  &commentSort=top|new|old` (`parseCommentSort` / `orderCommentPage` /
+  `compareCommentsFor` in `things/updownCore.ts`, pure + unit-tested;
+  `PostProjectionOptions` threaded through `getThing` → `toPublicPosts`).
+  `top` = net `votes.score` desc, a tie older-first, then id; `new` / `old`
+  by createdAt; absent keeps the default page (the newest 20, oldest →
+  newest) and the response echoes `commentSort` (null by default); any
+  other value → 400. Level 1 is loaded whole per post (the 500-comment cap
+  bounds it) so a sorted page is the TRUE top / newest / oldest 20 of the
+  level — the whole level is ordered before the page is cut, counts never
+  change (`commentCounts.total/direct` describe the thread, `loaded` the
+  page). The nested reply levels that ship (`REPLIES_PER_LEVEL` = 5 per
+  parent, DB-sliced newest-first before any score is known) re-order among
+  themselves under the same comparator rather than re-querying per parent —
+  the non-intrusive half the spec allowed; a deeper thread's full order
+  comes from its own `GET ?id=<comment>&commentSort=` (which sorts its
+  replies AND the root post's comments). Under a sort the legacy embedded
+  (v1) comment authors are all resolved, not just the trailing 20. It is a
+  read option of the single read, so a plain post takes it too. Contract
+  `api.things` 1.4.0 → 1.5.0 (feature) / 1.3.0 → 1.4.0 (contract); the
+  shared projection is untouched, so things-comment / -feed / -user stay
+  put. Edge cases re-walked in verify section S (no server change needed):
+  a deleted post's reports vanish from both queues, banning a pending
+  requester drops the request, transfer refuses banned / pending / outsider
+  targets (403 / 404 / 404), a pending requester's `canPost` is false and
+  the composer query (`mine=1`) omits the pending subspace, a demoted mod
+  is 403 on every queue / moderate / dismiss on the next request
+  (`requireModerator` reads the row per request — nothing is cached), and
+  `subspaceFeedClauses(null)` keeps private-subspace and removed posts out
+  of `/rss` and `/trending`.
 - `api/utils/subspaces/gate.ts` — things.ts-safe half: membership lookups,
   `assertSubspacePosting` (run on every post create AND PATCH touching
   subspaceId/flairId), `assertSubspaceInteraction` (bans block comments +
@@ -214,6 +244,26 @@ score field.
   `api.v1.subspaces.list({ q })`, fetched beside People, cached with the
   result snapshot) above the post results — `search.ts` untouched. Profile
   pages deliberately show no "member of" line (member lists are private).
+- Completeness sweep (S7): `PostCard` gains a tiny **Sort 💬 ▾** menu at
+  the top of the comments panel on subspace posts with more than one
+  comment (▲ Top / ✨ New / 🕰️ Old; state local to the card, `data-testid`
+  `comment-sort`, `comment-sort-<sort>`): it paints the chosen order over
+  the comments already held first (`sortCommentPage` in `feedTypes.ts`
+  mirrors the server comparator, unit-tested), then swaps in the server
+  page (`api.v1.things.get({ id, commentSort })`), drops a stale response
+  when the viewer picked again, keeps the painted order + toasts on a
+  refusal; under a sort the page reads top-down and the reveal control
+  becomes "Show more comments 💬" appending below (the default page keeps
+  "Show previous comments" revealing upwards); a comment you post keeps its
+  place in the chosen order. Guest nudges audited: votes / react / reply /
+  join / request approval already toasted; new — the ··· menu now shows
+  **Report to moderators 🚩** to guests too and toasts "Log in to report
+  🚩" (`post-report-guest`), the comment rows' flag does the same
+  (`comment-report-guest`), and `/s/<slug>` shows a "🗝️ Log in to post in
+  s/<slug>" row with a **Log in to post ✍️** button
+  (`subspace-guest-post-hint`) where members see the composer (restricted:
+  "log in and join first"). Members' `PostComposer` select already filtered
+  `mine=1` rows by `viewer.canPost`, so pending memberships never appear.
 
 ## Verification
 
@@ -497,6 +547,30 @@ score field.
   `canSeeSubspaceActivity` (subspaceCore.test.ts), `subspaces.list`
   (rateLimit/config.test.ts), `feedScopeOf` (feedTypes.test.ts), both
   capability pin files.
+- Round 2 S7 — verify section S (completeness sweep): comment sort — the
+  default read unchanged (oldest → newest, `commentSort` echoed null),
+  `top` = c2 (+2), c3 (+1, older), c4 (+1), c1 (−1) with the tie
+  older-first, `new`, `old`, counts identical between the default and the
+  top read, `bogus` / `TOP` → 400, an anonymous top read on a public
+  subspace post, nested replies re-ordering (r2 +2 before r1) while the
+  default keeps them oldest → newest, a comment-as-root read sorting its
+  replies and the root's comments, a plain post taking `new`; deleting a
+  reported post clearing the open and resolved queues + `openReportCount`;
+  banning a pending requester (queue empty, `pendingCount` 0, the stranger
+  reads banned + not pending, re-request 403); transfer to banned 403 /
+  pending 404 / outsider 404 with the crown kept; a pending requester's
+  `viewer.canPost false` + post 403, the composer query listing the joined
+  public subspace (canPost true) and never the pending one, the added
+  member's private row canPost true; a promoted mod reading all four mod
+  reads (200 ×4) then, demoted, 403 on every queue, moderate, dismiss and
+  `viewerCanModerate false` with no `reportCount`; `/rss` carrying the
+  public subspace post and never the private-subspace or removed post,
+  `/trending` never listing either (for a member too); the manifest
+  (`api.things` 1.4.0, the other three unchanged) and the docs route
+  (contract 1.4.0 / feature 1.5.0, the commentSort step + example);
+  cleanup. Unit pins: `parseCommentSort` / `orderCommentPage` /
+  `compareCommentsFor` (updownCore.test.ts), `sortCommentPage` /
+  `isCommentSort` (feedTypes.test.ts), both capability pin files.
 - Browser: see the run log in the PR description / TESTING.md checklists.
 
 ## Known limits (stated, not hidden)
@@ -504,6 +578,12 @@ score field.
 - Owners can't leave while they own the subspace — transfer first (the
   previous owner may leave right after).
 - No per-subspace wiki/sidebar widgets beyond About/Rules/Flairs/Your
-  flair/Mods.
+  flair/Mods; no crossposting, no karma totals, no modmail threads (out of
+  scope for this round).
 - Deny (join or posting request) does not notify the requester (Reddit
   parity — they simply may ask again).
+- Comment sort is a per-read view: the card's Top / New / Old pick is local
+  to that card (not a persisted preference), and under a sort the nested
+  reply levels re-order among the replies that already ship (the newest 5
+  per parent) — the full order of a deep thread comes from that comment's
+  own read (`GET ?id=<comment>&commentSort=`).

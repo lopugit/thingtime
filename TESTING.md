@@ -1514,6 +1514,34 @@ email whose link points at the attacker.
       learns its weekly post count — the same fence its feed applies); its
       members and mods still see it ranked by its real activity with the
       count. Member counts stay public on every sort. Verify section R.
+- [ ] Completeness sweep (S7) — comment sort: open a subspace post with a
+      few voted comments; the comments panel shows a tiny **Sort 💬 ▾** menu
+      (`data-testid="comment-sort"`, offered on subspace posts with more than
+      one comment). Pick **▲ Top**: the visible comments re-order INSTANTLY
+      (highest net score first, a tie older-first), then the server page lands
+      (`GET /api/v1/things?id=&commentSort=top` — the true top 20 of the
+      post, not the newest 20 re-shuffled) and nothing jumps; **✨ New** /
+      **🕰️ Old** order by age; the reveal control reads "Show more comments"
+      and appends BELOW under a sort (the default page keeps "Show previous
+      comments" revealing upwards); nested replies re-order among the replies
+      already shipped; a fresh comment you post keeps its place in the chosen
+      order; `commentSort=bogus` → 400 and the response echoes `commentSort`
+      (null on the default read). Guest nudges: logged out, every subspace
+      action toasts a Lopu login nudge instead of doing nothing — Join /
+      Request to join, ▲▼ votes, react, reply, the ··· menu's **Report to
+      moderators 🚩** (post and the comment rows' flag), and the `/s/<slug>`
+      page shows "🗝️ Log in to post in s/<slug>" + a **Log in to post ✍️**
+      button where members see the composer (a restricted subspace says
+      "log in and join first"). Edge cases (verify section S): deleting a
+      post clears its reports from the open AND resolved queues; banning a
+      pending requester drops the request (pendingCount 0, re-request 403);
+      transfer to a banned (403) / pending (404) / non-member (404) target is
+      refused; a pending requester reads `viewer.canPost false` and the
+      composer's `mine=1` select never lists the pending subspace; a demoted
+      moderator gets 403 from every queue, moderate and dismiss on the very
+      next request; private-subspace posts and mod-removed posts never appear
+      in `GET /api/v1/things/rss` or `/trending` (a public subspace post
+      does syndicate).
 - [ ] Bell 🔔 + Settings → Notifications: six subspace rows (roles 🎩,
       bans 🚫, join accepted 🎉, posts removed 🧹, join requests 🙋,
       reports 🚩 — the last two default email OFF). The bell's verb keys off
