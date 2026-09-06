@@ -13,6 +13,9 @@ import { randomBytes } from 'node:crypto';
 // baseUrl defaults to TT_VERIFY_BASE or http://127.0.0.1:19582.
 
 const BASE = process.argv[2] || process.env.TT_VERIFY_BASE || 'http://127.0.0.1:19582';
+// search/feed responses key `posts` by thing id (develop) — older builds returned an array
+const postRows = (body) => (Array.isArray(body?.posts) ? body.posts : Object.values(body?.posts || {}));
+
 
 let passed = 0;
 const failures = [];
@@ -75,7 +78,8 @@ const registerSession = async (name) => {
   const setCookie = res.headers.get('set-cookie') || '';
   const match = setCookie.match(/tt_auth=[^;]+/);
   if (!res.ok || !match) throw new Error(`register failed: ${res.status} ${setCookie.slice(0, 80)}`);
-  return { username, cookie: match[0] };
+  const body = await res.json().catch(() => null);
+  return { username, cookie: match[0], userId: body?.user?.id ? String(body.user.id) : '' };
 };
 
 const mintPat = async (cookie, input) => {
@@ -521,6 +525,21 @@ console.log('F. Visibility fence (public-only / private-only tokens)');
   });
   check('public-only reacts to a public post', pubReact.status === 200);
 
+  // Profile listing: the fence rides /api/v1/things/user too. postCount is
+  // computed from the same match, so an unfenced match would report the
+  // owner's private posts to a token that must never learn they exist.
+  const pubProfile = await api(`/api/v1/things/user?username=${owner.username}`, { token: pub.token });
+  check(
+    'public-only profile listing omits the owner’s private post',
+    pubProfile.status === 200 && !(pubProfile.body?.posts || []).some((p) => p.id === privatePostId),
+    `${pubProfile.status}`
+  );
+  check(
+    'public-only profile postCount excludes private posts',
+    pubProfile.body?.postCount === 1,
+    `postCount=${pubProfile.body?.postCount}`
+  );
+
   // --- private-only --------------------------------------------------------
   const priv = await mintPat(owner.cookie, { name: 'private-only', scopes: ['things'], visibility: 'private' });
   const privSeesPublic = await api(`/api/v1/things?id=${publicPostId}`, { token: priv.token });
@@ -548,7 +567,7 @@ console.log('F. Visibility fence (public-only / private-only tokens)');
   check(
     'private-only cannot reach public posts through the anon search view',
     privSearchAnon.status === 200 &&
-      ![...(privSearchAnon.body?.posts || []), ...(privSearchAnon.body?.things || [])].some((t) => t.id === publicPostId),
+      ![...postRows(privSearchAnon), ...(privSearchAnon.body?.things || [])].some((t) => t.id === publicPostId),
     `${privSearchAnon.status}`
   );
   // a genuinely credential-less anon=1 call still gets the cacheable public
@@ -632,12 +651,367 @@ console.log('F. Visibility fence (public-only / private-only tokens)');
   });
   check('private-only cannot react to a public post', privReactPublic.status === 404, `${privReactPublic.status}`);
 
+  const privProfile = await api(`/api/v1/things/user?username=${owner.username}`, { token: priv.token });
+  check(
+    'private-only profile listing omits the owner’s public post',
+    privProfile.status === 200 && !(privProfile.body?.posts || []).some((p) => p.id === publicPostId),
+    `${privProfile.status}`
+  );
+  check(
+    'private-only profile postCount excludes public posts',
+    privProfile.body?.postCount === 1,
+    `postCount=${privProfile.body?.postCount}`
+  );
+
   // --- unrestricted stays unrestricted ------------------------------------
   const all = await mintPat(owner.cookie, { name: 'both', scopes: ['things'] });
   check('default mint stays visibility "all"', all.tokenInfo?.visibility === 'all', JSON.stringify(all.tokenInfo?.visibility));
   const allSees = await api(`/api/v1/things?id=${privateDataId}`, { token: all.token });
   const allSeesPublic = await api(`/api/v1/things?id=${publicPostId}`, { token: all.token });
   check('unrestricted token still sees both audiences', allSees.status === 200 && allSeesPublic.status === 200);
+}
+
+// ---------------------------------------------------------------------------
+console.log('G. Hidden visibility — unlisted things behind random link keys');
+{
+  const owner = await registerSession('hid');
+  const peeker = await registerSession('peek');
+
+  const created = await api('/api/v1/things', {
+    cookie: owner.cookie,
+    method: 'POST',
+    body: { thingtime: ['post'], crystal: { type: 'text', text: 'hidden fixture' }, visibility: 'hidden' }
+  });
+  const hiddenId = created.body?.post?.id;
+  const linkKey = created.body?.post?.linkKey;
+  check('hidden create returns visibility "hidden"', created.status === 200 && created.body?.post?.visibility === 'hidden');
+  check('owner projection carries the random linkKey', typeof linkKey === 'string' && linkKey.length >= 20, String(linkKey).slice(0, 8));
+
+  const anonBlind = await api(`/api/v1/things?id=${hiddenId}`, {});
+  check('anonymous without the key sees nothing', anonBlind.status === 404, `${anonBlind.status}`);
+  const anonKeyed = await api(`/api/v1/things?id=${hiddenId}&key=${encodeURIComponent(linkKey)}`, {});
+  check('anonymous WITH the key views it', anonKeyed.status === 200 && anonKeyed.body?.post?.id === hiddenId, `${anonKeyed.status}`);
+  check('the key never leaks the linkKey back (non-owner projection)', anonKeyed.body?.post?.linkKey === undefined);
+  const wrongKey = await api(`/api/v1/things?id=${hiddenId}&key=not-the-key`, {});
+  check('a wrong key stays blind', wrongKey.status === 404, `${wrongKey.status}`);
+
+  const anonFeed = await api('/api/v1/things/feed?limit=50', {});
+  check(
+    'hidden posts never enter the public feed',
+    anonFeed.status === 200 && !(anonFeed.body?.posts || []).some((p) => p.id === hiddenId)
+  );
+  const ownerFeed = await api('/api/v1/things/feed?limit=50', { cookie: owner.cookie });
+  check(
+    'the owner still sees it in their own feed',
+    ownerFeed.status === 200 && (ownerFeed.body?.posts || []).some((p) => p.id === hiddenId),
+    `${ownerFeed.status}`
+  );
+  const profile = await api(`/api/v1/things/user?username=${owner.username}`, { cookie: peeker.cookie });
+  check(
+    'profile listings hide it from other users',
+    profile.status === 200 && !(profile.body?.posts || []).some((p) => p.id === hiddenId)
+  );
+
+  const blindComment = await api('/api/v1/things/comment', {
+    cookie: peeker.cookie,
+    method: 'POST',
+    body: { id: hiddenId, text: 'sneaky' }
+  });
+  check('another user without the key cannot comment', blindComment.status === 404, `${blindComment.status}`);
+  const keyedComment = await api('/api/v1/things/comment', {
+    cookie: peeker.cookie,
+    method: 'POST',
+    body: { id: hiddenId, text: 'found you via the link', key: linkKey }
+  });
+  check('the key admits engagement (comment)', keyedComment.status === 200, `${keyedComment.status}`);
+  const keyedReact = await api('/api/v1/things/react', {
+    cookie: peeker.cookie,
+    method: 'POST',
+    body: { id: hiddenId, emoji: '🕵️', key: linkKey }
+  });
+  check('the key admits engagement (react)', keyedReact.status === 200, `${keyedReact.status}`);
+
+  const unhide = await api('/api/v1/things', {
+    cookie: owner.cookie,
+    method: 'PATCH',
+    body: { id: hiddenId, visibility: 'private' }
+  });
+  check('owner can move it out of hidden', unhide.status === 200 && unhide.body?.thing?.visibility === 'private');
+  const retiredKey = await api(`/api/v1/things?id=${hiddenId}&key=${encodeURIComponent(linkKey)}`, {});
+  check('leaving hidden retires the link instantly', retiredKey.status === 404, `${retiredKey.status}`);
+
+  const rehide = await api('/api/v1/things', {
+    cookie: owner.cookie,
+    method: 'PATCH',
+    body: { id: hiddenId, visibility: 'hidden' }
+  });
+  const newKey = rehide.body?.thing?.linkKey;
+  check('re-hiding mints a FRESH key', rehide.status === 200 && typeof newKey === 'string' && newKey !== linkKey);
+  const oldKeyDead = await api(`/api/v1/things?id=${hiddenId}&key=${encodeURIComponent(linkKey)}`, {});
+  check('the old key stays dead after re-hide', oldKeyDead.status === 404, `${oldKeyDead.status}`);
+  const newKeyWorks = await api(`/api/v1/things?id=${hiddenId}&key=${encodeURIComponent(newKey)}`, {});
+  check('the fresh key works', newKeyWorks.status === 200, `${newKeyWorks.status}`);
+}
+
+// ---------------------------------------------------------------------------
+console.log('H. GET bridge — CRUD over plain GET URLs (allowGet tokens)');
+{
+  const owner = await registerSession('getb');
+  const bridge = (query) => `/api/v1/get?${new URLSearchParams(query)}`;
+
+  const plain = await mintPat(owner.cookie, { name: 'no-get', scopes: ['things'] });
+  const refused = await api(bridge({ token: plain.token, op: 'self' }), {});
+  check('tokens without the tick are refused', refused.status === 403, `${refused.status}`);
+
+  const minted = await mintPat(owner.cookie, { name: 'get-bridge', scopes: ['things'], maxUses: 20, allowGet: true });
+  check('mint records allowGet', minted.tokenInfo?.allowGet === true);
+
+  const self = await api(bridge({ token: minted.token, op: 'self' }), {});
+  check('op=self introspects', self.status === 200 && self.body?.token?.allowGet === true, `${self.status}`);
+  check('op=self is free (no use burned)', self.body?.token?.usesRemaining === 20, JSON.stringify(self.body?.token?.usesRemaining));
+  check('bridge responses are no-store', /no-store/.test(self.headers.get('cache-control') || ''), self.headers.get('cache-control'));
+  check('bridge responses never leak a referrer', self.headers.get('referrer-policy') === 'no-referrer');
+
+  const created = await api(
+    bridge({ token: minted.token, op: 'create', thingtime: '["post"]', crystal: '{"type":"text","text":"hello from a GET-only agent"}' }),
+    {}
+  );
+  const postId = created.body?.post?.id;
+  check('op=create makes a post', created.status === 200 && !!postId, `${created.status}`);
+
+  const fetched = await api(bridge({ token: minted.token, op: 'get', id: postId }), {});
+  check('op=get reads it back', fetched.status === 200 && fetched.body?.post?.id === postId);
+
+  const dataMade = await api(bridge({ token: minted.token, op: 'create', thingtime: 'data', crystal: '{"note":"csv thingtime"}' }), {});
+  const dataId = dataMade.body?.thing?.id;
+  check('bare csv thingtime works', dataMade.status === 200 && !!dataId, `${dataMade.status}`);
+
+  const patched = await api(bridge({ token: minted.token, op: 'update', id: dataId, crystal: '{"note":"edited via GET"}' }), {});
+  check('op=update PATCHes', patched.status === 200 && patched.body?.thing?.crystal?.note === 'edited via GET');
+
+  const reacted = await api(bridge({ token: minted.token, op: 'react', id: postId, emoji: '🌍' }), {});
+  check('op=react toggles (emoji stays a string)', reacted.status === 200, `${reacted.status}`);
+  const commented = await api(bridge({ token: minted.token, op: 'comment', id: postId, text: 'GET comment' }), {});
+  check('op=comment comments', commented.status === 200 && commented.body?.comment?.text === 'GET comment', `${commented.status}`);
+
+  const listed = await api(bridge({ token: minted.token, op: 'list', thingtime: 'data' }), {});
+  check('op=list lists', listed.status === 200 && (listed.body?.things || []).some((t) => t.id === dataId));
+
+  const removed = await api(bridge({ token: minted.token, op: 'delete', id: dataId }), {});
+  check('op=delete deletes', removed.status === 200 && removed.body?.ok === true, `${removed.status}`);
+
+  // 8 consuming calls so far (create, get, create, update, react, comment,
+  // list, delete) — self stays free and proves the accounting
+  const after = await api(bridge({ token: minted.token, op: 'self' }), {});
+  check('use accounting matches the call count', after.body?.token?.usesRemaining === 12, JSON.stringify(after.body?.token?.usesRemaining));
+
+  const badOp = await api(bridge({ token: minted.token, op: 'teleport' }), {});
+  check('unknown ops 400', badOp.status === 400, `${badOp.status}`);
+
+  const readOnly = await mintPat(owner.cookie, { name: 'get-read', scopes: ['things.read'], maxUses: 5, allowGet: true });
+  const scopeBlocked = await api(bridge({ token: readOnly.token, op: 'create', thingtime: 'data', crystal: '{"nope":true}' }), {});
+  check('missing scope 403s on the bridge too', scopeBlocked.status === 403, `${scopeBlocked.status}`);
+  const scopeFree = await api(bridge({ token: readOnly.token, op: 'self' }), {});
+  check('bridge scope 403s burn nothing', scopeFree.body?.token?.usesRemaining === 5);
+
+  const cookieOnly = await api(bridge({ op: 'get', id: postId }), { cookie: owner.cookie });
+  check('cookies alone never authorize the bridge', cookieOnly.status === 401, `${cookieOnly.status}`);
+
+  // fence × bridge: a public-only GET token cannot be walked into private data
+  const fenced = await mintPat(owner.cookie, { name: 'get-public', scopes: ['things'], visibility: 'public', allowGet: true });
+  const privateData = await api('/api/v1/things', {
+    cookie: owner.cookie,
+    method: 'POST',
+    body: { thingtime: ['data'], crystal: { secret: true }, acl: ['tt:user'] }
+  });
+  const fencedBlind = await api(bridge({ token: fenced.token, op: 'get', id: privateData.body?.thing?.id }), {});
+  check('visibility fence rides the bridge', fencedBlind.status === 404, `${fencedBlind.status}`);
+  const fencedSees = await api(bridge({ token: fenced.token, op: 'get', id: postId }), {});
+  check('…while public things stay reachable', fencedSees.status === 200, `${fencedSees.status}`);
+
+  // expectedUpdatedAt is a real compare-and-swap here, not a hint: op=update
+  // and op=delete anchor it into the write filter exactly like PATCH/DELETE
+  // /api/v1/things. It matters most on THIS branch, because a custom audience
+  // can hand tt:user/<name>/write to other people, so one thing genuinely has
+  // concurrent writers. `minted` has 12 uses left at this point; these spend 5.
+  const guarded = await api(bridge({ token: minted.token, op: 'create', thingtime: 'data', crystal: '{"note":"cas"}' }), {});
+  const guardId = guarded.body?.thing?.id;
+  const stamp = guarded.body?.thing?.updatedAt;
+  check('op=create hands back the updatedAt stamp', !!guardId && typeof stamp === 'string', JSON.stringify(stamp));
+
+  const staleUpdate = await api(
+    bridge({ token: minted.token, op: 'update', id: guardId, crystal: '{"note":"stale"}', expectedUpdatedAt: '2020-01-01T00:00:00.000Z' }),
+    {}
+  );
+  check('op=update refuses a stale expectedUpdatedAt', staleUpdate.status === 409, `${staleUpdate.status}`);
+
+  const freshUpdate = await api(
+    bridge({ token: minted.token, op: 'update', id: guardId, crystal: '{"note":"cas ok"}', expectedUpdatedAt: stamp }),
+    {}
+  );
+  check(
+    'op=update accepts the current expectedUpdatedAt',
+    freshUpdate.status === 200 && freshUpdate.body?.thing?.crystal?.note === 'cas ok',
+    `${freshUpdate.status}`
+  );
+
+  // the stamp above is now stale precisely BECAUSE the update landed — so this
+  // also proves op=update really moved updatedAt rather than silently no-oping
+  const staleDelete = await api(bridge({ token: minted.token, op: 'delete', id: guardId, expectedUpdatedAt: stamp }), {});
+  check('op=delete refuses a stale expectedUpdatedAt', staleDelete.status === 409, `${staleDelete.status}`);
+
+  const freshDelete = await api(
+    bridge({ token: minted.token, op: 'delete', id: guardId, expectedUpdatedAt: freshUpdate.body?.thing?.updatedAt }),
+    {}
+  );
+  check('op=delete accepts the current expectedUpdatedAt', freshDelete.status === 200, `${freshDelete.status}`);
+}
+
+// ---------------------------------------------------------------------------
+console.log('I. Custom audiences (capabilities + groups) and the hidden-only fence');
+{
+  const owner = await registerSession('cma');
+  const reader = await registerSession('cmr');
+  const writer = await registerSession('cmw');
+
+  // --- hidden-only token fence --------------------------------------------
+  const hiddenTok = await mintPat(owner.cookie, { name: 'hidden-only', scopes: ['things'], visibility: 'hidden' });
+  check('mint records the hidden fence', hiddenTok.tokenInfo?.visibility === 'hidden');
+  const hidMade = await api('/api/v1/things', {
+    token: hiddenTok.token,
+    method: 'POST',
+    body: { thingtime: ['data'], crystal: { born: 'hidden' } }
+  });
+  check(
+    'hidden-only creates are born hidden with a link key',
+    hidMade.status === 200 && hidMade.body?.thing?.visibility === 'hidden' && !!hidMade.body?.thing?.linkKey,
+    JSON.stringify(hidMade.body?.thing?.visibility)
+  );
+  const hidPublic = await api('/api/v1/things', {
+    token: hiddenTok.token,
+    method: 'POST',
+    body: { thingtime: ['post'], crystal: { type: 'text', text: 'loud' }, acl: ['tt:all'] }
+  });
+  check('hidden-only cannot create public things', hidPublic.status === 403, `${hidPublic.status}`);
+
+  // --- custom acl: per-user capability matrix ------------------------------
+  const post = await api('/api/v1/things', {
+    cookie: owner.cookie,
+    method: 'POST',
+    body: {
+      thingtime: ['post'],
+      crystal: { type: 'text', text: 'custom audience fixture' },
+      acl: ['tt:custom', 'tt:user', `tt:user/${reader.username}`, `tt:user/${writer.username}/write`]
+    }
+  });
+  const postId = post.body?.post?.id;
+  check('custom create round-trips visibility "custom"', post.status === 200 && post.body?.post?.visibility === 'custom');
+
+  const readerSees = await api(`/api/v1/things?id=${postId}`, { cookie: reader.cookie });
+  check('read grant admits viewing', readerSees.status === 200, `${readerSees.status}`);
+  const anonBlind = await api(`/api/v1/things?id=${postId}`, {});
+  check('private baseline hides it from everyone else', anonBlind.status === 404, `${anonBlind.status}`);
+
+  const readerComment = await api('/api/v1/things/comment', { cookie: reader.cookie, method: 'POST', body: { id: postId, text: 'hi' } });
+  check('read-only users cannot comment (403)', readerComment.status === 403, `${readerComment.status}`);
+  const readerReact = await api('/api/v1/things/react', { cookie: reader.cookie, method: 'POST', body: { id: postId, emoji: '👀' } });
+  check('read-only users cannot react', readerReact.status === 403, `${readerReact.status}`);
+
+  const writerComment = await api('/api/v1/things/comment', { cookie: writer.cookie, method: 'POST', body: { id: postId, text: 'editor here' } });
+  check('write implies comment', writerComment.status === 200, `${writerComment.status}`);
+  const writerEdit = await api('/api/v1/things', {
+    cookie: writer.cookie,
+    method: 'PATCH',
+    body: { id: postId, crystal: { text: 'custom audience fixture — edited by writer ✏️' } }
+  });
+  check('write grant allows shared crystal editing', writerEdit.status === 200, `${writerEdit.status}`);
+  const writerAclChange = await api('/api/v1/things', {
+    cookie: writer.cookie,
+    method: 'PATCH',
+    body: { id: postId, acl: ['tt:all'] }
+  });
+  check('writers can never change the audience', writerAclChange.status === 403, `${writerAclChange.status}`);
+  const writerDelete = await api('/api/v1/things', { cookie: writer.cookie, method: 'DELETE', body: { id: postId } });
+  check('writers can never delete', writerDelete.status === 404 || writerDelete.status === 403, `${writerDelete.status}`);
+  const readerEdit = await api('/api/v1/things', {
+    cookie: reader.cookie,
+    method: 'PATCH',
+    body: { id: postId, crystal: { text: 'sneaky' } }
+  });
+  check('read grant does not edit', readerEdit.status === 403, `${readerEdit.status}`);
+
+  // --- baseline toggles ----------------------------------------------------
+  const toPublicBase = await api('/api/v1/things', {
+    cookie: owner.cookie,
+    method: 'PATCH',
+    body: { id: postId, acl: ['tt:custom', 'tt:user', 'tt:all', `tt:user/${writer.username}/write`] }
+  });
+  check('owner sets a public baseline', toPublicBase.status === 200 && toPublicBase.body?.thing?.visibility === 'custom');
+  const anonReads = await api(`/api/v1/things?id=${postId}`, {});
+  check('public baseline: everyone may read', anonReads.status === 200, `${anonReads.status}`);
+  const readerCommentStill = await api('/api/v1/things/comment', {
+    cookie: reader.cookie,
+    method: 'POST',
+    body: { id: postId, text: 'still?' }
+  });
+  check('…but general viewers still cannot comment (custom gate)', readerCommentStill.status === 403, `${readerCommentStill.status}`);
+
+  const toHiddenBase = await api('/api/v1/things', {
+    cookie: owner.cookie,
+    method: 'PATCH',
+    body: { id: postId, acl: ['tt:custom', 'tt:user', 'tt:hidden', `tt:user/${writer.username}/write`] }
+  });
+  const customKey = toHiddenBase.body?.thing?.linkKey;
+  check('hidden baseline mints a link key on a custom thing', toHiddenBase.status === 200 && !!customKey);
+  const keyedRead = await api(`/api/v1/things?id=${postId}&key=${encodeURIComponent(customKey)}`, {});
+  check('link-key holders read the custom thing', keyedRead.status === 200, `${keyedRead.status}`);
+  const keyedComment = await api('/api/v1/things/comment', {
+    cookie: reader.cookie,
+    method: 'POST',
+    body: { id: postId, text: 'via key', key: customKey }
+  });
+  check('…and a key alone still never grants comment', keyedComment.status === 403, `${keyedComment.status}`);
+
+  // --- groups ---------------------------------------------------------------
+  const group = await api('/api/v1/groups', { cookie: owner.cookie, method: 'POST', body: { name: 'QA circle', memberIds: [reader.userId] } });
+  const groupId = group.body?.group?.id;
+  check('group create returns the group', group.status === 201 && !!groupId, JSON.stringify(group.body));
+  const sources = await api('/api/v1/groups/audience-sources', { cookie: owner.cookie });
+  check('audience-sources lists the group', sources.status === 200 && (sources.body?.groups || []).some((g) => g.id === groupId));
+
+  const grantGroup = await api('/api/v1/things', {
+    cookie: owner.cookie,
+    method: 'PATCH',
+    body: { id: postId, acl: ['tt:custom', 'tt:user', `tt:group/${groupId}/comment`] }
+  });
+  check('owner grants via group', grantGroup.status === 200);
+  const memberComment = await api('/api/v1/things/comment', { cookie: reader.cookie, method: 'POST', body: { id: postId, text: 'as group member' } });
+  check('group members inherit the group capability', memberComment.status === 200, `${memberComment.status}`);
+
+  const feed = await api('/api/v1/things/feed?limit=50', { cookie: reader.cookie });
+  check(
+    'granted things land in the grantee’s feed',
+    feed.status === 200 && (feed.body?.posts || []).some((p) => p.id === postId),
+    `${feed.status}`
+  );
+
+  const shrink = await api('/api/v1/groups', { cookie: owner.cookie, method: 'PATCH', body: { id: groupId, memberIds: [] } });
+  check('member list replaces whole', shrink.status === 200 && shrink.body?.group?.memberCount === 0);
+  const exMemberComment = await api('/api/v1/things/comment', { cookie: reader.cookie, method: 'POST', body: { id: postId, text: 'still in?' } });
+  check('membership removal revokes instantly', exMemberComment.status === 403 || exMemberComment.status === 404, `${exMemberComment.status}`);
+  const exMemberSees = await api(`/api/v1/things?id=${postId}`, { cookie: reader.cookie });
+  check('…including view (baseline private again)', exMemberSees.status === 404, `${exMemberSees.status}`);
+
+  const dropGroup = await api('/api/v1/groups', { cookie: owner.cookie, method: 'DELETE', body: { id: groupId } });
+  check('group delete works', dropGroup.status === 200);
+  const generic = await api('/api/v1/things', {
+    cookie: owner.cookie,
+    method: 'POST',
+    body: { thingtime: ['group'], crystal: { name: 'forged' } }
+  });
+  // 403 = protected-kind refusal, 400 = unregistered-thingtime refusal —
+  // either way the generic path can never mint a group
+  check('generic CRUD refuses group things (protected kind)', generic.status === 403 || generic.status === 400, `${generic.status}`);
 }
 
 // ---------------------------------------------------------------------------

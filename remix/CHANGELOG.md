@@ -186,6 +186,30 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-09-05: Promote PR #611 notification history and placement settings to main, including drawer-relative toast alignment. — Codex (AI)
 
+### 2026-09-05 — Re-land hidden 🕵️ links, the PAT GET bridge and custom audiences 🎭 — Claude (AI)
+
+- PRs #413 and #431 merged into their stacked base branches a minute after that base (#411)
+  had merged into develop, so the feature stack never reached develop or main. PR #613
+  re-lands `origin/claude/hidden-links-get-bridge` on current develop; conflict
+  resolutions and the 149-check `verify-pat-tokens.mjs` run are recorded in
+  `PRs/613-claude-hidden-links-custom-audiences-reland--re-land-hidden-links-get-bridge-custom-audiences.md`.
+- `scripts/verify-pat-tokens.mjs` now reads search/feed `posts` keyed by thing id
+  (develop's shape) as well as the older array form.
+- GET bridge `op=update` / `op=delete` now honour `expectedUpdatedAt`, the
+  optimistic-concurrency guard `PATCH`/`DELETE /api/v1/things` already anchor into
+  the write filter. The bridge was dropping it silently, so a caller asking for a
+  compare-and-swap got an unguarded write and a 200 — which this branch makes
+  reachable in earnest, since a custom audience can grant `tt:user/<name>/write`
+  to other people and give one thing concurrent writers. — Lopu (AI)
+- "Copy hidden link 🕵️" now appears for a custom audience 🎭 that picked the
+  "+ secret link" baseline. The server mints, projects and honours `linkKey`
+  off `acl.includes('tt:hidden')`, but `visibilityFromAcl` reports `custom`
+  whenever `tt:custom` rides along, so the post menu's `visibility === 'hidden'`
+  gate never fired for those things — the key existed and the owner already held
+  it in their own payload, with no UI to reach it. The menu now derives the link
+  from `post.linkKey`, which is already owner-only and hidden-only, and a new
+  `hiddenLinkContract.test.ts` pins the derivation. — Lopu (AI)
+
 ### 2026-09-02 — Lopu toast position setting + `/notifications` history page — Claude (AI)
 
 - Grouped summary; details in the PR note (`PRs/611-claude-lopu-toast-position-notifications-history--lopu-toast-position-notifications-history.md`).
