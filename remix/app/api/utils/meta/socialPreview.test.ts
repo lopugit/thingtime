@@ -38,6 +38,16 @@ test('static public routes get route-specific social context', () => {
 	assert.equal(profile.variant, 'profile');
 });
 
+test('a named catalogue page bounds its tags like every data-backed preview', () => {
+	// The leaf is a raw URL segment, so it is as long as the caller makes it.
+	const long = staticSocialPreview(`/docs/${'a'.repeat(600)}`);
+	assert.ok(Array.from(long.title).length <= 70, `title was ${Array.from(long.title).length} code points`);
+	assert.ok(Array.from(long.description).length <= 200, `description was ${Array.from(long.description).length} code points`);
+	assert.ok(long.title.endsWith('…'));
+	// Ordinary names are still printed whole.
+	assert.equal(staticSocialPreview('/components/colourful-button').title, 'Thingtime component: Colourful Button');
+});
+
 test('Open Graph tags declare a full PNG card for social renderers', () => {
 	const tags = buildSocialMetaTags('https://thingtime.example', '/feed', {
 		title: 'Thingtime feed',

@@ -245,12 +245,15 @@ export const staticSocialPreview = (pathInput: string): SocialPreview => {
 	const leaf = segments.at(-1) || '';
 	if (segments.length > 1 && ['docs', 'schemas', 'themes', 'components', 'actions'].includes(segment)) {
 		const category = segment === 'docs' ? 'docs' : segment.slice(0, -1);
+		// Bounded like every data-backed preview: the leaf is a raw URL segment,
+		// so an unbounded one would put a path-length og:title/og:description in
+		// the head (the card itself wraps and clamps by measured width anyway).
 		return {
 			...detail,
 			variant: staticVariantFor(detail.kind),
 			path,
-			title: `Thingtime ${category}: ${label(leaf)}`,
-			description: `${detail.description} Open ${label(leaf)} on Thingtime.`,
+			title: truncateSocialText(`Thingtime ${category}: ${label(leaf)}`, TITLE_MAX),
+			description: truncateSocialText(`${detail.description} Open ${label(leaf)} on Thingtime.`, DESCRIPTION_MAX),
 			article: false,
 			options: [],
 			images: [],
@@ -545,18 +548,33 @@ export const socialPreviewFromPublicPost = (path: string, post: any, context: { 
 	};
 };
 
+// The post-shaped projection of an already-resolved getThing result. Split out
+// so /thing/:id can reuse the walk it has already paid for: getThing is not a
+// cheap read — toPublicPosts batch-embeds comments/reactions/views, and for a
+// comment or a media attachment it also walks the parent chain (uncapped depth,
+// one round trip per level). Returns null when the target is not a
+// world-readable post, which every caller renders as the generic card.
+const publicPostPreview = async (path: string, result: any): Promise<SocialPreview | null> => {
+	const post: any = result.post;
+	if (!post) return null;
+	// belt-and-braces on top of the anonymous viewer walk: rich meta is for
+	// world-readable posts only. tt:all is directly world-readable; tt:inherit
+	// (every comment) counts too because the anonymous getThing success above
+	// already proved the inherited audience includes anonymous.
+	const { ACL_ALL, ACL_INHERIT } = await import('../../../schemas/registry');
+	if (!Array.isArray(post.acl) || !(post.acl.includes(ACL_ALL) || post.acl.includes(ACL_INHERIT))) return null;
+	return socialPreviewFromPublicPost(path, post, {
+		parent: result.parent,
+		revision: cleanSocialText(result.thing?.updatedAt) || cleanSocialText(result.thing?.createdAt)
+	});
+};
+
 const postPreview = async (path: string, id: string): Promise<SocialPreview> => {
 	const fallback = staticSocialPreview(path);
-	const { ACL_ALL, ACL_INHERIT } = await import('../../../schemas/registry');
 	const { getThing, viewerOf } = await import('../things/things');
 	const result = await getThing(viewerOf(null), id);
-	if (result.ok === false || !result.post) return fallback;
-	const post: any = result.post;
-	if (!Array.isArray(post.acl) || !(post.acl.includes(ACL_ALL) || post.acl.includes(ACL_INHERIT))) return fallback;
-	return socialPreviewFromPublicPost(path, post, {
-		parent: (result as any).parent,
-		revision: cleanSocialText((result as any).thing?.updatedAt) || cleanSocialText((result as any).thing?.createdAt)
-	});
+	if (result.ok === false) return fallback;
+	return (await publicPostPreview(path, result)) || fallback;
 };
 
 const profilePreview = async (path: string, username: string): Promise<SocialPreview> => {
@@ -620,7 +638,9 @@ const thingPreview = async (path: string, id: string): Promise<SocialPreview> =>
 	const { getThing, viewerOf } = await import('../things/things');
 	const result = await getThing(viewerOf(null), id);
 	if (result.ok === false) return fallback;
-	if (result.post) return postPreview(path, id);
+	// A /thing/:id that resolves to a post/comment/attachment gets the richer
+	// post card — from THIS result, never a second getThing for the same id.
+	if (result.post) return (await publicPostPreview(path, result)) || fallback;
 	const thing: any = result.thing;
 	const crystal = thing?.crystal || {};
 	const kind = cleanList(thing?.thingtime, 3).join(' · ') || 'Thing';
