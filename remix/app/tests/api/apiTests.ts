@@ -2264,6 +2264,309 @@ export const apiTests: ApiTestDefinition[] = [
   },
   ...watchPairingTests,
   ...watchQuickApprovalTests,
+  // ---- webpages demo library (catalog is code; seeded flags are per-deploy) --
+  {
+    id: 'webpages-demos-catalog',
+    name: 'Demo library lists the catalog anonymously',
+    description:
+      'GET /webpages/demos answers the whole deterministic catalog (200–500 demos, families with counts, seededCount) for anonymous callers — the seeded census may be 0 on a fresh DB, which is correct.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos',
+    anonymous: true,
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        Array.isArray(body?.demos) &&
+        body.demos.length >= 200 &&
+        body.demos.length <= 500 &&
+        body.demos.length === body.total &&
+        Array.isArray(body?.families) &&
+        body.families.every((family: any) => typeof family?.key === 'string' && typeof family?.count === 'number') &&
+        typeof body?.seededCount === 'number' &&
+        body.demos.every((demo: any) => typeof demo?.id === 'string' && demo.id.startsWith('webpage-demo-') && typeof demo?.seeded === 'boolean' && typeof demo?.blockCount === 'number'),
+      'Demo catalog listed with families, seeded flags, and bounded size.'
+    )
+  },
+  {
+    id: 'webpages-demos-library-components',
+    name: 'Demo library resolves every component key it references',
+    description:
+      'Component-kind demos reference platform library component things by componentKey, and the response carries components[] + refs so a client can draw them. Resolution is all-or-nothing: on a deployment where the library is seeded every ref resolves, so a partially-null refs map means the catalog names a componentKey the library does not have (a demo that renders empty). A fresh DB with no library seeded resolves none, which is also correct.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos',
+    anonymous: true,
+    expect: expectJson(
+      [200],
+      (body) => {
+        if (body?.ok !== true || !body?.refs || typeof body.refs !== 'object' || !Array.isArray(body?.components)) return false;
+        const entries = Object.entries(body.refs as Record<string, unknown>);
+        if (!entries.length) return false;
+        const resolved = entries.filter(([, id]) => typeof id === 'string' && id);
+        if (resolved.length && resolved.length !== entries.length) return false;
+        const byId = new Set(body.components.map((component: any) => component?.id));
+        return entries.every(([ref, id]) => typeof ref === 'string' && (id === null || (typeof id === 'string' && byId.has(id))));
+      },
+      'Every referenced library componentKey resolved (or the library is not seeded here and none did).'
+    )
+  },
+  {
+    id: 'webpages-demos-family-filter',
+    name: 'Demo library filters by family',
+    description: 'family=hero returns only hero demos, and every family entry keeps its catalog-wide count.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos?family=hero&kind=section',
+    anonymous: true,
+    expect: expectJson(
+      [200],
+      (body) => body?.ok === true && Array.isArray(body?.demos) && body.demos.length > 0 && body.demos.every((demo: any) => demo?.family === 'hero' && demo?.kind === 'section'),
+      'Family filter returned only hero sections.'
+    )
+  },
+  {
+    id: 'webpages-demos-single-with-crystal',
+    name: 'Demo library returns one demo with its crystal',
+    description: 'slug=hero-centered-paper adds demo.crystal (name, pageKey demo-<slug>, blocks) — the payload a client posts to /things to copy it.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos?slug=hero-centered-paper',
+    anonymous: true,
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        body?.demo?.slug === 'hero-centered-paper' &&
+        body.demo?.crystal?.pageKey === 'demo-hero-centered-paper' &&
+        Array.isArray(body.demo?.crystal?.blocks) &&
+        body.demo.crystal.blocks.length > 0,
+      'Single demo carried its crystal with blocks.'
+    )
+  },
+  {
+    id: 'webpages-demos-suites-listed',
+    name: 'Demo library lists behaviour suites',
+    description: 'Every response carries suites[] — bundles of schema/component/action/data/page things — with counts, the system ids, and a seeded flag.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos?family=video',
+    anonymous: true,
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        Array.isArray(body?.suites) &&
+        body.suites.length >= 10 &&
+        // the demo suites seed at webpage-demo-suite-<key>; app suites
+        // (Pokeworld, StarsAlign) keep their own keyed page ids under the
+        // same reserved webpage- prefix
+        body.suites.filter((suite: any) => typeof suite?.pageId === 'string' && suite.pageId.startsWith('webpage-demo-suite-')).length >= 10 &&
+        body.suites.every(
+          (suite: any) =>
+            typeof suite?.key === 'string' &&
+            typeof suite?.pageId === 'string' &&
+            suite.pageId.startsWith('webpage-') &&
+            Array.isArray(suite?.actionIds) &&
+            suite.actionIds.length > 0 &&
+            typeof suite?.counts?.actions === 'number' &&
+            typeof suite?.seeded === 'boolean'
+        ),
+      'Behaviour suites listed with counts, ids, and seeded flags.'
+    )
+  },
+  {
+    id: 'webpages-demos-suite-bundle',
+    name: 'Demo library returns an installable suite bundle',
+    description: 'suite=guestbook adds suite.bundle in OWN mode: schemas by name, actions by actionKey, data carrying schema names, and the page — the parts a client posts to /things to install.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos?suite=guestbook',
+    anonymous: true,
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        body?.suite?.key === 'guestbook' &&
+        body.suite?.bundle?.mode === 'own' &&
+        Array.isArray(body.suite.bundle?.schemas) &&
+        body.suite.bundle.schemas.length >= 1 &&
+        Array.isArray(body.suite.bundle?.actions) &&
+        body.suite.bundle.actions.every((action: any) => typeof action?.crystal?.actionKey === 'string' && Array.isArray(action.crystal?.steps)) &&
+        body.suite.bundle.actions.some((action: any) => JSON.stringify(action.crystal.steps).includes('"demo-guestbook-entry"')) &&
+        Array.isArray(body.suite.bundle?.data) &&
+        body.suite.bundle.data.every((entry: any) => entry?.crystal?.schema === 'demo-guestbook-entry') &&
+        Array.isArray(body.suite.bundle?.page?.crystal?.blocks),
+      'Suite bundle carried own-mode schemas, actions, data, and page.'
+    )
+  },
+  {
+    id: 'webpages-demos-unknown-suite',
+    name: 'Demo library unknown suite',
+    description: 'suite=definitely-missing-suite resolves to a 404 error shape.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos?suite=definitely-missing-suite',
+    anonymous: true,
+    expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown suite returned a 404 error shape.')
+  },
+  {
+    id: 'webpages-demos-unknown-family',
+    name: 'Demo library validates the family filter',
+    description: 'An unknown family is a 400 error shape; an unknown slug is a 404.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos?family=not-a-family',
+    anonymous: true,
+    expect: expectJson([400], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown family was rejected with a 400 error shape.')
+  },
+  {
+    id: 'webpages-demos-unknown-slug',
+    name: 'Demo library unknown slug',
+    description: 'slug=definitely-missing-demo resolves to a 404 error shape.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/webpages/demos?slug=definitely-missing-demo',
+    anonymous: true,
+    expect: expectJson([404], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown demo slug returned a 404 error shape.')
+  },
+  {
+    id: 'webpages-demos-seed-admin-only',
+    name: 'Demo seed is admin-only',
+    description: 'POST /admin/webpages/seed-demos refuses anonymous (401) and non-admin (403) callers without writing; an admin session seeds (200) — all three are correct shapes.',
+    group: WEBPAGES_GROUP,
+    method: 'POST',
+    path: '/api/v1/admin/webpages/seed-demos',
+    body: {},
+    mutates: true,
+    expect: expectJson(
+      [200, 401, 403, 429],
+      (body, response) => (response.status === 200 ? body?.ok === true && typeof body?.received === 'number' && body.received >= 200 : body?.ok === false && typeof body?.error === 'string'),
+      'Demo seed answered the admin gate (or seeded as an admin).'
+    )
+  },
+  {
+    id: 'webpages-demos-census',
+    name: 'Demo seed census counts each catalog once',
+    description:
+      'GET /admin/webpages/seed-demos reports the census without writing. Suite pages carry both the demo and suite tags, so the two counts must stay disjoint: demosSeeded never exceeds demosTotal and suitesSeeded never exceeds suitesTotal, however much of the library is seeded.',
+    group: WEBPAGES_GROUP,
+    method: 'GET',
+    path: '/api/v1/admin/webpages/seed-demos',
+    expect: expectJson(
+      [200, 401, 403],
+      (body, response) =>
+        response.status === 200
+          ? body?.ok === true &&
+            typeof body?.demosTotal === 'number' &&
+            body.demosTotal >= 200 &&
+            typeof body?.demosSeeded === 'number' &&
+            body.demosSeeded <= body.demosTotal &&
+            typeof body?.suitesTotal === 'number' &&
+            body.suitesTotal >= 10 &&
+            typeof body?.suitesSeeded === 'number' &&
+            body.suitesSeeded <= body.suitesTotal &&
+            typeof body?.siteSeeded === 'number' &&
+            typeof body?.totalSeeded === 'number' &&
+            body.totalSeeded >= body.demosSeeded + body.suitesSeeded + body.siteSeeded
+          : body?.ok === false && typeof body?.error === 'string',
+      'Census kept the demo and suite counts disjoint and inside their catalog totals.'
+    )
+  },
+  // ---- suite install (the one MUTATING endpoint the library adds) ----------
+  // The read side above is covered nine ways; the write side needs its own
+  // assertions because it creates programs (schemas, controls, actions, data,
+  // pages) in the caller's own things. The three claims the docs entry makes —
+  // session-only, 404 on an unknown key, idempotent by key — are asserted here
+  // in order: the install below runs before the re-install that checks it did
+  // not duplicate.
+  {
+    id: 'webpages-suites-install-anonymous',
+    name: 'Suite install requires a session',
+    description:
+      'POST /webpages/suites/install refuses an anonymous caller with 401 before reading the body. Installing writes programs the caller then runs as themselves, so it is session-only like actions.run — app tokens and PATs never resolve through getCurrentUser.',
+    group: WEBPAGES_GROUP,
+    method: 'POST',
+    path: '/api/v1/webpages/suites/install',
+    body: { key: 'guestbook' },
+    anonymous: true,
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous install was refused with a 401 error shape.')
+  },
+  {
+    id: 'webpages-suites-install-unknown',
+    name: 'Suite install rejects an unknown key',
+    description: 'An unknown suite key is a 404 error shape and writes nothing (401 when the run carries no session, 429 when rate-limited).',
+    group: WEBPAGES_GROUP,
+    method: 'POST',
+    path: '/api/v1/webpages/suites/install',
+    body: { key: 'definitely-missing-suite' },
+    expect: expectJson(
+      [404, 401, 429],
+      (body) => body?.ok === false && typeof body?.error === 'string',
+      'Unknown suite key was refused with an error shape.'
+    )
+  },
+  {
+    id: 'webpages-suites-install-own-things',
+    name: 'Suite install writes the bundle into the caller’s own things',
+    description:
+      'POST { key: guestbook } installs the own-mode bundle through the ordinary create path and answers with a per-part id map. Every id is a real thing id, so the page’s controls resolve owner-only against the caller’s own actions rather than the seeded copies.',
+    group: WEBPAGES_GROUP,
+    method: 'POST',
+    path: '/api/v1/webpages/suites/install',
+    body: { key: 'guestbook' },
+    mutates: true,
+    timeoutMs: 30000,
+    expect: expectJson(
+      [200, 401, 429],
+      (body, response) =>
+        response.status === 200
+          ? body?.ok === true &&
+            body?.suite === 'guestbook' &&
+            typeof body?.created === 'number' &&
+            typeof body?.updated === 'number' &&
+            body?.entryPageKey === 'demo-suite-guestbook' &&
+            typeof body?.entryPageId === 'string' &&
+            body.entryPageId.length > 0 &&
+            // the seed's reserved ids are the SYSTEM copies; an install must
+            // hand back the caller's own things, never the seeded shareIds
+            !body.entryPageId.startsWith('webpage-') &&
+            Object.values(body?.schemaIds || {}).length >= 1 &&
+            Object.values(body?.actionIds || {}).length >= 1 &&
+            // CONCAT the four maps rather than spreading them into one object:
+            // suite part keys are per-kind, so a suite with a `sign` control
+            // AND a `sign` action collides on merge and a dropped id would go
+            // unchecked. Every returned id must be one of the caller's own
+            // things — never a seeded shareId, which carries a reserved prefix
+            // that generic thing creation refuses outright.
+            [body?.schemaIds, body?.componentIds, body?.actionIds, body?.pageIds]
+              .flatMap((map: any) => Object.values(map || {}))
+              .every((id: any) => typeof id === 'string' && id.length > 0 && !/^(schema|component|action|webpage)-/.test(id))
+          : body?.ok === false && typeof body?.error === 'string',
+      'Suite install created the caller’s own bundle (or was correctly session-gated).'
+    )
+  },
+  {
+    id: 'webpages-suites-install-idempotent',
+    name: 'Re-installing a suite updates in place instead of duplicating',
+    description:
+      'The second identical install of the same suite must create nothing: every part is keyed inside the caller’s things (schema name, componentKey, actionKey, pageKey, sample stamp), so a re-install reconciles rather than minting a second copy. Runs straight after the install above and shares its session.',
+    group: WEBPAGES_GROUP,
+    method: 'POST',
+    path: '/api/v1/webpages/suites/install',
+    body: { key: 'guestbook' },
+    mutates: true,
+    timeoutMs: 30000,
+    expect: expectJson(
+      [200, 401, 429],
+      (body, response) =>
+        response.status === 200
+          ? body?.ok === true && body?.created === 0 && typeof body?.updated === 'number' && typeof body?.entryPageId === 'string'
+          : body?.ok === false && typeof body?.error === 'string',
+      'Re-install created nothing new (or was correctly session-gated).'
+    )
+  },
   ...apiDocsSmokeTests
 ];
 

@@ -151,6 +151,11 @@ export const router = createBrowserRouter([
       // the block-based site builder — create webpages from component things;
       // ?page=<id> opens the canvas (site pages included)
       { path: 'builder', lazy: lazyRoute(() => import('./routes/builder')) },
+      // the demo library — a few hundred example sections/pages to preview and
+      // copy into your own pages (catalog in schemas/webpageDemos)
+      { path: 'builder/demos', lazy: lazyRoute(() => import('./routes/builder-demos')) },
+      // one demo / suite / app on its own page: preview + the LIVE version
+      { path: 'builder/demos/:slug', lazy: lazyRoute(() => import('./routes/builder-demo-detail')) },
       // published block-based webpages (reserved prefix — outranks the * catch-all)
       { path: 'p/:id', lazy: lazyRoute(() => import('./routes/p')) },
       // the storybook-style design-system docs own the canonical short URL too
@@ -213,6 +218,9 @@ export const router = createBrowserRouter([
       // Schema BROWSING/BUILDING lives at /schemas (standalone, like /search);
       // the registry reference docs moved to /docs/schemas.
       { path: 'schemas', lazy: lazyRoute(() => import('./routes/schemas')) },
+      // one schema on its own page: field tree, render preview, and the LIVE
+      // create-a-thing form + the viewer's things of that shape
+      { path: 'schemas/:key', lazy: lazyRoute(() => import('./routes/schema-detail')) },
       // Actions: declarative capability-bounded programs — browse + the
       // per-action inspector (inputs, effects, limits, run panel, history)
       { path: 'actions', lazy: lazyRoute(() => import('./routes/actions')) },

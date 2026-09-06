@@ -4636,8 +4636,18 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       names; clicking a card opens /actions/:id.
 - [ ] The inspector shows Takes / Does (numbered steps with op tones, invoke
       steps deep-link to the invoked action) / Can access / Cannot access (no
-      network, no secrets, no deletes + scoped-only lines) / Limits / Effects,
-      and the raw definition.
+      network, no secrets, and "no deletes" ONLY while the program does not
+      declare things.delete + scoped-only lines) / Limits / Effects, and the
+      raw definition.
+- [ ] v2 destructive + public-read disclosure: an action with a
+      `things.delete` step shows a red "deletes things" chip on BOTH its
+      /actions card and the inspector's Effects section, and its Cannot-access
+      panel drops "no deletes" without ever printing an affirmative sentence
+      under the 🚫 (a "🚫 Can delete …" line would invert the one capability
+      that destroys data). An action whose only effect is that delete still
+      renders an Effects section. A `things.search` with `scope: 'public'`
+      shows "reads everyone's public <schema>" alongside the ordinary read
+      chip. Covered by app/components/Actions/actionInspect.test.ts.
 - [ ] The Run panel renders one typed input per descriptor, runs the action,
       and shows status + duration + ops/depth/child budget usage + the
       hierarchical trace (1 → 1.1/1.2 for invoked children) with /thing/<id>
@@ -4705,6 +4715,70 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       webpage- shareIds are refused on generic creates (reserved prefix).
 - [ ] /docs/design-system shows the foundations/page-scaffold/brutal-button/
       builder-blocks entries with live stories; /design-system redirects there.
+- [ ] Demo library: /builder/demos paints the whole catalog (200–500 demos,
+      `pnpm --dir remix run test:schemas` → webpageDemos asserts every demo
+      clears validateThingtimeCrystal(["webpage"]) unchanged and stays under
+      the block/byte caps) instantly with no spinner; kind + family chips and
+      the search box filter with the URL in sync; thumbnails mount lazily as
+      you scroll and stay mounted; Show more paginates; Preview opens the
+      full-size modal; Use template ✨ copies the demo into the viewer's own
+      page (signed-out → login) and opens the builder; the Builder header
+      links to the library.
+- [ ] Component blocks: the 🧩 Component blocks chip shows demos whose blocks
+      reference PLATFORM LIBRARY components by componentKey. Those blocks draw
+      real library components (buttons, a card, a text input, a badge, a status
+      avatar) in the thumbnail AND in the Preview modal once the demos endpoint
+      answers — an unresolved ref renders as NOTHING for a viewer, so a blank
+      card here means the catalog names a componentKey the components-db seed
+      does not have. Cross-check with
+      `GET /api/v1/webpages/demos` → every entry in `refs` non-null (the
+      `webpages-demos-library-components` apiTest asserts exactly this).
+- [ ] GET /api/v1/webpages/demos lists the catalog anonymously with seeded
+      flags (0 seeded on a fresh DB is correct), family/kind filters, slug=
+      returns the crystal, unknown family → 400, unknown slug → 404; admin
+      POST /api/v1/admin/webpages/seed-demos converges (re-run → unchanged),
+      after which every demo opens at /p/webpage-demo-<slug> and in the
+      builder (edits fork, the seed never changes) and the gallery shows 🌱
+      seeded + the /p/ link; GET /admin/webpages/seed reports
+      siteSeeded/demosSeeded/demosTotal/suitesSeeded/suitesTotal alongside
+      totalSeeded.
+- [ ] Text blocks accept an optional `href` (https, site-relative, mailto:,
+      tel:; javascript:/data:/http: refused — `test:schemas` →
+      webpageBlockGate) and render as an anchor (`data-testid`
+      text-block-link; external targets open in a new tab with noopener; the
+      edit canvas never navigates); the inspector's Link field round-trips
+      it. Every demo pill links (/register, /docs) and every demo nav label
+      links to its slug. Block css `white-space` reaches the text element (a
+      nowrap pill in a flex row stays on one line despite Main's global
+      pre-wrap); standalone pills shrink-wrap via `align` and row labels keep
+      their own width via `flex: 0 0 auto`.
+- [ ] Run-or-install: on a seeded suite page (/p/webpage-demo-suite-<key>)
+      or the gallery preview, a signed-in viewer's control click that finds
+      no owned action (executor: owner-only delegated resolution) installs
+      the suite into their things, re-runs the SAME click, then opens their
+      own copy; signed-out → login. Owned actions run directly. Foreign
+      user pages stay inert for non-owners (`useTtActionClicks` onUnowned,
+      `installSuite`, `routes/p.tsx`).
+- [ ] Demo gallery thumbnails scale to the card (ResizeObserver: scale =
+      box width / 760) — no clipped right edge at any grid column width;
+      layout audit script (scratchpad/audit-demos.js idiom: wrapped pills by
+      Range line count, overflow by scrollWidth, wide pills in columns)
+      reports zero defects across all cards.
+- [ ] Behaviour suites (`schemas/behaviourSuites.ts`, `pnpm --dir remix run
+      test:schemas` → behaviourSuites asserts every schema/component/action/
+      data/page crystal clears its kind gate in BOTH materialisations): the
+      🧪 Suites tab on /builder/demos lists 14 suites with counts; Preview
+      renders the suite page with its ttAction controls from the catalog (no
+      seed needed); Install suite ✨ (signed-in) creates the viewer's OWN
+      schemas → components → actions → data (stamped schemaId) → page through
+      /things and opens /p/<page>; clicking a control there runs the viewer's
+      own action (source component → owner-only resolution) and the Lopu
+      toast links to the run record; capture-and-qualify / open-with-note
+      exercise actions.invoke + $step refs + ttConcat; complete/escalate/pay
+      exercise things.get + things.update by id. Seeded suites (admin
+      seed-demos) are browsable on /schemas, /components, /actions and
+      /p/webpage-demo-suite-<key>; running action-demo-* from /actions mints
+      the viewer's own data things against the public schema id.
 - [ ] Nested blocks select on click: with a container (grid/row/column) holding
       children, clicking a CHILD selects the child (inspector shows its
       fields), clicking the container's own area selects the container —
@@ -4824,3 +4898,39 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       remains usable. Unsupported image formats fall back without retry loops.
 - [ ] Confirm partial/large files use native streaming and cached range reads
       cannot bypass authorization. Verify storage failure degrades to HTTP.
+## App suites — Pokeworld + StarsAlign (`remix/app/schemas/appSuites/`, `/p/pokeworld`, `/p/starsalign`)
+
+- Seed as an admin (`POST /api/v1/admin/webpages/seed-demos` or the 🌱 button
+  on `/builder/demos`), then open `/builder/demos` → **📱 Apps**: both cards
+  show pages counts, a tagline, **Open /p/<key>** when seeded, **Install app**.
+- Signed OUT: `/p/pokeworld` and `/p/starsalign` render the seeded pages with
+  every bound block in its **signed-out** state (sign-in card), nav links work,
+  no fetch is attempted (Network: no `/actions/run`).
+- Signed IN, not installed: the same pages show the app's **Install** card;
+  pressing it (or any control) installs through the server endpoint and the
+  same URL now serves your copy (`/api/v1/webpages/resolve?id=pokeworld` →
+  `source: "user"`). Re-installing reports `created: 0`.
+- Pokeworld: begin the journey (name ≤7, sprite) → the 11×9 viewport paints
+  with you in the centre; each D-pad press moves one tile (blocked tiles keep
+  the facing), items/signs toast, tall grass eventually spawns a battle; the
+  battle panel shows sprites + HP bars, four moves with PP, balls with counts,
+  items, RUN; catching adds to the party/box and the pokédex; PARTY (make lead,
+  deposit, heal), BAG (use on), POKéDEX (100/page, silhouettes until seen),
+  PC (withdraw), OPTION (name/sprite, teleport by lat/lng, badges). Every
+  control's run lands on `/actions/<id>`.
+- StarsAlign: signed in without a profile → welcome card with the live
+  sun/moon; Settings → save a birth date (future dates refused), find a city
+  (chips), set the place, save again (updates, no duplicate) → Today shows
+  greeting, chips incl. rising, the wheel (svg), the sky rows, transits or the
+  quiet-sky card, houses; School search/section/entry/Combinator; Erase
+  removes the profile and Today returns to the welcome.
+- Layout: check desktop (≥1024) and mobile (375) — the map grid scales with
+  its container, D-pad stays 48px cells, nav wraps, no horizontal scroll.
+- Regression classes: an `if` branch must not evaluate when untaken (a
+  `set` with an empty key inside the untaken branch used to fail the run);
+  the run payload's own `status` must never shadow the HTTP status in scripts;
+  a control gathers only the named fields of its closest `<fieldset>` (the
+  city Find button used to send the birth-date fields to `pick-city`, which
+  refused them as unknown inputs); a profile whose place was cleared
+  (`placeName ''`, `tz ''`, lat/lon 0) must read as a solar chart, not a
+  refusal; nested `ttEach` must flatten (the tile grid rendered empty).

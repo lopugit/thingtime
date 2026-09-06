@@ -141,6 +141,13 @@ export function useApi() {
           clearLocalCachePrefix('tt-passkeys');
           // Notification history can include private posts and action runs.
           clearLocalCachePrefix('tt-notif-history-');
+          // builder-page source results are whole action results run AS the
+          // viewer (their orders, their expense rows, their trainer) cached to
+          // paint /p/<page> without a spinner — the same shared-browser rule.
+          // The keys carry the viewer id, so a stale line can no longer be
+          // READ by the next account; dropping them here also stops it
+          // outliving the session that authorized it on disk.
+          clearLocalCachePrefix('tt-page-source:');
           const ret = asyncFetcher.submit(args?.all ? { all: true } : {}, { action: '/api/v1/auth/logout' });
           ret.then(refreshRootData).catch(() => {});
           return ret;

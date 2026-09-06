@@ -10379,6 +10379,168 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'webpages-demos',
+    // brand-new capability: everything this PR adds to the response is its 1.0.0 shape
+    contractVersion: '1.0.0',
+    group: 'webpages',
+    title: 'Browse the builder demo library',
+    endpoint: '/api/v1/webpages/demos',
+    summary: 'Lists the deterministic catalog of builder demos (sections, full pages, component-block pages) and behaviour suites (schemas + components + actions + data + page), with a seeded flag per entry.',
+    detail:
+      'The demo library is code: schemas/webpageDemos generates a few hundred example webpages from family × ' +
+      'layout × tone tables, each of which clears the webpage write gate unchanged. This endpoint lists that ' +
+      'catalog — id (the seeded shareId webpage-demo-<slug>), slug, name, family, kind, tone, layout, tags, ' +
+      'description, blockCount — plus families with counts and, per demo, whether its system doc is seeded on ' +
+      'this deployment (then /p/<id> and /builder?page=<id> open it directly; the builder forks a viewer’s edits ' +
+      'into their own twin). Pass slug=<slug> to also get that one demo’s full crystal (blocks included) — the ' +
+      'payload a client posts to /api/v1/things to make its own copy, seeded or not. Every response also lists ' +
+      'suites[] — the behaviour suites (schemas/behaviourSuites): bundles of schema things, ttAction-bound ' +
+      'component things, action things (the closed-vocabulary programs), sample data things, and a page, each ' +
+      'with counts, the system copy’s pageId/actionIds/schemaIds, and a seeded flag. Pass suite=<key> for ' +
+      'suite.bundle — the OWN-mode materialisation (schemas referenced by name, child actions by actionKey) a ' +
+      'client posts part by part to /api/v1/things (schemas, then components, actions, data stamped with the ' +
+      'created schema ids, then the page) so the page’s controls run the caller’s own programs end to end. ' +
+      'Every response also carries components[] + refs — the platform library component things the ' +
+      'component-kind demos reference, resolved exactly as /api/v1/webpages/resolve resolves a page’s blocks, ' +
+      'so a client can draw those demos without a second round trip; a null ref means that componentKey is not ' +
+      'seeded here and the block draws nothing. Read-only and public; two bounded queries, no per-viewer state.',
+    auth: {
+      mode: 'optional',
+      description: 'Anonymous callers see the same catalog and seeded flags — nothing here is per-viewer.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET with no query for the whole catalog, or family=<key> / kind=section|page|component to filter.',
+      'Read families[] (key, title, emoji, kind, description, count), total, seededCount, and suites[].',
+      'Draw kind=component demos by folding components[] + refs into a ref → component map (buildComponentsByRef).',
+      'Pass slug=<slug> to receive demo.crystal — POST it to /api/v1/things with thingtime ["webpage"] to copy it.',
+      'Pass suite=<key> to receive suite.bundle and install it: POST each schema, component, action, data (add schemaId), then the page.',
+      'Treat seeded: true as “/p/<id> and the builder open this demo directly” (suites: /actions/<actionId> runs the seeded program).',
+      'Handle 400 for an unknown family/kind/slug/suite shape, 404 for an unknown slug or suite, and 429 when rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Browse one family',
+        description: 'Every hero demo.',
+        method: 'GET',
+        query: { family: 'hero' }
+      },
+      {
+        name: 'Fetch one demo with blocks',
+        description: 'The crystal to clone.',
+        method: 'GET',
+        query: { slug: 'hero-centered-paper' }
+      },
+      {
+        name: 'Fetch a behaviour suite bundle',
+        description: 'Everything needed to install the guestbook suite into your own things.',
+        method: 'GET',
+        query: { suite: 'guestbook' }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Catalog slice returned.',
+        body: {
+          ok: true,
+          total: 322,
+          seededCount: 322,
+          families: [{ key: 'hero', title: 'Hero', emoji: '🌅', kind: 'section', description: 'Opening statements — centered, split, with stats, and minimal.', count: 24 }],
+          demos: [
+            {
+              id: 'webpage-demo-hero-centered-paper',
+              slug: 'hero-centered-paper',
+              name: 'Hero · Centered · Paper',
+              family: 'hero',
+              kind: 'section',
+              tone: 'paper',
+              layout: 'centered',
+              tags: ['webpage', 'demo', 'hero', 'section', 'paper', 'centered'],
+              description: 'Opening statements — centered, split, with stats, and minimal. Centered layout in the paper tone, copy from Thingtime.',
+              previewBg: '#fafafb',
+              blockCount: 7,
+              seeded: true
+            }
+          ],
+          suites: [
+            {
+              key: 'guestbook',
+              title: 'Guestbook',
+              emoji: '📖',
+              description: 'Sign a guestbook, then read the signatures back.',
+              story: ['The simplest program: one schema, one create action, one search action.'],
+              tone: 'paper',
+              counts: { schemas: 1, components: 2, actions: 2, data: 3 },
+              pageId: 'webpage-demo-suite-guestbook',
+              actionIds: ['action-demo-guestbook-sign', 'action-demo-guestbook-recent'],
+              schemaIds: ['schema-demo-guestbook-entry'],
+              seeded: true
+            }
+          ],
+          refs: { 'thingtime-button-solid': 'component-thingtime-button-solid', 'thingtime-card-basic': 'component-thingtime-card-basic' },
+          components: [{ id: 'component-thingtime-button-solid', thingtime: ['component'], visibility: 'public', crystal: { name: 'Solid Button', componentKey: 'thingtime-button-solid', args: [], render: {} } }]
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'webpages-suites-install',
+    contractVersion: '1.0.0',
+    group: 'webpages',
+    title: 'Install a behaviour suite or app suite',
+    endpoint: '/api/v1/webpages/suites/install',
+    summary: 'Installs (or re-installs) one suite — schemas, components, actions, sample data, and every page — into the caller’s own things in one idempotent request.',
+    detail:
+      'A suite is an installable program bundle (schemas/behaviourSuites): schema things, ttAction-bound component ' +
+      'things, action things, sample data things, and one or more builder pages. App suites (Pokeworld, StarsAlign) are ' +
+      'multi-page suites whose pages link to each other by pageKey. This endpoint writes the OWN-mode bundle through the ' +
+      'ordinary create/update utils as the caller — the same things the part-by-part client install creates — but ' +
+      'IDEMPOTENTLY: each part has a stable key inside the caller’s things (schema name, componentKey, actionKey, ' +
+      'pageKey, sample stamp), so a second call updates the existing copy in place instead of duplicating it, and sample ' +
+      'data is seeded once and never clobbered. Pages keep their pageKey, which is what makes /p/<pageKey> resolve the ' +
+      'caller’s copy ahead of the seeded one. Session-only, like actions.run: an install creates programs the caller ' +
+      'will run as themselves; delegated controls on the installed pages resolve owner-only.',
+    auth: {
+      mode: 'session',
+      description: 'A signed-in session. App tokens and personal access tokens are refused — installing programs is a first-party act.'
+    },
+    methods: ['POST'],
+    steps: [
+      'POST { key } where key is a suite key from GET /api/v1/webpages/demos (suites[].key).',
+      'Read created / updated counts, the per-part id maps (schemaIds, componentIds, actionIds, pageIds, dataIds), and entryPageKey.',
+      'Open /p/<entryPageKey> — the resolver now answers with the caller’s own copy; every control runs their own programs.',
+      'Call again after the catalog changes to refresh the copy in place (data things are never touched).',
+      'Handle 401 signed out, 404 for an unknown key, 422 when a part refuses to save (the message names the part), 429 when rate-limited (12/min).'
+    ],
+    requestExamples: [
+      { name: 'Install Pokeworld', description: 'Every page, control, and program of the game into your things.', method: 'POST', body: { key: 'pokeworld' } },
+      { name: 'Install the guestbook demo suite', description: 'A single-page behaviour suite.', method: 'POST', body: { key: 'guestbook' } }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Installed (first call).',
+        body: {
+          ok: true,
+          suite: 'pokeworld',
+          title: 'Pokeworld',
+          created: 31,
+          updated: 0,
+          schemaIds: { trainer: 'a1b2…' },
+          componentIds: { map: 'c3d4…' },
+          actionIds: { move: 'e5f6…' },
+          pageIds: { play: 'g7h8…' },
+          dataIds: [],
+          entryPageId: 'g7h8…',
+          entryPageKey: 'pokeworld'
+        }
+      },
+      { status: 200, description: 'Re-installed after a catalog update — refreshed in place.', body: { ok: true, suite: 'pokeworld', title: 'Pokeworld', created: 0, updated: 4, schemaIds: {}, componentIds: {}, actionIds: {}, pageIds: {}, dataIds: [], entryPageId: 'g7h8…', entryPageKey: 'pokeworld' } },
+      { status: 404, description: 'Unknown suite.', body: { ok: false, error: 'No suite matches "nope"' } }
+    ]
+  }),
+  endpoint({
     id: 'admin-components-seed',
     group: 'admin',
     title: 'Seed component library',
@@ -10433,7 +10595,67 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'admin-webpages-seed-demos',
+    group: 'admin',
+    title: 'Seed the builder demo library',
+    endpoint: '/api/v1/admin/webpages/seed-demos',
+    summary: 'Upserts every builder demo page and every behaviour-suite part (schemas, components, actions, data, pages) as system-owned public things.',
+    detail:
+      'The write path for the builder demo library: the deterministic schemas/webpageDemos catalog seeds one ' +
+      'system-owned webpage thing per demo (shareId webpage-demo-<slug>, reserved prefix, pageKey demo-<slug>, ' +
+      'tags webpage/demo/<family>/<kind>), and the schemas/behaviourSuites catalog seeds every suite part — ' +
+      'schema-demo-<suite>-<key>, component-demo-<suite>-<key> (ttAction-bound controls), ' +
+      'action-demo-<suite>-<key> (programs whose schema refs are the seeded schema ids and whose child refs are ' +
+      'the seeded action ids), data-demo-<suite>-<n> (stamped schema/schemaId like executor-minted things), and ' +
+      'webpage-demo-suite-<suite>. All carry storageClass "control", acl ["tt:all"], and per-kind hashed ' +
+      'uniqueKeys — the same envelope and reconciling upsert as the site-page seed. Every crystal passes its ' +
+      'kind’s validateThingtimeCrystal gate, the exact gate user things clear. Idempotent and self-healing: ' +
+      're-runs leave matching docs unchanged, refresh drifted crystals/tags in place, and skip (never touch) ' +
+      'foreign docs squatting a destination id. Once seeded, every demo opens at /p/ and in the builder (edits ' +
+      'fork), suite parts are browsable on /schemas, /components and /actions, and a signed-in viewer can run a ' +
+      'seeded action from its /actions page (it mints THEIR data things). The report sums both passes and ' +
+      'carries the suite pass as `suites`. GET returns the seed census (site + demo + suite counts) without writing.',
+    auth: {
+      mode: 'session-or-bearer',
+      description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
+    },
+    methods: ['GET', 'POST'],
+    steps: [
+      'POST with an empty body — the demo catalog is server-side and deterministic.',
+      'Read created/refreshed/unchanged/skipped and notes for per-slug outcomes.',
+      'GET the same path for { totalSeeded, siteSeeded, demosSeeded, demosTotal, suitesSeeded, suitesTotal } to check the census without writing — the three seeded counts are disjoint, so a suite page counts once, under suitesSeeded.',
+      'Re-run after the catalogs change — converges, never duplicates.',
+      'Handle 401/403 for non-admins and 429 when the fail-closed rate limit trips.'
+    ],
+    requestExamples: [
+      {
+        name: 'Seed the demo library',
+        description: 'Upsert every catalog demo.',
+        method: 'POST',
+        body: {}
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Seed report returned.',
+        body: {
+          ok: true,
+          received: 447,
+          created: 447,
+          refreshed: 0,
+          unchanged: 0,
+          skipped: 0,
+          notes: [],
+          totalSeeded: 364,
+          suites: { ok: true, received: 125, created: 125, refreshed: 0, unchanged: 0, skipped: 0, notes: [], totalSeeded: 364 }
+        }
+      }
+    ]
+  }),
+  endpoint({
     id: 'admin-webpages-seed',
+    contractVersion: '1.1.0',
     group: 'admin',
     title: 'Seed site webpages',
     endpoint: '/api/v1/admin/webpages/seed',
@@ -10456,7 +10678,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'POST with an empty body — the seed table is server-side and deterministic.',
       'Read created/refreshed/unchanged/skipped and notes for per-slug outcomes.',
-      'GET the same path for { totalSeeded } to check the census without writing.',
+      'GET the same path for { totalSeeded, siteSeeded, demosSeeded, demosTotal, suitesSeeded, suitesTotal } — totalSeeded counts every system webpage (site pages, the global doc, and demo-library pages), and the three seeded counts partition it.',
       'Re-run after adding routes to the seed table — converges, never duplicates.',
       'Handle 401/403 for non-admins and 429 when the fail-closed rate limit trips.'
     ],
@@ -10472,7 +10694,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       {
         status: 200,
         description: 'Seed report returned.',
-        body: { ok: true, received: 26, created: 26, refreshed: 0, unchanged: 0, skipped: 0, notes: [], totalSeeded: 26 }
+        body: { ok: true, received: 28, created: 28, refreshed: 0, unchanged: 0, skipped: 0, notes: [], totalSeeded: 28 }
       }
     ]
   }),
