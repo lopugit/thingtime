@@ -12,6 +12,14 @@
 //   - develop and main are level → do nothing. That is the normal state right
 //     after a promotion merges and "Sync main into develop" levels the
 //     branches again.
+//   - develop is ahead in commits but its tree already equals main's → keep
+//     refreshing the changelog, but say the promotion ships nothing instead of
+//     promising the listed PRs will land. That is the state after a develop PR
+//     reaches main by another route (a per-feature promotion PR, or a direct
+//     merge): develop's own "Merge pull request #N" commit stays unreachable
+//     from main, so it remains in main..develop, while its content is already
+//     on main. Merging is then a zero-diff history reconciliation, not a
+//     shipment, and claiming otherwise misreports the release.
 //
 // The changelog is the first-parent spine of main..develop: exactly the PR
 // merges and direct pushes that landed on develop and that merging the
@@ -165,6 +173,7 @@ const fmtDate = (iso) => (iso ? String(iso).slice(0, 10) : "");
 export function buildSection(data) {
   const {
     prs, directs, totalCommits, headShort, headDate, base, head,
+    noFileChanges = false,
     maxPrRows = CFG.maxPrRows, maxDirectRows = CFG.maxDirectRows,
   } = data;
   const setLine = [...prs.map((p) => p.number)].sort((a, b) => a - b).join(",");
@@ -175,9 +184,20 @@ export function buildSection(data) {
   lines.push("");
   const prCount = `**${prs.length} pull request${prs.length === 1 ? "" : "s"}**`;
   const commitCount = `${totalCommits} commit${totalCommits === 1 ? "" : "s"}`;
+  if (noFileChanges) {
+    lines.push(
+      `⚠️ **Nothing to ship:** \`${head}\` and \`${base}\` already point at identical trees, so merging this PR changes no files. ` +
+      `Whatever is listed below reached \`${base}\` another way — a per-feature promotion PR, or a direct merge — leaving ` +
+      `\`${head}\`'s own merge commits unreachable from \`${base}\` while their content is already there. ` +
+      `Merging still reconciles \`${head}\`'s history into \`${base}\` and clears this window; it just ships no code.`,
+    );
+    lines.push("");
+  }
   if (prs.length) {
     lines.push(
-      `${prCount} merged into \`${head}\` (${commitCount}) will land in \`${base}\` when this PR merges — newest first:`,
+      noFileChanges
+        ? `${prCount} merged into \`${head}\` (${commitCount}) are still in the promotion window — newest first:`
+        : `${prCount} merged into \`${head}\` (${commitCount}) will land in \`${base}\` when this PR merges — newest first:`,
     );
     lines.push("");
     lines.push("| PR | Title | Author | Source branch | Merged (UTC) |");
@@ -202,7 +222,9 @@ export function buildSection(data) {
     lines.push("");
     lines.push(
       `⚠️ **Carries \`no-promote\`-labeled PRs:** ${flagged.map((p) => `#${p.number}`).join(", ")}. ` +
-      `An omnibus \`${head}\` → \`${base}\` merge ships their changes anyway — split or revert them first if they must not reach \`${base}\`.`,
+      (noFileChanges
+        ? `Their content is already on \`${base}\`, so this merge is not what ships them — revert it on \`${base}\` if it must not be there.`
+        : `An omnibus \`${head}\` → \`${base}\` merge ships their changes anyway — split or revert them first if they must not reach \`${base}\`.`),
     );
   }
   if (directs.length) {
@@ -532,6 +554,31 @@ function selfTest() {
   assert(section.includes("ci: standing promo \\| workflow"), "escaped title in table");
   assert(section.includes("#186 ⚠️"), "flagged row marker");
   assert(section.includes("Direct commits"), "directs section");
+  assert(section.includes("will land in `main` when this PR merges"), "shipping promotion claims delivery");
+  assert(!section.includes("Nothing to ship"), "shipping promotion has no no-op banner");
+  assert(section.includes("merge ships their changes anyway"), "shipping promotion warns no-promote will ship");
+
+  // A promotion whose head tree already equals base's ships nothing: it must
+  // not promise the listed PRs will land. Happens when a develop PR reached
+  // main via a per-feature promotion PR, leaving develop's merge commit in
+  // main..develop while its content is already on main.
+  const noop = buildSection({
+    prs: [{ number: 672, title: "feat: thing", author: "lopugit", branch: "claude/thing", mergedAt: "2026-09-06T10:00:00Z", flagged: true }],
+    directs: [{ sha: "9a04aac5", subject: "Merge remote-tracking branch 'origin/main' into develop" }],
+    totalCommits: 6,
+    headShort: "9a04aac5",
+    headDate: "2026-09-06",
+    base: "main",
+    head: "develop",
+    noFileChanges: true,
+  });
+  assert(noop.includes("Nothing to ship"), "no-op promotion banner");
+  assert(!noop.includes("will land in `main` when this PR merges"), "no-op promotion drops the delivery claim");
+  assert(noop.includes("still in the promotion window"), "no-op promotion keeps the window wording");
+  assert(noop.includes("#672 ⚠️"), "no-op promotion still lists carried PRs");
+  assert(!noop.includes("merge ships their changes anyway"), "no-op promotion drops the will-ship warning");
+  assert(noop.includes("already on `main`"), "no-op promotion reframes the no-promote warning");
+  assert(parsePrSet(noop).has(672), "no-op promotion still records its PR set");
 
   const fresh = spliceSection("Preamble text.", section);
   assert(fresh.includes("Preamble text.\n\n<!-- promotion-changelog:start -->"), "append after preamble");
@@ -591,6 +638,17 @@ function main() {
       })
     : [];
   const totalCommits = Number(git("rev-list", "--count", `${CFG.gitBase}..${CFG.gitHead}`)) || 0;
+  // Identical tree SHAs ⇒ the two sides have byte-identical content, so a
+  // merge in either direction resolves to that same tree no matter what the
+  // merge base is: the promotion would change no files. Fail closed — if
+  // either rev cannot be resolved we keep the plain "will land" wording rather
+  // than claiming a no-op we could not prove.
+  let noFileChanges = false;
+  try {
+    noFileChanges = git("rev-parse", `${CFG.gitBase}^{tree}`) === git("rev-parse", `${CFG.gitHead}^{tree}`);
+  } catch {
+    noFileChanges = false;
+  }
   const headShort = spine.length ? spine[0].sha.slice(0, 8) : "";
   const headDate = spine.length
     ? git("show", "-s", "--format=%cs", spine[0].sha)
@@ -635,7 +693,9 @@ function main() {
   verifyFlags(prs);
   const section = buildSection({
     prs, directs, totalCommits, headShort, headDate, base: CFG.base, head: CFG.head,
+    noFileChanges,
   });
+  const noopNote = noFileChanges ? ", no file changes vs base" : "";
   const prsByNumber = new Map(prs.map((p) => [p.number, p]));
   const newSet = new Set(prsByNumber.keys());
 
@@ -658,7 +718,7 @@ function main() {
         console.log(url);
       }
       summary(
-        `Opened a promotion PR (${CFG.head} → ${CFG.base}) carrying ${prs.length} PRs / ${totalCommits} commits.`,
+        `Opened a promotion PR (${CFG.head} → ${CFG.base}) carrying ${prs.length} PRs / ${totalCommits} commits${noopNote}.`,
       );
       return;
     }
@@ -666,7 +726,7 @@ function main() {
     const oldBody = String(openPr.body ?? "").replace(/\r\n/g, "\n");
     const newBody = spliceSection(oldBody, section);
     if (newBody === oldBody) {
-      summary(`Changelog on PR #${openPr.number} is already current (${prs.length} PRs / ${totalCommits} commits).`);
+      summary(`Changelog on PR #${openPr.number} is already current (${prs.length} PRs / ${totalCommits} commits${noopNote}).`);
       return;
     }
 
@@ -699,12 +759,12 @@ function main() {
         ]);
       }
       summary(
-        `Refreshed the changelog on PR #${openPr.number} (${prs.length} PRs / ${totalCommits} commits); ` +
+        `Refreshed the changelog on PR #${openPr.number} (${prs.length} PRs / ${totalCommits} commits${noopNote}); ` +
         `delta comment ${CFG.dryRun ? "planned" : "posted"} (+${delta.added.length} / −${delta.removed.length}${initialized ? ", initialized" : ""}).`,
       );
     } else {
       summary(
-        `Refreshed the changelog on PR #${openPr.number} (${prs.length} PRs / ${totalCommits} commits); PR set unchanged, no comment.`,
+        `Refreshed the changelog on PR #${openPr.number} (${prs.length} PRs / ${totalCommits} commits${noopNote}); PR set unchanged, no comment.`,
       );
     }
   } finally {
