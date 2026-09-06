@@ -68,7 +68,18 @@
 // refused for banned / pending / outsider targets, a pending requester's
 // canPost false + the composer query excluding the pending subspace, a
 // demoted mod losing every queue on the next request, private-subspace and
-// removed posts never in rss / trending, the manifest + docs.
+// removed posts never in rss / trending, the manifest + docs — and (section
+// T) the final round-2 sweep, the cross-slice invariants no single slice
+// owns: "the mods" a report / join request rings are the ACTIVE owner +
+// moderators at emit time (a demoted mod and a moderator who left stop
+// ringing at once), an ACTIVE member of a private subspace calling join is
+// a no-op (never a request), the Reports queue pages by cursor, a subspace
+// deletion takes every subspace-report row with it (the reporter's own
+// generic read goes 200 → 404) while the posts survive, every bell of the
+// family deep-links consistently (post-shaped rows postId = targetId; the
+// subspace-shaped ones carry the subspace + an "s/<slug> ·" preview), and
+// the docs registry ↔ both served manifests agree across the whole family
+// at the round's final versions.
 //
 //   node scripts/verify-subspaces.mjs [baseUrl]
 //
@@ -2125,6 +2136,205 @@ const run = async () => {
 	const cleanupS = await Promise.all([ssSlug, ssPrivSlug].map((slugToDelete) => api('/api/v1/subspaces/delete', { method: 'POST', cookie: owner.cookie, body: { slug: slugToDelete, confirmSlug: slugToDelete } })));
 	const ssGone = await api(`/api/v1/subspaces/get?slug=${ssSlug}`);
 	check('(cleanup) the plain post is deleted and the owner deletes S and P (get → 404)', ssPlainDeleted.status === 200 && cleanupS.every((result) => result.status === 200) && ssGone.status === 404, `${ssPlainDeleted.status} ${JSON.stringify(cleanupS.map((result) => result.status))} ${ssGone.status}`);
+
+	console.log('\nT. final round-2 sweep — mod recipients, the report cascade, bell deep links, docs ↔ manifest');
+	// The cross-slice invariants no single slice section owns: who exactly a
+	// "notify the mods" emit reaches once the roster moves (a demoted mod and
+	// a moderator who left stop ringing at once — recipients are resolved at
+	// emit time), a private subspace's ACTIVE member calling join (a no-op,
+	// never downgraded to a request), the Reports queue's cursor paging, a
+	// subspace deletion taking every subspace-report row with it, every bell
+	// of the family deep-linking consistently (post-shaped rows carry postId =
+	// targetId = the post; subspace-shaped rows carry the subspace and an
+	// "s/<slug> ·" preview), and the docs registry ↔ the two served manifests
+	// agreeing across the whole family at the round's final versions.
+	const tSlug = `tfs_${suffix}`.slice(0, 30);
+	const tPrivSlug = `tfp_${suffix}`.slice(0, 30);
+	const tCreated = await api('/api/v1/subspaces', { method: 'POST', cookie: owner.cookie, body: { slug: tSlug, name: `Final ${suffix}`, access: 'public', rules: [{ title: 'Be kind', text: 'No gatekeeping.' }] } });
+	const tPrivCreated = await api('/api/v1/subspaces', { method: 'POST', cookie: owner.cookie, body: { slug: tPrivSlug, name: `Final private ${suffix}`, access: 'private' } });
+	const tSpace = tCreated.body?.subspace;
+	const tPriv = tPrivCreated.body?.subspace;
+	const tJoins = await Promise.all([mod, member, stranger].map((who) => api('/api/v1/subspaces/join', { method: 'POST', cookie: who.cookie, body: { slug: tSlug } })));
+	const tMembers = (slugOf, body) => api('/api/v1/subspaces/members', { method: 'POST', cookie: owner.cookie, body: { slug: slugOf, ...body } });
+	const tPromote = await tMembers(tSlug, { username: mod.username, action: 'role', role: 'moderator' });
+	const tPrivAdds = await Promise.all([mod, member].map((who) => tMembers(tPrivSlug, { username: who.username, action: 'add' })));
+	const tPrivPromote = await tMembers(tPrivSlug, { username: mod.username, action: 'role', role: 'moderator' });
+	check(
+		'(fixtures) T public + TP private founded; mod / member / stranger join T, the mod moderates both, the member is added to TP',
+		tCreated.status === 201 && tPrivCreated.status === 201 && tJoins.every((result) => result.status === 200) && tPromote.status === 200 && tPrivAdds.every((result) => result.status === 200) && tPrivPromote.status === 200,
+		`${tCreated.status}/${tPrivCreated.status} ${JSON.stringify(tJoins.map((result) => result.status))} ${tPromote.status} ${JSON.stringify(tPrivAdds.map((result) => result.status))} ${tPrivPromote.status}`
+	);
+
+	// --- an ACTIVE member of a private subspace calling join is a no-op ---
+	const tPrivRejoin = await api('/api/v1/subspaces/join', { method: 'POST', cookie: member.cookie, body: { slug: tPrivSlug } });
+	const tPrivQueue = await api(`/api/v1/subspaces/members?slug=${tPrivSlug}&pending=1`, { cookie: owner.cookie });
+	check(
+		'an ACTIVE member of a private subspace calling join is a no-op: 200 joined false / pending false, still a member (viewer.member, memberCount 3) and no request lands in the queue',
+		tPrivRejoin.status === 200 && tPrivRejoin.body.joined === false && tPrivRejoin.body.pending === false && tPrivRejoin.body.subspace?.viewer?.member === true && tPrivRejoin.body.subspace.viewer.pending === false && tPrivRejoin.body.subspace.memberCount === 3 && tPrivQueue.status === 200 && (tPrivQueue.body.members || []).length === 0,
+		`${tPrivRejoin.status} ${JSON.stringify({ joined: tPrivRejoin.body?.joined, pending: tPrivRejoin.body?.pending, viewer: tPrivRejoin.body?.subspace?.viewer, memberCount: tPrivRejoin.body?.subspace?.memberCount })} queue=${tPrivQueue.body?.members?.length}`
+	);
+
+	// --- the Reports queue pages by cursor; every ACTIVE mod rings once per report ---
+	const tPostIn = (cookie, subspaceId, title) => api('/api/v1/things', { method: 'POST', cookie, body: { type: 'text', text: `${title} body`, title, subspaceId, visibility: 'public' } });
+	const tReport = (cookie, id, reason) => api('/api/v1/subspaces/report', { method: 'POST', cookie, body: { id, reason } });
+	const tPost1 = (await tPostIn(member.cookie, tSpace.id, 'Final one')).body?.post;
+	const tPost2 = (await tPostIn(member.cookie, tSpace.id, 'Final two')).body?.post;
+	const tReport1 = await tReport(stranger.cookie, tPost1?.id, 'Rule 1: Be kind');
+	const tReport2 = await tReport(stranger.cookie, tPost2?.id, 'Spam');
+	check(
+		'(fixtures) the member posts twice in T; the stranger reports both (two fresh open rows)',
+		!!tPost1?.id && !!tPost2?.id && tReport1.status === 200 && tReport1.body.updated === false && !!tReport1.body.report?.id && tReport2.status === 200 && tReport2.body.updated === false && !!tReport2.body.report?.id,
+		`${tReport1.status}/${tReport2.status} ${JSON.stringify([tReport1.body?.updated, tReport2.body?.updated])}`
+	);
+	const tPage1 = await api(`/api/v1/subspaces/reports?slug=${tSlug}&limit=1`, { cookie: owner.cookie });
+	const tPage2 = typeof tPage1.body?.nextCursor === 'string' ? await api(`/api/v1/subspaces/reports?slug=${tSlug}&limit=1&cursor=${encodeURIComponent(tPage1.body.nextCursor)}`, { cookie: owner.cookie }) : { status: 0, body: null };
+	const tPagedIds = [...(tPage1.body?.reports || []), ...(tPage2.body?.reports || [])].map((group) => group.postId).sort();
+	check(
+		'the Reports queue pages by cursor: limit=1 → one group + nextCursor, the cursor → the other group + no cursor; the two pages cover both posts exactly once and each carries openReportCount 2',
+		tPage1.status === 200 && tPage1.body.reports?.length === 1 && typeof tPage1.body.nextCursor === 'string' && tPage2.status === 200 && tPage2.body.reports?.length === 1 && tPage2.body.nextCursor === null && JSON.stringify(tPagedIds) === JSON.stringify([tPost1.id, tPost2.id].sort()) && tPage1.body.openReportCount === 2 && tPage2.body.openReportCount === 2,
+		`${tPage1.status}/${tPage2.status} cursor=${tPage1.body?.nextCursor} ids=${JSON.stringify(tPagedIds)} open=${tPage1.body?.openReportCount}/${tPage2.body?.openReportCount}`
+	);
+	const tRowsOf = async (who, type, key, id) => (await notifsOf(who.cookie)).items.filter((n) => n.type === type && n[key] === id);
+	const tReportRows1 = await Promise.all([owner, mod, member, stranger].map((who) => tRowsOf(who, 'subspace-report', 'postId', tPost1.id)));
+	check(
+		'a report rings every ACTIVE moderator exactly once (owner + mod: one subspace-report row each for the post) and nobody else (the author and the reporter hear nothing)',
+		tReportRows1[0].length === 1 && tReportRows1[1].length === 1 && tReportRows1[2].length === 0 && tReportRows1[3].length === 0,
+		JSON.stringify(tReportRows1.map((rows) => rows.length))
+	);
+
+	// --- "the mods" = the ACTIVE owner + moderators, resolved at emit time ---
+	const tDemote = await tMembers(tSlug, { username: mod.username, action: 'role', role: 'member' });
+	const tPromoteMember = await tMembers(tSlug, { username: member.username, action: 'role', role: 'moderator' });
+	const tMemberLeaves = await api('/api/v1/subspaces/leave', { method: 'POST', cookie: member.cookie, body: { slug: tSlug } });
+	const tPost3 = (await tPostIn(stranger.cookie, tSpace.id, 'Final three')).body?.post;
+	const tReport3 = await tReport(nobody.cookie, tPost3?.id, 'Rule 1: Be kind');
+	check(
+		'(fixtures) the mod is demoted, the member is promoted and then LEAVES; the stranger posts and an outsider reports it',
+		tDemote.status === 200 && tPromoteMember.status === 200 && tMemberLeaves.status === 200 && !!tPost3?.id && tReport3.status === 200 && !!tReport3.body.report?.id,
+		`${tDemote.status} ${tPromoteMember.status} ${tMemberLeaves.status} post=${!!tPost3?.id} report=${tReport3.status}`
+	);
+	const tReportRows3 = await Promise.all([owner, mod, member, stranger, nobody].map((who) => tRowsOf(who, 'subspace-report', 'postId', tPost3.id)));
+	check(
+		'a report filed after the roster moved reaches the owner only: the demoted mod and the moderator who left get NO subspace-report row (recipients are the ACTIVE owner + moderators at emit time), nor do the author / reporter',
+		tReportRows3[0].length === 1 && tReportRows3.slice(1).every((rows) => rows.length === 0),
+		JSON.stringify(tReportRows3.map((rows) => rows.length))
+	);
+	const tPrivDemote = await tMembers(tPrivSlug, { username: mod.username, action: 'role', role: 'member' });
+	const tNobodyRequest = await api('/api/v1/subspaces/join', { method: 'POST', cookie: nobody.cookie, body: { slug: tPrivSlug } });
+	const tJoinRows = await Promise.all([owner, mod, member, nobody].map((who) => tRowsOf(who, 'subspace-join-request', 'targetId', tPriv.id)));
+	check(
+		'a join request filed after a demotion rings the owner only: the demoted TP moderator (still an active member) and a plain member get NO subspace-join-request row, nor does the requester',
+		tPrivDemote.status === 200 && tNobodyRequest.status === 200 && tNobodyRequest.body.pending === true && tJoinRows[0].length === 1 && tJoinRows.slice(1).every((rows) => rows.length === 0),
+		`${tPrivDemote.status} ${tNobodyRequest.status} ${JSON.stringify(tJoinRows.map((rows) => rows.length))}`
+	);
+
+	// --- every bell of the family deep-links consistently ---
+	const tAccept = await tMembers(tPrivSlug, { username: nobody.username, action: 'accept' });
+	const tRemove = await api('/api/v1/subspaces/moderate', { method: 'POST', cookie: owner.cookie, body: { id: tPost2.id, action: 'remove', reason: 'Final sweep' } });
+	const tBan = await tMembers(tSlug, { username: stranger.username, action: 'ban', reason: 'Final sweep' });
+	check('(fixtures) the owner accepts the request, removes a reported post and bans the stranger', tAccept.status === 200 && tRemove.status === 200 && tBan.status === 200, `${tAccept.status} ${tRemove.status} ${tBan.status}`);
+	const POST_SHAPED = new Set(['subspace-post-removed', 'subspace-report']);
+	const SUBSPACE_SHAPED = new Set(['subspace-role', 'subspace-ban', 'subspace-join-request', 'subspace-join-accepted']);
+	const tPostIds = new Set([tPost1.id, tPost2.id, tPost3.id]);
+	const tSlugById = new Map([[tSpace.id, tSlug], [tPriv.id, tPrivSlug]]);
+	const tAllRows = (await Promise.all([owner, mod, member, stranger, nobody].map((who) => notifsOf(who.cookie)))).flatMap((resp) => resp.items);
+	// this section's rows, picked structurally (never by clock): anything
+	// whose targetId is one of its posts or one of its subspaces
+	const tFamilyRows = tAllRows.filter((n) => String(n.type).startsWith('subspace-') && (tPostIds.has(n.targetId) || tSlugById.has(n.targetId)));
+	const tBadRows = tFamilyRows.filter((n) => {
+		if (tPostIds.has(n.targetId)) return !POST_SHAPED.has(n.type) || n.postId !== n.targetId;
+		return !SUBSPACE_SHAPED.has(n.type) || n.postId !== null || !String(n.preview || '').startsWith(`s/${tSlugById.get(n.targetId)} ·`);
+	});
+	const tTypesSeen = new Set(tFamilyRows.map((n) => n.type));
+	const tExpectedRows = [
+		['member', 'subspace-post-removed', tPost2.id, tAllRows.some((n) => n.type === 'subspace-post-removed' && n.postId === tPost2.id)],
+		['stranger', 'subspace-ban', tSpace.id, (await tRowsOf(stranger, 'subspace-ban', 'targetId', tSpace.id)).length === 1],
+		['nobody', 'subspace-join-accepted', tPriv.id, (await tRowsOf(nobody, 'subspace-join-accepted', 'targetId', tPriv.id)).length === 1],
+		['mod', 'subspace-role', tSpace.id, (await tRowsOf(mod, 'subspace-role', 'targetId', tSpace.id)).length === 2]
+	];
+	check(
+		'every bell about this section’s things deep-links consistently across all six types: post-shaped rows (post removed / report) carry postId = targetId = the post; subspace-shaped rows (role / ban / join request / join accepted) carry the subspace as targetId, no postId and an "s/<slug> ·" preview — and the expected rows exist (the author’s removal, the stranger’s ban, the requester’s acceptance, the mod’s promotion + demotion)',
+		tFamilyRows.length >= 8 && tBadRows.length === 0 && SUBSPACE_NOTIFICATION_TYPES.every((type) => tTypesSeen.has(type)) && tExpectedRows.every((row) => row[3] === true),
+		JSON.stringify({ rows: tFamilyRows.length, bad: tBadRows.map((n) => [n.type, n.targetId, n.postId, n.preview]), seen: [...tTypesSeen], expected: tExpectedRows.map((row) => row.slice(0, 2).concat(row[3])) })
+	);
+
+	// --- deleting the subspace takes every subspace-report row with it ---
+	const tReportReads = () => Promise.all([
+		api(`/api/v1/things?id=${tReport1.body.report.id}`, { cookie: stranger.cookie }),
+		api(`/api/v1/things?id=${tReport2.body.report.id}`, { cookie: stranger.cookie }),
+		api(`/api/v1/things?id=${tReport3.body.report.id}`, { cookie: nobody.cookie })
+	]);
+	const tRowsBefore = await tReportReads();
+	const tDelete = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: owner.cookie, body: { slug: tSlug, confirmSlug: tSlug } });
+	const tRowsAfter = await tReportReads();
+	const tPost1After = await api(`/api/v1/things?id=${tPost1.id}`);
+	const tModMine = await api('/api/v1/subspaces?mine=1&limit=50', { cookie: mod.cookie });
+	check(
+		'deleting the subspace takes every subspace-report row with it: the reporters read their own rows 200 before (three rows) and 404 after; the never-removed reported post survives as a plain public post (subspace / subspaceMod null, anonymous read); three member rows (owner, demoted mod, the banned one — an active member who leaves takes their row with them) are removed and the mod’s mine=1 no longer lists it',
+		tRowsBefore.every((result) => result.status === 200) && tDelete.status === 200 && tDelete.body.removedMembers === 3 && tRowsAfter.every((result) => result.status === 404) && tPost1After.status === 200 && tPost1After.body.post?.subspace === null && tPost1After.body.post.subspaceMod === null && tModMine.status === 200 && !(tModMine.body.subspaces || []).some((entry) => entry.slug === tSlug),
+		`before=${JSON.stringify(tRowsBefore.map((result) => result.status))} delete=${tDelete.status} ${JSON.stringify(tDelete.body)} after=${JSON.stringify(tRowsAfter.map((result) => result.status))} post=${tPost1After.status} sub=${JSON.stringify(tPost1After.body?.post?.subspace)} mod=${JSON.stringify(tPost1After.body?.post?.subspaceMod)}`
+	);
+
+	// --- the docs registry ↔ the served manifests, whole family, final round-2 numbers ---
+	// /api/v1/capabilities is generated from the docs' contractVersion (plus a
+	// route.v1.* key per executable route); /.well-known/thingtime-capabilities
+	// .json from the docs' featureVersion. Both must agree with the registry.
+	const FAMILY = {
+		'/api/v1/subspaces': ['api.subspaces', '1.5.0'],
+		'/api/v1/subspaces/get': ['api.subspaces-get', '1.4.0'],
+		'/api/v1/subspaces/join': ['api.subspaces-join', '1.3.0'],
+		'/api/v1/subspaces/leave': ['api.subspaces-leave', '1.3.0'],
+		'/api/v1/subspaces/members': ['api.subspaces-members', '1.4.1'],
+		'/api/v1/subspaces/moderate': ['api.subspaces-moderate', '1.4.0'],
+		'/api/v1/subspaces/modlog': ['api.subspaces-modlog', '1.0.0'],
+		'/api/v1/subspaces/update': ['api.subspaces-update', '1.3.0'],
+		'/api/v1/subspaces/feed': ['api.subspaces-feed', '1.3.0'],
+		'/api/v1/subspaces/transfer': ['api.subspaces-transfer', '1.2.0'],
+		'/api/v1/subspaces/delete': ['api.subspaces-delete', '1.1.0'],
+		'/api/v1/subspaces/report': ['api.subspaces-report', '1.0.1'],
+		'/api/v1/subspaces/reports': ['api.subspaces-reports', '1.0.1'],
+		'/api/v1/things': ['api.things', '1.4.0'],
+		'/api/v1/things/feed': ['api.things-feed', '1.4.0'],
+		'/api/v1/things/comment': ['api.things-comment', '1.3.0'],
+		'/api/v1/things/user': ['api.things-user', '1.3.0'],
+		'/api/v1/things/updown': ['api.things-updown', '1.0.0'],
+		'/api/v1/notifications': ['api.notifications-list', '1.2.0'],
+		'/api/v1/notifications/settings': ['api.notifications-settings', '1.1.0']
+	};
+	const tFamilyEndpoints = Object.keys(FAMILY);
+	const [tManifest, tWellKnown, ...tDocs] = await Promise.all([api('/api/v1/capabilities'), api('/.well-known/thingtime-capabilities.json'), ...tFamilyEndpoints.map((endpoint) => api(`${endpoint}-docs`))]);
+	const tDrift = tFamilyEndpoints.flatMap((endpoint, index) => {
+		const [feature, expected] = FAMILY[endpoint];
+		const doc = tDocs[index].body?.docs;
+		const advertised = tManifest.body?.features?.[feature];
+		const wellKnown = tWellKnown.body?.features?.[feature]?.version;
+		const routeKey = `route.${endpoint.replace('/api/', '').replace(/\//g, '.')}`;
+		const problems = [];
+		if (tDocs[index].status !== 200 || doc?.endpoint !== endpoint) problems.push(`docs ${tDocs[index].status}`);
+		if (doc && `api.${doc.id}` !== feature) problems.push(`id api.${doc.id}`);
+		if (doc && doc.contractVersion !== advertised) problems.push(`contract ${doc.contractVersion} ≠ /capabilities ${advertised}`);
+		if (doc && (doc.featureVersion || '1.0.0') !== wellKnown) problems.push(`feature ${doc.featureVersion} ≠ well-known ${wellKnown}`);
+		if (advertised !== expected) problems.push(`/capabilities ${advertised} ≠ expected ${expected}`);
+		if (tManifest.body?.features?.[routeKey] !== '1.0.0') problems.push(`${routeKey} missing`);
+		return problems.length ? [`${endpoint}: ${problems.join(', ')}`] : [];
+	});
+	check(
+		'docs ↔ manifests, whole family: every endpoint answers its -docs route under api.<id>; /api/v1/capabilities advertises exactly the docs’ contractVersion at the round’s final numbers (subspaces 1.5.0 · get 1.4.0 · join / leave / update 1.3.0 · members 1.4.1 · moderate 1.4.0 · feed 1.3.0 · transfer 1.2.0 · delete 1.1.0 · report / reports 1.0.1 · modlog 1.0.0 · things 1.4.0 · things-feed 1.4.0 · things-comment / things-user 1.3.0 · updown 1.0.0 · notifications-list 1.2.0 · notifications-settings 1.1.0) plus a route.v1.* key each, and /.well-known/thingtime-capabilities.json advertises the docs’ featureVersion',
+		tManifest.status === 200 && tWellKnown.status === 200 && tDrift.length === 0,
+		`${tManifest.status}/${tWellKnown.status} ${tDrift.join(' | ')}`
+	);
+	const tReportDocs = tDocs[tFamilyEndpoints.indexOf('/api/v1/subspaces/report')];
+	const tJoinDocs = tDocs[tFamilyEndpoints.indexOf('/api/v1/subspaces/join')];
+	check(
+		'the report and join docs name their own rate keys (subspaces.report 30 / min, subspaces.join 20/min) — the fan-out emits carry tighter windows than the shared write budget',
+		/subspaces\.report, 30 \/ min/.test(String(tReportDocs.body?.docs?.detail || '')) && /subspaces\.join, 20\/min/.test(JSON.stringify(tJoinDocs.body?.docs || {})),
+		`report=${/subspaces\.report/.test(String(tReportDocs.body?.docs?.detail || ''))} join=${/subspaces\.join/.test(JSON.stringify(tJoinDocs.body?.docs || {}))}`
+	);
+
+	// cleanup: TP (T went in the cascade check above)
+	const tPrivDeleted = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: owner.cookie, body: { slug: tPrivSlug, confirmSlug: tPrivSlug } });
+	const tGone = await Promise.all([tSlug, tPrivSlug].map((slugToDelete) => api(`/api/v1/subspaces/get?slug=${slugToDelete}`)));
+	check('(cleanup) the owner deletes TP; both get → 404', tPrivDeleted.status === 200 && tGone.every((result) => result.status === 404), `${tPrivDeleted.status} ${JSON.stringify(tGone.map((result) => result.status))}`);
 
 	console.log(`\n${passed} passed, ${failures.length} failed${skipped.length ? `, ${skipped.length} skipped (storage migration pending on this database)` : ''}`);
 	if (failures.length) {

@@ -1551,6 +1551,30 @@ email whose link points at the attacker.
       next request; private-subspace posts and mod-removed posts never appear
       in `GET /api/v1/things/rss` or `/trending` (a public subspace post
       does syndicate).
+- [ ] Final round-2 sweep (verify section T — the cross-slice invariants no
+      single slice owns): "the mods" a request / report rings are the ACTIVE
+      owner + moderators at emit time — a demoted moderator and a moderator
+      who left get no `subspace-report` / `subspace-join-request` row for
+      anything filed afterwards (the owner still does); an ACTIVE member of a
+      private subspace calling join is a no-op (`joined false, pending
+      false`, never downgraded to a request); the Reports queue pages by
+      cursor (`limit=1` → one group + `nextCursor`, the cursor → the rest, no
+      cursor at the end, `openReportCount` on every page); deleting a
+      subspace takes every `subspace-report` row with it (the reporter's own
+      generic read of the row goes 200 → 404) while the reported posts
+      survive as plain posts; every bell of the family deep-links
+      consistently (post removed / report rows carry `postId = targetId` =
+      the post; role / ban / join request / join accepted rows carry the
+      subspace as `targetId`, no `postId`, and an `s/<slug> ·` preview); and
+      the docs registry ↔ `/api/v1/capabilities` agree across the whole family
+      at the round's final numbers (subspaces 1.5.0 · get 1.4.0 · join /
+      leave / update 1.3.0 · members 1.4.1 · moderate 1.4.0 · feed 1.3.0 ·
+      transfer 1.2.0 · delete 1.1.0 · report / reports 1.0.1 · modlog 1.0.0 ·
+      things 1.4.0 · things-feed 1.4.0 · things-comment / things-user 1.3.0
+      · updown 1.0.0 · notifications-list 1.2.0 · notifications-settings
+      1.1.0) with a `route.v1.*` key for each. `test:rate-limit` pins the
+      `subspaces.write` 60 / `subspaces.join` 20 / `subspaces.report` 30 per
+      minute windows.
 - [ ] Bell 🔔 + Settings → Notifications: six subspace rows (roles 🎩,
       bans 🚫, join accepted 🎉, posts removed 🧹, join requests 🙋,
       reports 🚩 — the last two default email OFF). The bell's verb keys off

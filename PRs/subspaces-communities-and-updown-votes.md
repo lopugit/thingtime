@@ -598,6 +598,35 @@ score field.
   `compareCommentsFor` (updownCore.test.ts), `sortCommentPage` /
   `isCommentSort` / `isPendingComment` / `windowCommentPage` /
   `mergeCommentPage` (feedTypes.test.ts), both capability pin files.
+- Round 2 final — verify section T (the cross-slice invariants no single
+  slice owns): "the mods" a report / join request rings are the ACTIVE
+  owner + moderators at emit time — a report after the roster moved reaches
+  the owner only (the demoted mod and the moderator who LEFT get no
+  `subspace-report` row; a join request after a demotion rings the owner
+  only); an ACTIVE member of a private subspace calling join is a no-op
+  (`joined false, pending false`, no request filed); the Reports queue pages
+  by cursor (`limit=1` → one group + `nextCursor` → the other group + no
+  cursor, `openReportCount` on every page); deleting a subspace takes every
+  `subspace-report` row with it (the reporters' own generic reads go 200 →
+  404 for all three rows) while the never-removed reported post survives
+  plain and the member rows go (three: owner, demoted mod, the banned one —
+  an active member who leaves takes their row with them); every bell of the
+  family about the section's things deep-links consistently across all six
+  types (post-shaped rows `postId = targetId` = the post; subspace-shaped
+  rows the subspace + an `s/<slug> ·` preview, no `postId`); the docs
+  registry ↔ BOTH served manifests across the whole family at the round's
+  final numbers (`/api/v1/capabilities` = the docs' `contractVersion` +
+  a `route.v1.*` key each; `/.well-known/thingtime-capabilities.json` = the
+  docs' `featureVersion`); the report / join docs naming their rate keys.
+  Final walk: `486 passed, 0 failed`. Fixes found by the sweep: the
+  `withoutUnreadDuplicates` dedupe keys in `notifications.ts` joined
+  recipient + type with a raw NUL byte, which made git (and the PR diff)
+  treat the whole file as binary and `grep` skip it — now a space (ids are
+  hex / uuid, types are slugs; no behaviour change); `test:rate-limit` now
+  pins `subspaces.write` 60 / `subspaces.join` 20 / `subspaces.report` 30
+  per minute. Full `tsc --noEmit`: the only errors in branch-touched files
+  (`registry.ts` Feature-Stack fields without `description`, the duplicate
+  `headers` key in `apiDocs.ts`) are byte-identical on develop.
 - Browser: see the run log in the PR description / TESTING.md checklists.
 
 ## Known limits (stated, not hidden)
