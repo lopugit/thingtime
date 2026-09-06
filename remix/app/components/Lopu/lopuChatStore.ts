@@ -886,7 +886,7 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 		return { ok: false, error: 'Sign in to chat with Lopu', text };
 	}
 	if (state.streamingId && isLopuTurnActive(state.turns[state.streamingId])) {
-		notice('Lopu is still replying — stop her first or wait a moment ✨', { status: 'info' });
+		notice('Lopu is still replying — stop it first or wait a moment ✨', { status: 'info' });
 		return { ok: false, error: 'Lopu is still replying', text };
 	}
 

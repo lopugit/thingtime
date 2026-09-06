@@ -318,7 +318,7 @@ const SignedOutState = ({ compact }: { compact: boolean }) => (
 	<Flex className="lopuSignedOut" direction="column" align="center" justify="center" textAlign="center" flex={1} minH={compact ? '200px' : '320px'} px={4} py={6} gap={4}>
 		<LopuAvatar size={compact ? 48 : 56} />
 		<Text fontSize={compact ? LOPU_UI.fontCompact : LOPU_UI.fontBody} color={LOPU_UI.muted} maxW="360px" lineHeight="1.5">
-			Lopu builds pages, components and actions as you — sign in and she remembers every conversation.
+			Lopu builds pages, components and actions as you — sign in and it remembers every conversation.
 		</Text>
 		<Box
 			as={RouterLink}
