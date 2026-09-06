@@ -314,6 +314,33 @@ test('a photo tile whose bytes will not decode falls back to the branded tile', 
 	assert.ok(!tileIsBlank(truncated), 'an undecodable photo must fall back to the branded tile, not a blank white slab');
 });
 
+// A collage cell that is never drawn is not blank — it is the white card panel
+// showing through, which is the same slab the branded tile exists to prevent.
+// A 2×2 grid drawn for exactly three photos left its fourth cell undrawn, so
+// every three-photo post (an ordinary post, not an edge case) shipped with a
+// white square in the corner of its collage.
+test('every photo count fills the media panel, with no undrawn collage cell', () => {
+	// Bottom-right quadrant of the media panel (x=700..1130, y=92..538), sampled
+	// well inside it. White is the card panel showing through — the defect.
+	const quadrantIsBlank = (imageCount: number): boolean => {
+		const pixels = cardPixels({ ...gallery, images: [], imageCount }, []);
+		let total = 0;
+		let samples = 0;
+		for (let y = 340; y < 520; y += 2) {
+			for (let x = 940; x < 1120; x += 2) {
+				const index = (y * 1200 + x) * 4;
+				total += pixels[index] + pixels[index + 1] + pixels[index + 2];
+				samples += 1;
+			}
+		}
+		return total / samples > 740;
+	};
+
+	for (const imageCount of [1, 2, 3, 4, 6]) {
+		assert.ok(!quadrantIsBlank(imageCount), `a ${imageCount}-photo collage leaves the panel's bottom-right corner undrawn`);
+	}
+});
+
 // The cap on card imagery has to survive a response that declines to say how
 // big it is. S3 sends content-length today, so a header-only check looks fine
 // in production right up until a proxy, a range response or a compressed

@@ -310,6 +310,22 @@ const mediaLayout = (preview: SocialPreview, images: readonly (string | null)[],
 		)}`;
 	const tileWidth = width / 2 - 8;
 	const tileHeight = height / 2 - 8;
+	// Three photos get a tall-left/stacked-right collage rather than the 2×2 grid
+	// with its fourth cell left undrawn. An undrawn cell is not "empty": nothing
+	// is painted there, so the white card panel shows through as a blank slab in
+	// the corner of the collage — the exact treatment `imageTile` paints its
+	// branded tile to avoid, and the only count that had it (1, 2 and 4 all fill
+	// the panel). Exactly three photos is an ordinary post, not an edge case.
+	if (count === 3) {
+		return `${imageTile(images[0] || undefined, 0, x, y, tileWidth, height)}${imageTile(
+			images[1] || undefined,
+			1,
+			x + tileWidth + 16,
+			y,
+			tileWidth,
+			tileHeight
+		)}${imageTile(images[2] || undefined, 2, x + tileWidth + 16, y + tileHeight + 16, tileWidth, tileHeight)}`;
+	}
 	return Array.from({ length: count }, (_, index) =>
 		imageTile(
 			images[index] || undefined,
