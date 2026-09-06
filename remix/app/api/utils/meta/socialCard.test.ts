@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { buildSocialCardSvg, renderSocialCardPng, socialTextWidth } from './socialCard';
+import { Resvg } from '@resvg/resvg-js';
+
+import { buildSocialCardSvg, renderSocialCardPng, socialCardRenderOptions, socialTextWidth } from './socialCard';
 import type { SocialPreview } from './socialPreview';
 
 const gallery: SocialPreview = {
@@ -169,6 +171,82 @@ test('badge and poll labels are clamped to their pill, not to a character count'
 		badgeLabels.some((label) => label.endsWith('…')),
 		'an over-long badge should be visibly truncated'
 	);
+});
+
+// The card is only ever drawn on Linux hosts, and the deployed Vercel Node
+// runtime has NO fonts installed. `font-family="Arial, sans-serif"` therefore
+// resolved to nothing there and every production card came back with its
+// gradient, browser chrome and panel art drawn and not one glyph on it — while
+// CI and dev machines, which do have DejaVu/Liberation, rendered perfectly.
+// Asserting PNG magic bytes and a plausible byte length cannot tell those two
+// apart, so count the ink the text actually lays down instead.
+const inkInBand = (png: Buffer | Uint8Array, options: { top: number; bottom: number; left: number; right: number; dark: boolean }): number => {
+	let count = 0;
+	for (let y = options.top; y < options.bottom; y += 1) {
+		for (let x = options.left; x < options.right; x += 1) {
+			const index = (y * 1200 + x) * 4;
+			const [red, green, blue] = [png[index], png[index + 1], png[index + 2]];
+			const total = red + green + blue;
+			if (options.dark ? total < 260 : total > 700) count += 1;
+		}
+	}
+	return count;
+};
+
+const cardPixels = (preview: SocialPreview): Buffer => new Resvg(buildSocialCardSvg(preview), socialCardRenderOptions()).render().pixels;
+
+test('cards draw real glyphs on a host with no system fonts (the deployed runtime)', () => {
+	const preview: SocialPreview = { ...gallery, kind: 'feed', variant: 'feed', title: 'Nikk: the weekend garden bed', images: [], imageCount: 0 };
+	// The card renderer must not depend on the host having fonts at all.
+	assert.equal(socialCardRenderOptions()?.font?.loadSystemFonts, false, 'the bundled face must be the only one in play');
+
+	const pixels = cardPixels(preview);
+	// Dark headline ink on the white panel, in the title band above the art panel.
+	const titleInk = inkInBand(pixels, { top: 200, bottom: 340, left: 86, right: 700, dark: true });
+	assert.ok(titleInk > 500, `expected a drawn headline, found ${titleInk} dark pixels in the title band`);
+
+	// The same band with the text removed is the "blank card" this shipped as.
+	const blank = cardPixels({ ...preview, title: '', description: '', author: undefined, eyebrow: '', badges: [] });
+	const blankInk = inkInBand(blank, { top: 200, bottom: 340, left: 86, right: 700, dark: true });
+	assert.ok(titleInk > blankInk * 20, `headline ink (${titleInk}) is indistinguishable from an empty card (${blankInk})`);
+
+	// White wordmark ink inside the dark browser chrome bar.
+	const wordmarkInk = inkInBand(pixels, { top: 52, bottom: 80, left: 130, right: 320, dark: false });
+	assert.ok(wordmarkInk > 100, `expected the THINGTIME wordmark to render, found ${wordmarkInk} light pixels`);
+});
+
+test('nothing on a card is drawn as a missing-glyph box', () => {
+	// resvg paints an unmapped code point as `.notdef` — a hollow rectangle. Two
+	// of the chrome's decorative marks used to be U+2726/U+271A, which Liberation
+	// Sans does not have, and post titles routinely carry emoji.
+	const tofu = new Resvg(
+		`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630"><rect width="1200" height="630" fill="#FFFFFF"/><text x="40" y="120" font-family="Arial, sans-serif" font-size="38" fill="#17112D">\u{1F63B}</text></svg>`,
+		socialCardRenderOptions()
+	)
+		.render()
+		.pixels.reduce((total, channel, index) => (index % 4 === 0 && channel < 128 ? total + 1 : total), 0);
+	assert.ok(tofu > 0, 'expected an unmapped code point to prove it draws a visible .notdef box');
+
+	const withEmoji = buildSocialCardSvg({ ...gallery, title: 'Nikk: this mah cat 😻', badges: ['6 photos 🎉'], images: [], imageCount: 0 });
+	assert.doesNotMatch(withEmoji, /\p{Extended_Pictographic}/u, 'emoji must be dropped from the card, never handed to the renderer as tofu');
+	assert.match(withEmoji, /Nikk: this mah cat/, 'the words around an emoji must survive');
+	assert.doesNotMatch(buildSocialCardSvg({ ...gallery, images: [], imageCount: 0 }), /[✦✚]/, 'the chrome marks must be drawn, not typed');
+});
+
+test('empty-panel copy stays legible over its own artwork', () => {
+	// The art is positioned per variant but the copy sits at fixed baselines, so
+	// the poll axis stroke and the docs page rect both ran through it. Once the
+	// font landed this became two lines of white text on a yellow rectangle.
+	for (const variant of ['poll', 'docs', 'webpage', 'media-file', 'collection'] as const) {
+		const svg = buildSocialCardSvg({ ...gallery, kind: 'text-post', variant, images: [], imageCount: 0 });
+		const scrim = svg.match(/<rect data-preview-scrim="1" x="(\d+)" y="(\d+)" width="(\d+)" height="(\d+)"/);
+		assert.ok(scrim, `${variant} draws its panel copy with no scrim behind it`);
+		const [top, height] = [Number(scrim[2]), Number(scrim[4])];
+		// Both copy baselines (y=410 and y=450) plus their descenders must sit
+		// inside the darkened band, or the scrim is decorative rather than useful.
+		assert.ok(top <= 410 - 30, `${variant} scrim starts at y=${top}, below the first copy line`);
+		assert.ok(top + height >= 458, `${variant} scrim ends at y=${top + height}, above the second copy line`);
+	}
 });
 
 test('the social-card renderer emits a real multi-image collage PNG', async () => {

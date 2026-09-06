@@ -35,6 +35,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   marketplace, structured Thingtime, poll, share, comment, reply, standalone
   image/video/audio/file, profile, Thing, published page, feed and public
   catalogue/docs variants each have their own preview treatment.
+- Cards ship their own copy of Liberation Sans (SIL OFL 1.1, metric-compatible
+  with Arial) embedded in the server bundle. The deployed Vercel Node runtime
+  has no fonts installed, so the renderer previously drew every card's artwork
+  and not one glyph; CI and dev machines have system fonts and looked fine. —
+  Lopu (AI)
 
 ### 2026-09-02 — Lopu toast position setting + `/notifications` history page — Claude (AI)
 

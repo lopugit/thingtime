@@ -1,5 +1,10 @@
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { Resvg } from '@resvg/resvg-js';
 
+import { SOCIAL_CARD_FONTS, SOCIAL_CARD_FONT_FAMILY } from './socialCardFontData';
 import type { SocialPreview, SocialPreviewVariant } from './socialPreview';
 import { SOCIAL_PREVIEW_HEIGHT, SOCIAL_PREVIEW_WIDTH, cleanSocialText } from './socialPreview';
 
@@ -48,8 +53,25 @@ const CARD_THEMES: Record<SocialPreviewVariant, CardTheme> = {
 	thing: { primary: '#4F46E5', end: '#0F766E', panelStart: '#4338CA', panelEnd: '#047857' }
 };
 
+// The bundled face is a Latin/Greek/Cyrillic text font with no pictographs, and
+// resvg draws a missing glyph as `.notdef` — a literal tofu box. Emoji are
+// common in post titles, so strip them from the PNG rather than print squares
+// in a headline. The Open Graph text tags keep them: the unfurler renders those
+// with its own fonts, and only the image is limited to what we ship.
+const CARD_UNRENDERABLE = /[\p{Extended_Pictographic}\u{200D}\u{FE0E}\u{FE0F}\u{20E3}\u{1F3FB}-\u{1F3FF}]/gu;
+
+// Single choke point for every user-authored value entering the SVG, so the
+// drop and the escape can never be applied to one field and skipped on another.
 const escapeXml = (value: string): string =>
-	value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+	value
+		.replace(CARD_UNRENDERABLE, '')
+		.replace(/\s+/g, ' ')
+		.trim()
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&apos;');
 
 // A character budget cannot express "must not run under the art panel": the
 // same 27 characters are 470px of narrow letters or 700px of capitals, and the
@@ -74,7 +96,12 @@ export const socialTextWidth = (value: string, fontSize: number): number =>
 // The text column runs from x=86 to the media/art panel at x=700.
 const TEXT_COLUMN_WIDTH = 594;
 
-const clampToWidth = (value: string, maxWidth: number, fontSize: number): string => {
+// Drop what the bundled face cannot draw before anything is measured, so wrap
+// and clamp budget the column against the glyphs that actually get painted.
+const cardText = (value: string): string => value.replace(CARD_UNRENDERABLE, '').replace(/\s+/g, ' ').trim();
+
+const clampToWidth = (input: string, maxWidth: number, fontSize: number): string => {
+	const value = cardText(input);
 	if (socialTextWidth(value, fontSize) <= maxWidth) return value;
 	const codePoints = Array.from(value);
 	while (codePoints.length && socialTextWidth(`${codePoints.join('')}…`, fontSize) > maxWidth) codePoints.pop();
@@ -82,7 +109,7 @@ const clampToWidth = (value: string, maxWidth: number, fontSize: number): string
 };
 
 const wrap = (value: string, fontSize: number, maxLines: number, maxWidth = TEXT_COLUMN_WIDTH): string[] => {
-	const words = cleanSocialText(value).split(' ').filter(Boolean);
+	const words = cardText(cleanSocialText(value)).split(' ').filter(Boolean);
 	const lines: string[] = [];
 	let line = '';
 	for (const word of words) {
@@ -229,10 +256,22 @@ const mediaLayout = (preview: SocialPreview, images: readonly (string | null)[],
 	const tiles = Math.max(preview.imageCount, available.length);
 	if (!tiles) {
 		const [firstLine, secondLine] = panelCopy(preview.variant);
+		// Each variant positions its illustration independently, but the copy sits
+		// at two fixed baselines — so the poll's white axis stroke ran through
+		// "answering together" and the docs page rect put white text on yellow.
+		// A scrim is the one treatment that works for every variant without
+		// pinning twenty pieces of art to a shared bottom edge; it is clipped to
+		// the panel so it cannot square off the panel's rounded corners.
+		const scrimTop = y + height - 220;
 		return `<g data-preview-panel="${
 			preview.variant
 		}"><rect x="${x}" y="${y}" width="${width}" height="${height}" rx="34" fill="url(#empty-panel)" opacity=".95"/>
 		${panelArt(preview.variant)}
+		<defs><clipPath id="empty-panel-clip"><rect x="${x}" y="${y}" width="${width}" height="${height}" rx="34"/></clipPath>
+		<linearGradient id="panel-scrim" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#160A35" stop-opacity="0"/><stop offset=".55" stop-color="#160A35" stop-opacity=".62"/><stop offset="1" stop-color="#160A35" stop-opacity=".78"/></linearGradient></defs>
+		<rect data-preview-scrim="1" x="${x}" y="${scrimTop}" width="${width}" height="${
+			y + height - scrimTop
+		}" fill="url(#panel-scrim)" clip-path="url(#empty-panel-clip)"/>
 		<text x="${x + 46}" y="410" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="30" font-weight="700">${escapeXml(firstLine)}</text>
 		<text x="${x + 46}" y="450" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="30" font-weight="700">${escapeXml(secondLine)}</text></g>`;
 	}
@@ -288,7 +327,15 @@ export const buildSocialCardSvg = (preview: SocialPreview, imageDataUris: readon
 	<rect x="44" y="70" width="1112" height="22" fill="#17112D"/>
 	${plusMark(74, 49, 13)}
 	<text x="140" y="72" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="18" font-weight="700" letter-spacing="2">THINGTIME</text>
-	<text x="1050" y="72" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="17" text-anchor="end">✦  ☺  ✚</text>
+	<!-- The chrome's star/smiley/plus motifs are drawn, not typed: Liberation Sans
+	     has no U+2726 or U+271A, so as text they were two .notdef boxes. -->
+	<g opacity=".85">
+		<path d="M1006 55.5 1009 62 1015.5 65 1009 68 1006 74.5 1003 68 996.5 65 1003 62Z" fill="#FFFFFF"/>
+		<circle cx="1052" cy="65" r="8.5" fill="none" stroke="#FFFFFF" stroke-width="2.2"/>
+		<circle cx="1048.8" cy="62.4" r="1.3" fill="#FFFFFF"/><circle cx="1055.2" cy="62.4" r="1.3" fill="#FFFFFF"/>
+		<path d="M1048.4 67.6a4.4 4.4 0 0 0 7.2 0" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round"/>
+		<path d="M1098 57.5v15M1090.5 65h15" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round"/>
+	</g>
 	<text x="86" y="134" fill="#7C3AED" font-family="Arial, sans-serif" font-size="15" font-weight="700" letter-spacing="2">${escapeXml(
 		preview.eyebrow
 	)}</text>
@@ -343,6 +390,52 @@ export const buildSocialCardSvg = (preview: SocialPreview, imageDataUris: readon
 	</svg>`;
 };
 
+// resvg only loads fonts from a path, so the embedded faces are materialised
+// once per process into the runtime's temp dir (writable on Vercel) and reused.
+// `loadSystemFonts` is then off deliberately: it keeps the deployed card
+// byte-identical to the one CI renders, so the width estimate in
+// `socialTextWidth` is calibrated against the face that actually draws.
+let cardFontFiles: string[] | null = null;
+
+export const socialCardFontFiles = (): string[] => {
+	if (cardFontFiles) return cardFontFiles;
+	const directory = join(tmpdir(), 'thingtime-social-card-fonts');
+	const files: string[] = [];
+	try {
+		mkdirSync(directory, { recursive: true });
+		for (const font of SOCIAL_CARD_FONTS) {
+			const path = join(directory, font.file);
+			if (!existsSync(path)) writeFileSync(path, Buffer.from(font.base64, 'base64'));
+			files.push(path);
+		}
+	} catch (error) {
+		// Never fail a card over this: fall back to whatever the host provides.
+		// That is nothing on Vercel — hence the loud log — but it is a full font
+		// set on a developer machine, so local rendering still works.
+		console.error('[social-card] could not materialise the bundled card font; falling back to system fonts:', error);
+		cardFontFiles = [];
+		return cardFontFiles;
+	}
+	cardFontFiles = files;
+	return cardFontFiles;
+};
+
+export const socialCardRenderOptions = (): ConstructorParameters<typeof Resvg>[1] => {
+	const fontFiles = socialCardFontFiles();
+	return {
+		fitTo: { mode: 'width', value: SOCIAL_PREVIEW_WIDTH },
+		font: {
+			loadSystemFonts: fontFiles.length === 0,
+			fontFiles,
+			// `Arial` does not exist on Linux and the card markup asks for
+			// `Arial, sans-serif`, so both the generic fallback and the
+			// nothing-matched default have to land on the bundled face.
+			defaultFontFamily: SOCIAL_CARD_FONT_FAMILY,
+			sansSerifFamily: SOCIAL_CARD_FONT_FAMILY
+		}
+	};
+};
+
 const loadAttachmentDataUri = async (attachmentId: string): Promise<string | null> => {
 	try {
 		const { getAttachmentDownload } = await import('../attachments/attachments');
@@ -364,5 +457,5 @@ export const renderSocialCardPng = async (preview: SocialPreview, providedImageD
 	const imageDataUris =
 		providedImageDataUris ?? (await Promise.all(preview.images.slice(0, 4).map((image) => loadAttachmentDataUri(image.attachmentId))));
 	const svg = buildSocialCardSvg(preview, imageDataUris);
-	return new Resvg(svg, { fitTo: { mode: 'width', value: SOCIAL_PREVIEW_WIDTH } }).render().asPng();
+	return new Resvg(svg, socialCardRenderOptions()).render().asPng();
 };

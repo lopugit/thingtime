@@ -354,6 +354,15 @@ function — `remix/scripts/patch-vercel-output.mjs`).
 - [ ] The colourful Thingtime browser-card (wordmark, five-colour mark and
       playful icon treatment) remains readable at 1200×630 and iMessage-sized
       previews; no text or photo tile clips at the edge.
+- [ ] Check the card from the **deployed** preview, not just locally:
+      `curl -o card.png '<preview-origin>/social-card?path=/feed'` and open it.
+      Cards ship their own Liberation Sans (`socialCardFontData.ts`) because the
+      Vercel runtime has no system fonts, and a dev machine's fonts hide a
+      missing one — a fontless deploy renders full artwork with zero glyphs.
+      Emoji are deliberately dropped from the PNG (the face has no pictographs,
+      so they would draw as tofu boxes) while the `og:`/`twitter:` text tags
+      keep them. Non-Latin scripts the face lacks (CJK, Arabic, Thai) still draw
+      as tofu — known gap.
 - [ ] `npm --prefix remix run test:social-previews` passes.
 - [ ] After `npm run build`, `verify:vercel-output` passes: the permalink
       and social-card routes sit between the API routes and the SPA fallback,
