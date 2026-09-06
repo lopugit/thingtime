@@ -134,6 +134,16 @@ const git = (...args) => run("git", args).trim();
 // content main already has (work merged straight to main, then synced back into
 // develop). Identical trees mean any merge of the two produces main's current
 // tree, so this holds whether or not main is an ancestor of develop.
+//
+// One-sided on purpose: identical trees always mean a no-op merge, but a no-op
+// merge does not always mean identical trees — main strictly ahead in content
+// (a hotfix landed before "Sync main into develop" runs) still merges to main's
+// own tree while this reports "differs". A miss only falls back to the plain
+// carrying wording, never to a false no-op claim. Deciding it exactly needs
+// merge-tree, which this control plane runs only under the
+// core.attributesFile=/dev/null sandbox because gitattributes-selected merge
+// drivers are arbitrary code execution; that is not worth it for a transient
+// state the sync workflow collapses on every push to main.
 function treesMatch(base, head) {
   try {
     run("git", ["diff", "--quiet", base, head]);
