@@ -206,6 +206,15 @@ export const thingOpenHref = (thing: Pick<ThingsThing, 'id' | 'thingtime'>, from
   return href.startsWith('/thing/') ? `${href}?from=${from}` : href;
 };
 
+// What a `?from=` param names, defaulting to the feed. An OWN-property check,
+// not a truthiness one: `?from=toString` (or constructor / __proto__ /
+// valueOf) resolves through Object.prototype on a plain record lookup, so a
+// `REFERRERS[param] || REFERRERS.feed` fallback hands back a function instead
+// of falling through — and the back link then renders with no label and
+// navigates nowhere. Same guard demoDetail.parseKindFilter uses.
+export const parseThingsReferrer = (raw: string | null | undefined): ThingsReferrer =>
+  raw === 'things' || raw === 'actions' || raw === 'feed' ? raw : 'feed';
+
 // stable sort for browse views: folders first (Drive convention), then the
 // chosen order. Every comparator ends on id so the order is deterministic.
 export const sortThings = (things: ThingsThing[], sort: ThingsSort = 'newest'): ThingsThing[] =>

@@ -23,7 +23,7 @@ import {
 } from '~/components/Things/SensitiveThingReveal';
 import { isSourceActionKey } from '~/components/ComponentsLibrary/componentBrowseTypes';
 import { SchemaTemplateRender } from '~/components/Things/ThingsViews';
-import { schemaIdOf, schemaRenderOf, thingDisplayName, thingLink, thingsCacheKey } from '~/components/Things/thingsCore';
+import { parseThingsReferrer, schemaIdOf, schemaRenderOf, thingDisplayName, thingLink, thingsCacheKey } from '~/components/Things/thingsCore';
 import type { ThingsCache, ThingsReferrer } from '~/components/Things/thingsCore';
 import { apiErrorMessage } from '~/hooks/apiFailure';
 import { pruneCacheNamespace, readLocalCache, readStampedCache, writeStampedCache } from '~/hooks/localCache';
@@ -42,7 +42,10 @@ const MONO = 'var(--tt-font-mono, ui-monospace, monospace)';
 
 // Where the back link goes: the surface that sent the viewer here
 // (?from=things|actions|feed — thingsCore.thingOpenHref stamps it), the feed
-// when nothing did.
+// when nothing did. The param is narrowed by parseThingsReferrer, never used
+// as a raw index: a plain record lookup resolves inherited Object.prototype
+// keys, so `?from=toString` would answer with a function and leave the back
+// link label-less and pointing nowhere.
 const REFERRERS: Record<ThingsReferrer, { to: string; label: string }> = {
 	things: { to: '/things', label: 'Back to things' },
 	actions: { to: '/actions', label: 'Back to actions' },
@@ -252,8 +255,7 @@ export default function ThingPage() {
 	const { observeView } = useViewTracking();
 	const diagnosticRoute = DIAGNOSTIC_ID_PATTERN.test(id);
 	const requestKey = `${id}\u0000${currentUser?.id || 'anonymous'}\u0000${currentUser?.isAdmin ? 'admin' : 'user'}`;
-	const fromParam = searchParams.get('from');
-	const back = REFERRERS[(fromParam as ThingsReferrer) || 'feed'] || REFERRERS.feed;
+	const back = REFERRERS[parseThingsReferrer(searchParams.get('from'))];
 
 	// Optimistic-render house rule: the last-known projection of this thing
 	// paints on the very first render (per viewer, per id — never another
