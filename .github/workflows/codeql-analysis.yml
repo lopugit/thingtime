@@ -307,6 +307,78 @@ jobs:
           fetch-depth: 2
           persist-credentials: false
 
+      # Advanced Security opens the PR's aggregate CodeQL check the moment the
+      # FIRST configuration uploads, and closes it right there if no other
+      # CodeQL configuration is in flight for that SHA. These two legs are
+      # wildly uneven -- `actions` finishes in about a minute,
+      # `javascript-typescript` takes seven to eight -- so whenever Actions
+      # allocates the slow leg's runner late, the fast leg uploads before the
+      # slow leg exists and the check dies "1 configuration not found". This
+      # is the residual #557 shape reached through matrix scheduling rather
+      # than duplicate refs, and the concurrency group above cannot see it:
+      # `matrix.language` is part of the group key, so the legs never queue
+      # against each other and nothing else orders their starts.
+      #
+      # PR #610 @780c81f9: `actions` started 06:08:49 and uploaded 06:09:40;
+      # `javascript-typescript` did not start until 06:10:59. The aggregate
+      # check opened 06:09:39 and closed `timed_out` at 06:09:41, and the
+      # clean js-ts analysis that landed at 06:18:17 never reopened it. PR
+      # #662 is the same workflow with both legs starting one second apart,
+      # and its check passed while its js-ts analysis was still running --
+      # the presence of the sibling, not its result, is what the check needs.
+      #
+      # So hold every leg until all of them are out of the queue. Waiting
+      # before `init` (not before `analyze`) means the fast leg still spends
+      # its own checkout+init+build after the barrier lifts, which reproduces
+      # the healthy margin a co-scheduled run gets for free. No deadlock: a
+      # leg's own status is never `queued`, so co-scheduled legs pass through
+      # immediately and a lone straggler only ever blocks legs that already
+      # started. Never fail here -- a red job is precisely the check state
+      # this step exists to prevent, so an unreadable API or an exhausted
+      # wait proceeds with a warning, exactly like the push-ownership
+      # re-check below.
+      - name: Wait for every sibling language leg to start
+        if: strategy.job-total > 1
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          EXPECTED_LEGS: ${{ strategy.job-total }}
+        run: |
+          set -euo pipefail
+
+          [[ "$EXPECTED_LEGS" =~ ^[1-9][0-9]{0,2}$ ]] || {
+            echo "::warning::Unreadable matrix leg count '$EXPECTED_LEGS'; analyzing without the sibling-start barrier."
+            exit 0
+          }
+
+          deadline=$((SECONDS + 600))
+          started=0
+          while :; do
+            # Scope to this attempt: a re-run must not count the previous
+            # attempt's finished legs and skip the barrier outright.
+            if leg_statuses="$(
+              gh api "repos/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs?per_page=100" \
+                --jq '[.jobs[] | select(.name | contains("Analyze (")) | .status]' 2>/dev/null
+            )"; then
+              started="$(jq 'map(select(. != "queued")) | length' <<<"$leg_statuses")"
+              if [ "$started" -ge "$EXPECTED_LEGS" ]; then
+                echo "All $EXPECTED_LEGS analysis legs have started; their uploads will overlap."
+                break
+              fi
+            else
+              echo "::warning::Could not read this run's jobs; analyzing without the sibling-start barrier."
+              break
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::warning::Only $started of $EXPECTED_LEGS analysis legs started within the wait; analyzing anyway rather than leaving the commit unscanned."
+              break
+            fi
+            sleep 15
+          done
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4
         with:
