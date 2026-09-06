@@ -193,7 +193,8 @@ const inkInBand = (png: Buffer | Uint8Array, options: { top: number; bottom: num
 	return count;
 };
 
-const cardPixels = (preview: SocialPreview): Buffer => new Resvg(buildSocialCardSvg(preview), socialCardRenderOptions()).render().pixels;
+const cardPixels = (preview: SocialPreview, imageDataUris: readonly (string | null)[] = []): Buffer =>
+	new Resvg(buildSocialCardSvg(preview, imageDataUris), socialCardRenderOptions()).render().pixels;
 
 test('cards draw real glyphs on a host with no system fonts (the deployed runtime)', () => {
 	const preview: SocialPreview = { ...gallery, kind: 'feed', variant: 'feed', title: 'Nikk: the weekend garden bed', images: [], imageCount: 0 };
@@ -253,4 +254,33 @@ test('the social-card renderer emits a real multi-image collage PNG', async () =
 	const png = await renderSocialCardPng(gallery, [ONE_PIXEL_PNG, ONE_PIXEL_PNG, ONE_PIXEL_PNG, ONE_PIXEL_PNG]);
 	assert.deepEqual([...png.slice(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
 	assert.ok(png.byteLength > 1_000);
+});
+
+// An <image> whose bytes will not decode draws NOTHING — resvg has no error
+// treatment and the white card panel showed through as a blank slab. Only the
+// Content-Type header and a size bound are checked before the bytes reach the
+// renderer, so this is reachable from a stored object that does not match its
+// declared type, not just from an unlikely corruption in flight.
+test('a photo tile whose bytes will not decode falls back to the branded tile', () => {
+	// Mean colour of the single-image tile (x=700..1130, y=92..538), sampled
+	// well inside it. White is the card panel showing through — the defect.
+	const tileIsBlank = (dataUri: string | null): boolean => {
+		const pixels = cardPixels({ ...gallery, kind: 'image-post', variant: 'image-post', images: [], imageCount: 1 }, [dataUri]);
+		let total = 0;
+		let samples = 0;
+		for (let y = 200; y < 400; y += 2) {
+			for (let x = 800; x < 1050; x += 2) {
+				const index = (y * 1200 + x) * 4;
+				total += pixels[index] + pixels[index + 1] + pixels[index + 2];
+				samples += 1;
+			}
+		}
+		return total / samples > 740;
+	};
+
+	assert.ok(!tileIsBlank(null), 'a tile with no image at all must already draw the branded gradient');
+	// A PNG header with its image data cut off: valid enough to be fetched and
+	// labelled image/png, impossible for the renderer to draw.
+	const truncated = `data:image/png;base64,${ONE_PIXEL_PNG.split(',')[1].slice(0, 24)}`;
+	assert.ok(!tileIsBlank(truncated), 'an undecodable photo must fall back to the branded tile, not a blank white slab');
 });

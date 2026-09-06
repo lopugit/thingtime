@@ -165,10 +165,19 @@ const colourTile = (index: number, x: number, y: number, width: number, height: 
 	return `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="24" fill="url(#tile-${index})" /><defs><linearGradient id="tile-${index}" x1="0" y1="0" x2="1" y2="1"><stop stop-color="${start}"/><stop offset="1" stop-color="${end}"/></linearGradient></defs>`;
 };
 
+// The branded tile is painted first and the photo lands on top of it, so a
+// href resvg cannot decode degrades to exactly the treatment the no-image
+// case already uses. SVG has no "image failed" hook: an <image> whose bytes
+// will not decode simply draws nothing, and what showed through was the white
+// card panel — a blank slab where a photo was promised. The loader only
+// checks the Content-Type header and a size bound, so any object whose stored
+// bytes do not match their declared type reaches the renderer, as does any
+// SAFE_IMAGE_TYPES spelling this resvg build happens not to decode.
 const imageTile = (href: string | undefined, index: number, x: number, y: number, width: number, height: number): string => {
+	const tile = colourTile(index, x, y, width, height);
+	if (!href) return tile;
 	const clip = `clip-${index}`;
-	if (!href) return colourTile(index, x, y, width, height);
-	return `<clipPath id="${clip}"><rect x="${x}" y="${y}" width="${width}" height="${height}" rx="24"/></clipPath><image href="${href}" x="${x}" y="${y}" width="${width}" height="${height}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clip})"/>`;
+	return `${tile}<clipPath id="${clip}"><rect x="${x}" y="${y}" width="${width}" height="${height}" rx="24"/></clipPath><image href="${href}" x="${x}" y="${y}" width="${width}" height="${height}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clip})"/>`;
 };
 
 const panelArt = (variant: SocialPreviewVariant): string => {
