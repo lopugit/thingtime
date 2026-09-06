@@ -2,6 +2,13 @@ import React from 'react';
 
 import { useApi } from '~/hooks/useApi';
 import { ACL_OWNER, MAX_WEBPAGE_ROUTE_CHARS, WEBPAGE_ROUTE_PATTERN } from '~/schemas/registry';
+import {
+	focusWebpageDraft,
+	notifyWebpageDraftChange,
+	registerWebpageDraft,
+	type LopuDraftHandle,
+	type LopuSavedThingLike
+} from '../Lopu/lopuBuildBridge';
 import { buildComponentsByRef, type ComponentsByRef, type ComponentThingLike } from './WebpageBlocksRenderer';
 import type { WebpageBlock, WebpageCrystal } from './webpageBlocks';
 
@@ -63,6 +70,56 @@ export const resolveWebpageClient = async (target: WebpageTarget): Promise<Resol
 	}
 };
 
+// The /p/ viewer only DISPLAYS its draft (p.tsx renders the resolved page
+// blocks, never the editable tree). Drafts mounted there register with the
+// Lopu bridge as read-only so a streamed builder patch can never target them;
+// everything else (BuilderCanvas, SiteBlocksEditor — which the host never
+// mounts under /p/) is editable. Callers can always say so explicitly.
+export const isReadOnlyWebpageViewerRoute = (pathname: string): boolean => /^\/p\//.test(pathname);
+
+export type UseWebpageDraftOptions = {
+	// whether Lopu may paint live builder patches into this draft
+	// (default: true everywhere except the /p/ viewer route)
+	editable?: boolean;
+};
+
+// A save adopted through markSaved (Lopu persisted a patch) can outrun a
+// resolve that was already in flight for the SAME page. Applying that older
+// answer would rewind updatedAt (so the next save's expectedUpdatedAt 409s)
+// and the blocks, so such a landing is skipped.
+export const isStaleWebpageLanding = (
+	saved: { id: string; updatedAt: string } | null,
+	landing: { id?: string; updatedAt?: string } | null | undefined
+): boolean =>
+	!!saved && !!landing && landing.id === saved.id && typeof landing.updatedAt === 'string' && landing.updatedAt < saved.updatedAt;
+
+// Fold a saved webpage thing into the resolved page: the save is the viewer's
+// own row (source 'user'), fields the save does not carry are kept.
+export const mergeSavedWebpage = (prev: ResolvedWebpage | null, thing: LopuSavedThingLike): ResolvedWebpage | null => {
+	const id = typeof thing?.id === 'string' && thing.id ? thing.id : prev?.page?.id || null;
+	if (!id) return prev;
+	const crystal =
+		thing?.crystal && typeof thing.crystal === 'object' && !Array.isArray(thing.crystal)
+			? (thing.crystal as unknown as WebpageCrystal)
+			: prev?.page?.crystal || null;
+	if (!crystal) return prev;
+	const updatedAt = typeof thing?.updatedAt === 'string' ? thing.updatedAt : prev?.page?.updatedAt;
+	const acl = Array.isArray(thing?.acl) ? thing.acl.filter((entry): entry is string => typeof entry === 'string') : prev?.page?.acl;
+	const author = thing?.author && typeof thing.author === 'object' ? thing.author : prev?.page?.author;
+	return {
+		page: {
+			...(prev?.page || {}),
+			id,
+			crystal,
+			...(author !== undefined ? { author } : {}),
+			...(updatedAt ? { updatedAt } : {}),
+			...(acl ? { acl } : {})
+		},
+		source: 'user',
+		componentsByRef: prev?.componentsByRef || {}
+	};
+};
+
 export type UseWebpageDraft = {
 	loading: boolean;
 	resolved: ResolvedWebpage | null;
@@ -73,6 +130,10 @@ export type UseWebpageDraft = {
 	// make a just-inserted component renderable without a refetch
 	addComponent: (ref: string, component: ComponentThingLike | null) => void;
 	ensureComponent: (ref: string) => Promise<void>;
+	// adopt a save made elsewhere (Lopu's persisted patch/create): clears
+	// dirty, updates the resolved page (updatedAt/crystal/acl) and, when the
+	// saved thing carries blocks, converges the draft on them
+	markSaved: (thing: LopuSavedThingLike) => void;
 	save: (options?: { name?: string; isPublic?: boolean }) => Promise<{ ok: boolean; id?: string; error?: string }>;
 	// discard the viewer's personalised site doc (site targets only)
 	resetToDefault: () => Promise<{ ok: boolean; error?: string }>;
@@ -80,10 +141,11 @@ export type UseWebpageDraft = {
 	refresh: () => void;
 };
 
-export const useWebpageDraft = (target: WebpageTarget | null): UseWebpageDraft => {
+export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpageDraftOptions): UseWebpageDraft => {
 	const api = useApi();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
+	const editableOption = options?.editable;
 
 	const [resolved, setResolved] = React.useState<ResolvedWebpage | null>(null);
 	const [loading, setLoading] = React.useState(!!target);
@@ -100,14 +162,28 @@ export const useWebpageDraft = (target: WebpageTarget | null): UseWebpageDraft =
 	// server blocks wholesale.
 	const dirtyRef = React.useRef(false);
 	const appliedTargetRef = React.useRef<string | null>(null);
+	// the newest save adopted through markSaved for the current target — a
+	// resolve that was in flight when it landed must not rewind it
+	const savedRef = React.useRef<{ id: string; updatedAt: string } | null>(null);
+	const savedTargetRef = React.useRef<string | null>(null);
+	// the live handle registered with the Lopu build bridge (created once)
+	const handleRef = React.useRef<LopuDraftHandle | null>(null);
 
 	React.useEffect(() => {
 		if (!targetKey) return;
+		if (savedTargetRef.current !== targetKey) {
+			savedTargetRef.current = targetKey;
+			savedRef.current = null;
+		}
 		let cancelled = false;
 		setLoading(true);
 		(async () => {
 			const data = await resolveWebpageClient(JSON.parse(targetKey) as WebpageTarget);
 			if (cancelled) return;
+			if (isStaleWebpageLanding(savedRef.current, data?.page)) {
+				setLoading(false);
+				return;
+			}
 			setResolved(data);
 			const targetChanged = appliedTargetRef.current !== targetKey;
 			appliedTargetRef.current = targetKey;
@@ -128,6 +204,8 @@ export const useWebpageDraft = (target: WebpageTarget | null): UseWebpageDraft =
 		setBlocksState(next);
 		setDirty(true);
 		dirtyRef.current = true;
+		// an edit makes this the draft Lopu's 'active' patches go to
+		if (handleRef.current) focusWebpageDraft(handleRef.current);
 	}, []);
 
 	const componentsByRef = React.useMemo(
@@ -283,6 +361,93 @@ export const useWebpageDraft = (target: WebpageTarget | null): UseWebpageDraft =
 
 	const refresh = React.useCallback(() => setRefreshTick((tick) => tick + 1), []);
 
+	// A save that happened elsewhere (Lopu persisted a patch or created this
+	// page): the saved thing is the truth — adopt its blocks (ids the server
+	// rewrote included), its updatedAt (so the next manual save's
+	// expectedUpdatedAt matches) and clear dirty. The bridge announces the
+	// thingtime:webpage-saved event itself.
+	const markSaved = React.useCallback((thing: LopuSavedThingLike) => {
+		const id = typeof thing?.id === 'string' && thing.id ? thing.id : null;
+		const updatedAt = typeof thing?.updatedAt === 'string' ? thing.updatedAt : null;
+		if (id && updatedAt) savedRef.current = { id, updatedAt };
+		const savedBlocks =
+			thing?.crystal && Array.isArray((thing.crystal as { blocks?: unknown }).blocks)
+				? ((thing.crystal as unknown as WebpageCrystal).blocks as WebpageBlock[])
+				: null;
+		if (savedBlocks) setBlocksState(savedBlocks);
+		setDirty(false);
+		dirtyRef.current = false;
+		setResolved((prev) => mergeSavedWebpage(prev, thing));
+	}, []);
+
+	// ——— Lopu build bridge registration ————————————————————————————————
+	// One LIVE handle per mount: getters read the latest state through refs,
+	// so the registry never sees a stale tree; the methods are the stable
+	// callbacks above. Editability and the target are fixed per registration.
+	const stateRef = React.useRef({ resolved, blocks, dirty, componentsByRef });
+	stateRef.current = { resolved, blocks, dirty, componentsByRef };
+	const metaRef = React.useRef<{ editable: boolean; target: WebpageTarget | null }>({ editable: true, target: null });
+	const handle = React.useMemo<LopuDraftHandle>(
+		() => ({
+			get id() {
+				return stateRef.current.resolved?.page?.id ?? null;
+			},
+			get source() {
+				return stateRef.current.resolved?.source ?? null;
+			},
+			get pageKey() {
+				const value = stateRef.current.resolved?.page?.crystal?.pageKey;
+				// mirror save(): an unseeded global doc still binds to site-global
+				return typeof value === 'string' && value ? value : metaRef.current.target?.kind === 'global' ? 'site-global' : null;
+			},
+			get siteRoute() {
+				const value = stateRef.current.resolved?.page?.crystal?.siteRoute;
+				return typeof value === 'string' && value ? value : metaRef.current.target?.kind === 'path' ? metaRef.current.target.path : null;
+			},
+			get updatedAt() {
+				return stateRef.current.resolved?.page?.updatedAt ?? null;
+			},
+			get name() {
+				const value = stateRef.current.resolved?.page?.crystal?.name;
+				return typeof value === 'string' && value ? value : null;
+			},
+			get blocks() {
+				return stateRef.current.blocks;
+			},
+			get dirty() {
+				return stateRef.current.dirty;
+			},
+			get editable() {
+				return metaRef.current.editable;
+			},
+			get target() {
+				return metaRef.current.target;
+			},
+			get componentsByRef() {
+				return stateRef.current.componentsByRef;
+			},
+			setBlocks,
+			addComponent,
+			markSaved
+		}),
+		[setBlocks, addComponent, markSaved]
+	);
+	handleRef.current = handle;
+
+	React.useEffect(() => {
+		if (!targetKey) return;
+		metaRef.current = {
+			target: JSON.parse(targetKey) as WebpageTarget,
+			editable: editableOption ?? !(typeof window !== 'undefined' && isReadOnlyWebpageViewerRoute(window.location.pathname))
+		};
+		return registerWebpageDraft(handle);
+	}, [handle, targetKey, editableOption]);
+
+	// the context chip (page name, dirty) follows the resolved page
+	React.useEffect(() => {
+		notifyWebpageDraftChange();
+	}, [resolved, dirty]);
+
 	return {
 		loading,
 		resolved,
@@ -292,6 +457,7 @@ export const useWebpageDraft = (target: WebpageTarget | null): UseWebpageDraft =
 		componentsByRef,
 		addComponent,
 		ensureComponent,
+		markSaved,
 		save,
 		resetToDefault,
 		discardDraft,

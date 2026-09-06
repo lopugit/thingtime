@@ -759,7 +759,7 @@ type ComponentKindValue = { render: unknown; values: Record<string, string | num
 
 const ComponentKindRenderer = ({ value, context }: { value: ComponentKindValue; context: KindRenderContext }) => {
 	// Memoised like the /components preview: resolution walks the whole template
-	// under the MAX_RESOLVED_VALUES budget, so a feed or search page listing
+	// under the MAX_RESOLVED_NODES/_CHARS budgets, so a feed or search page listing
 	// several component things would redo that work on every parent render.
 	// adapt() rebuilds `values` on every RenderThing pass, so the memo keys on
 	// its content — a bounded scalar map (≤ MAX_COMPONENT_SAVED_ARGS entries) —

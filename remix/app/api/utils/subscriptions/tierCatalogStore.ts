@@ -14,6 +14,7 @@ import {
   TIER_DISCOUNT_COMPARISONS,
   computeTierDiscounts,
   sanitizeTierQuotas,
+  speedTestsPerHour,
   type SubscriptionTierDescriptor,
   type SubscriptionTierStatus,
   type TierDiscountKey,
@@ -204,6 +205,11 @@ export const sanitizeTierContent = (input: TierMutationInput): { ok: true; conte
     return fail(400, 'sortOrder must be an integer between -10000 and 10000');
   }
   if (typeof input.metered !== 'boolean') return fail(400, 'metered must be true or false');
+  if (input.metered && quotas.quotas.speedTestsPerHour === undefined) {
+    // Immutable PAYG revisions predate this optional allowance. Resolve the
+    // missing field without rejecting or rewriting their published history.
+    quotas.quotas.speedTestsPerHour = null;
+  }
   if (input.metered && QUOTA_OVERRIDE_FIELDS.some((field) => quotas.quotas[field] !== null)) {
     return fail(400, 'Metered tiers must use unlimited quota defaults for every allowance');
   }
@@ -308,6 +314,7 @@ const descriptorFromDoc = (doc: any): SubscriptionTierDescriptor | null => {
     version,
     status,
     ...sanitized.content,
+    quotas: { ...sanitized.content.quotas, speedTestsPerHour: speedTestsPerHour(tierId, sanitized.content.quotas) },
     // Published history must not drift when a future formula changes. New and
     // updated revisions persist the resolved matrix; only legacy docs compute.
     discounts: savedDiscounts ?? computeTierDiscounts(sanitized.content.prices, sanitized.content.discountOverrides),
@@ -886,5 +893,5 @@ export const tierAssignmentSnapshot = (tier: SubscriptionTierDescriptor) => ({
 
 export const isCompleteTierQuotas = (value: unknown): value is TierQuotas => {
   const quotas = tierQuotasFromUnknown(value);
-  return !!quotas && QUOTA_OVERRIDE_FIELDS.every((field) => field in quotas);
+  return !!quotas && QUOTA_OVERRIDE_FIELDS.every((field) => field === 'speedTestsPerHour' || field in quotas);
 };

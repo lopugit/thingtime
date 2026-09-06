@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 
 import { Box, Flex, Text } from '@chakra-ui/react';
-import { ChevronRight, Laptop, Lock } from 'lucide-react';
+import { ChevronRight, Laptop, Lock, Watch as WatchIcon } from 'lucide-react';
 
 import type { DeviceSnapshot, DeviceSummary } from './deviceTypes';
 import { DeviceHealthBadges, DeviceStatusPill, formatDeviceLastSeen } from './DeviceCard';
@@ -49,7 +49,7 @@ export const DeviceListRow = memo(
 				justifyContent="center"
 				width="36px"
 			>
-				<Laptop aria-hidden size={18} />
+				{device.platform === 'watchos' ? <WatchIcon aria-hidden size={18} /> : <Laptop aria-hidden size={18} />}
 			</Flex>
 
 			<Box flex="1" minWidth={0}>
