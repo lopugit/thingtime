@@ -1,7 +1,8 @@
 import React from 'react';
 import { Box, Button, Flex } from '@chakra-ui/react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 
+import { LopuChatView } from '../Lopu/LopuChatView';
 import { useLopu } from '../Lopu/useLopu';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useIsMobileViewport } from '../Nav/Drawer/useDrawer';
@@ -23,7 +24,7 @@ import {
 import { RequestsView } from './RequestsView';
 import { SlackSidebar } from './SlackSidebar';
 import { MESSENGER_REFRESH_EVENT, modeKey, readChatList, readCommunities, writeChatList, writeCommunities, writeUnread } from './messengerCache';
-import type { ChatSummary, Community, MessengerMode } from './messengerTypes';
+import { chatDisplayName, isLopuAiSource, type ChatSummary, type Community, type MessengerMode } from './messengerTypes';
 import { useMessengerApi } from './useMessengerApi';
 
 const LIST_POLL_MS = 15_000;
@@ -257,6 +258,27 @@ export const MessengerPage = () => {
       }}
       onChanged={() => void refresh()}
     />
+  ) : selectedChat && isLopuAiSource(selectedChat.externalSource) ? (
+    // a Lopu conversation IS the assistant chat: the same streamed view as
+    // /lopu, minus its conversation list (this page's sidebar is that list)
+    <Flex direction="column" height="100%" minWidth={0}>
+      <Flex align="center" gap={2} paddingX={3} paddingY={2} borderBottom="1px solid var(--tt-border-light, #f3f3f5)" flexShrink={0}>
+        {isMobile ? (
+          <Button size="sm" variant="ghost" onClick={() => selectChat(null)} aria-label="Back">
+            ←
+          </Button>
+        ) : null}
+        <Box minWidth={0} flex={1} fontWeight={700} fontSize="15px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
+          🦄 {chatDisplayName(selectedChat, userId)}
+        </Box>
+        <Button as={Link} to={`/lopu/${encodeURIComponent(selectedChat.id)}`} size="xs" variant="ghost" title="Open in Lopu" aria-label="Open in Lopu">
+          ⤢
+        </Button>
+      </Flex>
+      <Box flex={1} minHeight={0}>
+        <LopuChatView chatId={selectedChat.id} showConversations={false} />
+      </Box>
+    </Flex>
   ) : selectedChat ? (
     <ChatView
       key={selectedChat.id}

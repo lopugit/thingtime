@@ -818,6 +818,18 @@ export const SUBSCRIPTION_RESERVED_ID_PREFIX = 'subscription-';
 // Service quota ledgers use quota-<owner>-<service>-<window> ids. Reserving
 // their namespace keeps generic Things from pre-claiming an enforcement row.
 export const SERVICE_QUOTA_RESERVED_ID_PREFIX = 'quota-';
+// The demo/app seed is the one seeder that also mints DATA things: behaviour
+// suite samples (`data-demo-<suite>-<n>`) and app content (`data-app-<suite>-…`,
+// e.g. data-app-pokeworld-species-25). Its sibling parts already ride reserved
+// prefixes — schema-, component-, action-, webpage- — and these two close the
+// gap for the fifth kind. Without them a client can pre-create a plain data
+// thing at a seed destination, and upsertSystemThings (which requires
+// ownerId 'system' to touch a twin) then skips that row FOREVER: re-running
+// the seed never reclaims a squatted id, so the public corpus silently loses
+// entries. Deliberately the two full namespaces and not a bare `data-`, which
+// would refuse ordinary user ids like `data-my-notes`.
+export const SEEDED_DATA_SUITE_RESERVED_ID_PREFIX = 'data-demo-';
+export const SEEDED_DATA_APP_RESERVED_ID_PREFIX = 'data-app-';
 
 // Seeding passes fixed shareIds for idempotency (and Magic relies on ids
 // round-tripping), so client-supplied ids are allowed — but they must be sane
@@ -841,11 +853,13 @@ export const sanitizeShareId = (value: unknown): string | null | Fail => {
 		trimmed.startsWith(SUBSCRIPTION_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(SERVICE_QUOTA_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(MIGRATION_DIAGNOSTIC_ID_PREFIX) ||
-		trimmed.startsWith(APP_STORAGE_RESERVED_ID_PREFIX)
+		trimmed.startsWith(APP_STORAGE_RESERVED_ID_PREFIX) ||
+		trimmed.startsWith(SEEDED_DATA_SUITE_RESERVED_ID_PREFIX) ||
+		trimmed.startsWith(SEEDED_DATA_APP_RESERVED_ID_PREFIX)
   ) {
 		// Deterministic migration, schema, tier-revision, subscription assignment,
-		// service-quota, and app-storage destinations must never be squatted or
-		// impersonated by generic user-created Things.
+		// service-quota, app-storage, and seeded suite/app data destinations must
+		// never be squatted or impersonated by generic user-created Things.
     return fail(400, 'shareId uses a reserved prefix');
   }
   return trimmed;

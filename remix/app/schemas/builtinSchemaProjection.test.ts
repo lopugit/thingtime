@@ -111,6 +111,8 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   passkey: ['nickname', 'description', 'providerName', 'aaguid', 'deviceType', 'backedUp', 'transports', 'lastUsedAt', 'lastUsedOrigin', 'revokedAt'],
   'passkey-app-link': ['linkKey', 'appKey', 'appName', 'firstUsedAt', 'lastUsedAt', 'usageCount'],
   'account-link': ['linkKind', 'userId', 'targetId', 'role', 'createdBy'],
+  // Lopu model catalog — every field is scalar or string[], so all project
+  'ai-model': ['modelId', 'label', 'provider', 'efforts', 'speeds', 'family', 'enabled', 'sortOrder', 'contextWindow', 'notes'],
 	'ai-connection': [
 		'sourceType',
 		'provider',

@@ -106,6 +106,9 @@ export const CONTROL_PLANE_STORAGE_THINGTIMES = [
 	'lopu-recording-job',
 	'lopu-recording-reminder',
   'account-link',
+  // the Lopu model catalog: system-owned control docs seeded from code
+  // (api/utils/ai/models.ts), never user content
+  'ai-model',
   'app',
   'app-storage',
 	// Protected server-plumbing state is platform overhead. These Things are

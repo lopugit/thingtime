@@ -30,7 +30,7 @@ const directClientFiles = sourceFiles(appRoot)
 
 assert.deepEqual(
   directClientFiles,
-  ['app/api/utils/lopu/musing.ts', 'app/api/utils/lopu/recordingsProvider.ts', 'app/api/utils/moderation/claudeProvider.ts'],
+  ['app/api/utils/lopu/chat.ts', 'app/api/utils/lopu/musing.ts', 'app/api/utils/lopu/recordingsProvider.ts', 'app/api/utils/moderation/claudeProvider.ts'],
   'new direct AI clients must be added to the Thingtime Admin model-routing contract'
 );
 
@@ -45,7 +45,7 @@ assert.doesNotMatch(moderation, /model:\s*env\.TT_MODERATION_MODEL/);
 // Lopu musings resolve BOTH provider preferences from one waterfall read:
 // Claude runs the first Anthropic-capable entry, ChatGPT the first OpenAI
 // entry; LOPU_*_MODEL env values are only the 'default'-slot fallbacks.
-const musing = readFileSync(join(remixRoot, directClientFiles[0]), 'utf8');
+const musing = readFileSync(join(remixRoot, 'app/api/utils/lopu/musing.ts'), 'utf8');
 assert.match(musing, /getAiPreferredModelWaterfall/);
 assert.match(musing, /resolveAiPreferredAnthropicChoice/);
 assert.match(musing, /resolveAiPreferredOpenAiChoice/);
@@ -93,6 +93,38 @@ assert.equal(
 // read stays above the provider loop so a first-provider failure cannot cost a
 // second settings round-trip.
 assert.match(musing, /const choices = await getLopuModelChoices\(\);[\s\S]*?for \(const provider of providerOrder\(\)\)/);
+
+// Lopu's chat brain (assistant turns with tool use) mirrors the musing
+// contract: one waterfall read plans every provider attempt of a turn — the
+// explicit catalog choice runs on its own provider, the fallback provider runs
+// its first Admin waterfall entry — and LOPU_*_MODEL are only the
+// 'default'-slot fallbacks, never inlined as a model id.
+const chat = readFileSync(join(remixRoot, 'app/api/utils/lopu/chat.ts'), 'utf8');
+assert.match(chat, /getAiPreferredModelWaterfall/);
+assert.match(chat, /resolveAiPreferredAnthropicChoice/);
+assert.match(chat, /resolveAiPreferredOpenAiChoice/);
+assert.match(chat, /resolveAiPreferredAnthropicChoice\(waterfall, getDefaultLopuClaudeModel\(\)\)/);
+assert.match(chat, /resolveAiPreferredOpenAiChoice\(waterfall\)/);
+assert.doesNotMatch(chat, /model:\s*process\.env\./);
+
+// A chat turn streams tool inputs and reasoning against one named output
+// ceiling on both providers — Anthropic bills thinking inside `max_tokens`,
+// OpenAI bills reasoning inside `max_completion_tokens` (never the deprecated
+// `max_tokens`, which reasoning models reject outright).
+assert.match(chat, /const LOPU_CHAT_MAX_OUTPUT_TOKENS = 16000/);
+assert.match(chat, /max_tokens: LOPU_CHAT_MAX_OUTPUT_TOKENS/);
+assert.match(chat, /max_completion_tokens: LOPU_CHAT_MAX_OUTPUT_TOKENS/);
+assert.doesNotMatch(chat, /max_tokens:\s*\d/);
+
+// Both chat providers keep the musing's starvation guard: a decorated
+// (effort / fast) attempt that fails or completes empty before emitting
+// anything retries bare on the same model, and never retries after output.
+assert.match(chat, /if \(yielded \|\| attempt === attempts\.length - 1 \|\| isAbortError\(error\)\) throw error;/);
+assert.equal(
+  (chat.match(/if \(yielded \|\| attempt === attempts\.length - 1 \|\| isAbortError\(error\)\) throw error;/g) || []).length,
+  2,
+  'anthropicProvider and openAiProvider must each keep the bare-retry guard'
+);
 
 // This developer-only helper intentionally targets the local Codex proxy. It
 // is not a Thingtime runtime and cannot consume Claude model aliases; pin the

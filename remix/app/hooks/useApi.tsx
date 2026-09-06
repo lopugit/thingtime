@@ -4,6 +4,7 @@ import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapa
 import { buildActionRunBody } from '~/components/Actions/actionRunRequest';
 import { flushAttachmentDraftCleanups } from '~/components/Attachments/attachmentDraftCleanup';
 import type { AttachmentUploadPurpose } from '~/components/Attachments/attachmentTypes';
+import { postLopuReply, type LopuReplyBody } from '~/components/Lopu/lopuChatStream';
 import { recordApiCall } from './apiRequestLog';
 import { useAsyncFetcher } from './useAsyncFetcher';
 import { clearLocalCachePrefix } from './localCache';
@@ -141,6 +142,29 @@ export function useApi() {
           clearLocalCachePrefix('tt-passkeys');
           // Notification history can include private posts and action runs.
           clearLocalCachePrefix('tt-notif-history-');
+          // builder-page source results are whole action results run AS the
+          // viewer (their orders, their expense rows, their trainer) cached to
+          // paint /p/<page> without a spinner — the same shared-browser rule.
+          // The keys carry the viewer id, so a stale line can no longer be
+          // READ by the next account; dropping them here also stops it
+          // outliving the session that authorized it on disk.
+          clearLocalCachePrefix('tt-page-source:');
+          // /thing/:id caches the whole ACL-gated projection of each thing the
+          // viewer opened (private posts, circle data, their own components) to
+          // paint the permalink without a spinner. Same viewer-id keying and so
+          // the same shared-browser rule as the four caches above.
+          clearLocalCachePrefix('tt-thing-');
+          // /components/:key caches the ACL-gated browse projection of a
+          // component family — including the viewer's own unpublished designs
+          // and their author block. Same viewer-id keying, same rule.
+          clearLocalCachePrefix('tt-component-family-');
+          // /schemas/:key caches "your things with this shape": the viewer's
+          // OWN data things, crystal and all. The most private of the set.
+          clearLocalCachePrefix('tt-schema-things-');
+          // Lopu's caches (conversations, messages, model catalog, the
+          // floating window's last state) are the viewer's private chat
+          // with the assistant — same shared-browser privacy bar.
+          clearLocalCachePrefix('tt-lopu-');
           const ret = asyncFetcher.submit(args?.all ? { all: true } : {}, { action: '/api/v1/auth/logout' });
           ret.then(refreshRootData).catch(() => {});
           return ret;
@@ -247,9 +271,32 @@ export function useApi() {
     settings: {
       // Public so the GitHub conflict resolver can read the same ordered model
       // waterfall as the admin UI without inheriting an admin browser session.
-			prConflictResolverModelWaterfall: useCallback(async () => getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall'), [])
+			prConflictResolverModelWaterfall: useCallback(async () => getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall'), []),
+			// Lopu's stored chat defaults ({ model, effort, speed }); public GET, admin POST (admin.setLopuChatDefaults)
+			lopuChatDefaults: useCallback(async () => getJson('/api/v1/settings/lopu-chat-defaults'), [])
+    },
+    // the `ai-model` catalog Lopu thinks with (public; { models, defaults, providers }
+    // + for a signed-in viewer their Secure Vault providers as metadata only:
+    // vaultProviders: [{ id, name, kind, model, endpointHost, available, reason? }], vault: { configured })
+    ai: {
+      models: useCallback(async () => getJson('/api/v1/ai/models'), [])
     },
     admin: {
+      // { id, enabled } toggles one catalog model; { seed: true } re-runs the catalog upsert;
+      // { probe: true } re-checks the provider keys (fresh providers.<p>.verified + the re-projected list)
+      setAiModel: useCallback(
+        async (args: { id?: string; enabled?: boolean; seed?: boolean; probe?: boolean }) =>
+          asyncFetcher.submit(args, { action: '/api/v1/admin/ai/models', errorContext: 'update the Lopu model catalog' }),
+        [asyncFetcher]
+      ),
+      setLopuChatDefaults: useCallback(
+        async (args: { model?: string | null; effort?: string | null; speed?: string | null }) =>
+          asyncFetcher.submit(
+            { model: args?.model ?? null, effort: args?.effort ?? null, speed: args?.speed ?? null },
+            { action: '/api/v1/settings/lopu-chat-defaults', errorContext: 'save the Lopu chat defaults' }
+          ),
+        [asyncFetcher]
+      ),
       integrations: useCallback(async () => getJson('/api/v1/admin/integrations'), []),
       integrationAction: useCallback(
         async (args: Record<string, unknown>) =>
@@ -398,6 +445,42 @@ export function useApi() {
       setLink: useCallback(
         async (args: { action: 'add' | 'remove'; linkKind: 'account' | 'app'; userId: string; targetId: string }) =>
           asyncFetcher.submit(args, { action: '/api/v1/admin/links' }),
+        [asyncFetcher]
+      )
+    },
+    // Lopu 🦄 conversations (session only) — see /docs/api lopu. The model
+    // catalog is v1.ai.models() above.
+    lopu: {
+      chats: {
+        list: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/lopu/chats', options), []),
+        // providerId = one of the viewer's Secure Vault providers (v1.ai.models()
+        // → vaultProviders[].id); null clears it back to the catalog model
+        create: useCallback(
+          async (args?: { title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null }) =>
+            asyncFetcher.submit(args || {}, { action: '/api/v1/lopu/chats', errorContext: 'start a Lopu chat' }),
+          [asyncFetcher]
+        ),
+        update: useCallback(
+          async (args: { chatId: string; title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null }) =>
+            asyncFetcher.submit(args, { action: '/api/v1/lopu/chats/update', errorContext: 'update a Lopu chat' }),
+          [asyncFetcher]
+        ),
+        delete: useCallback(
+          async (args: { chatId: string }) =>
+            asyncFetcher.submit({ chatId: args?.chatId }, { action: '/api/v1/lopu/chats/delete', errorContext: 'delete a Lopu chat' }),
+          [asyncFetcher]
+        )
+      },
+      // the streamed turn — returns the RAW Response (NDJSON body); read it
+      // with readNdjson from components/Lopu/lopuChatStream
+      reply: useCallback(async (body: LopuReplyBody, options?: { signal?: AbortSignal }) => postLopuReply(body, options), []),
+      // direct voice (design note §6.1): the provider-minted five-minute
+      // realtime credential for one of the viewer's own Secure Vault
+      // providers (v1.ai.models() → vaultProviders[].realtimeModels); a
+      // refusal throws the route's error shape (400 with the reason)
+      voiceSession: useCallback(
+        async (args: { providerId: string; model?: string | null; effort?: string | null; textResponse?: boolean }, options?: { signal?: AbortSignal }) =>
+          asyncFetcher.submit(args, { action: '/api/v1/lopu/voice/session', errorContext: 'start direct voice', signal: options?.signal }),
         [asyncFetcher]
       )
     },
