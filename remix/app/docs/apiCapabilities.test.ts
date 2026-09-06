@@ -40,10 +40,26 @@ test('account-hint privacy contracts publish their patch-level capability update
 	assert.equal(manifest.features['api.auth-account-hints-resolve'], '1.0.1');
 });
 
+test('capabilities publish the native Apple notification device contract', () => {
+	const manifest = createApiCapabilitiesManifest();
+
+	assert.equal(manifest.features['api.notifications-devices'], '1.1.0');
+	assert.equal(manifest.features['api.notifications-list'], '1.2.0');
+	assert.equal(manifest.features['api.watch-pairing'], '1.2.0');
+	assert.equal(manifest.features['api.watch-sync'], '1.0.0');
+	assert.equal(manifest.features['api.watch-things'], '1.0.0');
+	assert.equal(manifest.features['api.devices'], '1.9.0');
+	assert.equal(manifest.features['api.attachment-uploads'], '1.1.0');
+	assert.equal(manifest.features['api.attachment-upload-parts'], '1.1.0');
+	assert.equal(manifest.features['api.attachment-upload-complete'], '1.1.0');
+});
+
 test('notification contracts publish the history filters and the system family as compatible minors', () => {
 	const manifest = createApiCapabilitiesManifest();
 
-	assert.equal(manifest.features['api.notifications-list'], '1.1.0');
+	// the history filters landed as 1.1.0; the list then took the cursor,
+	// from/to window and viewer object on top, so it publishes 1.2.0
+	assert.equal(manifest.features['api.notifications-list'], '1.2.0');
 	assert.equal(manifest.features['api.notifications-settings'], '1.1.0');
 });
 
@@ -73,4 +89,15 @@ test('the storage census and ciControl workbench allowlist publish their minor c
 
 test('persistent attachment content and resized previews advertise their additive contract', () => {
 	assert.equal(createApiCapabilitiesManifest().features['api.attachment-content'], '1.1.0');
+});
+
+test('admin preview dispatch publishes its protected-controller contract version', () => {
+	const manifest = createApiCapabilitiesManifest();
+	assert.equal(manifest.features['api.admin-ci-previews'], '2.0.0');
+});
+
+test('storage-aware health and the corrected email environment gate publish their contract updates', () => {
+	const manifest = createApiCapabilitiesManifest();
+	assert.equal(manifest.features['api.health-nitro'], '1.1.0');
+	assert.equal(manifest.features['api.email-config'], '1.0.1');
 });

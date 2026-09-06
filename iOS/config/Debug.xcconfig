@@ -1,3 +1,4 @@
 #include "Base.xcconfig"
 
 SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG
+APS_ENVIRONMENT = development
