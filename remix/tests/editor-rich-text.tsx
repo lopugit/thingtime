@@ -120,6 +120,7 @@ function SharedFieldsCheck() {
 			<LeafValueEditor value={value} edit={editing} onValueChange={setValue} />
 			<div style={{ marginTop: 12 }}>Tier inclusions</div>
 			<LongTextEditor
+				minHeight="72px"
 				value={{ kind: 'rich-text', blocks: [{ type: 'paragraph', data: { text: 'Neighbouring tier field' } }] }}
 				blockTypes={{ image: false, embed: false, code: false, table: false }}
 			/>

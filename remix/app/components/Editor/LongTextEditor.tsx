@@ -700,7 +700,7 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle & EditorHistor
 				editable?.focus({ preventScroll: true });
 			}}
 			width="100%"
-			minHeight={props.minHeight || '96px'}
+			minHeight={props.presentation === 'inline' ? props.minHeight || '96px' : `max(128px, ${props.minHeight || '96px'})`}
 			padding={props.presentation === 'inline' ? '0' : '10px 12px'}
 			background={props.presentation === 'inline' ? 'transparent' : 'var(--tt-card, #ffffff)'}
 			border={props.presentation === 'inline' ? '0' : '1px solid var(--tt-border, #ececef)'}

@@ -55,3 +55,14 @@ test('selection toolbar stays above when a clear slot is available', () => {
 	const result = placeEditorSelectionToolbar({ width: 206, height: 46 }, selection, { left: 8, top: 8, width: 304, height: 624 }, [selection]);
 	assert.ok(result.top + result.height < selection.top);
 });
+
+test('crowded mobile fields never sacrifice selected text for fewer control collisions', () => {
+	const selection = { left: 94, top: 321, width: 135, height: 20 };
+	const bounds = { left: 8, top: 95, width: 374, height: 400 };
+	const controls = [
+		{ left: 8, top: 95, width: 374, height: 210 },
+		{ left: 8, top: 355, width: 374, height: 140 }
+	];
+	const result = placeEditorSelectionToolbar({ width: 262, height: 46 }, selection, bounds, [selection, ...controls]);
+	assert.equal(overlayIntersects(result, selection), false);
+});

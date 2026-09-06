@@ -7,7 +7,8 @@ export const placeEditorOverlay = (
 	size: { width: number; height: number },
 	preferred: { left: number; top: number },
 	bounds: OverlayRect,
-	obstacles: OverlayRect[]
+	obstacles: OverlayRect[],
+	protectedRects: OverlayRect[] = []
 ): OverlayRect => {
 	const width = Math.min(size.width, bounds.width),
 		height = Math.min(size.height, bounds.height);
@@ -27,7 +28,8 @@ export const placeEditorOverlay = (
 		for (const top of [...ys].sort((a, b) => Math.abs(a - preferred.top) - Math.abs(b - preferred.top)).slice(0, 32)) {
 			const rect = { left, top, width, height };
 			const collisions = obstacles.filter((obstacle) => overlayIntersects(rect, obstacle)).length;
-			const score = collisions * 1e7 + Math.abs(left - preferred.left) + Math.abs(top - preferred.top) * 1.5;
+			const protectedCollisions = protectedRects.filter((obstacle) => overlayIntersects(rect, obstacle)).length;
+			const score = protectedCollisions * 1e10 + collisions * 1e7 + Math.abs(left - preferred.left) + Math.abs(top - preferred.top) * 1.5;
 			if (score < bestScore) {
 				best = rect;
 				bestScore = score;
@@ -45,10 +47,11 @@ export const placeEditorSelectionToolbar = (
 ) => {
 	const preferred = { left: selection.left + selection.width / 2 - size.width / 2, top: selection.top - size.height - 12 };
 	const above = { ...bounds, height: Math.max(0, Math.min(bounds.height, selection.top - 12 - bounds.top)) };
-	const primary = placeEditorOverlay(size, preferred, above.height >= size.height ? above : bounds, obstacles);
-	const collisions = (rect: OverlayRect) => obstacles.filter((obstacle) => overlayIntersects(rect, obstacle)).length;
+	const primary = placeEditorOverlay(size, preferred, above.height >= size.height ? above : bounds, obstacles, [selection]);
+	const collisions = (rect: OverlayRect) =>
+		(overlayIntersects(rect, selection) ? 1e4 : 0) + obstacles.filter((obstacle) => overlayIntersects(rect, obstacle)).length;
 	if (!collisions(primary)) return primary;
-	const fallback = placeEditorOverlay(size, preferred, bounds, obstacles);
+	const fallback = placeEditorOverlay(size, preferred, bounds, obstacles, [selection]);
 	return collisions(fallback) < collisions(primary) ? fallback : primary;
 };
 

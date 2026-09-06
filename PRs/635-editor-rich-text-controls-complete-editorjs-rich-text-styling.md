@@ -112,4 +112,6 @@ Field editors now reserve a wrapping history row in normal layout; inline editor
 
 A source contract guards the single runtime and shared rich-text entry points. The local fixture also exercises the real LeafValueEditor next to a restricted tier-style field.
 
-The selected-text toolbar prefers above; if every above-text slot overlaps labels/history, it chooses a clearer nearby slot. Verified the real Thing field adapter at 390px and 320px: custom alpha hex, rem size and strikethrough survive view/edit, Undo/Redo stays scoped, and Changes opens/closes. Editor/kind tests: 83; feed tests: 33. Client/embed build and focused lint pass.
+The selected-text toolbar prefers above; if every above-text slot overlaps labels/history, it chooses a clearer nearby slot. Verified the real Thing field adapter at 390px and 320px: custom alpha hex, rem size and strikethrough survive view/edit, Undo/Redo stays scoped, and Changes opens/closes. Editor/kind tests: 84; feed tests: 33; webpage tests: 31. Client/embed build and focused lint pass.
+
+Compact field editors reserve at least 128px so the selected-text toolbar has a clear fallback inside the field. The selection receives stronger collision protection than surrounding controls, preventing crowded mobile layouts from covering the text being formatted. Page-level controls outside the composer are included in placement checks.
