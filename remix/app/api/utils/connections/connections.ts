@@ -432,7 +432,10 @@ const clampPublishedAt = (value: Date | null, now: Date): Date => {
   return value as Date;
 };
 
-const upsertExternalPosts = async (
+// Exported for the same reason pageFromSourceRows is: the membership rows it
+// stamps carry the sort key the feed pages by, and that contract is worth
+// pinning in a unit test rather than only in a live end-to-end run.
+export const upsertExternalPosts = async (
   provider: ConnectionProvider,
   accountShareId: string,
   items: ExternalFeedItem[]
@@ -516,6 +519,30 @@ const upsertExternalPosts = async (
   // post may already exist from ANOTHER account's sync, and this account's
   // claim on it is exactly what the feed read and tt:extsourced evaluate.
   const stampSources = async () => {
+    // Read back each post's OWN createdAt and denormalize THAT, exactly like
+    // the relational-external-post-sources migration does. Recomputing
+    // clampPublishedAt(item.publishedAt, now) here instead would agree with the
+    // post only while the item carries a usable date: for a dateless item (an
+    // RSS entry with no pubDate/dc:date, an HN item with no `time` — both
+    // resolve to `null`, and dateOrNull makes that a routine shape rather than
+    // an error) the clamp falls through to `now`. The post's createdAt was
+    // stamped $setOnInsert at the FIRST account's sync, so a second account
+    // reaching the same post later would mint a row whose createdAt is its own
+    // wall clock — a different sort position for the same post. That breaks the
+    // invariant this field exists to hold: the feed pages membership rows and
+    // de-dupes only WITHIN a fetched window (pageFromSourceRows), which is
+    // sound because a post's rows share a createdAt and are therefore adjacent
+    // in the (createdAt, shareId) order. Rows scattered across the timeline
+    // instead put one post on two arbitrarily distant pages, and order it by
+    // sync time rather than by the publish time every other surface shows.
+    const postIds = [...new Set(items.map((item) => externalPostShareId(namespace, item.externalId)))];
+    const postCreatedAt = new Map<string, Date>();
+    const postDocs: any[] = await things
+      .find({ shareId: { $in: postIds }, thingtime: EXTERNAL_POST_KIND }, { projection: { shareId: 1, createdAt: 1 } })
+      .toArray();
+    for (const doc of postDocs) {
+      if (doc?.createdAt instanceof Date) postCreatedAt.set(String(doc.shareId), doc.createdAt);
+    }
     const rows = items.map((item) => {
       const postShareId = externalPostShareId(namespace, item.externalId);
       const sourceKey = externalPostSourceKey(postShareId, accountShareId);
@@ -547,8 +574,12 @@ const upsertExternalPosts = async (
               extended: null,
               tags: [],
               // denormalized post publish time: the feed pages MEMBERSHIP by
-              // this field, so it must sort identically to the post itself
-              createdAt: clampPublishedAt(item.publishedAt, now)
+              // this field, so it must sort identically to the post itself.
+              // The clamp is only the fallback for a post that somehow is not
+              // readable back (a concurrent delete) — the post's own stamp is
+              // the authority, so every row for it agrees no matter which
+              // account minted it or when.
+              createdAt: postCreatedAt.get(postShareId) || clampPublishedAt(item.publishedAt, now)
             }
           },
           upsert: true
