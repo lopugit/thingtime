@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS, USER_STORAGE_LEDGER_ENVELOPE_VERSION } from '../../../schemas/registry.ts';
+import { QUOTA_OVERRIDE_BOUNDS, QUOTA_OVERRIDE_FIELDS, REQUIRED_TIER_QUOTA_FIELDS } from './tierCatalog.ts';
 
 export type SubscriptionIdentitySubject = 'user' | 'app';
 
@@ -52,7 +53,18 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => !!va
 const hasOnlyKeys = (value: Record<string, unknown>, allowed: readonly string[]): boolean => Object.keys(value).every((key) => allowed.includes(key));
 const validDate = (value: unknown): boolean => value instanceof Date && Number.isFinite(value.getTime());
 const validNullableQuota = (value: unknown): boolean => value === null || (Number.isSafeInteger(value) && Number(value) >= 0);
-const TIER_QUOTA_KEYS = ['appStorageBytes', 'userStorageBytes', 'maxApps', 'maxPats'] as const;
+// Validate stored snapshots without the input sanitizer's coercion/clamping.
+// Immutable older revisions legitimately omit newly introduced optional quotas.
+const storedQuotaFieldsAreTrusted = (value: unknown): value is Record<string, unknown> =>
+	isPlainObject(value) &&
+	hasOnlyKeys(value, QUOTA_OVERRIDE_FIELDS) &&
+	Object.entries(value).every(([key, quota]) =>
+		validNullableQuota(quota) &&
+		(key !== 'speedTestsPerHour' || quota === null || Number(quota) <= QUOTA_OVERRIDE_BOUNDS.speedTestsPerHour.max)
+	);
+const storedTierQuotasAreTrusted = (value: unknown): boolean =>
+	storedQuotaFieldsAreTrusted(value) && REQUIRED_TIER_QUOTA_FIELDS.every((key) => Object.prototype.hasOwnProperty.call(value, key));
+const storedOverridesAreTrusted = (value: unknown): boolean => value === null || storedQuotaFieldsAreTrusted(value);
 
 const tierAssignmentShapeIsTrusted = (crystal: Record<string, unknown>): boolean => {
 	const quotas = crystal.tierQuotas;
@@ -66,11 +78,8 @@ const tierAssignmentShapeIsTrusted = (crystal: Record<string, unknown>): boolean
 		Number(crystal.tierVersion) >= 1 &&
 		typeof crystal.tierName === 'string' &&
 		typeof crystal.tierMetered === 'boolean' &&
-		isPlainObject(quotas) &&
-		hasOnlyKeys(quotas, TIER_QUOTA_KEYS) &&
-		TIER_QUOTA_KEYS.every((key) => Object.prototype.hasOwnProperty.call(quotas, key) && validNullableQuota(quotas[key])) &&
-		(overrides === null ||
-			(isPlainObject(overrides) && hasOnlyKeys(overrides, TIER_QUOTA_KEYS) && Object.values(overrides).every(validNullableQuota))) &&
+		storedTierQuotasAreTrusted(quotas) &&
+		storedOverridesAreTrusted(overrides) &&
 		(crystal.note === null || typeof crystal.note === 'string') &&
 		(crystal.updatedBy === null || typeof crystal.updatedBy === 'string') &&
 		typeof crystal.isDefaultAssignment === 'boolean'
@@ -151,17 +160,8 @@ export const userSubscriptionLedgerEnvelopeIssues = (doc: any, subjectId: string
 	check('crystal.tierVersion', Number.isSafeInteger(c.tierVersion) && Number(c.tierVersion) >= 1);
 	check('crystal.tierName', typeof c.tierName === 'string');
 	check('crystal.tierMetered', typeof c.tierMetered === 'boolean');
-	check(
-		'crystal.tierQuotas',
-		isPlainObject(c.tierQuotas) &&
-			hasOnlyKeys(c.tierQuotas, TIER_QUOTA_KEYS) &&
-			TIER_QUOTA_KEYS.every((key) => Object.prototype.hasOwnProperty.call(c.tierQuotas, key) && validNullableQuota(c.tierQuotas[key]))
-	);
-	check(
-		'crystal.overrides',
-		c.overrides === null ||
-			(isPlainObject(c.overrides) && hasOnlyKeys(c.overrides, TIER_QUOTA_KEYS) && Object.values(c.overrides).every(validNullableQuota))
-	);
+	check('crystal.tierQuotas', storedTierQuotasAreTrusted(c.tierQuotas));
+	check('crystal.overrides', storedOverridesAreTrusted(c.overrides));
 	check('crystal.note', c.note === null || typeof c.note === 'string');
 	check('crystal.updatedBy', c.updatedBy === null || typeof c.updatedBy === 'string');
 	check('crystal.isDefaultAssignment', typeof c.isDefaultAssignment === 'boolean');

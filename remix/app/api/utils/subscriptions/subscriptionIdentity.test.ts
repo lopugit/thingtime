@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { QUOTA_OVERRIDE_FIELDS, REQUIRED_TIER_QUOTA_FIELDS, SUBSCRIPTION_TIER_CATALOG } from './tierCatalog.ts';
 
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS, USER_STORAGE_LEDGER_ENVELOPE_VERSION } from '../../../schemas/registry.ts';
 import {
@@ -54,6 +55,50 @@ test('only the exact protected user subscription envelope is trusted', () => {
 	assert.equal(userSubscriptionLedgerEnvelopeIsTrusted({ ...canonical, crystal: { ...canonical.crystal, subjectId: 'user-2' } }, 'user-1'), false);
 	assert.equal(userSubscriptionLedgerEnvelopeIsTrusted({ ...canonical, ownerEditable: true }, 'user-1'), false);
 	assert.equal(userSubscriptionLedgerEnvelopeIsTrusted({ ...canonical, crystal: { ...canonical.crystal, extraCounter: 12 } }, 'user-1'), false);
+});
+
+test('all canonical tier snapshots and optional speed-test overrides preserve current and legacy envelopes', () => {
+	for (const tier of SUBSCRIPTION_TIER_CATALOG) {
+		for (const speedTestsPerHour of [undefined, null, 0, 4, 1000]) {
+			const doc: any = canonicalLedger();
+			doc.crystal.tierQuotas = { ...tier.quotas };
+			doc.crystal.overrides = speedTestsPerHour === undefined ? null : { speedTestsPerHour };
+			if (speedTestsPerHour === undefined) delete doc.crystal.tierQuotas.speedTestsPerHour;
+			else doc.crystal.tierQuotas.speedTestsPerHour = speedTestsPerHour;
+			const before = structuredClone(doc);
+			assert.equal(userSubscriptionLedgerEnvelopeIsTrusted(doc, 'user-1'), true);
+			assert.deepEqual(userSubscriptionLedgerEnvelopeIssues(doc, 'user-1'), []);
+			assert.deepEqual(doc, before, 'validation must not rewrite assignments');
+			const { storageLedgerEnvelopeVersion: _marker, ...legacy } = doc;
+			assert.equal(legacyUserSubscriptionLedgerEnvelopeCanUpgrade(legacy, 'user-1'), true);
+			assert.deepEqual(userSubscriptionLedgerEnvelopeIssues(legacy, 'user-1'), []);
+		}
+	}
+});
+
+test('stored quotas reject malformed values without coercion or clamping in either envelope', () => {
+	for (const container of ['tierQuotas', 'overrides']) {
+		for (const key of QUOTA_OVERRIDE_FIELDS) {
+			for (const invalid of [undefined, '4', -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, {}, [], true, ...(key === 'speedTestsPerHour' ? [1001] : [])]) {
+				const doc: any = canonicalLedger();
+				doc.crystal[container] = { ...(doc.crystal[container] ?? {}), [key]: invalid };
+				assert.equal(userSubscriptionLedgerEnvelopeIsTrusted(doc, 'user-1'), false, `${container}.${key}`);
+				assert.deepEqual(userSubscriptionLedgerEnvelopeIssues(doc, 'user-1'), [`crystal.${container}`]);
+				const { storageLedgerEnvelopeVersion: _marker, ...legacy } = doc;
+				assert.equal(legacyUserSubscriptionLedgerEnvelopeCanUpgrade(legacy, 'user-1'), false);
+			}
+		}
+		const doc: any = canonicalLedger();
+		doc.crystal[container] = { ...(doc.crystal[container] ?? {}), unknownQuota: 1 };
+		assert.equal(userSubscriptionLedgerEnvelopeIsTrusted(doc, 'user-1'), false);
+		assert.deepEqual(userSubscriptionLedgerEnvelopeIssues(doc, 'user-1'), [`crystal.${container}`]);
+	}
+	for (const key of REQUIRED_TIER_QUOTA_FIELDS) {
+		const doc: any = canonicalLedger();
+		delete doc.crystal.tierQuotas[key];
+		assert.equal(userSubscriptionLedgerEnvelopeIsTrusted(doc, 'user-1'), false);
+		assert.deepEqual(userSubscriptionLedgerEnvelopeIssues(doc, 'user-1'), ['crystal.tierQuotas']);
+	}
 });
 
 test('migration upgrades only the exact old server envelope', () => {
