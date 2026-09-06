@@ -5324,7 +5324,7 @@ Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Auto
   Lopu…" field whose Enter sends a normal chat turn (the same brain, tools
   included). With no SpeechRecognition (the in-app Browser pane) the mic
   click toasts "No microphone here" and the typed path still works; with a
-  mic, listening pauses for the whole turn and for Lopu's speech (never her
+  mic, listening pauses for the whole turn and for Lopu's speech (never its
   own voice back), then resumes. The gear popover (never a full-width card)
   holds Spoken replies, Transcribe mode, Direct voice (enabled only for a
   vault provider whose kind lists a realtime model — the hint reads the
@@ -5404,7 +5404,7 @@ Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Auto
   `/chats/reply`, `/voice/reply`, `/vault` — refuses a non-JSON body with 415
   before the body is read or a bucket is spent; `/voice/reply` and `/vault`
   writes refuse a temporary session (403); the chat write buckets fail closed
-  (a limiter outage answers 429 "cannot check her rate limit", never an
+  (a limiter outage answers 429 "cannot check its rate limit", never an
   unthrottled write). `verify-lopu.mjs` §A + `apiTests` (`lopu-*-json-only`,
   `lopu-vault-guarded`, `lopu-voice-reply-guarded`,
   `lopu-chats-reply-forged-confirmation`).
@@ -5438,3 +5438,8 @@ Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Auto
 - In Thing rich-text fields, tier inclusions and the advanced modal, check neighbouring labels/actions stay visible. History uses small grey absolute controls near the bottom-right of field and inline editors, moving into nearby clear space for tiny blocks; text must never run underneath them. Compare content dimensions with history visible/hidden: no history padding, minimum width/height or wrapping row may change the preview layout.
 - At desktop, 390px and 320px widths, select/style text, undo/redo, open/close Changes, toggle view/edit and scroll top to bottom. Ensure formatting survives and the active editor overlays do not hide a neighbouring editor.
 - In a crowded mobile composer, select text and verify the formatting toolbar stays above the line. A temporary space opens above the text when needed and closes on deselection. Check Undo/Redo/Changes at bottom right, nearby feed filters/tags, keyboard-sized viewports, and repeated selection without growing gaps.
+# Storage ledger operator diagnostics
+
+- Validate both immutable legacy four-field and current five-field quota snapshots (and partial overrides). Optional speed-test quotas accept null or safe integers 0–1000, reject coercible strings/fractions/unknown fields, and never change the stored assignment. After deploying, dry-run the production accounting migration before a separately authorized real run; verify storage readiness and a real upload before calling uploads healthy.
+
+- As an admin, dry-run `backfill-user-storage-accounting`; invalid ledgers must report only deterministic ledger IDs and fixed validation-field labels, at most ten records. Confirm zero ledger writes, no raw values or arbitrary key names, and unchanged strict envelope validation. Anonymous and non-admin callers remain denied by the existing migrations API gate.
