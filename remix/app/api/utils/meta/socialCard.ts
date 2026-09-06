@@ -26,6 +26,15 @@ const BADGE_ROW_TOP = 548;
 // out of both ends of its pill.
 const POLL_LABEL_WIDTH = 506;
 const BADGE_LABEL_WIDTH = 134;
+// The eyebrow starts at x=86 and the author name at x=136 (clear of the avatar
+// disc); both run at the media/art panel, which is drawn last and therefore
+// paints over anything that reaches x=700. Neither line is wrapped, so — like
+// the pills above — the cap has to be a measured width. A display name is
+// allowed 80 characters (MAX_DISPLAY_NAME_CHARS) and anything past ~41 was
+// sliced off mid-word by the panel with no ellipsis, so a card for
+// "Bartholomew Featherstonehaugh-Cholmondeley" read as a complete, wrong name.
+const AUTHOR_LABEL_WIDTH = 564;
+const EYEBROW_LETTER_SPACING = 2;
 
 type CardTheme = { primary: string; end: string; panelStart: string; panelEnd: string };
 
@@ -100,11 +109,15 @@ const TEXT_COLUMN_WIDTH = 594;
 // and clamp budget the column against the glyphs that actually get painted.
 const cardText = (value: string): string => value.replace(CARD_UNRENDERABLE, '').replace(/\s+/g, ' ').trim();
 
-const clampToWidth = (input: string, maxWidth: number, fontSize: number): string => {
+// `letterSpacing` is the SVG attribute of the same name: resvg adds it after
+// every glyph but the last, so a label the width estimate calls safe is really
+// that much wider on the eyebrow line.
+const clampToWidth = (input: string, maxWidth: number, fontSize: number, letterSpacing = 0): string => {
+	const width = (text: string): number => socialTextWidth(text, fontSize) + Math.max(0, Array.from(text).length - 1) * letterSpacing;
 	const value = cardText(input);
-	if (socialTextWidth(value, fontSize) <= maxWidth) return value;
+	if (width(value) <= maxWidth) return value;
 	const codePoints = Array.from(value);
-	while (codePoints.length && socialTextWidth(`${codePoints.join('')}…`, fontSize) > maxWidth) codePoints.pop();
+	while (codePoints.length && width(`${codePoints.join('')}…`) > maxWidth) codePoints.pop();
 	return `${codePoints.join('').trimEnd()}…`;
 };
 
@@ -345,15 +358,15 @@ export const buildSocialCardSvg = (preview: SocialPreview, imageDataUris: readon
 		<path d="M1048.4 67.6a4.4 4.4 0 0 0 7.2 0" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round"/>
 		<path d="M1098 57.5v15M1090.5 65h15" stroke="#FFFFFF" stroke-width="2.6" stroke-linecap="round"/>
 	</g>
-	<text x="86" y="134" fill="#7C3AED" font-family="Arial, sans-serif" font-size="15" font-weight="700" letter-spacing="2">${escapeXml(
-		preview.eyebrow
+	<text x="86" y="134" fill="#7C3AED" font-family="Arial, sans-serif" font-size="15" font-weight="700" letter-spacing="${EYEBROW_LETTER_SPACING}">${escapeXml(
+		clampToWidth(preview.eyebrow, TEXT_COLUMN_WIDTH, 15, EYEBROW_LETTER_SPACING)
 	)}</text>
 	${
 		preview.author
 			? `<circle cx="102" cy="178" r="22" fill="${primary}"/><text x="102" y="186" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="20" font-weight="700" text-anchor="middle">${escapeXml(
 					preview.initial || 'T'
 			  )}</text><text x="136" y="184" fill="#2B2440" font-family="Arial, sans-serif" font-size="19" font-weight="700">${escapeXml(
-					preview.author
+					clampToWidth(preview.author, AUTHOR_LABEL_WIDTH, 19)
 			  )}</text>`
 			: ''
 	}

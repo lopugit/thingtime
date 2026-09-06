@@ -173,6 +173,35 @@ test('badge and poll labels are clamped to their pill, not to a character count'
 	);
 });
 
+// The same defect class on the two single-line labels above the headline, which
+// wrap() never sees. A display name is allowed 80 characters
+// (MAX_DISPLAY_NAME_CHARS) and its line starts at x=136, so anything past ~41
+// reached the art panel — drawn last, so it painted over the overflow and the
+// name was sliced mid-word with no ellipsis, reading as a complete wrong name.
+// The eyebrow additionally carries letter-spacing="2", which the width estimate
+// does not model on its own: a label it calls safe is 2px per glyph wider here.
+test('the eyebrow and author line are clamped to the text column too', () => {
+	const svg = buildSocialCardSvg({
+		...gallery,
+		eyebrow: 'THINGTIME · A VERY LONG ROUTE DESCRIPTION THAT KEEPS GOING AND GOING',
+		author: 'Bartholomew Featherstonehaugh-Cholmondeley the Third of Melbourne',
+		images: [],
+		imageCount: 0
+	});
+	const eyebrow = svg.match(/<text x="86" y="134"[^>]*letter-spacing="(\d+)"[^>]*>([^<]*)<\/text>/);
+	const author = svg.match(/<text x="136" y="184"[^>]*>([^<]*)<\/text>/);
+	assert.ok(eyebrow, 'expected the eyebrow to render');
+	assert.ok(author, 'expected the author line to render');
+	const spacing = Number(eyebrow[1]);
+	const eyebrowWidth = socialTextWidth(eyebrow[2], 15) + Math.max(0, Array.from(eyebrow[2]).length - 1) * spacing;
+	assert.ok(eyebrowWidth <= 594, `eyebrow measures ${eyebrowWidth.toFixed(0)}px, past the x=700 art panel`);
+	assert.ok(eyebrow[2].endsWith('…'), 'an over-long eyebrow should be visibly truncated');
+	// x=136 (clear of the avatar disc) to the art panel at x=700.
+	const authorWidth = socialTextWidth(author[1], 19);
+	assert.ok(authorWidth <= 564, `author name measures ${authorWidth.toFixed(0)}px, past the x=700 art panel`);
+	assert.ok(author[1].endsWith('…'), 'an over-long display name should be visibly truncated');
+});
+
 // The card is only ever drawn on Linux hosts, and the deployed Vercel Node
 // runtime has NO fonts installed. `font-family="Arial, sans-serif"` therefore
 // resolved to nothing there and every production card came back with its
