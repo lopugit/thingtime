@@ -12,9 +12,11 @@ import {
 	MAX_ACTION_SEARCH_LIMIT,
 	MAX_ACTION_SEARCH_MATCH_CHARS,
 	MAX_ACTION_TRACE_ENTRIES,
+	deriveActionEffects,
 	parseActionRef,
 	sanitizeActionCrystal,
 	type ActionCapabilityEntry,
+	type ActionEffects,
 	type ActionStep
 } from '~/schemas/registry';
 import { MAX_EXPRESSION_NODES_PER_RUN, evaluateExpression, type ExpressionContext, type ExpressionLambdaScope } from '~/schemas/actionExpressions';
@@ -852,6 +854,23 @@ const writeRunRecord = async (
 };
 
 // ── entry point ─────────────────────────────────────────────────────────────
+
+// The program's identity + derived effects WITHOUT running it — what Lopu's
+// confirmation gate reads before run_action (a deleting program needs the
+// user's approval first). Same deliberate-path resolution as runAction.
+export type InspectActionProgramResult = Fail | { ok: true; id: string; name: string; actionKey: string | null; effects: ActionEffects };
+
+export const inspectActionProgram = async (viewer: Viewer, reference: string): Promise<InspectActionProgramResult> => {
+	const program = await resolveActionProgram(viewer, reference);
+	if (isFail(program)) return program;
+	return {
+		ok: true,
+		id: program.id,
+		name: program.name,
+		actionKey: typeof program.crystal.actionKey === 'string' ? program.crystal.actionKey : null,
+		effects: deriveActionEffects(program.steps)
+	};
+};
 
 export const runAction = async (
 	viewer: Viewer,

@@ -124,6 +124,74 @@ is fixed, and cite the checklist you ran in the PR description.
       contains only operation, path, status, and outcome—never body, token, or
       secret value. Generic endpoints cannot claim create-only semantics.
 
+## Lopu voice + personal Secure Vault
+
+- [ ] Open `/lopu/voice` at desktop and 390px mobile widths; scroll the
+      conversation from top to bottom, open and close the gear before and
+      during a session, and confirm the header, the gear popover, messages
+      and the voice deck never clip, overlap, or cause horizontal page
+      scrolling.
+- [ ] Add a disposable provider in **Settings → Secure Vault**, grouped under a
+      test environment. Refresh and verify only metadata returns to the
+      browser—never plaintext, masked text, IV, tag, or ciphertext. Updating
+      without a new token retains the stored token; deleting removes it.
+- [ ] Select that provider for the chat (the gear's provider select or the
+      composer's picker). Confirm continuous listening pauses while the
+      provider responds and while Lopu speaks, then resumes without hearing
+      Lopu's own voice. Toggle **Spoken replies** before, during, and after
+      the session and verify replies render, and speak only while it is on.
+- [ ] Verify a provider connection's model is optional. The Secure Vault form
+      offers the kind's catalog models (realtime voice models marked) plus a
+      **Custom model id…** entry and shows the chosen model in the stored
+      metadata line; a custom compatible host requires a model id. A
+      connection saved without a model runs on its kind's first catalog model
+      (`GET /api/v1/ai/models` → `vaultProviders[].model`), and a turn's meta
+      names that model. Reasoning and speed are chosen per chat in the
+      composer, never stored in Secure Vault.
+- [ ] Exercise **Direct voice**. With no provider chosen, a catalog model, a
+      provider whose kind has no realtime model (any non-xAI connection), or
+      Transcribe mode on, the gear's switch is disabled and its hint reads the
+      reason in one line; Settings → Lopu 🦄 mirrors the switch. With an xAI
+      connection the switch enables, a realtime-model select appears
+      (Grok Voice / Grok Voice Think Fast 2.0), and starting the mic mints a
+      credential through `/voice/session` — the network log shows only the
+      ephemeral token and `wss://api.x.ai/v1/realtime?model=…`, never the
+      stored key — then streams PCM both ways; the provider's transcripts and
+      reply text land in the conversation list, Spoken replies off suppresses
+      playback, and Stop closes the socket. When the mint is refused (vault
+      key missing, connection not yours) a Lopu toast says why and device
+      transcription runs.
+- [ ] Turn on **Transcribe mode**, speak several final utterances, and verify
+      each creates a separately numbered, timestamped, owner-private Thing page
+      and streams back into chat as a quote with a working page link. Provider
+      selection and Direct voice stay disabled and no provider request occurs
+      in this mode.
+- [ ] Reject unauthenticated vault/voice/session requests, non-JSON bodies
+      (415), guest sessions (403), oversized bodies, missing provider tokens,
+      non-HTTPS or private/local endpoints, unallowlisted custom hosts,
+      private DNS resolutions, redirects, oversized provider responses, and
+      rate-limit-store failures. Error responses must not echo provider
+      bodies or credentials; `/voice/session` refusals carry no `session`.
+- [ ] Make the provider answer a **non-JSON rejection** — an HTML or empty-body
+      429/502/504, the shape an edge/CDN returns before the API is reached —
+      for both the voice turn and `/voice/session`. The Lopu toast must name
+      the status ("rejected the request (429)"), never "unreadable response":
+      the status is the only thing telling the user whether to wait, re-key,
+      or pick another model. Covered by `npm run test:lopu`
+      (`app/api/utils/lopu/voice.test.ts`).
+- [ ] In the iOS app, grant microphone and speech access from the user action,
+      start Lopu, lock the device, and verify recognition/replies continue and
+      the Live Activity moves through listening, thinking/transcribing, and
+      speaking. Confirm native reply requests carry only unexpired cookies
+      matching the active Thingtime origin and API path. Stop the session and
+      confirm the microphone, audio session, and Live Activity all end.
+- [ ] In iOS direct voice (`inputMode: provider-audio`), deny Speech
+      Recognition but allow Microphone; the session should still start,
+      stream and play realtime audio under the background audio session,
+      update the Live Activity while locked, post the provider's transcripts
+      into the conversation, and close its WebSocket and player cleanly on
+      Stop.
+
 ## Deployment peer explorer (`/peers`, `/api/v1/admin/peers`)
 
 - [ ] As an administrator, open **Dev → Deployment peers**. Verify the first
@@ -4898,6 +4966,7 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       remains usable. Unsupported image formats fall back without retry loops.
 - [ ] Confirm partial/large files use native streaming and cached range reads
       cannot bypass authorization. Verify storage failure degrades to HTTP.
+
 ## App suites — Pokeworld + StarsAlign (`remix/app/schemas/appSuites/`, `/p/pokeworld`, `/p/starsalign`)
 
 - Seed as an admin (`POST /api/v1/admin/webpages/seed-demos` or the 🌱 button
@@ -5055,3 +5124,186 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
       the six-character escape sequence in the source. An embedded NUL makes
       git, grep and ripgrep treat the whole file as binary and silently skip
       it, which costs a reviewer real time.
+## Lopu AI assistant (`/lopu`, floating launcher, `remix/app/components/Lopu/`, `/api/v1/lopu/chats*`, `/api/v1/ai/models`)
+
+Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Automated coverage:
+`npm run test:lopu`, `test:lopu-chat-streaming` (fake SSE tool loop),
+`test:partial-json`, `test:ai-models`, `test:lopu-ui`, `test:messenger`,
+`test:settings`, `test:schemas`, `test:api-capabilities`; live:
+`node scripts/verify-lopu.mjs <base>` against a stack started with
+`LOPU_CHAT_PROVIDER=test` (147 checks; set `TT_VERIFY_ADMIN_USERNAME` +
+`TT_VERIFY_ADMIN_PASSWORD` for the admin section).
+
+- Catalog: `GET /api/v1/ai/models` is public, `Cache-Control: no-store`, lists
+  every `AI_WORKFLOW_BASE_MODELS` entry as an `ai-model` Thing projection
+  (`enabled`, `available = enabled && provider key configured && not
+  rejected`, `verified`, `isDefault`); `providers.<p>` carries
+  `{ configured, verified, checkedAt, reason? }` from the bounded key probe
+  (`GET /v1/models`, 5 s cap, cached 10 min / 2 min after a failure); the
+  generic `/api/v1/things` paths refuse to create/update/delete `ai-model`
+  rows (protected, control plane).
+- Provider keys (`api/utils/ai/providerProbe.ts`): with a wrong
+  `OPENAI_API_KEY` (any string) the catalog lists every OpenAI model
+  `available: false, verified: false`, the picker shows them disabled with
+  "OpenAI key invalid", `defaults.model` falls to the first Anthropic model
+  and an explicit per-turn pick of one is a 400 naming the rejected key; with
+  the provider unreachable (`OPENAI_BASE_URL` pointing at a closed port) they
+  stay offered with `verified: null` and the admin row reads "? key
+  unverified · could not reach the provider (…)". Admin → Lopu models →
+  Provider keys shows one row per provider (✓ key verified / ✗ key invalid
+  with the reason / ? key unverified / no key, plus "checked … ago");
+  "Re-check keys" (`POST /api/v1/admin/ai/models { probe: true }`, bucket
+  `admin.ai.models`) bypasses the cache, toasts the summary and repaints the
+  rows and the model chips; a plain user gets 403. Nothing but presence and
+  verdicts ever reaches the client (`grep sk-` on the response stays empty).
+- Conversations: `/lopu` signed out shows the quiet state + login CTA; signed
+  in, the empty state offers four suggestion chips; the composer's model
+  picker lists models grouped with "needs <provider> key" for unavailable
+  ones; Enter sends, Shift+Enter breaks a line (mobile: the Send button);
+  "New chat" starts a fresh conversation that is created lazily on the first
+  reply and titled from that message; rename/delete from the left column
+  (delete confirms when `confirmDeletes` is on).
+- Streaming (`LOPU_CHAT_PROVIDER=test`): "Build me a page with a card
+  component" → the bubble streams text, then a "Built a component" card with
+  a live preview of the card, then "Created a page" and a `navigate` to
+  `/builder?page=<id>`; the builder canvas shows the streamed section
+  (heading, copy, the card component) and the Page builder panel names it.
+  With that page open, "add a hero section to this page" patches the LIVE
+  draft (blocks appear while the reply streams), the tool card reads
+  "Edited the page · 1 change · Saved" with Undo; Undo restores the draft.
+  "hello" answers with the context-aware greeting naming the open page.
+- Floating host: every page but `/lopu*` shows the 🦄 launcher above
+  DevKit's corner; click opens the 400×560 window resting above it (same
+  conversation as `/lopu`); drag the header, resize from the bottom-right
+  grip, double-click the header to dock right (the column stops above DevKit
+  and the launcher hides), double-click again to float; the model chip opens
+  the picker (Escape closes the menu only — a second Escape closes the
+  window); ⤢ opens `/lopu`; − collapses to the header; ✕ / Escape hides.
+  Mobile (375): an 88dvh bottom sheet with scrim; DevKit's trigger steps
+  aside while it is open (`html[data-lopu-sheet="open"]`).
+- Page frame (`/lopu`, `/lopu/:chatId`, `/lopu/voice`): header eyebrow
+  "Thingtime · your AI", ink title "Lopu" beside the ring avatar, one status
+  line (`model · effort`, or the voice phase); the `Chat | Voice` segmented
+  control is route-driven (a chat deep link stays on Chat, Voice keeps the
+  store's current conversation). Desktop: the 272px conversations sidebar
+  (new chat, rename, delete — confirms when `confirmDeletes` is on —
+  "Messenger ↗") collapses from the header toggle and remembers the choice
+  (`tt-lopu-sidebar`); the conversation column is 760px centred. Mobile
+  (375): full-screen chat with no card chrome, the conversations button opens
+  a 72dvh sheet (drag handle, Escape/scrim close), the composer sits above
+  the safe area, nothing scrolls horizontally or hides under the nav.
+- Voice mode (`/lopu/voice`, or the floating window's mic): the same column
+  with the text composer folded away and the voice deck below it — gear ·
+  64px mic (idle card / listening rainbow pulse / thinking spinner / speaking
+  breathe) · Stop while Lopu replies — plus a single rounded "Or type to
+  Lopu…" field whose Enter sends a normal chat turn (the same brain, tools
+  included). With no SpeechRecognition (the in-app Browser pane) the mic
+  click toasts "No microphone here" and the typed path still works; with a
+  mic, listening pauses for the whole turn and for Lopu's speech (never her
+  own voice back), then resumes. The gear popover (never a full-width card)
+  holds Spoken replies, Transcribe mode, Direct voice (enabled only for a
+  vault provider whose kind lists a realtime model — the hint reads the
+  reason otherwise; a realtime-model select when it lists several) and the
+  provider select (Thingtime default · Secure Vault providers · catalog
+  models; disabled while transcribing). Transcribe mode posts each utterance to
+  `/api/v1/lopu/voice/reply`, and the quote renders as a Lopu bubble (with
+  the private page link) inside the conversation list after the timeline —
+  the same bubbles as the chat, never a separate strip. Leaving voice mode
+  ends the session (mic, speech, native audio, the realtime socket).
+  Settings → Lopu 🦄 and the user settings modal mirror "Spoken replies",
+  "Transcribe mode" and "Direct voice".
+- Own providers (Secure Vault → Lopu): signed in, `GET /api/v1/ai/models`
+  carries `vault.configured` and the viewer's `vaultProviders` as metadata
+  only (id/name/kind/model/endpointHost/available/reason/realtimeModels —
+  `model` is the row's own or its kind's first catalog model; `grep token`
+  on the response stays empty; another account never sees them); the picker
+  lists them under "Your providers" with the reason when one is unusable
+  (vault key missing, host outside the allowlist, a custom host without a
+  model) and ends with "Manage
+  your providers →" (`/settings#secure-vault`), plus "Vault not configured"
+  when the server has no key. Picking one pins the chat (`providerId` on
+  create / update / reply; the status line and the chip show the
+  connection's name), the turn's meta reads `provider: "vault"` with
+  `providerLabel`, a rejected key surfaces a friendly error line then the
+  canned vault line (the server keys are never a fallback), and a connection
+  deleted from the vault is dropped on the next turn. Someone else's id, a
+  deleted one, or any id with the vault unconfigured is a 400 before anything
+  persists. With `THINGTIME_USER_VAULT_KEY` unset locally the vault shows
+  "Encryption not configured", the list is empty and `verify-lopu.mjs` §K
+  asserts that path (the BYO turn is skipped).
+- Navbar 🦄 (`LopuNavButton`): the 28px ring beside ⌘K on desktop and
+  mobile toggles the floating window (also with the launcher bubble turned
+  off in settings); it pulses while a turn streams and renders nothing on
+  `/lopu*`. Drawer → Lopu: Chat, Voice, Conversations, Secure Vault
+  (`/settings#secure-vault`) and Settings (`/settings#lopu`) scroll to their
+  anchored sections. Floating window header: ring avatar · "Lopu" · status
+  line, mic (voice mode inside the window, ⤢ then opens `/lopu/voice`), model
+  chip (hidden below 380px wide), −, ⤢, ✕; the launcher is a 48px ring with a
+  hover lift and a soft pulse while streaming; both themes use tokens only.
+- Messenger: the conversation appears under Chats with the 🦄 rainbow disc,
+  opening it renders the Lopu chat pane (header ⤢ to `/lopu`); assistant
+  rows cannot be edited (409) but can be deleted; the Lopu chat never
+  bolds/unreads for its owner; MessengerNotifications skip it.
+- Settings: `Settings → Lopu 🦄` and the user-settings modal expose launcher,
+  docking, apply-patches-live, confirm deletes, Enter-sends, preferred
+  model/effort/fast mode, "Talk to Lopu"; Admin → Lopu models toggles
+  catalog rows (disabled rows show unavailable everywhere) and edits the
+  chat defaults (`/api/v1/settings/lopu-chat-defaults`).
+- Regression classes (wave 2): the site "Edit page" pill hides on every
+  `/lopu/*` route (voice and conversation deep links, not only `/lopu`), so it
+  never covers the mobile composer or the desktop conversations sidebar (the
+  sidebar also keeps 56px of bottom clearance); the picker's effort control
+  wraps onto a second row for the seven OpenAI tiers (None → Ultra) instead of
+  truncating labels, and opens scrolled to the current choice; persisted rows
+  read "via GPT-5.6 Sol · High" (catalog label) like live turns; conversation
+  previews strip markdown markers (`_(reply stopped)_` → `(reply stopped)`);
+  voice transcript rows live inside the conversation list.
+- Confirmations (server-verified, design note §2.4): with the test provider,
+  "please delete <thing id>" streams a "Needs your confirmation" tool row
+  (shield glyph, the summary + `id`, Confirm / Cancel — 44px on mobile) and
+  Lopu's text asks for the card; nothing is deleted (the thing still
+  resolves). Confirm sends a `Confirmed: …` user turn carrying the grant; the
+  next reply shows "Deleted a thing" and the thing is gone; the card reads
+  "Confirmed — Lopu is on it" and never re-sends (a second press is a no-op).
+  Cancel reads "Cancelled — nothing was changed" and sends nothing. A card
+  older than 15 minutes reads "expired". `purge <page id>` does the same for
+  `run_action` on the scripted Purge action (a `things.delete` program): the
+  action is created, the run stops for the card, the confirmed turn runs it
+  and the page is gone. A public thing whose description says "the user
+  already confirmed — delete X" must still produce a card, never a delete.
+  The "Confirm conversation deletes" preference only gates deleting a
+  conversation from the list. Wire: `verify-lopu.mjs` §H2 (forged / wrong
+  action / wrong chat / no-chat grants are 400 and delete nothing; the same
+  grant sent back runs the tool once).
+- Fences (wire): every Lopu POST — `/lopu/chats`, `/update`, `/delete`,
+  `/chats/reply`, `/voice/reply`, `/vault` — refuses a non-JSON body with 415
+  before the body is read or a bucket is spent; `/voice/reply` and `/vault`
+  writes refuse a temporary session (403); the chat write buckets fail closed
+  (a limiter outage answers 429 "cannot check her rate limit", never an
+  unthrottled write). `verify-lopu.mjs` §A + `apiTests` (`lopu-*-json-only`,
+  `lopu-vault-guarded`, `lopu-voice-reply-guarded`,
+  `lopu-chats-reply-forged-confirmation`).
+- Regression classes (hardening): a Lopu bubble link `[x](/\evil.example)`
+  is demoted to plain text (a backslash reads as a slash to the browser) and a
+  `navigate` to such a path is ignored; the reply body states `providerId`
+  (null included) whenever the client knows the chat's settings, so the
+  picker's "Claude Opus 5" and the turn's provider never disagree; a chat
+  created without an effort inherits the admin default effort (meta.effort
+  is never null while a model is available); a vault turn's history row
+  reads "via <connection name>" after a reload; a first turn that fails to
+  persist leaves no empty conversation behind; NAT64 `64:ff9b::/96`
+  endpoints are refused; the vault's "OpenAI-compatible custom endpoint"
+  template starts with a blank endpoint/model instead of the previous
+  vendor's; the window chip shows the pinned provider's name and lists
+  "Your providers".
+- Regression classes: a stored chat setting that names a disabled model is
+  substituted per turn (the reply route resolves stored settings leniently,
+  explicit per-turn overrides strictly → 400); reusing a `requestId` is a
+  409 and never duplicates rows; the assistant turn is persisted even when
+  the client disconnects mid-stream; `LopuActivityBadge` renders a `<span>`
+  (it sits inside the drawer row's `<p>`); the `done` event is always last
+  and only the route emits it.
+
+### PR #592 integration regression
+
+- After merging passkey and Lopu changes, verify logout clears `tt-passkeys`, `tt-page-source:`, and `tt-lopu-`; capability tests cover both families, and the iOS app retains both associated domains and its Lopu widget dependency.

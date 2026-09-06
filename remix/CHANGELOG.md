@@ -128,6 +128,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - Added protected iPhone/watch APNs device registration, a versioned
   `api.notifications-devices` capability contract, token-based APNs delivery,
   invalid-token cleanup, configuration docs, and focused contract tests.
+- 2026-09-05: Reconcile PR #592 with current develop, preserving Lopu widget support and passkey entitlements, both capability suites, all private logout caches, and both unit-test lists. Verify its exact-SHA preview and make preview delivery visible above collapsed PR comments. — Codex (AI)
 
 - 2026-09-05: Add bounded persistent media caching with access revalidation,
   responsive low-resolution image previews, and cache controls in Settings.
@@ -205,7 +206,187 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   through completion; regression tests cover stale cleanup, writer death,
   contention, malformed ownership, and timeout cleanup. — Codex (AI)
 
+### 2026-09-04 — Lopu direct voice + reconciled provider models (PR #592) — Claude (AI)
+
+- Reconciles the concurrent Codex "per-chat models" / "direct voice" commits
+  with the wave-2 assistant: the unified architecture stays, their
+  capability is ported. Details in the PR note
+  (`PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md` §6) and
+  `TESTING.md` ("Lopu voice + personal Secure Vault").
+- **Direct voice** (opt-in, `settings.lopu.directVoice` + `directVoiceModel`,
+  mirrored in Settings → Lopu 🦄): when the chat's Secure Vault provider's
+  kind lists a realtime model (xAI Grok Voice), the mic streams 24 kHz PCM
+  straight to the provider's realtime WebSocket (`lopuVoiceRealtime.ts`) on
+  a five-minute credential from the new `POST /api/v1/lopu/voice/session`
+  (`api.lopu-voice-session` 1.0.0: session-only, 403 for guests, JSON-only,
+  the `lopu.voiceReply` bucket; the stored key never leaves the server, a
+  minted secret that echoes it is refused); the gear's switch explains in one
+  line when a provider cannot do it and the standard path runs. The iOS
+  controller's provider-audio mode (`inputMode`, `model`, `effort`, `speed`
+  on `lopu-voice-start`; `lopu-voice-realtime-user` /
+  `lopu-voice-realtime-assistant-start` back) is wired into `useLopuVoice`.
+- **Provider models**: templates gain per-kind catalogs (`models[]` with
+  efforts, speeds, `audioInput: 'realtime'`) and four more kinds (Mistral,
+  DeepSeek, Groq, Cohere); a connection's `model` is optional again (the
+  Secure Vault form offers the catalog or a custom id) and a row without one
+  runs on its kind's first catalog model — one rule (`resolveVaultTurnModel`:
+  own → kind default → requested) for the chat client config, the voice turn
+  and `GET /api/v1/ai/models` (`vaultProviders[].model`, plus
+  `realtimeModels`; `api.ai-models` 1.3.0). The voice turn accepts optional
+  `model` / `effort` / `speed` mapped onto each vendor's fields
+  (`api.lopu-voice-reply` 1.1.0, `api.lopu-vault` 1.1.0).
+- Coverage: `voice.test.ts` rewritten against the shared client (per-kind
+  request bodies, the model rule, the credential exchange, the session),
+  `vaultProviders` / `lopuProviderCore` / `useLopuSettings` unit tests, three
+  `apiTests` session entries, `verify-lopu.mjs` §A + §K session walls.
+
+### 2026-09-04 — Lopu wave 2 hardening: server-verified confirmations, JSON fences, deterministic provider choice (PR #592) — Claude (AI)
+
+- Adversarial-review fixes; details in the PR note
+  (`PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md` §0, §1.3,
+  §2.3, §2.4 "Confirmations", §2.6) and `TESTING.md` ("Lopu AI assistant").
+- **Destructive tools wait for the user** (was: gated by a model-asserted
+  `confirmed` flag that prompt injection through tool results / page blocks
+  could set): `delete_thing`, `update_thing` with `replaceCrystal`, and
+  `run_action` on a program that deletes things now stop with a `confirm`
+  event carrying a server-signed grant (purpose JWT bound to user + chat +
+  action key, 15 min) and `tool_result.needsConfirmation`; the tool card's
+  Confirm sends the grant back once as `confirmations: [{ key, token }]`,
+  the route verifies it (400 otherwise) and the executor spends it once per
+  turn. The stable prompt gains the "Untrusted content" rule and the page
+  blocks arrive fenced. The "Confirm deletes" preference is renamed to what it
+  gates (deleting a conversation from the list).
+- `/api/v1/lopu/chats/reply` (1.2.0), `/voice/reply` and `/vault` (1.0.1)
+  apply the JSON-only CSRF fence (415) before reading the body or spending a
+  bucket; voice/vault refuse a temporary session (403); the chat write buckets
+  (create/update 1.1.1, delete 1.0.1) fail closed. Capability pins updated.
+- The client states `providerId` explicitly (`null` included) whenever it
+  knows the chat's settings, so a refused `/update` or a de-listed provider can
+  never route a turn behind the picker's back; the window's header chip reads
+  the per-chat store settings and lists "Your providers".
+- A chat whose stored effort/speed is `null` inherits the admin defaults
+  (was: the provider's own default); `'vault'` rows persist `providerLabel`;
+  a first turn that fails to persist discards the chat it just created; the
+  bubble link guard rejects `/\host` (browsers read `\` as `/`), NAT64
+  `64:ff9b::/96` is blocked, the vault's "custom endpoint" template starts
+  blank, persisted message bubbles are memoised.
+- Coverage: `chatTools`/`confirmations`/`chatPrompt`/`chat.streaming`/
+  `lopuTurnCore`/`lopuChatStore`/`userVaultCore`/`lopuChats` unit tests,
+  6 new `apiTests` lopu entries, `verify-lopu.mjs` §A fences + §H2
+  confirmations (delete_thing + a deleting `run_action` through the scripted
+  provider's new `purge` script).
+
+### 2026-09-04 — Lopu wave 2: voice in the chat page, your own providers, design pass, navbar 🦄 (PR #592) — Claude (AI)
+
+- Grouped summary; details in the PR note
+  (`PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`, §1.3 own
+  providers, §3.2 surfaces, §6 voice + Secure Vault — the Codex voice note is
+  folded in there) and the checklist in `TESTING.md` ("Lopu AI assistant").
+- **Voice unified into the Lopu page**: `/lopu` | `/lopu/voice` is a
+  route-driven Chat | Voice switch on one `LopuPage`; `useLopuVoice`
+  (`LopuVoiceControls.tsx`) owns SpeechRecognition / the iOS bridge /
+  speechSynthesis and the feedback-loop guard, every final utterance is a
+  normal chat turn (tools included, the chat's model or provider), Transcribe
+  mode keeps `/api/v1/lopu/voice/reply` and its quotes render inside the
+  conversation list; settings `spokenReplies` / `transcribe` / `providerId`
+  are mirrored in Settings → Lopu 🦄 and the user-settings modal.
+- **Your own providers**: `GET /api/v1/ai/models` returns redacted
+  `vaultProviders` + `vault.configured` for a session; chats carry
+  `lopu.providerId` (create / update / list) and `POST /api/v1/lopu/chats/reply`
+  runs a pinned turn on the caller's Secure Vault connection (Anthropic path
+  or the OpenAI-compatible path with native tools / the fenced `tt-tool`
+  protocol) through the shared SSRF fence in `lopu/vaultProviderClient.ts`,
+  which `voice.ts` now delegates to; meta `provider: "vault"` +
+  `providerLabel`; the server keys are never a fallback. Capability bumps
+  `ai-models` 1.2.0, `admin-ai-models` / `settings-lopu-chat-defaults` /
+  `lopu-chats` / `lopu-chats-update` / `lopu-chats-reply` 1.1.0 are now
+  published through `contractVersion` (what `/api/v1/capabilities` reads)
+  as well as `featureVersion`, pinned in both manifest tests.
+- **Design pass** (`lopuTheme.ts` tokens only, light + dark): one calm
+  neutral surface with a single restrained rainbow (ring, caret, send/mic),
+  18px bubbles, 760px centred column, 272px conversations sidebar, mobile
+  full-screen with the composer above the safe area, compact floating window,
+  markdown code copy button, aria-live streaming bubble, model picker grouped
+  Claude / OpenAI / Your providers with unavailable reasons and a "Manage your
+  providers" footer.
+- **Navbar 🦄** (`LopuNavButton`, beside ⌘K, hidden on `/lopu*`) toggles the
+  restyled floating window (avatar/status header, mic, model chip, open-full,
+  minimise, close; launcher ring; mobile sheet); Drawer → Lopu gains Voice and
+  Secure Vault (`/settings#secure-vault`) children.
+- Integration pass fixes: the site "Edit page" pill hides on `/lopu/*`
+  (`SiteBlocksHost`), the conversations sidebar clears it, the effort control
+  wraps for OpenAI's seven tiers (labels for `none` / `minimal` / `ultra`),
+  the picker opens on the current choice, persisted rows show the catalog
+  label, previews strip markdown, and voice transcript rows sit inside the
+  conversation list (`LopuChatView` `trailing`).
+- Live verification: `node scripts/verify-lopu.mjs <base>` (147 checks incl. the
+  vault-unconfigured path; the BYO turn needs `THINGTIME_USER_VAULT_KEY` and
+  `THINGTIME_LOPU_PROVIDER_DEV_REWRITES`, README "Lopu AI assistant").
+
 - 2026-09-03: Keep `/api/v1/capabilities` aligned with the protected admin preview dispatcher by publishing `api.admin-ci-previews` 2.0.0 from the canonical endpoint contract.
+
+### 2026-09-03 — Lopu AI assistant: streamed chat, tools, live builder patches (PR #592) — Claude (AI)
+
+- Grouped summary; the normative design lives in
+  `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md` and the checklist in `TESTING.md`
+  ("Lopu AI assistant").
+- **`ai-model` catalog** (protected, control-plane Things seeded from
+  `AI_WORKFLOW_BASE_MODELS`): `GET /api/v1/ai/models`, admin toggle/seed at
+  `POST /api/v1/admin/ai/models`, stored chat defaults at
+  `GET|POST /api/v1/settings/lopu-chat-defaults`.
+- **Verified provider keys** (2026-09-04): `GET /api/v1/ai/models` probes each
+  configured key once per process (`GET /v1/models`, 5 s cap, no retries,
+  cached 10 min / 2 min after a failure — `api/utils/ai/providerProbe.ts`)
+  and reports `providers.<p>.{configured, verified, checkedAt, reason?}` +
+  `models[].verified`; a rejected key (401/403) hides its models instead of
+  routing chats into the canned fallback, an unreachable provider leaves them
+  offered. `POST /api/v1/admin/ai/models { probe: true }` forces a re-check
+  (Admin → Lopu models → Provider keys → "Re-check keys"). README documents
+  the probe beside the key env vars; feature versions `ai-models` 1.2.0,
+  `admin-ai-models` 1.1.0, `settings-lopu-chat-defaults` 1.1.0.
+- **Lopu conversations in Messenger** (`externalSource.access === 'lopu'`
+  discriminator, one owner member): `GET|POST /api/v1/lopu/chats`,
+  `/update`, `/delete`, and the NDJSON turn `POST /api/v1/lopu/chats/reply`
+  (fail-closed `lopu.chat` 40/10 min); list entries carry the chat's own
+  `lopu` model settings.
+- **Provider loop** (`api/utils/lopu/chat.ts`): Claude tool loop with
+  cache-controlled system prompt + eager input streaming, OpenAI native
+  tools or the fenced `tt-tool` text protocol (`LOPU_OPENAI_TOOLS=text`) for
+  endpoints without function calling, a plain-completion rung for endpoints
+  that refuse `stream: true` (replayed as chunks; envelopes and bare
+  tool-call JSON normalised), a deterministic scripted provider
+  (`LOPU_CHAT_PROVIDER=test`), and honest canned fallbacks; 20 viewer-scoped
+  tools; isomorphic patch-op grammar (`pageOps.ts`) + tolerant partial JSON.
+- **Client**: `/lopu` page, floating launcher + draggable/dockable window
+  (mobile bottom sheet), Messenger pane, Drawer entry with a streaming badge,
+  Settings/admin surfaces; live builder patches paint block by block while
+  the reply streams (`lopuBuildBridge.ts`), with Undo.
+- Env: `LOPU_CHAT_PROVIDER`, `LOPU_OPENAI_TOOLS`, `LOPU_CLAUDE_MODEL`,
+  `LOPU_OPENAI_MODEL` (README "Lopu AI assistant"). Live verification:
+  `node scripts/verify-lopu.mjs <base>` (99 checks).
+
+### 2026-09-03 — Lopu voice, Live Activities + personal Secure Vault — Codex (AI)
+
+- Added continuous Lopu voice chat on web and iOS with persistent in-session
+  settings, optional text-only replies, provider-per-chat selection, and a
+  feedback-loop guard that pauses listening while Lopu answers.
+- Added Transcribe mode: every final utterance becomes a timestamped, numbered,
+  owner-private Thing page and streams back into chat as a linked quote.
+- Added iOS background audio and a Live Activity / Dynamic Island surface for
+  listening, thinking, transcribing, and speaking while the device is locked.
+- Added a user-facing AES-256-GCM Secure Vault for environment-grouped
+  password/key-value records and write-only BYO provider tokens, with built-in
+  OpenAI/Codex, Anthropic/Claude, Gemini, Grok, and OpenRouter templates plus a
+  server-allowlisted compatible endpoint path.
+- 2026-09-03: Keep `/api/v1/capabilities` aligned with the protected admin preview dispatcher by publishing `api.admin-ci-previews` 2.0.0 from the canonical endpoint contract.
+- Follow-ups (reconciled into the wave-2 assistant above — see the
+  2026-09-04 "direct voice + reconciled provider models" entry): provider
+  templates gained per-kind model catalogs with reasoning / speed options
+  and Mistral, DeepSeek, Groq and Cohere kinds; ordinary `/lopu` text
+  conversations use the same owner-scoped Secure Vault connections; and a
+  direct provider-audio mode streams PCM microphone and response audio to
+  xAI Grok Voice on a server-minted five-minute ephemeral credential, on the
+  web and on iOS (background audio session + Live Activity).
 
 ### 2026-09-03 — Multi-environment PR preview links — Codex (AI)
 
@@ -304,6 +485,25 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - **Deployment note**: after deploying, run the two migrations from
   `/migrations` (dry run, then confirm) to move existing rows and reclaim the
   index files; boot alone only frees the retired indexes.
+
+### 2026-09-02 — App suites: Pokeworld + StarsAlign on Thingtime — Claude (AI)
+
+- Grouped summary; details in `PRs/578-builder-demo-library-app-suites-pokeworld-starsalign.md`.
+- **Apps are installable suites**: multi-page behaviour suites with `app`
+  metadata (`remix/app/schemas/appSuites/`), seeded as public system copies,
+  installed idempotently by `POST /api/v1/webpages/suites/install`; pages
+  resolve by key (`/p/pokeworld`, `/p/starsalign`) with the viewer's twin ahead
+  of the seed. Seeding also writes 418 school entries + 386 species as public
+  data things.
+- **Page runtime**: source-bound component blocks, form-field gathering on
+  ttAction clicks, `last`/`viewer`/`query` template scope, `ttEach`/`ttIf`
+  ops/`ttFormat`, uncontrolled form fields, `$refresh`/`$install`.
+- **Action grammar v2**: `compute`, `things.delete`, `each`, `fail`, `when`,
+  `{ ttExpr }` expressions + `astro.*`/`pokeworld.*` packs, filtered/public
+  `things.search`, `$viewer`; caps raised (40 steps, depth 16, 100 ops,
+  templates 2000 nodes / 48KB / depth 48, `actions.run` 240/min).
+- Local dev: `scripts/verify-app-suites.mjs` (52 live checks). The shared local
+  Mongo can sit at the 64-index cap; run e2e against a private replica set.
 
 ### 2026-09-01 — Builder round 8: saved-media lifecycle + 17-finding review batch — Claude (AI)
 

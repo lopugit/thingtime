@@ -12,7 +12,9 @@ import { emitMessengerRefresh, mergeEmojiMap, pushCustomRecent, readEmojiMap, re
 import { getUserDisplayName } from '~/utils/userIdentity';
 import {
   chatDisplayName,
+	externalSourceAvatar,
 	isLiveAiSource,
+	isLopuAiSource,
   memberDisplayName,
   type ChatMember,
   type ChatMessage,
@@ -414,7 +416,7 @@ export const ChatView = (props: ChatViewProps) => {
             {title}
             {chatSummary.externalSource ? (
               <Box as="span" fontSize="10px" fontWeight={600} color="var(--tt-muted, #777782)" marginLeft={2}>
-                {chatSummary.externalSource.provider === 'chatgpt' ? '◎' : '✦'} {chatSummary.externalSource.label}
+                {externalSourceAvatar(chatSummary.externalSource).glyph} {chatSummary.externalSource.label}
               </Box>
             ) : null}
           </Box>
@@ -482,9 +484,11 @@ export const ChatView = (props: ChatViewProps) => {
           borderBottom="1px solid var(--tt-border-light, #f3f3f5)"
           whiteSpace="normal"
         >
-					{liveSource
-						? `Live with ${liveSource.label} on your computer. Messages here are sent to that desktop session; completed responses sync back to Thingtime.`
-						: `Imported read-only from ${chatSummary.externalSource.label}. Reactions, threads and replies stay in Thingtime.`}
+					{isLopuAiSource(chatSummary.externalSource)
+						? 'A conversation with Lopu, the Thingtime assistant 🦄'
+						: liveSource
+							? `Live with ${liveSource.label} on your computer. Messages here are sent to that desktop session; completed responses sync back to Thingtime.`
+							: `Imported read-only from ${chatSummary.externalSource.label}. Reactions, threads and replies stay in Thingtime.`}
         </Box>
       ) : null}
 
@@ -531,11 +535,13 @@ export const ChatView = (props: ChatViewProps) => {
 					) : null}
           <Composer
 						placeholder={
-							liveSource
-								? `Message ${liveSource.label} on your computer`
-								: chatSummary.externalSource
-								? `Reply in Thingtime about ${title}`
-								: `Message ${title}`
+							isLopuAiSource(chatSummary.externalSource)
+								? 'Ask Lopu anything 🦄'
+								: liveSource
+									? `Message ${liveSource.label} on your computer`
+									: chatSummary.externalSource
+										? `Reply in Thingtime about ${title}`
+										: `Message ${title}`
 						}
             pickerEmojis={pickerEmojis}
             replyTo={replyTo}

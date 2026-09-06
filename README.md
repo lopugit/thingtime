@@ -66,6 +66,55 @@ Thingtime desktop profiles, then import projects, chats, and visible messages
 through the authenticated Messenger API. See [`MCP/README.md`](MCP/README.md)
 for both workflows and their privacy boundaries.
 
+## Lopu voice + personal Secure Vault
+
+Signed-in people can open `/lopu/voice` (the Lopu page's Voice mode, also the
+mic in the floating window) for a continuous voice conversation — every final
+utterance is a normal Lopu chat turn, tools included — or use **Transcribe
+mode** to save each final utterance as its own timestamped, numbered,
+owner-private Thing page instead. The session gear remains available before,
+during, and after listening; **Spoken replies** (off by default) reads Lopu's
+replies aloud. **Direct voice** (off by default) streams the microphone
+straight to the chat's own Secure Vault provider when its kind offers realtime
+speech — xAI Grok Voice today, as 24 kHz PCM over the provider's realtime
+WebSocket on a five-minute ephemeral credential minted by
+`POST /api/v1/lopu/voice/session`; the long-lived provider token stays
+server-side, the gear explains in one line when a provider cannot do it, and
+the standard device-transcription path runs instead. The iOS app adds native
+speech recognition, the same direct provider-audio streaming, background
+audio, and a local Live Activity so an active conversation can continue while
+the phone is locked.
+
+Each account has a personal Secure Vault in **Settings → Secure Vault** for
+password/key-value records and Lopu provider connections. Values are
+write-only in the browser and AES-256-GCM encrypted at rest with record- and
+owner-bound authenticated data. Configure a 32-byte base64url key as
+`THINGTIME_USER_VAULT_KEY`; when omitted, Thingtime derives a purpose-separated
+user-vault key from `THINGTIME_ADMIN_VAULT_KEY` so an existing deployment can
+reuse its vault root without sharing the admin vault's ciphertext domain. For a
+new fork, generate the secret outside the repository and put it only in the
+runtime secret store:
+
+```sh
+openssl rand -base64 32 | tr '+/' '-_' | tr -d '='
+```
+
+Built-in connection templates cover OpenAI/Codex, Anthropic/Claude, Google
+Gemini, xAI/Grok, OpenRouter, Mistral, DeepSeek, Groq, and Cohere, each with
+its catalog of models (reasoning tiers, fast/priority modes, and which models
+speak the realtime direct-voice transport). A connection's model is optional:
+pick one from the kind's catalog or type a custom id, or leave it blank to run
+on the kind's first catalog model; a custom OpenAI-compatible host must name
+its model. Reasoning effort and speed are chosen per Lopu chat in the ordinary
+`/lopu` composer and travel to the provider's own request fields. Store
+provider tokens only through the write-only Secure Vault form — never in
+source or a public environment file. Custom OpenAI-compatible endpoint
+hostnames must be public HTTPS destinations and must also appear in the
+comma-separated `THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS` runtime setting;
+built-in provider hosts are already allowed. DNS is checked again immediately
+before each server-side provider request, redirects are rejected, and
+credentials never reach the browser after storage.
+
 ## Conflict-free Graphify snapshots
 
 Thingtime does not ask every branch to modify the same generated Graphify JSON
@@ -1101,6 +1150,72 @@ The JWKS endpoint supports offline signature, issuer, and expiry verification.
 It does not tell external platforms whether the backing Mongo session has been
 revoked; add a server-side introspection endpoint before relying on live
 revocation checks outside Thingtime.
+
+### Lopu AI assistant (chat, tools, live builder patches)
+
+Lopu (`/lopu` with a route-driven Chat | Voice mode switch — `/lopu`,
+`/lopu/:chatId`, `/lopu/voice` — the navbar 🦄 beside ⌘K and the draggable
+floating window it toggles, the 🦄 launcher bubble, and Lopu conversations in
+Messenger) streams replies over NDJSON from `POST /api/v1/lopu/chats/reply`
+and runs tools as the signed-in viewer (pages, sections, components, actions,
+schemas, data). Models come from the `ai-model` catalog (`GET /api/v1/ai/models`,
+seeded from `AI_WORKFLOW_BASE_MODELS`; admins toggle rows at `/admin` → Lopu
+models and set the chat defaults at `/api/v1/settings/lopu-chat-defaults`).
+A signed-in viewer can also run a chat on one of their own Secure Vault AI
+connections: the catalog response lists them as redacted `vaultProviders`
+(never a token, never an endpoint beyond its hostname), the composer's picker
+shows them under "Your providers" with the reason when one is unusable, and a
+chat pins the choice as `providerId` (`POST /api/v1/lopu/chats`, `/update`,
+`/reply`); the turn then dials the user's provider through the same SSRF
+fence voice uses (`api/utils/lopu/vaultProviderClient.ts`) and the server keys
+are never a fallback for it. See "Lopu voice + personal Secure Vault" above
+for the vault key and allowlist. Design note:
+`PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md` (§1.3 own
+providers, §6 voice + vault).
+
+```sh
+# at least one provider key makes Lopu think; with neither she answers with an
+# honest canned line instead of failing
+ANTHROPIC_API_KEY="<anthropic-api-key>"          # or ANTHROPIC_AUTH_TOKEN
+OPENAI_API_KEY="<openai-api-key>"
+OPENAI_BASE_URL="https://api.openai.com/v1"      # optional: any OpenAI-compatible endpoint
+
+LOPU_CHAT_PROVIDER="auto"        # auto | claude | openai | test (deterministic scripted provider, no keys)
+LOPU_OPENAI_TOOLS="native"       # native | text — `text` speaks a fenced ```tt-tool protocol for
+                                 # OpenAI-compatible endpoints without function calling; endpoints
+                                 # that refuse `stream: true` fall back to a plain completion automatically
+LOPU_CLAUDE_MODEL="claude-opus-5"   # optional: the Anthropic model used for the `default` waterfall slot
+LOPU_OPENAI_MODEL="gpt-5.6-sol"     # optional: the OpenAI model used for the `default` waterfall slot
+LOPU_TEST_PROVIDER_PACE_MS="12"     # optional: ms between scripted chunks in test mode
+# local development only (ignored in production and on Vercel): reach a fake
+# OpenAI-compatible endpoint saved in a Secure Vault connection under a public
+# HTTPS origin — the rewritten origin skips the allowlist/DNS checks
+THINGTIME_LOPU_PROVIDER_DEV_REWRITES="https://lopu-fake-provider.invalid=http://127.0.0.1:18170"
+```
+
+Keys are verified, not merely detected. On the first catalog read per process
+(`GET /api/v1/ai/models`) the server probes each configured provider once —
+`GET https://api.anthropic.com/v1/models` (`ANTHROPIC_BASE_URL` honoured;
+`x-api-key`, or `Authorization: Bearer` for `ANTHROPIC_AUTH_TOKEN`) and
+`GET ${OPENAI_BASE_URL:-https://api.openai.com/v1}/models` — with a 5 s cap, no
+retries and no redirects, and caches the verdict in-process for 10 minutes
+(2 minutes after anything but a success). A 401/403 marks that provider's
+models unavailable (`providers.<p>.verified === false`, picker hint
+"<Provider> key invalid") so a stale or wrong key never routes chats into the
+canned fallback; a timeout, network error or unexpected status leaves them
+offered but unverified (`verified: null`). Admins see the verdict per provider
+at `/admin` → Lopu models → Provider keys and can force a re-check with
+"Re-check keys" (`POST /api/v1/admin/ai/models { probe: true }`). Only
+presence and verdicts leave the server — never a value, a response body, or a
+base URL.
+
+Live check against a running stack: `node remix/scripts/verify-lopu.mjs
+http://127.0.0.1:<nitro-port>` (start the stack with `LOPU_CHAT_PROVIDER=test`
+so the reply builds a component and a page deterministically; set
+`TT_VERIFY_ADMIN_USERNAME`/`TT_VERIFY_ADMIN_PASSWORD` to cover the admin
+routes, and `THINGTIME_USER_VAULT_KEY` + the dev rewrite above on the server
+to exercise a BYO-provider turn end to end — otherwise that one check is
+skipped and the unconfigured-vault path is asserted instead).
 
 ### Password reset + email 2FA
 

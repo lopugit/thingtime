@@ -181,6 +181,12 @@ export const router = createBrowserRouter([
       { path: 'explore', element: <Explore /> },
       { path: 'feed', element: <Feed /> },
       { path: 'messages', lazy: lazyRoute(() => import('./routes/messages')), loader: requireUser('/login') },
+      // Lopu 🦄 — the AI assistant page; no loader guard: it renders its own
+      // signed-out quiet state, like /apps. /lopu/:chatId deep-links a
+      // conversation (the floating window shares the same store).
+      { path: 'lopu', lazy: lazyRoute(() => import('./routes/lopu')) },
+      { path: 'lopu/voice', lazy: lazyRoute(() => import('./routes/lopu-voice')), loader: requireUser('/login') },
+      { path: 'lopu/:chatId', lazy: lazyRoute(() => import('./routes/lopu')) },
       { path: 'login', element: <Login />, loader: requireGuest('/profile') },
       // admin database-migrations console (Dev drawer → Migrations) — moved
       // out of /docs/schemas into its own page
