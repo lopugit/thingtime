@@ -203,6 +203,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   has no fonts installed, so the renderer previously drew every card's artwork
   and not one glyph; CI and dev machines have system fonts and looked fine. —
   Lopu (AI)
+- Details in the PR note
+  (`PRs/607-codex-rich-link-previews--rich-route-aware-thingtime-link-previews.md`).
 
 ### 2026-09-02 — Lopu toast position setting + `/notifications` history page — Claude (AI)
 
