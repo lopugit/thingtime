@@ -331,13 +331,13 @@ const QuietState = () => (
 					Meet Lopu
 				</Text>
 				<Text fontSize={LOPU_UI.fontBody} color={LOPU_UI.muted}>
-					Thingtime&apos;s assistant — she builds things for you, as you.
+					Thingtime&apos;s assistant — it builds things for you, as you.
 				</Text>
 			</Box>
 		</Flex>
 		<Flex direction="column" gap={2} fontSize={LOPU_UI.fontBody} color="var(--tt-text, #33333c)" lineHeight="1.6">
 			{[
-				'Builds webpages and sections in the builder — live, block by block, while she is still typing.',
+				'Builds webpages and sections in the builder — live, block by block, while it is still typing.',
 				'Makes reusable components and declarative actions, then runs them for you.',
 				'Searches and explains your things, schemas and data.',
 				'Talks: a voice mode with spoken replies, and a transcribe mode that keeps private notes.',
