@@ -18,6 +18,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-06: Let rich-text style controls initialize in embedded browsers that
+  omit `crypto.randomUUID`; use independent local registry IDs as a fallback.
+
 - 2026-09-06: Combined Lopu, Builder and rich-text release validation is recorded
   in [PR #668 notes](../PRs/668-codex-lopu-builder-main-release-integrate-assistant-builder-rich-text.md).
 

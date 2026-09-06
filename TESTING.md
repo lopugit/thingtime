@@ -1,5 +1,9 @@
 # TESTING.md — per-area manual test checklists
 
+- Rich-text editors initialize when a browser omits `crypto.randomUUID`.
+  Multiple mounted editors of the same saved block keep independent tune IDs;
+  plain registry identifiers are never treated as credentials.
+
 - At 390px and desktop widths, the Lopu message input stays inside its composer
   card after typing and resizing. Measure the textarea and card bounds, not
   just document width (a clipped ancestor can hide overflow). Open/close chat

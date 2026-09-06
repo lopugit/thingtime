@@ -73,7 +73,7 @@ function TightBuilderCheck() {
 	return (
 		<section
 			data-testid="tight-builder-check"
-			style={{ margin: '80px 0', border: '1px solid #ddd', padding: 16, width: narrow ? 240 : '100%', maxWidth: '100%' }}
+			style={{ margin: '80px 0', border: '1px solid #ddd', padding: 16, width: narrow ? 240 : '100%', maxWidth: '100%', boxSizing: 'border-box' }}
 		>
 			<h2>Tight builder spaces</h2>
 			<button onClick={() => setNarrow(!narrow)}>Resize builder container</button>

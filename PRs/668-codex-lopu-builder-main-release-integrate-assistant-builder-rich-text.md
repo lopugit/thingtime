@@ -39,6 +39,14 @@ Latest rich-text source receipt records desktop, 390px and 320px history overlay
 selection and nested dialog checks; integrated editor tests pass. Physical iOS
 native editing-menu behavior remains device acceptance.
 
+The integrated fixture additionally found missing `crypto.randomUUID` support
+and field padding overflow. Style tune registry identities now have an isolated
+non-security fallback and editor borders/padding use border-box sizing. All 88
+editor tests pass, including the no-crypto initialization regression. Chrome at
+1280px, 390px and 320px initializes 16 editable fields, opens/closes the Changes
+dialog and passes selection/undo checks without page errors or horizontal
+overflow. Typecheck remains at the 108-error baseline.
+
 Local development: http://localhost:17890, HMR 17891, Nitro 17892. The one
 worktree PM2 entry has autorestart disabled. Tailscale/Funnel is unavailable:
 the installed shim references a missing Tailscale.app binary. No mapping changed.
