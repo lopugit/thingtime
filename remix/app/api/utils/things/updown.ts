@@ -4,7 +4,7 @@ import { getThingsCollection } from '../mongodb/collections';
 import { thingUniqueKey, thingUniqueKeyFilter } from '../mongodb/uniqueKeys';
 import { ACL_INHERIT, COLLECTION_SCHEMA_VERSIONS, UPDOWN_THINGTIME } from '~/schemas/registry';
 import { assertSubspaceInteraction, UPDOWN_KEY_FIELD } from '../subspaces/gate';
-import { emptyUpdownVotes, parseUpdownDirection, tallyUpdown, updownKeyOf, type PublicUpdownVotes, type UpdownDirection, type UpdownEntry } from './updownCore';
+import { emptyUpdownVotes, parseUpdownDirection, updownKeyOf, type PublicUpdownVotes, type UpdownDirection } from './updownCore';
 import { asViewer, fail, findViewableThing, isPostThing, patSandboxOf, tokenAclEntryFor, tokenAclOf, type Fail, type ThingDoc, type Viewer } from './things';
 
 // Up/down voting (see updownSchema in schemas/registry.ts): Reddit-style
@@ -23,17 +23,6 @@ export type CastUpdownResult = Fail | { ok: true; votes: PublicUpdownVotes; dire
 const isDuplicateKey = (err: unknown): boolean => (err as { code?: number } | null)?.code === 11000;
 
 const isVotable = (target: ThingDoc): boolean => isPostThing(target) || (Array.isArray(target.thingtime) && target.thingtime.includes('comment'));
-
-// Fresh authoritative tally for one target — one projected query.
-export const updownVotesOf = async (targetShareId: string, viewerId: string | null): Promise<PublicUpdownVotes> => {
-	const things = await getThingsCollection();
-	const docs = (await things
-		.find({ targetId: targetShareId, thingtime: UPDOWN_THINGTIME } as any)
-		.project({ ownerId: 1, 'crystal.direction': 1 })
-		.toArray()) as any[];
-	const entries: UpdownEntry[] = docs.map((doc) => ({ userId: String(doc.ownerId), direction: doc.crystal?.direction }));
-	return tallyUpdown(entries, viewerId);
-};
 
 // Batched tally for a page/window of targets — ONE $group over the updown
 // kind (never N+1), used by the subspace feed ranking.
@@ -70,6 +59,13 @@ export const updownTalliesFor = async (targetIds: readonly string[], viewerId: s
 	}
 	return tallies;
 };
+
+// Fresh authoritative tally for ONE target, through the same $group as the
+// batched path. A popular post's vote rows are unbounded, so the tally must
+// never be computed by loading every row into the process: one vote on a
+// 100k-vote post would read 100k docs to answer with four numbers.
+export const updownVotesOf = async (targetShareId: string, viewerId: string | null): Promise<PublicUpdownVotes> =>
+	(await updownTalliesFor([targetShareId], viewerId)).get(targetShareId) || emptyUpdownVotes();
 
 export const castUpdown = async (viewerInput: string | Viewer, shareId: unknown, directionRaw: unknown): Promise<CastUpdownResult> => {
 	const viewer = asViewer(viewerInput);

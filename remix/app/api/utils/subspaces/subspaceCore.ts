@@ -212,6 +212,15 @@ export const sanitizeBranding = (value: unknown, previous: SubspaceBranding | nu
 export const flairById = (flairs: readonly SubspaceFlair[] | null | undefined, id: string | null | undefined): SubspaceFlair | null =>
 	id ? (flairs || []).find((flair) => flair.id === id) || null : null;
 
+// A moderator's removal or comment lock is not the author's to undo. Changing
+// a post's subspace drops the whole server-owned `subspaceMod` stamp with it
+// (the state belongs to the subspace it was earned in), so without this guard
+// an author could launder a removed or locked post clean by PATCHing it out of
+// the subspace and straight back in. Pins/nsfw/spoiler are cosmetic and don't
+// hold the post in place.
+export const subspaceModHoldsPost = (subspaceMod: { status?: unknown; locked?: unknown } | null | undefined): boolean =>
+	subspaceMod?.status === 'removed' || subspaceMod?.locked === true;
+
 // ---------------------------------------------------------------------------
 // Removal reasons — the canned reasons a moderator picks when removing a post
 // (Reddit's "removal reasons"). They live on the subspace crystal as

@@ -27,6 +27,7 @@ import {
 	sanitizeBranding,
 	sanitizeFlairs,
 	sanitizeListSort,
+	subspaceModHoldsPost,
 	sanitizeRemovalReasons,
 	sanitizeReportNote,
 	sanitizeReportReason,
@@ -565,4 +566,19 @@ test('sliceRankedPage pages a ranked id list by offset and reports the next offs
 	assert.deepEqual(sliceRankedPage(ids, 'nope', 3), { ids: ['a', 'b', 'c'], nextCursor: '3' });
 	assert.deepEqual(sliceRankedPage(ids, '-4', 3), { ids: ['a', 'b', 'c'], nextCursor: '3' });
 	assert.deepEqual(sliceRankedPage([], '0', 3), { ids: [], nextCursor: null });
+});
+
+// Changing a post's subspace drops its whole subspaceMod stamp, so the write
+// path has to refuse the move while a moderator action is live — otherwise an
+// author launders a removed/locked post clean by PATCHing it out and back in.
+test('subspaceModHoldsPost pins a post only while a removal or lock is live', () => {
+	assert.equal(subspaceModHoldsPost({ status: 'removed' }), true);
+	assert.equal(subspaceModHoldsPost({ locked: true }), true);
+	assert.equal(subspaceModHoldsPost({ status: 'removed', locked: false }), true);
+	// cosmetic-only state never holds the post in place
+	assert.equal(subspaceModHoldsPost({ status: 'approved', pinned: true, nsfw: true, spoiler: true } as any), false);
+	assert.equal(subspaceModHoldsPost({ locked: false }), false);
+	assert.equal(subspaceModHoldsPost({}), false);
+	assert.equal(subspaceModHoldsPost(null), false);
+	assert.equal(subspaceModHoldsPost(undefined), false);
 });

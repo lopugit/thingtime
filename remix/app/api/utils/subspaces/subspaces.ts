@@ -64,9 +64,11 @@ import {
 	flairsOf,
 	isActiveMember,
 	loadViewerSubspaceRoles,
+	membershipFor,
 	membershipOf,
 	membershipOfDoc,
 	resolveRootPost,
+	truncatedThreadFail,
 	SUBSPACE_MEMBER_KEY_FIELD,
 	SUBSPACE_REPORT_KEY_FIELD,
 	SUBSPACE_SLUG_KEY_FIELD,
@@ -1873,13 +1875,17 @@ export const reportPost = async (viewerInput: string | Viewer, input: ReportPost
 	const target = (await things.findOne({ shareId: input.id.trim(), $or: [{ thingtime: 'post' }, { thingtime: 'comment' }, { kind: 'post' }] } as any)) as any as ThingDoc | null;
 	// never disclose what the viewer can't see: unknown and invisible read alike
 	if (!target || !(await canViewInherited(target, viewer))) return fail(404, 'Post not found');
-	const root = await resolveRootPost(target);
+	const { root, truncated } = await resolveRootPost(target);
+	// an unresolved chain is not "outside every subspace" — refuse rather than
+	// mis-file (or drop) the report
+	if (truncated) return truncatedThreadFail();
 	const subspaceId = subspaceIdOfDoc(root);
 	if (!root || !subspaceId) return fail(400, 'Only posts in a subspace can be reported to its moderators 🚩');
 	const subspace = await findSubspaceById(subspaceId);
 	if (!subspace) return fail(404, 'Subspace not found');
 	const slug = String(subspace.crystal?.slug || subspaceId);
-	const membership = viewer.subspaceRoles?.get(subspaceId) || (await membershipOf(subspaceId, viewer.id));
+	// authoritative row on a snapshot miss — the dropped row could be the ban
+	const membership = await membershipFor(subspaceId, viewer.id, viewer.subspaceRoles);
 	if (membership?.banned) return fail(403, `You are banned from s/${slug} 🚫`);
 	// a post the moderators have already taken down is not reportable: the
 	// mods can't act on it again (only Dismiss would be left in the queue) and
@@ -2130,7 +2136,10 @@ export const subspaceFeed = async (viewerInput: string | Viewer, query: Subspace
 	if (found.ok === false) return found;
 	const { subspace } = found;
 	const id = String(subspace.shareId);
-	const membership = viewer?.subspaceRoles ? viewer.subspaceRoles.get(id) || null : await membershipOf(id, viewer?.id);
+	// authoritative row on a snapshot miss: a member whose row fell outside the
+	// bounded roles snapshot must not be told their own private subspace is
+	// members-only, and a moderator must not silently lose includeRemoved
+	const membership = await membershipFor(id, viewer?.id, viewer?.subspaceRoles);
 	const moderator = canModerate(membership);
 	if (accessOf(subspace) === 'private' && !moderator && !isActiveMember(membership)) {
 		return fail(403, `s/${String(subspace.crystal?.slug || id)} is private — members only 🔒`);

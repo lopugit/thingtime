@@ -85,6 +85,7 @@ import {
 	resolveRootPost,
 	subspaceFeedClauses,
 	subspaceIdOfDoc,
+	subspaceModHoldsPost,
 	type AuthorFlairs,
 	type SubspaceEmbed,
 	type ViewerSubspaceRoles
@@ -3831,7 +3832,7 @@ export const addComment = async (
   // interaction gate already walked to the root — reuse its answer; only a
   // comment reconciled after an unknown transaction outcome (no gate result
   // on that path) walks again.
-  const rootSubspaceId = created.rootSubspaceId !== undefined ? created.rootSubspaceId : subspaceIdOfDoc(await resolveRootPost(target));
+  const rootSubspaceId = created.rootSubspaceId !== undefined ? created.rootSubspaceId : subspaceIdOfDoc((await resolveRootPost(target)).root);
   const [profiles, authorFlair] = await Promise.all([resolveProfiles([viewerId]), freshCommentAuthorFlair(viewer, rootSubspaceId)]);
   const comment: PublicComment = {
     id: doc.shareId,
@@ -4268,7 +4269,8 @@ const clearSubspaceReportsFor = async (root: ThingDoc, deletedCommentIds: Readon
 	const kinds = thingtimeOf(root);
 	if (kinds.includes('comment')) {
 		const commentIds = [...new Set([root.shareId, ...deletedCommentIds])].filter(Boolean);
-		const post = await resolveRootPost(root);
+		// an unresolved chain leaves any rows alone (nothing to file them under)
+		const { root: post } = await resolveRootPost(root);
 		const subspaceId = subspaceIdOfDoc(post);
 		if (!post?.shareId || !subspaceId || !commentIds.length) return;
 		await things.deleteMany({ thingtime: 'subspace-report', targetId: subspaceId, 'crystal.postId': post.shareId, 'crystal.commentId': { $in: commentIds } } as any);
@@ -4554,6 +4556,13 @@ export const updateThing = async (
   const prevSubspaceId = thingtime.includes('post') ? subspaceIdOfDoc(doc) : null;
   const nextSubspaceId = thingtime.includes('post') ? subspaceIdOfDoc({ crystal: validated.crystal }) : null;
   const subspaceChanged = prevSubspaceId !== nextSubspaceId;
+  // ...but a live moderator action holds the post where it is: the drop below
+  // is what makes the state subspace-local, so without this an author could
+  // PATCH a removed/locked post out of its subspace and back in to land it
+  // clean. Every other edit of the post still goes through.
+  if (subspaceChanged && prevSubspaceId && subspaceModHoldsPost(doc.subspaceMod)) {
+    return fail(403, 'Moderators have actioned this post — it can’t be moved out of its subspace 🔒');
+  }
   const prevFlairId = typeof crystalOf(doc).flairId === 'string' ? (crystalOf(doc).flairId as string) : null;
   const nextFlairId = typeof validated.crystal.flairId === 'string' ? (validated.crystal.flairId as string) : null;
   let nextSubspacePrivate: boolean | null = null; // null = leave the stamp as is
