@@ -14,9 +14,13 @@ test('capabilities advertise every documented semantic contract', () => {
 });
 
 test('both capability manifests advertise the bounded upload v2 contract', () => {
-	assert.equal(createApiCapabilitiesManifest().features['api.network-probe-upload'], '2.0.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.network-probe-upload'], '2.1.0');
 	const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-	assert.equal(manifest.features['api.network-probe-upload'].version, '2.0.0');
+	assert.equal(manifest.features['api.network-probe-upload'].version, '2.1.0');
+	for (const feature of ['api.network-probe-ping', 'api.network-probe-download', 'api.tiers', 'api.admin-tiers', 'api.admin-subscriptions']) {
+		assert.equal(manifest.features[feature].version, '1.1.0');
+		assert.equal(createApiCapabilitiesManifest().features[feature], '1.1.0');
+	}
 	assert.ok(manifest.operations.some((operation) => operation.feature === 'api.network-probe-upload' && operation.path === '/api/v1/network-probe/upload' && operation.methods.includes('POST')));
 });
 

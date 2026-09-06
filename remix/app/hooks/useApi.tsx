@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 
 import { buildActionRunBody } from '~/components/Actions/actionRunRequest';
 import { flushAttachmentDraftCleanups } from '~/components/Attachments/attachmentDraftCleanup';
@@ -73,6 +74,10 @@ export function useApi() {
   const asyncFetcher = useAsyncFetcher();
 
   const v1 = {
+    tiers: useCallback(async (options?: { signal?: AbortSignal }) => {
+      await requireThingtimeCapability('api.tiers', '1.1.0');
+      return getJson('/api/v1/tiers', options);
+    }, []),
     login: useCallback(
       async (args) => {
         const { username, password, challenge, code } = args;
