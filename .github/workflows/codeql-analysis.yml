@@ -370,6 +370,18 @@ jobs:
           # ordering while a wedged one cannot strand this runner.
           deadline=$(( SECONDS + 20 * 60 ))
 
+          # A sibling that finished successfully has either already uploaded --
+          # and is merely waiting on Advanced Security to process the SARIF --
+          # or is never going to, because its own ownership guard declined the
+          # upload. Those are indistinguishable from here, so keep waiting but
+          # only for as long as processing plausibly takes. The lag measured on
+          # live heads was 4s (#663), 5s (#592) and 21s (#291), so three
+          # minutes stays far clear of a real upload while capping the
+          # push-adopted-by-a-PR case, in which NEITHER leg uploads, at roughly
+          # three minutes of idling instead of the full twenty.
+          sibling_grace=$(( 3 * 60 ))
+          sibling_deadline=""
+
           while [ "$SECONDS" -lt "$deadline" ]; do
             # Preserve `gh`'s exit status rather than `|| true`: a rate-limited
             # lookup must retry, not be mistaken for "the sibling has landed".
@@ -408,6 +420,17 @@ jobs:
                 unusable)
                   echo "::warning::The $SLOWEST_LANGUAGE leg of this run ended without success; uploading $LANGUAGE now rather than waiting for a snapshot that is not coming."
                   exit 0
+                  ;;
+                done)
+                  # Start the grace window on the first sighting only, so a
+                  # sibling that completed before this leg even began polling
+                  # still gets a full processing allowance rather than none.
+                  if [ -z "$sibling_deadline" ]; then
+                    sibling_deadline=$(( SECONDS + sibling_grace ))
+                  elif [ "$SECONDS" -ge "$sibling_deadline" ]; then
+                    echo "::warning::The $SLOWEST_LANGUAGE leg succeeded but published no analysis for $ref@$sha within ${sibling_grace}s; it most likely declined the upload, so uploading $LANGUAGE now instead of idling out the ordering window."
+                    exit 0
+                  fi
                   ;;
               esac
             else
