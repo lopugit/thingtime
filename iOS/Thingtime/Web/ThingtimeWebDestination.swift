@@ -1,6 +1,11 @@
 import Foundation
 
 enum ThingtimeWebDestination {
+    struct StartupSelection: Equatable {
+        let selectedDestinationID: String
+        let lastConfiguredDestinationID: String
+    }
+
     struct Destination: Identifiable, Equatable {
         enum Source: Equatable {
             case production
@@ -136,6 +141,33 @@ enum ThingtimeWebDestination {
         }
 
         return destinations
+    }
+
+    static func startupSelection(
+        selectedDestinationID: String,
+        lastConfiguredDestinationID: String,
+        hasExplicitSelection: Bool,
+        destinations: [Destination]
+    ) -> StartupSelection {
+        let configured = destinations.first(where: { $0.source == .configured })
+        let fallback = configured ?? destinations.first ?? production
+        let selected = destinations.first(where: { $0.id == selectedDestinationID }) ?? fallback
+
+        guard let configured else {
+            return StartupSelection(
+                selectedDestinationID: selected.id,
+                lastConfiguredDestinationID: ""
+            )
+        }
+
+        let followsBuildConfiguration = !hasExplicitSelection
+            || selectedDestinationID == lastConfiguredDestinationID
+            || (lastConfiguredDestinationID.isEmpty && selectedDestinationID == production.id)
+
+        return StartupSelection(
+            selectedDestinationID: followsBuildConfiguration ? configured.id : selected.id,
+            lastConfiguredDestinationID: configured.id
+        )
     }
 
     static func url(from infoDictionary: [String: Any]?) -> URL? {

@@ -7,6 +7,7 @@ import { useLopu } from '~/components/Lopu/useLopu';
 
 import { AdminRowQueryControls, useAdminRowQuery } from './AdminRowQueryControls';
 import type { AdminRowField } from './adminRowQuery';
+import { LopuModelsEditor } from './LopuModelsEditor';
 import { PRConflictResolverModelWaterfallEditor } from './PRConflictResolverModelWaterfallEditor';
 
 // Admin-only control panel (rendered from SettingsPage when user.isAdmin).
@@ -373,6 +374,7 @@ const AdminManager = () => {
 export const AdminPanel = () => (
   <Flex flexDirection="column" rowGap={5}>
     <PRConflictResolverModelWaterfallEditor />
+    <LopuModelsEditor />
     <RateLimitEditor />
     <AdminManager />
   </Flex>

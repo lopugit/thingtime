@@ -1,28 +1,103 @@
 import React from 'react';
 import { Badge, Box, Button, Center, Flex, Heading, Spinner, Stack, Switch, Text } from '@chakra-ui/react';
 import { ArrowLeft, Copy, ExternalLink } from 'lucide-react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 
+import { ActionChip } from '~/components/Actions/ActionChip';
+import { useActionRunConfirm } from '~/components/Actions/ActionRunConfirm';
+import { ACTION_LIMIT_LABELS, actionEffectsOf, actionLimitsOf, displayRef, runInputDescriptorsOf, type ActionCrystal } from '~/components/Actions/actionInspect';
+import { LiveTemplate, useComponentArgValues, useThingSource, type ThingSourceBinding } from '~/components/Builder/liveComponent';
+import { useWebpageDraft } from '~/components/Builder/useWebpage';
+import type { WebpageBlock } from '~/components/Builder/webpageBlocks';
+import { WebpageBlocksRenderer } from '~/components/Builder/WebpageBlocksRenderer';
+import { WebpageRuntimeProvider } from '~/components/Builder/webpageRuntime';
 import { PostCard } from '~/components/Feed/PostCard';
 import { mergeReactionOverlay } from '~/components/Feed/reactionOverlay';
 import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
 import { useViewTracking } from '~/components/Feed/useViewTracking';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { RenderThing } from '~/components/Kinds';
 import { ThingView } from '~/components/Thingtime/ThingView';
 import {
 	SensitiveThingReveal,
 	type SensitiveThingRevealDescriptor
 } from '~/components/Things/SensitiveThingReveal';
+import { isSourceActionKey } from '~/components/ComponentsLibrary/componentBrowseTypes';
+import { SchemaTemplateRender } from '~/components/Things/ThingsViews';
+import { parseThingsReferrer, schemaIdOf, schemaRenderOf, thingDisplayName, thingLink, thingsCacheKey } from '~/components/Things/thingsCore';
+import type { ThingsCache, ThingsReferrer } from '~/components/Things/thingsCore';
 import { apiErrorMessage } from '~/hooks/apiFailure';
+import { pruneCacheNamespace, readLocalCache, readStampedCache, writeStampedCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import type * as InstallSuite from '~/components/Builder/installSuite';
+import type { BehaviourSuite } from '~/schemas/behaviourSuites';
 import { CARD_STYLES } from '~/theme/card';
 import { ThingAttachmentDetail } from '~/components/Things/ThingAttachmentDetail';
 import { attachmentFromThing, directAttachmentReferences } from '~/components/Things/thingAttachmentDetailCore';
+import { thingDetailSections } from '~/components/Things/thingDetailSectionsCore';
 
 const DIAGNOSTIC_ID_PATTERN = /^migration-diagnostic-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MUTED = 'var(--tt-muted, #9a9aa6)';
+const MONO = 'var(--tt-font-mono, ui-monospace, monospace)';
+
+// Where the back link goes: the surface that sent the viewer here
+// (?from=things|actions|feed — thingsCore.thingOpenHref stamps it), the feed
+// when nothing did. The param is narrowed by parseThingsReferrer, never used
+// as a raw index: a plain record lookup resolves inherited Object.prototype
+// keys, so `?from=toString` would answer with a function and leave the back
+// link label-less and pointing nowhere.
+const REFERRERS: Record<ThingsReferrer, { to: string; label: string }> = {
+	things: { to: '/things', label: 'Back to things' },
+	actions: { to: '/actions', label: 'Back to actions' },
+	feed: { to: '/feed', label: 'Back to feed' }
+};
+
+// The trust ladder for the live surfaces below (component + webpage):
+// - the viewer's OWN thing → live, no confirm (they composed it);
+// - a SEEDED platform thing → live for a signed-in viewer behind the confirm
+//   gate, run-or-install on an unowned action. System-owned is a NULL author
+//   (ownerId 'system' is never a real user, so the things projection resolves
+//   no profile) AND a reserved id prefix, the same two-part test
+//   componentBrowseTypes.componentTrustFor uses. The prefix alone is not
+//   enough: the executor mints `action-run-<uuid>` run records under the
+//   reserved `action-` prefix owned by the viewer who ran them, so the author
+//   check is what keeps a user's thing from ever reading as platform-curated.
+//   A part that looks like a suite part (`component-demo-<suite>-…`,
+//   `action-app-<suite>-…`) must also resolve through the suite catalog, a
+//   keyed page through its crystal (installSuite.suiteKeyOfPage);
+// - anyone else's thing → inert, with a visible label saying why.
+// Nothing in the thing's markup can widen this: the decision reads only the
+// id, the author and the catalog.
+const RESERVED_ID = /^(component|webpage|schema|action)-/;
+const SUITE_PART_ID = /^(component|webpage|schema|action)-(demo|app)-/;
+
+// `?source=<actionKey>` binds a component to a data source for this view.
+// The key is validated with the SAME `isSourceActionKey` the /components/:key
+// binding uses, which reads the registry's canonical ACTION_KEY_PATTERN /
+// MAX_ACTION_KEY_CHARS — a second, looser pattern here would confirm and then
+// run keys the executor always rejects.
+const MAX_CACHED_THING_CHARS = 256 * 1024;
+
+// One cache entry per viewed thing, so this namespace is bounded and stamped
+// through the shared localCache helpers (pruneCacheNamespace): past the cap
+// the oldest entries go, otherwise a long browsing session fills localStorage
+// and every OTHER tt-* optimistic cache starts losing its write silently,
+// because writeLocalCache swallows the quota error by design.
+const THING_CACHE_PREFIX = 'tt-thing-';
+const MAX_CACHED_THINGS = 40;
+
+// The suite catalog + installer are the whole demo/app library (behaviourSuites
+// pulls the 300-page demo catalog with it). This route ships in the eager
+// bundle (routes.tsx: permalinks), so both load on demand — and ONLY through
+// the registry module: importing it registers the app suites, so the lookups
+// see Pokeworld/StarsAlign parts, never just the demo suites. Until it lands a
+// reserved-prefix thing renders inert (fail closed), then flips live.
+type LiveKit = { suites: BehaviourSuite[]; install: typeof InstallSuite };
+const loadLiveKit = (): Promise<LiveKit> =>
+	Promise.all([import('~/schemas/appSuites/index'), import('~/components/Builder/installSuite')]).then(([registry, install]) => ({
+		suites: registry.ALL_SUITES,
+		install
+	}));
 
 type MigrationDiagnostic = {
 	id: string;
@@ -102,26 +177,101 @@ const readableDate = (value: string) => {
 	return Number.isFinite(date.getTime()) ? date.toLocaleString() : value;
 };
 
-// /thing/:id — canonical authenticated permalink for any persisted Thing.
-// Migration diagnostics use their stricter home-plane/current-admin reader;
-// every other id rides the normal ACL-aware Things API.
+const kindsOf = (thing: Record<string, any> | null): string[] => (Array.isArray(thing?.thingtime) ? thing!.thingtime.filter((kind: unknown) => typeof kind === 'string') : []);
+
+// A component thing, live: the ONE live-component path (liveComponent.tsx) —
+// useThingSource binds the optional data source, LiveTemplate resolves and,
+// only when `interactive`, arms the ttAction click wrapper. Every trust input
+// (interactive / confirm / onUnowned) is decided by the page, never here.
+const ComponentLive = ({
+	thing,
+	source,
+	interactive,
+	confirm,
+	onUnowned
+}: {
+	thing: Record<string, any>;
+	source: ThingSourceBinding | null;
+	interactive: boolean;
+	confirm: React.ComponentProps<typeof LiveTemplate>['confirm'];
+	onUnowned: React.ComponentProps<typeof LiveTemplate>['onUnowned'];
+}) => {
+	const crystal = (thing.crystal || {}) as Record<string, unknown>;
+	const { argValues } = useComponentArgValues(crystal, null);
+	const { scope } = useThingSource({ source, cacheId: thing.id, argValues, interactive });
+	const templateScope = React.useMemo(() => ({ ...argValues, ...scope }), [argValues, scope]);
+	if (!crystal.render) return <ThingView thing={crystal} />;
+	return (
+		<Box data-testid="thing-component-live" minW={0}>
+			<LiveTemplate render={crystal.render} scope={templateScope} interactive={interactive} confirm={confirm} onUnowned={onUnowned} />
+			{source && scope.state === 'not-installed' ? (
+				<Text color={MUTED} fontSize="xs" mt={2}>
+					No action you own matches <Box as="code" fontFamily={MONO}>{source.action}</Box> — install the suite it belongs to, or pick one of yours.
+				</Text>
+			) : null}
+			{source && scope.state === 'error' && scope.error ? (
+				<Text color="var(--tt-danger, #e5484d)" fontSize="xs" mt={2}>
+					Source failed: {scope.error}
+				</Text>
+			) : null}
+		</Box>
+	);
+};
+
+// Why the controls are off: a stranger's thing (ownership is the only thing
+// that arms it), or a platform thing whose programs aren't installable — a
+// reserved-prefix demo page/component that resolves to no suite.
+const InertLabel = ({ kind, author, platform }: { kind: string; author: string | null; platform: boolean }) => (
+	<Text color={MUTED} fontSize="xs" mt={3} data-testid="thing-inert-label">
+		🔒 Controls are off here —{' '}
+		{platform
+			? `this ${kind} is a Thingtime demo with no installable program behind it.`
+			: `this ${kind} belongs to ${author ? `@${author}` : 'someone else'}. Only your own things and Thingtime’s seeded demos run live;`}{' '}
+		open it in the builder to compose your own copy.
+	</Text>
+);
+
+// /thing/:id — the universal live page for any persisted Thing. Kinds with
+// a page of their own (post/action/webpage/schema) still open here from a
+// pasted id and link out prominently; components render live through the
+// shared live-component path, data draws through its schema's template,
+// everything keeps the raw JSON view. Migration diagnostics use their
+// stricter home-plane/current-admin reader; every other id rides the normal
+// ACL-aware Things API.
 export default function ThingPage() {
 	const { id = '' } = useParams();
+	const [searchParams] = useSearchParams();
 	const navigate = useNavigate();
-	const { v1 } = useApi();
+	const api = useApi();
+	const apiRef = React.useRef(api);
+	apiRef.current = api;
+	const { v1 } = api;
 	const currentUser = useCurrentUser();
 	const lopu = useLopu();
+	const lopuRef = React.useRef(lopu);
+	lopuRef.current = lopu;
 	const loadDiagnostic = v1.admin.migrationDiagnostic;
 	const loadThing = v1.things.get;
 	const { observeView } = useViewTracking();
 	const diagnosticRoute = DIAGNOSTIC_ID_PATTERN.test(id);
 	const requestKey = `${id}\u0000${currentUser?.id || 'anonymous'}\u0000${currentUser?.isAdmin ? 'admin' : 'user'}`;
-	const [loadState, setLoadState] = React.useState<ThingLoadState>({
-		key: '',
-		loading: true,
-		data: null,
-		error: null
-	});
+	const back = REFERRERS[parseThingsReferrer(searchParams.get('from'))];
+
+	// Optimistic-render house rule: the last-known projection of this thing
+	// paints on the very first render (per viewer, per id — never another
+	// account's read), the fetch reconciles behind it. Diagnostics are never
+	// cached: they are admin-only and short-lived.
+	const cacheKey = `${THING_CACHE_PREFIX}${currentUser?.id || 'anon'}-${id}`;
+	const seedState = React.useCallback(
+		(key: string): ThingLoadState => {
+			if (diagnosticRoute) return { key, loading: true, data: null, error: null };
+			const cached = readStampedCache<ThingViewData>(cacheKey);
+			const data = cached?.kind === 'thing' && cached.thing?.id === id ? cached : null;
+			return { key, loading: true, data, error: null };
+		},
+		[cacheKey, diagnosticRoute, id]
+	);
+	const [loadState, setLoadState] = React.useState<ThingLoadState>(() => seedState(requestKey));
 	// Both representations are useful on a permalink: the preview is the
 	// human-facing surface, while the full JSON remains available for people
 	// inspecting a Thing's exact shape. They are independent so either one (or
@@ -131,15 +281,15 @@ export default function ThingPage() {
 
 	// Hide prior-account data synchronously during the render that observes an
 	// identity change; the effect below then aborts the old request and refetches.
-	const visibleState: ThingLoadState = loadState.key === requestKey ? loadState : { key: requestKey, loading: true, data: null, error: null };
+	const visibleState: ThingLoadState = loadState.key === requestKey ? loadState : seedState(requestKey);
 
 	React.useLayoutEffect(() => {
 		window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-	}, [requestKey, visibleState.loading]);
+	}, [requestKey]);
 
 	React.useEffect(() => {
 		const controller = new AbortController();
-		setLoadState({ key: requestKey, loading: true, data: null, error: null });
+		setLoadState(seedState(requestKey));
 
 		if (diagnosticRoute && !currentUser?.isAdmin) {
 			setLoadState({
@@ -166,8 +316,17 @@ export default function ThingPage() {
 
 		request
 			.then((next) => {
-				if (!controller.signal.aborted) {
-					setLoadState({ key: requestKey, loading: false, data: next, error: null });
+				if (controller.signal.aborted) return;
+				setLoadState({ key: requestKey, loading: false, data: next, error: null });
+				if (next.kind === 'thing') {
+					try {
+						if (JSON.stringify(next).length <= MAX_CACHED_THING_CHARS) {
+							pruneCacheNamespace(THING_CACHE_PREFIX, cacheKey, MAX_CACHED_THINGS);
+							writeStampedCache(cacheKey, next);
+						}
+					} catch {
+						// unserialisable — the live fetch still painted
+					}
 				}
 			})
 			.catch((cause) => {
@@ -181,10 +340,16 @@ export default function ThingPage() {
 			});
 
 		return () => controller.abort();
-	}, [currentUser?.isAdmin, diagnosticRoute, id, loadDiagnostic, loadThing, requestKey]);
+	}, [cacheKey, currentUser?.isAdmin, diagnosticRoute, id, loadDiagnostic, loadThing, requestKey, seedState]);
 
 	const diagnostic = visibleState.data?.kind === 'diagnostic' ? visibleState.data.diagnostic : null;
 	const thing = visibleState.data?.kind === 'thing' ? visibleState.data.thing : null;
+	const kinds = kindsOf(thing);
+	const isComponent = kinds.includes('component');
+	const isWebpage = kinds.includes('webpage');
+	const isAction = kinds.includes('action');
+	const isSchema = kinds.includes('schema');
+	const isData = kinds.includes('data');
 	const attachment = attachmentFromThing(thing);
 	// The API's attachment post projection exists for the interaction-focused
 	// `/media/:id` route. It is the attachment coerced into a post-shaped
@@ -193,6 +358,226 @@ export default function ThingPage() {
 	const post = visibleState.data?.kind === 'thing' && !attachment ? visibleState.data.post : null;
 	const references = attachment && visibleState.data?.kind === 'thing' ? directAttachmentReferences(visibleState.data.parent) : [];
 	const { error, loading } = visibleState;
+	const isThingOwner = !!thing && !!currentUser?.id && thing.author?.id === currentUser.id;
+	const authorName: string | null = typeof thing?.author?.username === 'string' ? thing.author.username : null;
+
+	// ---------------------------------------------------------------- trust
+
+	const [kit, setKit] = React.useState<LiveKit | null>(null);
+	const isPlatform = !!thing && RESERVED_ID.test(thing.id);
+	const needsKit = !!thing && !isThingOwner && isPlatform && (isComponent || isWebpage);
+	// fail closed while the catalog loads — inert, but not yet labelled as
+	// someone else's: the label would be wrong for the seeded thing it usually is
+	const trustPending = needsKit && !kit;
+	React.useEffect(() => {
+		if (!needsKit || kit) return;
+		let cancelled = false;
+		loadLiveKit()
+			.then((loaded) => {
+				if (!cancelled) setKit(loaded);
+			})
+			.catch(() => {
+				// the catalog failed to load — the thing simply stays inert
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [needsKit, kit]);
+
+	// the page's suite, when it is a suite part: pages carry it in the
+	// crystal, every other part encodes it in its id
+	const suiteKey = React.useMemo<string | null>(() => {
+		if (!thing || !kit) return null;
+		if (isWebpage) return kit.install.suiteKeyOfPage(thing.crystal as { suiteKey?: unknown; pageKey?: unknown } | null);
+		if (!RESERVED_ID.test(thing.id)) return null;
+		return kit.install.suiteKeyFromActionKey(thing.id.replace(RESERVED_ID, ''), kit.suites);
+	}, [thing, kit, isWebpage]);
+	const suiteResolves = !!suiteKey && !!kit && kit.suites.some((suite) => suite.key === suiteKey);
+
+	// the inline page render (webpage kind) — the same resolve /p/ uses, so
+	// the viewer's own twin of a keyed page wins over the seeded copy
+	const webpageTarget = React.useMemo(() => (isWebpage && thing ? { kind: 'id' as const, id: thing.id } : null), [isWebpage, thing]);
+	const webpage = useWebpageDraft(webpageTarget);
+	const page = webpage.resolved?.page || null;
+
+	const seeded =
+		!!thing &&
+		!isThingOwner &&
+		!thing.author?.id &&
+		RESERVED_ID.test(thing.id) &&
+		(isWebpage ? suiteResolves && webpage.resolved?.source !== 'user' : !SUITE_PART_ID.test(thing.id) || suiteResolves);
+	const interactive = isThingOwner || seeded;
+
+	// The catalog-side confirm: a seeded thing's controls name what will run
+	// before anything executes. The viewer's own thing skips it — except for
+	// a URL-supplied source (below), which is nobody's authored markup.
+	const { confirm, dialog } = useActionRunConfirm({ enabled: true });
+	const confirmRef = React.useRef(confirm);
+	confirmRef.current = confirm;
+
+	// ?source=<actionKey>: bind the component to a data source for this view.
+	// It runs AS THE VIEWER on load, so it is gated behind the same confirm as
+	// a control — a pasted link must never run a program by surprise — and
+	// only on a surface that is live for this viewer at all.
+	const sourceParam = searchParams.get('source');
+	const requestedSource = React.useMemo<ThingSourceBinding | null>(
+		() => (sourceParam && isSourceActionKey(sourceParam) ? { action: sourceParam, refresh: 'load' } : null),
+		[sourceParam]
+	);
+	const [approvedSource, setApprovedSource] = React.useState<ThingSourceBinding | null>(null);
+	const requestedAction = requestedSource?.action || null;
+	React.useEffect(() => {
+		if (!requestedAction || !isComponent || !interactive || !thing) {
+			setApprovedSource(null);
+			return;
+		}
+		let cancelled = false;
+		// Drop the PREVIOUS approval before asking about this one. Without this
+		// the old binding keeps running while the dialog for the new one is on
+		// screen: navigating /thing/A?source=x → /thing/B?source=y repaints B
+		// instantly from the tt-thing- cache, so `thing` is already non-null and
+		// this effect skips the clearing branch above — and `x` would run against
+		// B, a surface the viewer never approved it for. Same order as the
+		// sibling /components/:key binding (ComponentDetailPage).
+		setApprovedSource(null);
+		Promise.resolve(confirmRef.current({ action: requestedAction, inputs: {} })).then((approved) => {
+			if (!cancelled) setApprovedSource(approved ? { action: requestedAction, refresh: 'load' } : null);
+		});
+		return () => {
+			cancelled = true;
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- re-ask only when the source, the thing or its trust changes
+	}, [requestedAction, isComponent, interactive, thing?.id]);
+
+	// ---------------------------------------------------------------- install
+
+	// The post-install hand-off is deferred so the "installed ✨" toast is
+	// readable before the page moves. Held in a ref so unmount — and a second
+	// install — cancels the pending hand-off (p.tsx).
+	const handoffRef = React.useRef<number | null>(null);
+	const scheduleHandoff = React.useCallback((run: () => void, delayMs: number) => {
+		if (handoffRef.current !== null) window.clearTimeout(handoffRef.current);
+		handoffRef.current = window.setTimeout(() => {
+			handoffRef.current = null;
+			run();
+		}, delayMs);
+	}, []);
+	React.useEffect(
+		() => () => {
+			if (handoffRef.current !== null) {
+				window.clearTimeout(handoffRef.current);
+				handoffRef.current = null;
+			}
+		},
+		[]
+	);
+
+	// Install a suite for the viewer — app suites through the one-request
+	// idempotent server install, demo suites part by part on the client — the
+	// same two paths /p/ takes, so both surfaces create exactly the same things.
+	const installForViewer = React.useCallback(
+		async (key: string): Promise<{ href: string | null } | null> => {
+			if (!kit) return null;
+			const suite = kit.suites.find((entry) => entry.key === key) || null;
+			if (!suite) return null;
+			if (!currentUser?.id) {
+				lopuRef.current({ title: 'Sign in to install this 🗝️', description: 'Installing it makes the programs — and the data — yours.', status: 'info' });
+				navigate('/login');
+				return null;
+			}
+			lopuRef.current({ title: `Installing ${suite.emoji} ${suite.title}…`, description: 'Your own schemas, controls, actions, and pages.', status: 'info', duration: 4000 });
+			if (suite.app) {
+				const installed = await kit.install.installSuiteOnServer(suite.key);
+				const href = `/p/${encodeURIComponent(installed.entryPageKey)}`;
+				lopuRef.current({
+					title: `${suite.emoji} ${suite.title} installed ✨`,
+					description: `${installed.created} things created · ${installed.updated} refreshed — its controls run as you now.`,
+					status: 'success',
+					duration: 6000,
+					link: { label: 'Open my app', href }
+				});
+				return { href };
+			}
+			const installed = await kit.install.installSuite((payload) => apiRef.current.v1.things.create(payload), suite, { seeded: true });
+			const href = `/p/${encodeURIComponent(installed.pageId)}`;
+			lopuRef.current({
+				title: `${suite.emoji} ${suite.title} installed ✨`,
+				description: 'Your own copy of its page, controls and programs.',
+				status: 'success',
+				duration: 6000,
+				link: { label: 'Open my page', href }
+			});
+			return { href };
+		},
+		[currentUser?.id, kit, navigate]
+	);
+
+	// a seeded control the viewer has no program for: install the suite, let
+	// the same click run again. A seeded PAGE then hands off to the viewer's
+	// own twin (p.tsx); a component page stays put — the viewer now owns the
+	// programs its controls name, so this very page keeps working.
+	const onUnowned = React.useCallback(
+		async (action: string): Promise<boolean> => {
+			if (!kit) return false;
+			const key = kit.install.suiteKeyFromActionKey(action, kit.suites) || suiteKey;
+			if (!key) return false;
+			try {
+				const outcome = await installForViewer(key);
+				if (!outcome) return false;
+				if (outcome.href && isWebpage) {
+					const target = outcome.href;
+					scheduleHandoff(() => navigate(target), 1200);
+				}
+				return true;
+			} catch (err: any) {
+				lopuRef.current({ title: err?.error || 'Couldn’t install — try again 🌈', status: 'error' });
+				return false;
+			}
+		},
+		[installForViewer, isWebpage, kit, navigate, scheduleHandoff, suiteKey]
+	);
+
+	// the `$install` pseudo-action a seeded page's own button names
+	const onInstall = React.useCallback(async (): Promise<boolean> => {
+		if (!suiteKey) return false;
+		try {
+			const outcome = await installForViewer(suiteKey);
+			if (!outcome) return false;
+			if (outcome.href && isWebpage) navigate(outcome.href);
+			return true;
+		} catch (err: any) {
+			lopuRef.current({ title: err?.error || 'Couldn’t install — try again 🌈', status: 'error' });
+			return false;
+		}
+	}, [installForViewer, isWebpage, navigate, suiteKey]);
+
+	// ---------------------------------------------------------------- data kind
+
+	// a data thing's schema render template: the /things Previews cache paints
+	// it instantly, the schema fetch reconciles (null = fetched, has none)
+	const schemaId = thing && isData ? schemaIdOf({ thingtime: kinds, crystal: thing.crystal || {} }) : null;
+	const [schemaRender, setSchemaRender] = React.useState<{ schemaId: string; template: Record<string, unknown> | null } | null>(null);
+	React.useEffect(() => {
+		if (!schemaId) return;
+		const cached = readLocalCache<ThingsCache>(thingsCacheKey(currentUser?.id))?.schemaRenders?.[schemaId];
+		if (cached !== undefined) setSchemaRender({ schemaId, template: cached });
+		let cancelled = false;
+		apiRef.current.v1.things
+			.get({ id: schemaId })
+			.then((response: any) => {
+				if (!cancelled) setSchemaRender({ schemaId, template: schemaRenderOf(response?.thing) });
+			})
+			.catch(() => {
+				if (!cancelled) setSchemaRender((current) => current?.schemaId === schemaId ? current : { schemaId, template: null });
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [schemaId, currentUser?.id]);
+	const dataTemplate = schemaId && schemaRender?.schemaId === schemaId ? schemaRender.template : null;
+
+	// ---------------------------------------------------------------- view
+
 	const genericDetail = thing
 		? JSON.stringify(
 				{
@@ -212,18 +597,15 @@ export default function ThingPage() {
 		  )
 		: '';
 	const detail = diagnostic?.detail || genericDetail;
-	const isThingOwner = !!thing && !!currentUser?.id && thing.author?.id === currentUser.id;
-	const thingPreview = thing ? (
-		thing.thingtime?.includes('component') ? (
-			<RenderThing
-				context={{ size: 'full', untrusted: !isThingOwner }}
-				fallback={<ThingView thing={thing.crystal} />}
-				thing={thing}
-			/>
-		) : (
-			<ThingView thing={thing.crystal} />
-		)
-	) : null;
+	const sections = thingDetailSections({ hasThing: !!thing, showPreview, showData });
+	const primaryKind = kinds[0] || 'thing';
+	const displayName = thing ? thingDisplayName({ thingtime: kinds, crystal: thing.crystal || {} }) : '';
+	const ownPage = thing ? thingLink({ id: thing.id, thingtime: kinds }) : null;
+	const actionCrystal = isAction ? ((thing?.crystal || {}) as ActionCrystal) : null;
+	const actionEffects = actionCrystal ? actionEffectsOf(actionCrystal) : null;
+	const actionLimits = actionCrystal ? actionLimitsOf(actionCrystal) : null;
+	const actionInputs = actionCrystal ? runInputDescriptorsOf(actionCrystal) : [];
+	const schemaFields: Record<string, unknown>[] = isSchema && Array.isArray(thing?.crystal?.fields) ? thing!.crystal.fields.filter((field: unknown) => field && typeof field === 'object') : [];
 
 	const copyDetail = async () => {
 		try {
@@ -235,20 +617,166 @@ export default function ThingPage() {
 	};
 
 	const handlePostChanged = React.useCallback(
-		(id: string, change: PostChange) => {
+		(postId: string, change: PostChange) => {
 			setLoadState((current) => {
 				if (current.key !== requestKey || current.data?.kind !== 'thing' || !current.data.post) return current;
-				if (current.data.post.id !== id) return current;
+				if (current.data.post.id !== postId) return current;
 				const next = typeof change === 'function' ? change(current.data.post) : change;
 				if (!next) {
-					navigate('/feed');
+					navigate(back.to);
 					return current;
 				}
 				return { ...current, data: { ...current.data, post: next } };
 			});
 		},
-		[navigate, requestKey]
+		[back.to, navigate, requestKey]
 	);
+
+	const previewBody = thing ? (
+		isComponent ? (
+			<>
+				<ComponentLive
+					thing={thing}
+					source={approvedSource}
+					interactive={interactive}
+					confirm={isThingOwner ? undefined : confirm}
+					onUnowned={seeded ? onUnowned : undefined}
+				/>
+				{!interactive && !trustPending ? <InertLabel kind="component" author={authorName} platform={isPlatform} /> : null}
+			</>
+		) : isWebpage ? (
+			<Stack spacing={3} minW={0}>
+				<Flex align="center" gap={2} wrap="wrap">
+					<Button as={Link} to={ownPage || '/'} size="sm" rightIcon={<ExternalLink size={13} />} data-testid="thing-open-page">
+						Open {ownPage}
+					</Button>
+					{isThingOwner ? (
+						<Button as={Link} to={`/builder?page=${encodeURIComponent(thing.id)}`} size="sm" variant="outline">
+							✏️ Edit in builder
+						</Button>
+					) : null}
+				</Flex>
+				{page ? (
+					<Box data-testid="thing-webpage-live" minW={0}>
+						<WebpageBlocksRenderer
+							blocks={(page.crystal?.blocks as WebpageBlock[]) || []}
+							componentsByRef={webpage.componentsByRef}
+							interactive={interactive}
+							onTtActionUnowned={seeded ? onUnowned : undefined}
+						/>
+					</Box>
+				) : webpage.loading ? null : (
+					<Text color={MUTED} fontSize="sm">
+						This page can’t be resolved for you here — open it on its own page.
+					</Text>
+				)}
+				{!interactive && !trustPending ? <InertLabel kind="page" author={authorName} platform={isPlatform} /> : null}
+			</Stack>
+		) : isAction && actionCrystal ? (
+			<Stack spacing={3} minW={0}>
+				<Flex align="center" gap={2} minW={0} wrap="wrap">
+					<Text fontSize="17px">⚡</Text>
+					<Text color="var(--tt-ink, #16161a)" fontSize="17px" fontWeight="600" overflowWrap="anywhere">
+						{typeof actionCrystal.name === 'string' && actionCrystal.name ? actionCrystal.name : 'Action'}
+					</Text>
+					{typeof actionCrystal.actionKey === 'string' && actionCrystal.actionKey ? (
+						<Text color={MUTED} fontFamily={MONO} fontSize="11px" letterSpacing="0.08em" overflowWrap="anywhere">
+							{actionCrystal.actionKey}
+						</Text>
+					) : null}
+				</Flex>
+				{typeof actionCrystal.description === 'string' && actionCrystal.description ? (
+					<Text color="var(--tt-text, #33333c)" fontSize="sm">
+						{actionCrystal.description}
+					</Text>
+				) : null}
+				{actionInputs.length ? (
+					<Flex gap={1.5} wrap="wrap">
+						{actionInputs.map((input, index) => (
+							<ActionChip dot={false} key={`${String(input.name)}-${index}`} size="md">
+								{String(input.name)}: {String(input.type || 'string')}
+								{input.required ? ' *' : ''}
+							</ActionChip>
+						))}
+					</Flex>
+				) : null}
+				<Flex gap={1.5} wrap="wrap">
+					{actionEffects?.creates.map((schema) => (
+						<ActionChip key={`c-${schema}`} size="md" tone="create">
+							creates {displayRef(schema)}
+						</ActionChip>
+					))}
+					{actionEffects?.reads.map((schema) => (
+						<ActionChip key={`r-${schema}`} size="md" tone="read">
+							reads {schema === '*' ? 'things' : displayRef(schema)}
+						</ActionChip>
+					))}
+					{actionEffects?.updates ? (
+						<ActionChip size="md" tone="write">
+							updates things
+						</ActionChip>
+					) : null}
+					{actionEffects?.invokes.map((key) => (
+						<ActionChip key={`i-${key}`} size="md" tone="invoke">
+							⚡ {key}
+						</ActionChip>
+					))}
+					{actionLimits ? (
+						<ActionChip dot={false} size="md">
+							{ACTION_LIMIT_LABELS.timeoutMs(actionLimits.timeoutMs)} · {ACTION_LIMIT_LABELS.maxOperations(actionLimits.maxOperations)}
+						</ActionChip>
+					) : null}
+				</Flex>
+				<Box>
+					<Button as={Link} to={ownPage || '/actions'} size="sm" rightIcon={<ExternalLink size={13} />} data-testid="thing-open-page">
+						Run it on {ownPage}
+					</Button>
+				</Box>
+				<Text color={MUTED} fontSize="xs">
+					The inspector shows every step, capability and run record, and is the only place a program runs by hand.
+				</Text>
+			</Stack>
+		) : isSchema ? (
+			<Stack spacing={3} minW={0}>
+				<Flex align="center" gap={2} minW={0} wrap="wrap">
+					<Text fontSize="17px">💎</Text>
+					<Text color="var(--tt-ink, #16161a)" fontSize="17px" fontWeight="600" overflowWrap="anywhere">
+						{displayName}
+					</Text>
+				</Flex>
+				{typeof thing.crystal?.description === 'string' && thing.crystal.description ? (
+					<Text color="var(--tt-text, #33333c)" fontSize="sm">
+						{thing.crystal.description}
+					</Text>
+				) : null}
+				{schemaFields.length ? (
+					<Flex gap={1.5} wrap="wrap" data-testid="thing-schema-fields">
+						{schemaFields.map((field, index) => (
+							<ActionChip dot={false} key={`${String(field.name)}-${index}`} size="md">
+								{String(field.name)} · {String(field.type || 'string')}
+								{field.required ? ' *' : ''}
+							</ActionChip>
+						))}
+					</Flex>
+				) : (
+					<Text color={MUTED} fontSize="xs">
+						No crystal fields — this schema’s presence in thingtime is the whole payload.
+					</Text>
+				)}
+				<Box>
+					<Button as={Link} to={ownPage || '/schemas'} size="sm" rightIcon={<ExternalLink size={13} />} data-testid="thing-open-page">
+						Open {ownPage}
+					</Button>
+				</Box>
+			</Stack>
+		) : isData && dataTemplate ? (
+			<Box data-testid="thing-data-template" minW={0}>
+				<SchemaTemplateRender template={dataTemplate} crystal={(thing.crystal || {}) as Record<string, unknown>} />
+			</Box>
+		) : (
+			<ThingView thing={thing.crystal} />
+		)
+	) : null;
 
 	return (
 		<Flex
@@ -261,27 +789,28 @@ export default function ThingPage() {
 		>
 			<Stack spacing={5} width="100%" maxW="920px" px={{ base: 4, md: 6 }} pt={{ base: 4, md: 7 }} minW={0}>
 				<Flex align="center" justify="space-between" gap={3} wrap="wrap">
-					<Box>
+					<Box minW={0}>
 						<Text color={MUTED} fontFamily="mono" fontSize="10px" fontWeight="700" letterSpacing="0.12em" textTransform="uppercase">
-							Thingtime · {diagnosticRoute ? 'Private admin diagnostic' : 'Thing'}
+							Thingtime · {diagnosticRoute ? 'Private admin diagnostic' : thing ? primaryKind : 'Thing'}
 						</Text>
-						<Heading as="h1" mt={1} fontSize={{ base: '2xl', md: '3xl' }}>
-							{diagnostic ? `Migration error · ${diagnostic.migrationId}` : diagnosticRoute ? 'Migration error' : 'Thing'}
+						<Heading as="h1" mt={1} fontSize={{ base: '2xl', md: '3xl' }} overflowWrap="anywhere">
+							{diagnostic ? `Migration error · ${diagnostic.migrationId}` : diagnosticRoute ? 'Migration error' : displayName || 'Thing'}
 						</Heading>
 					</Box>
 					<Button
 						as={Link}
-						to={diagnosticRoute ? '/migrations' : '/feed'}
+						to={diagnosticRoute ? '/migrations' : back.to}
 						size="sm"
 						variant="outline"
 						leftIcon={<ArrowLeft size={15} />}
 						borderRadius="999px"
+						data-testid="thing-back-link"
 					>
-						{diagnosticRoute ? 'Back to migrations' : 'Back to feed'}
+						{diagnosticRoute ? 'Back to migrations' : back.label}
 					</Button>
 				</Flex>
 
-				{loading ? (
+				{loading && !diagnostic && !thing ? (
 					<Center py={16}>
 						<Spinner color={MUTED} />
 					</Center>
@@ -298,7 +827,7 @@ export default function ThingPage() {
 					</Box>
 				) : null}
 
-				{!loading && (diagnostic || thing) ? (
+				{diagnostic || thing ? (
 					<>
 						<Box {...CARD_STYLES} p={{ base: 5, md: 6 }}>
 							<Flex align="flex-start" justify="space-between" gap={4} wrap="wrap">
@@ -307,13 +836,20 @@ export default function ThingPage() {
 										{diagnostic ? <Badge colorScheme="purple">admin only</Badge> : null}
 										{diagnostic ? <Badge colorScheme="orange">HTTP {diagnostic.status}</Badge> : null}
 										{diagnostic ? <Badge>{diagnostic.outcome}</Badge> : null}
+										{kinds.map((kind) => (
+											<Badge key={kind} variant="subtle">
+												{kind}
+											</Badge>
+										))}
 										{thing?.visibility ? <Badge>{thing.visibility}</Badge> : null}
+										{isThingOwner ? <Badge colorScheme="green">yours</Badge> : seeded ? <Badge colorScheme="purple">seeded by Thingtime</Badge> : null}
 									</Flex>
 									<Text fontWeight="700" overflowWrap="anywhere">
-										{diagnostic?.summary || thing?.id}
+										{diagnostic?.summary || displayName || thing?.id}
 									</Text>
 									<Text mt={2} color={MUTED} fontFamily="mono" fontSize="xs" overflowWrap="anywhere">
 										{diagnostic?.id || thing?.id}
+										{authorName ? ` · by @${authorName}` : ''}
 									</Text>
 									{diagnostic ? (
 										<Stack spacing={1} mt={3} color={MUTED} fontSize="xs">
@@ -326,13 +862,20 @@ export default function ThingPage() {
 										</Stack>
 									) : null}
 								</Box>
-								<Button size="sm" leftIcon={<Copy size={15} />} onClick={copyDetail} isDisabled={!detail}>
-									Copy {diagnostic ? 'error' : 'Thing'}
-								</Button>
+								<Flex gap={2} wrap="wrap">
+									{ownPage && !ownPage.startsWith('/thing/') ? (
+										<Button as={Link} to={ownPage} size="sm" variant="outline" rightIcon={<ExternalLink size={13} />}>
+											{isAction ? 'Run on /actions' : 'Open page'}
+										</Button>
+									) : null}
+									<Button size="sm" leftIcon={<Copy size={15} />} onClick={copyDetail} isDisabled={!detail}>
+										Copy {diagnostic ? 'error' : 'Thing'}
+									</Button>
+								</Flex>
 							</Flex>
 						</Box>
 
-						{thing ? (
+						{sections.viewToggles ? (
 							<Flex
 								{...CARD_STYLES}
 								align={{ base: 'flex-start', sm: 'center' }}
@@ -346,13 +889,13 @@ export default function ThingPage() {
 										Views
 									</Heading>
 									<Text color={MUTED} fontSize="sm" mt={1}>
-										Choose the human-friendly preview, the raw Thing data, or both.
+										Choose the {interactive && (isComponent || isWebpage) ? 'live' : 'human-friendly'} preview, the raw Thing data, or both.
 									</Text>
 								</Box>
 								<Flex align="center" gap={4} role="group" aria-label="Thing page views" wrap="wrap">
 									<Flex align="center" gap={2}>
 										<Switch aria-label="Show rendered preview" isChecked={showPreview} onChange={(event) => setShowPreview(event.target.checked)} />
-										<Text fontSize="sm">Rendered preview</Text>
+										<Text fontSize="sm">{interactive && (isComponent || isWebpage) ? 'Live preview' : 'Rendered preview'}</Text>
 									</Flex>
 									<Flex align="center" gap={2}>
 										<Switch aria-label="Show Thing data" isChecked={showData} onChange={(event) => setShowData(event.target.checked)} />
@@ -362,9 +905,9 @@ export default function ThingPage() {
 							</Flex>
 						) : null}
 
-						{showPreview && attachment ? <ThingAttachmentDetail attachment={attachment} references={references} /> : null}
+						{sections.preview && attachment ? <ThingAttachmentDetail attachment={attachment} references={references} /> : null}
 
-						{showPreview && post ? (
+						{sections.preview && post ? (
 							<Stack spacing={3} minW={0}>
 								<Flex align="center" justify="space-between" gap={3} wrap="wrap" px={1}>
 									<Heading as="h2" fontSize="md">
@@ -386,16 +929,39 @@ export default function ThingPage() {
 							</Stack>
 						) : null}
 
-						{showPreview && thing && !post ? (
-							<Box {...CARD_STYLES} p={{ base: 4, md: 6 }} minW={0}>
-								<Heading as="h2" fontSize="md" mb={3}>
-									Rendered preview
-								</Heading>
-								<Box minW={0}>{thingPreview}</Box>
-							</Box>
+						{sections.preview && thing && !post ? (
+							// The page runtime is what makes a live surface live: sources
+							// load and refetch after every run, `$refresh`/`$install` work.
+							// Its source is the viewer's ownership; its installer exists only
+							// for a seeded suite thing.
+							<WebpageRuntimeProvider
+								pageId={thing.id}
+								pageKey={isWebpage && typeof thing.crystal?.pageKey === 'string' ? thing.crystal.pageKey : null}
+								suiteKey={suiteKey ?? null}
+								source={isThingOwner ? 'user' : 'system'}
+								onInstall={seeded && suiteKey ? onInstall : undefined}
+							>
+								<Box {...CARD_STYLES} p={{ base: 4, md: 6 }} minW={0} data-live={interactive ? 'true' : 'false'}>
+									<Flex align="center" justify="space-between" gap={3} mb={3} wrap="wrap">
+										<Heading as="h2" fontSize="md">
+											{interactive && (isComponent || isWebpage) ? 'Live preview' : 'Rendered preview'}
+										</Heading>
+										{seeded && (isComponent || isWebpage) ? (
+											<Text color={MUTED} fontSize="xs">
+												Controls run as you — each one asks first{suiteKey ? ', and installs the suite if you don’t own its program yet' : ''}.
+											</Text>
+										) : null}
+									</Flex>
+									<Box minW={0}>{previewBody}</Box>
+								</Box>
+							</WebpageRuntimeProvider>
 						) : null}
 
-						{showData ? (
+						{/* `thingDetailSectionsCore` owns why a diagnostic ignores the
+						    `Thing data` switch: it renders no Views card, so a remembered
+						    `false` would hide the redacted error with no control left to
+						    bring it back. */}
+						{sections.detail ? (
 							<Box {...CARD_STYLES} p={{ base: 4, md: 6 }} minW={0}>
 								<Flex align="center" justify="space-between" gap={3} mb={3}>
 									<Heading as="h2" fontSize="md">
@@ -432,6 +998,7 @@ export default function ThingPage() {
 					</>
 				) : null}
 			</Stack>
+			{dialog}
 		</Flex>
 	);
 }

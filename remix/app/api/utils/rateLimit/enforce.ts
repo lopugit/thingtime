@@ -137,6 +137,25 @@ export const enforceFixedRateLimit = async (
 	}
 };
 
+// Server-resolved subscription entitlement, not an admin-editable endpoint
+// default or a client-supplied tier. The key intentionally excludes tier/token
+// so changing plans, sessions, devices, or IPs cannot reset account usage.
+export const enforceQuotaRateLimit = async (
+  name: string,
+  userId: string,
+  limit: number
+): Promise<RateLimitOutcome> => {
+  const windowMs = 60 * 60_000;
+  const resetAt = new Date(Date.now() + windowMs).toISOString();
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 11_000)
+    return { allowed: false, limit: 0, remaining: 0, resetAt };
+  try {
+    return await consume(hash(`quota:${name}:user:${userId}`), limit, windowMs);
+  } catch {
+    return { allowed: false, limit, remaining: 0, resetAt, unavailable: true };
+  }
+};
+
 // Convenience: a 429 JSON body + headers for a blocked outcome.
 export const rateLimitedResponseInit = (outcome: RateLimitOutcome) => ({
   status: 429,

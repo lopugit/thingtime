@@ -303,7 +303,15 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       return json(response, 200, await thingtime.networkProbe(state.settings));
     }
     if (request.method === 'POST' && url.pathname === '/api/activity/network/speed') {
-      return json(response, 200, await thingtime.networkProbe(state.settings, true));
+      return json(
+        response,
+        200,
+        await thingtime.networkProbe(
+          state.settings,
+          true,
+          networkProbeCredential(state.settings, state.accounts, credentials),
+        ),
+      );
     }
     if (request.method === 'GET' && url.pathname === '/api/search') {
       const query = url.searchParams.get('q') ?? '';
@@ -887,3 +895,4 @@ async function serveStatic(response: ServerResponse, root: string, pathname: str
   });
   createReadStream(candidate).pipe(response);
 }
+import { networkProbeCredential } from './services/networkProbe.js';
