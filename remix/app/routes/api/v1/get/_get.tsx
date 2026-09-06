@@ -262,14 +262,29 @@ export const loader = async ({ request }: { request: Request }) => {
     return respond({ ok: true, created: result.created, thing: result.thing, post: result.post }, { status: result.created ? 201 : 200 });
   }
 
+  // `expectedUpdatedAt` is the optimistic-concurrency guard PATCH/DELETE take
+  // on /api/v1/things: both compare it against the stored updatedAt and anchor
+  // it into the write filter, so a losing racer gets a 409 instead of silently
+  // clobbering. Dropping it here didn't merely lose a feature — it turned a
+  // compare-and-swap the caller asked for into an unguarded write that still
+  // answers 200. That matters more on this branch than it used to: custom
+  // audiences grant tt:user/<name>/write to OTHER people, so one thing now has
+  // genuinely concurrent writers. It rides the URL natively (an ISO string
+  // stays a string through overlayValue) and updateThing/deleteThing already
+  // 400 a malformed one, so a mis-encoded timestamp fails loudly, never open.
+  const expectedUpdatedAt = args.expectedUpdatedAt;
+
   if (op === 'update') {
-    const result = await updateThing(viewer, args.id, args, { replaceCrystal: false });
+    const result = await updateThing(viewer, args.id, args, { replaceCrystal: false, expectedUpdatedAt });
     if (result.ok === false) return respond({ ok: false, error: result.error }, { status: result.status });
     return respond({ ok: true, thing: result.thing, post: result.post });
   }
 
   if (op === 'delete') {
-    const hooks = user.accountKind === 'user' ? { beforeCascade: prepareAttachmentCascadeForThing } : undefined;
+    const hooks = {
+      ...(user.accountKind === 'user' ? { beforeCascade: prepareAttachmentCascadeForThing } : {}),
+      expectedUpdatedAt
+    };
     const result = await deleteThing(viewer, args.id, null, hooks as any);
     if (result.ok === false) return respond({ ok: false, error: result.error }, { status: result.status });
     return respond({ ok: true });

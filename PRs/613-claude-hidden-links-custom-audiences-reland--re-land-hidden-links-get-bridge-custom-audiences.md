@@ -49,3 +49,75 @@ This branch starts at `origin/claude/hidden-links-get-bridge` (d826cf6ce, the
   across sections A–I (F visibility fence, G hidden visibility, H GET bridge,
   I custom audiences + groups + hidden-only fence).
 - CI on the PR: CodeQL, API suite, Build + typecheck ratchet + unit tests — green.
+
+## Lopu review (2026-09-06, head `bdbe02a0`)
+
+Read the full head against `develop` @ `b1f8e212`, concentrating on the three
+surfaces this stack widens (bearer-secret reads, a cookie-free *mutating* GET
+route, and non-owner writes). CodeQL snapshot for this head is empty; PR checks
+are green (23 pass / 63 skipping / 0 failing).
+
+**One defect fixed: the GET bridge silently dropped `expectedUpdatedAt`.**
+`updateThing`/`deleteThing` implement it as a real compare-and-swap — validate
+the ISO string, compare against the stored `updatedAt`, anchor `updatedAt` into
+the write/anchored-delete filter, 409 on mismatch — and `_things.tsx` threads it
+through on both PATCH and DELETE. `_get.tsx` passed neither, so the bridge
+answered 200 for a write the caller had explicitly asked to be conditional. That
+is a lost-update guarantee, not a missing convenience, and this branch is what
+makes it reachable: `tt:user/<name>/write` grants give a single thing genuinely
+concurrent writers for the first time.
+
+- `app/routes/api/v1/get/_get.tsx` — thread `expectedUpdatedAt` into `op=update`
+  and `op=delete`. An ISO stamp survives the URL surface untouched
+  (`overlayValue` leaves non-`{[\"` values as strings) and both callees already
+  400 a malformed one, so a mis-encoded timestamp fails loudly, never open.
+- `app/docs/apiDocs.ts` — document the guard on the bridge endpoint.
+- `scripts/verify-pat-tokens.mjs` — section H gains five checks: stale stamp
+  409s on update, current stamp lands, the now-stale stamp 409s on delete
+  (which also proves the update really moved `updatedAt`), current stamp
+  deletes. Spends 5 of the 12 uses `minted` has left, so the existing
+  "use accounting matches the call count" assertion is untouched.
+
+`op=upsert` deliberately keeps no guard: `upsertThing` stays owner-fenced
+(`existing.ownerId !== ownerId` → 404), so shared editing is PATCH-only and a
+racing writer cannot reach it. `replaceCrystal` is likewise left off the bridge
+— `op=upsert` already *is* whole-crystal replacement.
+
+### Verified, no change needed
+
+- **Group membership cannot be self-granted.** `groupIdsOf` trusts any
+  `group-member` doc naming the viewer in `targetId`, with no owner constraint,
+  so the whole model rests on those docs being unforgeable. They are: `group`
+  and `group-member` are both in `PROTECTED_THINGTIME`, generic thing CRUD
+  refuses protected kinds, and `groups.ts` only ever writes `crystal.groupId`
+  from an owner-fenced `findOwnedGroup` lookup.
+- **`updateThing`'s ownership filter was removed** (`{shareId, ownerId}` →
+  `{shareId}`) to allow shared editing. Everything downstream still keys off
+  `doc.ownerId`, not the writer: storage ledger, `boundAttachmentPresence`,
+  the app-namespace stamp. The writer only supplies content — `acl`,
+  `visibility`, `folderId`, `tokenAcl` are refused for non-owners, so the
+  folder/cycle paths that key off `viewer.id` stay unreachable for them.
+- **`linkKey` is treated as a credential, not a field.** Owner-only in both
+  projections and gated on the acl *still* saying hidden, re-minted on every
+  entry into hidden so retired links can't resurrect, and added to
+  `MONGO_PROTECTED_THING_FIELDS` so the admin Mongo surface hard-strips it at
+  every pipeline ingress rather than relying on key-name redaction.
+- **`splitCapability` anchoring.** `tt:user/write` (the account literally named
+  "write") parses as subject `write` with cap `read`, not as base `tt:user`
+  (the OWNER entry) — the failure mode would have been a phantom owner grant.
+  Backed by the `/`-in-username guard added to `registerUser.ts`.
+- `visibilityQueryFor`'s grant clause is gated on the 🎭 circle and narrowed to
+  the requested circles, so a grant cannot smuggle a custom thing into a
+  public-only filter; `unfiltered` requires the full `REQUESTABLE_VISIBILITIES`
+  set rather than a length comparison.
+
+### Validation
+
+- `node --experimental-strip-types --test app/schemas/acl.test.ts` — 12/12 pass.
+- `node --check scripts/verify-pat-tokens.mjs`, and syntax checks on
+  `apiDocs.ts` / `_get.tsx` — clean.
+- CI on `bdbe02a0`: API suite, Build + typecheck ratchet + unit tests, CodeQL —
+  all green (run 34009044941).
+- The five new section-H checks were authored but NOT executed in this session:
+  `verify-pat-tokens.mjs` needs a running stack + database, which the review
+  runner does not have. They should be exercised on the next live QA pass.

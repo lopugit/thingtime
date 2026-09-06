@@ -36,6 +36,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `PRs/613-claude-hidden-links-custom-audiences-reland--re-land-hidden-links-get-bridge-custom-audiences.md`.
 - `scripts/verify-pat-tokens.mjs` now reads search/feed `posts` keyed by thing id
   (develop's shape) as well as the older array form.
+- GET bridge `op=update` / `op=delete` now honour `expectedUpdatedAt`, the
+  optimistic-concurrency guard `PATCH`/`DELETE /api/v1/things` already anchor into
+  the write filter. The bridge was dropping it silently, so a caller asking for a
+  compare-and-swap got an unguarded write and a 200 — which this branch makes
+  reachable in earnest, since a custom audience can grant `tt:user/<name>/write`
+  to other people and give one thing concurrent writers. — Lopu (AI)
 
 ### 2026-09-02 — Lopu toast position setting + `/notifications` history page — Claude (AI)
 

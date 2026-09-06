@@ -8868,7 +8868,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     notes: [
       'The token in the URL is a real credential: share bridge URLs only where you would share the token itself, scope tokens narrowly, cap uses, and revoke when done.',
       'Attachments and app tokens are not available through the bridge — those flows need real sessions.',
-      'op maps: get/list/search/feed → things.read, create → things.create (or react/comment when thingtime says so), update → things.update, upsert → create+update, delete/react/comment/save/share → their scopes.'
+      'op maps: get/list/search/feed → things.read, create → things.create (or react/comment when thingtime says so), update → things.update, upsert → create+update, delete/react/comment/save/share → their scopes.',
+      'op=update and op=delete honour expectedUpdatedAt=<the updatedAt you read> exactly like PATCH/DELETE /api/v1/things: the write only lands if the thing has not changed since, otherwise 409. Worth sending whenever a thing has more than one writer (a custom audience granting tt:user/<name>/write).'
     ]
   }),
   endpoint({

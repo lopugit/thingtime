@@ -828,6 +828,43 @@ console.log('H. GET bridge — CRUD over plain GET URLs (allowGet tokens)');
   check('visibility fence rides the bridge', fencedBlind.status === 404, `${fencedBlind.status}`);
   const fencedSees = await api(bridge({ token: fenced.token, op: 'get', id: postId }), {});
   check('…while public things stay reachable', fencedSees.status === 200, `${fencedSees.status}`);
+
+  // expectedUpdatedAt is a real compare-and-swap here, not a hint: op=update
+  // and op=delete anchor it into the write filter exactly like PATCH/DELETE
+  // /api/v1/things. It matters most on THIS branch, because a custom audience
+  // can hand tt:user/<name>/write to other people, so one thing genuinely has
+  // concurrent writers. `minted` has 12 uses left at this point; these spend 5.
+  const guarded = await api(bridge({ token: minted.token, op: 'create', thingtime: 'data', crystal: '{"note":"cas"}' }), {});
+  const guardId = guarded.body?.thing?.id;
+  const stamp = guarded.body?.thing?.updatedAt;
+  check('op=create hands back the updatedAt stamp', !!guardId && typeof stamp === 'string', JSON.stringify(stamp));
+
+  const staleUpdate = await api(
+    bridge({ token: minted.token, op: 'update', id: guardId, crystal: '{"note":"stale"}', expectedUpdatedAt: '2020-01-01T00:00:00.000Z' }),
+    {}
+  );
+  check('op=update refuses a stale expectedUpdatedAt', staleUpdate.status === 409, `${staleUpdate.status}`);
+
+  const freshUpdate = await api(
+    bridge({ token: minted.token, op: 'update', id: guardId, crystal: '{"note":"cas ok"}', expectedUpdatedAt: stamp }),
+    {}
+  );
+  check(
+    'op=update accepts the current expectedUpdatedAt',
+    freshUpdate.status === 200 && freshUpdate.body?.thing?.crystal?.note === 'cas ok',
+    `${freshUpdate.status}`
+  );
+
+  // the stamp above is now stale precisely BECAUSE the update landed — so this
+  // also proves op=update really moved updatedAt rather than silently no-oping
+  const staleDelete = await api(bridge({ token: minted.token, op: 'delete', id: guardId, expectedUpdatedAt: stamp }), {});
+  check('op=delete refuses a stale expectedUpdatedAt', staleDelete.status === 409, `${staleDelete.status}`);
+
+  const freshDelete = await api(
+    bridge({ token: minted.token, op: 'delete', id: guardId, expectedUpdatedAt: freshUpdate.body?.thing?.updatedAt }),
+    {}
+  );
+  check('op=delete accepts the current expectedUpdatedAt', freshDelete.status === 200, `${freshDelete.status}`);
 }
 
 // ---------------------------------------------------------------------------
