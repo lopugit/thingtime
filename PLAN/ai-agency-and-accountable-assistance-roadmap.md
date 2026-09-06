@@ -222,14 +222,14 @@ controls, affected people, remedies, stop conditions, and prohibited remainder.
 
 ## Measure contract
 
-| Question | Candidate evidence | Guardrail |
-| --- | --- | --- |
-| Can people control context? | Task test for viewing, excluding, and using no-history. | Do not log excluded or raw private content. |
-| Is authority understood? | Participant explanation of preview, confirmation, target, and side effects. | A click alone is not comprehension. |
-| Are changes correctable? | Eligible undo/restoration success and residual-effect disclosure. | Do not count a button render as recovery. |
-| Are outcomes useful? | Participant-defined task completion plus correction and abandonment reasons. | Do not optimize acceptance or usage duration. |
-| Is the journey accessible? | Complete-journey tests across approved assistive technology, input, zoom, language, and network profiles. | Do not substitute component checks for the journey. |
-| Do remedies work? | Authorized report, dispute, deletion, export, restore, and support exercises. | Do not expose private content in operational metrics. |
+| Question                    | Candidate evidence                                                                                        | Guardrail                                             |
+| --------------------------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Can people control context? | Task test for viewing, excluding, and using no-history.                                                   | Do not log excluded or raw private content.           |
+| Is authority understood?    | Participant explanation of preview, confirmation, target, and side effects.                               | A click alone is not comprehension.                   |
+| Are changes correctable?    | Eligible undo/restoration success and residual-effect disclosure.                                         | Do not count a button render as recovery.             |
+| Are outcomes useful?        | Participant-defined task completion plus correction and abandonment reasons.                              | Do not optimize acceptance or usage duration.         |
+| Is the journey accessible?  | Complete-journey tests across approved assistive technology, input, zoom, language, and network profiles. | Do not substitute component checks for the journey.   |
+| Do remedies work?           | Authorized report, dispute, deletion, export, restore, and support exercises.                             | Do not expose private content in operational metrics. |
 
 ## Stop conditions
 
