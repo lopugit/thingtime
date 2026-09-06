@@ -17,7 +17,7 @@ interface LoginStart {
 export class ThingtimeService {
   #pending = new Map<string, { verifier: string; createdAt: number }>();
   #networkCapabilities: { origin: string; expiresAt: number; manifest: unknown } | undefined;
-  #speedProbe: { origin: string; result: Promise<ThingtimeNetworkProbe> } | undefined;
+  #speedProbe: { origin: string; identity: string; result: Promise<ThingtimeNetworkProbe> } | undefined;
 
   beginLogin(settings: CommanderSettings, redirectUri: string): LoginStart {
     if (!settings.thingtimeClientId)
@@ -164,18 +164,25 @@ export class ThingtimeService {
     return { ...settings, syncRevision: nextRevision, syncUpdatedAt: updatedAt, syncDirty: false };
   }
 
-  async networkProbe(settings: CommanderSettings, includeSpeed = false): Promise<ThingtimeNetworkProbe> {
+  async networkProbe(
+    settings: CommanderSettings,
+    includeSpeed = false,
+    token?: string,
+  ): Promise<ThingtimeNetworkProbe> {
     const baseUrl = validatedThingtimeBaseUrl(settings.thingtimeBaseUrl);
     if (!includeSpeed) return this.#runNetworkProbe(baseUrl, false);
+    if (settings.activeAccountId && !token)
+      throw new Error('Unlock or sign in to the active Thingtime account before running a speed test');
+    const identity = token ? createHash('sha256').update(token).digest('hex') : 'guest';
     // All windows share this service: overlapping clicks join one run instead
     // of multiplying traffic, consuming the quota, and skewing measurements.
     if (this.#speedProbe) {
-      if (this.#speedProbe.origin !== baseUrl.origin)
-        throw new Error('A speed test is already running for another Thingtime server');
+      if (this.#speedProbe.origin !== baseUrl.origin || this.#speedProbe.identity !== identity)
+        throw new Error('A speed test is already running for another Thingtime server or account');
       return this.#speedProbe.result;
     }
-    const result = this.#runNetworkProbe(baseUrl, true);
-    this.#speedProbe = { origin: baseUrl.origin, result };
+    const result = this.#runNetworkProbe(baseUrl, true, token);
+    this.#speedProbe = { origin: baseUrl.origin, identity, result };
     try {
       return await result;
     } finally {
@@ -183,7 +190,11 @@ export class ThingtimeService {
     }
   }
 
-  async #runNetworkProbe(baseUrl: URL, includeSpeed: boolean): Promise<ThingtimeNetworkProbe> {
+  async #runNetworkProbe(
+    baseUrl: URL,
+    includeSpeed: boolean,
+    token?: string,
+  ): Promise<ThingtimeNetworkProbe> {
     let cached = this.#networkCapabilities;
     if (!cached || cached.origin !== baseUrl.origin || cached.expiresAt <= Date.now()) {
       cached = {
@@ -199,7 +210,7 @@ export class ThingtimeService {
       throw error;
     }
     this.#networkCapabilities = cached;
-    const ping = await this.#ping(baseUrl);
+    const ping = await this.#ping(baseUrl, token);
     if (!includeSpeed) return { sampledAtMs: Date.now(), ping };
 
     const downloads: NonNullable<ThingtimeNetworkProbe['speed']>['downloads'] = [];
@@ -213,8 +224,8 @@ export class ThingtimeService {
         for (const bytes of NETWORK_PROBE_PACKET_BYTES) {
           samples.push(
             await (direction === 'download'
-              ? this.#download(baseUrl, bytes)
-              : this.#uploadSample(baseUrl, bytes)),
+              ? this.#download(baseUrl, bytes, token)
+              : this.#uploadSample(baseUrl, bytes, token)),
           );
         }
       } catch (error) {
@@ -231,10 +242,11 @@ export class ThingtimeService {
     };
   }
 
-  async #ping(baseUrl: URL): Promise<ThingtimeNetworkProbe['ping']> {
+  async #ping(baseUrl: URL, token?: string): Promise<ThingtimeNetworkProbe['ping']> {
     const startedAt = performance.now();
     const response = await fetch(new URL('/api/v1/network-probe/ping', baseUrl), {
-      headers: { 'accept-encoding': 'identity' },
+      headers: { 'accept-encoding': 'identity', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      redirect: 'error',
       signal: AbortSignal.timeout(NETWORK_PROBE_TIMEOUT_MS),
     });
     const headersAt = performance.now();
@@ -251,10 +263,12 @@ export class ThingtimeService {
   async #download(
     baseUrl: URL,
     bytes: number,
+    token?: string,
   ): Promise<{ bytes: number; durationMs: number; megabitsPerSecond: number }> {
     const startedAt = performance.now();
     const response = await fetch(new URL(`/api/v1/network-probe/download?bytes=${bytes}`, baseUrl), {
-      headers: { 'accept-encoding': 'identity' },
+      headers: { 'accept-encoding': 'identity', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      redirect: 'error',
       signal: AbortSignal.timeout(NETWORK_PROBE_TIMEOUT_MS),
     });
     if (!response.ok)
@@ -269,6 +283,7 @@ export class ThingtimeService {
   async #upload(
     baseUrl: URL,
     bytes: number,
+    token?: string,
   ): Promise<{ bytes: number; durationMs: number; megabitsPerSecond: number }> {
     const payload = new Uint8Array(bytes);
     const startedAt = performance.now();
@@ -278,8 +293,10 @@ export class ThingtimeService {
         'content-type': 'application/octet-stream',
         'content-length': String(bytes),
         'accept-encoding': 'identity',
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
       },
       body: payload,
+      redirect: 'error',
       signal: AbortSignal.timeout(NETWORK_PROBE_TIMEOUT_MS),
     });
     const durationMs = Math.max(1, performance.now() - startedAt);
@@ -294,9 +311,10 @@ export class ThingtimeService {
   async #uploadSample(
     baseUrl: URL,
     bytes: number,
+    token?: string,
   ): Promise<{ bytes: number; durationMs: number; megabitsPerSecond: number }> {
     const started = performance.now();
-    for (const chunkBytes of networkProbeUploadChunks(bytes)) await this.#upload(baseUrl, chunkBytes);
+    for (const chunkBytes of networkProbeUploadChunks(bytes)) await this.#upload(baseUrl, chunkBytes, token);
     const durationMs = Math.max(1, performance.now() - started);
     return { bytes, durationMs, megabitsPerSecond: megabitsPerSecond(bytes, durationMs) };
   }

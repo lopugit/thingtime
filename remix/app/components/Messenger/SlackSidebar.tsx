@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Button, Flex, Menu, MenuButton, MenuItem, MenuList, Portal } from '@chakra-ui/react';
 
-import { chatDisplayName, type ChatSummary, type Community } from './messengerTypes';
+import { chatDisplayName, isLopuAiSource, type ChatSummary, type Community } from './messengerTypes';
 
 const UnreadBadge = ({ count }: { count: number }) =>
   count > 0 ? (
@@ -322,7 +322,7 @@ export const SlackSidebar = (props: SlackSidebarProps) => {
               unread={chat.unreadCount}
               onClick={() => props.onSelectChat(chat)}
             >
-              {chat.chatType === 'group' ? '👥 ' : ''}
+              {isLopuAiSource(chat.externalSource) ? '🦄 ' : chat.chatType === 'group' ? '👥 ' : ''}
               {chatDisplayName(chat, props.viewerId)}
             </RowButton>
           ))}

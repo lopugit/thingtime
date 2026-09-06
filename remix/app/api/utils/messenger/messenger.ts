@@ -30,7 +30,7 @@ import { customReactionEmojiId, isCustomReactionToken, sanitizeChatReactionToken
 import { getUserDisplayName } from '~/utils/userIdentity';
 import { isDuplicateOnlyBulkWriteError } from './bulkWriteError';
 import { matchesCommittedMessageRequest, messageIdForRequest, normalizedMessengerRequestId } from './messengerMediaCore';
-import { publicExternalAiSource, type PublicExternalAiSource } from './externalAi';
+import { publicExternalAiSource, publicLopuMessageMeta, type PublicExternalAiSource, type PublicLopuMessageMeta } from './externalAi';
 import { followersOfSet, followingSet, isFollowing } from './follows';
 import {
 	deleteMessengerThings,
@@ -63,6 +63,13 @@ const MAX_REACTION_TOKENS_PER_MESSAGE = 100;
 // member profiles ship inline on list rows for DMs and small groups; bigger
 // rooms send counts and resolve members on open
 const LIST_MEMBER_PROFILE_CAP = 25;
+
+// Lopu conversations (api/utils/messenger/lopuChats.ts) ride the messenger
+// family with this discriminator. They are first-party — the user's own
+// notebook with the assistant — so unlike imported/live AI mirrors they may
+// be renamed here and their rows deleted; Lopu's replies stay non-editable
+// and membership stays exactly the one user.
+const isLopuSource = (source: any): boolean => !!source && source.access === 'lopu' && source.provider === 'lopu';
 
 // ── public projections ──
 
@@ -134,6 +141,8 @@ export type PublicChatMessage = {
   threadLastAt: string | null;
   createdAt: string;
   externalSource: PublicExternalAiSource | null;
+  // Lopu turn metadata (model, provider, tool calls) — null on ordinary rows
+  lopu?: PublicLopuMessageMeta | null;
 };
 
 export type CustomEmojiMap = Record<string, { name: string; image: string; animated: boolean }>;
@@ -187,7 +196,7 @@ const previewText = (crystal: any): string => {
 
 type ChatMemberFields = { role?: ChatRole; state?: MemberState; requestOrigin?: RequestOrigin | null };
 
-const newChatMemberDoc = (chatId: string, userId: string, fields: ChatMemberFields) =>
+export const newChatMemberDoc = (chatId: string, userId: string, fields: ChatMemberFields) =>
   newThingDoc('chat-member', {
     ownerId: userId,
     targetId: chatId,
@@ -203,7 +212,7 @@ const newChatMemberDoc = (chatId: string, userId: string, fields: ChatMemberFiel
     }
   });
 
-const insertChatMember = async (chatId: string, userId: string, fields: ChatMemberFields, session?: any): Promise<boolean> => {
+export const insertChatMember = async (chatId: string, userId: string, fields: ChatMemberFields, session?: any): Promise<boolean> => {
   const things = await getThingsCollection();
   try {
     await insertMessengerThing(things, newChatMemberDoc(chatId, userId, fields) as any, session ? { session } : {});
@@ -264,7 +273,7 @@ const reviveMembership = async (memberDoc: any, fields: { role?: ChatRole; state
 // sidebar/notification list never has to aggregate message history. This is
 // the replace-on-write flavour FUNDAMENTALS §3 allows; the accumulating data
 // (the messages themselves) stays relational.
-const chatPreviewOf = (message: any, attachmentCount = 0) => ({
+export const chatPreviewOf = (message: any, attachmentCount = 0) => ({
   id: message.shareId,
   authorId: String(message.ownerId),
   text: message.crystal?.deletedAt ? '' : String(message.crystal?.text || '').slice(0, 140),
@@ -274,7 +283,7 @@ const chatPreviewOf = (message: any, attachmentCount = 0) => ({
   createdAt: new Date(message.createdAt).toISOString()
 });
 
-const touchChat = async (chatId: string, lastMessage?: Record<string, unknown>, session?: any) => {
+export const touchChat = async (chatId: string, lastMessage?: Record<string, unknown>, session?: any) => {
   const things = await getThingsCollection();
 	await updateMessengerThing(things, { shareId: chatId, thingtime: 'chat' } as any, {
 		$set: { updatedAt: new Date(), ...(lastMessage ? { 'crystal.lastMessage': lastMessage } : {}) }
@@ -308,12 +317,12 @@ const insertSystemMessage = async (
   await touchChat(chatId, chatPreviewOf(message), session);
 };
 
-type ChatAccess = { chat: any; member: any };
+export type ChatAccess = { chat: any; member: any };
 
 // Membership gate used by every chat read/write. Pending members may READ
 // (message requests show the conversation); anything stronger opts in via
 // requireActive.
-const resolveChatAccess = async (viewerId: string, chatId: unknown, opts: { requireActive?: boolean } = {}): Promise<ChatAccess | Fail> => {
+export const resolveChatAccess = async (viewerId: string, chatId: unknown, opts: { requireActive?: boolean } = {}): Promise<ChatAccess | Fail> => {
   if (typeof chatId !== 'string' || !chatId.trim()) return fail(400, 'Chat id required');
   // The membership lookup does not need the chat document — findThingByKind
   // matches on shareId === id, so chat.shareId is just the trimmed id. Running
@@ -660,13 +669,30 @@ const summaryEntry = (viewerId: string, chatDoc: any, ctx: SummaryContext): Chat
   };
 };
 
-const chatListEntryFor = async (viewerId: string, chatId: string): Promise<Fail | { ok: true; chat: ChatListEntry }> => {
+export const chatListEntryFor = async (viewerId: string, chatId: string): Promise<Fail | { ok: true; chat: ChatListEntry }> => {
   const membership = await getChatMemberDoc(chatId, viewerId);
   if (!membership) return fail(403, 'You are not in this chat');
   const ctx = await buildSummaryContext(viewerId, [membership]);
   const chatDoc = ctx.chatDocs[0];
   if (!chatDoc) return fail(404, 'Chat not found');
   return { ok: true, chat: summaryEntry(viewerId, chatDoc, ctx) };
+};
+
+// List entries for a known set of chat ids — the same summary aggregation as
+// listChats (unread, preview, membership), scoped by the viewer's ACTIVE
+// memberships in those chats (one $in over the member keys). Chats the
+// viewer is not an active member of are silently absent. Order is the
+// caller's to decide.
+export const listChatsById = async (viewerId: string, chatIds: readonly string[]): Promise<ChatListEntry[]> => {
+  const ids = Array.from(new Set(chatIds.filter((id) => typeof id === 'string' && !!id.trim()))).slice(0, MAX_LISTED_CHATS);
+  if (!ids.length) return [];
+  const things = await getThingsCollection();
+  const memberships = await things
+    .find({ thingtime: 'chat-member', 'crystal.memberKey': { $in: ids.map((id) => chatMemberKey(id, viewerId)) }, 'crystal.state': 'active' } as any)
+    .toArray();
+  if (!memberships.length) return [];
+  const ctx = await buildSummaryContext(viewerId, memberships);
+  return ctx.chatDocs.map((doc: any) => summaryEntry(viewerId, doc, ctx));
 };
 
 export type ListChatsResult = Fail | { ok: true; chats: ChatListEntry[]; totalUnread: number; requestsCount: number; serverTime: string };
@@ -735,7 +761,9 @@ export const updateChat = async (
   const access = await resolveChatAccess(viewerId, input.id, { requireActive: true });
   if ('ok' in access && access.ok === false) return access;
   const { chat, member } = access as ChatAccess;
-  if (chat.crystal?.externalSource) return fail(409, 'Imported AI chat details are read-only; resync the source to update them');
+  if (chat.crystal?.externalSource && !isLopuSource(chat.crystal.externalSource)) {
+    return fail(409, 'Imported AI chat details are read-only; resync the source to update them');
+  }
   const chatType: ChatType = chat.crystal?.chatType;
   if (chatType === 'dm') return fail(400, 'DMs have no name — set a nickname instead');
   // FB-style: any member may rename a group; channels need admin
@@ -849,6 +877,7 @@ export const manageChatMembers = async (
 
   if (Array.isArray(input.add) && input.add.length) {
     if (chatType === 'dm') return fail(400, 'DMs stay between two people — start a group instead');
+    if (isLopuSource(chat.crystal?.externalSource)) return fail(400, 'Lopu conversations stay between you and Lopu');
     // groups: any member adds (FB); channels: public → any member, private → admin
     if (chatType === 'channel' && chat.crystal?.channelVisibility === 'private' && !(await canAdministerChat(chat, member, viewerId))) {
       return fail(403, 'Only admins can add people to a private channel');
@@ -953,6 +982,7 @@ export const leaveChat = async (viewerId: string, chatId: unknown): Promise<Leav
   if ('ok' in access && access.ok === false) return access;
   const { chat, member } = access as ChatAccess;
   if (chat.crystal?.chatType === 'dm') return fail(400, 'DMs cannot be left — mute or decline instead');
+  if (isLopuSource(chat.crystal?.externalSource)) return fail(400, 'Delete the Lopu conversation instead — it is only you in here');
   const things = await getThingsCollection();
   await updateMessengerThing(things, { shareId: member.shareId } as any, { $set: { 'crystal.state': 'left', updatedAt: new Date() } });
   await insertSystemMessage(chat.shareId, viewerId, 'member-left', { subjectId: viewerId });
@@ -971,7 +1001,7 @@ export const leaveChat = async (viewerId: string, chatId: unknown): Promise<Leav
 
 // ── messages ──
 
-const projectMessages = async (
+export const projectMessages = async (
   viewerId: string,
   chatId: string,
   docs: any[],
@@ -1113,7 +1143,8 @@ const projectMessages = async (
       threadCount: thread?.count || 0,
       threadLastAt: thread?.lastAt ? new Date(thread.lastAt).toISOString() : null,
       createdAt: new Date(doc.createdAt).toISOString(),
-      externalSource: publicExternalAiSource(doc.crystal?.externalSource)
+      externalSource: publicExternalAiSource(doc.crystal?.externalSource),
+      lopu: publicLopuMessageMeta(doc.crystal?.lopu)
     };
   });
 
@@ -1358,6 +1389,7 @@ export const editMessage = async (viewerId: string, input: { id?: unknown; text?
   const access = await resolveChatAccess(viewerId, String(message.targetId), { requireActive: true });
   if ('ok' in access && access.ok === false) return access;
   if (String(message.ownerId) !== viewerId) return fail(403, 'Only the author can edit a message');
+  if (isLopuSource(message.crystal?.externalSource)) return fail(409, "Lopu's replies cannot be edited — ask again instead");
   if (message.crystal?.externalSource) return fail(409, 'Imported AI messages are read-only; add a Thingtime reply instead');
   if (message.crystal?.deletedAt) return fail(400, 'Deleted messages stay deleted');
   if (message.crystal?.systemType) return fail(400, 'System messages write themselves');
@@ -1391,7 +1423,9 @@ export const deleteMessage = async (viewerId: string, input: { id?: unknown }): 
   const access = await resolveChatAccess(viewerId, String(message.targetId), { requireActive: true });
   if ('ok' in access && access.ok === false) return access;
   const { chat, member } = access as ChatAccess;
-  if (message.crystal?.externalSource) return fail(409, 'Imported AI messages are read-only; manage them from AI connections');
+  if (message.crystal?.externalSource && !isLopuSource(message.crystal.externalSource)) {
+    return fail(409, 'Imported AI messages are read-only; manage them from AI connections');
+  }
   const mine = String(message.ownerId) === viewerId;
   if (!mine && !(await canAdministerChat(chat, member, viewerId))) {
     return fail(403, 'Only the author or an admin can delete a message');
