@@ -155,10 +155,13 @@ const viewerStateOf = (subspace: any, membership: SubspaceMembership | null): Pu
 	const moderator = canModerate(membership);
 	const access = accessOf(subspace);
 	const member = isActiveMember(membership);
-	const canPost =
-		!!membership && !membership.banned
-			? moderator || access === 'public' || (access === 'restricted' && membership.approved) || (access === 'private' && member)
-			: access === 'public';
+	// a ban is the one state that beats the access mode: without this a banned
+	// member of a PUBLIC subspace fell through to `access === 'public'` and
+	// reported canPost, so /s/<slug> rendered the ban notice and a live composer
+	// side by side and every submit came back 403 from assertSubspacePosting
+	const canPost = membership?.banned
+		? false
+		: moderator || access === 'public' || (access === 'restricted' && membership?.approved === true) || (access === 'private' && member);
 	return {
 		role: membership && !membership.left ? membership.role : null,
 		member,

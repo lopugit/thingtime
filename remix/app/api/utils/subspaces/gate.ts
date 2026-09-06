@@ -162,21 +162,38 @@ export const assertSubspacePosting = async (
 	return { ok: true, subspace, membership, flairId: resolvedFlairId, private: access === 'private', moderator };
 };
 
-// Walk a comment (or comment-on-comment…) up to the post it hangs off. Bounded
-// and cycle-safe; returns the doc itself when it is not a comment.
-export const resolveRootPost = async (doc: any, maxHops = 64): Promise<any | null> => {
+// Runaway rail for the root-post walk. Comment nesting is deliberately
+// uncapped in things.ts (MAX_COMMENTS_PER_POST bounds DIRECT replies to one
+// thing, not thread depth), so this is a work bound, not a depth policy: real
+// threads exit at the first non-comment ancestor after a hop or two. A chain
+// long enough to hit it is pathological, and the walk reports that rather than
+// pretending it reached the top.
+export const MAX_ROOT_POST_HOPS = 512;
+
+// Walk a comment (or comment-on-comment…) up to the post it hangs off; returns
+// the doc itself when it is not a comment.
+//
+// `truncated` separates "could not reach the top" (a cycle, or the rail above)
+// from "there is no post up there" (the parent was deleted, so the chain
+// simply ends). Callers must not read the first as the second: an unresolved
+// chain says nothing about whether a subspace rule applies, while a genuinely
+// orphaned comment has no subspace and nothing to enforce. Matches the
+// fail-closed-on-truncation convention of things.ts's folderAncestryContains.
+export const resolveRootPost = async (doc: any, maxHops = MAX_ROOT_POST_HOPS): Promise<{ root: any | null; truncated: boolean }> => {
 	const things = await getThingsCollection();
 	let cursor = doc;
 	const seen = new Set<string>();
-	for (let hop = 0; hop < maxHops && cursor; hop++) {
+	for (let hop = 0; hop < maxHops; hop++) {
+		if (!cursor) return { root: null, truncated: false }; // chain ends — nothing above
 		const kinds: string[] = Array.isArray(cursor.thingtime) ? cursor.thingtime : [];
-		if (!kinds.includes('comment')) return cursor;
+		if (!kinds.includes('comment')) return { root: cursor, truncated: false };
 		const targetId = typeof cursor.targetId === 'string' ? cursor.targetId : null;
-		if (!targetId || seen.has(targetId)) return null;
+		if (!targetId) return { root: null, truncated: false }; // detached comment
+		if (seen.has(targetId)) return { root: null, truncated: true }; // cycle — unresolvable
 		seen.add(targetId);
 		cursor = await things.findOne({ shareId: targetId } as any);
 	}
-	return null;
+	return { root: null, truncated: true }; // rail hit with the chain unresolved
 };
 
 // Comment/vote gate for things attached to subspace posts: banned users may
@@ -188,7 +205,11 @@ export const assertSubspaceInteraction = async (
 	kind: 'comment' | 'vote',
 	preloaded: { roles?: ViewerSubspaceRoles } = {}
 ): Promise<Fail | { ok: true }> => {
-	const root = await resolveRootPost(target);
+	const { root, truncated } = await resolveRootPost(target);
+	// an unresolved chain must never read as "not in a subspace" — that is the
+	// difference between a ban/lock that holds at every depth and one that stops
+	// applying below the rail
+	if (truncated) return fail(409, 'This thread is nested too deep to check its subspace rules — reply higher up 🌀');
 	const subspaceId = subspaceIdOfDoc(root);
 	if (!root || !subspaceId) return { ok: true };
 	const membership = preloaded.roles ? preloaded.roles.get(subspaceId) || null : await membershipOf(subspaceId, actorId);
