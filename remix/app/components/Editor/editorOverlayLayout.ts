@@ -115,7 +115,8 @@ export const editorTextObstacles = (holder: HTMLElement): OverlayRect[] => {
 	});
 	const session = holder.closest('.tt-editor-session');
 	const scope =
-		holder.closest('[data-editor-scope], form, [role="dialog"], main') ??
+		holder.closest('[role="dialog"], main, .mainFlexChildrenContainer') ??
+		holder.closest('[data-editor-scope], form')?.parentElement?.parentElement ??
 		holder.closest('article, section')?.parentElement ??
 		session?.parentElement?.parentElement;
 	// Field history occupies layout space and must also repel floating menus.
