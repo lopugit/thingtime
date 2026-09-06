@@ -824,6 +824,79 @@ export function assertControlPlaneContract() {
     /if open_prs="\$\(gh pr list[\s\S]*?\)"; then[\s\S]*?\n          else\n\s+echo "::warning::Could not re-confirm PR ownership/u,
     "a transient ownership lookup keeps the prepared analysis instead of failing the CodeQL check it exists to protect",
   );
+  // Advanced Security opens a PR's aggregate `CodeQL` check on the FIRST
+  // category's analysis and closes it `timed_out` about 6m30s later if the
+  // rest have not been PROCESSED by then. This matrix uploads `actions` in
+  // ~50s and `javascript-typescript` in 2-7 minutes, so the aggregate check
+  // closed `timed_out` on the two largest PRs (#291 at a 6m10s first-to-last
+  // gap, #592 at 6m28s) even though both slow SARIFs arrived seconds BEFORE
+  // the deadline and lost to processing lag alone. The repair inverts the
+  // upload order rather than widening the window, so it cannot decay as the
+  // JS/TS tree grows. Pin the properties that make that hold safe, not its
+  // exact spelling: the same lesson the merge-ref freshness assertions below
+  // record, where pinning one line's wording failed a legitimate rewrite.
+  const orderingHold =
+    /^      - name: Hold the faster analysis until the slowest language lands\n(?:(?!^      - name: ).*\n)*/mu.exec(
+      codeql,
+    )?.[0] ?? "";
+  assert.notEqual(
+    orderingHold,
+    "",
+    "the analyzer still holds every faster category until the slowest one has landed",
+  );
+  assert.match(
+    codeql,
+    /- name: Initialize CodeQL[\s\S]*?- name: Hold the faster analysis until the slowest language lands[\s\S]*?- name: Confirm this push still owns the analysis/u,
+    "the ordering hold waits with the database already built, and still leaves the ownership re-check adjacent to the upload",
+  );
+  // If the `if:` gate and the awaited language ever drift apart, the slowest
+  // leg is held behind its own unpublished analysis and every scan burns the
+  // full ordering window before failing open. Compare the two spellings
+  // directly instead of asserting each in isolation, and require the awaited
+  // language to be a real matrix entry so neither can be renamed alone.
+  const exemptedLanguage = /if: matrix\.language != '([^']+)'/u.exec(orderingHold)?.[1];
+  const awaitedLanguage = /SLOWEST_LANGUAGE: (\S+)/u.exec(orderingHold)?.[1];
+  assert.match(String(awaitedLanguage), /^[\w.-]+$/u, "the ordering hold names the language it waits for");
+  assert.equal(
+    exemptedLanguage,
+    awaitedLanguage,
+    "the gate exempts exactly the language the held legs wait for, so no leg can ever wait on itself",
+  );
+  assert.match(
+    codeql,
+    new RegExp(`language: \\[[^\\]]*\\b${awaitedLanguage}\\b[^\\]]*\\]`, "u"),
+    "the language the held legs wait for is actually analyzed by this matrix",
+  );
+  assert.match(
+    orderingHold,
+    /code-scanning\/analyses\?ref=\$encoded_ref/u,
+    "the hold releases on the analysis appearing in code scanning, not merely on the sibling job concluding: processing lag is what closed #291 and #592",
+  );
+  assert.doesNotMatch(
+    orderingHold,
+    /gh api[^\n]*\|\| true/u,
+    "a rate-limited lookup retries instead of being misread as the sibling having landed",
+  );
+  assert.doesNotMatch(
+    orderingHold,
+    /\bexit [1-9]/u,
+    "every path through the hold exits 0: an unscanned commit is a worse outcome than a late one",
+  );
+  assert.match(
+    orderingHold,
+    /while \[ "\$SECONDS" -lt "\$deadline" \]/u,
+    "the hold is bounded, so a wedged sibling cannot strand the analyzer up to its own 60-minute job timeout",
+  );
+  assert.match(
+    orderingHold,
+    /sibling_grace=[\s\S]*?sibling_deadline=\$\(\( SECONDS \+ sibling_grace \)\)/u,
+    "a sibling that succeeded without publishing — the adopted push where NEITHER leg uploads — releases on a grace window instead of idling out the whole hold",
+  );
+  assert.match(
+    orderingHold,
+    /if ! sibling="\$\(jq[\s\S]*?\)" \|\| \[ -z "\$sibling" \]; then\n\s+sibling=unreadable/u,
+    "an unclassifiable jobs payload keeps waiting for the authoritative analysis instead of aborting the step under `set -e`",
+  );
   assert.match(
     codeql,
     /^      actions: read\n      contents: read\n      packages: read\n      pull-requests: read\n      security-events: write$/mu,
