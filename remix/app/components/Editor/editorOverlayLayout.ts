@@ -100,7 +100,7 @@ export const moveEditorOverlay = (element: HTMLElement, position: Pick<OverlayRe
 	if (Math.abs(position.top - rect.top) > 0.5) mover.style.top = `${(parseFloat(css.top) || 0) + (position.top - rect.top) / (scaleY || 1)}px`;
 };
 
-export const editorTextObstacles = (holder: HTMLElement): OverlayRect[] => {
+export const editorTextObstacles = (holder: HTMLElement, includeHistory = true): OverlayRect[] => {
 	const rects: OverlayRect[] = [];
 	holder.querySelectorAll<HTMLElement>('[contenteditable="true"],textarea').forEach((field) => {
 		if (field.tagName === 'TEXTAREA' || !field.textContent?.trim()) rects.push(field.getBoundingClientRect());
@@ -121,8 +121,8 @@ export const editorTextObstacles = (holder: HTMLElement): OverlayRect[] => {
 		holder.closest('[data-editor-scope], form')?.parentElement?.parentElement ??
 		holder.closest('article, section')?.parentElement ??
 		session?.parentElement?.parentElement;
-	// Field history occupies layout space and must also repel floating menus.
-	if (session) {
+	// Floating history repels other menus, but must not repel its own placement.
+	if (session && includeHistory) {
 		const history = session?.querySelector<HTMLElement>(':scope > .tt-editor-history-controls');
 		if (history) rects.push(history.getBoundingClientRect());
 	}
