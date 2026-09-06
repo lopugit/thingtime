@@ -13,9 +13,16 @@
 //     after a promotion merges and "Sync main into develop" levels the
 //     branches again.
 //
-// The changelog is the first-parent spine of main..develop: exactly the PR
-// merges and direct pushes that landed on develop and that merging the
-// promotion PR would ship to main. Each spine commit is attributed to a
+// The changelog is the first-parent spine of main..develop: the PR merges and
+// direct pushes that landed on develop and that merging the promotion PR would
+// ship to main. Ancestry and content can disagree — the same work often reaches
+// main through its own main-based PR, and "Sync main into develop" then merges
+// main back into develop, leaving develop ahead by commits whose content main
+// already has. The spine is non-empty but the merge would change no files, so
+// the section leads with an explicit no-op warning (see contentEmpty in
+// buildSection) instead of claiming those PRs "will land in main". The no-op
+// test is a tree comparison (git diff --quiet base head), which holds whether
+// or not main is an ancestor of develop. Each spine commit is attributed to a
 // merged develop-based PR by, in order:
 //   1. its subject ("Merge pull request #N ..." and squash-style "... (#N)");
 //   2. content matching against recently merged develop-based PRs — merge
@@ -121,6 +128,21 @@ function run(cmd, args, opts = {}) {
   return execFileSync(cmd, args, { ...EXEC_OPTS, ...opts });
 }
 const git = (...args) => run("git", args).trim();
+
+// True when merging the promotion would change no files. Compares trees rather
+// than ancestry: develop can sit several commits ahead of main while carrying
+// content main already has (work merged straight to main, then synced back into
+// develop). Identical trees mean any merge of the two produces main's current
+// tree, so this holds whether or not main is an ancestor of develop.
+function treesMatch(base, head) {
+  try {
+    run("git", ["diff", "--quiet", base, head]);
+    return true; // exit 0 — no differences
+  } catch (error) {
+    if (error?.status === 1) return false; // exit 1 — real differences
+    throw error; // 128 and friends are genuine git failures, not "differs"
+  }
+}
 const gh = (args, opts = {}) => run("gh", args, opts);
 const ghJson = (args, opts = {}) => JSON.parse(gh(args, opts) || "null");
 
@@ -165,6 +187,7 @@ const fmtDate = (iso) => (iso ? String(iso).slice(0, 10) : "");
 export function buildSection(data) {
   const {
     prs, directs, totalCommits, headShort, headDate, base, head,
+    contentEmpty = false,
     maxPrRows = CFG.maxPrRows, maxDirectRows = CFG.maxDirectRows,
   } = data;
   const setLine = [...prs.map((p) => p.number)].sort((a, b) => a - b).join(",");
@@ -175,9 +198,19 @@ export function buildSection(data) {
   lines.push("");
   const prCount = `**${prs.length} pull request${prs.length === 1 ? "" : "s"}**`;
   const commitCount = `${totalCommits} commit${totalCommits === 1 ? "" : "s"}`;
+  if (contentEmpty) {
+    lines.push(
+      `> ⚠️ **This promotion would ship no file changes.** \`${head}\` and \`${base}\` have identical trees, ` +
+      `so merging this PR only reconciles history (\`${head}\` is ${commitCount} ahead). Everything listed below ` +
+      `already reached \`${base}\` by another route — nothing here is waiting to be released.`,
+    );
+    lines.push("");
+  }
   if (prs.length) {
     lines.push(
-      `${prCount} merged into \`${head}\` (${commitCount}) will land in \`${base}\` when this PR merges — newest first:`,
+      contentEmpty
+        ? `${prCount} merged into \`${head}\` (${commitCount}) — already present in \`${base}\`, listed for history, newest first:`
+        : `${prCount} merged into \`${head}\` (${commitCount}) will land in \`${base}\` when this PR merges — newest first:`,
     );
     lines.push("");
     lines.push("| PR | Title | Author | Source branch | Merged (UTC) |");
@@ -202,7 +235,9 @@ export function buildSection(data) {
     lines.push("");
     lines.push(
       `⚠️ **Carries \`no-promote\`-labeled PRs:** ${flagged.map((p) => `#${p.number}`).join(", ")}. ` +
-      `An omnibus \`${head}\` → \`${base}\` merge ships their changes anyway — split or revert them first if they must not reach \`${base}\`.`,
+      (contentEmpty
+        ? `Their changes are already in \`${base}\`, so holding this PR back no longer keeps them out — revert them on \`${base}\` if they must not be there.`
+        : `An omnibus \`${head}\` → \`${base}\` merge ships their changes anyway — split or revert them first if they must not reach \`${base}\`.`),
     );
   }
   if (directs.length) {
@@ -261,9 +296,10 @@ export function computeDelta(oldSet, newSet) {
   return { added, removed };
 }
 
-export function buildComment({ initialized, delta, prsByNumber, total, totalCommits, maxRows = CFG.maxCommentRows }) {
+export function buildComment({ initialized, delta, prsByNumber, total, totalCommits, contentEmpty = false, maxRows = CFG.maxCommentRows }) {
   const lines = [];
-  const carry = `**${total} PR${total === 1 ? "" : "s"}** (${totalCommits} commit${totalCommits === 1 ? "" : "s"})`;
+  const carry = `**${total} PR${total === 1 ? "" : "s"}** (${totalCommits} commit${totalCommits === 1 ? "" : "s"})`
+    + (contentEmpty ? " — ⚠️ no file changes; the content is already on the base branch" : "");
   const describe = (n) => {
     const pr = prsByNumber.get(n);
     if (!pr) return `- #${n}`;
@@ -532,6 +568,29 @@ function selfTest() {
   assert(section.includes("ci: standing promo \\| workflow"), "escaped title in table");
   assert(section.includes("#186 ⚠️"), "flagged row marker");
   assert(section.includes("Direct commits"), "directs section");
+  assert(section.includes("will land in `main`"), "carrying promotion claims a landing");
+  assert(!section.includes("would ship no file changes"), "carrying promotion has no no-op warning");
+
+  // A promotion whose trees already match must never claim the listed PRs
+  // "will land in main" — that is the develop-ahead-but-content-identical
+  // state left behind when work reaches main directly and is synced back.
+  const noop = buildSection({
+    prs: [{ number: 635, title: "feat: editor", author: "lopugit", branch: "codex/editor", mergedAt: "2026-09-06T03:06:52Z", flagged: true }],
+    directs: [{ sha: "b1f8e212", subject: "Merge remote-tracking branch 'origin/main' into develop" }],
+    totalCommits: 3,
+    headShort: "b1f8e212",
+    headDate: "2026-09-06",
+    base: "main",
+    head: "develop",
+    contentEmpty: true,
+  });
+  assert(noop.includes("would ship no file changes"), "no-op promotion warns up front");
+  assert(!noop.includes("will land in `main`"), "no-op promotion drops the landing claim");
+  assert(noop.includes("already present in `main`"), "no-op promotion reframes the table");
+  assert(noop.includes("already in `main`"), "no-op promotion corrects no-promote advice");
+  assert(!noop.includes("ships their changes anyway"), "no-op promotion drops stale no-promote advice");
+  assert(noop.includes("promotion-changelog-prs: 635"), "no-op promotion keeps the delta set line");
+  assert(parsePrSet(noop).has(635), "no-op promotion set line stays parseable");
 
   const fresh = spliceSection("Preamble text.", section);
   assert(fresh.includes("Preamble text.\n\n<!-- promotion-changelog:start -->"), "append after preamble");
@@ -559,6 +618,17 @@ function selfTest() {
     totalCommits: 9,
   });
   assert(comment.includes("Added:") && comment.includes("#187") && comment.includes("#42"), "delta comment");
+  assert(!comment.includes("no file changes"), "carrying delta comment has no no-op note");
+
+  const noopComment = buildComment({
+    initialized: false,
+    delta: { added: [635], removed: [] },
+    prsByNumber: new Map([[635, { number: 635, title: "feat: editor", author: "lopugit", flagged: false }]]),
+    total: 1,
+    totalCommits: 3,
+    contentEmpty: true,
+  });
+  assert(noopComment.includes("no file changes"), "no-op delta comment flags the empty promotion");
 
   if (process.exitCode) throw new Error("self-test failed");
   console.log("self-test OK");
@@ -633,8 +703,10 @@ function main() {
   }
 
   verifyFlags(prs);
+  const contentEmpty = treesMatch(CFG.gitBase, CFG.gitHead);
   const section = buildSection({
     prs, directs, totalCommits, headShort, headDate, base: CFG.base, head: CFG.head,
+    contentEmpty,
   });
   const prsByNumber = new Map(prs.map((p) => [p.number, p]));
   const newSet = new Set(prsByNumber.keys());
@@ -688,7 +760,7 @@ function main() {
       : delta.added.length > 0 || delta.removed.length > 0;
     if (worthCommenting) {
       const comment = buildComment({
-        initialized, delta, prsByNumber, total: newSet.size, totalCommits,
+        initialized, delta, prsByNumber, total: newSet.size, totalCommits, contentEmpty,
       });
       if (CFG.dryRun) {
         console.log(`DRY_RUN: would comment on PR #${openPr.number}:\n${comment}`);
