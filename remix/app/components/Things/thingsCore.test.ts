@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { groupThings, schemaRenderOf, thingLink, thingOpenHref, type ThingsThing } from './thingsCore';
+import { groupThings, parseThingsReferrer, schemaRenderOf, thingLink, thingOpenHref, type ThingsThing } from './thingsCore';
 
 const makeThing = (id: string, kind: string): ThingsThing => ({
   id,
@@ -54,6 +54,21 @@ test('thingOpenHref carries the referrer hint only onto the universal page', () 
   assert.equal(thingOpenHref(makeThing('post-1', 'post'), 'things'), '/post/post-1');
   assert.equal(thingOpenHref(makeThing('folder-1', 'folder'), 'things'), '/things?folder=folder-1');
   assert.equal(thingOpenHref(makeThing('action-1', 'action'), 'things'), '/actions/action-1');
+});
+
+test('parseThingsReferrer accepts only the three surfaces and never a prototype key', () => {
+  assert.equal(parseThingsReferrer('things'), 'things');
+  assert.equal(parseThingsReferrer('actions'), 'actions');
+  assert.equal(parseThingsReferrer('feed'), 'feed');
+  assert.equal(parseThingsReferrer(null), 'feed');
+  assert.equal(parseThingsReferrer(undefined), 'feed');
+  assert.equal(parseThingsReferrer(''), 'feed');
+  assert.equal(parseThingsReferrer('bogus'), 'feed');
+  // an inherited key must not read as a referrer: a raw record lookup would
+  // answer with Object.prototype's member and leave the back link broken
+  for (const inherited of ['toString', 'constructor', '__proto__', 'valueOf', 'hasOwnProperty']) {
+    assert.equal(parseThingsReferrer(inherited), 'feed', `${inherited} falls back to the feed`);
+  }
 });
 
 test('schemaRenderOf reads a schema thing render template and nothing else', () => {
