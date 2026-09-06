@@ -307,10 +307,262 @@ jobs:
           fetch-depth: 2
           persist-credentials: false
 
+      # Advanced Security opens the PR's aggregate CodeQL check the moment the
+      # FIRST configuration uploads, and closes it right there if no other
+      # CodeQL configuration is in flight for that SHA. These two legs are
+      # wildly uneven -- `actions` finishes in about a minute,
+      # `javascript-typescript` takes seven to eight -- so whenever Actions
+      # allocates the slow leg's runner late, the fast leg uploads before the
+      # slow leg exists and the check dies "1 configuration not found". This
+      # is the residual #557 shape reached through matrix scheduling rather
+      # than duplicate refs, and the concurrency group above cannot see it:
+      # `matrix.language` is part of the group key, so the legs never queue
+      # against each other and nothing else orders their starts.
+      #
+      # PR #610 @780c81f9: `actions` started 06:08:49 and uploaded 06:09:40;
+      # `javascript-typescript` did not start until 06:10:59. The aggregate
+      # check opened 06:09:39 and closed `timed_out` at 06:09:41, and the
+      # clean js-ts analysis that landed at 06:18:17 never reopened it. PR
+      # #662 is the same workflow with both legs starting one second apart,
+      # and its check passed while its js-ts analysis was still running --
+      # the presence of the sibling, not its result, is what the check needs.
+      #
+      # So hold every leg until all of them are out of the queue. Waiting
+      # before `init` (not before `analyze`) means the fast leg still spends
+      # its own checkout+init+build after the barrier lifts, which reproduces
+      # the healthy margin a co-scheduled run gets for free. No deadlock: a
+      # leg's own status is never `queued`, so co-scheduled legs pass through
+      # immediately and a lone straggler only ever blocks legs that already
+      # started. Never fail here -- a red job is precisely the check state
+      # this step exists to prevent, so an unreadable API or an exhausted
+      # wait proceeds with a warning, exactly like the push-ownership
+      # re-check below.
+      - name: Wait for every sibling language leg to start
+        if: strategy.job-total > 1
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          EXPECTED_LEGS: ${{ strategy.job-total }}
+        run: |
+          set -euo pipefail
+
+          [[ "$EXPECTED_LEGS" =~ ^[1-9][0-9]{0,2}$ ]] || {
+            echo "::warning::Unreadable matrix leg count '$EXPECTED_LEGS'; analyzing without the sibling-start barrier."
+            exit 0
+          }
+
+          deadline=$((SECONDS + 600))
+          started=0
+          while :; do
+            # Scope to this attempt: a re-run must not count the previous
+            # attempt's finished legs and skip the barrier outright.
+            if leg_statuses="$(
+              gh api "repos/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs?per_page=100" \
+                --jq '[.jobs[] | select(.name | contains("Analyze (")) | .status]' 2>/dev/null
+            )"; then
+              started="$(jq 'map(select(. != "queued")) | length' <<<"$leg_statuses")"
+              if [ "$started" -ge "$EXPECTED_LEGS" ]; then
+                echo "All $EXPECTED_LEGS analysis legs have started; their uploads will overlap."
+                break
+              fi
+            else
+              echo "::warning::Could not read this run's jobs; analyzing without the sibling-start barrier."
+              break
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::warning::Only $started of $EXPECTED_LEGS analysis legs started within the wait; analyzing anyway rather than leaving the commit unscanned."
+              break
+            fi
+            sleep 15
+          done
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4
         with:
           languages: ${{ matrix.language }}
+
+      # Advanced Security opens the PR's aggregate `CodeQL` check when the
+      # FIRST category's analysis lands, then closes it `timed_out` about
+      # 6m30s later if the remaining categories have not been processed by
+      # then. This matrix uploads `actions` in roughly 50s and
+      # `javascript-typescript` in 2-7 minutes, so that aggregate check is a
+      # race this repository sits on the edge of. Measured on the live PR
+      # heads: it passed at first-to-last upload gaps of 2m04s-5m32s (#10,
+      # #649, #607, #635, #596, #613, #295, #557, #662) and closed
+      # `timed_out` at 6m10s on #291 and 6m28s on #592 -- with BOTH failures
+      # served by a single uncontended `pull_request` run whose two matrix
+      # legs shared one workflow run. The duplicate-scan contention the #557
+      # guards above already removed is therefore not the remaining cause;
+      # the intrinsic per-language duration spread is. Because that spread
+      # tracks the size of the JS/TS diff, the failure lands hardest on
+      # exactly the largest PRs, and on both #291 and #592 the slow SARIF
+      # actually arrived seconds BEFORE the deadline and still lost to
+      # asynchronous processing.
+      #
+      # Remove the race instead of widening it: hold every faster category's
+      # upload until the slowest one has landed. The aggregate check then
+      # opens on the slow upload and the fast one follows about a minute
+      # later, far inside the window, however long the slow analysis took.
+      # Fail open in every uncertain case -- a category that cannot confirm
+      # its sibling still uploads, because an unscanned commit is a worse
+      # outcome than a late one.
+      - name: Hold the faster analysis until the slowest language lands
+        if: matrix.language != 'javascript-typescript'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          LANGUAGE: ${{ matrix.language }}
+          SLOWEST_LANGUAGE: javascript-typescript
+          ANALYSIS_REF: ${{ needs.scope.outputs.analysis_ref }}
+          ANALYSIS_SHA: ${{ needs.scope.outputs.analysis_sha }}
+          FALLBACK_REF: ${{ github.ref }}
+          FALLBACK_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          # The dispatched path names its target explicitly; `pull_request`
+          # and `push` both analyze the revision the event already points at
+          # (`refs/pull/N/merge`@merge-sha, or the pushed branch tip).
+          ref="$ANALYSIS_REF"
+          sha="$ANALYSIS_SHA"
+          if [ -z "$ref" ]; then
+            ref="$FALLBACK_REF"
+            sha="$FALLBACK_SHA"
+          fi
+          encoded_ref="$(jq -rn --arg value "$ref" '$value | @uri')"
+          category="/language:$SLOWEST_LANGUAGE"
+
+          # `code-scanning/analyses` retains EVERY analysis ever uploaded for a
+          # ref, so "an analysis exists for this sha and category" is a
+          # different question from "this run's sibling has uploaded". They
+          # diverge on the re-scan of an already-analyzed head, which is the
+          # path this repository reaches most often -- a re-run, a queued
+          # duplicate held by `queue: max` above, or a backfill dispatch.
+          # PR #291 is the live proof: attempt 2 of run 33993009078 started
+          # 23:31:23 and re-analyzed the SAME merge SHA a8e90ff3, uploading
+          # `actions` at 23:32:12 and `javascript-typescript` at 23:38:14 --
+          # and attempt 1's 21:32:20 analysis is still listed under that very
+          # ref and SHA. Matching it would release this leg instantly and hand
+          # back the exact 6m02s race this step exists to remove, silently, on
+          # every re-scan. Require the analysis to belong to THIS attempt.
+          #
+          # `run_started_at` is per-attempt (23:31:23 for that attempt 2, not
+          # its 21:25:26 creation), so it is the exact boundary: every analysis
+          # this attempt publishes is newer, and every analysis from an earlier
+          # scan of the same SHA is older. Fall back to this step's own start,
+          # which is later still and so likewise never admits a stale analysis;
+          # a sibling that uploaded before this leg began polling is then
+          # released by the `done` grace window below rather than by a match.
+          baseline_epoch="$(date -u +%s)"
+          if run_json="$(gh api "repos/$REPO/actions/runs/$RUN_ID")"; then
+            run_started_epoch="$(
+              jq -r '.run_started_at? | strings | fromdateiso8601? // empty' <<<"$run_json"
+            )" || run_started_epoch=""
+            if [ -n "$run_started_epoch" ]; then
+              baseline_epoch="$run_started_epoch"
+            fi
+          else
+            echo "::warning::Could not read this run's start time; holding $LANGUAGE against this step's own start instead."
+          fi
+
+          # Well above the 2-7 minutes observed and well below the job's own
+          # 60-minute ceiling, so a pathological slow analysis still gets its
+          # ordering while a wedged one cannot strand this runner.
+          deadline=$(( SECONDS + 20 * 60 ))
+
+          # A sibling that finished successfully has either already uploaded --
+          # and is merely waiting on Advanced Security to process the SARIF --
+          # or is never going to, because its own ownership guard declined the
+          # upload. Those are indistinguishable from here, so keep waiting but
+          # only for as long as processing plausibly takes. The lag measured on
+          # live heads was 4s (#663), 5s (#592) and 21s (#291), so three
+          # minutes stays far clear of a real upload while capping the
+          # push-adopted-by-a-PR case, in which NEITHER leg uploads, at roughly
+          # three minutes of idling instead of the full twenty.
+          sibling_grace=$(( 3 * 60 ))
+          sibling_deadline=""
+
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            # Preserve `gh`'s exit status rather than `|| true`: a rate-limited
+            # lookup must retry, not be mistaken for "the sibling has landed".
+            if analyses="$(gh api "repos/$REPO/code-scanning/analyses?ref=$encoded_ref&per_page=100")"; then
+              # `// 0` rather than `// empty`: a malformed or absent timestamp
+              # must evaluate to a definite "too old", not vanish out of the
+              # predicate and leave `any` to report on a shorter list.
+              if jq -e --arg sha "$sha" --arg category "$category" --argjson since "$baseline_epoch" '
+                any(.[];
+                  .commit_sha == $sha
+                    and .tool.name == "CodeQL"
+                    and .category == $category
+                    and ((.created_at? | strings | fromdateiso8601? // 0) >= $since))
+              ' <<<"$analyses" >/dev/null; then
+                echo "::notice::The $SLOWEST_LANGUAGE analysis for $ref@$sha has landed; uploading $LANGUAGE now."
+                exit 0
+              fi
+            else
+              echo "::warning::Could not read code-scanning analyses for $ref; retrying."
+            fi
+
+            # Never outlive a sibling that can no longer upload. A matrix that
+            # no longer carries the slow language, or one whose slow leg has
+            # already failed or been cancelled, must release this leg at once
+            # instead of idling out the full deadline.
+            if jobs_json="$(gh api "repos/$REPO/actions/runs/$RUN_ID/jobs?per_page=100")"; then
+              # `gh api` exits 0 on any 2xx, so the body is not guaranteed to be
+              # the shape this classifier expects — an edge-served HTML page, a
+              # truncated body, or a payload without `.jobs` all reach here. An
+              # unguarded assignment would abort the step under `set -e` and
+              # fail the job, which is precisely the red CodeQL check and
+              # unscanned `actions` snapshot this step exists to avoid. Guard it
+              # the way the analyses lookup above and the ownership re-check
+              # below already guard theirs: an unclassifiable payload matches no
+              # release branch, so this leg simply keeps waiting for the
+              # analysis itself, which remains the authoritative signal.
+              if ! sibling="$(jq -r --arg name "$SLOWEST_LANGUAGE" '
+                [.jobs[] | select(.name? | strings | contains("(" + $name + ")"))] as $legs
+                | if ($legs | length) == 0 then "missing"
+                  elif any($legs[]; .status != "completed") then "pending"
+                  elif any($legs[]; .conclusion == "success") then "done"
+                  else "unusable"
+                  end
+              ' <<<"$jobs_json")" || [ -z "$sibling" ]; then
+                sibling=unreadable
+                echo "::warning::Could not classify the $SLOWEST_LANGUAGE leg from this run's jobs payload; continuing to wait for the $SLOWEST_LANGUAGE analysis."
+              fi
+              case "$sibling" in
+                missing)
+                  echo "::notice::This run carries no $SLOWEST_LANGUAGE leg to order against; uploading $LANGUAGE now."
+                  exit 0
+                  ;;
+                unusable)
+                  echo "::warning::The $SLOWEST_LANGUAGE leg of this run ended without success; uploading $LANGUAGE now rather than waiting for a snapshot that is not coming."
+                  exit 0
+                  ;;
+                done)
+                  # Start the grace window on the first sighting only, so a
+                  # sibling that completed before this leg even began polling
+                  # still gets a full processing allowance rather than none.
+                  if [ -z "$sibling_deadline" ]; then
+                    sibling_deadline=$(( SECONDS + sibling_grace ))
+                  elif [ "$SECONDS" -ge "$sibling_deadline" ]; then
+                    echo "::warning::The $SLOWEST_LANGUAGE leg succeeded but published no analysis for $ref@$sha within ${sibling_grace}s; it most likely declined the upload, so uploading $LANGUAGE now instead of idling out the ordering window."
+                    exit 0
+                  fi
+                  ;;
+              esac
+            else
+              echo "::warning::Could not read this run's jobs; continuing to wait for the $SLOWEST_LANGUAGE analysis."
+            fi
+
+            sleep 15
+          done
+
+          echo "::warning::The $SLOWEST_LANGUAGE analysis for $ref@$sha did not land within the ordering window; uploading $LANGUAGE now so the revision is still scanned."
 
       # The scope pre-flight samples `gh pr list` within seconds of the push,
       # so a branch that is pushed FIRST and adopted by a PR moments later

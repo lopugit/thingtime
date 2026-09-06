@@ -824,6 +824,157 @@ export function assertControlPlaneContract() {
     /if open_prs="\$\(gh pr list[\s\S]*?\)"; then[\s\S]*?\n          else\n\s+echo "::warning::Could not re-confirm PR ownership/u,
     "a transient ownership lookup keeps the prepared analysis instead of failing the CodeQL check it exists to protect",
   );
+  // The ordering hold below makes `javascript-typescript` the FIRST uploader,
+  // which moves this barrier from a redundancy to a load-bearing guard. GHAS
+  // also closes the aggregate check on the spot when the first configuration
+  // uploads with no sibling configuration in flight -- PR #610 @780c81f9 opened
+  // at 06:09:39 and closed `timed_out` at 06:09:41 because the slow leg had not
+  // been allocated a runner yet, and the clean analysis that landed at 06:18:17
+  // never reopened it. The per-language concurrency group cannot see that shape
+  // (`matrix.language` is part of its key, so the legs never queue against each
+  // other), and the hold cannot either, because the hold exempts exactly the
+  // leg that now uploads first. Deleting this step would therefore trade the
+  // `timed_out` failure for the "1 configuration not found" one, silently. Pin
+  // the properties that prevent that, not the wording.
+  const siblingStartBarrier =
+    /^      - name: Wait for every sibling language leg to start\n(?:(?!^      - name: ).*\n)*/mu.exec(
+      codeql,
+    )?.[0] ?? "";
+  assert.notEqual(
+    siblingStartBarrier,
+    "",
+    "every analysis leg still waits for its siblings to start, so the first upload never lands alone",
+  );
+  assert.match(
+    codeql,
+    /- name: Wait for every sibling language leg to start[\s\S]*?- name: Initialize CodeQL[\s\S]*?- name: Hold the faster analysis until the slowest language lands/u,
+    "the barrier waits before init, so each leg still spends its own init and build after the barrier lifts instead of uploading the moment it clears",
+  );
+  // The gate and the expected count must come from one source. A hardcoded
+  // count silently over- or under-waits the moment a language is added or
+  // removed, and either mistake reintroduces a lone first uploader.
+  assert.match(
+    siblingStartBarrier,
+    /if: strategy\.job-total > 1\n[\s\S]*?EXPECTED_LEGS: \$\{\{ strategy\.job-total \}\}/u,
+    "the barrier is gated on, and counts, the live matrix size, so adding or removing a language cannot leave it waiting for the wrong number of legs",
+  );
+  // "Started" is the whole point: #662 passed while its js-ts analysis was
+  // still running, so the sibling's presence -- not its result -- is what the
+  // aggregate check needs. Waiting for completion instead would deadlock the
+  // legs against each other once the hold below also waits on the analysis.
+  assert.match(
+    siblingStartBarrier,
+    /map\(select\(\. != "queued"\)\) \| length/u,
+    "the barrier releases when its siblings have left the queue, never when they have finished, so no leg can ever wait on a leg that is waiting for it",
+  );
+  // A re-run must not count the previous attempt's finished legs and skip the
+  // barrier outright, which is exactly what the unscoped run-level jobs list
+  // would report while this attempt's siblings were still queued.
+  assert.match(
+    siblingStartBarrier,
+    /attempts\/\$RUN_ATTEMPT\/jobs/u,
+    "the barrier counts only this attempt's legs, so a re-run cannot be released by the previous attempt's completed jobs",
+  );
+  assert.match(
+    siblingStartBarrier,
+    /\[ "\$SECONDS" -ge "\$deadline" \]/u,
+    "the barrier is bounded, so a sibling that never gets a runner cannot strand this leg up to its own 60-minute job timeout",
+  );
+  assert.doesNotMatch(
+    siblingStartBarrier,
+    /\bexit [1-9]/u,
+    "every path through the barrier exits 0: a red analysis job is precisely the check state it exists to prevent",
+  );
+  // Advanced Security opens a PR's aggregate `CodeQL` check on the FIRST
+  // category's analysis and closes it `timed_out` about 6m30s later if the
+  // rest have not been PROCESSED by then. This matrix uploads `actions` in
+  // ~50s and `javascript-typescript` in 2-7 minutes, so the aggregate check
+  // closed `timed_out` on the two largest PRs (#291 at a 6m10s first-to-last
+  // gap, #592 at 6m28s) even though both slow SARIFs arrived seconds BEFORE
+  // the deadline and lost to processing lag alone. The repair inverts the
+  // upload order rather than widening the window, so it cannot decay as the
+  // JS/TS tree grows. Pin the properties that make that hold safe, not its
+  // exact spelling: the same lesson the merge-ref freshness assertions below
+  // record, where pinning one line's wording failed a legitimate rewrite.
+  const orderingHold =
+    /^      - name: Hold the faster analysis until the slowest language lands\n(?:(?!^      - name: ).*\n)*/mu.exec(
+      codeql,
+    )?.[0] ?? "";
+  assert.notEqual(
+    orderingHold,
+    "",
+    "the analyzer still holds every faster category until the slowest one has landed",
+  );
+  assert.match(
+    codeql,
+    /- name: Initialize CodeQL[\s\S]*?- name: Hold the faster analysis until the slowest language lands[\s\S]*?- name: Confirm this push still owns the analysis/u,
+    "the ordering hold waits with the database already built, and still leaves the ownership re-check adjacent to the upload",
+  );
+  // If the `if:` gate and the awaited language ever drift apart, the slowest
+  // leg is held behind its own unpublished analysis and every scan burns the
+  // full ordering window before failing open. Compare the two spellings
+  // directly instead of asserting each in isolation, and require the awaited
+  // language to be a real matrix entry so neither can be renamed alone.
+  const exemptedLanguage = /if: matrix\.language != '([^']+)'/u.exec(orderingHold)?.[1];
+  const awaitedLanguage = /SLOWEST_LANGUAGE: (\S+)/u.exec(orderingHold)?.[1];
+  assert.match(String(awaitedLanguage), /^[\w.-]+$/u, "the ordering hold names the language it waits for");
+  assert.equal(
+    exemptedLanguage,
+    awaitedLanguage,
+    "the gate exempts exactly the language the held legs wait for, so no leg can ever wait on itself",
+  );
+  assert.match(
+    codeql,
+    new RegExp(`language: \\[[^\\]]*\\b${awaitedLanguage}\\b[^\\]]*\\]`, "u"),
+    "the language the held legs wait for is actually analyzed by this matrix",
+  );
+  assert.match(
+    orderingHold,
+    /code-scanning\/analyses\?ref=\$encoded_ref/u,
+    "the hold releases on the analysis appearing in code scanning, not merely on the sibling job concluding: processing lag is what closed #291 and #592",
+  );
+  // `code-scanning/analyses` never forgets, so the release predicate has to
+  // separate "this attempt's sibling uploaded" from "this SHA was analyzed at
+  // some point". Without that, a re-scan of an already-analyzed head matches
+  // the PREVIOUS scan's analysis and releases instantly, restoring the very
+  // race this step removes — silently, and on the repository's most common
+  // path. #291 attempt 2 re-analyzed merge SHA a8e90ff3 at a 6m02s gap while
+  // attempt 1's analysis was still listed under that ref and SHA.
+  assert.match(
+    orderingHold,
+    /--argjson since "\$baseline_epoch"[\s\S]*?fromdateiso8601\? \/\/ 0\) >= \$since/u,
+    "the hold releases only on an analysis newer than this attempt, so a re-scan cannot be released by the previous scan's analysis of the same SHA",
+  );
+  assert.match(
+    orderingHold,
+    /baseline_epoch="\$\(date -u \+%s\)"[\s\S]*?\.run_started_at\?[\s\S]*?baseline_epoch="\$run_started_epoch"/u,
+    "that freshness baseline is this run attempt's own start, falling back to the step's start, so neither source can admit an earlier scan's analysis",
+  );
+  assert.doesNotMatch(
+    orderingHold,
+    /gh api[^\n]*\|\| true/u,
+    "a rate-limited lookup retries instead of being misread as the sibling having landed",
+  );
+  assert.doesNotMatch(
+    orderingHold,
+    /\bexit [1-9]/u,
+    "every path through the hold exits 0: an unscanned commit is a worse outcome than a late one",
+  );
+  assert.match(
+    orderingHold,
+    /while \[ "\$SECONDS" -lt "\$deadline" \]/u,
+    "the hold is bounded, so a wedged sibling cannot strand the analyzer up to its own 60-minute job timeout",
+  );
+  assert.match(
+    orderingHold,
+    /sibling_grace=[\s\S]*?sibling_deadline=\$\(\( SECONDS \+ sibling_grace \)\)/u,
+    "a sibling that succeeded without publishing — the adopted push where NEITHER leg uploads — releases on a grace window instead of idling out the whole hold",
+  );
+  assert.match(
+    orderingHold,
+    /if ! sibling="\$\(jq[\s\S]*?\)" \|\| \[ -z "\$sibling" \]; then\n\s+sibling=unreadable/u,
+    "an unclassifiable jobs payload keeps waiting for the authoritative analysis instead of aborting the step under `set -e`",
+  );
   assert.match(
     codeql,
     /^      actions: read\n      contents: read\n      packages: read\n      pull-requests: read\n      security-events: write$/mu,
