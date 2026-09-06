@@ -75,6 +75,12 @@ experiment by itself.
   context, bounded authority, risk-tiered tools, receipts, correction, remedy,
   and separately gated autonomy. Adoption experiments must not treat fluent
   output, confirmation, tool completion, or usage as authority or success.
+- [TODO 34](./34-collaboration-agency-and-shared-stewardship.md) owns informed
+  collaboration invitations, explicit artifact roles, exact-version
+  contributions, conflict recovery, departure, removal, and shared-stewardship
+  remedies. Adoption experiments must not infer edit authority from a
+  relationship or treat members, invites, edits, or activity as useful
+  collaboration.
 - [TODO 10](./10-delight-and-growth-ideas.md) is the idea bank; this epic adds
   sequencing and outcome gates.
 - [TODO 18](./18-account-invite-links.md) owns the defensive account-invite

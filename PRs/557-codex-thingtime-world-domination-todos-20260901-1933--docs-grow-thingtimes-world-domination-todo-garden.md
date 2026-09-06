@@ -354,3 +354,43 @@ from the NOTES, PLAN, main TODO, and Claude TODO indexes, plus the
 ethical-adoption evidence, trustworthy-adoption roadmap, and TODO 22 dependency
 list. No runtime, API, model, provider, tool, prompt, confirmation, storage,
 schema, analytics, or production behavior changed.
+
+## 2026-09-07 — collaboration agency and shared stewardship
+
+This run distinguishes social connection, content visibility, group membership,
+and platform ownership from bounded authority to create and steward an artifact
+together. It adds:
+
+- `NOTES/collaboration-agency-and-shared-stewardship-baseline.md`, a dated
+  evidence ledger covering owner-only Thing updates, ACL visibility,
+  `expectedUpdatedAt`, read-only app sharing, Messenger/community roles and
+  invites, missing contribution and exit contracts, external design inputs,
+  risks, measures, and one two-person private-draft pilot;
+- `PLAN/collaboration-agency-and-shared-stewardship-roadmap.md`, a gated path
+  from an approved collaboration charter through authority inventory, one
+  state machine, informed invitations, exact-version proposals, safe stopping,
+  a bounded adult pilot, and separately approved broader collaboration; and
+- `TODO/claude-todo/34-collaboration-agency-and-shared-stewardship.md`, an
+  execution epic with owner decisions, dependency boundaries, capability-
+  manifest obligations, current-state authorization, complete-journey
+  validation, acceptance criteria, stop conditions, and explicit non-goals.
+
+The recommended first experiment is intentionally small: one owner invites one
+named consenting adult to suggest bounded changes to one private draft for one
+declared purpose and duration. The recipient sees the proposed role,
+capabilities, visibility, notifications, and stop effects before acceptance but
+not the private draft body. Each suggestion targets an exact version; the owner
+accepts or rejects it; stale changes preserve both intentions and require an
+accessible compare/rebase path. Either participant can stop, and current
+authorization must invalidate stale clients and replays.
+
+A relationship is not access, visibility is not edit permission, membership is
+not ownership, attribution is not rights transfer, and removal is not deletion
+or recall. Public groups, anonymous or guest collaboration, direct/live
+co-editing, minors, money, institutions, apps, AI agents, and high-impact use
+remain separately gated. Open PR #649 is recorded only as active subspace work,
+not merged evidence or the pilot authority model. The theme is linked from the
+NOTES, PLAN, main TODO, and Claude TODO indexes, plus the ethical-adoption
+evidence, trustworthy-adoption roadmap, and TODO 22 dependency list. No runtime,
+API, schema, storage, authorization, UI, analytics, or production behavior
+changed.

@@ -32,6 +32,9 @@
 **AI-agency dependency:**
 [AI agency and accountable assistance](./ai-agency-and-accountable-assistance-roadmap.md)
 
+**Collaboration-agency dependency:**
+[Collaboration agency and shared stewardship](./collaboration-agency-and-shared-stewardship-roadmap.md)
+
 ## Outcome
 
 Make Thingtime easier to discover, understand, trust, use repeatedly, share by

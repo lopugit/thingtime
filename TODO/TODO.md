@@ -497,3 +497,20 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     evaluation, accessibility profiles, accountable owners, and stop authority.
     Public, external, bulk, unattended, child-facing, and high-impact uses
     remain separately gated.
+
+34. **🫶 Make collaboration agency and shared stewardship a product contract.**
+
+    Preserve Thingtime's owner-bound Things, explicit ACL visibility,
+    consent-based relationships, relational Messenger membership, bounded
+    community roles and invites, and exact-state update guard while defining
+    one honest shared-artifact lifecycle. Start with one named adult who may
+    suggest bounded changes to one owner-private draft; the owner accepts or
+    rejects against an exact version; either person can stop without stale
+    authority or silent loss. Execute
+    `claude-todo/34-collaboration-agency-and-shared-stewardship.md` only after
+    the owner and qualified reviewers approve invitation disclosure, role and
+    capability states, proposal/conflict semantics, departure/removal effects,
+    evidence and remedy boundaries, accessibility profiles, accountable
+    owners, and stop authority. Public groups, guests, anonymous participants,
+    direct or real-time co-editing, rights transfer, money, apps, AI agents,
+    minors, institutions, and high-impact use remain separately gated.

@@ -21,6 +21,7 @@ engineering decisions in [`../DECISIONS.md`](../DECISIONS.md).
 | [Creator sustainability and fair-value roadmap](./creator-sustainability-and-fair-value-roadmap.md)             | Role and terms approval through provider-neutral truth, synthetic proof, one payment rail, and a bounded invited pilot                          | Proposed |
 | [Learning agency and knowledge-stewardship roadmap](./learning-agency-and-knowledge-stewardship-roadmap.md)     | User-approved one-shot revisit through private reflection, honest evaluation, reusable knowledge, and separately gated AI or institutional use  | Proposed |
 | [AI agency and accountable-assistance roadmap](./ai-agency-and-accountable-assistance-roadmap.md)               | Assistance charter through context agency, risk-tiered tools, bounded receipts, private pilot, change evaluation, and separately gated autonomy | Proposed |
+| [Collaboration agency and shared-stewardship roadmap](./collaboration-agency-and-shared-stewardship-roadmap.md)   | Collaboration charter through informed invitations, suggestion-only authority, exact-version proposals, safe stopping, and a two-person pilot  | Proposed |
 
 ## Conventions
 
