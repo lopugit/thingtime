@@ -90,6 +90,12 @@ export const membershipOf = async (subspaceId: string, userId: string | null | u
 // Every membership row of one user — ONE indexed query, bounded by the
 // per-user membership cap. Read paths hang the result on the Viewer so the
 // sync acl checks (canView) can resolve private-subspace posts.
+//
+// The result is a bounded SNAPSHOT, not a complete roster: the cap bounds
+// ACTIVE memberships (membershipCount in subspaces.ts counts `left != true`),
+// while kicked and banned rows keep their doc forever and a moderator `add`
+// mints one without re-checking the cap. So a miss means "not in the
+// snapshot", NOT "not a member" — see membershipFor below.
 export const loadViewerSubspaceRoles = async (userId: string | null | undefined): Promise<ViewerSubspaceRoles> => {
 	const roles = new Map<string, SubspaceMembership>();
 	if (!userId) return roles;
@@ -106,6 +112,22 @@ export const loadViewerSubspaceRoles = async (userId: string | null | undefined)
 	}
 	return roles;
 };
+
+// Authoritative membership for ONE decision, given an optionally-preloaded
+// snapshot. A hit is exact; a miss falls back to the indexed single-row
+// lookup instead of being read as "no membership".
+//
+// Read surfaces (subspaceFeedClauses, canView, the mod flags on a projection)
+// may use the snapshot alone: every one of them fails CLOSED on a miss —
+// posts stay hidden, mod hats disappear. Anything that fails OPEN on a
+// missing row must come through here, because the row a truncated snapshot
+// dropped could be the ban that denies the write. One extra indexed findOne
+// on a write path is the same query the un-preloaded path already runs.
+export const membershipFor = async (
+	subspaceId: string,
+	userId: string | null | undefined,
+	roles?: ViewerSubspaceRoles
+): Promise<SubspaceMembership | null> => roles?.get(subspaceId) ?? (await membershipOf(subspaceId, userId));
 
 export const subspaceIdOfDoc = (doc: any): string | null => {
 	const id = doc?.crystal?.subspaceId;
@@ -144,7 +166,7 @@ export const assertSubspacePosting = async (
 	const subspace = preloaded.subspace?.shareId === subspaceId ? preloaded.subspace : await findSubspaceById(subspaceId);
 	if (!subspace) return fail(404, 'Subspace not found');
 	const slug = String(subspace.crystal?.slug || subspaceId);
-	const membership = preloaded.roles ? preloaded.roles.get(subspaceId) || null : await membershipOf(subspaceId, ownerId);
+	const membership = await membershipFor(subspaceId, ownerId, preloaded.roles);
 	if (membership?.banned) return fail(403, banMessage(slug, membership));
 	const moderator = canModerate(membership);
 	const access = accessOf(subspace);
@@ -212,7 +234,7 @@ export const assertSubspaceInteraction = async (
 	if (truncated) return fail(409, 'This thread is nested too deep to check its subspace rules — reply higher up 🌀');
 	const subspaceId = subspaceIdOfDoc(root);
 	if (!root || !subspaceId) return { ok: true };
-	const membership = preloaded.roles ? preloaded.roles.get(subspaceId) || null : await membershipOf(subspaceId, actorId);
+	const membership = await membershipFor(subspaceId, actorId, preloaded.roles);
 	if (membership?.banned) {
 		const subspace = await findSubspaceById(subspaceId);
 		return fail(403, banMessage(String(subspace?.crystal?.slug || subspaceId), membership));

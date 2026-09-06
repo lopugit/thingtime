@@ -54,6 +54,7 @@ import {
 	flairsOf,
 	isActiveMember,
 	loadViewerSubspaceRoles,
+	membershipFor,
 	membershipOf,
 	membershipOfDoc,
 	SUBSPACE_MEMBER_KEY_FIELD,
@@ -938,7 +939,10 @@ export const subspaceFeed = async (viewerInput: string | Viewer, query: Subspace
 	if (found.ok === false) return found;
 	const { subspace } = found;
 	const id = String(subspace.shareId);
-	const membership = viewer?.subspaceRoles ? viewer.subspaceRoles.get(id) || null : await membershipOf(id, viewer?.id);
+	// authoritative row on a snapshot miss: a member whose row fell outside the
+	// bounded roles snapshot must not be told their own private subspace is
+	// members-only, and a moderator must not silently lose includeRemoved
+	const membership = await membershipFor(id, viewer?.id, viewer?.subspaceRoles);
 	const moderator = canModerate(membership);
 	if (accessOf(subspace) === 'private' && !moderator && !isActiveMember(membership)) {
 		return fail(403, `s/${String(subspace.crystal?.slug || id)} is private — members only 🔒`);
