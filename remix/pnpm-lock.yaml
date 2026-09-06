@@ -110,6 +110,9 @@ importers:
       '@vercel/sandbox':
         specifier: 3.0.0
         version: 3.0.0
+      astronomy-engine:
+        specifier: 2.1.19
+        version: 2.1.19
       axios:
         specifier: ^1.6.8
         version: 1.18.1
@@ -2491,6 +2494,9 @@ packages:
 
   ast-types-flow@0.0.8:
     resolution: {integrity: sha512-OH/2E5Fg20h2aPrbe+QL8JZQFko0YZaF+j4mnQ7BGhfavO7OpSLa8a0y9sBwomHdSbkhTS8TQNayBfnW5DwbvQ==}
+
+  astronomy-engine@2.1.19:
+    resolution: {integrity: sha512-8yWKNf7UeNbH458h3sAJ6ZgAjE5jTXp/mNNRFoC20j2SHwZIjAQeEsBB2Q3uCFRaTCCJRv33K2XhkhZQMXoX6w==}
 
   async-function@1.0.0:
     resolution: {integrity: sha512-hsU18Ae8CDTR6Kgu9DYf0EbCr/a5iGL0rytQDobUcdpYOKokk8LEjVphnXkDkgpi0wYVsqrXuP0bZxJaTqdgoA==}
@@ -8795,6 +8801,8 @@ snapshots:
   assert-plus@1.0.0: {}
 
   ast-types-flow@0.0.8: {}
+
+  astronomy-engine@2.1.19: {}
 
   async-function@1.0.0: {}
 

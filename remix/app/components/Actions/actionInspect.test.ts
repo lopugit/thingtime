@@ -231,3 +231,32 @@ test('a non-composing action still asserts the full negative list', () => {
 	assert.ok(leaf.includes('Cannot invoke other actions'));
 	assert.equal(leaf.includes('Cannot read things'), false, 'it declared things.read');
 });
+
+// Every line of this list renders under a 🚫 as something the program cannot
+// do, so a declared things.delete must DROP "No deletes" and add nothing:
+// an affirmative sentence here would render as "🚫 Can delete …", inverting
+// the one capability that destroys data. The disclosure is a chip instead
+// (deriveActionEffects().deletes → the Effects section).
+test('a declared things.delete drops the negative without asserting an affirmative', () => {
+	const deleter = actionCannotAccess([{ capability: 'things.delete', schemas: ['task'] }]);
+	assert.equal(deleter.includes('No deletes'), false, 'it declared things.delete');
+	assert.equal(
+		deleter.some((line) => /^Can\b/.test(line)),
+		false,
+		'the 🚫 list only ever states negatives'
+	);
+	assert.ok(deleter.some((line) => line.includes('things.delete only: task')), 'the scope is still disclosed');
+});
+
+// The Effects section is the surface that carries the affirmative, so the
+// derived effects a delete-only program produces have to be non-empty —
+// otherwise the destructive step has no at-a-glance disclosure anywhere.
+test('a delete-only program derives a delete effect to render', () => {
+	const effects = deriveActionEffects([
+		{ op: 'things.delete', id: '$input.id' },
+		{ op: 'return', value: 'gone' }
+	]);
+	assert.equal(effects.deletes, true);
+	assert.deepEqual(effects.creates, []);
+	assert.equal(effects.updates, false);
+});
