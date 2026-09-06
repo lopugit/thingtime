@@ -23,7 +23,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   daily local-time reminders. Add account settings/activity at
   `/lopu/recordings`, explicit capability contracts and fork-safe scheduler /
   provider setup. Browser checks cover persisted settings and mobile layout;
-  live audio and native push acceptance remain release gates. — Codex (AI)
+  live audio and native push acceptance remain release gates. See the
+  [PR #665 verification note](../PRs/665-codex-watch-lopu-recording-automation-private-transcripts-todos-reminders.md). — Codex (AI)
 
 - 2026-09-05: Add bounded persistent media caching with access revalidation,
   responsive low-resolution image previews, and cache controls in Settings.
