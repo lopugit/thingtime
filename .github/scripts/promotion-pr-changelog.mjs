@@ -587,6 +587,10 @@ function selfTest() {
   assert(section.includes("Direct commits"), "directs section");
   assert(section.includes("will land in `main`"), "carrying promotion claims a landing");
   assert(!section.includes("would ship no file changes"), "carrying promotion has no no-op warning");
+  // Positive, not just the noop-side negative: without this, making the
+  // contentEmpty branch unconditional still passes, and a genuinely shipping
+  // promotion would tell a maintainer a no-promote PR is already on main.
+  assert(section.includes("ships their changes anyway"), "carrying promotion keeps the will-ship no-promote advice");
 
   // A promotion whose trees already match must never claim the listed PRs
   // "will land in main" — that is the develop-ahead-but-content-identical
@@ -646,6 +650,48 @@ function selfTest() {
     contentEmpty: true,
   });
   assert(noopComment.includes("no file changes"), "no-op delta comment flags the empty promotion");
+
+  // Everything above injects contentEmpty by hand, so nothing executes the
+  // probe that decides it. treesMatch carries the whole fix: get it wrong in
+  // the "always true" direction and every real promotion is labelled a no-op.
+  // Build a throwaway repo whose two heads diverged in history but converged
+  // in content — the ancestry-independence this claims, and the state
+  // main/develop actually reach — and run the real function against it.
+  const probeRepo = mkdtempSync(join(os.tmpdir(), "promotion-trees-"));
+  const startCwd = process.cwd();
+  try {
+    const g = (...args) => run("git", [
+      "-C", probeRepo,
+      "-c", "user.name=selftest", "-c", "user.email=selftest@example.invalid",
+      "-c", "commit.gpgsign=false", "-c", "init.defaultBranch=base",
+      "-c", "advice.detachedHead=false",
+      ...args,
+    ]).trim();
+    const file = join(probeRepo, "f.txt");
+    g("init", "--quiet");
+    writeFileSync(file, "one\n");
+    g("add", "f.txt");
+    g("commit", "--quiet", "--no-verify", "-m", "one");
+    const root = g("rev-parse", "HEAD");
+    writeFileSync(file, "two\n");
+    g("commit", "--quiet", "--no-verify", "-a", "-m", "left");
+    const left = g("rev-parse", "HEAD");
+    g("checkout", "--quiet", "--detach", root);
+    writeFileSync(file, "two\n");
+    g("commit", "--quiet", "--no-verify", "-a", "-m", "right");
+    const right = g("rev-parse", "HEAD");
+    // Distinct children of one root ⇒ neither is an ancestor of the other,
+    // which is the ancestry-independence the function claims.
+    assert(left !== right, "probe built two distinct commits");
+    assert(g("rev-parse", `${left}^`) === root && g("rev-parse", `${right}^`) === root,
+      "probe commits are siblings, not ancestor and descendant");
+    process.chdir(probeRepo);
+    assert(treesMatch(left, right) === true, "identical trees across divergent history are a no-op");
+    assert(treesMatch(root, left) === false, "differing content is not a no-op");
+  } finally {
+    process.chdir(startCwd);
+    rmSync(probeRepo, { recursive: true, force: true });
+  }
 
   if (process.exitCode) throw new Error("self-test failed");
   console.log("self-test OK");
