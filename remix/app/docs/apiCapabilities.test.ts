@@ -87,6 +87,27 @@ test('the storage census and ciControl workbench allowlist publish their minor c
 	assert.equal(manifest.features['api.mongodb-raw-results'], '1.1.0');
 });
 
+test('the Lopu family publishes its minor capability updates (own providers, verified keys)', () => {
+	const manifest = createApiCapabilitiesManifest();
+	// 1.3.0: vaultProviders[].realtimeModels + the kind-default model for a row saved without one
+	assert.equal(manifest.features['api.ai-models'], '1.3.0');
+	assert.equal(manifest.features['api.admin-ai-models'], '1.1.0');
+	assert.equal(manifest.features['api.settings-lopu-chat-defaults'], '1.1.0');
+	// 1.1.1 / 1.0.1: the chat write buckets fail closed on a limiter outage
+	assert.equal(manifest.features['api.lopu-chats'], '1.1.1');
+	assert.equal(manifest.features['api.lopu-chats-update'], '1.1.1');
+	assert.equal(manifest.features['api.lopu-chats-delete'], '1.0.1');
+	// 1.2.0: server-verified confirmations (confirmations[] in, confirm event +
+	// tool_result.needsConfirmation out) and the JSON-only fence (415)
+	assert.equal(manifest.features['api.lopu-chats-reply'], '1.2.0');
+	// 1.1.0: optional provider `model` + templates with catalog models / more kinds (vault);
+	// optional per-turn model, effort, speed (voice turn) — on top of the 1.0.1 fences
+	assert.equal(manifest.features['api.lopu-vault'], '1.1.0');
+	assert.equal(manifest.features['api.lopu-voice-reply'], '1.1.0');
+	// direct voice (§6.1): the ephemeral realtime credential
+	assert.equal(manifest.features['api.lopu-voice-session'], '1.0.0');
+});
+
 test('persistent attachment content and resized previews advertise their additive contract', () => {
 	assert.equal(createApiCapabilitiesManifest().features['api.attachment-content'], '1.1.0');
 });

@@ -2,7 +2,7 @@ import { MediaCacheSettings } from './MediaCacheSettings';
 import { TierFeatureComparison } from '~/components/Subscriptions/TierFeatureComparison';
 import React from 'react';
 import { Badge, Box, Button, Flex, Input, Progress, Switch, Text, Textarea } from '@chakra-ui/react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 
 import { AlgorithmManager } from './AlgorithmManager';
 import { LinkedDeployments } from './LinkedDeployments';
@@ -10,11 +10,13 @@ import { NotificationSettingsSection } from './NotificationSettings';
 import { PasskeysManager } from './PasskeysManager';
 import { TokenMinter } from './TokenMinter';
 import { RainbowButton, SettingRow, SettingsSection } from './SettingsSection';
+import { SecureVault } from './SecureVault';
 import { AccountSwitcher } from '~/components/Account/AccountSwitcher';
 import { AdminPanel } from '~/components/Admin/AdminPanel';
 import { ConnectedAppsSection } from '~/components/Apps/ConnectedAppsSection';
 import { LopuPositionSelect } from '~/components/Lopu/LopuPositionSelect';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { LopuSettingsRows } from '~/components/Lopu/LopuHost';
 import { DRAWER_TOP_LEVEL_DEFAULT_LIMIT, useDrawer } from '~/components/Nav/Drawer/useDrawer';
 import { ColorControl, ThingsBadgePaddingControl } from '~/components/ThemeSettings/controls';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -263,6 +265,19 @@ export const SettingsPage = () => {
   const api = useApi();
   const lopu = useLopu();
   const navigate = useNavigate();
+  const { hash } = useLocation();
+
+  // deep links (#secure-vault, #lopu — the drawer's Lopu rows) land on their
+  // section: the router does not scroll to fragments on its own, and the
+  // anchored sections mount only once the viewer is known
+  React.useEffect(() => {
+    const id = hash.replace(/^#/, '');
+    if (!id) return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ block: 'start' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [hash, user?.id]);
 
   const {
     direction,
@@ -528,6 +543,17 @@ export const SettingsPage = () => {
           </SettingsSection>
         )}
 
+		{/* Every account gets the same write-only encrypted key/value store as
+		    the admin integration console, scoped to that account's private Things.
+		    Anchored: the drawer's Lopu → Secure Vault row deep-links #secure-vault. */}
+		{user && !user.temporary && (
+			<Box id="secure-vault" width="100%" scrollMarginTop="calc(var(--tt-nav-clearance, 54px) + 16px)">
+				<SettingsSection eyebrow="Secure Vault 🔐" description="Encrypted passwords, keys, environments, and the AI provider connections Lopu can use for this account.">
+					<SecureVault key={user.id} />
+				</SettingsSection>
+			</Box>
+		)}
+
         {/* notifications (auth only) — per-type switches for the bell */}
         {user && <NotificationSettingsSection user={user} />}
 
@@ -671,6 +697,36 @@ export const SettingsPage = () => {
             </SettingRow>
           </Flex>
         </SettingsSection>
+
+        {/* 6 · Lopu — mirrors UserSettingsModal's Lopu section; local-first,
+            so it works logged out too. Anchored: the drawer's Lopu → Settings
+            row deep-links #lopu. */}
+        <Box id="lopu" width="100%" scrollMarginTop="calc(var(--tt-nav-clearance, 54px) + 16px)">
+          <SettingsSection
+            eyebrow="Lopu 🦄"
+            description="Your Thingtime assistant: the floating bubble, how her chat window sits, whether her builder edits paint live, her voice, and the model she thinks with."
+          >
+            <Flex flexDirection="column">
+              <LopuSettingsRows
+                renderRow={(label, control, hint) => (
+                  <SettingRow key={label} label={label} hint={hint}>
+                    {control}
+                  </SettingRow>
+                )}
+              />
+              <SettingRow label="Talk to Lopu" hint="The full chat page with every conversation">
+                <Button size="xs" variant="outline" onClick={() => navigate('/lopu')}>
+                  Open 🦄
+                </Button>
+              </SettingRow>
+              <SettingRow label="Voice mode" hint="Talk to Lopu hands-free — spoken replies and transcribe mode live here too">
+                <Button size="xs" variant="outline" onClick={() => navigate('/lopu/voice')}>
+                  Open 🎙️
+                </Button>
+              </SettingRow>
+            </Flex>
+          </SettingsSection>
+        </Box>
       </Flex>
     </Flex>
   );
