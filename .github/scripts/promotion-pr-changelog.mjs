@@ -767,14 +767,17 @@ function main() {
 
   verifyFlags(prs);
   const contentEmpty = treesMatch(CFG.gitBase, CFG.gitHead);
-  // The job summary is the only place an operator reliably learns the
-  // promotion is a no-op. The body carries the ⚠️ warning, but only the run
-  // that flips the state actually rewrites it — every later push finds the
-  // body already current and returns early. The delta comment is gated on the
-  // PR set changing, and "Sync main into develop" empties the content without
-  // touching that set, so buildComment's note effectively never fires here.
-  // Tagging the summary lines keeps "carrying N PRs / M commits" from reading
-  // as a pending release in exactly the state this whole change is about.
+  // Tag the job summary too, not just the PR body. The body's ⚠️ warning is
+  // refreshed on every push (the footer pins headShort, so newBody differs and
+  // the already-current early return does not fire), but it is only seen by
+  // someone who opens the PR. The other push-time signal does not reach an
+  // operator at all: buildComment's note is gated on the carried PR set
+  // changing, and "Sync main into develop" empties the content by adding a
+  // direct commit, which leaves that set untouched — so the delta comment
+  // effectively never fires in this state (a live contentEmpty run reports
+  // "PR set unchanged, no comment"). That leaves the summary as the only
+  // place the operator watching the run learns this, and untagged its
+  // "carrying N PRs / M commits" reads as a pending release when nothing is.
   const noopNote = contentEmpty ? ", no file changes vs base" : "";
   const section = buildSection({
     prs, directs, totalCommits, headShort, headDate, base: CFG.base, head: CFG.head,
