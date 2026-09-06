@@ -263,6 +263,29 @@ test('nothing on a card is drawn as a missing-glyph box', () => {
 	assert.doesNotMatch(buildSocialCardSvg({ ...gallery, images: [], imageCount: 0 }), /[✦✚]/, 'the chrome marks must be drawn, not typed');
 });
 
+// The emoji strip is applied at paint time, but the avatar letter and the three
+// badge pills are both CHOSEN before anything is measured. So a value that is
+// entirely unrenderable still took its slot and drew nothing into it: a leading
+// emoji in a display name (`🌸 Rosie` — an ordinary name, not an edge case) left
+// the avatar disc blank, because `initial || 'T'` sees a truthy emoji and only
+// the escape drops it. Badges were worse than blank: `#🎉` spent a pill on a
+// bare `#` and, since the slice to three ran first, pushed a real `#garden` off
+// the card entirely.
+test('a value the card cannot draw never takes the slot of one it can', () => {
+	const svg = buildSocialCardSvg({ ...gallery, author: '🌸 Rosie', initial: '🌸', badges: ['🎉', '#🎉', '#garden', 'Photo'], images: [], imageCount: 0 });
+	const avatar = svg.match(/<text x="102" y="186"[^>]*>([^<]*)<\/text>/);
+	assert.ok(avatar, 'expected the avatar disc to render');
+	assert.equal(avatar[1], 'R', 'the avatar letter must come from what the card can actually draw');
+
+	const labels = [...svg.matchAll(/<text x="\d+" y="\d+" fill="#5D5275"[^>]*>([^<]*)<\/text>/g)].map((match) => match[1]);
+	assert.deepEqual(labels, ['#garden', 'Photo'], 'unrenderable badges must not occupy — or displace — a pill');
+	assert.equal(rectsFilled(svg, '#F2EEF9').length, labels.length, 'every badge pill drawn must carry a label');
+
+	// A name with nothing renderable in it at all still gets the site letter.
+	const allEmoji = buildSocialCardSvg({ ...gallery, author: '🎉🎉', initial: '🎉', images: [], imageCount: 0 });
+	assert.equal(allEmoji.match(/<text x="102" y="186"[^>]*>([^<]*)<\/text>/)?.[1], 'T');
+});
+
 test('empty-panel copy stays legible over its own artwork', () => {
 	// The art is positioned per variant but the copy sits at fixed baselines, so
 	// the poll axis stroke and the docs page rect both ran through it. Once the

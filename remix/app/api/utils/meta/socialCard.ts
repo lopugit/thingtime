@@ -109,6 +109,29 @@ const TEXT_COLUMN_WIDTH = 594;
 // and clamp budget the column against the glyphs that actually get painted.
 const cardText = (value: string): string => value.replace(CARD_UNRENDERABLE, '').replace(/\s+/g, ' ').trim();
 
+// The strip above runs inside `cardText`/`escapeXml` — downstream of every
+// decision about WHAT to draw — so a value that is entirely unrenderable still
+// claimed its slot and then painted nothing into it. Two places chose before
+// they measured, and both are common rather than exotic:
+//
+//   - `🌸 Rosie` put a blank disc where the avatar letter goes. The `|| 'T'`
+//     fallback cannot catch it: the emoji is a perfectly truthy `initial`, and
+//     only the escape at paint time drops it.
+//   - An emoji tag or structured status spent a badge pill on an empty pill,
+//     and — because the slice to three happens first — pushed a real `#garden`
+//     off the card to do it.
+//
+// Both now choose from what survives the strip.
+const cardInitial = (preview: SocialPreview): string => {
+	const explicit = cardText(preview.initial || '');
+	if (explicit) return explicit;
+	return (Array.from(cardText(preview.author || ''))[0] || 'T').toUpperCase();
+};
+
+// A badge that strips to a bare hashtag marker (`#🎉`) is as empty as one that
+// strips to nothing at all.
+const badgeRenders = (badge: string): boolean => cardText(badge).replace(/^#/, '').length > 0;
+
 // `letterSpacing` is the SVG attribute of the same name: resvg adds it after
 // every glyph but the last, so a label the width estimate calls safe is really
 // that much wider on the eyebrow line.
@@ -342,7 +365,7 @@ export const buildSocialCardSvg = (preview: SocialPreview, imageDataUris: readon
 	const titleFontSize = preview.kind === 'profile' ? 42 : 38;
 	const titleLines = wrap(preview.title, titleFontSize, 3);
 	const descriptionLines = wrap(preview.description, 21, preview.options.length ? 2 : 3);
-	const badges = preview.badges.slice(0, 3);
+	const badges = preview.badges.filter(badgeRenders).slice(0, 3);
 	const pollRows = preview.options.slice(0, 3);
 	const theme = CARD_THEMES[preview.variant];
 	const primary = theme.primary;
@@ -380,7 +403,7 @@ export const buildSocialCardSvg = (preview: SocialPreview, imageDataUris: readon
 	${
 		preview.author
 			? `<circle cx="102" cy="178" r="22" fill="${primary}"/><text x="102" y="186" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="20" font-weight="700" text-anchor="middle">${escapeXml(
-					preview.initial || 'T'
+					cardInitial(preview)
 			  )}</text><text x="136" y="184" fill="#2B2440" font-family="Arial, sans-serif" font-size="19" font-weight="700">${escapeXml(
 					clampToWidth(preview.author, AUTHOR_LABEL_WIDTH, 19)
 			  )}</text>`
