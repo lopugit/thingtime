@@ -1,9 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { deflateSync } from 'node:zlib';
 
 import { Resvg } from '@resvg/resvg-js';
 
-import { buildSocialCardSvg, readBodyWithin, renderSocialCardPng, socialCardRenderOptions, socialTextWidth } from './socialCard';
+import {
+	buildSocialCardSvg,
+	readBodyWithin,
+	renderSocialCardPng,
+	socialCardImageExtent,
+	socialCardRenderOptions,
+	socialTextWidth
+} from './socialCard';
 import type { SocialPreview } from './socialPreview';
 
 const gallery: SocialPreview = {
@@ -397,4 +405,91 @@ test('a body exactly at the cap is kept, not rejected off by one', async () => {
 
 test('a response with no body at all reads as nothing rather than throwing', async () => {
 	assert.equal(await readBodyWithin(new Response(null, { status: 204 }), 1_000), null);
+});
+
+// A byte cap is not a memory cap. Every format the loader accepts compresses
+// uniform pixels to almost nothing, so the bound that actually protects a
+// public, unauthenticated renderer is on the decoded pixels — read from the
+// image's own header, before resvg is asked to allocate them.
+const pngOfSize = (width: number, height: number): Uint8Array => {
+	const crcTable = Array.from({ length: 256 }, (_, n) => {
+		let c = n;
+		for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+		return c >>> 0;
+	});
+	const crc = (buffer: Buffer): number => {
+		let c = 0xffffffff;
+		for (const byte of buffer) c = crcTable[(c ^ byte) & 0xff] ^ (c >>> 8);
+		return (c ^ 0xffffffff) >>> 0;
+	};
+	const chunk = (type: string, data: Buffer): Buffer => {
+		const length = Buffer.alloc(4);
+		length.writeUInt32BE(data.length);
+		const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+		const checksum = Buffer.alloc(4);
+		checksum.writeUInt32BE(crc(body));
+		return Buffer.concat([length, body, checksum]);
+	};
+	const header = Buffer.alloc(13);
+	header.writeUInt32BE(width, 0);
+	header.writeUInt32BE(height, 4);
+	header[8] = 8; // bit depth
+	header[9] = 0; // greyscale
+	return new Uint8Array(
+		Buffer.concat([
+			Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+			chunk('IHDR', header),
+			chunk('IDAT', deflateSync(Buffer.alloc((width + 1) * Math.min(height, 64)))),
+			chunk('IEND', Buffer.alloc(0))
+		])
+	);
+};
+
+test('image dimensions are read from the header of each accepted format', () => {
+	assert.deepEqual(socialCardImageExtent(pngOfSize(1200, 630)), { width: 1200, height: 630 });
+	// GIF87a, 8×5: logical screen width/height are little-endian at offset 6.
+	assert.deepEqual(
+		socialCardImageExtent(new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x37, 0x61, 8, 0, 5, 0, 0, 0, 0])),
+		{ width: 8, height: 5 }
+	);
+	// JPEG: SOI, an APP0 segment that must be skipped by its length, then SOF0
+	// carrying height before width.
+	assert.deepEqual(
+		socialCardImageExtent(
+			new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x00, 0x00, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x02, 0x76, 0x04, 0xb0, 0x03, 0, 0, 0])
+		),
+		{ width: 1200, height: 630 }
+	);
+	// Lossy WebP: a VP8 keyframe's 14-bit dimensions follow the start code.
+	const webp = new Uint8Array(30);
+	webp.set(Buffer.from('RIFF', 'ascii'), 0);
+	webp.set(Buffer.from('WEBP', 'ascii'), 8);
+	webp.set(Buffer.from('VP8 ', 'ascii'), 12);
+	webp.set([0x9d, 0x01, 0x2a], 23);
+	webp.set([0xb0, 0x04, 0x76, 0x02], 26);
+	assert.deepEqual(socialCardImageExtent(webp), { width: 1200, height: 630 });
+});
+
+test('an unmeasurable or mislabelled body never reaches the renderer', () => {
+	// The declared Content-Type is author-supplied metadata, so the extent is
+	// dispatched on magic bytes; anything unrecognised fails closed.
+	assert.equal(socialCardImageExtent(new Uint8Array([0x3c, 0x73, 0x76, 0x67, 0x20, 0x2f, 0x3e])), null);
+	assert.equal(socialCardImageExtent(new Uint8Array(0)), null);
+	// A truncated PNG header must not read past the bytes it actually has.
+	assert.equal(socialCardImageExtent(new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])), null);
+	// A zero dimension is not a renderable image.
+	assert.deepEqual(socialCardImageExtent(pngOfSize(0, 630)), null);
+});
+
+test('a decompression bomb is rejected on its pixel count, not its byte count', () => {
+	// 40000×40000 of one flat colour: a 1.5 MiB file that passes the 2 MiB byte
+	// cap and asks resvg for 5.96 GiB of RGBA.
+	const bomb = pngOfSize(40_000, 40_000);
+	assert.ok(bomb.byteLength < 2 * 1024 * 1024, `the bomb only bites while it fits the byte cap (was ${bomb.byteLength})`);
+	const extent = socialCardImageExtent(bomb);
+	assert.deepEqual(extent, { width: 40_000, height: 40_000 });
+	assert.ok((extent!.width * extent!.height) > 40_000_000, 'the guard must reject this on pixels');
+	// An ordinary phone photo stays well inside the same bound.
+	const photo = socialCardImageExtent(pngOfSize(4032, 3024))!;
+	assert.ok(photo.width * photo.height < 40_000_000);
 });

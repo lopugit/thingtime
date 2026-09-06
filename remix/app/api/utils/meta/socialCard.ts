@@ -10,6 +10,19 @@ import { SOCIAL_PREVIEW_HEIGHT, SOCIAL_PREVIEW_WIDTH, cleanSocialText } from './
 
 const SAFE_IMAGE_TYPES = new Set(['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp']);
 const MAX_CARD_IMAGE_BYTES = 2 * 1024 * 1024;
+// A byte cap is not a memory cap. resvg decodes an embedded raster to RGBA8
+// before it scales it into the tile, and every one of these formats compresses
+// uniform pixels to almost nothing: a 1.5 MiB PNG of 40000×40000 zero bytes
+// passes SAFE_IMAGE_TYPES and MAX_CARD_IMAGE_BYTES and then asks for 5.96 GiB.
+// resvg-js exposes no input-pixel limit of its own, so the bound has to be
+// applied before the bytes reach it — the same order `readBodyWithin` exists
+// for. 40 MP matches the `limitInputPixels` that attachments/imageVariants.ts
+// already imposes on the very same user images, so a photo the resize endpoint
+// refuses cannot slip in here instead. The collage budget is separate because
+// the loader fetches up to four tiles at once, which would otherwise multiply
+// the per-image ceiling by four on a public, unauthenticated request.
+const MAX_CARD_IMAGE_PIXELS = 40_000_000;
+const MAX_CARD_COLLAGE_PIXELS = 80_000_000;
 
 // The badge pills are pinned to the bottom of the white panel, so the poll
 // strip above them cannot shift with the author line: three rows at this pitch
@@ -538,7 +551,122 @@ export const readBodyWithin = async (response: Response, limit: number): Promise
 	return bytes;
 };
 
-const loadAttachmentDataUri = async (attachmentId: string): Promise<string | null> => {
+const readUint32BE = (bytes: Uint8Array, offset: number): number =>
+	bytes[offset] * 0x1000000 + ((bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3]);
+const readUint16BE = (bytes: Uint8Array, offset: number): number => (bytes[offset] << 8) | bytes[offset + 1];
+const readUint16LE = (bytes: Uint8Array, offset: number): number => bytes[offset] | (bytes[offset + 1] << 8);
+const readUint24LE = (bytes: Uint8Array, offset: number): number => bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16);
+const asciiAt = (bytes: Uint8Array, offset: number, length: number): string =>
+	Array.from(bytes.subarray(offset, offset + length), (byte) => String.fromCharCode(byte)).join('');
+
+type ImageExtent = { width: number; height: number };
+const larger = (a: ImageExtent | null, b: ImageExtent | null): ImageExtent | null =>
+	!a ? b : !b ? a : b.width * b.height > a.width * a.height ? b : a;
+
+// AVIF keeps its intrinsic size in an `ispe` box nested meta → iprp → ipco.
+// Walk the boxes rather than scanning the file for the fourcc: a raw scan can
+// match inside compressed image data and read a bogus — possibly small — size,
+// and under-reading is the one direction this guard must never fail in. The
+// largest `ispe` wins for the same reason (a multi-item file can describe
+// thumbnails alongside the full-size item).
+const AVIF_CONTAINER_BOXES = new Set(['meta', 'iprp', 'ipco']);
+const avifExtent = (bytes: Uint8Array, start: number, end: number, depth = 0): ImageExtent | null => {
+	let offset = start;
+	let found: ImageExtent | null = null;
+	while (offset + 8 <= end && depth < 6) {
+		const size = readUint32BE(bytes, offset);
+		const type = asciiAt(bytes, offset + 4, 4);
+		// size 0 means "runs to the end of the file"; size 1 means a 64-bit
+		// length, which no `ispe` ancestor needs, so stop rather than guess.
+		const boxEnd = size === 0 ? end : offset + size;
+		if (size === 1 || size < 8 || boxEnd > end) break;
+		if (type === 'ispe' && offset + 20 <= end) {
+			found = larger(found, { width: readUint32BE(bytes, offset + 12), height: readUint32BE(bytes, offset + 16) });
+		} else if (AVIF_CONTAINER_BOXES.has(type)) {
+			// `meta` is a full box: a version/flags word precedes its children.
+			found = larger(found, avifExtent(bytes, offset + 8 + (type === 'meta' ? 4 : 0), boxEnd, depth + 1));
+		}
+		offset = boxEnd;
+	}
+	return found;
+};
+
+const jpegExtent = (bytes: Uint8Array): ImageExtent | null => {
+	let offset = 2;
+	while (offset + 9 <= bytes.length) {
+		if (bytes[offset] !== 0xff) return null;
+		const marker = bytes[offset + 1];
+		// Padding, standalone markers (RSTn/TEM/SOI) carry no length word.
+		if (marker === 0xff) {
+			offset += 1;
+			continue;
+		}
+		if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd8)) {
+			offset += 2;
+			continue;
+		}
+		// SOS begins entropy-coded data and EOI ends the image; a frame header
+		// always precedes both, so anything not found by here is not there.
+		if (marker === 0xda || marker === 0xd9) return null;
+		// SOFn — every frame flavour except DHT (C4), JPG (C8) and DAC (CC).
+		if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+			return { width: readUint16BE(bytes, offset + 7), height: readUint16BE(bytes, offset + 5) };
+		}
+		const segment = readUint16BE(bytes, offset + 2);
+		if (segment < 2) return null;
+		offset += 2 + segment;
+	}
+	return null;
+};
+
+const webpExtent = (bytes: Uint8Array): ImageExtent | null => {
+	const chunk = asciiAt(bytes, 12, 4);
+	if (chunk === 'VP8X' && bytes.length >= 30) {
+		// The extended header stores canvas dimensions minus one.
+		return { width: readUint24LE(bytes, 24) + 1, height: readUint24LE(bytes, 27) + 1 };
+	}
+	if (chunk === 'VP8L' && bytes.length >= 25 && bytes[20] === 0x2f) {
+		// 14 bits of width-1 then 14 bits of height-1, little-endian.
+		const packed = readUint16LE(bytes, 21) + readUint16LE(bytes, 23) * 0x10000;
+		return { width: (packed & 0x3fff) + 1, height: ((packed >>> 14) & 0x3fff) + 1 };
+	}
+	if (chunk === 'VP8 ' && bytes.length >= 30 && bytes[23] === 0x9d && bytes[24] === 0x01 && bytes[25] === 0x2a) {
+		return { width: readUint16LE(bytes, 26) & 0x3fff, height: readUint16LE(bytes, 28) & 0x3fff };
+	}
+	return null;
+};
+
+/**
+ * Intrinsic pixel dimensions of an encoded image, read from its own header.
+ *
+ * Dispatched on the magic bytes, never on the declared Content-Type: the type
+ * a stored attachment serves is author-supplied metadata, so trusting it is
+ * exactly the gap that lets un-measured bytes reach the decoder. Returns null
+ * for anything this cannot measure with certainty, and every caller treats
+ * null as "do not render" — the branded tile that `imageTile` already paints
+ * for an undecodable href.
+ *
+ * Exported for the unit suite.
+ */
+export const socialCardImageExtent = (bytes: Uint8Array): ImageExtent | null => {
+	const extent =
+		bytes.length >= 24 && asciiAt(bytes, 0, 8) === '\x89PNG\r\n\x1a\n' && asciiAt(bytes, 12, 4) === 'IHDR'
+			? { width: readUint32BE(bytes, 16), height: readUint32BE(bytes, 20) }
+			: bytes.length >= 10 && asciiAt(bytes, 0, 4) === 'GIF8'
+			? { width: readUint16LE(bytes, 6), height: readUint16LE(bytes, 8) }
+			: bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8
+			? jpegExtent(bytes)
+			: bytes.length >= 16 && asciiAt(bytes, 0, 4) === 'RIFF' && asciiAt(bytes, 8, 4) === 'WEBP'
+			? webpExtent(bytes)
+			: bytes.length >= 12 && asciiAt(bytes, 4, 4) === 'ftyp'
+			? avifExtent(bytes, 0, bytes.length)
+			: null;
+	return extent && Number.isFinite(extent.width) && Number.isFinite(extent.height) && extent.width > 0 && extent.height > 0 ? extent : null;
+};
+
+type CardImage = { uri: string; pixels: number };
+
+const loadAttachmentDataUri = async (attachmentId: string): Promise<CardImage | null> => {
 	try {
 		const { getAttachmentDownload } = await import('../attachments/attachments');
 		const download = await getAttachmentDownload(null, attachmentId, false);
@@ -553,15 +681,32 @@ const loadAttachmentDataUri = async (attachmentId: string): Promise<string | nul
 		if (!response.ok || !SAFE_IMAGE_TYPES.has(contentType)) return null;
 		const bytes = await readBodyWithin(response, MAX_CARD_IMAGE_BYTES);
 		if (!bytes || bytes.byteLength === 0) return null;
-		return `data:${contentType};base64,${Buffer.from(bytes).toString('base64')}`;
+		const extent = socialCardImageExtent(bytes);
+		if (!extent) return null;
+		const pixels = extent.width * extent.height;
+		if (pixels > MAX_CARD_IMAGE_PIXELS) return null;
+		return { uri: `data:${contentType};base64,${Buffer.from(bytes).toString('base64')}`, pixels };
 	} catch {
 		return null;
 	}
 };
 
 export const renderSocialCardPng = async (preview: SocialPreview, providedImageDataUris?: readonly (string | null)[]): Promise<Uint8Array> => {
-	const imageDataUris =
-		providedImageDataUris ?? (await Promise.all(preview.images.slice(0, 4).map((image) => loadAttachmentDataUri(image.attachmentId))));
+	let imageDataUris = providedImageDataUris;
+	if (!imageDataUris) {
+		// The fetches stay concurrent — they are S3 round trips — but the decode
+		// budget is spent in tile order afterwards, so four in-budget photos still
+		// cannot hand the renderer four times the per-image ceiling at once. A
+		// dropped tile is not a blank slab: `imageTile` paints its branded tile
+		// wherever an href is missing.
+		const loaded = await Promise.all(preview.images.slice(0, 4).map((image) => loadAttachmentDataUri(image.attachmentId)));
+		let budget = MAX_CARD_COLLAGE_PIXELS;
+		imageDataUris = loaded.map((image) => {
+			if (!image || image.pixels > budget) return null;
+			budget -= image.pixels;
+			return image.uri;
+		});
+	}
 	const svg = buildSocialCardSvg(preview, imageDataUris);
 	return new Resvg(svg, socialCardRenderOptions()).render().asPng();
 };
