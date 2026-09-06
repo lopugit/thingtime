@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { overlayIntersects, placeEditorOverlay, type OverlayRect } from './editorOverlayLayout';
+import { placeEditorSelectionToolbar, overlayIntersects, placeEditorOverlay, type OverlayRect } from './editorOverlayLayout';
 
 const bounds = { left: 8, top: 80, width: 374, height: 680 };
 const assertFits = (rect: OverlayRect, area: OverlayRect, obstacles: OverlayRect[]) => {
@@ -37,4 +37,21 @@ test('repeated placement is stable and zero-space bounds produce no negative dim
 	assert.deepEqual(placeEditorOverlay(first, { left: 100, top: 180 }, bounds, input), first);
 	const zero = placeEditorOverlay({ width: 130, height: 24 }, { left: 100, top: 180 }, { left: 8, top: 8, width: 0, height: 0 }, []);
 	assert.deepEqual(zero, { left: 8, top: 8, width: 0, height: 0 });
+});
+
+test('selection toolbar keeps clear of a field history row when above is crowded', () => {
+	const bounds = { left: 8, top: 8, width: 304, height: 624 };
+	const selection = { left: 24, top: 300, width: 180, height: 24 };
+	const history = { left: 16, top: 250, width: 130, height: 24 };
+	const labels = { left: 8, top: 8, width: 304, height: 234 };
+	const result = placeEditorSelectionToolbar({ width: 206, height: 46 }, selection, bounds, [selection, history, labels]);
+	assert.equal(overlayIntersects(result, history), false);
+	assert.equal(overlayIntersects(result, selection), false);
+	assert.ok(result.top > selection.top);
+});
+
+test('selection toolbar stays above when a clear slot is available', () => {
+	const selection = { left: 24, top: 300, width: 180, height: 24 };
+	const result = placeEditorSelectionToolbar({ width: 206, height: 46 }, selection, { left: 8, top: 8, width: 304, height: 624 }, [selection]);
+	assert.ok(result.top + result.height < selection.top);
 });

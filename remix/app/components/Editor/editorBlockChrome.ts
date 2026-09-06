@@ -39,7 +39,12 @@ export const watchEditorBlockChrome = (holder: HTMLElement, getEditor: () => any
 		}
 		const history = session?.querySelector<HTMLElement>(':scope > .tt-editor-history-controls');
 		const visible = bounds.width > 0 && bounds.height > 0 && overlayIntersects(holder.getBoundingClientRect(), bounds, 0);
-		if (history) {
+		if (history && session?.dataset.editorPresentation !== 'inline') {
+			// Form fields own a real layout row, so adjacent labels and composers
+			// never need to guess the space their controls will occupy.
+			setEditorOverlayStyle(history, { maxWidth: '100%', visibility: visible ? 'visible' : 'hidden' });
+			obstacles.push(history.getBoundingClientRect());
+		} else if (history) {
 			setEditorOverlayStyle(history, { maxWidth: `${bounds.width}px`, visibility: visible ? 'visible' : 'hidden' });
 			const size = history.getBoundingClientRect();
 			const placement = placeEditorOverlay(
@@ -108,7 +113,7 @@ export const watchEditorBlockChrome = (holder: HTMLElement, getEditor: () => any
 		if (!frame) frame = requestAnimationFrame(sync);
 	};
 	const observer = new MutationObserver(schedule);
-	observer.observe(holder.closest('.ttBlockFrame') ?? holder, {
+	observer.observe(holder.closest('.ttBlockFrame') ?? holder.closest('.tt-editor-session') ?? holder, {
 		subtree: true,
 		childList: true,
 		attributes: true,

@@ -1,4 +1,10 @@
-import { editorOverlayBounds, editorTextObstacles, moveEditorOverlay, placeEditorOverlay, setEditorOverlayStyle } from './editorOverlayLayout';
+import {
+	editorOverlayBounds,
+	editorTextObstacles,
+	moveEditorOverlay,
+	placeEditorSelectionToolbar,
+	setEditorOverlayStyle
+} from './editorOverlayLayout';
 
 export const inlineToolbarPosition = (
 	selection: { left: number; top: number; width: number },
@@ -31,17 +37,7 @@ export const layoutEditorJsInlineToolbar = (holder: HTMLElement) => {
 	const old = panel.getBoundingClientRect();
 	const obstacles = editorTextObstacles(holder);
 
-	const above = { ...bounds, height: Math.max(0, Math.min(bounds.height, rect.top - 12 - bounds.top)) };
-	const placementBounds = above.height >= old.height ? above : bounds;
-	const pos = placeEditorOverlay(
-		old,
-		{
-			left: rect.left + rect.width / 2 - old.width / 2,
-			top: rect.top - old.height - 12
-		},
-		placementBounds,
-		obstacles
-	);
+	const pos = placeEditorSelectionToolbar(old, rect, bounds, obstacles);
 	moveEditorOverlay(panel, pos, toolbar);
 	return pos;
 };

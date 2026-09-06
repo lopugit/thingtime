@@ -4698,3 +4698,9 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       remains usable. Unsupported image formats fall back without retry loops.
 - [ ] Confirm partial/large files use native streaming and cached range reads
       cannot bypass authorization. Verify storage failure degrades to HTTP.
+
+### Shared rich-text surfaces (PR #635)
+
+- In new posts, post edits, comments/replies and poll questions, select paragraph and heading text; confirm colour/alpha, size/units, decorations and history use the same controls as the builder. Never submit QA content to another person.
+- In Thing rich-text fields, tier inclusions and the advanced modal, check neighbouring labels/actions stay visible. Field history occupies its own wrapping row; inline builder chrome still floats.
+- At desktop, 390px and 320px widths, select/style text, undo/redo, open/close Changes, toggle view/edit and scroll top to bottom. Ensure formatting survives and the active editor overlays do not hide a neighbouring editor.

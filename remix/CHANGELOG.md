@@ -18,6 +18,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-06: Share editor presentation across posts, replies, Thing fields, tiers and builder; reserve field history space and avoid neighbouring controls. See [PR #635 notes](../PRs/635-editor-rich-text-controls-complete-editorjs-rich-text-styling.md).
+
 - 2026-09-05: Coordinate builder labels, history and selection controls using
   measured free space; adapt to narrow blocks, viewport/inspector edges and
   scrolling containers. Keep history reachable across hover gaps and fix

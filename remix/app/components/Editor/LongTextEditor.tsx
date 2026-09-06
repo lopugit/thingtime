@@ -279,6 +279,8 @@ export type LongTextEditorProps = {
 	onValueChange?: (next: LongTextValue) => void;
 	placeholder?: string;
 	minHeight?: string;
+	/** Inline pages inherit typography; fields reserve a stable history row. Tools stay identical. */
+	presentation?: 'field' | 'inline';
 	// editor.js native read-only mode: same block layout, no editing chrome.
 	// Live-toggleable — the docs View/Edit switch flips it on the fly.
 	readonly?: boolean;
@@ -699,18 +701,29 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle & EditorHistor
 			}}
 			width="100%"
 			minHeight={props.minHeight || '96px'}
-			padding="10px 12px"
-			background="var(--tt-card, #ffffff)"
-			border="1px solid var(--tt-border, #ececef)"
+			padding={props.presentation === 'inline' ? '0' : '10px 12px'}
+			background={props.presentation === 'inline' ? 'transparent' : 'var(--tt-card, #ffffff)'}
+			border={props.presentation === 'inline' ? '0' : '1px solid var(--tt-border, #ececef)'}
 			borderRadius="var(--tt-radius-md, 12px)"
 			transition="border-color 0.15s ease, box-shadow 0.15s ease"
-			fontSize="15px"
-			_focusWithin={{
-				borderColor: 'var(--tt-faint, #b6b6c0)',
-				boxShadow: '0 0 0 3px var(--tt-accent-tint, #fff5fa)'
-			}}
+			fontSize={props.presentation === 'inline' ? 'inherit' : '15px'}
+			_focusWithin={
+				props.presentation === 'inline'
+					? {}
+					: {
+							borderColor: 'var(--tt-faint, #b6b6c0)',
+							boxShadow: '0 0 0 3px var(--tt-accent-tint, #fff5fa)'
+					  }
+			}
 			sx={{
 				'--tt-editor-popover-edge-gap': '8px',
+				...(props.presentation === 'inline'
+					? {
+							whiteSpace: 'normal',
+							'.codex-editor, .codex-editor__redactor': { padding: '0 !important' },
+							'.ce-header, .ce-paragraph': { margin: 0, padding: 0 }
+					  }
+					: {}),
 				// keep editor.js chrome inside our card look
 				'.codex-editor': { paddingInlineStart: '0 !important' },
 				// Raise open menus above history without blocking history while typing.
@@ -1009,8 +1022,12 @@ const EditableLongTextEditor = React.forwardRef<LongTextEditorHandle, LongTextEd
 		<Box
 			ref={hostRef}
 			className="tt-editor-session"
+			data-editor-presentation={props.presentation ?? 'field'}
 			position="relative"
+			minWidth={0}
+			width="100%"
 			zIndex={8}
+			_focusWithin={{ zIndex: 9 }}
 			onKeyDownCapture={(event) => {
 				if (
 					(event.metaKey || event.ctrlKey) &&
@@ -1026,12 +1043,13 @@ const EditableLongTextEditor = React.forwardRef<LongTextEditorHandle, LongTextEd
 			}}
 			sx={{
 				'.tt-editor-history-controls': {
-					position: 'absolute',
-					left: '4px',
-					top: 'var(--tt-editor-chrome-top,-29px)',
+					position: props.presentation === 'inline' ? 'absolute' : 'relative',
+					left: props.presentation === 'inline' ? '4px' : '0',
+					top: props.presentation === 'inline' ? 'var(--tt-editor-chrome-top,-29px)' : '0',
+					marginBottom: props.presentation === 'inline' ? 0 : '8px',
 					zIndex: 8,
 					width: 'max-content',
-					maxWidth: 'calc(100vw - 16px)',
+					maxWidth: props.presentation === 'inline' ? 'calc(100vw - 16px)' : '100%',
 					flexWrap: 'wrap',
 					background: 'var(--tt-card, #fff)',
 					borderRadius: '8px',

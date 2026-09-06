@@ -9,6 +9,7 @@ import { LongTextEditor } from '../app/components/Editor/LongTextEditor';
 import { RichTextBlocks } from '../app/components/Kinds/kindRenderersMedia';
 import { applySelectionStyle } from '../app/components/Editor/InlineStyle';
 import { EditorHistory } from '../app/components/Editor/editorHistory';
+import { LeafValueEditor } from '../app/components/Thingtime/concepts/conceptBits';
 import { RichTextModal } from '../app/components/Builder/RichTextModal';
 const initial = {
 	blocks: [
@@ -107,6 +108,26 @@ function TightBuilderCheck() {
 		</section>
 	);
 }
+function SharedFieldsCheck() {
+	const [value, setValue] = React.useState<any>({ kind: 'rich-text', blocks: [{ type: 'paragraph', data: { text: 'Shared rich text field' } }] });
+	const [editing, setEditing] = React.useState(true);
+	return (
+		<section data-testid="shared-fields-check" style={{ margin: '32px 0', maxWidth: 390 }}>
+			<h2>Shared rich text fields</h2>
+			<p>Labels, neighbouring fields and actions must stay clear of editor controls.</p>
+			<button onClick={() => setEditing(!editing)}>Toggle field view/edit</button>
+			<div style={{ marginTop: 12 }}>Thing rich text</div>
+			<LeafValueEditor value={value} edit={editing} onValueChange={setValue} />
+			<div style={{ marginTop: 12 }}>Tier inclusions</div>
+			<LongTextEditor
+				value={{ kind: 'rich-text', blocks: [{ type: 'paragraph', data: { text: 'Neighbouring tier field' } }] }}
+				blockTypes={{ image: false, embed: false, code: false, table: false }}
+			/>
+			<button>Following form action</button>
+			<pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(value)}</pre>
+		</section>
+	);
+}
 function App() {
 	const [doc, setDoc] = React.useState(initial),
 		[revision, setRevision] = React.useState(0),
@@ -168,6 +189,7 @@ function App() {
 					</button>
 				</div>
 				<pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{result}</pre>
+				<SharedFieldsCheck />
 				<BuilderCheck />
 				<TightBuilderCheck />
 				<h2>Saved rendering</h2>

@@ -36,6 +36,22 @@ export const placeEditorOverlay = (
 	return best;
 };
 
+/** Prefer above the selection, but never trade a clear nearby slot for overlapping controls. */
+export const placeEditorSelectionToolbar = (
+	size: Pick<OverlayRect, 'width' | 'height'>,
+	selection: OverlayRect,
+	bounds: OverlayRect,
+	obstacles: OverlayRect[]
+) => {
+	const preferred = { left: selection.left + selection.width / 2 - size.width / 2, top: selection.top - size.height - 12 };
+	const above = { ...bounds, height: Math.max(0, Math.min(bounds.height, selection.top - 12 - bounds.top)) };
+	const primary = placeEditorOverlay(size, preferred, above.height >= size.height ? above : bounds, obstacles);
+	const collisions = (rect: OverlayRect) => obstacles.filter((obstacle) => overlayIntersects(rect, obstacle)).length;
+	if (!collisions(primary)) return primary;
+	const fallback = placeEditorOverlay(size, preferred, bounds, obstacles);
+	return collisions(fallback) < collisions(primary) ? fallback : primary;
+};
+
 export const editorOverlayBounds = (holder: HTMLElement): OverlayRect => {
 	const vv = window.visualViewport;
 	let left = (vv?.offsetLeft || 0) + 8,
@@ -98,8 +114,19 @@ export const editorTextObstacles = (holder: HTMLElement): OverlayRect[] => {
 		if (!other.contains(holder) && !frame?.contains(other)) rects.push(other.getBoundingClientRect());
 	});
 	const session = holder.closest('.tt-editor-session');
-	const scope = holder.closest('main, [role="dialog"]') ?? holder.parentElement?.parentElement;
-	scope?.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6,p,button,input,select,summary,img,video').forEach((element) => {
+	const scope =
+		holder.closest('[data-editor-scope], form, [role="dialog"], main') ??
+		holder.closest('article, section')?.parentElement ??
+		session?.parentElement?.parentElement;
+	// Field history occupies layout space and must also repel floating menus.
+	if (session?.getAttribute('data-editor-presentation') !== 'inline') {
+		const history = session?.querySelector<HTMLElement>(':scope > .tt-editor-history-controls');
+		if (history) rects.push(history.getBoundingClientRect());
+	}
+	scope?.querySelectorAll<HTMLElement>('.tt-editor-session').forEach((other) => {
+		if (other !== session && !other.contains(holder)) rects.push(other.getBoundingClientRect());
+	});
+	scope?.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6,p,label,button,input,textarea,select,summary,img,video').forEach((element) => {
 		if (
 			session?.contains(element) ||
 			element.contains(holder) ||

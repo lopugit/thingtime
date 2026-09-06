@@ -103,3 +103,13 @@ Undo/Redo/Changes, picker scrolling and Changes close/return to editing.
 After Chrome disconnected, the in-app browser completed native and nested menu
 checks at desktop, 320px and 320x430px, plus container and viewport resizing.
 The fixture disposes its React root during hot reload to avoid duplicate roots.
+
+## Shared application surfaces — 2026-09-06
+
+The inventory found one Editor.js runtime: `LongTextEditor`. PostComposer covers new posts, edits, comments/replies and poll questions; Thingtime and LeafValueEditor cover rich Thing fields; TierManager covers inclusions; the builder adapters and docs use the same component. These all inherit formatting, style carry, history and viewport positioning.
+
+Field editors now reserve a wrapping history row in normal layout; inline editors retain floating history. The shared component owns inline typography/padding too, removing the builder's duplicate CSS. Collision detection includes nearby labels, textareas and other editor sessions, with form/article/section/dialog scopes. Only block vocabulary is restricted by field requirements; formatting is shared. Plain text inputs (names, tags and messages with plain-text contracts) are unchanged.
+
+A source contract guards the single runtime and shared rich-text entry points. The local fixture also exercises the real LeafValueEditor next to a restricted tier-style field.
+
+The selected-text toolbar prefers above; if every above-text slot overlaps labels/history, it chooses a clearer nearby slot. Verified the real Thing field adapter at 390px and 320px: custom alpha hex, rem size and strikethrough survive view/edit, Undo/Redo stays scoped, and Changes opens/closes. Editor/kind tests: 83; feed tests: 33. Client/embed build and focused lint pass.

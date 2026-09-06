@@ -115,26 +115,10 @@ export const InlineRichTextEditor = ({
 			className="ttInlineRichTextEditor"
 			data-testid="inline-rich-text-editor"
 			{...(typography as any)}
-			sx={{
-				whiteSpace: 'normal',
-				'& .long-text-editor': {
-					padding: '0 !important',
-					border: '0 !important',
-					borderRadius: 0,
-					background: 'transparent',
-					boxShadow: 'none !important',
-					fontSize: 'inherit'
-				},
-				// the canvas is the page — strip the editor's own gutters so the
-				// editing state sits where the render sits
-				'& .codex-editor__redactor': { padding: '0 !important' },
-				'& .codex-editor': { padding: '0 !important' },
-				'& .ce-header, & .ce-paragraph': { margin: 0, padding: 0 },
-				'& .ce-block__content, & .ce-toolbar__content': { maxWidth: 'none' }
-			}}
 			onClick={(event: React.MouseEvent) => event.stopPropagation()}
 		>
 			<LongTextEditor
+				presentation="inline"
 				history={history}
 				value={value}
 				onValueChange={handleChange}
