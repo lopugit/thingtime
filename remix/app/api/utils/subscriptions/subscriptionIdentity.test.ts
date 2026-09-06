@@ -6,6 +6,7 @@ import {
 	legacyUserSubscriptionLedgerEnvelopeCanUpgrade,
 	subscriptionShareId,
 	userSubscriptionLedgerEnvelopeIsTrusted,
+	userSubscriptionLedgerEnvelopeIssues,
 	userSubscriptionLedgerMatch
 } from './subscriptionIdentity.ts';
 
@@ -73,4 +74,52 @@ test('hot Mongo match pins the same deterministic identity and proof marker', ()
 	assert.equal(match.ownerId, 'user-1');
 	assert.equal(match['crystal.subjectId'], 'user-1');
 	assert.equal(match.storageLedgerEnvelopeVersion, USER_STORAGE_LEDGER_ENVELOPE_VERSION);
+});
+
+test('operator diagnostics identify invalid fields without disclosing values or arbitrary key names', () => {
+	const canonical = canonicalLedger();
+	assert.deepEqual(userSubscriptionLedgerEnvelopeIssues(canonical, 'user-1'), []);
+	const { storageLedgerEnvelopeVersion: _marker, ...legacy } = canonical;
+	assert.deepEqual(userSubscriptionLedgerEnvelopeIssues(legacy, 'user-1'), []);
+	const malformed = {
+		...legacy,
+		extended: { private: 'never disclose' },
+		'secret-in-a-key-name': 'never disclose',
+		crystal: { ...legacy.crystal, tierVersionId: null, note: { private: 'never disclose' } }
+	};
+	assert.deepEqual(userSubscriptionLedgerEnvelopeIssues(malformed, 'user-1'), [
+		'root.fields',
+		'root.unexpected.extended',
+		'crystal.tierVersionId',
+		'crystal.note'
+	]);
+	assert.equal(legacyUserSubscriptionLedgerEnvelopeCanUpgrade(malformed, 'user-1'), false);
+	assert.equal(JSON.stringify(userSubscriptionLedgerEnvelopeIssues(malformed, 'user-1')).includes('secret'), false);
+});
+
+test('diagnostics cover every canonical envelope predicate and stay bounded on malformed input', () => {
+	for (const rootKey of Object.keys(canonicalLedger()).filter((key) => key !== '_id')) {
+		const malformed: any = { ...canonicalLedger(), [rootKey]: 'invalid-value' };
+		assert.equal(userSubscriptionLedgerEnvelopeIsTrusted(malformed, 'user-1'), false, rootKey);
+		assert.ok(userSubscriptionLedgerEnvelopeIssues(malformed, 'user-1').length, rootKey);
+	}
+	for (const key of [
+		'tier',
+		'tierVersionId',
+		'tierVersion',
+		'tierName',
+		'tierMetered',
+		'tierQuotas',
+		'overrides',
+		'note',
+		'updatedBy',
+		'isDefaultAssignment'
+	]) {
+		const malformed = canonicalLedger();
+		(malformed.crystal as any)[key] = undefined;
+		assert.equal(userSubscriptionLedgerEnvelopeIsTrusted(malformed, 'user-1'), false, key);
+		assert.ok(userSubscriptionLedgerEnvelopeIssues(malformed, 'user-1').includes(`crystal.${key}`), key);
+	}
+	assert.deepEqual(userSubscriptionLedgerEnvelopeIssues(null, 'user-1'), ['root.object']);
+	assert.ok(userSubscriptionLedgerEnvelopeIssues({}, 'user-1').length < 40);
 });
