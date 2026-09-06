@@ -130,7 +130,7 @@ export type PublicDeviceConnector = {
 export type PublicDevice = {
 	id: string;
 	name: string;
-	platform: 'macos' | 'windows' | 'linux';
+	platform: 'macos' | 'windows' | 'linux' | 'watchos';
 	model: string | null;
 	osVersion: string | null;
 	appVersion: string | null;
@@ -138,6 +138,11 @@ export type PublicDevice = {
 	pairedAt: string;
 	online: boolean;
 	lastSeenAt: string | null;
+	lastSyncAt: string | null;
+	syncStatus: 'paired' | 'healthy' | 'error' | null;
+	watchHealth: { batteryLevel: number | null; lowPowerMode: boolean; error: string | null; updatedAt: string | null } | null;
+	createdThingCount: number;
+	recentThings: Array<{ id: string; label: string; createdAt: string }>;
 	locked: boolean | null;
 	volume: number | null;
 	brightness: number | null;

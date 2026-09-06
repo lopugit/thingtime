@@ -108,9 +108,12 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   'ci-event': ['provider', 'repository', 'deliveryId', 'eventType', 'action', 'actor', 'statusFrom', 'statusTo', 'occurredAt'], // data: record → dropped
   friend: ['status', 'friendKey'],
   notification: ['type', 'actorId', 'actorName', 'actorUsername', 'postId', 'preview', 'title', 'href', 'outcome'],
+  'push-device': ['platform', 'environment', 'topic'],
   passkey: ['nickname', 'description', 'providerName', 'aaguid', 'deviceType', 'backedUp', 'transports', 'lastUsedAt', 'lastUsedOrigin', 'revokedAt'],
   'passkey-app-link': ['linkKey', 'appKey', 'appName', 'firstUsedAt', 'lastUsedAt', 'usageCount'],
   'account-link': ['linkKind', 'userId', 'targetId', 'role', 'createdBy'],
+  // Lopu model catalog — every field is scalar or string[], so all project
+  'ai-model': ['modelId', 'label', 'provider', 'efforts', 'speeds', 'family', 'enabled', 'sortOrder', 'contextWindow', 'notes'],
 	'ai-connection': [
 		'sourceType',
 		'provider',
@@ -185,6 +188,7 @@ test('registered server-owned Things are protected from generic Thing CRUD', () 
 	assert.ok(PROTECTED_THINGTIME.includes('device'));
 	assert.ok(PROTECTED_THINGTIME.includes('device-command'));
 	assert.ok(PROTECTED_THINGTIME.includes('device-ai-live-state'));
+	assert.ok(PROTECTED_THINGTIME.includes('push-device'));
 	assert.equal(isProtectedThingtime(['app']), true);
 	assert.equal(isProtectedThingtime(['attachment']), true);
 	assert.equal(isProtectedThingtime(['migration-diagnostic']), true);

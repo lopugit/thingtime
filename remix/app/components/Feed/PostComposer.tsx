@@ -776,6 +776,7 @@ export const PostComposer = (props: PostComposerProps) => {
 
   return (
     <Flex
+      data-editor-scope="post-composer"
 			position="relative"
       flexDirection="column"
       rowGap={3}

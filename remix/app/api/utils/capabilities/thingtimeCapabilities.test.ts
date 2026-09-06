@@ -63,6 +63,18 @@ test('capability negotiation accepts compatible updates and rejects missing or b
   assert.equal(capabilitySatisfies('', '1.1.0'), false);
 });
 
+test('the Lopu catalog family publishes its verified-provider-key minor updates', () => {
+  const manifest = thingtimeCapabilityManifest('https://thingtime.test');
+  assert.equal(manifest.features['api.ai-models']?.version, '1.3.0');
+  assert.equal(manifest.features['api.admin-ai-models']?.version, '1.1.0');
+  assert.equal(manifest.features['api.settings-lopu-chat-defaults']?.version, '1.1.0');
+  // own providers (design note §1.3): providerId on create / update / reply;
+  // 1.1.1 = the write buckets fail closed, 1.2.0 = server-verified confirmations
+  assert.equal(manifest.features['api.lopu-chats']?.version, '1.1.1');
+  assert.equal(manifest.features['api.lopu-chats-update']?.version, '1.1.1');
+  assert.equal(manifest.features['api.lopu-chats-reply']?.version, '1.2.0');
+});
+
 test('both manifests publish passkey concurrency and Apple association contracts', () => {
   const originManifest = thingtimeCapabilityManifest('https://thingtime.com');
   const apiManifest = createApiCapabilitiesManifest();
@@ -80,8 +92,14 @@ test('both manifests publish passkey concurrency and Apple association contracts
 test('both manifests publish notification history and system notification contracts', () => {
   const originManifest = thingtimeCapabilityManifest('https://thingtime.com');
   const apiManifest = createApiCapabilitiesManifest();
-  for (const feature of ['api.notifications-list', 'api.notifications-settings']) {
-    assert.equal(originManifest.features[feature]?.version, '1.1.0');
-    assert.equal(apiManifest.features[feature], '1.1.0');
+  // the history filters landed as 1.1.0; the list then took the cursor, from/to
+  // window and viewer object on top, so it publishes 1.2.0
+  const expected: Record<string, string> = {
+    'api.notifications-list': '1.2.0',
+    'api.notifications-settings': '1.1.0'
+  };
+  for (const [feature, version] of Object.entries(expected)) {
+    assert.equal(originManifest.features[feature]?.version, version);
+    assert.equal(apiManifest.features[feature], version);
   }
 });

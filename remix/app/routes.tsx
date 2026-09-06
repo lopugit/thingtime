@@ -136,6 +136,8 @@ export const router = createBrowserRouter([
       // "Login with Thingtime" popup (embed SDK) — no guest/user guard: it
       // handles both states itself (login form → consent screen).
       { path: 'authorize', element: <Authorize /> },
+			{ path: 'watch/pair', lazy: lazyRoute(() => import('./routes/watch.pair')) },
+			{ path: 'pair/:code', lazy: lazyRoute(() => import('./routes/watch.pair')) },
       // admin dashboard — no loader guard: it renders its own 🔐 card for
       // non-admins (same idiom as the MongoDB workbench)
       { path: 'admin', lazy: lazyRoute(() => import('./routes/admin')) },
@@ -149,6 +151,11 @@ export const router = createBrowserRouter([
       // the block-based site builder — create webpages from component things;
       // ?page=<id> opens the canvas (site pages included)
       { path: 'builder', lazy: lazyRoute(() => import('./routes/builder')) },
+      // the demo library — a few hundred example sections/pages to preview and
+      // copy into your own pages (catalog in schemas/webpageDemos)
+      { path: 'builder/demos', lazy: lazyRoute(() => import('./routes/builder-demos')) },
+      // one demo / suite / app on its own page: preview + the LIVE version
+      { path: 'builder/demos/:slug', lazy: lazyRoute(() => import('./routes/builder-demo-detail')) },
       // published block-based webpages (reserved prefix — outranks the * catch-all)
       { path: 'p/:id', lazy: lazyRoute(() => import('./routes/p')) },
       // the storybook-style design-system docs own the canonical short URL too
@@ -174,6 +181,12 @@ export const router = createBrowserRouter([
       { path: 'explore', element: <Explore /> },
       { path: 'feed', element: <Feed /> },
       { path: 'messages', lazy: lazyRoute(() => import('./routes/messages')), loader: requireUser('/login') },
+      // Lopu 🦄 — the AI assistant page; no loader guard: it renders its own
+      // signed-out quiet state, like /apps. /lopu/:chatId deep-links a
+      // conversation (the floating window shares the same store).
+      { path: 'lopu', lazy: lazyRoute(() => import('./routes/lopu')) },
+      { path: 'lopu/voice', lazy: lazyRoute(() => import('./routes/lopu-voice')), loader: requireUser('/login') },
+      { path: 'lopu/:chatId', lazy: lazyRoute(() => import('./routes/lopu')) },
       { path: 'login', element: <Login />, loader: requireGuest('/profile') },
       // admin database-migrations console (Dev drawer → Migrations) — moved
       // out of /docs/schemas into its own page
@@ -215,12 +228,16 @@ export const router = createBrowserRouter([
       // Schema BROWSING/BUILDING lives at /schemas (standalone, like /search);
       // the registry reference docs moved to /docs/schemas.
       { path: 'schemas', lazy: lazyRoute(() => import('./routes/schemas')) },
+      // one schema on its own page: field tree, render preview, and the LIVE
+      // create-a-thing form + the viewer's things of that shape
+      { path: 'schemas/:key', lazy: lazyRoute(() => import('./routes/schema-detail')) },
       // Actions: declarative capability-bounded programs — browse + the
       // per-action inspector (inputs, effects, limits, run panel, history)
       { path: 'actions', lazy: lazyRoute(() => import('./routes/actions')) },
       { path: 'actions/:key', lazy: lazyRoute(() => import('./routes/action-detail')) },
       // UI component library: /schemas' UI-first sibling; every component
-      // family gets its own deep-linked page + /docs twin
+      // family gets its own deep-linked page + /docs twin. The twin is a named
+      // export of the detail module, so it reuses that same chunk.
       { path: 'components', lazy: lazyRoute(() => import('./routes/components')) },
       { path: 'components/:key', lazy: lazyRoute(() => import('./routes/component-detail')) },
       {
