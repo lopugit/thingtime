@@ -10,6 +10,7 @@ export type ApiTestGroup =
   | 'embed'
   | 'health'
   | 'lopu'
+  | 'lopu-recordings'
   | 'mongodb'
   | 'notifications'
   | 'profile'

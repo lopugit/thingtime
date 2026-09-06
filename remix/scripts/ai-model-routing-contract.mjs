@@ -30,7 +30,7 @@ const directClientFiles = sourceFiles(appRoot)
 
 assert.deepEqual(
   directClientFiles,
-  ['app/api/utils/lopu/musing.ts', 'app/api/utils/moderation/claudeProvider.ts'],
+  ['app/api/utils/lopu/musing.ts', 'app/api/utils/lopu/recordingsProvider.ts', 'app/api/utils/moderation/claudeProvider.ts'],
   'new direct AI clients must be added to the Thingtime Admin model-routing contract'
 );
 
@@ -53,6 +53,15 @@ assert.match(musing, /streamClaude\(SYSTEM_PROMPT, user, choices\.claude\)/);
 assert.match(musing, /streamOpenAI\(SYSTEM_PROMPT, user, choices\.openai\)/);
 assert.doesNotMatch(musing, /model:\s*process\.env\.LOPU_CLAUDE_MODEL/);
 assert.doesNotMatch(musing, /model:\s*process\.env\.LOPU_OPENAI_MODEL/);
+
+// Recording organization follows the same admin OpenAI choice. Audio
+// transcription is deliberately an audio-capable model, not a chat alias.
+const recordings = readFileSync(join(remixRoot, 'app/api/utils/lopu/recordingsProvider.ts'), 'utf8');
+assert.match(recordings, /resolveAiPreferredOpenAiChoice\(await getAiPreferredModelWaterfall\(\)\)/);
+assert.match(recordings, /model: choice\?\.model \|\| process\.env\.LOPU_OPENAI_MODEL/);
+assert.match(recordings, /model: 'gpt-4o-mini-transcribe'/);
+assert.match(recordings, /reasoning_effort: effort/);
+assert.match(recordings, /service_tier: 'priority'/);
 
 // An admin entry can pin a reasoning model or an explicit effort tier, and
 // both providers bill that reasoning against the request's output budget:

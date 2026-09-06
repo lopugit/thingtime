@@ -4,7 +4,7 @@ import { ObjectId } from 'mongodb';
 // Notifications are identity-adjacent (they belong to the RECIPIENT, not to
 // whatever data plane the actor's request was riding), so every access here is
 // home-pinned — same rationale as users.ts.
-import { getHomeThingsCollection as getThingsCollection, getUsersCollection } from '../mongodb/collections';
+import { getHomeThingsCollection as getThingsCollection, getUsersCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import { getUserNotificationPrefs } from '../auth/users';
 import {
   ACL_OWNER,
@@ -188,6 +188,34 @@ export const emitSystemNotification = (input: EmitSystemNotificationInput): Prom
     href: input.href ?? null,
     outcome: input.outcome ?? null
   });
+
+// Durable scheduler variant. The caller's unique id is server-generated and
+// reserved from generic Thing creation. Its checkpoint and bell entry commit
+// together; storage failures throw so the scheduler can retry, never silently
+// acknowledge a reminder that was not saved.
+export const emitSystemNotificationOnce = async (
+	input: EmitSystemNotificationInput,
+	uniqueId: string,
+	checkpoint: (session: any) => Promise<boolean>
+): Promise<boolean> => {
+	const prefs = normalizeNotificationPrefs(await getUserNotificationPrefs(input.recipientId));
+	if (!prefs.masters.push || prefs.push[input.type] === false) return false;
+	const things = await getThingsCollection();
+	const fullInput = { ...input, actor: SYSTEM_NOTIFICATION_ACTOR };
+	const doc = { ...notificationDoc(fullInput, new Date()), shareId: uniqueId };
+	const inserted = await withHomeMongoTransaction(async (session) => {
+		if (await things.findOne({ shareId: uniqueId }, { session })) return false;
+		if (!await checkpoint(session)) return false;
+		await things.insertOne(doc as any, { session });
+		return true;
+	});
+	if (!inserted) return false;
+	await trimRecipient(input.recipientId).catch(() => {});
+	// Native push is wired through the shared notification sender when the
+	// Watch foundation is integrated; the bell row is already durable here.
+	await maybeEmailNotification(fullInput).catch(() => {});
+	return true;
+};
 
 // Capped fan-out (posts from followed/friends): one insertMany, pref-agnostic
 // at write (reads filter). recipients map lets followers and friends of the

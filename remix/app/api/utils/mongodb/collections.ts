@@ -895,6 +895,10 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
       { partialFilterExpression: { storageClass: 'content' } }
     ),
     col.createIndex({ targetId: 1, thingtime: 1, createdAt: 1, shareId: 1 }),
+    col.createIndex(
+      { thingtime: 1, nextRunAt: 1, shareId: 1 },
+      { name: 'lopu_recording_due', partialFilterExpression: { thingtime: { $in: ['lopu-recording-settings', 'lopu-recording-job', 'lopu-recording-reminder'] } } }
+    ),
     // Live share counts are an $or of the v2 shape ({thingtime:'share',
     // targetId}) and the v1 shape (a post carrying shareOfId). shareOfId had
     // no index, and one unindexed branch drags the whole $or down: the

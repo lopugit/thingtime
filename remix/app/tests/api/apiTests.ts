@@ -156,6 +156,31 @@ const apiDocsSmokeTests: ApiTestDefinition[] = apiEndpointDocs.flatMap((doc) =>
 
 export const apiTests: ApiTestDefinition[] = [
   {
+    id: 'lopu-recordings-anonymous', name: 'Private recording activity requires an account',
+    description: 'Anonymous clients cannot read recording settings, jobs or todos.',
+    group: 'lopu-recordings', anonymous: true, method: 'GET', path: '/api/v1/lopu/recordings',
+    expect: expectJson([401], body => body?.ok === false && !body?.jobs && !body?.todos, 'Private activity is protected.')
+  },
+  {
+    id: 'lopu-recordings-cross-origin', name: 'Recording changes reject cross-origin callers',
+    description: 'A browser from another origin cannot enable processing or queue private audio.',
+    group: 'lopu-recordings', anonymous: true, method: 'POST', path: '/api/v1/lopu/recordings',
+    headers: { Origin: 'https://recording-attacker.invalid' }, body: { op: 'settings', settings: { enabled: true } },
+    expect: expectJson([403], body => body?.ok === false, 'Cross-origin mutation was rejected.')
+  },
+  {
+    id: 'lopu-recordings-cron-auth', name: 'Recording scheduler requires its credential',
+    description: 'No anonymous request can run account-wide provider work or reminders.',
+    group: 'lopu-recordings', anonymous: true, method: 'GET', path: '/api/v1/lopu/recordings/run',
+    expect: expectJson([401], body => body?.ok === false, 'Scheduler authorization is required.')
+  },
+  {
+    id: 'lopu-recordings-admin-auth', name: 'Manual recording scheduler requires admin',
+    description: 'An anonymous browser cannot trigger the manual scheduler.',
+    group: 'lopu-recordings', anonymous: true, method: 'POST', path: '/api/v1/lopu/recordings/run', body: {},
+    expect: expectJson([401,403], body => body?.ok === false, 'Manual scheduler is protected.')
+  },
+  {
     id: 'root-data',
     name: 'Root data',
     description: 'Root loader data route returns app shell configuration and current user shape.',
