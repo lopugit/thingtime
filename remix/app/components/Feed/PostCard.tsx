@@ -2448,7 +2448,10 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
         {/* action row — icons + counts only (X-style, no labels); the merged
         react control sits right beside the comments icon (comment rows keep
         their IG-style right-aligned react columns) */}
-        <Flex borderTop={BORDER} paddingTop={2} alignItems="center" columnGap={[1, 2]}>
+        {/* wraps at phone widths: the vote pill made the row wider than a
+        375px card, so the view counter (marginLeft auto) drops to its own
+        right-aligned line instead of being clipped by the card edge */}
+        <Flex borderTop={BORDER} paddingTop={2} alignItems="center" columnGap={[1, 2]} rowGap={1} flexWrap="wrap">
           <ActionIcon
             icon={<MessageCircle size={18} strokeWidth={2.2} />}
             count={post.commentCount}

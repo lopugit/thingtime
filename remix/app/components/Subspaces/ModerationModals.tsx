@@ -210,7 +210,7 @@ export const RemoveModal = ({
 		<Modal isOpen={isOpen} onClose={close} isCentered size="md" scrollBehavior="inside">
 			<ModalOverlay />
 			<ModalContent borderRadius={RADIUS_LG} background="var(--tt-card, #ffffff)" marginX={4} data-testid="remove-modal">
-				<ModalHeader fontFamily="heading" fontSize="lg" color={INK} paddingBottom={1}>
+				<ModalHeader fontFamily="heading" fontSize="lg" color={INK} paddingBottom={1} paddingRight={12}>
 					Remove from s/{subspaceSlug} 🧹
 				</ModalHeader>
 				<ModalCloseButton isDisabled={saving} />
@@ -376,7 +376,7 @@ export const BanModal = ({
 		<Modal isOpen={isOpen} onClose={close} isCentered size="md">
 			<ModalOverlay />
 			<ModalContent borderRadius={RADIUS_LG} background="var(--tt-card, #ffffff)" marginX={4} data-testid="ban-modal">
-				<ModalHeader fontFamily="heading" fontSize="lg" color={INK} paddingBottom={1}>
+				<ModalHeader fontFamily="heading" fontSize="lg" color={INK} paddingBottom={1} paddingRight={12}>
 					Ban {targetName} from s/{subspaceSlug}? 🚫
 				</ModalHeader>
 				<ModalCloseButton isDisabled={saving} />
@@ -521,7 +521,7 @@ export const ReportModal = ({
 		<Modal isOpen={isOpen} onClose={close} isCentered size="md" scrollBehavior="inside">
 			<ModalOverlay />
 			<ModalContent borderRadius={RADIUS_LG} background="var(--tt-card, #ffffff)" marginX={4} data-testid="report-modal">
-				<ModalHeader fontFamily="heading" fontSize="lg" color={INK} paddingBottom={1}>
+				<ModalHeader fontFamily="heading" fontSize="lg" color={INK} paddingBottom={1} paddingRight={12}>
 					Report this {target} to the s/{subspaceSlug} mods 🚩
 				</ModalHeader>
 				<ModalCloseButton />

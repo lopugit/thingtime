@@ -1587,6 +1587,20 @@ email whose link points at the attacker.
       preview beneath and clicking it opens `/s/<slug>`. Switching a type off
       hides its existing rows immediately.
 
+- [ ] At a 375px viewport (owner, member, non-mod member, pending
+      requester and guest): `/s`, `/s/<slug>`, every `/s/<slug>/mod` tab,
+      `/feed` with **🪐 My subspaces** on, `/explore`, `/search?q=` and
+      `/settings` have `scrollWidth === clientWidth`; every post card's action
+      row wraps so the `👁 views` counter sits on its own right-aligned line
+      instead of being clipped by the card edge (the vote pill made the row
+      wider than the card); the Remove / Ban / Report / Flair / Transfer /
+      Delete modal titles wrap clear of the close ✕ (header `paddingRight`),
+      the **Who can post** select (Create modal + mod Settings) shows short
+      `emoji Label` options with the access hint as helper text beneath it
+      rather than a clipped two-line option, and the mod page header keeps
+      the subspace name on one line with `← Back to s/<slug>` dropping to its
+      own right-aligned line.
+
 ## Up/down votes (`remix/app/api/utils/things/updown.ts`, `remix/app/components/Feed/UpdownControl.tsx`)
 
 - [ ] Every post and comment card shows the ▲ score ▼ pill beside the

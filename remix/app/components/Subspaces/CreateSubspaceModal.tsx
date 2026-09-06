@@ -145,13 +145,18 @@ export const CreateSubspaceModal = (props: { isOpen: boolean; onClose: () => voi
 						<Flex columnGap={3} rowGap={3} flexWrap="wrap">
 							<Box flex="1" minWidth="160px">
 								<Label>Who can post</Label>
+								{/* short option labels — the hint below the select instead of
+								inside it, where it truncated/clipped at narrow widths */}
 								<Select size="sm" borderRadius={RADIUS_MD} value={access} onChange={(event) => setAccess(event.target.value as SubspaceAccess)}>
 									{(Object.keys(ACCESS_META) as SubspaceAccess[]).map((key) => (
 										<option key={key} value={key}>
-											{ACCESS_META[key].emoji} {ACCESS_META[key].label} — {ACCESS_META[key].hint}
+											{ACCESS_META[key].emoji} {ACCESS_META[key].label}
 										</option>
 									))}
 								</Select>
+								<Text fontSize="xs" color={MUTED} marginTop={1} whiteSpace="normal">
+									{ACCESS_META[access].hint}
+								</Text>
 							</Box>
 							<Box width="80px">
 								<Label>Icon</Label>

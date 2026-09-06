@@ -404,7 +404,7 @@ const MemberFlairModal = ({
 		<Modal isOpen={!!member} onClose={() => !saving && onClose()} isCentered size="md">
 			<ModalOverlay />
 			<ModalContent borderRadius={RADIUS_LG} background="var(--tt-card, #ffffff)" marginX={4} data-testid="member-flair-modal">
-				<ModalHeader fontFamily="heading" fontSize="lg" color={INK} paddingBottom={1}>
+				<ModalHeader fontFamily="heading" fontSize="lg" color={INK} paddingBottom={1} paddingRight={12}>
 					Flair for {member ? memberName(member) : ''} 🏷️
 				</ModalHeader>
 				<ModalCloseButton isDisabled={saving} />
@@ -807,13 +807,18 @@ const SettingsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSave
 			<Flex columnGap={3} rowGap={3} flexWrap="wrap" alignItems="flex-end">
 				<Box minWidth="220px">
 					<Label>Who can post {isOwner ? '' : '(owner only)'}</Label>
+					{/* short option labels: the long hints wrapped inside the native
+					select at phone widths and got clipped; the hint lives below */}
 					<Select size="sm" borderRadius={RADIUS_MD} value={access} isDisabled={!isOwner} onChange={(event) => setAccess(event.target.value as SubspaceAccess)}>
 						{(Object.keys(ACCESS_META) as SubspaceAccess[]).map((key) => (
 							<option key={key} value={key}>
-								{ACCESS_META[key].emoji} {ACCESS_META[key].label} — {ACCESS_META[key].hint}
+								{ACCESS_META[key].emoji} {ACCESS_META[key].label}
 							</option>
 						))}
 					</Select>
+					<Text fontSize="xs" color={MUTED} marginTop={1} whiteSpace="normal">
+						{ACCESS_META[access].hint}
+					</Text>
 				</Box>
 				<Flex as="label" alignItems="center" columnGap={2} fontSize="sm" color={INK} cursor={isOwner ? 'pointer' : 'default'} paddingBottom={1}>
 					<Switch isChecked={nsfw} isDisabled={!isOwner} onChange={(event) => setNsfw(event.target.checked)} />
@@ -986,7 +991,7 @@ const DangerZonePanel = ({
 			<Modal isOpen={transferOpen} onClose={() => !transferring && setTransferOpen(false)} isCentered size="md">
 				<ModalOverlay />
 				<ModalContent borderRadius={RADIUS_LG} background="var(--tt-card, #ffffff)" marginX={4}>
-					<ModalHeader fontFamily="heading" fontSize="lg" color={INK} paddingBottom={1}>
+					<ModalHeader fontFamily="heading" fontSize="lg" color={INK} paddingBottom={1} paddingRight={12}>
 						Hand over s/{subspace.slug}? 👑
 					</ModalHeader>
 					<ModalCloseButton isDisabled={transferring} />
@@ -1021,7 +1026,7 @@ const DangerZonePanel = ({
 			>
 				<ModalOverlay />
 				<ModalContent borderRadius={RADIUS_LG} background="var(--tt-card, #ffffff)" marginX={4}>
-					<ModalHeader fontFamily="heading" fontSize="lg" color={INK} paddingBottom={1}>
+					<ModalHeader fontFamily="heading" fontSize="lg" color={INK} paddingBottom={1} paddingRight={12}>
 						Delete s/{subspace.slug}? 🗑️
 					</ModalHeader>
 					<ModalCloseButton isDisabled={deleting} />
@@ -1806,15 +1811,27 @@ export const SubspaceModPage = () => {
 		>
 			{/* full-width like the subspace page; panels stretch with the viewport */}
 			<Flex flexDirection="column" rowGap={4} width="100%" paddingX={[3, 4, 6, 8]} paddingTop={[3, 4, 5]}>
-				<Flex alignItems="center" columnGap={3}>
+				{/* wraps at phone widths: the back pill drops under the title (still
+				right-aligned) instead of squeezing the name and itself onto two lines */}
+				<Flex alignItems="center" columnGap={3} rowGap={2} flexWrap="wrap">
 					{subspace && <SubspaceIcon subspace={subspace} size="44px" fontSize="xl" />}
-					<Box>
+					<Box flex="1 1 auto" minWidth={0}>
 						<Label>Mod tools 🎩</Label>
 						<Text as="h1" fontFamily="heading" fontSize="2xl" fontWeight={700} letterSpacing="-0.02em" color={INK} lineHeight="1.1">
 							{subspace?.name || `s/${slug}`}
 						</Text>
 					</Box>
-					<Button as={Link} to={`/s/${slug}`} marginLeft="auto" size="sm" variant="outline" borderRadius="999px" borderColor="var(--tt-border, #ececef)">
+					<Button
+						as={Link}
+						to={`/s/${slug}`}
+						marginLeft="auto"
+						size="sm"
+						variant="outline"
+						borderRadius="999px"
+						borderColor="var(--tt-border, #ececef)"
+						flexShrink={0}
+						whiteSpace="nowrap"
+					>
 						← Back to s/{slug}
 					</Button>
 				</Flex>
