@@ -1,13 +1,6 @@
 import { createHash } from 'node:crypto';
 
 import { json } from '~/api/http';
-import { refreshAdminPrPreviewPublicationForDeployment } from '~/api/utils/ciControl/adminPreviewDeployments';
-import {
-  adminPreviewDeploymentStatus,
-  adminPreviewSnapshotUrl,
-  isTerminalAdminPreviewStatus
-} from '~/api/utils/ciControl/adminPreviewPublicationCore';
-import { isCiPreviewEnvironment } from '~/api/utils/ciControl/previewPolicyCore';
 import { ingestVercelWebhook, verifyVercelWebhookSignature } from '~/api/utils/ciControl/webhooks';
 
 const MAX_WEBHOOK_BYTES = 2 * 1024 * 1024;
@@ -36,41 +29,5 @@ export const action = async ({ request }: { request: Request }) => {
   // status update for the same deployment still becomes a distinct event.
   const deliveryId = `vercel:${createHash('sha256').update(rawBody, 'utf8').digest('hex')}`;
   const result = await ingestVercelWebhook({ eventType, deliveryId, payload });
-  const data = payload?.payload ?? payload?.data ?? payload;
-  const deployment = data?.deployment ?? data;
-  const meta = deployment?.meta ?? data?.meta ?? {};
-  const prNumber = Number(meta.githubPrId);
-  const environment = String(meta.thingtimePreviewEnvironment ?? '');
-  const sha = String(meta.githubCommitSha ?? '');
-  const status = adminPreviewDeploymentStatus({
-    readyState: deployment?.readyState,
-    state: deployment?.state,
-    eventType
-  });
-  const deploymentId = String(deployment?.id ?? data?.id ?? '');
-  if (
-    result.accepted &&
-    meta.thingtimeAdminPrPreview === '1' &&
-    Number.isSafeInteger(prNumber) &&
-    prNumber > 0 &&
-    isCiPreviewEnvironment(environment) &&
-    /^dpl_[A-Za-z0-9]+$/.test(deploymentId) &&
-    /^[0-9a-f]{40}$/.test(sha) &&
-    isTerminalAdminPreviewStatus(status)
-  ) {
-    // The delivery is already ingested and durable at this point, so refreshing
-    // the PR comment is best effort: a transient Vercel/GitHub failure must not
-    // turn an accepted delivery into a 5xx that Vercel retries and eventually
-    // disables. Every other publication call site is guarded the same way.
-    await refreshAdminPrPreviewPublicationForDeployment({
-      prNumber,
-      environment,
-      deploymentId,
-      sha,
-      status,
-      snapshotUrl: adminPreviewSnapshotUrl(deployment?.url ?? data?.url),
-      createdAt: deployment?.createdAt ?? deployment?.created ?? data?.createdAt ?? data?.created
-    }).catch(() => undefined);
-  }
   return json({ ok: true, ...result }, { status: result.accepted ? 202 : 200 });
 };
