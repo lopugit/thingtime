@@ -34,6 +34,9 @@ struct RecoveryContentView: View {
                 Section("GitHub releases") {
                     Text("\(store.releases(for: store.selectedProduct.component).count) \(store.selectedProduct.title) · \(store.recoveryReleases.count) Recovery")
                         .font(.caption).foregroundStyle(.secondary)
+                    if let status = store.catalogStatus {
+                        Text(status).font(.caption).foregroundStyle(.secondary)
+                    }
                     ForEach(releaseRows) { row in
                         ReleaseCardView(component: row.component, release: row.release, isSelected: selection == .release(row.component, row.release.id))
                             .tag(RecoverySelection.release(row.component, row.release.id))

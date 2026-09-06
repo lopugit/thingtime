@@ -467,6 +467,15 @@ const BlockInspector = ({
 							</Select>
 						</FieldRow>
 					</FieldPair>
+					<FieldRow label="Link (https, /path, mailto:, tel:) — makes this text a button">
+						<Input
+							{...inputStyles}
+							value={block.href || ''}
+							placeholder="/register"
+							onChange={(event) => patch({ href: event.target.value || undefined })}
+							data-testid="text-block-href"
+						/>
+					</FieldRow>
 					<Flex flexWrap="wrap" gap={2}>
 						<CssField label="Font size" cssKey="font-size" block={block} onCss={setCss} placeholder="16px" />
 						<CssField label="Weight" cssKey="font-weight" block={block} onCss={setCss} placeholder="400" />
