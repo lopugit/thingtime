@@ -42,6 +42,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   compare-and-swap got an unguarded write and a 200 — which this branch makes
   reachable in earnest, since a custom audience can grant `tt:user/<name>/write`
   to other people and give one thing concurrent writers. — Lopu (AI)
+- "Copy hidden link 🕵️" now appears for a custom audience 🎭 that picked the
+  "+ secret link" baseline. The server mints, projects and honours `linkKey`
+  off `acl.includes('tt:hidden')`, but `visibilityFromAcl` reports `custom`
+  whenever `tt:custom` rides along, so the post menu's `visibility === 'hidden'`
+  gate never fired for those things — the key existed and the owner already held
+  it in their own payload, with no UI to reach it. The menu now derives the link
+  from `post.linkKey`, which is already owner-only and hidden-only, and a new
+  `hiddenLinkContract.test.ts` pins the derivation. — Lopu (AI)
 
 ### 2026-09-02 — Lopu toast position setting + `/notifications` history page — Claude (AI)
 

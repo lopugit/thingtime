@@ -1397,8 +1397,18 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
 
   // menu copy-link: always the clipboard (the share icon owns the native
   // sheet). Hidden posts copy their SECRET link — permalink + ?key= — the
-  // only door into an unlisted post (linkKey projects to the owner only).
-  const hiddenLink = post.visibility === 'hidden' && post.linkKey ? `${permalinkPath}?key=${encodeURIComponent(post.linkKey)}` : null;
+  // only door into an unlisted post.
+  //
+  // Keyed on the KEY, not on the derived circle name. The server mints,
+  // projects and honours linkKey off `acl.includes(tt:hidden)` (createThing,
+  // toPublicPosts, canView), but visibilityFromAcl reports 'custom' whenever
+  // tt:custom rides along — and the audience picker's "🕵️ + secret link"
+  // baseline composes exactly that acl. Gating on the name therefore hid the
+  // link for every custom audience that opted into one: a real key existed,
+  // the owner held it in this very payload, and no UI would surface it.
+  // `post.linkKey` is already the exact condition — present only for the
+  // owner, and only while the acl still says hidden.
+  const hiddenLink = post.linkKey ? `${permalinkPath}?key=${encodeURIComponent(post.linkKey)}` : null;
   const handleCopyLink = async () => {
 		const url = `${window.location.origin}${hiddenLink || permalinkPath}`;
     try {

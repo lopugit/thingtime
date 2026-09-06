@@ -121,3 +121,76 @@ racing writer cannot reach it. `replaceCrystal` is likewise left off the bridge
 - The five new section-H checks were authored but NOT executed in this session:
   `verify-pat-tokens.mjs` needs a running stack + database, which the review
   runner does not have. They should be exercised on the next live QA pass.
+
+## Lopu review — head `9194b96e` (custom audiences could not reach their own secret link)
+
+### The defect 🕵️🎭
+
+The audience picker offers three baselines, one of which is **"🕵️ + secret
+link"** ("Anyone holding its hidden link can also view"). `composeCustomAcl`
+implements it by emitting `tt:hidden` alongside the `tt:custom` marker, and the
+whole server side honours that acl correctly:
+
+- `createThing` mints a `linkKey` for it (`acl.includes(ACL_HIDDEN)`),
+- `updateThing` re-mints on entry into hidden, keyed the same way,
+- `toPublicPosts` / `toPublicThings` project the key to the owner, gated on the
+  same `ACL_HIDDEN` test,
+- `canView` admits any key holder while the acl still says hidden.
+
+Every one of those keys off the acl. But **`PostCard`'s copy-link menu item —
+the only UI anywhere that surfaces the key — keyed off the derived circle
+name**:
+
+```ts
+const hiddenLink = post.visibility === 'hidden' && post.linkKey ? … : null;
+```
+
+and `visibilityFromAcl` ranks `tt:custom` *above* `tt:hidden` on purpose, so a
+custom audience with a hidden baseline always reports `visibility: 'custom'`.
+The gate could therefore never fire for it. The owner held a real, freshly
+minted, correctly projected `linkKey` in their own payload — `handleCustomApply`
+even merges `resp.post.linkKey` into the card state right after applying an
+audience — and no menu item would ever show it. A baseline the picker
+advertises in its own hint text had no way to be used.
+
+### The fix
+
+One line, plus its reasoning: derive from the key, not from the name.
+
+```ts
+const hiddenLink = post.linkKey ? `${permalinkPath}?key=${encodeURIComponent(post.linkKey)}` : null;
+```
+
+`post.linkKey` is *already* the exact condition the name gate was approximating:
+the server emits it only to the owner and only while the acl still says hidden.
+So this is strictly narrower than it looks — for a plain 🕵️ post nothing
+changes, for every other post `linkKey` is absent and the item stays "Copy link
+🔗". No new data reaches the client; the toast wording ("anyone holding this
+exact link can view the post") is accurate for a hidden baseline too, since
+`canView`'s key branch runs ahead of `aclAllows` and grants view — and only
+view, because `aclCapabilityFor` ignores link keys, so a key holder still
+cannot comment or edit a `tt:custom` thing.
+
+### Why a test rather than just the fix
+
+tsc cannot see this: both spellings typecheck and the wrong one reads as the
+more explicit of the two. That is the same category as the `onChanged` contract
+this directory already pins in `postCardChangeContract.test.ts`, so the new
+`hiddenLinkContract.test.ts` sits beside it and pins three facts — the
+derivation uses `post.linkKey` and *not* `post.visibility`, the 🕵️ baseline
+really composes `tt:hidden`, and `visibilityFromAcl` really ranks custom ahead
+of hidden (the fact that makes the name gate wrong).
+
+### Validation
+
+- `node --experimental-strip-types --test app/components/Feed/hiddenLinkContract.test.ts` — 3/3 pass.
+- Negative control: restoring the old `post.visibility === 'hidden' &&` gate
+  fails test 1 and only test 1 (2 pass / 1 fail), then passes again once
+  reverted — so the test genuinely catches this regression rather than
+  restating the code.
+- `node --experimental-strip-types --test app/components/Feed/postCardChangeContract.test.ts` — 8/8 pass; the edit touches no `onChanged` call site, so the contract's call counts are unchanged.
+- CI on this exact head `9194b96e`: API suite, Build + typecheck ratchet + unit
+  tests, CodeQL / Analyze (javascript-typescript), Analyze (actions) — all
+  green. Zero failing checks (47 success / 145 skipped / 1 neutral).
+- Trusted CodeQL snapshot for `9194b96e` is empty — nothing to fix, nothing to
+  dispose.
