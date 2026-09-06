@@ -60,6 +60,7 @@ export function EmojiPicker({
   const [status, setStatus] = useState<string | null>(null);
   const [requiresAccessibility, setRequiresAccessibility] = useState(false);
   const actionInFlight = useRef(false);
+  const recoveryHadFocus = useRef(false);
 
   const learnedCounts = useMemo(() => learnedEmojiCounts(learning, deferredQuery), [deferredQuery, learning]);
   const results = useMemo(
@@ -194,6 +195,16 @@ export function EmojiPicker({
     },
     [learn, query, remember, selected, tone],
   );
+
+  // Activating a recovery control unmounts it, which drops focus to the document
+  // body and silently stops typing from reaching the query field. Restore focus
+  // only when it was actually lost, so a deliberate focus elsewhere is not stolen.
+  useEffect(() => {
+    if (requiresAccessibility || !recoveryHadFocus.current) return;
+    recoveryHadFocus.current = false;
+    if (document.activeElement && document.activeElement !== document.body) return;
+    inputRef.current?.focus();
+  }, [requiresAccessibility]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -429,7 +440,12 @@ export function EmojiPicker({
                     Enable Commander in Privacy &amp; Security → Accessibility. If it is already enabled,
                     switch Commander off and on, then quit and reopen Commander.
                   </span>
-                  <div className="emoji-recovery-actions">
+                  <div
+                    className="emoji-recovery-actions"
+                    onFocus={() => {
+                      recoveryHadFocus.current = true;
+                    }}
+                  >
                     <button
                       type="button"
                       onClick={() => {

@@ -210,6 +210,52 @@ describe('EmojiPicker', () => {
     );
   });
 
+  it('returns focus to the query field when an activated recovery control unmounts', async () => {
+    vi.mocked(nativeRequest).mockImplementation(async (method) => {
+      if (method === 'clipboard.paste') return { copied: false, pasted: false, requiresAccessibility: true };
+      return undefined;
+    });
+    render(<EmojiPicker platform="macos" defaultAction="paste" onBack={vi.fn()} />);
+    const search = screen.getByRole('textbox', { name: 'Search emoji and symbols' });
+
+    fireEvent.keyDown(window, { key: 'Enter' });
+    const copyEmoji = await screen.findByRole('button', { name: 'Copy Emoji' });
+    copyEmoji.focus();
+    expect(document.activeElement).toBe(copyEmoji);
+
+    fireEvent.click(copyEmoji);
+
+    // The control unmounts on success; typing must keep reaching the search field.
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Copy Emoji' })).not.toBeInTheDocument(),
+    );
+    expect(document.activeElement).toBe(search);
+    fireEvent.change(search, { target: { value: 'heart' } });
+    expect(search).toHaveValue('heart');
+  });
+
+  it('does not steal focus that the reader deliberately moved elsewhere', async () => {
+    vi.mocked(nativeRequest).mockImplementation(async (method) => {
+      if (method === 'clipboard.paste') return { copied: false, pasted: false, requiresAccessibility: true };
+      return undefined;
+    });
+    render(<EmojiPicker platform="macos" defaultAction="paste" onBack={vi.fn()} />);
+
+    fireEvent.keyDown(window, { key: 'Enter' });
+    const copyEmoji = await screen.findByRole('button', { name: 'Copy Emoji' });
+    copyEmoji.focus();
+    const cell = within(screen.getByRole('listbox')).getAllByRole('option')[3];
+    if (!cell) throw new Error('Expected an emoji cell');
+    cell.focus();
+
+    fireEvent.click(copyEmoji);
+
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Copy Emoji' })).not.toBeInTheDocument(),
+    );
+    expect(document.activeElement).toBe(cell);
+  });
+
   it('does not reorder the unfiltered grid after repeated denied double clicks', async () => {
     vi.mocked(nativeRequest).mockImplementation(async (method) => {
       if (method === 'clipboard.paste') return { copied: false, pasted: false, requiresAccessibility: true };
