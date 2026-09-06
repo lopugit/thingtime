@@ -1,103 +1,24 @@
 import React from 'react';
 import { Box, Center, Flex, Popover, PopoverAnchor, PopoverContent, Spinner, Text } from '@chakra-ui/react';
 import { Bell } from 'lucide-react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 
-import { timeAgo } from '~/components/Feed/feedTypes';
-import { ProfileAvatarCircle } from '~/components/Profile/ProfilePage';
+import { NotificationRow } from '~/components/Notifications/NotificationRow';
+import { notificationHref, type NotificationItem } from '~/components/Notifications/notificationCore';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
-import { subspaceNotificationDetail, subspaceSlugFromNotificationPreview } from '~/schemas/registry';
 
 // The nav bell 🔔: unread badge + a popover of recent notifications. The
 // badge count seeds from the per-user localCache (no flash), reconciles on
 // mount / window focus / a slow poll, and zeroes optimistically when the
 // popover opens (which also marks everything read server-side — X-style).
+// The full, searchable history lives at /notifications ("See all").
 
 const MUTED = 'var(--tt-muted, #9a9aa6)';
-const INK = 'var(--tt-ink, #16161a)';
 const BORDER = '1px solid var(--tt-border, #ececef)';
 const POLL_MS = 90_000;
 
-type BellNotification = {
-  id: string;
-  type: string;
-  actorId: string;
-  actorUsername: string | null;
-  actorName: string | null;
-  actorAvatarUrl: string | null;
-  targetId: string | null;
-  postId: string | null;
-  preview: string | null;
-  readAt: string | null;
-  createdAt: string;
-};
-
-const TYPE_EMOJI: Record<string, string> = {
-  'friend-request': '🤝',
-  'friend-accepted': '💚',
-  'new-follower': '👀',
-  'post-from-followed': '📰',
-  'post-from-friend': '🫶',
-  comment: '💬',
-  reply: '↩️',
-  reaction: '🤣',
-  share: '🔁',
-  mention: '📣',
-  groups: '👥',
-  'subspace-join-request': '🙋',
-  'subspace-join-accepted': '🎉',
-  'subspace-post-removed': '🧹',
-  'subspace-report': '🚩',
-  'subspace-role': '🎩',
-  'subspace-ban': '🚫'
-};
-
-// Subspace previews lead with the slug ("s/<slug> · …"); the verb keys off the
-// DETAIL half only, so a slug like s/deleted_scenes or s/uplifted_minds can't
-// masquerade as a deletion or a lifted ban.
-const hasDetail = (item: BellNotification, pattern: RegExp) => pattern.test(subspaceNotificationDetail(item.preview));
-
-const verbOf = (item: BellNotification): string => {
-  switch (item.type) {
-    // subspace moderation — the preview line ("s/<slug> · …") carries the
-    // specifics, the verb names the event family
-    case 'subspace-join-request':
-      return hasDetail(item, /wants to post/i) ? 'asked for posting approval' : 'asked to join your subspace';
-    case 'subspace-join-accepted':
-      return 'accepted you into a subspace';
-    case 'subspace-post-removed':
-      return 'removed your post';
-    case 'subspace-report':
-      return 'reported a post to the mods';
-    case 'subspace-role':
-      return hasDetail(item, /deleted/i) ? 'deleted a subspace you moderated' : 'changed your role in a subspace';
-    case 'subspace-ban':
-      return hasDetail(item, /lifted/i) ? 'lifted your ban' : 'banned you from a subspace';
-    case 'friend-request':
-      return 'sent you a friend request';
-    case 'friend-accepted':
-      return 'accepted your friend request';
-    case 'new-follower':
-      return 'started following you';
-    case 'post-from-followed':
-    case 'post-from-friend':
-      return 'posted';
-    case 'comment':
-      return 'commented on your post';
-    case 'reply':
-      return 'replied to your comment';
-    case 'reaction':
-      return item.preview ? `reacted ${item.preview}` : 'reacted to your post';
-    case 'share':
-      return 'reposted your post';
-    case 'mention':
-      return 'mentioned you';
-    default:
-      return 'did something ✨';
-  }
-};
 
 export const NotificationsBell = () => {
   const user = useCurrentUser();
@@ -109,7 +30,7 @@ export const NotificationsBell = () => {
     cacheKey ? readLocalCache<number>(cacheKey) || 0 : 0
   );
   const [open, setOpen] = React.useState(false);
-  const [items, setItems] = React.useState<BellNotification[] | null>(null);
+  const [items, setItems] = React.useState<NotificationItem[] | null>(null);
 
   const listRef = React.useRef(api.v1.notifications.list);
   listRef.current = api.v1.notifications.list;
@@ -178,23 +99,10 @@ export const NotificationsBell = () => {
       .catch(() => setItems([]));
   };
 
-  const handleItemClick = (item: BellNotification) => {
+  const handleItemClick = (item: NotificationItem) => {
     setOpen(false);
-    if (item.postId) {
-      navigate(`/post/${item.postId}`);
-      return;
-    }
-    // subspace-scoped rows deep-link to the subspace (slug leads the preview)
-    if (item.type.startsWith('subspace-')) {
-      const slug = subspaceSlugFromNotificationPreview(item.preview);
-      if (slug) {
-        navigate(`/s/${slug}`);
-        return;
-      }
-    }
-    if (item.actorUsername) {
-      navigate(`/profile/${item.actorUsername}`);
-    }
+    const href = notificationHref(item);
+    if (href) navigate(href);
   };
 
   if (!user) return null;
@@ -257,6 +165,12 @@ export const NotificationsBell = () => {
             >
               Notifications 🔔
             </Text>
+            <Box flex={1} />
+            <Link to="/notifications" onClick={() => setOpen(false)}>
+              <Text as="span" fontSize="xs" fontWeight={600} color="var(--tt-accent, #7c5cff)" _hover={{ textDecoration: 'underline' }}>
+                See all →
+              </Text>
+            </Link>
           </Flex>
 
           {items === null && (
@@ -275,48 +189,7 @@ export const NotificationsBell = () => {
           )}
 
           {items?.map((item) => (
-            <Flex
-              key={item.id}
-              as="button"
-              type="button"
-              textAlign="left"
-              alignItems="flex-start"
-              columnGap={2.5}
-              paddingX={2}
-              paddingY={2}
-              borderRadius="var(--tt-radius-md, 12px)"
-              background={item.readAt ? 'transparent' : 'var(--tt-surface-alt, #f5f5f7)'}
-              _hover={{ background: 'var(--tt-surface-hover, #ececee)' }}
-              onClick={() => handleItemClick(item)}
-            >
-              <Box position="relative" flexShrink={0}>
-                <ProfileAvatarCircle
-                  avatarUrl={item.actorAvatarUrl}
-                  name={item.actorName || item.actorUsername || '?'}
-                  size="32px"
-                  fontSize="sm"
-                />
-                <Box position="absolute" bottom="-4px" right="-4px" fontSize="11px" lineHeight="1">
-                  {TYPE_EMOJI[item.type] || '✨'}
-                </Box>
-              </Box>
-              <Box minWidth={0} whiteSpace="normal">
-                <Text fontSize="xs" color={INK}>
-                  <Text as="span" fontWeight={700}>
-                    {item.actorName || item.actorUsername || 'Someone'}
-                  </Text>{' '}
-                  {verbOf(item)}
-                </Text>
-                {item.preview && item.type !== 'reaction' && (
-                  <Text fontSize="xs" color={MUTED} noOfLines={2}>
-                    {item.preview}
-                  </Text>
-                )}
-                <Text fontSize="10px" color={MUTED} marginTop={0.5}>
-                  {timeAgo(item.createdAt)}
-                </Text>
-              </Box>
-            </Flex>
+            <NotificationRow key={item.id} item={item} dense onClick={handleItemClick} />
           ))}
         </Flex>
       </PopoverContent>

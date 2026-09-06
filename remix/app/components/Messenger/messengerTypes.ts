@@ -53,10 +53,45 @@ export type LiveAiSource = {
 	authorName?: string | null;
 };
 
-export type ExternalAiSource = ImportedAiSource | LiveAiSource;
+// Lopu, the Thingtime assistant: its conversations are ordinary messenger
+// rows tagged with this source (chat: readOnly false; assistant turns:
+// readOnly true — never editable, deletable with the chat). Mirrors
+// PublicLopuExternalAiSource in api/utils/messenger/externalAi.ts.
+export type LopuAiSource = {
+	access: 'lopu';
+	provider: 'lopu';
+	sourceId: string;
+	label: string;
+	connector: string;
+	readOnly: boolean;
+	role?: 'user' | 'assistant' | 'system' | 'unknown';
+	authorName?: string | null;
+	messageId?: string | null;
+	revision?: number;
+	segmentIndex?: number;
+	segmentCount?: number;
+};
+
+export type ExternalAiSource = ImportedAiSource | LiveAiSource | LopuAiSource;
 
 export const isLiveAiSource = (source: ExternalAiSource | null | undefined): source is LiveAiSource =>
 	source?.access === 'live' && source.readOnly === false;
+
+export const isLopuAiSource = (source: ExternalAiSource | null | undefined): source is LopuAiSource =>
+	// provider is the fallback discriminator for a row projected without access
+	source?.access === 'lopu' || (source as { provider?: unknown } | null | undefined)?.provider === 'lopu';
+
+// The unicorn on a rainbow disc — Lopu's avatar wherever an AI chat/row is drawn.
+export const LOPU_RAINBOW_DISC = 'var(--tt-gradient-rainbow, linear-gradient(135deg, #f59e0b, #ec4899, #8b5cf6))';
+
+// Avatar treatment for an AI-backed chat or message row: ChatGPT and Claude
+// keep their brand discs, Lopu gets the unicorn on the rainbow disc.
+export const externalSourceAvatar = (source: ExternalAiSource): { glyph: string; background: string; color: string } =>
+	isLopuAiSource(source)
+		? { glyph: '🦄', background: LOPU_RAINBOW_DISC, color: 'white' }
+		: source.provider === 'chatgpt'
+			? { glyph: '◎', background: '#17171c', color: 'white' }
+			: { glyph: '✦', background: '#d97757', color: 'white' };
 
 export type MessengerProfile = {
   id: string;

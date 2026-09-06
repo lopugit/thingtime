@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import { createPinnedPnpmEnvironment } from './pinned-package-manager.mjs';
+import { productionSigningIdentity } from './production-signing-identity.mjs';
 
 const electronDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const electronBuilder = path.join(electronDir, 'node_modules', '.bin', 'electron-builder');
@@ -33,15 +34,8 @@ function developerIdIdentity() {
 		encoding: 'utf8',
 		stdio: ['ignore', 'pipe', 'pipe']
 	});
-	const identities = [...result.stdout.matchAll(/"([^"]+)"/gu)].map((match) => match[1]);
 	const requested = process.env.THINGTIME_ELECTRON_SIGNING_IDENTITY || process.env.CSC_NAME || '';
-	const identity = requested || identities.find((value) => value.startsWith('Developer ID Application:'));
-	if (!identity || !identity.startsWith('Developer ID Application:') || !identities.includes(identity)) {
-		throw new Error(
-			'Production release is blocked: import a Developer ID Application identity into the build keychain and set THINGTIME_ELECTRON_SIGNING_IDENTITY.'
-		);
-	}
-	return identity;
+	return productionSigningIdentity(result.stdout, requested);
 }
 
 function requireNotarizationCredentials() {
@@ -80,12 +74,12 @@ async function findReleaseArchives() {
 
 if (process.platform !== 'darwin') throw new Error('Thingtime production artifacts can only be built on macOS.');
 
-const identity = developerIdIdentity();
+const { identity, qualifier } = developerIdIdentity();
 requireNotarizationCredentials();
 const releaseEnvironment = {
 	...process.env,
 	CSC_IDENTITY_AUTO_DISCOVERY: 'true',
-	CSC_NAME: identity,
+	CSC_NAME: qualifier,
 	THINGTIME_NODE_SIGNING_IDENTITY: identity
 };
 
@@ -100,7 +94,8 @@ try {
 			'--publish',
 			'never',
 			'--config.forceCodeSigning=true',
-			`--config.mac.identity=${identity}`,
+            ...(process.env.THINGTIME_ELECTRON_BUILD_NUMBER ? [`--config.buildVersion=${process.env.THINGTIME_ELECTRON_BUILD_NUMBER}`] : []),
+			`--config.mac.identity=${qualifier}`,
 			'--config.mac.notarize=true',
 			...(releaseVersion ? [`--config.extraMetadata.version=${releaseVersion}`] : [])
 		],

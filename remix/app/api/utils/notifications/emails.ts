@@ -7,7 +7,7 @@ import { renderNotificationEmailTemplate } from '../email/templates';
 import { getEmailMessagesCollection } from '../mongodb/collections';
 import { normalizeNotificationPrefs, subspaceSlugFromNotificationPreview } from '~/schemas/registry';
 import type { NotificationType } from '~/schemas/registry';
-import { clampPreview } from './notifications';
+import { clampPreview, safeInternalHref } from './notifications';
 import type { EmitNotificationInput } from './notifications';
 
 // Email side of the notification system. Rides the same emit calls as the
@@ -71,20 +71,33 @@ const sendToTarget = async (target: EmailNotificationTarget, input: EmitNotifica
   }
   const origin = notificationEmailOrigin();
   const actorUsername = input.actor.username || null;
-  // subspace-scoped notifications (role/ban/join…) deep-link to the subspace
-  // — the slug rides at the head of the preview (registry.ts)
+  // system notes carry their own in-app path (already validated at emit);
+  // subspace-scoped notifications (role/ban/join…) deep-link to the subspace —
+  // the slug rides at the head of the preview (registry.ts)
+  const href = safeInternalHref(input.href);
   const subspaceSlug = input.type.startsWith('subspace-') && !input.postId ? subspaceSlugFromNotificationPreview(input.preview) : null;
-  const ctaUrl = input.postId
-    ? `${origin}/post/${encodeURIComponent(String(input.postId))}`
-    : subspaceSlug
-      ? `${origin}/s/${encodeURIComponent(subspaceSlug)}`
-      : actorUsername
-        ? `${origin}/profile/${encodeURIComponent(actorUsername)}`
-        : origin;
-  const ctaLabel = input.postId ? 'Open the post' : subspaceSlug ? `Open s/${subspaceSlug}` : actorUsername ? `View @${actorUsername}` : 'Open Thingtime';
+  const ctaUrl = href
+    ? `${origin}${href}`
+    : input.postId
+      ? `${origin}/post/${encodeURIComponent(String(input.postId))}`
+      : subspaceSlug
+        ? `${origin}/s/${encodeURIComponent(subspaceSlug)}`
+        : actorUsername
+          ? `${origin}/profile/${encodeURIComponent(actorUsername)}`
+          : origin;
+  const ctaLabel = href
+    ? 'Open in Thingtime'
+    : input.postId
+      ? 'Open the post'
+      : subspaceSlug
+        ? `Open s/${subspaceSlug}`
+        : actorUsername
+          ? `View @${actorUsername}`
+          : 'Open Thingtime';
   const rendered = renderNotificationEmailTemplate({
     type: input.type,
     actorName: input.actor.displayName || input.actor.username || null,
+    headline: clampPreview(input.title),
     preview: clampPreview(input.preview),
     ctaUrl,
     ctaLabel,

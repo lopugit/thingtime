@@ -7,7 +7,9 @@ import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z, DRAWER_TOP_LEVEL_DEFAULT_LIMIT,
 import { drawerItemClosesOnClick, drawerMenuItems, filterDrawerItemsByAuth } from './drawerMenu';
 import { AccountSwitcher } from '../../Account/AccountSwitcher';
 import { ElectronUpdateManager } from './ElectronUpdateManager';
+import { LopuPositionSelect } from '../../Lopu/LopuPositionSelect';
 import { useLopu } from '../../Lopu/useLopu';
+import { LopuSettingsRows } from '../../Lopu/LopuHost';
 import { ColorControl, ThingsBadgePaddingControl } from '../../ThemeSettings/controls';
 import { useThingtime } from '../../Thingtime/useThingtime';
 import { useApi } from '~/hooks/useApi';
@@ -700,6 +702,22 @@ export const UserSettingsModal = () => {
 				</Flex>
 			</Flex>
 
+			{/* 🦄 Lopu — the assistant's launcher, window and defaults (mirrors
+			    SettingsPage's Lopu section; the rows come from LopuSettingsRows) */}
+			<Flex flexDirection="column" rowGap={0}>
+				<Text paddingBottom={2} fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" opacity={0.45}>
+					Lopu 🦄
+				</Text>
+				<LopuSettingsRows renderRow={settingRow} />
+				{settingRow(
+					'Talk to Lopu',
+					<Button size="xs" variant="outline" onClick={() => handleGoTo('/lopu')}>
+						Open 🦄
+					</Button>,
+					'The full chat page with every conversation'
+				)}
+			</Flex>
+
 			{/* theming */}
 			<Flex flexDirection="column" rowGap={0}>
 				<Text paddingBottom={2} fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" opacity={0.45}>
@@ -752,6 +770,8 @@ export const UserSettingsModal = () => {
 					<Switch isChecked={theme.general.motion} onChange={(e) => setGeneral('motion', e.target.checked)}></Switch>,
 					'Rainbow + decorative animation'
 				)}
+
+				{settingRow('Lopu messages 🦄', <LopuPositionSelect />, 'Where notifications pop up on screen')}
 
 				{settingRow(
 					'Theme Studio',

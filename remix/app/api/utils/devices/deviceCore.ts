@@ -167,7 +167,7 @@ export const devicePayloadHash = (value: unknown): string => createHash('sha256'
 
 export type DeviceDescriptor = {
 	name: string;
-	platform: 'macos' | 'windows' | 'linux';
+	platform: 'macos' | 'windows' | 'linux' | 'watchos';
 	model: string | null;
 	osVersion: string | null;
 	appVersion: string | null;
@@ -178,7 +178,10 @@ export const normalizeDeviceDescriptor = (value: unknown): DeviceDescriptor | nu
 	const raw = value as Record<string, unknown>;
 	if (!Object.keys(raw).every((key) => ['name', 'platform', 'model', 'osVersion', 'appVersion'].includes(key))) return null;
 	const name = bounded(raw.name, 120);
-	const platform = raw.platform === 'macos' || raw.platform === 'windows' || raw.platform === 'linux' ? raw.platform : null;
+	const platform =
+		raw.platform === 'macos' || raw.platform === 'windows' || raw.platform === 'linux' || raw.platform === 'watchos'
+			? raw.platform
+			: null;
 	if (!name || !platform) return null;
 	return {
 		name,

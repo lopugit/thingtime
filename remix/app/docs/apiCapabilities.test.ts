@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { apiEndpointDocs, apiRouteCapabilityId, createApiCapabilitiesManifest } from './apiDocs';
 import { routeModules } from '../../server/routes/api/[...]';
+import { thingtimeCapabilityManifest } from '../api/utils/capabilities/thingtimeCapabilities';
 
 test('capabilities advertise every documented semantic contract', () => {
 	const manifest = createApiCapabilitiesManifest();
@@ -10,6 +11,20 @@ test('capabilities advertise every documented semantic contract', () => {
 	for (const doc of apiEndpointDocs) {
 		assert.equal(manifest.features[`api.${doc.id}`], doc.contractVersion, doc.endpoint);
 	}
+});
+
+test('both capability manifests advertise the bounded upload v2 contract', () => {
+	assert.equal(createApiCapabilitiesManifest().features['api.network-probe-upload'], '2.1.0');
+	const manifest = thingtimeCapabilityManifest('https://thingtime.test');
+	assert.equal(manifest.features['api.network-probe-upload'].version, '2.1.0');
+	for (const feature of ['api.network-probe-ping', 'api.network-probe-download', 'api.tiers', 'api.admin-tiers']) {
+		assert.equal(manifest.features[feature].version, '1.1.0');
+		assert.equal(createApiCapabilitiesManifest().features[feature], '1.1.0');
+	}
+	assert.equal(manifest.features['api.admin-subscriptions'].version, '1.1.1');
+	assert.equal(createApiCapabilitiesManifest().features['api.admin-subscriptions'], '1.1.1');
+	assert.equal(createApiCapabilitiesManifest().features['api.admin-migrations-run'], '1.0.1');
+	assert.ok(manifest.operations.some((operation) => operation.feature === 'api.network-probe-upload' && operation.path === '/api/v1/network-probe/upload' && operation.methods.includes('POST')));
 });
 
 test('capabilities advertise every executable API route, including undocumented routes', () => {
@@ -26,6 +41,29 @@ test('account-hint privacy contracts publish their patch-level capability update
 
 	assert.equal(manifest.features['api.auth-account-hints'], '1.0.1');
 	assert.equal(manifest.features['api.auth-account-hints-resolve'], '1.0.1');
+});
+
+test('capabilities publish the native Apple notification device contract', () => {
+	const manifest = createApiCapabilitiesManifest();
+
+	assert.equal(manifest.features['api.notifications-devices'], '1.1.0');
+	assert.equal(manifest.features['api.notifications-list'], '1.3.0');
+	assert.equal(manifest.features['api.watch-pairing'], '1.2.0');
+	assert.equal(manifest.features['api.watch-sync'], '1.0.0');
+	assert.equal(manifest.features['api.watch-things'], '1.0.0');
+	assert.equal(manifest.features['api.devices'], '1.9.0');
+	assert.equal(manifest.features['api.attachment-uploads'], '1.1.0');
+	assert.equal(manifest.features['api.attachment-upload-parts'], '1.1.0');
+	assert.equal(manifest.features['api.attachment-upload-complete'], '1.1.0');
+});
+
+test('notification contracts publish the history filters and the system family as compatible minors', () => {
+	const manifest = createApiCapabilitiesManifest();
+
+	// the history filters landed as 1.1.0; the list then took the cursor,
+	// from/to window and viewer object on top, so it publishes 1.2.0
+	assert.equal(manifest.features['api.notifications-list'], '1.3.0');
+	assert.equal(manifest.features['api.notifications-settings'], '1.2.0');
 });
 
 test('capabilities publish the non-secret data authority used by a bundle', () => {
@@ -52,6 +90,31 @@ test('the storage census and ciControl workbench allowlist publish their minor c
 	assert.equal(manifest.features['api.mongodb-raw-results'], '1.1.0');
 });
 
+test('the Lopu family publishes its minor capability updates (own providers, verified keys)', () => {
+	const manifest = createApiCapabilitiesManifest();
+	// 1.3.0: vaultProviders[].realtimeModels + the kind-default model for a row saved without one
+	assert.equal(manifest.features['api.ai-models'], '1.3.0');
+	assert.equal(manifest.features['api.admin-ai-models'], '1.1.0');
+	assert.equal(manifest.features['api.settings-lopu-chat-defaults'], '1.1.0');
+	// 1.1.1 / 1.0.1: the chat write buckets fail closed on a limiter outage
+	assert.equal(manifest.features['api.lopu-chats'], '1.1.1');
+	assert.equal(manifest.features['api.lopu-chats-update'], '1.1.1');
+	assert.equal(manifest.features['api.lopu-chats-delete'], '1.0.1');
+	// 1.2.0: server-verified confirmations (confirmations[] in, confirm event +
+	// tool_result.needsConfirmation out) and the JSON-only fence (415)
+	assert.equal(manifest.features['api.lopu-chats-reply'], '1.2.0');
+	// 1.1.0: optional provider `model` + templates with catalog models / more kinds (vault);
+	// optional per-turn model, effort, speed (voice turn) — on top of the 1.0.1 fences
+	assert.equal(manifest.features['api.lopu-vault'], '1.1.0');
+	assert.equal(manifest.features['api.lopu-voice-reply'], '1.1.0');
+	// direct voice (§6.1): the ephemeral realtime credential
+	assert.equal(manifest.features['api.lopu-voice-session'], '1.0.0');
+});
+
+test('persistent attachment content and resized previews advertise their additive contract', () => {
+	assert.equal(createApiCapabilitiesManifest().features['api.attachment-content'], '1.1.0');
+});
+
 test('admin preview dispatch publishes its protected-controller contract version', () => {
 	const manifest = createApiCapabilitiesManifest();
 	assert.equal(manifest.features['api.admin-ci-previews'], '2.0.0');
@@ -74,8 +137,8 @@ test('subspace lifecycle + notification type additions publish their contract ve
 	assert.equal(manifest.features['api.subspaces-delete'], '1.1.0');
 	// S4 review: subspace-post-removed / subspace-ban rows carry the subspace's
 	// mod team as their actor (1.2.0, additive)
-	assert.equal(manifest.features['api.notifications-list'], '1.2.0');
-	assert.equal(manifest.features['api.notifications-settings'], '1.1.0');
+	assert.equal(manifest.features['api.notifications-list'], '1.3.0');
+	assert.equal(manifest.features['api.notifications-settings'], '1.2.0');
 });
 
 test('subspace join requests + posting-approval requests publish their contract versions', () => {

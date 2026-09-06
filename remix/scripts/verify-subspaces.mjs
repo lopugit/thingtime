@@ -517,7 +517,7 @@ const run = async () => {
 	const manifest2 = await api('/api/v1/capabilities');
 	check(
 		'capability manifest advertises transfer (1.2.0, guarded writes + newOwner.userFlair + removalReasons) / delete (1.1.0, privatePosts + slug hold) and the bumped members (1.4.1, S2 queues + review fixes + S3 user flairs + S3 review + S4 ban note + S4 review mod-team ban bell) / notifications contracts (list 1.2.0 — mod-team actor rows; settings 1.1.0)',
-		manifest2.status === 200 && manifest2.body.features['api.subspaces-transfer'] === '1.2.0' && manifest2.body.features['api.subspaces-delete'] === '1.1.0' && manifest2.body.features['api.subspaces-members'] === '1.4.1' && manifest2.body.features['api.notifications-list'] === '1.2.0' && manifest2.body.features['api.notifications-settings'] === '1.1.0',
+		manifest2.status === 200 && manifest2.body.features['api.subspaces-transfer'] === '1.2.0' && manifest2.body.features['api.subspaces-delete'] === '1.1.0' && manifest2.body.features['api.subspaces-members'] === '1.4.1' && manifest2.body.features['api.notifications-list'] === '1.3.0' && manifest2.body.features['api.notifications-settings'] === '1.2.0',
 		JSON.stringify({ t: manifest2.body?.features?.['api.subspaces-transfer'], d: manifest2.body?.features?.['api.subspaces-delete'], m: manifest2.body?.features?.['api.subspaces-members'], n: manifest2.body?.features?.['api.notifications-list'] })
 	);
 	const deleteDocs = await api('/api/v1/subspaces/delete-docs');
@@ -1441,8 +1441,8 @@ const run = async () => {
 	// the manifest
 	const manifestP = await api('/api/v1/capabilities');
 	check(
-		'capability manifest advertises the S4 contracts (update / join / leave 1.3.0 — removalReasons; subspaces 1.5.0 after the S6 sort + review; get 1.4.0 with S5 openReportCount; transfer 1.2.0; feed 1.3.0 with S5 reportCount; moderate 1.4.0 — reasonId + ruleIndex + idempotent remove + the mod-team author notification + S5 report settlement; members 1.4.1 — ban note + mod-team ban bell; notifications-list 1.2.0 — mod-team actor rows)',
-		manifestP.status === 200 && ['api.subspaces-update', 'api.subspaces-join', 'api.subspaces-leave'].every((feature) => manifestP.body.features[feature] === '1.3.0') && manifestP.body.features['api.subspaces'] === '1.5.0' && manifestP.body.features['api.subspaces-get'] === '1.4.0' && manifestP.body.features['api.subspaces-transfer'] === '1.2.0' && manifestP.body.features['api.subspaces-feed'] === '1.3.0' && manifestP.body.features['api.subspaces-moderate'] === '1.4.0' && manifestP.body.features['api.subspaces-members'] === '1.4.1' && manifestP.body.features['api.notifications-list'] === '1.2.0',
+		'capability manifest advertises the S4 contracts (update / join / leave 1.3.0 — removalReasons; subspaces 1.5.0 after the S6 sort + review; get 1.4.0 with S5 openReportCount; transfer 1.2.0; feed 1.3.0 with S5 reportCount; moderate 1.4.0 — reasonId + ruleIndex + idempotent remove + the mod-team author notification + S5 report settlement; members 1.4.1 — ban note + mod-team ban bell; notifications-list 1.3.0 — mod-team actor rows + develop’s history filters)',
+		manifestP.status === 200 && ['api.subspaces-update', 'api.subspaces-join', 'api.subspaces-leave'].every((feature) => manifestP.body.features[feature] === '1.3.0') && manifestP.body.features['api.subspaces'] === '1.5.0' && manifestP.body.features['api.subspaces-get'] === '1.4.0' && manifestP.body.features['api.subspaces-transfer'] === '1.2.0' && manifestP.body.features['api.subspaces-feed'] === '1.3.0' && manifestP.body.features['api.subspaces-moderate'] === '1.4.0' && manifestP.body.features['api.subspaces-members'] === '1.4.1' && manifestP.body.features['api.notifications-list'] === '1.3.0',
 		JSON.stringify({ s: manifestP.body?.features?.['api.subspaces'], u: manifestP.body?.features?.['api.subspaces-update'], mo: manifestP.body?.features?.['api.subspaces-moderate'], m: manifestP.body?.features?.['api.subspaces-members'], f: manifestP.body?.features?.['api.subspaces-feed'], t: manifestP.body?.features?.['api.subspaces-transfer'], n: manifestP.body?.features?.['api.notifications-list'] })
 	);
 	const cleanupP = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: owner.cookie, body: { slug: rrSlug, confirmSlug: rrSlug } });
@@ -2298,8 +2298,8 @@ const run = async () => {
 		'/api/v1/things/comment': ['api.things-comment', '1.3.0'],
 		'/api/v1/things/user': ['api.things-user', '1.3.0'],
 		'/api/v1/things/updown': ['api.things-updown', '1.0.0'],
-		'/api/v1/notifications': ['api.notifications-list', '1.2.0'],
-		'/api/v1/notifications/settings': ['api.notifications-settings', '1.1.0']
+		'/api/v1/notifications': ['api.notifications-list', '1.3.0'],
+		'/api/v1/notifications/settings': ['api.notifications-settings', '1.2.0']
 	};
 	const tFamilyEndpoints = Object.keys(FAMILY);
 	const [tManifest, tWellKnown, ...tDocs] = await Promise.all([api('/api/v1/capabilities'), api('/.well-known/thingtime-capabilities.json'), ...tFamilyEndpoints.map((endpoint) => api(`${endpoint}-docs`))]);
@@ -2319,7 +2319,7 @@ const run = async () => {
 		return problems.length ? [`${endpoint}: ${problems.join(', ')}`] : [];
 	});
 	check(
-		'docs ↔ manifests, whole family: every endpoint answers its -docs route under api.<id>; /api/v1/capabilities advertises exactly the docs’ contractVersion at the round’s final numbers (subspaces 1.5.0 · get 1.4.0 · join / leave / update 1.3.0 · members 1.4.1 · moderate 1.4.0 · feed 1.3.0 · transfer 1.2.0 · delete 1.1.0 · report / reports 1.0.1 · modlog 1.0.0 · things 1.4.0 · things-feed 1.4.0 · things-comment / things-user 1.3.0 · updown 1.0.0 · notifications-list 1.2.0 · notifications-settings 1.1.0) plus a route.v1.* key each, and /.well-known/thingtime-capabilities.json advertises the docs’ featureVersion',
+		'docs ↔ manifests, whole family: every endpoint answers its -docs route under api.<id>; /api/v1/capabilities advertises exactly the docs’ contractVersion at the round’s final numbers (subspaces 1.5.0 · get 1.4.0 · join / leave / update 1.3.0 · members 1.4.1 · moderate 1.4.0 · feed 1.3.0 · transfer 1.2.0 · delete 1.1.0 · report / reports 1.0.1 · modlog 1.0.0 · things 1.4.0 · things-feed 1.4.0 · things-comment / things-user 1.3.0 · updown 1.0.0 · notifications-list 1.3.0 · notifications-settings 1.2.0) plus a route.v1.* key each, and /.well-known/thingtime-capabilities.json advertises the docs’ featureVersion',
 		tManifest.status === 200 && tWellKnown.status === 200 && tDrift.length === 0,
 		`${tManifest.status}/${tWellKnown.status} ${tDrift.join(' | ')}`
 	);

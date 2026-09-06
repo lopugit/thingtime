@@ -88,6 +88,8 @@ export const renderNewUserAdminNotificationTemplate = ({
 export type NotificationEmailInput = {
   type: string;
   actorName: string | null;
+  // system notes: the headline IS the subject + first line
+  headline?: string | null;
   preview?: string | null;
   // click-through target (the post, or the actor's profile)
   ctaUrl: string;
@@ -166,6 +168,11 @@ const NOTIFICATION_EMAIL_COPY: Record<string, { subject: (actor: string) => stri
   'subspace-ban': {
     subject: (actor) => `${actor} changed your access to a subspace 🚫`,
     line: (actor) => `${actor} changed your access to a subspace.`
+  },
+  // system note — normally overridden by the emit's headline
+  'action-run': {
+    subject: () => 'An action you ran has finished ⚡',
+    line: () => 'An action you ran on Thingtime has finished.'
   }
 };
 
@@ -184,6 +191,7 @@ const emailFooter = ({ settingsUrl, unsubscribeUrl }: { settingsUrl: string; uns
 export const renderNotificationEmailTemplate = ({
   type,
   actorName,
+  headline,
   preview,
   ctaUrl,
   ctaLabel,
@@ -195,14 +203,16 @@ export const renderNotificationEmailTemplate = ({
     subject: (name: string) => `${name} — new activity on Thingtime 🔔`,
     line: (name: string) => `${name} did something that landed in your notifications.`
   };
+  const subject = headline || copy.subject(actor);
+  const line = headline || copy.line(actor);
   const footer = emailFooter({ settingsUrl, unsubscribeUrl });
   return {
-    subject: copy.subject(actor),
-    text: [copy.line(actor), preview ? `“${preview}”` : undefined, `${ctaLabel}: ${ctaUrl}`, '', footer.text]
-      .filter((line) => line !== undefined)
+    subject,
+    text: [line, preview ? `“${preview}”` : undefined, `${ctaLabel}: ${ctaUrl}`, '', footer.text]
+      .filter((entry) => entry !== undefined)
       .join('\n'),
     html: [
-      `<p>${htmlEscape(copy.line(actor))}</p>`,
+      `<p>${htmlEscape(line)}</p>`,
       preview
         ? `<blockquote style="margin:8px 0;padding:8px 12px;border-left:3px solid #ececef;color:#5a5a66">${htmlEscape(preview)}</blockquote>`
         : '',

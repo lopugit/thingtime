@@ -1,7 +1,9 @@
 import React from 'react';
 
 import { Box, Checkbox, Flex, Grid, IconButton, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Portal, Text } from '@chakra-ui/react';
+import type { TextProps } from '@chakra-ui/react';
 import { ChevronRight, MoreHorizontal } from 'lucide-react';
+import { Link } from 'react-router';
 
 import { ChakraThingRenderer, HtmlThingRenderer, RenderThing, isChakraThingNode } from '~/components/Kinds';
 import type { ChakraThingNode, HtmlThingNode } from '~/components/Kinds';
@@ -21,7 +23,8 @@ import {
   isFolder,
   primaryKindOf,
   thingDisplayName,
-  thingIcon
+  thingIcon,
+  thingOpenHref
 } from './thingsCore';
 
 // What a preview draws: an explicit serialized render template wins, then a
@@ -37,6 +40,16 @@ const previewSourceOf = (thing: ThingsThing): unknown => {
 // The page looks a data thing's schema render template up per thing (fetched +
 // cached there); views just pass it through to the preview box.
 export type SchemaRenderLookup = (thing: ThingsThing) => Record<string, unknown> | null;
+
+// A data thing drawn through its schema's render template: {field} tokens
+// interpolate the thing's own crystal values, then the tree goes through the
+// sanitising allowlist renderers — never a click handler, never raw markup.
+// Shared by the /things previews and the universal /thing/:id page so one
+// template draws identically on both.
+export const SchemaTemplateRender = ({ template, crystal }: { template: Record<string, unknown>; crystal: Record<string, unknown> }) => {
+  const node = interpolateRenderTree(template, crystal || {});
+  return isChakraThingNode(node) ? <ChakraThingRenderer node={node as ChakraThingNode} /> : <HtmlThingRenderer node={node as HtmlThingNode} />;
+};
 
 // Bounded, non-interactive live render of a thing. pointerEvents none keeps
 // clicks selecting the tile (a link inside a preview must never hijack
@@ -58,8 +71,7 @@ const ThingPreviewBox = ({
   if (isFolder(thing)) return <>{fallback}</>;
   let body: React.ReactNode;
   if (schemaRender) {
-    const node = interpolateRenderTree(schemaRender, thing.crystal || {});
-		body = isChakraThingNode(node) ? <ChakraThingRenderer node={node as ChakraThingNode} /> : <HtmlThingRenderer node={node as HtmlThingNode} />;
+    body = <SchemaTemplateRender crystal={thing.crystal || {}} template={schemaRender} />;
   } else {
     // component and action things pass WHOLE — the component kind renderer
     // resolves the template against savedArgs/defaults (raw crystal.render
@@ -91,8 +103,9 @@ const ThingPreviewBox = ({
 };
 
 // Per-item actions the page implements; views only surface them. 'open' is
-// double-click/enter (folders navigate, posts go to /post/:id, the rest
-// preview). Rename applies to kinds whose crystal carries a name.
+// double-click / the title link (folders navigate in place, every other kind
+// opens its own page — thingsCore.thingLink); 'preview' is the explicit
+// quick-look modal. Rename applies to kinds whose crystal carries a name.
 export type ThingsItemAction =
   | 'open'
   | 'preview'
@@ -175,6 +188,59 @@ const dropHighlight = (thing: ThingsThing, handlers: ThingsItemHandlers) =>
       }
     : {};
 
+// What "Open" opens, named per kind so the menu never promises a preview
+// where a page will appear.
+const openLabelOf = (thing: ThingsThing): string => {
+  if (isFolder(thing)) return '📂 Open folder';
+  if (thing.thingtime.includes('post')) return '📝 Open post';
+  if (thing.thingtime.includes('action')) return '⚡ Open action';
+  if (thing.thingtime.includes('webpage')) return '🧱 Open page';
+  if (thing.thingtime.includes('schema')) return '💎 Open schema';
+  return '🔎 Open';
+};
+
+// A plain left click, no modifier — the one case the tile handles itself;
+// ⌘/ctrl/shift/middle clicks stay with the browser (new tab, window).
+const isPlainClick = (event: React.MouseEvent): boolean =>
+  event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+
+// The tile's title is a REAL link to the thing's own page: middle-click,
+// ⌘-click and the keyboard (Tab, Enter) work natively through the href. A
+// plain click stops at the link — the tile's single-click selection is not
+// disturbed — and hands off to the page's open handler, which keeps folder
+// navigation (selection + search resets) and the referrer hint on one path.
+// Never draggable itself: the tile is the drag source.
+const TitleLink = ({
+  thing,
+  handlers,
+  onOpen,
+  ...textProps
+}: {
+  thing: ThingsThing;
+  handlers: ThingsItemHandlers;
+  onOpen?: () => void;
+} & TextProps) => (
+  <Text
+    as={Link}
+    _focusVisible={{ outline: '2px solid var(--tt-accent, #f472b6)', outlineOffset: '2px', borderRadius: '4px' }}
+    _hover={{ textDecoration: 'underline' }}
+    data-testid="thing-title-link"
+    draggable={false}
+    onClick={(event: React.MouseEvent) => {
+      event.stopPropagation();
+      if (!isPlainClick(event)) return;
+      event.preventDefault();
+      if (onOpen) onOpen();
+      else handlers.onItemOpen(thing);
+    }}
+    onDoubleClick={(event: React.MouseEvent) => event.stopPropagation()}
+    to={thingOpenHref(thing, 'things')}
+    {...textProps}
+  >
+    {thingDisplayName(thing)}
+  </Text>
+);
+
 const ItemMenu = ({ thing, handlers }: { thing: ThingsThing; handlers: ThingsItemHandlers }) => (
   <Menu isLazy placement="bottom-end">
     <MenuButton
@@ -188,9 +254,8 @@ const ItemMenu = ({ thing, handlers }: { thing: ThingsThing; handlers: ThingsIte
     />
     <Portal>
       <MenuList fontSize="13px" minWidth="180px" zIndex={10250}>
-        <MenuItem onClick={() => handlers.onItemAction(thing, 'open')}>
-          {isFolder(thing) ? '📂 Open' : thing.thingtime.includes('post') ? '📝 Open post' : '👀 Preview'}
-        </MenuItem>
+        <MenuItem onClick={() => handlers.onItemAction(thing, 'open')}>{openLabelOf(thing)}</MenuItem>
+        {!isFolder(thing) && <MenuItem onClick={() => handlers.onItemAction(thing, 'preview')}>👀 Preview</MenuItem>}
         {canRename(thing) && <MenuItem onClick={() => handlers.onItemAction(thing, 'rename')}>✏️ Rename</MenuItem>}
         <MenuItem onClick={() => handlers.onItemAction(thing, 'move')}>📁 Move to…</MenuItem>
         <MenuItem onClick={() => handlers.onItemAction(thing, 'share')}>🌐 Share…</MenuItem>
@@ -320,9 +385,7 @@ export const ThingsGridView = ({
           ) : (
             iconBlock
           )}
-          <Text fontSize="13px" fontWeight={600} noOfLines={2} textAlign="center" wordBreak="break-word">
-            {thingDisplayName(thing)}
-          </Text>
+          <TitleLink fontSize="13px" fontWeight={600} handlers={handlers} noOfLines={2} textAlign="center" thing={thing} wordBreak="break-word" />
           <Flex alignItems="center" gap={2}>
             <KindChip thing={thing} />
             <Text color="var(--tt-faint, #b6b6c0)" fontSize="10px">
@@ -438,9 +501,7 @@ export const ThingsListView = ({
           </Box>
           <Flex alignItems="center" flex="1" gap={2} minWidth={0}>
             <Text fontSize="16px">{thingIcon(thing)}</Text>
-            <Text fontSize="13px" fontWeight={500} noOfLines={1} wordBreak="break-all">
-              {thingDisplayName(thing)}
-            </Text>
+            <TitleLink fontSize="13px" fontWeight={500} handlers={handlers} noOfLines={1} thing={thing} wordBreak="break-all" />
             {isFolder(thing) && <ChevronRight color="var(--tt-faint, #b6b6c0)" size={13} />}
           </Flex>
           <Box display={['none', 'block']} width="70px">
@@ -570,9 +631,15 @@ export const ThingsColumnsView = ({
               >
                 <Flex alignItems="center" gap={2}>
                   <Text fontSize="14px">{thingIcon(thing)}</Text>
-                  <Text flex="1" fontSize="13px" noOfLines={1} wordBreak="break-all">
-                    {thingDisplayName(thing)}
-                  </Text>
+                  <TitleLink
+                    flex="1"
+                    fontSize="13px"
+                    handlers={handlers}
+                    noOfLines={1}
+                    onOpen={folder ? () => onOpenFolderAt(depth, thing.id) : undefined}
+                    thing={thing}
+                    wordBreak="break-all"
+                  />
                   <ItemMenu handlers={handlers} thing={thing} />
                   {folder && <ChevronRight color="var(--tt-faint, #b6b6c0)" size={13} />}
                 </Flex>
