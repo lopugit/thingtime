@@ -78,11 +78,16 @@ const PagesList = () => {
 				title="Builder 🧱"
 				subtitle="Build webpages from Thingtime components and actions — and personalise every Thingtime page with the ✏️ edit mode."
 				after={
-					user?.id ? (
-						<Button size="sm" onClick={createPage} isLoading={creating} data-testid="builder-new-page">
-							New page ✨
+					<Flex columnGap={2} alignItems="center">
+						<Button as={Link} to="/builder/demos" size="sm" variant="outline" data-testid="builder-demo-library">
+							Demo library 🧱
 						</Button>
-					) : undefined
+						{user?.id ? (
+							<Button size="sm" onClick={createPage} isLoading={creating} data-testid="builder-new-page">
+								New page ✨
+							</Button>
+						) : null}
+					</Flex>
 				}
 			/>
 			{!user?.id ? (

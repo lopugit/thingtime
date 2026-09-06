@@ -38,6 +38,7 @@ import {
 	normalizeDeviceCommand,
 	normalizeDeviceConnectorCapability,
 	normalizeDeviceConnectors,
+	normalizeDeviceDescriptor,
 	normalizeDevicePermissionMode,
 	normalizeDeviceState,
 	MAX_DEVICE_AUDIO_DEVICES,
@@ -73,6 +74,13 @@ test('device and pairing credentials are strong-shaped and hashes never equal th
 	assert.notEqual(deviceCredentialHash(credential), credential);
 	assert.notEqual(pairingSecretHash(pairing), pairing);
 	assert.equal(deviceCredentialHash(credential), deviceCredentialHash(credential));
+});
+
+test('Apple Watch is a first-class paired device descriptor', () => {
+	assert.deepEqual(
+		normalizeDeviceDescriptor({ name: 'Lopu’s Apple Watch', platform: 'watchos', model: 'Watch', osVersion: '26.5', appVersion: '23' }),
+		{ name: 'Lopu’s Apple Watch', platform: 'watchos', model: 'Watch', osVersion: '26.5', appVersion: '23' }
+	);
 });
 
 test('device idempotency hashes share one bounded multikey index field', () => {

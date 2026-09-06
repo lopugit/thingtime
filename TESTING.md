@@ -1,5 +1,34 @@
 # TESTING.md — per-area manual test checklists
 
+- Thing detail back links accept only `things`, `actions`, or `feed` as `from`.
+  Unknown values and prototype keys such as `toString` must display a working
+  Back to feed link on desktop and mobile.
+
+- Rich-text editors initialize when a browser omits `crypto.randomUUID`.
+  Multiple mounted editors of the same saved block keep independent tune IDs;
+  plain registry identifiers are never treated as credentials.
+
+- At 390px and desktop widths, the Lopu message input stays inside its composer
+  card after typing and resizing. Measure the textarea and card bounds, not
+  just document width (a clipped ancestor can hide overflow). Open/close chat
+  settings and inspect the bottom controls after scrolling.
+
+- Combined Watch/Lopu/Builder release: build both embedded native targets;
+  iOS-only ActivityKit source must not compile into watchOS. Nested Builder
+  `ttArg` and `ttFormat` data must share the existing output-size budget and
+  must not execute template-shaped action result data. Confirm logout clears
+  Watch history, passkeys, Builder source/detail data and Lopu chat caches.
+
+- Signed-out first paint: `/`, `/builder/demos`, and `/watch/pair` must render
+  without a Watch approval banner exception. Account switching and temporary
+  sessions never show another account's cached Watch requests; expired and
+  dismissed requests stay hidden.
+
+- Watch release integration: the Nitro health contract smoke accepts documented
+  `degraded` / `migration-required` responses, but rejects contradictory readiness
+  or unavailable storage. Separately require `ready` on the release deployment;
+  passing the contract smoke alone is not proof that uploads are enabled.
+
 Run the checklist for every area a PR touches, in a live browser against the
 local dev stack (`npm run web-pms`, worktree stacks get their own port trio —
 see `AI_ALL.md`). Each list is the distilled regression history of that area:
@@ -7,6 +36,18 @@ every line exists because it broke once. Add a line whenever a new bug class
 is fixed, and cite the checklist you ran in the PR description.
 
 ## Native Commander network speed test
+
+- [ ] Account allowances: Free 4/hour, Plus 20/hour, Pro/PAYG unlimited by
+      default; admin overrides and historical tier snapshots remain effective.
+      Back-to-back tests work within the budget. Changing IP or session never
+      resets an account budget; different accounts do not share an IP quota.
+- [ ] Invalid/revoked or wrong-origin account tokens fail without guest fallback.
+      A selected locked account must prompt sign-in/unlock, not run anonymously.
+- [ ] A quota-denied zero-sample retry preserves the previous speed readings.
+      Switching accounts clears prior-account results and rejects stale replies.
+- [ ] Settings → Account → Compare account features shows the live tier
+      allowances at desktop/mobile widths. Admin tier and subscription editors
+      expose speedTestsPerHour, with null for unlimited and 0 for disabled.
 
 - [ ] Activity: run one 17.6 MiB each-way test against the deployed origin;
       confirm 5/5 download and upload samples, no 400/413, and no upload request
@@ -16,7 +57,7 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Interrupt a direction or hit its cooldown: completed measurements remain
       visible, partial results are labelled, and Retry-After is actionable.
       Opening a second Commander window must not duplicate an in-flight test.
-- [ ] Both capability manifests advertise upload 2.0.0; incompatible/missing
+- [ ] Both capability manifests advertise download 1.1.0 and upload 2.1.0; incompatible/missing
       capabilities are rejected before transferring the speed-test payloads.
 
 ## ChatGPT / Codex MCP connector
@@ -112,6 +153,74 @@ is fixed, and cite the checklist you ran in the PR description.
       contains only operation, path, status, and outcome—never body, token, or
       secret value. Generic endpoints cannot claim create-only semantics.
 
+## Lopu voice + personal Secure Vault
+
+- [ ] Open `/lopu/voice` at desktop and 390px mobile widths; scroll the
+      conversation from top to bottom, open and close the gear before and
+      during a session, and confirm the header, the gear popover, messages
+      and the voice deck never clip, overlap, or cause horizontal page
+      scrolling.
+- [ ] Add a disposable provider in **Settings → Secure Vault**, grouped under a
+      test environment. Refresh and verify only metadata returns to the
+      browser—never plaintext, masked text, IV, tag, or ciphertext. Updating
+      without a new token retains the stored token; deleting removes it.
+- [ ] Select that provider for the chat (the gear's provider select or the
+      composer's picker). Confirm continuous listening pauses while the
+      provider responds and while Lopu speaks, then resumes without hearing
+      Lopu's own voice. Toggle **Spoken replies** before, during, and after
+      the session and verify replies render, and speak only while it is on.
+- [ ] Verify a provider connection's model is optional. The Secure Vault form
+      offers the kind's catalog models (realtime voice models marked) plus a
+      **Custom model id…** entry and shows the chosen model in the stored
+      metadata line; a custom compatible host requires a model id. A
+      connection saved without a model runs on its kind's first catalog model
+      (`GET /api/v1/ai/models` → `vaultProviders[].model`), and a turn's meta
+      names that model. Reasoning and speed are chosen per chat in the
+      composer, never stored in Secure Vault.
+- [ ] Exercise **Direct voice**. With no provider chosen, a catalog model, a
+      provider whose kind has no realtime model (any non-xAI connection), or
+      Transcribe mode on, the gear's switch is disabled and its hint reads the
+      reason in one line; Settings → Lopu 🦄 mirrors the switch. With an xAI
+      connection the switch enables, a realtime-model select appears
+      (Grok Voice / Grok Voice Think Fast 2.0), and starting the mic mints a
+      credential through `/voice/session` — the network log shows only the
+      ephemeral token and `wss://api.x.ai/v1/realtime?model=…`, never the
+      stored key — then streams PCM both ways; the provider's transcripts and
+      reply text land in the conversation list, Spoken replies off suppresses
+      playback, and Stop closes the socket. When the mint is refused (vault
+      key missing, connection not yours) a Lopu toast says why and device
+      transcription runs.
+- [ ] Turn on **Transcribe mode**, speak several final utterances, and verify
+      each creates a separately numbered, timestamped, owner-private Thing page
+      and streams back into chat as a quote with a working page link. Provider
+      selection and Direct voice stay disabled and no provider request occurs
+      in this mode.
+- [ ] Reject unauthenticated vault/voice/session requests, non-JSON bodies
+      (415), guest sessions (403), oversized bodies, missing provider tokens,
+      non-HTTPS or private/local endpoints, unallowlisted custom hosts,
+      private DNS resolutions, redirects, oversized provider responses, and
+      rate-limit-store failures. Error responses must not echo provider
+      bodies or credentials; `/voice/session` refusals carry no `session`.
+- [ ] Make the provider answer a **non-JSON rejection** — an HTML or empty-body
+      429/502/504, the shape an edge/CDN returns before the API is reached —
+      for both the voice turn and `/voice/session`. The Lopu toast must name
+      the status ("rejected the request (429)"), never "unreadable response":
+      the status is the only thing telling the user whether to wait, re-key,
+      or pick another model. Covered by `npm run test:lopu`
+      (`app/api/utils/lopu/voice.test.ts`).
+- [ ] In the iOS app, grant microphone and speech access from the user action,
+      start Lopu, lock the device, and verify recognition/replies continue and
+      the Live Activity moves through listening, thinking/transcribing, and
+      speaking. Confirm native reply requests carry only unexpired cookies
+      matching the active Thingtime origin and API path. Stop the session and
+      confirm the microphone, audio session, and Live Activity all end.
+- [ ] In iOS direct voice (`inputMode: provider-audio`), deny Speech
+      Recognition but allow Microphone; the session should still start,
+      stream and play realtime audio under the background audio session,
+      update the Live Activity while locked, post the provider's transcripts
+      into the conversation, and close its WebSocket and player cleanly on
+      Stop.
+
 ## Deployment peer explorer (`/peers`, `/api/v1/admin/peers`)
 
 - [ ] As an administrator, open **Dev → Deployment peers**. Verify the first
@@ -142,6 +251,7 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Passkeys + cross-deployment auto-login
 
+- [ ] TestFlight passkey updates preserve the embedded Watch companion, both production push entitlements, the configured preview origin and matching phone/Watch build numbers; the signed phone includes `webcredentials:thingtime.com` and Apple CDN association matches it. Verify saved-key sign-in on a real device.
 - [ ] Slow login-options response + immediate passkey click or navigation: the old autofill request never opens a sheet or submits an assertion. Repeat with account-switcher login and the auto-login popup.
 - [ ] With 1Password enabled, click passkey sign-in, then Cancel: the button becomes usable immediately even if the extension ignores AbortSignal. Retry once; navigate away and verify no stale sign-in completes. Check desktop and 390px mobile through the footer.
 - [ ] Two login tabs can finish independently. Replaying a saved challenge cookie and zero-counter assertion fails. Wrong origin, missing UV and mismatched userHandle all fail.
@@ -610,6 +720,188 @@ email whose link points at the attacker.
       back in portrait and landscape. Nested deployment rows remain inside
       their branch cards, disclosure controls stay tappable, and vertical
       scrolling never triggers the horizontal drawer-close gesture.
+
+## Apple Watch notifications
+
+- [ ] Code input: four evenly spaced squares backed by one native input. Paste
+      a complete PIN with Cmd/Ctrl+V into any square (including replacing a filled
+      PIN), test autofill, select-all, arrow keys and backspace, and preserve
+      leading zeroes. Pasting an older eight-character code expands all eight
+      squares; no paste/autofill may get trapped in the first square. Check both
+      desktop and 390px layouts, focus ring, keyboard submission and accessible label.
+- [ ] With 1Password installed, focus the approval input and fill all digits.
+      Its saved-password badge must not cover the last square. Native
+      `one-time-code` autofill and Cmd/Ctrl+V must still fill the complete code.
+- [ ] Start with **Paired iPhone** selected, open the signed-in companion, and
+      verify another session of the same account/domain shows the exact prefilled
+      Watch/device/PIN. No credential may be claimed before explicit approval.
+      A different account must not list, look up, approve, or rebind the request.
+- [ ] Repeat using **Username** (including `@username`, a typo and wrong domain)
+      and **Enter code**. A `/pair/1234` link preserves all four digits, including
+      leading zeroes, through login. Check the five-minute expiry, unique active
+      PIN reservation, and five guesses/account limit with a visible retry error.
+- [ ] Verify quick-approval cards at 390px and desktop widths through the full
+      scroll range, dismiss with **Not now**, and approve another request. Account
+      switching/sign-out must never flash the previous account's request.
+- [ ] Open `/watch/pair` without query parameters on desktop and a 390px phone.
+      Sign in, enter a fresh Watch code, review the matching device/account, and
+      approve. Confirm the Watch claims the credential and downloads notifications;
+      no hidden pairing ID or Watch web browser is required. Invalid, wrong-domain,
+      expired and already-consumed codes must offer recovery without logging secrets.
+- [ ] Leave code approval pending beyond 90 seconds (31 polls), approve, and
+      confirm pairing still completes. Interrupt network access, retry approval,
+      switch domains mid-request, and replace an expired code. Cancelled requests
+      must not restore an old code/account or overwrite the new connection state.
+- [ ] Select an origin without `api.watch-pairing` 1.2.0 and confirm the Watch
+      shows an actionable domain/preview hint rather than a missing-endpoint error.
+- [ ] Pair a fresh Watch directly against both `thingtime.com` and
+      `dev.thingtime.com` once their manifests support the feature. Approve the four-digit code while
+      signed in, confirm the Watch receives only its device credential, and
+      verify notification refresh/read state works with the iPhone app closed.
+      A second account must remain independently selectable after relaunch.
+- [ ] On the smallest supported Watch, confirm the signed-in header shows the
+      selected account's avatar, **@username**, domain, and live status. Scroll
+      through the whole screen, tap the toolbar refresh and **Check & refresh**,
+      and verify checking/success/error states plus Last check and Last live
+      reply remain readable without clipping.
+- [ ] Open Settings, switch between production and development accounts, add
+      another account, and remove only the selected account. Confirm no account
+      reuses another origin's credential, snapshots, upload outbox, or inbox.
+- [ ] Under **Add private Thing**, confirm **Record** is the default first
+      favourite and that Settings can enable/disable the available favourites
+      while preserving their stable system order and the main Add action.
+- [ ] Create a private audio or photo Thing directly from the Watch, interrupt
+      the upload at each stage, and confirm retry uses the same request/Thing
+      identity without duplicate Things. The created record remains owner-only
+      and the Watch retains its local source until completion.
+- [ ] In `/things`, open the paired Apple Watch device. Confirm last sync,
+      status, battery/low-power health, last error, created-Thing count, and the
+      owner-only recent Things created by that exact Watch update after refresh.
+- [ ] On a signed-in paired Watch, confirm the connection section identifies
+      the active account as **@username**, keeps the current connection state
+      visible, and always shows **Check & refresh**. Tap it and confirm the
+      control changes to **Checking…**, then returns with updated **Last check**
+      and **Last reply** times without exposing a reusable session credential.
+- [ ] Regression class (2026-09): install a TestFlight build configured for a
+      preview over an older install that implicitly retained `thingtime.com`.
+      Confirm the iPhone migrates to the configured origin, the Watch displays
+      that origin plus matching iPhone/Watch build numbers, and notification
+      history downloads. Then explicitly select production and confirm a
+      relaunch preserves that deliberate choice.
+- [ ] Update only the iPhone app while leaving an older companion on the Watch.
+      Confirm the Watch connection section displays both build numbers, warns
+      that they differ, and clears the warning after the Watch app updates.
+
+- [ ] Launch the Watch app with the paired iPhone app closed, then open
+      Thingtime on iPhone. Confirm the Watch visibly moves through **Waiting for
+      iPhone** / **Checking Thingtime sign-in** to **Connected to iPhone**,
+      displays the last reply time, and reconnects without exposing or copying a
+      reusable web session credential. Repeat while signed out and confirm it
+      settles on **Sign in on iPhone**.
+- [ ] Leave the iPhone unreachable through the Watch's bounded 2, 5, and
+      10-second retry sequence. Confirm loading stops with an actionable status,
+      **Retry connection** starts a fresh attempt, and opening the iPhone later
+      consumes the safely queued refresh without duplicate work.
+- [ ] On a signed-in paired Watch, confirm the inbox initially shows the newest
+      10 notifications. Tap **Load previous 10** repeatedly and verify each page
+      appends in newest-first order without duplicates or gaps, including when
+      two notifications have the same `createdAt` timestamp.
+- [ ] Open **Notification history**, choose **One date**, and fetch the first
+      10. Confirm only notifications inside that local calendar day appear.
+      Switch to **Date range**, choose inclusive From and Through dates, and
+      confirm **Fetch 10 more** pages through that full period without crossing
+      either day boundary.
+- [ ] Tap **Download whole period**, background or close both apps while the
+      transfer completes, then reopen the Watch app offline. Confirm the archive
+      persists, initially reveals 10 rows, and **Show 10 more** reveals the rest
+      without network access. Mark an archived row read, relaunch, and confirm
+      its read state remains saved. The archive must contain no more than the
+      service-retained latest 500 notifications.
+- [ ] Queue both a historical page request and a period download while the
+      iPhone is unreachable, then open the signed-in iPhone app. Confirm each
+      request resumes once, a stale response cannot overwrite a newer selected
+      period, and malformed or metadata-mismatched archive files are rejected.
+
+- [ ] On a signed-in paired Watch, open **Add private Thing**, pick one and five
+      Photos-library screenshots, and record a short audio clip. Confirm every
+      item remains queued across a Watch app relaunch until the iPhone reports
+      success, then appears as a searchable owner-only Thing with exactly one
+      bound attachment and `acl: ["tt:user"]`.
+- [ ] Put the iPhone offline before choosing a Watch screenshot, then restore
+      connectivity and open the signed-in iPhone app. Confirm the same stable
+      request resumes without duplicate attachment Things; repeat while signed
+      out and confirm the Watch explains that Thingtime must be opened and
+      signed in, without losing the queued bytes.
+- [ ] Tap **Record**, deny microphone access, and confirm Apple's
+      native recorder returns safely without crashing. Grant access, save a
+      several-second recording, and confirm the completion callback does not
+      falsely report that Thingtime could not prepare it while the file is still
+      finalizing. Confirm the `.m4a` appears under **Saved recordings**
+      after relaunch. With **Upload after saving** enabled, confirm it queues
+      automatically; disable that preference, save another recording, and
+      confirm it waits for selection in the saved-recording screen.
+- [ ] Open **Saved recordings**, tap one retained Watch recording, and
+      confirm it creates a new private Thing without altering the retained
+      original. Swipe-delete another saved
+      recording and confirm only that on-watch copy disappears. Confirm the
+      explanatory copy does not claim third-party access to Apple's sandboxed
+      Voice Memos library and directs existing Watch Voice Memos to the synced
+      iPhone Thingtime upload flow.
+- [ ] Against an origin missing or breaking any required attachment/Things
+      capability, confirm the iPhone fails closed before reserving storage and
+      the Watch shows the compatibility error. Verify normal uploads use the
+      active WebView origin and never copy its session credential to watchOS.
+- [ ] Regression class (2026-09): `WCSessionFile` is temporary on receipt. Kill
+      the iPhone app immediately after delivery and confirm the inbox copy still
+      resumes on next launch; the Watch must retain its original until the
+      private Thing creation result arrives.
+
+- [ ] Regression class (2026-09): build the signed iPhone + Watch IPA with
+      Xcode 26.2, verify the locally exported IPA, and upload the same archive
+      through `xcodebuild -exportArchive` with `destination: upload` and the App
+      Store Connect API key. Confirm App Store Connect accepts the upload
+      without relying on Xcode 26 `altool`, which can report a platform error
+      while incorrectly exiting with status 0.
+- [ ] Regression class (2026-09): inspect the exported IPA and confirm the
+      companion watchOS app is under `Payload/Thingtime.app/Watch/`, not
+      `PlugIns/`; App Store Connect rejects the latter as an invalid directory.
+- [ ] With an iPhone paired to an Apple Watch, open Thingtime on the iPhone and
+      sign in. Launch the watch app and confirm it leaves “Pair Thingtime” without
+      asking for a password or exposing a session credential on the watch.
+- [ ] Tap Enable alerts on the watch, approve the system prompt, relaunch both
+      apps, and confirm the iPhone and watch APNs registrations appear through
+      `/api/v1/notifications/devices` without either token appearing in the JSON
+      response or generic Thing APIs.
+- [ ] From a second account, create a friend request, follow, comment, reply,
+      reaction, share, and mention. Confirm the watch alert names the actor, the
+      inbox refreshes, the unread count matches Thingtime, and tapping an unread
+      row marks that same notification read on the phone/web inbox.
+- [ ] Send the same payload to the paired iPhone and watch registration and
+      confirm only one user-visible alert appears. Repeat in Debug/sandbox and a
+      signed Release/production build so each token uses the matching APNs host.
+- [ ] Disable a push type and then the push master in Settings → Notifications;
+      confirm new events of those types produce neither a watch alert nor a
+      watch inbox row. Re-enable them and verify delivery resumes.
+- [ ] Sign out on the paired iPhone and confirm the watch returns to the pairing
+      screen and later activity for that account produces no device alert. The
+      registration may await cleanup, but its revoked/expired session binding
+      must make it immediately ineligible. Then sign in as another account and
+      confirm both device tokens move to the new owner without leaking the prior
+      inbox.
+- [ ] Exercise signed-out, empty, unread/read, denied-alert, long actor name, and
+      two-line preview states on the smallest supported watch. Scroll top to
+      bottom; no row, badge, toolbar item, or permission message clips or overlaps.
+- [ ] Regression class (2026-09): APNs device tokens are variable-length binary
+      values. Register a token longer than 32 bytes and confirm it is accepted,
+      deduplicated by hash, retained only in protected secure storage, and removed
+      after APNs reports `BadDeviceToken`, `Unregistered`, or HTTP 410.
+- [ ] Regression class (2026-09): a device row is keyed by token alone, so
+      re-registering must REBIND it to the caller. Sign in, register the device,
+      sign out (revoking that session), sign back in, and re-register the same
+      token: the alert must still arrive. Repeat as a different account on the
+      same device and confirm alerts follow the new owner. Pinning `ownerId` or
+      `targetId` at insert makes both cases permanently undeliverable — the row
+      keeps a dead session id and re-registration cannot heal it.
 
 ## Worktree dependency bootstrap (`remix/scripts/ensure-dependencies.js`)
 
@@ -1107,6 +1399,62 @@ email whose link points at the attacker.
       Editor section still lists/saves/restores layouts (embedded composer
       editors must never appear there).
 
+## Editor.js rich text styles
+
+- [ ] In builder inline/modal editors and the post composer, select paragraph,
+      heading, list/checklist, quote/caption, table-cell and warning text. The
+      palette button opens the same full styling panel for every rich-text field.
+- [ ] Test wheel dragging/keyboard controls, HEX/RGB/RGBA/HSL/HSLA input,
+      transparent colours and highlights, all decorations, font family, and
+      px/em/rem/pt/% sizes with both direct input and minus/plus controls.
+- [ ] Apply, save, reopen, and read the rendered content. Builder HTML round trips
+      retain selected-text styles and block colours, alignment and custom sizes.
+      Changing a substring keeps neighbouring and mixed formatting; Cancel leaves
+      the document unchanged, Reset clears styling, and Undo restores the edit.
+- [ ] At desktop and 390px mobile widths, select text near each viewport edge and
+      scroll top to bottom. The toolbar stays above the selection, wraps within
+      the viewport, and remains usable. Scroll the colour panel to both ends;
+      controls and Save/Cancel stay reachable without horizontal overflow.
+      Hover a desktop toolbar hint then shrink to mobile: hidden hints must not
+      leave a horizontal scrollbar.
+- [ ] Change a styled heading to paragraph, list/checklist or quote. Text colour,
+      size, decoration and alignment carry by default. In Changes, uncheck a
+      carry property and confirm only that whole-block property is omitted.
+- [ ] Open an unstyled colour picker: lightness starts at 50%. Change colour,
+      opacity, size and decoration while watching the actual text. Save keeps
+      the preview; Cancel restores the original without losing the preview events.
+- [ ] Type, style, insert an empty block, check a checklist item, add a table row,
+      convert, move and delete blocks. Undo/Redo buttons and Cmd/Ctrl+Z / Shift+Z
+      restore the complete draft, including unfinished blocks and focus.
+- [ ] Undo twice and type a different edit. Changes retains both futures with
+      their parent events; Restore point revisits either. Revert/reapply a colour
+      event preserves later text/size changes; overlapping field edits display a
+      conflict without overwriting the current document. Expand Changed properties.
+- [ ] Reopen the builder floating editor and toggle inline editing off/on: their
+      session histories remain available. Keep two editors with the same block
+      IDs open; styling one does not change the other's tune registry or focus.
+- [ ] Resize block settings, the style picker and the advanced editor using the
+      corner handle and arrow keys. Move the style picker by its title; resize
+      the viewport and scroll each panel to both ends. Controls remain reachable.
+- [ ] Compare edit/view text bounds with left, centre and right alignment at
+      desktop and mobile widths. There is no reserved toolbar gutter; +/dots
+      float right for left/centre text and left for right text, using clear space
+      beside the text or above the editor. Previous headings and history controls
+      remain visible, including inside the advanced modal.
+- [ ] On physical iOS, repeat selection with the native context menu and keyboard
+      open, including keyboard viewport panning and text near the screen top.
+- [ ] Local regression fixture: `/tests/editor-rich-text.html` under Vite uses the
+      real editor and builder components with ephemeral data and no API writes.
+- [ ] Editor-sink style scrub (`editorJsHtml.ts` `scrubElement`): save a block whose
+      stored html carries raw CSS on a NON-span inline carrier — for example
+      `<b style="position:fixed;inset:0;z-index:99999">` or
+      `<mark style="background-image:url(https://example.invalid/x)">` — then reopen
+      it in the inline and advanced editors. Editor.js renders `data.text` as live
+      innerHTML there without the render-side allowlist, so every element's style
+      must be re-validated through the style-token gate: no fixed-position overlay
+      and no outbound `url()` request on open. Legitimate `<span>` colour/size
+      styles and block-level `text-align` must still survive the round trip.
+
 ## Multi-editor focus (`remix/app/components/Editor/LongTextEditor.tsx`)
 
 - [ ] With the popout open (same path in two editors), click into an
@@ -1163,7 +1511,7 @@ email whose link points at the attacker.
       is contained to the sandbox (native field undo still works).
 - [ ] Global undo/redo shortcut guard (`useThingtimeMachine.tsx` `keyListener`):
       inside the post composer, a comment box, the login form, and any
-      contentEditable (Editor.js block), Cmd/Ctrl+Z performs NATIVE text undo —
+      contentEditable (Editor.js block), Cmd/Ctrl+Z performs the editor's own text/history undo —
       no thingtime state changes. With focus on the page background (no editable
       focused), Cmd/Ctrl+Z undoes and Cmd/Ctrl+Shift+Z REDOES (Shift reports
       `e.key === 'Z'`, so redo was unreachable before this guard normalised
@@ -4441,8 +4789,18 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       names; clicking a card opens /actions/:id.
 - [ ] The inspector shows Takes / Does (numbered steps with op tones, invoke
       steps deep-link to the invoked action) / Can access / Cannot access (no
-      network, no secrets, no deletes + scoped-only lines) / Limits / Effects,
-      and the raw definition.
+      network, no secrets, and "no deletes" ONLY while the program does not
+      declare things.delete + scoped-only lines) / Limits / Effects, and the
+      raw definition.
+- [ ] v2 destructive + public-read disclosure: an action with a
+      `things.delete` step shows a red "deletes things" chip on BOTH its
+      /actions card and the inspector's Effects section, and its Cannot-access
+      panel drops "no deletes" without ever printing an affirmative sentence
+      under the 🚫 (a "🚫 Can delete …" line would invert the one capability
+      that destroys data). An action whose only effect is that delete still
+      renders an Effects section. A `things.search` with `scope: 'public'`
+      shows "reads everyone's public <schema>" alongside the ordinary read
+      chip. Covered by app/components/Actions/actionInspect.test.ts.
 - [ ] The Run panel renders one typed input per descriptor, runs the action,
       and shows status + duration + ops/depth/child budget usage + the
       hierarchical trace (1 → 1.1/1.2 for invoked children) with /thing/<id>
@@ -4475,6 +4833,19 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       that prefixes another never cross-matches).
 
 ## Design system + builder (`/builder`, `/p/:id`, `/docs/design-system`, `remix/app/components/Builder/`, `/api/v1/webpages/resolve`, `/api/v1/admin/webpages/seed`)
+
+- [ ] At desktop, 390px and 320px widths, select a short centred text block,
+      a large heading and right-aligned text. The selection toolbar stays above
+      the selection, separate from the block label and history buttons; no
+      controls cross the viewport, inspector or scrolling-container edges.
+      Resize the container and scroll from top to bottom with menus open.
+      Native settings and Convert to submenus fit, including with reduced
+      keyboard space. Large document fonts do not enlarge toolbar icons, and
+      narrow desktop text has no unused 50px editor gutter.
+- [ ] Move the pointer from an edited block through the empty space to Undo,
+      Redo and Changes. All remain reachable; Changes opens, its controls work,
+      and its Close button returns to the same editor (portal clicks must not
+      be intercepted by the builder frame).
 
 - [ ] Every restyled page (status, mongodb-status, tests, vercel, crypto,
       migrations, apps, raw, admin + sub-panels) renders the PageShell surface
@@ -4510,6 +4881,70 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       webpage- shareIds are refused on generic creates (reserved prefix).
 - [ ] /docs/design-system shows the foundations/page-scaffold/brutal-button/
       builder-blocks entries with live stories; /design-system redirects there.
+- [ ] Demo library: /builder/demos paints the whole catalog (200–500 demos,
+      `pnpm --dir remix run test:schemas` → webpageDemos asserts every demo
+      clears validateThingtimeCrystal(["webpage"]) unchanged and stays under
+      the block/byte caps) instantly with no spinner; kind + family chips and
+      the search box filter with the URL in sync; thumbnails mount lazily as
+      you scroll and stay mounted; Show more paginates; Preview opens the
+      full-size modal; Use template ✨ copies the demo into the viewer's own
+      page (signed-out → login) and opens the builder; the Builder header
+      links to the library.
+- [ ] Component blocks: the 🧩 Component blocks chip shows demos whose blocks
+      reference PLATFORM LIBRARY components by componentKey. Those blocks draw
+      real library components (buttons, a card, a text input, a badge, a status
+      avatar) in the thumbnail AND in the Preview modal once the demos endpoint
+      answers — an unresolved ref renders as NOTHING for a viewer, so a blank
+      card here means the catalog names a componentKey the components-db seed
+      does not have. Cross-check with
+      `GET /api/v1/webpages/demos` → every entry in `refs` non-null (the
+      `webpages-demos-library-components` apiTest asserts exactly this).
+- [ ] GET /api/v1/webpages/demos lists the catalog anonymously with seeded
+      flags (0 seeded on a fresh DB is correct), family/kind filters, slug=
+      returns the crystal, unknown family → 400, unknown slug → 404; admin
+      POST /api/v1/admin/webpages/seed-demos converges (re-run → unchanged),
+      after which every demo opens at /p/webpage-demo-<slug> and in the
+      builder (edits fork, the seed never changes) and the gallery shows 🌱
+      seeded + the /p/ link; GET /admin/webpages/seed reports
+      siteSeeded/demosSeeded/demosTotal/suitesSeeded/suitesTotal alongside
+      totalSeeded.
+- [ ] Text blocks accept an optional `href` (https, site-relative, mailto:,
+      tel:; javascript:/data:/http: refused — `test:schemas` →
+      webpageBlockGate) and render as an anchor (`data-testid`
+      text-block-link; external targets open in a new tab with noopener; the
+      edit canvas never navigates); the inspector's Link field round-trips
+      it. Every demo pill links (/register, /docs) and every demo nav label
+      links to its slug. Block css `white-space` reaches the text element (a
+      nowrap pill in a flex row stays on one line despite Main's global
+      pre-wrap); standalone pills shrink-wrap via `align` and row labels keep
+      their own width via `flex: 0 0 auto`.
+- [ ] Run-or-install: on a seeded suite page (/p/webpage-demo-suite-<key>)
+      or the gallery preview, a signed-in viewer's control click that finds
+      no owned action (executor: owner-only delegated resolution) installs
+      the suite into their things, re-runs the SAME click, then opens their
+      own copy; signed-out → login. Owned actions run directly. Foreign
+      user pages stay inert for non-owners (`useTtActionClicks` onUnowned,
+      `installSuite`, `routes/p.tsx`).
+- [ ] Demo gallery thumbnails scale to the card (ResizeObserver: scale =
+      box width / 760) — no clipped right edge at any grid column width;
+      layout audit script (scratchpad/audit-demos.js idiom: wrapped pills by
+      Range line count, overflow by scrollWidth, wide pills in columns)
+      reports zero defects across all cards.
+- [ ] Behaviour suites (`schemas/behaviourSuites.ts`, `pnpm --dir remix run
+      test:schemas` → behaviourSuites asserts every schema/component/action/
+      data/page crystal clears its kind gate in BOTH materialisations): the
+      🧪 Suites tab on /builder/demos lists 14 suites with counts; Preview
+      renders the suite page with its ttAction controls from the catalog (no
+      seed needed); Install suite ✨ (signed-in) creates the viewer's OWN
+      schemas → components → actions → data (stamped schemaId) → page through
+      /things and opens /p/<page>; clicking a control there runs the viewer's
+      own action (source component → owner-only resolution) and the Lopu
+      toast links to the run record; capture-and-qualify / open-with-note
+      exercise actions.invoke + $step refs + ttConcat; complete/escalate/pay
+      exercise things.get + things.update by id. Seeded suites (admin
+      seed-demos) are browsable on /schemas, /components, /actions and
+      /p/webpage-demo-suite-<key>; running action-demo-* from /actions mints
+      the viewer's own data things against the public schema id.
 - [ ] Nested blocks select on click: with a container (grid/row/column) holding
       children, clicking a CHILD selects the child (inspector shows its
       fields), clicking the container's own area selects the container —
@@ -4629,3 +5064,350 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       remains usable. Unsupported image formats fall back without retry loops.
 - [ ] Confirm partial/large files use native streaming and cached range reads
       cannot bypass authorization. Verify storage failure degrades to HTTP.
+
+## App suites — Pokeworld + StarsAlign (`remix/app/schemas/appSuites/`, `/p/pokeworld`, `/p/starsalign`)
+
+- Seed as an admin (`POST /api/v1/admin/webpages/seed-demos` or the 🌱 button
+  on `/builder/demos`), then open `/builder/demos` → **📱 Apps**: both cards
+  show pages counts, a tagline, **Open /p/<key>** when seeded, **Install app**.
+- Signed OUT: `/p/pokeworld` and `/p/starsalign` render the seeded pages with
+  every bound block in its **signed-out** state (sign-in card), nav links work,
+  no fetch is attempted (Network: no `/actions/run`).
+- Signed IN, not installed: the same pages show the app's **Install** card;
+  pressing it (or any control) installs through the server endpoint and the
+  same URL now serves your copy (`/api/v1/webpages/resolve?id=pokeworld` →
+  `source: "user"`). Re-installing reports `created: 0`.
+- Pokeworld: begin the journey (name ≤7, sprite) → the 11×9 viewport paints
+  with you in the centre; each D-pad press moves one tile (blocked tiles keep
+  the facing), items/signs toast, tall grass eventually spawns a battle; the
+  battle panel shows sprites + HP bars, four moves with PP, balls with counts,
+  items, RUN; catching adds to the party/box and the pokédex; PARTY (make lead,
+  deposit, heal), BAG (use on), POKéDEX (100/page, silhouettes until seen),
+  PC (withdraw), OPTION (name/sprite, teleport by lat/lng, badges). Every
+  control's run lands on `/actions/<id>`.
+- StarsAlign: signed in without a profile → welcome card with the live
+  sun/moon; Settings → save a birth date (future dates refused), find a city
+  (chips), set the place, save again (updates, no duplicate) → Today shows
+  greeting, chips incl. rising, the wheel (svg), the sky rows, transits or the
+  quiet-sky card, houses; School search/section/entry/Combinator; Erase
+  removes the profile and Today returns to the welcome.
+- Layout: check desktop (≥1024) and mobile (375) — the map grid scales with
+  its container, D-pad stays 48px cells, nav wraps, no horizontal scroll.
+- Regression classes: an `if` branch must not evaluate when untaken (a
+  `set` with an empty key inside the untaken branch used to fail the run);
+  the run payload's own `status` must never shadow the HTTP status in scripts;
+  a control gathers only the named fields of its closest `<fieldset>` (the
+  city Find button used to send the birth-date fields to `pick-city`, which
+  refused them as unknown inputs); a profile whose place was cleared
+  (`placeName ''`, `tz ''`, lat/lon 0) must read as a solar chart, not a
+  refusal; nested `ttEach` must flatten (the tile grid rendered empty).
+
+## Dedicated live pages — every card opens one (`/components/:key`, `/builder/demos/:slug`, `/schemas/:key`, `/thing/:id`, `/actions/:id`)
+
+Shared pieces: `remix/app/components/Builder/liveComponent.tsx` (`useThingSource`
++ `LiveTemplate` — the ONE live-render path; `useBlockSource` in the page
+renderer delegates to it), `remix/app/components/Actions/ActionRunConfirm.tsx`
+(`useActionRunConfirm` → the confirm gate `useTtActionClicks` accepts), and the
+route stubs in `remix/app/routes.tsx`. Trust never comes from markup: own thing
+→ live, no confirm; seeded platform/demo/app thing → live for a signed-in
+viewer with the confirm dialog + run-or-install; a stranger's thing → inert with
+a label. Browse cards and `/things` tiles are LINKS, never armed controls.
+
+- [ ] `/components`: the whole card (title, preview area) opens
+      `/components/<key>` in every view mode (feed / grid / columns); the
+      buttons on the card (design pills, args/schema, react, Add to library,
+      Save version, Docs) still work in place without navigating; middle-click
+      on the title opens a new tab; the browse previews stay inert (a
+      `data-tt-action` control in a preview does nothing).
+- [ ] `/components/<key>` (e.g. `/components/app-pokeworld-hud`,
+      `/components/demo-guestbook-signer`): preview + args tester + docs are
+      still there; a LIVE pane renders the same component inside the page
+      runtime. Own component → controls run with no dialog. Seeded suite/app
+      component (signed in) → first press shows the "Run …?" confirm naming the
+      action + inputs, approve runs it (or installs the suite, then re-runs);
+      "Don't ask again for this action on this page" skips only for that
+      action and only until reload. Stranger's component → inert + "🔒
+      Controls belong to @author" label next to Save version. Signed out →
+      "Sign in to run controls" hint; a press toasts and routes to /login.
+      Data source control (`?source=<actionKey>&refresh=…`) renders the real
+      data (`app-pokeworld-hud` + `app-pokeworld-state`) and never persists to
+      the thing.
+- [ ] `/components/<key>?source=<actionKey>` opened from a PASTED link asks the
+      "Run …?" confirm BEFORE the source runs — for the owner of the component
+      too, not just on a seeded one (the URL binding is nobody's authored
+      markup, so it is gated even where the click path is not). Cancel leaves
+      the live pane with no source chip and runs nothing, while the source
+      control keeps the binding so it can be edited or cleared; approve runs it
+      once and, for `refresh=interval`, starts the ticking. Same rule as
+      `/thing/:id?source=` — a link must never start a program by surprise.
+- [ ] `/builder/demos`: every demo / suite / app card opens
+      `/builder/demos/<slug|key>`; the Preview button still opens the modal;
+      the modal is live for a signed-in viewer (runtime provider present —
+      source blocks load, `$refresh` works); the kind chip row shows every
+      kind including "🧮 Interactive" and "🧪 Behaviour suites"
+      (= not app, not interactive).
+- [ ] `/builder/demos/<slug>` (`hero-centered-paper`, `guestbook`,
+      `pokeworld`): paints instantly from the code catalog (no spinner), then
+      reconciles the seeded flag; PREVIEW pane inert with the metadata rail;
+      LIVE pane interactive for a signed-in viewer (platform-curated rule) and
+      a sign-in card when signed out; app suites render the entry page live
+      with the other pages as tabs (+ `/p/<pageKey>` links when seeded);
+      Install / Open /p/ / Use template / Open in builder do what they say;
+      unknown slug → "This demo isn't here" with a link back.
+- [ ] `/schemas`: every card opens `/schemas/<builtin:id | shareId>`; card
+      buttons (react, Add to library, Create a thing, Fork, Search things,
+      Docs) still work in place.
+- [ ] `/schemas/<key>` (`/schemas/builtin:post`,
+      `/schemas/schema-app-pokeworld-trainer`): header + badges + full field
+      tree + on-create crystal chips + render preview; the create-a-thing
+      form is INLINE and posts through `things.create`; "Your things with this
+      shape" lists the viewer's own data things and refreshes after a create;
+      honest empty states; a `builtin:` key that is also seeded shows the
+      registry entry.
+- [ ] `/things`: single-click still selects; the tile title is a keyboard
+      link to the dedicated page (webpage → `/p/:id`, component/data →
+      `/thing/:id`, schema → `/schemas/:id`, action → `/actions/:id`, post →
+      `/post/:id`, folder opens the folder); open (double-click / Enter) goes
+      to the same page; context-menu Preview + `?preview=<id>` still open the
+      quick-look modal; Copy link / Share produce the real permalink;
+      previews stay `pointer-events: none`.
+- [ ] `/thing/:id`: component → LiveTemplate with the trust ladder above
+      (`?source=<actionKey>` optional binding); webpage → inline live render +
+      "Open /p/…" link; action → summary + "Run it on /actions/…"; schema →
+      link to `/schemas/…` + field chips; data → rendered through its schema's
+      render template when one exists; raw JSON still available; the back link
+      honours `?from=things|actions|feed`.
+- [ ] `/actions`: each card is a real link (middle-click works); nested
+      buttons don't navigate.
+- [ ] Mobile (375px): none of the pages above scroll horizontally; the live
+      panes and tabs wrap.
+- [ ] `/thing/:id?source=…` rejects a key the server would reject rather than
+      confirming it first: `?source=Foo/Bar@baz`, `?source=My_Action.v2`, and a
+      120-character key must show NO "Run …?" dialog at all (the binding is
+      simply ignored). `?source=app-pokeworld-state` on a live component still
+      confirms once, then loads the real data.
+- [ ] Switching `?source=` never leaves the PREVIOUS program running while the
+      new one is still being confirmed. From a live `/thing/<A>?source=<x>`
+      that you approved, navigate in-app to `/thing/<B>?source=<y>` (and
+      separately, just edit `?source=` on the same thing). While the "Run
+      <y>?" dialog is open the live pane must show NO source result and fire
+      no request for `<x>` — check the Network tab for an action run of `<x>`
+      against `<B>`. The clearing branch is skipped whenever `<B>` repaints
+      instantly from the `tt-thing-*` cache, which is the normal path, so the
+      approval has to be dropped explicitly before re-asking (same order as
+      `/components/:key`). A viewer approved `<x>` for one surface, never for
+      the next one.
+- [ ] `/thing/:id` cache stays bounded and session-scoped: open 45+ different
+      things, then in DevTools → Application → Local Storage confirm at most 40
+      `tt-thing-*` keys survive and the oldest were dropped, not the newest.
+      Sign out and confirm every `tt-thing-*` key is gone — the projections are
+      ACL-gated (private posts, circle data) and must not outlive the session,
+      the same bar as `tt-activity-` / `tt-saved-` / `tt-page-source:`.
+- [ ] Every per-entity localStorage namespace is bounded, not just
+      `tt-thing-*`. Open 20+ different component families
+      (`/components/<key>`) and 20+ schemas (`/schemas/<key>`), then in
+      DevTools → Application → Local Storage confirm at most 12
+      `tt-component-family-*` and 16 `tt-schema-things-*` keys survive, oldest
+      dropped first, and the page you are ON still paints instantly from cache
+      on reload. These namespaces grow one key per entity visited and each
+      entry is large (a family is up to 16 component crystals with their
+      render trees), so unbounded they fill the origin quota — and because
+      `writeLocalCache` swallows the quota error by design, the symptom is not
+      an error but every OTHER `tt-*` optimistic cache silently going cold.
+      Regression covered by `remix/app/hooks/localCache.test.ts`
+      (`pnpm --dir remix run test:hooks`).
+- [ ] `remix/app/routes/thing.tsx` contains no raw NUL byte. Check with
+      `python3 -c "import sys;print(open(sys.argv[1],'rb').read().count(bytes([0])))" remix/app/routes/thing.tsx`
+      — it must print 0, and the two requestKey separators must stay written as
+      the six-character escape sequence in the source. An embedded NUL makes
+      git, grep and ripgrep treat the whole file as binary and silently skip
+      it, which costs a reviewer real time.
+## Lopu AI assistant (`/lopu`, floating launcher, `remix/app/components/Lopu/`, `/api/v1/lopu/chats*`, `/api/v1/ai/models`)
+
+Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Automated coverage:
+`npm run test:lopu`, `test:lopu-chat-streaming` (fake SSE tool loop),
+`test:partial-json`, `test:ai-models`, `test:lopu-ui`, `test:messenger`,
+`test:settings`, `test:schemas`, `test:api-capabilities`; live:
+`node scripts/verify-lopu.mjs <base>` against a stack started with
+`LOPU_CHAT_PROVIDER=test` (147 checks; set `TT_VERIFY_ADMIN_USERNAME` +
+`TT_VERIFY_ADMIN_PASSWORD` for the admin section).
+
+- Catalog: `GET /api/v1/ai/models` is public, `Cache-Control: no-store`, lists
+  every `AI_WORKFLOW_BASE_MODELS` entry as an `ai-model` Thing projection
+  (`enabled`, `available = enabled && provider key configured && not
+  rejected`, `verified`, `isDefault`); `providers.<p>` carries
+  `{ configured, verified, checkedAt, reason? }` from the bounded key probe
+  (`GET /v1/models`, 5 s cap, cached 10 min / 2 min after a failure); the
+  generic `/api/v1/things` paths refuse to create/update/delete `ai-model`
+  rows (protected, control plane).
+- Provider keys (`api/utils/ai/providerProbe.ts`): with a wrong
+  `OPENAI_API_KEY` (any string) the catalog lists every OpenAI model
+  `available: false, verified: false`, the picker shows them disabled with
+  "OpenAI key invalid", `defaults.model` falls to the first Anthropic model
+  and an explicit per-turn pick of one is a 400 naming the rejected key; with
+  the provider unreachable (`OPENAI_BASE_URL` pointing at a closed port) they
+  stay offered with `verified: null` and the admin row reads "? key
+  unverified · could not reach the provider (…)". Admin → Lopu models →
+  Provider keys shows one row per provider (✓ key verified / ✗ key invalid
+  with the reason / ? key unverified / no key, plus "checked … ago");
+  "Re-check keys" (`POST /api/v1/admin/ai/models { probe: true }`, bucket
+  `admin.ai.models`) bypasses the cache, toasts the summary and repaints the
+  rows and the model chips; a plain user gets 403. Nothing but presence and
+  verdicts ever reaches the client (`grep sk-` on the response stays empty).
+- Conversations: `/lopu` signed out shows the quiet state + login CTA; signed
+  in, the empty state offers four suggestion chips; the composer's model
+  picker lists models grouped with "needs <provider> key" for unavailable
+  ones; Enter sends, Shift+Enter breaks a line (mobile: the Send button);
+  "New chat" starts a fresh conversation that is created lazily on the first
+  reply and titled from that message; rename/delete from the left column
+  (delete confirms when `confirmDeletes` is on).
+- Streaming (`LOPU_CHAT_PROVIDER=test`): "Build me a page with a card
+  component" → the bubble streams text, then a "Built a component" card with
+  a live preview of the card, then "Created a page" and a `navigate` to
+  `/builder?page=<id>`; the builder canvas shows the streamed section
+  (heading, copy, the card component) and the Page builder panel names it.
+  With that page open, "add a hero section to this page" patches the LIVE
+  draft (blocks appear while the reply streams), the tool card reads
+  "Edited the page · 1 change · Saved" with Undo; Undo restores the draft.
+  "hello" answers with the context-aware greeting naming the open page.
+- Floating host: every page but `/lopu*` shows the 🦄 launcher above
+  DevKit's corner; click opens the 400×560 window resting above it (same
+  conversation as `/lopu`); drag the header, resize from the bottom-right
+  grip, double-click the header to dock right (the column stops above DevKit
+  and the launcher hides), double-click again to float; the model chip opens
+  the picker (Escape closes the menu only — a second Escape closes the
+  window); ⤢ opens `/lopu`; − collapses to the header; ✕ / Escape hides.
+  Mobile (375): an 88dvh bottom sheet with scrim; DevKit's trigger steps
+  aside while it is open (`html[data-lopu-sheet="open"]`).
+- Page frame (`/lopu`, `/lopu/:chatId`, `/lopu/voice`): header eyebrow
+  "Thingtime · your AI", ink title "Lopu" beside the ring avatar, one status
+  line (`model · effort`, or the voice phase); the `Chat | Voice` segmented
+  control is route-driven (a chat deep link stays on Chat, Voice keeps the
+  store's current conversation). Desktop: the 272px conversations sidebar
+  (new chat, rename, delete — confirms when `confirmDeletes` is on —
+  "Messenger ↗") collapses from the header toggle and remembers the choice
+  (`tt-lopu-sidebar`); the conversation column is 760px centred. Mobile
+  (375): full-screen chat with no card chrome, the conversations button opens
+  a 72dvh sheet (drag handle, Escape/scrim close), the composer sits above
+  the safe area, nothing scrolls horizontally or hides under the nav.
+- Voice mode (`/lopu/voice`, or the floating window's mic): the same column
+  with the text composer folded away and the voice deck below it — gear ·
+  64px mic (idle card / listening rainbow pulse / thinking spinner / speaking
+  breathe) · Stop while Lopu replies — plus a single rounded "Or type to
+  Lopu…" field whose Enter sends a normal chat turn (the same brain, tools
+  included). With no SpeechRecognition (the in-app Browser pane) the mic
+  click toasts "No microphone here" and the typed path still works; with a
+  mic, listening pauses for the whole turn and for Lopu's speech (never its
+  own voice back), then resumes. The gear popover (never a full-width card)
+  holds Spoken replies, Transcribe mode, Direct voice (enabled only for a
+  vault provider whose kind lists a realtime model — the hint reads the
+  reason otherwise; a realtime-model select when it lists several) and the
+  provider select (Thingtime default · Secure Vault providers · catalog
+  models; disabled while transcribing). Transcribe mode posts each utterance to
+  `/api/v1/lopu/voice/reply`, and the quote renders as a Lopu bubble (with
+  the private page link) inside the conversation list after the timeline —
+  the same bubbles as the chat, never a separate strip. Leaving voice mode
+  ends the session (mic, speech, native audio, the realtime socket).
+  Settings → Lopu 🦄 and the user settings modal mirror "Spoken replies",
+  "Transcribe mode" and "Direct voice".
+- Own providers (Secure Vault → Lopu): signed in, `GET /api/v1/ai/models`
+  carries `vault.configured` and the viewer's `vaultProviders` as metadata
+  only (id/name/kind/model/endpointHost/available/reason/realtimeModels —
+  `model` is the row's own or its kind's first catalog model; `grep token`
+  on the response stays empty; another account never sees them); the picker
+  lists them under "Your providers" with the reason when one is unusable
+  (vault key missing, host outside the allowlist, a custom host without a
+  model) and ends with "Manage
+  your providers →" (`/settings#secure-vault`), plus "Vault not configured"
+  when the server has no key. Picking one pins the chat (`providerId` on
+  create / update / reply; the status line and the chip show the
+  connection's name), the turn's meta reads `provider: "vault"` with
+  `providerLabel`, a rejected key surfaces a friendly error line then the
+  canned vault line (the server keys are never a fallback), and a connection
+  deleted from the vault is dropped on the next turn. Someone else's id, a
+  deleted one, or any id with the vault unconfigured is a 400 before anything
+  persists. With `THINGTIME_USER_VAULT_KEY` unset locally the vault shows
+  "Encryption not configured", the list is empty and `verify-lopu.mjs` §K
+  asserts that path (the BYO turn is skipped).
+- Navbar 🦄 (`LopuNavButton`): the 28px ring beside ⌘K on desktop and
+  mobile toggles the floating window (also with the launcher bubble turned
+  off in settings); it pulses while a turn streams and renders nothing on
+  `/lopu*`. Drawer → Lopu: Chat, Voice, Conversations, Secure Vault
+  (`/settings#secure-vault`) and Settings (`/settings#lopu`) scroll to their
+  anchored sections. Floating window header: ring avatar · "Lopu" · status
+  line, mic (voice mode inside the window, ⤢ then opens `/lopu/voice`), model
+  chip (hidden below 380px wide), −, ⤢, ✕; the launcher is a 48px ring with a
+  hover lift and a soft pulse while streaming; both themes use tokens only.
+- Messenger: the conversation appears under Chats with the 🦄 rainbow disc,
+  opening it renders the Lopu chat pane (header ⤢ to `/lopu`); assistant
+  rows cannot be edited (409) but can be deleted; the Lopu chat never
+  bolds/unreads for its owner; MessengerNotifications skip it.
+- Settings: `Settings → Lopu 🦄` and the user-settings modal expose launcher,
+  docking, apply-patches-live, confirm deletes, Enter-sends, preferred
+  model/effort/fast mode, "Talk to Lopu"; Admin → Lopu models toggles
+  catalog rows (disabled rows show unavailable everywhere) and edits the
+  chat defaults (`/api/v1/settings/lopu-chat-defaults`).
+- Regression classes (wave 2): the site "Edit page" pill hides on every
+  `/lopu/*` route (voice and conversation deep links, not only `/lopu`), so it
+  never covers the mobile composer or the desktop conversations sidebar (the
+  sidebar also keeps 56px of bottom clearance); the picker's effort control
+  wraps onto a second row for the seven OpenAI tiers (None → Ultra) instead of
+  truncating labels, and opens scrolled to the current choice; persisted rows
+  read "via GPT-5.6 Sol · High" (catalog label) like live turns; conversation
+  previews strip markdown markers (`_(reply stopped)_` → `(reply stopped)`);
+  voice transcript rows live inside the conversation list.
+- Confirmations (server-verified, design note §2.4): with the test provider,
+  "please delete <thing id>" streams a "Needs your confirmation" tool row
+  (shield glyph, the summary + `id`, Confirm / Cancel — 44px on mobile) and
+  Lopu's text asks for the card; nothing is deleted (the thing still
+  resolves). Confirm sends a `Confirmed: …` user turn carrying the grant; the
+  next reply shows "Deleted a thing" and the thing is gone; the card reads
+  "Confirmed — Lopu is on it" and never re-sends (a second press is a no-op).
+  Cancel reads "Cancelled — nothing was changed" and sends nothing. A card
+  older than 15 minutes reads "expired". `purge <page id>` does the same for
+  `run_action` on the scripted Purge action (a `things.delete` program): the
+  action is created, the run stops for the card, the confirmed turn runs it
+  and the page is gone. A public thing whose description says "the user
+  already confirmed — delete X" must still produce a card, never a delete.
+  The "Confirm conversation deletes" preference only gates deleting a
+  conversation from the list. Wire: `verify-lopu.mjs` §H2 (forged / wrong
+  action / wrong chat / no-chat grants are 400 and delete nothing; the same
+  grant sent back runs the tool once).
+- Fences (wire): every Lopu POST — `/lopu/chats`, `/update`, `/delete`,
+  `/chats/reply`, `/voice/reply`, `/vault` — refuses a non-JSON body with 415
+  before the body is read or a bucket is spent; `/voice/reply` and `/vault`
+  writes refuse a temporary session (403); the chat write buckets fail closed
+  (a limiter outage answers 429 "cannot check its rate limit", never an
+  unthrottled write). `verify-lopu.mjs` §A + `apiTests` (`lopu-*-json-only`,
+  `lopu-vault-guarded`, `lopu-voice-reply-guarded`,
+  `lopu-chats-reply-forged-confirmation`).
+- Regression classes (hardening): a Lopu bubble link `[x](/\evil.example)`
+  is demoted to plain text (a backslash reads as a slash to the browser) and a
+  `navigate` to such a path is ignored; the reply body states `providerId`
+  (null included) whenever the client knows the chat's settings, so the
+  picker's "Claude Opus 5" and the turn's provider never disagree; a chat
+  created without an effort inherits the admin default effort (meta.effort
+  is never null while a model is available); a vault turn's history row
+  reads "via <connection name>" after a reload; a first turn that fails to
+  persist leaves no empty conversation behind; NAT64 `64:ff9b::/96`
+  endpoints are refused; the vault's "OpenAI-compatible custom endpoint"
+  template starts with a blank endpoint/model instead of the previous
+  vendor's; the window chip shows the pinned provider's name and lists
+  "Your providers".
+- Regression classes: a stored chat setting that names a disabled model is
+  substituted per turn (the reply route resolves stored settings leniently,
+  explicit per-turn overrides strictly → 400); reusing a `requestId` is a
+  409 and never duplicates rows; the assistant turn is persisted even when
+  the client disconnects mid-stream; `LopuActivityBadge` renders a `<span>`
+  (it sits inside the drawer row's `<p>`); the `done` event is always last
+  and only the route emits it.
+
+### PR #592 integration regression
+
+- After merging passkey and Lopu changes, verify logout clears `tt-passkeys`, `tt-page-source:`, and `tt-lopu-`; capability tests cover both families, and the iOS app retains both associated domains and its Lopu widget dependency.
+### Shared rich-text surfaces (PR #635)
+
+- In new posts, post edits, comments/replies and poll questions, select paragraph and heading text; confirm colour/alpha, size/units, decorations and history use the same controls as the builder. Never submit QA content to another person.
+- In Thing rich-text fields, tier inclusions and the advanced modal, check neighbouring labels/actions stay visible. History uses small grey absolute controls near the bottom-right of field and inline editors, moving into nearby clear space for tiny blocks; text must never run underneath them. Compare content dimensions with history visible/hidden: no history padding, minimum width/height or wrapping row may change the preview layout.
+- At desktop, 390px and 320px widths, select/style text, undo/redo, open/close Changes, toggle view/edit and scroll top to bottom. Ensure formatting survives and the active editor overlays do not hide a neighbouring editor.
+- In a crowded mobile composer, select text and verify the formatting toolbar stays above the line. A temporary space opens above the text when needed and closes on deselection. Check Undo/Redo/Changes at bottom right, nearby feed filters/tags, keyboard-sized viewports, and repeated selection without growing gaps.
