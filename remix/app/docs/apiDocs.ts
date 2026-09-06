@@ -8375,7 +8375,21 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things',
-    featureVersion: '1.1.0',
+    // 1.3.0 / contract 1.2.0: post + comment projections carry authorFlair —
+    // the author's USER flair in the post's subspace (additive). The shared
+    // post projection is versioned HERE and on things-comment / things-feed /
+    // things-user; things-search / -trending / -rss / -saved ride the same
+    // projection without a bump of their own (round-1 precedent for
+    // title / subspace / votes — see PRs/subspaces-communities-and-updown-votes.md)
+    // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
+    // subspace post, for that subspace's moderators only (S5, additive)
+    // 1.5.0 / contract 1.4.0: GET ?id= takes commentSort=top|new|old — the
+    // shipped comment page in Reddit's three orders (top = votes.score desc,
+    // then older first) and the response echoes commentSort; an unknown value
+    // is a 400. Only this read grew — the shared projection is unchanged, so
+    // things-comment / -feed / -user stay put (S7, additive)
+    featureVersion: '1.5.0',
+    contractVersion: '1.4.0',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
@@ -8397,6 +8411,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Optionally add extended: any JSON up to 512KB, stored untouched and returned as-is — replace-on-write, null clears it. It is not structured-searchable (/search field conditions can’t target it), though its string content is indexed by the wildcard text index like any field.',
       'Attached kinds (comment, reaction) require targetId and carry acl ["tt:inherit"]; shares carry thingtime ["post","share"]. tt:inherit is stamped by the SERVER on target-attached things — sending it yourself is a 400 on create and update alike, because a thing whose audience is detached from its own acl can never be judged or re-edited.',
       "GET ?id= reads one thing; post projections include viewer-relative commentCounts { direct, replies, total, loaded } while commentCount remains the backward-compatible total. Hidden ACL/moderation rows are never counted or disclosed. GET ?target=&thingtime=comment lists a visible thing’s comments; GET ?thingtime=&cursor=&limit= lists your own things. Session callers may add appId=<clientId> to the own-things list to browse ONE app's namespace (see /api/v1/apps/data-summary).",
+      "GET ?id=&commentSort=top|new|old orders the shipped comment page (the post’s direct comments, 20 per read): top = net up/down score descending, ties older first; new = newest first; old = oldest first. Absent keeps the default page — the newest 20 shown oldest → newest — and any other value is a 400. The response echoes commentSort (null when absent). The whole first level is ordered before the page is cut, so top is the highest-scoring comments of the post, not the newest ones re-shuffled; the nested reply levels that ship with a comment (the newest 5 per parent) are re-ordered among themselves the same way, never re-fetched per parent — a deeper thread’s full order comes from its own GET ?id=<comment>&commentSort=.",
       'PUT { id, thingtime, crystal, acl? } creates the thing at that id (201) or replaces the owned thing’s crystal whole (200); PATCH { id, crystal?, extended?, acl?, tags? } merges crystal fields (extended still replaces whole).',
       'PATCH { id, attachmentIds } syncs a post’s (or rich comment’s) private attachments: the list is the full desired display order — it must include every id already bound to that thing (removals are rejected; 409 when the bound set changed) and may append the ids of newly uploaded ready drafts, which are bound to the post with the same fences create-time binding uses. Same-origin JSON from a full user session only, like attachment creation.',
       'PATCH/PUT may include expectedUpdatedAt to fail with 409 if the Thing changed after a preview. PATCH may set replaceCrystal true for whole-crystal replacement.',
@@ -8499,6 +8514,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           'Fetch a thing by id (posts AND comments include the full post projection; comments also return parent and root for thread navigation — the /post/:id permalink pages are backed by this).',
         method: 'GET',
         query: { id: 'post_123' }
+      },
+      {
+        name: 'Read a post with its top comments',
+        description: 'commentSort=top ships the post’s highest-scoring comments first (net up/down score, ties older first); new / old order by age. The response echoes commentSort.',
+        method: 'GET',
+        query: { id: 'post_123', commentSort: 'top' }
       },
       {
         name: 'List comments of a post',
@@ -8606,6 +8627,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Every doc stores the root schemaVersion it was written at; admins migrate older docs via /api/v1/admin/migrations.',
       'Browse every schema kind at /schemas or GET /api/v1/schemas.',
       'The comment/react/share/update/delete sub-routes remain as sugar over this endpoint.',
+      'commentSort is a per-read view of the same thread — it changes the ORDER of the shipped comment page (and which 20 direct comments make it), never the counts: commentCounts.total / direct still describe the whole thread and loaded is the page size. Comments left out of a sorted page are still reachable through GET ?target=<post>&thingtime=comment (chronological, cursor-paged).',
       "App-token behaviour in one line: same verbs, own namespace only — a thing without the app's root appId stamp 404s for reads, writes, and deletes alike. Apps read children (comments/reactions) relationally via GET ?target=… inside the namespace; child counts never mix in first-party or other-app children."
     ]
   }),
@@ -8884,7 +8906,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-comment',
-    featureVersion: '1.1.0',
+    // 1.3.0 / contract 1.2.0: post + comment projections carry authorFlair —
+    // the author's USER flair in the post's subspace (additive)
+    // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
+    // subspace post, for that subspace's moderators only (S5, additive)
+    featureVersion: '1.4.0',
+    contractVersion: '1.3.0',
     group: 'things',
     title: 'Comment on post',
     endpoint: '/api/v1/things/comment',
@@ -9073,21 +9100,31 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-feed',
-    featureVersion: '1.1.0',
+    // 1.3.0 / contract 1.2.0: post + comment projections carry authorFlair —
+    // the author's USER flair in the post's subspace (additive)
+    // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
+    // subspace post, for that subspace's moderators only (S5, additive)
+    // 1.5.0 / contract 1.4.0: scope=all|subspaces — "My subspaces" narrows
+    // the page to posts from the viewer's ACTIVE subspaces (empty for guests /
+    // non-members, every other fence intact); the response echoes scope; an
+    // unknown scope answers 400 (S6, additive)
+    featureVersion: '1.5.0',
+    contractVersion: '1.4.0',
     group: 'things',
     title: 'Feed page',
     endpoint: '/api/v1/things/feed',
     summary: 'Returns public and viewer-visible feed posts with optional algorithm ranking.',
     detail:
-      'The feed reads recent posts whose acl admits the viewer (tt:all for logged-out callers, plus your own things when authenticated — acl exclusions like -tt:user/<you> are honoured), applies filters, then optionally ranks them with the selected or active feed algorithm. tag narrows to posts carrying one tag (normalized to the stored trim/lowercase form) — the public tag feeds behind /feed?tag=<tag>.',
+      'The feed reads recent posts whose acl admits the viewer (tt:all for logged-out callers, plus your own things when authenticated — acl exclusions like -tt:user/<you> are honoured), applies filters, then optionally ranks them with the selected or active feed algorithm. tag narrows to posts carrying one tag (normalized to the stored trim/lowercase form) — the public tag feeds behind /feed?tag=<tag>. scope=subspaces narrows the page to posts from the subspaces the viewer is an ACTIVE member of (the "🪐 My subspaces" chip on /feed) — a pending join request is not a membership, a guest or someone in no subspace gets an empty page, and the usual fences (removed posts hidden, private subspaces members-only) still apply on top; scope=all is the default and the response echoes the scope it served.',
     auth: {
       mode: 'optional',
       description: 'Anonymous callers see public posts; authenticated callers may also see their own visible circles.'
     },
     methods: ['GET'],
     steps: [
-      'Send optional types, circles, tag, from, to, algorithm, cursor, and limit query parameters.',
+      'Send optional types, circles, tag, from, to, algorithm, scope, cursor, and limit query parameters.',
       'Use algorithm=latest to force chronological ordering.',
+      'Use scope=subspaces for only the viewer’s subspaces (default all); anything else answers 400.',
       'Use nextCursor for infinite scrolling.',
       'Read ranked to know whether algorithm scoring affected the page.'
     ],
@@ -9097,13 +9134,24 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Fetch a public feed page.',
         method: 'GET',
         query: { types: 'marketplace', circles: 'public', limit: 5 }
+      },
+      {
+        name: 'My subspaces',
+        description: 'Only posts from the subspaces the caller belongs to, newest first.',
+        method: 'GET',
+        query: { scope: 'subspaces', algorithm: 'latest', limit: 20 }
       }
     ],
     responseExamples: [
       {
         status: 200,
         description: 'Feed page returned.',
-        body: { ok: true, posts: [], nextCursor: null, ranked: false }
+        body: { ok: true, posts: [], nextCursor: null, ranked: false, scope: 'all' }
+      },
+      {
+        status: 400,
+        description: 'Unknown scope.',
+        body: { ok: false, error: 'scope must be one of all, subspaces' }
       }
     ]
   }),
@@ -9309,6 +9357,722 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     notes: ['Responses carry Cache-Control: private, no-store — the library is viewer-specific and never edge-cached.']
   }),
+  // ── Subspaces ─────────────────────────────────────────────────────────────
+  // Reddit-style communities (api/utils/subspaces): user-created subspaces
+  // with branding, rules, post flairs and an access mode; joining/leaving;
+  // moderation (remove/approve/pin/lock/flair, bans, roles, mod log); a
+  // per-subspace feed with hot/new/top/rising/controversial sorts. Up/down
+  // voting is its own focused reaction kind (see things-updown) and never
+  // touches the native emoji reactions.
+  endpoint({
+    id: 'subspaces',
+    // 1.1.0: every row's `viewer` carries pending (an open join request to a
+    // private subspace) + approvalRequested; memberCount excludes pending
+    // requesters and `mine=1` lists only ACTIVE memberships (additive)
+    // 1.2.0: rows carry userFlairs / userFlairSelfAssign / allowCustomUserFlair
+    // and viewer.userFlair — the user-flair vocabulary (additive)
+    // 1.3.0: rows carry removalReasons — the canned { id, title, message }
+    // reasons moderators remove posts with (S4, additive)
+    // 1.4.0: ?sort=new|members|active — the directory's orders (members /
+    // active rank the newest 200 matching subspaces in memory by member count
+    // / live posts in the last 7 days and page by offset; rows under active
+    // carry recentPostCount); the response echoes sort; an unknown sort
+    // answers 400 (S6, additive)
+    // 1.5.0 (S6 review): ?anon=1 — the logged-out view regardless of cookies,
+    // edge-cacheable (Cache-Control public, s-maxage=60, stale-while-
+    // revalidate=300, Vary Authorization; authed answers private, no-store)
+    // — additive; GET is rate-limited like the other public reads
+    // (subspaces.list, 120/min, anonymous callers by IP); a private
+    // subspace's activity is its ACTIVE members' business — under active it
+    // counts for, and shows recentPostCount to, them only; everyone else
+    // ranks it at zero and its row carries no recentPostCount (compatible
+    // corrections)
+    featureVersion: '1.5.0',
+    contractVersion: '1.5.0',
+    group: 'subspaces',
+    title: 'Subspaces',
+    endpoint: '/api/v1/subspaces',
+    summary: 'Browses the subspace directory or founds a new subspace.',
+    detail:
+      'GET lists subspaces (public; each row carries memberCount and the caller’s own membership ' +
+      'state under `viewer` — role, member, approved, banned, canModerate, canPost, pending, approvalRequested, ' +
+      'userFlair) plus the user-flair settings (userFlairs templates, userFlairSelfAssign, allowCustomUserFlair) — ' +
+      '`?q=` searches slug/name, `?mine=1` narrows to the caller’s ACTIVE memberships (a pending join request is ' +
+      'not one), `?sort=` orders them: new (default — newest first on a stable createdAt cursor), members ' +
+      '(highest member count) or active (most live posts in the last 7 days; rows carry recentPostCount). The ' +
+      'two ranked sorts are computed in memory over a bounded window — the newest 200 subspaces matching q / mine ' +
+      '— and paged by offset cursor, so a directory deeper than that ranks its newest 200; the response echoes ' +
+      '`sort`, and an unknown sort answers 400. A private subspace’s activity is fenced like its posts: under ' +
+      'active it counts for, and shows recentPostCount to, its ACTIVE members only — everyone else ranks it at ' +
+      'zero and its row carries no recentPostCount. GET is rate-limited like the other public reads ' +
+      '(subspaces.list, 120/min → 429; anonymous callers key by IP). Send `anon=1` from logged-out clients for ' +
+      'the edge-cacheable logged-out view (the response then depends only on the URL; `anon=1&mine=1` answers ' +
+      '401 — there is no caller to narrow to). POST ' +
+      'creates a subspace from a unique slug (3–30 chars of [a-z0-9_], the /s/<slug> URL) plus name, ' +
+      'description, access (public | restricted | private), nsfw, rules, flairs and branding; the creator ' +
+      'becomes owner and first member. Subspaces are things (thingtime ["subspace"]) with relational ' +
+      'subspace-member docs — the generic /api/v1/things CRUD refuses the whole family.',
+    auth: { mode: 'optional', description: 'GET works logged out; POST requires an auth cookie or Bearer token.' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET to browse; pass q to search, sort=new|members|active to order, and cursor/limit to page (nextCursor is null on the last page).',
+      'Send anon=1 from logged-out clients so the response is edge-cacheable (it then depends only on the URL).',
+      'POST slug + name (+ description, access, nsfw, rules, flairs, branding) to found one.',
+      'A taken slug answers 409; a reserved or malformed slug answers 400. The slug of a recently deleted subspace is ' +
+        'held for its previous owner (who may re-found it at once) and answers 409 to everyone else until the hold lapses.',
+      'Post into it with POST /api/v1/things { thingtime: ["post"], crystal: { subspaceId, title, flairId, … } }.'
+    ],
+    requestExamples: [
+      { name: 'Browse', description: 'Newest subspaces.', method: 'GET', query: { q: 'rain', limit: 20 } },
+      { name: 'My subspaces', description: 'Only the ones the caller joined.', method: 'GET', query: { mine: 1 } },
+      {
+        name: 'Popular',
+        description: 'The eight subspaces with the most members (the /explore strip; a logged-out client adds anon=1 so the edge can cache it).',
+        method: 'GET',
+        query: { sort: 'members', limit: 8, anon: 1 }
+      },
+      { name: 'Most active', description: 'Most live posts in the last 7 days; rows carry recentPostCount.', method: 'GET', query: { sort: 'active', limit: 20 } },
+      {
+        name: 'Found a subspace',
+        description: 'Create s/rainbows with a rule, a flair and branding.',
+        method: 'POST',
+        body: {
+          slug: 'rainbows',
+          name: 'Rainbows',
+          description: 'All things prismatic 🌈',
+          access: 'public',
+          rules: [{ title: 'Be kind', text: 'No gatekeeping the spectrum.' }],
+          flairs: [{ label: 'Photo', emoji: '📸', color: '#7c5cff' }],
+          branding: { icon: '🌈', accent: '#7c5cff' }
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 201,
+        description: 'Founded.',
+        body: {
+          ok: true,
+          subspace: {
+            id: 'c0ffee12-dddd-4ddd-8ddd-000000000004',
+            slug: 'rainbows',
+            name: 'Rainbows',
+            access: 'public',
+            memberCount: 1,
+            viewer: { role: 'owner', member: true, canModerate: true, canPost: true, pending: false, approvalRequested: false }
+          }
+        }
+      },
+      {
+        status: 200,
+        description: 'Directory page (sort=active).',
+        body: {
+          ok: true,
+          subspaces: [{ id: 'c0ffee12-dddd-4ddd-8ddd-000000000004', slug: 'rainbows', name: 'Rainbows', access: 'public', memberCount: 12, recentPostCount: 5, viewer: { role: null, member: false, pending: false } }],
+          nextCursor: null,
+          sort: 'active'
+        }
+      },
+      { status: 400, description: 'Unknown sort.', body: { ok: false, error: 'sort must be one of new, members, active' } },
+      { status: 429, description: 'Rate limited (subspaces.list, 120/min).', body: { ok: false, error: 'You’re browsing subspaces very enthusiastically — take a breather 🌸' } },
+      { status: 409, description: 'Slug taken.', body: { ok: false, error: 's/rainbows is taken — pick another slug' } },
+      {
+        status: 409,
+        description: 'Slug held after a deletion (previous owner only until the hold lapses).',
+        body: { ok: false, error: 's/rainbows was deleted recently — its slug is held for its previous owner until 2026-10-05' }
+      }
+    ],
+    notes: [
+      'Anonymous (anon=1) responses carry Cache-Control: public, s-maxage=60, stale-while-revalidate=300 (Vary: Authorization) — the logged-out directory is served from the Vercel edge and can lag a fresh subspace or member count by a minute; authenticated responses are private, no-store.',
+      'Under sort=active a private subspace ranks by its live posts only for its ACTIVE members (who also see recentPostCount); everyone else sees it ranked at zero with no recentPostCount — the same fence its feed applies.'
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-get',
+    // 1.1.0: viewer.pending / viewer.approvalRequested, and for moderators
+    // pendingCount + approvalRequestCount (the Requests queue sizes) — additive
+    // 1.2.0: userFlairs / userFlairSelfAssign / allowCustomUserFlair on the
+    // subspace and viewer.userFlair (the flair the caller wears here) — additive
+    // 1.3.0: removalReasons — the subspace's canned removal reasons (S4,
+    // additive)
+    // 1.4.0: moderators get openReportCount — open reports waiting in the
+    // Reports queue (S5, additive)
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
+    group: 'subspaces',
+    title: 'Subspace detail',
+    endpoint: '/api/v1/subspaces/get',
+    summary: 'Reads one subspace by slug or id with counts, the moderator roster, and the caller’s permissions.',
+    detail:
+      'Returns the subspace (branding, rules, flairs, access, the user-flair vocabulary: userFlairs templates, ' +
+      'userFlairSelfAssign, allowCustomUserFlair, and removalReasons — the canned reasons its moderators remove ' +
+      'posts with), memberCount (active members — pending requesters excluded) + ' +
+      'postCount (live posts only), the public moderator roster, and `viewer` — the caller’s role, membership, ' +
+      'approval, ban state, canModerate, canPost, pending (an open join request to a private subspace), ' +
+      'approvalRequested (asked for posting rights in a restricted one) and userFlair (the flair they wear here: ' +
+      '{ id (template id or null for custom text), label, emoji, color } | null) — so the /s/<slug> page can ' +
+      'render its header, sidebar, Your flair card and post button from one call. Moderators additionally get ' +
+      'pendingCount and approvalRequestCount, the sizes of the two request queues, and openReportCount, the open ' +
+      'reports waiting in the Reports queue (together the badge on Mod tools 🎩 / the Requests and Reports tabs).',
+    auth: { mode: 'optional', description: 'Works logged out; the viewer block is empty for anonymous callers.' },
+    methods: ['GET'],
+    steps: ['GET with ?slug=<slug> (or ?id=<shareId>).', 'Unknown subspaces answer 404.'],
+    requestExamples: [{ name: 'By slug', description: 'Read s/rainbows.', method: 'GET', query: { slug: 'rainbows' } }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'The subspace.',
+        body: {
+          ok: true,
+          subspace: { id: 'c0ffee12-…', slug: 'rainbows', name: 'Rainbows', memberCount: 128, postCount: 42, viewer: { role: null, member: false, canModerate: false, canPost: true, pending: false, approvalRequested: false } },
+          moderators: [{ userId: '664f…', profile: { username: 'lopu' }, role: 'owner' }]
+        }
+      },
+      {
+        status: 200,
+        description: 'As a moderator: the request queue sizes and the open report count ride along.',
+        body: { ok: true, subspace: { slug: 'rainbows', access: 'private', memberCount: 128, pendingCount: 3, approvalRequestCount: 0, openReportCount: 2, viewer: { role: 'moderator', member: true, canModerate: true, canPost: true } }, moderators: [] }
+      },
+      { status: 404, description: 'No such subspace.', body: { ok: false, error: 'Subspace not found' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-update',
+    // 1.1.0: changing access resolves the request queues — leaving private
+    // activates every pending join request (and notifies them,
+    // subspace-join-accepted), leaving restricted clears open posting-approval
+    // requests; the settings.update mod-log detail reports the counts (additive)
+    // 1.2.0: user flairs — userFlairs (templates), userFlairSelfAssign,
+    // allowCustomUserFlair (moderators) — additive
+    // 1.3.0: removalReasons (moderators) — the canned { id, title, message }
+    // list moderate remove's reasonId picks from (S4, additive)
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
+    group: 'subspaces',
+    title: 'Subspace settings',
+    endpoint: '/api/v1/subspaces/update',
+    summary: 'Moderators edit branding, rules, post flairs, user flairs and removal reasons; the owner changes access and the 18+ flag.',
+    detail:
+      'POST { id|slug, name?, description?, rules?, flairs?, branding?, userFlairs?, userFlairSelfAssign?, ' +
+      'allowCustomUserFlair?, removalReasons? } as a moderator, plus access? and nsfw? as the owner. removalReasons ' +
+      'are the canned reasons moderators remove posts with — a list of { id (slug, minted from the title), title ' +
+      '(≤80), message (≤500) }, ≤20 — that POST /api/v1/subspaces/moderate { action: remove, reasonId } picks from ' +
+      '(the title — message become the stored reason the author sees). userFlairs are the templates ' +
+      'members wear beside their name (the post-flair shape — { id, label, emoji, color, modOnly }, ≤50; modOnly ' +
+      'ones are assigned by moderators only); userFlairSelfAssign (default true) lets members pick one themselves ' +
+      'and allowCustomUserFlair (default false) lets them type their own text (≤40 chars) — both switches gate ' +
+      'members only, moderators may always dress anyone (POST /api/v1/subspaces/members action userFlair). ' +
+      'Flipping access to/from private re-stamps the subspace’s posts so feeds fence them ' +
+      'correctly. The request queues follow the access mode: switching AWAY from private turns every open join ' +
+      'request into an active membership (the doors are open to everyone now; the requesters are notified with ' +
+      'subspace-join-accepted, the first 200 of them), and switching away from restricted clears open ' +
+      'posting-approval requests (anyone / every member may post now). Every change writes a settings.update ' +
+      'mod-log entry whose detail lists the changed fields plus acceptedRequests / clearedApprovalRequests when ' +
+      'an access change resolved any.',
+    auth: { mode: 'session-or-bearer', description: 'Requires a moderator (owner for access/nsfw).' },
+    methods: ['POST'],
+    steps: ['POST the fields to change.', 'Non-moderators receive 403; owner-only fields 403 for moderators.'],
+    requestExamples: [
+      { name: 'Add a flair', description: 'Replace the flair list.', method: 'POST', body: { slug: 'rainbows', flairs: [{ id: 'photo', label: 'Photo' }, { label: 'Question' }] } },
+      {
+        name: 'User flairs',
+        description: 'Two templates (one mod-only), members may self-assign and type their own text.',
+        method: 'POST',
+        body: { slug: 'rainbows', userFlairs: [{ label: 'Prism', emoji: '🔮', color: '#7c5cff' }, { id: 'staff', label: 'Staff', modOnly: true }], userFlairSelfAssign: true, allowCustomUserFlair: true }
+      },
+      {
+        name: 'Removal reasons',
+        description: 'Two canned reasons the Remove modal offers moderators.',
+        method: 'POST',
+        body: { slug: 'rainbows', removalReasons: [{ title: 'No spam', message: 'Posts that only advertise are removed.' }, { id: 'off-topic', title: 'Off topic' }] }
+      },
+      { name: 'Go private', description: 'Owner locks the subspace to members.', method: 'POST', body: { slug: 'rainbows', access: 'private' } }
+    ],
+    responseExamples: [{ status: 200, description: 'Updated.', body: { ok: true, subspace: { slug: 'rainbows', access: 'private', removalReasons: [{ id: 'no-spam', title: 'No spam', message: 'Posts that only advertise are removed.' }] } } }]
+  }),
+  endpoint({
+    id: 'subspaces-join',
+    // 1.1.0: joining a PRIVATE subspace files a join request (200, pending:
+    // true) instead of answering 403; the response gained `pending` (additive)
+    // 1.1.1: a re-request starts from a clean row (a kicked approved poster's
+    // old approval no longer rides through the queue), the moderators' bell
+    // is deduped against an unread copy, and join has its own rate key
+    // (subspaces.join, 20/min) — compatible corrections
+    // 1.2.0: the returned subspace carries userFlairs / userFlairSelfAssign /
+    // allowCustomUserFlair and viewer.userFlair (S3 user flairs, additive)
+    // 1.3.0: the returned subspace carries removalReasons (S4, additive)
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
+    group: 'subspaces',
+    title: 'Join subspace',
+    endpoint: '/api/v1/subspaces/join',
+    summary: 'Joins a public or restricted subspace, or files a join request with the moderators of a private one.',
+    detail:
+      'POST { id|slug }. Public and restricted subspaces: creates the caller’s relational subspace-member doc (or ' +
+      'restores it after leaving) and answers { joined: true, pending: false }. Private subspaces: files a JOIN ' +
+      'REQUEST — the same member row with pending: true, which is NOT a membership (no private feed, no posting, ' +
+      'not counted) — answers { joined: false, pending: true } and notifies the moderators (subspace-join-request, ' +
+      'preview "s/<slug> · wants to join 🙋"; each moderator’s bell rings once per open request — a request ' +
+      'cancelled and filed again is deduped against their unread copy); a moderator accepts or denies it from ' +
+      'the Requests queue (POST /api/v1/subspaces/members action accept | deny — a moderator’s `add` accepts ' +
+      'too), and POST /api/v1/subspaces/leave cancels it. A re-request starts from a clean row (never an ' +
+      'approved poster). Banned users receive 403 with the ban reason. Joining (or requesting) twice is a ' +
+      'friendly no-op (joined: false, and pending: true while the request is open). Rate-limited per user ' +
+      '(subspaces.join, 20/min → 429).',
+    auth: { mode: 'session-or-bearer', description: 'Requires an auth cookie or Bearer token.' },
+    methods: ['POST'],
+    steps: ['POST the subspace slug or id.', 'Read joined / pending and the returned subspace.viewer for your new state.'],
+    requestExamples: [{ name: 'Join', description: 'Join s/rainbows.', method: 'POST', body: { slug: 'rainbows' } }],
+    responseExamples: [
+      { status: 200, description: 'Joined.', body: { ok: true, joined: true, pending: false, subspace: { slug: 'rainbows', memberCount: 129, viewer: { role: 'member', member: true, pending: false } } } },
+      {
+        status: 200,
+        description: 'Private subspace — a join request is now waiting for the moderators.',
+        body: { ok: true, joined: false, pending: true, subspace: { slug: 'secret', access: 'private', memberCount: 12, viewer: { role: null, member: false, canPost: false, pending: true } } }
+      },
+      { status: 403, description: 'Banned.', body: { ok: false, error: 'You are banned from s/rainbows 🚫' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-leave',
+    // 1.1.0: leaving with an open join request cancels the request (additive)
+    // 1.2.0: the returned subspace carries userFlairs / userFlairSelfAssign /
+    // allowCustomUserFlair and viewer.userFlair (S3 user flairs, additive)
+    // 1.3.0: the returned subspace carries removalReasons (S4, additive)
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
+    group: 'subspaces',
+    title: 'Leave subspace',
+    endpoint: '/api/v1/subspaces/leave',
+    summary: 'Leaves a subspace — or cancels a pending join request (owners can’t leave their own).',
+    detail:
+      'POST { id|slug }. Removes the caller’s member doc — an active membership ends, a pending join request to a ' +
+      'private subspace is cancelled (its row goes, the moderators’ queue no longer lists it); a banned member’s ' +
+      'doc is kept (left: true) so the ban outlives the membership. Owners answer 409.',
+    auth: { mode: 'session-or-bearer', description: 'Requires an auth cookie or Bearer token.' },
+    methods: ['POST'],
+    steps: ['POST the subspace slug or id.'],
+    requestExamples: [{ name: 'Leave', description: 'Leave s/rainbows.', method: 'POST', body: { slug: 'rainbows' } }],
+    responseExamples: [
+      { status: 200, description: 'Left (or the pending request cancelled).', body: { ok: true, subspace: { slug: 'rainbows', viewer: { role: null, member: false, pending: false } } } },
+      { status: 409, description: 'Owner.', body: { ok: false, error: 'Owners can’t leave their own subspace 👑' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-members',
+    // 1.1.0: role / ban / unban now notify the affected member (subspace-role,
+    // subspace-ban) — an additive side effect
+    // 1.2.0: the Requests queue — GET pending=1 | approvalRequests=1 (mods),
+    // POST actions accept / deny / request-approval (self), rows carry
+    // pending + approvalRequested, `add` on a pending row accepts it, approve /
+    // unapprove settle an approval request (additive)
+    // 1.2.1: a decision on a request that was withdrawn meanwhile answers 409
+    // (accept / deny / add-on-pending are guarded writes — no accept mod-log
+    // entry or "welcome in" bell for a non-member); approve / unapprove /
+    // role member on a pending row answer 400, remove on one 404; `remove`
+    // clears restricted posting approval; request-approval heals an expired
+    // temporary ban so the request reaches the queue — compatible corrections
+    // 1.3.0: user flairs — rows carry userFlair; POST action userFlair
+    // (self, or any member as a moderator) picks a template / sets custom
+    // text / clears (additive)
+    // 1.3.1: remove and ban strip the user flair (the mod-log detail reads
+    // userFlairCleared: true), role member strips a mod-only pick, and
+    // moderators may dress the owner too (403 → 200, per the round-2 spec:
+    // "mods may set anyone's") — compatible corrections
+    // 1.4.0: ban takes an optional private `note` (mod log detail only, never
+    // shown to the banned user) — S4 BanModal (additive)
+    // 1.4.1 (S4 review): the ban / unban bell comes from the subspace's mod
+    // team (actorId = the subspace, actorName "s/<slug> mods") rather than
+    // the individual moderator — the same posture as a post removal; role
+    // changes and accepted requests still name the acting mod — a
+    // compatible correction
+    featureVersion: '1.4.1',
+    contractVersion: '1.4.1',
+    group: 'subspaces',
+    title: 'Subspace members',
+    endpoint: '/api/v1/subspaces/members',
+    summary: 'Lists members and the two request queues (mod roster public, everything else mod-only) and applies member actions — including user flairs.',
+    detail:
+      'GET ?slug=&role=owner|moderator|member&banned=1&pending=1&approvalRequests=1&cursor=&limit= — the moderator ' +
+      'roster is public; the full member list (active members, oldest-first), the ban list, the JOIN REQUEST ' +
+      'queue (pending=1: users who asked to join a private subspace, newest-first) and the POSTING-APPROVAL ' +
+      'queue (approvalRequests=1: active members of a restricted subspace who asked for posting rights) require a ' +
+      'moderator. Every row carries pending + approvalRequested + userFlair ({ id, label, emoji, color } | null — ' +
+      'the flair they wear here). POST { id|slug, userId|username, action, role?, reason?, banDays?, flairId?, ' +
+      'text?, emoji?, color?, note? } with action add (also accepts a pending join request), accept (pending → active member; ' +
+      'notifies subspace-join-accepted; 404 without a request), deny (drops a pending join request, or clears a ' +
+      'posting-approval request; optional reason; 404 without one), remove (kick — also revokes restricted ' +
+      'posting approval and strips the user flair), approve/unapprove (restricted posting rights — both settle an ' +
+      'open approval request), ban/unban (banDays for a temporary ban; bans on non-members are pre-emptive; banning ' +
+      'a pending requester removes the request; a ban strips the user flair too; an optional `note` (≤300) lands in the ' +
+      'member.ban mod-log detail only — the banned user sees `reason`, never the note), role (owner only: moderator | ' +
+      'member — demoting strips a mod-only user flair, ordinary picks stay), or request-approval — the one SELF action: ' +
+      'an active, unapproved member of a RESTRICTED subspace asks the mods for posting rights (approvalRequested: ' +
+      'true; notifies the mods with subspace-join-request "s/<slug> · wants to post ✋", deduped against each ' +
+      'mod’s unread copy; 400 unless the subspace is restricted, 403 for non-members / for someone else; an ' +
+      'expired temporary ban is healed on the row so the request reaches the queue), or userFlair — the flair ' +
+      'beside a member’s name: without userId/username (or naming yourself) an ACTIVE member picks a template ' +
+      '(flairId; not a modOnly one → 403) while the subspace’s userFlairSelfAssign is on, types custom text ' +
+      '(text ≤40 chars, optional emoji/color under the icon/color rules) while allowCustomUserFlair is on, and may ' +
+      'always clear their own (flairId null + empty text); a non-member answers 403, an unknown template 400. ' +
+      'Moderators set anyone’s — the owner’s included (who can always override it) — any template incl. modOnly ' +
+      'or custom text, bound by neither switch — a banned target answers 400, a pending requester / non-member ' +
+      '404 — and only a moderator dressing someone ELSE writes a member.userFlair mod-log entry. Posts and comments ' +
+      'project the flair as authorFlair while the wearer is an active member; a kick or ban clears the pick and a ' +
+      'demotion clears a mod-only one (that entry’s mod-log detail reads userFlairCleared: true), so no badge walks ' +
+      'back in with a rejoin or an unban that nobody re-granted. A pending join request is ' +
+      'not a membership: only accept, deny, add, ban and role moderator apply to one — approve, unapprove and ' +
+      'role member answer 400 ("accept the join request first"), remove answers 404. accept, deny and add on a ' +
+      'pending row are guarded writes: if the requester cancelled or re-filed meanwhile the decision answers 409 ' +
+      '("withdrawn — reload the queue") and logs / notifies nothing. role, ban, unban and accept notify the ' +
+      'affected user (bell types subspace-role / subspace-ban / subspace-join-accepted, preview "s/<slug> · …", ' +
+      'targetId = the subspace); a ban / unban row comes from the subspace’s mod team (actorId = the subspace ' +
+      'shareId, actorName "s/<slug> mods", actorUsername null — never the individual moderator, whom only the mod ' +
+      'log names), a role change / an accepted request from the acting moderator; join and approval requests notify ' +
+      'the moderators (subspace-join-request). ' +
+      'Moderators can’t moderate other moderators or the owner; every moderator action writes a member.<action> ' +
+      'mod-log entry (request-approval writes none).',
+    auth: { mode: 'optional', description: 'GET of the mod roster works logged out; request-approval needs the member’s own session; everything else needs a moderator session.' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET role=moderator for the public mod roster.',
+      'As a moderator, GET the full list, banned=1 for the ban list, pending=1 for join requests, approvalRequests=1 for posting-approval requests.',
+      'POST an action against a username or userId (request-approval acts on yourself).'
+    ],
+    requestExamples: [
+      { name: 'Mod roster', description: 'Who moderates s/rainbows.', method: 'GET', query: { slug: 'rainbows', role: 'moderator' } },
+      { name: 'Join requests', description: 'Who is waiting to get into s/secret.', method: 'GET', query: { slug: 'secret', pending: 1 } },
+      { name: 'Accept a request', description: 'Let a requester in.', method: 'POST', body: { slug: 'secret', username: 'newcomer', action: 'accept' } },
+      { name: 'Ask to post', description: 'A member of restricted s/rainbows asks for posting rights.', method: 'POST', body: { slug: 'rainbows', action: 'request-approval' } },
+      { name: 'Wear a flair', description: 'Pick the "prism" user-flair template for yourself.', method: 'POST', body: { slug: 'rainbows', action: 'userFlair', flairId: 'prism' } },
+      { name: 'Custom flair text', description: 'Type your own flair (allowCustomUserFlair must be on for members).', method: 'POST', body: { slug: 'rainbows', action: 'userFlair', text: 'Double rainbow hunter', emoji: '🌈' } },
+      { name: 'Dress a member', description: 'A moderator gives someone the mod-only "staff" template.', method: 'POST', body: { slug: 'rainbows', username: 'helper', action: 'userFlair', flairId: 'staff' } },
+      { name: 'Clear a flair', description: 'Take your flair off.', method: 'POST', body: { slug: 'rainbows', action: 'userFlair', flairId: null } },
+      { name: 'Ban for a week', description: 'Temporary ban with a reason (shown to the user) and a private mod note (mod log only).', method: 'POST', body: { slug: 'rainbows', username: 'spammer', action: 'ban', reason: 'Rule 2', banDays: 7, note: 'second strike — next one is permanent' } },
+      { name: 'Promote', description: 'Owner makes someone a moderator.', method: 'POST', body: { slug: 'rainbows', username: 'helper', action: 'role', role: 'moderator' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Members page.', body: { ok: true, members: [{ userId: '664f…', profile: { username: 'lopu' }, role: 'owner', approved: true, banned: false, pending: false, approvalRequested: false, userFlair: { id: 'prism', label: 'Prism', emoji: '🔮', color: '#7c5cff' }, joinedAt: '2026-09-05T00:00:00.000Z' }], nextCursor: null } },
+      { status: 200, description: 'Flair set — the row reads back with it.', body: { ok: true, member: { userId: '664f…', profile: { username: 'lopu' }, role: 'member', userFlair: { id: null, label: 'Double rainbow hunter', emoji: '🌈', color: null } } } },
+      { status: 403, description: 'Self-assign is off / a mod-only template / custom text while it is off.', body: { ok: false, error: 'Members can’t pick their own flair here — ask a moderator 🎩' } },
+      { status: 200, description: 'Accepted — the requester is a member now.', body: { ok: true, member: { userId: '664f…', profile: { username: 'newcomer' }, role: 'member', pending: false, left: false } } },
+      { status: 403, description: 'Not a moderator.', body: { ok: false, error: 'Moderators only — you need a mod hat for that 🎩' } },
+      { status: 404, description: 'accept/deny without an open request.', body: { ok: false, error: 'No pending join request from that user' } },
+      { status: 400, description: 'approve / unapprove / role member on a pending join request.', body: { ok: false, error: 'Accept the join request first — they are not a member yet' } },
+      { status: 409, description: 'The request was cancelled (or re-filed) between the queue read and the decision.', body: { ok: false, error: 'That request was withdrawn — reload the queue' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-moderate',
+    // 1.1.0: the re-projected post carries authorFlair — the author's user
+    // flair in the subspace (S3 user flairs, additive)
+    // 1.2.0: remove takes reasonId (one of the subspace's removalReasons —
+    // title — message · note become the stored reason; unknown → 400) and
+    // notifies the author (subspace-post-removed, preview = the reason,
+    // postId deep-links to the post); approve notifies nothing (S4, additive)
+    // 1.3.0 (S4 review): remove takes ruleIndex (cites one of the subspace's
+    // rules — "Rule N: title — text · note", composed and bounded server-side
+    // like a canned reason; both → 400), a remove on an already-removed post
+    // is a no-op (200 with the post as it is — no second mod-log row, no
+    // second bell), the author's bell comes from the subspace's mod team
+    // (actorId = the subspace, actorName "s/<slug> mods") rather than the
+    // individual moderator, and its preview carries the reason's HEADLINE
+    // (title / rule citation / free text; previews clamp at 140 chars)
+    // 1.4.0 (S5 reports): remove / approve settle every open report on the
+    // post (resolution removed / approved; the mod-log detail carries
+    // resolvedReports) and the re-projected post carries subspaceMod.reportCount
+    // for moderators (additive)
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
+    group: 'subspaces',
+    title: 'Moderate post',
+    endpoint: '/api/v1/subspaces/moderate',
+    summary: 'Moderator actions on a post in a subspace: remove (with a reason / canned removal reason / cited rule), approve, pin, lock, nsfw, spoiler, flair.',
+    detail:
+      'POST { id (post shareId), action, reason?, reasonId?, ruleIndex?, value?, flairId? }. Writes the server-owned root subspaceMod ' +
+      'state (never client-writable) and a post.<action> mod-log entry, then returns the re-projected post. ' +
+      'remove takes `reason` (free text, ≤300) and/or ONE of `reasonId` — one of the subspace’s removalReasons (see ' +
+      '/api/v1/subspaces/update): its title — message become the stored reason with the free text appended as a ' +
+      'note ("No spam — Posts that only advertise are removed. · third time"); an unknown reasonId answers 400 — or ' +
+      '`ruleIndex` (0-based, into the subspace’s rules): the citation "Rule N: title — text · note" is composed the same ' +
+      'way (out of range → 400; naming both → 400). The composed text is bounded server-side at 900 chars (title / ' +
+      'message / rule text / note never overflow it), so a client never guesses what got stored. ' +
+      'The author is notified (subspace-post-removed; preview "s/<slug> · <headline>" — the canned reason’s title, ' +
+      'the rule citation, or the free text; bell previews clamp at 140 chars and the full reason is on the post the row ' +
+      'opens; postId = the post so the bell opens /post/<id>). The row comes from the subspace’s MOD TEAM, not the ' +
+      'moderator: actorId = the subspace shareId, actorName "s/<slug> mods", actorUsername null — the projection hides ' +
+      'removedById from the author and the bell hides it too (the mod log still names the moderator); a moderator ' +
+      'removing their own post tells nobody. The mod-log entry carries the composed ' +
+      'reason and detail.reasonId / detail.ruleIndex, and the post’s subspaceMod.reason shows the author and moderators the reason. ' +
+      'A remove on a post that is already removed is idempotent: 200 with the post as it is — its reason, removedAt, ' +
+      'mod-log row and the author’s bell are left alone (approve first to remove it again with a different reason). ' +
+      'approve restores the post and notifies nothing. remove and approve are also the mods’ verdict on every OPEN ' +
+      'report against the post (see /api/v1/subspaces/report): they are settled with resolution removed / approved, ' +
+      'the mod-log detail carries resolvedReports when any were, and the returned post’s subspaceMod.reportCount ' +
+      '(moderators only) reads 0 again. ' +
+      'Removed posts are redacted for everyone but their author and the subspace’s moderators and vanish from ' +
+      'every feed; locked posts refuse new comments (423) from everyone but moderators; at most 5 posts are ' +
+      'pinned per subspace. The post keeps its author’s emoji reactions and up/down votes throughout.',
+    auth: { mode: 'session-or-bearer', description: 'Requires a moderator of the post’s subspace.' },
+    methods: ['POST'],
+    steps: ['POST the post id and an action.', 'Use the returned post to reconcile the card in place.'],
+    requestExamples: [
+      { name: 'Remove', description: 'Remove a post citing rule 1.', method: 'POST', body: { id: '4f6b2c1e-…', action: 'remove', reason: 'Rule 1' } },
+      { name: 'Remove with a canned reason', description: 'Pick the subspace’s "no-spam" removal reason and add a note.', method: 'POST', body: { id: '4f6b2c1e-…', action: 'remove', reasonId: 'no-spam', reason: 'third time this week' } },
+      { name: 'Remove citing a rule', description: 'Cite the subspace’s second rule (0-based ruleIndex) with a note — the server composes "Rule 2: <title> — <text> · <note>".', method: 'POST', body: { id: '4f6b2c1e-…', action: 'remove', ruleIndex: 1, reason: 'duplicate of yesterday’s thread' } },
+      { name: 'Pin', description: 'Pin to the top of hot/new.', method: 'POST', body: { id: '4f6b2c1e-…', action: 'pin' } },
+      { name: 'Flair', description: 'Set (or clear with null) the post flair.', method: 'POST', body: { id: '4f6b2c1e-…', action: 'flair', flairId: 'photo' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Applied.', body: { ok: true, post: { id: '4f6b2c1e-…', subspaceMod: { status: 'removed', removed: true, reason: 'Rule 1', pinned: false, locked: false } } } },
+      { status: 200, description: 'Removed with a canned reason — the composed text is what the author sees.', body: { ok: true, post: { id: '4f6b2c1e-…', subspaceMod: { status: 'removed', removed: true, reason: 'No spam — Posts that only advertise are removed. · third time this week' } } } },
+      { status: 200, description: 'Removed citing a rule — the citation, the rule’s text and the note make up the stored reason.', body: { ok: true, post: { id: '4f6b2c1e-…', subspaceMod: { status: 'removed', removed: true, reason: 'Rule 2: No spam — Ads go elsewhere. · duplicate of yesterday’s thread' } } } },
+      { status: 400, description: 'Unknown removal reason id.', body: { ok: false, error: 'No removal reason "ghost" here — pick one of the subspace’s reasons or write your own' } },
+      { status: 400, description: 'A rule index the subspace does not have.', body: { ok: false, error: 'No rule 4 here — the subspace has 2 rules' } },
+      { status: 404, description: 'Not a subspace post.', body: { ok: false, error: 'Post not found in a subspace' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-modlog',
+    group: 'subspaces',
+    title: 'Mod log',
+    endpoint: '/api/v1/subspaces/modlog',
+    summary: 'The subspace’s moderation log, newest first (moderators only).',
+    detail: 'GET ?slug=&cursor=&limit=. Each entry names the acting moderator, the affected post and/or user, the action key (post.remove, member.ban, settings.update, …), the reason and a small detail record.',
+    auth: { mode: 'session-or-bearer', description: 'Requires a moderator session.' },
+    methods: ['GET'],
+    steps: ['GET with the slug; page with cursor.'],
+    requestExamples: [{ name: 'Latest actions', description: 'Newest 20 entries.', method: 'GET', query: { slug: 'rainbows' } }],
+    responseExamples: [
+      { status: 200, description: 'Entries.', body: { ok: true, entries: [{ id: '…', action: 'post.remove', actor: { username: 'lopu' }, postId: '4f6b2c1e-…', reason: 'Rule 1', createdAt: '2026-09-05T00:00:00.000Z' }], nextCursor: null } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-report',
+    // 1.0.1 (S5 review): a post the moderators already removed answers 409
+    // (no row, no bell — the mods can't act on it again); a repeat after the
+    // post MOVED to another subspace re-files the row there (targetId follows
+    // the post) and rings the new subspace's mods; deleting a reported
+    // comment deletes the rows that flagged it — compatible corrections
+    featureVersion: '1.0.1',
+    contractVersion: '1.0.1',
+    group: 'subspaces',
+    title: 'Report a post to the moderators',
+    endpoint: '/api/v1/subspaces/report',
+    summary: 'A viewer flags a subspace post (or a comment under one) to the subspace’s moderators with a reason and an optional note.',
+    detail:
+      'POST { id (a post or comment shareId), reason (≤120 — a rule title, a removal-reason id, or free text), note? (≤500) }. ' +
+      'Any logged-in viewer who can SEE the target may report it (an invisible or unknown id answers 404, never ' +
+      'disclosing existence — a private subspace’s posts and comments are invisible to strangers, pending ' +
+      'requesters and banned members alike); a user banned in a public subspace answers 403; a post outside any ' +
+      'subspace 400; a post the moderators already removed 409 (no row, no bell — there is nothing left for the ' +
+      'mods to do). A comment resolves to its ROOT post: the report hangs off the post (commentId remembers which ' +
+      'comment). One report per (post, reporter) — a repeat by the same reporter updates the reason / note on ' +
+      'their row (and re-opens it when the mods had settled it) and answers { updated: true }; when the post moved ' +
+      'to another subspace since, the repeat re-files the row THERE (its subspaceId follows the post) and counts as ' +
+      'new for that subspace’s mods. Every new or re-opened report notifies the subspace’s active owner + moderators ' +
+      '(subspace-report; preview "s/<slug> · <reason>", postId = the post so the bell opens /post/<id>; deduped ' +
+      'against each moderator’s unread bell, so one reporter cannot ring the mods twice about one post). Reports ' +
+      'are subspace-report things (targetId = the subspace, ownerId = the reporter, control-plane storage; the ' +
+      'reporter alone can read their own row through GET /api/v1/things?id=) that the moderators’ Reports queue ' +
+      '(GET /api/v1/subspaces/reports) groups by post; moderate remove / approve settles them (resolution removed ' +
+      '/ approved), POST /api/v1/subspaces/reports dismisses them; deleting the post deletes them, deleting a ' +
+      'reported comment deletes the rows that flagged it. Rate-limited per user (subspaces.report, 30 / min).',
+    auth: { mode: 'session-or-bearer', description: 'Requires a logged-in viewer who can see the post; banned users are refused.' },
+    methods: ['POST'],
+    steps: ['POST the post (or comment) id with a reason.', 'A 200 with updated: true means you had already reported it — your reason was refreshed.', 'A 409 means the moderators already removed it — nothing more to report.'],
+    requestExamples: [
+      { name: 'Report a post', description: 'Cite a rule.', method: 'POST', body: { id: '4f6b2c1e-…', reason: 'Rule 2: No spam', note: 'Third ad from this account this week' } },
+      { name: 'Report a comment', description: 'The report lands on the root post; commentId names the comment.', method: 'POST', body: { id: '9a1c-comment-…', reason: 'Harassment' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Filed.', body: { ok: true, updated: false, report: { id: 'r3p0…', subspaceId: 'c0ffee12-…', postId: '4f6b2c1e-…', commentId: null, reason: 'Rule 2: No spam', note: 'Third ad from this account this week', status: 'open', resolution: null } } },
+      { status: 200, description: 'Reported again — the existing row was refreshed.', body: { ok: true, updated: true, report: { id: 'r3p0…', postId: '4f6b2c1e-…', reason: 'Spam, again', status: 'open' } } },
+      { status: 400, description: 'Not a subspace post.', body: { ok: false, error: 'Only posts in a subspace can be reported to its moderators 🚩' } },
+      { status: 403, description: 'Banned in the subspace.', body: { ok: false, error: 'You are banned from s/rainbows 🚫' } },
+      { status: 404, description: 'Unknown or invisible.', body: { ok: false, error: 'Post not found' } },
+      { status: 409, description: 'The moderators already removed it.', body: { ok: false, error: 'That post was already removed by the moderators 🧹' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-reports',
+    // 1.0.1 (S5 review): a dismiss without id | slug resolves the queue from
+    // the open rows' own targetId first (a post that moved after it was
+    // reported keeps its rows dismissable in the old subspace), the post's
+    // current subspace only when open rows sit there — a compatible correction
+    featureVersion: '1.0.1',
+    contractVersion: '1.0.1',
+    group: 'subspaces',
+    title: 'Reports queue',
+    endpoint: '/api/v1/subspaces/reports',
+    summary: 'Moderators read the subspace’s reports grouped by post and dismiss the ones that need no action.',
+    detail:
+      'GET ?slug=|id=&status=open|resolved&cursor=&limit= (moderators only; others 403). Answers { reports: [{ postId, ' +
+      'post (the PublicPost projection as the moderator sees it — removed content included, subspaceMod.reportCount ' +
+      'set; null when the post is gone or left the subspace), reportCount, reasons: [{ reason, count }] most-cited ' +
+      'first, reporters: [{ userId, profile, reason, note, commentId, createdAt }] newest first (≤20; reportCount is ' +
+      'the exact total), latestAt, status, resolution }], nextCursor, status, openReportCount }. Groups are ordered ' +
+      'by latest activity and page by offset over a bounded newest-first window of 2,000 report rows (the ' +
+      'ranked-feed pattern — deterministic for a fixed dataset). ' +
+      'POST { postId, action: "dismiss", id|slug? } settles every OPEN report on the post with resolution dismissed ' +
+      '(the post stays), writes a report.dismiss mod-log entry (detail.count) and answers { dismissed, openReportCount }; ' +
+      'nothing open → 404. Without id | slug the queue is the one the OPEN rows sit in (their own targetId — a post that ' +
+      'moved to another subspace after it was reported leaves its rows dismissable in the old one, listed there with ' +
+      'post null); the post’s current subspace decides when open rows sit there (or none exist anywhere, so a ' +
+      'non-moderator still meets the 403 wall); an explicit id | slug in the body wins over both. moderate remove / ' +
+      'approve settle open reports implicitly.',
+    auth: { mode: 'session-or-bearer', description: 'Requires a moderator of the subspace.' },
+    methods: ['GET', 'POST'],
+    steps: ['GET the open queue (status defaults to open).', 'Remove / approve the post through /moderate, or POST a dismiss when it may stay.', 'Feed nextCursor back until it is null.'],
+    requestExamples: [
+      { name: 'Open queue', description: 'What is waiting in s/rainbows.', method: 'GET', query: { slug: 'rainbows', status: 'open' } },
+      { name: 'Dismiss', description: 'The mods looked; the post stays.', method: 'POST', body: { postId: '4f6b2c1e-…', action: 'dismiss' } }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'The open queue.',
+        body: {
+          ok: true,
+          status: 'open',
+          openReportCount: 3,
+          reports: [
+            {
+              postId: '4f6b2c1e-…',
+              post: { id: '4f6b2c1e-…', title: 'Buy my thing', subspaceMod: { status: 'approved', removed: false, reportCount: 3, viewerCanModerate: true } },
+              reportCount: 3,
+              reasons: [{ reason: 'Rule 2: No spam', count: 2 }, { reason: 'Other', count: 1 }],
+              reporters: [{ userId: '664f…', profile: { username: 'alice' }, reason: 'Rule 2: No spam', note: null, commentId: null, createdAt: '2026-09-05T10:00:00.000Z' }],
+              latestAt: '2026-09-05T10:00:00.000Z',
+              status: 'open',
+              resolution: null
+            }
+          ],
+          nextCursor: null
+        }
+      },
+      { status: 200, description: 'Dismissed.', body: { ok: true, postId: '4f6b2c1e-…', dismissed: 3, openReportCount: 0 } },
+      { status: 403, description: 'Not a moderator.', body: { ok: false, error: 'Moderators only — you need a mod hat for that 🎩' } },
+      { status: 404, description: 'Nothing open on that post.', body: { ok: false, error: 'No open reports on that post' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-feed',
+    // 1.1.0: posts (and their comments) carry authorFlair; the subspace block
+    // carries the user-flair settings — additive
+    // 1.2.0: the subspace block carries removalReasons (S4, additive)
+    // 1.3.0: moderators' posts carry subspaceMod.reportCount — open reports
+    // against the post (S5, additive)
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
+    group: 'subspaces',
+    title: 'Subspace feed',
+    endpoint: '/api/v1/subspaces/feed',
+    summary: 'The posts of one subspace with hot/new/top/rising/controversial sorts.',
+    detail:
+      'GET ?slug=&sort=hot|new|top|rising|controversial&range=hour|day|week|month|year|all&cursor=&limit=. ' +
+      '`new` pages by (createdAt, id) cursor with pinned posts leading the first page; the ranked sorts score a ' +
+      'bounded newest-first window with the relational up/down tallies (Reddit’s hot/controversy formulas, ' +
+      'HN-style rising) and page by offset — deterministic for a fixed dataset + timestamp. Removed posts are ' +
+      'excluded (moderators may pass includeRemoved=1 to review them); private subspaces answer 403 to ' +
+      'non-members. Posts project exactly like the home feed plus title, flair, subspace, subspaceMod, votes and ' +
+      'authorFlair (the author’s user flair here — one batched member-row lookup per page, comments included); ' +
+      'for moderators subspaceMod.reportCount carries the open reports against each post (one $group per page).',
+    auth: { mode: 'optional', description: 'Works logged out for public/restricted subspaces; votes/viewerVote need a session.' },
+    methods: ['GET'],
+    steps: ['GET with the slug and a sort.', 'Feed nextCursor back until it is null.', 'Handle 403 for private subspaces you have not joined.'],
+    requestExamples: [
+      { name: 'Hot', description: 'Front page of s/rainbows.', method: 'GET', query: { slug: 'rainbows', sort: 'hot' } },
+      { name: 'Top this week', description: 'Highest-scoring posts of the week.', method: 'GET', query: { slug: 'rainbows', sort: 'top', range: 'week' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'A page.', body: { ok: true, sort: 'hot', subspace: { slug: 'rainbows' }, posts: [{ id: '4f6b2c1e-…', title: 'Double rainbow', votes: { up: 12, down: 1, score: 11, viewerVote: 'up' }, subspaceMod: { pinned: true } }], nextCursor: '20' } },
+      { status: 403, description: 'Private.', body: { ok: false, error: 's/secret is private — members only 🔒' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-transfer',
+    // 1.0.1: every write inside the transfer transaction is guarded by the
+    // ownership/membership the gate saw — a concurrent transfer commits at most
+    // once, the loser answers 409 (compatible correction)
+    // 1.1.0: newOwner carries userFlair and the returned subspace the
+    // user-flair settings + viewer.userFlair (S3 user flairs, additive)
+    // 1.2.0: the returned subspace carries removalReasons (S4, additive)
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
+    group: 'subspaces',
+    title: 'Transfer subspace ownership',
+    endpoint: '/api/v1/subspaces/transfer',
+    summary: 'The owner hands the subspace to an active member; the previous owner becomes a moderator.',
+    detail:
+      'POST { id|slug, userId|username } as the owner (the member row AND the subspace’s ownerId must both name ' +
+      'the caller). The target must be an ACTIVE member (joined, not banned, not left; banned → 403, otherwise ' +
+      'not a member → 404) and may not already run the per-user maximum of subspaces. The target becomes owner ' +
+      '(approved), the previous owner steps down to moderator — and may now leave — and the subspace thing ' +
+      'changes hands (its accounted bytes move ledgers in the same transaction). Every write in that transaction ' +
+      'is conditional on the state the gate saw, so two transfers racing from the same owner commit at most once: ' +
+      'the loser answers 409 and changes nothing. Writes an owner.transfer mod-log entry and notifies the new ' +
+      'owner (subspace-role, preview "s/<slug> · you are now the owner 👑"). Returns the subspace as the caller ' +
+      'now sees it plus the new owner’s member row.',
+    auth: { mode: 'session-or-bearer', description: 'Requires the subspace owner.' },
+    methods: ['POST'],
+    steps: [
+      'POST the subspace and the new owner (username or userId).',
+      'Non-owners receive 403; a non-member target 404; yourself 400; a transfer that lost a race with another transfer 409 (reload and retry if still intended).'
+    ],
+    requestExamples: [{ name: 'Hand over', description: 'Make @helper the owner of s/rainbows.', method: 'POST', body: { slug: 'rainbows', username: 'helper' } }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Transferred.',
+        body: { ok: true, subspace: { slug: 'rainbows', ownerId: '664f…helper', viewer: { role: 'moderator', member: true, canModerate: true } }, newOwner: { userId: '664f…helper', role: 'owner', approved: true } }
+      },
+      { status: 403, description: 'Not the owner.', body: { ok: false, error: 'Only the owner can transfer ownership 👑' } },
+      { status: 404, description: 'Target is not an active member.', body: { ok: false, error: 'The new owner has to be an active member of s/rainbows first' } },
+      { status: 409, description: 'Lost a race with another transfer.', body: { ok: false, error: 's/rainbows changed hands while you were transferring it — reload and try again' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-delete',
+    // 1.1.0: private-subspace posts and moderator-removed posts leave as
+    // author-only posts (privatePosts in the response), rich ['post','comment']
+    // things are released too, the slug is held for the previous owner
+    // (subspace-tombstone), and a subspace with posts still pointing at it after
+    // the release passes answers 409 instead of dropping its doc (additive)
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
+    group: 'subspaces',
+    title: 'Delete subspace',
+    endpoint: '/api/v1/subspaces/delete',
+    summary: 'The owner deletes the subspace after retyping its slug; posts survive — public ones as plain posts, private/removed ones as author-only posts.',
+    detail:
+      'POST { id|slug, confirmSlug } as the owner; confirmSlug must equal the slug (a leading "s/" and case are ' +
+      'forgiven) or the call answers 400. Cascade: every post-shaped thing of the subspace (plain posts and ' +
+      'rich ["post","comment"] things alike) is released in bounded accounted batches — crystal.subspaceId, ' +
+      'crystal.flairId, the root subspaceMod state and the subspacePrivate fence are stripped, titles stay. ' +
+      'A post written behind a PRIVATE subspace’s wall, or one the moderators REMOVED, is never made public by ' +
+      'the owner’s click: it leaves as an author-only post (acl narrowed to its author, who can re-share it ' +
+      'deliberately) and is counted in privatePosts. Then the subspace thing itself goes (accounted delete) ' +
+      'together with a subspace-tombstone that keeps holding the slug — its previous owner may re-found it at ' +
+      'once, anyone else only after the hold — then every subspace-member, subspace-modlog and subspace-report ' +
+      'row. Former moderators are notified (subspace-role, "s/<slug> · was deleted by its owner"); GET ' +
+      '/api/v1/subspaces/get answers 404 afterwards. The call is safe to retry: the release is idempotent, and ' +
+      'while any post still points at the subspace (more posts than one call releases) it answers 409 with the ' +
+      'doc intact so nothing is ever left fenced behind a missing subspace.',
+    auth: { mode: 'session-or-bearer', description: 'Requires the subspace owner.' },
+    methods: ['POST'],
+    steps: [
+      'POST the subspace with confirmSlug equal to its slug.',
+      'Moderators receive 403; a mismatching confirmSlug 400; a 409 means posts remain (or ownership just moved) — run it again.'
+    ],
+    requestExamples: [{ name: 'Delete', description: 'Delete s/rainbows for good.', method: 'POST', body: { slug: 'rainbows', confirmSlug: 'rainbows' } }],
+    responseExamples: [
+      { status: 200, description: 'Deleted — 42 posts left the subspace, 3 of them (removed by mods) now author-only.', body: { ok: true, releasedPosts: 42, privatePosts: 3, removedMembers: 128 } },
+      { status: 400, description: 'Confirmation mismatch.', body: { ok: false, error: 'Type the slug to confirm — s/rainbows' } },
+      { status: 403, description: 'Not the owner.', body: { ok: false, error: 'Only the owner can delete a subspace 👑' } },
+      { status: 409, description: 'Posts still pointing at the subspace after the release passes — retry.', body: { ok: false, error: 's/rainbows still has 1,204 posts to release — run delete again to continue (it is safe to retry)' } }
+    ]
+  }),
   endpoint({
     id: 'things-vote',
     group: 'things',
@@ -9352,6 +10116,36 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           pollVotes: { counts: [3, 5, 1], totalVotes: 9, viewerVote: 1 }
         }
       }
+    ]
+  }),
+  endpoint({
+    id: 'things-updown',
+    group: 'things',
+    title: 'Upvote / downvote',
+    endpoint: '/api/v1/things/updown',
+    summary: 'Casts, flips, or clears the current user’s up/down vote on a visible post or comment.',
+    detail:
+      'Reddit-style scoring as a SEPARATE focused reaction kind: exactly one of "up" | "down" per (user, ' +
+      'target). The same direction again clears the vote, the other direction flips it in place, and ' +
+      'direction null clears. Votes are standalone things (thingtime ["updown"], crystal.direction, targetId = ' +
+      'the post or comment, acl ["tt:inherit"]) deduped through a server-written key in the root uniqueKeys ' +
+      'namespace, so /api/v1/things refuses the kind. Tallies ride every post and comment projection as ' +
+      '`votes { up, down, score, viewerVote }`. The native multi-emoji reactions (POST /api/v1/things/react) are ' +
+      'a different kind and are untouched by this endpoint. Banned members of a subspace can’t vote on its posts.',
+    auth: { mode: 'session-or-bearer', description: 'Requires an auth cookie or Authorization: Bearer token (PAT scope things.updown).' },
+    methods: ['POST'],
+    steps: [
+      'POST the post/comment id and direction "up" or "down" (null to clear).',
+      'Use the returned votes to reconcile the card optimistically.',
+      'Handle 401 unauthenticated, 404 for missing or not-visible targets, 403 when banned in the subspace.'
+    ],
+    requestExamples: [
+      { name: 'Upvote', description: 'Vote a post up.', method: 'POST', body: { id: '4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', direction: 'up' } },
+      { name: 'Clear', description: 'Remove your vote.', method: 'POST', body: { id: '4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', direction: null } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Fresh tally.', body: { ok: true, direction: 'up', votes: { up: 13, down: 1, score: 12, viewerVote: 'up' } } },
+      { status: 400, description: 'Bad direction.', body: { ok: false, error: 'direction must be "up", "down", or null to clear your vote' } }
     ]
   }),
   endpoint({
@@ -9486,7 +10280,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-user',
-    featureVersion: '1.1.0',
+    // 1.3.0 / contract 1.2.0: post + comment projections carry authorFlair —
+    // the author's USER flair in the post's subspace (additive)
+    // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
+    // subspace post, for that subspace's moderators only (S5, additive)
+    featureVersion: '1.4.0',
+    contractVersion: '1.3.0',
     group: 'things',
     title: 'User posts',
     endpoint: '/api/v1/things/user',
@@ -10017,21 +10816,31 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'notifications-list',
-    // 1.1.0 added the history filters, 1.2.0 the stable cursor, from/to window
-    // and viewer object — this endpoint now ships both, so it publishes 1.2.0.
-    contractVersion: '1.2.0',
-    featureVersion: '1.2.0',
+    // 1.1.0: the subspace-* types (join-request, join-accepted, post-removed,
+    // report, role, ban) joined the type enum — additive
+    // 1.2.0: (develop) history filters, stable cursor, from/to window, viewer
+    // object; (subspaces) subspace-post-removed and subspace-ban rows carry the
+    // subspace's MOD TEAM as their actor (actorId = the subspace shareId,
+    // actorName "s/<slug> mods", actorUsername / actorAvatarUrl null)
+    // 1.3.0: both lines merged — this endpoint ships history filters AND the
+    // subspace family together; additive
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
     group: 'notifications',
     title: 'List notifications',
     endpoint: '/api/v1/notifications',
     summary: 'Your notifications, newest first, filtered by your notification prefs — searchable by category, type, unread, text and date — plus the unread count.',
     detail:
       'Notifications are server-minted things (new followers, friend requests/accepts, comments, ' +
-      'replies, reactions, shares, @mentions, capped posts-from-followed/friends fan-out) plus SYSTEM ' +
+      'replies, reactions, shares, @mentions, capped posts-from-followed/friends fan-out, and subspace ' +
+      'moderation: subspace-join-request, subspace-join-accepted, subspace-post-removed, ' +
+      'subspace-report, subspace-role, subspace-ban) plus SYSTEM ' +
       'notes from Lopu (category system — today action-run: an action you ran finished or failed; ' +
       'actorId "thingtime", the headline in title, an in-app href, outcome ok|error). Every row ' +
-      'carries its category: social (friend-request, friend-accepted, new-follower, groups), ' +
-      'engagement (comment, reply, reaction, share, mention), feed (post-from-followed, ' +
+      'carries its category: social (friend-request, friend-accepted, new-follower, groups, ' +
+      'subspace-join-request, subspace-join-accepted, subspace-role, subspace-ban), ' +
+      'engagement (comment, reply, reaction, share, mention, subspace-post-removed, subspace-report), ' +
+      'feed (post-from-followed, ' +
       'post-from-friend), system (action-run). The list is ALWAYS filtered by your current ' +
       'notification settings, so disabling a type hides even already-written notifications of that ' +
       'type. Optional filters back the /notifications history page: category=<one>, ' +
@@ -10044,7 +10853,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'are never skipped; legacy before=<nextBefore> remains supported. Optional from (inclusive) ' +
       'and to (exclusive) ISO timestamps bound historical pages and exports, alongside since/until. ' +
       'The viewer object identifies the authenticated account by username so native companions can ' +
-      'visibly confirm which account is connected. A recipient keeps their newest 10,000 notifications.',
+      'visibly confirm which account is connected. A recipient keeps their newest 10,000 notifications. ' +
+      'Subspace-scoped rows (role, ban, join…) carry the subspace shareId in targetId and lead their preview ' +
+      'with "s/<slug> · …" so clients can link to /s/<slug>; post-scoped ones (post-removed, report) set postId ' +
+      'like every other post notification. The punitive pair (subspace-post-removed, subspace-ban) is sent by the ' +
+      'subspace’s mod team: actorId is the SUBSPACE shareId, actorName "s/<slug> mods", actorUsername and ' +
+      'actorAvatarUrl null — the moderator who acted is named only in the mod log; every other subspace row names ' +
+      'the acting moderator.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -10054,7 +10869,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'GET ?limit=&cursor=&from=&to= — newest first. Use cursor for stable 10-at-a-time history; from is inclusive and to is exclusive.',
       'Show unreadCount on the bell; refetch on window focus.',
       'History page: add category / types / unread / q / since / until and withTotal=1; keep the filter set in the URL.',
-      'Click-through: href (system notes) → that path, else postId → /post/<id>, else actor → /profile/<username>.',
+      'Click-through: href (system notes) → that path, else postId → /post/<id>, else a subspace-* row → /s/<slug> (slug from the preview), else actor → /profile/<username>.',
       'Handle 401 unauthenticated and 429 rate-limited.'
     ],
     requestExamples: [
@@ -10226,8 +11041,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'notifications-settings',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    // 1.1.0: six subspace-* switches joined the matrix — additive; 1.2.0:
+    // merged with develop's 1.1.0 (action-run switch) — additive
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'notifications',
     title: 'Notification settings',
     endpoint: '/api/v1/notifications/settings',
@@ -10236,9 +11053,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Two channels: push (the bell/in-app channel) and email (SES-backed notification emails), each ' +
       'with a master switch and per-type switches. Types: friend-request, friend-accepted, ' +
       'new-follower, post-from-followed, post-from-friend, comment, reply, reaction, share, mention, groups ' +
-      '(reserved), action-run (system notes from Lopu about actions you run), plus the email-only ' +
-      'weekly-summary digest. Defaults ON, except email for the high-volume types (post-from-followed / ' +
-      'post-from-friend / action-run), which are opt-in. GET always ' +
+      '(reserved), action-run (system notes from Lopu about actions you run), the subspace family ' +
+      'subspace-join-request, subspace-join-accepted, subspace-post-removed, subspace-report, subspace-role, ' +
+      'subspace-ban, plus the email-only weekly-summary digest. Defaults ON, except email for the high-volume ' +
+      'types (post-from-followed / post-from-friend / action-run and the mod-queue pair subspace-join-request / ' +
+      'subspace-report), which are opt-in. GET always ' +
       'returns the full matrix. POST merges only the keys you send — the new channel shape ' +
       '{ prefs: { push?, email?, masters? } } or the original flat { prefs: { <type>: boolean } } ' +
       '(which patches the push channel); unknown keys 400. A disabled push type is hidden from your ' +

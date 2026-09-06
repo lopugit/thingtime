@@ -19,6 +19,7 @@ const MUTED = 'var(--tt-muted, #9a9aa6)';
 const BORDER = '1px solid var(--tt-border, #ececef)';
 const POLL_MS = 90_000;
 
+
 export const NotificationsBell = () => {
   const user = useCurrentUser();
   const api = useApi();

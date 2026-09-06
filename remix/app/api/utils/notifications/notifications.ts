@@ -168,6 +168,35 @@ export const emitNotification = async (input: EmitNotificationInput): Promise<vo
   }
 };
 
+type BulkRecipient = { recipientId: string; type: NotificationType };
+export type EmitNotificationsBulkOptions = {
+  // skip every recipient who already holds an UNREAD copy of this exact
+  // notification (same type, actor, subject thing and preview). For request-
+  // shaped emits (a join request filed, cancelled and filed again) each
+  // moderator's bell rings once until they have looked — a re-request can't
+  // become a fan-out amplifier. One query on the partial unread index.
+  dedupeUnread?: boolean;
+};
+
+const withoutUnreadDuplicates = async (recipients: BulkRecipient[], base: Omit<EmitNotificationInput, 'recipientId' | 'type'>): Promise<BulkRecipient[]> => {
+  const things = await getThingsCollection();
+  const preview = clampPreview(base.preview);
+  const held = (await things
+    .find({
+      thingtime: 'notification',
+      ownerId: { $in: recipients.map(({ recipientId }) => recipientId) },
+      readAt: null,
+      targetId: base.targetId || null,
+      'crystal.actorId': base.actor.id,
+      'crystal.type': { $in: [...new Set(recipients.map(({ type }) => type))] },
+      ...(preview ? { 'crystal.preview': preview } : {})
+    } as any)
+    .project({ ownerId: 1, 'crystal.type': 1 })
+    .toArray()) as any[];
+  if (!held.length) return recipients;
+  const heldKeys = new Set(held.map((doc) => `${String(doc.ownerId)} ${String(doc.crystal?.type)}`));
+  return recipients.filter(({ recipientId, type }) => !heldKeys.has(`${recipientId} ${type}`));
+};
 // System notes: the platform speaking through Lopu — an action you ran
 // finished, and whatever comes next. Same protected doc, same prefs gate
 // (the recipient's 'action-run' switch), same bounded tail; the synthetic
@@ -202,24 +231,24 @@ export const emitSystemNotification = (input: EmitSystemNotificationInput): Prom
     href: input.href ?? null,
     outcome: input.outcome ?? null
   });
-
 // Capped fan-out (posts from followed/friends): one insertMany, pref-agnostic
 // at write (reads filter). recipients map lets followers and friends of the
 // same author get differently-typed notifications in one call. Never throws.
 export const emitNotificationsBulk = async (
-  recipients: Array<{ recipientId: string; type: NotificationType }>,
-  base: Omit<EmitNotificationInput, 'recipientId' | 'type'>
+  recipients: BulkRecipient[],
+  base: Omit<EmitNotificationInput, 'recipientId' | 'type'>,
+  options: EmitNotificationsBulkOptions = {}
 ): Promise<void> => {
   try {
     const seen = new Set<string>([base.actor.id]);
     const now = new Date();
-    const docs = recipients
-      .filter(({ recipientId }) => {
-        if (!recipientId || seen.has(recipientId)) return false;
-        seen.add(recipientId);
-        return true;
-      })
-      .map(({ recipientId, type }) => notificationDoc({ ...base, recipientId, type }, now));
+    let wanted = recipients.filter(({ recipientId }) => {
+      if (!recipientId || seen.has(recipientId)) return false;
+      seen.add(recipientId);
+      return true;
+    });
+    if (options.dedupeUnread && wanted.length) wanted = await withoutUnreadDuplicates(wanted, base);
+    const docs = wanted.map(({ recipientId, type }) => notificationDoc({ ...base, recipientId, type }, now));
     if (!docs.length) return;
     const things = await getThingsCollection();
     await things.insertMany(docs as any, { ordered: false });

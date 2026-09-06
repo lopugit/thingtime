@@ -37,6 +37,7 @@ import { extractInlineHashtags } from './hashtags';
 import { MentionAutocomplete } from './MentionAutocomplete';
 import { CIRCLE_META, MARKETPLACE_CATEGORY_META, POST_TYPE_META } from './feedTypes';
 import type { MarketplaceCategory, PostType, PostVisibility, PublicPost } from './feedTypes';
+import { composerContextOf, type PublicSubspace, type SubspaceComposerContext } from '~/components/Subspaces/subspaceTypes';
 
 // "What's on your mind?" composer. Collapsed it's a one-line prompt beside
 // the viewer's avatar; expanded it grows type TOGGLES (Text is the always-on
@@ -150,6 +151,11 @@ export type PostComposerProps = {
   // (type tabs, photos, listing, thing, tags, circle all editable — the same
   // suite as a new post) and saves through api.v1.things.update
   editPost?: PublicPost;
+  // post INTO a subspace: the /s/<slug> page passes its context (id, flairs,
+  // rights) so the composer locks the destination, shows the title + flair
+  // row, and stamps crystal.subspaceId. Without it the feed composer offers
+  // the viewer's joined subspaces as an optional destination.
+  subspace?: SubspaceComposerContext | null;
 };
 
 const Eyebrow = ({ children }: { children: React.ReactNode }) => (
@@ -159,7 +165,7 @@ const Eyebrow = ({ children }: { children: React.ReactNode }) => (
 );
 
 export const PostComposer = (props: PostComposerProps) => {
-  const { onPosted, parentId, onClose, editPost } = props;
+  const { onPosted, parentId, onClose, editPost, subspace } = props;
 
   const isComment = !!parentId;
   const isEdit = !!editPost;
@@ -202,6 +208,13 @@ export const PostComposer = (props: PostComposerProps) => {
   const [listingLocation, setListingLocation] = React.useState(editPost?.listing?.location || '');
   const [tagsInput, setTagsInput] = React.useState(editPost?.tags?.join(', ') || '');
   const [visibility, setVisibility] = React.useState<PostVisibility>(editPost?.visibility || 'public');
+  // subspace vocabulary: headline + destination + flair. Locked to the page's
+  // subspace when one is passed; otherwise the feed composer offers the
+  // viewer's joined subspaces (lazy-loaded on first expand).
+  const [postTitle, setPostTitle] = React.useState(editPost?.title || '');
+  const [subspaceId, setSubspaceId] = React.useState<string | null>(editPost?.subspace?.id || subspace?.id || null);
+  const [flairId, setFlairId] = React.useState<string | null>(editPost?.flair?.id || null);
+  const [mySubspaces, setMySubspaces] = React.useState<SubspaceComposerContext[] | null>(null);
 	// gallery layout (crystal.mediaLayout): auto = masonry default, stored null
 	const [layoutMode, setLayoutMode] = React.useState<ComposerLayoutMode>(
 		editPost?.mediaLayout?.mode === 'rows' ? 'rows' : editPost?.mediaLayout?.mode === 'grid' ? 'grid' : 'auto'
@@ -417,6 +430,30 @@ export const PostComposer = (props: PostComposerProps) => {
 				: listingValid;
 	const valid = contentValid && !attachmentSnapshot.blocking;
 
+  // the viewer's joined subspaces for the destination picker — loaded once,
+  // only for a top-level composer with no page-provided subspace
+  React.useEffect(() => {
+    if (!expanded || isComment || subspace || mySubspaces || !user) return;
+    let cancelled = false;
+    api.v1.subspaces
+      .list({ mine: true, limit: 50 })
+      .then((resp: any) => {
+        if (cancelled) return;
+        setMySubspaces(((resp?.subspaces || []) as PublicSubspace[]).filter((entry) => entry.viewer?.canPost).map(composerContextOf));
+      })
+      .catch(() => {
+        if (!cancelled) setMySubspaces([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // api.v1.subspaces.list is a stable useCallback
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded, isComment, subspace, mySubspaces, user?.id]);
+  const activeSubspace: SubspaceComposerContext | null =
+    subspace || (subspaceId ? mySubspaces?.find((entry) => entry.id === subspaceId) || null : null);
+  const flairOptions = (activeSubspace?.flairs || []).filter((flair) => !flair.modOnly || activeSubspace?.canModerate);
+
   const reset = () => {
 		pendingPostSubmissionRef.current = null;
 		setSubmissionUncertain(false);
@@ -436,6 +473,9 @@ export const PostComposer = (props: PostComposerProps) => {
     setListingLocation('');
     setTagsInput('');
     setVisibility('public');
+    setPostTitle('');
+    setFlairId(null);
+    if (!subspace) setSubspaceId(null);
 		setAttachmentSnapshot(EMPTY_ATTACHMENT_SNAPSHOT);
   };
 
@@ -540,6 +580,15 @@ export const PostComposer = (props: PostComposerProps) => {
 		if (currentPostShareId) currentPayload.shareId = currentPostShareId;
       // comments inherit the thread root's audience server-side
 		if (!isComment) currentPayload.visibility = visibility;
+		// subspace vocabulary rides the crystal: a headline, the destination
+		// subspace, and its flair (the server re-validates posting rights)
+		if (!isComment) {
+			if (postTitle.trim()) currentPayload.title = postTitle.trim();
+			if (subspaceId) {
+				currentPayload.subspaceId = subspaceId;
+				if (flairId) currentPayload.flairId = flairId;
+			}
+		}
 		if (currentAttachmentIds.length > 0) currentPayload.attachmentIds = currentAttachmentIds;
 		if (showPhotos) currentPayload.images = canonicalImages;
 		if (apiType === 'thingtime') currentPayload.thing = canonicalThing;
@@ -630,7 +679,12 @@ export const PostComposer = (props: PostComposerProps) => {
 						images: canonicalImages,
 						listing: canonicalListing,
 						thing: canonicalThing,
-						mediaLayout: canonicalMediaLayout
+						mediaLayout: canonicalMediaLayout,
+						// empty/null clear — the sanitizer drops the keys, so a post can
+						// lose its title or leave its subspace from here
+						title: postTitle.trim(),
+						subspaceId: subspaceId || null,
+						flairId: subspaceId ? flairId || null : null
 					},
 					tags: parsedTags,
 					visibility,
@@ -857,6 +911,22 @@ export const PostComposer = (props: PostComposerProps) => {
         />
       </Flex>
 
+      {!isComment && (subspaceId || subspace || postTitle) && (
+        <Input
+          size="md"
+          variant="unstyled"
+          fontFamily="heading"
+          fontSize="lg"
+          fontWeight={700}
+          color={INK}
+          placeholder={activeSubspace ? `Title for s/${activeSubspace.slug}` : 'Title (optional)'}
+          value={postTitle}
+          maxLength={300}
+          onChange={(event) => setPostTitle(event.target.value)}
+          aria-label="Post title"
+          data-testid="composer-title"
+        />
+      )}
       <Flex columnGap={3}>
         <UserAvatarCircle size="36px" fontSize="sm" />
         <Box flex="1" minWidth={0} ref={editorBoxRef}>
@@ -1182,8 +1252,73 @@ export const PostComposer = (props: PostComposerProps) => {
         )}
       </Flex>
 
-      {/* footer: circle + post (comments inherit the thread's circle) */}
-      <Flex alignItems="center" columnGap={2} borderTop={BORDER} paddingTop={3}>
+      {/* footer: subspace destination + flair + circle + post (comments
+      inherit the thread's circle) */}
+      <Flex alignItems="center" columnGap={2} rowGap={2} flexWrap="wrap" borderTop={BORDER} paddingTop={3}>
+        {!isComment && subspace && (
+          <Flex
+            alignItems="center"
+            columnGap={1}
+            fontSize="xs"
+            fontWeight={700}
+            color={INK}
+            border={BORDER}
+            borderRadius="999px"
+            paddingX={2}
+            height="32px"
+            title={`Posting in s/${subspace.slug}`}
+            data-testid="composer-subspace"
+          >
+            <Text as="span">{subspace.icon || '🪐'}</Text>
+            <Text as="span" fontFamily="mono" fontWeight={600}>
+              s/{subspace.slug}
+            </Text>
+          </Flex>
+        )}
+        {!isComment && !subspace && user && (
+          <Select
+            size="sm"
+            width="170px"
+            borderRadius={RADIUS_SM}
+            value={subspaceId || ''}
+            onChange={(event) => {
+              setSubspaceId(event.target.value || null);
+              setFlairId(null);
+            }}
+            aria-label="Post into a subspace"
+            data-testid="composer-subspace-select"
+          >
+            <option value="">🪐 No subspace</option>
+            {subspaceId && mySubspaces && !mySubspaces.some((entry) => entry.id === subspaceId) && editPost?.subspace && (
+              <option value={subspaceId}>s/{editPost.subspace.slug}</option>
+            )}
+            {(mySubspaces || []).map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.icon || '🪐'} s/{entry.slug}
+              </option>
+            ))}
+            {mySubspaces === null && <option disabled>Loading…</option>}
+          </Select>
+        )}
+        {!isComment && activeSubspace && flairOptions.length > 0 && (
+          <Select
+            size="sm"
+            width="150px"
+            borderRadius={RADIUS_SM}
+            value={flairId || ''}
+            onChange={(event) => setFlairId(event.target.value || null)}
+            aria-label="Post flair"
+            data-testid="composer-flair-select"
+          >
+            <option value="">No flair</option>
+            {flairOptions.map((flair) => (
+              <option key={flair.id} value={flair.id}>
+                {flair.emoji ? `${flair.emoji} ` : ''}
+                {flair.label}
+              </option>
+            ))}
+          </Select>
+        )}
         {!isComment && (
           <Select
             size="sm"
