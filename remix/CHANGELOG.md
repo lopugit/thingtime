@@ -18,6 +18,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-06: Fix the global Watch approval banner crashing signed-out first
+  paint when both account IDs were absent; add account/expiry/dismissal
+  regression coverage to the notification suite. — Codex (AI)
+
 - 2026-09-06: Watch-to-main integration [PR #667](https://github.com/lopugit/thingtime/pull/667)
   passes native compilation, web build and focused tests. Align the Nitro health
   smoke with its documented migration-required response without calling a
