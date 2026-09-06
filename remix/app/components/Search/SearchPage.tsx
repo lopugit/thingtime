@@ -575,7 +575,7 @@ export const SearchPage = () => {
             ? apiRef.current.v1.profile.search({ q: current.q.trim(), limit: 8 }).catch(() => null)
             : Promise.resolve(null),
           wantPeople
-            ? apiRef.current.v1.subspaces.list({ q: current.q.trim(), limit: SEARCH_SUBSPACE_RESULTS }).catch(() => null)
+            ? apiRef.current.v1.subspaces.list({ q: current.q.trim(), limit: SEARCH_SUBSPACE_RESULTS, anon: viewerIdRef.current ? undefined : 1 }).catch(() => null)
             : Promise.resolve(null)
         ])) as [SearchResponse, { users?: SearchPerson[] } | null, { subspaces?: PublicSubspace[] } | null];
         if (seq !== requestSeqRef.current) return;

@@ -47,6 +47,11 @@ export const SubspacesDirectoryPage = () => {
 	const requestSeqRef = React.useRef(0);
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
+	// always-current viewer id so load() can flag logged-out fetches as
+	// edge-cacheable (`anon=1`, the explore / search pattern) without joining
+	// the callback's dep list
+	const viewerIdRef = React.useRef(user?.id ?? null);
+	viewerIdRef.current = user?.id ?? null;
 
 	const load = React.useCallback(
 		async (options: { reset?: boolean; cursor?: string | null; q?: string } = {}) => {
@@ -54,7 +59,7 @@ export const SubspacesDirectoryPage = () => {
 			const q = options.q ?? query;
 			if (options.reset && !subspaces.length) setLoading(true);
 			try {
-				const resp: any = await apiRef.current.v1.subspaces.list({ q: q || undefined, mine, sort, cursor: options.cursor || undefined, limit: 30 });
+				const resp: any = await apiRef.current.v1.subspaces.list({ q: q || undefined, mine, sort, cursor: options.cursor || undefined, limit: 30, anon: viewerIdRef.current ? undefined : 1 });
 				if (seq !== requestSeqRef.current) return;
 				const page: PublicSubspace[] = resp.subspaces || [];
 				setSubspaces((prev) => {

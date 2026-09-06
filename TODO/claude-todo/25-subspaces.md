@@ -120,7 +120,12 @@ reactions untouched.
   cards, self-scrolling at 375px); `/search` **Subspaces 🪐** section (first
   6 slug/name matches, client-side, `search.ts` untouched). Profile pages
   show no member-of line by design (member lists are private). Verify
-  section R.
+  section R. S6 review: the directory GET is rate-limited
+  (`subspaces.list`, 120/min), takes `anon=1` (edge-cacheable logged-out
+  view, sent by the three guest-visible callers) and fences a private
+  subspace's activity to its ACTIVE members (`canSeeSubspaceActivity` —
+  ranked at zero, no `recentPostCount`, for everyone else); subspaces
+  1.5.0.
 
 ## Follow-ups (not in this PR)
 - Per-subspace wiki +

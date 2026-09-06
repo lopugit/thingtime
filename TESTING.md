@@ -1498,6 +1498,22 @@ email whose link points at the attacker.
       a **Subspaces 🪐** section (slug/name matches, first 6, compact cards)
       above People and the post results; a query with no matching subspace
       shows no section; `search.ts` is untouched.
+- [ ] Discovery — S6 review fixes: `GET /api/v1/subspaces` is rate-limited
+      like the other public reads (`subspaces.list`, 120/min; anonymous
+      callers key by IP → 429 with `Retry-After` past the budget). Logged-out
+      clients (the `/explore` strip, `/s`, the `/search` section) send
+      `anon=1` and the response carries `Cache-Control: public, s-maxage=60,
+      stale-while-revalidate=300` + `Vary: Authorization`; a cookie-less read
+      WITHOUT the flag carries no public header, an authed read is
+      `private, no-store`, `anon=1` with a session cookie still answers the
+      logged-out view (cookies are ignored on the cacheable URL), and
+      `anon=1&mine=1` → 401. A private subspace's activity is its members'
+      business: under **Most active 🔥** a private subspace the viewer is
+      not an ACTIVE member of ranks at zero and its row shows no "· N posts
+      this week" (a guest, a logged-in stranger or a pending requester never
+      learns its weekly post count — the same fence its feed applies); its
+      members and mods still see it ranked by its real activity with the
+      count. Member counts stay public on every sort. Verify section R.
 - [ ] Bell 🔔 + Settings → Notifications: six subspace rows (roles 🎩,
       bans 🚫, join accepted 🎉, posts removed 🧹, join requests 🙋,
       reports 🚩 — the last two default email OFF). The bell's verb keys off

@@ -47,6 +47,21 @@ score field.
   guest / a viewer in no subspace, and echoes `scope`; the route 400s an
   unknown scope. Contracts `api.subspaces` 1.3.0 → 1.4.0 and
   `api.things-feed` 1.3.0 → 1.4.0 (feature 1.5.0), both additive.
+  S6 review fixes: the directory GET is rate-limited like the other public
+  reads (`subspaces.list`, 120/min; anonymous callers key by IP) — the ranked
+  sorts cost a candidate find plus one or two aggregations per call; it
+  takes `anon=1` (the feed / trending contract: the logged-out view
+  regardless of cookies, `Cache-Control: public, s-maxage=60,
+  stale-while-revalidate=300` + `Vary: Authorization`, authed reads
+  `private, no-store`, a Bearer credential answered as itself,
+  `anon=1&mine=1` → 401) and the three guest-visible callers (`/explore`
+  strip, `/s`, `/search` section) send it when no viewer is present; and a
+  private subspace's activity is fenced like its posts —
+  `canSeeSubspaceActivity` (subspaceCore.ts, unit-tested): under `active`
+  it counts for, and shows `recentPostCount` to, its ACTIVE members only
+  (`recentPostCountsFor` never even counts a private subspace the viewer is
+  not in), everyone else ranks it at zero with no `recentPostCount`.
+  `api.subspaces` 1.4.0 → 1.5.0 (additive `anon` + compatible corrections).
 - `api/utils/subspaces/gate.ts` — things.ts-safe half: membership lookups,
   `assertSubspacePosting` (run on every post create AND PATCH touching
   subspaceId/flairId), `assertSubspaceInteraction` (bans block comments +
@@ -468,10 +483,20 @@ score field.
   subspace first; `mine=1&sort=members` narrows to the caller's; `q` +
   sort narrow; `sort=bogus` → 400; the response echoes `sort`; the
   /explore query `sort=members&limit=8` answers ≤ 8 rows in non-increasing
-  member count), and the manifest (`api.subspaces` 1.4.0,
-  `api.things-feed` 1.4.0). Unit pins: `sanitizeListSort` /
-  `rankSubspaceDirectory` / `sliceRankedPage` (subspaceCore.test.ts),
-  `feedScopeOf` (feedTypes.test.ts), both capability pin files.
+  member count), and the manifest (`api.subspaces` 1.5.0,
+  `api.things-feed` 1.4.0). S6 review fixes in the same section: anonymous
+  and logged-in-stranger `sort=active` rank the private subspace last with
+  no `recentPostCount` while its member (and the owner) see it ranked by
+  its real count; `anon=1` answers the public cache header + `Vary:
+  Authorization` with null viewer state (also with a session cookie
+  present), a cookie-less read without the flag carries no public header,
+  an authed read is `private, no-store`, `anon=1` beside an Authorization
+  header is answered as itself (no public header), `anon=1&mine=1` → 401;
+  the docs name the `subspaces.list` rate key and the cache contract. Unit
+  pins: `sanitizeListSort` / `rankSubspaceDirectory` / `sliceRankedPage` /
+  `canSeeSubspaceActivity` (subspaceCore.test.ts), `subspaces.list`
+  (rateLimit/config.test.ts), `feedScopeOf` (feedTypes.test.ts), both
+  capability pin files.
 - Browser: see the run log in the PR description / TESTING.md checklists.
 
 ## Known limits (stated, not hidden)

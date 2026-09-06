@@ -4,6 +4,7 @@ import test from 'node:test';
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
 import {
 	canPostIn,
+	canSeeSubspaceActivity,
 	confirmSlugMatches,
 	DIRECTORY_RANK_WINDOW,
 	isActiveMembershipState,
@@ -533,6 +534,25 @@ test('rankSubspaceDirectory orders by the sort’s measure, then newer, then id 
 	// the input is never mutated
 	assert.equal(candidates[0].id, 'b');
 	assert.deepEqual(rankSubspaceDirectory([], 'members'), []);
+});
+
+test('canSeeSubspaceActivity: a private subspace’s activity is its ACTIVE members’ business; public / restricted activity is everyone’s', () => {
+	const active = { role: 'member', approved: false, banned: false, left: false, pending: false, approvalRequested: false } as const;
+	// world-readable posts → world-readable counts (a ban there hides nothing the feed shows anyway)
+	assert.equal(canSeeSubspaceActivity('public', null), true);
+	assert.equal(canSeeSubspaceActivity('public', undefined), true);
+	assert.equal(canSeeSubspaceActivity('restricted', null), true);
+	assert.equal(canSeeSubspaceActivity('restricted', { ...active, banned: true }), true);
+	// private: only an active membership sees the measure
+	assert.equal(canSeeSubspaceActivity('private', null), false);
+	assert.equal(canSeeSubspaceActivity('private', undefined), false);
+	assert.equal(canSeeSubspaceActivity('private', active), true);
+	assert.equal(canSeeSubspaceActivity('private', { ...active, role: 'moderator' }), true);
+	assert.equal(canSeeSubspaceActivity('private', { ...active, role: 'owner' }), true);
+	// a pending requester, a kicked (left) member and a banned member are not members
+	assert.equal(canSeeSubspaceActivity('private', { ...active, pending: true }), false);
+	assert.equal(canSeeSubspaceActivity('private', { ...active, left: true }), false);
+	assert.equal(canSeeSubspaceActivity('private', { ...active, banned: true }), false);
 });
 
 test('sliceRankedPage pages a ranked id list by offset and reports the next offset', () => {

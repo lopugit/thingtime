@@ -601,10 +601,12 @@ export function useApi() {
     // failures surface through the shared API-failure path.
     subspaces: {
       // sort: new (default, cursor-paged) | members | active (ranked over a
-      // bounded window, offset-paged; rows under active carry recentPostCount)
+      // bounded window, offset-paged; rows under active carry recentPostCount
+      // — a private subspace's only for its members). `anon: 1` keeps
+      // logged-out requests edge-cacheable, mirroring feed / trending
       list: useCallback(
-        async (args?: { q?: string; mine?: boolean; sort?: 'new' | 'members' | 'active'; cursor?: string; limit?: number }) =>
-          getJson(`/api/v1/subspaces${toQuery({ q: args?.q, mine: args?.mine ? 1 : undefined, sort: args?.sort, cursor: args?.cursor, limit: args?.limit })}`),
+        async (args?: { q?: string; mine?: boolean; sort?: 'new' | 'members' | 'active'; cursor?: string; limit?: number; anon?: 1 }) =>
+          getJson(`/api/v1/subspaces${toQuery({ q: args?.q, mine: args?.mine ? 1 : undefined, sort: args?.sort, cursor: args?.cursor, limit: args?.limit, anon: args?.anon })}`),
         []
       ),
       get: useCallback(async (args: { slug?: string; id?: string }) => getJson(`/api/v1/subspaces/get${toQuery(args)}`), []),

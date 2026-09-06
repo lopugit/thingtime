@@ -48,7 +48,15 @@
 // ranked path scopes too), the directory sorts (members / active / new
 // orders, recentPostCount on active rows, offset paging, q + mine narrowing
 // every sort, an unknown sort → 400, the response echoes sort, the /explore
-// and /search queries) and the manifest.
+// and /search queries) and the manifest — plus the S6 review fixes: a
+// private subspace's activity is its ACTIVE members' business (under active
+// a guest, a logged-in stranger and a pending requester see it ranked at
+// zero with no recentPostCount; its member and the owner see it ranked by
+// its real count), the anon=1 edge-cache contract (the public Cache-Control
+// + Vary: Authorization with null viewer state, cookies ignored on the
+// cacheable URL, no public header without the flag, private / no-store when
+// authed, a Bearer credential answered as itself, anon=1&mine=1 → 401) and
+// the directory docs naming the subspaces.list rate key + the contract.
 //
 //   node scripts/verify-subspaces.mjs [baseUrl]
 //
@@ -93,11 +101,11 @@ const check = (name, condition, detail = '') => {
 // honest about behaviour while never reporting the budget itself as a
 // failure. No check in this file asserts a 429.
 const MAX_429_RETRIES = 3;
-const api = async (path, { cookie, method = 'GET', body } = {}) => {
+const api = async (path, { cookie, method = 'GET', body, headers } = {}) => {
 	for (let attempt = 0; ; attempt++) {
 		const response = await fetch(`${BASE}${path}`, {
 			method,
-			headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}) },
+			headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}), ...(headers || {}) },
 			...(body !== undefined ? { body: JSON.stringify(body) } : {})
 		});
 		let json = null;
@@ -113,7 +121,7 @@ const api = async (path, { cookie, method = 'GET', body } = {}) => {
 			await new Promise((resolve) => setTimeout(resolve, waitMs));
 			continue;
 		}
-		return { status: response.status, body: json };
+		return { status: response.status, body: json, headers: response.headers };
 	}
 };
 
@@ -377,7 +385,7 @@ const run = async () => {
 	const settings = await api('/api/v1/subspaces/update', { method: 'POST', cookie: mod.cookie, body: { slug, name: 'Verify Space ✨', description: 'Updated', branding: { accent: 'hotpink' }, rules: ['One'], flairs: [{ label: 'Meta' }] } });
 	check('mod edits identity/branding/rules/flairs', settings.status === 200 && settings.body.subspace.name === 'Verify Space ✨' && settings.body.subspace.branding.accent === 'hotpink' && settings.body.subspace.flairs[0].id === 'meta');
 	const manifest = await api('/api/v1/capabilities');
-	check('capability manifest advertises the new contracts (subspaces 1.2.0 → 1.3.0 with S4 removalReasons, updown 1.0.0, things-feed 1.2.0 → 1.4.0 with S5 reportCount + S6 scope; subspaces 1.4.0 after the S6 sort)', manifest.status === 200 && manifest.body.features?.['api.subspaces'] === '1.4.0' && manifest.body.features['api.things-updown'] === '1.0.0' && manifest.body.features['api.things-feed'] === '1.4.0', JSON.stringify({ s: manifest.body?.features?.['api.subspaces'], u: manifest.body?.features?.['api.things-updown'], f: manifest.body?.features?.['api.things-feed'] }));
+	check('capability manifest advertises the new contracts (subspaces 1.2.0 → 1.3.0 with S4 removalReasons, updown 1.0.0, things-feed 1.2.0 → 1.4.0 with S5 reportCount + S6 scope; subspaces 1.5.0 after the S6 sort + the S6 review anon=1 / rate key / private-activity fence)', manifest.status === 200 && manifest.body.features?.['api.subspaces'] === '1.5.0' && manifest.body.features['api.things-updown'] === '1.0.0' && manifest.body.features['api.things-feed'] === '1.4.0', JSON.stringify({ s: manifest.body?.features?.['api.subspaces'], u: manifest.body?.features?.['api.things-updown'], f: manifest.body?.features?.['api.things-feed'] }));
 	const docs = await api('/api/v1/subspaces/moderate-docs');
 	check('docs routes answer for the family', docs.status === 200 && docs.body.docs?.endpoint === '/api/v1/subspaces/moderate');
 
@@ -819,8 +827,8 @@ const run = async () => {
 	check('unknown member action → 400', badAction.status === 400);
 	const manifest3 = await api('/api/v1/capabilities');
 	check(
-		'capability manifest advertises the request contracts (leave / join 1.2.0 → 1.3.0 after the S3 review + S4 removalReasons bumps; list 1.4.0 after the S6 sort / update 1.3.0, get 1.4.0 after the S5 openReportCount bump, members 1.4.1 after the S3 user-flair bump + review + the S4 ban note + the S4 review mod-team ban bell)',
-		manifest3.status === 200 && manifest3.body.features['api.subspaces-join'] === '1.3.0' && manifest3.body.features['api.subspaces-leave'] === '1.3.0' && manifest3.body.features['api.subspaces-get'] === '1.4.0' && manifest3.body.features['api.subspaces'] === '1.4.0' && manifest3.body.features['api.subspaces-members'] === '1.4.1' && manifest3.body.features['api.subspaces-update'] === '1.3.0',
+		'capability manifest advertises the request contracts (leave / join 1.2.0 → 1.3.0 after the S3 review + S4 removalReasons bumps; list 1.5.0 after the S6 sort + review / update 1.3.0, get 1.4.0 after the S5 openReportCount bump, members 1.4.1 after the S3 user-flair bump + review + the S4 ban note + the S4 review mod-team ban bell)',
+		manifest3.status === 200 && manifest3.body.features['api.subspaces-join'] === '1.3.0' && manifest3.body.features['api.subspaces-leave'] === '1.3.0' && manifest3.body.features['api.subspaces-get'] === '1.4.0' && manifest3.body.features['api.subspaces'] === '1.5.0' && manifest3.body.features['api.subspaces-members'] === '1.4.1' && manifest3.body.features['api.subspaces-update'] === '1.3.0',
 		JSON.stringify({ j: manifest3.body?.features?.['api.subspaces-join'], l: manifest3.body?.features?.['api.subspaces-leave'], g: manifest3.body?.features?.['api.subspaces-get'], m: manifest3.body?.features?.['api.subspaces-members'], u: manifest3.body?.features?.['api.subspaces-update'] })
 	);
 
@@ -1197,8 +1205,8 @@ const run = async () => {
 	check('authorFlair is never client-writable (a PATCH smuggling it changes nothing)', genericFlair.status !== 500 && genericRead.body?.post?.authorFlair?.id === 'prism' && genericRead.body.post.authorFlair.label === 'Prism', `${genericFlair.status} ${JSON.stringify(genericRead.body?.post?.authorFlair)}`);
 	const manifestO = await api('/api/v1/capabilities');
 	check(
-		'capability manifest advertises the user-flair contracts (subspaces 1.2.0 → 1.3.0 with S4 removalReasons → 1.4.0 with S6 sort / update 1.3.0, get → 1.4.0 with S5 openReportCount, members 1.3.1 → 1.4.1 with the S4 ban note + S4 review, subspaces-feed 1.1.0 → 1.3.0 with S4 + S5 reportCount, things / things-comment / things-feed / things-user 1.2.0 → 1.3.0 with S5 reportCount)',
-		manifestO.status === 200 && manifestO.body.features['api.subspaces'] === '1.4.0' && manifestO.body.features['api.subspaces-get'] === '1.4.0' && manifestO.body.features['api.subspaces-update'] === '1.3.0' && manifestO.body.features['api.subspaces-members'] === '1.4.1' && manifestO.body.features['api.subspaces-feed'] === '1.3.0' && ['api.things', 'api.things-comment', 'api.things-user'].every((feature) => manifestO.body.features[feature] === '1.3.0') && manifestO.body.features['api.things-feed'] === '1.4.0',
+		'capability manifest advertises the user-flair contracts (subspaces 1.2.0 → 1.3.0 with S4 removalReasons → 1.4.0 with S6 sort → 1.5.0 after the S6 review / update 1.3.0, get → 1.4.0 with S5 openReportCount, members 1.3.1 → 1.4.1 with the S4 ban note + S4 review, subspaces-feed 1.1.0 → 1.3.0 with S4 + S5 reportCount, things / things-comment / things-feed / things-user 1.2.0 → 1.3.0 with S5 reportCount)',
+		manifestO.status === 200 && manifestO.body.features['api.subspaces'] === '1.5.0' && manifestO.body.features['api.subspaces-get'] === '1.4.0' && manifestO.body.features['api.subspaces-update'] === '1.3.0' && manifestO.body.features['api.subspaces-members'] === '1.4.1' && manifestO.body.features['api.subspaces-feed'] === '1.3.0' && ['api.things', 'api.things-comment', 'api.things-user'].every((feature) => manifestO.body.features[feature] === '1.3.0') && manifestO.body.features['api.things-feed'] === '1.4.0',
 		JSON.stringify({ s: manifestO.body?.features?.['api.subspaces'], g: manifestO.body?.features?.['api.subspaces-get'], u: manifestO.body?.features?.['api.subspaces-update'], m: manifestO.body?.features?.['api.subspaces-members'], f: manifestO.body?.features?.['api.subspaces-feed'], t: manifestO.body?.features?.['api.things'] })
 	);
 	check(
@@ -1410,8 +1418,8 @@ const run = async () => {
 	// the manifest
 	const manifestP = await api('/api/v1/capabilities');
 	check(
-		'capability manifest advertises the S4 contracts (update / join / leave 1.3.0 — removalReasons; subspaces 1.4.0 after the S6 sort; get 1.4.0 with S5 openReportCount; transfer 1.2.0; feed 1.3.0 with S5 reportCount; moderate 1.4.0 — reasonId + ruleIndex + idempotent remove + the mod-team author notification + S5 report settlement; members 1.4.1 — ban note + mod-team ban bell; notifications-list 1.2.0 — mod-team actor rows)',
-		manifestP.status === 200 && ['api.subspaces-update', 'api.subspaces-join', 'api.subspaces-leave'].every((feature) => manifestP.body.features[feature] === '1.3.0') && manifestP.body.features['api.subspaces'] === '1.4.0' && manifestP.body.features['api.subspaces-get'] === '1.4.0' && manifestP.body.features['api.subspaces-transfer'] === '1.2.0' && manifestP.body.features['api.subspaces-feed'] === '1.3.0' && manifestP.body.features['api.subspaces-moderate'] === '1.4.0' && manifestP.body.features['api.subspaces-members'] === '1.4.1' && manifestP.body.features['api.notifications-list'] === '1.2.0',
+		'capability manifest advertises the S4 contracts (update / join / leave 1.3.0 — removalReasons; subspaces 1.5.0 after the S6 sort + review; get 1.4.0 with S5 openReportCount; transfer 1.2.0; feed 1.3.0 with S5 reportCount; moderate 1.4.0 — reasonId + ruleIndex + idempotent remove + the mod-team author notification + S5 report settlement; members 1.4.1 — ban note + mod-team ban bell; notifications-list 1.2.0 — mod-team actor rows)',
+		manifestP.status === 200 && ['api.subspaces-update', 'api.subspaces-join', 'api.subspaces-leave'].every((feature) => manifestP.body.features[feature] === '1.3.0') && manifestP.body.features['api.subspaces'] === '1.5.0' && manifestP.body.features['api.subspaces-get'] === '1.4.0' && manifestP.body.features['api.subspaces-transfer'] === '1.2.0' && manifestP.body.features['api.subspaces-feed'] === '1.3.0' && manifestP.body.features['api.subspaces-moderate'] === '1.4.0' && manifestP.body.features['api.subspaces-members'] === '1.4.1' && manifestP.body.features['api.notifications-list'] === '1.2.0',
 		JSON.stringify({ s: manifestP.body?.features?.['api.subspaces'], u: manifestP.body?.features?.['api.subspaces-update'], mo: manifestP.body?.features?.['api.subspaces-moderate'], m: manifestP.body?.features?.['api.subspaces-members'], f: manifestP.body?.features?.['api.subspaces-feed'], t: manifestP.body?.features?.['api.subspaces-transfer'], n: manifestP.body?.features?.['api.notifications-list'] })
 	);
 	const cleanupP = await api('/api/v1/subspaces/delete', { method: 'POST', cookie: owner.cookie, body: { slug: rrSlug, confirmSlug: rrSlug } });
@@ -1845,12 +1853,27 @@ const run = async () => {
 	}
 
 	// --- directory sorts ---
-	const rsDir = async (extra, cookie = null) => api(`/api/v1/subspaces?q=${encodeURIComponent(rsName)}${extra}`, cookie ? { cookie } : {});
+	const rsDir = async (extra, cookie = null, headers = undefined) => api(`/api/v1/subspaces?q=${encodeURIComponent(rsName)}${extra}`, { ...(cookie ? { cookie } : {}), ...(headers ? { headers } : {}) });
 	const rsSlugsOf = (resp) => (resp.body?.subspaces || []).map((entry) => entry.slug);
 	const rsByMembers = await rsDir('&sort=members');
 	check('sort=members orders A (3) → P (2) → B (1) and echoes sort', rsByMembers.status === 200 && rsByMembers.body.sort === 'members' && JSON.stringify(rsSlugsOf(rsByMembers)) === JSON.stringify([rsSlug, rsPrivSlug, rs2Slug]) && rsByMembers.body.subspaces[0].memberCount === 3 && rsByMembers.body.subspaces[1].memberCount === 2 && rsByMembers.body.subspaces[2].memberCount === 1, `${rsByMembers.status} ${JSON.stringify(rsSlugsOf(rsByMembers))} ${JSON.stringify((rsByMembers.body?.subspaces || []).map((entry) => entry.memberCount))}`);
+	// sort=active: a private subspace's activity is its ACTIVE members'
+	// business (S6 review) — P (private, 1 post) ranks by its real count only
+	// for its members / mods; a guest and any logged-in non-member see it
+	// ranked at zero with no recentPostCount (member counts stay public)
+	const rsRecentOf = (resp) => (resp.body?.subspaces || []).map((entry) => entry.recentPostCount);
 	const rsByActive = await rsDir('&sort=active');
-	check('sort=active orders A (2 live posts — the removed A3 does not count) → P (1, newer) → B (1); rows carry recentPostCount', rsByActive.status === 200 && rsByActive.body.sort === 'active' && JSON.stringify(rsSlugsOf(rsByActive)) === JSON.stringify([rsSlug, rsPrivSlug, rs2Slug]) && rsByActive.body.subspaces[0].recentPostCount === 2 && rsByActive.body.subspaces[1].recentPostCount === 1 && rsByActive.body.subspaces[2].recentPostCount === 1, `${rsByActive.status} ${JSON.stringify(rsSlugsOf(rsByActive))} ${JSON.stringify((rsByActive.body?.subspaces || []).map((entry) => entry.recentPostCount))}`);
+	check('anonymous sort=active orders A (2 live posts — the removed A3 does not count) → B (1) → P (private: ranked at zero for a guest); A and B carry recentPostCount, P carries none (its memberCount 2 stays public)', rsByActive.status === 200 && rsByActive.body.sort === 'active' && JSON.stringify(rsSlugsOf(rsByActive)) === JSON.stringify([rsSlug, rs2Slug, rsPrivSlug]) && rsByActive.body.subspaces[0].recentPostCount === 2 && rsByActive.body.subspaces[1].recentPostCount === 1 && rsByActive.body.subspaces[2].recentPostCount === undefined && rsByActive.body.subspaces[2].memberCount === 2, `${rsByActive.status} ${JSON.stringify(rsSlugsOf(rsByActive))} ${JSON.stringify(rsRecentOf(rsByActive))}`);
+	const rsByActiveMember = await rsDir('&sort=active', member.cookie);
+	check('the member’s sort=active (they are in P) orders A (2) → P (1, newer) → B (1) and P’s row carries recentPostCount 1', rsByActiveMember.status === 200 && JSON.stringify(rsSlugsOf(rsByActiveMember)) === JSON.stringify([rsSlug, rsPrivSlug, rs2Slug]) && JSON.stringify(rsRecentOf(rsByActiveMember)) === JSON.stringify([2, 1, 1]), `${rsByActiveMember.status} ${JSON.stringify(rsSlugsOf(rsByActiveMember))} ${JSON.stringify(rsRecentOf(rsByActiveMember))}`);
+	const rsByActiveOwner = await rsDir('&sort=active', owner.cookie);
+	check('the owner’s sort=active agrees with the member’s (A → P → B, counts 2 / 1 / 1)', rsByActiveOwner.status === 200 && JSON.stringify(rsSlugsOf(rsByActiveOwner)) === JSON.stringify([rsSlug, rsPrivSlug, rs2Slug]) && JSON.stringify(rsRecentOf(rsByActiveOwner)) === JSON.stringify([2, 1, 1]), `${rsByActiveOwner.status} ${JSON.stringify(rsSlugsOf(rsByActiveOwner))} ${JSON.stringify(rsRecentOf(rsByActiveOwner))}`);
+	const rsByActiveNobody = await rsDir('&sort=active', nobody.cookie);
+	check('a logged-in stranger’s sort=active ranks P last with no recentPostCount (the private fence holds for every non-member, not just guests)', rsByActiveNobody.status === 200 && JSON.stringify(rsSlugsOf(rsByActiveNobody)) === JSON.stringify([rsSlug, rs2Slug, rsPrivSlug]) && rsByActiveNobody.body.subspaces[2].recentPostCount === undefined && rsByActiveNobody.body.subspaces[2].access === 'private', `${rsByActiveNobody.status} ${JSON.stringify(rsSlugsOf(rsByActiveNobody))} ${JSON.stringify(rsRecentOf(rsByActiveNobody))}`);
+	const rsNobodyRequest = await api('/api/v1/subspaces/join', { method: 'POST', cookie: nobody.cookie, body: { slug: rsPrivSlug } });
+	const rsByActivePending = await rsDir('&sort=active', nobody.cookie);
+	const rsNobodyCancel = await api('/api/v1/subspaces/leave', { method: 'POST', cookie: nobody.cookie, body: { slug: rsPrivSlug } });
+	check('a PENDING requester of P (request filed, then cancelled) is not a member: P still ranks last for them with no recentPostCount while their row reads viewer.pending', rsNobodyRequest.status === 200 && rsNobodyRequest.body.pending === true && rsByActivePending.status === 200 && rsSlugsOf(rsByActivePending)[2] === rsPrivSlug && rsByActivePending.body.subspaces[2].recentPostCount === undefined && rsByActivePending.body.subspaces[2].viewer.pending === true && rsNobodyCancel.status === 200, `${rsNobodyRequest.status} ${JSON.stringify(rsNobodyRequest.body).slice(0, 120)} / ${rsByActivePending.status} ${JSON.stringify(rsSlugsOf(rsByActivePending))} ${JSON.stringify(rsRecentOf(rsByActivePending))} / ${rsNobodyCancel.status}`);
 	const rsByNew = await rsDir('&sort=new');
 	const rsByDefault = await rsDir('');
 	check('sort=new (and no sort) orders newest first — P → B → A — echoes sort new and carries no recentPostCount', rsByNew.status === 200 && rsByNew.body.sort === 'new' && JSON.stringify(rsSlugsOf(rsByNew)) === JSON.stringify([rsPrivSlug, rs2Slug, rsSlug]) && rsByDefault.status === 200 && rsByDefault.body.sort === 'new' && JSON.stringify(rsSlugsOf(rsByDefault)) === JSON.stringify([rsPrivSlug, rs2Slug, rsSlug]) && rsByNew.body.subspaces.every((entry) => entry.recentPostCount === undefined), `${rsByNew.status} ${JSON.stringify(rsSlugsOf(rsByNew))} / ${JSON.stringify(rsSlugsOf(rsByDefault))}`);
@@ -1868,6 +1891,24 @@ const run = async () => {
 	check('mine=1&sort=active for a viewer in no subspace → 200, empty, sort echoed', rsMineActiveNobody.status === 200 && rsMineActiveNobody.body.subspaces.length === 0 && rsMineActiveNobody.body.sort === 'active');
 	const rsMineAnon = await api('/api/v1/subspaces?mine=1&sort=members');
 	check('anonymous mine=1&sort=members → 401', rsMineAnon.status === 401);
+	// the anon=1 edge-cache contract (S6 review — the feed's): the logged-out
+	// view regardless of cookies, cacheable at the edge by URL, never shared
+	// with an authenticated reading of the same URL
+	const PUBLIC_CACHE = 'public, s-maxage=60, stale-while-revalidate=300';
+	const rsDirAnon = await rsDir('&sort=members&anon=1');
+	check('anon=1 (no Authorization) answers the logged-out directory with Cache-Control: public, s-maxage=60, stale-while-revalidate=300 + Vary: Authorization and null viewer state on every row', rsDirAnon.status === 200 && rsDirAnon.headers.get('cache-control') === PUBLIC_CACHE && /authorization/i.test(rsDirAnon.headers.get('vary') || '') && rsDirAnon.body.subspaces.length === 3 && rsDirAnon.body.subspaces.every((entry) => entry.viewer.member === false && entry.viewer.role === null), `${rsDirAnon.status} cc=${rsDirAnon.headers.get('cache-control')} vary=${rsDirAnon.headers.get('vary')}`);
+	const rsDirAnonActive = await rsDir('&sort=active&anon=1');
+	check('anon=1&sort=active ranks P at zero with no recentPostCount — the cacheable body never carries a private subspace’s activity', rsDirAnonActive.status === 200 && rsDirAnonActive.headers.get('cache-control') === PUBLIC_CACHE && JSON.stringify(rsSlugsOf(rsDirAnonActive)) === JSON.stringify([rsSlug, rs2Slug, rsPrivSlug]) && rsDirAnonActive.body.subspaces[2].recentPostCount === undefined, `${rsDirAnonActive.status} ${JSON.stringify(rsSlugsOf(rsDirAnonActive))} ${JSON.stringify(rsRecentOf(rsDirAnonActive))}`);
+	const rsAnonCookieIgnored = await rsDir('&sort=members&anon=1', member.cookie);
+	check('anon=1 with a session cookie still answers the logged-out view (cookies are ignored on the cacheable URL — clients send anon=1 only when no viewer is present): null viewer state, the public cache header', rsAnonCookieIgnored.status === 200 && rsAnonCookieIgnored.headers.get('cache-control') === PUBLIC_CACHE && rsAnonCookieIgnored.body.subspaces.every((entry) => entry.viewer.member === false), `${rsAnonCookieIgnored.status} cc=${rsAnonCookieIgnored.headers.get('cache-control')} ${JSON.stringify((rsAnonCookieIgnored.body?.subspaces || []).map((entry) => entry.viewer.member))}`);
+	const rsAnonBearer = await rsDir('&sort=members&anon=1', null, { Authorization: 'Bearer not-a-real-token' });
+	check('anon=1 beside an Authorization header is answered as itself (an unknown credential degrades to the logged-out view) and carries NO public cache header — a fenced credential can never be handed a cached anon body', rsAnonBearer.status === 200 && !/public/.test(rsAnonBearer.headers.get('cache-control') || '') && rsAnonBearer.body.subspaces.length === 3, `${rsAnonBearer.status} cc=${rsAnonBearer.headers.get('cache-control')}`);
+	const rsAnonNoFlag = await rsDir('&sort=members');
+	check('a cookie-less read WITHOUT anon=1 carries no public cache header (only the URL-marked form is edge-cacheable)', rsAnonNoFlag.status === 200 && !/public/.test(rsAnonNoFlag.headers.get('cache-control') || ''), `cc=${rsAnonNoFlag.headers.get('cache-control')}`);
+	const rsAuthedHeaders = await rsDir('&sort=members', member.cookie);
+	check('an authenticated directory read answers Cache-Control: private, no-store with the member’s own viewer state', rsAuthedHeaders.status === 200 && rsAuthedHeaders.headers.get('cache-control') === 'private, no-store' && rsAuthedHeaders.body.subspaces.some((entry) => entry.viewer.member === true), `cc=${rsAuthedHeaders.headers.get('cache-control')}`);
+	const rsAnonMine = await api('/api/v1/subspaces?mine=1&anon=1');
+	check('anon=1&mine=1 → 401 (there is no caller to narrow to)', rsAnonMine.status === 401);
 	// the /explore strip's query and the /search section's query
 	const rsExplore = await api('/api/v1/subspaces?sort=members&limit=8');
 	const rsExploreCounts = (rsExplore.body?.subspaces || []).map((entry) => entry.memberCount);
@@ -1878,10 +1919,11 @@ const run = async () => {
 	check('a query matching no subspace answers an empty list (the section simply stays away)', rsSearchMiss.status === 200 && rsSearchMiss.body.subspaces.length === 0);
 	// the manifest
 	const manifestR = await api('/api/v1/capabilities');
-	check('capability manifest advertises the S6 contracts (subspaces 1.4.0 — sort; things-feed 1.4.0 — scope) with the rest of the family untouched', manifestR.status === 200 && manifestR.body.features['api.subspaces'] === '1.4.0' && manifestR.body.features['api.things-feed'] === '1.4.0' && manifestR.body.features['api.subspaces-update'] === '1.3.0' && manifestR.body.features['api.things'] === '1.3.0', JSON.stringify({ s: manifestR.body?.features?.['api.subspaces'], f: manifestR.body?.features?.['api.things-feed'] }));
+	check('capability manifest advertises the S6 contracts (subspaces 1.5.0 — sort, then the review’s anon=1 / subspaces.list rate key / private-activity fence; things-feed 1.4.0 — scope) with the rest of the family untouched', manifestR.status === 200 && manifestR.body.features['api.subspaces'] === '1.5.0' && manifestR.body.features['api.things-feed'] === '1.4.0' && manifestR.body.features['api.subspaces-update'] === '1.3.0' && manifestR.body.features['api.things'] === '1.3.0', JSON.stringify({ s: manifestR.body?.features?.['api.subspaces'], f: manifestR.body?.features?.['api.things-feed'] }));
 	const rsDocs = await api('/api/v1/subspaces-docs');
 	const rsFeedDocs = await api('/api/v1/things/feed-docs');
 	check('docs routes answer for the two extended endpoints', rsDocs.status === 200 && rsDocs.body.docs?.endpoint === '/api/v1/subspaces' && rsFeedDocs.status === 200 && rsFeedDocs.body.docs?.endpoint === '/api/v1/things/feed');
+	check('the directory docs name the read’s rate key (subspaces.list, 120/min), the anon=1 cache contract and the private-activity fence, at contract 1.5.0', /subspaces\.list, 120\/min/.test(rsDocs.body?.docs?.detail || '') && JSON.stringify(rsDocs.body?.docs?.notes || []).includes('s-maxage=60') && /ACTIVE members only/.test(rsDocs.body?.docs?.detail || '') && rsDocs.body?.docs?.contractVersion === '1.5.0', JSON.stringify({ cv: rsDocs.body?.docs?.contractVersion, notes: (rsDocs.body?.docs?.notes || []).length }));
 	// cleanup: the plain post, then the three subspaces (their posts survive as plain / private posts)
 	const rsPlainDeleted = await api(`/api/v1/things?id=${rsPlain.id}`, { method: 'DELETE', cookie: owner.cookie });
 	const cleanupR = await Promise.all([rsSlug, rs2Slug, rsPrivSlug].map((slugToDelete) => api('/api/v1/subspaces/delete', { method: 'POST', cookie: owner.cookie, body: { slug: slugToDelete, confirmSlug: slugToDelete } })));

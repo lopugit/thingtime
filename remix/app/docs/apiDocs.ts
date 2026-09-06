@@ -8560,8 +8560,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // / live posts in the last 7 days and page by offset; rows under active
     // carry recentPostCount); the response echoes sort; an unknown sort
     // answers 400 (S6, additive)
-    featureVersion: '1.4.0',
-    contractVersion: '1.4.0',
+    // 1.5.0 (S6 review): ?anon=1 — the logged-out view regardless of cookies,
+    // edge-cacheable (Cache-Control public, s-maxage=60, stale-while-
+    // revalidate=300, Vary Authorization; authed answers private, no-store)
+    // — additive; GET is rate-limited like the other public reads
+    // (subspaces.list, 120/min, anonymous callers by IP); a private
+    // subspace's activity is its ACTIVE members' business — under active it
+    // counts for, and shows recentPostCount to, them only; everyone else
+    // ranks it at zero and its row carries no recentPostCount (compatible
+    // corrections)
+    featureVersion: '1.5.0',
+    contractVersion: '1.5.0',
     group: 'subspaces',
     title: 'Subspaces',
     endpoint: '/api/v1/subspaces',
@@ -8575,7 +8584,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       '(highest member count) or active (most live posts in the last 7 days; rows carry recentPostCount). The ' +
       'two ranked sorts are computed in memory over a bounded window — the newest 200 subspaces matching q / mine ' +
       '— and paged by offset cursor, so a directory deeper than that ranks its newest 200; the response echoes ' +
-      '`sort`, and an unknown sort answers 400. POST ' +
+      '`sort`, and an unknown sort answers 400. A private subspace’s activity is fenced like its posts: under ' +
+      'active it counts for, and shows recentPostCount to, its ACTIVE members only — everyone else ranks it at ' +
+      'zero and its row carries no recentPostCount. GET is rate-limited like the other public reads ' +
+      '(subspaces.list, 120/min → 429; anonymous callers key by IP). Send `anon=1` from logged-out clients for ' +
+      'the edge-cacheable logged-out view (the response then depends only on the URL; `anon=1&mine=1` answers ' +
+      '401 — there is no caller to narrow to). POST ' +
       'creates a subspace from a unique slug (3–30 chars of [a-z0-9_], the /s/<slug> URL) plus name, ' +
       'description, access (public | restricted | private), nsfw, rules, flairs and branding; the creator ' +
       'becomes owner and first member. Subspaces are things (thingtime ["subspace"]) with relational ' +
@@ -8584,6 +8598,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET', 'POST'],
     steps: [
       'GET to browse; pass q to search, sort=new|members|active to order, and cursor/limit to page (nextCursor is null on the last page).',
+      'Send anon=1 from logged-out clients so the response is edge-cacheable (it then depends only on the URL).',
       'POST slug + name (+ description, access, nsfw, rules, flairs, branding) to found one.',
       'A taken slug answers 409; a reserved or malformed slug answers 400. The slug of a recently deleted subspace is ' +
         'held for its previous owner (who may re-found it at once) and answers 409 to everyone else until the hold lapses.',
@@ -8592,7 +8607,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     requestExamples: [
       { name: 'Browse', description: 'Newest subspaces.', method: 'GET', query: { q: 'rain', limit: 20 } },
       { name: 'My subspaces', description: 'Only the ones the caller joined.', method: 'GET', query: { mine: 1 } },
-      { name: 'Popular', description: 'The eight subspaces with the most members (the /explore strip).', method: 'GET', query: { sort: 'members', limit: 8 } },
+      {
+        name: 'Popular',
+        description: 'The eight subspaces with the most members (the /explore strip; a logged-out client adds anon=1 so the edge can cache it).',
+        method: 'GET',
+        query: { sort: 'members', limit: 8, anon: 1 }
+      },
       { name: 'Most active', description: 'Most live posts in the last 7 days; rows carry recentPostCount.', method: 'GET', query: { sort: 'active', limit: 20 } },
       {
         name: 'Found a subspace',
@@ -8636,12 +8656,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         }
       },
       { status: 400, description: 'Unknown sort.', body: { ok: false, error: 'sort must be one of new, members, active' } },
+      { status: 429, description: 'Rate limited (subspaces.list, 120/min).', body: { ok: false, error: 'You’re browsing subspaces very enthusiastically — take a breather 🌸' } },
       { status: 409, description: 'Slug taken.', body: { ok: false, error: 's/rainbows is taken — pick another slug' } },
       {
         status: 409,
         description: 'Slug held after a deletion (previous owner only until the hold lapses).',
         body: { ok: false, error: 's/rainbows was deleted recently — its slug is held for its previous owner until 2026-10-05' }
       }
+    ],
+    notes: [
+      'Anonymous (anon=1) responses carry Cache-Control: public, s-maxage=60, stale-while-revalidate=300 (Vary: Authorization) — the logged-out directory is served from the Vercel edge and can lag a fresh subspace or member count by a minute; authenticated responses are private, no-store.',
+      'Under sort=active a private subspace ranks by its live posts only for its ACTIVE members (who also see recentPostCount); everyone else sees it ranked at zero with no recentPostCount — the same fence its feed applies.'
     ]
   }),
   endpoint({

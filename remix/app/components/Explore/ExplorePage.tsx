@@ -90,7 +90,8 @@ export const ExplorePage = () => {
     const seq = requestSeqRef.current;
     const targetCacheKey = stripCacheKeyRef.current;
     try {
-      const resp: any = await apiRef.current.v1.subspaces.list({ sort: 'members', limit: EXPLORE_POPULAR_SUBSPACES });
+      // logged-out fetches are flagged edge-cacheable (`anon=1`) like trending
+      const resp: any = await apiRef.current.v1.subspaces.list({ sort: 'members', limit: EXPLORE_POPULAR_SUBSPACES, anon: viewerIdRef.current ? undefined : 1 });
       if (seq !== requestSeqRef.current) return;
       const fresh: PublicSubspace[] = Array.isArray(resp?.subspaces) ? resp.subspaces : [];
       setPopular(fresh);

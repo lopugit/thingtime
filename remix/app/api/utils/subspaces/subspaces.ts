@@ -78,6 +78,7 @@ import {
 } from './gate';
 import {
 	canPostIn,
+	canSeeSubspaceActivity,
 	confirmSlugMatches,
 	DIRECTORY_RANK_WINDOW,
 	flairById,
@@ -395,7 +396,10 @@ const memberCountsFor = async (subspaceIds: string[]): Promise<Map<string, numbe
 };
 
 // Live (not mod-removed) posts per subspace since `since` — ONE $group over
-// the candidates' ids, the measure behind the directory's sort=active.
+// the candidates' ids, the measure behind the directory's sort=active. The
+// caller passes only the subspaces whose activity the viewer may see
+// (canSeeSubspaceActivity): a private subspace the viewer is not in is never
+// counted, so its weekly post count can neither rank it nor reach the row.
 const recentPostCountsFor = async (subspaceIds: string[], since: Date): Promise<Map<string, number>> => {
 	const counts = new Map<string, number>();
 	if (!subspaceIds.length) return counts;
@@ -678,11 +682,16 @@ export const listSubspaces = async (
 		const pattern = new RegExp(escapeRegex(q.toLowerCase().replace(/^s\//, '')), 'i');
 		match = withMatch(match, { $or: [{ 'crystal.slug': pattern }, { 'crystal.name': pattern }] });
 	}
+	// a private subspace's activity is its members' business: only its ACTIVE
+	// members get its recentPostCount (and only for them does it count towards
+	// sort=active) — everyone else sees the row without the measure, ranked
+	// at zero, exactly as its posts stay out of their feeds
+	const activityVisible = (doc: any): boolean => canSeeSubspaceActivity(accessOf(doc), roles.get(String(doc.shareId)));
 	const project = (docs: any[], counts: Map<string, number>, recent: Map<string, number> | null): PublicSubspace[] =>
 		docs.map((doc) =>
 			toPublicSubspace(doc, {
 				memberCount: counts.get(String(doc.shareId)) || 0,
-				...(recent ? { recentPostCount: recent.get(String(doc.shareId)) || 0 } : {}),
+				...(recent && activityVisible(doc) ? { recentPostCount: recent.get(String(doc.shareId)) || 0 } : {}),
 				membership: roles.get(String(doc.shareId)) || null
 			})
 		);
@@ -694,11 +703,14 @@ export const listSubspaces = async (
 			.find(match as any)
 			.sort({ createdAt: -1, shareId: 1 })
 			.limit(DIRECTORY_RANK_WINDOW)
-			.project({ shareId: 1, createdAt: 1 })
+			.project({ shareId: 1, createdAt: 1, 'crystal.access': 1 })
 			.toArray()) as any[];
 		const candidateIds = candidates.map((doc) => String(doc.shareId));
+		// sort=active counts only the subspaces whose activity this viewer may
+		// see — a private subspace the viewer is not in is never even counted
+		const countableIds = candidates.filter(activityVisible).map((doc) => String(doc.shareId));
 		const since = new Date(Date.now() - SUBSPACE_ACTIVE_WINDOW_MS);
-		const [counts, recent] = await Promise.all([memberCountsFor(candidateIds), sort === 'active' ? recentPostCountsFor(candidateIds, since) : Promise.resolve(null)]);
+		const [counts, recent] = await Promise.all([memberCountsFor(candidateIds), sort === 'active' ? recentPostCountsFor(countableIds, since) : Promise.resolve(null)]);
 		const ranked = rankSubspaceDirectory(
 			candidates.map(
 				(doc): DirectoryCandidate => ({

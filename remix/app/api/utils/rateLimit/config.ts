@@ -46,6 +46,12 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // NEW report fans a (deduped) bell out to every moderator; a repeat on the
   // same post only updates the row. Nobody files 30 honest reports a minute.
   'subspaces.report': { limit: 30, windowMs: 60_000, enabled: true },
+  // the subspace directory (GET /api/v1/subspaces) — a public read like
+  // things.search: sort=members / sort=active each run a 200-doc candidate
+  // find plus one or two $group aggregations, so the read carries the same
+  // 120/min ceiling as the other public reads (anonymous callers key by IP;
+  // logged-out clients also send anon=1 so Vercel's edge absorbs repeats)
+  'subspaces.list': { limit: 120, windowMs: 60_000, enabled: true },
   // schema browsing (/api/v1/schemas/browse) — read-only, bounded like search
   'schemas.browse': { limit: 120, windowMs: 60_000, enabled: true },
   // embed SDK reads (GET /api/v1/embed/things) — the only anonymous

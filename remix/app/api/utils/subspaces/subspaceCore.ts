@@ -572,6 +572,16 @@ export const canPostIn = (access: SubspaceAccessMode, membership: Partial<Member
 	return active;
 };
 
+// May this viewer see how busy a subspace is — the directory's sort=active
+// measure, recentPostCount? A private subspace's posts are fenced to its
+// active members, so its activity level is too: everyone else ranks it at
+// zero under active and its row carries no recentPostCount (a stranger must
+// not learn a private community's weekly post count from the directory when
+// its feed answers them 403). Public / restricted posts are world-readable,
+// so their counts are — a ban there hides nothing the feed shows anyway.
+export const canSeeSubspaceActivity = (access: SubspaceAccessMode, membership: Partial<MembershipState> | null | undefined): boolean =>
+	access !== 'private' || isActiveMembershipState(membership);
+
 // Which queue a member row belongs in, if any — the mod page's Requests tab
 // shows join requests (pending) and posting-approval requests (an active,
 // unapproved member who asked).
