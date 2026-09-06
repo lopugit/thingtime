@@ -4592,6 +4592,17 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
       120-character key must show NO "Run …?" dialog at all (the binding is
       simply ignored). `?source=app-pokeworld-state` on a live component still
       confirms once, then loads the real data.
+- [ ] Switching `?source=` never leaves the PREVIOUS program running while the
+      new one is still being confirmed. From a live `/thing/<A>?source=<x>`
+      that you approved, navigate in-app to `/thing/<B>?source=<y>` (and
+      separately, just edit `?source=` on the same thing). While the "Run
+      <y>?" dialog is open the live pane must show NO source result and fire
+      no request for `<x>` — check the Network tab for an action run of `<x>`
+      against `<B>`. The clearing branch is skipped whenever `<B>` repaints
+      instantly from the `tt-thing-*` cache, which is the normal path, so the
+      approval has to be dropped explicitly before re-asking (same order as
+      `/components/:key`). A viewer approved `<x>` for one surface, never for
+      the next one.
 - [ ] `/thing/:id` cache stays bounded and session-scoped: open 45+ different
       things, then in DevTools → Application → Local Storage confirm at most 40
       `tt-thing-*` keys survive and the oldest were dropped, not the newest.

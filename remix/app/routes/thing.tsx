@@ -429,6 +429,14 @@ export default function ThingPage() {
 			return;
 		}
 		let cancelled = false;
+		// Drop the PREVIOUS approval before asking about this one. Without this
+		// the old binding keeps running while the dialog for the new one is on
+		// screen: navigating /thing/A?source=x → /thing/B?source=y repaints B
+		// instantly from the tt-thing- cache, so `thing` is already non-null and
+		// this effect skips the clearing branch above — and `x` would run against
+		// B, a surface the viewer never approved it for. Same order as the
+		// sibling /components/:key binding (ComponentDetailPage).
+		setApprovedSource(null);
 		Promise.resolve(confirmRef.current({ action: requestedAction, inputs: {} })).then((approved) => {
 			if (!cancelled) setApprovedSource(approved ? { action: requestedAction, refresh: 'load' } : null);
 		});
