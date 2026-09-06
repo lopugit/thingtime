@@ -212,6 +212,10 @@ export const PostComposer = (props: PostComposerProps) => {
   // onClose fires right after onApply and would read this render's (stale)
   // customAcl — the ref is the truth for "has an audience ever been composed"
   const audienceAppliedRef = React.useRef<boolean>(!!(editPost?.visibility === 'custom' && editPost?.acl));
+  // …and the circle to come back to when the picker is abandoned. Seeded like
+  // `visibility` above so a brand-new post still falls back to 🌐 Public,
+  // while an edit falls back to whatever the post actually was.
+  const audiencePreviousVisibilityRef = React.useRef<PostVisibility>(editPost?.visibility || 'public');
 	// gallery layout (crystal.mediaLayout): auto = masonry default, stored null
 	const [layoutMode, setLayoutMode] = React.useState<ComposerLayoutMode>(
 		editPost?.mediaLayout?.mode === 'rows' ? 'rows' : editPost?.mediaLayout?.mode === 'grid' ? 'grid' : 'auto'
@@ -1206,9 +1210,15 @@ export const PostComposer = (props: PostComposerProps) => {
               value={visibility}
               onChange={(event) => {
                 const next = event.target.value as PostVisibility;
+                // custom opens the picker; re-picking custom re-opens it.
+                // Remember the circle we're LEAVING first: abandoning the
+                // picker has to come back here, and `visibility` still holds
+                // the pre-change value on this render.
+                if (next === 'custom') {
+                  audiencePreviousVisibilityRef.current = visibility;
+                  setAudienceOpen(true);
+                }
                 setVisibility(next);
-                // custom opens the picker; re-picking custom re-opens it
-                if (next === 'custom') setAudienceOpen(true);
               }}
               aria-label="Who can see this post"
             >
@@ -1249,9 +1259,15 @@ export const PostComposer = (props: PostComposerProps) => {
           isOpen={audienceOpen}
           onClose={() => {
             setAudienceOpen(false);
-            // abandoning the picker with nothing EVER composed falls back to
-            // public (a cancel after applying keeps the composed audience)
-            if (!audienceAppliedRef.current) setVisibility((current) => (current === 'custom' ? 'public' : current));
+            // Abandoning the picker with nothing EVER composed restores the
+            // circle that was in effect before it opened (a cancel after
+            // applying keeps the composed audience). It must NOT fall through
+            // to a fixed 'public': editing a 🔒/👥/🕵️ post, opening 🎭 out of
+            // curiosity and cancelling would leave the composer set to 🌐, so
+            // the next Save silently published it.
+            if (!audienceAppliedRef.current) {
+              setVisibility((current) => (current === 'custom' ? audiencePreviousVisibilityRef.current : current));
+            }
           }}
           initialAcl={customAcl || undefined}
           onApply={(acl) => {
