@@ -4732,32 +4732,28 @@ jobs:
             against `github-actions`. Never push `github-actions`, `main`, or
             another target/default branch directly.
 
-            Before you write that controller fix, inventory the Lopu controller
-            repairs already open against `github-actions` with
+            Before writing that fix, inventory the repairs already open with
             `gh pr list --repo $REPO --state open --base github-actions
-            --limit 100 --json number,title,url,body` and read every one whose
-            body carries `<!-- thingtime-lopu-controller-repair:v1`; use
-            `gh pr diff <number> --name-only` to see which protected files each
-            one touches. The publisher can only fold your patch into an open
-            repair when it applies cleanly on top of it, so a second
-            independent rewrite of the same file does not update that PR — it
-            opens a rival one that conflicts with it and neither can merge
-            until a human picks. If an open repair already covers the defect,
-            do not restate it: revert your edits so the trusted checkout is
-            clean again, leave `$RUNNER_TEMP/lopu-workflow-fix.md` unwritten,
-            and record the pending PR number in the review report and PR
+            --limit 500 --json number,title,url,body`, read each body carrying
+            `<!-- thingtime-lopu-controller-repair:v1`, and read the paths and
+            hunks each one touches with `gh pr diff <number>`. The publisher
+            folds your patch into an open repair only when it applies cleanly
+            on top of it, so a second independent rewrite of the same lines
+            opens a rival PR that conflicts with the first and blocks both
+            until a human picks one. If an open repair already covers the
+            defect, do not restate it: revert your edits so the trusted
+            checkout is clean, leave `$RUNNER_TEMP/lopu-workflow-fix.md`
+            unwritten, and record that PR number in the review report and PR
             conversation instead. A dirty trusted checkout without that report
             fails the publish step outright.
 
-            Author a controller fix only for a defect no open repair covers, or
-            as one that stacks on an open repair. To stack, keep editing
-            `$GITHUB_WORKSPACE/trusted` at the `github-actions` head it is
-            already checked out on and write hunks that do not overlap the open
-            repair's — the publisher stacks for you, detaching onto that PR's
-            head and 3-way applying your patch. Never move that checkout's
-            `HEAD` onto another branch or PR: the publisher compares it against
-            the live `github-actions` ref and drops your repair with only a
-            warning when they differ.
+            Otherwise fix a defect no open repair covers, or stack on one by
+            editing `$GITHUB_WORKSPACE/trusted` at the `github-actions` head it
+            is already on, with hunks that do not overlap that repair's; the
+            publisher detaches onto the open PR's head and 3-way applies your
+            patch. Never move that checkout's `HEAD`: the publisher compares it
+            against the live `github-actions` ref and drops your repair with
+            only a warning when they differ.
 
             These worktrees start detached at immutable PR heads. Do not merge,
             rebase, delete branches, or push target/default branches. Leave any

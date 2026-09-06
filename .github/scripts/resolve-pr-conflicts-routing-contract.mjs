@@ -1478,6 +1478,32 @@ function assertWorkflowSource() {
     /outcome=updated-existing/u,
     "a successfully reused controller repair is reported separately from a newly opened PR",
   );
+  // The publisher's fold is mechanical: it can only absorb a patch that 3-way
+  // applies onto the open repair. Two independent rewrites of the same lines
+  // never do, so the duplicate has to be prevented in the reviewer prompt --
+  // #671 and #675 are one defect fixed twice, each blocking the other. These
+  // pin the reviewer half of that contract so a prompt reflow cannot silently
+  // drop it while the publisher keeps failing open.
+  assert.match(
+    reviewBlock,
+    /inventory the repairs already open with\s+`gh pr list[^`]*--base github-actions\s+--limit 500[\s\S]*?thingtime-lopu-controller-repair:v1`, and read the paths and\s+hunks each one touches/u,
+    "the reviewer reads every open controller repair's paths and hunks before authoring a rival patch",
+  );
+  assert.match(
+    reviewBlock,
+    /If an open repair already covers the\s+defect, do not restate it: revert your edits/u,
+    "a defect an open repair already covers is reported, not patched a second time",
+  );
+  assert.match(
+    reviewBlock,
+    /Never move that checkout's `HEAD`: the publisher compares it\s+against the live `github-actions` ref/u,
+    "the reviewer leaves the trusted checkout on the head the publisher leases against",
+  );
+  assert.match(
+    reviewBlock,
+    /source_sha="\$\(git -C "\$trusted" rev-parse HEAD\)"[\s\S]*?git\/ref\/heads\/github-actions[\s\S]*?outcome=stale-controller/u,
+    "the lease the prompt promises exists: a repair authored off a moved controller head is preserved, not published",
+  );
   assert.match(
     reviewBlock,
     /report_title=.*sed -n 's\/\^# \/\/p'[\s\S]*title="fix\(actions\):/u,
