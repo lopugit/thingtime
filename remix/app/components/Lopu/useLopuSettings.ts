@@ -26,7 +26,7 @@ export interface LopuSettings {
 	launcher: boolean;
 	// where the chat window sits: free-floating or flush against an edge
 	dock: LopuDock;
-	// paint Lopu's builder patches into the open draft while she streams
+	// paint Lopu's builder patches into the open draft while it streams
 	applyPatches: boolean;
 	// ask before deleting a CONVERSATION from the list (the sidebar's delete
 	// button). Lopu's own destructive tools (delete_thing, a whole-crystal
@@ -357,7 +357,7 @@ export const useLopuSettings = () => {
 	);
 
 	// Whether the floating window is showing describes THIS viewport, not a
-	// preference: a second tab sliding Lopu open because you opened her here
+	// preference: a second tab sliding Lopu open because you opened it here
 	// would be wrong. Persisted as before, so a reload still restores it.
 	const setOpen = React.useCallback(
 		(value: boolean) => {

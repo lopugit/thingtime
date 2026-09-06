@@ -354,7 +354,7 @@ shares the same brain and the same fence.
 Order: explicit choice's provider first; if that provider fails before any
 text, try the other configured provider with its waterfall/default choice;
 finally the fallback stream (`streamFallbackReply` — an honest canned line such
-as "Lopu is resting her horn — no AI provider is configured yet. Ask an admin
+as "Lopu is resting its horn — no AI provider is configured yet. Ask an admin
 to add ANTHROPIC_API_KEY." when nothing is configured, or "Lopu is
 daydreaming… try again 🔮" on provider errors). Never a blank reply.
 
@@ -783,8 +783,8 @@ three passes.
   to the current Thingtime origin and API path, and posts voice turns
   directly (`/api/v1/lopu/voice/reply` with the session's `providerId`,
   `model`, `effort`, `speed`) when the WebView is backgrounded. Listening
-  pauses for the whole provider turn and for Lopu's speech so she never
-  transcribes her own voice (the feedback-loop guard, `pausedRef` in
+  pauses for the whole provider turn and for Lopu's speech so it never
+  transcribes its own voice (the feedback-loop guard, `pausedRef` in
   `useLopuVoice`), then resumes. `lopu-voice-start` carries `inputMode:
   'provider-audio' | 'native-transcript'` (direct voice when the chat's
   provider supports it, else the web toasts the reason and asks for

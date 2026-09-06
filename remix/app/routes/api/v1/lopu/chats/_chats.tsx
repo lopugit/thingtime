@@ -14,7 +14,7 @@ export { requireJsonContentType };
 // Chat writes fail CLOSED on a limiter outage: an unthrottled client could
 // otherwise create MAX_LOPU_CHATS_PER_USER conversations in one go.
 export const chatWriteLimitError = (limit: { unavailable?: boolean }): string =>
-	limit.unavailable ? 'Lopu cannot check her rate limit right now — try again shortly' : 'Slow down a little 🌸';
+	limit.unavailable ? 'Lopu cannot check its rate limit right now — try again shortly' : 'Slow down a little 🌸';
 
 // GET /api/v1/lopu/chats?limit= — the caller's Lopu conversations, newest
 // activity first, in the same list-entry shape as /api/v1/chats (unread count,
