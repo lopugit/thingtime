@@ -1,5 +1,10 @@
 # TESTING.md — per-area manual test checklists
 
+- Recording reminders fan out to native push only after their private todo and
+  daily notification transaction commits. Retries never send another push for
+  the same daily ID; blocked preferences/checkpoints send none. A push transport
+  failure does not erase or duplicate the durable bell reminder.
+
 - Thing detail back links accept only `things`, `actions`, or `feed` as `from`.
   Unknown values and prototype keys such as `toString` must display a working
   Back to feed link on desktop and mobile.
@@ -34,6 +39,31 @@ local dev stack (`npm run web-pms`, worktree stacks get their own port trio —
 see `AI_ALL.md`). Each list is the distilled regression history of that area:
 every line exists because it broke once. Add a line whenever a new bug class
 is fixed, and cite the checklist you ran in the PR description.
+
+## Lopu Apple Watch recording automation
+
+- [ ] On desktop and 390px mobile, open `/lopu/recordings`, verify the account,
+      refresh status, save options/time zone/hour, and scroll to the bottom.
+      Inputs must not overlap; missing `AbortSignal.timeout` must not prevent
+      loading. Preserve loaded state during background refreshes.
+- [ ] With no provider configured, show that fact and prevent enabling; an
+      already-enabled account must still be able to disable automation.
+- [ ] With explicit opt-in and a configured provider, upload a new private
+      Watch recording. Verify transcript comments and private notes/todos,
+      source links, quota accounting, and a visible completed receipt.
+- [ ] Retry after a provider failure or interruption after a committed comment:
+      the transcript and derived Things must not duplicate. Long emoji
+      transcripts split into valid comments within the comment size limit.
+- [ ] A different account, temporary user, scoped credential, cross-origin
+      mutation, invalid settings or unauthenticated scheduler cannot change
+      state or disclose recordings. Switching accounts clears the prior view.
+- [ ] Disable automation or privatization eligibility during processing:
+      no later content write succeeds; re-enable without scanning old uploads.
+- [ ] Send reminders twice on one local date: one bell entry per unfinished
+      todo. Completion, paused reminders and disabled notification preferences
+      stop subsequent alerts. Check a DST transition and the next local day.
+- [ ] Verify actual native push on a paired Watch separately from bell history;
+      a provider-configured flag or HTTP 200 is not end-to-end proof.
 
 ## Native Commander network speed test
 

@@ -52,7 +52,8 @@ export const NOTIFICATION_TYPE_META: Record<NotificationType, { emoji: string; l
     emoji: '⚡',
     label: 'Action runs',
     hint: 'Lopu reports each action you run yourself, plus any run that fails — email is opt-in'
-  }
+  },
+  'recording-reminder': { emoji: '🦄', label: 'Recording reminders', hint: 'Daily reminders for unfinished todos from Watch recordings — email is opt-in' }
 };
 
 export const notificationEmoji = (type: string): string => (isNotificationType(type) ? NOTIFICATION_TYPE_META[type].emoji : '✨');
@@ -88,6 +89,8 @@ export const notificationVerb = (item: Pick<NotificationItem, 'type' | 'preview'
       return 'mentioned you';
     case 'action-run':
       return 'ran an action';
+    case 'recording-reminder':
+      return 'has a reminder for you';
     default:
       return 'did something ✨';
   }

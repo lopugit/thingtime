@@ -633,6 +633,26 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 
 export const apiEndpointDocs: ApiEndpointDoc[] = [
 	endpoint({
+		id: 'lopu-recordings', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'lopu', title: 'Watch recording automation',
+		endpoint: '/api/v1/lopu/recordings', methods: ['GET', 'POST'],
+		summary: 'Opt in to private Watch audio transcription, generated notes/todos and daily reminders; inspect and retry your own jobs.',
+		detail: 'Home-origin account feature. GET returns ownerId, settings, provider configuration availability, the newest 50 processing jobs and newest 100 recording todos. POST accepts op=settings with a partial settings object (enabled, createTodos, createNotes, dailyReminders booleans; IANA timeZone; reminderHour 0–23), op=queue with an owned private Watch postId, op=retry with a failed/retry/paused job id, or op=todo with an owned generated todo id and completed/reminders booleans. Opt-in defaults off; new uploads are discovered after first setup. Queued jobs and scheduled reminders are durable and idempotent. Audio and transcript are sent to the deployment’s OpenAI provider; audio is limited to 24 MiB. Full transcripts become private relational comments (split at the existing comment limit), and generated notes/todos are ordinary quota-billed private data Things. Model output cannot invoke tools. Requests never execute purchases or contact other users. Completion, deletion and pausing stop reminders; local calendar dates deduplicate them across DST. Private state and provider credentials are never returned. Existing recordings require an explicit queue request. Processing may need retry after provider or storage failures.',
+		auth: { mode: 'session-or-bearer', description: 'Full, live first-party account session only; app, Watch and personal scoped tokens are not account sessions. Mutation requires a non-temporary user account, same-origin JSON and a write rate limit.' },
+		steps: ['Sign in on the same domain as your Watch.', 'Open /lopu/recordings, review provider disclosure and enable automation.', 'Upload a recording and inspect its private comments, generated Things and reminder todos.'],
+		requestExamples: [{ name: 'Enable recordings', description: 'Opt in and select the reminder time zone.', method: 'POST', body: { op: 'settings', settings: { enabled: true, timeZone: 'Australia/Melbourne', reminderHour: 9 } } }, { name: 'Complete a todo', description: 'Stop daily reminders for this task.', method: 'POST', body: { op: 'todo', id: 'your-todo-id', completed: true } }],
+		responseExamples: [{ status: 200, description: 'Private account-scoped automation state.', body: { ok: true, ownerId: 'your-user-id', settings: { enabled: true, timeZone: 'Australia/Melbourne', reminderHour: 9 }, jobs: [], todos: [], provider: { configured: true, name: 'Thingtime OpenAI provider', maxAudioBytes: 25165824 } } }, { status: 401, description: 'A full signed-in account is required.', body: { ok: false, error: 'Sign in to manage your recordings.' } }]
+	}),
+	endpoint({
+		id: 'lopu-recordings-run', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'lopu', title: 'Run recording automation',
+		endpoint: '/api/v1/lopu/recordings/run', methods: ['GET', 'POST'],
+		summary: 'Protected scheduler/admin entry point for durable Watch recording jobs and due daily reminders.',
+		detail: 'GET requires the exact CRON_SECRET bearer credential; POST requires a current administrator and same-origin request. Home data plane only. Bounded discovery, leased processing, private comment/Thing creation and once-per-local-day reminder delivery. There are no user-selected provider hosts, owner ids, prompts or execution commands. Retries resume checkpoints instead of duplicating content. Response contains counts and status labels only, never recordings, transcripts, credentials or account ids.',
+		auth: { mode: 'session-or-bearer', description: 'GET: scheduler secret only. POST: current administrator only.' },
+		steps: ['Configure OpenAI and CRON_SECRET in the deployment.', 'Vercel invokes the registered cron automatically; an administrator can POST for a bounded manual run.'],
+		requestExamples: [{ name: 'Run scheduler', description: 'Administrator-only manual run.', method: 'POST', body: {} }],
+		responseExamples: [{ status: 200, description: 'Bounded processing counts.', body: { ok: true, reminders: { sent: 0 }, recordings: { queued: 1, processed: 1, outcomes: ['done'], providerConfigured: true } } }]
+	}),
+	endpoint({
 		id: 'capabilities',
 		contractVersion: '1.1.0',
 		group: 'platform',
@@ -10018,9 +10038,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'notifications-list',
     // 1.1.0 added the history filters, 1.2.0 the stable cursor, from/to window
-    // and viewer object — this endpoint now ships both, so it publishes 1.2.0.
-    contractVersion: '1.2.0',
-    featureVersion: '1.2.0',
+    // and viewer object; 1.3.0 adds private recording-reminder notifications.
+    contractVersion: '1.3.0',
+    featureVersion: '1.3.0',
     group: 'notifications',
     title: 'List notifications',
     endpoint: '/api/v1/notifications',
@@ -10028,11 +10048,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     detail:
       'Notifications are server-minted things (new followers, friend requests/accepts, comments, ' +
       'replies, reactions, shares, @mentions, capped posts-from-followed/friends fan-out) plus SYSTEM ' +
-      'notes from Lopu (category system — today action-run: an action you ran finished or failed; ' +
+      'notes from Lopu (category system — action-run: an action you ran finished or failed; recording-reminder: a daily reminder for an unfinished Watch recording todo; ' +
       'actorId "thingtime", the headline in title, an in-app href, outcome ok|error). Every row ' +
       'carries its category: social (friend-request, friend-accepted, new-follower, groups), ' +
       'engagement (comment, reply, reaction, share, mention), feed (post-from-followed, ' +
-      'post-from-friend), system (action-run). The list is ALWAYS filtered by your current ' +
+      'post-from-friend), system (action-run, recording-reminder). The list is ALWAYS filtered by your current ' +
       'notification settings, so disabling a type hides even already-written notifications of that ' +
       'type. Optional filters back the /notifications history page: category=<one>, ' +
       'types=<csv> (intersected with category when both are given; unknown names match nothing), ' +
@@ -10226,14 +10246,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'notifications-settings',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    contractVersion: '1.2.0',
+    featureVersion: '1.2.0',
     group: 'notifications',
     title: 'Notification settings',
     endpoint: '/api/v1/notifications/settings',
     summary: 'Read or merge-patch your notification switches — per type, per channel (push + email), plus channel masters.',
     detail:
-      'Two channels: push (the bell/in-app channel) and email (SES-backed notification emails), each ' +
+      'Includes recording-reminder for opted-in daily Watch recording todos (push on, email opt-in). Two channels: push (the bell/in-app channel) and email (SES-backed notification emails), each ' +
       'with a master switch and per-type switches. Types: friend-request, friend-accepted, ' +
       'new-follower, post-from-followed, post-from-friend, comment, reply, reaction, share, mention, groups ' +
       '(reserved), action-run (system notes from Lopu about actions you run), plus the email-only ' +

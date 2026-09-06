@@ -1672,6 +1672,67 @@ incomplete-MPU lifecycle remains a required independent guard.
 An MPU that never issued a part URL has no possible late browser PUT and can be
 refunded promptly after Abort/ListParts/HEAD proves it empty.
 
+### Private Apple Watch recording automation
+
+`/lopu/recordings` (also linked from Settings) controls Lopu's recording
+automation. It is **off until each account opts in**: private audio and its
+transcript are sent to the deployment's OpenAI provider. Only newly uploaded
+private `watch-upload-*` posts tagged `apple-watch` are discovered. Owners can
+explicitly queue an older private Watch post on the same page. This covers
+direct Watch uploads and the older paired-iPhone relay.
+
+Configure these values in your deployment's secret store, never in Git:
+
+```sh
+OPENAI_API_KEY="<server-side provider key>"
+CRON_SECRET="<long random scheduler secret>"
+# Optional operator-controlled compatible provider base and analysis model:
+OPENAI_BASE_URL="https://api.openai.com/v1"
+LOPU_OPENAI_MODEL="gpt-4o-mini"
+```
+
+The provider must support `gpt-4o-mini-transcribe` audio transcription and JSON
+chat completions; a chat-only proxy is insufficient. Analysis honors the
+current Thingtime Admin OpenAI model preference, including effort/priority;
+`LOPU_OPENAI_MODEL` is only the default-slot fallback. `Provider configured`
+means a key is present, not that a live transcription has passed. Audio is
+limited to 24 MiB; M4A/MP4, MP3, WAV and WebM are accepted. Never point the
+provider base at an untrusted service: it receives the key and private audio.
+
+The repository-root Vercel cron calls `GET /api/v1/lopu/recordings/run` every
+five minutes using `Authorization: Bearer <CRON_SECRET>`. Other hosts must
+schedule that authenticated endpoint themselves. An administrator may use
+same-origin `POST` for a manual run. The scheduler discovers bounded batches,
+processes one recording per run, and resumes interrupted work through durable
+leases/checkpoints. A busy installation must schedule sufficient worker
+capacity; five minutes is polling cadence, not a completion guarantee.
+
+Transcripts become quota-billed, relational comments on the source private
+post (long transcripts are split). Derived notes and unfinished todos are
+ordinary owner-private Things linking back to that post. This feature creates
+reminders, not purchases, messages or executable actions. It rechecks source
+privacy and opt-in before every write; atomic checkpoints prevent duplicate
+comments/todos on retry. Processing scratch is non-indexed BinData and is
+discarded on completion. Activity and retry buttons expose failures without
+printing provider credentials or signed attachment URLs.
+
+Daily reminders use the account's selected IANA time zone and hour, with at
+most one bell entry per unfinished todo per local date, including DST days.
+Reminders arrive at or after that hour as the bounded queue is processed.
+Complete a todo, pause its reminders, or disable daily reminders globally to
+stop them. The normal notification preferences also apply; reminder emails
+are opt-in. Native delivery additionally requires the Watch push setup.
+
+API contracts: `api.lopu-recordings` and `api.lopu-recordings-run` 1.0.0;
+notification list/settings 1.2.0 add `recording-reminder`. Both manifests and
+the runtime route registry advertise these versions. Clients must negotiate
+against the selected origin before using recording operations.
+
+Local QA worktree: `thingtime-watch-recording-automation` uses Vite 17460,
+HMR 17461 and Nitro 17462, derived by `npm run web-ports`. Start with the
+repository PM2 lifecycle. No public Funnel was configured for this worktree
+during implementation: the machine's Tailscale CLI pointed at a missing app.
+
 ### Notification emails (SES notification stream)
 
 Activity notifications (friend requests, new followers, comments, replies,

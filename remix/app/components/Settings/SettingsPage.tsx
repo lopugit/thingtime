@@ -556,6 +556,9 @@ export const SettingsPage = () => {
 
         {/* notifications (auth only) — per-type switches for the bell */}
         {user && <NotificationSettingsSection user={user} />}
+        {user && <SettingsSection eyebrow="Watch recordings 🦄" description="Turn private Watch recordings into transcripts, notes and todos, with daily reminders you can pause or complete.">
+          <Button onClick={() => navigate('/lopu/recordings')}>Manage recording automation</Button>
+        </SettingsSection>}
 
         {/* admin (admins only) */}
         {user?.isAdmin && (
