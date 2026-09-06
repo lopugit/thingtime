@@ -20,6 +20,7 @@ engineering decisions in [`../DECISIONS.md`](../DECISIONS.md).
 | [Resource-conscious reach roadmap](./resource-conscious-reach-roadmap.md)                                       | Constrained-journey baselines through client, media, offline, backend, impact-evidence, and continuous resource gates                           | Proposed |
 | [Creator sustainability and fair-value roadmap](./creator-sustainability-and-fair-value-roadmap.md)             | Role and terms approval through provider-neutral truth, synthetic proof, one payment rail, and a bounded invited pilot                          | Proposed |
 | [Learning agency and knowledge-stewardship roadmap](./learning-agency-and-knowledge-stewardship-roadmap.md)       | User-approved one-shot revisit through private reflection, honest evaluation, reusable knowledge, and separately gated AI or institutional use | Proposed |
+| [AI agency and accountable-assistance roadmap](./ai-agency-and-accountable-assistance-roadmap.md)                 | Assistance charter through context agency, risk-tiered tools, bounded receipts, private pilot, change evaluation, and separately gated autonomy | Proposed |
 
 ## Conventions
 

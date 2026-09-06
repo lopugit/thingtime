@@ -484,3 +484,17 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     exclusions, owners, and stop authority. AI, minors, schools, assessment,
     credentials, institutional dashboards, and efficacy claims remain
     separately gated.
+
+33. **🤝 Make AI agency and accountable assistance a product contract.**
+
+    Preserve Lopu's owner-private chats, explicit model/provider selection,
+    user-vault boundaries, tool evidence, signed exact-action confirmations,
+    and compact receipts while making context, authority, uncertainty,
+    correction, and remedy understandable end to end. Start with one private,
+    previewable, reversible draft journey for consenting adults. Execute
+    `claude-todo/33-ai-agency-and-accountable-assistance.md` only after the
+    owner and qualified reviewers approve the assistance charter, context and
+    memory boundary, capability-risk map, receipt and remedy contract,
+    evaluation, accessibility profiles, accountable owners, and stop authority.
+    Public, external, bulk, unattended, child-facing, and high-impact uses
+    remain separately gated.

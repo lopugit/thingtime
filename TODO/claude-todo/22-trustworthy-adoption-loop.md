@@ -71,6 +71,10 @@ experiment by itself.
   knowledge revisits, private reflection, source-version context, and honest
   learning-evidence limits. Adoption experiments must not label saves, opens,
   completions, confidence, streaks, or time spent as learning.
+- [TODO 33](./33-ai-agency-and-accountable-assistance.md) owns visible AI
+  context, bounded authority, risk-tiered tools, receipts, correction, remedy,
+  and separately gated autonomy. Adoption experiments must not treat fluent
+  output, confirmation, tool completion, or usage as authority or success.
 - [TODO 10](./10-delight-and-growth-ideas.md) is the idea bank; this epic adds
   sequencing and outcome gates.
 - [TODO 18](./18-account-invite-links.md) owns the defensive account-invite

@@ -29,6 +29,9 @@
 **Learning-agency dependency:**
 [Learning agency and knowledge stewardship](./learning-agency-and-knowledge-stewardship-roadmap.md)
 
+**AI-agency dependency:**
+[AI agency and accountable assistance](./ai-agency-and-accountable-assistance-roadmap.md)
+
 ## Outcome
 
 Make Thingtime easier to discover, understand, trust, use repeatedly, share by
@@ -270,6 +273,7 @@ Every experiment copied into `TODO/` should contain:
 | Growth excludes constrained devices or networks                   | Core-journey completion, transfer, long-task, or local-footprint evidence crosses an approved profile budget                             | Stop expansion; preserve complete meaning and satisfy the resource-conscious reach gate before resuming.                                                   |
 | Creator commerce creates unfair influence or unresolved liability | Payment affects reach/trust/safety, or seller, merchant, fulfilment, refund, dispute, loss, payout, or support responsibility is unclear | Stop transaction intake; preserve receipts, entitlements, remedies, and support, then satisfy the creator fair-value gate before resuming.                 |
 | Learning claims outrun evidence                                   | Saves, opens, completions, confidence, streaks, or time spent are labelled learning, mastery, or efficacy                                  | Remove the claim; preserve private reflection and source context, then satisfy the learning-agency gate before resuming.                                  |
+| AI fluency or tool activity is mistaken for authority or success  | Conversation history becomes implied consent, confirmations become blanket delegation, or tool completion is reported as a correct outcome | Stop the affected assistance path; restore human control, bounded context, current authorization, receipts, correction, and remedy before resuming.      |
 | Costs grow faster than usefulness                                 | Storage, compute, email, moderation, or support cost per useful return rises                                                             | Narrow the experiment, improve efficiency, or test an aligned paid tier.                                                                                   |
 | Metrics optimize the proxy                                        | Page views/time rise while useful outcomes or trust fall                                                                                 | Retire the proxy and return to outcome-based evaluation.                                                                                                   |
 

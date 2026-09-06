@@ -316,3 +316,41 @@ The new theme is linked from the NOTES, PLAN, main TODO, and Claude TODO indexes
 plus the ethical-adoption evidence, trustworthy-adoption roadmap, and TODO 22
 dependency list. No runtime, API, schema, worker, scheduler, notification,
 analytics, course, certificate, AI, or production behavior changed.
+
+## 2026-09-06 — AI agency and accountable assistance
+
+This run distinguishes an assistant's fluent conversation and tool activity
+from informed context choice, bounded authority, correct outcomes, and real
+remedy. It adds:
+
+- `NOTES/ai-agency-and-accountable-assistance-baseline.md`, a dated evidence
+  ledger covering Lopu's current chat history, model/provider choices,
+  user-vault boundary, broad tool surface, narrow destructive confirmations,
+  prompt-injection posture, compact receipts, missing memory and risk contracts,
+  external governance inputs, and one bounded private-draft pilot;
+- `PLAN/ai-agency-and-accountable-assistance-roadmap.md`, a gated path from an
+  assistance charter and capability-risk map through adjustable context,
+  risk-tiered execution, bounded receipts and remedies, one private pilot,
+  change evaluation, and separately approved broader autonomy; and
+- `TODO/claude-todo/33-ai-agency-and-accountable-assistance.md`, an execution
+  epic with owner decisions, dependency boundaries, capability-manifest and
+  authorization requirements, complete-journey validation, acceptance criteria,
+  stop conditions, and explicit non-goals.
+
+The recommended first experiment is intentionally small: a consenting adult
+chooses one owner-private draft outcome and source scope, sees and can adjust a
+concise context receipt before the model call, keeps any mutation private,
+previewed, bounded, and reversible, then receives an action receipt with
+uncertainty, review, undo, report, delete, and export paths. Conversation
+history is not memory or future consent; a tool request is not authority; a
+confirmation is not blanket delegation; and a tool result is not proof that
+the outcome is correct.
+
+Public publishing, external side effects, bulk or unattended work,
+cross-account memory, minors, impersonation, private-data training, and
+high-impact domains remain blocked or separately gated. Open PR #665 is treated
+only as active design evidence, not shipped behavior. The new theme is linked
+from the NOTES, PLAN, main TODO, and Claude TODO indexes, plus the
+ethical-adoption evidence, trustworthy-adoption roadmap, and TODO 22 dependency
+list. No runtime, API, model, provider, tool, prompt, confirmation, storage,
+schema, analytics, or production behavior changed.
