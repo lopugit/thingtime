@@ -365,6 +365,39 @@ jobs:
           encoded_ref="$(jq -rn --arg value "$ref" '$value | @uri')"
           category="/language:$SLOWEST_LANGUAGE"
 
+          # `code-scanning/analyses` retains EVERY analysis ever uploaded for a
+          # ref, so "an analysis exists for this sha and category" is a
+          # different question from "this run's sibling has uploaded". They
+          # diverge on the re-scan of an already-analyzed head, which is the
+          # path this repository reaches most often -- a re-run, a queued
+          # duplicate held by `queue: max` above, or a backfill dispatch.
+          # PR #291 is the live proof: attempt 2 of run 33993009078 started
+          # 23:31:23 and re-analyzed the SAME merge SHA a8e90ff3, uploading
+          # `actions` at 23:32:12 and `javascript-typescript` at 23:38:14 --
+          # and attempt 1's 21:32:20 analysis is still listed under that very
+          # ref and SHA. Matching it would release this leg instantly and hand
+          # back the exact 6m02s race this step exists to remove, silently, on
+          # every re-scan. Require the analysis to belong to THIS attempt.
+          #
+          # `run_started_at` is per-attempt (23:31:23 for that attempt 2, not
+          # its 21:25:26 creation), so it is the exact boundary: every analysis
+          # this attempt publishes is newer, and every analysis from an earlier
+          # scan of the same SHA is older. Fall back to this step's own start,
+          # which is later still and so likewise never admits a stale analysis;
+          # a sibling that uploaded before this leg began polling is then
+          # released by the `done` grace window below rather than by a match.
+          baseline_epoch="$(date -u +%s)"
+          if run_json="$(gh api "repos/$REPO/actions/runs/$RUN_ID")"; then
+            run_started_epoch="$(
+              jq -r '.run_started_at? | strings | fromdateiso8601? // empty' <<<"$run_json"
+            )" || run_started_epoch=""
+            if [ -n "$run_started_epoch" ]; then
+              baseline_epoch="$run_started_epoch"
+            fi
+          else
+            echo "::warning::Could not read this run's start time; holding $LANGUAGE against this step's own start instead."
+          fi
+
           # Well above the 2-7 minutes observed and well below the job's own
           # 60-minute ceiling, so a pathological slow analysis still gets its
           # ordering while a wedged one cannot strand this runner.
@@ -386,11 +419,15 @@ jobs:
             # Preserve `gh`'s exit status rather than `|| true`: a rate-limited
             # lookup must retry, not be mistaken for "the sibling has landed".
             if analyses="$(gh api "repos/$REPO/code-scanning/analyses?ref=$encoded_ref&per_page=100")"; then
-              if jq -e --arg sha "$sha" --arg category "$category" '
+              # `// 0` rather than `// empty`: a malformed or absent timestamp
+              # must evaluate to a definite "too old", not vanish out of the
+              # predicate and leave `any` to report on a shorter list.
+              if jq -e --arg sha "$sha" --arg category "$category" --argjson since "$baseline_epoch" '
                 any(.[];
                   .commit_sha == $sha
                     and .tool.name == "CodeQL"
-                    and .category == $category)
+                    and .category == $category
+                    and ((.created_at? | strings | fromdateiso8601? // 0) >= $since))
               ' <<<"$analyses" >/dev/null; then
                 echo "::notice::The $SLOWEST_LANGUAGE analysis for $ref@$sha has landed; uploading $LANGUAGE now."
                 exit 0

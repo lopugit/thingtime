@@ -872,6 +872,23 @@ export function assertControlPlaneContract() {
     /code-scanning\/analyses\?ref=\$encoded_ref/u,
     "the hold releases on the analysis appearing in code scanning, not merely on the sibling job concluding: processing lag is what closed #291 and #592",
   );
+  // `code-scanning/analyses` never forgets, so the release predicate has to
+  // separate "this attempt's sibling uploaded" from "this SHA was analyzed at
+  // some point". Without that, a re-scan of an already-analyzed head matches
+  // the PREVIOUS scan's analysis and releases instantly, restoring the very
+  // race this step removes — silently, and on the repository's most common
+  // path. #291 attempt 2 re-analyzed merge SHA a8e90ff3 at a 6m02s gap while
+  // attempt 1's analysis was still listed under that ref and SHA.
+  assert.match(
+    orderingHold,
+    /--argjson since "\$baseline_epoch"[\s\S]*?fromdateiso8601\? \/\/ 0\) >= \$since/u,
+    "the hold releases only on an analysis newer than this attempt, so a re-scan cannot be released by the previous scan's analysis of the same SHA",
+  );
+  assert.match(
+    orderingHold,
+    /baseline_epoch="\$\(date -u \+%s\)"[\s\S]*?\.run_started_at\?[\s\S]*?baseline_epoch="\$run_started_epoch"/u,
+    "that freshness baseline is this run attempt's own start, falling back to the step's start, so neither source can admit an earlier scan's analysis",
+  );
   assert.doesNotMatch(
     orderingHold,
     /gh api[^\n]*\|\| true/u,
