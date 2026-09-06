@@ -38,7 +38,7 @@ export const placeEditorOverlay = (
 	return best;
 };
 
-/** Prefer above the selection, but never trade a clear nearby slot for overlapping controls. */
+/** Always stay above the line: below-text space belongs to the native iOS menu. */
 export const placeEditorSelectionToolbar = (
 	size: Pick<OverlayRect, 'width' | 'height'>,
 	selection: OverlayRect,
@@ -46,13 +46,12 @@ export const placeEditorSelectionToolbar = (
 	obstacles: OverlayRect[]
 ) => {
 	const preferred = { left: selection.left + selection.width / 2 - size.width / 2, top: selection.top - size.height - 12 };
-	const above = { ...bounds, height: Math.max(0, Math.min(bounds.height, selection.top - 12 - bounds.top)) };
-	const primary = placeEditorOverlay(size, preferred, above.height >= size.height ? above : bounds, obstacles, [selection]);
-	const collisions = (rect: OverlayRect) =>
-		(overlayIntersects(rect, selection) ? 1e4 : 0) + obstacles.filter((obstacle) => overlayIntersects(rect, obstacle)).length;
-	if (!collisions(primary)) return primary;
-	const fallback = placeEditorOverlay(size, preferred, bounds, obstacles, [selection]);
-	return collisions(fallback) < collisions(primary) ? fallback : primary;
+	const above = {
+		...bounds,
+		top: Math.min(bounds.top, preferred.top),
+		height: Math.max(size.height, Math.min(bounds.height, selection.top - 12 - bounds.top))
+	};
+	return placeEditorOverlay(size, preferred, above, obstacles, [selection]);
 };
 
 export const editorOverlayBounds = (holder: HTMLElement): OverlayRect => {
@@ -123,7 +122,7 @@ export const editorTextObstacles = (holder: HTMLElement): OverlayRect[] => {
 		holder.closest('article, section')?.parentElement ??
 		session?.parentElement?.parentElement;
 	// Field history occupies layout space and must also repel floating menus.
-	if (session?.getAttribute('data-editor-presentation') !== 'inline') {
+	if (session) {
 		const history = session?.querySelector<HTMLElement>(':scope > .tt-editor-history-controls');
 		if (history) rects.push(history.getBoundingClientRect());
 	}

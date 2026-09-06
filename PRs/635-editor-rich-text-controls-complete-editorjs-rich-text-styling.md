@@ -115,3 +115,11 @@ A source contract guards the single runtime and shared rich-text entry points. T
 The selected-text toolbar prefers above; if every above-text slot overlaps labels/history, it chooses a clearer nearby slot. Verified the real Thing field adapter at 390px and 320px: custom alpha hex, rem size and strikethrough survive view/edit, Undo/Redo stays scoped, and Changes opens/closes. Editor/kind tests: 84; feed tests: 33; webpage tests: 31. Client/embed build and focused lint pass.
 
 Compact field editors reserve at least 128px so the selected-text toolbar has a clear fallback inside the field. The selection receives stronger collision protection than surrounding controls, preventing crowded mobile layouts from covering the text being formatted. Page-level controls outside the composer are included in placement checks.
+
+## Subtle history and above-line formatting — 2026-09-06
+
+The iOS screenshots confirmed that the previous below-selection fallback still collided with the native editing menu. Formatting now stays above the line; when the surrounding UI leaves no clear slot, the editor temporarily reserves space above its content while the selection is open. Deselecting removes that space.
+
+Undo, Redo and Changes now use transparent backgrounds, muted grey 11px labels and compact 28px buttons inside the bottom-right corner of field and inline editors. Bottom padding keeps content clear of the controls; there is no separate top history row. The history timeline and keyboard shortcuts are unchanged. The field minimum returns to 96px because below-selection fallback space is no longer needed.
+
+Chrome checks cover 390px and 320px widths, a 600px-high viewport, selection separation, footer Undo/Redo/Changes, and large inline builder headings. Physical iOS native-menu positioning remains device acceptance.

@@ -39,15 +39,14 @@ test('repeated placement is stable and zero-space bounds produce no negative dim
 	assert.deepEqual(zero, { left: 8, top: 8, width: 0, height: 0 });
 });
 
-test('selection toolbar keeps clear of a field history row when above is crowded', () => {
+test('selection toolbar stays above even when controls crowd the space', () => {
 	const bounds = { left: 8, top: 8, width: 304, height: 624 };
 	const selection = { left: 24, top: 300, width: 180, height: 24 };
 	const history = { left: 16, top: 250, width: 130, height: 24 };
 	const labels = { left: 8, top: 8, width: 304, height: 234 };
 	const result = placeEditorSelectionToolbar({ width: 206, height: 46 }, selection, bounds, [selection, history, labels]);
-	assert.equal(overlayIntersects(result, history), false);
 	assert.equal(overlayIntersects(result, selection), false);
-	assert.ok(result.top > selection.top);
+	assert.ok(result.top + result.height < selection.top);
 });
 
 test('selection toolbar stays above when a clear slot is available', () => {

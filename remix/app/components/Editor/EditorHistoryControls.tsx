@@ -38,7 +38,28 @@ export function EditorHistoryControls({
 	};
 	return (
 		<>
-			<HStack className="tt-editor-history-controls" aria-label="Editor history" spacing={1}>
+			<HStack
+				className="tt-editor-history-controls"
+				aria-label="Editor history"
+				spacing={0}
+				sx={{
+					'& > button': {
+						background: 'transparent',
+						color: 'var(--tt-muted, #777782)',
+						fontSize: '11px',
+						fontWeight: 400,
+						height: '28px',
+						minWidth: '28px',
+						paddingInline: '6px',
+						border: 0,
+						boxShadow: 'none',
+						borderRadius: '5px',
+						'&:hover:not(:disabled)': { background: 'var(--tt-hover, #f1f1f4)', color: 'var(--tt-text, #555560)' },
+						'&:disabled': { opacity: 0.35, background: 'transparent' },
+						'&:focus-visible': { outline: '2px solid var(--tt-muted, #777782)', outlineOffset: '1px' }
+					}
+				}}
+			>
 				<Button
 					size="xs"
 					aria-label="Undo"

@@ -26,8 +26,6 @@ export const watchEditorBlockChrome = (holder: HTMLElement, getEditor: () => any
 		const obstacles = editorTextObstacles(holder);
 		const inline = layoutEditorJsInlineToolbar(holder);
 		if (inline) obstacles.push(inline);
-		const fields = Array.from(holder.querySelectorAll<HTMLElement>('[contenteditable="true"],textarea'));
-		const first = fields[0]?.getBoundingClientRect() ?? holder.getBoundingClientRect();
 		const chip = holder.closest('.ttBlockFrame')?.querySelector<HTMLElement>(':scope > .ttBlockChip');
 		if (chip) {
 			const frameRect = chip.parentElement!.getBoundingClientRect();
@@ -39,25 +37,9 @@ export const watchEditorBlockChrome = (holder: HTMLElement, getEditor: () => any
 		}
 		const history = session?.querySelector<HTMLElement>(':scope > .tt-editor-history-controls');
 		const visible = bounds.width > 0 && bounds.height > 0 && overlayIntersects(holder.getBoundingClientRect(), bounds, 0);
-		if (history && session?.dataset.editorPresentation !== 'inline') {
-			// Form fields own a real layout row, so adjacent labels and composers
-			// never need to guess the space their controls will occupy.
-			setEditorOverlayStyle(history, { maxWidth: '100%', visibility: visible ? 'visible' : 'hidden' });
+		if (history) {
+			setEditorOverlayStyle(history, { visibility: visible ? 'visible' : 'hidden' });
 			obstacles.push(history.getBoundingClientRect());
-		} else if (history) {
-			setEditorOverlayStyle(history, { maxWidth: `${bounds.width}px`, visibility: visible ? 'visible' : 'hidden' });
-			const size = history.getBoundingClientRect();
-			const placement = placeEditorOverlay(
-				size,
-				{
-					left: holder.dataset.ttControlsSide === 'left' ? first.left + first.width - size.width : first.left,
-					top: first.top - size.height - 10
-				},
-				bounds,
-				obstacles
-			);
-			moveEditorOverlay(history, placement);
-			obstacles.push(placement);
 		}
 		const actions = holder.querySelector<HTMLElement>('.ce-toolbar__actions');
 		if (field && actions?.offsetParent) {

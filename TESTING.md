@@ -4702,6 +4702,6 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 ### Shared rich-text surfaces (PR #635)
 
 - In new posts, post edits, comments/replies and poll questions, select paragraph and heading text; confirm colour/alpha, size/units, decorations and history use the same controls as the builder. Never submit QA content to another person.
-- In Thing rich-text fields, tier inclusions and the advanced modal, check neighbouring labels/actions stay visible. Field history occupies its own wrapping row; inline builder chrome still floats.
+- In Thing rich-text fields, tier inclusions and the advanced modal, check neighbouring labels/actions stay visible. History uses small grey controls inside the bottom-right of both field and inline editors; text must never run underneath them.
 - At desktop, 390px and 320px widths, select/style text, undo/redo, open/close Changes, toggle view/edit and scroll top to bottom. Ensure formatting survives and the active editor overlays do not hide a neighbouring editor.
-- In a crowded mobile composer with a 72px requested field, verify the shared minimum leaves room for formatting, the toolbar never covers selected text, and nearby feed filters/tags remain usable.
+- In a crowded mobile composer, select text and verify the formatting toolbar stays above the line. A temporary space opens above the text when needed and closes on deselection. Check Undo/Redo/Changes at bottom right, nearby feed filters/tags, keyboard-sized viewports, and repeated selection without growing gaps.

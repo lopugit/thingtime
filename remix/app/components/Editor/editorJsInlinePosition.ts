@@ -1,6 +1,7 @@
 import {
 	editorOverlayBounds,
 	editorTextObstacles,
+	overlayIntersects,
 	moveEditorOverlay,
 	placeEditorSelectionToolbar,
 	setEditorOverlayStyle
@@ -21,10 +22,17 @@ export const inlineToolbarPosition = (
 /** Selection gets the closest available space; secondary chrome works around it. */
 export const layoutEditorJsInlineToolbar = (holder: HTMLElement) => {
 	const selection = window.getSelection();
-	if (!selection?.rangeCount || selection.isCollapsed || !holder.contains(selection.anchorNode)) return;
+	const releaseSpace = () => holder.style.removeProperty('--tt-editor-selection-space');
+	if (!selection?.rangeCount || selection.isCollapsed || !holder.contains(selection.anchorNode)) {
+		releaseSpace();
+		return;
+	}
 	const toolbar = holder.querySelector<HTMLElement>('.ce-inline-toolbar');
 	const panel = toolbar?.querySelector<HTMLElement>('.ce-popover--inline.ce-popover--opened > .ce-popover__container');
-	if (!toolbar || !panel) return;
+	if (!toolbar || !panel) {
+		releaseSpace();
+		return;
+	}
 	const range = selection.getRangeAt(0),
 		rect = range.getBoundingClientRect();
 	const bounds = editorOverlayBounds(holder);
@@ -37,7 +45,17 @@ export const layoutEditorJsInlineToolbar = (holder: HTMLElement) => {
 	const old = panel.getBoundingClientRect();
 	const obstacles = editorTextObstacles(holder);
 
-	const pos = placeEditorSelectionToolbar(old, rect, bounds, obstacles);
+	let pos = placeEditorSelectionToolbar(old, rect, bounds, obstacles);
+	// Keep a temporary slot above the line when labels, controls or viewport
+	// chrome leave no room. Hold it until selection closes to avoid oscillation.
+	if (
+		!holder.style.getPropertyValue('--tt-editor-selection-space') &&
+		(pos.top < bounds.top || obstacles.some((obstacle) => overlayIntersects(pos, obstacle)))
+	) {
+		const space = Math.max(old.height + 12, bounds.top + old.height + 12 - rect.top);
+		holder.style.setProperty('--tt-editor-selection-space', `${space}px`);
+		pos = placeEditorSelectionToolbar(old, range.getBoundingClientRect(), editorOverlayBounds(holder), editorTextObstacles(holder));
+	}
 	moveEditorOverlay(panel, pos, toolbar);
 	return pos;
 };
@@ -60,6 +78,7 @@ export const watchEditorJsInlinePosition = (holder: HTMLElement): (() => void) =
 	window.visualViewport?.addEventListener('resize', schedule);
 	window.visualViewport?.addEventListener('scroll', schedule);
 	return () => {
+		holder.style.removeProperty('--tt-editor-selection-space');
 		observer.disconnect();
 		cancelAnimationFrame(frame);
 		document.removeEventListener('selectionchange', schedule);
