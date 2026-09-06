@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box } from '@chakra-ui/react';
+import { Global } from '@emotion/react';
 
 import {
 	blocksToText,
@@ -20,6 +21,14 @@ import { watchEditorJsPopoverViewport } from './editorJsPopoverViewport';
 import { filterListV2ChecklistToolbox } from './editorJsToolbox';
 import { getEditorJsTouchFocusTarget } from './editorJsTouchFocus';
 import { StyleTune } from './StyleTune';
+import { InlineStyle } from './InlineStyle';
+import { watchEditorJsInlinePosition } from './editorJsInlinePosition';
+import { EditorHistory } from './editorHistory';
+import { EditorHistoryControls, type EditorHistoryHandle, type HistoryAction } from './EditorHistoryControls';
+import { watchEditorStyleCarry, type StyleCarryPreferences } from './editorStyleCarry';
+import { watchEditorBlockChrome } from './editorBlockChrome';
+import { useLopu } from '../Lopu/useLopu';
+import { captureEditorDraft } from './editorDraftSnapshot';
 
 export { getEditorJsDoc, isEditorJsDoc, parseEditorJsDocString } from './editorJsValue';
 export type { EditorJsBlock, EditorJsDoc } from './editorJsValue';
@@ -270,24 +279,34 @@ export type LongTextEditorProps = {
 	onValueChange?: (next: LongTextValue) => void;
 	placeholder?: string;
 	minHeight?: string;
+	/** Inline pages inherit typography; fields reserve a stable history row. Tools stay identical. */
+	presentation?: 'field' | 'inline';
 	// editor.js native read-only mode: same block layout, no editing chrome.
 	// Live-toggleable — the docs View/Edit switch flips it on the fly.
 	readonly?: boolean;
 	// enable/disable individual tools for this field (absent/true = enabled)
 	blockTypes?: LongTextBlockTypes;
+	/** Optional owner-scoped history keeps branches across an editor closing/reopening. */
+	history?: EditorHistory;
 };
 
 type SequencedLongTextValue = {
 	value: LongTextValue;
 	sequence: number;
+	doc: EditorJsDoc;
+	label?: string;
+	epoch: number;
 };
 
 type LongTextEditorInnerProps = Omit<LongTextEditorProps, 'onValueChange'> & {
-	onValueChange?: (next: LongTextValue, sequence: number) => void;
+	onValueChange?: (next: LongTextValue, sequence: number, doc: EditorJsDoc, label?: string) => void;
 	allocateChangeSequence: () => number;
+	history: EditorHistory;
+	carryPreferences: StyleCarryPreferences;
+	seedDoc?: EditorJsDoc;
 };
 
-const LongTextEditorInner = React.forwardRef<LongTextEditorHandle, LongTextEditorInnerProps>((props, ref) => {
+const LongTextEditorInner = React.forwardRef<LongTextEditorHandle & EditorHistoryHandle, LongTextEditorInnerProps>((props, ref) => {
 	const holderRef = React.useRef<HTMLDivElement | null>(null);
 	const editorRef = React.useRef<any>(null);
 	const destroyedRef = React.useRef(false);
@@ -299,8 +318,21 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle, LongTextEdito
 	const blockTypesRef = React.useRef(props.blockTypes);
 	const rawInputCleanupRef = React.useRef<(() => void) | null>(null);
 	const saveCurrentValueRef = React.useRef<() => Promise<LongTextValue>>(async () => valueRef.current);
+	const restoreRef = React.useRef<(doc: EditorJsDoc) => Promise<void>>(async () => {});
+	const carryPreferencesRef = React.useRef(props.carryPreferences);
+	carryPreferencesRef.current = props.carryPreferences;
 
-	React.useImperativeHandle(ref, () => ({ save: () => saveCurrentValueRef.current() }), []);
+	React.useImperativeHandle(
+		ref,
+		() => ({
+			save: () => saveCurrentValueRef.current(),
+			flush: async () => {
+				await saveCurrentValueRef.current();
+			},
+			restore: (doc) => restoreRef.current(doc)
+		}),
+		[]
+	);
 
 	React.useEffect(() => {
 		valueRef.current = props.value;
@@ -325,17 +357,27 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle, LongTextEdito
 
 	React.useEffect(() => {
 		destroyedRef.current = false;
+		const mountedHolder = holderRef.current;
 		let cancelled = false;
 		let textFieldKeyboardCleanup: (() => void) | undefined;
 		let blockReorderCleanup: (() => void) | undefined;
+		let inlinePositionCleanup: (() => void) | undefined;
 		let popoverViewportCleanup: (() => void) | undefined;
+		let carryCleanup: (() => void) | undefined;
+		let chromeCleanup: (() => void) | undefined;
+		let mutationCleanup: (() => void) | undefined;
+		let epoch = 0,
+			restoring = false,
+			ready = false;
+		let captureError: unknown;
+		let pendingCaptures: Promise<unknown> = Promise.resolve();
 		let editorChangeQueue: OrderedEditorJsChangeQueue<SequencedLongTextValue> | undefined;
-		let saveEditorValue: (() => void) | undefined;
-		let captureEditorValue: (() => Promise<LongTextValue>) | undefined;
+		let saveEditorValue: ((label?: string) => void) | undefined;
 
 		(async () => {
 			if (!holderRef.current) return;
 			popoverViewportCleanup = watchEditorJsPopoverViewport(holderRef.current);
+			inlinePositionCleanup = watchEditorJsInlinePosition(holderRef.current);
 
 			const [
 				{ default: EditorJS },
@@ -373,7 +415,10 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle, LongTextEdito
 
 			const initial = valueRef.current;
 			const blocks = isEditorJsDoc(initial) ? initial.blocks : textToBlocks(String(initial ?? ''));
-			const initialOutputValue: LongTextValue = blockModeRef.current ? (initial as EditorJsDoc) : blocksToText(blocks as EditorJsDoc['blocks']);
+			const editorBlocks = (props.seedDoc?.blocks ?? blocks).map((block, index) => ({
+				...block,
+				...(!block.id && props.history.current?.doc.blocks[index]?.type === block.type ? { id: props.history.current.doc.blocks[index].id } : {})
+			}));
 
 			const enabled = (tool: LongTextBlockType) => blockTypesRef.current?.[tool] !== false;
 			// List v2 also advertises a Checklist toolbox alias. Keep the legacy
@@ -400,12 +445,12 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle, LongTextEdito
 							}
 					  }
 					: {}),
-				...(enabled('embed') ? { embed: Embed as any } : {}),
-				...(enabled('image') ? { image: SimpleImage as any } : {}),
+				...(enabled('embed') ? { embed: { class: Embed as any, inlineToolbar: true } } : {}),
+				...(enabled('image') ? { image: { class: SimpleImage as any, inlineToolbar: true } } : {}),
 				...(enabled('marker') ? { marker: Marker as any } : {}),
 				...(enabled('inlineCode') ? { inlineCode: InlineCode as any } : {}),
 				...(enabled('underline') ? { underline: Underline as any } : {}),
-				...(enabled('style') ? { style: StyleTune as any } : {})
+				...(enabled('style') ? { style: StyleTune as any, textStyle: InlineStyle as any } : {})
 			};
 
 			// Editor.js's ReadOnly module clears the DOCUMENT selection while a new
@@ -436,41 +481,96 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle, LongTextEdito
 
 			let editor: any;
 			editorChangeQueue = createOrderedEditorJsChangeQueue<SequencedLongTextValue, string>({
-				getSignature: (snapshot) => getEditorJsValueSignature(snapshot.value),
-				initialSignature: getEditorJsValueSignature(initialOutputValue),
+				getSignature: (snapshot) => `${snapshot.epoch}:${getEditorJsValueSignature(snapshot.doc)}`,
 				onEmit: (snapshot) => {
-					onChangeRef.current?.(snapshot.value, snapshot.sequence);
+					if (snapshot.epoch !== epoch) return;
+					captureError = undefined;
+					valueRef.current = snapshot.value;
+					onChangeRef.current?.(snapshot.value, snapshot.sequence, snapshot.doc, snapshot.label);
+				},
+				onError: (error) => {
+					if (!captureError) holderRef.current?.dispatchEvent(new CustomEvent('tt-editor-history-error', { bubbles: true }));
+					captureError = error;
 				}
 			});
 
-			captureEditorValue = async () => {
-				const activeEditor = editor;
-				await activeEditor.isReady;
-				if (destroyedRef.current || editorRef.current !== activeEditor) return valueRef.current;
-				const saved = await activeEditor.save();
-				if (blockModeRef.current) {
-					const base = isEditorJsDoc(valueRef.current) ? valueRef.current : {};
-					return { ...base, blocks: saved.blocks } as EditorJsDoc;
-				}
-				return blocksToText(saved.blocks as EditorJsDoc['blocks']);
-			};
-			saveCurrentValueRef.current = captureEditorValue;
-
-			saveEditorValue = () => {
-				if (!editor || destroyedRef.current) return;
+			saveEditorValue = (label) => {
+				if (!editor || destroyedRef.current || restoring || !ready) return;
 				const sequence = props.allocateChangeSequence();
+				const captureEpoch = epoch;
+				const saved = captureEditorDraft(editor);
+				const capture = Promise.resolve(saved).then(({ doc, submitted }) => ({
+					doc,
+					value: blockModeRef.current
+						? { ...(isEditorJsDoc(valueRef.current) ? valueRef.current : {}), blocks: submitted.blocks }
+						: blocksToText(submitted.blocks),
+					sequence,
+					label,
+					epoch: captureEpoch
+				}));
 				editorChangeQueue?.enqueue(async () => {
-					return { value: await captureEditorValue!(), sequence };
+					return await capture;
 				});
+				pendingCaptures = Promise.allSettled([pendingCaptures, capture]);
+			};
+			saveCurrentValueRef.current = async () => {
+				saveEditorValue?.();
+				await pendingCaptures;
+				if (captureError) throw captureError;
+				return valueRef.current;
+			};
+			restoreRef.current = async (doc) => {
+				await editor.isReady;
+				if (destroyedRef.current) return;
+				const active = document.activeElement;
+				const shouldFocus = holderRef.current?.closest('.tt-editor-session')?.contains(active);
+				const index = Math.max(0, editor.blocks.getCurrentBlockIndex());
+				const activeBlock = editor.blocks.getBlockByIndex(index);
+				const fieldIndex = activeBlock ? Array.from(activeBlock.holder.querySelectorAll('[contenteditable],textarea')).indexOf(active) : 0;
+				epoch++;
+				restoring = true;
+				if (holderRef.current) holderRef.current.dataset.ttRestoring = 'true';
+				try {
+					// Tools may normalise their input in place. Never expose journal snapshots to them.
+					await editor.blocks.render(JSON.parse(JSON.stringify(doc)));
+				} finally {
+					restoring = false;
+					if (holderRef.current) delete holderRef.current.dataset.ttRestoring;
+				}
+				saveEditorValue?.();
+				await pendingCaptures;
+				if (shouldFocus) {
+					const block = editor.blocks.getById(activeBlock?.id) || editor.blocks.getBlockByIndex(Math.min(index, editor.blocks.getBlocksCount() - 1));
+					const fields = block?.holder.querySelectorAll('[contenteditable],textarea');
+					const field = fields?.[Math.max(0, fieldIndex)] || fields?.[0];
+					if (field) {
+						field.focus({ preventScroll: true });
+						const range = document.createRange();
+						range.selectNodeContents(field);
+						range.collapse(false);
+						const selection = window.getSelection();
+						selection?.removeAllRanges();
+						selection?.addRange(range);
+					}
+				}
 			};
 
 			editor = new EditorJS({
 				holder: holderRef.current,
-				data: { blocks },
+				data: { blocks: editorBlocks },
 				placeholder: props.placeholder || 'Imagine..',
 				minHeight: 0,
 				readOnly: readonlyRef.current,
 				tools: tools as any,
+				inlineToolbar: [
+					'bold',
+					'italic',
+					'link',
+					...(enabled('style') ? ['textStyle'] : []),
+					...(enabled('underline') ? ['underline'] : []),
+					...(enabled('marker') ? ['marker'] : []),
+					...(enabled('inlineCode') ? ['inlineCode'] : [])
+				],
 				// the 🎨 Style tune rides every block's settings menu
 				...(enabled('style') ? { tunes: ['style'] } : {}),
 				onChange: () => {
@@ -491,6 +591,29 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle, LongTextEdito
 			}
 
 			restoreForeignSelection();
+			props.history.record((await captureEditorDraft(editor)).doc, 'Document opened or replaced');
+			ready = true;
+			StyleTune.bindHolder(holderRef.current);
+			carryCleanup = watchEditorStyleCarry(
+				holderRef.current,
+				(id, tokens) => {
+					StyleTune.replaceForBlock(holderRef.current!, id, tokens);
+					saveEditorValue?.('Change block type');
+				},
+				() => carryPreferencesRef.current
+			);
+			chromeCleanup = watchEditorBlockChrome(holderRef.current, () => editor);
+			const mutationObserver = new MutationObserver(() => {
+				if (holderRef.current) StyleTune.bindHolder(holderRef.current);
+				saveEditorValue?.();
+			});
+			mutationObserver.observe(holderRef.current.querySelector('.codex-editor__redactor')!, {
+				subtree: true,
+				childList: true,
+				attributes: true,
+				attributeFilter: ['style', 'data-checked', 'class']
+			});
+			mutationCleanup = () => mutationObserver.disconnect();
 
 			// Editor.js's block listener mistakes empty internal lines in tool
 			// textboxes for block boundaries. Bind before that outer listener so
@@ -517,16 +640,12 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle, LongTextEdito
 			// Fallback for programmatic/IME mutations that Editor.js misses. Always
 			// capture the final raw-input snapshot: the ordered queue removes the
 			// adjacent duplicate when Editor.js also reported the same mutation.
-			const rawSaveDelay = 250;
-			let inputDebounce: ReturnType<typeof setTimeout> | undefined;
-			const onRawInput = () => {
-				clearTimeout(inputDebounce);
-				inputDebounce = setTimeout(() => saveEditorValue?.(), rawSaveDelay);
-			};
+			const onRawInput = (event: Event) => saveEditorValue?.(event instanceof CustomEvent ? event.detail?.label : undefined);
 			holderRef.current?.addEventListener('input', onRawInput);
+			holderRef.current?.addEventListener('tt-editor-change', onRawInput);
 			rawInputCleanupRef.current = () => {
-				clearTimeout(inputDebounce);
 				holderRef.current?.removeEventListener('input', onRawInput);
+				holderRef.current?.removeEventListener('tt-editor-change', onRawInput);
 			};
 		})();
 
@@ -534,6 +653,11 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle, LongTextEdito
 			cancelled = true;
 			saveCurrentValueRef.current = async () => valueRef.current;
 			popoverViewportCleanup?.();
+			inlinePositionCleanup?.();
+			carryCleanup?.();
+			chromeCleanup?.();
+			mutationCleanup?.();
+			if (mountedHolder) StyleTune.release(mountedHolder);
 			// Capture the final DOM state before teardown, then allow already-started
 			// saves to drain. The outer wrapper rejects stale results after an explicit
 			// value replacement while preserving edits across tool-config remounts.
@@ -577,51 +701,64 @@ const LongTextEditorInner = React.forwardRef<LongTextEditorHandle, LongTextEdito
 			}}
 			width="100%"
 			minHeight={props.minHeight || '96px'}
-			padding="10px 12px"
-			background="var(--tt-card, #ffffff)"
-			border="1px solid var(--tt-border, #ececef)"
+			padding={props.presentation === 'inline' ? '0' : '10px 12px'}
+			paddingTop={`calc(${props.presentation === 'inline' ? '0px' : '10px'} + var(--tt-editor-selection-space, 0px))`}
+			background={props.presentation === 'inline' ? 'transparent' : 'var(--tt-card, #ffffff)'}
+			border={props.presentation === 'inline' ? '0' : '1px solid var(--tt-border, #ececef)'}
 			borderRadius="var(--tt-radius-md, 12px)"
 			transition="border-color 0.15s ease, box-shadow 0.15s ease"
-			fontSize="15px"
-			_focusWithin={{
-				borderColor: 'var(--tt-faint, #b6b6c0)',
-				boxShadow: '0 0 0 3px var(--tt-accent-tint, #fff5fa)'
-			}}
+			fontSize={props.presentation === 'inline' ? 'inherit' : '15px'}
+			_focusWithin={
+				props.presentation === 'inline'
+					? {}
+					: {
+							borderColor: 'var(--tt-faint, #b6b6c0)',
+							boxShadow: '0 0 0 3px var(--tt-accent-tint, #fff5fa)'
+					  }
+			}
 			sx={{
 				'--tt-editor-popover-edge-gap': '8px',
+				...(props.presentation === 'inline'
+					? {
+							whiteSpace: 'normal',
+							'.codex-editor, .codex-editor__redactor': { padding: '0 !important' },
+							'.ce-header, .ce-paragraph': { margin: 0, padding: 0 }
+					  }
+					: {}),
 				// keep editor.js chrome inside our card look
-				// Wide Editor.js positions its 58px + / settings action row to the
-				// left of block content. Reserve that gutter inside the editor;
-				// narrow mode moves the controls itself and must keep the full width.
-				'@media screen and (min-width: 651px)': {
-					'.codex-editor:not(.codex-editor--narrow)': { paddingInlineStart: '58px' },
-					'.codex-editor:not(.codex-editor--narrow) .ce-toolbar': {
-						insetInlineStart: '58px',
-						width: 'calc(100% - 58px)'
-					}
+				'.codex-editor': { paddingInlineStart: '0 !important' },
+				// Raise open menus above history without blocking history while typing.
+				'.codex-editor:has(.ce-popover--opened:not(.ce-popover--inline))': { zIndex: 9 },
+				// Document typography must not enlarge or decorate editor controls.
+				'.ce-toolbar, .ce-inline-toolbar': {
+					fontSize: '14px',
+					fontWeight: 400,
+					lineHeight: 1.4,
+					textAlign: 'left',
+					letterSpacing: 'normal',
+					textTransform: 'none'
 				},
-				'.codex-editor__redactor': { paddingBottom: '0 !important' },
+				'.ce-inline-toolbar button[aria-label="Text style"]': { fontSize: '20px', lineHeight: 1 },
+				'.codex-editor .ce-toolbar': { left: '0 !important', right: '0 !important', width: '100% !important' },
+				'.ce-toolbar__content': { position: 'relative' },
+				'.codex-editor .ce-toolbar__actions': {
+					position: 'absolute',
+					left: '0',
+					right: 'auto',
+					top: '-30px',
+					bottom: 'auto',
+					padding: '0 !important',
+					background: 'var(--tt-card,#fff)',
+					borderRadius: '8px'
+				},
+				// Our actions float, so narrow desktop editors need no 50px gutter.
+				'.codex-editor__redactor': { paddingBottom: '0 !important', margin: '0 !important' },
 				'.ce-block__content, .ce-toolbar__content': { maxWidth: '100%' },
 				'.ce-toolbar__plus, .ce-toolbar__settings-btn': { color: 'var(--tt-muted, #9a9aa6)' },
 				// the grip doubles as the block-drag handle: keep the browser from
 				// hijacking a touch long-press into page scroll, and hint the affordance
 				'.ce-toolbar__settings-btn': { touchAction: 'none', cursor: 'grab' },
 				'@media screen and (max-width: 650px)': {
-					// Editor.js normally puts its mobile + / settings action row after the
-					// active block. Keep the row on the same line at the inline end instead,
-					// and reserve its width so long or right-aligned text cannot overlap it.
-					'.codex-editor__redactor': {
-						boxSizing: 'border-box',
-						paddingInlineEnd: '80px'
-					},
-					'.codex-editor .ce-toolbar__actions': {
-						insetInlineStart: 'auto !important',
-						insetInlineEnd: '0 !important',
-						top: 'auto',
-						bottom: 0,
-						paddingInlineEnd: 0,
-						paddingRight: 0
-					},
 					// Editor.js fixes its mobile sheets to the layout viewport. Keep the
 					// opened top-level sheet inside iOS's keyboard/zoom visual viewport.
 					'.ce-popover.ce-popover--opened:not(.ce-popover--inline):not(.ce-popover--nested) > .ce-popover__container': {
@@ -692,8 +829,15 @@ LongTextEditorInner.displayName = 'LongTextEditorInner';
 // cannot swap tools live), so we remount the inner editor keyed by the
 // enabled-tool set while carrying the latest edited value across the remount.
 const EditableLongTextEditor = React.forwardRef<LongTextEditorHandle, LongTextEditorProps>((props, ref) => {
+	const [localHistory] = React.useState(() => new EditorHistory());
+	const history = props.history ?? localHistory;
+	const [carryPreferences, setCarryPreferences] = React.useState<StyleCarryPreferences>({});
+	const latestDocRef = React.useRef<EditorJsDoc | undefined>(undefined);
+	const hostRef = React.useRef<HTMLDivElement>(null);
+	const navigating = React.useRef(false);
+	const lopu = useLopu();
 	const latestRef = React.useRef<LongTextValue | null>(null);
-	const innerRef = React.useRef<LongTextEditorHandle | null>(null);
+	const innerRef = React.useRef<(LongTextEditorHandle & EditorHistoryHandle) | null>(null);
 	const valueMode = isEditorJsDoc(props.value) ? 'blocks' : 'string';
 	const valueModeRef = React.useRef(valueMode);
 	const incomingSignature = getEditorJsValueSignature(props.value);
@@ -709,11 +853,9 @@ const EditableLongTextEditor = React.forwardRef<LongTextEditorHandle, LongTextEd
 		changeSequenceRef.current += 1;
 		return changeSequenceRef.current;
 	}, []);
-	React.useImperativeHandle(
-		ref,
-		() => ({ save: () => innerRef.current?.save() ?? Promise.resolve(latestRef.current ?? props.value) }),
-		[props.value]
-	);
+	React.useImperativeHandle(ref, () => ({ save: () => innerRef.current?.save() ?? Promise.resolve(latestRef.current ?? props.value) }), [
+		props.value
+	]);
 
 	// A caller can explicitly convert string <-> Editor.js while this wrapper
 	// remains mounted. Reset the carried value and remount the inner editor so
@@ -747,6 +889,7 @@ const EditableLongTextEditor = React.forwardRef<LongTextEditorHandle, LongTextEd
 			latestRef.current = props.value;
 			latestSignatureRef.current = incomingSignature;
 			externalRevisionRef.current += 1;
+			latestDocRef.current = undefined;
 		} else {
 			// Acknowledging an emitted value also retires every older edit. Keep
 			// newer unacknowledged values live so a delayed parent echo cannot
@@ -767,7 +910,7 @@ const EditableLongTextEditor = React.forwardRef<LongTextEditorHandle, LongTextEd
 	const onValueChange = props.onValueChange;
 
 	const handleChange = React.useCallback(
-		(next: LongTextValue, source: EditorJsSourceRevision, sequence: number) => {
+		(next: LongTextValue, source: EditorJsSourceRevision, sequence: number, doc: EditorJsDoc, label?: string) => {
 			// An explicit conversion/replacement wins over a late save from the old
 			// editor. A tool-config-only remount keeps the edit and refreshes the new
 			// editor once the parent echoes the drained value.
@@ -785,6 +928,11 @@ const EditableLongTextEditor = React.forwardRef<LongTextEditorHandle, LongTextEd
 			// instance even if its promise resolves last.
 			if (sequence <= lastAcceptedSequenceRef.current) return;
 			lastAcceptedSequenceRef.current = sequence;
+			latestDocRef.current = doc;
+			history.record(doc, label);
+			hostRef.current?.dispatchEvent(
+				new CustomEvent('tt-editor-update', { bubbles: true, detail: { event: history.current, cursor: history.cursor } })
+			);
 			if (source.configKey !== activeConfigKeyRef.current) editorRefreshRevisionRef.current += 1;
 
 			const signature = getEditorJsValueSignature(next);
@@ -797,8 +945,61 @@ const EditableLongTextEditor = React.forwardRef<LongTextEditorHandle, LongTextEd
 			if (pending.length > 32) pending.splice(0, pending.length - 32);
 			onValueChange?.(next);
 		},
-		[onValueChange]
+		[onValueChange, history]
 	);
+	const act = React.useCallback(
+		async (action: HistoryAction) => {
+			if (navigating.current || props.readonly) return;
+			navigating.current = true;
+			let previous = history.cursor;
+			try {
+				await innerRef.current?.flush();
+				previous = history.cursor;
+				if (action.type === 'patch') {
+					const result = history.patch(action.id, action.direction);
+					if (result.conflicts) {
+						lopu({
+							title: 'This change overlaps later edits',
+							description: 'Restore its timeline point to review the complete earlier version. Your current work and all branches are kept.',
+							status: 'info'
+						});
+						return;
+					}
+					history.record(result.doc, `${action.direction === 'revert' ? 'Revert' : 'Reapply'} change ${action.id}`);
+				} else {
+					const id = action.type === 'select' ? action.id : action.type === 'undo' ? history.undoId : history.redoId;
+					if (id === null) return;
+					history.select(id);
+				}
+				await innerRef.current?.restore(history.current.doc);
+			} catch {
+				history.select(previous);
+				lopu({ title: 'Could not restore this change', description: 'Your history is still available. Please try again.', status: 'error' });
+			} finally {
+				navigating.current = false;
+			}
+		},
+		[history, lopu, props.readonly]
+	);
+	React.useEffect(() => {
+		const host = hostRef.current;
+		const onCommand = (event: Event) => {
+			event.stopPropagation();
+			void act((event as CustomEvent).detail);
+		};
+		const onError = () =>
+			lopu({
+				title: 'An editor change could not be recorded',
+				description: 'Your text remains in the editor. Please retry saving before closing it.',
+				status: 'error'
+			});
+		host?.addEventListener('tt-editor-history-command', onCommand);
+		host?.addEventListener('tt-editor-history-error', onError);
+		return () => {
+			host?.removeEventListener('tt-editor-history-command', onCommand);
+			host?.removeEventListener('tt-editor-history-error', onError);
+		};
+	}, [act, lopu]);
 
 	// Keep this wrapper mounted for unsafe external replacements so it can bump
 	// the generation above and invalidate any save draining from the old editor.
@@ -819,14 +1020,58 @@ const EditableLongTextEditor = React.forwardRef<LongTextEditorHandle, LongTextEd
 	}
 
 	return (
-		<LongTextEditorInner
-			{...props}
-			ref={innerRef}
-			key={configKey}
-			value={latestRef.current ?? props.value}
-			allocateChangeSequence={allocateChangeSequence}
-			onValueChange={(next, sequence) => handleChange(next, { ...sourceRevision, configKey }, sequence)}
-		/>
+		<Box
+			ref={hostRef}
+			className="tt-editor-session"
+			data-editor-presentation={props.presentation ?? 'field'}
+			position="relative"
+			minWidth={0}
+			width="100%"
+			zIndex={8}
+			_focusWithin={{ zIndex: 9 }}
+			onKeyDownCapture={(event) => {
+				if (
+					(event.metaKey || event.ctrlKey) &&
+					event.key.toLowerCase() === 'z' &&
+					!event.altKey &&
+					!event.nativeEvent.isComposing &&
+					!props.readonly
+				) {
+					event.preventDefault();
+					event.stopPropagation();
+					void act({ type: event.shiftKey ? 'redo' : 'undo' });
+				}
+			}}
+			sx={{
+				'.tt-editor-history-controls': {
+					position: 'absolute',
+					right: '8px',
+					bottom: '5px',
+					zIndex: 8,
+					width: 'max-content',
+					maxWidth: 'calc(100vw - 16px)',
+					flexWrap: 'nowrap',
+					pointerEvents: 'auto'
+				}
+			}}
+		>
+			{/* Editor.js leaves hidden tooltips at their last desktop coordinates. */}
+			<Global styles={{ '.ct:not(.ct--shown)': { display: 'none' } }} />
+			<LongTextEditorInner
+				{...props}
+				ref={innerRef}
+				key={configKey}
+				value={latestRef.current ?? props.value}
+				seedDoc={latestDocRef.current}
+				history={history}
+				carryPreferences={carryPreferences}
+				allocateChangeSequence={allocateChangeSequence}
+				onValueChange={(next, sequence, doc, label) => handleChange(next, { ...sourceRevision, configKey }, sequence, doc, label)}
+			/>
+			{!props.readonly ? (
+				<EditorHistoryControls history={history} act={act} preferences={carryPreferences} onPreferences={setCarryPreferences} />
+			) : null}
+		</Box>
 	);
 });
 EditableLongTextEditor.displayName = 'EditableLongTextEditor';

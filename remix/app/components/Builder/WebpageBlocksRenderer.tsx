@@ -9,6 +9,7 @@ import { defaultsFromArgs, resolveTemplate, sanitizeArgSpecs } from '../Componen
 import { useTtActionClicks } from '../Actions/useTtActionClicks';
 import { htmlToNode } from './htmlToNode';
 import { InlineRichTextEditor } from './InlineRichTextEditor';
+import { EditorHistory } from '../Editor/editorHistory';
 import { RICH_HTML_SX } from './richHtmlStyles';
 import { blockLabel, type WebpageBlock } from './webpageBlocks';
 
@@ -434,6 +435,7 @@ const BlockFrame = ({
 		<Box
 			{...dropProps}
 			className="ttBlockFrame"
+			zIndex={selected ? 10 : undefined}
 			data-block-id={block.id}
 			position="relative"
 			{...selfPlacement(block, parentDirection)}
@@ -486,6 +488,9 @@ const BlockFrame = ({
 				// own their clicks — capturing them would select the container
 				// instead of opening the menu
 				const target = event.target as HTMLElement;
+				// React portals bubble through their owner frame. A modal's close,
+				// history or style controls must receive their own clicks.
+				if (!event.currentTarget.contains(target)) return;
 				if (
 					target.closest?.(
 						'.ttInsertZone, .ttDropWell, .ttChipAction, .ttInlineRichTextEditor, .codex-editor, .ce-toolbar, .ce-popover, .ce-inline-toolbar, .ttArgEditPopover, .ttBlockContextMenu'
@@ -505,6 +510,7 @@ const BlockFrame = ({
 		>
 			{(hovered || selected) && (
 				<Flex
+					className="ttBlockChip"
 					position="absolute"
 					top="-14px"
 					left="6px"
@@ -896,6 +902,7 @@ const BlockView = (
 	// Inspector typography (font-size, color, …) must reach the text itself,
 	// not just the wrapper — explicit sizes in the typo presets and the rich
 	// document scale would otherwise always win over block.css.
+	const [textHistory] = React.useState(() => new EditorHistory());
 	const cssTypo = React.useMemo(() => typographyFromCss(block.css), [block.css]);
 	const styleTypo = TEXT_STYLE_TYPO[block.style || 'body'] || TEXT_STYLE_TYPO.body;
 	const mergedTypo = React.useMemo(
@@ -923,6 +930,7 @@ const BlockView = (
 			// the canvas (the drawer's modal remains the "advanced" surface)
 			body = (
 				<InlineRichTextEditor
+					history={textHistory}
 					html={block.html}
 					text={block.text}
 					typography={typo}
