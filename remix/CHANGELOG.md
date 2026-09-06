@@ -34,6 +34,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   viewport. Add live previews with Save/Cancel, conversion style preferences,
   branching Undo/Redo and a Changes timeline, larger resizable panels, and
   floating controls that preserve the document width. [PR #635 verification](../PRs/635-editor-rich-text-controls-complete-editorjs-rich-text-styling.md). — Codex (AI)
+- 2026-09-06: Watch-to-main integration [PR #667](https://github.com/lopugit/thingtime/pull/667)
+  passes native compilation, web build and focused tests. Align the Nitro health
+  smoke with its documented migration-required response without calling a
+  degraded deployment ready. — Codex (AI)
+
 - Validation and rollout notes for account-tier speed-test allowances: [PR #664](../PRs/664-speed-test-tier-allowances-account-tier-speed-test-allowances-and-feature-comparison.md).
 
 - 2026-09-06: Tie Commander speed-test allowances to protected account-tier

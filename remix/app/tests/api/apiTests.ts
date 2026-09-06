@@ -2,6 +2,7 @@ import { expectJson, expectNdjson, expectRedirectedTo, expectStatus, type ApiTes
 import { apiEndpointDocs } from '~/docs/apiDocs';
 import { watchPairingTests } from './watchPairingTests';
 import { watchQuickApprovalTests } from './watchQuickApprovalTests';
+import { nitroHealthResponseIsConsistent } from './healthResponse';
 
 // crypto-sourced randomness: these suffixes end up in registered usernames /
 // email aliases, and Web Crypto is available everywhere this runs (browser
@@ -658,18 +659,14 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'health-nitro',
     name: 'Nitro health',
-    description: 'Nitro health returns local API readiness.',
+    description: 'Nitro health reports consistent ready or migration-required storage status; a contract smoke does not certify deployment readiness.',
     group: 'health',
     method: 'GET',
     path: '/api/v1/health/nitro',
     expect: expectJson(
       [200],
-      (body) =>
-        body?.service === 'nitro' &&
-        body?.state === 'ready' &&
-        body?.storageAccounting?.state === 'ready' &&
-        Number.isSafeInteger(body?.storageAccounting?.expectedVersion),
-      'Nitro health returned ready with current storage accounting.'
+      nitroHealthResponseIsConsistent,
+      'Nitro health reported a consistent storage readiness state.'
     )
   },
   {
