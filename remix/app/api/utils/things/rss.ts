@@ -10,6 +10,7 @@ import {
   type PublicPost,
   type ThingDoc
 } from './things';
+import { subspaceFeedClauses } from '../subspaces/gate';
 
 // Atom feed — the engine behind GET /api/v1/things/rss.
 //
@@ -92,7 +93,8 @@ export const buildPublicPostsAtomFeed = async (origin: string): Promise<{ ok: tr
   // public circle only — the anonymous null viewer makes visibilityQueryFor
   // emit exactly the coarse public superset clause (same match as trending,
   // minus the 7-day window: the feed is "latest", not "hot").
-  const match = withMatch(postMatch(), visibilityQueryFor(null, ['public']));
+  // subspace fences: removed posts and private-subspace posts never syndicate
+  const match = withMatch(postMatch(), visibilityQueryFor(null, ['public']), ...subspaceFeedClauses(null));
   const candidates = (await things
     .find(match as any)
     .sort({ createdAt: -1, shareId: 1 })
