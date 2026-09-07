@@ -532,6 +532,21 @@ function assertWorkflowSource() {
       /Lopu-Rebase-Completion: run=\(\[1-9\]\[0-9\]\*\) pr=\(\[1-9\]\[0-9\]\*\)/,
       `${name} deferral recognizes the exact rebase run/PR trailer`,
     );
+    // Publishing a review moves the PR head, so an unrecognized review commit
+    // dispatches a review of itself, which can publish again. This kind must
+    // stay recognized or that loop returns.
+    assert.match(
+      block,
+      /Lopu-Review-Publication: run=\(\[1-9\]\[0-9\]\*\) pr=\(\[1-9\]\[0-9\]\*\)/,
+      `${name} deferral recognizes the exact review-publication run/PR trailer`,
+    );
+    // `review` must not fall through to the rebase branch: that branch demands
+    // a "/ Rebase PR #<n>" job the review worker never runs.
+    assert.match(
+      block,
+      /if \[ "\$marker_kind" != rebase \]; then/,
+      `${name} deferral verifies a review publication against the dispatch-worker run shape`,
+    );
     assert.match(block, /\.event == "repository_dispatch"/);
     assert.match(block, /actions\/runs\/\$run_id\/jobs\?per_page=100/);
     assert.match(block, /expected_job=" \/ Rebase PR #\$pr_number"/);
@@ -542,12 +557,23 @@ function assertWorkflowSource() {
   assert.match(source, /Verified Lopu conflict resolution is reviewed once by the batch finalizer/);
   assert.match(source, /Verified Lopu rebase is reviewed once by the rebase-fleet finalizer/);
   assert.match(
+    source,
+    /Verified Lopu review publication was already inspected by the review session that wrote it/,
+  );
+  // The producing half of the same contract: without this trailer the two
+  // deferrals above can never recognize Lopu's own review publication.
+  assert.match(
+    source,
+    /-m 'chore\(lopu\): apply repository review improvements' \\\n\s*-m "Lopu-Review-Publication: run=\$GITHUB_RUN_ID pr=\$number"/,
+    "every Lopu review publication carries a worker-run and PR-bound trailer",
+  );
+  assert.match(
     rebaseProvenanceBlock,
     /trailer="Lopu-Rebase-Completion: run=\$GITHUB_RUN_ID pr=\$PR_NUMBER"/,
   );
   assert.match(
     rebaseProvenanceBlock,
-    /Lopu-\(Conflict-Resolution\|Rebase-Completion\): run=\[1-9\]\[0-9\]\* pr=\[1-9\]\[0-9\]\*\$\/d/,
+    /Lopu-\(Conflict-Resolution\|Rebase-Completion\|Review-Publication\): run=\[1-9\]\[0-9\]\* pr=\[1-9\]\[0-9\]\*\$\/d/,
     "a new rebase replaces stale Lopu publication provenance on the rewritten tip",
   );
   assert.match(rebaseProvenanceBlock, /git interpret-trailers/);

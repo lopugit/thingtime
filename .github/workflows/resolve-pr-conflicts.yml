@@ -787,6 +787,7 @@ jobs:
               sed -nE \
                 -e 's/^Lopu-Conflict-Resolution: run=([1-9][0-9]*) pr=([1-9][0-9]*)$/conflict \1 \2/p' \
                 -e 's/^Lopu-Rebase-Completion: run=([1-9][0-9]*) pr=([1-9][0-9]*)$/rebase \1 \2/p' \
+                -e 's/^Lopu-Review-Publication: run=([1-9][0-9]*) pr=([1-9][0-9]*)$/review \1 \2/p' \
                 <<<"$message"
             )"
             marker_count="$(printf '%s\n' "$markers" | sed '/^$/d' | wc -l | tr -d ' ')"
@@ -801,7 +802,9 @@ jobs:
             run_json="$(
               gh api "repos/$REPO/actions/runs/$run_id" 2>/dev/null
             )" || return 1
-            if [ "$marker_kind" = conflict ]; then
+            # Review publications share the conflict provenance branch: only
+            # the control plane starts a dispatch of this file on github-actions.
+            if [ "$marker_kind" != rebase ]; then
               jq -e '
                 .event == "workflow_dispatch"
                 and .head_branch == "github-actions"
@@ -870,11 +873,17 @@ jobs:
                || { [ "$EVENT_ACTOR" = 'github-actions[bot]' ] \
                     && [ "${head_message%%$'\n'*}" = \
                          'chore: refresh graphify outputs after PR branch merge' ]; }; then
-              if [ "${LOPU_PUBLICATION_KIND:-legacy}" = rebase ]; then
-                echo '::notice::Deferring the all-branch rebuild to the rebase-fleet finalizer.'
-              else
-                echo '::notice::Deferring the all-branch rebuild to the conflict-batch finalizer.'
-              fi
+              case "${LOPU_PUBLICATION_KIND:-legacy}" in
+                rebase)
+                  echo '::notice::Deferring the all-branch rebuild to the rebase-fleet finalizer.'
+                  ;;
+                review)
+                  echo '::notice::Deferring the all-branch rebuild after a Lopu review publication; the review session that wrote it already owns this head.'
+                  ;;
+                *)
+                  echo '::notice::Deferring the all-branch rebuild to the conflict-batch finalizer.'
+                  ;;
+              esac
               exit 0
             fi
           fi
@@ -2952,6 +2961,7 @@ jobs:
               sed -nE \
                 -e 's/^Lopu-Conflict-Resolution: run=([1-9][0-9]*) pr=([1-9][0-9]*)$/conflict \1 \2/p' \
                 -e 's/^Lopu-Rebase-Completion: run=([1-9][0-9]*) pr=([1-9][0-9]*)$/rebase \1 \2/p' \
+                -e 's/^Lopu-Review-Publication: run=([1-9][0-9]*) pr=([1-9][0-9]*)$/review \1 \2/p' \
                 <<<"$message"
             )"
             marker_count="$(printf '%s\n' "$markers" | sed '/^$/d' | wc -l | tr -d ' ')"
@@ -2966,7 +2976,9 @@ jobs:
             run_json="$(
               gh api "repos/$REPO/actions/runs/$run_id" 2>/dev/null
             )" || return 1
-            if [ "$marker_kind" = conflict ]; then
+            # Review publications share the conflict provenance branch: only
+            # the control plane starts a dispatch of this file on github-actions.
+            if [ "$marker_kind" != rebase ]; then
               jq -e '
                 .event == "workflow_dispatch"
                 and .head_branch == "github-actions"
@@ -3035,11 +3047,21 @@ jobs:
                             && [ "$EVENT_ACTION" = synchronize ]; }; } \
                   && [ "${resolution_message%%$'\n'*}" = \
                        'chore: refresh graphify outputs after PR branch merge' ]; }; then
-            if [ "${LOPU_PUBLICATION_KIND:-legacy}" = rebase ]; then
-              echo 'Verified Lopu rebase is reviewed once by the rebase-fleet finalizer.'
-            else
-              echo 'Verified Lopu conflict resolution is reviewed once by the batch finalizer.'
-            fi
+            case "${LOPU_PUBLICATION_KIND:-legacy}" in
+              rebase)
+                echo 'Verified Lopu rebase is reviewed once by the rebase-fleet finalizer.'
+                ;;
+              review)
+                # The publishing session inspected this content before it
+                # committed. Re-reviewing it only re-derives that conclusion,
+                # and any pass that commits again dispatches another. The next
+                # non-Lopu head still gets a full review of the whole tree.
+                echo 'Verified Lopu review publication was already inspected by the review session that wrote it.'
+                ;;
+              *)
+                echo 'Verified Lopu conflict resolution is reviewed once by the batch finalizer.'
+                ;;
+            esac
             echo 'any=false' >>"$GITHUB_OUTPUT"
             exit 0
           fi
@@ -4922,7 +4944,13 @@ jobs:
             git -C "$worktree" config user.email 'lopu[bot]@users.noreply.github.com'
             git -C "$worktree" add -A
             if ! git -C "$worktree" diff --cached --quiet; then
-              git -C "$worktree" commit -m 'chore(lopu): apply repository review improvements'
+              # Bind the commit to this review worker and PR. The push moves the
+              # PR head and fires pull_request_target:synchronize; without
+              # provenance the detectors cannot tell this from a contributor
+              # push and re-review the fix Lopu just validated.
+              git -C "$worktree" commit \
+                -m 'chore(lopu): apply repository review improvements' \
+                -m "Lopu-Review-Publication: run=$GITHUB_RUN_ID pr=$number"
             fi
             local_head="$(git -C "$worktree" rev-parse HEAD)"
             remote_head="$(gh api "repos/$REPO/git/ref/heads/$head" --jq '.object.sha')"
