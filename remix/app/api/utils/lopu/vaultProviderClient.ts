@@ -263,10 +263,45 @@ export const extractPlainCompletionText = (kind: LopuProviderKind, result: any):
 	return null;
 };
 
+// The token usage a kind's native response reports, in the chat brain's
+// shape (uncached input / output / cache read / cache write) — null when the
+// provider said nothing. OpenAI-style hosts count cached prompt tokens inside
+// prompt_tokens, so the cached share is moved out of inputTokens.
+export type VaultProviderUsage = { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number };
+
+const count = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0);
+
+export const extractPlainCompletionUsage = (kind: LopuProviderKind, result: any): VaultProviderUsage | null => {
+	if (kind === 'anthropic') {
+		const usage = result?.usage;
+		if (!usage || typeof usage !== 'object') return null;
+		const cacheRead = count(usage.cache_read_input_tokens);
+		const cacheWrite = count(usage.cache_creation_input_tokens);
+		return { inputTokens: count(usage.input_tokens), outputTokens: count(usage.output_tokens), ...(cacheRead ? { cacheReadTokens: cacheRead } : {}), ...(cacheWrite ? { cacheWriteTokens: cacheWrite } : {}) };
+	}
+	if (kind === 'google') {
+		const usage = result?.usageMetadata;
+		if (!usage || typeof usage !== 'object') return null;
+		const cached = count(usage.cachedContentTokenCount);
+		return { inputTokens: Math.max(0, count(usage.promptTokenCount) - cached), outputTokens: count(usage.candidatesTokenCount), ...(cached ? { cacheReadTokens: cached } : {}) };
+	}
+	const usage = result?.usage;
+	if (!usage || typeof usage !== 'object') return null;
+	const cached = count(usage.prompt_tokens_details?.cached_tokens);
+	return { inputTokens: Math.max(0, count(usage.prompt_tokens) - cached), outputTokens: count(usage.completion_tokens), ...(cached ? { cacheReadTokens: cached } : {}) };
+};
+
+export type VaultProviderCompletion = { text: string; model: string; usage: VaultProviderUsage | null };
+
 // One bounded, non-streaming completion on the connection's native API
 // (Messages for Anthropic, generateContent for Gemini, chat.completions for
 // everything else) — the voice turn's model call. Throws user-facing errors.
-export const callVaultProviderPlainCompletion = async (provider: LopuVaultProviderRecord, input: PlainCompletionInput): Promise<string> => {
+// Answers the text plus the model that ran and the usage the provider
+// reported (accounting records byo turns too, design note §2).
+export const callVaultProviderPlainCompletion = async (provider: LopuVaultProviderRecord, input: PlainCompletionInput): Promise<string> =>
+	(await callVaultProviderCompletion(provider, input)).text;
+
+export const callVaultProviderCompletion = async (provider: LopuVaultProviderRecord, input: PlainCompletionInput): Promise<VaultProviderCompletion> => {
 	const model = resolveVaultTurnModel(provider.model, input.model, defaultVaultProviderModel(provider.provider));
 	if (!model) throw vaultGuardError(LOPU_VAULT_NO_MODEL_REASON);
 	const safe = await (input.assertEndpoint ?? assertSafeProviderEndpoint)(provider.endpoint);
@@ -296,7 +331,7 @@ export const callVaultProviderPlainCompletion = async (provider: LopuVaultProvid
 	const result = await readBoundedJson(response);
 	const text = extractPlainCompletionText(provider.provider, result);
 	if (typeof text !== 'string' || !text.trim()) throw new Error('The selected AI provider returned no text.');
-	return text.trim();
+	return { text: text.trim(), model, usage: extractPlainCompletionUsage(provider.provider, result) };
 };
 
 // ── direct voice: the ephemeral realtime credential ─────────────────────────
