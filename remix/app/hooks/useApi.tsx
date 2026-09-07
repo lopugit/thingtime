@@ -140,7 +140,8 @@ export function useApi() {
           // signed-out viewer bookmarked — same shared-browser privacy bar
           clearLocalCachePrefix('tt-saved-');
           clearLocalCachePrefix('tt-passkeys');
-          // Notification history can include private posts and action runs.
+          // the /notifications history seed quotes private posts and the
+          // viewer's own action runs — same shared-browser privacy bar
           clearLocalCachePrefix('tt-notif-history-');
           // builder-page source results are whole action results run AS the
           // viewer (their orders, their expense rows, their trainer) cached to

@@ -181,6 +181,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   invalid-token cleanup, configuration docs, and focused contract tests.
 - 2026-09-05: Reconcile PR #592 with current develop, preserving Lopu widget support and passkey entitlements, both capability suites, all private logout caches, and both unit-test lists. Verify its exact-SHA preview and make preview delivery visible above collapsed PR comments. — Codex (AI)
 
+- 2026-09-05: Align Lopu notifications with the desktop content area as the drawer opens, closes, or resizes; keep mobile messages readable. — Codex (AI)
+
 - 2026-09-05: Add bounded persistent media caching with access revalidation,
   responsive low-resolution image previews, and cache controls in Settings.
   Preserve restorable non-secret AWS S3 and SES customizations under
@@ -189,52 +191,6 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Main promotion: [PR #654](../PRs/654-codex-persistent-media-cache-main-production-promotion.md), explicitly authorized by the owner. — Codex (AI)
 
 - 2026-09-05: Promote PR #611 notification history and placement settings to main, including drawer-relative toast alignment. — Codex (AI)
-
-### 2026-09-04 — Rich public link previews — Codex (AI)
-
-- Shared public pages now publish route-aware Open Graph/Twitter metadata and
-  colourful 1200×630 Thingtime PNG cards. Posts carry author/excerpt/context;
-  image posts safely render up to four stored images as a collage; text,
-  marketplace, structured Thingtime, poll, share, comment, reply, standalone
-  image/video/audio/file, profile, Thing, published page, feed and public
-  catalogue/docs variants each have their own preview treatment.
-- Cards ship their own copy of Liberation Sans (SIL OFL 1.1, metric-compatible
-  with Arial) embedded in the server bundle. The deployed Vercel Node runtime
-  has no fonts installed, so the renderer previously drew every card's artwork
-  and not one glyph; CI and dev machines have system fonts and looked fine. —
-  Lopu (AI)
-- Details in the PR note
-  (`PRs/607-codex-rich-link-previews--rich-route-aware-thingtime-link-previews.md`).
-
-### 2026-09-02 — Lopu toast position setting + `/notifications` history page — Claude (AI)
-
-- Grouped summary; details in the PR note (`PRs/611-claude-lopu-toast-position-notifications-history--lopu-toast-position-notifications-history.md`).
-- **Lopu messages move to the bottom-left** by default. Settings →
-  Appearance (page + drawer modal) gains a "Lopu messages 🦄" dropdown for
-  any of Chakra's six corners; the preference lives at
-  `settings.lopu.position` (cross-tab, undo-exempt) and is mirrored into the
-  synchronous `tt-lopu-position` cache that `useLopu` reads at fire time, so
-  none of the ~86 callers subscribe to settings state. `--toast-z-index`
-  (10260) lifts toasts above the drawer and modals.
-- **`/notifications`**: every notification the viewer has received, newest
-  first, with the filter grammar in the URL — category chips
-  (social / engagement / feed / system), a type dropdown, unread-only,
-  debounced search, and a from/to day window — plus per-row mark-read on
-  click, "Mark all read", cursor "Load older", and a flash-free cached first
-  page. Linked from the bell ("See all →"), Settings → Notifications
-  ("History 📜"), and the drawer's Account group.
-- **System notifications**: new `action-run` type (category `system`, actor
-  `thingtime` / "Lopu", headline + `href` + `outcome`) emitted by the action
-  executor for every explicit run and any failed delegated run; push on by
-  default, email opt-in. `NOTIFICATION_TYPE_CATEGORY` in the registry maps
-  every type to a family (coverage-tested).
-- `GET /api/v1/notifications` → contract 1.1.0: optional `category`, `types`,
-  `unread`, `q`, `since`, `until`, `withTotal` (→ `total`); rows now carry
-  `category`, `title`, `href`, `outcome`. `/api/v1/notifications/settings` →
-  1.1.0 (accepts `action-run`). Per-recipient tail raised from 500 to 10,000.
-  Query resolution lives in `api/utils/notifications/listQuery.ts`
-  (`npm run test:notifications`).
-
 
 - 2026-09-05: Correct Commander archive architecture and UI resource verification after Apple's successful notarization; add real macOS lipo and Vite output regression checks. [Release notes](../../PRs/648-commander-cloud-releases-publish-installable-signed-commander-builds-with-recovery-provenance.md).
 - 2026-09-05: Repair passkey request cancellation across login, account switching and settings; isolate concurrent challenges and reject saved-cookie replay; add native Apple domain association support and account-scoped settings caches. Verified a signed iOS Release build and configured the matching public Apple application ID in Vercel; production code rollout and device acceptance remain pending. See `PRs/641-passkey-reliability-fix-passkey-cancellation-concurrent-challenges-and-native-app-association.md` for validation and rollout requirements.
@@ -455,27 +411,34 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   xAI Grok Voice on a server-minted five-minute ephemeral credential, on the
   web and on iOS (background audio session + Live Activity).
 
-### 2026-09-03 — Generated marketing suite: 1,600+ pages, animated walkthroughs, social image suite — Claude (AI)
+### 2026-09-02 — Lopu toast position setting + `/notifications` history page — Claude (AI)
 
-- Grouped summary; details in the PR note (`PRs/610-claude-marketing-suite--generated-marketing-suite.md`).
-- **`/marketing`** is a catalog-generated marketing site: feature landing
-  pages, how-to guides, animated cursor walkthroughs over mock screens,
-  fair competitor comparisons and alternatives, audience pages, use cases,
-  concept explainers, starter templates, twelve "style editions" per lead
-  feature, FAQ pages and getting-started checklists — 1,635 pages from one
-  data set (`remix/app/marketing/`), every slug validated, every link
-  resolved, hero-first and CTA-last, deterministic per slug.
-- **`/marketing/social-media`** is a menu-navigable image suite: every
-  feature × twelve viral trend styles × ten platform formats renders as a
-  self-contained SVG and downloads as PNG at the exact platform size, with
-  per-platform captions and hashtags (10,680 images).
-- Routes are lazy (`marketing`, `marketing/social-media`,
-  `marketing/:category`, `marketing/*`); the root title effect defers to
-  `useMarketingSeo` under `/marketing`; the drawer gains a Marketing hub.
-- Tests: `npm run test:marketing` (catalog validation, walkthrough target
-  coverage, SVG rendering, copy determinism, mock-screen coverage, player
-  engine); manual checklist in `TESTING.md` ("Marketing suite"); design
-  notes in `docs/marketing-suite.md`.
+- Grouped summary; details in the PR note (`PRs/611-claude-lopu-toast-position-notifications-history--lopu-toast-position-notifications-history.md`).
+- **Lopu messages move to the bottom-left** by default. Settings →
+  Appearance (page + drawer modal) gains a "Lopu messages 🦄" dropdown for
+  any of Chakra's six corners; the preference lives at
+  `settings.lopu.position` (cross-tab, undo-exempt) and is mirrored into the
+  synchronous `tt-lopu-position` cache that `useLopu` reads at fire time, so
+  none of the ~86 callers subscribe to settings state. `--toast-z-index`
+  (10260) lifts toasts above the drawer and modals.
+- **`/notifications`**: every notification the viewer has received, newest
+  first, with the filter grammar in the URL — category chips
+  (social / engagement / feed / system), a type dropdown, unread-only,
+  debounced search, and a from/to day window — plus per-row mark-read on
+  click, "Mark all read", cursor "Load older", and a flash-free cached first
+  page. Linked from the bell ("See all →"), Settings → Notifications
+  ("History 📜"), and the drawer's Account group.
+- **System notifications**: new `action-run` type (category `system`, actor
+  `thingtime` / "Lopu", headline + `href` + `outcome`) emitted by the action
+  executor for every explicit run and any failed delegated run; push on by
+  default, email opt-in. `NOTIFICATION_TYPE_CATEGORY` in the registry maps
+  every type to a family (coverage-tested).
+- `GET /api/v1/notifications` → contract 1.1.0: optional `category`, `types`,
+  `unread`, `q`, `since`, `until`, `withTotal` (→ `total`); rows now carry
+  `category`, `title`, `href`, `outcome`. `/api/v1/notifications/settings` →
+  1.1.0 (accepts `action-run`). Per-recipient tail raised from 500 to 10,000.
+  Query resolution lives in `api/utils/notifications/listQuery.ts`
+  (`npm run test:notifications`).
 
 ### 2026-09-03 — Multi-environment PR preview links — Codex (AI)
 
