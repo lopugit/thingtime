@@ -774,6 +774,12 @@ export const UserSettingsModal = () => {
 				{settingRow('Lopu messages 🦄', <LopuPositionSelect />, 'Where notifications pop up on screen')}
 
 				{settingRow(
+					'Pet',
+					<Switch isChecked={theme.general.pet} onChange={(e) => setGeneral('pet', e.target.checked)}></Switch>,
+					'Lopuuu, the floating unicorn 🦄'
+				)}
+
+				{settingRow(
 					'Theme Studio',
 					<Button size="xs" variant="outline" onClick={() => handleGoTo('/themes')}>
 						Open 🎨

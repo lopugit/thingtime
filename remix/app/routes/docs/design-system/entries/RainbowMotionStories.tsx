@@ -250,14 +250,19 @@ const KeyframesStory = () => {
 };
 
 const MotionSwitchStory = () => {
-	const [values, setValues] = React.useState<{ motion: string; anim: string } | null>(null);
+	const [values, setValues] = React.useState<{ motion: string; anim: string; pet: string } | null>(null);
 
 	React.useEffect(() => {
 		try {
 			const styles = getComputedStyle(document.documentElement);
 			setValues({
 				motion: styles.getPropertyValue('--tt-motion').trim() || '(unset)',
-				anim: styles.getPropertyValue('--tt-rainbow-anim').trim() || '(unset)'
+				anim: styles.getPropertyValue('--tt-rainbow-anim').trim() || '(unset)',
+				// Motion-on writes `initial`, which makes the property
+				// guaranteed-invalid — so it reads back EMPTY here, exactly as the
+				// pet's var(--tt-pet-anim, <its own spec>) fallbacks need. '(unset)'
+				// would read as "nobody wrote it", which is the opposite of true.
+				pet: styles.getPropertyValue('--tt-pet-anim').trim() || 'initial (guaranteed-invalid)'
 			});
 		} catch {
 			// non-browser render
@@ -286,9 +291,17 @@ const MotionSwitchStory = () => {
 				<Text fontFamily={MONO} fontSize="11px" color="var(--tt-muted, #9a9aa6)" overflowWrap="anywhere">
 					{values ? values.anim : 'reading…'} — the shorthand CSS rides; resolves to none when motion is off
 				</Text>
+				<Text fontFamily={MONO} fontSize="11px" fontWeight={600} color="var(--tt-ink, #16161a)">
+					--tt-pet-anim
+				</Text>
+				<Text fontFamily={MONO} fontSize="11px" color="var(--tt-muted, #9a9aa6)" overflowWrap="anywhere">
+					{values ? values.pet : 'reading…'} — the same switch for the pet, which has three different
+					shorthands to gate; none when motion is off, else guaranteed-invalid so each element falls back to
+					its own spec
+				</Text>
 			</Grid>
 			<Caption>
-				One theme boolean (general.motion) writes both vars in themeToCssVars() — flip motion in Settings →
+				One theme boolean (general.motion) writes all three vars in themeToCssVars() — flip motion in Settings →
 				Appearance and this tile freezes while the values above change, no reload
 			</Caption>
 		</Flex>
@@ -357,7 +370,7 @@ export const rainbowMotionStories: DesignSystemStory[] = [
 		id: 'motion-switch',
 		title: 'The motion switch',
 		description:
-			'One theme boolean, two outputs: themeToCssVars() writes --tt-rainbow-anim (the full animation shorthand, or none) for CSS, and --tt-motion (1/0) for JS. CSS rides the var; imperative effects call the ConfettiCanvas recipe — prefers-reduced-motion OR --tt-motion === "0" means stay still. This story reads the live values off <html>.',
+			'One theme boolean, three outputs: themeToCssVars() writes --tt-rainbow-anim (the full animation shorthand, or none) for CSS, --tt-motion (1/0) for JS, and --tt-pet-anim for the decorative pet. CSS rides the var; imperative effects call the ConfettiCanvas recipe — prefers-reduced-motion OR --tt-motion === "0" means stay still. The pet needs its own var because it gates three different shorthands rather than one: motion-off writes none, motion-on writes initial (guaranteed-invalid) so each element\'s var(--tt-pet-anim, <its own spec>) falls back to its own animation. All three are Tier 1, so the switch lands on the first paint through the snapshot tt-boot.js replays. This story reads the live values off <html>.',
 		render: MotionSwitchStory,
 		note: '--tt-anim-speed (default 200ms) is the third motion token — the base duration for UI transitions, separate from the decorative switch.'
 	},
