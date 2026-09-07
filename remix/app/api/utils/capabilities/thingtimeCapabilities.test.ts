@@ -24,6 +24,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.integration-ci-progress']?.version, '1.0.0');
   assert.equal(manifest.features['api.things-search']?.version, '1.1.1');
   assert.equal(manifest.features['api.things-share']?.version, '1.1.0');
+  assert.equal(manifest.features['api.users-profile']?.version, '1.1.0');
   // subspaces + up/down votes: posts/comments gained title/subspace/flair/
   // subspaceMod/votes and the feeds honour subspace fences (1.2.0, additive);
   // round 2 S3 — user flairs: posts + comments carry authorFlair, the

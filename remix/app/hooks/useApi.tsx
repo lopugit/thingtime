@@ -829,8 +829,13 @@ export function useApi() {
       userPosts: useCallback(async (args) => getJson(`/api/v1/things/user${toQuery(args)}`), []),
 			// commentSort: 'top' | 'new' | 'old' re-orders the shipped comment page
 			// of the post projection (PostCard's Top / New / Old menu); omit for
-			// the default page
-			get: useCallback(async (args, options?: { signal?: AbortSignal }) => getJson(`/api/v1/things${toQuery({ id: args?.id, commentSort: args?.commentSort })}`, options), []),
+			// the default page. key: a hidden thing's secret link key (?key= on
+			// /post pages) — lets anyone holding the link view the unlisted thing
+			get: useCallback(
+				async (args, options?: { signal?: AbortSignal }) =>
+					getJson(`/api/v1/things${toQuery({ id: args?.id, commentSort: args?.commentSort, key: args?.key })}`, options),
+				[]
+			),
       list: useCallback(
         async (args) =>
           getJson(
@@ -1012,6 +1017,31 @@ export function useApi() {
         [asyncFetcher]
       )
     },
+    groups: {
+      // audience groups (custom visibility) + the picker's prefill sources
+      list: useCallback(async () => getJson('/api/v1/groups'), []),
+      create: useCallback(
+        async (args) => asyncFetcher.submit({ name: args?.name, memberIds: args?.memberIds }, { action: '/api/v1/groups' }),
+        [asyncFetcher]
+      ),
+      update: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            {
+              id: args?.id,
+              ...(args && 'name' in args ? { name: args.name } : {}),
+              ...(args && 'memberIds' in args ? { memberIds: args.memberIds } : {})
+            },
+            { action: '/api/v1/groups', method: 'PATCH' }
+          ),
+        [asyncFetcher]
+      ),
+      remove: useCallback(
+        async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/groups', method: 'DELETE' }),
+        [asyncFetcher]
+      ),
+      audienceSources: useCallback(async () => getJson('/api/v1/groups/audience-sources'), [])
+    },
     tokens: {
       // personal access tokens (Settings → Token minter) — the mint response
       // carries the token string exactly once
@@ -1025,7 +1055,8 @@ export function useApi() {
               expiresInMs: args?.expiresInMs ?? null,
               maxUses: args?.maxUses ?? null,
               onlyCreatedThings: args?.onlyCreatedThings === true,
-              visibility: args?.visibility ?? 'all'
+              visibility: args?.visibility ?? 'all',
+              allowGet: args?.allowGet === true
             },
             { action: '/api/v1/tokens' }
           ),
@@ -1120,7 +1151,8 @@ export function useApi() {
 						'bannerUrl',
 						'avatarAttachmentId',
 						'bannerAttachmentId',
-						'birthday'
+						'birthday',
+						'hideEmailOnProfile'
 					] as const) {
 						if (Object.prototype.hasOwnProperty.call(args || {}, key)) body[key] = args?.[key];
 					}
