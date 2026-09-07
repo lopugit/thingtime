@@ -13,6 +13,7 @@ import {
 	socialTextWidth
 } from './socialCard';
 import type { SocialPreview } from './socialPreview';
+import { staticSocialPreview } from './socialPreview';
 
 const gallery: SocialPreview = {
 	kind: 'gallery',
@@ -292,6 +293,38 @@ test('a value the card cannot draw never takes the slot of one it can', () => {
 	// A name with nothing renderable in it at all still gets the site letter.
 	const allEmoji = buildSocialCardSvg({ ...gallery, author: '🎉🎉', initial: '🎉', images: [], imageCount: 0 });
 	assert.equal(allEmoji.match(/<text x="102" y="186"[^>]*>([^<]*)<\/text>/)?.[1], 'T');
+});
+
+// U+FFFE/U+FFFF are \p{Cn} noncharacters, so `cleanSocialText`'s \p{Cc} strip
+// keeps them and they are legal in a JS string, in UTF-8, in Mongo and in a
+// percent-encoded URL — but they are not XML characters at all, and escaping
+// cannot express them. resvg therefore rejects the whole document, so one of
+// them anywhere in a post's text meant that post got no card. Worse, a crafted
+// `/social-card?path=/docs/<U+FFFF>` lands it in `staticSocialPreview`'s own
+// title, which is exactly what the route's catch block re-renders as its safe
+// fallback — both renders threw and the public endpoint answered 500.
+test('a character XML cannot carry never reaches the renderer', () => {
+	const nonXml = '\uFFFF';
+	const svg = buildSocialCardSvg({
+		...gallery,
+		title: `Nikk: cat${nonXml} pictures`,
+		description: `Six${nonXml} very important cats.`,
+		eyebrow: `THINGTIME · PHOTO${nonXml} SET`,
+		author: `Nikk${nonXml}`,
+		initial: `N${nonXml}`,
+		badges: [`#cats${nonXml}`],
+		options: [`Yes${nonXml}`],
+		images: [],
+		imageCount: 0
+	});
+	assert.doesNotMatch(svg, /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/, 'a non-XML character must never enter the SVG');
+	assert.match(svg, /Nikk: cat pictures/, 'the words around it must survive');
+	assert.doesNotThrow(() => new Resvg(svg, socialCardRenderOptions()).render().asPng(), 'the card must still render');
+
+	// The route's own fallback card, built from the raw `?path=` leaf.
+	const fallback = buildSocialCardSvg(staticSocialPreview(`/docs/${nonXml}api`));
+	assert.doesNotMatch(fallback, /[\uFFFE\uFFFF]/, 'the safe fallback card must be safe for the input that reached it');
+	assert.doesNotThrow(() => new Resvg(fallback, socialCardRenderOptions()).render().asPng(), 'the fallback card must render');
 });
 
 test('empty-panel copy stays legible over its own artwork', () => {

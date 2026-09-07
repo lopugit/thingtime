@@ -82,11 +82,30 @@ const CARD_THEMES: Record<SocialPreviewVariant, CardTheme> = {
 // with its own fonts, and only the image is limited to what we ship.
 const CARD_UNRENDERABLE = /[\p{Extended_Pictographic}\u{200D}\u{FE0E}\u{FE0F}\u{20E3}\u{1F3FB}-\u{1F3FF}]/gu;
 
+// Escaping is not enough to make a value XML: the characters below have no
+// representation at all in XML 1.0 — not literal, not as a numeric reference —
+// so resvg's parser rejects the WHOLE document rather than the one glyph, and
+// `new Resvg(...)` throws before anything is drawn. `cleanSocialText` strips
+// \p{Cc}, but U+FFFE/U+FFFF are \p{Cn} noncharacters: legal in a JS string,
+// legal UTF-8, legal in Mongo, and legal in a percent-encoded URL. So they pass
+// every existing filter and reach the parser. Two ways that bites:
+//   - Any public post/profile/page whose text contains one renders no card at
+//     all — the route falls back to the generic one for a perfectly good post.
+//   - `/social-card?path=/docs/<U+FFFF>` puts it in `staticSocialPreview`'s own
+//     title, which is exactly what the route's catch block re-renders as its
+//     "safe fallback" — so both renders throw and the public, unauthenticated
+//     endpoint answers 500 instead of a card.
+// Tab/LF/CR are the three controls XML does allow and the `\s+` collapse below
+// handles them; this class is the rest, kept self-contained rather than relying
+// on which upstream helper happened to run first.
+const CARD_NON_XML = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g;
+
 // Single choke point for every user-authored value entering the SVG, so the
 // drop and the escape can never be applied to one field and skipped on another.
 const escapeXml = (value: string): string =>
 	value
 		.replace(CARD_UNRENDERABLE, '')
+		.replace(CARD_NON_XML, '')
 		.replace(/\s+/g, ' ')
 		.trim()
 		.replace(/&/g, '&amp;')
@@ -120,7 +139,11 @@ const TEXT_COLUMN_WIDTH = 594;
 
 // Drop what the bundled face cannot draw before anything is measured, so wrap
 // and clamp budget the column against the glyphs that actually get painted.
-const cardText = (value: string): string => value.replace(CARD_UNRENDERABLE, '').replace(/\s+/g, ' ').trim();
+// Both classes, for the same reason `escapeXml` applies both: a value that
+// survives here but is dropped there would be measured, given a slot, and then
+// painted as nothing — the exact mismatch `badgeRenders`/`cardInitial` exist to
+// prevent.
+const cardText = (value: string): string => value.replace(CARD_UNRENDERABLE, '').replace(CARD_NON_XML, '').replace(/\s+/g, ' ').trim();
 
 // The strip above runs inside `cardText`/`escapeXml` — downstream of every
 // decision about WHAT to draw — so a value that is entirely unrenderable still
