@@ -1,7 +1,7 @@
 import { connect } from 'node:http2';
 import { createHash, createPrivateKey, sign } from 'node:crypto';
 
-import { clampPreview } from './notifications';
+import { clampPreview, safeInternalHref } from './notifications';
 import type { EmitNotificationInput } from './notifications';
 import { listPushDevicesForUser, removePushDeviceById, type PushDevice } from './pushDevices';
 
@@ -57,7 +57,8 @@ const providerToken = (config: ApnsConfig): string => {
   return value;
 };
 
-export const notificationURL = (notification: Pick<EmitNotificationInput, 'postId' | 'actor'>): string => {
+export const notificationURL = (notification: Pick<EmitNotificationInput, 'postId' | 'actor'> & Partial<Pick<EmitNotificationInput, 'type' | 'href'>>): string => {
+  if (notification.type === 'recording-reminder') return safeInternalHref(notification.href) || '/lopu/recordings';
   if (notification.postId) return `/post/${encodeURIComponent(notification.postId)}`;
   if (notification.actor.username) return `/profile/${encodeURIComponent(notification.actor.username)}`;
   return '/notifications';
@@ -76,7 +77,12 @@ export const buildApnsPayload = (notification: PushEnvelope) => {
   const preview = clampPreview(notification.preview);
   return {
     aps: {
-      alert: { title: `${actor} ${action}`, ...(preview ? { body: preview } : {}) },
+      alert: {
+        title: notification.type === 'recording-reminder'
+          ? clampPreview(notification.title) || 'A little reminder from Lopu'
+          : `${actor} ${action}`,
+        ...(preview ? { body: preview } : {})
+      },
       sound: 'default',
       'thread-id': notification.postId || notification.targetId || notification.type
     },

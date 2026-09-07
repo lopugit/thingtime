@@ -18,37 +18,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-09-06: **Subspaces 🪐 round 2** — everything a subreddit needs to run:
-  ownership transfer + owner-only delete (posts are released as plain posts;
-  members/modlog/reports cascade), join requests for private subspaces and
-  posting-approval requests for restricted ones (Requests mod tab), per-member
-  user flairs with `authorFlair` on every post/comment projection, removal
-  reasons + Chakra modals for remove/ban/report/transfer/delete (no browser
-  prompts), post/comment reports with a Reports mod queue and `reportCount`,
-  six `subspace-*` notification types (mod-team actor on the punitive pair),
-  `GET /api/v1/things/feed?scope=subspaces`, directory sorts (new / members /
-  active, rate-limited `subspaces.list`), an Explore "Popular subspaces" strip
-  and a Search "Subspaces" section, per-card comment sort (top / new / old),
-  guest nudges and a 375px layout pass. Live walk `remix/scripts/verify-subspaces.mjs`
-  sections A–T: 486 passed. See the [PR note](../PRs/subspaces-communities-and-updown-votes.md). — Claude (AI)
+- 2026-09-07: Bring recording automation up to date with the released Lopu/Builder/rich-text work and the verified production storage-ledger repair. See the [PR #665 verification note](../PRs/665-codex-watch-lopu-recording-automation-private-transcripts-todos-reminders.md). — Codex (AI)
 
-- 2026-09-05: **Subspaces 🪐 + up/down votes 🔼** — Reddit-style communities as
-  things: `subspace` (slug, branding, rules, flairs, access), relational
-  `subspace-member` (role/approval/ban) and `subspace-modlog` docs, posts
-  gaining `title`/`subspaceId`/`flairId` with a server-side posting gate and a
-  root `subspaceMod` state (remove/approve/pin/lock/nsfw/spoiler, redaction for
-  non-mods, feed fences incl. private subspaces), `/api/v1/subspaces*` (list/
-  create, get, update, join, leave, members, moderate, modlog, feed with
-  hot/new/top/rising/controversial), and `updown` — a separate focused vote kind
-  (`POST /api/v1/things/updown`, one of up/down per user per post or comment,
-  aggregated as `votes`) beside the untouched native emoji reactions. UI: `/s`,
-  `/s/:slug`, `/s/:slug/mod`, the ▲ score ▼ pill on every post/comment card,
-  subspace/title/flair in the composer, mod menu on cards, drawer entry,
-  Settings → Subspaces. One new partial index (`things_subspace_posts`);
-  contracts `api.things`, `api.things-feed`, `api.things-comment`,
-  `api.things-user` bumped to 1.2.0. Live walk: `remix/scripts/verify-subspaces.mjs`.
-  See the [PR note](../PRs/subspaces-communities-and-updown-votes.md). — Claude (AI)
+- 2026-09-06: Integrate recording automation with the merged Watch foundation;
+  send daily reminders through its native push channel after durable commit,
+  preserving a bounded title and safe recordings link. — Codex (AI)
 
+- 2026-09-06: Add opt-in private Watch recording transcription, relational
+  transcript comments, grounded notes/todos, durable retry checkpoints and
+  daily local-time reminders. Add account settings/activity at
+  `/lopu/recordings`, explicit capability contracts and fork-safe scheduler /
+  provider setup. Browser checks cover persisted settings and mobile layout;
+  live audio and native push acceptance remain release gates. See the
+  [PR #665 verification note](../PRs/665-codex-watch-lopu-recording-automation-private-transcripts-todos-reminders.md). — Codex (AI)
 - Fix production storage-ledger validation to accept the catalog's optional speed-test quota without coercion, subscription rewrites, or allowance resets; retain legacy snapshots and fail closed on malformed quotas. — Codex (AI), 2026-09-06
 
 - 2026-09-06: Add bounded, value-free admin dry-run diagnostics for malformed protected storage ledgers; preserve fail-closed validation and all subscription allowances.

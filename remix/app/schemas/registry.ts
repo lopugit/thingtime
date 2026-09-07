@@ -2520,13 +2520,8 @@ export const NOTIFICATION_TYPES = [
   'share',
   'mention',
   'groups',
-  'subspace-join-request',
-  'subspace-join-accepted',
-  'subspace-post-removed',
-  'subspace-report',
-  'subspace-role',
-  'subspace-ban',
-  'action-run'
+  'action-run',
+  'recording-reminder'
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -2590,15 +2585,8 @@ export const NOTIFICATION_TYPE_CATEGORY: Record<NotificationType, NotificationCa
   mention: 'engagement',
   'post-from-followed': 'feed',
   'post-from-friend': 'feed',
-  // subspaces: membership/role events are social, moderation of your content
-  // and the mod queue are engagement
-  'subspace-join-request': 'social',
-  'subspace-join-accepted': 'social',
-  'subspace-role': 'social',
-  'subspace-ban': 'social',
-  'subspace-post-removed': 'engagement',
-  'subspace-report': 'engagement',
-  'action-run': 'system'
+  'action-run': 'system',
+  'recording-reminder': 'system'
 };
 
 export const isNotificationType = (value: unknown): value is NotificationType =>
@@ -2624,11 +2612,9 @@ export const EMAIL_NOTIFICATION_TYPES = [...NOTIFICATION_TYPES, ...EMAIL_ONLY_NO
 export type EmailNotificationType = (typeof EMAIL_NOTIFICATION_TYPES)[number];
 
 // High-volume types whose EMAIL channel defaults OFF (the bell stays ON): a
-// busy follow graph would otherwise turn every post into an email, a scripted
-// action can run sixty times a minute, and the mod-queue traffic of a big
-// subspace (join requests, reports) is the same class of firehose —
-// moderators opt in per type.
-export const EMAIL_DEFAULT_OFF_TYPES: readonly string[] = ['post-from-followed', 'post-from-friend', 'action-run', 'subspace-join-request', 'subspace-report'];
+// busy follow graph would otherwise turn every post into an email, and a
+// scripted action can run sixty times a minute.
+export const EMAIL_DEFAULT_OFF_TYPES: readonly string[] = ['post-from-followed', 'post-from-friend', 'action-run', 'recording-reminder'];
 
 export type NotificationChannelMasters = { push: boolean; email: boolean };
 export type NormalizedNotificationPrefs = {
@@ -3902,6 +3888,9 @@ export const DEVICE_THINGTIME = [
 export const DEVICE_CONTROL_THINGTIME = ['device-command', 'device-command-event', 'device-ai-live-state', 'device-approval'] as const;
 
 export const PROTECTED_THINGTIME = [
+	'lopu-recording-settings',
+	'lopu-recording-job',
+	'lopu-recording-reminder',
 	ATTACHMENT_THINGTIME,
   'user',
   'theme',
@@ -3960,7 +3949,7 @@ export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) =>
 // unreachable, unaccounted, and never pruned again — so create/run/delete
 // cycles would re-open exactly the unbounded accumulation the retention cap
 // closes. Cascading is also the only way an owner can ever remove them.
-export const CASCADE_CHILD_THINGTIME = [ATTACHMENT_THINGTIME, 'comment', 'reaction', 'save', 'action-run', UPDOWN_THINGTIME] as const;
+export const CASCADE_CHILD_THINGTIME = [ATTACHMENT_THINGTIME, 'comment', 'reaction', 'save', 'action-run', 'lopu-recording-job', 'lopu-recording-reminder'] as const;
 
 // Messenger kinds are owned by /api/v1/chats* end to end. Create/update are
 // already refused by the missing crystal sanitizers, and DELETE must be too:
@@ -4085,6 +4074,12 @@ const waitlistThingSchema: ThingtimeSchema = {
 };
 
 export const thingtimeSchemas: ThingtimeSchema[] = [
+	...(['lopu-recording-settings', 'lopu-recording-job', 'lopu-recording-reminder'] as const).map((id): ThingtimeSchema => ({
+		id, version: 1, kind: 'crystal', collection: null, title: id,
+		summary: 'Protected owner-private Watch recording automation state.',
+		detail: 'Managed by the Lopu recording API. Bounded operational state; private processing scratch is in secure BinData, never indexed or projected. Transcript comments and generated Things use ordinary quota-billed content writes.',
+		createdVia: 'POST /api/v1/lopu/recordings', fields: [], example: {}
+	})),
   rootThingSchema,
   postSchema,
 	attachmentSchema,

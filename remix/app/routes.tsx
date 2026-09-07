@@ -235,6 +235,7 @@ export const router = createBrowserRouter([
       { path: 's/:slug/mod', lazy: lazyRoute(() => import('./routes/subspace-mod')), loader: requireUser('/login') },      // the viewer's full notification history (search + category/type/
       // unread/date filters in the URL) — same signed-out quiet state posture
       { path: 'notifications', lazy: lazyRoute(() => import('./routes/notifications')) },
+      { path: 'lopu/recordings', lazy: lazyRoute(() => import('./routes/lopu.recordings')) },
       // Schema BROWSING/BUILDING lives at /schemas (standalone, like /search);
       // the registry reference docs moved to /docs/schemas.
       { path: 'schemas', lazy: lazyRoute(() => import('./routes/schemas')) },

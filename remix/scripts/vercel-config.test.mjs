@@ -14,8 +14,12 @@ test('Vercel cron path and schedule pairs are unique', () => {
 	assert.equal(new Set(cronKeys).size, cronKeys.length, 'vercel.json must not register the same cron path and schedule twice');
 });
 
-test('attachment cleanup, moderation sweep, peer sync, and notification digest schedules are registered once', () => {
+test('recording processing, attachment cleanup, moderation sweep, peer sync, and notification digest schedules are registered once', () => {
 	assert.deepEqual(vercelConfig.crons, [
+		{
+			path: '/api/v1/lopu/recordings/run',
+			schedule: '*/5 * * * *'
+		},
 		{
 			path: '/api/v1/attachments/cleanup',
 			schedule: '17 * * * *'

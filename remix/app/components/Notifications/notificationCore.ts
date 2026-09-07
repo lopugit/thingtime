@@ -55,18 +55,7 @@ export const NOTIFICATION_TYPE_META: Record<NotificationType, { emoji: string; l
     label: 'Action runs',
     hint: 'Lopu reports each action you run yourself, plus any run that fails — email is opt-in'
   },
-  // subspaces 🪐 — the member-facing four, then the two mod-queue types
-  // (those default to email OFF: a busy subspace is a firehose)
-  'subspace-role': { emoji: '🎩', label: 'Subspace roles', hint: 'You are made a moderator or owner, demoted, or a subspace you moderate is deleted' },
-  'subspace-ban': { emoji: '🚫', label: 'Subspace bans', hint: 'You are banned from, or unbanned in, a subspace' },
-  'subspace-join-accepted': { emoji: '🎉', label: 'Join requests accepted', hint: 'A private subspace lets you in' },
-  'subspace-post-removed': { emoji: '🧹', label: 'Posts removed by mods', hint: 'A moderator removes one of your posts — with the reason' },
-  'subspace-join-request': {
-    emoji: '🙋',
-    label: 'Join requests (mods)',
-    hint: 'Someone asks to join or post in a subspace you moderate — email is opt-in'
-  },
-  'subspace-report': { emoji: '🚩', label: 'Reports (mods)', hint: 'Someone reports a post in a subspace you moderate — email is opt-in' }
+  'recording-reminder': { emoji: '🦄', label: 'Recording reminders', hint: 'Daily reminders for unfinished todos from Watch recordings — email is opt-in' }
 };
 
 export const notificationEmoji = (type: string): string => (isNotificationType(type) ? NOTIFICATION_TYPE_META[type].emoji : '✨');
@@ -102,22 +91,8 @@ export const notificationVerb = (item: Pick<NotificationItem, 'type' | 'preview'
       return 'mentioned you';
     case 'action-run':
       return 'ran an action';
-    // subspace moderation — the preview line ("s/<slug> · …") carries the
-    // specifics, the verb names the event family. The verb keys off the
-    // DETAIL half only, so a slug like s/deleted_scenes or s/uplifted_minds
-    // can't masquerade as a deletion or a lifted ban.
-    case 'subspace-join-request':
-      return /wants to post/i.test(subspaceNotificationDetail(item.preview)) ? 'asked for posting approval' : 'asked to join your subspace';
-    case 'subspace-join-accepted':
-      return 'accepted you into a subspace';
-    case 'subspace-post-removed':
-      return 'removed your post';
-    case 'subspace-report':
-      return 'reported a post to the mods';
-    case 'subspace-role':
-      return /deleted/i.test(subspaceNotificationDetail(item.preview)) ? 'deleted a subspace you moderated' : 'changed your role in a subspace';
-    case 'subspace-ban':
-      return /lifted/i.test(subspaceNotificationDetail(item.preview)) ? 'lifted your ban' : 'banned you from a subspace';
+    case 'recording-reminder':
+      return 'has a reminder for you';
     default:
       return 'did something ✨';
   }

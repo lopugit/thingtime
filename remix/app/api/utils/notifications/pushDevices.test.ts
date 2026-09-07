@@ -79,3 +79,20 @@ test('clamps a long preview so APNs cannot reject the push as too large', () => 
   assert.ok(payload.aps.alert.body!.length < 5000, 'preview must be clamped, not passed through');
   assert.ok(Buffer.byteLength(JSON.stringify(payload), 'utf8') < 4096, 'APNs alert payloads must stay under 4 KB');
 });
+
+test('recording reminders carry their bounded title and safe recording deep link', () => {
+  const input = {
+    notificationId: 'reminder-1', recipientId: 'owner', type: 'recording-reminder' as const,
+    actor: { id: 'system', displayName: 'Thingtime' }, targetId: 'todo-1',
+    title: 'A little reminder from Lopu', preview: 'Buy bike tubes', href: '/lopu/recordings'
+  };
+  const payload = buildApnsPayload(input);
+  assert.equal(payload.aps.alert.title, input.title);
+  assert.equal(payload.aps.alert.body, input.preview);
+  assert.equal(payload.url, input.href);
+  for (const href of ['https://evil.invalid', '//evil.invalid', '/bad\npath']) {
+    assert.equal(notificationURL({ ...input, href }), '/lopu/recordings');
+  }
+  const long = buildApnsPayload({ ...input, title: '🦄'.repeat(5000), preview: '🦄'.repeat(5000) });
+  assert.ok(Buffer.byteLength(JSON.stringify(long), 'utf8') < 4096);
+});

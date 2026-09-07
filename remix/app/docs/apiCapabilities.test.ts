@@ -60,8 +60,6 @@ test('capabilities publish the native Apple notification device contract', () =>
 test('notification contracts publish the history filters and the system family as compatible minors', () => {
 	const manifest = createApiCapabilitiesManifest();
 
-	// the history filters landed as 1.1.0; the list then took the cursor,
-	// from/to window and viewer object on top, so it publishes 1.2.0
 	assert.equal(manifest.features['api.notifications-list'], '1.3.0');
 	assert.equal(manifest.features['api.notifications-settings'], '1.2.0');
 });
