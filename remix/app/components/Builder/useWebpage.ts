@@ -21,28 +21,21 @@ import type { WebpageBlock, WebpageCrystal } from './webpageBlocks';
 // callers render last-known state and reconcile when data lands.
 
 export type WebpageTarget =
-	| { kind: 'id'; id: string }
+	| { kind: 'id'; id: string; key?: string }
 	| { kind: 'path'; path: string }
 	| { kind: 'global' };
 
 export type ResolvedWebpage = {
-	page: { id: string; crystal: WebpageCrystal; author?: { id?: string } | null; updatedAt?: string; acl?: string[] } | null;
+	page: { id: string; crystal: WebpageCrystal; author?: { id?: string } | null; updatedAt?: string; acl?: string[]; linkKey?: string } | null;
 	source: 'user' | 'system' | null;
 	componentsByRef: ComponentsByRef;
 };
 
-// The public toggle must never bulldoze the rest of the acl — hidden links
-// (tt:hidden + link keys), custom audiences (tt:user/…, tt:group/…), and app
-// grants (tt:app/…) all live in the same list. Only the tt:all entry is the
-// toggle's to add or remove.
-export const webpageAclForToggle = (current: unknown, isPublic: boolean): string[] => {
-	const list = Array.isArray(current) ? current.filter((entry): entry is string => typeof entry === 'string') : [];
-	const others = list.filter((entry) => entry !== 'tt:all' && entry !== ACL_OWNER);
-	return isPublic ? [ACL_OWNER, ...others, 'tt:all'] : [ACL_OWNER, ...others];
-};
-
 const targetQuery = (target: WebpageTarget): string => {
-	if (target.kind === 'id') return `id=${encodeURIComponent(target.id)}`;
+	if (target.kind === 'id') {
+		const id = `id=${encodeURIComponent(target.id)}`;
+		return target.key ? `${id}&key=${encodeURIComponent(target.key)}` : id;
+	}
 	if (target.kind === 'path') return `path=${encodeURIComponent(target.path)}`;
 	return 'global=1';
 };
@@ -105,6 +98,13 @@ export const mergeSavedWebpage = (prev: ResolvedWebpage | null, thing: LopuSaved
 	if (!crystal) return prev;
 	const updatedAt = typeof thing?.updatedAt === 'string' ? thing.updatedAt : prev?.page?.updatedAt;
 	const acl = Array.isArray(thing?.acl) ? thing.acl.filter((entry): entry is string => typeof entry === 'string') : prev?.page?.acl;
+	const savedAclPresent = Array.isArray(thing?.acl);
+	const linkKey =
+		typeof (thing as { linkKey?: unknown })?.linkKey === 'string'
+			? (thing as { linkKey: string }).linkKey
+			: savedAclPresent
+				? undefined
+				: prev?.page?.linkKey;
 	const author = thing?.author && typeof thing.author === 'object' ? thing.author : prev?.page?.author;
 	return {
 		page: {
@@ -113,7 +113,8 @@ export const mergeSavedWebpage = (prev: ResolvedWebpage | null, thing: LopuSaved
 			crystal,
 			...(author !== undefined ? { author } : {}),
 			...(updatedAt ? { updatedAt } : {}),
-			...(acl ? { acl } : {})
+			...(acl ? { acl } : {}),
+			...(savedAclPresent ? { linkKey } : linkKey ? { linkKey } : {})
 		},
 		source: 'user',
 		componentsByRef: prev?.componentsByRef || {}
@@ -134,7 +135,7 @@ export type UseWebpageDraft = {
 	// dirty, updates the resolved page (updatedAt/crystal/acl) and, when the
 	// saved thing carries blocks, converges the draft on them
 	markSaved: (thing: LopuSavedThingLike) => void;
-	save: (options?: { name?: string; isPublic?: boolean }) => Promise<{ ok: boolean; id?: string; error?: string }>;
+	save: (options?: { name?: string; acl?: string[] }) => Promise<{ ok: boolean; id?: string; thing?: Record<string, any>; error?: string }>;
 	// discard the viewer's personalised site doc (site targets only)
 	resetToDefault: () => Promise<{ ok: boolean; error?: string }>;
 	discardDraft: () => void;
@@ -253,7 +254,7 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 	};
 
 	const save = React.useCallback(
-		async (options?: { name?: string; isPublic?: boolean }) => {
+		async (options?: { name?: string; acl?: string[] }) => {
 			if (!targetKey) return { ok: false, error: 'Nothing to save' };
 			const target = JSON.parse(targetKey) as WebpageTarget;
 			const page = resolved?.page || null;
@@ -280,46 +281,43 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 			};
 			try {
 				if (resolved?.source === 'user' && page) {
-					// the public toggle merges with the page's existing acl (hidden
-					// links, custom audiences, app grants survive the toggle)
-					let aclPatch: { acl: string[] } | Record<string, never> = {};
-					if (options?.isPublic !== undefined) {
-						let currentAcl: unknown = page.acl;
-						if (!Array.isArray(currentAcl)) {
-							try {
-								const current: any = await apiRef.current.v1.things.get({ id: page.id });
-								currentAcl = current?.thing?.acl ?? current?.things?.[0]?.acl;
-							} catch {
-								// fall through — the merge treats unknown as owner-only base
-							}
-						}
-						aclPatch = { acl: webpageAclForToggle(currentAcl, options.isPublic) };
-					}
 					const resp: any = await apiRef.current.v1.things.update({
 						id: page.id,
 						crystal,
 						// refuse to silently overwrite a save made from another tab or
 						// device since this draft loaded (server answers 409)
 						...(page.updatedAt ? { expectedUpdatedAt: page.updatedAt } : {}),
-						...aclPatch
+						...(options?.acl ? { acl: options.acl } : {})
 					});
 					if (!resp?.ok) return { ok: false, error: resp?.error || 'Save failed' };
 					setDirty(false);
 					dirtyRef.current = false;
 					const nextUpdatedAt = typeof resp?.thing?.updatedAt === 'string' ? resp.thing.updatedAt : page.updatedAt;
 					const nextAcl = Array.isArray(resp?.thing?.acl) ? (resp.thing.acl as string[]) : page.acl;
+					const nextLinkKey = typeof resp?.thing?.linkKey === 'string' ? resp.thing.linkKey : undefined;
 					setResolved((prev) =>
-						prev ? { ...prev, page: { ...prev.page!, crystal, updatedAt: nextUpdatedAt, acl: nextAcl } } : prev
+						prev
+							? {
+								...prev,
+								page: {
+									...prev.page!,
+									crystal,
+									updatedAt: nextUpdatedAt,
+									acl: nextAcl,
+									...(nextLinkKey ? { linkKey: nextLinkKey } : { linkKey: undefined })
+								}
+							}
+							: prev
 					);
 					announceSave(crystal);
-					return { ok: true, id: page.id };
+					return { ok: true, id: page.id, thing: resp?.thing };
 				}
 				// forking a system/site default or creating a brand-new page —
 				// personal site docs stay private, standalone pages honour the toggle
 				const resp: any = await apiRef.current.v1.things.create({
 					thingtime: ['webpage'],
 					crystal,
-					...(options?.isPublic ? {} : { acl: [ACL_OWNER] })
+					acl: options?.acl || [ACL_OWNER]
 				});
 				if (!resp?.ok) return { ok: false, error: resp?.error || 'Save failed' };
 				const id = resp?.thing?.id || resp?.id;
@@ -328,7 +326,7 @@ export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpa
 				// re-resolve so source flips to 'user' and future saves update in place
 				setRefreshTick((tick) => tick + 1);
 				announceSave(crystal);
-				return { ok: true, id };
+				return { ok: true, id, thing: resp?.thing };
 			} catch (err: any) {
 				return { ok: false, error: err?.error || err?.message || 'Save failed' };
 			}

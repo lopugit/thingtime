@@ -21,22 +21,19 @@ import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { RenderThing } from '~/components/Kinds';
+import { ThingAudienceControl } from '~/components/Sharing/ThingAudienceControl';
 import { ThingView } from '~/components/Thingtime/ThingView';
-import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 
 import { FolderTree } from './FolderTree';
 import type { FolderTreeProps } from './FolderTree';
 import {
   VISIBILITY_META,
-  circleOf,
-  composeAcl,
   formatWhen,
   isFolder,
-  personGrantsOf,
   primaryKindOf,
   thingDisplayName,
   thingIcon,
-  thingLink
+  thingShareLink
 } from './thingsCore';
 import type { ThingsThing } from './thingsCore';
 
@@ -257,73 +254,54 @@ export const ShareDialog = ({
 }) => {
   const api = useApi();
   const lopu = useLopu();
-  const apiRef = useRef(api);
-  apiRef.current = api;
 
   const single = things.length === 1 ? things[0] : null;
   const folderCount = things.filter(isFolder).length;
-  const [circle, setCircle] = useState('private');
-  const [people, setPeople] = useState<string[]>([]);
-  const [peopleLabels, setPeopleLabels] = useState<Record<string, string>>({});
-  const [personQuery, setPersonQuery] = useState('');
-  const [personResults, setPersonResults] = useState<
-    Array<{ username: string; displayName: string | null; temporary?: boolean }>
-  >([]);
+  const [acl, setAcl] = useState<string[]>(['tt:user']);
   const [recursive, setRecursive] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!things.length) return;
-    const first = things[0];
-    const initial = circleOf(first.acl);
-    setCircle(initial === 'inherit' ? 'private' : initial);
-    setPeople(single ? personGrantsOf(first.acl) : []);
-    setPeopleLabels({});
-    setPersonQuery('');
-    setPersonResults([]);
+    setAcl(things[0].acl.includes('tt:inherit') ? ['tt:user'] : things[0].acl);
     setRecursive(false);
     setBusy(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [things.map((thing) => thing.id).join(',')]);
-
-  // debounced people search
-  useEffect(() => {
-    const q = personQuery.trim();
-    if (!q) {
-      setPersonResults([]);
-      return;
-    }
-    let cancelled = false;
-    const timer = setTimeout(async () => {
-      try {
-        const resp = await apiRef.current.v1.profile.search({ q, limit: 6 });
-        if (!cancelled) setPersonResults(resp?.users || []);
-      } catch {
-        if (!cancelled) setPersonResults([]);
-      }
-    }, 300);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [personQuery]);
 
   const inheritLocked = useMemo(() => things.filter((thing) => thing.acl.includes('tt:inherit')), [things]);
 
   const submit = async () => {
     if (busy) return;
     setBusy(true);
-    const ok = await onApply(composeAcl(circle, people), recursive && folderCount > 0);
+    const ok = await onApply(acl, recursive && folderCount > 0);
+    if (ok && single && acl.includes('tt:hidden')) {
+      try {
+        const response: any = await api.v1.things.get({ id: single.id });
+        const updated = response?.thing || response?.things?.[0];
+        if (updated?.linkKey) await copyThingLink({ ...single, acl: updated.acl || acl, linkKey: updated.linkKey });
+      } catch {
+        lopu({
+          title: 'Audience saved — reopen Share to copy the link',
+          description: 'The hidden link is ready, but the clipboard was unavailable.',
+          status: 'info'
+        });
+      }
+    }
     setBusy(false);
     if (ok) onClose();
   };
 
-  const copyLink = async () => {
-    if (!single) return;
-    const url = `${window.location.origin}${thingLink(single)}`;
+  const copyThingLink = async (thing: ThingsThing) => {
+    const url = `${window.location.origin}${thingShareLink(thing)}`;
     try {
       await navigator.clipboard.writeText(url);
-      lopu({ title: 'Link copied 🔗', description: url, status: 'success', duration: 6000 });
+      lopu({
+        title: thing.acl.includes('tt:hidden') ? 'Secret link copied 🕵️' : 'Link copied 🔗',
+        description: url,
+        status: 'success',
+        duration: 6000
+      });
     } catch {
       lopu({ title: 'Couldn’t copy the link', description: url, status: 'error' });
     }
@@ -339,86 +317,7 @@ export const ShareDialog = ({
         <ModalCloseButton />
         <ModalBody>
           <Flex direction="column" gap={4}>
-            <Box>
-              <Text color="var(--tt-muted, #9a9aa6)" fontSize="12px" marginBottom={1}>
-                Audience
-              </Text>
-              <Select onChange={(event) => setCircle(event.target.value)} size="sm" value={circle}>
-                {['public', 'friends', 'family', 'private'].map((value) => (
-                  <option key={value} value={value}>
-                    {VISIBILITY_META[value].icon} {VISIBILITY_META[value].label}
-                  </option>
-                ))}
-              </Select>
-            </Box>
-            <Box>
-              <Text color="var(--tt-muted, #9a9aa6)" fontSize="12px" marginBottom={1}>
-                Share with specific people
-              </Text>
-              <Input
-                onChange={(event) => setPersonQuery(event.target.value)}
-                placeholder="Search people by name…"
-                size="sm"
-                value={personQuery}
-              />
-              {personResults.length > 0 && (
-                <Box border="1px solid var(--tt-border, #ececef)" borderRadius="10px" marginTop={1} overflow="hidden">
-                  {personResults.map((person) => (
-                    <Flex
-                      key={person.username}
-                      _hover={{ background: 'var(--tt-surface, #fafafb)' }}
-                      cursor="pointer"
-                      gap={2}
-                      onClick={() => {
-                        setPeople((prev) => (prev.includes(person.username) ? prev : [...prev, person.username]));
-                        setPeopleLabels((prev) => ({ ...prev, [person.username]: getUserIdentityDetail(person) }));
-                        setPersonQuery('');
-                        setPersonResults([]);
-                      }}
-                      paddingX={3}
-                      paddingY={2}
-                    >
-                      <Text fontSize="13px" fontWeight={500}>
-                        {getUserDisplayName(person)}
-                      </Text>
-                      <Text color="var(--tt-muted, #9a9aa6)" fontSize="13px">
-                        {getUserIdentityDetail(person)}
-                      </Text>
-                    </Flex>
-                  ))}
-                </Box>
-              )}
-              <Flex flexWrap="wrap" gap={2} marginTop={2}>
-                {people.map((username) => (
-                  <Flex
-                    key={username}
-                    alignItems="center"
-                    background="var(--tt-surface, #fafafb)"
-                    border="1px solid var(--tt-border, #ececef)"
-                    borderRadius="999px"
-                    gap={1}
-                    paddingX={2}
-                    paddingY="2px"
-                  >
-                    <Text fontSize="12px">{peopleLabels[username] || `@${username}`}</Text>
-                    <Box
-                      as="button"
-                      color="var(--tt-muted, #9a9aa6)"
-                      fontSize="12px"
-                      onClick={() => setPeople((prev) => prev.filter((entry) => entry !== username))}
-                      type="button"
-                    >
-                      ✕
-                    </Box>
-                  </Flex>
-                ))}
-                {!people.length && (
-                  <Text color="var(--tt-faint, #b6b6c0)" fontSize="12px">
-                    No direct grants — the audience circle decides who sees {things.length === 1 ? 'it' : 'them'}.
-                  </Text>
-                )}
-              </Flex>
-            </Box>
+            <ThingAudienceControl acl={acl} onChange={setAcl} testId="things-share-audience" />
             {folderCount > 0 && (
               <Box>
                 <Checkbox
@@ -447,15 +346,15 @@ export const ShareDialog = ({
         </ModalBody>
         <ModalFooter gap={2}>
           {single && (
-            <Button marginRight="auto" onClick={copyLink} size="sm" variant="outline">
-              🔗 Copy link
+            <Button marginRight="auto" onClick={() => copyThingLink(single)} size="sm" variant="outline">
+              {single.acl.includes('tt:hidden') ? '🕵️ Copy secret link' : '🔗 Copy link'}
             </Button>
           )}
           <Button onClick={onClose} size="sm" variant="ghost">
             Cancel
           </Button>
           <Button colorScheme="pink" isLoading={busy} onClick={submit} size="sm">
-            Apply
+            {single && acl.includes('tt:hidden') ? 'Apply & copy link' : 'Apply'}
           </Button>
         </ModalFooter>
       </ModalContent>
