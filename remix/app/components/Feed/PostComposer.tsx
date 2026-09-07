@@ -15,6 +15,7 @@ import {
 import type { AttachmentComposerSnapshot, PublicAttachment } from '~/components/Attachments/attachmentTypes';
 import type { MediaLayoutSpan, PostMediaLayout } from '~/schemas/registry';
 import {
+	attachmentFilesFromClipboard,
 	canonicalPostTags,
 	matchesCommittedPostCreate,
 	MAX_POST_ATTACHMENTS,
@@ -227,6 +228,7 @@ export const PostComposer = (props: PostComposerProps) => {
 	// it and inserts `@username ` at the caret (posts and comments both)
 	const editorBoxRef = React.useRef<HTMLDivElement | null>(null);
 	const attachmentComposerRef = React.useRef<AttachmentComposerHandle | null>(null);
+	const pendingPastedFilesRef = React.useRef<File[]>([]);
 	const postTextEditorRef = React.useRef<LongTextEditorHandle | null>(null);
 	// A stable client id turns a lost POST response into a safely reconcilable
 	// read. It is rotated only after the draft is definitively committed/reset.
@@ -242,6 +244,39 @@ export const PostComposer = (props: PostComposerProps) => {
   // bumping the session remounts the block editor with a clean document
   // (while mounted, the editor owns the text)
   const [composerSession, setComposerSession] = React.useState(0);
+
+	// File-bearing pastes anywhere inside the expanded composer belong to the
+	// post's one media panel. When Photos is still off, retain the File objects
+	// for the next render, turn the panel on, then queue them through the same
+	// secure uploader used by file-picking and drag/drop. Text-only paste keeps
+	// its native Editor.js/input behavior.
+	const handleComposerPaste = React.useCallback(
+		(event: React.ClipboardEvent<HTMLDivElement>) => {
+			if (event.defaultPrevented || posting || submissionUncertain || !user) return;
+			// React portal events bubble through the component tree. Do not turn a
+			// file pasted into the separate Thing editor modal into post media.
+			if (!event.currentTarget.contains(event.target as Node)) return;
+			const files = attachmentFilesFromClipboard(event.clipboardData);
+			if (!files.length) return;
+			event.preventDefault();
+			event.stopPropagation();
+			setPollOn(false);
+			if (attachmentComposerRef.current) {
+				attachmentComposerRef.current.addFiles(files);
+				return;
+			}
+			pendingPastedFilesRef.current = [...pendingPastedFilesRef.current, ...files];
+			setPhotosOn(true);
+		},
+		[posting, submissionUncertain, user]
+	);
+
+	React.useEffect(() => {
+		if (!photosOn || !attachmentComposerRef.current || pendingPastedFilesRef.current.length === 0) return;
+		const files = pendingPastedFilesRef.current;
+		pendingPastedFilesRef.current = [];
+		attachmentComposerRef.current.addFiles(files);
+	}, [composerSession, photosOn, user?.id]);
 
   // edit mode: the thing to seed the draft branch with, captured at mount so
   // the seed effect's deps stay constant
@@ -731,6 +766,7 @@ export const PostComposer = (props: PostComposerProps) => {
       borderRadius="var(--tt-radius-lg, 16px)"
       boxShadow="var(--tt-shadow-card, 0px 1px 2px rgba(22, 22, 26, 0.05))"
       padding={4}
+			onPasteCapture={handleComposerPaste}
     >
 			{(posting || submissionUncertain) && (
 				<Flex
@@ -848,6 +884,7 @@ export const PostComposer = (props: PostComposerProps) => {
           borderRadius="8px"
 						isDisabled={posting}
 						onClick={() => {
+							pendingPastedFilesRef.current = [];
 							if (isComment || isEdit) onClose?.();
 							else {
 								setExpanded(false);
