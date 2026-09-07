@@ -1000,7 +1000,8 @@ export function useApi() {
 						'bannerUrl',
 						'avatarAttachmentId',
 						'bannerAttachmentId',
-						'birthday'
+						'birthday',
+						'hideEmailOnProfile'
 					] as const) {
 						if (Object.prototype.hasOwnProperty.call(args || {}, key)) body[key] = args?.[key];
 					}
