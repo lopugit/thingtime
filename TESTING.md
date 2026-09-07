@@ -417,42 +417,69 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Run `npm run test:attachments` (it carries the public-upload permission
       unit tests alongside the upload-gate regression test).
 
-## Social meta / link unfurls (`remix/app/api/utils/meta/socialMeta.ts`)
+## Social meta / link unfurls (`remix/app/api/utils/meta/socialMeta.ts`, `socialPreview.ts`, `socialCard.ts`)
 
 Crawlers never run JS, so verify with plain `curl` against the Nitro port (the
 Vite dev port serves the raw shell without injection; in production, Vercel
-routes `/post/:id` and `/profile/:username` to the Nitro `__server` function —
-`remix/scripts/patch-vercel-output.mjs`).
+routes every public share surface plus `/social-card` to the Nitro `__server`
+function — `remix/scripts/patch-vercel-output.mjs`).
 
 - [ ] `curl -s <nitro>/post/<public post id>` returns `og:type article`, an
       `og:title` carrying the author + truncated text (or the poll question),
       an `og:description` capped near 200 chars, an absolute `og:url` /
-      `og:image`, and `twitter:card summary` (`summary_large_image` when the
-      post has an image attachment or a legacy `images[0]` URL, which then
-      becomes the `og:image`).
+      `/social-card?path=...` `og:image`, and `twitter:card summary_large_image`.
+- [ ] `curl -o card.png '<nitro>/social-card?path=/post/<public-photo-post-id>'`
+      yields a valid 1200×630 PNG. A two-photo post is a two-tile collage; a
+      four-or-more-photo post is a four-tile collage, while its excerpt, author
+      and `N photos` badge remain visible alongside it. Text, image,
+      marketplace, and structured Thingtime posts each have their own card
+      variant; polls show question + options, listings show
+      price/category/location, and shares identify the original content type.
+- [ ] A rich comment permalink has the comment treatment; a reply permalink
+      has the threaded reply treatment and identifies its visible parent.
+      Comments with photos retain their collage, while text-post attachments
+      select a video, audio, or file treatment rather than the generic card.
+- [ ] `/media/:id`, `/thing/:id`, `/p/:id`, `/profile/:username`, `/feed`,
+      `/explore`, deep docs/catalogue URLs, and `/social-card?path=/...` each
+      produce a route-appropriate title, eyebrow and descriptive card rather
+      than the indistinguishable pink placeholder. Standalone image, video,
+      audio, and file routes have distinct media treatments. A published
+      `/p/:id` page uses its name, description or safely extracted block text.
 - [ ] Fail closed: `curl -s <nitro>/post/<private post id>` and
       `/post/<garbage id>` both return ONLY the generic site block —
       indistinguishable from each other, and no post text, author, or image
       may appear anywhere in the HTML. (Status stays 200 by design: h3 treats
       a 404 Response from this middleware as "unhandled" and would fall
       through to the raw source template — see `server/routes/[...].ts`.)
-- [ ] `curl -s <nitro>/profile/<username>` returns `og:type profile`, the
-      `displayName (@username)` title, the bio as description, and the avatar
-      as `og:image` when set; an unknown username gets the generic block.
+- [ ] The image renderer fetches only stored, public Thingtime image
+      attachments via a short-lived download URL; a linked remote attachment,
+      private attachment, oversized response, malformed `path`, or non-image
+      MIME type never becomes a server-side fetch or an image-card leak.
 - [ ] User-authored text with `<`, `>`, `&`, quotes, and newlines arrives
-      HTML-escaped and whitespace-collapsed inside `content="…"`.
+      HTML/XML-escaped and whitespace-collapsed inside both `content="…"` and
+      the generated card.
 - [ ] `curl -s -H 'x-forwarded-host: thingtime.com' -H 'x-forwarded-proto:
       https' <nitro>/post/<id>` derives `https://thingtime.com/...` absolute
       URLs (the request-origin pattern, not a hardcoded host).
-- [ ] Every other page (`/`, `/feed`, deep unknown paths) carries the injected
-      site-default block (site_name Thingtime, generic description, brand
-      image, `twitter:card summary`) with absolute URLs, and responses from
-      the shell handler carry the `X-TT-Shell: social-meta` header.
+- [ ] The colourful Thingtime browser-card (wordmark, five-colour mark and
+      playful icon treatment) remains readable at 1200×630 and iMessage-sized
+      previews; no text or photo tile clips at the edge.
+- [ ] Check the card from the **deployed** preview, not just locally:
+      `curl -o card.png '<preview-origin>/social-card?path=/feed'` and open it.
+      Cards ship their own Liberation Sans (`socialCardFontData.ts`) because the
+      Vercel runtime has no system fonts, and a dev machine's fonts hide a
+      missing one — a fontless deploy renders full artwork with zero glyphs.
+      Emoji are deliberately dropped from the PNG (the face has no pictographs,
+      so they would draw as tofu boxes) while the `og:`/`twitter:` text tags
+      keep them. Non-Latin scripts the face lacks (CJK, Arabic, Thai) still draw
+      as tofu — known gap.
+- [ ] `npm --prefix remix run test:social-previews` passes.
 - [ ] After `npm run build`, `verify:vercel-output` passes: the permalink
-      routes sit between the API routes and the SPA fallback and point at the
-      Nitro server function.
-- [ ] A normal browser load of `/post/<id>` and `/profile/<username>` still
-      renders the SPA (the injected head block must not break the shell).
+      and social-card routes sit between the API routes and the SPA fallback,
+      point at the Nitro server function, and trace the native PNG renderer.
+- [ ] A normal browser load of `/post/<id>`, `/profile/<username>`, and
+      `/p/<id>` still renders the SPA (the injected head block must not break
+      the shell).
 
 ## Emailed-link origin trust (`remix/app/api/utils/auth/appOrigin.ts`)
 
