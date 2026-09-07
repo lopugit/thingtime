@@ -60,8 +60,16 @@ const boundedInteger = (value: unknown, fallback: number, min: number, max: numb
 const isSafeFieldPath = (value: string) =>
   value.length > 0 && value.length <= 200 && !value.includes('\0') && !value.startsWith('$');
 
+// things-era protected root fields, normalized the same way keys are below.
+// DERIVED from MONGO_PROTECTED_THING_FIELDS rather than spelled out, so the
+// hard ingress strip, the probe/aliasing guard and the response redactor can
+// never drift apart when a field joins the list.
+const normalizeQueryKey = (key: string) => key.toLowerCase().replace(/[^a-z0-9]/g, '');
+const protectedThingFieldSet = new Set<string>(MONGO_PROTECTED_THING_FIELDS.map(normalizeQueryKey));
+
 const shouldRedactKey = (key: string) => {
-  const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normalized = normalizeQueryKey(key);
+  if (protectedThingFieldSet.has(normalized)) return true;
   return (
     normalized.includes('password') ||
     normalized.includes('secret') ||
@@ -76,12 +84,7 @@ const shouldRedactKey = (key: string) => {
     normalized === 'cookie' ||
     normalized === 'sessionid' ||
     normalized === 'sessionjti' ||
-    normalized === 'rosterid' ||
-    // things-era system kinds (user/theme/…) store credentials + PII ciphertext
-    // under the root `secure` BinData field and hashed uniqueness material under
-    // `uniqueKeys` — neither matches the generic heuristics above
-    normalized === 'secure' ||
-    normalized === 'uniquekeys'
+    normalized === 'rosterid'
   );
 };
 
@@ -470,8 +473,9 @@ export const redactMongoValue = (value: unknown, state?: RedactionState): { valu
 };
 
 // things-era system kinds (user/theme/…) keep credentials + PII ciphertext
-// under root `secure`/`uniqueKeys`. Strip both server-side at EVERY point
-// things documents can enter a pipeline — primary collection, $lookup,
+// under root `secure`/`uniqueKeys`, and unlisted things keep their hidden-link
+// bearer secret under root `linkKey`. Strip them all server-side at EVERY
+// point things documents can enter a pipeline — primary collection, $lookup,
 // $unionWith — so no later stage (e.g. $objectToArray over $$ROOT, which
 // turns field names into values) can see them; key-based response redaction
 // alone can't survive renaming. Derived from MONGO_PROTECTED_THING_FIELDS so

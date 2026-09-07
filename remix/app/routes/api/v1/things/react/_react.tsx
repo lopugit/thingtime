@@ -5,7 +5,7 @@ import { appDataPreflight, readJsonBodyWithCors } from '~/api/utils/apps/cors';
 import { safeErrorText } from '~/api/utils/errors/safeError';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { StorageMutationError } from '~/api/utils/storage/storageCore';
-import { toggleReaction, viewerOf } from '~/api/utils/things/things';
+import { toggleReaction, viewerOf, withLinkKeys } from '~/api/utils/things/things';
 
 // POST /api/v1/things/react — { id, emoji } — toggle the caller's reaction on a
 // post. `emoji` may be any single emoji or a multi-emoji group (one token);
@@ -43,7 +43,12 @@ export const action = async ({ request }: { request: Request }) => {
   const body = await readJsonBodyWithCors(request, 64 * 1024, cors);
   let result: Awaited<ReturnType<typeof toggleReaction>>;
   try {
-    result = await toggleReaction(viewerOf(user, actorPat(actor)), body.id, body.emoji ?? null, app);
+    result = await toggleReaction(
+      withLinkKeys(viewerOf(user, actorPat(actor)), [typeof body?.key === 'string' ? body.key : '']),
+      body.id,
+      body.emoji ?? null,
+      app
+    );
   } catch (error) {
     if (error instanceof StorageMutationError) {
       return json({ ok: false, error: error.message, outcome: 'rejected' }, { status: error.status, headers: cors });

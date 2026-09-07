@@ -37,6 +37,7 @@ import { RAINBOW } from '~/theme/rainbow';
 import { extractInlineHashtags } from './hashtags';
 import { MentionAutocomplete } from './MentionAutocomplete';
 import { CIRCLE_META, MARKETPLACE_CATEGORY_META, POST_TYPE_META } from './feedTypes';
+import { CustomAudienceModal } from './CustomAudienceModal';
 import type { MarketplaceCategory, PostType, PostVisibility, PublicPost } from './feedTypes';
 
 // "What's on your mind?" composer. Collapsed it's a one-line prompt beside
@@ -203,6 +204,19 @@ export const PostComposer = (props: PostComposerProps) => {
   const [listingLocation, setListingLocation] = React.useState(editPost?.listing?.location || '');
   const [tagsInput, setTagsInput] = React.useState(editPost?.tags?.join(', ') || '');
   const [visibility, setVisibility] = React.useState<PostVisibility>(editPost?.visibility || 'public');
+  // custom audience 🎭 — the picker composes a full tt:custom acl; while
+  // visibility is 'custom' the payloads carry it (acl wins over the name)
+  const [customAcl, setCustomAcl] = React.useState<string[] | null>(
+    editPost?.visibility === 'custom' && Array.isArray(editPost?.acl) ? editPost.acl : null
+  );
+  const [audienceOpen, setAudienceOpen] = React.useState(false);
+  // onClose fires right after onApply and would read this render's (stale)
+  // customAcl — the ref is the truth for "has an audience ever been composed"
+  const audienceAppliedRef = React.useRef<boolean>(!!(editPost?.visibility === 'custom' && editPost?.acl));
+  // …and the circle to come back to when the picker is abandoned. Seeded like
+  // `visibility` above so a brand-new post still falls back to 🌐 Public,
+  // while an edit falls back to whatever the post actually was.
+  const audiencePreviousVisibilityRef = React.useRef<PostVisibility>(editPost?.visibility || 'public');
 	// gallery layout (crystal.mediaLayout): auto = masonry default, stored null
 	const [layoutMode, setLayoutMode] = React.useState<ComposerLayoutMode>(
 		editPost?.mediaLayout?.mode === 'rows' ? 'rows' : editPost?.mediaLayout?.mode === 'grid' ? 'grid' : 'auto'
@@ -575,6 +589,9 @@ export const PostComposer = (props: PostComposerProps) => {
 		if (currentPostShareId) currentPayload.shareId = currentPostShareId;
       // comments inherit the thread root's audience server-side
 		if (!isComment) currentPayload.visibility = visibility;
+		// custom audiences ride the explicit acl (the server prefers acl over the
+		// visibility name)
+		if (!isComment && visibility === 'custom' && customAcl) currentPayload.acl = customAcl;
 		if (currentAttachmentIds.length > 0) currentPayload.attachmentIds = currentAttachmentIds;
 		if (showPhotos) currentPayload.images = canonicalImages;
 		if (apiType === 'thingtime') currentPayload.thing = canonicalThing;
@@ -669,6 +686,7 @@ export const PostComposer = (props: PostComposerProps) => {
 					},
 					tags: parsedTags,
 					visibility,
+					...(visibility === 'custom' && customAcl ? { acl: customAcl } : {}),
 					...(editAttachmentsChanged ? { attachmentIds: [...editAttachments.map((attachment) => attachment.id), ...resolvedPanelIds] } : {})
 				});
 				finishPost(updated.post);
@@ -1222,20 +1240,38 @@ export const PostComposer = (props: PostComposerProps) => {
       {/* footer: circle + post (comments inherit the thread's circle) */}
       <Flex alignItems="center" columnGap={2} borderTop={BORDER} paddingTop={3}>
         {!isComment && (
-          <Select
-            size="sm"
-            width="150px"
-            borderRadius={RADIUS_SM}
-            value={visibility}
-            onChange={(event) => setVisibility(event.target.value as PostVisibility)}
-            aria-label="Who can see this post"
-          >
-            {(Object.keys(CIRCLE_META) as PostVisibility[]).map((key) => (
-              <option key={key} value={key}>
-                {CIRCLE_META[key].emoji} {CIRCLE_META[key].label}
-              </option>
-            ))}
-          </Select>
+          <>
+            <Select
+              size="sm"
+              width="150px"
+              borderRadius={RADIUS_SM}
+              value={visibility}
+              onChange={(event) => {
+                const next = event.target.value as PostVisibility;
+                // custom opens the picker; re-picking custom re-opens it.
+                // Remember the circle we're LEAVING first: abandoning the
+                // picker has to come back here, and `visibility` still holds
+                // the pre-change value on this render.
+                if (next === 'custom') {
+                  audiencePreviousVisibilityRef.current = visibility;
+                  setAudienceOpen(true);
+                }
+                setVisibility(next);
+              }}
+              aria-label="Who can see this post"
+            >
+              {(Object.keys(CIRCLE_META) as PostVisibility[]).map((key) => (
+                <option key={key} value={key}>
+                  {CIRCLE_META[key].emoji} {CIRCLE_META[key].label}
+                </option>
+              ))}
+            </Select>
+            {visibility === 'custom' && (
+              <Button size="sm" variant="ghost" onClick={() => setAudienceOpen(true)} title="Edit the custom audience">
+                🎭 Edit
+              </Button>
+            )}
+          </>
         )}
         <Button
           marginLeft="auto"
@@ -1256,6 +1292,29 @@ export const PostComposer = (props: PostComposerProps) => {
         </Button>
       </Flex>
 			</Box>
+      {!isComment && (
+        <CustomAudienceModal
+          isOpen={audienceOpen}
+          onClose={() => {
+            setAudienceOpen(false);
+            // Abandoning the picker with nothing EVER composed restores the
+            // circle that was in effect before it opened (a cancel after
+            // applying keeps the composed audience). It must NOT fall through
+            // to a fixed 'public': editing a 🔒/👥/🕵️ post, opening 🎭 out of
+            // curiosity and cancelling would leave the composer set to 🌐, so
+            // the next Save silently published it.
+            if (!audienceAppliedRef.current) {
+              setVisibility((current) => (current === 'custom' ? audiencePreviousVisibilityRef.current : current));
+            }
+          }}
+          initialAcl={customAcl || undefined}
+          onApply={(acl) => {
+            audienceAppliedRef.current = true;
+            setCustomAcl(acl);
+            setVisibility('custom');
+          }}
+        />
+      )}
     </Flex>
   );
 };

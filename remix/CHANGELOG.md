@@ -192,6 +192,60 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-09-05: Promote PR #611 notification history and placement settings to main, including drawer-relative toast alignment. — Codex (AI)
 
+### 2026-09-05 — Re-land hidden 🕵️ links, the PAT GET bridge and custom audiences 🎭 — Claude (AI)
+
+- PRs #413 and #431 merged into their stacked base branches a minute after that base (#411)
+  had merged into develop, so the feature stack never reached develop or main. PR #613
+  re-lands `origin/claude/hidden-links-get-bridge` on current develop; conflict
+  resolutions and the 149-check `verify-pat-tokens.mjs` run are recorded in
+  `PRs/613-claude-hidden-links-custom-audiences-reland--re-land-hidden-links-get-bridge-custom-audiences.md`.
+- `scripts/verify-pat-tokens.mjs` now reads search/feed `posts` keyed by thing id
+  (develop's shape) as well as the older array form.
+- GET bridge `op=update` / `op=delete` now honour `expectedUpdatedAt`, the
+  optimistic-concurrency guard `PATCH`/`DELETE /api/v1/things` already anchor into
+  the write filter. The bridge was dropping it silently, so a caller asking for a
+  compare-and-swap got an unguarded write and a 200 — which this branch makes
+  reachable in earnest, since a custom audience can grant `tt:user/<name>/write`
+  to other people and give one thing concurrent writers. — Lopu (AI)
+- "Copy hidden link 🕵️" now appears for a custom audience 🎭 that picked the
+  "+ secret link" baseline. The server mints, projects and honours `linkKey`
+  off `acl.includes('tt:hidden')`, but `visibilityFromAcl` reports `custom`
+  whenever `tt:custom` rides along, so the post menu's `visibility === 'hidden'`
+  gate never fired for those things — the key existed and the owner already held
+  it in their own payload, with no UI to reach it. The menu now derives the link
+  from `post.linkKey`, which is already owner-only and hidden-only, and a new
+  `hiddenLinkContract.test.ts` pins the derivation. — Lopu (AI)
+
+### 2026-09-02 — Lopu toast position setting + `/notifications` history page — Claude (AI)
+
+- Grouped summary; details in the PR note (`PRs/611-claude-lopu-toast-position-notifications-history--lopu-toast-position-notifications-history.md`).
+- **Lopu messages move to the bottom-left** by default. Settings →
+  Appearance (page + drawer modal) gains a "Lopu messages 🦄" dropdown for
+  any of Chakra's six corners; the preference lives at
+  `settings.lopu.position` (cross-tab, undo-exempt) and is mirrored into the
+  synchronous `tt-lopu-position` cache that `useLopu` reads at fire time, so
+  none of the ~86 callers subscribe to settings state. `--toast-z-index`
+  (10260) lifts toasts above the drawer and modals.
+- **`/notifications`**: every notification the viewer has received, newest
+  first, with the filter grammar in the URL — category chips
+  (social / engagement / feed / system), a type dropdown, unread-only,
+  debounced search, and a from/to day window — plus per-row mark-read on
+  click, "Mark all read", cursor "Load older", and a flash-free cached first
+  page. Linked from the bell ("See all →"), Settings → Notifications
+  ("History 📜"), and the drawer's Account group.
+- **System notifications**: new `action-run` type (category `system`, actor
+  `thingtime` / "Lopu", headline + `href` + `outcome`) emitted by the action
+  executor for every explicit run and any failed delegated run; push on by
+  default, email opt-in. `NOTIFICATION_TYPE_CATEGORY` in the registry maps
+  every type to a family (coverage-tested).
+- `GET /api/v1/notifications` → contract 1.1.0: optional `category`, `types`,
+  `unread`, `q`, `since`, `until`, `withTotal` (→ `total`); rows now carry
+  `category`, `title`, `href`, `outcome`. `/api/v1/notifications/settings` →
+  1.1.0 (accepts `action-run`). Per-recipient tail raised from 500 to 10,000.
+  Query resolution lives in `api/utils/notifications/listQuery.ts`
+  (`npm run test:notifications`).
+
+
 - 2026-09-05: Correct Commander archive architecture and UI resource verification after Apple's successful notarization; add real macOS lipo and Vite output regression checks. [Release notes](../../PRs/648-commander-cloud-releases-publish-installable-signed-commander-builds-with-recovery-provenance.md).
 - 2026-09-05: Repair passkey request cancellation across login, account switching and settings; isolate concurrent challenges and reject saved-cookie replay; add native Apple domain association support and account-scoped settings caches. Verified a signed iOS Release build and configured the matching public Apple application ID in Vercel; production code rollout and device acceptance remain pending. See `PRs/641-passkey-reliability-fix-passkey-cancellation-concurrent-challenges-and-native-app-association.md` for validation and rollout requirements.
 

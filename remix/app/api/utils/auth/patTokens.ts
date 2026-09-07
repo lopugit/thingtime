@@ -59,6 +59,9 @@ export type PublicPatToken = {
   // audience fence: which visibility of things the token may see/touch
   // ('all' = unrestricted; tokens minted before the field read as 'all')
   visibility: PatVisibilityMode;
+  // GET bridge: this token may drive /api/v1/get — CRUD via plain GET URLs
+  // with the token in a query param (for browse-only agents). Default off.
+  allowGet: boolean;
   createdAt: string;
   expiresAt: string | null;
   maxUses: number | null;
@@ -96,6 +99,7 @@ export const toPublicPatToken = (session: SessionDoc): PublicPatToken => {
     scopes: patSessionScopes(meta),
     onlyCreatedThings: meta.onlyCreatedThings === true,
     visibility: patSessionVisibility(meta),
+    allowGet: meta.allowGet === true,
     createdAt: new Date(session.createdAt).toISOString(),
     expiresAt: expiresAt ? expiresAt.toISOString() : null,
     maxUses,
@@ -113,6 +117,7 @@ export type MintPatInput = {
   maxUses?: unknown;
   onlyCreatedThings?: unknown;
   visibility?: unknown;
+  allowGet?: unknown;
   // Internal mint sites can identify a generated credential without exposing
   // the provenance knob on the public token-minter API.
   createdVia?: 'chatgpt-oauth';
@@ -200,6 +205,9 @@ export const mintPatToken = async (userId: string, input: MintPatInput): Promise
       // only restrictions are stored — absent means 'all', matching every
       // token minted before the field existed
       ...(visibility !== 'all' ? { visibility } : {}),
+      // opt-in only: GET URLs put the credential in logs/history, so the
+      // holder must have chosen that trade at mint time
+      ...(input.allowGet === true ? { allowGet: true } : {}),
       createdVia: input.createdVia === 'chatgpt-oauth' ? 'chatgpt-oauth' : 'token-minter'
     }
   });
@@ -286,6 +294,105 @@ export type ThingsActor = { user: PublicUser | null; pat: PatContext | null };
 
 export type ThingsActorResult = { ok: true; actor: ThingsActor } | { ok: false; status: number; error: string };
 
+// The shared PAT-session → actor path (used by the Bearer route above and the
+// GET bridge below): scope check first (403s are free), then atomic use
+// consumption, then user resolution. `null` = degrade to anonymous (dead or
+// disallowed account) — the caller decides what anonymous means for it.
+const resolvePatSessionActor = async (
+  session: SessionDoc,
+  sub: string,
+  scope: string | string[]
+): Promise<ThingsActorResult | null> => {
+  const scopes = patSessionScopes(session.meta);
+  for (const required of Array.isArray(scope) ? scope : [scope]) {
+    if (!patScopeCovers(scopes, required)) {
+      return { ok: false, status: 403, error: `This token is missing the ${required} permission 🔐` };
+    }
+  }
+
+  if (!(await consumePatUse(session))) {
+    return { ok: false, status: 401, error: 'This token has no uses remaining 🔋' };
+  }
+
+  const userDoc = await findUserById(sub);
+  if (!userDoc || !serviceAccountAuthenticationAllowed(userDoc)) return null;
+
+  const maxUses = typeof session.meta?.maxUses === 'number' ? session.meta.maxUses : null;
+  const before = typeof session.meta?.usesRemaining === 'number' ? session.meta.usesRemaining : null;
+  return {
+    ok: true,
+    actor: {
+      user: await toPublicUserWithStorage(userDoc),
+      pat: {
+        jti: session.jti,
+        name: typeof session.meta?.name === 'string' ? session.meta.name : 'API token',
+        scopes,
+        onlyCreatedThings: session.meta?.onlyCreatedThings === true,
+        visibility: patSessionVisibility(session.meta),
+        expiresAt: session.expiresAt ? new Date(session.expiresAt) : null,
+        maxUses,
+        usesRemaining: maxUses === null ? null : Math.max(0, (before ?? 0) - 1)
+      }
+    }
+  };
+};
+
+// A raw token string → its live PAT session, shared by the GET bridge paths.
+const livePatSessionOf = async (
+  rawToken: unknown
+): Promise<{ ok: true; session: SessionDoc; sub: string } | { ok: false; status: number; error: string }> => {
+  if (typeof rawToken !== 'string' || !rawToken.trim()) {
+    return { ok: false, status: 401, error: 'Send a personal access token as ?token=<token> (or an Authorization: Bearer header)' };
+  }
+  const claims = await verifyJwt(rawToken.trim());
+  if (!claims) return { ok: false, status: 401, error: 'Token is invalid, expired, or revoked' };
+  const session = await getLiveSession(claims.jti);
+  if (!session || session.purpose !== 'pat' || String(session.userId) !== claims.sub) {
+    return { ok: false, status: 401, error: 'Token is invalid, expired, or revoked' };
+  }
+  return { ok: true, session: session as SessionDoc, sub: claims.sub };
+};
+
+// GET-bridge resolution (/api/v1/get): the token arrives as a ?token= query
+// param — a deliberate trade (URLs land in logs and history) that only tokens
+// minted with the "works via GET links" tick (meta.allowGet) are allowed to
+// make. Cookies are never read here, so a mutating GET can't be forged
+// cross-site with ambient credentials. Everything else — scope check before
+// use consumption, atomic use accounting, the sandbox and visibility fences
+// riding PatContext — is byte-for-byte the Bearer path.
+export const resolveGetBridgeActor = async (rawToken: unknown, scope: string | string[]): Promise<ThingsActorResult> => {
+  const live = await livePatSessionOf(rawToken);
+  if (live.ok === false) return live;
+  if (live.session.meta?.allowGet !== true) {
+    return { ok: false, status: 403, error: 'This token is not enabled for GET links 🌍 — mint one with “Works via GET links” ticked' };
+  }
+  const resolved = await resolvePatSessionActor(live.session, live.sub, scope);
+  return resolved ?? { ok: false, status: 401, error: 'Token is invalid, expired, or revoked' };
+};
+
+// Free introspection for the bridge (op=self) — same promise as
+// /api/v1/tokens/self: asking "who am I" never spends a use.
+export const resolveGetBridgeSelf = async (rawToken: unknown): Promise<PatIntrospection> => {
+  const live = await livePatSessionOf(rawToken);
+  if (live.ok === false) return live;
+  if (live.session.meta?.allowGet !== true) {
+    return { ok: false, status: 403, error: 'This token is not enabled for GET links 🌍 — mint one with “Works via GET links” ticked' };
+  }
+  const userDoc = await findUserById(live.sub);
+  if (!userDoc || !serviceAccountAuthenticationAllowed(userDoc)) {
+    return { ok: false, status: 401, error: 'Token is invalid, expired, or revoked' };
+  }
+  return {
+    ok: true,
+    token: toPublicPatToken(live.session),
+    user: {
+      id: String(userDoc._id),
+      username: userDoc.username,
+      displayName: typeof userDoc.displayName === 'string' ? userDoc.displayName : null
+    }
+  };
+};
+
 // Resolve who is calling a things-family route: a full session (cookie or
 // Bearer — pat: null, no scope limits), a PAT (Bearer only — must cover the
 // required scope(s), consumes one use), or nobody. Unknown/expired/revoked
@@ -308,41 +415,12 @@ export const resolveThingsActor = async (request: Request, scope: string | strin
   if (session.purpose === 'pat') {
     // Bearer-only: PATs live in agent/script configs and never ride a cookie,
     // so a cross-site request can't replay one as an ambient credential.
+    // (Query-param delivery exists ONLY on the /api/v1/get bridge, gated by
+    // the token's own allowGet tick — resolveGetBridgeActor below.)
     const header = request.headers.get('Authorization');
     if (!header?.startsWith('Bearer ')) return anonymous;
-
-    const scopes = patSessionScopes(session.meta);
-    for (const required of Array.isArray(scope) ? scope : [scope]) {
-      if (!patScopeCovers(scopes, required)) {
-        return { ok: false, status: 403, error: `This token is missing the ${required} permission 🔐` };
-      }
-    }
-
-    if (!(await consumePatUse(session))) {
-      return { ok: false, status: 401, error: 'This token has no uses remaining 🔋' };
-    }
-
-    const userDoc = await findUserById(claims.sub);
-    if (!userDoc || !serviceAccountAuthenticationAllowed(userDoc)) return anonymous;
-
-    const maxUses = typeof session.meta?.maxUses === 'number' ? session.meta.maxUses : null;
-    const before = typeof session.meta?.usesRemaining === 'number' ? session.meta.usesRemaining : null;
-    return {
-      ok: true,
-      actor: {
-				user: await toPublicUserWithStorage(userDoc),
-        pat: {
-          jti: session.jti,
-          name: typeof session.meta?.name === 'string' ? session.meta.name : 'API token',
-          scopes,
-          onlyCreatedThings: session.meta?.onlyCreatedThings === true,
-          visibility: patSessionVisibility(session.meta),
-          expiresAt: session.expiresAt ? new Date(session.expiresAt) : null,
-          maxUses,
-          usesRemaining: maxUses === null ? null : Math.max(0, (before ?? 0) - 1)
-        }
-      }
-    };
+    const resolved = await resolvePatSessionActor(session, claims.sub, scope);
+    return resolved ?? anonymous;
   }
 
   // Every other scoped credential (app, sandbox app, one-time OAuth code, and
