@@ -331,13 +331,13 @@ const QuietState = () => (
 					Meet Lopu
 				</Text>
 				<Text fontSize={LOPU_UI.fontBody} color={LOPU_UI.muted}>
-					Thingtime&apos;s assistant — she builds things for you, as you.
+					Thingtime&apos;s assistant — it builds things for you, as you.
 				</Text>
 			</Box>
 		</Flex>
 		<Flex direction="column" gap={2} fontSize={LOPU_UI.fontBody} color="var(--tt-text, #33333c)" lineHeight="1.6">
 			{[
-				'Builds webpages and sections in the builder — live, block by block, while she is still typing.',
+				'Builds webpages and sections in the builder — live, block by block, while it is still typing.',
 				'Makes reusable components and declarative actions, then runs them for you.',
 				'Searches and explains your things, schemas and data.',
 				'Talks: a voice mode with spoken replies, and a transcribe mode that keeps private notes.',
@@ -456,7 +456,17 @@ export const LopuPage = (props: { mode?: LopuPageMode }) => {
 
 	const chatHref = chat.chatId ? `${LOPU_PAGE_PATH}/${encodeURIComponent(chat.chatId)}` : LOPU_PAGE_PATH;
 	const modelLine = describeModelChoice(chat.models, chat.settings);
-	const status = mode === 'voice' && voicePhase !== 'idle' ? lopuVoicePhaseLabel(voicePhase) : mode === 'voice' ? `${modelLine} · voice` : modelLine;
+	// a locked account (verified-credits design note §4): the column shows
+	// LopuLockedState (LopuChatView / LopuVoiceSurface draw it) and the status
+	// line says why; the conversations sidebar stays — history is the user's
+	const locked = signedIn && chat.account.access.locked;
+	const status = locked
+		? 'Invite-only — waiting for an admin to verify you'
+		: mode === 'voice' && voicePhase !== 'idle'
+			? lopuVoicePhaseLabel(voicePhase)
+			: mode === 'voice'
+				? `${modelLine} · voice`
+				: modelLine;
 
 	if (!signedIn) {
 		return (

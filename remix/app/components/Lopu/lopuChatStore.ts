@@ -53,8 +53,10 @@ import {
 	isLopuConfirmUsable,
 	isLopuTurnActive,
 	isOptimisticLopuMessage,
+	lopuGateFromResponse,
 	markLopuTurnAborted,
 	markLopuTurnFailed,
+	markLopuTurnGated,
 	mergeMessages,
 	reduceLopuTurn,
 	resolveLopuToolConfirm,
@@ -62,8 +64,10 @@ import {
 	type LopuPatchTarget,
 	type LopuThingLike,
 	type LopuToolActivity,
+	type LopuTurnGate,
 	type LopuTurnState
 } from './lopuTurnCore';
+import { applyLopuTurnBilling, noteLopuGate } from './useLopuAccount';
 
 // ——— wire shapes ————————————————————————————————————————————————————————————
 
@@ -276,6 +280,20 @@ const errorText = (error: unknown, fallback: string): string => {
 const errorStatus = (error: unknown): number | null => {
 	const status = (error as { status?: unknown } | null)?.status;
 	return typeof status === 'number' ? status : null;
+};
+
+// A refused request that is really the access gate (403 LOPU_UNVERIFIED /
+// 402 LOPU_NO_CREDITS, verified-credits design note §1) — duck-typed so the
+// stream transport's LopuStreamError and useApi's ThingtimeApiError both fit.
+const gateFromError = (error: unknown): LopuTurnGate | null => {
+	const status = errorStatus(error);
+	const code = (error as { code?: unknown } | null)?.code;
+	return lopuGateFromResponse(status, code, errorText(error, ''));
+};
+
+const gateBalance = (error: unknown): number | null => {
+	const balance = (error as { balanceMicros?: unknown } | null)?.balanceMicros;
+	return typeof balance === 'number' && Number.isFinite(balance) ? balance : null;
 };
 
 const uuid = (): string =>
@@ -558,6 +576,14 @@ export const createLopuChat = async (args?: { title?: string }): Promise<{ ok: b
 		});
 		return { ok: true, chat };
 	} catch (error) {
+		// the access gate (unverified / no credits) is not an error to shout
+		// about: the surfaces flip to the locked state once the account refetches
+		const gate = gateFromError(error);
+		if (gate) {
+			noteLopuGate(gate, gateBalance(error));
+			notice(gate.message, { status: 'info' });
+			return { ok: false, error: gate.message };
+		}
 		const message = errorText(error, 'Could not start a chat');
 		notice(message, { status: 'error' });
 		return { ok: false, error: message };
@@ -869,8 +895,13 @@ export type SendLopuOptions = {
 };
 
 // chatIdKnown: the failed send DID reach the server (meta arrived) — a Confirm
-// card must then stay retired, since its grant may have been spent
-export type SendLopuResult = { ok: true; requestId: string; chatId: string | null } | { ok: false; error: string; text: string; chatIdKnown?: boolean };
+// card must then stay retired, since its grant may have been spent.
+// gate: the server refused the turn at the access gate (403/402); the turn
+// stays in the timeline as a Lopu bubble with the friendly copy + action, so
+// the text is NOT handed back to the composer
+export type SendLopuResult =
+	| { ok: true; requestId: string; chatId: string | null }
+	| { ok: false; error: string; text: string; chatIdKnown?: boolean; gate?: LopuTurnGate };
 
 /**
  * Send one turn: stream the reply, fold every event into the turn state,
@@ -886,7 +917,7 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 		return { ok: false, error: 'Sign in to chat with Lopu', text };
 	}
 	if (state.streamingId && isLopuTurnActive(state.turns[state.streamingId])) {
-		notice('Lopu is still replying — stop her first or wait a moment ✨', { status: 'info' });
+		notice('Lopu is still replying — stop it first or wait a moment ✨', { status: 'info' });
 		return { ok: false, error: 'Lopu is still replying', text };
 	}
 
@@ -969,6 +1000,12 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 				notice(event.message || 'Lopu hit a snag', { status: 'error', description: event.retryable ? 'You can try again.' : undefined });
 				break;
 			}
+			case 'done': {
+				// the balance chip moves from the event's numbers before the
+				// account refetch lands (verified-credits design note §4)
+				applyLopuTurnBilling({ balanceMicros: next.balanceMicros, costMicros: next.costMicros, billing: next.billing, usage: next.usage });
+				break;
+			}
 			default:
 				break;
 		}
@@ -1003,8 +1040,16 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 		if (isAbortError(error) || abort.signal.aborted) {
 			commit(markLopuTurnAborted(turn));
 		} else {
-			failure = errorText(error, 'Lopu is daydreaming… try again 🔮');
-			commit(markLopuTurnFailed(turn, failure, true));
+			// the access gate (403 unverified / 402 no credits) is answered by a
+			// Lopu bubble with the friendly copy, never a raw error
+			const gate = !turn.meta ? gateFromError(error) : null;
+			if (gate) {
+				commit(markLopuTurnGated(turn, gate));
+				noteLopuGate(gate, gateBalance(error));
+			} else {
+				failure = errorText(error, 'Lopu is daydreaming… try again 🔮');
+				commit(markLopuTurnFailed(turn, failure, true));
+			}
 		}
 	} finally {
 		if (controller === abort) controller = null;
@@ -1016,6 +1061,12 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 	if (state.userId !== userId) return { ok: false, error: 'The account changed while Lopu was replying', text: trimmed, chatIdKnown: !!turn.meta };
 
 	const finalChatId = turn.chatId;
+	if (turn.gate && !turn.meta) {
+		// the turn stays in the timeline: the viewer's bubble and Lopu's gate
+		// bubble (request credits / ask an admin); nothing was persisted
+		setState({ sending: false, streamingId: null, error: null });
+		return { ok: false, error: turn.gate.message, text: '', chatIdKnown: false, gate: turn.gate };
+	}
 	if (!turn.meta || !finalChatId) {
 		// nothing persisted server-side that we know of — drop the turn, hand
 		// the text back to the composer, and say why

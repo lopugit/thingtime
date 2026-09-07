@@ -63,7 +63,7 @@ is fixed, and cite the checklist you ran in the PR description.
 ## ChatGPT / Codex MCP connector
 
 - [ ] `GET /.well-known/oauth-protected-resource`, `GET
-    /.well-known/oauth-authorization-server`, and the Thingtime capability
+      /.well-known/oauth-authorization-server`, and the Thingtime capability
       manifest return the deployed HTTPS origin and the MCP path exactly.
 - [ ] From ChatGPT Developer mode, add the deployed MCP URL. The authorization
       page works at desktop and a 390px mobile viewport, requires `resource`,
@@ -3211,8 +3211,11 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       (children carry ['tt:inherit']). 'all' and legacy pre-field tokens stay
       unrestricted; mint 400s on unknown visibility values; /tokens/self and
       the mint response report the fence; the settings row badges 🌐/🔒
-      restricted tokens; combines with the 🧸 sandbox. Covered by section F
-      of `node scripts/verify-pat-tokens.mjs`.
+      restricted tokens; combines with the 🧸 sandbox. The fence also rides
+      /api/v1/things/user: a fenced token's profile pages AND postCount only
+      cover in-fence posts (regression: a stacked-branch restructure once
+      dropped this clause, leaking private-post counts to public-only
+      tokens). Covered by section F of `node scripts/verify-pat-tokens.mjs`.
 - [ ] The fence survives the edge cache: `?anon=1` on feed/search is answered
       as the Bearer credential rather than anonymously, the fenced answer
       carries `private, no-store`, and the credential-less cacheable answer
@@ -3221,6 +3224,70 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       Authorization-carrying request, so without the Vary a warm anon entry
       reaches a fenced token without the origin ever being asked. Same
       section F.
+- [ ] Hidden visibility ('hidden', acl ['tt:hidden','tt:user'] + random
+      linkKey): composer/post-menu offer 🕵️ Hidden; the created/edited thing
+      returns owner-only linkKey (never in non-owner projections); anonymous
+      GET ?id= 404s without the key, 200s with ?key=<linkKey>, wrong keys stay
+      blind; the post never appears in the public feed, other users' profile
+      view, or search — the owner still sees it in their own feed/listings;
+      body.key admits other users to comment/react/save/share; PATCHing the
+      audience away from hidden kills the link INSTANTLY, and re-hiding mints
+      a FRESH key (old links stay dead — key rotation on every entry into
+      hidden); "Copy hidden link 🕵️" in the post menu copies
+      /post/<id>?key=<linkKey> and the /post page threads ?key= through to
+      the API. Covered by section G of `node scripts/verify-pat-tokens.mjs`.
+- [ ] GET bridge (/api/v1/get + per-token allowGet, "Works via GET links 🌍"
+      in the minter): only tokens minted with the tick resolve there (others
+      403), the token rides ?token= (Bearer also accepted, cookies NEVER —
+      a cookie-only request 401s, so mutating GETs can't be CSRF'd), op ∈
+      get/list/search/feed/self/create/update/upsert/delete/react/comment/
+      save/share behave exactly like their endpoints: same scopes (403s free),
+      same atomic use accounting (op=self is free introspection), same
+      sandbox + visibility fence, mirrored rate-limit keys. Args = body JSON
+      param + query params overlaid ({/[/" values parse as JSON, bare words
+      stay strings, thingtime accepts csv); responses carry Cache-Control:
+      private, no-store + Referrer-Policy: no-referrer; unknown ops 400.
+      Minted rows badge 🌍 GET links. Covered by section H of
+      `node scripts/verify-pat-tokens.mjs`.
+- [ ] Custom audiences 🎭 ('custom', acl marker tt:custom + baseline +
+      capability grants): the composer/post-menu Custom option opens the
+      audience picker (baseline chips Only-these-people / +secret-link /
+      +everyone; user search via /api/v1/users/search; prefilled Recents /
+      Friends / Connections sections filtered by the search box; per-entry
+      capability select Read/Comment/Edit; save-selection-as-group and
+      pick-existing-group). Applying composes acl ['tt:custom','tt:user',
+      baseline?, 'tt:user/<name>[/comment|/write]'…, 'tt:group/<id>[…]'…] and
+      the wire round-trips visibility 'custom'. Enforcement: read grant =
+      view only (comment/react 403 — general baseline viewers TOO, even with
+      a public baseline or a hidden link key); write ⊃ comment ⊃ read; write
+      grantees PATCH crystal/extended/tags but NEVER acl/visibility/folder/
+      tokenAcl (403) and never delete (owner-only); storage stays billed to
+      the owner. Group grants resolve live: PATCHing the group's member list
+      (replacement semantics) grants/revokes instantly on every thing that
+      references tt:group/<id>; deleting the group makes its entries inert.
+      Granted things land in the grantee's FEED (visibilityQueryFor grant
+      clause); hidden baseline mints a linkKey (key = read only). Groups are
+      protected kinds managed solely via /api/v1/groups (+ audience-sources).
+      Covered by section I of `node scripts/verify-pat-tokens.mjs`.
+- [ ] Token visibility fence 'hidden' mode ("Hidden only 🕵️" chip): the token
+      lives entirely in hidden link-key things — its no-acl creates are born
+      hidden WITH a fresh linkKey, public/private things 404, creating
+      outside the fence 403s; composes with the sandbox and the GET bridge.
+      Covered by section I of the verify suite.
+- [ ] Circle filters honour every circle they offer (regression: a new circle
+      that the filter menu shows but the API drops reads downstream as "no
+      circle filter", so the chip WIDENS the result set instead of narrowing
+      it). Tick 🕵️ Hidden alone in the feed/search Advanced panel: only your
+      hidden things come back, not the whole feed. Tick 🔒 Private alone: no
+      hidden things in the result. Tick 🎭 Custom alone: your custom-audience
+      things plus the ones granted to you by name/group, nothing else. Tick
+      any five of the six circles: the omitted circle really is omitted (this
+      used to fall through to an "all circles" shortcut keyed on selection
+      COUNT) — including 🎭 Custom, whose grant clause is gated on the filter
+      like every other clause, so omitting it really does drop the things
+      other people granted you. Leaving every circle unticked is unchanged —
+      the default feed still shows all of your own things, hidden included,
+      plus everything granted to you.
 - [ ] PAT × app-token coexistence on the shared things routes (one resolver,
       three credential kinds): a PAT ignores Origin (no app binding), the
       OPTIONS preflight for app SDKs still serves with Authorization allowed,
@@ -5297,7 +5364,7 @@ Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Auto
   Lopu…" field whose Enter sends a normal chat turn (the same brain, tools
   included). With no SpeechRecognition (the in-app Browser pane) the mic
   click toasts "No microphone here" and the typed path still works; with a
-  mic, listening pauses for the whole turn and for Lopu's speech (never her
+  mic, listening pauses for the whole turn and for Lopu's speech (never its
   own voice back), then resumes. The gear popover (never a full-width card)
   holds Spoken replies, Transcribe mode, Direct voice (enabled only for a
   vault provider whose kind lists a realtime model — the hint reads the
@@ -5377,7 +5444,7 @@ Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Auto
   `/chats/reply`, `/voice/reply`, `/vault` — refuses a non-JSON body with 415
   before the body is read or a bucket is spent; `/voice/reply` and `/vault`
   writes refuse a temporary session (403); the chat write buckets fail closed
-  (a limiter outage answers 429 "cannot check her rate limit", never an
+  (a limiter outage answers 429 "cannot check its rate limit", never an
   unthrottled write). `verify-lopu.mjs` §A + `apiTests` (`lopu-*-json-only`,
   `lopu-vault-guarded`, `lopu-voice-reply-guarded`,
   `lopu-chats-reply-forged-confirmation`).
@@ -5411,3 +5478,97 @@ Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Auto
 - In Thing rich-text fields, tier inclusions and the advanced modal, check neighbouring labels/actions stay visible. History uses small grey absolute controls near the bottom-right of field and inline editors, moving into nearby clear space for tiny blocks; text must never run underneath them. Compare content dimensions with history visible/hidden: no history padding, minimum width/height or wrapping row may change the preview layout.
 - At desktop, 390px and 320px widths, select/style text, undo/redo, open/close Changes, toggle view/edit and scroll top to bottom. Ensure formatting survives and the active editor overlays do not hide a neighbouring editor.
 - In a crowded mobile composer, select text and verify the formatting toolbar stays above the line. A temporary space opens above the text when needed and closes on deselection. Check Undo/Redo/Changes at bottom right, nearby feed filters/tags, keyboard-sized viewports, and repeated selection without growing gaps.
+
+### Lopu verified access + credits (client — `PRs/lopu-verified-credits-design.md` §4)
+
+Automated coverage: `npm run test:lopu-ui` (`useLopuAccount.test.ts` —
+account / history / admin-row normalisation, the access matrix, credits
+formatting, the store's reactions to `done` and the gate; `lopuTurnCore.test.ts`
+— the `done` accounting fields, the gate, the footer credits;
+`lopuChatStore.test.ts` — `done` → account slice, 402/403 → a gated turn) plus
+`test:hooks`, `test:settings`, `test:nav`. Live: a stack with
+`LOPU_CHAT_PROVIDER=test`, a fresh account (unverified) and an admin.
+
+- [ ] Fresh account, verification required: `/lopu`, the floating window
+      (desktop frame + 375px sheet) and `/lopu/voice` show the locked state —
+      🦄 on the ring, "Lopu is invite-only for now", the one-line admin
+      explanation, "Credits & usage" — with the composer disabled (placeholder
+      names the reason) and the mic disabled; the status line reads
+      "Invite-only — waiting for an admin to verify you"; the navbar 🦄 and
+      the drawer's Lopu entry still open that view (no dead end); the
+      conversations sidebar and Messenger history stay readable. An admin
+      previewing the copy sees the "Admin → Lopu accounts" link
+      (`/settings#lopu-accounts`). Nothing scrolls horizontally at 375px.
+- [ ] Admin → Lopu accounts: the `Thingtime.LopuAccess` editor (require
+      verification, allow own providers when unverified, starter credits,
+      low-balance warning) saves and round-trips; the accounts table paints
+      from cache, search filters by username, the verified toggle flips
+      instantly and reverts on failure (admins are disabled — always
+      verified), "Add credits" grants/adjusts/refunds with a reason, a pending
+      request shows the amount + note with Approve / Decline (decline takes an
+      optional reason), and "Load more" follows the cursor.
+- [ ] Verified account, 0 credits: the balance chip beside the model chip
+      reads "0.00 credits" in red and opens a popover with "Request credits"
+      (`/settings#lopu-credits`) and "Buy credits ↗" only when
+      `THINGTIME_LOPU_TOPUP_URL` is set; a send answers with Lopu's own bubble
+      ("Lopu's credits for your account are used up — add credits to keep
+      going") with Request credits / Try again — never a red error line or a
+      toast, and the text is NOT handed back to the composer. Under the
+      low-balance threshold the chip turns amber; above it, quiet. With one of
+      your own providers pinned the chip reads "your provider".
+- [ ] After a Thingtime-billed turn: the chip moves from the `done` event
+      before the refetch lands; the turn's footer reads "via <model> · <effort>
+      · 0.0132 credits" (BYO / free turns show no credits), and a reloaded
+      history row keeps the same footer.
+- [ ] Settings → Lopu credits & usage (`/settings#lopu-credits`): the verified
+      status line, balance (red at zero / amber low), this month (key, cost,
+      turns), lifetime (cost, turns, tokens in/out), the request form
+      (0.5–1000 credits + note; a pending request replaces the form with
+      "waiting for an admin" + "Check again"; a second request reads the 409
+      as info), "Buy credits ↗" when the URL is set, and the history list
+      (ledger + usage rows newest first, "Load more"). The user settings modal
+      mirrors balance + status with an "Open" link. Logout sweeps
+      `tt-lopu-account-*` with the rest of `tt-lopu-`.
+- [ ] Cold start with no cache: the chat paints unlocked (no flash of the
+      locked card) and flips to locked only when the account says so; a
+      cached account paints its state on the first frame. On a deployment with
+      `requireVerification` OFF, a first-ever unverified account on a browser
+      that has seen ANY Lopu account (the per-device `tt-lopu-access` line)
+      paints unlocked instead of "invite-only"; with nothing cached at all the
+      safe default (locked) still applies.
+
+#### Money invariants (server — regressions, fixer round 1)
+
+Automated coverage: `npm run test:lopu` (`accounting.test.ts` — the minted
+usage id, the guarded `$inc`, the in-flight cap and its TTL sweep, the stranded
+approval; `access.test.ts` — the reservation matrix) and
+`scripts/verify-lopu.mjs` §A2 end to end. Live checks below need
+`LOPU_CHAT_PROVIDER=test` so a turn prices at exactly 0.2 credits.
+
+- [ ] A `requestId` is never an idempotency key for money: send a turn, note
+      the balance, delete that conversation, then send the SAME `requestId`
+      again — it streams and costs another 0.2 credits, and the history shows
+      two usage rows carrying that one `requestId`. (Before the fix the second
+      turn ran on Thingtime's keys for free, repeatably.)
+- [ ] Concurrency cannot spend the balance more than once: with a verified
+      account, fire ~10 replies at the same instant. At most three stream; the
+      rest answer 429 `LOPU_TURN_IN_FLIGHT` with "Lopu is still working on your
+      last few messages" — never a 500, never a 402 — and the balance falls by
+      exactly 0.2 × the number that streamed.
+- [ ] Every slot comes back: four turns in a row all stream (a leaked
+      reservation would refuse the fourth). Kill the server mid-turn, restart,
+      and after `LOPU_INFLIGHT_TTL_MS` (10 min) the next turn still starts —
+      the sweep clears the dead reservation.
+- [ ] Admin → Lopu accounts: an amount that rounds to nothing (`1e-7` credits
+      through `POST /api/v1/admin/lopu/credits`) answers 400, not 500.
+- [ ] A top-up approval is recoverable: an `approved` request whose grant never
+      landed (no `lopu-credit-topup-<requestId>` ledger row) is completed by
+      approving it again; once the row exists a further approval is the
+      ordinary 409 and the balance does not move twice.
+- [ ] The "request credits" ops mail links the trusted origin (`APP_URL` → the
+      platform → thingtime.com), never the caller's `Host` header.
+# Storage ledger operator diagnostics
+
+- Validate both immutable legacy four-field and current five-field quota snapshots (and partial overrides). Optional speed-test quotas accept null or safe integers 0–1000, reject coercible strings/fractions/unknown fields, and never change the stored assignment. After deploying, dry-run the production accounting migration before a separately authorized real run; verify storage readiness and a real upload before calling uploads healthy.
+
+- As an admin, dry-run `backfill-user-storage-accounting`; invalid ledgers must report only deterministic ledger IDs and fixed validation-field labels, at most ten records. Confirm zero ledger writes, no raw values or arbitrary key names, and unchanged strict envelope validation. Anonymous and non-admin callers remain denied by the existing migrations API gate.

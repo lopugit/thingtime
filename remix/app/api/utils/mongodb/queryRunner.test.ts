@@ -51,15 +51,37 @@ test('protects things-era secure fields from probing and aliasing', async () => 
   });
   assert.equal('status' in lookupAlias, true);
 
-  const redacted = redactMongoValue({ secure: { email: 'x' }, uniqueKeys: ['y'], crystal: { name: 'ok' } });
-  assert.deepEqual(redacted.value, { secure: '[redacted]', uniqueKeys: '[redacted]', crystal: { name: 'ok' } });
+  // hidden-link bearer secret: whoever reads it can view the unlisted thing,
+  // so it is guarded exactly like the credential fields — no filter probe, no
+  // alias out of the redactor, and masked in any response it reaches
+  const linkKeyProbe = await normalizeMongoQueryRequest({
+    collection: 'things',
+    operation: 'find',
+    filter: { linkKey: { $exists: true } }
+  });
+  assert.equal('status' in linkKeyProbe, true);
+
+  const linkKeyAlias = await normalizeMongoQueryRequest({
+    collection: 'things',
+    operation: 'find',
+    projection: { harmless: '$linkKey' }
+  });
+  assert.equal('status' in linkKeyAlias, true);
+
+  const redacted = redactMongoValue({ secure: { email: 'x' }, uniqueKeys: ['y'], linkKey: 'z', crystal: { name: 'ok' } });
+  assert.deepEqual(redacted.value, {
+    secure: '[redacted]',
+    uniqueKeys: '[redacted]',
+    linkKey: '[redacted]',
+    crystal: { name: 'ok' }
+  });
 });
 
 test('strips protected thing fields at every pipeline ingress', async () => {
   // primary collection: strip prepended
   const primary = hardenThingsQuery(await normalized({ collection: 'things', operation: 'aggregate', pipeline: [{ $sort: { createdAt: -1 } }] }));
   assert.equal('status' in primary, false);
-  if (!('status' in primary)) assert.deepEqual(primary.pipeline[0], { $project: { secure: 0, uniqueKeys: 0 } });
+  if (!('status' in primary)) assert.deepEqual(primary.pipeline[0], { $project: { secure: 0, uniqueKeys: 0, linkKey: 0 } });
 
   // $unionWith from things (string and object forms) gains a stripped sub-pipeline
   const union = hardenThingsQuery(
@@ -72,7 +94,7 @@ test('strips protected thing fields at every pipeline ingress', async () => {
   assert.equal('status' in union, false);
   if (!('status' in union)) {
     const unionStage = (union.pipeline[0] as any).$unionWith;
-    assert.deepEqual(unionStage.pipeline[0], { $project: { secure: 0, uniqueKeys: 0 } });
+    assert.deepEqual(unionStage.pipeline[0], { $project: { secure: 0, uniqueKeys: 0, linkKey: 0 } });
   }
 
   // $lookup from things gains a stripped pipeline even in localField form
@@ -86,7 +108,7 @@ test('strips protected thing fields at every pipeline ingress', async () => {
   assert.equal('status' in lookup, false);
   if (!('status' in lookup)) {
     const lookupStage = (lookup.pipeline[0] as any).$lookup;
-    assert.deepEqual(lookupStage.pipeline[0], { $project: { secure: 0, uniqueKeys: 0 } });
+    assert.deepEqual(lookupStage.pipeline[0], { $project: { secure: 0, uniqueKeys: 0, linkKey: 0 } });
   }
 
   // $graphLookup cannot be stripped — reading things through it is rejected
@@ -108,7 +130,7 @@ test('strips protected thing fields at every pipeline ingress', async () => {
     Object.fromEntries(Object.entries(projection).map(([key, value]) => [key, Number(value)]));
   const exclusion = hardenThingsQuery(await normalized({ collection: 'things', operation: 'find', projection: { crystal: 0, _id: 1 } }));
   assert.equal('status' in exclusion, false);
-  if (!('status' in exclusion)) assert.deepEqual(plain(exclusion.projection), { crystal: 0, _id: 1, secure: 0, uniqueKeys: 0 });
+  if (!('status' in exclusion)) assert.deepEqual(plain(exclusion.projection), { crystal: 0, _id: 1, secure: 0, uniqueKeys: 0, linkKey: 0 });
   const idOnly = hardenThingsQuery(await normalized({ collection: 'things', operation: 'find', projection: { _id: 1 } }));
   assert.equal('status' in idOnly, false);
   if (!('status' in idOnly)) assert.deepEqual(plain(idOnly.projection), { _id: 1 });

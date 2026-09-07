@@ -9,6 +9,8 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   const manifest = thingtimeCapabilityManifest('https://preview.example.test/path');
   assert.equal(manifest.origin, 'https://preview.example.test');
   assert.equal(manifest.schemaVersion, 1);
+  assert.equal(manifest.features['api.admin-migrations-run']?.version, '1.1.1');
+  assert.equal(manifest.features['api.admin-subscriptions']?.version, '1.1.1');
 	assert.equal(manifest.features['api.admin-ci-dispatch']?.version, '2.1.0');
   assert.equal(manifest.features['api.admin-ci-control']?.version, '1.0.2');
   assert.equal(manifest.features['api.admin-ci-credentials']?.version, '2.0.0');
@@ -21,6 +23,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.integration-ci-credentials']?.version, '1.1.0');
   assert.equal(manifest.features['api.integration-ci-progress']?.version, '1.0.0');
   assert.equal(manifest.features['api.things-search']?.version, '1.1.1');
+	assert.equal(manifest.features['api.users-profile']?.version, '1.1.0');
   for (const feature of [
     'api.things',
     'api.things-comment',
@@ -54,14 +57,21 @@ test('capability negotiation accepts compatible updates and rejects missing or b
 
 test('the Lopu catalog family publishes its verified-provider-key minor updates', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-  assert.equal(manifest.features['api.ai-models']?.version, '1.3.0');
+  // 1.4.0: models[].pricing (verified-access design note §2)
+  assert.equal(manifest.features['api.ai-models']?.version, '1.4.0');
   assert.equal(manifest.features['api.admin-ai-models']?.version, '1.1.0');
   assert.equal(manifest.features['api.settings-lopu-chat-defaults']?.version, '1.1.0');
   // own providers (design note §1.3): providerId on create / update / reply;
-  // 1.1.1 = the write buckets fail closed, 1.2.0 = server-verified confirmations
-  assert.equal(manifest.features['api.lopu-chats']?.version, '1.1.1');
+  // 1.1.1 = the write buckets fail closed, 1.2.0 = server-verified confirmations;
+  // then the verified-access gate + accounting fields (create 1.2.0, reply 1.3.0),
+  // and reply 1.4.0 = the in-flight cap (429 LOPU_TURN_IN_FLIGHT past three billed turns at once)
+  assert.equal(manifest.features['api.lopu-chats']?.version, '1.2.0');
   assert.equal(manifest.features['api.lopu-chats-update']?.version, '1.1.1');
-  assert.equal(manifest.features['api.lopu-chats-reply']?.version, '1.2.0');
+  assert.equal(manifest.features['api.lopu-chats-reply']?.version, '1.4.0');
+  // verified access + credits (design note "Lopu verified access, usage accounting and credits")
+  for (const feature of ['api.admin-users-lopu-access', 'api.settings-lopu-access', 'api.lopu-account', 'api.lopu-account-history', 'api.lopu-account-topup-request', 'api.admin-lopu-accounts', 'api.admin-lopu-credits']) {
+    assert.equal(manifest.features[feature]?.version, '1.0.0', feature);
+  }
 });
 
 test('both manifests publish passkey concurrency and Apple association contracts', () => {

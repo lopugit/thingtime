@@ -107,6 +107,9 @@ export type PublicUser = {
 	};
 	activeThemeId: string | null;
 	activeFeedAlgorithmId: string | null;
+	// Private, owner-facing profile preference. It is safe by default: only an
+	// explicit false permits the public profile projection to include email.
+	hideEmailOnProfile?: boolean;
 	// Upload permissions are OFF for every account created after the
 	// signup-permissions hotfix; an admin turns them on per user from /admin
 	// (see setUserUploadPermissions), per scope or all at once. Accounts
@@ -115,13 +118,17 @@ export type PublicUser = {
 	// = message attachments + own profile avatar/banner.
 	publicUploadsEnabled: boolean;
 	privateUploadsEnabled: boolean;
+	// Lopu is invite-only (meta.lopuVerified, absent = false; admins always
+	// verified) — the client renders the locked state from this, the server
+	// gates every turn (api/utils/lopu/access.ts). Self projection only.
+	lopuVerified: boolean;
 	// true when meta.admin OR the ADMIN_USERNAMES env allowlist — the client uses
 	// it to reveal the admin panel; the server always re-checks server-side.
 	isAdmin: boolean;
 };
 
 // Minimal projection safe to show OTHER users (public profiles, post authors).
-// Never includes email, verification state, storage, or meta.
+// Email, verification state, storage, and meta are never public.
 export type PublicProfile = {
 	id: string;
 	username: string;
@@ -146,6 +153,14 @@ export type PublicProfile = {
 // locked-out admin can never be unable to fix the account that grants them.
 export const userPublicUploadsEnabled = (user: any): boolean => isAdminDoc(user) || user?.meta?.publicUploads !== false;
 export const userPrivateUploadsEnabled = (user: any): boolean => isAdminDoc(user) || user?.meta?.privateUploads !== false;
+
+// Lopu verified access (design note "Lopu verified access, usage accounting
+// and credits" §1): meta.lopuVerified is a plain opt-in — absent or anything
+// but an exact true reads as NOT verified (new accounts start locked, exactly
+// like meta.publicUploads after the signup-permissions hotfix). Admins are
+// always verified, so a locked-out admin can never be unable to fix the
+// account that verifies them.
+export const userLopuVerified = (user: any): boolean => isAdminDoc(user) || user?.meta?.lopuVerified === true;
 
 export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null): PublicUser => {
 	const source = subscription?.subjectType === 'user' ? subscription.storage : null;
@@ -189,8 +204,10 @@ export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null):
 		storage,
 		activeThemeId: typeof user.meta?.activeThemeId === 'string' ? user.meta.activeThemeId : null,
 		activeFeedAlgorithmId: typeof user.meta?.activeFeedAlgorithmId === 'string' ? user.meta.activeFeedAlgorithmId : null,
+		hideEmailOnProfile: user.meta?.hideEmailOnProfile !== false,
 		publicUploadsEnabled: userPublicUploadsEnabled(user),
 		privateUploadsEnabled: userPrivateUploadsEnabled(user),
+		lopuVerified: userLopuVerified(user),
 		isAdmin: isAdminDoc(user)
 	};
 };
@@ -1326,6 +1343,9 @@ export type AdminUserRow = {
 	// signup), so the UI can tell "awaiting approval" from "grandfathered".
 	publicUploadsPending: boolean;
 	privateUploadsPending: boolean;
+	// Lopu access (meta.lopuVerified; admins always true) — toggled from
+	// Admin → Lopu accounts through POST /api/v1/admin/users/lopu-access
+	lopuVerified: boolean;
 };
 
 // Escape user-supplied text before embedding it in a Mongo $regex — shared with
@@ -1350,8 +1370,13 @@ const toAdminRow = (doc: any): AdminUserRow => ({
 	publicUploadsEnabled: userPublicUploadsEnabled(doc),
 	privateUploadsEnabled: userPrivateUploadsEnabled(doc),
 	publicUploadsPending: doc?.meta?.publicUploads === false && !isAdminDoc(doc),
-	privateUploadsPending: doc?.meta?.privateUploads === false && !isAdminDoc(doc)
+	privateUploadsPending: doc?.meta?.privateUploads === false && !isAdminDoc(doc),
+	lopuVerified: userLopuVerified(doc)
 });
+
+// The admin row for a user doc already in hand (the Lopu accounts directory
+// joins accounts to users this way) — the same projection the searches use.
+export const adminUserRowOf = (doc: any): AdminUserRow => toAdminRow(doc);
 
 // Set (or clear) a user's stored admin flag. Env-allowlist admins remain admin
 // regardless (isAdminDoc ORs the env check), so demoting one only clears the
@@ -1407,6 +1432,37 @@ export const setUserUploadPermissions = async (userId: string, updates: UploadPe
 		const $set: Record<string, unknown> = { updatedAt: new Date() };
 		for (const key of keys) $set[`meta.${key}`] = updates[key] === true;
 		const legacy = await (await getUsersCollection()).updateOne({ _id: new ObjectId(userId) }, { $set });
+		if (legacy.matchedCount) applied = true;
+	}
+
+	if (!applied) return null;
+	const updated = await findUserById(userId);
+	return updated ? toAdminRow(updated) : null;
+};
+
+// Verify (or un-verify) a user's Lopu access — meta.lopuVerified plus the
+// audit pair meta.lopuVerifiedAt / meta.lopuVerifiedBy — with exactly the
+// dual-store, CAS-guarded write setUserUploadPermissions uses (the flag rides
+// the secure blob's meta: no new index, no collection generation, and a
+// dual-era twin can never resurrect a stale value). Returns the admin row,
+// or null when no store holds the user.
+export const setUserLopuVerified = async (userId: string, verified: boolean, actorId: string): Promise<AdminUserRow | null> => {
+	const now = new Date();
+	const stamp = { lopuVerified: verified === true, lopuVerifiedAt: now.toISOString(), lopuVerifiedBy: String(actorId || '').slice(0, 128) || 'system' };
+	let applied = false;
+	const result = await mutateUserThingSecure(userId, (secure) => {
+		secure.meta = { ...(secure.meta || {}), ...stamp };
+	});
+	if (result === 'contended') throw new SecureWriteContendedError(userId);
+	if (result === 'mutated') applied = true;
+
+	if (ObjectId.isValid(userId)) {
+		const legacy = await (
+			await getUsersCollection()
+		).updateOne(
+			{ _id: new ObjectId(userId) },
+			{ $set: { 'meta.lopuVerified': stamp.lopuVerified, 'meta.lopuVerifiedAt': stamp.lopuVerifiedAt, 'meta.lopuVerifiedBy': stamp.lopuVerifiedBy, updatedAt: now } }
+		);
 		if (legacy.matchedCount) applied = true;
 	}
 
@@ -1777,6 +1833,7 @@ export type UpdateProfileInput = {
 	avatarAttachmentId?: unknown;
 	bannerAttachmentId?: unknown;
 	birthday?: unknown;
+	hideEmailOnProfile?: unknown;
 };
 
 type UpdateProfileResult = { ok: false; status: number; error: string } | { ok: true; user: PublicUser };
@@ -1788,6 +1845,7 @@ type ProfileUserMutationDependencies = {
 	reconcileAttachments: typeof reconcileReadyProfileAttachmentsToUser;
 	findUser: typeof findUserById;
 	projectUser: typeof toPublicUserWithStorage;
+	mutateSecure: typeof mutateUserThingSecure;
 	now: () => Date;
 };
 
@@ -1809,6 +1867,7 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 		reconcileAttachments: reconcileReadyProfileAttachmentsToUser,
 		findUser: findUserById,
 		projectUser: toPublicUserWithStorage,
+		mutateSecure: mutateUserThingSecure,
 		now: () => new Date(),
 		...overrides
 	};
@@ -1877,9 +1936,8 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 			return { ok: false, status: 400, error: 'Avatar and banner must use different attachments' };
 		}
 
-		// Birthday is PRIVATE state — it lives in the secure blob (meta.birthday),
-		// never in the public crystal, so it takes the secure write path below
-		// rather than the crystal/attachment transaction.
+		// Birthday and email visibility are PRIVATE state — both live in the secure
+		// blob, never in the public crystal, so they take the secure write path.
 		let birthday: string | null | undefined;
 		if (input.birthday !== undefined) {
 			birthday = sanitizeBirthday(input.birthday);
@@ -1887,33 +1945,47 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 				return { ok: false, status: 400, error: 'Birthday must be a real YYYY-MM-DD date (1900 → today)' };
 			}
 		}
+		let hideEmailOnProfile: boolean | undefined;
+		if (input.hideEmailOnProfile !== undefined) {
+			if (typeof input.hideEmailOnProfile !== 'boolean') {
+				return { ok: false, status: 400, error: 'Hide email on profile must be true or false' };
+			}
+			hideEmailOnProfile = input.hideEmailOnProfile;
+		}
 
-		if (!Object.keys(set).length && !media.avatar.touched && !media.banner.touched && birthday === undefined) {
+		if (!Object.keys(set).length && !media.avatar.touched && !media.banner.touched && birthday === undefined && hideEmailOnProfile === undefined) {
 			return { ok: false, status: 400, error: 'Nothing to update' };
 		}
 
 		// Secure-blob write first: it is a separate store from the crystal, so it
 		// runs outside the profile/attachment transaction below.
-		if (birthday !== undefined) {
-			const cleared = birthday === null;
-			const result = await mutateUserThingSecure(userId, (s) => {
-				if (cleared) delete s.meta!.birthday;
-				else s.meta!.birthday = birthday;
+		if (birthday !== undefined || hideEmailOnProfile !== undefined) {
+			const clearedBirthday = birthday === null;
+			const result = await dependencies.mutateSecure(userId, (s) => {
+				if (birthday !== undefined) {
+					if (clearedBirthday) delete s.meta!.birthday;
+					else s.meta!.birthday = birthday;
+				}
+				if (hideEmailOnProfile !== undefined) s.meta!.hideEmailOnProfile = hideEmailOnProfile;
 			});
 			if (result === 'contended') throw new SecureWriteContendedError(userId);
 			if (result === 'missing') {
 				if (!ObjectId.isValid(userId)) return { ok: false, status: 400, error: 'Invalid user id' };
+				const legacySet: Record<string, unknown> = { updatedAt: dependencies.now() };
+				if (birthday !== undefined && !clearedBirthday) legacySet['meta.birthday'] = birthday;
+				if (hideEmailOnProfile !== undefined) legacySet['meta.hideEmailOnProfile'] = hideEmailOnProfile;
 				await (await dependencies.getUsers()).updateOne(
 					{ _id: new ObjectId(userId) },
-					cleared
-						? { $unset: { 'meta.birthday': '' }, $set: { updatedAt: dependencies.now() } }
-						: { $set: { 'meta.birthday': birthday, updatedAt: dependencies.now() } }
+					{
+						$set: legacySet,
+						...(birthday !== undefined && clearedBirthday ? { $unset: { 'meta.birthday': '' } } : {})
+					}
 				);
 			}
 		}
 
-		// A birthday-only update never touches the crystal or attachments, so the
-		// transactional write below is skipped entirely for it.
+		// Private-only updates never touch the crystal or attachments, so the
+		// transactional write below is skipped entirely for them.
 		if (Object.keys(set).length || media.avatar.touched || media.banner.touched) {
 			try {
 				const mutated = await dependencies.withTransaction(async (session) => {

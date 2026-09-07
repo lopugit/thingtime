@@ -27,6 +27,10 @@ export type LopuComposerProps = {
 	onStop: () => void;
 	streaming: boolean;
 	disabled?: boolean;
+	// only the message field and Send are disabled — the model chip stays
+	// usable, so a locked account that may still chat on its own provider
+	// (Thingtime.LopuAccess allowByoUnverified) can pick one and unlock
+	inputDisabled?: boolean;
 	enterSends?: boolean;
 	placeholder?: string;
 	models: AiModelPublic[];
@@ -42,6 +46,9 @@ export type LopuComposerProps = {
 	inputRef?: React.Ref<HTMLTextAreaElement>;
 	// the mic / voice control (W2) rendered in the left cluster
 	composerLeading?: React.ReactNode;
+	// the credits balance chip (LopuBalanceChip) rendered right after the
+	// model chip — verified-credits design note §4
+	accountChip?: React.ReactNode;
 	// session preferences shown in the gear popover, plus extra rows (voice)
 	preferences?: LopuComposerPreferences;
 	onPreferencesChange?: (patch: Partial<LopuComposerPreferences>) => void;
@@ -128,6 +135,7 @@ export const LopuComposer = ({
 	onStop,
 	streaming,
 	disabled = false,
+	inputDisabled = false,
 	enterSends = true,
 	placeholder,
 	models,
@@ -141,6 +149,7 @@ export const LopuComposer = ({
 	autoFocus = false,
 	inputRef,
 	composerLeading,
+	accountChip,
 	preferences,
 	onPreferencesChange,
 	settingsContent,
@@ -156,7 +165,8 @@ export const LopuComposer = ({
 		},
 		[inputRef]
 	);
-	const canSend = !disabled && !streaming && value.trim().length > 0;
+	const fieldDisabled = disabled || inputDisabled;
+	const canSend = !fieldDisabled && !streaming && value.trim().length > 0;
 	const controlSize = isMobile ? LOPU_UI.touchTarget : compact ? 30 : 36;
 	const iconSize = isMobile ? LOPU_UI.touchTarget : compact ? 28 : 32;
 	const bodySize = compact ? LOPU_UI.fontCompact : LOPU_UI.fontBody;
@@ -172,9 +182,9 @@ export const LopuComposer = ({
 
 	const submit = React.useCallback(() => {
 		const text = value.trim();
-		if (!text || disabled || streaming) return;
+		if (!text || fieldDisabled || streaming) return;
 		onSend(text.slice(0, LOPU_MAX_MESSAGE_CHARS));
-	}, [value, disabled, streaming, onSend]);
+	}, [value, fieldDisabled, streaming, onSend]);
 
 	const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
 		if (event.key !== 'Enter') return;
@@ -207,7 +217,7 @@ export const LopuComposer = ({
 				bg={LOPU_UI.card}
 				transition={`border-color ${LOPU_UI.transitionFast}`}
 				_focusWithin={{ borderColor: LOPU_UI.ink }}
-				opacity={disabled ? 0.7 : 1}
+				opacity={fieldDisabled ? 0.7 : 1}
 				minW={0}
 			>
 				<Textarea
@@ -215,7 +225,7 @@ export const LopuComposer = ({
 					value={value}
 					onChange={(event) => onChange(event.target.value.slice(0, LOPU_MAX_MESSAGE_CHARS))}
 					onKeyDown={onKeyDown}
-					placeholder={placeholder || (streaming ? 'Lopu is replying…' : 'Ask Lopu anything, or tell her what to build…')}
+					placeholder={placeholder || (streaming ? 'Lopu is replying…' : 'Ask Lopu anything, or tell it what to build…')}
 					aria-label="Message Lopu"
 					rows={1}
 					width="100%"
@@ -232,7 +242,7 @@ export const LopuComposer = ({
 					px={compact ? 3 : 3.5}
 					pt={compact ? 2.5 : 3}
 					pb={1}
-					isDisabled={disabled}
+					isDisabled={fieldDisabled}
 					autoFocus={autoFocus}
 					whiteSpace="pre-wrap"
 					_placeholder={{ color: LOPU_UI.faint }}
@@ -240,6 +250,11 @@ export const LopuComposer = ({
 				/>
 				<Flex align="center" gap={1.5} px={compact ? 1.5 : 2} pb={compact ? 1.5 : 2} pt={0.5} minW={0}>
 					<LopuModelPicker models={models} vaultProviders={vaultProviders} vault={vault} value={settings} defaults={defaults} onChange={onSettingsChange} compact={compact} disabled={disabled} mobile={isMobile} />
+					{accountChip ? (
+						<Box display="inline-flex" alignItems="center" flexShrink={0} minW={0} data-lopu-control>
+							{accountChip}
+						</Box>
+					) : null}
 					{composerLeading ? (
 						<Box display="inline-flex" alignItems="center" flexShrink={0} data-lopu-control>
 							{composerLeading}

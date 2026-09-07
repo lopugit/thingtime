@@ -11,7 +11,7 @@ import { useApi } from '~/hooks/useApi';
 // drawer's `settings.drawer.*`): they persist to localforage, restore on
 // reload, and sync between tabs. The one exception is `open`, which describes
 // THIS viewport (is the floating window showing here?) and is written
-// tabLocal so opening Lopu in one tab never pops her open in every other tab.
+// tabLocal so opening Lopu in one tab never pops it open in every other tab.
 //
 // The launcher bubble position and the window frame are per-device chrome,
 // not preferences worth syncing — they live in the synchronous localStorage
@@ -26,7 +26,7 @@ export interface LopuSettings {
 	launcher: boolean;
 	// where the chat window sits: free-floating or flush against an edge
 	dock: LopuDock;
-	// paint Lopu's builder patches into the open draft while she streams
+	// paint Lopu's builder patches into the open draft while it streams
 	applyPatches: boolean;
 	// ask before deleting a CONVERSATION from the list (the sidebar's delete
 	// button). Lopu's own destructive tools (delete_thing, a whole-crystal
@@ -357,7 +357,7 @@ export const useLopuSettings = () => {
 	);
 
 	// Whether the floating window is showing describes THIS viewport, not a
-	// preference: a second tab sliding Lopu open because you opened her here
+	// preference: a second tab sliding Lopu open because you opened it here
 	// would be wrong. Persisted as before, so a reload still restores it.
 	const setOpen = React.useCallback(
 		(value: boolean) => {

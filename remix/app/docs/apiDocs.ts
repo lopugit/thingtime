@@ -1583,8 +1583,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'admin-subscriptions',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    contractVersion: '1.1.1',
+    featureVersion: '1.1.1',
     group: 'admin',
     title: 'Subscription tiers & quota overrides',
     endpoint: '/api/v1/admin/subscriptions',
@@ -1595,7 +1595,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'users or apps. Per-field admin overrides win over the snapshot (explicit null = unlimited). GET without ' +
       "params returns live revisions; with ?subjectType=user|app&subjectId= it also returns that subject's " +
       'assignment and its archived current revision when needed. POST { subjectType, subjectId, tier, ' +
-      'tierVersionId, overrides?, note? } assigns; clear pins the current default revision.',
+      'tierVersionId, overrides?, note? } assigns; clear pins the current default revision. Protected storage ledgers accept ' +
+      'the optional speedTestsPerHour quota in snapshots and overrides while preserving older four-field revisions.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET', 'POST'],
     steps: [
@@ -2494,6 +2495,139 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'admin-users-lopu-access',
+    group: 'admin',
+    title: 'Verify Lopu access',
+    endpoint: '/api/v1/admin/users/lopu-access',
+    summary: 'Verify or un-verify a user’s Lopu access (admin only).',
+    detail:
+      'POST { userId, verified } sets meta.lopuVerified (plus meta.lopuVerifiedAt / meta.lopuVerifiedBy) on the user. ' +
+      'Lopu is invite-only while the Thingtime.LopuAccess singleton says requireVerification (the default): every account ' +
+      'starts unverified and every Lopu turn — chats create, chats reply, voice reply, direct-voice session — answers ' +
+      '403 { code: "LOPU_UNVERIFIED" } until an admin verifies it here (an unverified account may still run turns on its own ' +
+      'Secure Vault provider when allowByoUnverified is on). Admins are always verified. The response is the same admin user ' +
+      'row the directory uses, now carrying lopuVerified; GET /api/v1/lopu/account and the user’s own profile read the flag back.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin). Bodies must be application/json (415 otherwise).' },
+    methods: ['POST'],
+    steps: [
+      'Find the user under Admin → Lopu accounts (GET /api/v1/admin/lopu/accounts?q=) or the Users tab.',
+      'POST { userId, verified: true } to let Lopu build with them; verified: false locks the account again.',
+      'Read user.lopuVerified back to update the toggle; the user’s next /api/v1/lopu/account read reflects it at once.',
+      'Non-admins receive 403; a missing userId or a non-boolean verified 400; an unknown user 404.'
+    ],
+    requestExamples: [
+      { name: 'Verify a user', description: 'Let Lopu build with this account.', method: 'POST', body: { userId: '64f000000000000000000002', verified: true } },
+      { name: 'Lock a user again', description: 'Withdraw Lopu access.', method: 'POST', body: { userId: '64f000000000000000000002', verified: false } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Updated user row.', body: { ok: true, user: { id: '64f000000000000000000002', username: 'nik', isAdmin: false, lopuVerified: true, publicUploadsEnabled: true, privateUploadsEnabled: true } } },
+      { status: 400, description: 'verified was not a boolean.', body: { ok: false, error: 'verified must be a boolean' } },
+      { status: 404, description: 'Unknown user.', body: { ok: false, error: 'User not found' } }
+    ],
+    notes: ['Rate limited per admin by admin.users.lopu-access (60 per minute), enforced fail-closed. Responses are private and uncacheable.']
+  }),
+  endpoint({
+    id: 'admin-lopu-accounts',
+    group: 'admin',
+    title: 'Lopu accounts directory',
+    endpoint: '/api/v1/admin/lopu/accounts',
+    summary: 'Lists Lopu accounts — verified status, credit balance, this month’s and lifetime usage, and pending top-up requests (admin only).',
+    detail:
+      'GET ?q&cursor&limit. Without q every lopu-account row is listed newest first (cursor-paged, limit ≤ 100, default 50); with q the ' +
+      'admin user search resolves the matching users and each is listed with their account — or without one (hasAccount: false, a zero ' +
+      'balance) when they never opened Lopu, so an admin can verify or grant credits before the first turn. Each row carries ' +
+      '{ user: { id, username, displayName, email, lopuVerified, isAdmin }, hasAccount, accountId, balanceMicros, balanceCredits, lowBalance, ' +
+      'month: { key, costMicros, turns }, lifetime: { costMicros, inputTokens, outputTokens, turns }, starterGranted, pendingRequest, createdAt, ' +
+      'updatedAt }; the response also returns the current Thingtime.LopuAccess settings so the editor and the table share one read. ' +
+      '1 credit = 1 USD of list price = 1,000,000 micros.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET'],
+    steps: [
+      'GET to page through every account (follow nextCursor), or GET ?q=<username> to find one user.',
+      'Toggle user.lopuVerified through POST /api/v1/admin/users/lopu-access.',
+      'Grant credits or resolve pendingRequest through POST /api/v1/admin/lopu/credits.',
+      'Non-admins receive 403; a malformed cursor 400.'
+    ],
+    requestExamples: [
+      { name: 'Find a user', description: 'Search by username.', method: 'GET', query: { q: 'nik' } },
+      { name: 'Page through accounts', description: 'Newest accounts first, five per page.', method: 'GET', query: { limit: '5' } }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'One account row with a pending request.',
+        body: {
+          ok: true,
+          accounts: [
+            {
+              user: { id: '64f000000000000000000002', username: 'nik', displayName: 'Nik', email: 'nik@example.com', lopuVerified: true, isAdmin: false },
+              hasAccount: true,
+              accountId: 'lopu-account-3f9c2a1b-7d5e-4c6a-8b0f-1e2d3c4b5a69',
+              balanceMicros: 1980500,
+              balanceCredits: 1.9805,
+              lowBalance: false,
+              month: { key: '2026-09', costMicros: 19500, turns: 1 },
+              lifetime: { costMicros: 19500, inputTokens: 1200, outputTokens: 380, turns: 1 },
+              starterGranted: true,
+              pendingRequest: { id: 'lopu-credit-0a1b2c3d-…', entry: 'request', amountMicros: 3000000, amountCredits: 3, requestStatus: 'pending', note: 'Building a site', createdAt: '2026-09-06T10:00:00.000Z' },
+              createdAt: '2026-09-06T09:00:00.000Z',
+              updatedAt: '2026-09-06T10:00:00.000Z'
+            }
+          ],
+          nextCursor: null,
+          settings: { requireVerification: true, allowByoUnverified: false, starterCredits: 0, lowBalanceWarningCredits: 1 }
+        }
+      },
+      { status: 403, description: 'Caller is not an admin.', body: { ok: false, error: 'Admins only' } }
+    ],
+    notes: ['Rate limited per admin by admin.lopu.accounts (60 per minute). Responses are private and uncacheable.']
+  }),
+  endpoint({
+    id: 'admin-lopu-credits',
+    group: 'admin',
+    title: 'Lopu credits',
+    endpoint: '/api/v1/admin/lopu/credits',
+    summary: 'Grants, adjusts or refunds Lopu credits, or approves / declines a user’s top-up request (admin only).',
+    detail:
+      'Three shapes. { userId, credits, entry?, reason?, note? } moves a balance directly: credits is a number between −10000 and 10000 ' +
+      '(never 0), entry is grant (the default) | topup | adjust | refund — grant and topup must be positive, adjust and refund may be signed. ' +
+      '{ requestId, credits?, reason? } approves a pending top-up request: the requested amount is granted as a topup unless credits ' +
+      'overrides it, the request flips to approved (resolvedAt / resolvedBy / grantedMicros) and the topup ledger row links back to it. ' +
+      '{ requestId, decline: true, reason? } declines it with no balance change. Every grant is one $inc on the user’s lopu-account plus a ' +
+      'lopu-credit ledger row carrying balanceAfterMicros; a request can only be resolved once (409 afterwards), and a user has at most ' +
+      'one pending request. Answers { ok, account, ledger, request } — the admin account row, the ledger row written (null on a decline) ' +
+      'and the resolved request (null on a direct grant).',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin). Bodies must be application/json (415 otherwise).' },
+    methods: ['POST'],
+    steps: [
+      'POST { userId, credits, reason } to grant credits to any user (their account is created on the spot when missing).',
+      'POST { requestId } (from the directory’s pendingRequest) to approve a request as asked, or add credits to grant a different amount.',
+      'POST { requestId, decline: true, reason } to decline it.',
+      'Read account.balanceMicros back; 400 for a zero / out-of-range / mis-signed amount or an unknown entry, 404 for an unknown user or request, 409 for a request already resolved.'
+    ],
+    requestExamples: [
+      { name: 'Grant credits', description: 'Add five credits with a reason.', method: 'POST', body: { userId: '64f000000000000000000002', credits: 5, reason: 'Welcome to Lopu' } },
+      { name: 'Refund a turn', description: 'A signed refund of 0.02 credits.', method: 'POST', body: { userId: '64f000000000000000000002', credits: 0.02, entry: 'refund', reason: 'Provider error mid-reply' } },
+      { name: 'Approve a request', description: 'Grant what the user asked for.', method: 'POST', body: { requestId: 'lopu-credit-0a1b2c3d-…', reason: 'Approved' } },
+      { name: 'Decline a request', description: 'No balance change.', method: 'POST', body: { requestId: 'lopu-credit-0a1b2c3d-…', decline: true, reason: 'Not yet' } }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'A grant applied.',
+        body: {
+          ok: true,
+          account: { user: { id: '64f000000000000000000002', username: 'nik', displayName: 'Nik', email: 'nik@example.com', lopuVerified: true, isAdmin: false }, hasAccount: true, balanceMicros: 5000000, balanceCredits: 5, lowBalance: false, month: { key: '2026-09', costMicros: 0, turns: 0 }, lifetime: { costMicros: 0, inputTokens: 0, outputTokens: 0, turns: 0 }, starterGranted: true, pendingRequest: null },
+          ledger: { id: 'lopu-credit-…', entry: 'grant', amountMicros: 5000000, balanceAfterMicros: 5000000 },
+          request: null
+        }
+      },
+      { status: 400, description: 'A zero amount.', body: { ok: false, error: 'credits must be a non-zero number of credits between -10000 and 10000' } },
+      { status: 409, description: 'The request was already resolved.', body: { ok: false, error: 'That request was already approved' } }
+    ],
+    notes: ['Rate limited per admin by admin.lopu.credits (60 per minute), enforced fail-closed. Responses are private and uncacheable.']
+  }),
+  endpoint({
     id: 'admin-moderation',
     group: 'admin',
     title: 'Moderation review queue',
@@ -2637,10 +2771,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.1.0: a session also gets `vaultProviders` + `vault` (additive, design note §1.3);
     // 1.2.0: `models[].verified` + `providers.<p>.{verified, checkedAt, reason}` from the key
     // probe (additive); 1.3.0: `vaultProviders[].realtimeModels` (the kind’s direct-voice models, design
-    // note §6.1) and a row without a model reports its kind’s first catalog model (additive).
+    // note §6.1) and a row without a model reports its kind’s first catalog model (additive);
+    // 1.4.0: `models[].pricing` — the list price per million tokens with an `estimated` flag
+    // (verified-access design note §2, additive).
     // contractVersion feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.3.0',
-    featureVersion: '1.3.0',
+    contractVersion: '1.4.0',
+    featureVersion: '1.4.0',
     summary: 'Lists every AI model Lopu can chat with, its availability (provider keys verified, not merely detected), the resolved chat defaults, and (for a session) the caller’s own Secure Vault providers.',
     detail:
       'The public projection of the protected `ai-model` Things — one per base model in the Thingtime Admin catalog, ' +
@@ -2695,7 +2831,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               enabled: true,
               available: true,
               verified: true,
-              isDefault: true
+              isDefault: true,
+              pricing: { inputPerM: 5, outputPerM: 25, estimated: false }
             },
             {
               id: 'gpt-5.6-sol',
@@ -2707,7 +2844,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               enabled: true,
               available: false,
               verified: null,
-              isDefault: false
+              isDefault: false,
+              pricing: { inputPerM: 2.5, outputPerM: 15, estimated: true }
             }
           ],
           defaults: { model: 'claude-opus-5', effort: 'high', speed: 'normal' },
@@ -2734,6 +2872,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     notes: [
       'Responses set Cache-Control: no-store so admin toggles and key changes are visible immediately.',
+      'models[].pricing = { inputPerM, outputPerM, estimated } is the list price in USD per million tokens the credit accounting bills a turn on Thingtime’s keys with (1 credit = 1 USD = 1,000,000 micros); estimated: true marks a row priced from its closest sibling. Public, never a secret.',
       'providers.<provider>.verified is the cached probe verdict (10 minutes after a success, 2 after anything else); administrators force a fresh check with POST /api/v1/admin/ai/models { probe: true }. A probe never blocks the catalog for more than its 5 s cap and never fails it.',
       'vaultProviders is empty for anonymous callers and when the Secure Vault key is not configured; a vault read failure degrades to an empty list, never a failed catalog.'
     ]
@@ -2888,6 +3027,40 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       { status: 403, description: 'POST caller is not an admin.', body: { ok: false, error: 'Admins only' } }
     ],
     notes: ['Responses set Cache-Control: no-store. Storage audit fields (updatedAt/updatedBy) are never exposed by this endpoint.']
+  }),
+  endpoint({
+    id: 'settings-lopu-access',
+    group: 'settings',
+    title: 'Lopu access rules',
+    endpoint: '/api/v1/settings/lopu-access',
+    summary: 'Read or administratively set whether Lopu is invite-only, whether unverified accounts may bring their own provider, the starter credits and the low-balance threshold.',
+    detail:
+      'The Thingtime.LopuAccess settings singleton: { requireVerification (default true — every account starts unverified and an admin ' +
+      'verifies it through POST /api/v1/admin/users/lopu-access; admins are always verified), allowByoUnverified (default false — let an ' +
+      'unverified account still run turns on its own Secure Vault provider), starterCredits (default 0 — granted exactly once when an ' +
+      'account is first created), lowBalanceWarningCredits (default 1 — the balance under which the client shows the amber warning) }. ' +
+      'GET is public (the client needs the rules to render the locked state; nothing here is secret). POST replaces the rules for ' +
+      'administrators and accepts the whole shape or just the fields being changed (merged over the stored value); booleans must be ' +
+      'booleans and the credit amounts numbers between 0 and 1000. A missing or corrupt stored document reads as the locked default — ' +
+      'an outage never opens Lopu to unverified accounts.',
+    auth: { mode: 'optional', description: 'GET is public. POST requires an authenticated administrator session; bodies must be application/json (415 otherwise).' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET to read the rules (key + settings).',
+      'Administrators POST { requireVerification?, allowByoUnverified?, starterCredits?, lowBalanceWarningCredits? } to change any subset.',
+      'Read settings back; the next gated Lopu turn already applies them (every read hits the durable singleton).'
+    ],
+    requestExamples: [
+      { name: 'Read the rules', description: 'Load the stored rules.', method: 'GET' },
+      { name: 'Grant two starter credits', description: 'Change one field as an administrator.', method: 'POST', body: { starterCredits: 2 } },
+      { name: 'Open Lopu to everyone', description: 'Turn verification off.', method: 'POST', body: { requireVerification: false } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Current rules.', body: { ok: true, key: 'Thingtime.LopuAccess', settings: { requireVerification: true, allowByoUnverified: false, starterCredits: 2, lowBalanceWarningCredits: 1 } } },
+      { status: 400, description: 'Invalid rule.', body: { ok: false, error: 'starterCredits must be a number of credits between 0 and 1000' } },
+      { status: 403, description: 'POST caller is not an admin.', body: { ok: false, error: 'Admins only' } }
+    ],
+    notes: ['Responses set Cache-Control: no-store. Rate limited by settings.lopu-access (30 per minute; the admin POST fails closed). Storage audit fields are never exposed.']
   }),
   endpoint({
     id: 'root-data',
@@ -4087,10 +4260,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/lopu/chats',
     // 1.1.0: `providerId` (a Secure Vault provider) on create + in every list entry's
     // `lopu` settings (additive). 1.1.1: POST fails closed on a limiter outage (429 with the
-    // unavailable copy instead of an unthrottled write). contractVersion feeds
-    // /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.1.1',
-    featureVersion: '1.1.1',
+    // unavailable copy instead of an unthrottled write). 1.2.0: POST runs the verified-access
+    // gate — 403 { code: LOPU_UNVERIFIED } for an unverified account, 402 { code: LOPU_NO_CREDITS,
+    // balanceMicros } when the conversation would run on Thingtime's keys with no credits, and a
+    // temporary session is 403 { code: LOPU_GUEST } like every other Lopu write (additive
+    // refusals; GET is never gated). contractVersion feeds /api/v1/capabilities, featureVersion
+    // the well-known Thingtime manifest.
+    contractVersion: '1.2.0',
+    featureVersion: '1.2.0',
     summary: 'Lists the caller’s conversations with Lopu, or starts a new one.',
     detail:
       'A Lopu conversation is an ordinary messenger chat (a one-member group owned by the caller) whose ' +
@@ -4158,6 +4335,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     notes: [
       'GET draws from the lopu.chats rate-limit bucket (120 per minute); POST from lopu.chats.write (30 per minute), enforced fail-closed — a limiter outage answers 429 rather than an unthrottled write.',
+      'POST is gated by verified access and credits (verified-access design note §1): 403 { code: "LOPU_UNVERIFIED" } while Thingtime.LopuAccess.requireVerification is on and the account is not verified (unless the body pins a providerId and allowByoUnverified is on), 402 { code: "LOPU_NO_CREDITS", balanceMicros } when the conversation would run on Thingtime’s keys with a balance of zero or less, 403 { code: "LOPU_GUEST" } for a temporary session. Listing is never gated.',
       'The generic /api/v1/things paths refuse messenger kinds, so a Lopu chat can only be changed through this family.'
     ]
   }),
@@ -4277,11 +4455,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // gains provider 'vault' + providerLabel (additive). 1.2.0: server-verified confirmations —
     // `confirmations: [{ key, token }]` in, the `confirm` event + tool_result.needsConfirmation out
     // (additive); the body is JSON-only (415), a stored null effort inherits the admin default,
-    // and 'vault' rows persist providerLabel. contractVersion feeds /api/v1/capabilities,
-    // featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.2.0',
-    featureVersion: '1.2.0',
-    summary: 'Sends one message to Lopu and streams her reply — text, tool calls and live builder patches — as newline-delimited JSON.',
+    // and 'vault' rows persist providerLabel. 1.3.0: the verified-access gate before any provider
+    // call (403 LOPU_UNVERIFIED / 402 LOPU_NO_CREDITS / 403 LOPU_GUEST) and usage accounting —
+    // `billing` on meta, `billing` / `costMicros` / `priced` / `balanceMicros` (+ cache tokens in
+    // `usage`) on done and on the persisted assistant row's lopu meta (additive). 1.4.0: a billed
+    // turn holds one of at most three in-flight slots on the account, so concurrent turns cannot
+    // each spend the same last credit — past the cap the request is refused 429
+    // LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted (additive). contractVersion
+    // feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
+    contractVersion: '1.4.0',
+    featureVersion: '1.4.0',
+    summary: 'Sends one message to Lopu and streams its reply — text, tool calls and live builder patches — as newline-delimited JSON.',
     detail:
       'POST { chatId?, text, requestId, model?, effort?, speed?, providerId?, context?, confirmations? }. The user turn is persisted first (omit chatId to start a ' +
       'conversation titled from the message), then the reply streams as application/x-ndjson, one JSON event per line: meta (chat, ' +
@@ -4353,7 +4537,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 200,
         description: 'NDJSON stream events (one per line).',
         body: [
-          { type: 'meta', chatId: 'lopu-chat-…', userMessageId: 'msg-…', requestId: '0f7d2c3a-…', model: 'claude-opus-5', effort: 'high', speed: 'normal', provider: 'claude', label: 'Claude Opus 5' },
+          { type: 'meta', chatId: 'lopu-chat-…', userMessageId: 'msg-…', requestId: '0f7d2c3a-…', model: 'claude-opus-5', effort: 'high', speed: 'normal', provider: 'claude', label: 'Claude Opus 5', billing: 'thingtime' },
           { type: 'delta', text: 'Adding a hero now ✨' },
           { type: 'tool_use_start', id: 'toolu_01', name: 'patch_page' },
           { type: 'tool_input_delta', id: 'toolu_01', name: 'patch_page', partial: '{"target":"active","ops":[{"op":"insert"' },
@@ -4361,19 +4545,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           { type: 'patch', id: 'toolu_01', target: 'active', ops: [{ op: 'insert', containerId: null, index: 1, block: { id: 'hero', type: 'container', direction: 'column', children: [] } }], pageId: 'my-landing-page', persisted: true },
           { type: 'tool_result', id: 'toolu_01', name: 'patch_page', ok: true, summary: 'Applied 1/1 op(s) to "Landing" and saved it' },
           { type: 'delta', text: 'Done — your hero is on the page 🦄' },
-          { type: 'done', assistantMessageId: 'msg-…', messages: [], stopReason: 'end_turn' }
+          { type: 'done', assistantMessageId: 'msg-…', messages: [], usage: { inputTokens: 1200, outputTokens: 380, cacheReadTokens: 8000 }, billing: 'thingtime', costMicros: 19500, priced: true, balanceMicros: 1980500, stopReason: 'end_turn' }
         ]
       },
       {
         status: 200,
         description: 'A destructive tool stops for the caller’s confirmation (NDJSON, one event per line).',
         body: [
-          { type: 'meta', chatId: 'lopu-chat-…', userMessageId: 'msg-…', requestId: '0f7d2c3a-…', model: 'claude-opus-5', effort: 'high', speed: 'normal', provider: 'claude', label: 'Claude Opus 5' },
+          { type: 'meta', chatId: 'lopu-chat-…', userMessageId: 'msg-…', requestId: '0f7d2c3a-…', model: 'claude-opus-5', effort: 'high', speed: 'normal', provider: 'claude', label: 'Claude Opus 5', billing: 'thingtime' },
           { type: 'tool_use', id: 'toolu_02', name: 'delete_thing', input: { id: 'old-page', name: 'Old page' } },
           { type: 'confirm', id: 'toolu_02', name: 'delete_thing', key: 'delete_thing:old-page', token: '<grant>', expiresAt: '2026-09-04T00:15:00.000Z', summary: 'Delete "Old page" (thing old-page)', subject: { id: 'old-page', name: 'Old page' } },
           { type: 'tool_result', id: 'toolu_02', name: 'delete_thing', ok: false, summary: 'Waiting for the user’s confirmation: Delete "Old page" (thing old-page). …', needsConfirmation: true },
           { type: 'delta', text: 'Press Confirm on the card and I will remove it 🗑️' },
-          { type: 'done', assistantMessageId: 'msg-…', messages: [], stopReason: 'end_turn' }
+          { type: 'done', assistantMessageId: 'msg-…', messages: [], usage: { inputTokens: 1200, outputTokens: 380, cacheReadTokens: 8000 }, billing: 'thingtime', costMicros: 19500, priced: true, balanceMicros: 1980500, stopReason: 'end_turn' }
         ]
       },
       {
@@ -4385,6 +4569,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 401,
         description: 'No session.',
         body: { ok: false, error: 'Sign in to talk to Lopu' }
+      },
+      {
+        status: 403,
+        description: 'The account is not verified for Lopu (Thingtime.LopuAccess.requireVerification) — nothing is persisted.',
+        body: { ok: false, error: 'Lopu is invite-only for now — an admin needs to verify your account before it can build with you', code: 'LOPU_UNVERIFIED' }
+      },
+      {
+        status: 402,
+        description: 'The turn would run on Thingtime’s keys and the credit balance is zero or less — nothing is persisted.',
+        body: { ok: false, error: 'Lopu’s credits for your account are used up — add credits to keep going', code: 'LOPU_NO_CREDITS', balanceMicros: -19500 }
       },
       {
         status: 409,
@@ -4399,6 +4593,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     notes: [
       'Rate limited per user by lopu.chat (40 per 10 minutes), enforced fail-closed; vault turns share the bucket.',
+      'Verified access + credits (verified-access design note §1–§2): the gate runs after the body, conversation and provider are validated and BEFORE anything is persisted or any provider is dialed — 403 { code: "LOPU_UNVERIFIED" } for an unverified account (unless the turn runs on the caller’s own vault provider and Thingtime.LopuAccess.allowByoUnverified is on), 402 { code: "LOPU_NO_CREDITS", balanceMicros } when the turn would run on Thingtime’s keys with a balance of zero or less, 403 { code: "LOPU_GUEST" } for a temporary session. Every turn is then priced from the catalog list prices (GET /api/v1/ai/models pricing; the scripted test provider reports 100 in / 50 out tokens per hop and prices against test-model) and recorded as a lopu-usage row: meta carries billing ("thingtime" = server keys, debited from the credit balance with a lopu-credit ledger row; "byo" = the caller’s vault provider, recorded only; "free" = the canned fallback), done carries billing, costMicros (the list price in micro-USD), priced (the model had a price) and balanceMicros (the balance after the debit; null when no account is involved), and the persisted assistant row’s lopu meta keeps the same fields. The balance may go negative by at most one turn; the next one is refused. An accounting failure is logged and retried once, never surfaced as a chat error.',
       'Confirmations are purpose JWTs on the auth key material (15-minute expiry, bound to account + chat + action key); they are single-use within the turn that spends them and the client retires a card after one press. Nothing the model reads — tool results, page blocks, thing content — can grant one.',
       'Env: ANTHROPIC_API_KEY / OPENAI_API_KEY pick the providers; LOPU_CHAT_PROVIDER (auto|claude|openai|test) and LOPU_OPENAI_TOOLS (native|text) shape routing; LOPU_CLAUDE_MODEL / LOPU_OPENAI_MODEL are the provider defaults for the admin waterfall’s default slot.',
       'Vault turns need THINGTIME_USER_VAULT_KEY (or the admin vault key) and honour THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS for custom compatible hosts; a vault turn takes precedence over LOPU_CHAT_PROVIDER, test mode included.'
@@ -4454,8 +4649,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		// temporary (guest) session — compatible corrections.
 		// 1.1.0: optional per-turn `model`, `effort`, `speed` (validated against the
 		// provider’s catalog when it lists the model) — compatible additions.
-		contractVersion: '1.1.0',
-		featureVersion: '1.1.0',
+		// 1.2.0: conversation turns run the verified-access gate as byo turns (403 LOPU_UNVERIFIED
+		// unless Thingtime.LopuAccess.allowByoUnverified; transcribe mode is not gated) and are
+		// recorded as lopu-usage rows — meta carries billing "byo", done carries the provider's
+		// usage, billing and the list-price costMicros (never debited) — compatible additions.
+		contractVersion: '1.2.0',
+		featureVersion: '1.2.0',
 		group: 'lopu',
 		title: 'Lopu voice turn',
 		endpoint: '/api/v1/lopu/voice/reply',
@@ -4474,13 +4673,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			{ name: 'Transcription page', description: 'Persist and quote without an AI call.', method: 'POST', body: { sessionId: 'voice-session-1', transcript: 'Meeting note.', transcribeMode: true } }
 		],
 		responseExamples: [
-			{ status: 200, description: 'NDJSON conversation events.', body: [{ type: 'meta', mode: 'conversation', provider: 'My Claude' }, { type: 'delta', text: 'Start ' }, { type: 'done' }] },
+			{ status: 200, description: 'NDJSON conversation events.', body: [{ type: 'meta', mode: 'conversation', provider: 'My Claude', billing: 'byo' }, { type: 'delta', text: 'Start ' }, { type: 'done', usage: { inputTokens: 210, outputTokens: 42 }, billing: 'byo', costMicros: 1260 }] },
+			{ status: 403, description: 'The account is not verified for Lopu and unverified BYO turns are off.', body: { ok: false, error: 'Lopu is invite-only for now — an admin needs to verify your account before it can build with you', code: 'LOPU_UNVERIFIED' } },
 			{ status: 200, description: 'NDJSON transcribe events.', body: [{ type: 'meta', mode: 'transcribe' }, { type: 'quote', text: 'Meeting note.', page: { id: '<thing-id>', title: 'Lopu voice transcript · …', pageNumber: 1 } }, { type: 'done' }] }
 		]
 	}),
   endpoint({
 		id: 'lopu-voice-session',
-		contractVersion: '1.0.0',
+		// 1.1.0: the verified-access gate (a byo turn: 403 LOPU_UNVERIFIED unless
+		// allowByoUnverified) and one lopu-usage row per minted session — compatible additions.
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
 		group: 'lopu',
 		title: 'Lopu direct voice session',
 		endpoint: '/api/v1/lopu/voice/session',
@@ -4502,8 +4705,133 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			{ status: 400, description: 'The connection is not the caller’s, its kind has no realtime model, or the model/effort is not eligible.', body: { ok: false, error: 'Direct voice needs a provider with realtime speech (xAI Grok Voice) — this connection has none.' } },
 			{ status: 401, description: 'No live user session.', body: { ok: false, error: 'Unauthorized' } }
 		],
-		notes: ['Rate limited per user by lopu.voiceReply (30 per minute), enforced fail-closed and shared with the voice turn.']
+		notes: ['Rate limited per user by lopu.voiceReply (30 per minute), enforced fail-closed and shared with the voice turn.', 'Gated like a BYO turn (verified-access design note §1): 403 { code: "LOPU_UNVERIFIED" } for an unverified account unless Thingtime.LopuAccess.allowByoUnverified is on; each minted session is recorded as a lopu-usage row (surface voice-session, billing byo, zero tokens — minutes are not known at mint time).']
 	}),
+  endpoint({
+    id: 'lopu-account',
+    group: 'lopu',
+    title: 'Lopu account',
+    endpoint: '/api/v1/lopu/account',
+    summary: 'The caller’s Lopu account — verified status, the access rules, the credit balance, this month’s and lifetime usage, and a pending top-up request.',
+    detail:
+      'GET answers { ok, account: { userId, verified, requireVerification, allowByoUnverified, lowBalanceWarningCredits, balanceMicros, ' +
+      'balanceCredits, lowBalance, month: { key, costMicros, turns }, lifetime: { costMicros, inputTokens, outputTokens, turns }, ' +
+      'starterCredits, starterGranted, topupUrl, pendingRequest, createdAt, updatedAt } }. The lopu-account Thing is created lazily on ' +
+      'the first read (or the first gated turn) and the Thingtime.LopuAccess starterCredits are granted exactly once — so the very first ' +
+      'read already shows the starter balance. 1 credit = 1 USD of the provider’s list price = 1,000,000 micros; turns on Thingtime’s keys ' +
+      'are debited, turns on the caller’s own Secure Vault provider are recorded only. topupUrl is the optional THINGTIME_LOPU_TOPUP_URL ' +
+      '("Buy credits"); when null the client offers "Request credits" only. verified is false while an admin has not verified the ' +
+      'account (admins are always verified); lowBalance is true under lowBalanceWarningCredits.',
+    auth: { mode: 'session', description: 'Requires an auth cookie for a full (non-temporary) account — a temporary session is 403 { code: "LOPU_GUEST" }.' },
+    methods: ['GET'],
+    steps: [
+      'GET after sign-in, after every done event of a reply, and on focus (the client caches the last value and refreshes in the background).',
+      'Render the locked state when requireVerification && !verified; show the balance chip from balanceMicros / balanceCredits and the amber state from lowBalance.',
+      'Offer "Buy credits" when topupUrl is set and "Request credits" (POST /api/v1/lopu/account/topup-request) unless pendingRequest is set.'
+    ],
+    requestExamples: [{ name: 'Read my account', description: 'Load the balance and rules.', method: 'GET' }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'A verified account with credits.',
+        body: {
+          ok: true,
+          account: {
+            userId: '64f000000000000000000002',
+            verified: true,
+            requireVerification: true,
+            allowByoUnverified: false,
+            lowBalanceWarningCredits: 1,
+            balanceMicros: 1980500,
+            balanceCredits: 1.9805,
+            lowBalance: false,
+            month: { key: '2026-09', costMicros: 19500, turns: 1 },
+            lifetime: { costMicros: 19500, inputTokens: 1200, outputTokens: 380, turns: 1 },
+            starterCredits: 0,
+            starterGranted: true,
+            topupUrl: null,
+            pendingRequest: null,
+            createdAt: '2026-09-06T09:00:00.000Z',
+            updatedAt: '2026-09-06T10:00:00.000Z'
+          }
+        }
+      },
+      { status: 401, description: 'No session.', body: { ok: false, error: 'Sign in to see your Lopu account' } },
+      { status: 403, description: 'A temporary session.', body: { ok: false, error: 'Create an account to chat with Lopu — conversations are saved to your account', code: 'LOPU_GUEST' } }
+    ],
+    notes: ['Rate limited per user by lopu.account (120 per minute), shared with /history. Responses set Cache-Control: no-store.']
+  }),
+  endpoint({
+    id: 'lopu-account-history',
+    group: 'lopu',
+    title: 'Lopu credit history',
+    endpoint: '/api/v1/lopu/account/history',
+    summary: 'The caller’s credit ledger newest first, with the usage rows the page’s debits point at.',
+    detail:
+      'GET ?cursor&limit (≤ 100, default 50) answers { ok, entries, usage, nextCursor }. entries are lopu-credit rows newest first — ' +
+      '{ id, entry: starter | grant | topup | debit | adjust | refund | request, amountMicros (signed), amountCredits, balanceAfterMicros ' +
+      '(null on a request), reason, actorId, usageId, requestId, requestStatus (pending | approved | declined on requests), note, ' +
+      'resolvedAt, resolvedBy, grantedMicros, createdAt, updatedAt }; usage holds the lopu-usage rows the page’s debit entries reference — ' +
+      '{ id, chatId, requestId, surface: chat | voice | voice-session, provider, providerLabel, model, billing, inputTokens, outputTokens, ' +
+      'cacheReadTokens, cacheWriteTokens, costMicros, costCredits, priced, estimated, debitedMicros, toolCalls, hops, durationMs, createdAt }. ' +
+      'Follow nextCursor for older rows; a malformed cursor is a 400.',
+    auth: { mode: 'session', description: 'Requires an auth cookie for a full (non-temporary) account.' },
+    methods: ['GET'],
+    steps: [
+      'GET to render the "Credits & usage" history table; join usage rows to debits by usageId.',
+      'Pass nextCursor back as cursor for "Load more".'
+    ],
+    requestExamples: [{ name: 'First page', description: 'The newest ten rows.', method: 'GET', query: { limit: '10' } }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'A debit and the grant before it.',
+        body: {
+          ok: true,
+          entries: [
+            { id: 'lopu-credit-debit-3f9c…', entry: 'debit', amountMicros: -19500, amountCredits: -0.0195, balanceAfterMicros: 1980500, reason: 'Chat turn · claude-opus-5', actorId: '64f000000000000000000002', usageId: 'lopu-usage-3f9c…', requestId: null, requestStatus: null, note: null, createdAt: '2026-09-06T10:00:00.000Z' },
+            { id: 'lopu-credit-…', entry: 'grant', amountMicros: 2000000, amountCredits: 2, balanceAfterMicros: 2000000, reason: 'Welcome to Lopu', actorId: '64f000000000000000000001', usageId: null, requestId: null, requestStatus: null, note: null, createdAt: '2026-09-06T09:00:00.000Z' }
+          ],
+          usage: [
+            { id: 'lopu-usage-3f9c…', chatId: 'lopu-chat-…', requestId: '0f7d2c3a-…', surface: 'chat', provider: 'claude', providerLabel: null, model: 'claude-opus-5', billing: 'thingtime', inputTokens: 1200, outputTokens: 380, cacheReadTokens: 8000, cacheWriteTokens: 0, costMicros: 19500, costCredits: 0.0195, priced: true, estimated: false, debitedMicros: 19500, toolCalls: 2, hops: 3, durationMs: 8400, createdAt: '2026-09-06T10:00:00.000Z' }
+          ],
+          nextCursor: null
+        }
+      },
+      { status: 400, description: 'A malformed cursor.', body: { ok: false, error: 'cursor is not a history cursor' } },
+      { status: 401, description: 'No session.', body: { ok: false, error: 'Sign in to see your Lopu history' } }
+    ],
+    notes: ['Rate limited per user by lopu.account (120 per minute), shared with /account. Responses set Cache-Control: no-store.']
+  }),
+  endpoint({
+    id: 'lopu-account-topup-request',
+    group: 'lopu',
+    title: 'Request Lopu credits',
+    endpoint: '/api/v1/lopu/account/topup-request',
+    summary: 'Asks an admin for Lopu credits — one pending request per account.',
+    detail:
+      'POST { credits (0.5 … 1000), note? (≤ 500 chars) } writes a lopu-credit row with entry "request" and requestStatus "pending" and ' +
+      'answers { ok, request } (the same row shape /history lists). While a request is pending a second one is a 409; an admin approves ' +
+      '(the credits land as a topup ledger row) or declines it through POST /api/v1/admin/lopu/credits, and the account’s pendingRequest ' +
+      'clears. Admins are notified through the ops-mail boundary the "new user" notification uses (THINGTIME_ADMIN_NOTIFICATION_EMAIL) — ' +
+      'best effort, the request stands when mail is down. No payment processor is involved; THINGTIME_LOPU_TOPUP_URL, when set, is the ' +
+      'separate "Buy credits" link the account read surfaces.',
+    auth: { mode: 'session', description: 'Requires an auth cookie for a full (non-temporary) account. Bodies must be application/json (415 otherwise — the CSRF fence, before the rate limit).' },
+    methods: ['POST'],
+    steps: [
+      'POST { credits, note } with Content-Type: application/json from the "Request credits" form.',
+      'Show request.requestStatus (pending) on the account until an admin resolves it; 409 means one is already waiting.',
+      'Handle 400 for an amount outside 0.5 … 1000 or a note over 500 characters.'
+    ],
+    requestExamples: [{ name: 'Ask for three credits', description: 'With a short note for the admin.', method: 'POST', headers: { 'Content-Type': 'application/json' }, body: { credits: 3, note: 'Building the launch page' } }],
+    responseExamples: [
+      { status: 200, description: 'The pending request.', body: { ok: true, request: { id: 'lopu-credit-0a1b2c3d-…', entry: 'request', amountMicros: 3000000, amountCredits: 3, balanceAfterMicros: null, reason: 'Credit top-up request', actorId: '64f000000000000000000002', usageId: null, requestId: null, requestStatus: 'pending', note: 'Building the launch page', resolvedAt: null, resolvedBy: null, grantedMicros: null, createdAt: '2026-09-06T10:05:00.000Z', updatedAt: '2026-09-06T10:05:00.000Z' } } },
+      { status: 400, description: 'Amount out of range.', body: { ok: false, error: 'credits must be a number between 0.5 and 1000' } },
+      { status: 409, description: 'A request is already pending.', body: { ok: false, error: 'You already have a credit request waiting for an admin — Lopu will let you know when it is reviewed' } },
+      { status: 415, description: 'The body was not application/json.', body: { ok: false, error: 'Content-Type must be application/json' } }
+    ],
+    notes: ['Rate limited per user by lopu.account.write (10 per hour), enforced fail-closed. Responses set Cache-Control: no-store.']
+  }),
   endpoint({
     id: 'deployment-links',
     group: 'deployments',
@@ -8380,7 +8708,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares.',
     detail:
-      'Everything is a thing: one root Thing schema per doc, sub-schemas applied via the thingtime array of schema ids (see /schemas), the payload under crystal, and the audience under acl — tt: grants plus "-"-prefixed exclusions where the most specific matching entry wins (["tt:all"] public, ["-tt:all","tt:userFriends","tt:user"] friends-only, ["tt:all","-tt:user/somebody"] public except one user; owners always see their own things). POST creates (unified shape or the legacy post body — same path), GET reads one thing / lists a target’s attached things / lists your own, PUT upserts by id (create-or-replace), PATCH merges a partial update, DELETE removes an owned thing and its attached comments/reactions. The legacy visibility names still work as input and are derived on the wire. Crystals are optionally schema-less: omit thingtime and it defaults to ["data"], the bounded free-form crystal. Beside the crystal, every thing also carries a schema-free extended property — any JSON up to 512KB, stored and returned exactly as given, never validated or interpreted, and not structured-searchable (/search field conditions can’t target it, though its string content is indexed by the wildcard text index). extended replaces as a whole value on write (deep-merging arbitrary JSON is ambiguous) and null clears it — the open sidecar external apps park their data in. Things also carry a tokenAcl grant list (tt:token/<token id> entries, see /api/v1/tokens-docs): sandboxed personal-access-tokens may only mutate things carrying their entry; creators are auto-granted, the list replaces whole via tokenAcl on POST/PUT/PATCH (null clears, max 32 entries), it never affects visibility, and it projects to the owner only.',
+      'Everything is a thing: one root Thing schema per doc, sub-schemas applied via the thingtime array of schema ids (see /schemas), the payload under crystal, and the audience under acl — tt: grants plus "-"-prefixed exclusions where the most specific matching entry wins (["tt:all"] public, ["-tt:all","tt:userFriends","tt:user"] friends-only, ["tt:all","-tt:user/somebody"] public except one user; owners always see their own things). POST creates (unified shape or the legacy post body — same path), GET reads one thing / lists a target’s attached things / lists your own, PUT upserts by id (create-or-replace), PATCH merges a partial update, DELETE removes an owned thing and its attached comments/reactions. The legacy visibility names still work as input and are derived on the wire — including "hidden" (acl ["tt:hidden","tt:user"]): an unlisted thing that never appears in feeds, listings, profiles, or search for anyone but its owner, yet is viewable by ANYONE presenting its randomly generated linkKey — GET /api/v1/things?id=<id>&key=<linkKey>, or the /post/<id>?key=<linkKey> page. The server mints a fresh linkKey whenever a thing enters hidden (re-hiding rotates it, so previously shared links die), projects it to the owner only, and honors it on the engagement routes too (body.key on comment/react/save/share admits key-holders). Changing the audience away from hidden retires the link instantly. "custom" audiences go further: an acl carrying the tt:custom marker names exactly who can do what — a baseline (tt:all = everyone may read, tt:hidden = link-key holders may read, neither = only the people below), plus per-user grants tt:user/<username> (read), tt:user/<username>/comment, tt:user/<username>/write and per-group grants tt:group/<group id>[/comment|/write] (groups: /api/v1/groups-docs; write ⊃ comment ⊃ read). On custom things, general viewers READ ONLY — commenting, reacting, and sharing need the comment capability, and users with write may PATCH the thing’s crystal/extended/tags (never its audience, folder, or token grants; storage stays billed to the owner). Saves are exempt (a save is a private bookmark). The composer’s Custom option builds these acls visually. Crystals are optionally schema-less: omit thingtime and it defaults to ["data"], the bounded free-form crystal. Beside the crystal, every thing also carries a schema-free extended property — any JSON up to 512KB, stored and returned exactly as given, never validated or interpreted, and not structured-searchable (/search field conditions can’t target it, though its string content is indexed by the wildcard text index). extended replaces as a whole value on write (deep-merging arbitrary JSON is ambiguous) and null clears it — the open sidecar external apps park their data in. Things also carry a tokenAcl grant list (tt:token/<token id> entries, see /api/v1/tokens-docs): sandboxed personal-access-tokens may only mutate things carrying their entry; creators are auto-granted, the list replaces whole via tokenAcl on POST/PUT/PATCH (null clears, max 32 entries), it never affects visibility, and it projects to the owner only.',
     auth: {
       mode: 'session-or-bearer',
       description:
@@ -9525,7 +9853,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/tokens',
     summary: 'Mint and list scoped API tokens — hand one to an AI or script so it can work your things.',
     detail:
-      'Personal access tokens (minted in Settings → Token minter, or here) are scoped, revocable Bearer credentials for the things API — made to hand to an AI agent or script so it can push new things, update things, and scan your things without your password. GET lists your tokens plus the scope and visibility catalogs; POST mints one: { name?, scopes: string[], expiresInMs?: number|null, maxUses?: number|null, onlyCreatedThings?: boolean, visibility?: "all"|"public"|"private" }. Scopes are dot paths with ancestor coverage — "things" covers every "things.*" leaf (read, create, update, delete, comment, react, save, share); upserts (PUT /api/v1/things) need BOTH things.create and things.update. Lifetime is two independent dials: expiresInMs from 1 (one millisecond) to null (never expires), and maxUses from 1 to null (unlimited) — each successfully authenticated request consumes one use; a missing-scope 403 consumes nothing. onlyCreatedThings: true sandboxes the token to its granted things — every thing it creates carries its tt:token/<token id> entry in the thing’s tokenAcl grant list, and its updates, deletes, comments, reactions, saves and shares only work on things whose tokenAcl carries its entry (403 anywhere else; reads still follow things.read). Grants layer: put several tokens’ entries on one thing (tokenAcl on create, or replace it whole via PATCH/PUT /api/v1/things) and those sandboxed tokens overlap on it. visibility fences the token to one audience of things: "public" means it only sees and touches world-visible things (acl tt:all — your private things stay invisible to it, and everything it creates or edits must stay public), "private" means it only sees and touches non-public things (it cannot read the public feed, publish, or engage publicly; its standalone creations default to acl ["tt:user"]), and "all" (the default) applies no fence. The fence covers reads AND writes, resolves inherited audiences through the target chain (a comment is as public as its post), and 403s with a clear message when a mutation crosses it. The token string is returned ONCE and never shown again (only the revocable session record is kept). Tokens work ONLY on the things routes plus /api/v1/tokens/self — they cannot manage tokens, change auth settings, or reach any other surface.',
+      'Personal access tokens (minted in Settings → Token minter, or here) are scoped, revocable Bearer credentials for the things API — made to hand to an AI agent or script so it can push new things, update things, and scan your things without your password. GET lists your tokens plus the scope and visibility catalogs; POST mints one: { name?, scopes: string[], expiresInMs?: number|null, maxUses?: number|null, onlyCreatedThings?: boolean, visibility?: "all"|"public"|"private"|"hidden", allowGet?: boolean }. Scopes are dot paths with ancestor coverage — "things" covers every "things.*" leaf (read, create, update, delete, comment, react, save, share); upserts (PUT /api/v1/things) need BOTH things.create and things.update. Lifetime is two independent dials: expiresInMs from 1 (one millisecond) to null (never expires), and maxUses from 1 to null (unlimited) — each successfully authenticated request consumes one use; a missing-scope 403 consumes nothing. onlyCreatedThings: true sandboxes the token to its granted things — every thing it creates carries its tt:token/<token id> entry in the thing’s tokenAcl grant list, and its updates, deletes, comments, reactions, saves and shares only work on things whose tokenAcl carries its entry (403 anywhere else; reads still follow things.read). Grants layer: put several tokens’ entries on one thing (tokenAcl on create, or replace it whole via PATCH/PUT /api/v1/things) and those sandboxed tokens overlap on it. visibility fences the token to one audience of things: "hidden" means it lives entirely in hidden link-key things (its creates are born hidden and mint their secret link), "public" means it only sees and touches world-visible things (acl tt:all — your private things stay invisible to it, and everything it creates or edits must stay public), "private" means it only sees and touches non-public things (it cannot read the public feed, publish, or engage publicly; its standalone creations default to acl ["tt:user"]), and "all" (the default) applies no fence. The fence covers reads AND writes, resolves inherited audiences through the target chain (a comment is as public as its post), and 403s with a clear message when a mutation crosses it. The token string is returned ONCE and never shown again (only the revocable session record is kept). Tokens work ONLY on the things routes plus /api/v1/tokens/self — they cannot manage tokens, change auth settings, or reach any other surface.',
     auth: {
       mode: 'session',
       description: 'Full session (cookie or service-account Bearer) required — a personal access token can never mint or list tokens.'
@@ -9600,8 +9928,102 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Expiry is enforced at millisecond precision server-side; the sessions TTL index reaps expired tokens, so they eventually disappear from the list.',
       'onlyCreatedThings sandbox: scopes say WHAT verbs, tokenAcl grants say ON WHICH things. A sandboxed token needs its tt:token/<id> entry on the thing — its own creations carry it automatically, the owner (or any credential that can update the thing) layers more tokens on by editing tokenAcl, and removing an entry revokes that token’s reach immediately. Re-sharing a token-created share of a foreign post still blocks (shares attach to the root).',
       'visibility fence: the third axis — scopes say WHAT verbs, tokenAcl says WHICH things, visibility says WHICH AUDIENCE. "public" and "private" partition things by whether their (inherit-resolved) acl carries tt:all; both directions of the boundary are locked (a public-only token cannot make a public thing private, a private-only token cannot publish). Tokens minted before this field behave as "all". Combines freely with onlyCreatedThings.',
+      'allowGet: true additionally opens /api/v1/get to this token — the whole things surface as plain GET URLs with the token in a query param, for browse-only agents. Off by default: a token in a URL lands in logs and history, so it is a per-token informed opt-in. See the GET bridge endpoint below.',
       'tokenAcl entries for revoked or unknown tokens are inert (the credential can’t authenticate), so grant lists never need cleanup to stay safe.',
       'At most 200 tokens per user — revoke old ones to make room.'
+    ]
+  }),
+  endpoint({
+    id: 'get-bridge',
+    group: 'tokens',
+    title: 'GET bridge',
+    endpoint: '/api/v1/get',
+    summary: 'The whole token API as plain GET URLs — for agents that can only browse.',
+    detail:
+      'GET /api/v1/get?token=<personal access token>&op=<op>… exposes the personal-access-token things surface as single GET requests, for AIs and agents that can open URLs but cannot send headers, bodies, or non-GET verbs. Only tokens minted with allowGet: true (“Works via GET links” in the Settings token minter) resolve here — the query-param credential is a deliberate opt-in, because URLs land in logs and browser history. Cookies are never read on this route, so a mutating GET cannot be forged with ambient browser credentials; the unguessable token is the authorization. op is one of: get, list, search, feed, self, create, update, upsert, delete, react, comment, save, share — each behaves exactly like its normal endpoint: same scopes (checked before a use is consumed; missing-scope 403s are free), same atomic use accounting, same rate limits, and the same onlyCreatedThings sandbox and visibility fence. Arguments come from an optional body param holding a URL-encoded JSON object, with every other query parameter overlaid on top: values starting with { [ or " parse as JSON, everything else stays a string (so ?text=hello and ?emoji=🔥 mean what they look like; put numbers in body). thingtime and tags accept a bare csv (thingtime=post,comment, tags=travel,food). key admits hidden-link things exactly like ?key= on GET /api/v1/things. op=self is free introspection — the natural first call for an agent handed a bridge URL. Responses carry Cache-Control: private, no-store and Referrer-Policy: no-referrer.',
+    auth: {
+      mode: 'bearer',
+      description: 'A personal access token minted with allowGet, sent as ?token= (an Authorization: Bearer header also works). Sessions, cookies, and app tokens are rejected.'
+    },
+    methods: ['GET'],
+    steps: [
+      'Mint a token in Settings → Token minter with “Works via GET links” ticked (or POST /api/v1/tokens with allowGet: true).',
+      'Open /api/v1/get?token=<token>&op=self to see who you are and what the token can do (free).',
+      'Read: op=get&id=…, op=list&thingtime=…, op=search&body={…}, op=feed.',
+      'Write: op=create&thingtime=["post"]&crystal={"type":"text","text":"hi"}, op=update&id=…&crystal={…}, op=react&id=…&emoji=🔥, op=comment&id=…&text=…, op=delete&id=….',
+      'Every successful call consumes one use, exactly like the Bearer routes.'
+    ],
+    requestExamples: [
+      { name: 'Who am I', description: 'Free introspection.', method: 'GET', query: { token: '<token>', op: 'self' } },
+      {
+        name: 'Create a post',
+        description: 'A public text post via one URL.',
+        method: 'GET',
+        query: { token: '<token>', op: 'create', thingtime: '["post"]', crystal: '{"type":"text","text":"hello from a GET-only agent"}' }
+      },
+      { name: 'Read a thing', description: 'One thing (add key=… for hidden links).', method: 'GET', query: { token: '<token>', op: 'get', id: '<shareId>' } },
+      { name: 'React', description: 'Toggle a reaction.', method: 'GET', query: { token: '<token>', op: 'react', id: '<shareId>', emoji: '🔥' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Same shapes as the underlying endpoints.', body: { ok: true, post: { id: 'shareId', visibility: 'public' } } },
+      { status: 403, description: 'Token minted without the GET tick.', body: { ok: false, error: 'This token is not enabled for GET links 🌍 — mint one with “Works via GET links” ticked' } }
+    ],
+    notes: [
+      'The token in the URL is a real credential: share bridge URLs only where you would share the token itself, scope tokens narrowly, cap uses, and revoke when done.',
+      'Attachments and app tokens are not available through the bridge — those flows need real sessions.',
+      'op maps: get/list/search/feed → things.read, create → things.create (or react/comment when thingtime says so), update → things.update, upsert → create+update, delete/react/comment/save/share → their scopes.',
+      'op=update and op=delete honour expectedUpdatedAt=<the updatedAt you read> exactly like PATCH/DELETE /api/v1/things: the write only lands if the thing has not changed since, otherwise 409. Worth sending whenever a thing has more than one writer (a custom audience granting tt:user/<name>/write).'
+    ]
+  }),
+  endpoint({
+    id: 'groups',
+    group: 'things',
+    title: 'Audience groups',
+    endpoint: '/api/v1/groups',
+    summary: 'Reusable "share with these people" lists for custom-audience things.',
+    detail:
+      'Groups power the custom visibility picker: make one once, then grant it on any thing with an acl entry tt:group/<group id> (optionally suffixed /comment or /write for capabilities — see the things endpoint). GET lists your groups with member profiles; POST { name, memberIds? } creates one (members are user ids); PATCH { id, name?, memberIds? } renames or REPLACES the member list whole (list semantics mirror tokenAcl — merging is ambiguous); DELETE { id } removes the group and its memberships. Members are stored relationally as group-member things (FUNDAMENTALS §3) so membership checks ride existing indexes. Bounds: 64 groups per user, 128 members per group. Deleting a group instantly retires every tt:group acl entry that referenced it (the entries become inert).',
+    auth: { mode: 'session', description: 'Full session only — tokens and apps cannot manage your audience groups.' },
+    methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+    steps: [
+      'GET to list your groups.',
+      'POST { name, memberIds } to create — pick members from /api/v1/groups/audience-sources or /api/v1/users/search.',
+      'Grant it on a thing: acl [..., "tt:group/<group id>/comment"].',
+      'PATCH { id, memberIds } to change who’s in it — every thing granted to the group follows automatically.'
+    ],
+    requestExamples: [
+      { name: 'List groups', description: 'Your groups + members.', method: 'GET' },
+      { name: 'Create', description: 'A study group.', method: 'POST', body: { name: 'Study group 📚', memberIds: ['<user id>', '<user id>'] } },
+      { name: 'Replace members', description: 'Member list replaces whole.', method: 'PATCH', body: { id: '<group id>', memberIds: ['<user id>'] } },
+      { name: 'Delete', description: 'Group + memberships.', method: 'DELETE', body: { id: '<group id>' } }
+    ],
+    responseExamples: [
+      {
+        status: 201,
+        description: 'Created.',
+        body: { ok: true, group: { id: 'group-uuid', name: 'Study group 📚', memberCount: 2, members: [] } }
+      },
+      { status: 400, description: 'Unknown member.', body: { ok: false, error: 'Unknown member user id: …' } }
+    ],
+    notes: [
+      'Group membership updates propagate live: acl entries reference the group by id, and the read path resolves the viewer’s memberships per request.',
+      'Members can see which groups they belong to only through what those groups unlock — the group itself stays the owner’s private thing.'
+    ]
+  }),
+  endpoint({
+    id: 'groups-audience-sources',
+    group: 'things',
+    title: 'Audience sources',
+    endpoint: '/api/v1/groups/audience-sources',
+    summary: 'Everything the custom-audience picker prefills: friends, connections, recent people, groups.',
+    detail:
+      'GET returns { friends, connections, recents, groups } for the signed-in user — friends are accepted friendships, connections are people you follow, recents are owners of things you recently engaged with (comments, reactions, saves, shares), and groups are your audience groups with member profiles. One call, viewer-private, no-store. Use /api/v1/users/search to find anyone outside these lists.',
+    auth: { mode: 'session', description: 'Full session only — this is your private social context.' },
+    methods: ['GET'],
+    steps: ['GET, then render the sections; search fills the gaps.'],
+    requestExamples: [{ name: 'Load sources', description: 'All four sections at once.', method: 'GET' }],
+    responseExamples: [
+      { status: 200, description: 'Sources.', body: { ok: true, friends: [], connections: [], recents: [], groups: [] } }
     ]
   }),
   endpoint({
@@ -9656,12 +10078,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'users-profile',
+		// 1.1.0: private hideEmailOnProfile preference for the owner's own profile UI.
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
     group: 'profile',
     title: 'User profile',
     endpoint: '/api/v1/users/profile',
     summary: 'Reads public profiles or updates the current user profile fields.',
     detail:
-      'GET returns a stripped public projection that never includes email, verification fields, or the ' +
+		'GET returns a stripped public projection that never includes email or verification fields, or the ' +
       'birthday, plus wornTheme ({id, name} of the profile owner’s active theme, resolved through the ' +
       'public share gate — null when unset or private). POST updates the caller display name, bio, ' +
       'avatar, banner, or birthday. Avatar/banner may use either one external http(s) URL or a ready ' +
@@ -9675,7 +10100,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET', 'POST'],
     steps: [
       'GET with username to read a public profile and post count.',
-			'POST displayName, bio, or birthday independently of profile media.',
+			'POST displayName, bio, birthday, or hideEmailOnProfile independently of profile media. hideEmailOnProfile defaults to true for existing and new accounts; it controls whether the owner sees their email on their own profile page and never changes public email privacy.',
 			'Use avatarAttachmentId or bannerAttachmentId to bind a ready owner-matched profile upload. Use avatarUrl or bannerUrl for the quota-saving external-link alternative; sending a URL clears that slot’s managed attachment.',
 			'Never send a non-null attachment id with a URL. Send both fields as null to clear a slot, or send only attachmentId:null to remove managed media while preserving its stored external fallback.',
 			'External writes accept structurally valid credential-free http(s) URLs; legacy data:image values remain read-compatible.',
@@ -11598,6 +12023,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
   endpoint({
     id: 'admin-migrations-run',
+    contractVersion: '1.0.1',
+    featureVersion: '1.1.1',
     group: 'admin',
     title: 'Run migration',
     endpoint: '/api/v1/admin/migrations/run',
@@ -11613,7 +12040,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'pending is 0) and rebuild-things-indexes then drops and recreates the plan-owned things indexes so the storage ' +
       'the deleted rows occupied is actually released — both destructive, both confirm: true. Failed real runs may return a private ' +
 			'diagnosticThingId for the same admin to open at /thing/:id; failed dry runs never create diagnostics and instead return ' +
-			'bounded redacted adminDetail inline.',
+			'bounded redacted adminDetail inline. Storage-ledger validation accepts valid optional speedTestsPerHour quotas ' +
+      'without rewriting immutable tier snapshots, overrides, ownership, or allowances.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
@@ -11624,6 +12052,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Pass dryRun: true first to see matched counts without writing.',
       'Pass confirm: true when running a destructive migration for real.',
       'Read the report for matched, migrated, created, skipped, and notes.',
+      'Storage-accounting dry runs include up to ten invalid ledger IDs and fixed validation-field labels in notes; no stored values or arbitrary field names are exposed and no ledger is modified.',
 			'On failure, open diagnosticThingId as the same admin, or render adminDetail when persistence was skipped or unavailable.',
       'Handle 401 non-admin callers and 404 unknown migration ids.'
     ],

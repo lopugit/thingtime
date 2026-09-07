@@ -1,5 +1,7 @@
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { assertLopuAccess, lopuAccessResponse } from '~/api/utils/lopu/access';
+import { debitLopuUsage } from '~/api/utils/lopu/accounting';
 import { createLopuVoiceRealtimeSession } from '~/api/utils/lopu/voice';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
@@ -24,9 +26,17 @@ export const action = async ({ request }: { request: Request }) => {
 		const init = rateLimitedResponseInit(limit);
 		return json({ ok: false, error: 'Lopu voice sessions are rate limited.' }, { ...init, headers: { ...init.headers, ...NO_STORE } });
 	}
+	// the access gate (verified-access design note §1): direct voice always
+	// runs on the viewer's own provider, so it is a byo turn — an unverified
+	// account passes only when Thingtime.LopuAccess allows BYO
+	const access = await assertLopuAccess(user, { billing: 'byo' });
+	if (access.ok === false) return lopuAccessResponse(access);
 	const body = await readJsonBody(request, MAX_BODY_BYTES);
 	try {
 		const session = await createLopuVoiceRealtimeSession(user.id, body && typeof body === 'object' && !Array.isArray(body) ? body : {});
+		// the session is a byo usage row of its own (minutes are not known at
+		// mint time, so zero tokens — still a row, design note §2)
+		await debitLopuUsage(user.id, { surface: 'voice-session', billing: 'byo', provider: session.provider, model: session.model, usage: null });
 		return json({ ok: true, session }, { headers: NO_STORE });
 	} catch (error) {
 		return json({ ok: false, error: error instanceof Error && error.message ? error.message : 'Lopu could not start a direct voice session.' }, { status: 400, headers: NO_STORE });

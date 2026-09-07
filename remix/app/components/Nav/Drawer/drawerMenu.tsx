@@ -66,8 +66,8 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		]
 	},
 	{
-		// 🦄 Lopu, the Thingtime assistant: the chat page, her conversations
-		// (they live in Messenger) and her preferences
+		// 🦄 Lopu, the Thingtime assistant: the chat page, its conversations
+		// (they live in Messenger) and its preferences
 		id: 'lopu',
 		label: 'Lopu',
 		icon: '🦄',
