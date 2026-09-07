@@ -456,7 +456,17 @@ export const LopuPage = (props: { mode?: LopuPageMode }) => {
 
 	const chatHref = chat.chatId ? `${LOPU_PAGE_PATH}/${encodeURIComponent(chat.chatId)}` : LOPU_PAGE_PATH;
 	const modelLine = describeModelChoice(chat.models, chat.settings);
-	const status = mode === 'voice' && voicePhase !== 'idle' ? lopuVoicePhaseLabel(voicePhase) : mode === 'voice' ? `${modelLine} · voice` : modelLine;
+	// a locked account (verified-credits design note §4): the column shows
+	// LopuLockedState (LopuChatView / LopuVoiceSurface draw it) and the status
+	// line says why; the conversations sidebar stays — history is the user's
+	const locked = signedIn && chat.account.access.locked;
+	const status = locked
+		? 'Invite-only — waiting for an admin to verify you'
+		: mode === 'voice' && voicePhase !== 'idle'
+			? lopuVoicePhaseLabel(voicePhase)
+			: mode === 'voice'
+				? `${modelLine} · voice`
+				: modelLine;
 
 	if (!signedIn) {
 		return (

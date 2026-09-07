@@ -19,6 +19,8 @@ import {
 	type LopuApiClient,
 	type LopuVaultProvider
 } from './lopuChatStore.ts';
+// @ts-ignore same
+import { bindLopuAccountApi, getLopuAccountSnapshot, hydrateLopuAccount, refreshLopuAccount, resetLopuAccountForTests, type LopuAccountApiClient } from './useLopuAccount.ts';
 
 // providerId plumbing (design brief): the choice reconciles against the
 // viewer's vault list, persists per chat through the update route, rides on
@@ -90,6 +92,103 @@ const fakeClient = (options?: { reply?: (body: any) => Response; chats?: unknown
 };
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+// the account slice the chat store feeds (verified-credits design note §4) —
+// a stateful fake server, since the slice refetches after every gate / done
+const ACCOUNT = { ok: true, account: { verified: true, requireVerification: true, allowByoUnverified: false, balanceMicros: 2_000_000, lowBalance: false, lowBalanceWarningCredits: 1, month: { key: '2026-09', costMicros: 0, turns: 0 }, lifetime: { costMicros: 0, inputTokens: 0, outputTokens: 0, turns: 0 }, starterCredits: 0, topupUrl: null, pendingRequest: null } };
+const fakeAccountClient = () => {
+	const server = { balanceMicros: ACCOUNT.account.balanceMicros, verified: ACCOUNT.account.verified };
+	const client: LopuAccountApiClient = {
+		get: async () => ({ ...ACCOUNT, account: { ...ACCOUNT.account, balanceMicros: server.balanceMicros, verified: server.verified } }),
+		history: async () => ({ ok: true, entries: [], usage: [], nextCursor: null }),
+		requestTopup: async () => ({ ok: true })
+	};
+	return { client, server };
+};
+
+test('a done event hands its usage / cost / balance to the account slice, so the chip moves before the refetch', async () => {
+	resetLopuStoreForTests();
+	resetLopuAccountForTests();
+	const accountServer = fakeAccountClient();
+	bindLopuAccountApi(accountServer.client);
+	hydrateLopuAccount('u1');
+	await refreshLopuAccount();
+	const { client } = fakeClient({
+		reply: (body) =>
+			ndjson([
+				{ type: 'meta', chatId: 'chat-1', userMessageId: 'u-1', requestId: body.requestId, model: 'gpt-5', effort: 'high', speed: 'normal', provider: 'openai', label: 'GPT-5', billing: 'thingtime' },
+				{ type: 'delta', text: 'Hello!' },
+				{ type: 'done', assistantMessageId: 'a-1', messages: [], stopReason: 'end_turn', usage: { inputTokens: 100, outputTokens: 50 }, costMicros: 13_200, billing: 'thingtime', balanceMicros: 1_986_800 }
+			])
+	});
+	bindLopuApi(client);
+	hydrateLopuStore('u1');
+	await loadLopuModels();
+	const result = await sendLopuMessage('hello');
+	assert.equal(result.ok, true);
+	const turn = result.ok ? getLopuStoreSnapshot().turns[result.requestId] : null;
+	assert.equal(turn?.billing, 'thingtime');
+	assert.equal(turn?.costMicros, 13_200);
+	assert.equal(turn?.balanceMicros, 1_986_800);
+	const account = getLopuAccountSnapshot().account;
+	assert.equal(account?.balanceMicros, 1_986_800, 'the balance moved from the done event');
+	assert.equal(account?.month.costMicros, 13_200);
+	assert.equal(account?.month.turns, 1);
+	resetLopuAccountForTests();
+	resetLopuStoreForTests();
+});
+
+test('a 402 / 403 from the reply endpoint becomes a gated turn kept in the timeline — the text is not handed back and the account learns of it', async () => {
+	resetLopuStoreForTests();
+	resetLopuAccountForTests();
+	const accountServer = fakeAccountClient();
+	bindLopuAccountApi(accountServer.client);
+	hydrateLopuAccount('u1');
+	await refreshLopuAccount();
+	const { client } = fakeClient({
+		reply: () => {
+			accountServer.server.balanceMicros = 0;
+			return new Response(JSON.stringify({ ok: false, error: "Lopu's credits for your account are used up — add credits to keep going", code: 'LOPU_NO_CREDITS', balance: 0 }), { status: 402, headers: { 'Content-Type': 'application/json' } });
+		}
+	});
+	bindLopuApi(client);
+	hydrateLopuStore('u1');
+	await loadLopuModels();
+	const result = await sendLopuMessage('build me a hero');
+	assert.equal(result.ok, false);
+	assert.equal(result.ok === false && result.text, '', 'the viewer bubble stays; nothing goes back to the composer');
+	assert.equal(result.ok === false && result.gate?.code, 'LOPU_NO_CREDITS');
+	const snapshot = getLopuStoreSnapshot();
+	const turn = Object.values(snapshot.turns)[0];
+	assert.ok(turn, 'the gated turn stays in the store');
+	assert.equal(turn.status, 'error');
+	assert.equal(turn.gate?.code, 'LOPU_NO_CREDITS');
+	assert.equal(turn.userText, 'build me a hero');
+	assert.equal(snapshot.sending, false);
+	assert.equal(snapshot.streamingId, null);
+	assert.equal(snapshot.error, null, 'no raw error line — the bubble explains');
+	assert.equal(snapshot.notices.length, 0, 'no toast either');
+	assert.equal(getLopuAccountSnapshot().account?.balanceMicros, 0, 'the 402 named the balance');
+	// an unverified refusal reads the same way
+	const refused = fakeClient({
+		reply: () => {
+			accountServer.server.verified = false;
+			return new Response(JSON.stringify({ ok: false, error: 'Lopu is invite-only for now — an admin needs to verify your account before it can build with you', code: 'LOPU_UNVERIFIED' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+		}
+	});
+	bindLopuApi(refused.client);
+	const second = await sendLopuMessage('again');
+	assert.equal(second.ok === false && second.gate?.code, 'LOPU_UNVERIFIED');
+	assert.equal(getLopuAccountSnapshot().account?.verified, false);
+	// an ordinary failure still drops the turn and hands the text back
+	const broken = fakeClient({ reply: () => new Response(JSON.stringify({ ok: false, error: 'boom' }), { status: 500, headers: { 'Content-Type': 'application/json' } }) });
+	bindLopuApi(broken.client);
+	const failed = await sendLopuMessage('one more');
+	assert.equal(failed.ok === false && failed.text, 'one more');
+	assert.equal(failed.ok === false && failed.gate, undefined);
+	resetLopuAccountForTests();
+	resetLopuStoreForTests();
+});
 
 test('reconcileLopuSettings keeps a providerId only while the vault lists it as available', () => {
 	assert.equal(reconcileLopuSettings({ model: 'gpt-5', providerId: 'vp-1' }, MODELS, DEFAULTS, VAULT).providerId, 'vp-1');
