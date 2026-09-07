@@ -364,6 +364,8 @@ const run = async () => {
     check('the admin credits response is private', /no-store/.test(granted.headers.get('cache-control') || ''));
     const zeroGrant = await api('/api/v1/admin/lopu/credits', { cookie: admin.cookie, method: 'POST', body: { userId: user.id, credits: 0 } });
     check('a zero grant is a 400', zeroGrant.status === 400);
+    const dustGrant = await api('/api/v1/admin/lopu/credits', { cookie: admin.cookie, method: 'POST', body: { userId: user.id, credits: 1e-7 } });
+    check('an amount that rounds to nothing is a 400, not a 500', dustGrant.status === 400, `status ${dustGrant.status} ${JSON.stringify(dustGrant.body)}`);
     const negativeGrant = await api('/api/v1/admin/lopu/credits', { cookie: admin.cookie, method: 'POST', body: { userId: user.id, credits: -1, entry: 'grant' } });
     check('a negative grant is a 400 (adjust / refund carry signs)', negativeGrant.status === 400);
     const unknownGrant = await api('/api/v1/admin/lopu/credits', { cookie: admin.cookie, method: 'POST', body: { userId: 'does-not-exist', credits: 1 } });
@@ -478,7 +480,66 @@ const run = async () => {
     check('admin tops up the run budget', runBudget.status === 200 && runBudget.body?.ledger?.entry === 'topup');
     const otherBudget = await api('/api/v1/admin/lopu/credits', { cookie: admin.cookie, method: 'POST', body: { userId: other.id, credits: 5, reason: 'verify-lopu other budget' } });
     check('the second account gets a budget too', otherBudget.status === 200 && otherBudget.body?.account?.balanceMicros === 5_000_000);
-    if (paidChatId) await api('/api/v1/lopu/chats/delete', { cookie: user.cookie, method: 'POST', body: { chatId: paidChatId } });
+
+    // ── the two ways a balance could be spent without being charged ────────
+    // (1) idempotency is the SERVER's: deleting the conversation drops the
+    // message that would 409 a re-used requestId, so the same requestId must
+    // buy a second turn at full price, never a free one.
+    if (testBilled && paidChatId) {
+      const removedPaid = await api('/api/v1/lopu/chats/delete', { cookie: user.cookie, method: 'POST', body: { chatId: paidChatId } });
+      const beforeReplay = (await api('/api/v1/lopu/account', { cookie: user.cookie })).body?.account?.balanceMicros ?? 0;
+      const replayed = await reply(user.cookie, { text: 'Hello Lopu, are credits working?', requestId: paidRequest });
+      const replayedDone = replayed.events[replayed.events.length - 1];
+      check(
+        'a requestId re-used after the chat was deleted is charged again (no free turns)',
+        removedPaid.status === 200 && replayed.status === 200 && replayedDone?.type === 'done' && replayedDone.costMicros === 200_000 && replayedDone.balanceMicros === beforeReplay - 200_000,
+        JSON.stringify({ beforeReplay, done: replayedDone })
+      );
+      const replayHistory = await api('/api/v1/lopu/account/history?limit=25', { cookie: user.cookie });
+      const replayUsage = (replayHistory.body?.usage || []).filter((row) => row.requestId === paidRequest);
+      check('the replay wrote its own usage row (two rows, two debits, one requestId)', replayUsage.length >= 2, JSON.stringify(replayUsage.map((row) => row.id)));
+      const replayChatId = replayed.events[0]?.chatId || null;
+      if (replayChatId) await api('/api/v1/lopu/chats/delete', { cookie: user.cookie, method: 'POST', body: { chatId: replayChatId } });
+    } else {
+      skip('the re-used requestId is charged again', testBilled ? 'no conversation to delete' : 'run the server with LOPU_CHAT_PROVIDER=test');
+      if (paidChatId) await api('/api/v1/lopu/chats/delete', { cookie: user.cookie, method: 'POST', body: { chatId: paidChatId } });
+    }
+
+    // (2) the gate reads the balance seconds before the debit lands, so a
+    // billed turn holds a bounded in-flight slot. Every slot must come back:
+    // four turns in a row on a cap of three prove the release runs.
+    const sequential = [];
+    for (let index = 0; index < 4; index++) {
+      const turn = await reply(other.cookie, { text: `sequential ${index}`, requestId: requestId(`seq-${index}`) });
+      sequential.push(turn);
+      const chatToDrop = turn.events[0]?.chatId || null;
+      if (chatToDrop) await api('/api/v1/lopu/chats/delete', { cookie: other.cookie, method: 'POST', body: { chatId: chatToDrop } });
+    }
+    check(
+      'four turns in a row all stream — the in-flight slot is always released',
+      sequential.every((turn) => turn.status === 200 && turn.events[turn.events.length - 1]?.type === 'done'),
+      JSON.stringify(sequential.map((turn) => [turn.status, turn.body?.code]))
+    );
+    // …and a simultaneous burst is either streamed or refused with the
+    // in-flight code — never a 500, and never more spend than turns streamed
+    const burstBefore = (await api('/api/v1/lopu/account', { cookie: other.cookie })).body?.account?.balanceMicros ?? 0;
+    const burst = await Promise.all(Array.from({ length: 4 }, (_, index) => reply(other.cookie, { text: `burst ${index}`, requestId: requestId(`burst-${index}`) })));
+    const streamed = burst.filter((turn) => turn.status === 200 && turn.events[turn.events.length - 1]?.type === 'done');
+    const inFlight = burst.filter((turn) => turn.status === 429 && turn.body?.code === 'LOPU_TURN_IN_FLIGHT');
+    check(
+      'a simultaneous burst only ever streams or refuses with 429 LOPU_TURN_IN_FLIGHT',
+      streamed.length + inFlight.length === burst.length && inFlight.every((turn) => /Lopu is still working/.test(String(turn.body?.error))),
+      JSON.stringify(burst.map((turn) => [turn.status, turn.body?.code]))
+    );
+    const burstAfter = (await api('/api/v1/lopu/account', { cookie: other.cookie })).body?.account?.balanceMicros ?? 0;
+    if (testBilled) {
+      check('the burst spent exactly one priced turn per streamed reply', burstAfter === burstBefore - streamed.length * 200_000, `${burstBefore} → ${burstAfter}, ${streamed.length} streamed, ${inFlight.length} refused`);
+    }
+    for (const turn of burst) {
+      const chatToDrop = turn.events?.[0]?.chatId || null;
+      if (chatToDrop) await api('/api/v1/lopu/chats/delete', { cookie: other.cookie, method: 'POST', body: { chatId: chatToDrop } });
+    }
+
     const cleaned = await api('/api/v1/lopu/chats', { cookie: user.cookie });
     check('the section’s conversation is cleaned up', cleaned.body?.chats?.length === 0);
   }

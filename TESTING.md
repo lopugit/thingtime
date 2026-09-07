@@ -5464,4 +5464,39 @@ formatting, the store's reactions to `done` and the gate; `lopuTurnCore.test.ts`
       `tt-lopu-account-*` with the rest of `tt-lopu-`.
 - [ ] Cold start with no cache: the chat paints unlocked (no flash of the
       locked card) and flips to locked only when the account says so; a
-      cached account paints its state on the first frame.
+      cached account paints its state on the first frame. On a deployment with
+      `requireVerification` OFF, a first-ever unverified account on a browser
+      that has seen ANY Lopu account (the per-device `tt-lopu-access` line)
+      paints unlocked instead of "invite-only"; with nothing cached at all the
+      safe default (locked) still applies.
+
+#### Money invariants (server — regressions, fixer round 1)
+
+Automated coverage: `npm run test:lopu` (`accounting.test.ts` — the minted
+usage id, the guarded `$inc`, the in-flight cap and its TTL sweep, the stranded
+approval; `access.test.ts` — the reservation matrix) and
+`scripts/verify-lopu.mjs` §A2 end to end. Live checks below need
+`LOPU_CHAT_PROVIDER=test` so a turn prices at exactly 0.2 credits.
+
+- [ ] A `requestId` is never an idempotency key for money: send a turn, note
+      the balance, delete that conversation, then send the SAME `requestId`
+      again — it streams and costs another 0.2 credits, and the history shows
+      two usage rows carrying that one `requestId`. (Before the fix the second
+      turn ran on Thingtime's keys for free, repeatably.)
+- [ ] Concurrency cannot spend the balance more than once: with a verified
+      account, fire ~10 replies at the same instant. At most three stream; the
+      rest answer 429 `LOPU_TURN_IN_FLIGHT` with "Lopu is still working on your
+      last few messages" — never a 500, never a 402 — and the balance falls by
+      exactly 0.2 × the number that streamed.
+- [ ] Every slot comes back: four turns in a row all stream (a leaked
+      reservation would refuse the fourth). Kill the server mid-turn, restart,
+      and after `LOPU_INFLIGHT_TTL_MS` (10 min) the next turn still starts —
+      the sweep clears the dead reservation.
+- [ ] Admin → Lopu accounts: an amount that rounds to nothing (`1e-7` credits
+      through `POST /api/v1/admin/lopu/credits`) answers 400, not 500.
+- [ ] A top-up approval is recoverable: an `approved` request whose grant never
+      landed (no `lopu-credit-topup-<requestId>` ledger row) is completed by
+      approving it again; once the row exists a further approval is the
+      ordinary 409 and the balance does not move twice.
+- [ ] The "request credits" ops mail links the trusted origin (`APP_URL` → the
+      platform → thingtime.com), never the caller's `Host` header.

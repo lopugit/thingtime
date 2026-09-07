@@ -224,7 +224,10 @@ test('POST /api/v1/lopu/account/topup-request: fence, validation, one pending at
   assert.equal(body.request.amountCredits, 2.5);
   assert.equal(h.notified.length, 1);
   assert.equal(h.notified[0].username, 'nik');
-  assert.equal(h.notified[0].origin, ORIGIN);
+  // the admin link is the TRUSTED origin, never the caller's Host: a request
+  // arriving as thingtime.test cannot point an admin's mail at itself
+  assert.notEqual(h.notified[0].origin, ORIGIN);
+  assert.equal(h.notified[0].origin, 'https://thingtime.com');
   assert.equal(h.notified[0].request.id, body.request.id);
   assert.deepEqual(h.limits[0], { name: 'lopu.account.write', identity: 'user:user-1', options: { failClosed: true } });
   const again = await h.topup.action({ request: post('/api/v1/lopu/account/topup-request', { credits: 1 }) });

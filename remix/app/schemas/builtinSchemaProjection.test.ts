@@ -110,7 +110,22 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   // Lopu model catalog — every field is scalar or string[], so all project
   'ai-model': ['modelId', 'label', 'provider', 'efforts', 'speeds', 'family', 'enabled', 'sortOrder', 'contextWindow', 'notes'],
   // Lopu credits + usage accounting (api/utils/lopu/accounting.ts) — scalars only, so all project
-  'lopu-account': ['balanceMicros', 'lifetimeCostMicros', 'lifetimeInputTokens', 'lifetimeOutputTokens', 'turns', 'monthKey', 'monthCostMicros', 'monthTurns', 'starterGranted', 'starterMicros', 'lowBalanceNotifiedAt'],
+  'lopu-account': [
+    'balanceMicros',
+    'lifetimeCostMicros',
+    'lifetimeInputTokens',
+    'lifetimeOutputTokens',
+    'turns',
+    'monthKey',
+    'monthCostMicros',
+    'monthTurns',
+    'starterGranted',
+    'starterMicros',
+    'lowBalanceNotifiedAt',
+    'inflight',
+    'inflightSince',
+    'appliedIds'
+  ],
   'lopu-usage': ['chatId', 'requestId', 'surface', 'provider', 'providerLabel', 'model', 'billing', 'inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheWriteTokens', 'costMicros', 'priced', 'estimated', 'debitedMicros', 'toolCalls', 'hops', 'durationMs'],
   'lopu-credit': ['entry', 'amountMicros', 'balanceAfterMicros', 'reason', 'actorId', 'usageId', 'requestId', 'requestStatus', 'note', 'resolvedAt', 'resolvedBy', 'grantedMicros'],
 	'ai-connection': [

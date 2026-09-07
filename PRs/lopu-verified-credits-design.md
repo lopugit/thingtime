@@ -40,7 +40,17 @@ notifications via `useLopu()`; optimistic rendering from `tt-lopu-*` caches; des
   - temporary/guest sessions → 403 (already the case for voice/vault; make chats consistent);
   - `requireVerification && !userLopuVerified(user)` → 403 unless `billing === 'byo' && allowByoUnverified`;
   - `billing === 'thingtime'` and `balanceMicros <= 0` → 402 (starter credits are granted on
-    first account creation, see §3), never for `byo`/`free`.
+    first account creation, see §3), never for `byo`/`free`;
+  - `billing === 'thingtime'` and the account already has `LOPU_MAX_CONCURRENT_TURNS` (3) billed
+    turns in flight → 429 `LOPU_TURN_IN_FLIGHT` (**reservation**, fixer round 1). The gate reads
+    the balance seconds before the debit lands, so without a bounded slot every concurrent reply
+    spends the same last credit and the overshoot is the rate-limit window (40 turns), not one
+    turn. `assertLopuAccess(user, { billing, reserve: true })` takes the slot — only after the
+    balance passed, only for billed turns, and only where a provider call follows (the reply
+    route) — and the grant carries `release`, which that route calls in a `finally` (early
+    return, throw, or once the turn is on the ledger). A slot whose request died mid-turn is
+    swept by the next reservation after `LOPU_INFLIGHT_TTL_MS` (10 min > the 240 s turn cap), so
+    a leak costs a slot for a while, never the account.
   Applied BEFORE any provider call in: `POST /api/v1/lopu/chats` (create), `/lopu/chats/reply`,
   `/lopu/voice/reply`, `/lopu/voice/session`. Listing/reading chats stays allowed (history is
   the user's data). `/lopu/musing` is a public site feature and is NOT gated. Error copy is
@@ -84,8 +94,20 @@ notifications via `useLopu()`; optimistic rendering from `tt-lopu-*` caches; des
   never a transaction across collections is needed (single `things` collection); a failure
   after the provider call is logged and retried once, never surfaced as a chat error (the reply
   already streamed). `grantLopuCredits(userId, amountMicros, entry, reason, actorId)` is the
-  same shape with a positive `$inc`. Balance may go negative by at most one turn (prepaid model);
-  the next gate refuses.
+  same shape with a positive `$inc`. Balance may go negative by at most one turn per in-flight
+  slot (prepaid model, §1 reservation); the next gate refuses.
+- **Idempotence is server-minted** (fixer round 1). The `lopu-usage` shareId is minted per
+  `debitLopuUsage` call — NEVER derived from the client's `requestId`. A client may legitimately
+  re-use a `requestId` (deleting the conversation hard-deletes the `chat-message` whose
+  deterministic id would otherwise 409 it), and every re-use is a real provider call that must be
+  charged; keying the usage row on it turned one `requestId` into unlimited free turns. The
+  `requestId` stays on the row as metadata. The one non-idempotent step, the `$inc`, is guarded
+  by that minted id through `crystal.appliedIds` (the last 8 applied write ids, bounded by
+  `$slice`), so the app-level retry after a driver error that had in fact committed is a no-op
+  rather than a second debit. `grantLopuCredits` takes the same guard on an optional caller-pinned
+  `ledgerId`; a top-up approval derives `lopu-credit-topup-<requestId>` from the request, which
+  both makes a re-approval harmless and makes "approved but never granted" detectable — an
+  approved request with no such ledger row is recovered by approving again instead of 409.
 - **Units**: 1 credit = 1 USD of list price = 1,000,000 micros; display credits with two
   decimals (`formatCredits`), cents when < 1.
 
@@ -124,7 +146,12 @@ notifications via `useLopu()`; optimistic rendering from `tt-lopu-*` caches; des
   "Lopu is invite-only for now", one line explaining an admin must verify the account, and for
   admins a link to Admin → Lopu accounts); the composer and mic are disabled; the navbar 🦄 and
   drawer entry stay visible (they open the locked view, no dead ends). BYO providers remain
-  selectable only when `allowByoUnverified`.
+  selectable only when `allowByoUnverified`. Before the account has landed, `selectLopuAccess`
+  needs BOTH halves of the rule: the self projection's `lopuVerified` AND the deployment's
+  `requireVerification`, which the store keeps per device under `tt-lopu-access` (written beside
+  every account fetch, read on hydrate). Without it a deployment that does not require
+  verification greeted a first-visit account with "invite-only" until the fetch landed; with
+  nothing cached the server's own default (verification required) still applies.
 - **Balance chip** in the composer's left cluster (next to the model chip): "4.97 credits", turns
   amber under `lowBalanceWarningCredits`, red at ≤ 0 with the top-up action; hidden for BYO turns
   (shows "your provider" instead). The per-turn footer ("via Claude Opus 5 · High") appends
@@ -158,7 +185,11 @@ notifications via `useLopu()`; optimistic rendering from `tt-lopu-*` caches; des
   balance decreased by the priced amount, `lopu-usage` + `lopu-credit` rows listed in history,
   `done` carries `costMicros`; top-up request → pending → admin approve → balance + ledger;
   admin accounts list shows the user; settings lopu-access GET/POST round-trip; generic
-  `/api/v1/things` cannot read/write the accounting kinds of another user.
+  `/api/v1/things` cannot read/write the accounting kinds of another user. Money-bypass
+  regressions (fixer round 1): a `requestId` re-used after the chat was deleted is charged again
+  and writes its own usage row; four turns in a row all stream (every in-flight slot is released);
+  a simultaneous burst only ever streams or refuses with 429 `LOPU_TURN_IN_FLIGHT` and spends
+  exactly one priced turn per streamed reply; an admin amount that rounds to 0 micros is a 400.
 - Unit tests: pricing (every catalog model priced, rounding, cache tokens), accounting math
   (starter once, debit/grant, month rollover, negative floor), gate matrix (guest/unverified/verified/
   admin × billing × balance), route handlers with in-memory collections, client reducer for the

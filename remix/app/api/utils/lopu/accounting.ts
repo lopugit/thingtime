@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { Binary } from 'mongodb';
 
 import { getHomeThingsCollection } from '../mongodb/collections';
@@ -28,10 +28,26 @@ import { isLopuBilling, type LopuBilling } from './accessCore';
 // with $inc on the account (the month counters are reset first by a
 // conditional update when the month key moved on), (3) insert the debit
 // ledger row carrying balanceAfterMicros. Each step is retried once and is
-// idempotent (deterministic shareIds, duplicate-key tolerated), and a failure
-// after the provider call is logged, never surfaced as a chat error — the
-// reply already streamed. The balance may go negative by at most one turn;
-// the next gate refuses (prepaid model).
+// idempotent, and a failure after the provider call is logged, never
+// surfaced as a chat error — the reply already streamed. The balance may go
+// negative by at most one turn per in-flight slot (see below); the next gate
+// refuses (prepaid model).
+//
+// Idempotence is by SERVER-MINTED ids, never by anything the client chose: a
+// usage row's shareId is minted per call (a client that re-used its
+// requestId — after deleting the chat, say — must still be charged for the
+// provider call its request caused), and every $inc on the account is guarded
+// by that id through `crystal.appliedIds` (the last few applied write ids,
+// bounded by $slice). So the ONE non-idempotent step, the $inc, can be
+// retried after a driver error that had in fact committed without moving the
+// balance twice.
+//
+// The gate's balance check and the debit are seconds apart (a turn streams),
+// so concurrent turns would otherwise all pass a balance of one credit and
+// each spend it. reserveLopuTurn/releaseLopuTurn bound that: at most
+// LOPU_MAX_CONCURRENT_TURNS provider calls per account are in flight, the
+// slot is released in the reply route's finally, and a reservation whose
+// request died mid-turn is swept after LOPU_INFLIGHT_TTL_MS.
 //
 // Units: 1 credit = 1 USD = 1,000,000 micros (../ai/pricing.ts).
 
@@ -61,6 +77,20 @@ export const LOPU_HISTORY_DEFAULT_LIMIT = 50;
 export const LOPU_HISTORY_MAX_LIMIT = 100;
 export const LOPU_ADMIN_ACCOUNTS_DEFAULT_LIMIT = 50;
 export const LOPU_ADMIN_ACCOUNTS_MAX_LIMIT = 100;
+
+// How many billed turns one account may have in flight at once. The gate
+// reads the balance before the provider call and the debit lands after it, so
+// this — not the balance — is what bounds how far an account can overshoot:
+// at most this many turns, instead of the whole lopu.chat rate-limit window.
+// Comfortably above what the UI can start at once (page + floating window).
+export const LOPU_MAX_CONCURRENT_TURNS = 3;
+// A reservation older than this belonged to a request that died mid-turn (the
+// release never ran); the next reserve sweeps it. Well above the 240s a chat
+// turn can take (LOPU_CHAT_MAX_TURN_MS).
+export const LOPU_INFLIGHT_TTL_MS = 10 * 60_000;
+// The last write ids applied to the balance, kept on the account so a retried
+// $inc cannot land twice. Bounded by $slice — never an unbounded array.
+export const LOPU_APPLIED_IDS_KEPT = 8;
 
 export type Fail = { ok: false; status: number; error: string };
 const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
@@ -151,7 +181,15 @@ export type LopuGrantInput = {
   actorId: string;
   note?: string | null;
   requestId?: string | null;
+  // a caller-chosen ledger shareId makes the grant idempotent across calls
+  // (a top-up approval derives one from the request, so a retried approval
+  // can never grant twice — and an approval that never granted can recover)
+  ledgerId?: string | null;
 };
+
+// One in-flight billed turn's slot on the account. `release` is idempotent and
+// never throws — the reply route calls it in a finally.
+export type LopuTurnReservation = { ok: true; release: () => Promise<void> } | { ok: false; reason: 'busy' };
 
 export type LopuGrantResult = { ok: true; ledgerId: string; balanceMicros: number; account: LopuAccountRecord };
 
@@ -603,12 +641,78 @@ export const createLopuAccountingService = (dependencies: LopuAccountingDependen
     }
   };
 
-  const usageShareId = (userId: string, input: LopuUsageInput): string => {
-    if (input.requestId) {
-      const digest = createHash('sha256').update(`${userId}|${input.surface}|${input.requestId}`).digest('hex').slice(0, 32);
-      return `lopu-usage-${digest}`;
+  // Apply a signed movement to the balance exactly once. The write id is
+  // remembered in `crystal.appliedIds` (bounded by $slice) and guards the
+  // filter, so re-running the same movement — the retry after a driver error
+  // that had actually committed — matches nothing and reads the account back
+  // instead of moving the balance a second time.
+  const applyBalanceMove = async (
+    things: LopuAccountingCollection,
+    userId: string,
+    writeId: string,
+    inc: Record<string, number>,
+    at: Date
+  ): Promise<any | null> => {
+    const updated = await things.findOneAndUpdate(
+      { ...accountFilter(userId), 'crystal.appliedIds': { $ne: writeId } },
+      {
+        $inc: inc,
+        $set: { updatedAt: at },
+        $push: { 'crystal.appliedIds': { $each: [writeId], $slice: -LOPU_APPLIED_IDS_KEPT } }
+      },
+      { returnDocument: 'after' }
+    );
+    // null = this exact movement is already on the account
+    return updated ?? (await things.findOne(accountFilter(userId)));
+  };
+
+  // ── concurrency ─────────────────────────────────────────────────────────
+  // A billed turn holds a slot on its account for as long as the provider
+  // call runs, so the balance the gate read cannot be spent by more than
+  // LOPU_MAX_CONCURRENT_TURNS turns at once. Never throws: a reservation the
+  // storage cannot make refuses the turn rather than 500-ing it.
+
+  const releaseLopuTurn = async (userId: string): Promise<void> => {
+    try {
+      const things = await dependencies.getThingsCollection();
+      await things.updateOne({ ...accountFilter(userId), 'crystal.inflight': { $gt: 0 } }, { $inc: { 'crystal.inflight': -1 } });
+    } catch (error) {
+      // the sweep in reserveLopuTurn recovers the slot after the TTL
+      log('[lopu-accounting] in-flight slot not released', error);
     }
-    return `lopu-usage-${newId()}`;
+  };
+
+  const reserveLopuTurn = async (userId: string): Promise<LopuTurnReservation> => {
+    let released = false;
+    const release = async () => {
+      if (released) return;
+      released = true;
+      await releaseLopuTurn(userId);
+    };
+    try {
+      const things = await dependencies.getThingsCollection();
+      const at = now();
+      // slots held by requests that died mid-turn come back after the TTL
+      const stale = new Date(at.getTime() - LOPU_INFLIGHT_TTL_MS).toISOString();
+      await things.updateOne(
+        { ...accountFilter(userId), 'crystal.inflight': { $gt: 0 }, 'crystal.inflightSince': { $lt: stale } },
+        { $set: { 'crystal.inflight': 0 } }
+      );
+      const reserved = await things.findOneAndUpdate(
+        {
+          ...accountFilter(userId),
+          // an account written before this field existed has no counter yet
+          $or: [{ 'crystal.inflight': { $lt: LOPU_MAX_CONCURRENT_TURNS } }, { 'crystal.inflight': { $exists: false } }]
+        },
+        { $inc: { 'crystal.inflight': 1 }, $set: { 'crystal.inflightSince': at.toISOString() } },
+        { returnDocument: 'after' }
+      );
+      if (!reserved) return { ok: false, reason: 'busy' };
+      return { ok: true, release };
+    } catch (error) {
+      log('[lopu-accounting] in-flight slot not reserved', error);
+      return { ok: false, reason: 'busy' };
+    }
   };
 
   // Record one turn and, for thingtime billing, debit it. Never throws.
@@ -620,7 +724,9 @@ export const createLopuAccountingService = (dependencies: LopuAccountingDependen
       const debited = input.billing === 'thingtime' ? price.costMicros : 0;
       const inputTokens = nonNegativeInt(input.usage?.inputTokens);
       const outputTokens = nonNegativeInt(input.usage?.outputTokens);
-      const usageId = usageShareId(userId, input);
+      // minted here, never derived from the client's requestId: a re-used
+      // requestId still caused a provider call and must still be charged
+      const usageId = `lopu-usage-${newId()}`;
       const usageCrystal: LopuUsageCrystal = {
         chatId: text(input.chatId, 160) || null,
         requestId: text(input.requestId, 160) || null,
@@ -642,35 +748,36 @@ export const createLopuAccountingService = (dependencies: LopuAccountingDependen
         durationMs: nonNegativeInt(input.durationMs)
       };
 
-      // (1) the usage row — deterministic id, so a retry never doubles it
+      // (1) the usage row — its id is this debit's idempotency key, so the
+      // retry inside withRetry never doubles it
       const inserted = await insertTolerant(things, thing(LOPU_USAGE_THINGTIME, userId, usageId, usageCrystal, at), 'usage row');
       if (inserted === 'existing') {
-        // this exact turn was already accounted for (a replayed request):
-        // report the balance and do not charge twice
+        // a minted id collided (or this call already ran): the turn is
+        // already accounted for, report the balance and do not charge twice
         const record = (await getLopuAccount(userId)) ?? (await ensureLopuAccount(userId));
         return { ok: true, usageId, costMicros: price.costMicros, debitedMicros: 0, balanceMicros: record.crystal.balanceMicros, priced: price.priced, estimated: price.estimated };
       }
 
-      // (2) one $inc on the account
+      // (2) one $inc on the account, guarded by the usage id so the retry
+      // cannot apply it twice
       await ensureLopuAccount(userId);
       const monthKey = monthKeyOf(at);
       const updated = await withRetry('account debit', async () => {
         await rolloverMonth(things, userId, monthKey, at);
-        return things.findOneAndUpdate(
-          accountFilter(userId),
+        return applyBalanceMove(
+          things,
+          userId,
+          usageId,
           {
-            $inc: {
-              'crystal.balanceMicros': -debited,
-              'crystal.lifetimeCostMicros': debited,
-              'crystal.lifetimeInputTokens': inputTokens,
-              'crystal.lifetimeOutputTokens': outputTokens,
-              'crystal.turns': 1,
-              'crystal.monthCostMicros': debited,
-              'crystal.monthTurns': 1
-            },
-            $set: { updatedAt: at }
+            'crystal.balanceMicros': -debited,
+            'crystal.lifetimeCostMicros': debited,
+            'crystal.lifetimeInputTokens': inputTokens,
+            'crystal.lifetimeOutputTokens': outputTokens,
+            'crystal.turns': 1,
+            'crystal.monthCostMicros': debited,
+            'crystal.monthTurns': 1
           },
-          { returnDocument: 'after' }
+          at
         );
       });
       const record = accountRecordOf(updated, at);
@@ -704,12 +811,13 @@ export const createLopuAccountingService = (dependencies: LopuAccountingDependen
     const things = await dependencies.getThingsCollection();
     await ensureLopuAccount(userId);
     const at = now();
-    const updated = await withRetry('credit grant', () =>
-      things.findOneAndUpdate(accountFilter(userId), { $inc: { 'crystal.balanceMicros': amount }, $set: { updatedAt: at } }, { returnDocument: 'after' })
-    );
+    // the ledger id is this grant's idempotency key: a caller may pin it (a
+    // top-up approval derives it from the request) so a retried approval
+    // moves the balance once, whatever happens between the two calls
+    const ledgerId = text(input.ledgerId, 160) || `lopu-credit-${newId()}`;
+    const updated = await withRetry('credit grant', () => applyBalanceMove(things, userId, ledgerId, { 'crystal.balanceMicros': amount }, at));
     const record = accountRecordOf(updated, at);
     if (!record) throw new Error('Lopu account vanished during the grant');
-    const ledgerId = `lopu-credit-${newId()}`;
     const ledger = thing(LOPU_CREDIT_THINGTIME, userId, ledgerId, {
       entry: input.entry,
       amountMicros: amount,
@@ -787,10 +895,17 @@ export const createLopuAccountingService = (dependencies: LopuAccountingDependen
     return { ok: true, request };
   };
 
+  // The ledger row an approved request grants. Derived from the request, so
+  // the grant is idempotent and "approved but never granted" is detectable.
+  const topupLedgerIdFor = (requestId: string): string => `lopu-credit-topup-${requestId.replace(/^lopu-credit-/, '')}`.slice(0, 160);
+
   // Approve (grant the requested or an overriding amount, entry 'topup') or
   // decline a pending request. The status flips first, guarded on 'pending',
   // so a double-approve can never grant twice; the pending unique key is
-  // released with the same write.
+  // released with the same write. An approval whose grant did not survive the
+  // flip (the process died in between) is recoverable: the request reads
+  // 'approved' but its topup ledger row is missing, and approving again
+  // finishes the job instead of refusing with 409.
   const resolveLopuTopupRequest = async (input: {
     requestId: unknown;
     actorId: string;
@@ -804,8 +919,27 @@ export const createLopuAccountingService = (dependencies: LopuAccountingDependen
     const doc = await things.findOne({ shareId: requestId, thingtime: LOPU_CREDIT_THINGTIME, 'crystal.entry': 'request' });
     const current = publicLopuCreditRow(doc);
     if (!doc || !current || typeof doc.ownerId !== 'string') return fail(404, 'Credit request not found');
-    if (current.requestStatus !== 'pending') return fail(409, `That request was already ${current.requestStatus}`);
     const userId = doc.ownerId as string;
+    const ledgerId = topupLedgerIdFor(requestId);
+    if (current.requestStatus !== 'pending') {
+      // the only second pass that does anything: an approval that flipped the
+      // status but never landed its grant
+      const stranded =
+        input.approve && current.requestStatus === 'approved' && !(await things.findOne({ shareId: ledgerId, thingtime: LOPU_CREDIT_THINGTIME }));
+      if (!stranded) return fail(409, `That request was already ${current.requestStatus}`);
+      const recoverMicros = safeInt(current.grantedMicros) || current.amountMicros;
+      if (recoverMicros <= 0) return fail(409, 'That request was already approved');
+      const recovered = await grantLopuCredits(userId, {
+        entry: 'topup',
+        amountMicros: recoverMicros,
+        reason: current.reason || `Top-up request approved (${microsToCredits(recoverMicros)} credits)`,
+        actorId: input.actorId,
+        requestId,
+        ledgerId
+      });
+      const ledgerRow = publicLopuCreditRow(await things.findOne({ shareId: recovered.ledgerId, thingtime: LOPU_CREDIT_THINGTIME }));
+      return { ok: true, request: current, ledger: ledgerRow, balanceMicros: recovered.balanceMicros, userId };
+    }
     const at = now();
     const grantMicros = input.approve ? (typeof input.credits === 'number' && Number.isFinite(input.credits) ? creditsToMicros(input.credits) : current.amountMicros) : 0;
     if (input.approve && grantMicros <= 0) return fail(400, 'An approved request needs a positive amount of credits');
@@ -836,7 +970,8 @@ export const createLopuAccountingService = (dependencies: LopuAccountingDependen
         amountMicros: grantMicros,
         reason: text(input.reason, LOPU_REASON_MAX_CHARS) || `Top-up request approved (${microsToCredits(grantMicros)} credits)`,
         actorId: input.actorId,
-        requestId
+        requestId,
+        ledgerId
       });
       balanceMicros = granted.balanceMicros;
       const ledgerDoc = await things.findOne({ shareId: granted.ledgerId, thingtime: LOPU_CREDIT_THINGTIME });
@@ -910,6 +1045,8 @@ export const createLopuAccountingService = (dependencies: LopuAccountingDependen
   return {
     ensureLopuAccount,
     getLopuAccount,
+    reserveLopuTurn,
+    releaseLopuTurn,
     debitLopuUsage,
     grantLopuCredits,
     getPendingLopuTopupRequest,
@@ -932,6 +1069,8 @@ const service = createLopuAccountingService({
 
 export const ensureLopuAccount = service.ensureLopuAccount;
 export const getLopuAccount = service.getLopuAccount;
+export const reserveLopuTurn = service.reserveLopuTurn;
+export const releaseLopuTurn = service.releaseLopuTurn;
 export const debitLopuUsage = service.debitLopuUsage;
 export const grantLopuCredits = service.grantLopuCredits;
 export const getPendingLopuTopupRequest = service.getPendingLopuTopupRequest;

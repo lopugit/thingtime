@@ -350,7 +350,7 @@ export const LopuSettingsRows = (props: { renderRow: (label: string, control: Re
 			{renderRow(
 				'Floating Lopu 🦄',
 				<Switch isChecked={settings.launcher} onChange={(event) => setLauncher(event.target.checked)} aria-label="Show the floating Lopu bubble" />,
-				'Show the draggable Lopu bubble on every page (the navbar 🦄 opens her either way)'
+				'Show the draggable Lopu bubble on every page (the navbar 🦄 opens Lopu either way)'
 			)}
 			{renderRow(
 				'Window docking',

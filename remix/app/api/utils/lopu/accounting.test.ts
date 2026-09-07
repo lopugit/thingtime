@@ -11,6 +11,8 @@ import {
   encodeLopuCursor,
   LOPU_ACCOUNT_THINGTIME,
   LOPU_CREDIT_THINGTIME,
+  LOPU_INFLIGHT_TTL_MS,
+  LOPU_MAX_CONCURRENT_TURNS,
   LOPU_USAGE_THINGTIME,
   lopuTopupUrl,
   monthKeyOf,
@@ -149,13 +151,96 @@ test('debitLopuUsage prices the turn, writes the usage + ledger rows and moves t
   assert.equal(debits[0].crystal.actorId, 'user-1');
   assert.match(debits[0].crystal.reason, /Chat turn · test/);
 
-  // the same request again is idempotent: no second usage row, no second debit
-  const replay = await service.debitLopuUsage('user-1', chatUsage('req-1', 3));
-  assert.equal(replay.ok, true);
-  assert.equal((replay as any).debitedMicros, 0);
-  assert.equal((replay as any).balanceMicros, 1_400_000);
-  assert.equal(things.ofKind(LOPU_USAGE_THINGTIME).length, 1);
-  assert.equal(things.ofKind(LOPU_CREDIT_THINGTIME).filter((doc) => doc.crystal.entry === 'debit').length, 1);
+  // A SECOND provider call is a second charge, even when the client re-used
+  // its requestId (it can: deleting the chat drops the message that would
+  // have 409'd it). The idempotency key is minted here, never taken from the
+  // caller — otherwise a single requestId would buy unlimited free turns.
+  const again = await service.debitLopuUsage('user-1', chatUsage('req-1', 3));
+  assert.equal(again.ok, true);
+  assert.notEqual((again as any).usageId, result.usageId);
+  assert.equal((again as any).debitedMicros, 600_000);
+  assert.equal((again as any).balanceMicros, 800_000);
+  assert.equal(things.ofKind(LOPU_USAGE_THINGTIME).length, 2);
+  assert.equal(things.ofKind(LOPU_CREDIT_THINGTIME).filter((doc) => doc.crystal.entry === 'debit').length, 2);
+  // …and both rows still carry the requestId, as metadata
+  assert.deepEqual(
+    things.ofKind(LOPU_USAGE_THINGTIME).map((doc) => doc.crystal.requestId),
+    ['req-1', 'req-1']
+  );
+});
+
+test('a $inc that is retried after it already committed does not move the balance twice', async () => {
+  const { things, service, logs } = setup({ starterCredits: 5 });
+  await service.ensureLopuAccount('user-1');
+  // the driver reports a failure AFTER the write landed — the classic
+  // retryable-write hazard: the retry must be a no-op, not a second debit
+  const original = things.findOneAndUpdate;
+  let sabotage = true;
+  things.findOneAndUpdate = async (filter, update, options) => {
+    const applied = await original(filter, update, options);
+    if (sabotage && update.$inc && 'crystal.balanceMicros' in (update.$inc as Record<string, number>)) {
+      sabotage = false;
+      throw new Error('socket closed after commit');
+    }
+    return applied;
+  };
+  const debit = await service.debitLopuUsage('user-1', chatUsage('req-1', 1));
+  things.findOneAndUpdate = original;
+  assert.equal(debit.ok, true);
+  // one turn of 0.2 credits, not two
+  assert.equal((debit as any).balanceMicros, 4_800_000);
+  const account = (await service.getLopuAccount('user-1'))!;
+  assert.equal(account.crystal.balanceMicros, 4_800_000);
+  assert.equal(account.crystal.turns, 1);
+  assert.ok(logs.some((line) => /retrying once/.test(line)));
+
+  // the same guard on a grant: the retry cannot grant twice
+  sabotage = true;
+  things.findOneAndUpdate = async (filter, update, options) => {
+    const applied = await original(filter, update, options);
+    if (sabotage) {
+      sabotage = false;
+      throw new Error('socket closed after commit');
+    }
+    return applied;
+  };
+  const granted = await service.grantLopuCredits('user-1', { entry: 'grant', amountMicros: 1_000_000, reason: 'Bonus', actorId: 'admin-1' });
+  things.findOneAndUpdate = original;
+  assert.equal(granted.balanceMicros, 5_800_000);
+  assert.equal((await service.getLopuAccount('user-1'))!.crystal.balanceMicros, 5_800_000);
+  assert.equal(things.ofKind(LOPU_CREDIT_THINGTIME).filter((doc) => doc.crystal.entry === 'grant').length, 1);
+});
+
+test('a billed turn holds one of a bounded number of in-flight slots, and a dead request’s slot is swept', async () => {
+  const { things, service, tick } = setup({ starterCredits: 5 });
+  await service.ensureLopuAccount('user-1');
+  await service.ensureLopuAccount('user-2');
+  const held: Array<{ ok: true; release: () => Promise<void> }> = [];
+  for (let index = 0; index < LOPU_MAX_CONCURRENT_TURNS; index++) {
+    const slot = await service.reserveLopuTurn('user-1');
+    assert.equal(slot.ok, true, `slot ${index} should be free`);
+    if (slot.ok === true) held.push(slot);
+  }
+  // the cap: the next concurrent turn is refused rather than spending the
+  // same balance one more time
+  assert.deepEqual(await service.reserveLopuTurn('user-1'), { ok: false, reason: 'busy' });
+  // another account is unaffected
+  assert.equal((await service.reserveLopuTurn('user-2')).ok, true);
+
+  // releasing hands the slot straight back, and is idempotent
+  await held[0].release();
+  await held[0].release();
+  assert.equal((await service.reserveLopuTurn('user-1')).ok, true);
+  assert.deepEqual(await service.reserveLopuTurn('user-1'), { ok: false, reason: 'busy' });
+
+  // a request that died mid-turn never released: the next reservation after
+  // the TTL sweeps the account clean instead of locking the user out
+  tick(LOPU_INFLIGHT_TTL_MS + 60_000);
+  assert.equal((await service.reserveLopuTurn('user-1')).ok, true);
+  const account = things.ofKind(LOPU_ACCOUNT_THINGTIME).find((doc) => doc.ownerId === 'user-1');
+  assert.equal(account.crystal.inflight, 1);
+  // an account that does not exist can never take a slot (fail closed)
+  assert.deepEqual(await service.reserveLopuTurn('nobody'), { ok: false, reason: 'busy' });
 });
 
 test('byo and free turns are recorded but never debited; unpriced models cost nothing', async () => {
@@ -317,6 +402,45 @@ test('top-up requests: one pending at a time, approve grants and links, decline 
   assert.equal((await service.resolveLopuTopupRequest({ requestId: (again as any).request.id, actorId: 'a', approve: true, credits: 0 }) as any).status, 409);
 });
 
+test('an approval whose grant never landed is recoverable, and recovering it cannot grant twice', async () => {
+  const { things, service } = setup();
+  const request = (await service.createLopuTopupRequest('user-1', { credits: 3 })) as { ok: true; request: { id: string } };
+  assert.equal(request.ok, true);
+
+  // the status flip lands (a plain updateOne), the grant's $inc does not —
+  // the request reads 'approved' with the balance untouched
+  const original = things.findOneAndUpdate;
+  things.findOneAndUpdate = async () => {
+    throw new Error('died before the grant');
+  };
+  await assert.rejects(service.resolveLopuTopupRequest({ requestId: request.request.id, actorId: 'admin-1', approve: true }));
+  things.findOneAndUpdate = original;
+  const stranded = things.docs.find((doc) => doc.shareId === request.request.id)!;
+  assert.equal(stranded.crystal.requestStatus, 'approved');
+  assert.equal((await service.getLopuAccount('user-1'))!.crystal.balanceMicros, 0);
+  assert.equal(things.ofKind(LOPU_CREDIT_THINGTIME).filter((doc) => doc.crystal.entry === 'topup').length, 0);
+
+  // approving again finishes the job instead of refusing it with a 409
+  const recovered = await service.resolveLopuTopupRequest({ requestId: request.request.id, actorId: 'admin-2', approve: true });
+  assert.equal(recovered.ok, true);
+  if (recovered.ok !== true) return;
+  assert.equal(recovered.balanceMicros, 3_000_000);
+  assert.equal(recovered.ledger!.entry, 'topup');
+  assert.equal(recovered.ledger!.amountMicros, 3_000_000);
+  assert.equal(recovered.request.requestStatus, 'approved');
+
+  // …and once it has landed, a third approval is the ordinary 409 — the
+  // deterministic ledger id makes a double grant impossible either way
+  assert.equal((await service.resolveLopuTopupRequest({ requestId: request.request.id, actorId: 'admin-2', approve: true }) as any).status, 409);
+  assert.equal((await service.getLopuAccount('user-1'))!.crystal.balanceMicros, 3_000_000);
+  assert.equal(things.ofKind(LOPU_CREDIT_THINGTIME).filter((doc) => doc.crystal.entry === 'topup').length, 1);
+  // a declined request is never "recovered"
+  const declined = (await service.createLopuTopupRequest('user-2', { credits: 1 })) as { ok: true; request: { id: string } };
+  await service.resolveLopuTopupRequest({ requestId: declined.request.id, actorId: 'admin-1', approve: false });
+  assert.equal((await service.resolveLopuTopupRequest({ requestId: declined.request.id, actorId: 'admin-1', approve: true }) as any).status, 409);
+  assert.equal((await service.getLopuAccount('user-2'))!.crystal.balanceMicros, 0);
+});
+
 test('history pages newest first with the usage rows the debits point at, and cursors round-trip', async () => {
   const { service, tick } = setup({ starterCredits: 5 });
   await service.ensureLopuAccount('user-1');
@@ -397,12 +521,13 @@ test('a failure inside the debit is logged, retried once, and never thrown', asy
   const failed = await service.debitLopuUsage('user-1', chatUsage('req-2', 1));
   assert.equal(failed.ok, false);
   assert.ok(logs.some((line) => /usage was not recorded/.test(line)));
-  // the usage row from the failed attempt exists; replaying the same request
-  // does not double-count it and reports the untouched balance
+  // the usage row from the failed attempt exists but nothing was applied to
+  // the balance, so the NEXT turn debits normally (the failed one is on the
+  // house — logged, never charged twice)
   things.findOneAndUpdate = original;
-  const replay = await service.debitLopuUsage('user-1', chatUsage('req-2', 1));
-  assert.equal((replay as any).debitedMicros, 0);
-  assert.equal((replay as any).balanceMicros, 800_000);
+  const next = await service.debitLopuUsage('user-1', chatUsage('req-3', 1));
+  assert.equal((next as any).debitedMicros, 200_000);
+  assert.equal((next as any).balanceMicros, 600_000);
 });
 
 test('public projections bound and default every field', () => {

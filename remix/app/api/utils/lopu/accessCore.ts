@@ -20,10 +20,14 @@ export const LOPU_NO_CREDITS_CODE = 'LOPU_NO_CREDITS' as const;
 // a temporary (guest) session — refused like before, now with a code so the
 // client can tell "sign up" from "locked"
 export const LOPU_GUEST_CODE = 'LOPU_GUEST' as const;
+// too many billed turns already running for this account: the balance the
+// gate reads is only spendable by a bounded number of turns at once
+export const LOPU_BUSY_CODE = 'LOPU_TURN_IN_FLIGHT' as const;
 
 export const LOPU_UNVERIFIED_ERROR = 'Lopu is invite-only for now — an admin needs to verify your account before it can build with you';
 export const LOPU_NO_CREDITS_ERROR = 'Lopu’s credits for your account are used up — add credits to keep going';
 export const LOPU_GUEST_ERROR = 'Create an account to chat with Lopu — conversations are saved to your account';
+export const LOPU_BUSY_ERROR = 'Lopu is still working on your last few messages — let one finish, then ask again 🦄';
 
 // What the gate needs to know about the caller (the PublicUser projection
 // carries all four fields).
@@ -33,7 +37,8 @@ export type LopuAccessRules = { requireVerification: boolean; allowByoUnverified
 
 export type LopuAccessRefusal =
   | { ok: false; status: 403; code: typeof LOPU_UNVERIFIED_CODE | typeof LOPU_GUEST_CODE; error: string }
-  | { ok: false; status: 402; code: typeof LOPU_NO_CREDITS_CODE; error: string; balanceMicros: number };
+  | { ok: false; status: 402; code: typeof LOPU_NO_CREDITS_CODE; error: string; balanceMicros: number }
+  | { ok: false; status: 429; code: typeof LOPU_BUSY_CODE; error: string };
 
 export type LopuAccessVerdict = { ok: true } | LopuAccessRefusal;
 

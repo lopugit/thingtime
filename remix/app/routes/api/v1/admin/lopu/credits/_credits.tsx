@@ -105,7 +105,11 @@ export const createAdminLopuCreditsHandlers = (dependencies: AdminLopuCreditsHan
         return json({ ok: false, error: `entry must be one of ${LOPU_ADMIN_CREDIT_ENTRIES.join(', ')}` }, { status: 400 });
       }
       const credits = creditsOf(body.credits);
-      if (credits === null || credits === 0) return json({ ok: false, error: `credits must be a non-zero number of credits between -${LOPU_ADMIN_CREDITS_MAX} and ${LOPU_ADMIN_CREDITS_MAX}` }, { status: 400 });
+      // an amount that rounds to nothing (1e-7 credits) is a bad request, not
+      // a 500 from the writer's non-zero guard
+      if (credits === null || credits === 0 || creditsToMicros(credits) === 0) {
+        return json({ ok: false, error: `credits must be a non-zero number of credits between -${LOPU_ADMIN_CREDITS_MAX} and ${LOPU_ADMIN_CREDITS_MAX}` }, { status: 400 });
+      }
       if ((entry === 'grant' || entry === 'topup') && credits < 0) return json({ ok: false, error: `a ${entry} must be a positive amount — use adjust or refund for a signed movement` }, { status: 400 });
       const user = await dependencies.findUser(userId);
       if (!user) return json({ ok: false, error: 'User not found' }, { status: 404 });

@@ -163,6 +163,12 @@ test('selectLopuAccess: guest / unverified / verified / admin × BYO', () => {
 	assert.equal(selectLopuAccess(null, VIEWER).known, false);
 	assert.equal(selectLopuAccess(null, { ...VIEWER, verifiedHint: false }).locked, true);
 	assert.equal(selectLopuAccess(null, { ...VIEWER, verifiedHint: true }).locked, false);
+	// …and on a deployment this device has seen NOT require verification, an
+	// unverified first-visit account is not falsely greeted with "invite-only"
+	assert.equal(selectLopuAccess(null, { ...VIEWER, verifiedHint: false, requireVerificationHint: false }).locked, false);
+	assert.equal(selectLopuAccess(null, { ...VIEWER, verifiedHint: false, requireVerificationHint: true }).locked, true);
+	// nothing known yet stays on the server's own default (verification required)
+	assert.equal(selectLopuAccess(null, { ...VIEWER, verifiedHint: false, requireVerificationHint: null }).locked, true);
 });
 
 test('the balance chip tone: red at or below zero, amber under the threshold, quiet otherwise', () => {
@@ -238,6 +244,9 @@ test('the store hydrates per viewer, refreshes through the bound client and dedu
 	assert.equal(snapshot.loaded, true);
 	assert.equal(snapshot.account?.balanceMicros, 4_970_000);
 	assert.ok(snapshot.fetchedAt > 0);
+	// the deployment's rule is remembered beside the account, so the next
+	// first-visit viewer on this device is not falsely locked
+	assert.equal(snapshot.requireVerificationHint, snapshot.account?.requireVerification);
 	// a fresh enough copy is kept when a minimum age is asked for
 	await refreshLopuAccount({ minAgeMs: 60_000 });
 	assert.equal(calls.filter((call) => call.name === 'get').length, 1);

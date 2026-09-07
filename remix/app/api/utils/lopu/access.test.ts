@@ -4,6 +4,8 @@ import test from 'node:test';
 import {
   billingForProvider,
   evaluateLopuAccess,
+  LOPU_BUSY_CODE,
+  LOPU_BUSY_ERROR,
   LOPU_GUEST_CODE,
   LOPU_NO_CREDITS_CODE,
   LOPU_NO_CREDITS_ERROR,
@@ -119,7 +121,8 @@ test('the async gate reads the settings, creates the account lazily for thingtim
     ensureAccount: async (userId) => {
       ensured.push(userId);
       return { id: `acct-${userId}`, userId, crystal: { balanceMicros: balance } as any, createdAt: null, updatedAt: null };
-    }
+    },
+    reserveTurn: async () => ({ ok: true, release: async () => {} })
   });
 
   // an unverified caller is refused before any account exists
@@ -159,4 +162,63 @@ test('the async gate reads the settings, creates the account lazily for thingtim
   settings = { ...open, starterCredits: 0, lowBalanceWarningCredits: 1 };
   assert.equal((await gate(unverified, { billing: 'thingtime' })).ok, true);
   assert.equal((await gate(unverified, { billing: 'thingtime' }) as any).verified, false);
+});
+
+test('the gate reserves an in-flight slot only when asked, only for billed turns, and only after the balance passed', async () => {
+  const settings = { ...locked, starterCredits: 0, lowBalanceWarningCredits: 1 };
+  let balance = 2_000_000;
+  let busy = false;
+  const reserved: string[] = [];
+  const released: string[] = [];
+  const gate = createAssertLopuAccess({
+    getSettings: async () => settings,
+    ensureAccount: async (userId) => ({ id: `acct-${userId}`, userId, crystal: { balanceMicros: balance } as any, createdAt: null, updatedAt: null }),
+    reserveTurn: async (userId) => {
+      if (busy) return { ok: false, reason: 'busy' };
+      reserved.push(userId);
+      return {
+        ok: true,
+        release: async () => {
+          released.push(userId);
+        }
+      };
+    }
+  });
+
+  // no reserve asked for (chats create, voice): no slot, nothing to release
+  const plain = await gate(verified, { billing: 'thingtime' });
+  assert.equal(plain.ok, true);
+  assert.equal((plain as any).release, null);
+  assert.deepEqual(reserved, []);
+
+  // the reply route asks: the grant carries the release
+  const held = await gate(verified, { billing: 'thingtime', reserve: true });
+  assert.equal(held.ok, true);
+  assert.equal(typeof (held as any).release, 'function');
+  assert.deepEqual(reserved, ['v']);
+  await (held as any).release();
+  assert.deepEqual(released, ['v']);
+
+  // a byo turn spends no credits, so it never takes a slot
+  reserved.length = 0;
+  const byo = await gate(verified, { billing: 'byo', reserve: true });
+  assert.equal((byo as any).release, null);
+  assert.deepEqual(reserved, []);
+
+  // a broke account is a 402 and never holds a slot
+  balance = 0;
+  assert.equal((await gate(verified, { billing: 'thingtime', reserve: true }) as any).code, LOPU_NO_CREDITS_CODE);
+  assert.deepEqual(reserved, []);
+
+  // the cap: 429 with the busy code, not a 402 and not a 500
+  balance = 2_000_000;
+  busy = true;
+  const refused = await gate(verified, { billing: 'thingtime', reserve: true });
+  assert.deepEqual(refused, { ok: false, status: 429, code: LOPU_BUSY_CODE, error: LOPU_BUSY_ERROR });
+  assert.deepEqual(lopuAccessRefusalBody(refused as any), { ok: false, error: LOPU_BUSY_ERROR, code: LOPU_BUSY_CODE });
+  const response = lopuAccessResponse(refused as any);
+  assert.equal(response.status, 429);
+  // a slot frees in seconds (one running turn ending), not the limiter's minutes
+  assert.equal(response.headers.get('retry-after'), '5');
+  assert.equal(response.headers.get('cache-control'), 'no-store');
 });

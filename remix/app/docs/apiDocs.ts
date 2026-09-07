@@ -4457,10 +4457,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // and 'vault' rows persist providerLabel. 1.3.0: the verified-access gate before any provider
     // call (403 LOPU_UNVERIFIED / 402 LOPU_NO_CREDITS / 403 LOPU_GUEST) and usage accounting —
     // `billing` on meta, `billing` / `costMicros` / `priced` / `balanceMicros` (+ cache tokens in
-    // `usage`) on done and on the persisted assistant row's lopu meta (additive). contractVersion
+    // `usage`) on done and on the persisted assistant row's lopu meta (additive). 1.4.0: a billed
+    // turn holds one of at most three in-flight slots on the account, so concurrent turns cannot
+    // each spend the same last credit — past the cap the request is refused 429
+    // LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted (additive). contractVersion
     // feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.3.0',
-    featureVersion: '1.3.0',
+    contractVersion: '1.4.0',
+    featureVersion: '1.4.0',
     summary: 'Sends one message to Lopu and streams its reply — text, tool calls and live builder patches — as newline-delimited JSON.',
     detail:
       'POST { chatId?, text, requestId, model?, effort?, speed?, providerId?, context?, confirmations? }. The user turn is persisted first (omit chatId to start a ' +

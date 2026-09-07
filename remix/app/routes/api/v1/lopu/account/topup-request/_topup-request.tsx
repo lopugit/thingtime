@@ -1,5 +1,6 @@
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 
+import { resolveTrustedOrigin } from '~/api/utils/auth/appOrigin';
 import { adminNotificationEmail } from '~/api/utils/auth/email';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { sendEmail } from '~/api/utils/email/service';
@@ -79,7 +80,9 @@ export const createLopuTopupRequestHandlers = (dependencies: LopuTopupRequestHan
     if (result.ok === false) return json({ ok: false, error: result.error }, { status: result.status, headers: NO_STORE_HEADERS });
 
     try {
-      await dependencies.notifyAdmins({ username: user.username, userId: user.id, request: result.request, origin: new URL(request.url).origin });
+      // the admin link never comes from the request Host: same rule as every
+      // other ops/auth mail (api/utils/auth/appOrigin.ts)
+      await dependencies.notifyAdmins({ username: user.username, userId: user.id, request: result.request, origin: resolveTrustedOrigin(request) });
     } catch (error) {
       log('[lopu] top-up request admin notification failed (the request is saved)', error);
     }
@@ -94,8 +97,9 @@ const handlers = createLopuTopupRequestHandlers({
   enforceRateLimit,
   createRequest: createLopuTopupRequest,
   notifyAdmins: async ({ username, userId, request, origin }) => {
-    const base = process.env.APP_URL?.trim() || origin;
-    const rendered = renderLopuTopupRequestEmail({ username, userId, credits: request.amountCredits, note: request.note, adminUrl: `${base}/admin` });
+    // `origin` is already the trusted origin (APP_URL → the platform → the
+    // canonical domain), never the caller's Host header
+    const rendered = renderLopuTopupRequestEmail({ username, userId, credits: request.amountCredits, note: request.note, adminUrl: `${origin.replace(/\/+$/, '')}/admin` });
     await sendEmail({
       to: adminNotificationEmail(),
       stream: 'transactional',

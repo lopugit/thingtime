@@ -1,8 +1,9 @@
 // An in-memory stand-in for the slice of the MongoDB Collection API the Lopu
 // accounting service uses (accounting.ts `LopuAccountingCollection`): enough
-// of the query language (equality, $in, $ne, $lt, $gt, $or, dotted paths,
-// Binary equality) and the update language ($set, $inc, $setOnInsert,
-// $pull, upsert, returnDocument: 'after') to run the real service in unit
+// of the query language (equality, $in, $ne, $lt, $gt, $exists, $or, dotted
+// paths, multikey array matching, Binary equality) and the update language
+// ($set, $inc, $push with $each/$slice, $setOnInsert, $pull, $unset, upsert,
+// returnDocument: 'after') to run the real service in unit
 // tests, plus the ONE invariant the real index enforces here — every
 // `uniqueKeys` element is unique across the collection (duplicates throw a
 // driver-shaped E11000 error). Test-only; not a mock of the driver.
@@ -47,7 +48,9 @@ const matchesValue = (actual: unknown, expected: unknown): boolean => {
         case '$in':
           return Array.isArray(operand) && operand.some((entry) => (Array.isArray(actual) ? actual.some((item) => same(item, entry)) : same(actual, entry)));
         case '$ne':
-          return !same(actual, operand);
+          // multikey, like the server: an array field matches $ne only when
+          // NO element equals the operand
+          return Array.isArray(actual) && !Array.isArray(operand) ? !actual.some((entry) => same(entry, operand)) : !same(actual, operand);
         case '$lt':
           return actual !== undefined && compare(actual, operand) < 0;
         case '$gt':
@@ -109,7 +112,17 @@ export const createMemoryThingsCollection = () => {
       const entries = Object.entries(fields as Record<string, unknown>);
       if (op === '$set') for (const [path, value] of entries) write(doc, path, clone(value));
       else if (op === '$inc') for (const [path, value] of entries) write(doc, path, (Number(read(doc, path)) || 0) + Number(value));
-      else if (op === '$pull') {
+      else if (op === '$push') {
+        for (const [path, value] of entries) {
+          const current = read(doc, path);
+          const list = Array.isArray(current) ? [...current] : [];
+          const modifier = value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+          const added = modifier && Array.isArray(modifier.$each) ? modifier.$each : [value];
+          list.push(...added.map((entry) => clone(entry)));
+          const slice = modifier && typeof modifier.$slice === 'number' ? modifier.$slice : null;
+          write(doc, path, slice === null ? list : slice < 0 ? list.slice(slice) : list.slice(0, slice));
+        }
+      } else if (op === '$pull') {
         for (const [path, value] of entries) {
           const current = read(doc, path);
           if (Array.isArray(current)) write(doc, path, current.filter((entry) => !same(entry, value)));

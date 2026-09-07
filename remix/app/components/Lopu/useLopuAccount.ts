@@ -321,6 +321,11 @@ export type LopuAccessViewer = {
 	admin: boolean;
 	// the user projection's own `lopuVerified` (null when the server does not say)
 	verifiedHint?: boolean | null;
+	// the instance-wide `requireVerification` last seen on this device (null
+	// when nothing is known yet — the server default, true, then applies).
+	// Without it an instance that does NOT require verification would greet a
+	// first-visit account with "invite-only" until GET /lopu/account lands.
+	requireVerificationHint?: boolean | null;
 };
 
 export type LopuLockReason = 'unverified' | 'temporary';
@@ -367,10 +372,13 @@ export const selectLopuAccess = (account: LopuAccount | null | undefined, viewer
 	}
 	if (viewer.admin) return { ...OPEN_ACCESS, known: !!account, lowBalance: account?.lowBalance === true, noCredits: !!account && account.balanceMicros <= 0 };
 	if (!account) {
-		// before the account is known: the user projection's own flag is the
-		// only hint (verification is required by default)
-		const locked = viewer.verifiedHint === false;
-		return { ...OPEN_ACCESS, verified: viewer.verifiedHint !== false, requireVerification: locked, locked, reason: locked ? 'unverified' : null };
+		// before the account is known: the user projection's own flag says
+		// whether this account is verified, and the last-seen instance rule
+		// says whether that even matters (defaulting to the server's own
+		// default, "verification required")
+		const requireVerification = viewer.requireVerificationHint !== false;
+		const locked = requireVerification && viewer.verifiedHint === false;
+		return { ...OPEN_ACCESS, verified: viewer.verifiedHint !== false, requireVerification, locked, reason: locked ? 'unverified' : null };
 	}
 	const verified = account.verified;
 	const unverifiedGate = account.requireVerification && !verified;
@@ -392,6 +400,11 @@ export const selectLopuAccess = (account: LopuAccount | null | undefined, viewer
 // ——— the store ————————————————————————————————————————————————————————————
 
 export const lopuAccountCacheKey = (userId: string) => `tt-lopu-account-${userId}`;
+// The instance-wide access rule, kept per DEVICE rather than per user: a
+// first-ever account on this browser has no account cache to seed from, and
+// without this it would be greeted with "invite-only" on a deployment that
+// does not require verification at all.
+export const LOPU_ACCESS_HINT_CACHE_KEY = 'tt-lopu-access';
 
 type AccountCache = { at: number; account: LopuAccount };
 
@@ -405,6 +418,8 @@ export type LopuAccountState = {
 	userId: string | null;
 	hydrated: boolean;
 	account: LopuAccount | null;
+	// the instance-wide `requireVerification` last seen on this device
+	requireVerificationHint: boolean | null;
 	loading: boolean;
 	loaded: boolean;
 	error: string | null;
@@ -425,6 +440,7 @@ const createInitialState = (): LopuAccountState => ({
 	userId: null,
 	hydrated: false,
 	account: null,
+	requireVerificationHint: null,
 	loading: false,
 	loaded: false,
 	error: null,
@@ -494,13 +510,23 @@ const errorStatus = (error: unknown): number | null => {
 	return typeof status === 'number' ? status : null;
 };
 
+/** The last-seen instance rule, or null when this device has never seen one. */
+export const readLopuAccessHint = (): boolean | null => {
+	const cached = readLocalCache<{ requireVerification?: unknown }>(LOPU_ACCESS_HINT_CACHE_KEY);
+	return typeof cached?.requireVerification === 'boolean' ? cached.requireVerification : null;
+};
+
 const writeCache = (userId: string | null, account: LopuAccount | null) => {
 	if (userId && account) writeLocalCache(lopuAccountCacheKey(userId), { at: Date.now(), account } satisfies AccountCache);
+	// the rule is the deployment's, not this user's — kept beside the account
+	// so the next first-visit account on this device is not falsely locked
+	if (account) writeLocalCache(LOPU_ACCESS_HINT_CACHE_KEY, { requireVerification: account.requireVerification });
 };
 
 /**
  * Seed the store for a viewer from localCache. Idempotent per user; safe to
- * call during render. A viewer change drops the previous account's numbers.
+ * call during render. A viewer change drops the previous account's numbers
+ * but keeps the deployment-wide access hint.
  */
 export const hydrateLopuAccount = (userId: string | null): LopuAccountState => {
 	if (state.hydrated && state.userId === userId) return state;
@@ -511,6 +537,7 @@ export const hydrateLopuAccount = (userId: string | null): LopuAccountState => {
 		userId,
 		hydrated: true,
 		account,
+		requireVerificationHint: account ? account.requireVerification : readLopuAccessHint(),
 		fetchedAt: account && typeof cached?.at === 'number' ? cached.at : 0
 	};
 	scheduleEmit();
@@ -535,7 +562,7 @@ export const refreshLopuAccount = async (options?: { minAgeMs?: number }): Promi
 				return;
 			}
 			writeCache(userId, account);
-			setState({ account, loading: false, loaded: true, error: null, fetchedAt: Date.now() });
+			setState({ account, requireVerificationHint: account.requireVerification, loading: false, loaded: true, error: null, fetchedAt: Date.now() });
 		} catch (error) {
 			if (state.userId !== userId) return;
 			// a signed-out / temporary session has no account (401/403): no error to show
@@ -717,8 +744,13 @@ export const useLopuAccount = (options: UseLopuAccountOptions = {}): UseLopuAcco
 
 	const byo = options.byo === true;
 	const access = React.useMemo(
-		() => selectLopuAccess(snapshot.account, { signedIn: !!userId && !temporary, temporary, admin, verifiedHint }, { byo }),
-		[snapshot.account, userId, temporary, admin, verifiedHint, byo]
+		() =>
+			selectLopuAccess(
+				snapshot.account,
+				{ signedIn: !!userId && !temporary, temporary, admin, verifiedHint, requireVerificationHint: snapshot.requireVerificationHint },
+				{ byo }
+			),
+		[snapshot.account, snapshot.requireVerificationHint, userId, temporary, admin, verifiedHint, byo]
 	);
 
 	const refresh = React.useCallback(() => refreshLopuAccount(), []);
