@@ -69,6 +69,15 @@ export const createUserAccount = async (input: CreateUserAccountInput): Promise<
   const password = input.password || '';
 
   if (!username) return { ok: false, status: 400, error: 'Username is required' };
+  // '/' is the acl grammar's separator: an acl grant is tt:user/<username>
+  // with an optional /comment or /write capability suffix (schemas/registry.ts
+  // splitCapability). A username containing '/' would make those entries
+  // ambiguous — picking the account "someone/write" in the custom-audience
+  // picker mints tt:user/someone/write, which the server reads as EDIT rights
+  // for the DIFFERENT account "someone". Same chokepoint reasoning as the
+  // ADMIN_USERNAMES reservation below; the service-account path already
+  // slugifies to [a-z0-9._-], and /profile/:username can't address one either.
+  if (username.includes('/')) return { ok: false, status: 400, error: 'Usernames can’t contain “/”' };
   if (password.length < 6) return { ok: false, status: 400, error: 'Password must be at least 6 characters' };
   if (!isEmail(email)) return { ok: false, status: 400, error: 'A valid email is required' };
 
