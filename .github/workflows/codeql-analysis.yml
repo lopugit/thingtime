@@ -312,6 +312,76 @@ jobs:
         with:
           languages: ${{ matrix.language }}
 
+      # Advanced Security opens the PR's aggregate CodeQL check when the FIRST
+      # analysis for the ref lands, then closes it `timed_out` if the remaining
+      # languages have not answered inside a budget that is neither ours to set
+      # nor a clean threshold. Measured across this repository's open PRs, every
+      # upload skew of 199s or less passed; #660 survived 388s; #649 (387s) and
+      # #683 (392s) both closed `timed_out` even though their code was clean and
+      # BOTH language analyses ultimately succeeded and uploaded. `actions`
+      # completes in about a minute while `javascript-typescript` now needs
+      # seven or more on this tree, so the fast language had been opening the
+      # window roughly 390s before the slow one could answer it, leaving the
+      # check to be decided by a coin flip. This is the #557 failure the scope
+      # job above already guards against, reached through matrix skew rather
+      # than duplicate scans, so guard it the same way and one job earlier:
+      # hold the fast language until the slow one has uploaded. The check then
+      # opens on the slow analysis and the skew collapses to seconds, which is
+      # deep inside the band that has never timed out. Placed before the
+      # ownership re-check below so that check keeps its "last moment before
+      # upload" meaning rather than going stale across this wait.
+      - name: Let the slowest language open the aggregate check
+        if: matrix.language != 'javascript-typescript'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          LANGUAGE: ${{ matrix.language }}
+          # Reusable `workflow_call` runs prefix job names with the caller's job
+          # id (`control-plane / Analyze (javascript-typescript)`), so match the
+          # suffix rather than the whole name.
+          PACING_JOB: Analyze (javascript-typescript)
+        run: |
+          set -euo pipefail
+
+          # Bounded far below this job's own timeout-minutes: a stuck, cancelled
+          # or removed sibling must degrade to "upload late", never to a job the
+          # runner kills, which would discard a built database and produce
+          # exactly the red check this step exists to prevent.
+          limit=1800
+          grace=120
+          waited=0
+          while true; do
+            # Preserve `gh`'s exit status the way the scope pre-flight does for
+            # its optional lookups -- never `|| true`. A rate-limited or
+            # transient lookup falls back to the prior unpaced behaviour.
+            if ! jobs_json="$(gh api "repos/$REPO/actions/runs/$RUN_ID/jobs?per_page=100")"; then
+              echo "::warning::Could not read sibling job status; uploading $LANGUAGE unpaced."
+              break
+            fi
+            status="$(jq -r --arg name "$PACING_JOB" '
+              [.jobs[] | select(.name | endswith($name))] | .[0].status // "absent"
+            ' <<<"$jobs_json")"
+            if [ "$status" = completed ]; then
+              # Deliberately not gated on its conclusion. A failed sibling has
+              # no upload left to wait for, and masking that by stalling here
+              # would hide a genuinely broken analysis behind a slow job.
+              echo "$PACING_JOB finished after ${waited}s; uploading $LANGUAGE behind it."
+              break
+            fi
+            if [ "$status" = absent ] && [ "$waited" -ge "$grace" ]; then
+              echo "::notice::This run has no $PACING_JOB; uploading $LANGUAGE unpaced."
+              break
+            fi
+            if [ "$waited" -ge "$limit" ]; then
+              echo "::warning::$PACING_JOB still $status after ${waited}s; uploading $LANGUAGE rather than leaving this revision unscanned."
+              break
+            fi
+            sleep 15
+            waited=$(( waited + 15 ))
+          done
+
       # The scope pre-flight samples `gh pr list` within seconds of the push,
       # so a branch that is pushed FIRST and adopted by a PR moments later
       # still reaches this job believing it owns analysis. Uploading a
