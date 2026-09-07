@@ -1509,7 +1509,10 @@ function assertWorkflowSource() {
   // never do, so the duplicate has to be prevented in the reviewer prompt --
   // #671 and #675 are one defect fixed twice, each blocking the other. These
   // pin the reviewer half of that contract so a prompt reflow cannot silently
-  // drop it while the publisher keeps failing open.
+  // drop it while the publisher keeps failing open. Every gap inside a pinned
+  // phrase is `\s+` on purpose: the guard is against the instruction being
+  // deleted, not against rewrapping it, and this prompt shares a byte budget
+  // that makes rewrapping routine.
   assert.match(
     reviewBlock,
     /inventory the repairs already open with\s+`gh pr list[^`]*--base github-actions\s+--limit 500[\s\S]*?thingtime-lopu-controller-repair:v1`, and read the paths and\s+hunks each one touches/u,
@@ -1517,12 +1520,12 @@ function assertWorkflowSource() {
   );
   assert.match(
     reviewBlock,
-    /If an open repair already covers the\s+defect, do not restate it: revert your edits/u,
+    /If\s+an\s+open\s+repair\s+already\s+covers\s+the\s+defect,\s+do\s+not\s+restate\s+it:\s+revert\s+your\s+edits/u,
     "a defect an open repair already covers is reported, not patched a second time",
   );
   assert.match(
     reviewBlock,
-    /Never move that checkout's `HEAD`: the publisher compares it\s+against the live `github-actions` ref/u,
+    /never\s+move\s+that\s+checkout's\s+`HEAD`:\s+the\s+publisher\s+drops\s+repairs\s+authored\s+off\s+a\s+moved\s+head/u,
     "the reviewer leaves the trusted checkout on the head the publisher leases against",
   );
   assert.match(
