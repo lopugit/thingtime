@@ -273,7 +273,10 @@ export function useApi() {
       // waterfall as the admin UI without inheriting an admin browser session.
 			prConflictResolverModelWaterfall: useCallback(async () => getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall'), []),
 			// Lopu's stored chat defaults ({ model, effort, speed }); public GET, admin POST (admin.setLopuChatDefaults)
-			lopuChatDefaults: useCallback(async () => getJson('/api/v1/settings/lopu-chat-defaults'), [])
+			lopuChatDefaults: useCallback(async () => getJson('/api/v1/settings/lopu-chat-defaults'), []),
+			// Thingtime.LopuAccess ({ requireVerification, allowByoUnverified, starterCredits,
+			// lowBalanceWarningCredits }); public GET, admin POST (admin.setLopuAccess)
+			lopuAccess: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/settings/lopu-access', options), [])
     },
     // the `ai-model` catalog Lopu thinks with (public; { models, defaults, providers }
     // + for a signed-in viewer their Secure Vault providers as metadata only:
@@ -295,6 +298,40 @@ export function useApi() {
             { model: args?.model ?? null, effort: args?.effort ?? null, speed: args?.speed ?? null },
             { action: '/api/v1/settings/lopu-chat-defaults', errorContext: 'save the Lopu chat defaults' }
           ),
+        [asyncFetcher]
+      ),
+      // Thingtime.LopuAccess — who may use Lopu and what a new account starts with
+      setLopuAccess: useCallback(
+        async (args: { requireVerification?: boolean; allowByoUnverified?: boolean; starterCredits?: number; lowBalanceWarningCredits?: number }) =>
+          asyncFetcher.submit(args, { action: '/api/v1/settings/lopu-access', errorContext: 'save the Lopu access settings' }),
+        [asyncFetcher]
+      ),
+      // { userId, verified } — the per-account Lopu verified flag (meta.lopuVerified)
+      setUserLopuAccess: useCallback(
+        async (args: { userId: string; verified: boolean }) =>
+          asyncFetcher.submit(
+            { userId: args?.userId, verified: args?.verified },
+            { action: '/api/v1/admin/users/lopu-access', errorContext: `${args?.verified ? 'verify' : 'unverify'} Lopu access` }
+          ),
+        [asyncFetcher]
+      ),
+      // Admin → Lopu accounts: rows { user, balanceMicros, month, lifetime, pendingRequest }, cursor-paged
+      lopuAccounts: useCallback(
+        async (args?: { q?: string; cursor?: string; limit?: number }, options?: { signal?: AbortSignal }) =>
+          getJson(`/api/v1/admin/lopu/accounts${toQuery(args)}`, options),
+        []
+      ),
+      // grant / adjust credits ({ userId, credits, entry, reason }), approve a
+      // request ({ ...same, requestId }) or decline one ({ requestId, decline: true, reason })
+      lopuCredits: useCallback(
+        async (args: {
+          userId?: string;
+          credits?: number;
+          entry?: 'grant' | 'topup' | 'adjust' | 'refund';
+          reason?: string;
+          requestId?: string;
+          decline?: boolean;
+        }) => asyncFetcher.submit(args, { action: '/api/v1/admin/lopu/credits', errorContext: 'update Lopu credits' }),
         [asyncFetcher]
       ),
       integrations: useCallback(async () => getJson('/api/v1/admin/integrations'), []),
@@ -482,7 +519,24 @@ export function useApi() {
         async (args: { providerId: string; model?: string | null; effort?: string | null; textResponse?: boolean }, options?: { signal?: AbortSignal }) =>
           asyncFetcher.submit(args, { action: '/api/v1/lopu/voice/session', errorContext: 'start direct voice', signal: options?.signal }),
         [asyncFetcher]
-      )
+      ),
+      // the viewer's Lopu account (verified flag, credits, usage — design note
+      // "Lopu verified access, usage accounting and credits" §3); session only
+      account: {
+        get: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/lopu/account', options), []),
+        // ledger rows + the usage rows of the same window, newest first, cursor-paged (limit ≤ 100)
+        history: useCallback(
+          async (args?: { cursor?: string | null; limit?: number }, options?: { signal?: AbortSignal }) =>
+            getJson(`/api/v1/lopu/account/history${toQuery({ cursor: args?.cursor ?? undefined, limit: args?.limit })}`, options),
+          []
+        ),
+        // { credits: 0.5..1000, note? } — one pending request at a time (409)
+        requestTopup: useCallback(
+          async (args: { credits: number; note?: string }) =>
+            asyncFetcher.submit({ credits: args?.credits, ...(args?.note ? { note: args.note } : {}) }, { action: '/api/v1/lopu/account/topup-request', errorContext: 'request Lopu credits' }),
+          [asyncFetcher]
+        )
+      }
     },
     mongodb: {
       capabilities: useCallback(async () => getJson('/api/v1/mongodb/raw-results'), []),

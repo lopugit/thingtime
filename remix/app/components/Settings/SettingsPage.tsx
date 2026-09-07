@@ -14,6 +14,7 @@ import { SecureVault } from './SecureVault';
 import { AccountSwitcher } from '~/components/Account/AccountSwitcher';
 import { AdminPanel } from '~/components/Admin/AdminPanel';
 import { ConnectedAppsSection } from '~/components/Apps/ConnectedAppsSection';
+import { LOPU_CREDITS_ANCHOR_ID, LopuCreditsPanel } from '~/components/Lopu/LopuCreditsPanel';
 import { LopuPositionSelect } from '~/components/Lopu/LopuPositionSelect';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { LopuSettingsRows } from '~/components/Lopu/LopuHost';
@@ -727,6 +728,21 @@ export const SettingsPage = () => {
             </Flex>
           </SettingsSection>
         </Box>
+
+        {/* 7 · Lopu credits & usage (auth only) — the verified status, the
+            balance, this month / lifetime, history and the request form.
+            Anchored: the balance chip and the locked state deep-link
+            #lopu-credits. */}
+        {user && !user.temporary && (
+          <Box id={LOPU_CREDITS_ANCHOR_ID} width="100%" scrollMarginTop="calc(var(--tt-nav-clearance, 54px) + 16px)">
+            <SettingsSection
+              eyebrow="Lopu credits & usage 🦄"
+              description="What Lopu's turns on Thingtime's own models cost you, in credits (1 credit = 1 USD of list price). Turns on your own Secure Vault providers are free here."
+            >
+              <LopuCreditsPanel key={user.id} admin={user.isAdmin} />
+            </SettingsSection>
+          </Box>
+        )}
       </Flex>
     </Flex>
   );

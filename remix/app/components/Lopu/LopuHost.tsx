@@ -7,6 +7,7 @@ import { ChevronDown, Maximize2, Mic, Minus, X } from 'lucide-react';
 import { LopuActivityBadge, LopuRingAvatar, useLopuStreamingActivity } from './LopuActivityBadge';
 import { LopuChatView } from './LopuChatView';
 import { getLopuStoreServerSnapshot, getLopuStoreSnapshot, selectLopuProviderNames, setLopuSettings, subscribeLopuStore, type LopuVaultProvider } from './lopuChatStore';
+import { useLopuAccount } from './useLopuAccount';
 import { vaultProviderUnavailableReason } from './lopuProviderCore';
 import { LopuVoiceSurface, lopuVoicePhaseLabel, type LopuVoicePhase } from './LopuVoiceControls';
 import { LOPU_UI, lopuIconButtonSx, lopuRainbowRing } from './lopuTheme';
@@ -473,6 +474,12 @@ export const LopuHost = () => {
 	const chatStore = React.useSyncExternalStore(subscribeLopuStore, getLopuStoreSnapshot, getLopuStoreServerSnapshot);
 	const chatProviderId = chatStore.settings.providerId;
 	const chatProviderName = chatProviderId ? selectLopuProviderNames(chatStore)[chatProviderId] || 'Your provider' : null;
+	// the access gate (verified-credits design note §4): the window / sheet
+	// body draws LopuLockedState through LopuChatView / LopuVoiceSurface; the
+	// header's status line and chip follow (the cache seeds it, no fetch here
+	// until the window opens)
+	const account = useLopuAccount({ byo: !!chatProviderId, active: showWindow });
+	const locked = account.access.locked && account.access.reason === 'unverified';
 
 	// keep both surfaces on screen when the viewport changes
 	React.useEffect(() => {
@@ -773,11 +780,13 @@ export const LopuHost = () => {
 	}
 
 	const choice = resolveLopuModelChoice(catalog, settings);
-	const chipVisible = !minimised && !voiceMode && (isMobile || geometry.width >= CHIP_MIN_WINDOW_WIDTH);
+	const chipVisible = !minimised && !voiceMode && !locked && (isMobile || geometry.width >= CHIP_MIN_WINDOW_WIDTH);
 	const detail = [describeLopuEffort(choice.effort), choice.speed === 'fast' ? 'Fast ⚡' : null].filter(Boolean).join(' · ');
 	// the chat's own provider (per-chat store settings) wins over the
 	// catalog choice in the header, exactly as it does for the turn
-	const status = streaming
+	const status = locked
+		? 'Invite-only for now'
+		: streaming
 		? 'Replying…'
 		: voiceMode
 			? voicePhase === 'idle'

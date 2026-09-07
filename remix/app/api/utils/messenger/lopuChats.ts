@@ -100,6 +100,12 @@ export type LopuAssistantTurnMeta = {
 	// the vault connection's name on a 'vault' turn (design note §1.3)
 	providerLabel?: unknown;
 	usage?: unknown;
+	// accounting (verified-access design note §2): who paid, the list price in
+	// micros, whether the model was priced, the balance after the debit
+	billing?: unknown;
+	costMicros?: unknown;
+	priced?: unknown;
+	balanceMicros?: unknown;
 	toolCalls?: unknown;
 	stopReason?: unknown;
 };

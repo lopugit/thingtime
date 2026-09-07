@@ -13,6 +13,11 @@ export const LOPU_TEST_COMPONENT_KEY = 'lopu-test-card';
 export const LOPU_TEST_ACTION_KEY = 'lopu-pong';
 export const LOPU_TEST_PURGE_ACTION_KEY = 'lopu-purge';
 export const LOPU_TEST_MIN_INPUT_CHUNKS = 6;
+// Synthetic usage, reported cumulatively at every hop_end exactly like a real
+// provider: 100 input / 50 output tokens per hop, which the accounting prices
+// against the `test-model` row (0.2 credits per hop) so credits are
+// observable end to end without a key (verified-access design note §2).
+export const LOPU_TEST_USAGE_PER_HOP = Object.freeze({ inputTokens: 100, outputTokens: 50 });
 
 export type LopuTestProviderInput = {
   userText: string;
@@ -256,7 +261,6 @@ export const createLopuTestProvider = (input: LopuTestProviderInput): LopuProvid
 
   async function* streamText(text: string): AsyncGenerator<LopuProviderEvent, void, unknown> {
     for (const chunk of chunkWords(text)) {
-      usage.outputTokens += 1;
       yield { type: 'text', text: chunk };
       await sleep(pace);
     }
@@ -268,7 +272,6 @@ export const createLopuTestProvider = (input: LopuTestProviderInput): LopuProvid
     const json = JSON.stringify(plan.input);
     yield { type: 'tool_use_start', id, name: plan.name };
     for (const chunk of chunkJson(json)) {
-      usage.outputTokens += 1;
       yield { type: 'tool_input_delta', id, name: plan.name, partial: chunk };
       await sleep(pace);
     }
@@ -279,7 +282,8 @@ export const createLopuTestProvider = (input: LopuTestProviderInput): LopuProvid
     const previous: LopuProviderToolResult[][] = [];
     let results: LopuProviderToolResult[] = [];
     for (const build of script) {
-      usage.inputTokens += 1;
+      usage.inputTokens += LOPU_TEST_USAGE_PER_HOP.inputTokens;
+      usage.outputTokens += LOPU_TEST_USAGE_PER_HOP.outputTokens;
       const hop = build(results, previous);
       if (hop.text) yield* streamText(hop.text);
       for (const plan of hop.tools) yield* streamTool(plan);

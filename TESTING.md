@@ -5411,3 +5411,57 @@ Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Auto
 - In Thing rich-text fields, tier inclusions and the advanced modal, check neighbouring labels/actions stay visible. History uses small grey absolute controls near the bottom-right of field and inline editors, moving into nearby clear space for tiny blocks; text must never run underneath them. Compare content dimensions with history visible/hidden: no history padding, minimum width/height or wrapping row may change the preview layout.
 - At desktop, 390px and 320px widths, select/style text, undo/redo, open/close Changes, toggle view/edit and scroll top to bottom. Ensure formatting survives and the active editor overlays do not hide a neighbouring editor.
 - In a crowded mobile composer, select text and verify the formatting toolbar stays above the line. A temporary space opens above the text when needed and closes on deselection. Check Undo/Redo/Changes at bottom right, nearby feed filters/tags, keyboard-sized viewports, and repeated selection without growing gaps.
+
+### Lopu verified access + credits (client — `PRs/lopu-verified-credits-design.md` §4)
+
+Automated coverage: `npm run test:lopu-ui` (`useLopuAccount.test.ts` —
+account / history / admin-row normalisation, the access matrix, credits
+formatting, the store's reactions to `done` and the gate; `lopuTurnCore.test.ts`
+— the `done` accounting fields, the gate, the footer credits;
+`lopuChatStore.test.ts` — `done` → account slice, 402/403 → a gated turn) plus
+`test:hooks`, `test:settings`, `test:nav`. Live: a stack with
+`LOPU_CHAT_PROVIDER=test`, a fresh account (unverified) and an admin.
+
+- [ ] Fresh account, verification required: `/lopu`, the floating window
+      (desktop frame + 375px sheet) and `/lopu/voice` show the locked state —
+      🦄 on the ring, "Lopu is invite-only for now", the one-line admin
+      explanation, "Credits & usage" — with the composer disabled (placeholder
+      names the reason) and the mic disabled; the status line reads
+      "Invite-only — waiting for an admin to verify you"; the navbar 🦄 and
+      the drawer's Lopu entry still open that view (no dead end); the
+      conversations sidebar and Messenger history stay readable. An admin
+      previewing the copy sees the "Admin → Lopu accounts" link
+      (`/settings#lopu-accounts`). Nothing scrolls horizontally at 375px.
+- [ ] Admin → Lopu accounts: the `Thingtime.LopuAccess` editor (require
+      verification, allow own providers when unverified, starter credits,
+      low-balance warning) saves and round-trips; the accounts table paints
+      from cache, search filters by username, the verified toggle flips
+      instantly and reverts on failure (admins are disabled — always
+      verified), "Add credits" grants/adjusts/refunds with a reason, a pending
+      request shows the amount + note with Approve / Decline (decline takes an
+      optional reason), and "Load more" follows the cursor.
+- [ ] Verified account, 0 credits: the balance chip beside the model chip
+      reads "0.00 credits" in red and opens a popover with "Request credits"
+      (`/settings#lopu-credits`) and "Buy credits ↗" only when
+      `THINGTIME_LOPU_TOPUP_URL` is set; a send answers with Lopu's own bubble
+      ("Lopu's credits for your account are used up — add credits to keep
+      going") with Request credits / Try again — never a red error line or a
+      toast, and the text is NOT handed back to the composer. Under the
+      low-balance threshold the chip turns amber; above it, quiet. With one of
+      your own providers pinned the chip reads "your provider".
+- [ ] After a Thingtime-billed turn: the chip moves from the `done` event
+      before the refetch lands; the turn's footer reads "via <model> · <effort>
+      · 0.0132 credits" (BYO / free turns show no credits), and a reloaded
+      history row keeps the same footer.
+- [ ] Settings → Lopu credits & usage (`/settings#lopu-credits`): the verified
+      status line, balance (red at zero / amber low), this month (key, cost,
+      turns), lifetime (cost, turns, tokens in/out), the request form
+      (0.5–1000 credits + note; a pending request replaces the form with
+      "waiting for an admin" + "Check again"; a second request reads the 409
+      as info), "Buy credits ↗" when the URL is set, and the history list
+      (ledger + usage rows newest first, "Load more"). The user settings modal
+      mirrors balance + status with an "Open" link. Logout sweeps
+      `tt-lopu-account-*` with the rest of `tt-lopu-`.
+- [ ] Cold start with no cache: the chat paints unlocked (no flash of the
+      locked card) and flips to locked only when the account says so; a
+      cached account paints its state on the first frame.

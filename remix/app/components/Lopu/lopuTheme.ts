@@ -70,6 +70,9 @@ export const LOPU_UI = {
 	link: 'var(--tt-link, #18181b)',
 	positive: 'var(--tt-positive, #2f9e6b)',
 	danger: 'var(--tt-danger, #d64545)',
+	// the theme's warning tone (the balance chip turning amber under the
+	// low-balance threshold — semantic, never decorative)
+	warning: 'var(--tt-warning, #ffbc48)',
 	// the compact (floating window) body size
 	fontCompact: '13px',
 	fontMono: 'var(--tt-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',

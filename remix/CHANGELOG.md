@@ -18,6 +18,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-06: Lopu verified access + credits (client): a `tt-lopu-account-<uid>`
+  store slice + `useLopuAccount` (refreshed on mount, after every `done` and
+  slowly on focus), the invite-only locked state on `/lopu`, the floating
+  window / sheet and voice mode (composer + mic disabled, navbar 🦄 and the
+  drawer entry still open it), the composer's balance chip (amber under the
+  admin threshold, red at zero with the top-up action, "your provider" for
+  BYO), per-turn footer credits, 403/402 reply refusals as Lopu bubbles with
+  the matching action, Settings → Lopu "Credits & usage" (balance, month,
+  lifetime, cursor history, request form, Buy credits), the user settings
+  modal mirror and Admin → Lopu accounts (verified toggle, balances, pending
+  requests, add credits, `Thingtime.LopuAccess` editor). Design note:
+  [`PRs/lopu-verified-credits-design.md`](../PRs/lopu-verified-credits-design.md). — Claude (AI)
+
 - 2026-09-06: Include #612's final detail-page review follow-up in the main
   release: reject inherited/unknown `from` parameters and keep the Back link
   functional. This completes the source revision beyond the initial #668 merge.

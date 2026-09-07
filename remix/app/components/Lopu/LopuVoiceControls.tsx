@@ -1116,8 +1116,19 @@ export const LopuVoiceSurface = ({ chatId, onChatChange, compact = false, onOpen
 		onPhaseChange?.(voice.phase);
 	}, [onPhaseChange, voice.phase]);
 
+	// the access gate (verified-credits design note §4): a locked account sees
+	// LopuLockedState in the conversation column (LopuChatView draws it) and
+	// the mic / typed path stay disabled; a session that was running when the
+	// lock landed ends
+	const locked = !!chat.viewer.id && chat.account.access.locked;
+	const stopRef = React.useRef(voice.stop);
+	stopRef.current = voice.stop;
+	React.useEffect(() => {
+		if (locked) stopRef.current();
+	}, [locked]);
+
 	return (
-		<Flex className="lopuVoiceSurface" direction="column" flex={1} minH={0} minW={0} width="100%" sx={{ '& .lopuComposerDock, & .lopuComposer': { display: 'none' } }}>
+		<Flex className="lopuVoiceSurface" data-locked={locked ? 'true' : 'false'} direction="column" flex={1} minH={0} minW={0} width="100%" sx={{ '& .lopuComposerDock, & .lopuComposer': { display: 'none' } }}>
 			<LopuChatView
 				chatId={chatId}
 				onChatChange={onChatChange}
@@ -1127,7 +1138,7 @@ export const LopuVoiceSurface = ({ chatId, onChatChange, compact = false, onOpen
 				autoFocus={false}
 				trailing={voice.items.length ? <LopuVoiceTranscript items={voice.items} compact={compact} /> : null}
 			/>
-			<LopuVoiceDeck voice={voice} compact={compact} disabled={!chat.viewer.id} providerValue={providerValue} onProviderChange={onProviderChange} provider={provider} />
+			<LopuVoiceDeck voice={voice} compact={compact} disabled={!chat.viewer.id || locked} providerValue={providerValue} onProviderChange={onProviderChange} provider={provider} />
 		</Flex>
 	);
 };

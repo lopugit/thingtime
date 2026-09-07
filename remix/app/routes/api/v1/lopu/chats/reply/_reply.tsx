@@ -1,8 +1,11 @@
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 import { listAiModels, resolveLopuModelChoice } from '~/api/utils/ai/models';
 import { isAiModelEffort } from '~/api/utils/ai/modelsCore';
+import { LOPU_TEST_MODEL_ID } from '~/api/utils/ai/pricing';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
-import { streamLopuChatTurn, type LopuVaultTurnProvider } from '~/api/utils/lopu/chat';
+import { assertLopuAccess, billingForProvider, lopuAccessResponse, resolveLopuBilling } from '~/api/utils/lopu/access';
+import { debitLopuUsage } from '~/api/utils/lopu/accounting';
+import { hasLopuChatProviderConfigured, lopuChatProviderMode, streamLopuChatTurn, type LopuVaultTurnProvider } from '~/api/utils/lopu/chat';
 import type { LopuChatContext, LopuChatEvent, LopuChatTurnOutcome } from '~/api/utils/lopu/chatEvents';
 import type { LopuApprovedAction } from '~/api/utils/lopu/chatTools';
 import { parseLopuConfirmations, verifyLopuConfirmation, type LopuConfirmationInput } from '~/api/utils/lopu/confirmations';
@@ -247,6 +250,16 @@ export const action = async ({ request }: { request: Request }) => {
     }
   }
 
+  // --- the access gate (verified-access design note §1) --------------------
+  // BEFORE any provider call and before anything is persisted: a guest or an
+  // unverified account is a 403 (LOPU_UNVERIFIED), an exhausted balance on
+  // Thingtime's keys a 402 (LOPU_NO_CREDITS). A vault turn bills the viewer
+  // (byo); the canned fallback is free; the test provider bills like the
+  // server keys so accounting is observable end to end.
+  const expectedBilling = resolveLopuBilling({ vault: !!vaultProvider, mode: lopuChatProviderMode(), configured: hasLopuChatProviderConfigured() });
+  const access = await assertLopuAccess(user, { billing: expectedBilling });
+  if (access.ok === false) return lopuAccessResponse(access);
+
   // --- model choice -------------------------------------------------------
   const catalog = await listAiModels({ id: user.id });
   const overrides = !!(input.model || input.effort || input.speed);
@@ -320,6 +333,7 @@ export const action = async ({ request }: { request: Request }) => {
   const userMessageId = userTurn.message.id;
 
   // --- the stream -----------------------------------------------------------
+  const startedAt = Date.now();
   const abort = new AbortController();
   const requestSignal = (request as Request & { signal?: AbortSignal }).signal;
   if (requestSignal) {
@@ -372,6 +386,33 @@ export const action = async ({ request }: { request: Request }) => {
         const finished = outcome?.stopReason === 'end_turn' || outcome?.stopReason === 'fallback' || outcome?.stopReason === 'tool_limit' || outcome?.stopReason === 'hop_limit' || outcome?.stopReason === 'time_limit' || outcome?.stopReason === 'max_tokens';
         const text = finished && outcome?.text.trim() ? outcome.text : interruptedNote(outcome);
         const stopReason = outcome?.stopReason || 'error';
+
+        // --- accounting (verified-access design note §2) ----------------------
+        // price what the provider reported and record the turn; thingtime
+        // billing is debited (the test provider prices against `test-model`),
+        // byo/free turns are recorded only. Never a chat error — the reply
+        // already streamed; the writer logs and retries once on its own.
+        const turnProvider = outcome?.provider ?? 'fallback';
+        const billing = billingForProvider(turnProvider);
+        const turnModel = outcome?.model ?? choice?.model ?? null;
+        const accounted = await debitLopuUsage(user.id, {
+          surface: 'chat',
+          billing,
+          provider: turnProvider,
+          providerLabel: outcome?.providerLabel ?? null,
+          model: turnModel,
+          pricingModel: turnProvider === 'test' ? LOPU_TEST_MODEL_ID : turnModel,
+          usage: outcome?.usage ?? null,
+          chatId: persistedChatId,
+          requestId: input.requestId,
+          toolCalls: outcome?.toolCalls?.length ?? 0,
+          hops: outcome?.hops ?? 0,
+          durationMs: Date.now() - startedAt
+        });
+        const costMicros = accounted.ok ? accounted.costMicros : 0;
+        const priced = accounted.ok ? accounted.priced : false;
+        const balanceMicros: number | null = accounted.ok ? accounted.balanceMicros : access.account?.crystal.balanceMicros ?? null;
+
         let assistantMessageId = '';
         let messages: PublicChatMessage[] = [];
         try {
@@ -386,6 +427,10 @@ export const action = async ({ request }: { request: Request }) => {
               provider: outcome?.provider ?? 'fallback',
               ...(outcome?.providerLabel ? { providerLabel: outcome.providerLabel } : {}),
               usage: outcome?.usage,
+              billing,
+              costMicros,
+              priced,
+              balanceMicros,
               toolCalls: outcome?.toolCalls ?? [],
               stopReason
             }
@@ -399,7 +444,7 @@ export const action = async ({ request }: { request: Request }) => {
         } catch (error: any) {
           console.error('[lopu] assistant turn persist threw:', error?.message || error);
         }
-        send({ type: 'done', assistantMessageId, messages, ...(outcome?.usage ? { usage: outcome.usage } : {}), stopReason });
+        send({ type: 'done', assistantMessageId, messages, ...(outcome?.usage ? { usage: outcome.usage } : {}), billing, costMicros, priced, balanceMicros, stopReason });
         try {
           controller.close();
         } catch {

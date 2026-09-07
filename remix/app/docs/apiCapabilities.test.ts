@@ -89,23 +89,42 @@ test('the storage census and ciControl workbench allowlist publish their minor c
 
 test('the Lopu family publishes its minor capability updates (own providers, verified keys)', () => {
 	const manifest = createApiCapabilitiesManifest();
-	// 1.3.0: vaultProviders[].realtimeModels + the kind-default model for a row saved without one
-	assert.equal(manifest.features['api.ai-models'], '1.3.0');
+	// 1.3.0: vaultProviders[].realtimeModels + the kind-default model for a row saved without one;
+	// 1.4.0: models[].pricing (list price per million tokens, verified-access design note §2)
+	assert.equal(manifest.features['api.ai-models'], '1.4.0');
 	assert.equal(manifest.features['api.admin-ai-models'], '1.1.0');
 	assert.equal(manifest.features['api.settings-lopu-chat-defaults'], '1.1.0');
-	// 1.1.1 / 1.0.1: the chat write buckets fail closed on a limiter outage
-	assert.equal(manifest.features['api.lopu-chats'], '1.1.1');
+	// 1.1.1 / 1.0.1: the chat write buckets fail closed on a limiter outage;
+	// 1.2.0 (create): the verified-access gate (403 LOPU_UNVERIFIED / 402 LOPU_NO_CREDITS, guests 403)
+	assert.equal(manifest.features['api.lopu-chats'], '1.2.0');
 	assert.equal(manifest.features['api.lopu-chats-update'], '1.1.1');
 	assert.equal(manifest.features['api.lopu-chats-delete'], '1.0.1');
 	// 1.2.0: server-verified confirmations (confirmations[] in, confirm event +
-	// tool_result.needsConfirmation out) and the JSON-only fence (415)
-	assert.equal(manifest.features['api.lopu-chats-reply'], '1.2.0');
+	// tool_result.needsConfirmation out) and the JSON-only fence (415);
+	// 1.3.0: the verified-access gate + billing / usage / costMicros / balanceMicros on meta, done and the persisted turn
+	assert.equal(manifest.features['api.lopu-chats-reply'], '1.3.0');
 	// 1.1.0: optional provider `model` + templates with catalog models / more kinds (vault);
-	// optional per-turn model, effort, speed (voice turn) — on top of the 1.0.1 fences
+	// optional per-turn model, effort, speed (voice turn) — on top of the 1.0.1 fences;
+	// 1.2.0 (voice reply): the gate on conversation turns + billing/usage/costMicros on done
 	assert.equal(manifest.features['api.lopu-vault'], '1.1.0');
-	assert.equal(manifest.features['api.lopu-voice-reply'], '1.1.0');
-	// direct voice (§6.1): the ephemeral realtime credential
-	assert.equal(manifest.features['api.lopu-voice-session'], '1.0.0');
+	assert.equal(manifest.features['api.lopu-voice-reply'], '1.2.0');
+	// direct voice (§6.1): the ephemeral realtime credential; 1.1.0: the gate + a usage row per session
+	assert.equal(manifest.features['api.lopu-voice-session'], '1.1.0');
+});
+
+test('the Lopu verified-access and credits family publishes its contracts', () => {
+	const manifest = createApiCapabilitiesManifest();
+	for (const feature of [
+		'api.admin-users-lopu-access',
+		'api.settings-lopu-access',
+		'api.lopu-account',
+		'api.lopu-account-history',
+		'api.lopu-account-topup-request',
+		'api.admin-lopu-accounts',
+		'api.admin-lopu-credits'
+	]) {
+		assert.equal(manifest.features[feature], '1.0.0', feature);
+	}
 });
 
 test('persistent attachment content and resized previews advertise their additive contract', () => {
