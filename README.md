@@ -1835,6 +1835,101 @@ AI-backed musings per detected IP address per rolling hour. Requests over the
 limit, or requests made while the rate-limit collection is unavailable, stream
 the preset fallback responses instead of calling an AI provider.
 
+## Third-party app connections
+
+`/connections` links external accounts (Reddit, YouTube channels, Mastodon,
+Bluesky, Lemmy, Hacker News, GitHub activity, any RSS/Atom feed, plus a
+deterministic demo provider) to a Thingtime account; `/connections/feed`
+browses them with native Thingtime comments/reactions layered on the synced
+posts, and AI feed filters ("warn for sad news" → veiled behind a Show
+button, or hidden) applied server-side.
+
+Fork-safe setup: the shipped providers are keyless public-content APIs and
+need **no configuration**. AI-backed filter classification reuses the Lopu
+provider keys above (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY`) and the Admin AI
+model waterfall; without any key, classification falls back to a
+deterministic keyword heuristic so the feature keeps working. Verify a
+deployment end to end with:
+
+```sh
+pnpm --dir remix run verify:connections
+```
+
+(94 real-API checks against the local nitro port; `TT_VERIFY_LIVE=1` adds a
+live Hacker News pull, for 96.)
+
+### SSO account linking (Facebook, Instagram, TikTok, YouTube account)
+
+SSO providers use real OAuth sign-in: Connect sends the browser to the
+provider's own login, and the token response is sealed into the linked
+account's secure storage server-side (no token ever reaches a client). Each
+provider stays `configured: false` (UI: "Needs setup") until its app
+credentials are set:
+
+```sh
+# Meta app (facebook provider — scopes public_profile,user_posts)
+FACEBOOK_APP_ID="<meta-app-id>"
+FACEBOOK_APP_SECRET="<meta-app-secret>"
+# Instagram API with Instagram Login (professional accounts)
+INSTAGRAM_APP_ID="<instagram-app-id>"
+INSTAGRAM_APP_SECRET="<instagram-app-secret>"
+# TikTok Login Kit (scopes user.info.basic,video.list)
+TIKTOK_CLIENT_KEY="<tiktok-client-key>"
+TIKTOK_CLIENT_SECRET="<tiktok-client-secret>"
+# Google OAuth client (youtube-account provider — youtube.readonly)
+GOOGLE_CLIENT_ID="<google-oauth-client-id>"
+GOOGLE_CLIENT_SECRET="<google-oauth-client-secret>"
+# Reddit script app (reddit-account provider — syncs your REAL front page)
+REDDIT_CLIENT_ID="<reddit-app-client-id>"
+REDDIT_CLIENT_SECRET="<reddit-app-secret>"
+# Mastodon app registered on ONE instance (mastodon-account provider — syncs
+# your REAL home timeline; users of that instance sign in there)
+MASTODON_INSTANCE="mastodon.social"
+MASTODON_CLIENT_ID="<mastodon-app-client-id>"
+MASTODON_CLIENT_SECRET="<mastodon-app-secret>"
+# X app (x provider — home timeline; requires a PAID X API tier to read)
+X_CLIENT_ID="<x-oauth2-client-id>"
+X_CLIENT_SECRET="<x-oauth2-client-secret>"
+# Twitch app (twitch provider — followed channels that are live)
+TWITCH_CLIENT_ID="<twitch-client-id>"
+TWITCH_CLIENT_SECRET="<twitch-client-secret>"
+# Tumblr app (tumblr provider — your REAL dashboard feed)
+TUMBLR_CLIENT_ID="<tumblr-consumer-key>"
+TUMBLR_CLIENT_SECRET="<tumblr-consumer-secret>"
+# Pinterest app (pinterest provider — your own pins; no home-feed API)
+PINTEREST_CLIENT_ID="<pinterest-app-id>"
+PINTEREST_CLIENT_SECRET="<pinterest-app-secret>"
+# LinkedIn app (linkedin provider — account linking only; feeds are partner-gated)
+LINKEDIN_CLIENT_ID="<linkedin-client-id>"
+LINKEDIN_CLIENT_SECRET="<linkedin-client-secret>"
+# Spotify app (spotify provider — recently played + followed-artist releases)
+SPOTIFY_CLIENT_ID="<spotify-client-id>"
+SPOTIFY_CLIENT_SECRET="<spotify-client-secret>"
+# Optional: YouTube Data API key — lights up channel NAME search for the
+# Thingtime-managed virtual subscription list (ids/URLs/@handles work keyless)
+YOUTUBE_API_KEY="<youtube-data-api-key>"
+# Optional: pin the OAuth redirect origin when the app runs behind a proxy or
+# tunnel (must match the redirect URI registered with each provider app)
+CONNECTIONS_OAUTH_REDIRECT_BASE="https://your-host.example.com"
+# Optional: dedicated HMAC key the PKCE code verifier is derived from. Falls
+# back to JWT_SECRET / JWT_PRIVATE_KEY, so every deployment already has one;
+# set it only to rotate PKCE independently of the auth signing key. Any
+# in-flight connect started before a rotation just has to be retried.
+CONNECTIONS_PKCE_SECRET="<random-32-byte-secret>"
+```
+
+Register `https://<your-host>/api/v1/connections/oauth/callback` as the OAuth
+redirect URI in each provider app's settings (Meta and TikTok require https —
+a tunnel origin works for local dev). Official-API honesty notes: Meta removed
+the friends News Feed API in 2015, so the facebook provider syncs your own
+timeline posts; Instagram and TikTok expose your own media/videos, not the
+home/For You feed; the youtube-account provider syncs the latest uploads from
+your real subscriptions. The REAL algorithmic home feeds come from the
+providers whose APIs expose them: `reddit-account` (your front page),
+`mastodon-account` (your home timeline), and `bluesky-account` (your
+following timeline — connects with an app password, no developer app needed:
+the password is exchanged for a session and never stored).
+
 ## Branch automation: develop → main promotion
 
 `develop` is the integration branch; `main` is the release branch. The one

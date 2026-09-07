@@ -859,6 +859,59 @@ export function useApi() {
         [asyncFetcher]
       )
     },
+    // third-party app connections (Reddit, YouTube, Mastodon, …) — link
+    // external accounts, browse their feeds, manage AI feed filters
+    connections: {
+      providers: useCallback(async () => getJson('/api/v1/connections/providers'), []),
+      list: useCallback(async () => getJson('/api/v1/connections'), []),
+      connect: useCallback(
+        async (args) => asyncFetcher.submit({ provider: args?.provider, fields: args?.fields }, { action: '/api/v1/connections' }),
+        [asyncFetcher]
+      ),
+      unlink: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/connections/unlink' }), [asyncFetcher]),
+      // SSO account linking: begin returns the provider's authorize URL — send
+      // the browser there; the callback lands back on /connections
+      oauthBegin: useCallback(
+        async (args) => asyncFetcher.submit({ provider: args?.provider }, { action: '/api/v1/connections/oauth/begin' }),
+        [asyncFetcher]
+      ),
+      // the Thingtime-managed virtual YouTube subscription list
+      youtubeSearch: useCallback(async (args) => getJson(`/api/v1/connections/youtube/search${toQuery({ q: args?.q })}`), []),
+      youtubeChannels: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            { ...(args && 'add' in args ? { add: args.add } : {}), ...(args?.remove ? { remove: args.remove } : {}) },
+            { action: '/api/v1/connections/youtube/channels' }
+          ),
+        [asyncFetcher]
+      ),
+      feed: useCallback(
+        async (args) =>
+          getJson(
+            `/api/v1/connections/feed${toQuery({
+              connection: args?.connection,
+              cursor: args?.cursor,
+              limit: args?.limit,
+              sync: args?.sync,
+              deepen: args?.deepen
+            })}`
+          ),
+        []
+      ),
+      filters: useCallback(async () => getJson('/api/v1/connections/filters'), []),
+      saveFilter: useCallback(
+        async (args) =>
+          asyncFetcher.submit(
+            { id: args?.id, name: args?.name, prompt: args?.prompt, action: args?.action, enabled: args?.enabled },
+            { action: '/api/v1/connections/filters' }
+          ),
+        [asyncFetcher]
+      ),
+      removeFilter: useCallback(
+        async (args) => asyncFetcher.submit({ id: args?.id, remove: true }, { action: '/api/v1/connections/filters' }),
+        [asyncFetcher]
+      )
+    },
     // first-party browsing of app namespaces (what has each app stored for me)
     apps: {
       list: useCallback(async () => getJson('/api/v1/apps'), []),

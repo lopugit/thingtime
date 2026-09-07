@@ -160,6 +160,10 @@ export const router = createBrowserRouter([
       { path: 'p/:id', lazy: lazyRoute(() => import('./routes/p')) },
       // the storybook-style design-system docs own the canonical short URL too
       { path: 'design-system', loader: () => redirect('/docs/design-system'), element: <HydrateFallback /> },
+      // third-party app connections — no guard: both pages render their own
+      // signed-out quiet state (the /settings, /apps idiom)
+      { path: 'connections', lazy: lazyRoute(() => import('./routes/connections')) },
+      { path: 'connections/feed', lazy: lazyRoute(() => import('./routes/connections-feed')) },
       { path: 'crypto', lazy: lazyRoute(() => import('./routes/crypto')) },
       {
         path: 'docs',

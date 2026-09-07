@@ -43,6 +43,7 @@ import {
 	userUsernameKey
 } from '../auth/users';
 import { waitlistEmailKey } from '../waitlist/waitlist';
+import { externalPostSourceKey, externalPostSourceShareId } from '../connections/connections';
 import { RELATIONSHIP_UNIQUE_CRYSTAL_KEYS, relationshipUniqueKeys } from '../messenger/shared';
 import { themeAcl } from '../themes/themes';
 import {
@@ -73,6 +74,8 @@ import {
 import { reconcileUserStorage, userStorageAllowanceIsValid } from '../storage/userStorage';
 import {
   ACL_ALL,
+  ACL_EXTACCT_PREFIX,
+  ACL_EXT_SOURCED,
   ACL_INHERIT,
   ACL_OWNER,
   APP_STORAGE_ACCOUNTING_VERSION,
@@ -3134,6 +3137,130 @@ const backfillRelationshipUniqueKeys: Migration = {
 	}
 };
 
+// Connections membership went relational: an external post used to carry a
+// root `sourceIds` array (one element per sourcing account) plus, for personal
+// providers, one `tt:extacct/<accountId>` acl entry per source. Both grew with
+// the number of accounts that ever surfaced the post — for personal-timeline
+// providers that means one element PER USER, so a viral post's doc grew
+// without bound, and the acl (which PublicPost discloses verbatim) leaked the
+// external-account ids of everyone else who sourced it. Membership is now one
+// external-post-source row per (post, account), and the post's acl is the
+// constant `tt:extsourced`, resolved live against those rows.
+const legacyExternalSourceFilter = { thingtime: 'external-post', sourceIds: { $type: 'array' } } as any;
+
+const relationalExternalPostSources: Migration = {
+	id: 'relational-external-post-sources',
+	collection: 'things',
+	fromVersion: THINGS_VERSION,
+	toVersion: THINGS_VERSION,
+	title: 'Move external-post source membership onto relational rows',
+	description:
+		'Converts each synced external post\'s embedded `sourceIds` array into one external-post-source thing per ' +
+		'(post, account) — canonical v2 child relation (root targetId = the post\'s shareId), uniqueKeys-deduped on ' +
+		'`sourceKey:<postId>:<accountId>`, createdAt denormalized from the post so the feed can page membership ' +
+		'directly. Rewrites the per-source `tt:extacct/<accountId>` acl entries to the single constant ' +
+		'`tt:extsourced` (public posts keep tt:all), then unsets sourceIds. Idempotent: row shareIds are ' +
+		'deterministic and only posts still carrying sourceIds are touched.',
+	pending: async () => {
+		const things = await getCollection('things');
+		return things.countDocuments(legacyExternalSourceFilter);
+	},
+	run: async ({ dryRun, assertLease }) => {
+		const things = await getCollection('things');
+		const matched = await things.countDocuments(legacyExternalSourceFilter);
+		const notes: string[] = [];
+		let migrated = 0;
+		let created = 0;
+		let skipped = 0;
+		if (dryRun || !matched) return { dryRun, matched, migrated, created, skipped, notes };
+		// Progress comes from `$unset: sourceIds` taking each converted doc out of
+		// the filter, so a doc the loop SKIPS would be handed back by every
+		// subsequent page — a full batch of them spins forever, holding the
+		// migration lease. Skips are carried out of the filter explicitly instead.
+		const skippedIds: unknown[] = [];
+		while (true) {
+			await assertLease?.();
+			const batch = await things
+				.find(skippedIds.length ? ({ ...legacyExternalSourceFilter, _id: { $nin: skippedIds } } as any) : legacyExternalSourceFilter)
+				.project({ shareId: 1, sourceIds: 1, acl: 1, crystal: 1, createdAt: 1 })
+				.limit(THINGS_BATCH)
+				.toArray();
+			if (!batch.length) break;
+			for (const doc of batch) {
+				const postShareId = String(doc.shareId || '');
+				const accountIds: string[] = Array.from(
+					new Set<string>(
+						(Array.isArray(doc.sourceIds) ? (doc.sourceIds as unknown[]) : [])
+							.map((id: unknown) => String(id || ''))
+							.filter((id: string): id is string => !!id)
+					)
+				);
+				if (!postShareId) {
+					skipped += 1;
+					skippedIds.push(doc._id);
+					continue;
+				}
+				const now = new Date();
+				for (const accountId of accountIds) {
+					const sourceKey = externalPostSourceKey(postShareId, accountId);
+					try {
+						const result = await things.updateOne(
+							{ shareId: externalPostSourceShareId(postShareId, accountId), thingtime: 'external-post-source' } as any,
+							{
+								// root parentId = the sourcing account: the feed and the
+								// tt:extsourced membership check both filter on it, as a
+								// root-field residual over the existing (thingtime, createdAt,
+								// shareId) and (targetId, thingtime, …) indexes.
+								// In $set so a row created by an earlier run converges too.
+								$set: { updatedAt: now, parentId: accountId },
+								$setOnInsert: {
+									schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+									thingtime: ['external-post-source'],
+									ownerId: 'system',
+									acl: [],
+									storageClass: 'control',
+									targetId: postShareId,
+									crystal: { accountId, provider: String(doc?.crystal?.provider || ''), sourceKey },
+									uniqueKeys: [toBin(`sourceKey:${sourceKey}`)],
+									extended: null,
+									tags: [],
+									createdAt: doc.createdAt instanceof Date ? doc.createdAt : new Date(doc.createdAt || now)
+								}
+							} as any,
+							{ upsert: true }
+						);
+						if (result.upsertedCount) created += 1;
+					} catch (err: any) {
+						// a uniqueKeys twin already holds this (post, account) slot —
+						// membership is already represented, nothing to guess at
+						if (err?.code !== 11000) throw err;
+						skipped += 1;
+					}
+				}
+				// Personal posts carried per-source tt:extacct/ entries and nothing
+				// else; public posts carried tt:all. Preserve which of the two the
+				// post was, and drop every account-naming entry.
+				const acl = (Array.isArray(doc.acl) ? doc.acl : []).map((entry: unknown) => String(entry || ''));
+				const hadPerSource = acl.some((entry) => entry.includes(ACL_EXTACCT_PREFIX));
+				const nextAcl = acl.filter((entry) => entry && !entry.includes(ACL_EXTACCT_PREFIX));
+				if (hadPerSource && !nextAcl.includes(ACL_EXT_SOURCED)) nextAcl.push(ACL_EXT_SOURCED);
+				// a post with neither audience would become invisible to everyone —
+				// it can only mean an empty legacy acl, so fail closed to personal
+				if (!nextAcl.length) nextAcl.push(ACL_EXT_SOURCED);
+				await things.updateOne({ shareId: postShareId } as any, {
+					$set: { acl: nextAcl, updatedAt: new Date() },
+					$unset: { sourceIds: '' }
+				} as any);
+				migrated += 1;
+			}
+			if (batch.length < THINGS_BATCH) break;
+		}
+		if (created) notes.push(`${created} external-post-source row(s) created`);
+		if (migrated) notes.push(`${migrated} external post(s) converted to relational membership`);
+		return { dryRun, matched, migrated, created, skipped, notes };
+	}
+};
+
 export const migrations: Migration[] = [
 	// Physical residue must land in the current generation before any logical
 	// shape or byte-ledger migration can declare its source universe complete.
@@ -3155,6 +3282,10 @@ export const migrations: Migration[] = [
   backfillAppStorageAllowances,
 	backfillUserStorageAccounting,
 	backfillRelationshipUniqueKeys,
+	relationalExternalPostSources,
+	// Shape first, then storage: relocate drains the ci-* rows out of things and
+	// rebuild reclaims the index bytes they left behind, so both run after every
+	// migration that still reads or rewrites things documents.
 	relocateCiControlTelemetry,
 	rebuildThingsIndexes,
   dropStaleCollectionGenerations
