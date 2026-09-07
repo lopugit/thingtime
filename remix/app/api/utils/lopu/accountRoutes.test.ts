@@ -243,7 +243,9 @@ test('POST /api/v1/lopu/account/topup-request: fence, validation, one pending at
   const mail = renderLopuTopupRequestEmail({ username: 'nik', userId: 'user-1', credits: 2.5, note: '<b>hi</b>', adminUrl: 'https://thingtime.test/admin' });
   assert.match(mail.subject, /@nik asks for 2\.5 credits/);
   assert.ok(mail.html.includes('&lt;b&gt;hi&lt;/b&gt;'));
-  assert.ok(mail.text.includes('https://thingtime.test/admin'));
+  // exact final line, not a substring: an `includes` here would also pass on
+  // https://thingtime.test/admin.evil.com (CodeQL js/incomplete-url-substring-sanitization)
+  assert.equal(mail.text.split('\n').at(-1), 'Review it under Admin \u2192 Lopu accounts: https://thingtime.test/admin');
 });
 
 test('POST /api/v1/admin/users/lopu-access: admin-only, JSON-only, validated, fail-closed', async () => {
