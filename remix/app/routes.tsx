@@ -192,6 +192,13 @@ export const router = createBrowserRouter([
       { path: 'lopu/voice', lazy: lazyRoute(() => import('./routes/lopu-voice')), loader: requireUser('/login') },
       { path: 'lopu/:chatId', lazy: lazyRoute(() => import('./routes/lopu')) },
       { path: 'login', element: <Login />, loader: requireGuest('/profile') },
+      // the generated marketing suite: hub, the social-image suite, one index
+      // per category (+ /marketing/search) and a splat resolver for the
+      // 1600+ catalog pages ("landing/feed", "for/developers/open-api", …)
+      { path: 'marketing', lazy: lazyRoute(() => import('./routes/marketing/_index')) },
+      { path: 'marketing/social-media', lazy: lazyRoute(() => import('./routes/marketing/social-media')) },
+      { path: 'marketing/:category', lazy: lazyRoute(() => import('./routes/marketing/category')) },
+      { path: 'marketing/*', lazy: lazyRoute(() => import('./routes/marketing/page')) },
       // admin database-migrations console (Dev drawer → Migrations) — moved
       // out of /docs/schemas into its own page
       { path: 'migrations', lazy: lazyRoute(() => import('./routes/migrations')) },
