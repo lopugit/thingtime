@@ -11,7 +11,7 @@ import {
 } from '~/schemas/registry';
 import {
   POST_TYPES,
-  VISIBILITIES,
+  REQUESTABLE_VISIBILITIES,
   appMatchClauses,
   appShapeProjections,
   appVisiblePage,
@@ -495,9 +495,11 @@ export const searchThings = async (
   const types = csvList(query.types).filter((entry): entry is PostType => POST_TYPES.includes(entry as PostType));
   if (types.length) clauses.push(typeClause(types));
 
-  // audience circles narrow the visibility superset below
+  // audience circles narrow the visibility superset below — validate against
+  // the REQUESTABLE set so 'hidden' survives (a dropped circle silently reads
+  // as "no circle filter", which widens rather than narrows)
   const circles = csvList(query.circles).filter((entry): entry is PostVisibility =>
-    VISIBILITIES.includes(entry as PostVisibility)
+    REQUESTABLE_VISIBILITIES.includes(entry as PostVisibility)
   );
 
   // author: one username → ownerId. An unknown username matches nothing —

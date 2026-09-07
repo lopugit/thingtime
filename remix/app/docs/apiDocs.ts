@@ -8381,7 +8381,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares.',
     detail:
-      'Everything is a thing: one root Thing schema per doc, sub-schemas applied via the thingtime array of schema ids (see /schemas), the payload under crystal, and the audience under acl — tt: grants plus "-"-prefixed exclusions where the most specific matching entry wins (["tt:all"] public, ["-tt:all","tt:userFriends","tt:user"] friends-only, ["tt:all","-tt:user/somebody"] public except one user; owners always see their own things). POST creates (unified shape or the legacy post body — same path), GET reads one thing / lists a target’s attached things / lists your own, PUT upserts by id (create-or-replace), PATCH merges a partial update, DELETE removes an owned thing and its attached comments/reactions. The legacy visibility names still work as input and are derived on the wire. Crystals are optionally schema-less: omit thingtime and it defaults to ["data"], the bounded free-form crystal. Beside the crystal, every thing also carries a schema-free extended property — any JSON up to 512KB, stored and returned exactly as given, never validated or interpreted, and not structured-searchable (/search field conditions can’t target it, though its string content is indexed by the wildcard text index). extended replaces as a whole value on write (deep-merging arbitrary JSON is ambiguous) and null clears it — the open sidecar external apps park their data in. Things also carry a tokenAcl grant list (tt:token/<token id> entries, see /api/v1/tokens-docs): sandboxed personal-access-tokens may only mutate things carrying their entry; creators are auto-granted, the list replaces whole via tokenAcl on POST/PUT/PATCH (null clears, max 32 entries), it never affects visibility, and it projects to the owner only.',
+      'Everything is a thing: one root Thing schema per doc, sub-schemas applied via the thingtime array of schema ids (see /schemas), the payload under crystal, and the audience under acl — tt: grants plus "-"-prefixed exclusions where the most specific matching entry wins (["tt:all"] public, ["-tt:all","tt:userFriends","tt:user"] friends-only, ["tt:all","-tt:user/somebody"] public except one user; owners always see their own things). POST creates (unified shape or the legacy post body — same path), GET reads one thing / lists a target’s attached things / lists your own, PUT upserts by id (create-or-replace), PATCH merges a partial update, DELETE removes an owned thing and its attached comments/reactions. The legacy visibility names still work as input and are derived on the wire — including "hidden" (acl ["tt:hidden","tt:user"]): an unlisted thing that never appears in feeds, listings, profiles, or search for anyone but its owner, yet is viewable by ANYONE presenting its randomly generated linkKey — GET /api/v1/things?id=<id>&key=<linkKey>, or the /post/<id>?key=<linkKey> page. The server mints a fresh linkKey whenever a thing enters hidden (re-hiding rotates it, so previously shared links die), projects it to the owner only, and honors it on the engagement routes too (body.key on comment/react/save/share admits key-holders). Changing the audience away from hidden retires the link instantly. "custom" audiences go further: an acl carrying the tt:custom marker names exactly who can do what — a baseline (tt:all = everyone may read, tt:hidden = link-key holders may read, neither = only the people below), plus per-user grants tt:user/<username> (read), tt:user/<username>/comment, tt:user/<username>/write and per-group grants tt:group/<group id>[/comment|/write] (groups: /api/v1/groups-docs; write ⊃ comment ⊃ read). On custom things, general viewers READ ONLY — commenting, reacting, and sharing need the comment capability, and users with write may PATCH the thing’s crystal/extended/tags (never its audience, folder, or token grants; storage stays billed to the owner). Saves are exempt (a save is a private bookmark). The composer’s Custom option builds these acls visually. Crystals are optionally schema-less: omit thingtime and it defaults to ["data"], the bounded free-form crystal. Beside the crystal, every thing also carries a schema-free extended property — any JSON up to 512KB, stored and returned exactly as given, never validated or interpreted, and not structured-searchable (/search field conditions can’t target it, though its string content is indexed by the wildcard text index). extended replaces as a whole value on write (deep-merging arbitrary JSON is ambiguous) and null clears it — the open sidecar external apps park their data in. Things also carry a tokenAcl grant list (tt:token/<token id> entries, see /api/v1/tokens-docs): sandboxed personal-access-tokens may only mutate things carrying their entry; creators are auto-granted, the list replaces whole via tokenAcl on POST/PUT/PATCH (null clears, max 32 entries), it never affects visibility, and it projects to the owner only.',
     auth: {
       mode: 'session-or-bearer',
       description:
@@ -9526,7 +9526,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/tokens',
     summary: 'Mint and list scoped API tokens — hand one to an AI or script so it can work your things.',
     detail:
-      'Personal access tokens (minted in Settings → Token minter, or here) are scoped, revocable Bearer credentials for the things API — made to hand to an AI agent or script so it can push new things, update things, and scan your things without your password. GET lists your tokens plus the scope and visibility catalogs; POST mints one: { name?, scopes: string[], expiresInMs?: number|null, maxUses?: number|null, onlyCreatedThings?: boolean, visibility?: "all"|"public"|"private" }. Scopes are dot paths with ancestor coverage — "things" covers every "things.*" leaf (read, create, update, delete, comment, react, save, share); upserts (PUT /api/v1/things) need BOTH things.create and things.update. Lifetime is two independent dials: expiresInMs from 1 (one millisecond) to null (never expires), and maxUses from 1 to null (unlimited) — each successfully authenticated request consumes one use; a missing-scope 403 consumes nothing. onlyCreatedThings: true sandboxes the token to its granted things — every thing it creates carries its tt:token/<token id> entry in the thing’s tokenAcl grant list, and its updates, deletes, comments, reactions, saves and shares only work on things whose tokenAcl carries its entry (403 anywhere else; reads still follow things.read). Grants layer: put several tokens’ entries on one thing (tokenAcl on create, or replace it whole via PATCH/PUT /api/v1/things) and those sandboxed tokens overlap on it. visibility fences the token to one audience of things: "public" means it only sees and touches world-visible things (acl tt:all — your private things stay invisible to it, and everything it creates or edits must stay public), "private" means it only sees and touches non-public things (it cannot read the public feed, publish, or engage publicly; its standalone creations default to acl ["tt:user"]), and "all" (the default) applies no fence. The fence covers reads AND writes, resolves inherited audiences through the target chain (a comment is as public as its post), and 403s with a clear message when a mutation crosses it. The token string is returned ONCE and never shown again (only the revocable session record is kept). Tokens work ONLY on the things routes plus /api/v1/tokens/self — they cannot manage tokens, change auth settings, or reach any other surface.',
+      'Personal access tokens (minted in Settings → Token minter, or here) are scoped, revocable Bearer credentials for the things API — made to hand to an AI agent or script so it can push new things, update things, and scan your things without your password. GET lists your tokens plus the scope and visibility catalogs; POST mints one: { name?, scopes: string[], expiresInMs?: number|null, maxUses?: number|null, onlyCreatedThings?: boolean, visibility?: "all"|"public"|"private"|"hidden", allowGet?: boolean }. Scopes are dot paths with ancestor coverage — "things" covers every "things.*" leaf (read, create, update, delete, comment, react, save, share); upserts (PUT /api/v1/things) need BOTH things.create and things.update. Lifetime is two independent dials: expiresInMs from 1 (one millisecond) to null (never expires), and maxUses from 1 to null (unlimited) — each successfully authenticated request consumes one use; a missing-scope 403 consumes nothing. onlyCreatedThings: true sandboxes the token to its granted things — every thing it creates carries its tt:token/<token id> entry in the thing’s tokenAcl grant list, and its updates, deletes, comments, reactions, saves and shares only work on things whose tokenAcl carries its entry (403 anywhere else; reads still follow things.read). Grants layer: put several tokens’ entries on one thing (tokenAcl on create, or replace it whole via PATCH/PUT /api/v1/things) and those sandboxed tokens overlap on it. visibility fences the token to one audience of things: "hidden" means it lives entirely in hidden link-key things (its creates are born hidden and mint their secret link), "public" means it only sees and touches world-visible things (acl tt:all — your private things stay invisible to it, and everything it creates or edits must stay public), "private" means it only sees and touches non-public things (it cannot read the public feed, publish, or engage publicly; its standalone creations default to acl ["tt:user"]), and "all" (the default) applies no fence. The fence covers reads AND writes, resolves inherited audiences through the target chain (a comment is as public as its post), and 403s with a clear message when a mutation crosses it. The token string is returned ONCE and never shown again (only the revocable session record is kept). Tokens work ONLY on the things routes plus /api/v1/tokens/self — they cannot manage tokens, change auth settings, or reach any other surface.',
     auth: {
       mode: 'session',
       description: 'Full session (cookie or service-account Bearer) required — a personal access token can never mint or list tokens.'
@@ -9601,8 +9601,102 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Expiry is enforced at millisecond precision server-side; the sessions TTL index reaps expired tokens, so they eventually disappear from the list.',
       'onlyCreatedThings sandbox: scopes say WHAT verbs, tokenAcl grants say ON WHICH things. A sandboxed token needs its tt:token/<id> entry on the thing — its own creations carry it automatically, the owner (or any credential that can update the thing) layers more tokens on by editing tokenAcl, and removing an entry revokes that token’s reach immediately. Re-sharing a token-created share of a foreign post still blocks (shares attach to the root).',
       'visibility fence: the third axis — scopes say WHAT verbs, tokenAcl says WHICH things, visibility says WHICH AUDIENCE. "public" and "private" partition things by whether their (inherit-resolved) acl carries tt:all; both directions of the boundary are locked (a public-only token cannot make a public thing private, a private-only token cannot publish). Tokens minted before this field behave as "all". Combines freely with onlyCreatedThings.',
+      'allowGet: true additionally opens /api/v1/get to this token — the whole things surface as plain GET URLs with the token in a query param, for browse-only agents. Off by default: a token in a URL lands in logs and history, so it is a per-token informed opt-in. See the GET bridge endpoint below.',
       'tokenAcl entries for revoked or unknown tokens are inert (the credential can’t authenticate), so grant lists never need cleanup to stay safe.',
       'At most 200 tokens per user — revoke old ones to make room.'
+    ]
+  }),
+  endpoint({
+    id: 'get-bridge',
+    group: 'tokens',
+    title: 'GET bridge',
+    endpoint: '/api/v1/get',
+    summary: 'The whole token API as plain GET URLs — for agents that can only browse.',
+    detail:
+      'GET /api/v1/get?token=<personal access token>&op=<op>… exposes the personal-access-token things surface as single GET requests, for AIs and agents that can open URLs but cannot send headers, bodies, or non-GET verbs. Only tokens minted with allowGet: true (“Works via GET links” in the Settings token minter) resolve here — the query-param credential is a deliberate opt-in, because URLs land in logs and browser history. Cookies are never read on this route, so a mutating GET cannot be forged with ambient browser credentials; the unguessable token is the authorization. op is one of: get, list, search, feed, self, create, update, upsert, delete, react, comment, save, share — each behaves exactly like its normal endpoint: same scopes (checked before a use is consumed; missing-scope 403s are free), same atomic use accounting, same rate limits, and the same onlyCreatedThings sandbox and visibility fence. Arguments come from an optional body param holding a URL-encoded JSON object, with every other query parameter overlaid on top: values starting with { [ or " parse as JSON, everything else stays a string (so ?text=hello and ?emoji=🔥 mean what they look like; put numbers in body). thingtime and tags accept a bare csv (thingtime=post,comment, tags=travel,food). key admits hidden-link things exactly like ?key= on GET /api/v1/things. op=self is free introspection — the natural first call for an agent handed a bridge URL. Responses carry Cache-Control: private, no-store and Referrer-Policy: no-referrer.',
+    auth: {
+      mode: 'bearer',
+      description: 'A personal access token minted with allowGet, sent as ?token= (an Authorization: Bearer header also works). Sessions, cookies, and app tokens are rejected.'
+    },
+    methods: ['GET'],
+    steps: [
+      'Mint a token in Settings → Token minter with “Works via GET links” ticked (or POST /api/v1/tokens with allowGet: true).',
+      'Open /api/v1/get?token=<token>&op=self to see who you are and what the token can do (free).',
+      'Read: op=get&id=…, op=list&thingtime=…, op=search&body={…}, op=feed.',
+      'Write: op=create&thingtime=["post"]&crystal={"type":"text","text":"hi"}, op=update&id=…&crystal={…}, op=react&id=…&emoji=🔥, op=comment&id=…&text=…, op=delete&id=….',
+      'Every successful call consumes one use, exactly like the Bearer routes.'
+    ],
+    requestExamples: [
+      { name: 'Who am I', description: 'Free introspection.', method: 'GET', query: { token: '<token>', op: 'self' } },
+      {
+        name: 'Create a post',
+        description: 'A public text post via one URL.',
+        method: 'GET',
+        query: { token: '<token>', op: 'create', thingtime: '["post"]', crystal: '{"type":"text","text":"hello from a GET-only agent"}' }
+      },
+      { name: 'Read a thing', description: 'One thing (add key=… for hidden links).', method: 'GET', query: { token: '<token>', op: 'get', id: '<shareId>' } },
+      { name: 'React', description: 'Toggle a reaction.', method: 'GET', query: { token: '<token>', op: 'react', id: '<shareId>', emoji: '🔥' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Same shapes as the underlying endpoints.', body: { ok: true, post: { id: 'shareId', visibility: 'public' } } },
+      { status: 403, description: 'Token minted without the GET tick.', body: { ok: false, error: 'This token is not enabled for GET links 🌍 — mint one with “Works via GET links” ticked' } }
+    ],
+    notes: [
+      'The token in the URL is a real credential: share bridge URLs only where you would share the token itself, scope tokens narrowly, cap uses, and revoke when done.',
+      'Attachments and app tokens are not available through the bridge — those flows need real sessions.',
+      'op maps: get/list/search/feed → things.read, create → things.create (or react/comment when thingtime says so), update → things.update, upsert → create+update, delete/react/comment/save/share → their scopes.',
+      'op=update and op=delete honour expectedUpdatedAt=<the updatedAt you read> exactly like PATCH/DELETE /api/v1/things: the write only lands if the thing has not changed since, otherwise 409. Worth sending whenever a thing has more than one writer (a custom audience granting tt:user/<name>/write).'
+    ]
+  }),
+  endpoint({
+    id: 'groups',
+    group: 'things',
+    title: 'Audience groups',
+    endpoint: '/api/v1/groups',
+    summary: 'Reusable "share with these people" lists for custom-audience things.',
+    detail:
+      'Groups power the custom visibility picker: make one once, then grant it on any thing with an acl entry tt:group/<group id> (optionally suffixed /comment or /write for capabilities — see the things endpoint). GET lists your groups with member profiles; POST { name, memberIds? } creates one (members are user ids); PATCH { id, name?, memberIds? } renames or REPLACES the member list whole (list semantics mirror tokenAcl — merging is ambiguous); DELETE { id } removes the group and its memberships. Members are stored relationally as group-member things (FUNDAMENTALS §3) so membership checks ride existing indexes. Bounds: 64 groups per user, 128 members per group. Deleting a group instantly retires every tt:group acl entry that referenced it (the entries become inert).',
+    auth: { mode: 'session', description: 'Full session only — tokens and apps cannot manage your audience groups.' },
+    methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+    steps: [
+      'GET to list your groups.',
+      'POST { name, memberIds } to create — pick members from /api/v1/groups/audience-sources or /api/v1/users/search.',
+      'Grant it on a thing: acl [..., "tt:group/<group id>/comment"].',
+      'PATCH { id, memberIds } to change who’s in it — every thing granted to the group follows automatically.'
+    ],
+    requestExamples: [
+      { name: 'List groups', description: 'Your groups + members.', method: 'GET' },
+      { name: 'Create', description: 'A study group.', method: 'POST', body: { name: 'Study group 📚', memberIds: ['<user id>', '<user id>'] } },
+      { name: 'Replace members', description: 'Member list replaces whole.', method: 'PATCH', body: { id: '<group id>', memberIds: ['<user id>'] } },
+      { name: 'Delete', description: 'Group + memberships.', method: 'DELETE', body: { id: '<group id>' } }
+    ],
+    responseExamples: [
+      {
+        status: 201,
+        description: 'Created.',
+        body: { ok: true, group: { id: 'group-uuid', name: 'Study group 📚', memberCount: 2, members: [] } }
+      },
+      { status: 400, description: 'Unknown member.', body: { ok: false, error: 'Unknown member user id: …' } }
+    ],
+    notes: [
+      'Group membership updates propagate live: acl entries reference the group by id, and the read path resolves the viewer’s memberships per request.',
+      'Members can see which groups they belong to only through what those groups unlock — the group itself stays the owner’s private thing.'
+    ]
+  }),
+  endpoint({
+    id: 'groups-audience-sources',
+    group: 'things',
+    title: 'Audience sources',
+    endpoint: '/api/v1/groups/audience-sources',
+    summary: 'Everything the custom-audience picker prefills: friends, connections, recent people, groups.',
+    detail:
+      'GET returns { friends, connections, recents, groups } for the signed-in user — friends are accepted friendships, connections are people you follow, recents are owners of things you recently engaged with (comments, reactions, saves, shares), and groups are your audience groups with member profiles. One call, viewer-private, no-store. Use /api/v1/users/search to find anyone outside these lists.',
+    auth: { mode: 'session', description: 'Full session only — this is your private social context.' },
+    methods: ['GET'],
+    steps: ['GET, then render the sections; search fills the gaps.'],
+    requestExamples: [{ name: 'Load sources', description: 'All four sections at once.', method: 'GET' }],
+    responseExamples: [
+      { status: 200, description: 'Sources.', body: { ok: true, friends: [], connections: [], recents: [], groups: [] } }
     ]
   }),
   endpoint({

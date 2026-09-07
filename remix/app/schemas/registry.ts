@@ -79,7 +79,7 @@ export type ThingtimeSchema = {
   example: Record<string, unknown>;
 };
 
-export const THING_VISIBILITIES = ['public', 'friends', 'family', 'private', 'inherit'] as const;
+export const THING_VISIBILITIES = ['public', 'friends', 'family', 'private', 'hidden', 'custom', 'inherit'] as const;
 export type ThingVisibility = (typeof THING_VISIBILITIES)[number];
 
 // Protected operational Things created when an admin migration throws. The
@@ -130,6 +130,25 @@ export const CI_CONTROL_THINGTIME = [
 //                       through the generic routes; acl entries are not).
 //   tt:inherit          attached things (comments, reactions) — as visible as
 //                       their target
+//   tt:hidden           unlisted: matches NO viewer here (owner short-circuit
+//                       aside) — visibility comes from the doc's random
+//                       linkKey instead: anyone presenting it via a ?key= URL
+//                       may view (things.ts canView). Never in feeds/search.
+//   tt:custom           the custom-audience marker: matches nobody itself,
+//                       but flips the thing into capability mode — general
+//                       viewers (via a tt:all / tt:hidden baseline) get READ
+//                       ONLY, and engagement/edit rights come from the
+//                       per-user and per-group grants below.
+//   tt:group/<groupId>  members of one of the owner's groups (group things +
+//                       group-member docs, api/utils/groups). The read path
+//                       preloads the viewer's memberships into
+//                       AclViewer.groupIds, like friendIds.
+//
+// Capability suffixes (custom audiences): a tt:user/<username> or
+// tt:group/<id> grant may carry '/comment' or '/write' — write ⊃ comment ⊃
+// read. The suffix never changes WHO can view (the base entry grants view);
+// it feeds aclCapabilityFor, which the engagement gate (comment/react) and
+// the shared-edit path (PATCH crystal) consult on tt:custom things.
 //
 // Examples: ['tt:all'] is public; ['-tt:all', 'tt:userFriends', 'tt:user'] is
 // friends-only; ['tt:all', '-tt:user/somebody'] is public except one user.
@@ -147,11 +166,16 @@ export const ACL_OWNER = 'tt:user';
 export const ACL_FRIENDS = 'tt:userFriends';
 export const ACL_FAMILY = 'tt:userFamily';
 export const ACL_INHERIT = 'tt:inherit';
+export const ACL_HIDDEN = 'tt:hidden';
+export const ACL_CUSTOM = 'tt:custom';
 export const ACL_USER_PREFIX = 'tt:user/';
 export const ACL_APP_PREFIX = 'tt:app/';
+export const ACL_GROUP_PREFIX = 'tt:group/';
 
 const ACL_ENTRY_PATTERN = /^-?tt:[A-Za-z0-9][A-Za-z0-9._/-]*$/;
-const MAX_ACL_ENTRIES = 16;
+// raised from 16 for custom audiences (a hand-picked user list + groups);
+// still a hard bound so acl stays a bounded field, never an unbounded list
+const MAX_ACL_ENTRIES = 64;
 const MAX_ACL_ENTRY_CHARS = 64;
 
 // legacy visibility names map onto acls (accepted as input everywhere an acl
@@ -161,6 +185,10 @@ export const LEGACY_VISIBILITY_ACLS: Record<ThingVisibility, string[]> = {
   friends: ['-tt:all', ACL_FRIENDS, ACL_OWNER],
   family: ['-tt:all', ACL_FAMILY, ACL_OWNER],
   private: [ACL_OWNER],
+  hidden: [ACL_HIDDEN, ACL_OWNER],
+  // the minimal custom acl — real custom audiences arrive as explicit acls
+  // composed by the picker (marker + baseline + grants)
+  custom: [ACL_CUSTOM, ACL_OWNER],
   inherit: [ACL_INHERIT]
 };
 
@@ -169,9 +197,13 @@ export const aclFromVisibility = (visibility: unknown): string[] | null =>
 
 export const visibilityFromAcl = (acl: string[]): ThingVisibility => {
   if (acl.includes(ACL_INHERIT)) return 'inherit';
+  // custom outranks its own baseline entries (tt:all / tt:hidden may ride
+  // along as the general-audience toggle) so the wire round-trips 'custom'
+  if (acl.includes(ACL_CUSTOM)) return 'custom';
   if (acl.includes(ACL_ALL)) return 'public';
   if (acl.includes(ACL_FRIENDS)) return 'friends';
   if (acl.includes(ACL_FAMILY)) return 'family';
+  if (acl.includes(ACL_HIDDEN)) return 'hidden';
   return 'private';
 };
 
@@ -189,40 +221,143 @@ export const sanitizeAcl = (value: unknown): string[] | { ok: false; status: num
         error: `acl entries look like tt:all, tt:user, tt:userFriends, or tt:user/<username>, optionally '-' prefixed (got ${entry.slice(0, 80)})`
       };
     }
-    if (!entries.includes(entry)) entries.push(entry);
+    // A tt:user/ or tt:group/ grant is exactly ONE subject segment plus an
+    // optional /comment|/write capability suffix (splitCapability below).
+    // Anything deeper is ambiguous — "tt:user/a/b" could mean "user a with
+    // capability b" or "user a/b, read" — so refuse it instead of guessing.
+    const positive = entry.startsWith('-') ? entry.slice(1) : entry;
+    let normalized = entry;
+    for (const prefix of [ACL_USER_PREFIX, ACL_GROUP_PREFIX]) {
+      if (!positive.startsWith(prefix)) continue;
+      const subject = positive.slice(prefix.length).replace(/\/(comment|write)$/, '');
+      if (!subject || subject.includes('/')) {
+        return {
+          ok: false,
+          status: 400,
+          error: `${prefix}… entries take one name plus an optional /comment or /write (got ${entry.slice(0, 80)})`
+        };
+      }
+      // Canonicalize the USERNAME to lower case. aclEntryMatches compares it
+      // case-insensitively, but the feed/search grant clause (things.ts
+      // visibilityQueryFor) matches acl strings EXACTLY, against a lower-cased
+      // `tt:user/<username>` built from the viewer. Storing 'tt:user/Bob/write'
+      // verbatim therefore honours the grant on direct access (canView) while
+      // the grantee's own feed never surfaces it — a grant that half-works.
+      // Usernames are already stored lower case (auth/registerUser), so this
+      // only canonicalizes hand-authored acls and changes no view decision.
+      // Group ids are NOT folded: they are opaque and compared exactly
+      // (viewer.groupIds.has), so lower-casing one could break a real match.
+      if (prefix === ACL_USER_PREFIX) {
+        normalized = `${entry.startsWith('-') ? '-' : ''}${prefix}${subject.toLowerCase()}${positive.slice(prefix.length + subject.length)}`;
+      }
+    }
+    if (!entries.includes(normalized)) entries.push(normalized);
     if (entries.length > MAX_ACL_ENTRIES) return { ok: false, status: 400, error: `acl can have at most ${MAX_ACL_ENTRIES} entries` };
   }
   if (!entries.length) return { ok: false, status: 400, error: 'acl needs at least one entry' };
   return entries;
 };
 
-// friendIds: shareIds of users the viewer has an ACCEPTED friendship with,
-// preloaded by the read path (one batched query per request) so acl checks
-// stay sync + pure. Absent set = no friend info loaded = circle denies.
-export type AclViewer = { id: string | null; username?: string | null; friendIds?: ReadonlySet<string> } | null;
+// friendIds: shareIds of users the viewer has an ACCEPTED friendship with;
+// groupIds: shareIds of group things the viewer is a member of — both
+// preloaded by the read path (one batched query each per request) so acl
+// checks stay sync + pure. Absent set = not loaded = that circle denies.
+export type AclViewer = {
+  id: string | null;
+  username?: string | null;
+  friendIds?: ReadonlySet<string>;
+  groupIds?: ReadonlySet<string>;
+} | null;
+
+// Custom-audience capabilities: write ⊃ comment ⊃ read. A grant entry may
+// carry a '/comment' or '/write' suffix (tt:user/<name>/write,
+// tt:group/<id>/comment) — the base entry decides WHO, the suffix decides
+// HOW MUCH.
+export type AclCapability = 'none' | 'read' | 'comment' | 'write';
+const CAP_RANK: Record<AclCapability, number> = { none: 0, read: 1, comment: 2, write: 3 };
+
+// Only a SUBJECT grant carries a capability, and only over a non-empty
+// subject: 'tt:user/<name>' and 'tt:group/<id>'. Anchoring the strip is what
+// keeps `write` and `comment` usable as ordinary usernames — bare
+// `id.endsWith('/write')` reads the picker's own output for the account named
+// "write" (tt:user/write) as base 'tt:user', i.e. the OWNER entry, so that
+// account silently receives nothing and the acl gains a phantom owner grant.
+// Same ambiguity the '/'-in-username guard (auth/registerUser.ts) closes from
+// the other side; usernames are already '/'-free, so the base can never be a
+// deeper path here.
+const splitCapability = (id: string): { base: string; cap: 'read' | 'comment' | 'write' } => {
+  for (const [suffix, cap] of [
+    ['/write', 'write'],
+    ['/comment', 'comment']
+  ] as const) {
+    if (!id.endsWith(suffix)) continue;
+    const base = id.slice(0, -suffix.length);
+    const grantPrefix = [ACL_USER_PREFIX, ACL_GROUP_PREFIX].find((prefix) => base.startsWith(prefix));
+    if (grantPrefix && base.length > grantPrefix.length) return { base, cap };
+  }
+  return { base: id, cap: 'read' };
+};
 
 const aclSpecificity = (id: string): number => {
-  if (id === ACL_ALL) return 0;
-  if (id === ACL_OWNER) return 2;
-  if (id.startsWith(ACL_USER_PREFIX)) return 3;
-  return 1; // circles + future groups
+  const { base } = splitCapability(id);
+  if (base === ACL_ALL) return 0;
+  if (base === ACL_OWNER) return 2;
+  if (base.startsWith(ACL_USER_PREFIX)) return 3;
+  return 1; // circles + groups
 };
 
 const aclEntryMatches = (id: string, viewer: AclViewer, ownerId: string): boolean => {
-  if (id === ACL_ALL) return true;
+  const { base } = splitCapability(id);
+  if (base === ACL_ALL) return true;
   if (!viewer?.id) return false;
-  if (id === ACL_OWNER) return viewer.id === ownerId;
-  if (id.startsWith(ACL_USER_PREFIX)) {
-    const username = id.slice(ACL_USER_PREFIX.length).toLowerCase();
+  if (base === ACL_OWNER) return viewer.id === ownerId;
+  if (base.startsWith(ACL_USER_PREFIX)) {
+    const username = base.slice(ACL_USER_PREFIX.length).toLowerCase();
     return !!viewer.username && viewer.username.toLowerCase() === username;
+  }
+  // group grant: the viewer's preloaded memberships answer (owner counts too)
+  if (base.startsWith(ACL_GROUP_PREFIX)) {
+    const groupId = base.slice(ACL_GROUP_PREFIX.length);
+    return viewer.id === ownerId || viewer.groupIds?.has(groupId) === true;
   }
   // friends circle: real graph — the viewer sees it when they're an accepted
   // friend of the owner (friendship is mutual, so the viewer's own friend set
   // answers for any owner). Owner always counts as their own friend.
-  if (id === ACL_FRIENDS) return viewer.id === ownerId || viewer.friendIds?.has(ownerId) === true;
+  if (base === ACL_FRIENDS) return viewer.id === ownerId || viewer.friendIds?.has(ownerId) === true;
   // family circle: no family graph yet — owner only
-  if (id === ACL_FAMILY) return viewer.id === ownerId;
+  if (base === ACL_FAMILY) return viewer.id === ownerId;
   return false;
+};
+
+// The viewer's capability on a custom-audience thing. Owner → write. Grants
+// are positive entries only (exclusions shape VIEW, not capabilities); the
+// strongest matching suffix wins, and any plain view match floors at 'read'.
+// Callers only consult this when acl carries tt:custom.
+//
+// No view, no capability. An exclusion outranks a grant for VIEW under
+// most-specific-wins, so an acl carrying BOTH a grant and a same-specificity
+// exclusion for one subject — ['tt:custom','tt:all','tt:user',
+// 'tt:user/bob/write','-tt:user/bob'] — denies bob the thing entirely. Without
+// this floor the loop below still saw the positive 'tt:user/bob/write' and
+// handed back 'write', i.e. edit rights on a thing the same acl says he may
+// not even read. Every caller happens to prove view first today (updateThing
+// via canViewInherited, the engage gates via findViewableThingAs), so this was
+// unreachable rather than live — but that made the invariant a precondition
+// every future caller had to rediscover. Anchoring it here makes the function
+// answer correctly on its own.
+export const aclCapabilityFor = (acl: string[], viewer: AclViewer, ownerId: string): AclCapability => {
+  if (viewer?.id && viewer.id === ownerId) return 'write';
+  if (!aclAllows(acl, viewer, ownerId)) return 'none';
+  let best: AclCapability = 'read';
+  for (const raw of acl) {
+    if (raw.startsWith('-')) continue;
+    const { base, cap } = splitCapability(raw);
+    if (cap === 'read') continue;
+    if (base === ACL_INHERIT || base === ACL_CUSTOM) continue;
+    if (!aclEntryMatches(raw, viewer, ownerId)) continue;
+    if (CAP_RANK[cap] > CAP_RANK[best]) best = cap;
+  }
+  return best;
 };
 
 // Most-specific matching entry wins; exclusions win ties. Callers short-circuit
@@ -3328,6 +3463,9 @@ export const PROTECTED_THINGTIME = [
   'feed-algorithm',
   'waitlist',
 	'app',
+  // audience groups (custom visibility) — managed only via /api/v1/groups
+  'group',
+  'group-member',
   'subscription-tier',
   'subscription',
   'account-link',
