@@ -79,7 +79,7 @@ export type ThingtimeSchema = {
   example: Record<string, unknown>;
 };
 
-export const THING_VISIBILITIES = ['public', 'friends', 'family', 'private', 'inherit'] as const;
+export const THING_VISIBILITIES = ['public', 'friends', 'family', 'private', 'hidden', 'custom', 'inherit'] as const;
 export type ThingVisibility = (typeof THING_VISIBILITIES)[number];
 
 // Protected operational Things created when an admin migration throws. The
@@ -130,6 +130,25 @@ export const CI_CONTROL_THINGTIME = [
 //                       through the generic routes; acl entries are not).
 //   tt:inherit          attached things (comments, reactions) — as visible as
 //                       their target
+//   tt:hidden           unlisted: matches NO viewer here (owner short-circuit
+//                       aside) — visibility comes from the doc's random
+//                       linkKey instead: anyone presenting it via a ?key= URL
+//                       may view (things.ts canView). Never in feeds/search.
+//   tt:custom           the custom-audience marker: matches nobody itself,
+//                       but flips the thing into capability mode — general
+//                       viewers (via a tt:all / tt:hidden baseline) get READ
+//                       ONLY, and engagement/edit rights come from the
+//                       per-user and per-group grants below.
+//   tt:group/<groupId>  members of one of the owner's groups (group things +
+//                       group-member docs, api/utils/groups). The read path
+//                       preloads the viewer's memberships into
+//                       AclViewer.groupIds, like friendIds.
+//
+// Capability suffixes (custom audiences): a tt:user/<username> or
+// tt:group/<id> grant may carry '/comment' or '/write' — write ⊃ comment ⊃
+// read. The suffix never changes WHO can view (the base entry grants view);
+// it feeds aclCapabilityFor, which the engagement gate (comment/react) and
+// the shared-edit path (PATCH crystal) consult on tt:custom things.
 //
 // Examples: ['tt:all'] is public; ['-tt:all', 'tt:userFriends', 'tt:user'] is
 // friends-only; ['tt:all', '-tt:user/somebody'] is public except one user.
@@ -147,8 +166,11 @@ export const ACL_OWNER = 'tt:user';
 export const ACL_FRIENDS = 'tt:userFriends';
 export const ACL_FAMILY = 'tt:userFamily';
 export const ACL_INHERIT = 'tt:inherit';
+export const ACL_HIDDEN = 'tt:hidden';
+export const ACL_CUSTOM = 'tt:custom';
 export const ACL_USER_PREFIX = 'tt:user/';
 export const ACL_APP_PREFIX = 'tt:app/';
+export const ACL_GROUP_PREFIX = 'tt:group/';
 // audience = "holders of a connections link to an external account that
 // SOURCES this post" — one CONSTANT entry, resolved live against relational
 // external-post-source membership docs (see aclEntryMatches). Constant by
@@ -163,7 +185,9 @@ export const ACL_EXT_SOURCED = 'tt:extsourced';
 export const ACL_EXTACCT_PREFIX = 'tt:extacct/';
 
 const ACL_ENTRY_PATTERN = /^-?tt:[A-Za-z0-9][A-Za-z0-9._/-]*$/;
-const MAX_ACL_ENTRIES = 16;
+// raised from 16 for custom audiences (a hand-picked user list + groups);
+// still a hard bound so acl stays a bounded field, never an unbounded list
+const MAX_ACL_ENTRIES = 64;
 const MAX_ACL_ENTRY_CHARS = 64;
 
 // legacy visibility names map onto acls (accepted as input everywhere an acl
@@ -173,6 +197,10 @@ export const LEGACY_VISIBILITY_ACLS: Record<ThingVisibility, string[]> = {
   friends: ['-tt:all', ACL_FRIENDS, ACL_OWNER],
   family: ['-tt:all', ACL_FAMILY, ACL_OWNER],
   private: [ACL_OWNER],
+  hidden: [ACL_HIDDEN, ACL_OWNER],
+  // the minimal custom acl — real custom audiences arrive as explicit acls
+  // composed by the picker (marker + baseline + grants)
+  custom: [ACL_CUSTOM, ACL_OWNER],
   inherit: [ACL_INHERIT]
 };
 
@@ -181,9 +209,13 @@ export const aclFromVisibility = (visibility: unknown): string[] | null =>
 
 export const visibilityFromAcl = (acl: string[]): ThingVisibility => {
   if (acl.includes(ACL_INHERIT)) return 'inherit';
+  // custom outranks its own baseline entries (tt:all / tt:hidden may ride
+  // along as the general-audience toggle) so the wire round-trips 'custom'
+  if (acl.includes(ACL_CUSTOM)) return 'custom';
   if (acl.includes(ACL_ALL)) return 'public';
   if (acl.includes(ACL_FRIENDS)) return 'friends';
   if (acl.includes(ACL_FAMILY)) return 'family';
+  if (acl.includes(ACL_HIDDEN)) return 'hidden';
   return 'private';
 };
 
@@ -201,20 +233,52 @@ export const sanitizeAcl = (value: unknown): string[] | { ok: false; status: num
         error: `acl entries look like tt:all, tt:user, tt:userFriends, or tt:user/<username>, optionally '-' prefixed (got ${entry.slice(0, 80)})`
       };
     }
-    if (!entries.includes(entry)) entries.push(entry);
+    // A tt:user/ or tt:group/ grant is exactly ONE subject segment plus an
+    // optional /comment|/write capability suffix (splitCapability below).
+    // Anything deeper is ambiguous — "tt:user/a/b" could mean "user a with
+    // capability b" or "user a/b, read" — so refuse it instead of guessing.
+    const positive = entry.startsWith('-') ? entry.slice(1) : entry;
+    let normalized = entry;
+    for (const prefix of [ACL_USER_PREFIX, ACL_GROUP_PREFIX]) {
+      if (!positive.startsWith(prefix)) continue;
+      const subject = positive.slice(prefix.length).replace(/\/(comment|write)$/, '');
+      if (!subject || subject.includes('/')) {
+        return {
+          ok: false,
+          status: 400,
+          error: `${prefix}… entries take one name plus an optional /comment or /write (got ${entry.slice(0, 80)})`
+        };
+      }
+      // Canonicalize the USERNAME to lower case. aclEntryMatches compares it
+      // case-insensitively, but the feed/search grant clause (things.ts
+      // visibilityQueryFor) matches acl strings EXACTLY, against a lower-cased
+      // `tt:user/<username>` built from the viewer. Storing 'tt:user/Bob/write'
+      // verbatim therefore honours the grant on direct access (canView) while
+      // the grantee's own feed never surfaces it — a grant that half-works.
+      // Usernames are already stored lower case (auth/registerUser), so this
+      // only canonicalizes hand-authored acls and changes no view decision.
+      // Group ids are NOT folded: they are opaque and compared exactly
+      // (viewer.groupIds.has), so lower-casing one could break a real match.
+      if (prefix === ACL_USER_PREFIX) {
+        normalized = `${entry.startsWith('-') ? '-' : ''}${prefix}${subject.toLowerCase()}${positive.slice(prefix.length + subject.length)}`;
+      }
+    }
+    if (!entries.includes(normalized)) entries.push(normalized);
     if (entries.length > MAX_ACL_ENTRIES) return { ok: false, status: 400, error: `acl can have at most ${MAX_ACL_ENTRIES} entries` };
   }
   if (!entries.length) return { ok: false, status: 400, error: 'acl needs at least one entry' };
   return entries;
 };
 
-// friendIds: shareIds of users the viewer has an ACCEPTED friendship with,
-// preloaded by the read path (one batched query per request) so acl checks
-// stay sync + pure. Absent set = no friend info loaded = circle denies.
+// friendIds: shareIds of users the viewer has an ACCEPTED friendship with;
+// groupIds: shareIds of group things the viewer is a member of — both
+// preloaded by the read path (one batched query each per request) so acl
+// checks stay sync + pure. Absent set = not loaded = that circle denies.
 export type AclViewer = {
   id: string | null;
   username?: string | null;
   friendIds?: ReadonlySet<string>;
+  groupIds?: ReadonlySet<string>;
   // external-account shareIds the viewer holds connections links to — loaded
   // lazily (things.ts withExtAccountIds) only when a doc carries a LEGACY
   // tt:extacct/ entry, exactly like friendIds serves tt:userFriends
@@ -227,39 +291,106 @@ export type AclViewer = {
   extSourcedPostIds?: ReadonlySet<string>;
 } | null;
 
+// Custom-audience capabilities: write ⊃ comment ⊃ read. A grant entry may
+// carry a '/comment' or '/write' suffix (tt:user/<name>/write,
+// tt:group/<id>/comment) — the base entry decides WHO, the suffix decides
+// HOW MUCH.
+export type AclCapability = 'none' | 'read' | 'comment' | 'write';
+const CAP_RANK: Record<AclCapability, number> = { none: 0, read: 1, comment: 2, write: 3 };
+
+// Only a SUBJECT grant carries a capability, and only over a non-empty
+// subject: 'tt:user/<name>' and 'tt:group/<id>'. Anchoring the strip is what
+// keeps `write` and `comment` usable as ordinary usernames — bare
+// `id.endsWith('/write')` reads the picker's own output for the account named
+// "write" (tt:user/write) as base 'tt:user', i.e. the OWNER entry, so that
+// account silently receives nothing and the acl gains a phantom owner grant.
+// Same ambiguity the '/'-in-username guard (auth/registerUser.ts) closes from
+// the other side; usernames are already '/'-free, so the base can never be a
+// deeper path here.
+const splitCapability = (id: string): { base: string; cap: 'read' | 'comment' | 'write' } => {
+  for (const [suffix, cap] of [
+    ['/write', 'write'],
+    ['/comment', 'comment']
+  ] as const) {
+    if (!id.endsWith(suffix)) continue;
+    const base = id.slice(0, -suffix.length);
+    const grantPrefix = [ACL_USER_PREFIX, ACL_GROUP_PREFIX].find((prefix) => base.startsWith(prefix));
+    if (grantPrefix && base.length > grantPrefix.length) return { base, cap };
+  }
+  return { base: id, cap: 'read' };
+};
+
 const aclSpecificity = (id: string): number => {
-  if (id === ACL_ALL) return 0;
-  if (id === ACL_OWNER) return 2;
-  if (id.startsWith(ACL_USER_PREFIX)) return 3;
-  return 1; // circles + future groups
+  const { base } = splitCapability(id);
+  if (base === ACL_ALL) return 0;
+  if (base === ACL_OWNER) return 2;
+  if (base.startsWith(ACL_USER_PREFIX)) return 3;
+  return 1; // circles + groups
 };
 
 const aclEntryMatches = (id: string, viewer: AclViewer, ownerId: string, docId?: string | null): boolean => {
-  if (id === ACL_ALL) return true;
+  const { base } = splitCapability(id);
+  if (base === ACL_ALL) return true;
   if (!viewer?.id) return false;
-  if (id === ACL_OWNER) return viewer.id === ownerId;
-  if (id.startsWith(ACL_USER_PREFIX)) {
-    const username = id.slice(ACL_USER_PREFIX.length).toLowerCase();
+  if (base === ACL_OWNER) return viewer.id === ownerId;
+  if (base.startsWith(ACL_USER_PREFIX)) {
+    const username = base.slice(ACL_USER_PREFIX.length).toLowerCase();
     return !!viewer.username && viewer.username.toLowerCase() === username;
+  }
+  // group grant: the viewer's preloaded memberships answer (owner counts too)
+  if (base.startsWith(ACL_GROUP_PREFIX)) {
+    const groupId = base.slice(ACL_GROUP_PREFIX.length);
+    return viewer.id === ownerId || viewer.groupIds?.has(groupId) === true;
   }
   // friends circle: real graph — the viewer sees it when they're an accepted
   // friend of the owner (friendship is mutual, so the viewer's own friend set
   // answers for any owner). Owner always counts as their own friend.
-  if (id === ACL_FRIENDS) return viewer.id === ownerId || viewer.friendIds?.has(ownerId) === true;
+  if (base === ACL_FRIENDS) return viewer.id === ownerId || viewer.friendIds?.has(ownerId) === true;
   // external-source audience (connections): the viewer sees the post while
   // they hold a link to ANY external account that sources it. Membership is
   // relational (external-post-source docs) and evaluated live, so unlinking
   // revokes instantly, new links grant instantly, nothing materializes per
   // member, and the entry itself names no account (it is a constant, so it
   // discloses nothing through PublicPost.acl).
-  if (id === ACL_EXT_SOURCED) return !!docId && viewer.extSourcedPostIds?.has(docId) === true;
+  if (base === ACL_EXT_SOURCED) return !!docId && viewer.extSourcedPostIds?.has(docId) === true;
   // LEGACY per-source audience — pre-migration rows only (see ACL_EXTACCT_PREFIX)
-  if (id.startsWith(ACL_EXTACCT_PREFIX)) {
-    return viewer.extAccountIds?.has(id.slice(ACL_EXTACCT_PREFIX.length)) === true;
+  if (base.startsWith(ACL_EXTACCT_PREFIX)) {
+    return viewer.extAccountIds?.has(base.slice(ACL_EXTACCT_PREFIX.length)) === true;
   }
   // family circle: no family graph yet — owner only
-  if (id === ACL_FAMILY) return viewer.id === ownerId;
+  if (base === ACL_FAMILY) return viewer.id === ownerId;
   return false;
+};
+
+// The viewer's capability on a custom-audience thing. Owner → write. Grants
+// are positive entries only (exclusions shape VIEW, not capabilities); the
+// strongest matching suffix wins, and any plain view match floors at 'read'.
+// Callers only consult this when acl carries tt:custom.
+//
+// No view, no capability. An exclusion outranks a grant for VIEW under
+// most-specific-wins, so an acl carrying BOTH a grant and a same-specificity
+// exclusion for one subject — ['tt:custom','tt:all','tt:user',
+// 'tt:user/bob/write','-tt:user/bob'] — denies bob the thing entirely. Without
+// this floor the loop below still saw the positive 'tt:user/bob/write' and
+// handed back 'write', i.e. edit rights on a thing the same acl says he may
+// not even read. Every caller happens to prove view first today (updateThing
+// via canViewInherited, the engage gates via findViewableThingAs), so this was
+// unreachable rather than live — but that made the invariant a precondition
+// every future caller had to rediscover. Anchoring it here makes the function
+// answer correctly on its own.
+export const aclCapabilityFor = (acl: string[], viewer: AclViewer, ownerId: string): AclCapability => {
+  if (viewer?.id && viewer.id === ownerId) return 'write';
+  if (!aclAllows(acl, viewer, ownerId)) return 'none';
+  let best: AclCapability = 'read';
+  for (const raw of acl) {
+    if (raw.startsWith('-')) continue;
+    const { base, cap } = splitCapability(raw);
+    if (cap === 'read') continue;
+    if (base === ACL_INHERIT || base === ACL_CUSTOM) continue;
+    if (!aclEntryMatches(raw, viewer, ownerId)) continue;
+    if (CAP_RANK[cap] > CAP_RANK[best]) best = cap;
+  }
+  return best;
 };
 
 // Most-specific matching entry wins; exclusions win ties. Callers short-circuit
@@ -2922,6 +3053,156 @@ const aiModelSchema: ThingtimeSchema = {
   }
 };
 
+// Lopu usage accounting and credits (design note "Lopu verified access, usage
+// accounting and credits" §2–§3): three protected, owner-private control-plane
+// kinds written ONLY by api/utils/lopu/accounting.ts — a forged account or
+// ledger row would be free credits, so generic Thing CRUD refuses them and
+// they never appear in generic listings. No crystal sanitizer, no new index:
+// the account rides the root uniqueKeys index (lopuAccount:<userId>), the
+// rows the ownerId/thingtime/createdAt index, and "one pending top-up
+// request at a time" is the lopuTopupPending:<userId> unique key.
+const lopuAccountSchema: ThingtimeSchema = {
+  id: 'lopu-account',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Lopu account',
+  summary: 'One per user — the Lopu credit balance plus lifetime and monthly usage counters.',
+  detail:
+    'Created lazily by ensureLopuAccount (the first gated Lopu turn or GET /api/v1/lopu/account), which grants the ' +
+    'Thingtime.LopuAccess starterCredits exactly once. ownerId = the user, acl ["tt:user"], storageClass "control", root ' +
+    'uniqueKeys lopuAccount:<userId>. Every debit is ONE $inc on this row (balance, lifetime, month — the month counters ' +
+    'reset when monthKey moves on), guarded by the write id in appliedIds so a retried $inc cannot land twice; the ' +
+    'balance may go negative by at most one turn and the next turn is refused with 402 LOPU_NO_CREDITS. A billed turn ' +
+    'also holds an inflight slot for as long as the provider call runs (429 LOPU_TURN_IN_FLIGHT past the cap), so ' +
+    'concurrent turns cannot each spend the same last credit. 1 credit = 1 USD of list price = 1,000,000 micros.',
+  createdVia: 'api/utils/lopu/accounting.ts ensureLopuAccount (first gated Lopu turn, GET /api/v1/lopu/account, admin credit grant)',
+  fields: [
+    { name: 'balanceMicros', type: 'number', required: true, description: 'Current credit balance in micro-USD (signed; negative by at most one turn).' },
+    { name: 'lifetimeCostMicros', type: 'number', required: true, min: 0, description: 'Micros ever debited from this account.' },
+    { name: 'lifetimeInputTokens', type: 'number', required: true, min: 0, description: 'Input tokens across every recorded turn (all billings).' },
+    { name: 'lifetimeOutputTokens', type: 'number', required: true, min: 0, description: 'Output tokens across every recorded turn (all billings).' },
+    { name: 'turns', type: 'number', required: true, min: 0, description: 'Recorded turns (chat, voice, voice sessions).' },
+    { name: 'monthKey', type: 'string', required: true, max: 7, description: 'UTC month the month counters belong to (YYYY-MM).' },
+    { name: 'monthCostMicros', type: 'number', required: true, min: 0, description: 'Micros debited in monthKey.' },
+    { name: 'monthTurns', type: 'number', required: true, min: 0, description: 'Turns recorded in monthKey.' },
+    { name: 'starterGranted', type: 'boolean', required: true, description: 'The one-time starter grant was applied (also true when starterCredits was 0).' },
+    { name: 'starterMicros', type: 'number', required: true, min: 0, description: 'The starter amount that was granted, in micros.' },
+    { name: 'lowBalanceNotifiedAt', type: 'string', required: false, max: 40, description: 'When the balance last dropped under the low-balance threshold (null once lifted).' },
+    { name: 'inflight', type: 'number', required: false, min: 0, description: 'Billed turns currently running for this account (the concurrency cap the gate enforces).' },
+    { name: 'inflightSince', type: 'string', required: false, max: 40, description: 'When a slot was last taken — a slot older than the TTL is swept by the next reservation.' },
+    { name: 'appliedIds', type: 'string[]', required: false, max: 8, description: 'The last few write ids applied to the balance (bounded by $slice) so a retried $inc is a no-op.' }
+  ],
+  example: {
+    balanceMicros: 1400000,
+    lifetimeCostMicros: 600000,
+    lifetimeInputTokens: 300,
+    lifetimeOutputTokens: 150,
+    turns: 1,
+    monthKey: '2026-09',
+    monthCostMicros: 600000,
+    monthTurns: 1,
+    starterGranted: true,
+    starterMicros: 2000000
+  }
+};
+
+const lopuUsageSchema: ThingtimeSchema = {
+  id: 'lopu-usage',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Lopu usage',
+  summary: 'One row per Lopu turn — tokens, the list price, and what was actually debited.',
+  detail:
+    'Written by debitLopuUsage after every chat reply, voice turn and direct-voice session (ownerId = the user, acl ' +
+    '["tt:user"], storageClass "control"; the chat row’s shareId derives from the requestId so a retried debit never ' +
+    'doubles). billing says who paid: "thingtime" (server keys — debited), "byo" (the viewer’s own Secure Vault provider — ' +
+    'recorded, never debited) or "free" (the canned fallback). costMicros is the list price from api/utils/ai/pricing.ts ' +
+    '(priced: false for a model outside the pricing table, estimated: true for a sibling-priced row); debitedMicros is ' +
+    'the amount taken from the account. Listed through GET /api/v1/lopu/account/history beside the debits that point at it.',
+  createdVia: 'api/utils/lopu/accounting.ts debitLopuUsage (chats reply, voice reply, voice session)',
+  fields: [
+    { name: 'chatId', type: 'string', required: false, max: 160, description: 'The Lopu conversation (chat turns).' },
+    { name: 'requestId', type: 'string', required: false, max: 160, description: 'The client request id of the turn.' },
+    { name: 'surface', type: 'enum', required: true, values: ['chat', 'voice', 'voice-session'], description: 'Which Lopu surface ran the turn.' },
+    { name: 'provider', type: 'string', required: true, max: 40, description: 'claude | openai | vault | test | fallback, or the vault connection kind.' },
+    { name: 'providerLabel', type: 'string', required: false, max: 80, description: 'The vault connection’s display name (byo turns).' },
+    { name: 'model', type: 'string', required: false, max: 128, description: 'The model that answered.' },
+    { name: 'billing', type: 'enum', required: true, values: ['thingtime', 'byo', 'free'], description: 'Who paid for the turn.' },
+    { name: 'inputTokens', type: 'number', required: true, min: 0, description: 'Uncached input tokens.' },
+    { name: 'outputTokens', type: 'number', required: true, min: 0, description: 'Output tokens.' },
+    { name: 'cacheReadTokens', type: 'number', required: true, min: 0, description: 'Prompt-cache read tokens when the provider reported them.' },
+    { name: 'cacheWriteTokens', type: 'number', required: true, min: 0, description: 'Prompt-cache write tokens when the provider reported them.' },
+    { name: 'costMicros', type: 'number', required: true, min: 0, description: 'List price of the turn in micro-USD.' },
+    { name: 'priced', type: 'boolean', required: true, description: 'The model has a pricing row.' },
+    { name: 'estimated', type: 'boolean', required: true, description: 'The pricing row is a sibling estimate.' },
+    { name: 'debitedMicros', type: 'number', required: true, min: 0, description: 'Micros actually taken from the account (0 for byo / free).' },
+    { name: 'toolCalls', type: 'number', required: true, min: 0, description: 'Tool executions in the turn.' },
+    { name: 'hops', type: 'number', required: true, min: 0, description: 'Model hops in the turn.' },
+    { name: 'durationMs', type: 'number', required: true, min: 0, description: 'Wall-clock time of the turn.' }
+  ],
+  example: {
+    chatId: 'lopu-chat-7d1f2c1a-3b7e-4d0a-9c1d-000000000001',
+    requestId: '0f7d2c3a-8b1e-4c2d-9a4f-000000000002',
+    surface: 'chat',
+    provider: 'claude',
+    model: 'claude-opus-5',
+    billing: 'thingtime',
+    inputTokens: 1200,
+    outputTokens: 380,
+    cacheReadTokens: 8000,
+    cacheWriteTokens: 0,
+    costMicros: 19500,
+    priced: true,
+    estimated: false,
+    debitedMicros: 19500,
+    toolCalls: 2,
+    hops: 3,
+    durationMs: 8400
+  }
+};
+
+const lopuCreditSchema: ThingtimeSchema = {
+  id: 'lopu-credit',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Lopu credit ledger row',
+  summary: 'One signed movement of a Lopu credit balance, or a top-up request waiting for an admin.',
+  detail:
+    'The ledger (ownerId = the user, acl ["tt:user"], storageClass "control"): entry "starter" (the one-time grant), ' +
+    '"grant" / "topup" / "adjust" / "refund" (admin movements through POST /api/v1/admin/lopu/credits, adjust and refund ' +
+    'may be negative), "debit" (one per debited turn, usageId points at the lopu-usage row) — each carrying ' +
+    'balanceAfterMicros — and "request" (POST /api/v1/lopu/account/topup-request: amountMicros is the requested amount, ' +
+    'balanceAfterMicros null, requestStatus pending → approved | declined; while pending the row also carries the root ' +
+    'uniqueKeys lopuTopupPending:<userId>, so an account can only have one open request). Newest first through ' +
+    'GET /api/v1/lopu/account/history.',
+  createdVia: 'api/utils/lopu/accounting.ts (ensureLopuAccount, debitLopuUsage, grantLopuCredits, createLopuTopupRequest, resolveLopuTopupRequest)',
+  fields: [
+    { name: 'entry', type: 'enum', required: true, values: ['starter', 'grant', 'topup', 'debit', 'adjust', 'refund', 'request'], description: 'What kind of movement or request this is.' },
+    { name: 'amountMicros', type: 'number', required: true, description: 'Signed movement in micro-USD (a request carries the requested amount, positive).' },
+    { name: 'balanceAfterMicros', type: 'number', required: false, description: 'The balance after the movement (null on a request).' },
+    { name: 'reason', type: 'string', required: true, max: 300, description: 'Why — the admin’s reason, the turn, or the request kind.' },
+    { name: 'actorId', type: 'string', required: true, max: 128, description: 'Who caused it: the admin, the user, or "system".' },
+    { name: 'usageId', type: 'string', required: false, max: 160, description: 'The lopu-usage row a debit paid for.' },
+    { name: 'requestId', type: 'string', required: false, max: 160, description: 'The request row a topup grant answered.' },
+    { name: 'requestStatus', type: 'enum', required: false, values: ['pending', 'approved', 'declined'], description: 'Request rows only.' },
+    { name: 'note', type: 'string', required: false, max: 500, description: 'The user’s note on a request, or the admin’s note on a grant.' },
+    { name: 'resolvedAt', type: 'string', required: false, max: 40, description: 'When a request was approved or declined.' },
+    { name: 'resolvedBy', type: 'string', required: false, max: 128, description: 'The admin who resolved a request.' },
+    { name: 'grantedMicros', type: 'number', required: false, min: 0, description: 'What an approved request actually granted.' }
+  ],
+  example: {
+    entry: 'debit',
+    amountMicros: -19500,
+    balanceAfterMicros: 1980500,
+    reason: 'Chat turn · claude-opus-5',
+    actorId: '64f000000000000000000002',
+    usageId: 'lopu-usage-3f9c2a1b7d5e4c6a8b0f1e2d3c4b5a69'
+  }
+};
+
 const aiConnectionSchema: ThingtimeSchema = {
   id: 'ai-connection',
   version: 1,
@@ -3392,6 +3673,9 @@ export const PROTECTED_THINGTIME = [
   'feed-algorithm',
   'waitlist',
 	'app',
+  // audience groups (custom visibility) — managed only via /api/v1/groups
+  'group',
+  'group-member',
   'subscription-tier',
   'subscription',
   'account-link',
@@ -3422,7 +3706,12 @@ export const PROTECTED_THINGTIME = [
   // the Lopu model catalog (api/utils/ai/models.ts): catalog fields are code
   // and `enabled` is admin-only, so nothing may mint a model or flip
   // availability through generic Thing CRUD
-  'ai-model'
+  'ai-model',
+  // Lopu credits and usage (api/utils/lopu/accounting.ts): a forged account,
+  // ledger row or usage row would be free credits or a falsified bill
+  'lopu-account',
+  'lopu-usage',
+  'lopu-credit'
 ] as const;
 export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) => (PROTECTED_THINGTIME as readonly string[]).includes(id));
 
@@ -3592,6 +3881,10 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   migrationDiagnosticSchema,
   // the Lopu model catalog (protected, seeded by api/utils/ai/models.ts)
   aiModelSchema,
+  // Lopu credits + usage accounting (protected, api/utils/lopu/accounting.ts)
+  lopuAccountSchema,
+  lopuUsageSchema,
+  lopuCreditSchema,
   ...ciControlSchemas,
   // social graph + notifications (protected, server-minted). The `follow`
   // kind registers ONCE, below with the messenger family: followSchema is the

@@ -51,13 +51,20 @@ export class LopuStreamError extends Error {
 	status: number;
 	error: string;
 	retryAfter: string | null;
+	// the API's machine-readable refusal (LOPU_UNVERIFIED / LOPU_NO_CREDITS on
+	// the 403/402 gate — verified-credits design note §1); null otherwise
+	code: string | null;
+	// the account balance a 402 reports (micro-USD), when it does
+	balanceMicros: number | null;
 
-	constructor(status: number, error: string, retryAfter: string | null = null) {
+	constructor(status: number, error: string, retryAfter: string | null = null, extra?: { code?: string | null; balanceMicros?: number | null }) {
 		super(error);
 		this.name = 'LopuStreamError';
 		this.status = status;
 		this.error = error;
 		this.retryAfter = retryAfter;
+		this.code = typeof extra?.code === 'string' && extra.code ? extra.code : null;
+		this.balanceMicros = typeof extra?.balanceMicros === 'number' && Number.isFinite(extra.balanceMicros) ? extra.balanceMicros : null;
 	}
 }
 
@@ -104,13 +111,19 @@ export const postLopuReply = async (body: LopuReplyBody, options?: { signal?: Ab
 
 const errorFromResponse = async (response: Response): Promise<LopuStreamError> => {
 	let message = `Lopu could not reply (HTTP ${response.status})`;
+	let code: string | null = null;
+	let balanceMicros: number | null = null;
 	try {
 		const payload = await response.json();
 		if (payload && typeof payload.error === 'string' && payload.error) message = payload.error;
+		if (payload && typeof payload.code === 'string') code = payload.code;
+		const balance = payload?.balance ?? payload?.balanceMicros;
+		if (typeof balance === 'number' && Number.isFinite(balance)) balanceMicros = balance;
+		else if (balance && typeof balance === 'object' && typeof balance.balanceMicros === 'number') balanceMicros = balance.balanceMicros;
 	} catch {
 		// non-JSON body — keep the status message
 	}
-	return new LopuStreamError(response.status, message, response.headers.get('Retry-After'));
+	return new LopuStreamError(response.status, message, response.headers.get('Retry-After'), { code, balanceMicros });
 };
 
 /**

@@ -47,6 +47,7 @@ import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 import { RAINBOW } from '~/theme/rainbow';
 import { PostComposer } from './PostComposer';
+import { CustomAudienceModal } from './CustomAudienceModal';
 import { ReactionControl } from './ReactionControl';
 import { splashEmoji } from './emojiSplash';
 import { isUnknownReactionFailure, reactionFailureMessage, shouldReconcileReactionFailure } from './reactionFailure';
@@ -1353,10 +1354,33 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     }
   };
 
+  // Custom audience 🎭: the picker composes the acl; applying PATCHes it
+  const [audienceOpen, setAudienceOpen] = React.useState(false);
+  const handleCustomApply = async (acl: string[]) => {
+    const prevVisibility = post.visibility;
+    const prevAcl = post.acl;
+    onChanged?.(post.id, (prev) => ({ ...prev, visibility: 'custom' as PostVisibility, acl }));
+    try {
+      const resp = await api.v1.things.update({ id: post.id, acl });
+      if (resp?.post) {
+        onChanged?.(post.id, (prev) => ({ ...prev, visibility: resp.post.visibility, acl: resp.post.acl, linkKey: resp.post.linkKey }));
+      }
+      lopu({ title: 'Custom audience set 🎭', description: 'Exactly the people you picked, with the powers you gave them.', status: 'success', duration: 4000 });
+    } catch (err: any) {
+      onChanged?.(post.id, (prev) => ({ ...prev, visibility: prevVisibility, acl: prevAcl }));
+      lopu({ title: err?.error || 'Could not change the audience 😞', status: 'error' });
+    }
+  };
+
   // Change privacy from the post menu. Optimistic: the circle badge flips
   // immediately; the server response reconciles the derived acl, and a
   // failure flips it back.
   const handleVisibilityChange = async (next: PostVisibility) => {
+    // custom routes through the picker (it needs the WHO before it can apply)
+    if (next === 'custom') {
+      setAudienceOpen(true);
+      return;
+    }
     if (next === post.visibility) return;
     const prevVisibility = post.visibility;
     const prevAcl = post.acl;
@@ -1364,22 +1388,47 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     try {
       const resp = await api.v1.things.update({ id: post.id, visibility: next });
       if (resp?.post) {
-        onChanged?.(post.id, (prev) => ({ ...prev, visibility: resp.post.visibility, acl: resp.post.acl }));
+        // linkKey rides along: entering hidden mints a fresh secret, so the
+        // Copy hidden link item works the moment the switch lands
+        onChanged?.(post.id, (prev) => ({ ...prev, visibility: resp.post.visibility, acl: resp.post.acl, linkKey: resp.post.linkKey }));
       }
       const meta = CIRCLE_META[next];
-      lopu({ title: `Privacy set to ${meta.label} ${meta.emoji}`, status: 'success', duration: 4000 });
+      lopu({
+        title: `Privacy set to ${meta.label} ${meta.emoji}`,
+        description: next === 'hidden' ? 'Unlisted everywhere — “Copy hidden link” in the post menu shares its secret URL.' : undefined,
+        status: 'success',
+        duration: 4000
+      });
     } catch (err: any) {
       onChanged?.(post.id, (prev) => ({ ...prev, visibility: prevVisibility, acl: prevAcl }));
       lopu({ title: err?.error || 'Could not change privacy 😞', status: 'error' });
     }
   };
 
-  // menu copy-link: always the clipboard (the share icon owns the native sheet)
+  // menu copy-link: always the clipboard (the share icon owns the native
+  // sheet). Hidden posts copy their SECRET link — permalink + ?key= — the
+  // only door into an unlisted post.
+  //
+  // Keyed on the KEY, not on the derived circle name. The server mints,
+  // projects and honours linkKey off `acl.includes(tt:hidden)` (createThing,
+  // toPublicPosts, canView), but visibilityFromAcl reports 'custom' whenever
+  // tt:custom rides along — and the audience picker's "🕵️ + secret link"
+  // baseline composes exactly that acl. Gating on the name therefore hid the
+  // link for every custom audience that opted into one: a real key existed,
+  // the owner held it in this very payload, and no UI would surface it.
+  // `post.linkKey` is already the exact condition — present only for the
+  // owner, and only while the acl still says hidden.
+  const hiddenLink = post.linkKey ? `${permalinkPath}?key=${encodeURIComponent(post.linkKey)}` : null;
   const handleCopyLink = async () => {
-		const url = `${window.location.origin}${permalinkPath}`;
+		const url = `${window.location.origin}${hiddenLink || permalinkPath}`;
     try {
       await navigator.clipboard.writeText(url);
-      lopu({ title: 'Link copied 🔗', status: 'success', duration: 4000 });
+      lopu({
+        title: hiddenLink ? 'Hidden link copied 🕵️' : 'Link copied 🔗',
+        description: hiddenLink ? 'Anyone holding this exact link can view the post — share it deliberately.' : undefined,
+        status: 'success',
+        duration: 4000
+      });
     } catch {
       // clipboard unavailable (http origin) — hand the link over anyway
       lopu({ title: `Copy this link: ${url}`, status: 'info', duration: 10000 });
@@ -1789,7 +1838,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                   </MenuItem>
                 )}
                 <MenuItem fontSize="sm" onClick={handleCopyLink}>
-                  Copy link 🔗
+                  {hiddenLink ? 'Copy hidden link 🕵️' : 'Copy link 🔗'}
                 </MenuItem>
                 {!mediaThing && (
                   <>
@@ -1814,6 +1863,14 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                 )}
               </MenuList>
             </Menu>
+          )}
+          {isOwner && (
+            <CustomAudienceModal
+              isOpen={audienceOpen}
+              onClose={() => setAudienceOpen(false)}
+              initialAcl={post.visibility === 'custom' ? post.acl : undefined}
+              onApply={handleCustomApply}
+            />
           )}
         </Flex>
 

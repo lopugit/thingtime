@@ -7,6 +7,7 @@ import { ChevronDown, Maximize2, Mic, Minus, X } from 'lucide-react';
 import { LopuActivityBadge, LopuRingAvatar, useLopuStreamingActivity } from './LopuActivityBadge';
 import { LopuChatView } from './LopuChatView';
 import { getLopuStoreServerSnapshot, getLopuStoreSnapshot, selectLopuProviderNames, setLopuSettings, subscribeLopuStore, type LopuVaultProvider } from './lopuChatStore';
+import { useLopuAccount } from './useLopuAccount';
 import { vaultProviderUnavailableReason } from './lopuProviderCore';
 import { LopuVoiceSurface, lopuVoicePhaseLabel, type LopuVoicePhase } from './LopuVoiceControls';
 import { LOPU_UI, lopuIconButtonSx, lopuRainbowRing } from './lopuTheme';
@@ -100,7 +101,7 @@ class LopuHostBoundary extends React.Component<{ children: React.ReactNode }, { 
 			return (
 				<Flex flexDirection="column" alignItems="center" justifyContent="center" rowGap={2} flex="1" padding={6} textAlign="center">
 					<Text fontSize="sm" fontWeight={600}>
-						Lopu tripped over her horn 🌧️
+						Lopu tripped over its horn 🌧️
 					</Text>
 					<Text fontSize="xs" color={LOPU_UI.muted}>
 						{this.state.error.message || 'Something went wrong while drawing the chat.'}
@@ -349,7 +350,7 @@ export const LopuSettingsRows = (props: { renderRow: (label: string, control: Re
 			{renderRow(
 				'Floating Lopu 🦄',
 				<Switch isChecked={settings.launcher} onChange={(event) => setLauncher(event.target.checked)} aria-label="Show the floating Lopu bubble" />,
-				'Show the draggable Lopu bubble on every page (the navbar 🦄 opens her either way)'
+				'Show the draggable Lopu bubble on every page (the navbar 🦄 opens Lopu either way)'
 			)}
 			{renderRow(
 				'Window docking',
@@ -365,7 +366,7 @@ export const LopuSettingsRows = (props: { renderRow: (label: string, control: Re
 			{renderRow(
 				'Apply builder changes live',
 				<Switch isChecked={settings.applyPatches} onChange={(event) => setApplyPatches(event.target.checked)} aria-label="Apply builder changes live" />,
-				'Lopu’s page and component edits paint into the open draft while she is still typing'
+				'Lopu’s page and component edits paint into the open draft while it is still typing'
 			)}
 			{renderRow(
 				'Confirm conversation deletes',
@@ -473,6 +474,12 @@ export const LopuHost = () => {
 	const chatStore = React.useSyncExternalStore(subscribeLopuStore, getLopuStoreSnapshot, getLopuStoreServerSnapshot);
 	const chatProviderId = chatStore.settings.providerId;
 	const chatProviderName = chatProviderId ? selectLopuProviderNames(chatStore)[chatProviderId] || 'Your provider' : null;
+	// the access gate (verified-credits design note §4): the window / sheet
+	// body draws LopuLockedState through LopuChatView / LopuVoiceSurface; the
+	// header's status line and chip follow (the cache seeds it, no fetch here
+	// until the window opens)
+	const account = useLopuAccount({ byo: !!chatProviderId, active: showWindow });
+	const locked = account.access.locked && account.access.reason === 'unverified';
 
 	// keep both surfaces on screen when the viewport changes
 	React.useEffect(() => {
@@ -773,11 +780,13 @@ export const LopuHost = () => {
 	}
 
 	const choice = resolveLopuModelChoice(catalog, settings);
-	const chipVisible = !minimised && !voiceMode && (isMobile || geometry.width >= CHIP_MIN_WINDOW_WIDTH);
+	const chipVisible = !minimised && !voiceMode && !locked && (isMobile || geometry.width >= CHIP_MIN_WINDOW_WIDTH);
 	const detail = [describeLopuEffort(choice.effort), choice.speed === 'fast' ? 'Fast ⚡' : null].filter(Boolean).join(' · ');
 	// the chat's own provider (per-chat store settings) wins over the
 	// catalog choice in the header, exactly as it does for the turn
-	const status = streaming
+	const status = locked
+		? 'Invite-only for now'
+		: streaming
 		? 'Replying…'
 		: voiceMode
 			? voicePhase === 'idle'

@@ -53,7 +53,7 @@ export type LiveAiSource = {
 	authorName?: string | null;
 };
 
-// Lopu, the Thingtime assistant: her conversations are ordinary messenger
+// Lopu, the Thingtime assistant: its conversations are ordinary messenger
 // rows tagged with this source (chat: readOnly false; assistant turns:
 // readOnly true — never editable, deletable with the chat). Mirrors
 // PublicLopuExternalAiSource in api/utils/messenger/externalAi.ts.

@@ -6,8 +6,10 @@ import { ChevronDown, Maximize2 } from 'lucide-react';
 import type { ChatMessage } from '~/components/Messenger/messengerTypes';
 import { useIsMobileViewport } from '../Nav/Drawer/useDrawer';
 import type { ComponentsByRef } from '../Builder/WebpageBlocksRenderer';
+import { LOPU_CREDITS_SETTINGS_PATH, LopuBalanceChip } from './LopuBalanceChip';
 import { LopuComposer } from './LopuComposer';
 import { LopuLivePreview } from './LopuLivePreview';
+import { LOPU_ADMIN_ACCOUNTS_PATH, LopuActionLink, LopuLockedState } from './LopuLockedState';
 import { LopuMarkdown, StreamingCaret } from './LopuMarkdown';
 import { LopuToolCallRow, LopuToolCard } from './LopuToolCard';
 import { LOPU_UI, lopuChipSx, lopuEyebrowSx, lopuFocusRingSx, lopuRainbowRing, lopuReducedMotionSx } from './lopuTheme';
@@ -18,8 +20,10 @@ import {
 	describeLopuTurnMeta,
 	lopuMessageMeta,
 	type LopuTimelineRow,
+	type LopuTurnGate,
 	type LopuTurnState
 } from './lopuTurnCore';
+import type { LopuAccount } from './useLopuAccount';
 import { useLopuChat, type LopuContextProvider } from './useLopuChat';
 
 // The Lopu chat surface (design note §3.2, restyled per the design brief)
@@ -166,6 +170,76 @@ const ErrorLine = ({ message }: { message: string }) => (
 	</Text>
 );
 
+// The access gate answered instead of Lopu (403 unverified / 402 no
+// credits — verified-credits design note §4): the friendly copy in Lopu's
+// own bubble plus the action that fixes it — request / buy credits and try
+// the same message again, or (for an admin) the accounts panel.
+const GateBubble = ({
+	gate,
+	account,
+	admin,
+	compact,
+	onRetry
+}: {
+	gate: LopuTurnGate;
+	account: LopuAccount | null;
+	admin: boolean;
+	compact: boolean;
+	onRetry?: () => void;
+}) => {
+	const noCredits = gate.code === 'LOPU_NO_CREDITS';
+	const unverified = gate.code === 'LOPU_UNVERIFIED';
+	const guest = gate.code === 'LOPU_GUEST';
+	return (
+		<Box className="lopuGateBubble" data-gate={gate.code} role="status" minW={0}>
+			<Text fontSize={compact ? LOPU_UI.fontCompact : LOPU_UI.fontBody} lineHeight="1.5" color={LOPU_UI.ink} overflowWrap="anywhere">
+				{gate.message}
+			</Text>
+			<Flex gap={2} wrap="wrap" mt={2}>
+				{noCredits ? (
+					<>
+						<LopuActionLink to={LOPU_CREDITS_SETTINGS_PATH} primary={!account?.topupUrl} compact={compact}>
+							{account?.pendingRequest ? 'Credits & usage' : 'Request credits'}
+						</LopuActionLink>
+						{account?.topupUrl ? (
+							<LopuActionLink to={account.topupUrl} external primary compact={compact}>
+								Buy credits ↗
+							</LopuActionLink>
+						) : null}
+						{onRetry ? (
+							<LopuActionLink onClick={onRetry} compact={compact}>
+								Try again
+							</LopuActionLink>
+						) : null}
+					</>
+				) : null}
+				{guest ? (
+					<>
+						<LopuActionLink to="/register" primary compact={compact}>
+							Create an account
+						</LopuActionLink>
+						<LopuActionLink to="/login" compact={compact}>
+							Sign in
+						</LopuActionLink>
+					</>
+				) : null}
+				{unverified ? (
+					<>
+						{admin ? (
+							<LopuActionLink to={LOPU_ADMIN_ACCOUNTS_PATH} primary compact={compact}>
+								Admin → Lopu accounts
+							</LopuActionLink>
+						) : null}
+						<LopuActionLink to={LOPU_CREDITS_SETTINGS_PATH} compact={compact}>
+							Credits &amp; usage
+						</LopuActionLink>
+					</>
+				) : null}
+			</Flex>
+		</Box>
+	);
+};
+
 const componentsFromTurn = (turn: LopuTurnState): ComponentsByRef => {
 	const out: ComponentsByRef = {};
 	for (const record of turn.things) {
@@ -189,7 +263,10 @@ const TurnBubble = ({
 	onUndo,
 	onConfirm,
 	onDecline,
-	confirmBusy
+	confirmBusy,
+	account,
+	admin,
+	onRetry
 }: {
 	turn: LopuTurnState;
 	first: boolean;
@@ -201,14 +278,25 @@ const TurnBubble = ({
 	onDecline: (requestId: string, toolId: string) => void;
 	// another reply is in flight — a Confirm card waits its turn
 	confirmBusy: boolean;
+	// the viewer's account (a gate bubble offers its top-up action)
+	account: LopuAccount | null;
+	admin: boolean;
+	onRetry: (text: string) => void;
 }) => {
 	const streaming = turn.status === 'streaming';
 	const componentsByRef = React.useMemo(() => componentsFromTurn(turn), [turn]);
 	const segments = turn.segments;
 	const lastSegment = segments[segments.length - 1];
 	const waitingAfterTool = streaming && !!lastSegment && lastSegment.kind === 'tool' && turn.tools.every((tool) => tool.status === 'ok' || tool.status === 'error' || tool.status === 'confirm');
+	if (turn.gate) {
+		return (
+			<LopuAssistantRow first={first} last={last} compact={compact}>
+				<GateBubble gate={turn.gate} account={account} admin={admin} compact={compact} onRetry={turn.gate.code === 'LOPU_NO_CREDITS' && !confirmBusy ? () => onRetry(turn.userText) : undefined} />
+			</LopuAssistantRow>
+		);
+	}
 	return (
-		<LopuAssistantRow first={first} last={last} meta={describeLopuTurnMeta(turn.meta)} compact={compact} live busy={streaming}>
+		<LopuAssistantRow first={first} last={last} meta={describeLopuTurnMeta(turn.meta, { billing: turn.billing, costMicros: turn.costMicros })} compact={compact} live busy={streaming}>
 			{segments.length === 0 && streaming ? <Thinking compact={compact} /> : null}
 			{segments.map((segment, index) => {
 				if (segment.kind === 'text') {
@@ -269,14 +357,18 @@ const MessageBubble = React.memo(function MessageBubble({
 	if (role === 'user') return <LopuUserRow text={message.text} compact={compact} />;
 	const metaLine =
 		meta && meta.provider
-			? describeLopuTurnMeta({
-					provider: meta.provider,
-					label: meta.model ? (modelLabels[meta.model] ?? null) : null,
-					model: meta.model,
-					effort: meta.effort,
-					speed: meta.speed,
-					providerLabel: meta.providerLabel
-				})
+			? describeLopuTurnMeta(
+					{
+						provider: meta.provider,
+						label: meta.model ? (modelLabels[meta.model] ?? null) : null,
+						model: meta.model,
+						effort: meta.effort,
+						speed: meta.speed,
+						providerLabel: meta.providerLabel
+					},
+					// a persisted row remembers what it cost (turn meta billing/cost)
+					{ billing: meta.billing, costMicros: meta.costMicros }
+				)
 			: null;
 	return (
 		<LopuAssistantRow first={first} last={last} meta={metaLine} compact={compact}>
@@ -318,7 +410,7 @@ const SignedOutState = ({ compact }: { compact: boolean }) => (
 	<Flex className="lopuSignedOut" direction="column" align="center" justify="center" textAlign="center" flex={1} minH={compact ? '200px' : '320px'} px={4} py={6} gap={4}>
 		<LopuAvatar size={compact ? 48 : 56} />
 		<Text fontSize={compact ? LOPU_UI.fontCompact : LOPU_UI.fontBody} color={LOPU_UI.muted} maxW="360px" lineHeight="1.5">
-			Lopu builds pages, components and actions as you — sign in and she remembers every conversation.
+			Lopu builds pages, components and actions as you — sign in and it remembers every conversation.
 		</Text>
 		<Box
 			as={RouterLink}
@@ -474,16 +566,39 @@ export const LopuChatView = ({
 		[chat]
 	);
 	const activeName = chat.chat?.name || (chat.chatId ? 'Conversation' : 'New chat');
-	const status = describeLopuStatusLine({
-		model: chat.settings.model,
-		effort: chat.settings.effort,
-		speed: chat.settings.speed,
-		providerId: chat.settings.providerId,
-		modelLabels: chat.modelLabels,
-		providerNames: chat.providerNames,
-		streaming: streamingHere,
-		listening
-	});
+	// the access gate (verified-credits design note §4): a locked account
+	// sees LopuLockedState and a disabled composer; the balance chip sits by
+	// the model chip for every signed-in viewer
+	const access = chat.account.access;
+	const locked = !!chat.viewer.id && access.locked;
+	const lockReason = access.reason ?? 'unverified';
+	const viewerIsAdmin = chat.viewer.admin;
+	const status = locked
+		? lockReason === 'temporary'
+			? 'Create an account to chat'
+			: 'Invite-only — waiting for an admin to verify you'
+		: describeLopuStatusLine({
+				model: chat.settings.model,
+				effort: chat.settings.effort,
+				speed: chat.settings.speed,
+				providerId: chat.settings.providerId,
+				modelLabels: chat.modelLabels,
+				providerNames: chat.providerNames,
+				streaming: streamingHere,
+				listening
+			});
+	// a locked account that may still chat on its own provider keeps the model
+	// chip usable (only the field and Send are disabled) — picking a vault
+	// provider makes the turn BYO and unlocks the composer
+	const byoUnlock = locked && lockReason === 'unverified' && access.byoOnly;
+	const composerPlaceholder = locked
+		? lockReason === 'temporary'
+			? 'Create an account to chat with Lopu'
+			: byoUnlock
+				? 'Lopu is invite-only for now — pick one of your own providers in the model chip to chat'
+				: 'Lopu is invite-only for now — an admin needs to verify your account'
+		: undefined;
+	const accountChip = chat.viewer.signedIn && !locked ? <LopuBalanceChip account={chat.account.account} byo={chat.byo} compact={compact} mobile={isMobile} /> : null;
 
 	const gutter = compact ? 3 : { base: 3, md: 6 };
 	const columnMaxW = compact ? '100%' : LOPU_UI.conversationMaxWidth;
@@ -506,6 +621,9 @@ export const LopuChatView = ({
 							onConfirm={onConfirm}
 							onDecline={chat.declineTool}
 							confirmBusy={confirmBusy}
+							account={chat.account.account}
+							admin={viewerIsAdmin}
+							onRetry={send}
 						/>
 					) : (
 						<MessageBubble message={row.item.message} role={row.role} first={row.first} last={row.last} compact={compact} modelLabels={chat.modelLabels} />
@@ -582,12 +700,19 @@ export const LopuChatView = ({
 				<Flex direction="column" maxW={columnMaxW} mx="auto" width="100%" minH="100%" minW={0}>
 					{!chat.viewer.id ? (
 						<SignedOutState compact={compact} />
+					) : locked && rows.length === 0 && !trailing ? (
+						<LopuLockedState reason={lockReason} admin={viewerIsAdmin} byoAllowed={access.byoOnly} compact={compact} />
 					) : rows.length === 0 && !trailing ? (
 						<EmptyState onPick={send} compact={compact} mobile={isMobile} />
 					) : (
 						<>
 							{rows.map(renderRow)}
 							{trailing}
+							{locked ? (
+								<Box mt={compact ? 3 : 4} borderTop={LOPU_UI.border}>
+									<LopuLockedState reason={lockReason} admin={viewerIsAdmin} byoAllowed={access.byoOnly} compact />
+								</Box>
+							) : null}
 						</>
 					)}
 				</Flex>
@@ -607,7 +732,9 @@ export const LopuChatView = ({
 						onSend={send}
 						onStop={stop}
 						streaming={streamingHere || chat.sending}
-						disabled={!chat.viewer.id}
+						disabled={!chat.viewer.id || (locked && !byoUnlock)}
+						inputDisabled={locked}
+						placeholder={composerPlaceholder}
 						enterSends={chat.preferences.enterSends}
 						models={chat.models}
 						vaultProviders={chat.vaultProviders}
@@ -617,9 +744,10 @@ export const LopuChatView = ({
 						onSettingsChange={chat.setSettings}
 						contextLabel={chat.contextLabel}
 						compact={compact}
-						autoFocus={autoFocus}
+						autoFocus={autoFocus && !locked}
 						inputRef={inputRef}
 						composerLeading={composerLeading}
+						accountChip={accountChip}
 						preferences={chat.preferences}
 						onPreferencesChange={chat.setPreferences}
 						settingsContent={settingsContent}
