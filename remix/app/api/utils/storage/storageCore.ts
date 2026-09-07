@@ -106,6 +106,11 @@ export const CONTROL_PLANE_STORAGE_THINGTIMES = [
   // the Lopu model catalog: system-owned control docs seeded from code
   // (api/utils/ai/models.ts), never user content
   'ai-model',
+  // Lopu credits + usage accounting (api/utils/lopu/accounting.ts): the
+  // platform's own bill for a user, never user content
+  'lopu-account',
+  'lopu-credit',
+  'lopu-usage',
   'app',
   'app-storage',
 	// Protected server-plumbing state is platform overhead. These Things are
