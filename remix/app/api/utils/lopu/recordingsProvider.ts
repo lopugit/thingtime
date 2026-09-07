@@ -2,13 +2,13 @@ import OpenAI, { toFile } from 'openai';
 import { getAttachmentDownload } from '../attachments/attachments';
 import { getAiPreferredModelWaterfall } from '../settings/prConflictResolverModelWaterfall';
 import { resolveAiPreferredOpenAiChoice, toOpenAiReasoningEffort } from '../settings/prConflictResolverModelWaterfallCore';
-import { parseRecordingInsights, RECORDING_INSIGHTS_PROMPT, RECORDING_MAX_AUDIO_BYTES, RECORDING_MAX_TRANSCRIPT_CHARS } from './recordingsCore';
+import { parseRecordingInsights, RecordingFailure, recordingProviderFailure, RECORDING_INSIGHTS_PROMPT, RECORDING_MAX_AUDIO_BYTES, RECORDING_MAX_TRANSCRIPT_CHARS } from './recordingsCore';
 
 const AUDIO_TYPES = new Set(['audio/mp4', 'audio/m4a', 'audio/x-m4a', 'audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/webm', 'video/mp4']);
 
 export const recordingProviderStatus = () => ({
 	configured: Boolean(process.env.OPENAI_API_KEY?.trim()),
-	name: 'Thingtime OpenAI provider',
+	name: 'Configured AI provider',
 	maxAudioBytes: RECORDING_MAX_AUDIO_BYTES
 });
 
@@ -21,12 +21,12 @@ const client = () => {
 
 export const readRecordingBytes = async (ownerId: string, attachmentId: string): Promise<{ bytes: Uint8Array; type: string }> => {
 	const download = await getAttachmentDownload({ id: ownerId }, attachmentId, false);
-	if (!download.ok) throw new Error('This recording is no longer available.');
+	if (!download.ok) throw new RecordingFailure('source');
 	if (!AUDIO_TYPES.has(download.contentType) || download.size < 1 || download.size > RECORDING_MAX_AUDIO_BYTES) {
-		throw new Error('Use an audio recording smaller than 24 MiB (M4A, MP3, MP4, WAV or WebM).');
+		throw new RecordingFailure('format');
 	}
-	const response = await fetch(download.url, { redirect: 'error', signal: AbortSignal.timeout(30_000) });
-	if (!response.ok || !response.body) throw new Error('The recording could not be downloaded.');
+	const response = await fetch(download.url, { redirect: 'error', signal: AbortSignal.timeout(30_000) }).catch(() => { throw new RecordingFailure('download'); });
+	if (!response.ok || !response.body) throw new RecordingFailure('download');
 	const reader = response.body.getReader();
 	const chunks: Uint8Array[] = [];
 	let total = 0;
@@ -35,13 +35,15 @@ export const readRecordingBytes = async (ownerId: string, attachmentId: string):
 			const { done, value } = await reader.read();
 			if (done) break;
 			total += value.byteLength;
-			if (total > download.size || total > RECORDING_MAX_AUDIO_BYTES) throw new Error('The recording exceeded its expected size.');
+			if (total > download.size || total > RECORDING_MAX_AUDIO_BYTES) throw new RecordingFailure('download');
 			chunks.push(value);
 		}
+	} catch {
+		throw new RecordingFailure('download');
 	} finally {
 		await reader.cancel().catch(() => {});
 	}
-	if (total !== download.size) throw new Error('The recording download was incomplete.');
+	if (total !== download.size) throw new RecordingFailure('download');
 	return { bytes: Buffer.concat(chunks), type: download.contentType };
 };
 
@@ -66,8 +68,8 @@ export const transcribeRecordingAudio = async (bytes: Uint8Array, type: string):
 		const text = result.text?.trim();
 		if (!text || text.length > RECORDING_MAX_TRANSCRIPT_CHARS) throw new Error('empty');
 		return text;
-	} catch {
-		throw new Error('Transcription did not finish. Check the recording provider and retry.');
+	} catch (error) {
+		throw recordingProviderFailure(error, 'transcription');
 	}
 };
 
@@ -89,7 +91,7 @@ export const analyzeRecording = async (transcript: string, beforeSend?: () => Pr
 			]
 		});
 		return parseRecordingInsights(result.choices[0]?.message.content || '', transcript);
-	} catch {
-		throw new Error('Lopu could not organize this transcript yet. Your saved transcript is safe; retry to continue.');
+	} catch (error) {
+		throw recordingProviderFailure(error, 'analysis');
 	}
 };

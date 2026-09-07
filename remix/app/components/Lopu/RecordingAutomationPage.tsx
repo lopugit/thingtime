@@ -187,7 +187,7 @@ export function RecordingAutomationPage() {
 							/>
 						</Flex>
 						<Text mt={4} fontSize="sm">
-							When enabled, your recording audio and transcript are sent to Thingtime’s configured OpenAI provider. Transcripts are posted as private
+							When enabled, your recording audio and transcript are sent to the configured AI provider. Transcripts are posted as private
 							comments. Generated notes and todos stay private. This does not buy anything, contact anyone, or carry out the tasks.
 						</Text>
 						<Text mt={2} fontSize="sm" role="status">

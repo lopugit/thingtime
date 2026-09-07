@@ -20,11 +20,12 @@ test('both registered recording endpoints are explicitly versioned in both manif
 	const manifest = thingtimeCapabilityManifest(origin);
 	assert.equal(supportsRecordingAutomation(manifest, origin), true);
 	for (const id of ['lopu-recordings', 'lopu-recordings-run']) {
+		const version = id === 'lopu-recordings' ? '1.0.1' : '1.0.0';
 		const doc = apiEndpointDocs.find((entry) => entry.id === id);
-		assert.equal(doc?.contractVersion, '1.0.0');
-		assert.equal(doc?.featureVersion, '1.0.0');
-		assert.equal(createApiCapabilitiesManifest().features[`api.${id}`], '1.0.0');
-		assert.equal(manifest.features[`api.${id}`].version, '1.0.0');
+		assert.equal(doc?.contractVersion, version);
+		assert.equal(doc?.featureVersion, version);
+		assert.equal(createApiCapabilitiesManifest().features[`api.${id}`], version);
+		assert.equal(manifest.features[`api.${id}`].version, version);
 		assert.ok(manifest.operations.some((entry) => entry.feature === `api.${id}` && entry.methods.includes('POST') && entry.methods.includes('GET')));
 	}
 });

@@ -6,8 +6,27 @@ import {
 	parseRecordingSettingsPatch,
 	recordingReminderWindow,
 	recordingRetryAt,
-	recordingSettingsOf
+	recordingSettingsOf,
+	RecordingFailure,
+	recordingFailureMessage,
+	recordingProviderFailure
 } from './recordingsCore';
+
+test('recording failures expose closed actionable messages, never provider errors or signed URLs', () => {
+	const privateError = new Error('secret credential https://storage.example/signed?token=private');
+	assert.match(recordingFailureMessage(privateError, 'transcription'), /transcribe/);
+	assert.match(recordingFailureMessage(privateError, 'analysis'), /transcript is saved/);
+	for (const [status, expected] of [[401, /credentials/], [403, /credentials/], [429, /quota/], [500, /transcribe/]] as const) {
+		const safe = recordingFailureMessage(recordingProviderFailure({ status, message: privateError.message }, 'transcription'));
+		assert.match(safe, expected);
+		assert.doesNotMatch(safe, /secret credential|signed\?token/);
+	}
+	const typed = new RecordingFailure('download');
+	typed.message = privateError.message;
+	assert.match(recordingFailureMessage(typed), /download the saved audio/);
+	assert.doesNotMatch(recordingFailureMessage(typed), /secret credential/);
+	assert.match(recordingFailureMessage({ code: 'provider_auth', message: privateError.message }), /save/);
+});
 
 test('private audio processing requires opt-in; settings patches do not erase unrelated preferences', () => {
 	assert.equal(recordingSettingsOf(null).enabled, false);

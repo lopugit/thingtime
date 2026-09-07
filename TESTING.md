@@ -42,6 +42,8 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Lopu Apple Watch recording automation
 
+- [ ] Force a storage-download failure and provider 401/429 in the isolated test harness. Verify recording status identifies the failed step and never exposes raw errors, credentials, signed URLs, or transcript content. Retry must preserve completed checkpoints.
+
 - [ ] On desktop and 390px mobile, open `/lopu/recordings`, verify the account,
       refresh status, save options/time zone/hour, and scroll to the bottom.
       Inputs must not overlap; missing `AbortSignal.timeout` must not prevent

@@ -9,7 +9,8 @@ import {
 	RECORDING_REMINDER_KIND,
 	RECORDING_LEASE_MS,
 	RECORDING_MAX_ATTEMPTS,
-	recordingRetryAt
+	recordingRetryAt,
+	recordingFailureMessage
 } from './recordingsCore';
 import {
 	discoverRecordingUploads,
@@ -111,16 +112,19 @@ export const processRecordingJob = async (
 ) => {
 	const things = await getHomeThingsCollection();
 	let state = recordingJobState(job);
+	let failureStage: 'transcription' | 'analysis' | 'save' = 'transcription';
 	try {
 		if (Number(job.crystal.attempts) > RECORDING_MAX_ATTEMPTS) throw new Error('Retry limit reached.');
 		await assertActive(job);
 		if (!state.transcript) {
 			state.transcript = await deps.transcribe(job.ownerId, job.crystal.attachmentId, () => assertActive(job));
+			failureStage = 'save';
 			state.commentIds = transcriptParts(state.transcript).map(() => randomUUID());
 			await assertActive(job);
 			await saveState(job, state, 'transcribed');
 		}
 		const parts = transcriptParts(state.transcript);
+		failureStage = 'save';
 		while (state.commentIndex < parts.length) {
 			await assertActive(job);
 			const index = state.commentIndex;
@@ -147,15 +151,18 @@ export const processRecordingJob = async (
 		}
 		let settings = await getRecordingSettings(job.ownerId);
 		if (!state.insights) {
+			failureStage = 'analysis';
 			await assertActive(job);
 			state.insights =
 				settings.createNotes || settings.createTodos
 					? (await deps.analyze(state.transcript, () => assertActive(job))).map((item) => ({ ...item, id: randomUUID() }))
 					: [];
+			failureStage = 'save';
 			await assertActive(job);
 			await saveState(job, state, 'organized');
 		}
 		while (state.insightIndex < state.insights.length) {
+			failureStage = 'save';
 			await assertActive(job);
 			settings = await getRecordingSettings(job.ownerId);
 			const item = state.insights[state.insightIndex];
@@ -216,7 +223,7 @@ export const processRecordingJob = async (
 					'crystal.status': status,
 					'crystal.error': paused
 						? 'Paused: enable automation and keep the source recording private to retry.'
-						: 'Processing could not finish. Check your provider, recording size and available storage, then retry.',
+						: recordingFailureMessage(error, failureStage),
 					updatedAt: new Date(),
 					nextRunAt: recordingRetryAt(Number(job.crystal.attempts), new Date())
 				},

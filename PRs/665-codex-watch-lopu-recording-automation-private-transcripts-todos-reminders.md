@@ -39,6 +39,16 @@ Branch: `codex/watch-lopu-recording-automation`.
 
 ## Delivery gates still open
 
+Live acceptance, 2026-09-07: the user signed into the exact-head preview as
+@lopu. Preview and production use separate account data. A private copy of the
+approved synthetic WAV uploaded successfully on the preview and queued once.
+The admin worker returned processed=1/outcomes=[retry] in 431 ms, without a
+transcript. Automatic processing was paused while investigating. The existing
+generic error hid the failing phase, so this follow-up adds closed, redacted
+failure categories and isolated provider/download tests. It also applies the
+user-requested provider-neutral consent copy. No provider-backed transcription
+or actual native reminder is claimed yet.
+
 Update 2026-09-07: the historical foundation/APNs/storage blockers below are resolved.
 The selected Watch, Lopu, Builder and rich-text releases are merged into main,
 and this branch incorporates main through `6ad5ef21b7a89fa54b4932809c0f17359124beab`.

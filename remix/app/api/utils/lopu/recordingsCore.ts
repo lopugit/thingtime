@@ -8,6 +8,35 @@ export const RECORDING_MAX_INSIGHTS = 20;
 export const RECORDING_MAX_ATTEMPTS = 5;
 export const RECORDING_LEASE_MS = 5 * 60_000;
 
+const RECORDING_FAILURE_MESSAGES = {
+	source: 'The recording is no longer available. Check that its private audio attachment is ready.',
+	format: 'This recording format or size is not supported. Use M4A, MP3, WAV or WebM under 24 MiB.',
+	download: 'Thingtime could not download the saved audio from storage. The recording is safe; retry after checking storage.',
+	provider_auth: 'The AI provider rejected the configured credentials. Ask an administrator to check the provider configuration.',
+	provider_limit: 'The recording provider is rate-limited or out of quota. Check its allowance, then retry.',
+	transcription: 'The provider could not transcribe this audio. Check its audio-model access and retry.',
+	analysis: 'The transcript is saved, but Lopu could not organize it. Check the configured text model and retry.',
+	save: 'Thingtime could not save the recording results. Check available storage and retry; saved checkpoints are preserved.'
+} as const;
+
+export class RecordingFailure extends Error {
+	constructor(readonly code: keyof typeof RECORDING_FAILURE_MESSAGES) {
+		super(RECORDING_FAILURE_MESSAGES[code]);
+	}
+}
+
+// Re-project a closed code, never the exception's message/cause: SDK and S3
+// errors may contain credentials, signed URLs, or private response content.
+export const recordingFailureMessage = (error: unknown, fallback: keyof typeof RECORDING_FAILURE_MESSAGES = 'save') =>
+	error instanceof RecordingFailure && Object.prototype.hasOwnProperty.call(RECORDING_FAILURE_MESSAGES, error.code)
+		? RECORDING_FAILURE_MESSAGES[error.code]
+		: RECORDING_FAILURE_MESSAGES[fallback];
+
+export const recordingProviderFailure = (error: unknown, stage: 'transcription' | 'analysis') => {
+	const status = error && typeof error === 'object' && 'status' in error ? error.status : undefined;
+	return new RecordingFailure(status === 401 || status === 403 ? 'provider_auth' : status === 429 ? 'provider_limit' : stage);
+};
+
 export type RecordingSettings = {
 	enabled: boolean;
 	createTodos: boolean;

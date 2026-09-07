@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { beforeEach, mock, test } from 'node:test';
-import { DEFAULT_RECORDING_SETTINGS, RECORDING_SETTINGS_KIND, RECORDING_REMINDER_KIND } from './recordingsCore';
+import { DEFAULT_RECORDING_SETTINGS, RECORDING_SETTINGS_KIND, RECORDING_REMINDER_KIND, RecordingFailure } from './recordingsCore';
 
 // In-memory collaborators only. Tests never seed or modify a real database.
 let settings: any;
@@ -111,6 +111,17 @@ const reclaim = () => {
 	persisted.lease = 'lease-2';
 	persisted.crystal.attempts++;
 };
+
+test('provider and storage failure categories survive the worker without raw exception details', async () => {
+	const failure = new RecordingFailure('provider_auth');
+	failure.message = 'private provider URL and credentials';
+	assert.equal(await processRecordingJob(structuredClone(persisted), {
+		...deps, transcribe: async () => { throw failure; }
+	}), 'retry');
+	assert.match(persisted.crystal.error, /rejected the configured credentials/);
+	assert.doesNotMatch(persisted.crystal.error, /private provider URL/);
+	assert.equal(created.length, 0);
+});
 
 test('a recording becomes a relational transcript comment and owner-private todo with one reminder', async () => {
 	assert.equal(await attempt(), 'done');

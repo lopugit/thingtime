@@ -18,6 +18,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-07: Use provider-neutral recording consent and status wording. Report safe, actionable recording failure categories for source/format, storage download, provider credentials/quota, transcription, analysis and saving. Live preview acceptance surfaced an immediate retry previously hidden behind one generic message. — Codex (AI)
 - 2026-09-07: Bring recording automation up to date with the released Lopu/Builder/rich-text work and the verified production storage-ledger repair. See the [PR #665 verification note](../PRs/665-codex-watch-lopu-recording-automation-private-transcripts-todos-reminders.md). — Codex (AI)
 
 - 2026-09-06: Integrate recording automation with the merged Watch foundation;
