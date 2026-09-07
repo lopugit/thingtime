@@ -236,7 +236,7 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     (fixing the previously-broken `~/`-alias suites and covering the
     scriptless `collectionNames.test.ts`); `typecheck` plus a
     `typecheck:ratchet` that fails only when the tsc error count grows past
-    `scripts/typecheck-baseline.json`; and `.github/workflows/web-ci.yml`
+    `remix/scripts/typecheck-baseline.json`; and `.github/workflows/web-ci.yml`
     (build + ratchet + unit tests, and the full API suite against a real
     Vite + Nitro + Mongo stack). **Still open:** progressively enabling tsc
     strictness to burn the baseline down (start with `noImplicitAny`, fixing
