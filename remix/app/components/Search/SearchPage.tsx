@@ -17,6 +17,8 @@ import { canonicalPostTags } from '~/components/Attachments/attachmentUiCore';
 import { blocksToText, getEditorJsDoc } from '~/components/Editor/editorJsValue';
 import { PostCard } from '~/components/Feed/PostCard';
 import type { PostChange } from '~/components/Feed/feedTypes';
+import { SubspaceCard } from '~/components/Subspaces/SubspaceCard';
+import { SEARCH_SUBSPACE_RESULTS, type PublicSubspace } from '~/components/Subspaces/subspaceTypes';
 import { searchTagHref } from '~/components/Feed/hashtags';
 import { Rainbow } from '~/components/Rainbow/Rainbow';
 import { ThingView } from '~/components/Thingtime/ThingView';
@@ -122,6 +124,10 @@ type CachedSearch = {
   things: SearchThing[];
   posts: Record<string, SearchPost>;
   people?: SearchPerson[];
+  // the Subspaces section — slug/name matches for the text query, first
+  // SEARCH_SUBSPACE_RESULTS (client-side GET /api/v1/subspaces?q=; search.ts
+  // itself knows nothing about subspaces)
+  subspaces?: PublicSubspace[];
   total: number | null;
   totalCapped: boolean;
   ranked: boolean;
@@ -442,6 +448,7 @@ export const SearchPage = () => {
   const [things, setThings] = React.useState<SearchThing[]>(cached?.things || []);
   const [posts, setPosts] = React.useState<Record<string, SearchPost>>(cached?.posts || {});
   const [people, setPeople] = React.useState<SearchPerson[]>(cached?.people || []);
+  const [subspaces, setSubspaces] = React.useState<PublicSubspace[]>(cached?.subspaces || []);
   const [total, setTotal] = React.useState<number | null>(cached?.total ?? null);
   const [totalCapped, setTotalCapped] = React.useState(cached?.totalCapped || false);
   const [ranked, setRanked] = React.useState(cached?.ranked || false);
@@ -557,15 +564,20 @@ export const SearchPage = () => {
       };
 
       try {
-        // people ride along on first-page text searches — users aren't things
-        // (separate collection), so they get their own endpoint, in parallel
+        // people and subspaces ride along on first-page text searches — users
+        // aren't things (separate collection) and subspaces have their own
+        // directory search, so each gets its own endpoint, in parallel; either
+        // failing quietly keeps the post results the search is about
         const wantPeople = !cursor && !!current.q.trim();
-        const [resp, peopleResp] = (await Promise.all([
+        const [resp, peopleResp, subspacesResp] = (await Promise.all([
           apiRef.current.v1.things.search(body),
           wantPeople
             ? apiRef.current.v1.profile.search({ q: current.q.trim(), limit: 8 }).catch(() => null)
+            : Promise.resolve(null),
+          wantPeople
+            ? apiRef.current.v1.subspaces.list({ q: current.q.trim(), limit: SEARCH_SUBSPACE_RESULTS, anon: viewerIdRef.current ? undefined : 1 }).catch(() => null)
             : Promise.resolve(null)
-        ])) as [SearchResponse, { users?: SearchPerson[] } | null];
+        ])) as [SearchResponse, { users?: SearchPerson[] } | null, { subspaces?: PublicSubspace[] } | null];
         if (seq !== requestSeqRef.current) return;
         setHasSearched(true);
         // only a RESOLVED first page owns load-more continuation — committing
@@ -574,6 +586,7 @@ export const SearchPage = () => {
         if (!cursor) submittedRef.current = current;
 
         if (!cursor) setPeople(wantPeople ? peopleResp?.users || [] : []);
+        if (!cursor) setSubspaces(wantPeople ? subspacesResp?.subspaces || [] : []);
 
         setThings((prev) => {
           if (!cursor) return resp.things || [];
@@ -599,6 +612,7 @@ export const SearchPage = () => {
             things: (resp.things || []).slice(0, PAGE_SIZE),
             posts: resp.posts || {},
             people: wantPeople ? peopleResp?.users || [] : [],
+            subspaces: wantPeople ? subspacesResp?.subspaces || [] : [],
             total: resp.total ?? null,
             totalCapped: !!resp.totalCapped,
             ranked: !!resp.ranked,
@@ -1234,6 +1248,19 @@ export const SearchPage = () => {
           </Flex>
         </Flex>
 
+        {subspaces.length ? (
+          <Flex direction="column" gap={2} data-testid="search-subspaces">
+            <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="11px" fontWeight="700">
+              Subspaces 🪐
+            </Text>
+            <Flex direction="column" gap={2}>
+              {subspaces.map((subspace) => (
+                <SubspaceCard key={subspace.id} subspace={subspace} compact />
+              ))}
+            </Flex>
+          </Flex>
+        ) : null}
+
         {people.length ? (
           <Flex direction="column" gap={2}>
             <Text color="var(--tt-muted, #9a9aa6)" fontFamily="mono" fontSize="11px" fontWeight="700">
@@ -1262,7 +1289,7 @@ export const SearchPage = () => {
           )}
           {/* while a ?schema deep link resolves, neither copy is true yet —
               hold the box until its search settles (which strips ?schema) */}
-          {!things.length && !people.length && !loading && !urlSchema ? (
+          {!things.length && !people.length && !subspaces.length && !loading && !urlSchema ? (
             <Box {...CARD_STYLES} p={8} textAlign="center">
               <Text color="var(--tt-muted, #9a9aa6)">
                 {hasSearched
