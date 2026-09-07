@@ -44,6 +44,9 @@ export type CurrentUser = {
 	};
   activeThemeId: string | null;
   activeFeedAlgorithmId: string | null;
+	// Owner-only privacy setting. Missing values from an older server are safe:
+	// the settings UI treats them as hidden until the next refresh.
+	hideEmailOnProfile?: boolean;
 } | null;
 
 // Reads the authenticated user resolved by the root loader (getCurrentUser).

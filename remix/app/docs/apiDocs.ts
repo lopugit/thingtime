@@ -9751,12 +9751,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'users-profile',
+		// 1.1.0: private hideEmailOnProfile preference for the owner's own profile UI.
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
     group: 'profile',
     title: 'User profile',
     endpoint: '/api/v1/users/profile',
     summary: 'Reads public profiles or updates the current user profile fields.',
     detail:
-      'GET returns a stripped public projection that never includes email, verification fields, or the ' +
+		'GET returns a stripped public projection that never includes email or verification fields, or the ' +
       'birthday, plus wornTheme ({id, name} of the profile owner’s active theme, resolved through the ' +
       'public share gate — null when unset or private). POST updates the caller display name, bio, ' +
       'avatar, banner, or birthday. Avatar/banner may use either one external http(s) URL or a ready ' +
@@ -9770,7 +9773,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET', 'POST'],
     steps: [
       'GET with username to read a public profile and post count.',
-			'POST displayName, bio, or birthday independently of profile media.',
+			'POST displayName, bio, birthday, or hideEmailOnProfile independently of profile media. hideEmailOnProfile defaults to true for existing and new accounts; it controls whether the owner sees their email on their own profile page and never changes public email privacy.',
 			'Use avatarAttachmentId or bannerAttachmentId to bind a ready owner-matched profile upload. Use avatarUrl or bannerUrl for the quota-saving external-link alternative; sending a URL clears that slot’s managed attachment.',
 			'Never send a non-null attachment id with a URL. Send both fields as null to clear a slot, or send only attachmentId:null to remove managed media while preserving its stored external fallback.',
 			'External writes accept structurally valid credential-free http(s) URLs; legacy data:image values remain read-compatible.',
