@@ -33,6 +33,26 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'things.save': { limit: 60, windowMs: 60_000, enabled: true },
   // poll vote toggles (POST /api/v1/things/vote) — same shape as reactions
   'things.vote': { limit: 60, windowMs: 60_000, enabled: true },
+  // up/down vote toggles (POST /api/v1/things/updown) — same shape as reactions
+  'things.updown': { limit: 60, windowMs: 60_000, enabled: true },
+  // subspace mutations (create/update/leave/members/moderate) — write-shaped
+  'subspaces.write': { limit: 60, windowMs: 60_000, enabled: true },
+  // joining / requesting to join (POST /api/v1/subspaces/join) — a private
+  // join request fans a bell out to every moderator, and /leave cancels it
+  // for free, so the join side gets a tighter window than the shared write
+  // key (the emit is also deduped against each mod's unread bell); nobody
+  // joins 20 subspaces a minute by hand
+  'subspaces.join': { limit: 20, windowMs: 60_000, enabled: true },
+  // reporting a post to the mods (POST /api/v1/subspaces/report) — each
+  // NEW report fans a (deduped) bell out to every moderator; a repeat on the
+  // same post only updates the row. Nobody files 30 honest reports a minute.
+  'subspaces.report': { limit: 30, windowMs: 60_000, enabled: true },
+  // the subspace directory (GET /api/v1/subspaces) — a public read like
+  // things.search: sort=members / sort=active each run a 200-doc candidate
+  // find plus one or two $group aggregations, so the read carries the same
+  // 120/min ceiling as the other public reads (anonymous callers key by IP;
+  // logged-out clients also send anon=1 so Vercel's edge absorbs repeats)
+  'subspaces.list': { limit: 120, windowMs: 60_000, enabled: true },
   // schema browsing (/api/v1/schemas/browse) — read-only, bounded like search
   'schemas.browse': { limit: 120, windowMs: 60_000, enabled: true },
   // embed SDK reads (GET /api/v1/embed/things) — the only anonymous
