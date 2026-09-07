@@ -33,7 +33,21 @@ export type LopuThingLike = {
 	[key: string]: unknown;
 };
 
-export type LopuUsage = { inputTokens?: number; outputTokens?: number };
+export type LopuUsage = { inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number };
+
+// Who pays for a turn (verified-credits design note §1 "Billing resolution"):
+// 'thingtime' = the server keys (and the scripted test provider, which stands
+// in for them), debited from the viewer's credits; 'byo' = one of their own
+// Secure Vault providers; 'free' = the canned fallback (nothing is charged).
+export type LopuBilling = 'thingtime' | 'byo' | 'free';
+
+export const LOPU_BILLINGS: ReadonlyArray<LopuBilling> = ['thingtime', 'byo', 'free'];
+
+export const normalizeLopuBilling = (value: unknown): LopuBilling | null => (LOPU_BILLINGS.includes(value as LopuBilling) ? (value as LopuBilling) : null);
+
+// An integer micro-USD amount off the wire (1 credit = 1,000,000 micros);
+// anything that is not a finite number reads as unknown.
+export const microsOrNull = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : null);
 
 export type LopuConfirmSubject = { id?: string; kind?: string; name?: string };
 
@@ -49,6 +63,32 @@ export type LopuTurnMeta = {
 	// a 'vault' turn names the viewer's provider (its display name + id)
 	providerLabel?: string | null;
 	providerId?: string | null;
+	// who pays for this turn (absent on a server that predates credits)
+	billing?: LopuBilling | null;
+};
+
+// The reply endpoints refuse a turn before dialing a provider when the
+// account is not verified (403 LOPU_UNVERIFIED), its Thingtime credits are
+// used up (402 LOPU_NO_CREDITS) or the session is a temporary guest (403
+// LOPU_GUEST). The client keeps such a turn as a Lopu bubble with the
+// friendly copy and the matching action — never a raw error.
+export type LopuGateCode = 'LOPU_UNVERIFIED' | 'LOPU_NO_CREDITS' | 'LOPU_GUEST' | 'LOPU_FORBIDDEN';
+
+export type LopuTurnGate = { code: LopuGateCode; message: string; status: number };
+
+export const LOPU_GATE_COPY: Record<LopuGateCode, string> = {
+	LOPU_UNVERIFIED: 'Lopu is invite-only for now — an admin needs to verify your account before it can build with you.',
+	LOPU_NO_CREDITS: "Lopu's credits for your account are used up — add credits to keep going.",
+	LOPU_GUEST: 'Create an account to chat with Lopu — conversations are saved to your account.',
+	LOPU_FORBIDDEN: 'Lopu cannot take this turn from this account.'
+};
+
+/** Map a refused reply (status + the API's `code`) onto a gate; null for anything that is not a gate. */
+export const lopuGateFromResponse = (status: number | null | undefined, code: unknown, message?: string | null): LopuTurnGate | null => {
+	if (status !== 402 && status !== 403) return null;
+	const known = code === 'LOPU_UNVERIFIED' || code === 'LOPU_NO_CREDITS' || code === 'LOPU_GUEST' ? code : status === 402 ? 'LOPU_NO_CREDITS' : 'LOPU_FORBIDDEN';
+	const text = typeof message === 'string' && message.trim() ? message.trim() : LOPU_GATE_COPY[known];
+	return { code: known, message: text, status };
 };
 
 export type LopuChatEvent =
@@ -73,6 +113,11 @@ export type LopuChatEvent =
 			messages?: ChatMessage[];
 			usage?: LopuUsage;
 			stopReason?: string | null;
+			// verified-credits design note §2/§4: what this turn cost (micro-USD
+			// of list price), who paid, and the account balance after the debit
+			costMicros?: number | null;
+			billing?: LopuBilling | null;
+			balanceMicros?: number | null;
 	  };
 
 export const LOPU_EVENT_TYPES: ReadonlyArray<LopuChatEvent['type']> = [
@@ -166,6 +211,14 @@ export type LopuTurnState = {
 	messages: ChatMessage[];
 	usage: LopuUsage | null;
 	stopReason: string | null;
+	// what the turn cost / who paid / the balance after it (from `done`; null
+	// until then or on a server that predates credits)
+	costMicros: number | null;
+	billing: LopuBilling | null;
+	balanceMicros: number | null;
+	// the reply endpoint refused the turn at the gate (403/402): the bubble
+	// shows the friendly copy + action instead of a red error line
+	gate: LopuTurnGate | null;
 	// bumps once per reduced event — cheap change detection for throttled paints
 	sequence: number;
 };
@@ -199,6 +252,10 @@ export const initialLopuTurn = (input: {
 	messages: [],
 	usage: null,
 	stopReason: null,
+	costMicros: null,
+	billing: null,
+	balanceMicros: null,
+	gate: null,
 	sequence: 0
 });
 
@@ -277,10 +334,12 @@ export const reduceLopuTurn = (state: LopuTurnState, event: LopuChatEvent): Lopu
 	switch (event.type) {
 		case 'meta': {
 			const { type: _type, ...meta } = event;
+			const billing = normalizeLopuBilling(meta.billing);
 			return bump(state, {
-				meta,
+				meta: { ...meta, billing },
 				chatId: meta.chatId || state.chatId,
-				userMessageId: meta.userMessageId || state.userMessageId
+				userMessageId: meta.userMessageId || state.userMessageId,
+				billing
 			});
 		}
 		case 'delta': {
@@ -404,14 +463,41 @@ export const reduceLopuTurn = (state: LopuTurnState, event: LopuChatEvent): Lopu
 				status: 'done',
 				assistantMessageId: typeof event.assistantMessageId === 'string' ? event.assistantMessageId : null,
 				messages: Array.isArray(event.messages) ? event.messages : [],
-				usage: event.usage && typeof event.usage === 'object' ? event.usage : null,
+				usage: normalizeLopuUsage(event.usage),
 				stopReason: typeof event.stopReason === 'string' ? event.stopReason : null,
+				costMicros: microsOrNull(event.costMicros),
+				// the done event's billing wins (a fallback mid-turn can change who pays)
+				billing: normalizeLopuBilling(event.billing) ?? state.billing,
+				balanceMicros: microsOrNull(event.balanceMicros),
 				tools: state.tools.map((tool) => (tool.status === 'streaming' || tool.status === 'running' ? { ...tool, status: 'error' } : tool))
 			});
 		}
 		default:
 			return state;
 	}
+};
+
+/** The usage block off the wire: known token counters only, null when empty. */
+export const normalizeLopuUsage = (raw: unknown): LopuUsage | null => {
+	if (!raw || typeof raw !== 'object') return null;
+	const record = raw as Record<string, unknown>;
+	const out: LopuUsage = {};
+	for (const key of ['inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheWriteTokens'] as const) {
+		const value = record[key];
+		if (typeof value === 'number' && Number.isFinite(value) && value >= 0) out[key] = value;
+	}
+	return Object.keys(out).length ? out : null;
+};
+
+/** The reply endpoint refused the turn at the gate (403/402) before anything streamed. */
+export const markLopuTurnGated = (state: LopuTurnState, gate: LopuTurnGate): LopuTurnState => {
+	if (state.status !== 'streaming') return state;
+	return bump(state, {
+		status: 'error',
+		gate,
+		error: { message: gate.message, retryable: gate.code === 'LOPU_NO_CREDITS' },
+		tools: state.tools.map((tool) => (tool.status === 'streaming' || tool.status === 'running' ? { ...tool, status: 'error' } : tool))
+	});
 };
 
 /** The stream ended without `done` (network drop, non-OK response). */
@@ -898,6 +984,10 @@ export type LopuMessageMeta = {
 	toolCalls: LopuMessageToolCall[];
 	stopReason: string | null;
 	usage: LopuUsage | null;
+	// persisted turn accounting (verified-credits design note §1): absent on
+	// rows written before credits existed
+	billing: LopuBilling | null;
+	costMicros: number | null;
 };
 
 const LOPU_PROVIDERS: ReadonlyArray<LopuProvider> = ['claude', 'openai', 'test', 'fallback', 'vault'];
@@ -929,10 +1019,54 @@ export const lopuMessageMeta = (message: unknown): LopuMessageMeta | null => {
 		usage: usageRaw
 			? {
 					...(typeof usageRaw.inputTokens === 'number' ? { inputTokens: usageRaw.inputTokens } : {}),
-					...(typeof usageRaw.outputTokens === 'number' ? { outputTokens: usageRaw.outputTokens } : {})
+					...(typeof usageRaw.outputTokens === 'number' ? { outputTokens: usageRaw.outputTokens } : {}),
+					...(typeof usageRaw.cacheReadTokens === 'number' ? { cacheReadTokens: usageRaw.cacheReadTokens } : {}),
+					...(typeof usageRaw.cacheWriteTokens === 'number' ? { cacheWriteTokens: usageRaw.cacheWriteTokens } : {})
 			  }
-			: null
+			: null,
+		billing: normalizeLopuBilling(record.billing),
+		costMicros: microsOrNull(record.costMicros)
 	};
+};
+
+// ——— credits (1 credit = 1 USD of list price = 1,000,000 micros) ————————————
+
+export const LOPU_CREDIT_MICROS = 1_000_000;
+
+export const microsToCredits = (micros: number): number => micros / LOPU_CREDIT_MICROS;
+export const creditsToMicros = (credits: number): number => Math.round(credits * LOPU_CREDIT_MICROS);
+
+/**
+ * A balance / ledger amount for people: two decimals ("4.97"), cents below
+ * one credit ("42¢", "1.3¢"), a plain "0.00" at zero, a leading "−" when
+ * negative. Never NaN — an unknown amount reads as "0.00".
+ */
+export const formatCredits = (micros: number | null | undefined): string => {
+	const value = typeof micros === 'number' && Number.isFinite(micros) ? micros : 0;
+	const sign = value < 0 ? '−' : '';
+	const abs = Math.abs(value);
+	if (abs === 0) return '0.00';
+	if (abs < LOPU_CREDIT_MICROS) {
+		const cents = abs / 10_000;
+		// whole cents read as "42¢"; smaller amounts keep one decimal ("1.3¢")
+		const text = cents >= 1 ? (Number.isInteger(cents) ? String(cents) : cents.toFixed(1).replace(/\.0$/, '')) : cents.toFixed(1);
+		return `${sign}${text}¢`;
+	}
+	return `${sign}${(abs / LOPU_CREDIT_MICROS).toFixed(2)}`;
+};
+
+/** A single turn's cost with more precision ("0.0132"), at least two decimals ("0.50"). */
+export const formatTurnCredits = (micros: number | null | undefined): string => {
+	const value = typeof micros === 'number' && Number.isFinite(micros) ? micros : 0;
+	const text = (Math.abs(value) / LOPU_CREDIT_MICROS).toFixed(4).replace(/(\.\d\d[1-9]?)0+$/, '$1');
+	return `${value < 0 ? '−' : ''}${text}`;
+};
+
+/** "· 0.0132 credits" for a turn Thingtime billed; null for BYO / free / unknown turns. */
+export const describeTurnCredits = (input: { billing?: LopuBilling | null; costMicros?: number | null } | null | undefined): string | null => {
+	if (!input || input.billing !== 'thingtime') return null;
+	if (typeof input.costMicros !== 'number' || !Number.isFinite(input.costMicros) || input.costMicros < 0) return null;
+	return `${formatTurnCredits(input.costMicros)} credits`;
 };
 
 // ——— provider / status copy ————————————————————————————————————————————————
@@ -948,20 +1082,29 @@ export const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
 const EFFORT_DISPLAY: Record<string, string> = { none: 'None', minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max', ultra: 'Ultra' };
 export const describeLopuEffortLabel = (effort: string | null | undefined): string => (effort ? EFFORT_DISPLAY[effort] || effort : '');
 
-/** "via Claude Opus 5 · High · Fast" — the meta line under a turn (null when unknown). */
-export const describeLopuTurnMeta = (meta: Pick<LopuTurnMeta, 'provider' | 'label' | 'model' | 'effort' | 'speed' | 'providerLabel'> | null | undefined): string | null => {
+/**
+ * "via Claude Opus 5 · High · Fast" — the meta line under a turn (null when
+ * unknown). A turn Thingtime billed appends "· 0.0132 credits" when `cost`
+ * names what it cost (verified-credits design note §4).
+ */
+export const describeLopuTurnMeta = (
+	meta: Pick<LopuTurnMeta, 'provider' | 'label' | 'model' | 'effort' | 'speed' | 'providerLabel'> | null | undefined,
+	cost?: { billing?: LopuBilling | null; costMicros?: number | null } | null
+): string | null => {
 	if (!meta) return null;
-	if (meta.provider === 'fallback') return `from ${PROVIDER_DISPLAY_NAMES.fallback}`;
+	const credits = describeTurnCredits(cost);
+	const withCredits = (line: string) => (credits ? `${line} · ${credits}` : line);
+	if (meta.provider === 'fallback') return withCredits(`from ${PROVIDER_DISPLAY_NAMES.fallback}`);
 	if (meta.provider === 'vault') {
 		const bits = [meta.providerLabel || PROVIDER_DISPLAY_NAMES.vault];
 		if (meta.model) bits.push(meta.model);
-		return `via ${bits.join(' · ')}`;
+		return withCredits(`via ${bits.join(' · ')}`);
 	}
 	const bits = [meta.label || meta.model || PROVIDER_DISPLAY_NAMES[meta.provider] || meta.provider];
 	const effort = describeLopuEffortLabel(meta.effort);
 	if (effort) bits.push(effort);
 	if (meta.speed === 'fast') bits.push('Fast');
-	return `via ${bits.join(' · ')}`;
+	return withCredits(`via ${bits.join(' · ')}`);
 };
 
 export type LopuStatusInput = {

@@ -2,7 +2,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 
 import { parsePartialJson } from '~/utils/partialJson';
+import { addCacheTokens } from '../ai/pricing';
 import { getAiPreferredModelWaterfall } from '../settings/prConflictResolverModelWaterfall';
+import { billingForProvider } from './accessCore';
 import {
   type AiModelEffort,
   type AiWorkflowModelChoice,
@@ -543,6 +545,8 @@ async function* anthropicProvider(options: AnthropicProviderOptions): LopuProvid
     if (!finalMessage) throw new Error('Anthropic stream ended without a final message');
     usage.inputTokens += Number(finalMessage.usage?.input_tokens) || 0;
     usage.outputTokens += Number(finalMessage.usage?.output_tokens) || 0;
+    // Anthropic reports cache tokens beside (not inside) input_tokens
+    addCacheTokens(usage, (finalMessage.usage as any)?.cache_read_input_tokens, (finalMessage.usage as any)?.cache_creation_input_tokens);
     messages.push({ role: 'assistant', content: finalMessage.content as Anthropic.Messages.ContentBlockParam[] });
     const toolUses = (finalMessage.content as any[]).filter((block) => block?.type === 'tool_use');
 
@@ -739,8 +743,12 @@ async function* openAiProvider(options: OpenAiProviderOptions): LopuProviderStre
         const stream = (await attempts[attempt]()) as unknown as AsyncIterable<any>;
         for await (const chunk of stream) {
           if (chunk?.usage) {
-            usage.inputTokens += Number(chunk.usage.prompt_tokens) || 0;
+            // OpenAI counts cached prompt tokens INSIDE prompt_tokens; keep
+            // inputTokens as the uncached share so pricing never bills twice
+            const cached = Math.max(0, Number(chunk.usage.prompt_tokens_details?.cached_tokens) || 0);
+            usage.inputTokens += Math.max(0, (Number(chunk.usage.prompt_tokens) || 0) - cached);
             usage.outputTokens += Number(chunk.usage.completion_tokens) || 0;
+            addCacheTokens(usage, cached, undefined);
           }
           const first = chunk?.choices?.[0];
           if (!first) continue;
@@ -1110,7 +1118,8 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
     speed: choice?.speed ?? 'normal',
     provider,
     label: labelFor(provider, choice),
-    ...(providerLabel ? { providerLabel } : {})
+    ...(providerLabel ? { providerLabel } : {}),
+    billing: billingForProvider(provider)
   });
 
   const outcome = (provider: LopuChatProvider, choice: AiWorkflowModelChoice | null, state: TurnState, model?: string, providerLabel?: string): LopuChatTurnOutcome => ({
@@ -1121,6 +1130,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
     speed: choice?.speed ?? 'normal',
     ...(providerLabel ? { providerLabel } : {}),
     usage: state.usage,
+    hops: state.hops,
     toolCalls: state.toolCalls,
     stopReason: state.stopReason,
     ...(state.error ? { error: state.error } : {})
