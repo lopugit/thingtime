@@ -8,6 +8,7 @@ import { drawerItemClosesOnClick, drawerMenuItems, filterDrawerItemsByAuth } fro
 import { AccountSwitcher } from '../../Account/AccountSwitcher';
 import { DesktopNodeControls } from './DesktopNodeControls';
 import { ElectronUpdateManager } from './ElectronUpdateManager';
+import { LopuCreditsSummary } from '../../Lopu/LopuCreditsPanel';
 import { LopuPositionSelect } from '../../Lopu/LopuPositionSelect';
 import { useLopu } from '../../Lopu/useLopu';
 import { LopuSettingsRows } from '../../Lopu/LopuHost';
@@ -711,6 +712,9 @@ export const UserSettingsModal = () => {
 					Lopu 🦄
 				</Text>
 				<LopuSettingsRows renderRow={settingRow} />
+				{/* the compact credits mirror (balance + verified status + the
+				    link to Settings → Lopu credits & usage) */}
+				{user && !user.temporary ? <LopuCreditsSummary admin={!!user.isAdmin} onNavigate={close} /> : null}
 				{settingRow(
 					'Talk to Lopu',
 					<Button size="xs" variant="outline" onClick={() => handleGoTo('/lopu')}>

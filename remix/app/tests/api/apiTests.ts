@@ -820,6 +820,39 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous Lopu defaults save refused.')
   },
   {
+    id: 'settings-lopu-access-read',
+    name: 'Lopu access rules',
+    description: 'GET /api/v1/settings/lopu-access publicly returns the Thingtime.LopuAccess rules (requireVerification, allowByoUnverified, starterCredits, lowBalanceWarningCredits).',
+    group: 'lopu',
+    method: 'GET',
+    path: '/api/v1/settings/lopu-access',
+    timeoutMs: 15000,
+    expect: expectJson(
+      [200],
+      (body) =>
+        body?.ok === true &&
+        body?.key === 'Thingtime.LopuAccess' &&
+        isObject(body?.settings) &&
+        typeof body.settings.requireVerification === 'boolean' &&
+        typeof body.settings.allowByoUnverified === 'boolean' &&
+        typeof body.settings.starterCredits === 'number' &&
+        typeof body.settings.lowBalanceWarningCredits === 'number' &&
+        !('updatedBy' in body.settings),
+      'Lopu access rules returned with the four public fields.'
+    )
+  },
+  {
+    id: 'settings-lopu-access-anonymous',
+    name: 'Lopu access rules save requires auth',
+    description: 'POST /api/v1/settings/lopu-access refuses anonymous callers before writing.',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/settings/lopu-access',
+    anonymous: true,
+    body: { requireVerification: false },
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous Lopu access rules save refused.')
+  },
+  {
     id: 'lopu-musing-stream',
     name: 'Lopu musing stream',
     description: 'Lopu musing streams NDJSON fallback or provider events.',
@@ -859,14 +892,15 @@ export const apiTests: ApiTestDefinition[] = [
   {
     id: 'lopu-chats-create',
     name: 'Lopu chat create',
-    description: 'POST /api/v1/lopu/chats creates a one-member Lopu conversation for a session (or answers 401 anonymously).',
+    description:
+      'POST /api/v1/lopu/chats creates a one-member Lopu conversation for a verified session with credits (401 anonymously; 403 LOPU_UNVERIFIED while the account is not verified for Lopu; 402 LOPU_NO_CREDITS with an empty balance).',
     group: 'lopu',
     method: 'POST',
     path: '/api/v1/lopu/chats',
     mutates: true,
     body: { title: 'API test chat with Lopu', model: 'claude-opus-5', effort: 'high' },
     expect: expectJson(
-      [200, 401],
+      [200, 401, 402, 403],
       (body) =>
         (body?.ok === true &&
           typeof body?.chat?.id === 'string' &&
@@ -876,7 +910,7 @@ export const apiTests: ApiTestDefinition[] = [
           body?.chat?.myMember?.role === 'owner' &&
           body?.chat?.memberCount === 1) ||
         (body?.ok === false && typeof body?.error === 'string'),
-      'Lopu chat was created as a one-member owner conversation (or rejected with a 401 error shape anonymously).'
+      'Lopu chat was created as a one-member owner conversation (or refused with an error shape: no session, unverified account, or no credits).'
     )
   },
   {
@@ -887,7 +921,7 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'POST',
     path: '/api/v1/lopu/chats',
     body: { model: 'definitely-not-a-catalog-model' },
-    expect: expectJson([400, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown model was rejected with an error shape.')
+    expect: expectJson([400, 401, 402, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Unknown model was rejected with an error shape (or the account was refused by the Lopu access gate first).')
   },
   {
     id: 'lopu-chats-create-unknown-provider',
@@ -897,7 +931,7 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'POST',
     path: '/api/v1/lopu/chats',
     body: { providerId: 'tt-api-test-missing-provider' },
-    expect: expectJson([400, 401], (body) => body?.ok === false && typeof body?.error === 'string', 'A foreign providerId was rejected with an error shape.')
+    expect: expectJson([400, 401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'A foreign providerId was rejected with an error shape (or the unverified account was refused by the gate first).')
   },
   {
     id: 'lopu-chats-reply-unknown-provider',
@@ -946,7 +980,7 @@ export const apiTests: ApiTestDefinition[] = [
     id: 'lopu-chats-reply-stream',
     name: 'Lopu reply stream',
     description:
-      'POST /api/v1/lopu/chats/reply with a session starts a conversation and streams NDJSON events (meta first, done last) — from the scripted test provider, a real provider, or the canned fallback when no key is configured.',
+      'POST /api/v1/lopu/chats/reply with a verified session (and credits) starts a conversation and streams NDJSON events (meta first, done last — done carrying billing / costMicros / balanceMicros) — from the scripted test provider, a real provider, or the canned fallback when no key is configured. An unverified account is refused 403 LOPU_UNVERIFIED, an empty balance 402 LOPU_NO_CREDITS, before anything is persisted.',
     group: 'lopu',
     method: 'POST',
     path: '/api/v1/lopu/chats/reply',
@@ -955,15 +989,15 @@ export const apiTests: ApiTestDefinition[] = [
     body: () => ({ text: 'hello Lopu', requestId: `tt-api-test-${uniqueSuffix()}`, context: { route: '/tests' } }),
     expect: ({ response, textBody }) => {
       const contentType = response.headers.get('Content-Type') || '';
-      if (response.status === 401 || response.status === 403 || response.status === 429) {
+      if (response.status === 401 || response.status === 402 || response.status === 403 || response.status === 429) {
         let body: any = null;
         try {
           body = JSON.parse(textBody);
         } catch {
           body = null;
         }
-        const pass = body?.ok === false && typeof body?.error === 'string';
-        return { pass, details: pass ? 'Lopu reply was refused with an error shape (no session / temporary account / rate limited).' : 'Expected a JSON error shape.' };
+        const pass = body?.ok === false && typeof body?.error === 'string' && (response.status !== 402 || (body?.code === 'LOPU_NO_CREDITS' && typeof body?.balanceMicros === 'number'));
+        return { pass, details: pass ? 'Lopu reply was refused with an error shape (no session / temporary account / unverified / no credits / rate limited).' : 'Expected a JSON error shape (with code + balanceMicros on a 402).' };
       }
       const lines = textBody
         .trim()
@@ -980,9 +1014,13 @@ export const apiTests: ApiTestDefinition[] = [
         contentType.includes('application/x-ndjson') &&
         lines[0]?.type === 'meta' &&
         typeof lines[0]?.chatId === 'string' &&
+        ['thingtime', 'byo', 'free'].includes(lines[0]?.billing) &&
         lines.some((line) => line?.type === 'delta') &&
-        lines[lines.length - 1]?.type === 'done';
-      return { pass, details: pass ? 'Lopu streamed meta → delta → done as NDJSON.' : 'Expected a 200 NDJSON stream starting with meta and ending with done.' };
+        lines[lines.length - 1]?.type === 'done' &&
+        ['thingtime', 'byo', 'free'].includes(lines[lines.length - 1]?.billing) &&
+        typeof lines[lines.length - 1]?.costMicros === 'number' &&
+        (lines[lines.length - 1]?.balanceMicros === null || typeof lines[lines.length - 1]?.balanceMicros === 'number');
+      return { pass, details: pass ? 'Lopu streamed meta → delta → done as NDJSON, with billing on meta and billing / costMicros / balanceMicros on done.' : 'Expected a 200 NDJSON stream starting with meta (billing) and ending with done (billing, costMicros, balanceMicros).' };
     }
   },
   {
@@ -1088,6 +1126,117 @@ export const apiTests: ApiTestDefinition[] = [
       (body) => body?.ok === false && typeof body?.error === 'string' && !('session' in (body || {})) && !JSON.stringify(body).includes('"token"'),
       'The unknown connection was refused with an error shape and no credential.'
     )
+  },
+  {
+    id: 'lopu-account-guarded',
+    name: 'Lopu account requires a session',
+    description: 'GET /api/v1/lopu/account without a session is rejected with a 401 error shape and never creates an account.',
+    group: 'lopu',
+    method: 'GET',
+    path: '/api/v1/lopu/account',
+    anonymous: true,
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string' && !('account' in (body || {})), 'Anonymous Lopu account read was rejected with a 401 error shape.')
+  },
+  {
+    id: 'lopu-account-read',
+    name: 'Lopu account',
+    description:
+      'GET /api/v1/lopu/account for a session answers the caller’s Lopu account — verified status, the access rules, the credit balance in micros and credits, month + lifetime usage, the starter-credit setting, the optional top-up URL and a pending request (403 LOPU_GUEST for a temporary account, 401 anonymously).',
+    group: 'lopu',
+    method: 'GET',
+    path: '/api/v1/lopu/account',
+    timeoutMs: 15000,
+    expect: expectJson(
+      [200, 401, 403],
+      (body) =>
+        (body?.ok === true &&
+          isObject(body?.account) &&
+          typeof body.account.userId === 'string' &&
+          typeof body.account.verified === 'boolean' &&
+          typeof body.account.requireVerification === 'boolean' &&
+          typeof body.account.allowByoUnverified === 'boolean' &&
+          typeof body.account.lowBalanceWarningCredits === 'number' &&
+          Number.isSafeInteger(body.account.balanceMicros) &&
+          typeof body.account.balanceCredits === 'number' &&
+          typeof body.account.lowBalance === 'boolean' &&
+          isObject(body.account.month) &&
+          /^\d{4}-\d{2}$/.test(body.account.month.key) &&
+          Number.isSafeInteger(body.account.month.costMicros) &&
+          Number.isSafeInteger(body.account.month.turns) &&
+          isObject(body.account.lifetime) &&
+          Number.isSafeInteger(body.account.lifetime.costMicros) &&
+          Number.isSafeInteger(body.account.lifetime.turns) &&
+          typeof body.account.starterCredits === 'number' &&
+          typeof body.account.starterGranted === 'boolean' &&
+          (body.account.topupUrl === null || /^https?:\/\//.test(body.account.topupUrl)) &&
+          (body.account.pendingRequest === null || isObject(body.account.pendingRequest))) ||
+        (body?.ok === false && typeof body?.error === 'string'),
+      'Lopu account returned with the balance, rules and usage (or refused with an error shape).'
+    )
+  },
+  {
+    id: 'lopu-account-history-guarded',
+    name: 'Lopu credit history requires a session',
+    description: 'GET /api/v1/lopu/account/history without a session is rejected with a 401 error shape.',
+    group: 'lopu',
+    method: 'GET',
+    path: '/api/v1/lopu/account/history',
+    anonymous: true,
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous Lopu history read was rejected with a 401 error shape.')
+  },
+  {
+    id: 'lopu-account-history-read',
+    name: 'Lopu credit history',
+    description: 'GET /api/v1/lopu/account/history for a session lists the caller’s ledger rows newest first with the usage rows they point at and a cursor (403 LOPU_GUEST for a temporary account, 401 anonymously).',
+    group: 'lopu',
+    method: 'GET',
+    path: '/api/v1/lopu/account/history?limit=5',
+    timeoutMs: 15000,
+    expect: expectJson(
+      [200, 401, 403],
+      (body) =>
+        (body?.ok === true &&
+          Array.isArray(body?.entries) &&
+          body.entries.length <= 5 &&
+          body.entries.every((row: any) => isObject(row) && typeof row.id === 'string' && typeof row.entry === 'string' && Number.isSafeInteger(row.amountMicros) && typeof row.amountCredits === 'number') &&
+          Array.isArray(body?.usage) &&
+          body.usage.every((row: any) => isObject(row) && typeof row.id === 'string' && ['chat', 'voice', 'voice-session'].includes(row.surface) && ['thingtime', 'byo', 'free'].includes(row.billing) && Number.isSafeInteger(row.costMicros)) &&
+          (body.nextCursor === null || typeof body.nextCursor === 'string')) ||
+        (body?.ok === false && typeof body?.error === 'string'),
+      'Lopu credit history returned (or refused with an error shape).'
+    )
+  },
+  {
+    id: 'lopu-account-topup-request-guarded',
+    name: 'Lopu credit request requires a session',
+    description: 'POST /api/v1/lopu/account/topup-request without a session is rejected with a 401 error shape before any row is written.',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/account/topup-request',
+    body: { credits: 1 },
+    anonymous: true,
+    expect: expectJson([401], (body) => body?.ok === false && typeof body?.error === 'string', 'Anonymous Lopu credit request was rejected with a 401 error shape.')
+  },
+  {
+    id: 'lopu-account-topup-request-json-only',
+    name: 'Lopu credit request requires JSON',
+    description: 'POST /api/v1/lopu/account/topup-request with a safelisted text/plain body is refused with 415 for a session before the rate limit is spent (401 anonymously, 403 for a temporary account).',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/account/topup-request',
+    body: { credits: 1 },
+    headers: { 'Content-Type': 'text/plain' },
+    expect: expectJson([415, 401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'A non-JSON credit request body was refused with an error shape.')
+  },
+  {
+    id: 'lopu-account-topup-request-validation',
+    name: 'Lopu credit request validates the amount',
+    description: 'POST /api/v1/lopu/account/topup-request with an amount under 0.5 credits is a 400 error shape for a session and writes nothing (401 anonymously, 403 for a temporary account).',
+    group: 'lopu',
+    method: 'POST',
+    path: '/api/v1/lopu/account/topup-request',
+    body: { credits: 0.01 },
+    expect: expectJson([400, 401, 403], (body) => body?.ok === false && typeof body?.error === 'string' && !('request' in (body || {})), 'The under-sized credit request was refused with an error shape.')
   },
   {
     id: 'mongodb-status',
@@ -1692,6 +1841,35 @@ export const apiTests: ApiTestDefinition[] = [
     path: '/api/v1/admin/set-admin',
     body: { userId: '000000000000000000000000', admin: true },
     expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string', 'Non-admin promote attempt was rejected.')
+  },
+  {
+    id: 'admin-users-lopu-access-guarded',
+    name: 'Verify Lopu access is admin-only',
+    description: 'POST /api/v1/admin/users/lopu-access requires an admin session (401 anonymously, 403 for a plain user) and writes nothing otherwise.',
+    group: 'admin',
+    method: 'POST',
+    path: '/api/v1/admin/users/lopu-access',
+    body: { userId: '000000000000000000000000', verified: true },
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string' && !('user' in (body || {})), 'Non-admin Lopu access change was rejected.')
+  },
+  {
+    id: 'admin-lopu-accounts-guarded',
+    name: 'Lopu accounts directory is admin-only',
+    description: 'GET /api/v1/admin/lopu/accounts requires an admin session (401 anonymously, 403 for a plain user) and lists nothing otherwise.',
+    group: 'admin',
+    method: 'GET',
+    path: '/api/v1/admin/lopu/accounts',
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string' && !('accounts' in (body || {})), 'Non-admin Lopu accounts listing was rejected.')
+  },
+  {
+    id: 'admin-lopu-credits-guarded',
+    name: 'Lopu credit grants are admin-only',
+    description: 'POST /api/v1/admin/lopu/credits requires an admin session (401 anonymously, 403 for a plain user) and moves no balance otherwise.',
+    group: 'admin',
+    method: 'POST',
+    path: '/api/v1/admin/lopu/credits',
+    body: { userId: '000000000000000000000000', credits: 1000 },
+    expect: expectJson([401, 403], (body) => body?.ok === false && typeof body?.error === 'string' && !('account' in (body || {})), 'Non-admin Lopu credit grant was rejected.')
   },
   {
     id: 'admin-moderation-guarded',

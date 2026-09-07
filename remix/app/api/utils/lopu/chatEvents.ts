@@ -30,7 +30,16 @@ import type { PageOp, PatchTarget } from './pageOps';
 // (design note §1.3); the meta event then also names it in `providerLabel`.
 export type LopuChatProvider = 'claude' | 'openai' | 'vault' | 'test' | 'fallback';
 
-export type LopuChatUsage = { inputTokens: number; outputTokens: number };
+// Provider-reported tokens for a turn. Cache tokens appear only when the
+// provider reported them (Anthropic cache_read/cache_creation, OpenAI
+// prompt_tokens_details.cached_tokens — subtracted from inputTokens so
+// `inputTokens` is always the UNCACHED input on every provider).
+export type LopuChatUsage = { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number };
+
+// Who pays for a turn (design note "Lopu verified access, usage accounting and
+// credits" §1): Thingtime's server keys (credits), the viewer's own Secure
+// Vault provider ("bring your own"), or nobody (the canned fallback).
+export type LopuBilling = 'thingtime' | 'byo' | 'free';
 
 export type LopuChatStopReason =
   | 'end_turn'
@@ -87,6 +96,9 @@ export type LopuChatEvent =
       label: string;
       // the vault connection's name when provider === 'vault'
       providerLabel?: string;
+      // who pays for this turn (byo for a vault turn, free for the canned
+      // fallback, thingtime for the server keys and the test provider)
+      billing?: LopuBilling;
     }
   | { type: 'delta'; text: string }
   | { type: 'thinking'; text: string }
@@ -106,6 +118,13 @@ export type LopuChatEvent =
       assistantMessageId: string;
       messages: PublicChatMessage[];
       usage?: LopuChatUsage;
+      // accounting (design note §2): who paid, the list price of the turn in
+      // micro-USD, whether the model was in the pricing table, and the
+      // account balance after the debit (null when no account is involved)
+      billing?: LopuBilling;
+      costMicros?: number;
+      priced?: boolean;
+      balanceMicros?: number | null;
       stopReason: LopuChatStopReason;
     };
 
@@ -123,6 +142,8 @@ export type LopuChatTurnOutcome = {
   // history reads "via <name>" after a reload)
   providerLabel?: string;
   usage?: LopuChatUsage;
+  // model hops the turn took (the accounting row records it)
+  hops?: number;
   toolCalls: LopuToolCallSummary[];
   stopReason: LopuChatStopReason;
   error?: string;
