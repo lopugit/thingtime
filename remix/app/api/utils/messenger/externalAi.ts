@@ -190,7 +190,14 @@ export type PublicLopuMessageMeta = {
 	// the vault connection's display name — 'vault' rows only, so history
 	// reads "via <name>" after a reload (never the endpoint or a credential)
 	providerLabel?: string;
-	usage?: { inputTokens: number; outputTokens: number };
+	usage?: { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number };
+	// accounting (verified-access design note §2): who paid for the turn, its
+	// list price in micro-USD, whether the model had a price, and the account
+	// balance right after the debit
+	billing?: 'thingtime' | 'byo' | 'free';
+	costMicros?: number;
+	priced?: boolean;
+	balanceMicros?: number | null;
 	toolCalls?: PublicLopuToolCall[];
 	stopReason?: string | null;
 };
@@ -218,7 +225,18 @@ export const publicLopuMessageMeta = (value: unknown): PublicLopuMessageMeta | n
 	const usage = raw.usage && typeof raw.usage === 'object' ? (raw.usage as Record<string, unknown>) : null;
 	const inputTokens = nonNegativeInt(usage?.inputTokens);
 	const outputTokens = nonNegativeInt(usage?.outputTokens);
-	if (inputTokens !== undefined && outputTokens !== undefined) meta.usage = { inputTokens, outputTokens };
+	if (inputTokens !== undefined && outputTokens !== undefined) {
+		meta.usage = { inputTokens, outputTokens };
+		const cacheReadTokens = nonNegativeInt(usage?.cacheReadTokens);
+		const cacheWriteTokens = nonNegativeInt(usage?.cacheWriteTokens);
+		if (cacheReadTokens) meta.usage.cacheReadTokens = cacheReadTokens;
+		if (cacheWriteTokens) meta.usage.cacheWriteTokens = cacheWriteTokens;
+	}
+	if (raw.billing === 'thingtime' || raw.billing === 'byo' || raw.billing === 'free') meta.billing = raw.billing;
+	const costMicros = nonNegativeInt(raw.costMicros);
+	if (costMicros !== undefined) meta.costMicros = costMicros;
+	if (typeof raw.priced === 'boolean') meta.priced = raw.priced;
+	if (raw.balanceMicros === null || Number.isSafeInteger(raw.balanceMicros)) meta.balanceMicros = raw.balanceMicros as number | null;
 	if (Array.isArray(raw.toolCalls)) {
 		const toolCalls: PublicLopuToolCall[] = [];
 		for (const entry of raw.toolCalls.slice(0, LOPU_MAX_TOOL_CALLS)) {

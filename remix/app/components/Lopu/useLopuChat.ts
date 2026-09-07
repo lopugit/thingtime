@@ -56,6 +56,7 @@ import {
 import type { LopuReplyContext } from './lopuChatStream';
 import { buildLopuTimeline, type LopuTimelineItem, type LopuTurnState } from './lopuTurnCore';
 import { useLopu } from './useLopu';
+import { useLopuAccount, type UseLopuAccount } from './useLopuAccount';
 import { useLopuSettings } from './useLopuSettings';
 
 // ——— §3.3 context provider ————————————————————————————————————————————————
@@ -111,7 +112,7 @@ export type UseLopuChatOptions = {
 	applyPatches?: boolean;
 };
 
-export type LopuViewer = { id: string | null; signedIn: boolean; temporary: boolean };
+export type LopuViewer = { id: string | null; signedIn: boolean; temporary: boolean; admin: boolean };
 
 export type UseLopuChat = {
 	viewer: LopuViewer;
@@ -152,6 +153,12 @@ export type UseLopuChat = {
 	// grant back as a new turn, decline retires the card locally
 	confirmTool: (requestId: string, toolId: string) => Promise<SendLopuResult>;
 	declineTool: (requestId: string, toolId: string) => void;
+	// the viewer's Lopu account + access rules (verified flag, credits) —
+	// `account.access.locked` is what every surface draws LopuLockedState on
+	account: UseLopuAccount;
+	// the composer's current choice thinks with the viewer's own provider
+	// (Thingtime credits are not used for that turn)
+	byo: boolean;
 	error: string | null;
 };
 
@@ -186,6 +193,12 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 
 	const snapshot = React.useSyncExternalStore(subscribeLopuStore, getLopuStoreSnapshot, getLopuStoreServerSnapshot);
 	const activeChatId = snapshot.activeChatId;
+
+	// the viewer's account / access rules ride along with every surface; a
+	// pinned vault provider makes the turn BYO (the gate lets it through when
+	// the admin allows unverified BYO, and the chip reads "your provider")
+	const byo = !!snapshot.settings.providerId;
+	const account = useLopuAccount({ byo });
 
 	// background refetches
 	React.useEffect(() => {
@@ -276,7 +289,7 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 	const streaming = streamingAny && streamingAny.chatId === activeChatId ? streamingAny : null;
 
 	return {
-		viewer: { id: userId, signedIn: !!user && !user.temporary, temporary: !!user?.temporary },
+		viewer: { id: userId, signedIn: !!user && !user.temporary, temporary: !!user?.temporary, admin: user?.isAdmin === true },
 		chats: snapshot.chats,
 		chatsLoaded: snapshot.chatsLoaded,
 		chat,
@@ -309,6 +322,8 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 		canUndoPatch: canUndoLopuPatch,
 		confirmTool,
 		declineTool: declineLopuTool,
+		account,
+		byo,
 		error: snapshot.error
 	};
 };
