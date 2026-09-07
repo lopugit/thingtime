@@ -7,6 +7,7 @@ import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z, DRAWER_TOP_LEVEL_DEFAULT_LIMIT,
 import { drawerItemClosesOnClick, drawerMenuItems, filterDrawerItemsByAuth } from './drawerMenu';
 import { AccountSwitcher } from '../../Account/AccountSwitcher';
 import { ElectronUpdateManager } from './ElectronUpdateManager';
+import { LopuCreditsSummary } from '../../Lopu/LopuCreditsPanel';
 import { LopuPositionSelect } from '../../Lopu/LopuPositionSelect';
 import { useLopu } from '../../Lopu/useLopu';
 import { LopuSettingsRows } from '../../Lopu/LopuHost';
@@ -709,6 +710,9 @@ export const UserSettingsModal = () => {
 					Lopu 🦄
 				</Text>
 				<LopuSettingsRows renderRow={settingRow} />
+				{/* the compact credits mirror (balance + verified status + the
+				    link to Settings → Lopu credits & usage) */}
+				{user && !user.temporary ? <LopuCreditsSummary admin={!!user.isAdmin} onNavigate={close} /> : null}
 				{settingRow(
 					'Talk to Lopu',
 					<Button size="xs" variant="outline" onClick={() => handleGoTo('/lopu')}>

@@ -18,6 +18,18 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-06: Lopu verified access + credits (client): a `tt-lopu-account-<uid>`
+  store slice + `useLopuAccount` (refreshed on mount, after every `done` and
+  slowly on focus), the invite-only locked state on `/lopu`, the floating
+  window / sheet and voice mode (composer + mic disabled, navbar 🦄 and the
+  drawer entry still open it), the composer's balance chip (amber under the
+  admin threshold, red at zero with the top-up action, "your provider" for
+  BYO), per-turn footer credits, 403/402 reply refusals as Lopu bubbles with
+  the matching action, Settings → Lopu "Credits & usage" (balance, month,
+  lifetime, cursor history, request form, Buy credits), the user settings
+  modal mirror and Admin → Lopu accounts (verified toggle, balances, pending
+  requests, add credits, `Thingtime.LopuAccess` editor). Design note:
+  [`PRs/lopu-verified-credits-design.md`](../PRs/lopu-verified-credits-design.md). — Claude (AI)
 - Fix production storage-ledger validation to accept the catalog's optional speed-test quota without coercion, subscription rewrites, or allowance resets; retain legacy snapshots and fail closed on malformed quotas. — Codex (AI), 2026-09-06
 
 - 2026-09-06: Add bounded, value-free admin dry-run diagnostics for malformed protected storage ledgers; preserve fail-closed validation and all subscription allowances.

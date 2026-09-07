@@ -217,6 +217,16 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // interactive read/save; the public GET keys anonymous callers by IP and
   // the admin POST is enforced fail-closed at the route
   'settings.lopu-chat-defaults': { limit: 30, windowMs: 60_000, enabled: true },
+  // Thingtime.LopuAccess singleton (GET public / POST admin) — the client
+  // reads it to render the locked state; the admin POST fails closed
+  'settings.lopu-access': { limit: 30, windowMs: 60_000, enabled: true },
+  // Lopu verified access + credits, admin side (verified-access design note
+  // §1/§3): the per-user verify toggle, the accounts directory, and credit
+  // grants / request approvals — bounded interactive admin actions, the
+  // writes enforced fail-closed at the route
+  'admin.users.lopu-access': { limit: 60, windowMs: 60_000, enabled: true },
+  'admin.lopu.accounts': { limit: 60, windowMs: 60_000, enabled: true },
+  'admin.lopu.credits': { limit: 60, windowMs: 60_000, enabled: true },
   'tokens.mint': { limit: 30, windowMs: 3_600_000, enabled: true },
   // PAT listing aggregates the user's pat sessions — bounded like oauth.grants
   'tokens.read': { limit: 60, windowMs: 60_000, enabled: true },
@@ -285,6 +295,12 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // as the viewer — so the budget is per user over ten minutes and the route
   // enforces it fail-closed: a limiter outage must not become free AI calls.
   'lopu.chat': { limit: 40, windowMs: 600_000, enabled: true },
+  // The caller's Lopu account + history (GET /api/v1/lopu/account, /history):
+  // refreshed after every turn and on focus — browse-shaped reads
+  'lopu.account': { limit: 120, windowMs: 60_000, enabled: true },
+  // POST /api/v1/lopu/account/topup-request writes a ledger row and mails the
+  // admin inbox, so it is per user per hour and fails closed at the route
+  'lopu.account.write': { limit: 10, windowMs: 3_600_000, enabled: true },
   // custom emoji uploads carry up to ~512KB data URIs into things docs — rare
   // interactive action, so the budget is per-hour like app registration
   'emojis.write': { limit: 30, windowMs: 3_600_000, enabled: true },
