@@ -384,6 +384,8 @@ export const SettingsPage = () => {
 		twoFactorCacheKey ? readLocalCache<boolean>(twoFactorCacheKey) === true : false
   );
   const [twoFactorSaving, setTwoFactorSaving] = React.useState(false);
+	const [hideEmailOnProfile, setHideEmailOnProfile] = React.useState(() => user?.hideEmailOnProfile !== false);
+	const [emailVisibilitySaving, setEmailVisibilitySaving] = React.useState(false);
 
   React.useEffect(() => {
     if (!user) return;
@@ -403,6 +405,10 @@ export const SettingsPage = () => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
+
+	React.useEffect(() => {
+		setHideEmailOnProfile(user?.hideEmailOnProfile !== false);
+	}, [user?.id, user?.hideEmailOnProfile]);
 
   const handleTwoFactorToggle = async (enabled: boolean) => {
     if (!user || twoFactorSaving) return;
@@ -436,6 +442,27 @@ export const SettingsPage = () => {
       setTwoFactorSaving(false);
     }
   };
+
+	const handleHideEmailOnProfileToggle = async (enabled: boolean) => {
+		if (!user || emailVisibilitySaving) return;
+		const previous = hideEmailOnProfile;
+		setHideEmailOnProfile(enabled);
+		setEmailVisibilitySaving(true);
+		try {
+			const resp = await api.v1.profile.update({ hideEmailOnProfile: enabled });
+			if (!resp?.ok) throw new Error(resp?.error || 'Please try again in a moment.');
+			lopu({
+				title: enabled ? 'Email hidden on your profile 🔒' : 'Email shown on your profile ✉️',
+				status: 'success',
+				duration: 6000
+			});
+		} catch (err: any) {
+			setHideEmailOnProfile(previous);
+			lopu({ title: 'Could not update email visibility', description: err?.message || err?.error, status: 'error', duration: 6000 });
+		} finally {
+			setEmailVisibilitySaving(false);
+		}
+	};
 
   const handleResendVerification = async () => {
     if (!user) return;
@@ -570,6 +597,20 @@ export const SettingsPage = () => {
             </Flex>
           </SettingsSection>
         )}
+
+		{user && !user.temporary && (
+			<SettingsSection eyebrow="Privacy" description="Choose what other people can see on your public profile.">
+				<Flex flexDirection="column">
+					<SettingRow label="Hide email on profile" hint="On by default. Your email always stays private from other people; this controls whether you see it on your own profile page.">
+						<Switch
+							isChecked={hideEmailOnProfile}
+							isDisabled={emailVisibilitySaving}
+							onChange={(e) => handleHideEmailOnProfileToggle(e.target.checked)}
+						/>
+					</SettingRow>
+				</Flex>
+			</SettingsSection>
+		)}
 
         {/* connected apps — grants + everything each app stores */}
         {user && <ConnectedAppsSection userId={user.id} />}

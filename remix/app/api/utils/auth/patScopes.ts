@@ -85,9 +85,11 @@ export const PAT_SCOPE_IDS = PAT_SCOPE_CATALOG.map((scope) => scope.id);
 // touch, orthogonal to the verb scopes above and to the onlyCreatedThings
 // sandbox. 'public' fences the token to things whose (inherit-resolved) acl
 // is world-visible (tt:all); 'private' fences it to everything that is NOT
-// public (owner-only, circles, specific grants); 'all' (the default, and what
-// legacy tokens without the field mean) is unrestricted.
-export type PatVisibilityMode = 'all' | 'public' | 'private';
+// public (owner-only, circles, specific grants — hidden included); 'hidden'
+// fences it to ONLY hidden link-key things (acl tt:hidden — its creates
+// default to hidden and mint their secret link); 'all' (the default, and
+// what legacy tokens without the field mean) is unrestricted.
+export type PatVisibilityMode = 'all' | 'public' | 'private' | 'hidden';
 
 export type PatVisibilityDescriptor = {
   id: PatVisibilityMode;
@@ -115,11 +117,17 @@ export const PAT_VISIBILITY_CATALOG: PatVisibilityDescriptor[] = [
     title: 'Private only',
     description: 'Only non-public things — the token cannot see, create, or engage with anything public.',
     emoji: '🔒'
+  },
+  {
+    id: 'hidden',
+    title: 'Hidden only',
+    description: 'Only hidden link-key things — everything it creates is born hidden with a secret link, and nothing else exists to it.',
+    emoji: '🕵️'
   }
 ];
 
 export const isKnownPatVisibility = (value: unknown): value is PatVisibilityMode =>
-  value === 'all' || value === 'public' || value === 'private';
+  value === 'all' || value === 'public' || value === 'private' || value === 'hidden';
 
 export const isKnownPatScope = (value: unknown): value is string =>
   typeof value === 'string' && CATALOG_BY_ID.has(value);

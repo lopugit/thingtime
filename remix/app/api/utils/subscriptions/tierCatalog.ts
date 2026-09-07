@@ -225,7 +225,8 @@ export const subscriptionTierById = (id: SubscriptionTierId): SubscriptionTierDe
 
 export type QuotaOverrides = Partial<TierQuotas>;
 
-export const QUOTA_OVERRIDE_FIELDS = ['appStorageBytes', 'userStorageBytes', 'maxApps', 'maxPats', 'speedTestsPerHour'] as const;
+export const REQUIRED_TIER_QUOTA_FIELDS = ['appStorageBytes', 'userStorageBytes', 'maxApps', 'maxPats'] as const;
+export const QUOTA_OVERRIDE_FIELDS = [...REQUIRED_TIER_QUOTA_FIELDS, 'speedTestsPerHour'] as const;
 
 export const QUOTA_OVERRIDE_BOUNDS: Record<keyof TierQuotas, { min: number; max: number }> = {
   appStorageBytes: { min: 0, max: 1024 * GB },
@@ -269,7 +270,7 @@ export const sanitizeTierQuotas = (input: unknown): { ok: true; quotas: TierQuot
   const sanitized = sanitizeQuotaOverrides(input);
   if (sanitized.ok === false) return sanitized;
   const quotas = sanitized.overrides;
-  if (!quotas || QUOTA_OVERRIDE_FIELDS.some((field) => field !== 'speedTestsPerHour' && !(field in quotas))) {
+  if (!quotas || REQUIRED_TIER_QUOTA_FIELDS.some((field) => !(field in quotas))) {
     return { ok: false, error: 'quotas must include appStorageBytes, userStorageBytes, maxApps, and maxPats' };
   }
   return { ok: true, quotas: quotas as TierQuotas };

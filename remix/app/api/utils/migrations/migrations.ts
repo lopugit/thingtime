@@ -60,6 +60,7 @@ import {
 	legacyUserSubscriptionLedgerMatch,
 	subscriptionThingMatch,
 	userSubscriptionLedgerEnvelopeIsTrusted,
+	userSubscriptionLedgerEnvelopeIssues,
 	userSubscriptionLedgerMatch
 } from '../subscriptions/subscriptionIdentity';
 import {
@@ -2249,7 +2250,7 @@ const upgradeUserSubscriptionLedgerEnvelopes = async (ids: readonly string[]): P
 		if (!doc || userSubscriptionLedgerEnvelopeIsTrusted(doc, ownerId)) continue;
 		if (!legacyUserSubscriptionLedgerEnvelopeCanUpgrade(doc, ownerId)) {
 			throw new MigrationOperatorError('subscription_envelope_invalid', {
-				internalMessage: `Subscription ledger ${looseMatch.shareId} has an invalid protected envelope`
+				internalMessage: `Subscription ledger ${looseMatch.shareId} has an invalid protected envelope: ${userSubscriptionLedgerEnvelopeIssues(doc, ownerId).join(', ')}`
 			});
 		}
 		const result = await things.updateOne(legacyUserSubscriptionLedgerMatch(ownerId) as any, {
@@ -2339,7 +2340,22 @@ const backfillUserStorageAccounting: Migration = {
 		const things = await getCollection('things');
 		const matched = await pendingUserStorageAccounting();
 		const notes: string[] = [];
-		if (dryRun) return { dryRun, matched, migrated: 0, created: 0, skipped: 0, notes };
+		if (dryRun) {
+			// The admin-only dry run must identify the actual failed predicates
+			// before an operator considers repair. Never expose raw protected rows.
+			for (const ownerId of await currentUserIds()) {
+				const match = subscriptionThingMatch('user', ownerId);
+				const doc = await things.findOne(match);
+				if (!doc) continue;
+				const issues = userSubscriptionLedgerEnvelopeIssues(doc, ownerId);
+				if (issues.length) notes.push(`Subscription ledger ${match.shareId}: ${issues.join(', ')}`);
+				if (notes.length === 10) {
+					notes.push('Diagnostic limit reached (10 ledgers). Repair these and dry-run again.');
+					break;
+				}
+			}
+			return { dryRun, matched, migrated: 0, created: 0, skipped: 0, notes };
+		}
 		if (!assertLease) throw new MigrationOperatorError('lease_required');
 		await assertLease();
 

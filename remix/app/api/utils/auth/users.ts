@@ -107,6 +107,9 @@ export type PublicUser = {
 	};
 	activeThemeId: string | null;
 	activeFeedAlgorithmId: string | null;
+	// Private, owner-facing profile preference. It is safe by default: only an
+	// explicit false permits the public profile projection to include email.
+	hideEmailOnProfile?: boolean;
 	// Upload permissions are OFF for every account created after the
 	// signup-permissions hotfix; an admin turns them on per user from /admin
 	// (see setUserUploadPermissions), per scope or all at once. Accounts
@@ -125,7 +128,7 @@ export type PublicUser = {
 };
 
 // Minimal projection safe to show OTHER users (public profiles, post authors).
-// Never includes email, verification state, storage, or meta.
+// Email, verification state, storage, and meta are never public.
 export type PublicProfile = {
 	id: string;
 	username: string;
@@ -201,6 +204,7 @@ export const toPublicUser = (user: any, subscription?: SubscriptionInfo | null):
 		storage,
 		activeThemeId: typeof user.meta?.activeThemeId === 'string' ? user.meta.activeThemeId : null,
 		activeFeedAlgorithmId: typeof user.meta?.activeFeedAlgorithmId === 'string' ? user.meta.activeFeedAlgorithmId : null,
+		hideEmailOnProfile: user.meta?.hideEmailOnProfile !== false,
 		publicUploadsEnabled: userPublicUploadsEnabled(user),
 		privateUploadsEnabled: userPrivateUploadsEnabled(user),
 		lopuVerified: userLopuVerified(user),
@@ -1829,6 +1833,7 @@ export type UpdateProfileInput = {
 	avatarAttachmentId?: unknown;
 	bannerAttachmentId?: unknown;
 	birthday?: unknown;
+	hideEmailOnProfile?: unknown;
 };
 
 type UpdateProfileResult = { ok: false; status: number; error: string } | { ok: true; user: PublicUser };
@@ -1840,6 +1845,7 @@ type ProfileUserMutationDependencies = {
 	reconcileAttachments: typeof reconcileReadyProfileAttachmentsToUser;
 	findUser: typeof findUserById;
 	projectUser: typeof toPublicUserWithStorage;
+	mutateSecure: typeof mutateUserThingSecure;
 	now: () => Date;
 };
 
@@ -1861,6 +1867,7 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 		reconcileAttachments: reconcileReadyProfileAttachmentsToUser,
 		findUser: findUserById,
 		projectUser: toPublicUserWithStorage,
+		mutateSecure: mutateUserThingSecure,
 		now: () => new Date(),
 		...overrides
 	};
@@ -1929,9 +1936,8 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 			return { ok: false, status: 400, error: 'Avatar and banner must use different attachments' };
 		}
 
-		// Birthday is PRIVATE state — it lives in the secure blob (meta.birthday),
-		// never in the public crystal, so it takes the secure write path below
-		// rather than the crystal/attachment transaction.
+		// Birthday and email visibility are PRIVATE state — both live in the secure
+		// blob, never in the public crystal, so they take the secure write path.
 		let birthday: string | null | undefined;
 		if (input.birthday !== undefined) {
 			birthday = sanitizeBirthday(input.birthday);
@@ -1939,33 +1945,47 @@ export const createUpdateUserProfile = (overrides: Partial<ProfileUserMutationDe
 				return { ok: false, status: 400, error: 'Birthday must be a real YYYY-MM-DD date (1900 → today)' };
 			}
 		}
+		let hideEmailOnProfile: boolean | undefined;
+		if (input.hideEmailOnProfile !== undefined) {
+			if (typeof input.hideEmailOnProfile !== 'boolean') {
+				return { ok: false, status: 400, error: 'Hide email on profile must be true or false' };
+			}
+			hideEmailOnProfile = input.hideEmailOnProfile;
+		}
 
-		if (!Object.keys(set).length && !media.avatar.touched && !media.banner.touched && birthday === undefined) {
+		if (!Object.keys(set).length && !media.avatar.touched && !media.banner.touched && birthday === undefined && hideEmailOnProfile === undefined) {
 			return { ok: false, status: 400, error: 'Nothing to update' };
 		}
 
 		// Secure-blob write first: it is a separate store from the crystal, so it
 		// runs outside the profile/attachment transaction below.
-		if (birthday !== undefined) {
-			const cleared = birthday === null;
-			const result = await mutateUserThingSecure(userId, (s) => {
-				if (cleared) delete s.meta!.birthday;
-				else s.meta!.birthday = birthday;
+		if (birthday !== undefined || hideEmailOnProfile !== undefined) {
+			const clearedBirthday = birthday === null;
+			const result = await dependencies.mutateSecure(userId, (s) => {
+				if (birthday !== undefined) {
+					if (clearedBirthday) delete s.meta!.birthday;
+					else s.meta!.birthday = birthday;
+				}
+				if (hideEmailOnProfile !== undefined) s.meta!.hideEmailOnProfile = hideEmailOnProfile;
 			});
 			if (result === 'contended') throw new SecureWriteContendedError(userId);
 			if (result === 'missing') {
 				if (!ObjectId.isValid(userId)) return { ok: false, status: 400, error: 'Invalid user id' };
+				const legacySet: Record<string, unknown> = { updatedAt: dependencies.now() };
+				if (birthday !== undefined && !clearedBirthday) legacySet['meta.birthday'] = birthday;
+				if (hideEmailOnProfile !== undefined) legacySet['meta.hideEmailOnProfile'] = hideEmailOnProfile;
 				await (await dependencies.getUsers()).updateOne(
 					{ _id: new ObjectId(userId) },
-					cleared
-						? { $unset: { 'meta.birthday': '' }, $set: { updatedAt: dependencies.now() } }
-						: { $set: { 'meta.birthday': birthday, updatedAt: dependencies.now() } }
+					{
+						$set: legacySet,
+						...(birthday !== undefined && clearedBirthday ? { $unset: { 'meta.birthday': '' } } : {})
+					}
 				);
 			}
 		}
 
-		// A birthday-only update never touches the crystal or attachments, so the
-		// transactional write below is skipped entirely for it.
+		// Private-only updates never touch the crystal or attachments, so the
+		// transactional write below is skipped entirely for them.
 		if (Object.keys(set).length || media.avatar.touched || media.banner.touched) {
 			try {
 				const mutated = await dependencies.withTransaction(async (session) => {
