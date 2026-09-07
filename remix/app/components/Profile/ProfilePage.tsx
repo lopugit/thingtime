@@ -570,7 +570,7 @@ export const ProfilePage = (props: ProfilePageProps) => {
         <Text fontSize="sm" color="var(--tt-muted, #9a9aa6)">
           {getUserIdentityDetail(profile)}
         </Text>
-        {isSelf && user && !temporaryProfile && (
+        {isSelf && user && !temporaryProfile && user.hideEmailOnProfile === false && (
           <Text mt={1} fontSize="sm" color="var(--tt-text, #5a5a66)">
             {user.email} {user.emailVerified ? '✅' : '· ✉️ unverified'}
           </Text>
