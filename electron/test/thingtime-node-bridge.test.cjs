@@ -54,6 +54,22 @@ async function makeSignedNodeFixture() {
 		serviceRegistered: false
 	};
 	const runner = async (command, args, options = {}) => {
+		if (command === '/usr/bin/plutil') {
+			if (process.platform === 'darwin') return require('../lib/thingtime-node-bridge.cjs').runProcess(command, args, options);
+			// The service only runs on macOS; model plutil on other CI hosts.
+			const xml = Buffer.from(options.input).toString('utf8');
+			const string = (key) => xml.match(new RegExp(`<key>${key}</key>\\s*<string>(.*?)</string>`))?.[1];
+			const helper = xml.match(/<key>ProgramArguments<\/key>\s*<array>\s*<string>(.*?)<\/string>/u)?.[1];
+			return { status: 0, stdout: JSON.stringify({
+				Label: string('Label'), ThingtimeDesktopOwner: string('ThingtimeDesktopOwner'),
+				ProgramArguments: helper ? [helper] : [],
+				EnvironmentVariables: {
+					THINGTIME_NODE_CONNECTOR_EXECUTABLE: string('THINGTIME_NODE_CONNECTOR_EXECUTABLE'),
+					THINGTIME_NODE_CONNECTOR_ARGUMENTS_JSON: string('THINGTIME_NODE_CONNECTOR_ARGUMENTS_JSON')?.replaceAll('&quot;', '"')
+				},
+				MachServices: { 'com.thingtime.desktop.node.xpc': xml.includes('<key>com.thingtime.desktop.node.xpc</key>') }
+			}), stderr: '' };
+		}
 		if (command === '/usr/bin/codesign') {
 			const target = args.at(-1);
 			if (args[0] === '--verify') {
@@ -425,9 +441,7 @@ test('app launch restarts an explicitly enabled managed node after its menu-bar 
 	};
 	try {
 		await fixture.integration.reconcileRegisteredService(options, { startIfStopped: true });
-		assert.equal(fixture.state.bootstrapCalls, 0, 'a never-enabled node must not be installed silently');
-		await fixture.integration.registerService(options);
-		assert.equal(fixture.state.bootstrapCalls, 1);
+		assert.equal(fixture.state.bootstrapCalls, 1, 'default-on launch installs the bundled node');
 
 		// Native Quit performs launchctl bootout but deliberately preserves the
 		// Electron-managed plist as proof that this node was explicitly enabled.
@@ -499,7 +513,7 @@ test('failed registration restores the prior managed plist and running service',
 			runtimePath: fixture.paths.runtimePath
 		});
 		await mkdir(path.dirname(fixture.paths.launchAgentPath), { recursive: true });
-		await writeFile(fixture.paths.launchAgentPath, previousPlist);
+		await writeFile(fixture.paths.launchAgentPath, previousPlist, { mode: 0o600 });
 		fixture.state.serviceRegistered = true;
 		fixture.state.failBootstrapCount = 1;
 
@@ -512,4 +526,80 @@ test('failed registration restores the prior managed plist and running service',
 	} finally {
 		await rm(fixture.root, { recursive: true, force: true });
 	}
+});
+
+for (const persistentOwner of [false, true]) {
+	test(`launch adopts a comment-free bundled node (persistent owner: ${persistentOwner})`, async () => {
+		const fixture = await makeSignedNodeFixture();
+		try {
+			await fixture.integration.registerService();
+			let plist = (await readFile(fixture.paths.launchAgentPath, 'utf8')).replace(/<!--.*?-->/gsu, '');
+			if (!persistentOwner) plist = plist.replace(/\s*<key>ThingtimeDesktopOwner<\/key>\s*<string>.*?<\/string>/su, '');
+			await writeFile(fixture.paths.launchAgentPath, plist);
+			fixture.state.serviceRegistered = false;
+			await fixture.integration.reconcileRegisteredService({}, { startIfStopped: true });
+			assert.equal(fixture.state.bootstrapCalls, 2);
+			assert.match(fixture.state.bootstrapPlists[1], /<key>ThingtimeDesktopOwner<\/key>/u);
+		} finally { await rm(fixture.root, { recursive: true, force: true }); }
+	});
+}
+
+test('launch restarts once after a Desktop version change at the same installed path', async () => {
+	const fixture = await makeSignedNodeFixture();
+	try {
+		await fixture.integration.registerService();
+		fixture.integration.app.getVersion = () => '0.1.0+build.11';
+		await fixture.integration.reconcileRegisteredService({}, { startIfStopped: true });
+		await fixture.integration.reconcileRegisteredService({}, { startIfStopped: true });
+		assert.equal(fixture.state.bootstrapCalls, 2);
+		assert.match(fixture.state.bootstrapPlists[1], /0.1.0\+build.11/u);
+	} finally { await rm(fixture.root, { recursive: true, force: true }); }
+});
+
+test('auto-start off leaves a missing node uninstalled', async () => {
+	const fixture = await makeSignedNodeFixture();
+	try {
+		await fixture.integration.reconcileRegisteredService({}, { startIfStopped: false });
+		assert.equal(fixture.state.bootstrapCalls, 0);
+	} finally { await rm(fixture.root, { recursive: true, force: true }); }
+});
+
+test('comment-free agent pointing to a different helper is left untouched', async () => {
+	const fixture = await makeSignedNodeFixture();
+	try {
+		await fixture.integration.registerService();
+		const plist = (await readFile(fixture.paths.launchAgentPath, 'utf8'))
+			.replace(/<!--.*?-->/gsu, '')
+			.replace(/\s*<key>ThingtimeDesktopOwner<\/key>\s*<string>.*?<\/string>/su, '')
+			.replace(fixture.paths.helperExecutable, '/other/ThingtimeNode');
+		await writeFile(fixture.paths.launchAgentPath, plist);
+		const calls = fixture.state.bootoutCalls;
+		await assert.rejects(fixture.integration.reconcileRegisteredService({}, { startIfStopped: true }), { code: 'login_item_conflict' });
+		assert.equal(fixture.state.bootoutCalls, calls);
+		assert.equal(await readFile(fixture.paths.launchAgentPath, 'utf8'), plist);
+	} finally { await rm(fixture.root, { recursive: true, force: true }); }
+});
+
+test('registered but unresponsive node is recovered once on launch', async () => {
+	const fixture = await makeSignedNodeFixture();
+	try {
+		await fixture.integration.registerService();
+		const status = fixture.integration.status.bind(fixture.integration);
+		let calls = 0;
+		fixture.integration.status = async () => ++calls === 1 ? { serviceStatus: 'starting' } : status();
+		await fixture.integration.reconcileRegisteredService({}, { startIfStopped: true });
+		assert.equal(fixture.state.bootstrapCalls, 2);
+	} finally { await rm(fixture.root, { recursive: true, force: true }); }
+});
+
+test('binary plist rewrite retains Desktop ownership', { skip: process.platform !== 'darwin' }, async () => {
+	const fixture = await makeSignedNodeFixture();
+	try {
+		await fixture.integration.registerService();
+		const result = await require('../lib/thingtime-node-bridge.cjs').runProcess('/usr/bin/plutil', ['-convert', 'binary1', fixture.paths.launchAgentPath]);
+		assert.equal(result.status, 0);
+		fixture.state.serviceRegistered = false;
+		await fixture.integration.reconcileRegisteredService({}, { startIfStopped: true });
+		assert.equal(fixture.state.bootstrapCalls, 2);
+	} finally { await rm(fixture.root, { recursive: true, force: true }); }
 });

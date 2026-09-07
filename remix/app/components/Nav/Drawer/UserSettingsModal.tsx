@@ -580,7 +580,7 @@ export const UserSettingsModal = () => {
 						<Box minWidth={0}>
 							<Text fontSize="sm">Auto-start node on Thingtime launch</Text>
 							<Text fontSize="xs" opacity={0.55}>
-								Restarts a node you already enabled; it never installs a new node without asking first.
+								Starts the bundled node and keeps it up to date with this Desktop app.
 							</Text>
 						</Box>
 						<Switch

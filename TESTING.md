@@ -4059,7 +4059,10 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       Electron app. It must bootstrap exactly one node from that existing plist.
       Turn the setting off and repeat: reopening Electron must leave it stopped;
       turn it back on and confirm it converges immediately. A Mac with no
-      managed plist must still require the explicit **Start node** confirmation.
+      managed plist must start the bundled node when auto-start is on. Rewrite
+      the plist with plutil (removing XML comments), quit/reopen, and confirm
+      recovery still works. Install a newer Desktop build at the same path:
+      one node must restart with the new build and stay stable on the next launch.
 - [ ] Open the exact installed Electron app, record its bundled loopback
       renderer origin and separately selected API origin, and Quit with Cmd+Q. Electron must
       stop while the launchd node and

@@ -116,7 +116,12 @@ signature from the same team, and one of its three exact client bundle IDs.
 Requests and replies are capped at 1 MiB and time out; neither bridge uses a
 shell, AppleScript, cookies, provider databases, or raw private app stores.
 
-Login registration is always an explicit confirmed user action. Electron writes
+Desktop starts and maintains its bundled node when the default-on auto-start
+preference is enabled. Turning it off leaves a stopped node stopped. A persistent
+plist owner field survives macOS plist rewrites; legacy agents are adopted only
+when they identify the same bundled helper, connector, runtime and Mach service.
+The Desktop version is recorded so replacing an app at the same path restarts
+the node with that build. Manual registration remains available. Electron writes
 a per-user LaunchAgent containing valid ordinary `<key>` fields and absolute
 paths into the installed signed app, validates the plist, then calls
 `/bin/launchctl` with fixed arguments (never through a shell). Bootstrap is not
