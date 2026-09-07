@@ -66,6 +66,12 @@ export type PostComment = {
   tags: string[];
   reactionCounts: Record<string, number>;
   viewerReactions: string[];
+  // up/down votes — the separate focused reaction kind (POST /api/v1/things/updown).
+  // Optional while older deployments roll out; treat absence as no votes.
+  votes?: PublicUpdownVotes;
+  // the author's USER flair in the root post's subspace (null outside
+  // subspaces / when they wear none). Optional during rollout.
+  authorFlair?: PublicAuthorFlair | null;
   // direct replies — the comment's own /post/:id page shows the thread
   commentCount: number;
   // nested replies (threads ship two levels deep, ≤ 5 per level, oldest →
@@ -101,6 +107,19 @@ export type PublicPost = {
   reactionCounts: Record<string, number>;
   // every reaction token the viewer has toggled on this post (multi-react)
   viewerReactions: string[];
+  // up/down votes — the separate focused reaction kind beside the emoji
+  // reactions (POST /api/v1/things/updown). Optional during rollout.
+  votes?: PublicUpdownVotes;
+  // Subspace vocabulary (api/utils/subspaces): optional headline (any post may
+  // carry one), the subspace embed + flair, and the moderation state — null
+  // outside subspaces. Optional during rollout.
+  title?: string | null;
+  subspace?: PublicPostSubspace | null;
+  flair?: PublicPostFlair | null;
+  // the author's USER flair in this post's subspace (their pick beside their
+  // name — a template or custom text). Optional during rollout.
+  authorFlair?: PublicAuthorFlair | null;
+  subspaceMod?: PublicSubspaceMod | null;
   commentCount: number;
   // Viewer-relative count layers. Optional while older deployments roll out;
   // commentCount remains the backward-compatible total.
@@ -135,14 +154,136 @@ export type PublicPost = {
 // api/utils/things/pollCore.ts.
 export type PublicPollVotes = { counts: number[]; totalVotes: number; viewerVote: number | null };
 
-// A matched AI feed filter on a connections-feed post: 'warn' veils the post
-// behind a Show button, 'hide' drops it from the rendered feed.
-export type FeedFilterMatch = {
-  filterId: string;
+// Up/down vote tally carried on posts and comments (mirrors PublicUpdownVotes
+// in api/utils/things/updownCore.ts): raw counts, net score, the viewer's
+// own vote (null = hasn't voted).
+export type UpdownDirection = 'up' | 'down';
+export type PublicUpdownVotes = { up: number; down: number; score: number; viewerVote: UpdownDirection | null };
+export const EMPTY_VOTES: PublicUpdownVotes = { up: 0, down: 0, score: 0, viewerVote: null };
+
+// Lean subspace embed on subspace posts (mirrors PublicPostSubspace in
+// api/utils/things/things.ts) — identity + branding + the viewer's own role.
+export type SubspaceAccess = 'public' | 'restricted' | 'private';
+export type SubspaceRole = 'owner' | 'moderator' | 'member';
+export type PublicPostSubspace = {
+  id: string;
+  slug: string;
   name: string;
-  action: 'warn' | 'hide';
-  reason: string;
-  source: 'claude' | 'openai' | 'heuristic';
+  icon: string | null;
+  iconUrl: string | null;
+  accent: string | null;
+  access: SubspaceAccess;
+  nsfw: boolean;
+  viewerRole: SubspaceRole | null;
+};
+export type PublicPostFlair = { id: string; label: string; emoji: string | null; color: string | null };
+// a user flair beside an author's name (mirrors PublicAuthorFlair in
+// api/utils/things/things.ts): a template pick (id) or custom text (id null)
+export type PublicAuthorFlair = { id: string | null; label: string; emoji: string | null; color: string | null };
+export type PublicSubspaceMod = {
+  status: 'approved' | 'removed';
+  removed: boolean;
+  reason: string | null;
+  removedAt: string | null;
+  pinned: boolean;
+  locked: boolean;
+  nsfw: boolean;
+  spoiler: boolean;
+  viewerCanModerate: boolean;
+  // moderators only: open reports against the post (the 🚩 badge in the
+  // subspace line); absent for everyone else
+  reportCount?: number;
+};
+
+// Apply one up/down tap to a post or comment optimistically: same direction
+// again clears, the other direction flips (both counters move), null clears.
+// Idempotent against the FRESHEST snapshot so concurrent reactions on other
+// fields are never clobbered — the reaction-toggle pattern.
+export const applyUpdownVote = <T extends { votes?: PublicUpdownVotes }>(prev: T, direction: UpdownDirection | null): T => {
+  const votes = prev.votes || EMPTY_VOTES;
+  const current = votes.viewerVote;
+  const next = current === direction ? null : direction;
+  if (next === current) return prev;
+  let { up, down } = votes;
+  if (current === 'up') up -= 1;
+  if (current === 'down') down -= 1;
+  if (next === 'up') up += 1;
+  if (next === 'down') down += 1;
+  up = Math.max(0, up);
+  down = Math.max(0, down);
+  return { ...prev, votes: { up, down, score: up - down, viewerVote: next } };
+};
+
+// Comment sort inside a post (round 2 S7): GET /api/v1/things?id=&commentSort=
+// ships the page in one of Reddit's three orders; the card paints the SAME
+// order over the comments it already holds first (and keeps a fresh comment
+// in its place after the server page lands), so this comparator mirrors the
+// server's (things/updownCore.ts orderCommentPage): top = net score desc,
+// ties older first; new = newest first; old = oldest first.
+export const COMMENT_SORTS = ['top', 'new', 'old'] as const;
+export type CommentSort = (typeof COMMENT_SORTS)[number];
+export const COMMENT_SORT_META: Record<CommentSort, { label: string; emoji: string; hint: string }> = {
+  top: { label: 'Top', emoji: '▲', hint: 'Highest score first' },
+  new: { label: 'New', emoji: '✨', hint: 'Newest first' },
+  old: { label: 'Old', emoji: '🕰️', hint: 'Oldest first' }
+};
+export const isCommentSort = (value: unknown): value is CommentSort => (COMMENT_SORTS as readonly string[]).includes(value as string);
+const commentTimeOf = (comment: Pick<PostComment, 'createdAt'>): number => {
+  const time = new Date(comment.createdAt).getTime();
+  return Number.isFinite(time) ? time : 0;
+};
+export const sortCommentPage = <T extends Pick<PostComment, 'id' | 'createdAt' | 'votes'>>(comments: readonly T[], sort: CommentSort | null): T[] => {
+  if (!sort) return [...comments];
+  return [...comments].sort((a, b) => {
+    if (sort === 'top') {
+      const scoreDelta = (b.votes?.score ?? 0) - (a.votes?.score ?? 0);
+      if (scoreDelta !== 0) return scoreDelta;
+    }
+    if (sort === 'new') return commentTimeOf(b) - commentTimeOf(a) || a.id.localeCompare(b.id);
+    return commentTimeOf(a) - commentTimeOf(b) || a.id.localeCompare(b.id);
+  });
+};
+
+// An optimistic comment's provisional id (PostCard's buildPendingComment)
+// until the server copy swaps in.
+export const isPendingComment = (comment: Pick<PostComment, 'id'>): boolean => comment.id.startsWith('pending-');
+
+// The slice of an ORDERED level a card shows. The default page reveals
+// upwards — the LAST `visible`, newest at the bottom next to the composer —
+// and a sort reads top-down, the FIRST `visible`. Under a sort the viewer's
+// own fresh comments (`pinnedIds`: the ones sent from this list) that fall
+// outside the window stay shown, appended after it in order: a new comment
+// scores 0 and is the newest, so Top and Old would otherwise bury the comment
+// the viewer just posted below the fold with nothing on screen to confirm it
+// landed (the optimistic-render rule: paint first).
+export const windowCommentPage = <T extends Pick<PostComment, 'id'>>(ordered: readonly T[], sort: CommentSort | null, visible: number, pinnedIds: readonly string[] = []): T[] => {
+  if (!sort) return ordered.slice(-visible);
+  const shown = ordered.slice(0, visible);
+  if (!pinnedIds.length || shown.length === ordered.length) return shown;
+  const pinned = new Set(pinnedIds);
+  const below = ordered.slice(visible).filter((comment) => pinned.has(comment.id));
+  return below.length ? [...shown, ...below] : shown;
+};
+
+// A freshly read (sorted) page landing over the comments a card already
+// holds. The page wins the order, and the viewer's own comments the page does
+// not carry survive it — a pending row (its POST still in flight, so the ack
+// still finds it to replace) or a saved one (`keepIds`) written after the read
+// or left out of the sorted 20 — appended after the page; everything else the
+// card held gives way to the page. `unseen` counts the kept rows the page's
+// counts cannot include yet (pending, or created at / after the read started)
+// so commentCount stays honest until the next authoritative count lands.
+export const mergeCommentPage = <T extends Pick<PostComment, 'id' | 'createdAt'>>(
+  page: readonly T[],
+  held: readonly T[],
+  keepIds: readonly string[],
+  readStartedAt: number
+): { comments: T[]; unseen: number } => {
+  const onPage = new Set(page.map((comment) => comment.id));
+  const keep = new Set(keepIds);
+  const kept = held.filter((comment) => !onPage.has(comment.id) && (isPendingComment(comment) || keep.has(comment.id)));
+  const unseen = kept.filter((comment) => isPendingComment(comment) || commentTimeOf(comment) >= readStartedAt).length;
+  return { comments: kept.length ? [...page, ...kept] : [...page], unseen };
 };
 
 // A post update bubbled up from a card. A value replaces the post (null removes
@@ -252,3 +393,12 @@ export const appendPostsDeduped = (prev: PublicPost[], page: PublicPost[]): Publ
   });
   return fresh.length ? [...prev, ...fresh] : prev;
 };
+
+// The home feed's scope (GET /api/v1/things/feed?scope=): every visible post,
+// or only posts from the viewer's ACTIVE subspaces — the "🪐 My subspaces"
+// chip beside the algorithm menu. Persisted per browser in the sync
+// localCache tier under FEED_SCOPE_CACHE_KEY so the choice paints on first
+// render; guests always read `all` (they have no subspaces to scope to).
+export type FeedScope = 'all' | 'subspaces';
+export const FEED_SCOPE_CACHE_KEY = 'tt-feed-scope';
+export const feedScopeOf = (value: unknown, loggedIn: boolean): FeedScope => (loggedIn && value === 'subspaces' ? 'subspaces' : 'all');

@@ -30,6 +30,7 @@ import {
   viewerOf,
   withLinkKeys
 } from '~/api/utils/things/things';
+import { parseCommentSort } from '~/api/utils/things/updownCore';
 
 // Route a unified mutation to the rate-limit key its dedicated sub-route would
 // use, so the generic endpoint can't be used to bypass the per-op limits.
@@ -75,8 +76,9 @@ const csv = (value: string | null): string[] =>
     .map((entry) => entry.trim())
     .filter(Boolean);
 
-// GET /api/v1/things?id=<shareId> — read one thing (post projection included
-// for post things).
+// GET /api/v1/things?id=<shareId>[&commentSort=top|new|old] — read one thing
+// (post projection included for post things; commentSort re-orders the
+// shipped comment page — default: the newest comments, oldest → newest).
 // GET /api/v1/things?target=<shareId>&thingtime=comment&cursor=&limit= — list
 // things attached to a viewable thing (its comments/reactions).
 // GET /api/v1/things?thingtime=&folder=&cursor=&limit= — list your own things
@@ -114,14 +116,20 @@ export const loader = async ({ request }: { request: Request }) => {
 
   const id = (params.get('id') || '').trim();
   if (id) {
-    const result = await getThing(viewer, id, app);
+    // commentSort=top|new|old re-orders the shipped comment page of the post
+    // projection (round 2 S7); absent keeps the default page, a typo is a 400
+    // (never a silently re-ordered thread)
+    const commentSort = parseCommentSort(params.get('commentSort') || undefined);
+    if (commentSort.ok === false) return json({ ok: false, error: commentSort.error }, { status: 400, headers: cors });
+    const result = await getThing(viewer, id, app, { commentSort: commentSort.sort });
     if (result.ok === false) {
       return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
     }
     // comments project as posts too; parent/root carry their thread context
-    // (post/parent/root are first-party projections — null under the app lens)
+    // (post/parent/root are first-party projections — null under the app lens);
+    // the response echoes the comment order it shipped (null = default)
     return json(
-      { ok: true, thing: result.thing, post: result.post, parent: result.parent, root: result.root },
+      { ok: true, thing: result.thing, post: result.post, parent: result.parent, root: result.root, commentSort: commentSort.sort },
       { headers: cors }
     );
   }

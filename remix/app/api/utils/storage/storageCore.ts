@@ -117,6 +117,18 @@ export const CONTROL_PLANE_STORAGE_THINGTIMES = [
 	// sanitizer). Direct-inserted without a storage stamp, so they must stay
 	// out of billable arithmetic like the other dedicated-endpoint kinds.
 	'vote',
+	// Up/down votes, subspace memberships and mod-log rows are the same class of
+	// bounded engagement/plumbing docs (one tiny fixed-shape doc per relation,
+	// minted only by their dedicated endpoints — api/utils/subspaces, things/updown).
+	'updown',
+	'subspace-member',
+	'subspace-modlog',
+	// a deleted subspace's slug hold (one tiny row per deletion, consumed when
+	// the slug is re-founded) — plumbing, never billable content
+	'subspace-tombstone',
+	// a viewer's report of a post to the mods (one tiny row per (post,
+	// reporter), settled by moderation) — plumbing, never billable content
+	'subspace-report',
 	// Messenger communities, conversations, messages, comments, and custom
 	// emoji are user-owned content and intentionally remain billable. Their
 	// attachment object bytes are metered separately by attachment Things.

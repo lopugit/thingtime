@@ -1645,6 +1645,430 @@ email whose link points at the attacker.
       data crystal) makes the vote endpoint answer 409 — never a silent
       `ok: true` that drops the vote.
 
+## Subspaces (`remix/app/components/Subspaces/`, `remix/app/api/utils/subspaces/`, `/api/v1/subspaces*`)
+
+- [ ] `/s` lists subspaces newest-first with member counts; search narrows by
+      slug/name; **Mine ⭐** shows only joined ones; **Create ➕** (or
+      `/s?create=1`, the drawer's Subspaces ▸ Create) opens the modal. The
+      slug previews live from the name (`Rainbow Makers` → `rainbow_makers`),
+      reserved words (`all`, `mod`, `create`…) and <3-char slugs are refused,
+      a taken slug answers 409 with a Lopu toast, and success navigates to
+      `/s/<slug>` with the creator as 👑 owner.
+- [ ] `/s/<slug>` renders banner (image or accent gradient) + icon + name +
+      `👥 members` + access badge, the sort tabs (Hot/New/Top/Rising/
+      Controversial; Top/Controversial add a range select), the composer
+      LOCKED to the subspace (chip `s/<slug>`, a Title input above the body,
+      a Flair select when flairs exist), the post column, and the sidebar
+      (About, Rules, Flairs, Moderators, and **Mod tools 🎩** for mods). At
+      375px the sidebar stacks below the posts; nothing scrolls horizontally.
+- [ ] Join/Leave paints instantly (count ±1, button flips) and reverts with a
+      toast on failure; owners see no leave button (API 409s anyway); banned
+      viewers see a 🚫 notice and a disabled button; on a private subspace
+      the button requests instead of joining (see the join-requests bullet).
+- [ ] A post made from the subspace composer shows the `🪐 s/<slug>` chip,
+      the title as an h2, and the flair chip — on `/s/<slug>`, `/feed`,
+      `/post/:id` and the author's profile alike. The feed composer's
+      **🪐 No subspace** select lists joined subspaces; picking one reveals
+      the title + flair controls and the post lands in that subspace.
+- [ ] Posting rules: unknown flair 400, mod-only flair 403 for members,
+      restricted subspace 403 for unapproved posters (✋ hint under the
+      composer), private subspace 403 for non-members; PATCHing
+      `crystal.flairId` re-runs the same gate (author may flair, but not with
+      a mod-only flair). Generic `POST /api/v1/things` with
+      `thingtime: ["subspace"|"subspace-member"|"subspace-modlog"|"subspace-report"|"updown"]`
+      answers 403.
+- [ ] Moderation (··· menu on a subspace post, mods only): Remove opens the
+      **Remove modal** (`remove-modal`: a radio list of the subspace's removal
+      reasons — title + message — then its rules, then Custom; a note field;
+      "Also lock comments 🔒"; "Also ban @author 🚫" with a days input, hidden
+      on your own post) and redacts the post for everyone but the author +
+      mods (body, media, title gone; "🧹 Removed by moderators — <reason>"
+      notice; reason visible to author/mods only) and drops it from every
+      feed. The card paints removed + the reason the instant you confirm and
+      reverts with a toast if the API refuses; lock/ban follow-ups that fail
+      keep the removal and toast on their own. A canned reason stores
+      `title — message · note`; a rule pick is sent as `ruleIndex` and the
+      SERVER composes `Rule N: title — text · note` (both bounded at 900
+      server-side — the note field's `n/max` counter shrinks beside a canned
+      reason / rule so nothing you type is sliced off; a note written under
+      Custom is trimmed to fit when you switch picks). The lazy default pick
+      (first canned reason) only lands while the form is untouched — click
+      Custom or start typing before the rules load and nothing flips under
+      you. "Also ban" sends the SHORT reason (the canned title / `Rule N:
+      title` / your custom text), never the full composed text. The author
+      gets a 🧹 `subspace-post-removed` bell entry ("s/<slug> · <headline>" —
+      the canned title / the rule citation / the free text; bell previews
+      clamp at 140 chars, the full reason is on the post) that opens
+      `/post/:id`; the row — like the 🚫 ban / unban rows — comes from
+      "s/<slug> mods" (actorId = the subspace, no profile link), never the
+      individual moderator, whom only the mod log names; removing your own
+      post rings nobody; a second Remove on an already-removed post (a retry,
+      two mods racing, an API caller) is a no-op: 200, same reason /
+      removedAt, no second mod-log row, no second bell. Approve
+      restores it silently. No `window.prompt`/`confirm` anywhere in the
+      subspace UI. Approve restores it;
+      Pin leads Hot/New with a 📌 badge (max 5); Lock shows 🔒 and makes
+      commenting 423 for everyone but mods — replies to replies included;
+      18+ / Spoiler toggle badges; Flair submenu (lazy-loaded list). Every
+      action lands in the mod log with the actor.
+- [ ] `/s/<slug>/mod` (mods only; others see the 🎩 notice): Queue (newest,
+      removed included, "Removed only" switch); Members (username + action:
+      add/approve/unapprove/kick/make mod/demote, per-row buttons; only the
+      owner can promote/demote/moderate other mods; the owner can't be
+      banned); Ban (per row and Banned → "Ban someone" by username) opens the
+      **Ban modal** (`ban-modal`: reason shown to the user, days — blank =
+      permanent, and a private mod note that lands in the `member.ban` mod-log
+      detail only, never in the user's `banReason` or bell); a banned row
+      leaves the Members list the moment you confirm and comes back if the
+      API refuses (the modal stays open with your text); Banned (unban);
+      Settings (name, description, icon, accent, icon/banner URLs; access +
+      18+ owner-only, disabled for mods); Requests (join + posting-approval
+      queues, see below); Rules (add/reorder/remove, ≤15) + **Removal
+      reasons** (second card: title ≤80 + message ≤500, ids minted from
+      titles on save, ≤20, reorder/remove; a plain member's save 403s, >20 /
+      a 501-char message / duplicate ids 400) — saving rules, reasons or
+      flairs refreshes what the card menu / Remove modal offer; Flairs (emoji/
+      label/color/mods-only, ids minted on save, ≤50); Log (newest first).
+      A banned user cannot post, comment, vote, or (re)join; the ban outlives
+      leaving; a temporary ban expires on its own.
+- [ ] Access: switching to **private** walls `/s/<slug>` for non-members
+      (🔒 empty state, feed 403), hides its posts from the home feed, search,
+      trending, RSS and direct `/post/:id` reads for non-members, while
+      members and mods keep seeing them; outsiders **request to join** and a
+      mod accepts (or **adds** them by username); switching back to public
+      re-exposes them. **Restricted** keeps reading open but only approved
+      posters/mods post (members may request approval).
+- [ ] Settings → **Subspaces 🪐**: the vote-pill switches hide the ▲▼ pills
+      on posts and/or comments across every mounted card immediately; the
+      default sort applies when a `/s/<slug>` link carries no `?sort=`.
+- [ ] Deleting a post removes its `updown` votes (cascade); a subspace's
+      posts survive it losing a flair (chip simply disappears).
+- [ ] Mod page → Settings → **Danger zone ⚠️** (owner only; mods see a
+      one-line "up to its owner" note): **Transfer ownership** takes a
+      username, opens a confirm modal, and on success the crown moves (the
+      old owner's owner-only controls dim instantly, `viewer.role` becomes
+      `moderator`, the Lopu toast names the new owner, the new owner gets a
+      🎩 `subspace-role` bell entry "s/<slug> · you are now the owner 👑"
+      that deep-links to `/s/<slug>`); the API refuses non-owners (403),
+      yourself (400), non-members / unknown users (404) and banned members
+      (403), and the previous owner can now Leave. While the transfer is in
+      flight the Danger zone stays mounted and merely dims (the confirm
+      modal keeps its spinner); a failed transfer (typo'd username → 404)
+      puts the crown straight back with the username still typed. Two
+      transfers racing from the same owner (double-click, two tabs, two API
+      clients) commit at most once — the loser answers 409 and the roster
+      never shows two crowns. **Delete subspace** opens a modal whose red
+      button arms only once `s/<slug>` is retyped (prefix and case
+      forgiven); success navigates to `/s` with a toast counting released
+      posts (and how many stay private to their authors) + removed
+      memberships, `/s/<slug>` shows "doesn't exist" (its cached copy is
+      evicted, never repainted), members/mod log are gone, and every former
+      post still opens on `/post/:id` as a plain post (no subspace chip,
+      flair or mod state; title kept). Posts of a **private** subspace and
+      posts the mods had **removed** become author-only private posts (404
+      for everyone else, never back on public feeds) — the owner's click
+      never publishes what an author never chose to publish; rich
+      post+comment things pointing at the subspace are released the same
+      way. The slug is **held** (a `subspace-tombstone` row keeps its
+      uniqueKey): anyone else gets 409 "held" for 30 days while the previous
+      owner may re-found it at once, and `/s/<slug>` stays 404 meanwhile.
+      Moderators (403), a wrong `confirmSlug` (400), a delete that lost a
+      race with a transfer (409) and a subspace with more posts than one
+      call releases (409, doc intact — run it again) are refused; former
+      mods get a "s/<slug> · was deleted by its owner 🗑️" bell entry.
+- [ ] Join requests (private) + posting-approval requests (restricted):
+      on a **private** `/s/<slug>` the header button reads **Request to
+      join 🔒** → paints **Requested ✓ · cancel** instantly (the count does
+      not move — a request is not a membership: feed 403, `mine=1` empty,
+      posting 403, transfer-to 404), toast "Asked to join s/<slug> 🙋";
+      clicking again cancels (`/leave`, row gone). Directory cards read
+      **Request 🔒** / **Requested ✓**. Mods get a 🙋 `subspace-join-request`
+      bell entry ("s/<slug> · wants to join"), a numeric badge on **Mod
+      tools 🎩** (links straight to the Requests tab) and a **Requests** tab
+      (badge = join + approval requests) with Accept ✓ / Deny per row — the
+      row leaves and the badge drops optimistically, both come back on
+      failure. Accept → member (🎉 `subspace-join-accepted` bell entry,
+      modlog `member.accept`); Deny drops the row (modlog `member.deny`,
+      optional reason) and the user may ask again; a mod's **Add member**
+      on a requester accepts too; banning a requester removes the request.
+      In a **restricted** subspace an unapproved member sees "✋ Only
+      approved posters can post here" + **Request posting approval ✋** →
+      **Approval requested ✓** (disabled); mods get "s/<slug> · wants to
+      post", the request shows in the Requests tab's second card and as
+      "✋ asked to post" on the Members row; Approve grants posting and clears
+      it, Deny / Unapprove clear it; asking as a non-member (403), for
+      someone else (403), when already able to post (400) or in a public /
+      private subspace (400) is refused. `members?pending=1` /
+      `?approvalRequests=1` are 403 for non-mods; `memberCount` and the
+      member list never include pending rows; `viewer.pending` /
+      `viewer.approvalRequested` ride every subspace projection and mods
+      get `pendingCount` / `approvalRequestCount` on the detail.
+- [ ] Request edge cases (S2 review): the server's posting gate IS
+      `viewer.canPost` (`canPostIn`) — kicking an approved poster of a
+      restricted subspace clears `approved`, so `POST /api/v1/things` answers
+      403 for them and a rejoin does not restore approval; a private
+      re-request starts from a clean row (never approved); a post card's
+      `subspace.viewerRole` is `null` for anyone who is not an active member
+      (kicked, pending). A pending join request takes only Accept / Deny /
+      Add / Ban / Make mod: approve, unapprove and demote answer 400 ("accept
+      the join request first"), kick answers 404, and the requester never
+      gets a stray "no longer a moderator" bell. Accept / Deny / Add on a
+      request that was cancelled meanwhile answer 409 ("withdrawn — reload
+      the queue"; the Requests tab refreshes instead of restoring the row)
+      and write no `member.accept` log / 🎉 bell — a cancelled request
+      answers 404 outright. Switching a private subspace to public or
+      restricted activates every open join request (requesters become
+      members, get a "s/<slug> · opened up — your request to join went
+      through 🎉" bell; modlog `settings.update` detail `acceptedRequests`);
+      switching away from restricted clears open posting-approval requests.
+      A member whose temporary ban has expired can request posting approval
+      and the request shows in the queue + count (the row heals). A request
+      cancelled and filed again (`/join` → `/leave` → `/join`) does not
+      ring the mods again while their earlier 🙋 bell is unread (it rings
+      once more after they read it); `/join` has its own rate key
+      (`subspaces.join`, 20/min → 429).
+- [ ] User flairs 🏷️: Mod page → Flairs → **User flairs** card (templates
+      with emoji/label/color/mods-only, ids minted on save, ≤50; switches
+      "Members pick their own flair" (default on) and "Members may type their
+      own text" (default off; ≤40 chars)); any moderator may save it. On
+      `/s/<slug>` an active member sees the sidebar **Your flair** card:
+      template pills (mod-only ones 🎩 only for mods; the active one shows ✓
+      and clicking it again takes it off), a custom-text input when allowed,
+      and **Take it off ✕** — the pick paints instantly on the card, the
+      header state and every post/comment of theirs on the page, and reverts
+      with a toast on failure. The chip (`data-testid="author-flair"`)
+      appears right after the author name on post cards, comment rows (all
+      shipped levels), the shared-post sub-card and the mod page's member
+      rows — only inside subspaces (`authorFlair` is null elsewhere), and
+      only while the author is an active member (a pending wearer's chip is
+      hidden; a kick or ban STRIPS the pick — a rejoin / unban wears nothing
+      until it is picked or granted again — and demoting a moderator strips
+      a mod-only pick while ordinary ones stay; the `member.remove` /
+      `member.ban` / `member.role` mod-log detail reads
+      `userFlairCleared: true`). Renaming a template updates every wearer's
+      chip — on the post page AND on a comment's own `/post/<commentId>`
+      drill-down; deleting one keeps their snapshot. Mod page → Members →
+      **Set flair** opens a Chakra modal (template select incl. 🎩 mod-only
+      ones / Custom text… + emoji / No flair; a worn template the mods
+      deleted since opens as editable custom text with a "removed" hint;
+      Save waits while another member action is saving, and the modal stays
+      open with the typed text when the API refuses) — a mod may dress
+      anyone, the owner included (who can always override it; the owner's
+      row shows Set flair too), bound by neither switch, and only dressing
+      someone ELSE writes a `member.userFlair` mod-log entry. API walls:
+      anonymous 401, a non-member setting their own 403, someone else's
+      without a mod hat 403, unknown template 400, mod-only template as a
+      member 403, custom text while it is off 403 / over 40 chars 400,
+      self-assign off → a member's pick 403 but clearing still 200, a mod
+      dressing a non-member 404 / a banned user 400. The fresh comment
+      `POST /api/v1/things/comment` answers with already carries
+      `authorFlair` (the root post's subspace, resolved once by the
+      interaction gate); the projection resolves every page in ONE
+      member-row lookup (posts, shared originals, every comment level).
+- [ ] Reports 🚩: on a subspace post (or a comment under one) a logged-in
+      viewer who is neither the author nor a mod finds **Report to
+      moderators 🚩** in the card's ··· menu (`post-report`; comment rows
+      get a small flag icon, `comment-report`); the **Report modal**
+      (`report-modal`) lists the subspace's rules (Rule N: title — the first
+      one preselected while the form is untouched) + Other and a note (≤500).
+      Confirming closes the modal and toasts "Reported — thanks, the mods will
+      look 🚩" at once (optimistic — a refusal toasts on its own); a comment
+      report lands on the ROOT post (the queue row says "(a comment ↗)").
+      Reporting the same post again refreshes your row (`updated: true`,
+      still one report) and does not ring the mods again; after the mods
+      settled it a new report re-opens it and rings again. Mods get a 🚩
+      `subspace-report` bell entry ("s/<slug> · <reason>", from the reporter,
+      opens `/post/:id` — deduped against their unread bell), a `🚩 N` badge
+      in the post's subspace line (`post-report-badge`, links to the Reports
+      tab — only mods ever see `subspaceMod.reportCount`), the count on
+      **Mod tools 🎩** (requests + reports) and the mod page **Reports** tab
+      (badge = open reports): each reported post renders as its card with
+      the reasons tally (×N), the reporters (name · reason · note · when,
+      ≤20 listed, "…and N more"), **Remove 🧹** (the Remove modal — the
+      removal settles the reports: `post.remove` mod-log detail
+      `resolvedReports`) and **Dismiss ✓** (the post stays; mod-log
+      `report.dismiss` with `detail.count`); both paint first (group leaves,
+      badge drops) and come back on failure (a 404 = settled meanwhile →
+      the queue refreshes). The **Resolved** toggle shows how each post was
+      settled (Removed 🧹 / Approved ✅ / Dismissed ✓); approve settles open
+      reports as `approved` too. A post the author deletes takes its reports
+      with it. API walls: anonymous 401, no reason 400, a 501-char note 400,
+      an unknown OR invisible post 404 (never 400 — existence is not
+      disclosed), a post outside any subspace 400, a banned reporter 403;
+      `GET /api/v1/subspaces/reports` 401 / 403 for non-mods, dismiss 401 /
+      403 / 400 (no postId, bad action) / 404 (nothing open). Generic
+      `POST /api/v1/things` with `thingtime: ["subspace-report"]` answers
+      403. Rate key `subspaces.report` (30/min).
+      S5 review fixes: a post the mods already removed offers no 🚩 (card
+      menu and comment rows) and `/report` answers 409 for it — no row, no
+      bell; in a PRIVATE subspace a stranger, a pending requester and a
+      banned member get 404 for the post and its comments (an active member
+      200); a report row is the reporter's own private thing (generic
+      `GET /things?id=` 200 for them, 404 for everyone else); a post that
+      MOVED to another subspace keeps its open rows dismissable in the old
+      queue without a slug, and the reporter's next report re-files in the
+      new subspace and rings its mods; deleting a reported COMMENT deletes
+      the rows that flagged it (the post's other reports stay). Reports tab:
+      the badge / `Open · N` drop by the group's ROWS (not one per group)
+      and reconcile from the server after Remove 🧹, a removal or approval
+      through the card's own ··· menu drops the group too, and flipping
+      Open / Resolved paints the list it already knows while the fresh page
+      loads — a slow page can never land under the other heading.
+- [ ] Discovery 🪐 (S6): `/feed` shows a **🪐 My subspaces** chip beside
+      the algorithm menu — on, the eyebrow reads "Your subspaces 🪐 · …" and
+      the column holds ONLY posts from subspaces the viewer is an ACTIVE
+      member of (`GET /api/v1/things/feed?scope=subspaces`; a pending join
+      request is not a membership; removed posts and other people's private
+      subspaces stay out; a member of no subspace sees the "join a few on
+      /s" empty state, never the whole feed). The choice persists per
+      browser (`tt-feed-scope`) and paints on first render; logging out
+      drops back to all; a guest tapping the chip gets a "Log in" Lopu toast;
+      the chip rests (disabled) while Filters ▸ Advanced is applied.
+      `?scope=anything-else` answers 400. `/s` has sort chips **New ✨ /
+      Most members 👥 / Most active 🔥** (`?sort=` shareable; New is the
+      cursor walk, the other two rank the newest 200 matching subspaces in
+      memory — most members / most live posts in the last 7 days — and page
+      by offset; Most active rows read "· N posts this week"; `?sort=bogus`
+      → 400; q / Mine narrow every sort). `/explore` opens with a
+      **Popular subspaces 🪐** strip (top 8 by members, compact cards,
+      "All subspaces →" to `/s?sort=members`) that scrolls inside its own
+      box at 375px — no page-level horizontal scroll — and is simply absent
+      while there are no subspaces. `/search` with a non-empty query shows
+      a **Subspaces 🪐** section (slug/name matches, first 6, compact cards)
+      above People and the post results; a query with no matching subspace
+      shows no section; `search.ts` is untouched.
+- [ ] Discovery — S6 review fixes: `GET /api/v1/subspaces` is rate-limited
+      like the other public reads (`subspaces.list`, 120/min; anonymous
+      callers key by IP → 429 with `Retry-After` past the budget). Logged-out
+      clients (the `/explore` strip, `/s`, the `/search` section) send
+      `anon=1` and the response carries `Cache-Control: public, s-maxage=60,
+      stale-while-revalidate=300` + `Vary: Authorization`; a cookie-less read
+      WITHOUT the flag carries no public header, an authed read is
+      `private, no-store`, `anon=1` with a session cookie still answers the
+      logged-out view (cookies are ignored on the cacheable URL), and
+      `anon=1&mine=1` → 401. A private subspace's activity is its members'
+      business: under **Most active 🔥** a private subspace the viewer is
+      not an ACTIVE member of ranks at zero and its row shows no "· N posts
+      this week" (a guest, a logged-in stranger or a pending requester never
+      learns its weekly post count — the same fence its feed applies); its
+      members and mods still see it ranked by its real activity with the
+      count. Member counts stay public on every sort. Verify section R.
+- [ ] Completeness sweep (S7) — comment sort: open a subspace post with a
+      few voted comments; the comments panel shows a tiny **Sort 💬 ▾** menu
+      (`data-testid="comment-sort"`, offered on subspace posts with more than
+      one comment). Pick **▲ Top**: the visible comments re-order INSTANTLY
+      (highest net score first, a tie older-first), then the server page lands
+      (`GET /api/v1/things?id=&commentSort=top` — the true top 20 of the
+      post, not the newest 20 re-shuffled) and nothing jumps; **✨ New** /
+      **🕰️ Old** order by age; the reveal control reads "Show more comments"
+      and appends BELOW under a sort (the default page keeps "Show previous
+      comments" revealing upwards); nested replies re-order among the replies
+      already shipped, and opening or expanding a thread under a sort reads
+      that comment's own sorted page (`GET ?id=<comment>&commentSort=` — the
+      Network tab shows it; the reveal reads "Show more replies") so deeper
+      levels keep the card's order; a fresh comment you post is ALWAYS on
+      screen — under ▲ Top / 🕰️ Old, where a new zero-score comment sorts
+      below the fold, it stays pinned at the end of the shown list right
+      above the composer (the count grows by one, the row is there); pick a
+      sort while a comment is still sending and it is never dropped (the
+      page lands, your comment stays, its ack still swaps in); a refused
+      sort read (offline) toasts AND the menu reverts to the previous pick;
+      `commentSort=bogus` → 400 and the response echoes `commentSort`
+      (null on the default read). Guest nudges: logged out, every subspace
+      action toasts a Lopu login nudge instead of doing nothing — Join /
+      Request to join, ▲▼ votes, react, reply, the ··· menu's **Report to
+      moderators 🚩** (post and the comment rows' flag), and the `/s/<slug>`
+      page shows "🗝️ Log in to post in s/<slug>" + a **Log in to post ✍️**
+      button where members see the composer (a restricted subspace says
+      "log in and join first"). Edge cases (verify section S): deleting a
+      post clears its reports from the open AND resolved queues; banning a
+      pending requester drops the request (pendingCount 0, re-request 403);
+      transfer to a banned (403) / pending (404) / non-member (404) target is
+      refused; a pending requester reads `viewer.canPost false` and the
+      composer's `mine=1` select never lists the pending subspace; a demoted
+      moderator gets 403 from every queue, moderate and dismiss on the very
+      next request; private-subspace posts and mod-removed posts never appear
+      in `GET /api/v1/things/rss` or `/trending` (a public subspace post
+      does syndicate).
+- [ ] Final round-2 sweep (verify section T — the cross-slice invariants no
+      single slice owns): "the mods" a request / report rings are the ACTIVE
+      owner + moderators at emit time — a demoted moderator and a moderator
+      who left get no `subspace-report` / `subspace-join-request` row for
+      anything filed afterwards (the owner still does); an ACTIVE member of a
+      private subspace calling join is a no-op (`joined false, pending
+      false`, never downgraded to a request); the Reports queue pages by
+      cursor (`limit=1` → one group + `nextCursor`, the cursor → the rest, no
+      cursor at the end, `openReportCount` on every page); deleting a
+      subspace takes every `subspace-report` row with it (the reporter's own
+      generic read of the row goes 200 → 404) while the reported posts
+      survive as plain posts; every bell of the family deep-links
+      consistently (post removed / report rows carry `postId = targetId` =
+      the post; role / ban / join request / join accepted rows carry the
+      subspace as `targetId`, no `postId`, and an `s/<slug> ·` preview); and
+      the docs registry ↔ `/api/v1/capabilities` agree across the whole family
+      at the round's final numbers (subspaces 1.5.0 · get 1.4.0 · join /
+      leave / update 1.3.0 · members 1.4.1 · moderate 1.4.0 · feed 1.3.0 ·
+      transfer 1.2.0 · delete 1.1.0 · report / reports 1.0.1 · modlog 1.0.0 ·
+      things 1.4.0 · things-feed 1.4.0 · things-comment / things-user 1.3.0
+      · updown 1.0.0 · notifications-list 1.2.0 · notifications-settings
+      1.1.0) with a `route.v1.*` key for each. `test:rate-limit` pins the
+      `subspaces.write` 60 / `subspaces.join` 20 / `subspaces.report` 30 per
+      minute windows.
+- [ ] Bell 🔔 + Settings → Notifications: six subspace rows (roles 🎩,
+      bans 🚫, join accepted 🎉, posts removed 🧹, join requests 🙋,
+      reports 🚩 — the last two default email OFF). The bell's verb keys off
+      the preview's detail half only (`subspaceNotificationDetail`): a
+      promotion in `s/deleted_scenes` reads "changed your role", a ban in
+      `s/uplifted_minds` reads "banned you" — never "deleted a subspace" /
+      "lifted your ban". Promote/demote rings
+      `subspace-role`, ban/unban rings `subspace-ban`; each row reads
+      "<actor> changed your role in a subspace" with the `s/<slug> · …`
+      preview beneath and clicking it opens `/s/<slug>`. Switching a type off
+      hides its existing rows immediately.
+
+- [ ] At a 375px viewport (owner, member, non-mod member, pending
+      requester and guest): `/s`, `/s/<slug>`, every `/s/<slug>/mod` tab,
+      `/feed` with **🪐 My subspaces** on, `/explore`, `/search?q=` and
+      `/settings` have `scrollWidth === clientWidth`; every post card's action
+      row wraps so the `👁 views` counter sits on its own right-aligned line
+      instead of being clipped by the card edge (the vote pill made the row
+      wider than the card); the Remove / Ban / Report / Flair / Transfer /
+      Delete modal titles wrap clear of the close ✕ (header `paddingRight`),
+      the **Who can post** select (Create modal + mod Settings) shows short
+      `emoji Label` options with the access hint as helper text beneath it
+      rather than a clipped two-line option, and the mod page header keeps
+      the subspace name on one line with `← Back to s/<slug>` dropping to its
+      own right-aligned line.
+
+## Up/down votes (`remix/app/api/utils/things/updown.ts`, `remix/app/components/Feed/UpdownControl.tsx`)
+
+- [ ] Every post and comment card shows the ▲ score ▼ pill beside the
+      react button (native emoji reactions are untouched — react, multi-react
+      and the picker keep working on the same card). Tap ▲: the arrow fills,
+      score +1 INSTANTLY (optimistic), then the server tally reconciles; tap
+      ▲ again → cleared; tap ▼ while ▲ is set → flips (score −2 net, up −1,
+      down +1). Rapid double-taps never double-count (in-flight guard).
+- [ ] `POST /api/v1/things/updown { id, direction }` returns
+      `votes { up, down, score, viewerVote }` matching the card; `direction:
+      null` clears; `"sideways"` 400s; anonymous 401; a subspace/data thing id
+      400s (only posts/comments are votable); a not-visible post 404s.
+- [ ] One vote per user per target survives races (root `uniqueKeys`
+      `updownKey:<targetId>~<userId>`): two tabs voting the same post converge
+      on one doc; the 409 "vote slot blocked" path never returns a silent ok.
+- [ ] Logged out: pills show the score, tapping toasts "Log in to vote 🔼".
+- [ ] Votes on a comment ride `comments[].votes` in every projection and the
+      comment pill is compact; a shared post's nested original shows the
+      live score read-only.
+- [ ] Banned subspace members get 403 voting on that subspace's posts AND
+      their comments (root-post walk); votes elsewhere keep working.
+- [ ] Vote endpoint failure (devtools: fail `/api/v1/things/updown` once)
+      reverts the pill to the pre-tap tally with a Lopu error toast.
+- [ ] Subspace sorts use the relational tallies: Top (with range) orders by
+      score, Controversial needs both sides and peaks when split, Rising
+      favours fresh score, Hot is time-weighted (a two-day-old high scorer
+      falls behind fresh content), New is chronological with pins first;
+      `scripts/verify-subspaces.mjs` walks all of this against a live stack.
+
 ## Thing context menu (`remix/app/components/Thingtime/ContextMenu/`)
 
 - [ ] Open the hover (popover) menu from a row inside a SMALL editor box: the

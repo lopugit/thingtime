@@ -39,6 +39,7 @@ import {
   type ThingDoc,
   type Viewer
 } from './things';
+import { subspaceFeedClauses } from '../subspaces/gate';
 import { attachRankScores, type RankedSearchSource } from './searchRanking';
 import { emojiTokensForSearchTerm } from './emojiSearch';
 
@@ -559,7 +560,8 @@ export const searchThings = async (
       : directVisibility;
   if (!visibility) return emptyResult;
 
-  const baseMatch = withMatch(visibility, ...clauses);
+  // subspace fences (removed / private-subspace posts) — same clauses the feeds use
+  const baseMatch = withMatch(visibility, ...clauses, ...subspaceFeedClauses(viewer));
   const ranked = sort === 'relevance';
 
   // A cursor is minted for one paging mode and is meaningless in another: offset
