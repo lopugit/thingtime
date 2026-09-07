@@ -4053,6 +4053,13 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       resolves to the exact private user-data file. Bootstrap must not issue an
       unconditional immediate kickstart. Replace an exact old managed node,
       then confirm launchd owns one new PID with `runs = 1` and no exit.
+- [ ] In Desktop settings, use **Stop node**, **Start node**, then **Restart node**.
+      Stop must remove the running service while preserving pairing and the plist;
+      Start resumes one node, Restart changes its PID, and rapid clicks must not
+      create overlapping registrations. Check desktop and mobile widths, including
+      long version strings and error messages. Open the node menu **About Thingtime
+      Node** and verify version, build, source commit, bundle ID, and management
+      mode match the actual installed bundle without account or secret data.
 - [ ] With **Auto-start node on Thingtime launch** left at its default-on
       setting, use the native menu-bar **Quit Thingtime**, confirm launchd is
       stopped while the managed plist remains, then Cmd+Q/reopen the installed

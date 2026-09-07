@@ -904,6 +904,7 @@ class ThingtimeNodeIntegration {
 		this.electronDir = electronDir;
 		this.environment = environment;
 		this.runner = runner;
+		this.serviceOperation = Promise.resolve();
 	}
 
 	paths() {
@@ -1067,7 +1068,46 @@ class ThingtimeNodeIntegration {
 		});
 	}
 
-	async registerService(options = {}) {
+	withServiceLock(operation) {
+		const pending = this.serviceOperation.then(operation);
+		this.serviceOperation = pending.catch(() => {});
+		return pending;
+	}
+
+	registerService(options = {}) {
+		return this.withServiceLock(() => this._registerService(options));
+	}
+
+	reconcileRegisteredService(options = {}, policy = {}) {
+		return this.withServiceLock(() => this._reconcileRegisteredService(options, policy));
+	}
+
+	unregisterService() {
+		return this.withServiceLock(() => this._unregisterService());
+	}
+
+	controlService(action, options = {}) {
+		if (!['start', 'stop', 'restart'].includes(action)) {
+			return Promise.reject(new ThingtimeNodeBridgeError('invalid_request', 'Unsupported node control.'));
+		}
+		return this.withServiceLock(async () => {
+			if (action === 'start') return this._reconcileRegisteredService(options, { startIfStopped: true });
+			if (action === 'restart') return this._registerService(options);
+			const paths = this.paths();
+			const existing = await readManagedLaunchAgent(paths, this.runner);
+			const registration = await this.registrationStatus();
+			if (registration.registered && existing === null) {
+				throw new ThingtimeNodeBridgeError('login_item_conflict', 'The running node has no Desktop-owned registration.');
+			}
+			const stopped = await this.runner('/bin/launchctl', ['bootout', `gui/${process.getuid()}/${NODE_LABEL}`], {
+				maximumOutputBytes: MAX_ERROR_BYTES, timeoutMs: 10_000
+			});
+			requireLaunchctlSuccess(stopped, 'stop the node', { allowMissing: true });
+			return this.status();
+		});
+	}
+
+	async _registerService(options = {}) {
 		const paths = this.paths();
 		await this.verify(paths);
 		if (!this.app.isPackaged && this.environment.THINGTIME_NODE_ALLOW_DEV_REGISTRATION !== '1') {
@@ -1126,7 +1166,7 @@ class ThingtimeNodeIntegration {
 		return this.status();
 	}
 
-	async reconcileRegisteredService(options = {}, { startIfStopped = false } = {}) {
+	async _reconcileRegisteredService(options = {}, { startIfStopped = false } = {}) {
 		const paths = this.paths();
 		const registration = await this.registrationStatus();
 		const existing = await readManagedLaunchAgent(paths, this.runner);
@@ -1134,7 +1174,7 @@ class ThingtimeNodeIntegration {
 			// The default-on launch preference owns installation as well as recovery.
 			if (startIfStopped !== true) return this.status();
 			await this.verify(paths);
-			return this.registerService(options);
+			return this._registerService(options);
 		}
 		await this.verify(paths);
 		if (existing === null) {
@@ -1143,14 +1183,14 @@ class ThingtimeNodeIntegration {
 				'A Thingtime Node service is registered without a Thingtime Electron-managed LaunchAgent and was left unchanged.'
 			);
 		}
-		if (existing.toString('utf8') !== this.servicePlist(paths, options)) return this.registerService(options);
+		if (existing.toString('utf8') !== this.servicePlist(paths, options)) return this._registerService(options);
 		const status = await this.status();
 		// launchd registration alone does not mean a process is serving requests.
-		if (startIfStopped && status.serviceStatus === 'starting') return this.registerService(options);
+		if (startIfStopped && status.serviceStatus === 'starting') return this._registerService(options);
 		return status;
 	}
 
-	async unregisterService() {
+	async _unregisterService() {
 		const paths = this.paths();
 		const domain = `gui/${process.getuid()}`;
 		const existing = await readManagedLaunchAgent(paths, this.runner);

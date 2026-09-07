@@ -603,3 +603,30 @@ test('binary plist rewrite retains Desktop ownership', { skip: process.platform 
 		assert.equal(fixture.state.bootstrapCalls, 2);
 	} finally { await rm(fixture.root, { recursive: true, force: true }); }
 });
+
+test('Desktop stop preserves the plist and a later start resumes exactly one node', async () => {
+	const fixture = await makeSignedNodeFixture();
+	try {
+		await fixture.integration.controlService('start');
+		const plist = await readFile(fixture.paths.launchAgentPath, 'utf8');
+		const stopped = await fixture.integration.controlService('stop');
+		assert.equal(stopped.serviceStatus, 'stopped');
+		assert.equal(await readFile(fixture.paths.launchAgentPath, 'utf8'), plist);
+		await fixture.integration.controlService('start');
+		await fixture.integration.controlService('start');
+		assert.equal(fixture.state.bootstrapCalls, 2);
+		await fixture.integration.controlService('restart');
+		assert.equal(fixture.state.bootstrapCalls, 3);
+	} finally { await rm(fixture.root, { recursive: true, force: true }); }
+});
+
+test('concurrent node commands are serialized and invalid controls cannot mutate launchd', async () => {
+	const fixture = await makeSignedNodeFixture();
+	try {
+		await assert.rejects(fixture.integration.controlService('delete'), { code: 'invalid_request' });
+		assert.equal(fixture.state.bootoutCalls, 0);
+		await Promise.all([fixture.integration.controlService('start'), fixture.integration.controlService('stop')]);
+		assert.equal(fixture.state.serviceRegistered, false);
+		assert.equal(fixture.state.bootstrapCalls, 1);
+	} finally { await rm(fixture.root, { recursive: true, force: true }); }
+});

@@ -121,7 +121,12 @@ preference is enabled. Turning it off leaves a stopped node stopped. A persisten
 plist owner field survives macOS plist rewrites; legacy agents are adopted only
 when they identify the same bundled helper, connector, runtime and Mach service.
 The Desktop version is recorded so replacing an app at the same path restarts
-the node with that build. Manual registration remains available. Electron writes
+the node with that build. Desktop Settings provides Start, Stop, and Restart controls with live status.
+Stop preserves pairing and registration and suppresses automatic recovery for
+the current Desktop session. A later launch follows the auto-start preference.
+Node lifecycle mutations are serialized. The Node menu includes About Thingtime
+Node with version, build, source commit, bundle ID, architecture, and management
+mode. Manual registration remains available. Electron writes
 a per-user LaunchAgent containing valid ordinary `<key>` fields and absolute
 paths into the installed signed app, validates the plist, then calls
 `/bin/launchctl` with fixed arguments (never through a shell). Bootstrap is not

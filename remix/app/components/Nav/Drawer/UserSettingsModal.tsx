@@ -6,6 +6,7 @@ import { X } from 'lucide-react';
 import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z, DRAWER_TOP_LEVEL_DEFAULT_LIMIT, useDrawer, useIsMobileViewport } from './useDrawer';
 import { drawerItemClosesOnClick, drawerMenuItems, filterDrawerItemsByAuth } from './drawerMenu';
 import { AccountSwitcher } from '../../Account/AccountSwitcher';
+import { DesktopNodeControls } from './DesktopNodeControls';
 import { ElectronUpdateManager } from './ElectronUpdateManager';
 import { LopuPositionSelect } from '../../Lopu/LopuPositionSelect';
 import { useLopu } from '../../Lopu/useLopu';
@@ -553,6 +554,7 @@ export const UserSettingsModal = () => {
 							</Button>
 						</Flex>
 					</Flex>
+					<DesktopNodeControls active={accountModalOpen} />
 					<Flex flexDirection="column" rowGap={2} paddingTop={2} borderTop="1px solid" borderColor="blackAlpha.100">
 						<Text fontSize="sm">Thingtime Node menu bar icon</Text>
 						<Select
