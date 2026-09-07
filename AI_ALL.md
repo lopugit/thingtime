@@ -59,13 +59,17 @@ product direction or architecture tradeoffs matter. Default to
 single-source-of-truth, determinism, test-equals-live cohesion, and merge
 commits.
 
+Evidence and sequencing sit upstream of that backlog, one stage per tree:
+`NOTES/` holds dated, sourced observations and open questions that nothing has
+committed to yet; `PLAN/` turns a note into gated milestones, metrics, and stop
+conditions; `TODO/` is the actionable work; `DECISIONS.md` records the durable
+fork once the owner decides. Write a note before a plan and a plan before a new
+`TODO/claude-todo/NN-*.md`, and update the index that fronts each tree
+(`NOTES/README.md`, `PLAN/README.md`, `TODO/TODO.md` plus
+`TODO/claude-todo/README.md`) in the same change — those indexes are the entry
+points, not the individual files.
+
 ## Local development and worktrees
-
-## Commander macOS distribution signing
-
-- For Commander direct-distribution builds, prefer an installed `Developer ID Application` identity whenever one is available. Do not silently fall back to `Apple Development`, `Apple Distribution`, or ad-hoc signing for a release build: those identities do not provide the same Gatekeeper contract.
-- Keep local iteration explicit with `COMMANDER_SIGNING_MODE=development`; production/direct-distribution builds must fail closed when no Developer ID Application certificate and private key are installed.
-- Keep Apple Developer and notarization credentials in the Keychain or CI secret store only. Never print, export, commit, or copy their values into project documentation.
 
 - On local desktop sessions, use the PM2 ecosystem configs for local dev servers instead of starting duplicate ad-hoc app servers. The local alias `pm` may be available for PM2; otherwise use `pm2`. The root `ecosystem.config.js` defines `thingtime-stack`, while `remix/ecosystem.config.js` defines the Nitro + React Router dev app `tt-nitro-react-router-9999`, with Vite on port 9999 and Nitro on port 10000. Prefer `npm run web-pms` from the repo root, or the compatibility alias `npm run remix-pms`, to start or restart the local web app — it is now the blessed lifecycle command (it cleans up the previous timestamped app and starts a fresh one). Do **not** use a raw `pm2 restart ecosystem.config.js`: the app name carries a clock-time suffix that is re-stamped on each config load, so a raw restart would spawn a duplicate instead of restarting in place. Do not restart the PM2-managed web dev app after every source edit; it has rebuild/hot reloading. Restart only for env var changes, dependency/native-binding changes, server config changes, a crashed/stale process, or an explicit user request. Stop/restart the managed app before claiming a local dev-server state.
 - Worktree dev servers: `remix/scripts/worktree-ports.cjs` is the single source
@@ -127,6 +131,12 @@ commits.
   checkouts generate untracked `remix/.env.auto` via `pre-dev.sh`, and Vercel
   reads `VERCEL_GIT_COMMIT_REF` from the system env at build and runtime.
 - If local web dev 500s with a missing `bcrypt_lib.node` native binding, run `corepack pnpm --dir remix run ensure-bcrypt`, then restart the PM2-managed `tt-nitro-react-router-9999` app. The app `postinstall`, `dev`, and `build` scripts also run this check automatically.
+
+## Commander macOS distribution signing
+
+- For Commander direct-distribution builds, prefer an installed `Developer ID Application` identity whenever one is available. Do not silently fall back to `Apple Development`, `Apple Distribution`, or ad-hoc signing for a release build: those identities do not provide the same Gatekeeper contract.
+- Keep local iteration explicit with `COMMANDER_SIGNING_MODE=development`; production/direct-distribution builds must fail closed when no Developer ID Application certificate and private key are installed.
+- Keep Apple Developer and notarization credentials in the Keychain or CI secret store only. Never print, export, commit, or copy their values into project documentation.
 
 ## Browser and UI validation
 
