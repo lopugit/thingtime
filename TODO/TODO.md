@@ -111,7 +111,6 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
    > are closed. A3 is throttled but not yet bounded. Do not re-claim A1/A2 or
    > A3's throttle. Full spec and original finding:
    > `claude-todo/09-security-hardening.md` §A.
-
    - ✅ **A1 — `POST /api/v1/mongodb/raw-results`**
      (`remix/app/routes/api/v1/mongodb/raw-results/_raw-results.tsx`): loader and
      action both gate on `requireAdmin`, then a fail-closed `mongodb.query`
@@ -130,7 +129,7 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
      minted token is non-expiring (`signJwt expiresIn:null`,
      `createSession expiresAt:null`) and carries the 5 GiB
      `storageAllowanceBytes` default. Bound the token lifetime before closing
-     this item. (`getCurrentUser` only disables an *unverified* service token
+     this item. (`getCurrentUser` only disables an _unverified_ service token
      after a 7-day grace, so it does not bound a verified one.) PR #103 was
      closed unmerged and covered signup/item 8, not A3.
 
@@ -237,7 +236,7 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     (fixing the previously-broken `~/`-alias suites and covering the
     scriptless `collectionNames.test.ts`); `typecheck` plus a
     `typecheck:ratchet` that fails only when the tsc error count grows past
-    `scripts/typecheck-baseline.json`; and `.github/workflows/web-ci.yml`
+    `remix/scripts/typecheck-baseline.json`; and `.github/workflows/web-ci.yml`
     (build + ratchet + unit tests, and the full API suite against a real
     Vite + Nitro + Mongo stack). **Still open:** progressively enabling tsc
     strictness to burn the baseline down (start with `noImplicitAny`, fixing
@@ -302,7 +301,7 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     confirmation, never the author-controlled button label, is the source of
     truth about what executes. Since the 2026-08-25 security review the
     delegated run path is owner-pinned, so foreign markup can only ever name
-    one of the viewer's *own* actions — with author-chosen inputs, and a bare
+    one of the viewer's _own_ actions — with author-chosen inputs, and a bare
     key is exactly the case the dialog cannot resolve client-side. Ownership
     therefore sets confirmation strength rather than acting as an on/off
     switch: a component the viewer did not author always confirms, with no
@@ -321,7 +320,56 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     client-identity control plane.
     Full spec: `claude-todo/21-app-composition-surface.md`.
 
-21. **🚨 P0: Keep all established functionality available across pending storage migrations.**
+21. **🌱 Define and prove a trustworthy adoption loop.**
+
+    Thingtime has many useful creation, search, history, sharing, component,
+    action, invite, and composed-app ideas, but no shared definition of healthy
+    adoption. Approve one first-value journey, useful-return metric, privacy-safe
+    learning contract, consentful sharing gate, accessibility/reliability
+    guardrails, and aligned sustainability path before optimizing acquisition.
+    Raw signups, page views, time-on-site, and content volume are not north-star
+    outcomes. Start with the evidence note and phased roadmap, then execute the
+    bounded epic in `claude-todo/22-trustworthy-adoption-loop.md`.
+
+22. **🧳 Prove data portability and a graceful exit.**
+
+    Thingtime publicly promises open, always-exportable data and no lock-in,
+    while today's verified primitives are paginated Thing reads, per-item and
+    per-app deletion, private per-file downloads, and a split home/custom data
+    plane. Define one account-wide inventory, versioned open archive, offline
+    verifier, safe semantic restore, selective deletion, and resumable account
+    closure contract. Exclude credentials and foreign private data; never let
+    imported data grant authority; keep baseline exit available to every tier.
+    Start with the evidence note and phased roadmap, then execute
+    `claude-todo/23-data-portability-and-exit.md`.
+
+23. **🌿 Make attention agency and calm use a product contract.**
+
+    Preserve Thingtime's chronological no-training feed and granular
+    notification controls while making automatic continuation, ranked-feed
+    training, corrective feedback, per-post explanations, stopping points, and
+    delivery defaults explicit choices. Useful return may improve, but not by
+    rewarding more minutes, scroll depth, training events, streaks, or
+    notification opens. Start with the evidence note and phased roadmap, then
+    execute `claude-todo/24-attention-agency-and-calm-use.md` only after the
+    owner approves defaults, migration behavior, and guardrail owners.
+
+24. **🌍 Make accessibility and language readiness a release contract.**
+
+    Preserve Thingtime's existing reduced-motion, announcement, focus, and
+    feature-level keyboard work while replacing scattered checks with one
+    complete-journey matrix, impact-led severity policy, shared interaction
+    foundation, and canonical locale/formatting layer. Target WCAG 2.2 AA for
+    approved core web journeys only if the owner accepts the decision packet;
+    do not publish a conformance claim from lint or automated scores. Keep UI
+    locale, authored-content language, and translation separate, and never send
+    private Things to a translator without a distinct approved data contract.
+    Start with the evidence note and phased roadmap, then execute
+    `claude-todo/25-accessibility-and-language-readiness.md` after the owner
+    approves scope, locales, test environments, severity, and accountable
+    owners.
+
+25. **🚨 P0: Keep all established functionality available across pending storage migrations.**
 
     Deploying code to `develop`, production, or another running shared branch
     must never make existing user-data reads or writes depend on an operator
@@ -333,3 +381,136 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     save, share, or other established capabilities. If compatibility cannot be
     preserved, block the deployment in CI rather than rejecting live user work.
     Full spec: `claude-todo/24-migration-safe-continuous-availability.md`.
+
+26. **🛡️ Make community safety and moderation accountable.**
+
+    Preserve Thingtime's shipped community roles, invite controls, message
+    requests, chat mute, and automated moderation while adding the missing
+    human loop: quiet account-level boundaries, specific reports, durable case
+    events, scoped moderator jurisdiction, policy reasons, status, appeal,
+    remedy, and privacy-safe transparency. Models may assist or quarantine under
+    an approved policy; report counts and model verdicts must never be the sole
+    basis for durable high-impact sanctions. Start with the evidence note and
+    phased roadmap, then execute
+    `claude-todo/26-community-safety-and-accountable-moderation.md` only after
+    the owner approves scope, evidence retention, staffing, and stop conditions.
+
+27. **🧩 Build a trusted developer ecosystem.**
+
+    Preserve Thingtime's origin-bound OAuth, explicit scopes, revocation,
+    user-owned app data, sandbox, generated API docs, semantic capability
+    negotiation, and capability-bounded actions while adding the missing
+    distribution lifecycle: accountable publisher declarations, immutable
+    releases, permission and compatibility diffs, reproducible review receipts,
+    narrow incident containment, remediation/appeal, abandonment, and fair
+    discovery. A declaration or badge must never widen runtime authority, and
+    popularity or payment must never substitute for evidence. Start with the
+    evidence note and phased roadmap, then execute
+    `claude-todo/27-trusted-developer-ecosystem.md` only after the owner approves
+    the first artifact family, review capacity, consent rules, incident states,
+    funding boundaries, and stop conditions.
+
+28. **🛟 Make service continuity and recovery a user-facing contract.**
+
+    Preserve Thingtime's existing frontend, Nitro, MongoDB, and deployment
+    health signals while replacing point-in-time readiness with journey-level
+    service objectives, safe degraded modes, truthful write outcomes, verified
+    backups and restore drills, incident ownership, and dependency-failure
+    exercises. Health checks and successful deployments are evidence inputs,
+    not proof that user work is durable or recoverable. Start with the evidence
+    note and phased roadmap, then execute
+    `claude-todo/28-service-continuity-and-recovery.md` only after the owner
+    approves critical journeys, objectives, recovery targets, communication
+    ownership, drill environments, and stop conditions.
+
+29. **🧭 Make content provenance and correction integrity legible.**
+
+    Preserve Thingtime's account-bound authorship, creation/update timestamps,
+    sharing references, and public projections while making material edits,
+    source claims, derivation, platform assistance, corrections, disputes, and
+    evidence limits understandable. Never turn provenance into a universal
+    truth badge, infer AI use from a detector, expose private prompts or source
+    material, or let unsigned user declarations gain platform authority. Start
+    with the evidence note and phased roadmap, then execute
+    `claude-todo/29-content-provenance-and-correction-integrity.md` only after
+    the owner approves the first artifact family, public edit policy, retention
+    and deletion semantics, assertion authority, dispute/remedy ownership, and
+    interoperability pilot boundary.
+
+30. **🌱 Make resource-conscious reach a release contract.**
+
+    Preserve Thingtime's route splitting, immutable asset caching, lazy images,
+    exact byte ledgers, and explicit offline audio while adding complete-journey
+    budgets for constrained devices and networks, a private data-saver choice,
+    intentional media derivatives, bounded local copies, backend-work evidence,
+    and honest environmental-claim limits. Do not remove meaning or safety to
+    hit a score, infer constrained users from sensitive traits, confuse billing
+    bytes with emissions, or queue offline mutations before authority and
+    conflict semantics are approved. Start with the evidence note and phased
+    roadmap, then execute `claude-todo/30-resource-conscious-reach.md` only
+    after the owner approves journeys, test profiles, resource envelopes,
+    tier-neutral meaning, offline scope, signal boundaries, and accountable
+    owners.
+
+31. **🌻 Make creator sustainability and fair value a product contract.**
+
+    Preserve Thingtime's provider-independent subscription tiers, quota
+    accounting, marketplace metadata, authorship, provenance, and portability
+    foundations while defining one honest creator value exchange. Decide the
+    seller, merchant, fulfilment, tax, refund, dispute, loss, payout, and support
+    roles before choosing payment rails; keep signed provider events separate
+    from canonical offers, orders, receipts, entitlements, remedies, and private
+    ledgers. Money must never buy reach, trust, safety, identity disclosure,
+    accessibility, export, or deletion. Start with the evidence note and phased
+    roadmap, then execute
+    `claude-todo/31-creator-sustainability-and-fair-value.md` only after the owner
+    and qualified reviewers approve the fixed-artifact pilot, country/currency,
+    responsibilities, terms, data boundary, provider criteria, operating
+    capacity, guardrails, and stop authority.
+
+32. **📚 Make learning agency and knowledge stewardship a product contract.**
+
+    Preserve Thingtime's knowledge-oriented Things, private relational saves,
+    calm anniversary memories, search, and proposed history/provenance
+    foundations while proving one user-chosen knowledge revisit. Keep saving,
+    scheduling, opening, reflecting, and sharing separate; bind private
+    reflection to authorized source/version context; and never label opens,
+    completions, confidence, streaks, or time spent as learning. Start with the
+    evidence note and phased roadmap, then execute
+    `claude-todo/32-learning-agency-and-knowledge-stewardship.md` only after the
+    owner and qualified reviewers approve the adult cohort, artifact family,
+    one-shot in-app journey, data boundary, evaluation, accessibility profiles,
+    exclusions, owners, and stop authority. AI, minors, schools, assessment,
+    credentials, institutional dashboards, and efficacy claims remain
+    separately gated.
+
+33. **🤝 Make AI agency and accountable assistance a product contract.**
+
+    Preserve Lopu's owner-private chats, explicit model/provider selection,
+    user-vault boundaries, tool evidence, signed exact-action confirmations,
+    and compact receipts while making context, authority, uncertainty,
+    correction, and remedy understandable end to end. Start with one private,
+    previewable, reversible draft journey for consenting adults. Execute
+    `claude-todo/33-ai-agency-and-accountable-assistance.md` only after the
+    owner and qualified reviewers approve the assistance charter, context and
+    memory boundary, capability-risk map, receipt and remedy contract,
+    evaluation, accessibility profiles, accountable owners, and stop authority.
+    Public, external, bulk, unattended, child-facing, and high-impact uses
+    remain separately gated.
+
+34. **🫶 Make collaboration agency and shared stewardship a product contract.**
+
+    Preserve Thingtime's owner-bound Things, explicit ACL visibility,
+    consent-based relationships, relational Messenger membership, bounded
+    community roles and invites, and exact-state update guard while defining
+    one honest shared-artifact lifecycle. Start with one named adult who may
+    suggest bounded changes to one owner-private draft; the owner accepts or
+    rejects against an exact version; either person can stop without stale
+    authority or silent loss. Execute
+    `claude-todo/34-collaboration-agency-and-shared-stewardship.md` only after
+    the owner and qualified reviewers approve invitation disclosure, role and
+    capability states, proposal/conflict semantics, departure/removal effects,
+    evidence and remedy boundaries, accessibility profiles, accountable
+    owners, and stop authority. Public groups, guests, anonymous participants,
+    direct or real-time co-editing, rights transfer, money, apps, AI agents,
+    minors, institutions, and high-impact use remain separately gated.

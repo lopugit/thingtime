@@ -118,6 +118,10 @@ systems. Reusable whimsy exports (from the review):
   people a reason to come back and raise their feed. *(`AlgorithmMenu.tsx` dot
   title ~L341, `AlgorithmManager.tsx` label ~L248, `useFeedEngagement.ts`
   thresholds.)* **See the mockup in `docs/design/thingtime-algorithm-growth/`.**
+  Treat the growth stage as an explanation of learning, not a retention target:
+  before expanding it, meet [TODO 24's attention-agency gates](./24-attention-agency-and-calm-use.md)
+  for training pause, correction, stopping points, and metrics that do not
+  reward more scrolling.
 
 ## ⌨️ Power user / dev
 
@@ -158,4 +162,7 @@ systems. Reusable whimsy exports (from the review):
 ## Done when
 
 Each idea graduates to its own `claude-todo/NN-*.md` when picked up. This file is
-the menu, not the commitment.
+the menu, not the commitment. Cross-feature sequencing, privacy-safe outcome
+measurement, accessibility/reliability gates, and sustainable adoption belong
+to [22 — Trustworthy adoption loop](./22-trustworthy-adoption-loop.md) and its
+[phased roadmap](../../PLAN/trustworthy-adoption-roadmap.md).
