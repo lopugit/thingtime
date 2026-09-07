@@ -11,14 +11,30 @@
 //   /api/v1/admin/ai/models toggle + seed and GET/POST
 //   /api/v1/settings/lopu-chat-defaults.
 //
+//   Section A2 (verified access + credits, design note "Lopu verified access,
+//   usage accounting and credits" §5): a fresh account is unverified → create /
+//   reply / voice session are 403 LOPU_UNVERIFIED (listing never is) → the
+//   admin verifies both throwaway accounts → with no credits a reply is 402
+//   LOPU_NO_CREDITS → the admin grants 2 credits → the reply streams (the test
+//   provider's synthetic 100/50 tokens priced against test-model: 0.2 credits)
+//   → done carries billing / costMicros / balanceMicros, the account and the
+//   history show the debit + usage row → a top-up request (one pending at a
+//   time) → admin approves (and declines another) → the admin directory lists
+//   the user → the access rules round-trip → the generic /api/v1/things paths
+//   cannot mint, read or edit the accounting kinds → a run budget is granted
+//   so every later section can chat.
+//
 //   node scripts/verify-lopu.mjs [baseUrl]
 //
 // baseUrl defaults to TT_VERIFY_BASE or this worktree's nitro port. The
-// admin section needs TT_VERIFY_ADMIN_USERNAME + TT_VERIFY_ADMIN_PASSWORD
-// (a username listed in the server's ADMIN_USERNAMES); it is skipped, not
-// failed, when they are absent. The reply section expects the server to run
-// with LOPU_CHAT_PROVIDER=test (deterministic tool script); against any other
-// provider the tool-specific checks are reported as skipped.
+// admin sections need TT_VERIFY_ADMIN_USERNAME + TT_VERIFY_ADMIN_PASSWORD
+// (a username listed in the server's ADMIN_USERNAMES); they are skipped, not
+// failed, when they are absent — but under the default access rules
+// (requireVerification) a fresh account cannot chat until an admin verifies
+// it, so without admin credentials the script stops after the walls. The
+// reply section expects the server to run with LOPU_CHAT_PROVIDER=test
+// (deterministic tool script, synthetic usage); against any other provider
+// the tool- and price-specific checks are reported as skipped.
 //
 // Section K ("your own providers", design note §1.3) always checks the vault
 // status + redacted vaultProviders on GET /api/v1/ai/models and that a
@@ -200,6 +216,17 @@ const reply = async (cookie, body) => {
   return { status: response.status, contentType, events, body: null, invalidLines };
 };
 
+const summarize = () => {
+  console.log(`\n${passed} passed, ${failures.length} failed, ${skipped} skipped`);
+  if (failures.length) {
+    console.log('Failures:');
+    for (const name of failures) console.log(`  - ${name}`);
+    process.exitCode = 1;
+  }
+};
+
+const BILLINGS = ['thingtime', 'byo', 'free'];
+
 const eventsOf = (events, type) => events.filter((event) => event?.type === type);
 const deltaText = (events) => eventsOf(events, 'delta').map((event) => event.text).join('');
 const requestId = (label) => `verify-${label}-${suffix}-${randomBytes(3).toString('hex')}`;
@@ -240,6 +267,282 @@ const run = async () => {
   check('a non-JSON voice session body is refused (415)', sessionForm.status === 415);
   const sessionDocs = await api('/api/v1/lopu/voice/session-docs');
   check('voice session docs endpoint is public and shaped', sessionDocs.status === 200 && sessionDocs.body?.docs?.endpoint === '/api/v1/lopu/voice/session');
+
+  console.log('\nA2. verified access + credits (design note "Lopu verified access, usage accounting and credits")');
+  // the walls: public rules, session-only account routes, JSON-only writes, admin-only admin routes
+  const accessRules = await api('/api/v1/settings/lopu-access');
+  const rules = accessRules.body?.settings || null;
+  check('GET /settings/lopu-access is public and shaped', accessRules.status === 200 && accessRules.body?.ok === true && accessRules.body?.key === 'Thingtime.LopuAccess' && !!rules && typeof rules.requireVerification === 'boolean' && typeof rules.allowByoUnverified === 'boolean' && typeof rules.starterCredits === 'number' && typeof rules.lowBalanceWarningCredits === 'number');
+  check('the access rules response is not cached', (accessRules.headers.get('cache-control') || '').includes('no-store'));
+  const accountAnon = await api('/api/v1/lopu/account');
+  check('GET /lopu/account without auth is 401', accountAnon.status === 401 && !('account' in (accountAnon.body || {})));
+  const historyAnon = await api('/api/v1/lopu/account/history');
+  check('GET /lopu/account/history without auth is 401', historyAnon.status === 401);
+  const topupAnon = await api('/api/v1/lopu/account/topup-request', { method: 'POST', body: { credits: 1 } });
+  check('POST /lopu/account/topup-request without auth is 401', topupAnon.status === 401);
+  const topupForm = await api('/api/v1/lopu/account/topup-request', { cookie: user.cookie, method: 'POST', raw: true, body: 'credits=1', headers: { 'Content-Type': 'text/plain' } });
+  check('a non-JSON top-up request is refused (415)', topupForm.status === 415);
+  const accountDocs = await api('/api/v1/lopu/account-docs');
+  check('account docs endpoint is public and shaped', accountDocs.status === 200 && accountDocs.body?.docs?.endpoint === '/api/v1/lopu/account');
+  const plainVerify = await api('/api/v1/admin/users/lopu-access', { cookie: user.cookie, method: 'POST', body: { userId: user.id, verified: true } });
+  check('a plain user cannot verify Lopu access', plainVerify.status === 403 || plainVerify.status === 401);
+  const plainAccounts = await api('/api/v1/admin/lopu/accounts', { cookie: user.cookie });
+  check('a plain user cannot list Lopu accounts', (plainAccounts.status === 403 || plainAccounts.status === 401) && !('accounts' in (plainAccounts.body || {})));
+  const plainCredits = await api('/api/v1/admin/lopu/credits', { cookie: user.cookie, method: 'POST', body: { userId: user.id, credits: 100 } });
+  check('a plain user cannot grant credits', plainCredits.status === 403 || plainCredits.status === 401);
+  const plainRules = await api('/api/v1/settings/lopu-access', { cookie: user.cookie, method: 'POST', body: { requireVerification: false } });
+  check('a plain user cannot change the access rules', plainRules.status === 403 || plainRules.status === 401);
+
+  // the account is created lazily on the first read, unverified
+  const account0 = await api('/api/v1/lopu/account', { cookie: user.cookie });
+  const acct0 = account0.body?.account || null;
+  check('GET /lopu/account creates the account lazily with the public shape', account0.status === 200 && account0.body?.ok === true && !!acct0 && acct0.userId === user.id && typeof acct0.verified === 'boolean' && typeof acct0.requireVerification === 'boolean' && typeof acct0.allowByoUnverified === 'boolean' && Number.isSafeInteger(acct0.balanceMicros) && typeof acct0.balanceCredits === 'number' && typeof acct0.lowBalance === 'boolean' && /^\d{4}-\d{2}$/.test(acct0.month?.key || '') && Number.isSafeInteger(acct0.month?.turns) && Number.isSafeInteger(acct0.lifetime?.turns) && typeof acct0.starterCredits === 'number' && acct0.starterGranted === true && 'topupUrl' in acct0 && 'pendingRequest' in acct0, JSON.stringify(account0.body));
+  check('the account response is not cached', (account0.headers.get('cache-control') || '').includes('no-store'));
+  check('a fresh account is not verified', acct0?.verified === false);
+  const starterMicros = Math.round((rules?.starterCredits ?? 0) * 1_000_000);
+  check('the starter grant matches the rules', acct0?.balanceMicros === starterMicros);
+  const requireVerification = acct0?.requireVerification === true;
+  const admin = ADMIN_USERNAME && ADMIN_PASSWORD ? await login(ADMIN_USERNAME, ADMIN_PASSWORD) : null;
+
+  if (requireVerification) {
+    const lockedCreate = await api('/api/v1/lopu/chats', { cookie: user.cookie, method: 'POST', body: {} });
+    check('an unverified account cannot start a conversation (403 LOPU_UNVERIFIED, Lopu-voiced copy)', lockedCreate.status === 403 && lockedCreate.body?.ok === false && lockedCreate.body?.code === 'LOPU_UNVERIFIED' && /invite-only/.test(String(lockedCreate.body?.error)), JSON.stringify(lockedCreate.body));
+    const lockedReply = await api('/api/v1/lopu/chats/reply', { cookie: user.cookie, method: 'POST', body: { text: 'hi', requestId: requestId('locked') } });
+    check('an unverified account cannot reply (403 LOPU_UNVERIFIED, nothing streamed)', lockedReply.status === 403 && lockedReply.body?.code === 'LOPU_UNVERIFIED');
+    const lockedSession = await api('/api/v1/lopu/voice/session', { cookie: user.cookie, method: 'POST', body: { providerId: 'prov-does-not-exist-000' } });
+    check('an unverified account cannot start a direct voice session (403 before the connection is checked)', lockedSession.status === 403 && lockedSession.body?.code === 'LOPU_UNVERIFIED');
+    const lockedVoice = await api('/api/v1/lopu/voice/reply', { cookie: user.cookie, method: 'POST', body: { transcript: 'hi', sessionId: 'verify-voice', providerId: 'prov-does-not-exist-000' } });
+    check('an unverified account cannot run a voice turn (403)', lockedVoice.status === 403 && lockedVoice.body?.code === 'LOPU_UNVERIFIED');
+    const lockedList = await api('/api/v1/lopu/chats', { cookie: user.cookie });
+    check('listing conversations is never gated', lockedList.status === 200 && lockedList.body?.ok === true);
+    const lockedPersisted = await api('/api/v1/lopu/chats', { cookie: user.cookie });
+    check('the refused turns persisted no conversation', lockedPersisted.body?.chats?.length === 0);
+  } else {
+    skip('the unverified walls (403 LOPU_UNVERIFIED)', 'the server does not require verification (Thingtime.LopuAccess.requireVerification=false)');
+  }
+
+  if (!admin) {
+    skip('verified access + credits (admin verifies, grants, approves)', ADMIN_USERNAME ? 'admin login failed' : 'set TT_VERIFY_ADMIN_USERNAME + TT_VERIFY_ADMIN_PASSWORD');
+    if (requireVerification) {
+      skip('every later section', 'under requireVerification a fresh account cannot chat until an admin verifies it — provide the admin credentials');
+      summarize();
+      return;
+    }
+  } else {
+    // the admin verifies both throwaway accounts: the rest of the script
+    // chats as `user`, and `other` exercises the "another user" walls, which
+    // must be permission walls rather than the verification wall
+    const verified = await api('/api/v1/admin/users/lopu-access', { cookie: admin.cookie, method: 'POST', body: { userId: user.id, verified: true } });
+    check('admin verifies the account (the admin row carries lopuVerified)', verified.status === 200 && verified.body?.ok === true && verified.body?.user?.id === user.id && verified.body.user.lopuVerified === true, JSON.stringify(verified.body));
+    const verifiedOther = await api('/api/v1/admin/users/lopu-access', { cookie: admin.cookie, method: 'POST', body: { userId: other.id, verified: true } });
+    check('admin verifies the second account', verifiedOther.status === 200 && verifiedOther.body?.user?.lopuVerified === true);
+    const badVerify = await api('/api/v1/admin/users/lopu-access', { cookie: admin.cookie, method: 'POST', body: { userId: user.id, verified: 'yes' } });
+    check('a non-boolean verified is a 400', badVerify.status === 400);
+    const unknownVerify = await api('/api/v1/admin/users/lopu-access', { cookie: admin.cookie, method: 'POST', body: { userId: 'does-not-exist', verified: true } });
+    check('verifying an unknown user is a 404', unknownVerify.status === 404);
+    const formVerify = await api('/api/v1/admin/users/lopu-access', { cookie: admin.cookie, method: 'POST', raw: true, body: 'userId=x', headers: { 'Content-Type': 'text/plain' } });
+    check('a non-JSON verify is refused (415)', formVerify.status === 415);
+    const account1 = await api('/api/v1/lopu/account', { cookie: user.cookie });
+    check('the account now reads verified', account1.body?.account?.verified === true);
+    const rootData = await api('/api/root-data', { cookie: user.cookie });
+    check('the self profile carries lopuVerified', rootData.status === 200 && rootData.body?.user?.lopuVerified === true, JSON.stringify(rootData.body?.user?.lopuVerified));
+
+    // credits: with an empty balance a thingtime turn is a 402
+    const balance0 = account1.body?.account?.balanceMicros ?? 0;
+    if (balance0 <= 0) {
+      const broke = await api('/api/v1/lopu/chats/reply', { cookie: user.cookie, method: 'POST', body: { text: 'hi', requestId: requestId('broke') } });
+      check('with no credits a reply is a 402 LOPU_NO_CREDITS carrying the balance', broke.status === 402 && broke.body?.ok === false && broke.body?.code === 'LOPU_NO_CREDITS' && broke.body?.balanceMicros === balance0 && /credits/.test(String(broke.body?.error)), JSON.stringify(broke.body));
+      const brokeCreate = await api('/api/v1/lopu/chats', { cookie: user.cookie, method: 'POST', body: {} });
+      check('with no credits a conversation cannot be started either (402)', brokeCreate.status === 402 && brokeCreate.body?.code === 'LOPU_NO_CREDITS');
+    } else {
+      skip('402 with no credits', `the account already holds ${balance0} micros (starterCredits=${rules?.starterCredits})`);
+    }
+
+    // the admin grants 2 credits
+    const granted = await api('/api/v1/admin/lopu/credits', { cookie: admin.cookie, method: 'POST', body: { userId: user.id, credits: 2, reason: 'verify-lopu grant' } });
+    check('admin grants 2 credits (account row + ledger row echoed)', granted.status === 200 && granted.body?.ok === true && granted.body?.account?.user?.id === user.id && granted.body.account.balanceMicros === balance0 + 2_000_000 && granted.body?.ledger?.entry === 'grant' && granted.body.ledger.amountMicros === 2_000_000 && granted.body?.request === null, JSON.stringify(granted.body));
+    check('the admin credits response is private', /no-store/.test(granted.headers.get('cache-control') || ''));
+    const zeroGrant = await api('/api/v1/admin/lopu/credits', { cookie: admin.cookie, method: 'POST', body: { userId: user.id, credits: 0 } });
+    check('a zero grant is a 400', zeroGrant.status === 400);
+    const dustGrant = await api('/api/v1/admin/lopu/credits', { cookie: admin.cookie, method: 'POST', body: { userId: user.id, credits: 1e-7 } });
+    check('an amount that rounds to nothing is a 400, not a 500', dustGrant.status === 400, `status ${dustGrant.status} ${JSON.stringify(dustGrant.body)}`);
+    const negativeGrant = await api('/api/v1/admin/lopu/credits', { cookie: admin.cookie, method: 'POST', body: { userId: user.id, credits: -1, entry: 'grant' } });
+    check('a negative grant is a 400 (adjust / refund carry signs)', negativeGrant.status === 400);
+    const unknownGrant = await api('/api/v1/admin/lopu/credits', { cookie: admin.cookie, method: 'POST', body: { userId: 'does-not-exist', credits: 1 } });
+    check('granting an unknown user is a 404', unknownGrant.status === 404);
+
+    // a priced turn: the test provider reports 100 in / 50 out per hop
+    // against test-model → 0.2 credits for this one-hop greeting
+    const balanceBefore = balance0 + 2_000_000;
+    const paidRequest = requestId('paid');
+    const paid = await reply(user.cookie, { text: 'Hello Lopu, are credits working?', requestId: paidRequest });
+    const paidMeta = paid.events[0];
+    const paidDone = paid.events[paid.events.length - 1];
+    const paidChatId = paidMeta?.chatId || null;
+    check('with credits the reply streams and meta carries billing', paid.status === 200 && paidMeta?.type === 'meta' && BILLINGS.includes(paidMeta.billing), `status ${paid.status} ${JSON.stringify(paid.body || paidMeta)}`);
+    check('done carries billing, costMicros, priced and balanceMicros', paidDone?.type === 'done' && BILLINGS.includes(paidDone.billing) && Number.isSafeInteger(paidDone.costMicros) && typeof paidDone.priced === 'boolean' && (paidDone.balanceMicros === null || Number.isSafeInteger(paidDone.balanceMicros)), JSON.stringify(paidDone));
+    const testBilled = paidMeta?.provider === 'test';
+    if (testBilled) {
+      check('the test provider turn bills credits, priced against test-model (0.2 credits per hop)', paidMeta.billing === 'thingtime' && paidDone?.billing === 'thingtime' && paidDone?.priced === true && paidDone?.costMicros === 200_000 && paidDone?.usage?.inputTokens === 100 && paidDone?.usage?.outputTokens === 50, JSON.stringify({ meta: paidMeta, done: paidDone }));
+      check('the balance decreased by the priced amount', paidDone?.balanceMicros === balanceBefore - 200_000, `${paidDone?.balanceMicros} vs ${balanceBefore - 200_000}`);
+    } else {
+      skip('the test-model price of the turn', `provider=${paidMeta?.provider} — run the server with LOPU_CHAT_PROVIDER=test`);
+    }
+    check('the persisted turn carries billing and costMicros', paidDone?.messages?.[0]?.lopu?.billing === paidDone?.billing && paidDone?.messages?.[0]?.lopu?.costMicros === paidDone?.costMicros && paidDone?.messages?.[0]?.lopu?.balanceMicros === paidDone?.balanceMicros, JSON.stringify(paidDone?.messages?.[0]?.lopu));
+    const account2 = await api('/api/v1/lopu/account', { cookie: user.cookie });
+    check('GET /lopu/account reflects the turn', account2.body?.account?.balanceMicros === paidDone?.balanceMicros && account2.body.account.lifetime.turns >= 1 && account2.body.account.month.turns >= 1 && account2.body.account.lifetime.inputTokens >= (paidDone?.usage?.inputTokens || 0), JSON.stringify(account2.body?.account));
+    const history = await api('/api/v1/lopu/account/history?limit=10', { cookie: user.cookie });
+    const entries = Array.isArray(history.body?.entries) ? history.body.entries : [];
+    check('history lists the ledger newest first with the usage rows', history.status === 200 && history.body?.ok === true && entries.length >= 1 && entries.some((row) => row.entry === 'grant' && row.amountMicros === 2_000_000) && Array.isArray(history.body?.usage) && ('nextCursor' in history.body), JSON.stringify(history.body));
+    if (testBilled) {
+      const debit = entries.find((row) => row.entry === 'debit');
+      const usageRow = history.body?.usage?.find((row) => row.id === debit?.usageId);
+      check('the debit row links the usage row (chat, test provider, 100/50 tokens, priced, debited)', entries[0]?.entry === 'debit' && !!debit && debit.amountMicros === -200_000 && debit.balanceAfterMicros === paidDone?.balanceMicros && !!usageRow && usageRow.surface === 'chat' && usageRow.requestId === paidRequest && usageRow.chatId === paidChatId && usageRow.provider === 'test' && usageRow.inputTokens === 100 && usageRow.outputTokens === 50 && usageRow.costMicros === 200_000 && usageRow.debitedMicros === 200_000 && usageRow.billing === 'thingtime' && usageRow.priced === true && usageRow.hops === 1, JSON.stringify({ debit, usageRow }));
+    }
+    const badCursor = await api('/api/v1/lopu/account/history?cursor=junk', { cookie: user.cookie });
+    check('a bad history cursor is a 400', badCursor.status === 400);
+    const otherHistory = await api('/api/v1/lopu/account/history', { cookie: other.cookie });
+    check('another user’s history is their own', otherHistory.status === 200 && Array.isArray(otherHistory.body?.entries) && !otherHistory.body.entries.some((row) => entries.some((mine) => mine.id === row.id)));
+
+    // a top-up request → pending → approved; one pending at a time
+    const badTopup = await api('/api/v1/lopu/account/topup-request', { cookie: user.cookie, method: 'POST', body: { credits: 0.1 } });
+    check('a too-small top-up request is a 400', badTopup.status === 400);
+    const topup = await api('/api/v1/lopu/account/topup-request', { cookie: user.cookie, method: 'POST', body: { credits: 3, note: 'verify-lopu request' } });
+    const requestRow = topup.body?.request || null;
+    check('POST /lopu/account/topup-request creates a pending request', topup.status === 200 && topup.body?.ok === true && !!requestRow && requestRow.entry === 'request' && requestRow.requestStatus === 'pending' && requestRow.amountMicros === 3_000_000 && requestRow.amountCredits === 3 && requestRow.note === 'verify-lopu request' && requestRow.balanceAfterMicros === null, JSON.stringify(topup.body));
+    const secondTopup = await api('/api/v1/lopu/account/topup-request', { cookie: user.cookie, method: 'POST', body: { credits: 1 } });
+    check('a second request while one is pending is a 409', secondTopup.status === 409);
+    const account3 = await api('/api/v1/lopu/account', { cookie: user.cookie });
+    check('the account shows the pending request', !!requestRow && account3.body?.account?.pendingRequest?.id === requestRow.id);
+    const adminSearch = await api(`/api/v1/admin/lopu/accounts?q=${encodeURIComponent(user.username)}`, { cookie: admin.cookie });
+    const adminRow = adminSearch.body?.accounts?.find((row) => row.user?.id === user.id) || null;
+    check('the admin directory finds the user with balance, verification and the pending request', adminSearch.status === 200 && adminSearch.body?.ok === true && !!adminRow && adminRow.user.username === user.username && adminRow.user.lopuVerified === true && adminRow.hasAccount === true && typeof adminRow.accountId === 'string' && adminRow.balanceMicros === account3.body?.account?.balanceMicros && adminRow.pendingRequest?.id === requestRow?.id && typeof adminRow.lifetime?.turns === 'number' && !!adminSearch.body?.settings && typeof adminSearch.body.settings.requireVerification === 'boolean', JSON.stringify(adminSearch.body));
+    check('the admin directory is private', /no-store/.test(adminSearch.headers.get('cache-control') || ''));
+    const adminPage = await api('/api/v1/admin/lopu/accounts?limit=2', { cookie: admin.cookie });
+    check('the admin directory pages newest first', adminPage.status === 200 && Array.isArray(adminPage.body?.accounts) && adminPage.body.accounts.length <= 2 && 'nextCursor' in adminPage.body && adminPage.body.accounts.every((row) => typeof row.user?.id === 'string' && typeof row.balanceMicros === 'number'));
+    if (adminPage.body?.nextCursor) {
+      const adminPage2 = await api(`/api/v1/admin/lopu/accounts?limit=2&cursor=${encodeURIComponent(adminPage.body.nextCursor)}`, { cookie: admin.cookie });
+      check('the next directory page continues past the cursor', adminPage2.status === 200 && Array.isArray(adminPage2.body?.accounts) && !adminPage2.body.accounts.some((row) => adminPage.body.accounts.some((first) => first.user.id === row.user.id)));
+    }
+    const approved = await api('/api/v1/admin/lopu/credits', { cookie: admin.cookie, method: 'POST', body: { requestId: requestRow?.id, reason: 'verify-lopu approve' } });
+    const balanceBeforeApprove = account3.body?.account?.balanceMicros ?? 0;
+    check('admin approves the request (topup ledger row linked, balance up, request approved)', approved.status === 200 && approved.body?.ok === true && approved.body?.request?.id === requestRow?.id && approved.body.request.requestStatus === 'approved' && approved.body.request.grantedMicros === 3_000_000 && approved.body?.ledger?.entry === 'topup' && approved.body.ledger.amountMicros === 3_000_000 && approved.body.ledger.requestId === requestRow?.id && approved.body?.account?.balanceMicros === balanceBeforeApprove + 3_000_000 && approved.body.account.pendingRequest === null, JSON.stringify(approved.body));
+    const approveAgain = await api('/api/v1/admin/lopu/credits', { cookie: admin.cookie, method: 'POST', body: { requestId: requestRow?.id } });
+    check('approving twice is a 409', approveAgain.status === 409);
+    const account4 = await api('/api/v1/lopu/account', { cookie: user.cookie });
+    check('the pending request is cleared and the balance moved', account4.body?.account?.pendingRequest === null && account4.body?.account?.balanceMicros === balanceBeforeApprove + 3_000_000);
+    const afterApprove = await api('/api/v1/lopu/account/topup-request', { cookie: user.cookie, method: 'POST', body: { credits: 1 } });
+    check('a fresh request is possible once the last one is resolved', afterApprove.status === 200 && afterApprove.body?.request?.requestStatus === 'pending');
+    const declined = await api('/api/v1/admin/lopu/credits', { cookie: admin.cookie, method: 'POST', body: { requestId: afterApprove.body?.request?.id, decline: true, reason: 'not now' } });
+    check('admin declines a request (no balance change, no ledger row)', declined.status === 200 && declined.body?.request?.requestStatus === 'declined' && declined.body?.ledger === null && declined.body?.account?.balanceMicros === balanceBeforeApprove + 3_000_000, JSON.stringify(declined.body));
+    const history2 = await api('/api/v1/lopu/account/history?limit=2', { cookie: user.cookie });
+    check('history pages with a cursor (request, topup, …)', history2.status === 200 && history2.body?.entries?.length === 2 && history2.body.entries[0].entry === 'request' && history2.body.entries[0].requestStatus === 'declined' && typeof history2.body.nextCursor === 'string', JSON.stringify(history2.body?.entries));
+    if (history2.body?.nextCursor) {
+      const history3 = await api(`/api/v1/lopu/account/history?limit=2&cursor=${encodeURIComponent(history2.body.nextCursor)}`, { cookie: user.cookie });
+      check('the next history page continues past the cursor', history3.status === 200 && Array.isArray(history3.body?.entries) && history3.body.entries.length >= 1 && !history3.body.entries.some((row) => history2.body.entries.some((first) => first.id === row.id)));
+    }
+
+    // the access rules round-trip (a partial save keeps the other fields)
+    const setRules = await api('/api/v1/settings/lopu-access', { cookie: admin.cookie, method: 'POST', body: { lowBalanceWarningCredits: 2.5 } });
+    check('admin patches the access rules (partial save keeps the rest)', setRules.status === 200 && setRules.body?.ok === true && setRules.body?.settings?.lowBalanceWarningCredits === 2.5 && setRules.body.settings.requireVerification === rules?.requireVerification && setRules.body.settings.starterCredits === rules?.starterCredits, JSON.stringify(setRules.body));
+    const readRules = await api('/api/v1/settings/lopu-access');
+    check('the saved rules read back publicly and at once', readRules.body?.settings?.lowBalanceWarningCredits === 2.5);
+    const accountRules = await api('/api/v1/lopu/account', { cookie: user.cookie });
+    check('the account read reflects the new threshold', accountRules.body?.account?.lowBalanceWarningCredits === 2.5);
+    const badRules = await api('/api/v1/settings/lopu-access', { cookie: admin.cookie, method: 'POST', body: { starterCredits: -1 } });
+    check('a bad access setting is a 400', badRules.status === 400);
+    const formRules = await api('/api/v1/settings/lopu-access', { cookie: admin.cookie, method: 'POST', raw: true, body: 'starterCredits=1', headers: { 'Content-Type': 'text/plain' } });
+    check('a non-JSON rules save is refused (415)', formRules.status === 415);
+    const restoreRules = await api('/api/v1/settings/lopu-access', { cookie: admin.cookie, method: 'POST', body: rules });
+    check('the previous rules are restored', restoreRules.status === 200 && restoreRules.body?.settings?.lowBalanceWarningCredits === rules?.lowBalanceWarningCredits);
+
+    // the generic things paths never reach the accounting kinds
+    const forgeLedger = await api('/api/v1/things', { cookie: user.cookie, method: 'POST', body: { thingtime: ['lopu-credit'], crystal: { entry: 'grant', amountMicros: 999_999_999, balanceAfterMicros: 999_999_999, reason: 'forged', actorId: user.id } } });
+    check('generic /things cannot mint a ledger row (protected kind)', forgeLedger.status === 403 || forgeLedger.status === 400, `status ${forgeLedger.status}`);
+    const forgeAccount = await api('/api/v1/things', { cookie: user.cookie, method: 'POST', body: { thingtime: ['lopu-account'], crystal: { balanceMicros: 999_999_999 } } });
+    check('generic /things cannot mint an account (protected kind)', forgeAccount.status === 403 || forgeAccount.status === 400);
+    const forgeUsage = await api('/api/v1/things', { cookie: user.cookie, method: 'POST', body: { thingtime: ['lopu-usage'], crystal: { surface: 'chat', billing: 'free', costMicros: 0 } } });
+    check('generic /things cannot mint a usage row (protected kind)', forgeUsage.status === 403 || forgeUsage.status === 400);
+    const accountRowId = adminRow?.accountId || null;
+    if (accountRowId) {
+      const otherPeek = await api(`/api/v1/things?id=${accountRowId}`, { cookie: other.cookie });
+      check('another user cannot read the account through generic /things', otherPeek.status === 403 || otherPeek.status === 404, `status ${otherPeek.status}`);
+      const ownerPatch = await api('/api/v1/things', { cookie: user.cookie, method: 'PATCH', body: { id: accountRowId, crystal: { balanceMicros: 999_999_999 } } });
+      check('the owner cannot edit the account through generic /things', ownerPatch.status === 403 || ownerPatch.status === 400 || ownerPatch.status === 404 || ownerPatch.status === 405, `status ${ownerPatch.status}`);
+      const ownerDelete = await api('/api/v1/things', { cookie: user.cookie, method: 'DELETE', body: { id: accountRowId } });
+      check('the owner cannot delete the account through generic /things', ownerDelete.status === 403 || ownerDelete.status === 400 || ownerDelete.status === 404 || ownerDelete.status === 405, `status ${ownerDelete.status}`);
+      const untouched = await api('/api/v1/lopu/account', { cookie: user.cookie });
+      check('the balance is untouched by the refused generic writes', untouched.body?.account?.balanceMicros === balanceBeforeApprove + 3_000_000);
+    }
+
+    // a run budget so every later section can chat, and the fixture chat goes
+    const runBudget = await api('/api/v1/admin/lopu/credits', { cookie: admin.cookie, method: 'POST', body: { userId: user.id, credits: 100, entry: 'topup', reason: 'verify-lopu run budget' } });
+    check('admin tops up the run budget', runBudget.status === 200 && runBudget.body?.ledger?.entry === 'topup');
+    const otherBudget = await api('/api/v1/admin/lopu/credits', { cookie: admin.cookie, method: 'POST', body: { userId: other.id, credits: 5, reason: 'verify-lopu other budget' } });
+    check('the second account gets a budget too', otherBudget.status === 200 && otherBudget.body?.account?.balanceMicros === 5_000_000);
+
+    // ── the two ways a balance could be spent without being charged ────────
+    // (1) idempotency is the SERVER's: deleting the conversation drops the
+    // message that would 409 a re-used requestId, so the same requestId must
+    // buy a second turn at full price, never a free one.
+    if (testBilled && paidChatId) {
+      const removedPaid = await api('/api/v1/lopu/chats/delete', { cookie: user.cookie, method: 'POST', body: { chatId: paidChatId } });
+      const beforeReplay = (await api('/api/v1/lopu/account', { cookie: user.cookie })).body?.account?.balanceMicros ?? 0;
+      const replayed = await reply(user.cookie, { text: 'Hello Lopu, are credits working?', requestId: paidRequest });
+      const replayedDone = replayed.events[replayed.events.length - 1];
+      check(
+        'a requestId re-used after the chat was deleted is charged again (no free turns)',
+        removedPaid.status === 200 && replayed.status === 200 && replayedDone?.type === 'done' && replayedDone.costMicros === 200_000 && replayedDone.balanceMicros === beforeReplay - 200_000,
+        JSON.stringify({ beforeReplay, done: replayedDone })
+      );
+      const replayHistory = await api('/api/v1/lopu/account/history?limit=25', { cookie: user.cookie });
+      const replayUsage = (replayHistory.body?.usage || []).filter((row) => row.requestId === paidRequest);
+      check('the replay wrote its own usage row (two rows, two debits, one requestId)', replayUsage.length >= 2, JSON.stringify(replayUsage.map((row) => row.id)));
+      const replayChatId = replayed.events[0]?.chatId || null;
+      if (replayChatId) await api('/api/v1/lopu/chats/delete', { cookie: user.cookie, method: 'POST', body: { chatId: replayChatId } });
+    } else {
+      skip('the re-used requestId is charged again', testBilled ? 'no conversation to delete' : 'run the server with LOPU_CHAT_PROVIDER=test');
+      if (paidChatId) await api('/api/v1/lopu/chats/delete', { cookie: user.cookie, method: 'POST', body: { chatId: paidChatId } });
+    }
+
+    // (2) the gate reads the balance seconds before the debit lands, so a
+    // billed turn holds a bounded in-flight slot. Every slot must come back:
+    // four turns in a row on a cap of three prove the release runs.
+    const sequential = [];
+    for (let index = 0; index < 4; index++) {
+      const turn = await reply(other.cookie, { text: `sequential ${index}`, requestId: requestId(`seq-${index}`) });
+      sequential.push(turn);
+      const chatToDrop = turn.events[0]?.chatId || null;
+      if (chatToDrop) await api('/api/v1/lopu/chats/delete', { cookie: other.cookie, method: 'POST', body: { chatId: chatToDrop } });
+    }
+    check(
+      'four turns in a row all stream — the in-flight slot is always released',
+      sequential.every((turn) => turn.status === 200 && turn.events[turn.events.length - 1]?.type === 'done'),
+      JSON.stringify(sequential.map((turn) => [turn.status, turn.body?.code]))
+    );
+    // …and a simultaneous burst is either streamed or refused with the
+    // in-flight code — never a 500, and never more spend than turns streamed
+    const burstBefore = (await api('/api/v1/lopu/account', { cookie: other.cookie })).body?.account?.balanceMicros ?? 0;
+    const burst = await Promise.all(Array.from({ length: 4 }, (_, index) => reply(other.cookie, { text: `burst ${index}`, requestId: requestId(`burst-${index}`) })));
+    const streamed = burst.filter((turn) => turn.status === 200 && turn.events[turn.events.length - 1]?.type === 'done');
+    const inFlight = burst.filter((turn) => turn.status === 429 && turn.body?.code === 'LOPU_TURN_IN_FLIGHT');
+    check(
+      'a simultaneous burst only ever streams or refuses with 429 LOPU_TURN_IN_FLIGHT',
+      streamed.length + inFlight.length === burst.length && inFlight.every((turn) => /Lopu is still working/.test(String(turn.body?.error))),
+      JSON.stringify(burst.map((turn) => [turn.status, turn.body?.code]))
+    );
+    const burstAfter = (await api('/api/v1/lopu/account', { cookie: other.cookie })).body?.account?.balanceMicros ?? 0;
+    if (testBilled) {
+      check('the burst spent exactly one priced turn per streamed reply', burstAfter === burstBefore - streamed.length * 200_000, `${burstBefore} → ${burstAfter}, ${streamed.length} streamed, ${inFlight.length} refused`);
+    }
+    for (const turn of burst) {
+      const chatToDrop = turn.events?.[0]?.chatId || null;
+      if (chatToDrop) await api('/api/v1/lopu/chats/delete', { cookie: other.cookie, method: 'POST', body: { chatId: chatToDrop } });
+    }
+
+    const cleaned = await api('/api/v1/lopu/chats', { cookie: user.cookie });
+    check('the section’s conversation is cleaned up', cleaned.body?.chats?.length === 0);
+  }
 
   console.log('\nB. model catalog');
   const models = await api('/api/v1/ai/models');
@@ -543,7 +846,7 @@ const run = async () => {
   check('a plain user cannot set the chat defaults', nonAdminDefaults.status === 403 || nonAdminDefaults.status === 401);
   const publicDefaults = await api('/api/v1/settings/lopu-chat-defaults');
   check('GET /settings/lopu-chat-defaults is public and shaped', publicDefaults.status === 200 && publicDefaults.body?.ok === true && publicDefaults.body?.defaults && 'model' in publicDefaults.body.defaults && publicDefaults.body?.resolved && Array.isArray(publicDefaults.body?.models));
-  const admin = ADMIN_USERNAME && ADMIN_PASSWORD ? await login(ADMIN_USERNAME, ADMIN_PASSWORD) : null;
+  // `admin` was logged in by section A2 (the same credentials)
   if (!admin) {
     skip('admin catalog toggle / seed / defaults', ADMIN_USERNAME ? 'admin login failed' : 'set TT_VERIFY_ADMIN_USERNAME + TT_VERIFY_ADMIN_PASSWORD');
   } else {
@@ -699,12 +1002,7 @@ const run = async () => {
     }
   }
 
-  console.log(`\n${passed} passed, ${failures.length} failed, ${skipped} skipped`);
-  if (failures.length) {
-    console.log('Failures:');
-    for (const name of failures) console.log(`  - ${name}`);
-    process.exitCode = 1;
-  }
+  summarize();
 };
 
 run().catch((error) => {
