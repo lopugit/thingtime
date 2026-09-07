@@ -787,6 +787,7 @@ jobs:
               sed -nE \
                 -e 's/^Lopu-Conflict-Resolution: run=([1-9][0-9]*) pr=([1-9][0-9]*)$/conflict \1 \2/p' \
                 -e 's/^Lopu-Rebase-Completion: run=([1-9][0-9]*) pr=([1-9][0-9]*)$/rebase \1 \2/p' \
+                -e 's/^Lopu-Review-Publication: run=([1-9][0-9]*) pr=([1-9][0-9]*)$/review \1 \2/p' \
                 <<<"$message"
             )"
             marker_count="$(printf '%s\n' "$markers" | sed '/^$/d' | wc -l | tr -d ' ')"
@@ -801,20 +802,16 @@ jobs:
             run_json="$(
               gh api "repos/$REPO/actions/runs/$run_id" 2>/dev/null
             )" || return 1
-            if [ "$marker_kind" = conflict ]; then
+            # Reviews share the conflict provenance branch: only the control
+            # plane dispatches this file on github-actions.
+            if [ "$marker_kind" != rebase ]; then
               jq -e '
                 .event == "workflow_dispatch"
                 and .head_branch == "github-actions"
                 and .actor.login == "github-actions[bot]"
                 and .path == ".github/workflows/resolve-pr-conflicts.yml"
-                and (
-                  .status == "queued"
-                  or .status == "in_progress"
-                  or .status == "pending"
-                  or .status == "waiting"
-                  or .status == "requested"
-                  or (.status == "completed" and .conclusion == "success")
-                )
+                and ((.status | test("^(queued|in_progress|pending|waiting|requested)$"))
+                     or (.status == "completed" and .conclusion == "success"))
               ' >/dev/null <<<"$run_json" || return 1
             else
               jq -e --arg owner "$REPOSITORY_OWNER" '
@@ -825,14 +822,8 @@ jobs:
                          and .head_branch == "github-actions"
                          and (.actor.login == "github-actions[bot]"
                               or .actor.login == $owner)))
-                and (
-                  .status == "queued"
-                  or .status == "in_progress"
-                  or .status == "pending"
-                  or .status == "waiting"
-                  or .status == "requested"
-                  or (.status == "completed" and .conclusion == "success")
-                )
+                and ((.status | test("^(queued|in_progress|pending|waiting|requested)$"))
+                     or (.status == "completed" and .conclusion == "success"))
               ' >/dev/null <<<"$run_json" || return 1
               jobs_json="$(
                 gh api "repos/$REPO/actions/runs/$run_id/jobs?per_page=100" \
@@ -842,11 +833,7 @@ jobs:
               jq -e --arg expected_job "$expected_job" '
                 [.jobs[]?
                   | select(.name | endswith($expected_job))
-                  | select(.status == "queued"
-                           or .status == "in_progress"
-                           or .status == "pending"
-                           or .status == "waiting"
-                           or .status == "requested"
+                  | select((.status | test("^(queued|in_progress|pending|waiting|requested)$"))
                            or (.status == "completed" and .conclusion == "success"))]
                 | length == 1
               ' >/dev/null <<<"$jobs_json" || return 1
@@ -870,11 +857,11 @@ jobs:
                || { [ "$EVENT_ACTOR" = 'github-actions[bot]' ] \
                     && [ "${head_message%%$'\n'*}" = \
                          'chore: refresh graphify outputs after PR branch merge' ]; }; then
-              if [ "${LOPU_PUBLICATION_KIND:-legacy}" = rebase ]; then
-                echo '::notice::Deferring the all-branch rebuild to the rebase-fleet finalizer.'
-              else
-                echo '::notice::Deferring the all-branch rebuild to the conflict-batch finalizer.'
-              fi
+              case "${LOPU_PUBLICATION_KIND:-legacy}" in
+                rebase) echo '::notice::Deferring the all-branch rebuild to the rebase-fleet finalizer.' ;;
+                review) echo '::notice::Deferring the all-branch rebuild to the review session that wrote this head.' ;;
+                *) echo '::notice::Deferring the all-branch rebuild to the conflict-batch finalizer.' ;;
+              esac
               exit 0
             fi
           fi
@@ -2952,6 +2939,7 @@ jobs:
               sed -nE \
                 -e 's/^Lopu-Conflict-Resolution: run=([1-9][0-9]*) pr=([1-9][0-9]*)$/conflict \1 \2/p' \
                 -e 's/^Lopu-Rebase-Completion: run=([1-9][0-9]*) pr=([1-9][0-9]*)$/rebase \1 \2/p' \
+                -e 's/^Lopu-Review-Publication: run=([1-9][0-9]*) pr=([1-9][0-9]*)$/review \1 \2/p' \
                 <<<"$message"
             )"
             marker_count="$(printf '%s\n' "$markers" | sed '/^$/d' | wc -l | tr -d ' ')"
@@ -2966,20 +2954,16 @@ jobs:
             run_json="$(
               gh api "repos/$REPO/actions/runs/$run_id" 2>/dev/null
             )" || return 1
-            if [ "$marker_kind" = conflict ]; then
+            # Reviews share the conflict provenance branch: only the control
+            # plane dispatches this file on github-actions.
+            if [ "$marker_kind" != rebase ]; then
               jq -e '
                 .event == "workflow_dispatch"
                 and .head_branch == "github-actions"
                 and .actor.login == "github-actions[bot]"
                 and .path == ".github/workflows/resolve-pr-conflicts.yml"
-                and (
-                  .status == "queued"
-                  or .status == "in_progress"
-                  or .status == "pending"
-                  or .status == "waiting"
-                  or .status == "requested"
-                  or (.status == "completed" and .conclusion == "success")
-                )
+                and ((.status | test("^(queued|in_progress|pending|waiting|requested)$"))
+                     or (.status == "completed" and .conclusion == "success"))
               ' >/dev/null <<<"$run_json" || return 1
             else
               jq -e --arg owner "$REPOSITORY_OWNER" '
@@ -2990,14 +2974,8 @@ jobs:
                          and .head_branch == "github-actions"
                          and (.actor.login == "github-actions[bot]"
                               or .actor.login == $owner)))
-                and (
-                  .status == "queued"
-                  or .status == "in_progress"
-                  or .status == "pending"
-                  or .status == "waiting"
-                  or .status == "requested"
-                  or (.status == "completed" and .conclusion == "success")
-                )
+                and ((.status | test("^(queued|in_progress|pending|waiting|requested)$"))
+                     or (.status == "completed" and .conclusion == "success"))
               ' >/dev/null <<<"$run_json" || return 1
               jobs_json="$(
                 gh api "repos/$REPO/actions/runs/$run_id/jobs?per_page=100" \
@@ -3007,11 +2985,7 @@ jobs:
               jq -e --arg expected_job "$expected_job" '
                 [.jobs[]?
                   | select(.name | endswith($expected_job))
-                  | select(.status == "queued"
-                           or .status == "in_progress"
-                           or .status == "pending"
-                           or .status == "waiting"
-                           or .status == "requested"
+                  | select((.status | test("^(queued|in_progress|pending|waiting|requested)$"))
                            or (.status == "completed" and .conclusion == "success"))]
                 | length == 1
               ' >/dev/null <<<"$jobs_json" || return 1
@@ -3035,11 +3009,13 @@ jobs:
                             && [ "$EVENT_ACTION" = synchronize ]; }; } \
                   && [ "${resolution_message%%$'\n'*}" = \
                        'chore: refresh graphify outputs after PR branch merge' ]; }; then
-            if [ "${LOPU_PUBLICATION_KIND:-legacy}" = rebase ]; then
-              echo 'Verified Lopu rebase is reviewed once by the rebase-fleet finalizer.'
-            else
-              echo 'Verified Lopu conflict resolution is reviewed once by the batch finalizer.'
-            fi
+            # A review publication was already inspected by the session that
+            # wrote it; the next non-Lopu head still gets a full review.
+            case "${LOPU_PUBLICATION_KIND:-legacy}" in
+              rebase) echo 'Verified Lopu rebase is reviewed once by the rebase-fleet finalizer.' ;;
+              review) echo 'Verified Lopu review publication was already inspected by the review session that wrote it.' ;;
+              *) echo 'Verified Lopu conflict resolution is reviewed once by the batch finalizer.' ;;
+            esac
             echo 'any=false' >>"$GITHUB_OUTPUT"
             exit 0
           fi
@@ -4732,6 +4708,20 @@ jobs:
             against `github-actions`. Never push `github-actions`, `main`, or
             another target/default branch directly.
 
+            Before writing that fix, inventory the repairs already open with
+            `gh pr list --repo $REPO --state open --base github-actions
+            --limit 500 --json number,title,url,body`, read each body carrying
+            `<!-- thingtime-lopu-controller-repair:v1`, and read the paths and
+            hunks each one touches. The publisher folds your patch into an open
+            repair only when it applies cleanly, so a second rewrite of the same
+            lines opens a rival PR that blocks both. If an open repair already
+            covers the defect, do not restate it: revert your edits, leave
+            `$RUNNER_TEMP/lopu-workflow-fix.md` unwritten (a dirty checkout
+            without it fails publishing), and report that PR number instead.
+            Otherwise fix a defect no open repair covers, or stack
+            non-overlapping hunks on one, and never move that checkout's
+            `HEAD`: the publisher drops repairs authored off a moved head.
+
             These worktrees start detached at immutable PR heads. Do not merge,
             rebase, delete branches, or push target/default branches. Leave any
             desired PR fixes as normal uncommitted worktree changes; the following
@@ -4899,7 +4889,12 @@ jobs:
             git -C "$worktree" config user.email 'lopu[bot]@users.noreply.github.com'
             git -C "$worktree" add -A
             if ! git -C "$worktree" diff --cached --quiet; then
-              git -C "$worktree" commit -m 'chore(lopu): apply repository review improvements'
+              # Bind the commit to this worker and PR: the push fires
+              # pull_request_target:synchronize, which without provenance
+              # re-reviews the fix Lopu just validated.
+              git -C "$worktree" commit \
+                -m 'chore(lopu): apply repository review improvements' \
+                -m "Lopu-Review-Publication: run=$GITHUB_RUN_ID pr=$number"
             fi
             local_head="$(git -C "$worktree" rev-parse HEAD)"
             remote_head="$(gh api "repos/$REPO/git/ref/heads/$head" --jq '.object.sha')"
