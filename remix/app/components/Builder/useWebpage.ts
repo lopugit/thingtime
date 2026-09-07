@@ -106,15 +106,22 @@ export const mergeSavedWebpage = (prev: ResolvedWebpage | null, thing: LopuSaved
 				? undefined
 				: prev?.page?.linkKey;
 	const author = thing?.author && typeof thing.author === 'object' ? thing.author : prev?.page?.author;
+	// Drop the previous linkKey from the carried-over base: `linkKey` above has
+	// already decided whether it survives (a save that carries an acl is the
+	// authoritative sharing state, so a key it omits was revoked). Spreading
+	// `{ linkKey: undefined }` over the base would clear it too, but it also
+	// materialises an own `linkKey` key, which deepStrictEqual reports as a
+	// difference from an unshared page that never had one.
+	const { linkKey: _supersededLinkKey, ...carried } = prev?.page || {};
 	return {
 		page: {
-			...(prev?.page || {}),
+			...carried,
 			id,
 			crystal,
 			...(author !== undefined ? { author } : {}),
 			...(updatedAt ? { updatedAt } : {}),
 			...(acl ? { acl } : {}),
-			...(savedAclPresent ? { linkKey } : linkKey ? { linkKey } : {})
+			...(linkKey ? { linkKey } : {})
 		},
 		source: 'user',
 		componentsByRef: prev?.componentsByRef || {}
