@@ -44,6 +44,8 @@ export type RecordingSettings = {
 	dailyReminders: boolean;
 	timeZone: string;
 	reminderHour: number;
+	transcriptionProviders: string[];
+	analysisProviders: string[];
 };
 
 export const DEFAULT_RECORDING_SETTINGS: RecordingSettings = {
@@ -53,7 +55,9 @@ export const DEFAULT_RECORDING_SETTINGS: RecordingSettings = {
 	createNotes: true,
 	dailyReminders: true,
 	timeZone: 'UTC',
-	reminderHour: 9
+	reminderHour: 9,
+	transcriptionProviders: ['configured'],
+	analysisProviders: ['configured']
 };
 
 export const isRecordingTimeZone = (value: unknown): value is string => {
@@ -80,6 +84,11 @@ export const parseRecordingSettingsPatch = (input: unknown): Partial<RecordingSe
 			if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 23)
 				throw new Error('Reminder hour must be between 0 and 23.');
 			patch.reminderHour = value;
+		} else if (key === 'transcriptionProviders' || key === 'analysisProviders') {
+			if (!Array.isArray(value) || value.length < 1 || value.length > 4 ||
+				value.some((id) => typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(id)) || new Set(value).size !== value.length)
+				throw new Error('Choose one to four different provider connections in order.');
+			patch[key] = [...value];
 		} else throw new Error('Unknown recording setting.');
 	}
 	return patch;

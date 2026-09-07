@@ -24,6 +24,7 @@ import {
 	type RecordingJobState
 } from './recordingsStore';
 import { analyzeRecording, recordingProviderStatus, transcribeRecording } from './recordingsProvider';
+import { recordingConnectionStatus } from './recordingsConnections';
 
 class RecordingPaused extends Error {}
 
@@ -155,7 +156,7 @@ export const processRecordingJob = async (
 			await assertActive(job);
 			state.insights =
 				settings.createNotes || settings.createTodos
-					? (await deps.analyze(state.transcript, () => assertActive(job))).map((item) => ({ ...item, id: randomUUID() }))
+					? (await deps.analyze(state.transcript, () => assertActive(job), job.ownerId)).map((item) => ({ ...item, id: randomUUID() }))
 					: [];
 			failureStage = 'save';
 			await assertActive(job);
@@ -237,9 +238,11 @@ export const processRecordingJob = async (
 export const runRecordingAutomation = async () =>
 	runWithMongoEndpoint(null, async () => {
 		const queued = await discoverRecordingUploads();
-		if (!recordingProviderStatus().configured) return { queued, processed: 0, providerConfigured: false };
+		// Each job resolves only its owner's selected connections. An operator's
+		// missing default key must not block a user with their own API credentials.
 		const things = await getHomeThingsCollection();
 		const outcomes: string[] = [];
+		let providerConfigured = recordingProviderStatus().configured;
 		// One bounded job per invocation: a worst-case provider turn cannot exceed
 		// the serverless request budget by starting a second long job near its end.
 		for (let index = 0; index < 1; index++) {
@@ -258,7 +261,8 @@ export const runRecordingAutomation = async () =>
 				{ sort: { nextRunAt: 1, shareId: 1 }, returnDocument: 'after' }
 			);
 			if (!job) break;
+			providerConfigured = (await recordingConnectionStatus(job.ownerId)).configured;
 			outcomes.push(await processRecordingJob(job));
 		}
-		return { queued, processed: outcomes.length, outcomes, providerConfigured: true };
+		return { queued, processed: outcomes.length, outcomes, providerConfigured };
 	});

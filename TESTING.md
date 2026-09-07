@@ -42,6 +42,8 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Lopu Apple Watch recording automation
 
+- [ ] Credential waterfall: select/reorder/remove up to four own API connections per stage; paste no keys into recording settings. A missing default or deleted last connection must not prevent replacing it. Claude must never be selectable for audio. Verify 429/401/timeout fallback, first-success stop, and no repeat per key; invalid output/unsafe endpoint must stop. Disable consent or change the selected list after the first failure and verify no second provider receives content. Another account's connection ID must be rejected and responses must contain no tokens/endpoints. Verify desktop and mobile controls, open selects, full-page scrolling and optimistic rollback.
+
 - [ ] Force a storage-download failure and provider 401/429 in the isolated test harness. Verify recording status identifies the failed step and never exposes raw errors, credentials, signed URLs, or transcript content. Retry must preserve completed checkpoints.
 
 - [ ] On desktop and 390px mobile, open `/lopu/recordings`, verify the account,

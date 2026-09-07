@@ -39,6 +39,25 @@ Branch: `codex/watch-lopu-recording-automation`.
 
 ## Delivery gates still open
 
+### 2026-09-07 provider quota and credential waterfall follow-up
+
+At `51b93134a01e5bc049b457d39f02b41ca24a1c89`, all four required CI checks
+passed and preview deployment `dpl_BYzw21bD19qPPWiGZhWJmSX6rPFs` was READY.
+The authorized synthetic fixture's real worker retry returned a safe provider
+429/quota category in 1923 ms. Automation is paused; no real transcript or
+native reminder is claimed. TestFlight status run 34088034401 confirmed build
+25 VALID / IN_BETA_TESTING internally, and a fresh integrated Watch simulator
+build passed. No new TestFlight build was uploaded.
+
+The user's requested follow-up adds separate ordered transcription/analysis
+credential lists using the current account's existing Secure Vault. It does
+not silently import CI OAuth credentials. Anthropic Console API keys support
+notes/todos only; a speech-capable API connection is still needed. The named
+Nikolaj credential has not yet been located/validated as an API key, and no
+deployment secret or account credential selection has been changed. New
+fallback tests use synthetic keys and mocked provider transport only. Live
+provider success and the refreshed UI remain acceptance gates.
+
 Live acceptance, 2026-09-07: the user signed into the exact-head preview as
 @lopu. Preview and production use separate account data. A private copy of the
 approved synthetic WAV uploaded successfully on the preview and queued once.

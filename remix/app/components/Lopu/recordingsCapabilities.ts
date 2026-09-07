@@ -1,4 +1,4 @@
-export const RECORDING_AUTOMATION_REQUIREMENTS = { 'api.lopu-recordings': '1.0.0' } as const;
+export const RECORDING_AUTOMATION_REQUIREMENTS = { 'api.lopu-recordings': '1.1.0' } as const;
 
 export const supportsRecordingAutomation = (manifest: any, origin: string) => {
 	if (manifest?.origin !== origin) return false;

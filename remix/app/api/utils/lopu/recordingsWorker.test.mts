@@ -72,6 +72,9 @@ mock.module(new URL('./recordingsProvider.ts', import.meta.url).href, {
 		recordingProviderStatus: () => ({ configured: true })
 	}
 });
+mock.module(new URL('./recordingsConnections.ts', import.meta.url).href, {
+	namedExports: { recordingConnectionStatus: async () => ({ configured: true }) }
+});
 mock.module(new URL('../things/things.ts', import.meta.url).href, {
 	namedExports: {
 		createThing: async (ownerId: string, doc: any, _actor: unknown, _app: unknown, hooks: any) => {

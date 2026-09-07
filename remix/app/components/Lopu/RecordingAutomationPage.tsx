@@ -6,11 +6,12 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from './useLopu';
 import { DEFAULT_RECORDING_SETTINGS, type RecordingSettings } from '~/api/utils/lopu/recordingsCore';
 import { supportsRecordingAutomation } from './recordingsCapabilities';
+import type { RecordingConnectionChoice } from '~/api/utils/lopu/recordingsConnections';
 
 type RecordingData = {
 	ownerId: string;
 	settings: RecordingSettings;
-	provider: { configured: boolean; name: string };
+	provider: { configured: boolean; name: string; transcription: boolean; analysis: boolean; choices: RecordingConnectionChoice[] };
 	jobs: Array<{
 		id: string;
 		postId: string;
@@ -139,6 +140,11 @@ export function RecordingAutomationPage() {
 
 	const patch = (value: Partial<RecordingSettings>) =>
 		change({ op: 'settings', settings: value }, (previous) => ({ ...previous, settings: { ...previous.settings, ...value } }));
+	const moveProvider = (key: 'transcriptionProviders' | 'analysisProviders', index: number, offset: number) => {
+		const ids = [...settings[key]];
+		[ids[index], ids[index + offset]] = [ids[index + offset], ids[index]];
+		void patch({ [key]: ids });
+	};
 
 	return (
 		<PageShell width={760}>
@@ -187,16 +193,103 @@ export function RecordingAutomationPage() {
 							/>
 						</Flex>
 						<Text mt={4} fontSize="sm">
-							When enabled, your recording audio and transcript are sent to the configured AI provider. Transcripts are posted as private
-							comments. Generated notes and todos stay private. This does not buy anything, contact anyone, or carry out the tasks.
+							When enabled, your recording audio and transcript are sent to your selected AI providers. If a selected connection is unavailable, the
+							next connection in that stage’s list is tried. Transcripts are posted as private comments. Generated notes and todos stay private. This
+							does not buy anything, contact anyone, or carry out the tasks.
 						</Text>
 						<Text mt={2} fontSize="sm" role="status">
 							{current
 								? current.provider.configured
 									? 'Provider configured · M4A, MP3, WAV or WebM · up to 24 MiB per recording'
-									: 'Transcription is not configured on this domain yet.'
+									: 'Select configured connections for the enabled recording stages below.'
 								: 'Checking connection…'}
 						</Text>
+						<Box mt={5}>
+							<Text as="h3" fontWeight="bold">
+								AI credential waterfall
+							</Text>
+							<Text fontSize="sm" mt={2}>
+								Choose up to four connections per stage, in order. Personal keys stay in your Secure Vault; platform keys stay server-side. Only your
+								selected connections are used.
+							</Text>
+							<Link to="/settings">Manage API connections in Settings → Secure Vault</Link>
+							{(['transcription', 'analysis'] as const).map((stage) => {
+								const key = stage === 'transcription' ? 'transcriptionProviders' : 'analysisProviders';
+								const selected = settings[key];
+								const choices = current?.provider.choices || [];
+								const available = choices.filter((choice) => choice[stage] && !selected.includes(choice.id));
+								const label = stage === 'transcription' ? 'Audio transcription' : 'Notes and todos';
+								return (
+									<Box key={stage} mt={4}>
+										<Text fontWeight="semibold">{label}</Text>
+										{stage === 'transcription' ? (
+											<Text fontSize="xs" color="var(--tt-muted)">
+												OpenAI API connections support audio. Claude API connections are available for notes and todos, not transcription.
+											</Text>
+										) : null}
+										{selected.map((id, index) => {
+											const choice = choices.find((entry) => entry.id === id);
+											return (
+												<Flex key={id} gap={2} mt={2} align="center" flexWrap="wrap">
+													<Text fontSize="sm" flex="1" minW="120px" overflowWrap="anywhere">
+														{index + 1}. {choice?.name || 'Unavailable connection'}
+														{choice && !choice.configured ? ' (not configured)' : ''}
+													</Text>
+													<Button
+														size="xs"
+														aria-label={`Move ${label} connection ${index + 1} up`}
+														isDisabled={busy || index === 0}
+														onClick={() => moveProvider(key, index, -1)}
+													>
+														↑
+													</Button>
+													<Button
+														size="xs"
+														aria-label={`Move ${label} connection ${index + 1} down`}
+														isDisabled={busy || index === selected.length - 1}
+														onClick={() => moveProvider(key, index, 1)}
+													>
+														↓
+													</Button>
+													<Button
+														size="xs"
+														aria-label={`Remove ${label} connection ${index + 1}`}
+														isDisabled={busy || selected.length === 1}
+														onClick={() => void patch({ [key]: selected.filter((entry) => entry !== id) })}
+													>
+														Remove
+													</Button>
+												</Flex>
+											);
+										})}
+										<Select
+											mt={2}
+											aria-label={`Add ${label} connection`}
+											value=""
+											isDisabled={busy || !current || selected.length >= 4 || !available.length}
+											onChange={(event) => {
+												if (event.target.value)
+													void patch({
+														[key]: [...selected.filter((id) => choices.some((choice) => choice.id === id && choice[stage])), event.target.value]
+													});
+											}}
+										>
+											<option value="">Add a fallback connection…</option>
+											{available.map((choice) => (
+												<option key={choice.id} value={choice.id}>
+													{choice.name}
+												</option>
+											))}
+										</Select>
+										<Text fontSize="xs" mt={1} color="var(--tt-muted)">
+											{current?.provider[stage]
+												? 'Connection configured; availability is checked when processing.'
+												: 'No compatible connection configured for this stage.'}
+										</Text>
+									</Box>
+								);
+							})}
+						</Box>
 						<Flex direction="column" gap={4} mt={5}>
 							{(
 								[

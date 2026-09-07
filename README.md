@@ -1676,7 +1676,7 @@ refunded promptly after Abort/ListParts/HEAD proves it empty.
 
 `/lopu/recordings` (also linked from Settings) controls Lopu's recording
 automation. It is **off until each account opts in**: private audio and its
-transcript are sent to the deployment's OpenAI provider. Only newly uploaded
+transcript are sent to the account's explicitly selected AI providers. Only newly uploaded
 private `watch-upload-*` posts tagged `apple-watch` are discovered. Owners can
 explicitly queue an older private Watch post on the same page. This covers
 direct Watch uploads and the older paired-iPhone relay.
@@ -1685,19 +1685,44 @@ Configure these values in your deployment's secret store, never in Git:
 
 ```sh
 OPENAI_API_KEY="<server-side provider key>"
+ANTHROPIC_API_KEY="<optional server-side Anthropic API key for notes/todos>"
 CRON_SECRET="<long random scheduler secret>"
 # Optional operator-controlled compatible provider base and analysis model:
 OPENAI_BASE_URL="https://api.openai.com/v1"
 LOPU_OPENAI_MODEL="gpt-4o-mini"
 ```
 
-The provider must support `gpt-4o-mini-transcribe` audio transcription and JSON
-chat completions; a chat-only proxy is insufficient. Analysis honors the
-current Thingtime Admin OpenAI model preference, including effort/priority;
-`LOPU_OPENAI_MODEL` is only the default-slot fallback. `Provider configured`
+Audio connections must support `gpt-4o-mini-transcribe`; a chat-only proxy or
+Claude API key cannot transcribe recordings. Analysis supports OpenAI and
+Anthropic API connections. It honors the connection's own model, otherwise
+the matching Thingtime Admin model preference (`LOPU_OPENAI_MODEL` /
+`LOPU_CLAUDE_MODEL` supply default-slot fallbacks). `Provider configured`
 means a key is present, not that a live transcription has passed. Audio is
 limited to 24 MiB; M4A/MP4, MP3, WAV and WebM are accepted. Never point the
 provider base at an untrusted service: it receives the key and private audio.
+
+For account-specific waterfalls, add API connections in **Settings → Secure
+Vault**, then order them separately under **Audio transcription** and **Notes
+and todos** on `/lopu/recordings`. Each list holds 1–4 unique connection IDs.
+Legacy settings keep the platform audio/text provider as their only entry;
+no extra provider is opted in automatically. Platform defaults are optional
+when the account supplies its own compatible keys. Secure Vault requires a
+stable `THINGTIME_USER_VAULT_KEY` (or the existing admin vault key), configured
+using the Secure Vault setup above. Keep encryption keys in the host's secret
+store. Choices return labels/capabilities only; keys are decrypted server-side
+only for that owner's selected attempt. GitHub Actions/CI credentials are not
+enumerated or inherited. Claude Code OAuth/setup tokens are not API keys and
+are rejected; use a separately billed Anthropic Console API key.
+
+Authentication, rate/quota, timeout and provider-availability failures try the
+next selected connection, at most once per connection (20 seconds each, 80
+seconds per stage). Invalid requests, unsafe endpoints and malformed outputs
+stop instead of forwarding the recording again. Consent, source privacy and
+the selected list are rechecked before every attempt. Disabling processing or
+changing the list stops further fallback. A successful transcript checkpoint
+is reused when retrying analysis. All provider endpoints, including custom
+platform bases, must pass the existing HTTPS/public-DNS guard and server
+`THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS` allowlist; redirects are refused.
 
 The repository-root Vercel cron calls `GET /api/v1/lopu/recordings/run` every
 five minutes using `Authorization: Bearer <CRON_SECRET>`. Other hosts must

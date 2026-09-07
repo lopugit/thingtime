@@ -10,7 +10,7 @@ import {
 	retryRecordingJob,
 	setRecordingSettings
 } from '~/api/utils/lopu/recordingsStore';
-import { recordingProviderStatus } from '~/api/utils/lopu/recordingsProvider';
+import { recordingConnectionStatus, validateRecordingConnections } from '~/api/utils/lopu/recordingsConnections';
 import { parseRecordingSettingsPatch } from '~/api/utils/lopu/recordingsCore';
 import { updateRecordingTodo } from '~/api/utils/lopu/recordingsReminders';
 
@@ -21,7 +21,7 @@ export const loader = async ({ request }: { request: Request }) => {
 	const user = await getCurrentUser(request);
 	if (!user || user.temporary) return reply({ ok: false, error: 'Sign in to manage your recordings.' }, 401);
 	return runWithMongoEndpoint(null, async () =>
-		reply({ ok: true, ownerId: user.id, ...(await listRecordingAutomation(user.id)), provider: recordingProviderStatus() })
+		reply({ ok: true, ownerId: user.id, ...(await listRecordingAutomation(user.id)), provider: await recordingConnectionStatus(user.id) })
 	);
 };
 
@@ -50,8 +50,11 @@ export const action = async ({ request }: { request: Request }) => {
 	return runWithMongoEndpoint(null, async () => {
 		try {
 			if (body?.op === 'settings') {
-				if (body.settings?.enabled === true && !recordingProviderStatus().configured)
-					return reply({ ok: false, error: 'Recording transcription is not configured on this Thingtime yet.' }, 503);
+				const patch = parseRecordingSettingsPatch(body.settings);
+				await validateRecordingConnections(user.id, patch);
+				const next = { ...await getRecordingSettings(user.id), ...patch };
+				if (next.enabled && !(await recordingConnectionStatus(user.id, next)).configured)
+					return reply({ ok: false, error: 'Select available API connections for transcription and notes/todos first.' }, 503);
 				await setRecordingSettings(user.id, body.settings);
 			} else if (body?.op === 'retry') {
 				if (!(await getRecordingSettings(user.id)).enabled) return reply({ ok: false, error: 'Enable recording automation first.' }, 409);
@@ -66,9 +69,9 @@ export const action = async ({ request }: { request: Request }) => {
 				const result = await updateRecordingTodo(user.id, body.id, body);
 				if (result.ok === false) return reply(result, result.status);
 			} else return reply({ ok: false, error: 'Unknown recording operation.' }, 400);
-			return reply({ ok: true, ownerId: user.id, ...(await listRecordingAutomation(user.id)), provider: recordingProviderStatus() });
+			return reply({ ok: true, ownerId: user.id, ...(await listRecordingAutomation(user.id)), provider: await recordingConnectionStatus(user.id) });
 		} catch (error) {
-			if (error instanceof TypeError) return reply({ ok: false, error: 'Choose one of your private Apple Watch recording posts.' }, 400);
+			if (error instanceof TypeError) return reply({ ok: false, error: 'Choose your own compatible provider connections or a private Apple Watch recording post.' }, 400);
 			return reply({ ok: false, error: 'Recording service is temporarily unavailable. Please retry.' }, 503);
 		}
 	});
