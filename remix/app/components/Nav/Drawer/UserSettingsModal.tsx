@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router';
 import { X } from 'lucide-react';
 
 import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z, DRAWER_TOP_LEVEL_DEFAULT_LIMIT, useDrawer, useIsMobileViewport } from './useDrawer';
-import { drawerItemClosesOnClick, drawerMenuItems, filterDrawerItemsByAuth } from './drawerMenu';
+import { drawerItemClosesOnClick, drawerMenuItems, filterDrawerItemsByAuth, filterDrawerTopItems } from './drawerMenu';
 import { AccountSwitcher } from '../../Account/AccountSwitcher';
 import { ElectronUpdateManager } from './ElectronUpdateManager';
 import { LopuPositionSelect } from '../../Lopu/LopuPositionSelect';
@@ -12,9 +12,11 @@ import { useLopu } from '../../Lopu/useLopu';
 import { LopuSettingsRows } from '../../Lopu/LopuHost';
 import { ColorControl, ThingsBadgePaddingControl } from '../../ThemeSettings/controls';
 import { useThingtime } from '../../Thingtime/useThingtime';
+import { useMarketingPublications } from '~/components/Marketing/marketingPublicationsStore';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useTtTheme } from '~/hooks/useTtTheme';
+import { isKeyPublished } from '~/marketing/publishingCore';
 import { getUserMention } from '~/utils/userIdentity';
 import {
 	electronAutoUpdateSettingPath,
@@ -47,6 +49,16 @@ export const UserSettingsModal = () => {
 
 	const isMobile = useIsMobileViewport();
 	const user = useCurrentUser();
+	// the "Close after click" list mirrors the drawer, so it needs the same
+	// publish state DrawerContent reads — without it every publication-gated
+	// item (Marketing) fails closed here and a visitor can no longer configure
+	// a section they can actually see. It must also use the drawer's own pair
+	// of filters (filterDrawerTopItems for the sections, filterDrawerItemsByAuth
+	// for their children): a top-level section is listed as soon as ANY child is
+	// visible, so gating it on its own key would hide Marketing here while the
+	// drawer still shows it (published `category:landing`, unpublished `hub`).
+	const { publications } = useMarketingPublications();
+	const isPublished = React.useCallback((key: string) => isKeyPublished(publications, key), [publications]);
 	const api = useApi();
 	const navigate = useNavigate();
 	const lopu = useLopu();
@@ -670,7 +682,7 @@ export const UserSettingsModal = () => {
 						Which menu items close the drawer when clicked (desktop and mobile)
 					</Text>
 					<Flex flexDirection="column" paddingTop={2}>
-						{filterDrawerItemsByAuth(drawerMenuItems, !!user, !!user?.isAdmin).map((top) => (
+						{filterDrawerTopItems(drawerMenuItems, !!user, !!user?.isAdmin, isPublished).map((top) => (
 							<React.Fragment key={top.id}>
 								<Flex alignItems="center" columnGap={4} paddingY={1}>
 									<Text fontSize="sm">
@@ -683,7 +695,7 @@ export const UserSettingsModal = () => {
 										onChange={(event) => setCloseOnClickFor(top.id, event.target.checked)}
 									></Switch>
 								</Flex>
-								{filterDrawerItemsByAuth(top.children || [], !!user, !!user?.isAdmin).map((child) => (
+								{filterDrawerItemsByAuth(top.children || [], !!user, !!user?.isAdmin, isPublished).map((child) => (
 									<Flex key={child.id} alignItems="center" columnGap={4} paddingY={0.5} paddingLeft={4}>
 										<Text fontSize="xs" opacity={0.8}>
 											{child.icon} {child.label}

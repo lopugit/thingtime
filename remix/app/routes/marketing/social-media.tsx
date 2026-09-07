@@ -3,13 +3,17 @@ import React from 'react';
 import { Link as RouterLink, useSearchParams } from 'react-router';
 
 import { useLopu } from '~/components/Lopu/useLopu';
+import { MarketingColdStart, MarketingUnpublished } from '~/components/Marketing/MarketingGate';
+import { PublishToggle, type AdminSurface } from '~/components/Marketing/MarketingPublishing';
 import { Crumbs, MarketingShell, formatCount, useMarketingSeo } from '~/components/Marketing/MarketingShell';
 import { DOWNLOAD_BATCH_CAP, downloadPng, downloadSequentially, planDownloads } from '~/components/Marketing/marketingDownload';
 import { MK } from '~/components/Marketing/marketingTheme';
 import { SocialCaptionPanel, SocialImageCard, useSocialActions } from '~/components/Marketing/SocialImage';
+import { useMarketingVisibility } from '~/components/Marketing/useMarketingPublications';
 import { MARKETING_BASE } from '~/marketing/catalog';
 import { FEATURES, FEATURE_BY_KEY, FEATURE_CATEGORY_LABELS } from '~/marketing/features';
-import { SOCIAL_ASSET_COUNT, buildSocialSvg, socialAssetFilename, socialAssetKey, socialCaption, type SocialAssetRef } from '~/marketing/social';
+import { SOCIAL_KEY, socialFeatureKey } from '~/marketing/publishing';
+import { buildSocialSvg, socialAssetFilename, socialAssetKey, socialCaption, type SocialAssetRef } from '~/marketing/social';
 import { SOCIAL_FORMATS, SOCIAL_FORMAT_BY_KEY, TRENDS, TREND_BY_KEY } from '~/marketing/trends';
 import type { Feature, SocialFormat, TrendKey } from '~/marketing/types';
 
@@ -18,18 +22,36 @@ import type { Feature, SocialFormat, TrendKey } from '~/marketing/types';
 // menu; the selection lives in the URL so every combination is a shareable
 // link, and the grid renders the trend × format expansion as downloadable
 // cards. There is no loader: everything is generated from the catalog.
+//
+// Publishing (marketing/publishing.ts): the suite is one surface, and each
+// feature's image set is its own "resource" — visitors only see published
+// sets, and a selection naming an unpublished feature falls back to the
+// first published one.
+
+const SUITE_SURFACE: AdminSurface = {
+	key: SOCIAL_KEY,
+	label: 'Social image suite',
+	bulk: { noun: 'image sets', keys: FEATURES.map((feature) => socialFeatureKey(feature.key)) }
+};
 
 export type SocialSelection = { feature: string; trend: TrendKey | 'all'; format: string };
 
 export const DEFAULT_SELECTION: SocialSelection = { feature: 'feed', trend: 'bold-brutal', format: 'all' };
 
-/** Pure: reads ?feature=&trend=&format= and falls back to the defaults for anything unknown. */
-export const resolveSocialSelection = (params: URLSearchParams): SocialSelection => {
+/**
+ * Pure: reads ?feature=&trend=&format= and falls back to the defaults for
+ * anything unknown. `allowedFeatures` narrows the feature to what the viewer
+ * may see (its first entry is the fallback); an empty list keeps the default
+ * so the page can render its own empty state.
+ */
+export const resolveSocialSelection = (params: URLSearchParams, allowedFeatures: readonly Feature[] = FEATURES): SocialSelection => {
 	const feature = params.get('feature');
 	const trend = params.get('trend');
 	const format = params.get('format');
+	const allowed = allowedFeatures.length ? allowedFeatures : FEATURES;
+	const featureAllowed = feature && FEATURE_BY_KEY[feature] && allowed.some((entry) => entry.key === feature);
 	return {
-		feature: feature && FEATURE_BY_KEY[feature] ? feature : DEFAULT_SELECTION.feature,
+		feature: featureAllowed ? feature : allowed.some((entry) => entry.key === DEFAULT_SELECTION.feature) ? DEFAULT_SELECTION.feature : allowed[0].key,
 		trend: trend === 'all' || (trend && TREND_BY_KEY[trend as TrendKey]) ? (trend as TrendKey | 'all') : DEFAULT_SELECTION.trend,
 		format: format === 'all' || (format && SOCIAL_FORMAT_BY_KEY[format]) ? format : DEFAULT_SELECTION.format
 	};
@@ -241,7 +263,9 @@ const QuickChip = ({ to, selected, children }: { to: string; selected?: boolean;
 
 export default function SocialMediaSuite() {
 	const [searchParams, setSearchParams] = useSearchParams();
-	const selection = React.useMemo(() => resolveSocialSelection(searchParams), [searchParams]);
+	const visibility = useMarketingVisibility();
+	const features = React.useMemo(() => visibility.features(FEATURES), [visibility]);
+	const selection = React.useMemo(() => resolveSocialSelection(searchParams, features), [features, searchParams]);
 	const { feature: featureKey, trend: trendKey, format: formatKey } = selection;
 	const feature = FEATURE_BY_KEY[featureKey];
 	const trend = trendKey === 'all' ? null : TREND_BY_KEY[trendKey];
@@ -256,11 +280,18 @@ export default function SocialMediaSuite() {
 	const lopu = useLopu();
 	const { copy } = useSocialActions();
 
+	const visibleAssetCount = features.length * TRENDS.length * SOCIAL_FORMATS.length;
+
+	const gated = visibility.ready && !visibility.social;
 	useMarketingSeo({
-		title: 'Social media image suite',
-		description: `${formatCount(SOCIAL_ASSET_COUNT)} downloadable social images: every Thingtime feature in ${TRENDS.length} viral styles and ${
-			SOCIAL_FORMATS.length
-		} platform formats, each with a ready-to-post caption.`
+		title: gated ? 'Not published yet' : 'Social media image suite',
+		description: gated
+			? 'This part of the Thingtime marketing site is not published yet.'
+			: `${formatCount(visibleAssetCount)} downloadable social images: ${features.length === FEATURES.length ? 'every' : formatCount(features.length)} Thingtime feature${
+					features.length === 1 ? '' : 's'
+			  } in ${TRENDS.length} viral styles and ${SOCIAL_FORMATS.length} platform formats, each with a ready-to-post caption.`,
+		// cold start writes nothing rather than a fail-closed "0 images" blurb
+		enabled: visibility.ready
 	});
 
 	const select = React.useCallback(
@@ -312,10 +343,33 @@ export default function SocialMediaSuite() {
 
 	const featureLabel = `${feature.emoji} ${feature.name}`;
 	const firstAsset = assets[0];
+	const crumbs = [visibility.hub ? { to: MARKETING_BASE, label: 'Marketing' } : { label: 'Marketing' }, { label: 'Social images' }];
+
+	if (!visibility.ready) return <MarketingColdStart />;
+	if (!visibility.social) return <MarketingUnpublished surface={SUITE_SURFACE} active="social-media" crumbs={crumbs} />;
+
+	if (!features.length) {
+		return (
+			<MarketingShell trend="bold-brutal" active="social-media" publication={SUITE_SURFACE}>
+				<Crumbs items={crumbs} />
+				<Box paddingY={12} textAlign="center" data-testid="social-empty">
+					<Text fontSize="48px" aria-hidden="true">
+						📸
+					</Text>
+					<Text as="h1" fontSize="clamp(28px, 4vw, 44px)" fontWeight={900} letterSpacing="-0.02em" margin={0} color={MK.ink}>
+						Images are on their way
+					</Text>
+					<Text color={MK.text} marginTop={3} fontSize="16px" lineHeight={1.6} maxWidth="520px" marginX="auto">
+						No image sets are published yet — check back soon.
+					</Text>
+				</Box>
+			</MarketingShell>
+		);
+	}
 
 	return (
-		<MarketingShell trend={trend?.key ?? 'bold-brutal'} active="social-media">
-			<Crumbs items={[{ to: MARKETING_BASE, label: 'Marketing' }, { label: 'Social images' }]} />
+		<MarketingShell trend={trend?.key ?? 'bold-brutal'} active="social-media" publication={SUITE_SURFACE}>
+			<Crumbs items={crumbs} />
 
 			<Box as="header" paddingTop={6} paddingBottom={6} maxWidth="860px">
 				<Text
@@ -334,9 +388,9 @@ export default function SocialMediaSuite() {
 					Every feature, every style, every platform.
 				</Text>
 				<Text as="p" fontSize="15px" lineHeight={1.6} color={MK.text} margin="14px 0 0" data-testid="social-counts">
-					{formatCount(FEATURES.length)} features × {TRENDS.length} styles × {SOCIAL_FORMATS.length} formats ={' '}
+					{formatCount(features.length)} feature{features.length === 1 ? '' : 's'} × {TRENDS.length} styles × {SOCIAL_FORMATS.length} formats ={' '}
 					<Text as="strong" color={MK.ink}>
-						{formatCount(SOCIAL_ASSET_COUNT)} downloadable images
+						{formatCount(visibleAssetCount)} downloadable images
 					</Text>
 					, each rendered as a crisp SVG you can save as a PNG at the exact platform size, with a caption to match.
 				</Text>
@@ -377,7 +431,7 @@ export default function SocialMediaSuite() {
 					<Box as="section" marginBottom={4}>
 						<MenuHeading>Feature</MenuHeading>
 						{FEATURE_CATEGORIES.map((category) => {
-							const items = FEATURES.filter((entry) => entry.category === category);
+							const items = features.filter((entry) => entry.category === category);
 							if (!items.length) return null;
 							const label = FEATURE_CATEGORY_LABELS[category];
 							return (
@@ -386,9 +440,14 @@ export default function SocialMediaSuite() {
 										<span aria-hidden="true">{label.emoji}</span> {label.name}
 									</MenuSubheading>
 									{items.map((entry) => (
-										<MenuItem key={entry.key} selected={entry.key === featureKey} onClick={() => select({ feature: entry.key })}>
-											<span aria-hidden="true">{entry.emoji}</span> {entry.name}
-										</MenuItem>
+										<Flex key={entry.key} alignItems="center" gap={1}>
+											<Box flex="1 1 auto" minWidth={0} opacity={visibility.everything && !visibility.isPublished(socialFeatureKey(entry.key)) ? 0.72 : 1}>
+												<MenuItem selected={entry.key === featureKey} onClick={() => select({ feature: entry.key })}>
+													<span aria-hidden="true">{entry.emoji}</span> {entry.name}
+												</MenuItem>
+											</Box>
+											<PublishToggle publicationKey={socialFeatureKey(entry.key)} label={`${entry.name} image set`} iconOnly flex="none" />
+										</Flex>
 									))}
 								</Box>
 							);

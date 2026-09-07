@@ -100,7 +100,7 @@
     "test:vercel-config": "node --test scripts/vercel-config.test.mjs",
     "test:vercel-root": "node --test ../scripts/vercel-root-flow.test.mjs",
     "test:web-ci-context": "node scripts/web-ci-required-context-contract.mjs",
-    "test:marketing": "node --import tsx --test app/marketing/*.test.ts app/components/Marketing/*.test.ts",
+    "test:marketing": "node --import tsx --test app/marketing/*.test.ts app/components/Marketing/*.test.ts app/api/utils/marketing/*.test.ts app/routes/api/v1/marketing/publications/*.test.ts app/routes/api/v1/admin/marketing/publications/*.test.ts",
     "test:webpages": "node --import tsx --test app/components/Builder/*.test.ts app/api/utils/webpages/*.test.ts",
     "test:workflow-callers": "node scripts/workflow-caller-contract.mjs",
     "test:subscriptions": "node --import tsx --test app/api/utils/subscriptions/tierCatalog.test.ts && node --experimental-test-module-mocks --import tsx --test app/api/utils/subscriptions/tierCatalogStore.test.mts",
