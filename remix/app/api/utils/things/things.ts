@@ -4,6 +4,7 @@ import { ObjectId, type Binary } from 'mongodb';
 
 import { getHomeThingsCollection, getThingsCollection, getUsersCollection, withMongoTransaction } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
+import { legacyThingReadsRequired } from '../mongodb/legacyThingLayout';
 import { findUserByUsername, pushUserRecentReaction, unpackSecure } from '../auth/users';
 import {
 	CONTROL_PLANE_STORAGE_THINGTIMES,
@@ -909,18 +910,20 @@ const folderIdOf = (doc: ThingDoc): string | null => (isV2(doc) ? doc.folderId |
 // under their target, never in feeds/profiles, so the comment id is excluded.
 // (exported for things/trending.ts, which selects its candidate window with
 // the exact same era semantics as the feed)
-export const postMatch = () => ({ $or: [{ thingtime: 'post' }, { kind: 'post' }], thingtime: { $ne: 'comment' } });
+export const postMatch = async () => await legacyThingReadsRequired()
+  ? { $or: [{ thingtime: 'post' }, { kind: 'post' }], thingtime: { $ne: 'comment' } }
+  : { thingtime: { $eq: 'post', $ne: 'comment' } };
 
 // Any post-shaped thing, including rich comments — for share-original lookups,
 // where the target may legitimately be a ["post","comment"] thing.
-export const postThingMatch = () => ({ $or: [{ thingtime: 'post' }, { kind: 'post' }] });
+export const postThingMatch = async () => await legacyThingReadsRequired() ? { $or: [{ thingtime: 'post' }, { kind: 'post' }] } : { thingtime: 'post' };
 
 // Query fragment for a `thingtime in [...]` filter that stays era-correct: v1
 // posts have no thingtime array, so a 'post' filter must also match kind:'post'.
 // Shared by listThings and things/search so the two never disagree on which
 // legacy posts exist (the single source the era semantics live behind).
-export const thingtimeInClause = (thingtime: string[]) =>
-  thingtime.includes('post') ? { $or: [{ thingtime: { $in: thingtime } }, { kind: 'post' }] } : { thingtime: { $in: thingtime } };
+export const thingtimeInClause = async (thingtime: string[]) =>
+  thingtime.includes('post') && await legacyThingReadsRequired() ? { $or: [{ thingtime: { $in: thingtime } }, { kind: 'post' }] } : { thingtime: { $in: thingtime } };
 
 export const withMatch = (base: Record<string, any>, ...clauses: Record<string, any>[]) => {
   const and = [base, ...clauses].filter((clause) => Object.keys(clause).length);
@@ -1897,6 +1900,7 @@ export const visibleRelatedModerationClause = (viewerId: string | null): Record<
 		: { 'moderation.status': { $nin: ['blocked', 'pending'] } };
 
 const resolveRelated = async (docs: ThingDoc[], viewerId: string | null): Promise<RelatedThings> => {
+  const legacy = await legacyThingReadsRequired();
   const ids = docs.map((doc) => doc.shareId);
   const commentsByTarget = new Map<string, CommentEntry[]>();
   const reactionsByTarget = new Map<string, ReactionEntry[]>();
@@ -1917,16 +1921,16 @@ const resolveRelated = async (docs: ThingDoc[], viewerId: string | null): Promis
     // interim relational era: kind:'reaction'/'comment' docs linked by parentId
     // (written by the pre-unification relational model; converted by the things
     // migration, folded here until then)
-    things
+    legacy ? things
       .find(withMatch({ kind: { $in: ['comment', 'reaction'] }, parentId: { $in: ids } }, moderation) as any)
       .project(RELATED_LEGACY_PROJECTION)
       .sort({ createdAt: 1 })
-      .toArray() as Promise<any[]>,
+      .toArray() as Promise<any[]> : Promise.resolve([]),
     things
       .aggregate([
         {
 					$match: withMatch(
-						{ $or: [{ thingtime: 'share', targetId: { $in: ids } }, { shareOfId: { $in: ids } }] },
+						legacy ? { $or: [{ thingtime: 'share', targetId: { $in: ids } }, { shareOfId: { $in: ids } }] } : { thingtime: 'share', targetId: { $in: ids } },
 						moderation
 					)
 				},
@@ -2288,7 +2292,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   // one level of share resolution
   const shareTargets = [...new Set(docs.map((doc) => targetIdOf(doc)).filter(Boolean))] as string[];
   const originals = shareTargets.length
-    ? ((await things.find(withMatch({ shareId: { $in: shareTargets } }, postThingMatch()) as any).toArray()) as any as ThingDoc[])
+    ? ((await things.find(withMatch({ shareId: { $in: shareTargets } }, await postThingMatch()) as any).toArray()) as any as ThingDoc[])
     : [];
   const originalsById = new Map(originals.map((doc) => [doc.shareId, doc]));
 
@@ -3024,6 +3028,7 @@ const countCommentsOf = async (
 	target: ThingDoc,
 	options: { includeBlocked?: boolean; viewerId?: string | null } = {}
 ): Promise<number> => {
+  const legacy = await legacyThingReadsRequired();
   const things = await getThingsCollection();
 	// visible counts must match what the read paths render (blocked comments
 	// are excluded everywhere); the comment CAP passes includeBlocked because
@@ -3031,7 +3036,7 @@ const countCommentsOf = async (
 	const blockedClause = options.includeBlocked ? {} : visibleRelatedModerationClause(options.viewerId ?? null);
   const [standalone, legacyRelational] = await Promise.all([
     things.countDocuments(withMatch({ targetId: target.shareId, thingtime: 'comment' }, blockedClause) as any),
-    things.countDocuments(withMatch({ kind: 'comment', parentId: target.shareId }, blockedClause) as any)
+    legacy ? things.countDocuments(withMatch({ kind: 'comment', parentId: target.shareId }, blockedClause) as any) : Promise.resolve(0)
   ]);
   return standalone + legacyRelational + (target.comments || []).length;
 };
@@ -3041,21 +3046,22 @@ const countCommentsOf = async (
 // POST /api/v1/things path both funnel through createThing). Counts across
 // both eras: v2 crystal.emoji reaction things and interim kind:'reaction' docs.
 const enforceReactionCaps = async (targetShareId: string, ownerId: string, token: string): Promise<Fail | null> => {
+  const legacy = await legacyThingReadsRequired();
   const things = await getThingsCollection();
   const [ownV2, ownKind] = await Promise.all([
     things.countDocuments({ targetId: targetShareId, thingtime: 'reaction', ownerId } as any),
-    things.countDocuments({ kind: 'reaction', parentId: targetShareId, ownerId } as any)
+    legacy ? things.countDocuments({ kind: 'reaction', parentId: targetShareId, ownerId } as any) : Promise.resolve(0)
   ]);
   if (ownV2 + ownKind >= MAX_REACTIONS_PER_USER_PER_POST) {
     return fail(400, `You can add at most ${MAX_REACTIONS_PER_USER_PER_POST} reactions to a post`);
   }
   const tokenAlreadyOnPost =
     (await things.countDocuments({ targetId: targetShareId, thingtime: 'reaction', 'crystal.emoji': token } as any, { limit: 1 })) ||
-    (await things.countDocuments({ kind: 'reaction', parentId: targetShareId, token } as any, { limit: 1 }));
+    (legacy && await things.countDocuments({ kind: 'reaction', parentId: targetShareId, token } as any, { limit: 1 }));
   if (!tokenAlreadyOnPost) {
     const [v2Tokens, kindTokens] = await Promise.all([
       things.distinct('crystal.emoji', { targetId: targetShareId, thingtime: 'reaction' } as any),
-      things.distinct('token', { kind: 'reaction', parentId: targetShareId } as any)
+      legacy ? things.distinct('token', { kind: 'reaction', parentId: targetShareId } as any) : Promise.resolve([])
     ]);
     if (new Set([...v2Tokens, ...kindTokens]).size >= MAX_REACTION_KEYS_PER_POST) {
       return fail(400, 'This post has reached its reaction limit');
@@ -3146,7 +3152,7 @@ export const getFeed = async (
     if (query.to) range.createdAt.$lte = query.to;
   }
   const match = withMatch(
-    postMatch(),
+    await postMatch(),
     visibility,
     typeClause(types),
     tag ? { tags: tag } : {},
@@ -3202,7 +3208,7 @@ export const getFeed = async (
 
   const pageIds = scored.slice(offset, offset + limit).map((entry) => entry.doc.shareId);
   const pageDocs = pageIds.length
-    ? ((await things.find(withMatch({ shareId: { $in: pageIds } }, postMatch()) as any).toArray()) as any as ThingDoc[])
+    ? ((await things.find(withMatch({ shareId: { $in: pageIds } }, await postMatch()) as any).toArray()) as any as ThingDoc[])
     : [];
   const docsById = new Map(pageDocs.map((doc) => [doc.shareId, doc]));
   const page = pageIds.map((id) => docsById.get(id)).filter(Boolean) as ThingDoc[];
@@ -3236,10 +3242,10 @@ export const listUserPosts = async (
   // a friend browsing this profile also sees the owner's friends-circle posts
   const friendOfOwner = !!viewer?.friendIds?.has(ownerId);
   const baseMatch = own
-    ? withMatch(postMatch(), { ownerId })
+    ? withMatch(await postMatch(), { ownerId })
     : friendOfOwner
-      ? withMatch(postMatch(), { ownerId }, { $or: [circleClause('public'), circleClause('friends')] })
-      : withMatch(postMatch(), { ownerId }, circleClause('public'));
+      ? withMatch(await postMatch(), { ownerId }, { $or: [circleClause('public'), circleClause('friends')] })
+      : withMatch(await postMatch(), { ownerId }, circleClause('public'));
   // visibility-restricted tokens: conjoin the audience fence the same way
   // listThings does. Not just paging hygiene (without it a public-only token
   // pages an owner's mostly-private profile in near-empty slices while the
@@ -3390,7 +3396,7 @@ export const listThings = async (
     match = {
       ownerId: viewer.id,
       thingtime: { $nin: [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME, ...SUBSPACE_THINGTIME, UPDOWN_THINGTIME] },
-      $or: [{ thingtime: { $exists: true } }, { kind: 'post' }]
+      ...await legacyThingReadsRequired() ? { $or: [{ thingtime: { $exists: true } }, { kind: 'post' }] } : { $and: [{ thingtime: { $exists: true } }] }
     };
     const folder = typeof query.folder === 'string' ? query.folder.trim() : '';
     if (folder) {
@@ -3414,7 +3420,7 @@ export const listThings = async (
     }
   }
   if (thingtime.length) {
-    match = withMatch(match, thingtimeInClause(thingtime));
+    match = withMatch(match, await thingtimeInClause(thingtime));
   }
   if (!app) {
     // visibility-restricted tokens: conjoin the audience fence so pages stay
@@ -3733,7 +3739,7 @@ export const toggleReaction = async (
         ownerId: viewerId,
         'crystal.emoji': token
       } as any),
-      things.findOne({ kind: 'reaction', parentId: target.shareId, ownerId: viewerId, token } as any)
+      await legacyThingReadsRequired() ? things.findOne({ kind: 'reaction', parentId: target.shareId, ownerId: viewerId, token } as any) : Promise.resolve(null)
     ]);
     if (existingV2 || existingKind) {
 			try {
@@ -4129,7 +4135,7 @@ export const refundDeletedNamespaceDocs = async (docs: ThingDoc[]): Promise<void
   }
 };
 
-const cascadeAttachmentFilter = (parentIds: string[]) => ({
+const cascadeAttachmentFilter = async (parentIds: string[]) => ({
 	$or: [
 		{
 			targetId: { $in: parentIds },
@@ -4140,11 +4146,11 @@ const cascadeAttachmentFilter = (parentIds: string[]) => ({
 			// visible exactly when the poll is and must go when the poll goes.
 			thingtime: { $in: [...CASCADE_CHILD_THINGTIME, 'vote'], $nin: ['share'] }
 		},
-		{
+		...await legacyThingReadsRequired() ? [{
 			parentId: { $in: parentIds },
 			kind: { $in: ['comment', 'reaction'] },
 			thingtime: { $nin: ['share'] }
-		}
+		}] : []
 	]
 });
 
@@ -4191,7 +4197,7 @@ const discoverCascadeDescendants = async (root: ThingDoc): Promise<ThingDoc[]> =
 		const parents = frontier.slice(offset, offset + STORAGE_DELETE_TRANSACTION_BATCH);
 		offset += parents.length;
 		const cursor = things
-			.find(cascadeAttachmentFilter(parents) as any)
+			.find(await cascadeAttachmentFilter(parents) as any)
 			.project({ _id: 1, shareId: 1, commentId: 1, targetId: 1, parentId: 1, thingtime: 1, kind: 1 })
 			.sort({ shareId: 1, commentId: 1, _id: 1 })
 			.batchSize(STORAGE_DELETE_TRANSACTION_BATCH);
@@ -4403,7 +4409,7 @@ const deleteCascadeBatchAtomically = async (batch: ThingDoc[], rootMongoId: unkn
 	return withMongoTransaction(async (session) => {
 		const externalChild = await things.findOne(
 			{
-				...cascadeAttachmentFilter(parentIds),
+				...await cascadeAttachmentFilter(parentIds),
 				...(mongoIds.length ? { _id: { $nin: mongoIds } } : {})
 			} as any,
 			{ session, projection: { _id: 1 } }
@@ -4426,7 +4432,7 @@ const deleteDrainedRootAtomically = async (deleteFilter: Record<string, any>): P
 	return withMongoTransaction(async (session) => {
 		const root = (await things.findOne(deleteFilter as any, { session })) as any as ThingDoc | null;
 		if (!root) return { state: 'missing' };
-		const child = await things.findOne({ ...cascadeAttachmentFilter(cascadeLinkIdsOf(root)), _id: { $ne: (root as any)._id } } as any, {
+		const child = await things.findOne({ ...await cascadeAttachmentFilter(cascadeLinkIdsOf(root)), _id: { $ne: (root as any)._id } } as any, {
 			session,
 			projection: { _id: 1 }
 		});
@@ -5348,7 +5354,7 @@ export const bulkThings = async (
 // things collection directly.
 export const countPublicPosts = async (ownerId: string): Promise<number> => {
   const things = await getThingsCollection();
-  return things.countDocuments(withMatch(postMatch(), { ownerId }, circleClause('public')) as any);
+  return things.countDocuments(withMatch(await postMatch(), { ownerId }, circleClause('public')) as any);
 };
 
 // Activity heatmap window: exactly the days the client's 53-column
@@ -5443,7 +5449,7 @@ export const getPostFeatures = async (viewerInput: string | Viewer, shareIds: st
   if (!wanted.length) return new Map();
   const things = await getThingsCollection();
   const docs = (await things
-    .find(withMatch({ shareId: { $in: wanted } }, postMatch()) as any)
+    .find(withMatch({ shareId: { $in: wanted } }, await postMatch()) as any)
     .project(FEATURE_PROJECTION)
     .toArray()) as any as ThingDoc[];
   return new Map(docs.filter((doc) => canView(doc, viewer)).map((doc) => [doc.shareId, featuresOf(doc)]));
