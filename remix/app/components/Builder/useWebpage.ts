@@ -106,15 +106,16 @@ export const mergeSavedWebpage = (prev: ResolvedWebpage | null, thing: LopuSaved
 				? undefined
 				: prev?.page?.linkKey;
 	const author = thing?.author && typeof thing.author === 'object' ? thing.author : prev?.page?.author;
+	const { linkKey: _previousLinkKey, ...previousPage } = prev?.page || {};
 	return {
 		page: {
-			...(prev?.page || {}),
+			...previousPage,
 			id,
 			crystal,
 			...(author !== undefined ? { author } : {}),
 			...(updatedAt ? { updatedAt } : {}),
 			...(acl ? { acl } : {}),
-			...(savedAclPresent ? { linkKey } : linkKey ? { linkKey } : {})
+			...(linkKey ? { linkKey } : {})
 		},
 		source: 'user',
 		componentsByRef: prev?.componentsByRef || {}
