@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
-import { getThingsCollection } from '../mongodb/collections';
+import { ensurePollVoteLayout, getThingsCollection } from '../mongodb/collections';
+import { pollVoteIdentity } from '../mongodb/pollVoteIndex';
 import { ACL_INHERIT, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import { pollShapeOfCrystal, tallyPollVotes, voteKeyOf, type PollVoteEntry, type PublicPollVotes } from './pollCore';
 import {
@@ -18,7 +19,7 @@ import {
 // Poll voting (see voteSchema in schemas/registry.ts): one relational child
 // thing per (user, poll) — kind ['vote'], targetId = the poll thing, acl
 // ['tt:inherit'] so a vote is visible exactly when its poll is. Deduped
-// structurally by crystal.voteKey + the things_vote_key_unique partial index.
+// structurally by the protected Binary voteKey slot in uniqueKeys_1.
 // Semantics (matching the react util's toggle opinion): voting the SAME option
 // again removes the vote; voting a DIFFERENT option updates the existing doc
 // in place. This util is the ONLY writer — the vote kind has no generic
@@ -53,10 +54,12 @@ export const voteOnThing = async (viewerInput: string | Viewer, shareId: unknown
 		return fail(403, 'This token is sandboxed — it can only touch things carrying its tt:token grant 🧸');
 	}
 
+	await ensurePollVoteLayout();
 	const things = await getThingsCollection();
 	const voteKey = voteKeyOf(target.shareId, viewerId);
+	const identity = pollVoteIdentity(target.shareId, viewerId);
 	const now = new Date();
-	const existing = (await things.findOne({ thingtime: 'vote', 'crystal.voteKey': voteKey, ownerId: viewerId } as any)) as any as ThingDoc | null;
+	const existing = (await things.findOne(identity.filter as any)) as any as ThingDoc | null;
 
 	if (existing && Number(existing.crystal?.optionIndex) === optionIndex) {
 		// same option again → toggle the vote off (the react util's opinion)
@@ -71,6 +74,7 @@ export const voteOnThing = async (viewerInput: string | Viewer, shareId: unknown
 				schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
 				thingtime: ['vote'],
 				crystal: { optionIndex, voteKey },
+				uniqueKeys: [identity.uniqueKey],
 				ownerId: viewerId,
 				acl: [ACL_INHERIT],
 				targetId: target.shareId,
@@ -80,9 +84,9 @@ export const voteOnThing = async (viewerInput: string | Viewer, shareId: unknown
 			} as any);
 		} catch (err) {
 			if (!isDuplicateKey(err)) throw err;
-			// raced our own double-tap — the unique voteKey index kept one doc;
+			// raced our own double-tap — the protected unique slot kept one doc;
 			// settle it on the requested option
-			const settled = await things.updateOne({ thingtime: 'vote', 'crystal.voteKey': voteKey, ownerId: viewerId } as any, {
+			const settled = await things.updateOne(identity.filter as any, {
 				$set: { 'crystal.optionIndex': optionIndex, updatedAt: now }
 			});
 			// matched nothing: the unique slot is held by a doc that is NOT this

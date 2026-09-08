@@ -10432,6 +10432,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-vote',
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     group: 'things',
     title: 'Vote on poll',
     endpoint: '/api/v1/things/vote',
@@ -10440,8 +10442,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Polls are posts (or data things) whose thing carries a string question plus an options ' +
       'list of 2+ entries. One vote per (user, poll), enforced structurally: votes are standalone ' +
       'things (thingtime ["vote"], crystal.optionIndex, targetId = the poll, acl ["tt:inherit"]) ' +
-      'deduped by a server-written crystal.voteKey ("<pollId>~<userId>") under a partial unique ' +
-      'index. Voting a DIFFERENT option moves your vote (the doc updates in place); voting the ' +
+      'deduped by a server-written Binary voteKey slot in the protected root uniqueKeys index. ' +
+      'Legacy genuine votes are validated and backfilled before voting; malformed or duplicate legacy slots require repair, never automatic deletion. ' +
+      'Voting a DIFFERENT option moves your vote (the doc updates in place); voting the ' +
       'SAME option again removes it (toggle off, matching reactions). The poll must be visible ' +
       'to the caller — acl and inherit chains are re-checked on every vote. Live tallies ride ' +
       'poll posts as pollVotes wherever posts are projected (feed, /post/:id, profiles).',

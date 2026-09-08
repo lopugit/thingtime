@@ -1719,6 +1719,24 @@ incomplete-MPU lifecycle remains a required independent guard.
 An MPU that never issued a part URL has no possible late browser PUT and can be
 refunded promptly after Abort/ListParts/HEAD proves it empty.
 
+### Poll index headroom during the Watch rollout
+
+Poll point lookups now reuse the existing protected Binary `uniqueKeys_1`
+index, leaving the combined home Things plan at 60 indexes with four spare
+slots. Startup and the first poll write validate/backfill genuine legacy votes
+before retiring `things_vote_key_lookup`; new votes stamp their protected slot.
+The operation adds only derived control metadata, never deletes or selects a
+winner among duplicate votes. Malformed/duplicate legacy slots fail closed and
+need administrator repair before the old index is retired. Forks need normal
+MongoDB index-management permissions. Custom data endpoints receive the key
+backfill but do not have their existing named indexes removed.
+
+For a production-free verification, install MongoDB locally and run
+`node --import tsx scripts/verify-poll-index-layout.mts /absolute/path/to/mongod`
+from `remix/`. It starts a loopback-only disposable database, checks migration
+ordering, duplicate rejection, index count and the real lookup plan, then stops
+the database and removes only its own temporary data directory.
+
 ### Personal recording runtime (local adapter)
 
 `remix/scripts/personal-recording-runtime.mjs` provides local `transcribe` and

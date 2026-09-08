@@ -5,6 +5,7 @@ import { COLLECTIONS, physicalCollectionName } from './collectionNames';
 import { MIGRATION_DIAGNOSTIC_THINGTIME } from '../../../schemas/registry';
 import { CI_DASHBOARD_UPDATED_INDEX } from '../ciControl/dashboardQueryCore';
 import { thingUniqueKey } from './uniqueKeys';
+import { migratePollVoteIndex } from './pollVoteIndex';
 
 export { COLLECTIONS, physicalCollectionName, versionedCollectionName, collectionVersion } from './collectionNames';
 
@@ -250,6 +251,23 @@ export const warnIfTransactionsUnsupported = async (): Promise<void> => {
 // every identity / auth / control-plane getter uses.
 export const getCollection = async (logical: string) => (await getThingtimeDb()).collection(physicalCollectionName(logical));
 export const getHomeCollection = async (logical: string) => (await getHomeThingtimeDb()).collection(physicalCollectionName(logical));
+
+// Poll writes await this small, memoised layout gate rather than the entire
+// background index battery. Scope the cache to the actual selected endpoint.
+const pollVoteLayouts = new Map<string, Promise<void>>();
+export const ensurePollVoteLayout = async () => {
+	const key = `${getActiveMongoUri()}\0${getActiveMongoDbName()}`;
+	const cached = pollVoteLayouts.get(key);
+	if (cached) return cached;
+	const run = (async () => {
+		const raw = thingsCollection(await getThingtimeDb());
+		await migratePollVoteIndex(raw, name => dropIndexRetrying(raw, name), !isCustomMongoEndpointActive());
+	})();
+	pollVoteLayouts.set(key, run);
+	try { await run; }
+	catch (error) { if (pollVoteLayouts.get(key) === run) pollVoteLayouts.delete(key); throw error; }
+	while (pollVoteLayouts.size > MAX_CUSTOM_CLIENTS + 1) pollVoteLayouts.delete(pollVoteLayouts.keys().next().value!);
+};
 
 export const getUsersCollection = async () => getHomeCollection('users');
 export const getSessionsCollection = async () => getHomeCollection('sessions');
@@ -1156,18 +1174,8 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
       { name: 'things_follow_key_lookup', partialFilterExpression: { 'crystal.followKey': { $type: 'string' } } },
       ['things_follow_key_unique']
     ),
-    // Poll voting is deliberately outside this release, but its preview
-    // branch already installed the old kind-blind index in the shared develop
-    // database. Retire it here with the rest of the family so phase 2 can
-    // safely reopen voteKey too. Any existing vote docs are backfilled into
-    // uniqueKeys; this lookup preserves the future query shape without
-    // shipping the poll product surface.
-    createIndexReplacing(
-      col,
-      { 'crystal.voteKey': 1 },
-      { name: 'things_vote_key_lookup', partialFilterExpression: { 'crystal.voteKey': { $type: 'string' } } },
-      ['things_vote_key_unique']
-    ),
+    // Poll point reads and writes share uniqueKeys_1. The awaited poll layout
+    // gate backfills legacy votes before retiring the home lookup-only index.
     // Poll voting DOES ship on this branch (things/vote.ts), but it does not
     // get its old kind-blind things_vote_key_unique back — that index is the
     // squat class this family just retired. 'vote' is already in
@@ -1379,6 +1387,8 @@ export const ensureIndexes = async () => {
 			await pruneRetiredHomeThingsIndexes(db);
 			await pruneRebuildTwins(db);
 			await migrateDeviceIndexLayout(db);
+			const pollRaw = thingsCollection(db);
+			await migratePollVoteIndex(pollRaw, name => dropIndexRetrying(pollRaw, name));
       // indexes land on the current-generation physical collections; createIndex
       // failures are tagged with `<logical>.<index name>` (via taggedCollection)
       // because Promise.all surfaces only the first rejection and driver

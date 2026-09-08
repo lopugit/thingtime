@@ -1603,8 +1603,8 @@ email whose link points at the attacker.
       your own option again REMOVES it. `POST /api/v1/things/vote` returns
       `pollVotes { counts, totalVotes, viewerVote }` matching what renders.
 - [ ] One vote per user per poll survives races: double-tap fast / two tabs —
-      the `things_vote_key_unique` index keeps ONE vote doc per
-      (`crystal.voteKey` = `<pollId>~<userId>`); reloads converge.
+      the protected `uniqueKeys_1` index keeps ONE Binary `voteKey:` slot per
+      user/poll; reloads converge. New writes stamp the root slot explicitly.
 - [ ] Logged out: the poll shows results only (bars + percentages visible,
       no vote recorded); tapping toasts "Log in to vote 🗳️".
 - [ ] A poll on a private/friends-only post can't be voted on by a viewer
@@ -1621,9 +1621,17 @@ email whose link points at the attacker.
 - [ ] Deleting a poll post cascade-deletes its vote things (no orphan `vote`
       docs pointing at the gone poll); vote docs never list as /things rows
       and folder copy skips them like reactions/saves.
-- [ ] A foreign doc squatting the `crystal.voteKey` slot (e.g. a free-form
-      data crystal) makes the vote endpoint answer 409 — never a silent
-      `ok: true` that drops the vote.
+- [ ] A free-form data crystal containing the same `voteKey` cannot reserve
+      a protected slot or prevent a legitimate vote. A conflicting protected
+      root slot still fails loudly rather than silently losing the vote.
+- [ ] Before retiring the home `things_vote_key_lookup`, ensure the replacement
+      unique index exists and legacy genuine votes have been validated and
+      backfilled. Duplicate/malformed legacy votes must fail without deleting
+      votes or retiring the old index. Custom databases retain their named
+      indexes. Run `node --import tsx scripts/verify-poll-index-layout.mts
+      /absolute/path/to/mongod` from `remix/` for a disposable local MongoDB
+      proof: 60 total indexes, four free slots, and one document examined for
+      a poll point lookup. No production URI is accepted by this verifier.
 
 ## Subspaces (`remix/app/components/Subspaces/`, `remix/app/api/utils/subspaces/`, `/api/v1/subspaces*`)
 

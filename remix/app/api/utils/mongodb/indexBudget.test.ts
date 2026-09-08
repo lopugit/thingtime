@@ -77,6 +77,7 @@ test('current Things index plan keeps four slots free below MongoDB hard limit',
 	// CI control-plane rows live on the ciControl satellite: `things` must not
 	// carry their dashboard sort or per-parent history indexes any more
 	assert.equal(desired.has('things_ci_repository_updated'), false);
+	assert.equal(desired.has('things_vote_key_lookup'), false, 'poll point reads reuse uniqueKeys_1');
 	assert.equal(desired.has('thingtime_1_parentId_1_createdAt_-1_shareId_1'), false);
 });
 

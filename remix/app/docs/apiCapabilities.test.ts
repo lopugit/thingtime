@@ -63,6 +63,7 @@ test('notification contracts publish the history filters and the system family a
 	// Preserve both subspace notifications and private recording reminders.
 	assert.equal(manifest.features['api.notifications-list'], '1.4.0');
 	assert.equal(manifest.features['api.notifications-settings'], '1.3.0');
+	assert.equal(manifest.features['api.things-vote'], '1.0.1');
 });
 
 test('capabilities publish the non-secret data authority used by a bundle', () => {

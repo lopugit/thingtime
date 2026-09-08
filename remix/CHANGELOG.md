@@ -18,6 +18,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-08: Restore four-slot MongoDB index headroom by moving poll point reads/writes to protected Binary unique keys; validate/backfill legacy votes before retiring the home lookup index. A disposable MongoDB test proves 60 indexes, indexed lookups and duplicate protection. Poll contract/client minimum is 1.0.1. — Codex (AI)
+
 - 2026-09-08: Reconcile PR #665 with released Desktop Node ownership and subspace notifications. Preserve both notification families, opt-in email defaults, and relational delete cascades; publish compatible notification list/settings contracts 1.4.0/1.3.0. — Codex (AI)
 
 - 2026-09-08 — **Codex (AI):** Add a bounded local speech-to-text and personal Claude Code adapter; synthetic audio produced validated grounded todos without sending audio to Claude. Cloud job pairing remains pending. See [PR #665 notes](../PRs/665-codex-watch-lopu-recording-automation-private-transcripts-todos-reminders.md).

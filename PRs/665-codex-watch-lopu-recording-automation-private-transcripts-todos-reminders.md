@@ -147,6 +147,16 @@ test items; no answer has been received yet.
 
 ## Shared AI router and accepted runtime direction — 2026-09-08
 
+Index-headroom repair: the combined plan's 61/64 failure is addressed without
+relaxing its four-slot reserve. Poll reads/writes reuse protected Binary
+voteKey slots; the layout gate validates/backfills genuine legacy votes before
+dropping the home lookup-only index, and preserves foreign custom indexes.
+Malformed/duplicate legacy records stop the gate without data deletion or
+index retirement. The native MongoDB verifier exercised 1,001 synthetic legacy
+votes, an idempotent second pass, free-form crystal isolation, duplicate
+rejection, 60 total indexes and a one-document uniqueKeys_1 point lookup.
+This does not constitute production migration or Watch-worker acceptance.
+
 Main reconciliation: merge main 2fea784bb (Desktop Node ownership plus subspaces)
 into this feature branch, preserving private recording reminders and all six
 subspace notification types. Notification list/settings publish 1.4.0/1.3.0

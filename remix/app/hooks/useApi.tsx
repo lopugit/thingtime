@@ -984,8 +984,10 @@ export function useApi() {
       saved: useCallback(async (args?: { cursor?: string; limit?: number }) => getJson(`/api/v1/things/saved${toQuery(args)}`), []),
       // cast/move/remove the caller's vote on a visible poll thing
       vote: useCallback(
-        async (args: { id: string; optionIndex: number }) =>
-          asyncFetcher.submit({ id: args?.id, optionIndex: args?.optionIndex }, { action: '/api/v1/things/vote', errorContext: 'save your vote' }),
+        async (args: { id: string; optionIndex: number }) => {
+          await requireThingtimeCapability('api.things-vote', '1.0.1');
+          return asyncFetcher.submit({ id: args?.id, optionIndex: args?.optionIndex }, { action: '/api/v1/things/vote', errorContext: 'save your vote' });
+        },
         [asyncFetcher]
       ),
       // up/down vote (the separate focused reaction kind): 'up' | 'down' casts
