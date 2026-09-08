@@ -1,7 +1,6 @@
 import { defineHandler } from 'nitro/h3';
 import { useStorage } from 'nitro/storage';
 
-import { renderSocialCardPng } from '../../app/api/utils/meta/socialCard';
 import { injectSocialMeta, renderSocialMetaHtml, resolveSocialMeta } from '../../app/api/utils/meta/socialMeta';
 import { normaliseSocialPreviewPath, resolveSocialPreview, staticSocialPreview } from '../../app/api/utils/meta/socialPreview';
 import { getRequestMongoEndpoint, runWithMongoEndpoint } from '../../app/api/utils/mongodb/endpoint';
@@ -36,6 +35,14 @@ export default defineHandler(async (event) => {
 		// that projection with no PNG to make the miss worth caching.
 		if (method === 'HEAD') return new Response(null, { headers: cardHeaders });
 		const path = normaliseSocialPreviewPath(requestUrl.searchParams.get('path'));
+		// lazy, for the same reason socialPreview.ts lazy-imports things/users/
+		// webpages/attachments: socialCard.ts pulls in the @resvg native binding and
+		// ~1.1 MB of embedded font source, measuring ~40ms and ~7 MiB of heap at
+		// module load against ~3ms/~0.5 MiB for the meta path. Only this endpoint
+		// ever draws a card, so the HTML shell — every public page, now including
+		// `/` — must not pay that on a cold start. A static import made it
+		// unconditional for the whole route module.
+		const { renderSocialCardPng } = await import('../../app/api/utils/meta/socialCard');
 		try {
 			// Deliberately NOT runWithMongoEndpoint. This response is shared-cacheable
 			// (s-maxage below) and shared caches key on the URL alone, so honouring an
