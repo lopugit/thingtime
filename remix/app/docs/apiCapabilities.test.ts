@@ -6,6 +6,18 @@ import { routeModules } from '../../server/routes/api/[...]';
 import { thingtimeCapabilityManifest } from '../api/utils/capabilities/thingtimeCapabilities';
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 
+test('poll votes publish the shared-identity correction', () => {
+	const route = createApiCapabilitiesManifest().features;
+	const manifest = thingtimeCapabilityManifest('https://thingtime.test');
+	assert.equal(route['api.things-vote'], '1.0.1');
+	assert.equal(manifest.features['api.things-vote'].version, '1.0.1');
+	assert.equal(capabilitySatisfies(route['api.things-vote'], '1.0.0'), true);
+	assert.equal(capabilitySatisfies('1.0.0', '1.0.1'), false);
+	assert.equal(capabilitySatisfies('2.0.0', '1.0.1'), false);
+	assert.equal(capabilitySatisfies('', '1.0.1'), false);
+	assert.ok(manifest.operations.some(operation => operation.feature === 'api.things-vote' && operation.path === '/api/v1/things/vote' && operation.methods.includes('POST')));
+});
+
 test('relationship consolidation publishes compatible additive migrations on both manifests', () => {
 	const route = createApiCapabilitiesManifest().features;
 	const wellKnown = thingtimeCapabilityManifest('https://thingtime.test').features;
