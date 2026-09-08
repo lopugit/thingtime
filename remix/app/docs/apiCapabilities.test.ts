@@ -103,7 +103,8 @@ test('capabilities publish the non-secret data authority used by a bundle', () =
 test('the storage census and ciControl workbench allowlist publish their minor capability updates', () => {
 	const manifest = createApiCapabilitiesManifest();
 	assert.equal(manifest.features['api.admin-migrations'], '1.1.1');
-	assert.equal(manifest.features['api.mongodb-raw-results'], '1.1.0');
+	assert.equal(manifest.features['api.mongodb-raw-results'], '1.1.1');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.mongodb-raw-results'].version, '1.0.1');
 });
 
 test('the Lopu family publishes its minor capability updates (own providers, verified keys)', () => {

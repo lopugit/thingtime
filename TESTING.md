@@ -6022,6 +6022,8 @@ approval; `access.test.ts` — the reservation matrix) and
 - Desktop privacy status: grant/revoke each permission, return from System Settings, and confirm live status refreshes without prompting. Stop the node and confirm failed checks show last-known status, not a new denial or false success. Restart and use Check access to recover; a signing migration must explain the one-time off/on grant refresh.
 # Index consolidation regression checks
 
+- In the admin workbench, an aggregation starting with `$indexStats: {}` must run without MongoDB Location40602. Keep protected-field probes rejected and strip protected Thing fields from later joins; do not generalize the first-stage exception to document-reading expressions.
+
 - Relationship-key migrations must count missing individual keys, preserve all existing keys, compare the source identity, and stop safely on lease loss. More than one batch of duplicate slots must terminate, remain pending, and never disclose key values or delete a relationship.
 
 - Run `cd remix && node --import tsx scripts/audit-things-indexes.mts`; source-plan replay must work without database credentials, include Mongo's `_id_`, and preserve exact key order, unique/partial/sparse/TTL options.

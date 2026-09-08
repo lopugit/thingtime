@@ -5161,10 +5161,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/mongodb/raw-results',
     // 1.1.0: the collection allowlist gained `ciControl` (additive).
     // contractVersion is what the capabilities manifest publishes.
-    contractVersion: '1.1.0',
+    contractVersion: '1.1.1',
+    featureVersion: '1.0.1',
     summary: 'Advertises and runs bounded, read-only MongoDB queries for the no-code admin workbench.',
     detail:
-      'GET returns the server-owned capability catalogue. POST accepts a structured query built from filters, typed Extended JSON values, projection, sort, collation, index hints, or a read-only aggregation pipeline. Results are capped by document count, response bytes, and execution time. Mutations, change streams, operational/session inspection, server-side JavaScript, arbitrary databases, and unknown collections are rejected recursively.',
+      'GET returns the server-owned capability catalogue. POST accepts a structured query built from filters, typed Extended JSON values, projection, sort, collation, index hints, or a read-only aggregation pipeline. Results are capped by document count, response bytes, and execution time. Mutations, change streams, operational/session inspection, server-side JavaScript, arbitrary databases, and unknown collections are rejected recursively. An initial empty $indexStats stage remains first as MongoDB requires; it emits only index metadata, while protected-field stripping remains active for document ingress and subsequent joins.',
     auth: {
       mode: 'session-or-bearer',
       description:
