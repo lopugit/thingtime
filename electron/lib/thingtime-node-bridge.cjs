@@ -225,7 +225,8 @@ function buildLaunchAgentPlist({
 	projectRegistryPath = null,
 	menuBarIconId = 'tree-pink',
 	menuBarCustomIconPath = null,
-	unsignedDistribution = false
+	unsignedDistribution = false,
+	desktopVersion = ''
 }) {
 	for (const [label, value] of [
 		['helper executable', helperExecutable],
@@ -282,6 +283,10 @@ function buildLaunchAgentPlist({
 <dict>
     <key>Label</key>
     <string>${NODE_LABEL}</string>
+    <key>ThingtimeDesktopOwner</key>
+    <string>${DESKTOP_BUNDLE_ID}</string>
+    <key>ThingtimeDesktopVersion</key>
+    <string>${xmlEscape(desktopVersion)}</string>
     <key>ProgramArguments</key>
     <array>
 ${plistString(helperExecutable)}
@@ -800,16 +805,8 @@ function requireLaunchctlSuccess(result, action, { allowMissing = false } = {}) 
 	throw new ThingtimeNodeBridgeError('login_item_failed', `macOS could not ${action} Thingtime Node.`);
 }
 
-function assertManagedLaunchAgentContents(contents) {
-	if (typeof contents !== 'string' || !contents.includes(MANAGED_PLIST_MARKER)) {
-		throw new ThingtimeNodeBridgeError(
-			'login_item_conflict',
-			'The existing Thingtime Node LaunchAgent is not owned by Thingtime Electron and was left unchanged.'
-		);
-	}
-}
-
-async function readManagedLaunchAgent(launchAgentPath) {
+async function readManagedLaunchAgent(paths, runner) {
+	const { launchAgentPath } = paths;
 	let stat;
 	try {
 		stat = await fsPromises.lstat(launchAgentPath);
@@ -817,14 +814,28 @@ async function readManagedLaunchAgent(launchAgentPath) {
 		if (error?.code === 'ENOENT') return null;
 		throw error;
 	}
-	if (stat.isSymbolicLink() || !stat.isFile()) {
-		throw new ThingtimeNodeBridgeError(
-			'login_item_conflict',
-			'The existing Thingtime Node LaunchAgent is not a regular Thingtime-managed file and was left unchanged.'
-		);
-	}
-	const contents = await fsPromises.readFile(launchAgentPath, 'utf8');
-	assertManagedLaunchAgentContents(contents);
+	const conflict = () => new ThingtimeNodeBridgeError(
+		'login_item_conflict',
+		'The existing Thingtime Node LaunchAgent does not identify this Desktop node and was left unchanged.'
+	);
+	if (stat.isSymbolicLink() || !stat.isFile() || stat.size > MAX_FRAME_BYTES ||
+		stat.uid !== process.getuid() || (stat.mode & 0o022) !== 0) throw conflict();
+	const contents = await fsPromises.readFile(launchAgentPath);
+	// Parse the plist instead of relying on a comment that plutil strips.
+	const result = await runner('/usr/bin/plutil', ['-convert', 'json', '-o', '-', '--', '-'], {
+		input: contents, maximumOutputBytes: MAX_FRAME_BYTES, timeoutMs: 5_000
+	});
+	let plist;
+	try { plist = JSON.parse(result.stdout); } catch { throw conflict(); }
+	if (result.status !== 0 || plist?.Label !== NODE_LABEL) throw conflict();
+	const environment = plist.EnvironmentVariables;
+	const sameBundledNode = Array.isArray(plist.ProgramArguments) && plist.ProgramArguments.length === 1 &&
+		plist.ProgramArguments[0] === paths.helperExecutable &&
+		environment?.THINGTIME_NODE_CONNECTOR_EXECUTABLE === paths.electronExecutable &&
+		environment?.THINGTIME_NODE_CONNECTOR_ARGUMENTS_JSON === JSON.stringify([paths.runtimePath]) &&
+		plist.MachServices?.[`${NODE_LABEL}.xpc`] === true;
+	const marked = plist.ThingtimeDesktopOwner === DESKTOP_BUNDLE_ID || contents.includes(MANAGED_PLIST_MARKER);
+	if (!marked && !sameBundledNode) throw conflict();
 	return contents;
 }
 
@@ -893,6 +904,7 @@ class ThingtimeNodeIntegration {
 		this.electronDir = electronDir;
 		this.environment = environment;
 		this.runner = runner;
+		this.serviceOperation = Promise.resolve();
 	}
 
 	paths() {
@@ -1051,11 +1063,51 @@ class ThingtimeNodeIntegration {
 			menuBarIconId,
 			projectRegistryPath,
 			runtimePath: paths.runtimePath,
-			unsignedDistribution: this.isUnsignedDistribution()
+			unsignedDistribution: this.isUnsignedDistribution(),
+			desktopVersion: this.app.getVersion?.() || ''
 		});
 	}
 
-	async registerService(options = {}) {
+	withServiceLock(operation) {
+		const pending = this.serviceOperation.then(operation);
+		this.serviceOperation = pending.catch(() => {});
+		return pending;
+	}
+
+	registerService(options = {}) {
+		return this.withServiceLock(() => this._registerService(options));
+	}
+
+	reconcileRegisteredService(options = {}, policy = {}) {
+		return this.withServiceLock(() => this._reconcileRegisteredService(options, policy));
+	}
+
+	unregisterService() {
+		return this.withServiceLock(() => this._unregisterService());
+	}
+
+	controlService(action, options = {}) {
+		if (!['start', 'stop', 'restart'].includes(action)) {
+			return Promise.reject(new ThingtimeNodeBridgeError('invalid_request', 'Unsupported node control.'));
+		}
+		return this.withServiceLock(async () => {
+			if (action === 'start') return this._reconcileRegisteredService(options, { startIfStopped: true });
+			if (action === 'restart') return this._registerService(options);
+			const paths = this.paths();
+			const existing = await readManagedLaunchAgent(paths, this.runner);
+			const registration = await this.registrationStatus();
+			if (registration.registered && existing === null) {
+				throw new ThingtimeNodeBridgeError('login_item_conflict', 'The running node has no Desktop-owned registration.');
+			}
+			const stopped = await this.runner('/bin/launchctl', ['bootout', `gui/${process.getuid()}/${NODE_LABEL}`], {
+				maximumOutputBytes: MAX_ERROR_BYTES, timeoutMs: 10_000
+			});
+			requireLaunchctlSuccess(stopped, 'stop the node', { allowMissing: true });
+			return this.status();
+		});
+	}
+
+	async _registerService(options = {}) {
 		const paths = this.paths();
 		await this.verify(paths);
 		if (!this.app.isPackaged && this.environment.THINGTIME_NODE_ALLOW_DEV_REGISTRATION !== '1') {
@@ -1067,7 +1119,7 @@ class ThingtimeNodeIntegration {
 		await fsPromises.mkdir(launchAgentDirectory, { mode: 0o700, recursive: true });
 
 		const domain = `gui/${process.getuid()}`;
-		const previousContents = await readManagedLaunchAgent(paths.launchAgentPath);
+		const previousContents = await readManagedLaunchAgent(paths, this.runner);
 		const previousRegistration = await this.registrationStatus();
 		if (previousRegistration.registered && previousContents === null) {
 			throw new ThingtimeNodeBridgeError(
@@ -1114,18 +1166,15 @@ class ThingtimeNodeIntegration {
 		return this.status();
 	}
 
-	async reconcileRegisteredService(options = {}, { startIfStopped = false } = {}) {
+	async _reconcileRegisteredService(options = {}, { startIfStopped = false } = {}) {
 		const paths = this.paths();
 		const registration = await this.registrationStatus();
-		const existing = await readManagedLaunchAgent(paths.launchAgentPath);
+		const existing = await readManagedLaunchAgent(paths, this.runner);
 		if (!registration.registered) {
-			// A missing plist means the user has never enabled the node (or removed it
-			// explicitly), so app launch must not install one silently. The native Quit
-			// item intentionally leaves our managed plist behind; default-on desktop
-			// launch may safely bootstrap that previously approved service again.
-			if (existing === null || startIfStopped !== true) return this.status();
+			// The default-on launch preference owns installation as well as recovery.
+			if (startIfStopped !== true) return this.status();
 			await this.verify(paths);
-			return this.registerService(options);
+			return this._registerService(options);
 		}
 		await this.verify(paths);
 		if (existing === null) {
@@ -1134,13 +1183,17 @@ class ThingtimeNodeIntegration {
 				'A Thingtime Node service is registered without a Thingtime Electron-managed LaunchAgent and was left unchanged.'
 			);
 		}
-		return existing === this.servicePlist(paths, options) ? this.status() : this.registerService(options);
+		if (existing.toString('utf8') !== this.servicePlist(paths, options)) return this._registerService(options);
+		const status = await this.status();
+		// launchd registration alone does not mean a process is serving requests.
+		if (startIfStopped && status.serviceStatus === 'starting') return this._registerService(options);
+		return status;
 	}
 
-	async unregisterService() {
+	async _unregisterService() {
 		const paths = this.paths();
 		const domain = `gui/${process.getuid()}`;
-		const existing = await readManagedLaunchAgent(paths.launchAgentPath);
+		const existing = await readManagedLaunchAgent(paths, this.runner);
 		const registration = await this.registrationStatus();
 		if (registration.registered && existing === null) {
 			throw new ThingtimeNodeBridgeError(

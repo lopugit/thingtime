@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
@@ -34,13 +34,17 @@ import type { WebpageBlock } from '../components/Builder/webpageBlocks';
 
 export default function PublicWebpage() {
 	const { id } = useParams();
+	const [searchParams] = useSearchParams();
+	const linkKey = (searchParams.get('key') || '').trim();
 	const user = useCurrentUser();
 	const api = useApi();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
 	const lopu = useLopu();
 	const navigate = useNavigate();
-	const draft = useWebpageDraft(React.useMemo(() => (id ? { kind: 'id' as const, id } : null), [id]));
+	const draft = useWebpageDraft(
+		React.useMemo(() => (id ? { kind: 'id' as const, id, ...(linkKey ? { key: linkKey } : {}) } : null), [id, linkKey])
+	);
 	const page = draft.resolved?.page || null;
 	const isOwner = !!user?.id && page?.author?.id === user.id;
 	// system docs project no author; the seeded suite pages are exactly the
