@@ -2483,3 +2483,35 @@ Tailscale/Funnel could not be verified: the installed CLI wrapper points to a
 missing Tailscale.app executable. No public mapping was created or changed.
 
 Thingtime Desktop checks Node privacy access directly from the running helper. The Things setup card refreshes every five seconds while visible and on return from System Settings; **Check access** retries immediately. A failed check preserves and labels the last known result. If macOS shows access enabled but the helper reports denial after moving from a development build to Developer ID signing, switch **Thingtime Node** off and on once for each affected permission, restart the node in Desktop settings, and check again. Desktop never resets privacy grants automatically.
+## Thing index audit
+
+The staged consolidation audit and production/develop rollout gates live in
+[Thing index consolidation](docs/architecture/thing-index-consolidation.md).
+Run `cd remix && node --import tsx scripts/audit-things-indexes.mts` for the
+exact source-plan inventory. It does not connect to a database or need secrets;
+live index counts must be checked separately through the admin workbench.
+
+The combined relationship/legacy increment targets 47 home indexes, but keeps
+60 during compatibility rollout (unknown extra indexes are preserved). Run
+`consolidate-relationship-lookup-indexes` and `retire-legacy-thing-indexes`
+on that home database. Deploy the
+compatible code to every origin sharing it first, dry-run, then run with
+`confirm: true` under the migration lease. Duplicate keys block activation;
+no relationship documents are deleted. Custom endpoints are not migrated.
+Each migration first activates readers without dropping indexes; run it again
+after at least one minute to finish retirement. Repeated early runs do not
+reset the drain deadline. Legacy rows block retirement except canonical embeds,
+whose redundant `kind` metadata can be safely removed after readers drain.
+Readiness uses the existing home settings/key index and a 30-second cache;
+normal requests never backfill data. No additional secret or provider setup is
+required. Follow the linked rollout guide and verify native query plans and
+the live index set before retiring any supporting index.
+
+For isolated native regression checks, start a **fresh disposable** MongoDB
+replica set named `ttindex` on loopback port `27192` (never your normal local
+database). Then run `cd remix` and
+`TT_INDEX_TEST_ALLOW_LOCAL=1 MONGODB_CONNECTION_STRING='mongodb://127.0.0.1:27192/thingtime?replicaSet=ttindex' npm run verify:relationship-indexes`.
+The script creates fixture accounts/content through the real API utilities,
+runs the leased migration, checks behavior and emits identity-free native
+explain counts. It refuses any other URI. Stop the disposable server afterward;
+it is not a persistent development service.
