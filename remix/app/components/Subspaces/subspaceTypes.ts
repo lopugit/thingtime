@@ -1,0 +1,237 @@
+// Client-side shapes for the subspace APIs. Mirrors the public projections in
+// remix/app/api/utils/subspaces/subspaces.ts — the API utils are the source
+// of truth; keep this file in sync with them.
+import type { FeedAuthor, PublicAuthorFlair, PublicPost, SubspaceAccess, SubspaceRole } from '~/components/Feed/feedTypes';
+
+export type { PublicAuthorFlair, SubspaceAccess, SubspaceRole };
+
+export type SubspaceRule = { title: string; text: string | null };
+export type SubspaceFlair = { id: string; label: string; emoji: string | null; color: string | null; modOnly: boolean };
+// a canned removal reason moderators pick when removing a post (title +
+// message become the stored reason the author sees)
+export type SubspaceRemovalReason = { id: string; title: string; message: string };
+export type SubspaceBranding = { icon: string | null; iconUrl: string | null; bannerUrl: string | null; accent: string | null };
+
+export type PublicSubspaceViewer = {
+	role: SubspaceRole | null;
+	member: boolean;
+	approved: boolean;
+	banned: boolean;
+	banReason: string | null;
+	banUntil: string | null;
+	canModerate: boolean;
+	canPost: boolean;
+	// an open join request to a private subspace (not a member yet)
+	pending: boolean;
+	// asked the mods for posting approval (restricted subspaces)
+	approvalRequested: boolean;
+	// the flair the viewer wears here (active members only)
+	userFlair: PublicAuthorFlair | null;
+};
+
+export type PublicSubspace = {
+	id: string;
+	slug: string;
+	name: string;
+	description: string | null;
+	access: SubspaceAccess;
+	nsfw: boolean;
+	rules: SubspaceRule[];
+	flairs: SubspaceFlair[];
+	// user flairs: the templates members wear beside their name + the two
+	// self-service switches (moderators are bound by neither)
+	userFlairs: SubspaceFlair[];
+	userFlairSelfAssign: boolean;
+	allowCustomUserFlair: boolean;
+	// canned removal reasons (the Remove modal's radio list, after the rules)
+	removalReasons: SubspaceRemovalReason[];
+	branding: SubspaceBranding;
+	ownerId: string;
+	memberCount: number;
+	postCount?: number;
+	// directory rows under sort=active: live posts in the last 7 days
+	recentPostCount?: number;
+	// moderators only (detail): sizes of the Requests queues
+	pendingCount?: number;
+	approvalRequestCount?: number;
+	// moderators only (detail): open reports waiting in the Reports queue
+	openReportCount?: number;
+	createdAt: string;
+	updatedAt: string;
+	viewer: PublicSubspaceViewer;
+};
+
+// open requests a moderator sees (badge on the Requests tab)
+export const openRequestCount = (subspace: Pick<PublicSubspace, 'pendingCount' | 'approvalRequestCount'> | null | undefined): number =>
+	(subspace?.pendingCount || 0) + (subspace?.approvalRequestCount || 0);
+// open reports a moderator sees (badge on the Reports tab)
+export const openReportCount = (subspace: Pick<PublicSubspace, 'openReportCount'> | null | undefined): number => subspace?.openReportCount || 0;
+// everything waiting for a moderator — requests + reports (the badge on Mod tools 🎩)
+export const modQueueCount = (subspace: Pick<PublicSubspace, 'pendingCount' | 'approvalRequestCount' | 'openReportCount'> | null | undefined): number =>
+	openRequestCount(subspace) + openReportCount(subspace);
+// The open-report badge after a queue group leaves (or comes back): the count
+// is report ROWS, a group carries reportCount of them — never "one per group".
+export const openReportCountWithout = (count: number, group: { reportCount: number }): number => Math.max(0, (count || 0) - Math.max(0, group.reportCount || 0));
+// Did a card's OWN action inside the queue settle its open reports? Only the
+// server's re-projection after a moderator's remove / approve reads
+// subspaceMod.reportCount 0 on a post that had open rows (mods always get the
+// key; the card's optimistic paints spread the previous value or omit it), so
+// the group can leave the open list and the badge follow without a guess.
+export const reportsSettledByCard = (group: { status: SubspaceReportStatus; reportCount: number }, next: { subspaceMod?: { reportCount?: number } | null } | null | undefined): boolean =>
+	group.status === 'open' && group.reportCount > 0 && next?.subspaceMod?.reportCount === 0;
+
+// --- reports (POST /api/v1/subspaces/report, GET+POST /api/v1/subspaces/reports)
+export type SubspaceReportStatus = 'open' | 'resolved';
+export type SubspaceReportResolution = 'removed' | 'approved' | 'dismissed';
+export type PublicSubspaceReport = {
+	id: string;
+	subspaceId: string;
+	postId: string;
+	commentId: string | null;
+	reason: string;
+	note: string | null;
+	status: SubspaceReportStatus;
+	resolution: SubspaceReportResolution | null;
+	createdAt: string;
+	updatedAt: string;
+};
+// POST /report — updated: true when the reporter had already reported the post
+export type SubspaceReportResponse = { ok: true; report: PublicSubspaceReport; updated: boolean };
+// one row of the mods' Reports queue: a post with every report against it
+export type PublicReportedPost = {
+	postId: string;
+	// the post as the mod sees it; null when it is gone / left the subspace
+	post: PublicPost | null;
+	reportCount: number;
+	reasons: { reason: string; count: number }[];
+	reporters: { userId: string; profile: FeedAuthor | null; reason: string; note: string | null; commentId: string | null; createdAt: string }[];
+	latestAt: string;
+	status: SubspaceReportStatus;
+	resolution: SubspaceReportResolution | null;
+};
+export type SubspaceReportsResponse = { ok: true; reports: PublicReportedPost[]; nextCursor: string | null; status: SubspaceReportStatus; openReportCount: number };
+export type SubspaceDismissReportsResponse = { ok: true; postId: string; dismissed: number; openReportCount: number };
+// the reason the ReportModal sends for its "Other" pick (server groups by it)
+export const REPORT_OTHER_REASON = 'Other';
+
+export type PublicSubspaceMember = {
+	userId: string;
+	profile: FeedAuthor | null;
+	role: SubspaceRole;
+	approved: boolean;
+	banned: boolean;
+	banReason: string | null;
+	banUntil: string | null;
+	left: boolean;
+	pending: boolean;
+	approvalRequested: boolean;
+	// the flair they wear here (null when none)
+	userFlair: PublicAuthorFlair | null;
+	joinedAt: string;
+};
+
+// what a viewer may do about their own flair here: pick a template (any
+// non-modOnly one while self-assign is on), type custom text (while allowed),
+// or nothing but clear. Moderators are bound by neither switch.
+export const userFlairChoices = (subspace: Pick<PublicSubspace, 'userFlairs' | 'userFlairSelfAssign' | 'allowCustomUserFlair' | 'viewer'>) => {
+	const moderator = subspace.viewer.canModerate;
+	const templates = moderator ? subspace.userFlairs : subspace.userFlairSelfAssign ? subspace.userFlairs.filter((flair) => !flair.modOnly) : [];
+	return { templates, custom: moderator || (subspace.userFlairSelfAssign && subspace.allowCustomUserFlair) };
+};
+
+// POST /api/v1/subspaces/join — joined: true for public/restricted;
+// pending: true when a PRIVATE subspace filed a join request instead
+export type SubspaceJoinResponse = { ok: true; subspace: PublicSubspace; joined: boolean; pending: boolean };
+export type SubspaceMemberResponse = { ok: true; member: PublicSubspaceMember };
+
+export type PublicModlogEntry = {
+	id: string;
+	action: string;
+	actor: FeedAuthor | null;
+	user: FeedAuthor | null;
+	userId: string | null;
+	postId: string | null;
+	reason: string | null;
+	detail: Record<string, unknown> | null;
+	createdAt: string;
+};
+
+// POST /api/v1/subspaces/transfer — the subspace as the (now moderator)
+// caller sees it + the new owner's member row
+export type SubspaceTransferResponse = { ok: true; subspace: PublicSubspace; newOwner: PublicSubspaceMember };
+// POST /api/v1/subspaces/delete — how many posts left the subspace
+// (releasedPosts), how many of those stayed private to their authors
+// (privatePosts: posts of a private subspace + posts the mods had removed —
+// the owner's click never publishes them) and how many member rows (incl.
+// ban records) were removed
+export type SubspaceDeleteResponse = { ok: true; releasedPosts: number; privatePosts: number; removedMembers: number };
+
+// GET /api/v1/subspaces?sort= — the directory's orders. new walks newest
+// first on a cursor; members / active are ranked server-side over the newest
+// 200 matching subspaces (most members / most live posts in the last 7 days)
+// and paged by offset — the chips on /s and the /explore strip's query.
+export type SubspaceListSort = 'new' | 'members' | 'active';
+export const SUBSPACE_LIST_SORTS: { id: SubspaceListSort; label: string; emoji: string; hint: string }[] = [
+	{ id: 'new', label: 'New', emoji: '✨', hint: 'Newest subspaces first' },
+	{ id: 'members', label: 'Most members', emoji: '👥', hint: 'Biggest communities first' },
+	{ id: 'active', label: 'Most active', emoji: '🔥', hint: 'Most posts in the last 7 days first' }
+];
+export const subspaceListSortOf = (value: unknown): SubspaceListSort => (value === 'members' || value === 'active' ? value : 'new');
+export type SubspaceListResponse = { ok: true; subspaces: PublicSubspace[]; nextCursor: string | null; sort: SubspaceListSort };
+// how many subspaces the /explore "Popular subspaces" strip shows (top by members)
+export const EXPLORE_POPULAR_SUBSPACES = 8;
+// how many subspaces the /search "Subspaces" section shows above the posts
+export const SEARCH_SUBSPACE_RESULTS = 6;
+
+export type SubspaceFeedSort = 'hot' | 'new' | 'top' | 'rising' | 'controversial';
+export const SUBSPACE_SORTS: { id: SubspaceFeedSort; label: string; emoji: string }[] = [
+	{ id: 'hot', label: 'Hot', emoji: '🔥' },
+	{ id: 'new', label: 'New', emoji: '✨' },
+	{ id: 'top', label: 'Top', emoji: '🏆' },
+	{ id: 'rising', label: 'Rising', emoji: '📈' },
+	{ id: 'controversial', label: 'Controversial', emoji: '⚡' }
+];
+export type TopRange = 'hour' | 'day' | 'week' | 'month' | 'year' | 'all';
+export const TOP_RANGES: { id: TopRange; label: string }[] = [
+	{ id: 'hour', label: 'Past hour' },
+	{ id: 'day', label: 'Today' },
+	{ id: 'week', label: 'This week' },
+	{ id: 'month', label: 'This month' },
+	{ id: 'year', label: 'This year' },
+	{ id: 'all', label: 'All time' }
+];
+
+export const ACCESS_META: Record<SubspaceAccess, { label: string; emoji: string; hint: string }> = {
+	public: { label: 'Public', emoji: '🌐', hint: 'Anyone can view and post' },
+	restricted: { label: 'Restricted', emoji: '✋', hint: 'Anyone can view; approved posters post' },
+	private: { label: 'Private', emoji: '🔒', hint: 'Members only — request to join, a moderator lets you in' }
+};
+
+export type SubspaceFeedResponse = { ok: true; subspace: PublicSubspace; posts: PublicPost[]; nextCursor: string | null; sort: SubspaceFeedSort };
+
+// What the composer needs to post INTO a subspace: identity + flairs + rights.
+export type SubspaceComposerContext = {
+	id: string;
+	slug: string;
+	name: string;
+	flairs: SubspaceFlair[];
+	canModerate: boolean;
+	canPost: boolean;
+	accent?: string | null;
+	icon?: string | null;
+};
+
+export const composerContextOf = (subspace: PublicSubspace): SubspaceComposerContext => ({
+	id: subspace.id,
+	slug: subspace.slug,
+	name: subspace.name,
+	flairs: subspace.flairs,
+	canModerate: subspace.viewer.canModerate,
+	canPost: subspace.viewer.canPost,
+	accent: subspace.branding.accent,
+	icon: subspace.branding.icon
+});
+
+// the subspace's visual accent (branding.accent or the platform accent)
+export const subspaceAccent = (subspace: { branding?: SubspaceBranding | null } | null | undefined): string =>
+	subspace?.branding?.accent || 'var(--tt-accent, #7c5cff)';
