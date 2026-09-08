@@ -3697,9 +3697,11 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       component-card Save version, and component-detail Save version all offer
       Public / Friends / Family / Private / Anyone with the link / Custom from
       the same audience control. Custom opens the people + groups capability
-      picker. Saving a standalone Builder page with the link option mints an
-      owner-only key; its copied `/p/<id>?key=<key>` URL resolves while logged
-      out, and the same key pattern opens non-page/non-post Things through
+      picker. At a mobile viewport, open Custom from the Builder inspector and
+      confirm the entire picker (including its buttons) layers above the drawer
+      and remains usable. Saving a standalone Builder page with the link option
+      mints an owner-only key; its copied `/p/<id>?key=<key>` URL resolves while
+      logged out, and the same key pattern opens non-page/non-post Things through
       `/thing/<id>?key=<key>`. A no-key visit remains 404 and never paints a
       bearer-key response from local cache. Moving away from hidden invalidates
       the old link.
