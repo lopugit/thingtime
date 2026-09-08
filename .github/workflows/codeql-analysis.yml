@@ -289,8 +289,22 @@ jobs:
       security-events: write
     strategy:
       fail-fast: false
+      # GitHub Advanced Security opens the PR's aggregate `CodeQL` check when
+      # the FIRST language analysis is uploaded and closes it `timed_out` if
+      # the remaining expected analysis has not landed roughly 6m45s later.
+      # `actions` finishes in well under a minute while `javascript-typescript`
+      # ranges from ~2.5 to ~8 minutes: it is diff-informed when GitHub can
+      # generate `base...head`, and falls back to a full-corpus scan (a ~250 MiB
+      # database instead of a ~200 KiB one) whenever that compare API times out
+      # on a long-running branch. Running the pair in parallel therefore starts
+      # GHAS's window at the fast analysis and loses the race whenever the slow
+      # one degrades, marking the check red even though both analyses succeed
+      # and report zero alerts. Analyze serially, slowest language first, so
+      # the window opens on `javascript-typescript` and `actions` follows a
+      # sub-minute later regardless of how slow the JavaScript scan gets.
+      max-parallel: 1
       matrix:
-        language: [actions, javascript-typescript]
+        language: [javascript-typescript, actions]
     concurrency:
       group: >-
         codeql-${{ matrix.language }}-${{ github.event_name }}-${{ needs.scope.outputs.analysis_sha || github.event.pull_request.head.sha || github.sha }}
