@@ -18,6 +18,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-08: Add the shared owner-scoped text AI endpoint and origin-negotiated client with explicit multi-endpoint credential waterfall, redacted routing traces and shared recording retry policy. Personal Claude Code runtime and local transcription integration remain release gates. See [PR #665](../PRs/665-codex-watch-lopu-recording-automation-private-transcripts-todos-reminders.md). — Codex (AI)
+
 - 2026-09-07: Add explicit account-owned AI credential waterfalls for Watch recording transcription and analysis, including Claude API analysis, bounded failover, renewed consent checks, redacted connection choices and capability 1.1.0. Existing accounts keep their original provider selection. See [PR #665](../PRs/665-codex-watch-lopu-recording-automation-private-transcripts-todos-reminders.md). — Codex (AI)
 
 - 2026-09-07: Use provider-neutral recording consent and status wording. Report safe, actionable recording failure categories for source/format, storage download, provider credentials/quota, transcription, analysis and saving. Live preview acceptance surfaced an immediate retry previously hidden behind one generic message. — Codex (AI)

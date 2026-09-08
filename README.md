@@ -1672,6 +1672,44 @@ incomplete-MPU lifecycle remains a required independent guard.
 An MPU that never issued a part URL has no possible late browser PUT and can be
 refunded promptly after Abort/ListParts/HEAD proves it empty.
 
+### Shared AI endpoint waterfall
+
+`POST /api/v1/ai/complete` is the shared, non-streaming text completion entry
+point. A full signed-in user sends `{ connectionIds, prompt, system? }`.
+`connectionIds` is an explicit ordered list of one to four **owned Secure
+Vault connection IDs**, not tokens. Each connection keeps its own endpoint,
+credential and model. Choose that order per request; no provider is opted in
+implicitly. The `useApi().v1.ai.complete()` client negotiates the origin's
+`api.ai-complete` feature at version 1.0.0 before sending text.
+
+Fork setup: configure the existing Secure Vault encryption key in the host's
+secret store, add connections in Settings → Secure Vault, and admit custom
+HTTPS hosts with `THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS`. Never put credentials
+in source, URLs, prompts or request bodies. Existing Anthropic Messages,
+Gemini generateContent and OpenAI-compatible endpoint adapters are supported.
+All selected IDs are validated as owned before any external delivery; each
+key is resolved again immediately before its attempt. Platform/CI credentials
+are never implicitly selected. This endpoint does not persist prompts or
+responses; each selected provider's own data handling still applies.
+
+The shared waterfall policy also drives recording-stage retries. Each
+connection is tried once (20-second transport timeout, 80-second total
+budget); network, timeout, authentication, quota and selected 5xx failures
+permit fallback. Invalid configuration, unsafe endpoints, malformed replies
+and cancellation stop. Responses report `connectionId` and a bounded
+`attempts` trace containing IDs, outcomes and optional HTTP statuses, never
+tokens, endpoint URLs or upstream error bodies. All failures return a fixed
+safe message. There is a fail-closed limit of 20 requests per ten minutes per
+account. Scoped app/PAT/device credentials are not full account sessions.
+
+**Integration status:** this is text routing, not audio transcription or a
+Claude Code OAuth bridge. The planned personal runtime keeps Claude Code's
+sign-in inside the unmodified runtime and uses a separate endpoint credential
+to authenticate Thingtime. Do not place a Claude session token in an HTTP
+provider entry. Local speech-to-text, runtime pairing and real Watch recording
+acceptance remain separate release gates; no paid transcription key is
+required by this text endpoint.
+
 ### Private Apple Watch recording automation
 
 `/lopu/recordings` (also linked from Settings) controls Lopu's recording

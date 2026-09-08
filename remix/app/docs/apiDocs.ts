@@ -633,6 +633,16 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 
 export const apiEndpointDocs: ApiEndpointDoc[] = [
 	endpoint({
+		id: 'ai-complete', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'lopu', title: 'AI connection waterfall',
+		endpoint: '/api/v1/ai/complete', methods: ['POST'],
+		summary: 'Complete text through an explicit ordered waterfall of your own Secure Vault endpoint connections.',
+		detail: 'Accepts connectionIds (one to four unique owned vault IDs), prompt (1–40000 characters), and optional system (up to 8000 characters). No inline credentials, URLs, tools, owner IDs, model overrides or audio. Connections retain their own endpoint, token and model. Supports the existing Anthropic Messages, Gemini generateContent and OpenAI-compatible adapters. Validates the entire selection before external delivery, then re-resolves each owned connection immediately before use. Tries each connection once with a 20-second transport deadline and 80-second waterfall budget. Only network/timeout and HTTP 401/403/408/429/500/502/503/504/529 permit fallback; invalid configuration, malformed output, other HTTP failures and caller cancellation stop. HTTPS/host allowlisting, public DNS checks, refusal of redirects and response-size limits apply. Claude session tokens are not endpoint credentials and are rejected. This route does not implement a personal Claude Code runtime or transcription. Text goes to the selected endpoints and is not persisted by this route. All inference is billed to the selected connection owner; platform and CI credentials are never selected implicitly.',
+		auth: { mode: 'session-or-bearer', description: 'Live full first-party user account only; temporary/service accounts and scoped app/PAT/device tokens are rejected. Same-origin JSON; fail-closed account rate limit of 20 requests per ten minutes.' },
+		steps: ['Create endpoint connections in Settings → Secure Vault.', 'Negotiate api.ai-complete >=1.0.0 with matching major on this origin.', 'Send their IDs in your desired fallback order with the text.', 'Inspect the chosen connectionId and redacted attempts; a configured connection is not proof of quota availability.'],
+		requestExamples: [{ name: 'Text completion', description: 'Try a second owned connection only if the first is unavailable.', method: 'POST', body: { connectionIds: ['your-primary-id', 'your-fallback-id'], prompt: 'Summarize this transcript.', system: 'Return concise notes.' } }],
+		responseExamples: [{ status: 200, description: 'Completion and safe routing trace.', body: { ok: true, text: 'Notes', connectionId: 'your-fallback-id', attempts: [{ connectionId: 'your-primary-id', outcome: 'unavailable', status: 429 }, { connectionId: 'your-fallback-id', outcome: 'succeeded' }] } }, { status: 503, description: 'All selected connections unavailable.', body: { ok: false, error: 'The selected AI connections are unavailable. Check their status and allowance.', attempts: [] } }]
+	}),
+	endpoint({
 		id: 'lopu-recordings', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'lopu', title: 'Watch recording automation',
 		endpoint: '/api/v1/lopu/recordings', methods: ['GET', 'POST'],
 		summary: 'Opt in to private Watch audio transcription, generated notes/todos and daily reminders; inspect and retry your own jobs.',

@@ -42,6 +42,8 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Lopu Apple Watch recording automation
 
+- [ ] Shared AI endpoint: negotiate `api.ai-complete` on the selected origin, then submit text with 1–4 owned Secure Vault IDs. Reject inline URLs/tokens, audio, foreign IDs anywhere in the list, temporary/service/scoped accounts, cross-origin or non-JSON requests, duplicate IDs and oversized input before external delivery. Force a 429 on one endpoint and verify only the next selected endpoint receives its own credential; stop on success, malformed output, unsafe host, other 4xx or caller cancellation. Inspect redacted attempt receipts, no-store and fail-closed rate limiting. Existing recording retry/consent tests must still pass against the same shared waterfall engine.
+
 - [ ] Credential waterfall: select/reorder/remove up to four own API connections per stage; paste no keys into recording settings. A missing default or deleted last connection must not prevent replacing it. Claude must never be selectable for audio. Verify 429/401/timeout fallback, first-success stop, and no repeat per key; invalid output/unsafe endpoint must stop. Disable consent or change the selected list after the first failure and verify no second provider receives content. Another account's connection ID must be rejected and responses must contain no tokens/endpoints. Verify desktop and mobile controls, open selects, full-page scrolling and optimistic rollback.
 
 - [ ] Force a storage-download failure and provider 401/429 in the isolated test harness. Verify recording status identifies the failed step and never exposes raw errors, credentials, signed URLs, or transcript content. Retry must preserve completed checkpoints.

@@ -144,3 +144,26 @@ scope grant, credential fabrication or direct database bypass was performed.
 Lopu/Builder integration #668 and real provider-backed audio acceptance remain
 release gates. The user was asked which account to use for synthetic private
 test items; no answer has been received yet.
+
+## Shared AI router and accepted runtime direction — 2026-09-08
+
+The later user decision supersedes the historical credential blocker: use
+local/separate **speech-to-text**, then a personal signed-in Claude Code
+runtime for text. Keep a central Thingtime endpoint that supports multiple
+provider endpoints and credentials. Do not turn the shared CI OAuth vault
+into an application API-key pool.
+
+The first implementation slice adds `/api/v1/ai/complete` (feature 1.0.0),
+an origin-negotiated `useApi` client, and a shared waterfall execution policy
+also used by the recording worker. The route supports explicit ordered owned
+Secure Vault connections across existing HTTP adapters. It validates the full
+selection before any provider call, resolves current keys per attempt,
+refuses inline endpoints/secrets/tools/audio, and returns only a redacted
+attempt trace beside the requested completion. Auth, no-store, bounded input,
+transport deadlines, cancellation and fail-closed rate limiting apply.
+
+Not yet implemented in this slice: personal runtime pairing/hosting,
+offline transcription, routing the recording analysis call through that
+runtime, and a real synthetic recording → transcript → notes/todos → reminder
+→ physical Watch receipt. Existing default recording settings are unchanged.
+Do not treat this endpoint or green CI as complete live acceptance.

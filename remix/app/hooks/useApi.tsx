@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
+import { AI_COMPLETION_REQUIREMENTS, type AiCompletionInput } from '~/api/utils/ai/completionCore';
 
 import { buildActionRunBody } from '~/components/Actions/actionRunRequest';
 import { flushAttachmentDraftCleanups } from '~/components/Attachments/attachmentDraftCleanup';
@@ -279,7 +280,11 @@ export function useApi() {
     // + for a signed-in viewer their Secure Vault providers as metadata only:
     // vaultProviders: [{ id, name, kind, model, endpointHost, available, reason? }], vault: { configured })
     ai: {
-      models: useCallback(async () => getJson('/api/v1/ai/models'), [])
+      models: useCallback(async () => getJson('/api/v1/ai/models'), []),
+      complete: useCallback(async (input: AiCompletionInput) => {
+        for (const [feature, minimum] of Object.entries(AI_COMPLETION_REQUIREMENTS)) await requireThingtimeCapability(feature, minimum);
+        return asyncFetcher.submit(input, { action: '/api/v1/ai/complete', errorContext: 'complete text with your selected AI connections' });
+      }, [asyncFetcher])
     },
     admin: {
       // { id, enabled } toggles one catalog model; { seed: true } re-runs the catalog upsert;

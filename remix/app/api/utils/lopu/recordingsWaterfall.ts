@@ -1,4 +1,5 @@
 import { RecordingFailure, recordingProviderFailure } from './recordingsCore';
+import { AiTransportFailure, AiWaterfallFailure, runAiProviderWaterfall } from '../ai/providerWaterfall';
 
 export type RecordingStage = 'transcription' | 'analysis';
 export const recordingStageSetting = (stage: RecordingStage) => (stage === 'transcription' ? 'transcriptionProviders' : 'analysisProviders');
@@ -26,18 +27,23 @@ export const runRecordingWaterfall = async <T>(options: {
 }) => {
 	const ids = [...new Set(options.ids)].slice(0, 4);
 	let last: unknown = new RecordingFailure(options.stage);
-	const deadline = Date.now() + 80_000;
-	for (const id of ids) {
-		await options.beforeAttempt(id);
-		const remaining = deadline - Date.now();
-		if (remaining <= 0) break;
-		try {
-			return await options.attempt(id, AbortSignal.timeout(Math.min(20_000, remaining)));
-		} catch (error) {
-			last = error;
-			if (!canFallbackRecordingProvider(error)) break;
-		}
+	if (!ids.length) throw last;
+	try {
+		return (await runAiProviderWaterfall({
+			connectionIds: ids,
+			beforeAttempt: options.beforeAttempt,
+			attempt: async (id, signal) => {
+				try { return await options.attempt(id, signal); }
+				catch (error) {
+					last = error instanceof RecordingFailure ? error : recordingProviderFailure(error, options.stage);
+					if (!canFallbackRecordingProvider(error)) throw last;
+					const status = error && typeof error === 'object' && 'status' in error && typeof error.status === 'number' ? error.status : undefined;
+					throw new AiTransportFailure(status);
+				}
+			}
+		})).value;
+	} catch (error) {
+		if (error instanceof AiWaterfallFailure) throw last;
+		throw error;
 	}
-	if (last instanceof RecordingFailure) throw last;
-	throw recordingProviderFailure(last, options.stage);
 };

@@ -13,6 +13,7 @@
 // provider-minted short-lived credential, never the stored key.
 
 import { lookup } from 'node:dns/promises';
+import { AiTransportFailure } from '../ai/providerWaterfall';
 
 import {
 	defaultVaultProviderModel,
@@ -283,7 +284,7 @@ export const callVaultProviderPlainCompletion = async (provider: LopuVaultProvid
 	try {
 		response = await createGuardedProviderFetch(input.fetchImpl)(request.url, { method: 'POST', headers: request.headers, body: JSON.stringify(request.body), signal });
 	} catch {
-		throw new Error('The selected AI provider could not be reached.');
+		throw new AiTransportFailure();
 	}
 	// Status BEFORE body: a rejection's body is not always JSON (an edge/CDN
 	// 429/502/504 answers with HTML or nothing at all), and parsing first made
@@ -291,7 +292,7 @@ export const callVaultProviderPlainCompletion = async (provider: LopuVaultProvid
 	// needs — the status. Nothing reads `result` on the failure path anyway.
 	if (!response.ok) {
 		await response.body?.cancel().catch(() => {});
-		throw new Error(`The selected AI provider rejected the request (${response.status}).`);
+		throw new AiTransportFailure(response.status);
 	}
 	const result = await readBoundedJson(response);
 	const text = extractPlainCompletionText(provider.provider, result);
