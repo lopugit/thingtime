@@ -217,19 +217,6 @@ export const PostComposer = (props: PostComposerProps) => {
   const [subspaceId, setSubspaceId] = React.useState<string | null>(editPost?.subspace?.id || subspace?.id || null);
   const [flairId, setFlairId] = React.useState<string | null>(editPost?.flair?.id || null);
   const [mySubspaces, setMySubspaces] = React.useState<SubspaceComposerContext[] | null>(null);
-  // custom audience 🎭 — the picker composes a full tt:custom acl; while
-  // visibility is 'custom' the payloads carry it (acl wins over the name)
-  const [customAcl, setCustomAcl] = React.useState<string[] | null>(
-    editPost?.visibility === 'custom' && Array.isArray(editPost?.acl) ? editPost.acl : null
-  );
-  const [audienceOpen, setAudienceOpen] = React.useState(false);
-  // onClose fires right after onApply and would read this render's (stale)
-  // customAcl — the ref is the truth for "has an audience ever been composed"
-  const audienceAppliedRef = React.useRef<boolean>(!!(editPost?.visibility === 'custom' && editPost?.acl));
-  // …and the circle to come back to when the picker is abandoned. Seeded like
-  // `visibility` above so a brand-new post still falls back to 🌐 Public,
-  // while an edit falls back to whatever the post actually was.
-  const audiencePreviousVisibilityRef = React.useRef<PostVisibility>(editPost?.visibility || 'public');
 	// gallery layout (crystal.mediaLayout): auto = masonry default, stored null
 	const [layoutMode, setLayoutMode] = React.useState<ComposerLayoutMode>(
 		editPost?.mediaLayout?.mode === 'rows' ? 'rows' : editPost?.mediaLayout?.mode === 'grid' ? 'grid' : 'auto'
@@ -638,9 +625,6 @@ export const PostComposer = (props: PostComposerProps) => {
 				if (flairId) currentPayload.flairId = flairId;
 			}
 		}
-		// custom audiences ride the explicit acl (the server prefers acl over the
-		// visibility name)
-		if (!isComment && visibility === 'custom' && customAcl) currentPayload.acl = customAcl;
 		if (currentAttachmentIds.length > 0) currentPayload.attachmentIds = currentAttachmentIds;
 		if (showPhotos) currentPayload.images = canonicalImages;
 		if (apiType === 'thingtime') currentPayload.thing = canonicalThing;
