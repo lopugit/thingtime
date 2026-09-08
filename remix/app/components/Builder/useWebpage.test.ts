@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { resolveWebpageClient, webpageAclForToggle } from './useWebpage';
+import { mergeSavedWebpage, resolveWebpageClient, type ResolvedWebpage } from './useWebpage';
 import { MAX_WEBPAGE_ROUTE_CHARS } from '~/schemas/registry';
 
 // SiteBlocksHost resolves the site doc for EVERY route a signed-in viewer
@@ -69,23 +69,38 @@ test('id and global targets are never path-screened', async () => {
 	assert.ok(global.calls[0].includes('global=1'));
 });
 
-// The public toggle owns the tt:all entry and nothing else — hidden links,
-// custom audiences (tt:user/<name>) and app grants (tt:app/<id>) share the
-// list and must survive a publish/unpublish round trip.
-test('the public toggle only adds and removes tt:all', () => {
-	assert.deepEqual(webpageAclForToggle(['tt:user'], true), ['tt:user', 'tt:all']);
-	assert.deepEqual(webpageAclForToggle(['tt:user', 'tt:all'], false), ['tt:user']);
-	assert.deepEqual(webpageAclForToggle(['tt:user', 'tt:hidden', 'tt:user/ada', 'tt:app/x'], true), [
-		'tt:user',
-		'tt:hidden',
-		'tt:user/ada',
-		'tt:app/x',
-		'tt:all'
-	]);
-	assert.deepEqual(webpageAclForToggle(['tt:all', 'tt:hidden', 'tt:app/x'], false), ['tt:user', 'tt:hidden', 'tt:app/x']);
-	// a missing/garbage acl degrades to owner-only rather than throwing
-	assert.deepEqual(webpageAclForToggle(undefined, false), ['tt:user']);
-	assert.deepEqual(webpageAclForToggle('not-a-list', true), ['tt:user', 'tt:all']);
-	// tt:all is never duplicated by a repeated publish
-	assert.deepEqual(webpageAclForToggle(['tt:user', 'tt:all'], true), ['tt:user', 'tt:all']);
+test('a standalone page forwards its hidden-link bearer key', async () => {
+	const { calls } = await withFetch(okResponse, () =>
+		resolveWebpageClient({ kind: 'id', id: 'hidden-page', key: 'secret key' })
+	);
+	assert.equal(calls.length, 1);
+	assert.ok(calls[0].includes('id=hidden-page'));
+	assert.ok(calls[0].includes('key=secret%20key'));
+});
+
+test('saved webpages adopt and clear owner-only hidden-link keys with their ACL', () => {
+	const initial: ResolvedWebpage = {
+		page: {
+			id: 'page-1',
+			crystal: { name: 'Shared page', siteRoute: '/shared', blocks: [] },
+			acl: ['tt:user', 'tt:hidden'],
+			linkKey: 'old-key'
+		},
+		source: 'user' as const,
+		componentsByRef: {}
+	};
+	const refreshed = mergeSavedWebpage(initial, {
+		id: 'page-1',
+		crystal: initial.page?.crystal as unknown as Record<string, unknown>,
+		acl: ['tt:user', 'tt:hidden'],
+		linkKey: 'fresh-key'
+	});
+	assert.equal(refreshed?.page?.linkKey, 'fresh-key');
+
+	const publicPage = mergeSavedWebpage(refreshed, {
+		id: 'page-1',
+		crystal: initial.page?.crystal as unknown as Record<string, unknown>,
+		acl: ['tt:user', 'tt:all']
+	});
+	assert.equal(publicPage?.page?.linkKey, undefined);
 });

@@ -64,7 +64,7 @@ export const getSavedPosts = async (
   // both render as cards); toggleSave dedupes, so ids are effectively unique
   const targetIds = [...new Set(page.map((save) => String(save.targetId || '')).filter(Boolean))];
   const targetDocs = targetIds.length
-    ? ((await things.find(withMatch({ shareId: { $in: targetIds } }, postThingMatch()) as any).toArray()) as any as ThingDoc[])
+    ? ((await things.find(withMatch({ shareId: { $in: targetIds } }, await postThingMatch()) as any).toArray()) as any as ThingDoc[])
     : [];
   const docsById = new Map(targetDocs.map((doc) => [doc.shareId, doc]));
 

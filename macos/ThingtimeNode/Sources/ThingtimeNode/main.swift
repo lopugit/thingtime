@@ -519,6 +519,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: ThingtimeStatusMenuCopy.refreshStatus, action: #selector(refreshStatus(_:)), keyEquivalent: "r"))
         menu.addItem(NSMenuItem(title: ThingtimeStatusMenuCopy.openThingtime, action: #selector(openThingtime(_:)), keyEquivalent: "o"))
+        menu.addItem(NSMenuItem(title: ThingtimeStatusMenuCopy.aboutThingtime, action: #selector(showAbout(_:)), keyEquivalent: ""))
         menu.addItem(.separator())
         if launchdManaged {
             menu.addItem(NSMenuItem(title: ThingtimeStatusMenuCopy.restartThingtime, action: #selector(restart(_:)), keyEquivalent: ""))
@@ -526,6 +527,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: ThingtimeStatusMenuCopy.quitThingtime, action: #selector(quit(_:)), keyEquivalent: "q"))
         menu.items.forEach { $0.target = self }
         statusItem.menu = menu
+    }
+
+    @objc private func showAbout(_ sender: Any?) {
+        let info = ThingtimeNodeAboutInfo(bundleInfo: Bundle.main.infoDictionary ?? [:])
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.orderFrontStandardAboutPanel(options: [
+            .applicationName: "Thingtime Node",
+            .applicationVersion: info.version,
+            .version: info.build,
+            .credits: NSAttributedString(string: info.details)
+        ])
     }
 
     @objc private func refreshStatus(_ sender: Any?) {

@@ -34,7 +34,7 @@ export const pollShapeOfCrystal = (crystal: Record<string, unknown> | null | und
 };
 
 // One vote per (poll, user), enforced structurally by the
-// things_vote_key_unique partial index over crystal.voteKey.
+// protected Binary voteKey entry in the shared uniqueKeys index.
 export const voteKeyOf = (pollShareId: string, userId: string): string => `${pollShareId}~${userId}`;
 
 export type PollVoteEntry = { userId: string; optionIndex: number };

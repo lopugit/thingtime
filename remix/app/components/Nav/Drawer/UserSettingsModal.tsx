@@ -6,6 +6,7 @@ import { X } from 'lucide-react';
 import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z, DRAWER_TOP_LEVEL_DEFAULT_LIMIT, useDrawer, useIsMobileViewport } from './useDrawer';
 import { drawerItemClosesOnClick, drawerMenuItems, filterDrawerItemsByAuth } from './drawerMenu';
 import { AccountSwitcher } from '../../Account/AccountSwitcher';
+import { DesktopNodeControls } from './DesktopNodeControls';
 import { ElectronUpdateManager } from './ElectronUpdateManager';
 import { LopuCreditsSummary } from '../../Lopu/LopuCreditsPanel';
 import { LopuPositionSelect } from '../../Lopu/LopuPositionSelect';
@@ -554,6 +555,7 @@ export const UserSettingsModal = () => {
 							</Button>
 						</Flex>
 					</Flex>
+					<DesktopNodeControls active={accountModalOpen} />
 					<Flex flexDirection="column" rowGap={2} paddingTop={2} borderTop="1px solid" borderColor="blackAlpha.100">
 						<Text fontSize="sm">Thingtime Node menu bar icon</Text>
 						<Select
@@ -581,7 +583,7 @@ export const UserSettingsModal = () => {
 						<Box minWidth={0}>
 							<Text fontSize="sm">Auto-start node on Thingtime launch</Text>
 							<Text fontSize="xs" opacity={0.55}>
-								Restarts a node you already enabled; it never installs a new node without asking first.
+								Starts the bundled node and keeps it up to date with this Desktop app.
 							</Text>
 						</Box>
 						<Switch

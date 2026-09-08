@@ -582,6 +582,14 @@ export const hardenThingsQuery = (query: NormalizedMongoQuery): NormalizedMongoQ
       typeof first === 'object' &&
       '$match' in (first as Record<string, unknown>) &&
       matchUsesText((first as Record<string, unknown>).$match);
+    // $indexStats emits index metadata, never input Thing documents, and
+    // Mongo requires it at position zero. Hoist only its exact empty-object
+    // form; never generalize this exception to arbitrary first-stage probes.
+    // The normal strip still follows it, and stripThingsIngress above still
+    // protects every subsequent $lookup/$unionWith that introduces documents.
+    const stats = (first as Record<string, unknown> | undefined)?.$indexStats;
+    const firstIsIndexStats = !!first && Object.keys(first).length === 1 &&
+      !!stats && typeof stats === 'object' && !Array.isArray(stats) && Object.keys(stats).length === 0;
     if (firstIsTextMatch) {
       const probe = findProtectedQueryReference((first as Record<string, unknown>).$match, {
         matchPath: isSensitiveFieldPath,
@@ -594,7 +602,7 @@ export const hardenThingsQuery = (query: NormalizedMongoQuery): NormalizedMongoQ
         );
       }
     }
-    pipeline = firstIsTextMatch
+    pipeline = firstIsTextMatch || firstIsIndexStats
       ? [first as Record<string, unknown>, PROTECTED_THING_STRIP, ...rest]
       : [PROTECTED_THING_STRIP, ...walked.stages];
   }

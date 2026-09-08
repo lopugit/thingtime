@@ -11,6 +11,7 @@ import {
 
 import type { DeviceActionControl, DeviceActionHandler, DeviceActionIntent, DeviceControlResolver } from './DeviceStateGrid';
 import type { DeviceActionKind, DeviceActionPolicy } from './deviceTypes';
+import { permissionSnapshot } from './localNodePermissions';
 import { localNodeActionIsBusy, localNodeActionKey } from './localNodePresentation';
 
 const LOCAL_ACTIONS = new Set<DeviceActionKind>([
@@ -63,6 +64,8 @@ export type LocalThingtimeNodeState = {
 	pendingActionKeys: string[];
 	status: ThingtimeNodeStatus | null;
 	permissions: ThingtimeNodePermission[];
+	permissionsCheckedAt: number | null;
+	permissionCheckError: string | null;
 	pairingChallenge: ThingtimeNodePairingChallenge | null;
 	pairedDeviceIds: string[];
 	pairedAccountCount: number;
@@ -88,6 +91,7 @@ export const useLocalThingtimeNode = (
 	const lopuRef = useRef(lopu);
 	const permissionPollGenerationRef = useRef(0);
 	const statusRefreshGenerationRef = useRef(0);
+	const refreshInFlightRef = useRef<Promise<ThingtimeNodeStatus | null> | null>(null);
 	lopuRef.current = lopu;
 	const bridge = typeof window === 'undefined' ? undefined : getElectronBridge();
 	const [state, setState] = useState<LocalThingtimeNodeRuntimeState>({
@@ -96,42 +100,49 @@ export const useLocalThingtimeNode = (
 		pendingActionKeys: [],
 		status: null,
 		permissions: [],
+		permissionsCheckedAt: null,
+		permissionCheckError: null,
 		pairingChallenge: null
 	});
 
-	const refresh = useCallback(async () => {
-		const generation = ++statusRefreshGenerationRef.current;
-		const currentBridge = getElectronBridge();
-		if (!currentBridge?.nodeGetStatus) {
-			setState((previous) => ({ ...previous, available: false, checking: false }));
-			return null;
-		}
-		setState((previous) => ({ ...previous, available: true, checking: true }));
-		try {
-			const [statusResult, permissionsResult] = await Promise.allSettled([currentBridge.nodeGetStatus(), currentBridge.nodeGetPermissions?.()]);
-			if (statusResult.status === 'rejected') throw statusResult.reason;
-			if (statusRefreshGenerationRef.current !== generation) return statusResult.value;
-			setState((previous) => ({
-				...previous,
-				available: true,
-				checking: false,
-				status: statusResult.value,
-				permissions:
-					permissionsResult.status === 'fulfilled' && permissionsResult.value?.permissions
-						? permissionsResult.value.permissions
-						: previous.permissions
-			}));
-			return statusResult.value;
-		} catch (error) {
-			if (statusRefreshGenerationRef.current !== generation) return null;
-			setState((previous) => ({ ...previous, available: true, checking: false }));
-			lopuRef.current({
-				title: 'Couldn’t read the local Thingtime node 😔',
-				description: apiErrorMessage(error, 'Open Thingtime Desktop and try again.'),
-				status: 'error'
-			});
-			return null;
-		}
+	const refresh = useCallback(() => {
+		if (refreshInFlightRef.current) return refreshInFlightRef.current;
+		const run = async () => {
+			const generation = ++statusRefreshGenerationRef.current;
+			const currentBridge = getElectronBridge();
+			if (!currentBridge?.nodeGetStatus) {
+				setState((previous) => ({ ...previous, available: false, checking: false }));
+				return null;
+			}
+			setState((previous) => ({ ...previous, available: true, checking: true }));
+			try {
+				const [statusResult, permissionsResult] = await Promise.allSettled([currentBridge.nodeGetStatus(), currentBridge.nodeGetPermissions?.()]);
+				if (statusResult.status === 'rejected') throw statusResult.reason;
+				if (statusRefreshGenerationRef.current !== generation) return statusResult.value;
+				setState((previous) => ({
+					...previous,
+					available: true,
+					checking: false,
+					status: statusResult.value,
+					...permissionSnapshot(previous, permissionsResult, Date.now())
+				}));
+				return statusResult.value;
+			} catch (error) {
+				if (statusRefreshGenerationRef.current !== generation) return null;
+				setState((previous) => ({
+					...previous,
+					available: true,
+					checking: false,
+					permissionCheckError: 'Could not reach Thingtime Node. Start it in Desktop settings, then check access again.'
+				}));
+				return null;
+			}
+		};
+		const pending = run().finally(() => {
+			refreshInFlightRef.current = null;
+		});
+		refreshInFlightRef.current = pending;
+		return pending;
 	}, []);
 
 	useEffect(() => {
@@ -141,9 +152,17 @@ export const useLocalThingtimeNode = (
 
 	useEffect(() => {
 		if (!bridge?.nodeGetStatus || typeof window === 'undefined') return;
-		const refreshAfterSettings = () => void refresh();
+		const refreshAfterSettings = () => {
+			if (document.visibilityState === 'visible') void refresh();
+		};
 		window.addEventListener('focus', refreshAfterSettings);
-		return () => window.removeEventListener('focus', refreshAfterSettings);
+		document.addEventListener('visibilitychange', refreshAfterSettings);
+		const timer = window.setInterval(refreshAfterSettings, 5_000);
+		return () => {
+			window.clearInterval(timer);
+			window.removeEventListener('focus', refreshAfterSettings);
+			document.removeEventListener('visibilitychange', refreshAfterSettings);
+		};
 	}, [bridge?.nodeGetStatus, refresh]);
 
 	useEffect(
