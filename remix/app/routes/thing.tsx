@@ -241,6 +241,7 @@ const InertLabel = ({ kind, author, platform }: { kind: string; author: string |
 export default function ThingPage() {
 	const { id = '' } = useParams();
 	const [searchParams] = useSearchParams();
+	const linkKey = (searchParams.get('key') || '').trim();
 	const navigate = useNavigate();
 	const api = useApi();
 	const apiRef = React.useRef(api);
@@ -254,17 +255,20 @@ export default function ThingPage() {
 	const loadThing = v1.things.get;
 	const { observeView } = useViewTracking();
 	const diagnosticRoute = DIAGNOSTIC_ID_PATTERN.test(id);
-	const requestKey = `${id}\u0000${currentUser?.id || 'anonymous'}\u0000${currentUser?.isAdmin ? 'admin' : 'user'}`;
+	const requestKey = `${id}\u0000${currentUser?.id || 'anonymous'}\u0000${currentUser?.isAdmin ? 'admin' : 'user'}\u0000${linkKey}`;
 	const back = REFERRERS[parseThingsReferrer(searchParams.get('from'))];
 
 	// Optimistic-render house rule: the last-known projection of this thing
 	// paints on the very first render (per viewer, per id — never another
 	// account's read), the fetch reconciles behind it. Diagnostics are never
 	// cached: they are admin-only and short-lived.
-	const cacheKey = `${THING_CACHE_PREFIX}${currentUser?.id || 'anon'}-${id}`;
+	// A bearer-key response must never become the optimistic no-key paint on a
+	// later visit. Hidden-link reads stay live-only and leave no local cache.
+	const cacheKey = linkKey ? null : `${THING_CACHE_PREFIX}${currentUser?.id || 'anon'}-${id}`;
 	const seedState = React.useCallback(
 		(key: string): ThingLoadState => {
 			if (diagnosticRoute) return { key, loading: true, data: null, error: null };
+			if (!cacheKey) return { key, loading: true, data: null, error: null };
 			const cached = readStampedCache<ThingViewData>(cacheKey);
 			const data = cached?.kind === 'thing' && cached.thing?.id === id ? cached : null;
 			return { key, loading: true, data, error: null };
@@ -307,7 +311,7 @@ export default function ThingPage() {
 					kind: 'diagnostic' as const,
 					diagnostic: diagnosticFromResponse(response)
 			  }))
-			: loadThing({ id }, { signal: controller.signal }).then((response: any) => ({
+			: loadThing({ id, ...(linkKey ? { key: linkKey } : {}) }, { signal: controller.signal }).then((response: any) => ({
 					kind: 'thing' as const,
 					thing: thingFromResponse(response),
 					post: response?.post ? mergeReactionOverlay(startedAt, response.post as PublicPost) : null,
@@ -320,7 +324,7 @@ export default function ThingPage() {
 				setLoadState({ key: requestKey, loading: false, data: next, error: null });
 				if (next.kind === 'thing') {
 					try {
-						if (JSON.stringify(next).length <= MAX_CACHED_THING_CHARS) {
+						if (cacheKey && JSON.stringify(next).length <= MAX_CACHED_THING_CHARS) {
 							pruneCacheNamespace(THING_CACHE_PREFIX, cacheKey, MAX_CACHED_THINGS);
 							writeStampedCache(cacheKey, next);
 						}
@@ -340,7 +344,7 @@ export default function ThingPage() {
 			});
 
 		return () => controller.abort();
-	}, [cacheKey, currentUser?.isAdmin, diagnosticRoute, id, loadDiagnostic, loadThing, requestKey, seedState]);
+	}, [cacheKey, currentUser?.isAdmin, diagnosticRoute, id, linkKey, loadDiagnostic, loadThing, requestKey, seedState]);
 
 	const diagnostic = visibleState.data?.kind === 'diagnostic' ? visibleState.data.diagnostic : null;
 	const thing = visibleState.data?.kind === 'thing' ? visibleState.data.thing : null;
