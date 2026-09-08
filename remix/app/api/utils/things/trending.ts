@@ -1,4 +1,5 @@
 import { getThingsCollection } from '../mongodb/collections';
+import { legacyThingReadsRequired } from '../mongodb/legacyThingLayout';
 import { resolveViewStats } from './views';
 import {
   asViewer,
@@ -44,6 +45,7 @@ type EngagementCounts = { reactions: number; comments: number; votes: number };
 // the interim relational era (kind + parentId) is folded in the same way
 // resolveRelated folds it.
 const resolveEngagementCounts = async (ids: string[]): Promise<Map<string, EngagementCounts>> => {
+  const legacy = await legacyThingReadsRequired();
   const counts = new Map<string, EngagementCounts>();
   if (!ids.length) return counts;
   const bump = (target: string, kind: string, count: number) => {
@@ -65,12 +67,12 @@ const resolveEngagementCounts = async (ids: string[]): Promise<Map<string, Engag
         { $group: { _id: { target: '$targetId', kind: '$kinds' }, count: { $sum: 1 } } }
       ])
       .toArray() as Promise<any[]>,
-    things
+    legacy ? things
       .aggregate([
         { $match: { kind: { $in: ['comment', 'reaction'] }, parentId: { $in: ids } } },
         { $group: { _id: { target: '$parentId', kind: '$kind' }, count: { $sum: 1 } } }
       ])
-      .toArray() as Promise<any[]>
+      .toArray() as Promise<any[]> : Promise.resolve([])
   ]);
   for (const row of [...v2Rows, ...legacyRows]) bump(String(row._id.target), String(row._id.kind), row.count);
   return counts;
@@ -96,7 +98,7 @@ export const getTrendingPosts = async (
   // public circle only, regardless of viewer — an anonymous null viewer makes
   // visibilityQueryFor emit exactly the coarse public superset clause
   const match = withMatch(
-    postMatch(),
+    await postMatch(),
     visibilityQueryFor(null, ['public']),
     { createdAt: { $gte: new Date(Date.now() - TRENDING_WINDOW_MS) } },
     // subspace fences: removed + private-subspace posts never trend publicly
@@ -132,7 +134,7 @@ export const getTrendingPosts = async (
   // full docs for the winning slice only, kept in score order
   const winnerIds = winners.map((entry) => entry.id);
   const fullDocs = (await things
-    .find(withMatch({ shareId: { $in: winnerIds } }, postMatch()) as any)
+    .find(withMatch({ shareId: { $in: winnerIds } }, await postMatch()) as any)
     .toArray()) as any as ThingDoc[];
   const docsById = new Map(fullDocs.map((doc) => [doc.shareId, doc]));
 

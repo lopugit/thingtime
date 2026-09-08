@@ -3,6 +3,7 @@
 // relational children, aggregated on read, per FUNDAMENTALS §3.
 import { randomBytes } from 'node:crypto';
 import { getThingsCollection } from '../mongodb/collections';
+import { relationshipLookupFilter } from '../mongodb/relationshipLookup';
 import { resolveProfiles } from '../things/things';
 import { MAX_COMMUNITIES_PER_USER, MAX_COMMUNITY_DESCRIPTION_CHARS, MAX_COMMUNITY_NAME_CHARS, MAX_SECTION_NAME_CHARS } from '~/schemas/registry';
 import type { ChatRole, Fail } from './shared';
@@ -375,7 +376,7 @@ export const joinCommunityByCode = async (viewerId: string, code: unknown): Prom
   const trimmed = boundedTrimmed(code, 100);
   if (!trimmed) return fail(400, 'Invite code required');
   const things = await getThingsCollection();
-  const invite = await things.findOne({ thingtime: 'community-invite', 'crystal.inviteCode': trimmed } as any);
+  const invite = await things.findOne({ thingtime: 'community-invite', ...await relationshipLookupFilter('inviteCode', trimmed) } as any);
   if (!invite) return fail(404, 'Invalid invite code');
   const crystal = (invite as any).crystal || {};
   if (crystal.revoked) return fail(410, 'This invite was revoked');
