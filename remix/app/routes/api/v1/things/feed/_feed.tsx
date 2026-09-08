@@ -4,6 +4,7 @@ import { resolveThingsActor } from '~/api/utils/auth/patTokens';
 import type { PatContext } from '~/api/utils/auth/patTokens';
 import { getOwnedAlgorithmWeights } from '~/api/utils/algorithms/algorithms';
 import { getFeed, viewerOf, type PostType, type PostVisibility } from '~/api/utils/things/things';
+import { FEED_SCOPES, type FeedScope } from '~/schemas/registry';
 
 const csv = (value: string | null): string[] =>
   (value || '')
@@ -31,9 +32,12 @@ const ANON_CACHE_CONTROL = 'public, s-maxage=60, stale-while-revalidate=300';
 // cacheable path keeps one entry and loses no hit rate.
 const ANON_CACHE_VARY = 'Authorization';
 
-// GET /api/v1/things/feed?types=&circles=&from=&to=&algorithm=<id|latest>&cursor=&limit=&anon=1
+// GET /api/v1/things/feed?types=&circles=&from=&to=&algorithm=<id|latest>&scope=all|subspaces&cursor=&limit=&anon=1
 // The public feed. Works logged out (public posts only). With `algorithm`
 // omitted the viewer's active algorithm applies; 'latest' forces chronological.
+// `scope=subspaces` narrows to posts from the viewer's ACTIVE subspaces (a
+// guest / non-member gets an empty page, every other fence still applies);
+// an unknown scope answers 400.
 // `anon=1` requests the logged-out view regardless of cookies — the response
 // then depends only on the URL, so it is safe to cache on Vercel's edge (which
 // keys by URL, not Cookie). Clients send it only when no viewer is present;
@@ -69,6 +73,12 @@ export const loader = async ({ request }: { request: Request }) => {
     pat = auth.actor.pat;
   }
 
+  const scopeParam = (params.get('scope') || '').trim();
+  if (scopeParam && !(FEED_SCOPES as readonly string[]).includes(scopeParam)) {
+    return json({ ok: false, error: `scope must be one of ${FEED_SCOPES.join(', ')}` }, { status: 400 });
+  }
+  const scope = (scopeParam || 'all') as FeedScope;
+
   const algorithmParam = (params.get('algorithm') || '').trim();
   let weights = null;
   if (user && algorithmParam !== 'latest') {
@@ -91,14 +101,15 @@ export const loader = async ({ request }: { request: Request }) => {
     to: isoDate(params.get('to')),
     cursor: params.get('cursor'),
     limit: Number(params.get('limit')) || undefined,
-    weights
+    weights,
+    scope
   });
 
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });
   }
   return json(
-    { ok: true, posts: result.posts, nextCursor: result.nextCursor, ranked: result.ranked },
+    { ok: true, posts: result.posts, nextCursor: result.nextCursor, ranked: result.ranked, scope: result.scope },
     {
       headers: anonCacheable
         ? { 'Cache-Control': ANON_CACHE_CONTROL, Vary: ANON_CACHE_VARY }

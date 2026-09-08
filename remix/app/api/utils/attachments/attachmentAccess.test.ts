@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { attachmentTargetAclAllows, createCanViewHomeAttachmentTarget, profileAttachmentTargetAllows } from './attachmentAccess';
+import { thingUniqueKeyFilter } from '../mongodb/uniqueKeys';
 
 const post = (overrides: Record<string, unknown> = {}) => ({
 	shareId: 'post-1',
@@ -120,6 +121,7 @@ test('comment attachment authorization walks the exact home comment chain to the
 test('message attachment authorization requires the exact live message and an active or pending chat membership', async () => {
 	let memberState: string | null = 'active';
 	const canView = createCanViewHomeAttachmentTarget({
+		memberFilter: async (key) => thingUniqueKeyFilter('memberKey', key),
 		getThings: async () =>
 			({
 				findOne: async (filter: any) => {
@@ -127,6 +129,9 @@ test('message attachment authorization requires the exact live message and an ac
 						return { shareId: 'message-1', ownerId: 'author-1', thingtime: ['chat-message'], targetId: 'chat-1', crystal: {} };
 					}
 					if (filter.thingtime === 'chat-member' && memberState && filter.ownerId === 'reader-1') {
+						assert.deepEqual(filter.uniqueKeys, thingUniqueKeyFilter('memberKey', 'chat-1:reader-1').uniqueKeys);
+						assert.equal(filter.targetId, 'chat-1');
+						assert.deepEqual(filter['crystal.state'], { $in: ['active', 'pending'] });
 						return { shareId: 'member-1', crystal: { state: memberState } };
 					}
 					return null;
@@ -150,6 +155,7 @@ test('custom emoji attachment authorization requires the exact emoji reference a
 	let communityScoped = false;
 	let member = true;
 	const canView = createCanViewHomeAttachmentTarget({
+		memberFilter: async (key) => thingUniqueKeyFilter('memberKey', key),
 		getThings: async () =>
 			({
 				findOne: async (filter: any) => {
@@ -162,7 +168,12 @@ test('custom emoji attachment authorization requires the exact emoji reference a
 							emojiAttachmentId: 'attachment-1'
 						};
 					}
-					if (filter.thingtime === 'community-member' && member) return { shareId: 'community-member-1' };
+					if (filter.thingtime === 'community-member' && member) {
+						assert.deepEqual(filter.uniqueKeys, thingUniqueKeyFilter('memberKey', 'community-1:reader-1').uniqueKeys);
+						assert.equal(filter.targetId, 'community-1');
+						assert.equal(filter.ownerId, 'reader-1');
+						return { shareId: 'community-member-1' };
+					}
 					return null;
 				}
 			} as any),

@@ -28,10 +28,11 @@ import { useOutsideTapClose } from '~/hooks/useOutsideTapClose';
 import { useRecentReactions } from '~/components/Emoji/useRecentReactions';
 import { timeAgo } from '~/components/Feed/feedTypes';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { ThingAudienceControl } from '~/components/Sharing/ThingAudienceControl';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
-import { ACL_OWNER, getThingtimeSchema } from '~/schemas/registry';
+import { getThingtimeSchema } from '~/schemas/registry';
 import type { SchemaThingField } from '~/schemas/registry';
 import { describeSchemaField } from '~/schemas/tools';
 import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
@@ -240,7 +241,7 @@ type ComponentCardProps = {
   source: ComponentCardSource;
   onReact: (source: ComponentCardSource, token: string) => void;
   onSave: (source: ComponentCardSource) => void;
-  onSaveVersion: (source: ComponentCardSource, values: ComponentArgValues, name: string, isPublic: boolean) => Promise<boolean>;
+  onSaveVersion: (source: ComponentCardSource, values: ComponentArgValues, name: string, acl: string[]) => Promise<boolean>;
   loadFamily: (key: string) => Promise<BrowseComponentEntry[]>;
 };
 
@@ -287,7 +288,7 @@ const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersi
   const [schemaOpen, setSchemaOpen] = React.useState(false);
   const [versionOpen, setVersionOpen] = React.useState(false);
   const [versionName, setVersionName] = React.useState('');
-  const [versionPublic, setVersionPublic] = React.useState(false);
+  const [versionAcl, setVersionAcl] = React.useState<string[]>(['tt:user']);
   const [savingVersion, setSavingVersion] = React.useState(false);
   const { recent } = useRecentReactions();
   const [pickerOpen, setPickerOpen] = React.useState(false);
@@ -316,12 +317,13 @@ const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersi
 
   const openVersionPanel = () => {
     setVersionName(`${source.name} v${(entry?.usageCount || 0) + 2}`);
+    setVersionAcl(['tt:user']);
     setVersionOpen((open) => !open);
   };
 
   const submitVersion = async () => {
     setSavingVersion(true);
-    const ok = await onSaveVersion(source, values, versionName, versionPublic);
+    const ok = await onSaveVersion(source, values, versionName, versionAcl);
     setSavingVersion(false);
     if (ok) setVersionOpen(false);
   };
@@ -760,12 +762,14 @@ const ComponentCard = React.memo(({ source: family, onReact, onSave, onSaveVersi
             size="sm"
             value={versionName}
           />
-          <Flex align="center" gap={1.5}>
-            <Switch isChecked={versionPublic} onChange={(event) => setVersionPublic(event.target.checked)} size="sm" />
-            <Text color="var(--tt-muted, #9a9aa6)" fontSize="12px">
-              public
-            </Text>
-          </Flex>
+          <Box flex="1 1 260px" minWidth="220px">
+            <ThingAudienceControl
+              acl={versionAcl}
+              label="Who can use this version?"
+              onChange={setVersionAcl}
+              testId={`component-version-audience-${source.id}`}
+            />
+          </Box>
           <Button colorScheme="pink" isLoading={savingVersion} onClick={submitVersion} size="sm">
             Save to my Things
           </Button>
@@ -990,7 +994,7 @@ export const ComponentsBrowsePage = () => {
   );
 
   const handleSaveVersion = React.useCallback(
-    async (source: ComponentCardSource, values: ComponentArgValues, name: string, isPublic: boolean): Promise<boolean> => {
+    async (source: ComponentCardSource, values: ComponentArgValues, name: string, acl: string[]): Promise<boolean> => {
       if (!user) {
         lopuRef.current({ title: 'Sign in to save component versions ✨', status: 'info', duration: 6000 });
         return false;
@@ -1021,8 +1025,7 @@ export const ComponentsBrowsePage = () => {
             ...(source.previewBg ? { previewBg: source.previewBg } : {}),
             forkOf: source.id
           },
-          // private by default — flip the toggle to publish into the catalog
-          ...(isPublic ? {} : { acl: [ACL_OWNER] })
+          acl
         });
         if (!resp?.ok) throw resp;
         patchEntry(source.id, (entry) => ({ ...entry, usageCount: (entry.usageCount || 0) + 1 }));

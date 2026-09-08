@@ -1,5 +1,6 @@
 import { escapeRegex, findUserByUsername } from '../auth/users';
 import { getThingsCollection } from '../mongodb/collections';
+import { legacyThingReadsRequired } from '../mongodb/legacyThingLayout';
 import { fetchCappedTotal } from '../mongodb/cappedTotal';
 import {
   ACL_INHERIT,
@@ -39,6 +40,7 @@ import {
   type ThingDoc,
   type Viewer
 } from './things';
+import { subspaceFeedClauses } from '../subspaces/gate';
 import { attachRankScores, type RankedSearchSource } from './searchRanking';
 import { emojiTokensForSearchTerm } from './emojiSearch';
 
@@ -462,7 +464,7 @@ export const searchThings = async (
 
   const thingtime = csvList(query.thingtime);
   if (thingtime.length) {
-    clauses.push(thingtimeInClause(thingtime));
+    clauses.push(await thingtimeInClause(thingtime));
   }
 
   // Protected system kinds are NOT discoverable through the generic search:
@@ -559,7 +561,8 @@ export const searchThings = async (
       : directVisibility;
   if (!visibility) return emptyResult;
 
-  const baseMatch = withMatch(visibility, ...clauses);
+  // subspace fences (removed / private-subspace posts) — same clauses the feeds use
+  const baseMatch = withMatch(visibility, ...clauses, ...subspaceFeedClauses(viewer));
   const ranked = sort === 'relevance';
 
   // A cursor is minted for one paging mode and is meaningless in another: offset
@@ -646,7 +649,7 @@ export const searchThings = async (
               }
             ])
             .toArray() as Promise<any[]>,
-          things
+          await legacyThingReadsRequired() ? things
             .aggregate([
               { $match: { parentId: { $in: ids }, kind: { $in: ['comment', 'reaction'] } } },
               {
@@ -657,7 +660,7 @@ export const searchThings = async (
                 }
               }
             ])
-            .toArray() as Promise<any[]>
+            .toArray() as Promise<any[]> : Promise.resolve([])
         ])
       : [[], []];
 

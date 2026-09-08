@@ -38,7 +38,7 @@ import {
   schemaRenderOf,
   sortThings,
   thingDisplayName,
-  thingLink,
+  thingShareLink,
   thingOpenHref,
   thingsCacheKey
 } from './thingsCore';
@@ -885,10 +885,15 @@ export const ThingsPage = () => {
   );
 
   const copyLink = useCallback(async (thing: ThingsThing) => {
-    const url = `${window.location.origin}${thingLink(thing)}`;
+    const url = `${window.location.origin}${thingShareLink(thing)}`;
     try {
       await navigator.clipboard.writeText(url);
-      lopuRef.current({ title: 'Link copied 🔗', description: url, status: 'success', duration: 5000 });
+      lopuRef.current({
+        title: thing.acl.includes('tt:hidden') ? 'Secret link copied 🕵️' : 'Link copied 🔗',
+        description: url,
+        status: 'success',
+        duration: 5000
+      });
     } catch {
       lopuRef.current({ title: 'Couldn’t copy the link', description: url, status: 'error' });
     }
@@ -1263,7 +1268,7 @@ export const ThingsPage = () => {
           <Text {...monoLabel}>Thingtime · Things</Text>
         </Flex>
 				{devicesEnabled && !folderId && !searchMode ? (
-					<LocalNodeSetupCard controlFor={localDeviceControlFor} onAction={executeLocalDeviceAction} state={localNode} />
+					<LocalNodeSetupCard onRefresh={localNode.refresh} controlFor={localDeviceControlFor} onAction={executeLocalDeviceAction} state={localNode} />
 				) : null}
         <Flex alignItems="center" gap={3} wrap="wrap">
           <Text

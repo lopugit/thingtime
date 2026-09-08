@@ -599,8 +599,8 @@ const SiteBlocksEditor = ({ path, children }: { path: string; children: React.Re
 				mode="site"
 				pageName={pageName}
 				onPageName={setPageName}
-				isPublic={false}
-				onIsPublic={() => {}}
+				audienceAcl={['tt:user']}
+				onAudienceAcl={() => {}}
 				onSaveAll={saveAll}
 				anyDirty={pageDraft.dirty || globalDraft.dirty}
 				regionLabel={activeIsGlobal ? '🌐 global block' : 'this page'}

@@ -70,6 +70,12 @@ export const PAT_SCOPE_CATALOG: PatScopeDescriptor[] = [
     emoji: '🗳️'
   },
   {
+    id: 'things.updown',
+    title: 'Upvote / downvote',
+    description: 'Upvote, downvote, or clear your vote on visible posts and comments.',
+    emoji: '🔼'
+  },
+  {
     id: 'things.share',
     title: 'Share',
     description: 'Repost visible things as shares.',
