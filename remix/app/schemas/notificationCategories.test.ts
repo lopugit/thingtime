@@ -36,6 +36,18 @@ test('unknown types read as social, unknown categories are rejected', () => {
   assert.equal(isNotificationCategory('all'), false);
 });
 
+test('merged recording and subspace families retain their independent preference defaults', () => {
+  const prefs = normalizeNotificationPrefs(null);
+  for (const type of ['recording-reminder', 'subspace-join-request', 'subspace-report'] as const) {
+    assert.ok(isNotificationType(type));
+    assert.equal(prefs.push[type], true);
+    assert.equal(prefs.email[type], false);
+  }
+  assert.equal(notificationCategoryOf('recording-reminder'), 'system');
+  assert.equal(notificationCategoryOf('subspace-join-request'), 'social');
+  assert.equal(notificationCategoryOf('subspace-report'), 'engagement');
+});
+
 test('action-run is the system family: bell on by default, email opt-in', () => {
   assert.equal(NOTIFICATION_TYPE_CATEGORY['action-run'], 'system');
   assert.deepEqual(notificationTypesInCategory('system'), ['action-run', 'recording-reminder']);

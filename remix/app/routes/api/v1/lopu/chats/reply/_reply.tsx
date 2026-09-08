@@ -1,8 +1,11 @@
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 import { listAiModels, resolveLopuModelChoice } from '~/api/utils/ai/models';
 import { isAiModelEffort } from '~/api/utils/ai/modelsCore';
+import { LOPU_TEST_MODEL_ID } from '~/api/utils/ai/pricing';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
-import { streamLopuChatTurn, type LopuVaultTurnProvider } from '~/api/utils/lopu/chat';
+import { assertLopuAccess, billingForProvider, lopuAccessResponse, resolveLopuBilling } from '~/api/utils/lopu/access';
+import { debitLopuUsage } from '~/api/utils/lopu/accounting';
+import { hasLopuChatProviderConfigured, lopuChatProviderMode, streamLopuChatTurn, type LopuVaultTurnProvider } from '~/api/utils/lopu/chat';
 import type { LopuChatContext, LopuChatEvent, LopuChatTurnOutcome } from '~/api/utils/lopu/chatEvents';
 import type { LopuApprovedAction } from '~/api/utils/lopu/chatTools';
 import { parseLopuConfirmations, verifyLopuConfirmation, type LopuConfirmationInput } from '~/api/utils/lopu/confirmations';
@@ -247,177 +250,244 @@ export const action = async ({ request }: { request: Request }) => {
     }
   }
 
-  // --- model choice -------------------------------------------------------
-  const catalog = await listAiModels({ id: user.id });
-  const overrides = !!(input.model || input.effort || input.speed);
-  // a chat with no stored effort/speed inherits the admin defaults (the
-  // resolver's `undefined` branch); a stored null must not read as "the
-  // provider's own default", which is spelled 'default' on the wire
-  const requested = { model: input.model ?? settings.model, effort: input.effort ?? settings.effort ?? undefined, speed: input.speed ?? settings.speed ?? undefined };
-  let choice: AiWorkflowModelChoice | null = null;
-  if (catalog.models.length) {
-    // explicit overrides are strict (a bad model is a 400); stored settings
-    // are lenient (an admin may have disabled the chat's model since), and so
-    // is everything on a vault turn — the connection's own model runs it
-    const resolved = resolveLopuModelChoice(requested, catalog.models, { defaults: catalog.defaults, lenient: !overrides || !!vaultProvider });
-    if (resolved.ok === false) {
-      if (overrides) return json({ ok: false, error: resolved.error }, { status: 400 });
-    } else if (catalog.defaults.model || resolved.available) {
-      choice = resolved.choice;
-    }
-  }
-  if (vaultProvider) {
-    // the chat's effort travels to the user's provider (the decorated → bare
-    // retry ladder covers an endpoint that rejects it); the model is the
-    // connection's own, or the requested one for a connection saved without
-    vaultProvider.effort = isAiModelEffort(requested.effort) ? requested.effort : (choice?.effort ?? null);
-    vaultProvider.requestedModel = requested.model;
-  }
-
-  let createdHere = false;
-  if (!chatId) {
-    const created = await createLopuChat(user.id, {
-      title: titleFromMessage(input.text),
-      ...(choice ? { model: choice.model, effort: choice.effort, speed: choice.speed } : {}),
-      ...(providerExplicit && vaultProvider ? { providerId: vaultProvider.id } : {})
-    });
-    if (created.ok === false) return json({ ok: false, error: created.error }, { status: created.status });
-    chatId = created.chat.id;
-    createdHere = true;
-  } else {
-    // a per-turn override becomes the conversation's setting (best effort —
-    // the turn itself already carries the resolved choice); an explicit
-    // providerId (or null) does too, and a stored connection that no longer
-    // resolves is cleared so the picker stops showing it
-    const patch: { model?: string; effort?: string | null; speed?: string; providerId?: string | null } = {};
-    if (overrides && choice) Object.assign(patch, { model: choice.model, effort: choice.effort, speed: choice.speed });
-    if (providerExplicit) patch.providerId = vaultProvider?.id ?? null;
-    else if (clearStoredProvider) patch.providerId = null;
-    if (Object.keys(patch).length) await updateLopuChat(user.id, chatId, patch).catch(() => null);
-  }
-
-  // --- history + the user turn ------------------------------------------
-  const loaded = await loadLopuHistory(user.id, chatId, { limit: HISTORY_TURNS });
-  const history = loaded.ok === false ? [] : loaded.history;
-
-  // a conversation created by THIS request must not outlive a first turn
-  // that failed to persist (an empty, titled chat would surface on reload)
-  const discardCreated = async () => {
-    if (createdHere && chatId) await deleteLopuChat(user.id, chatId).catch(() => null);
+  // --- the access gate (verified-access design note §1) --------------------
+  // BEFORE any provider call and before anything is persisted: a guest or an
+  // unverified account is a 403 (LOPU_UNVERIFIED), an exhausted balance on
+  // Thingtime's keys a 402 (LOPU_NO_CREDITS). A vault turn bills the viewer
+  // (byo); the canned fallback is free; the test provider bills like the
+  // server keys so accounting is observable end to end.
+  // A billed turn also takes an in-flight slot on the account (`reserve`):
+  // the balance below was read seconds before the debit lands, so without it
+  // every concurrent reply spends the same last credit. The slot is released
+  // in the finally below (early return or throw) or once the stream has
+  // finished accounting for the turn.
+  const expectedBilling = resolveLopuBilling({ vault: !!vaultProvider, mode: lopuChatProviderMode(), configured: hasLopuChatProviderConfigured() });
+  const access = await assertLopuAccess(user, { billing: expectedBilling, reserve: true });
+  if (access.ok === false) return lopuAccessResponse(access);
+  let released = false;
+  const releaseTurn = async () => {
+    if (released || !access.release) return;
+    released = true;
+    await access.release().catch(() => null);
   };
-  let userTurn: Awaited<ReturnType<typeof persistLopuUserTurn>>;
+  // set once the stream owns the slot, so the finally below stops releasing it
+  let streaming = false;
+
   try {
-    userTurn = await persistLopuUserTurn(user.id, { chatId, requestId: input.requestId, text: input.text });
-  } catch (error) {
-    await discardCreated();
-    throw error;
-  }
-  if (userTurn.ok === false) {
-    await discardCreated();
-    return json({ ok: false, error: userTurn.error }, { status: userTurn.status });
-  }
-  if (userTurn.existing) return json({ ok: false, error: 'A message with this requestId already exists — send a fresh message' }, { status: 409 });
-  const userMessageId = userTurn.message.id;
+    // --- model choice -------------------------------------------------------
+    const catalog = await listAiModels({ id: user.id });
+    const overrides = !!(input.model || input.effort || input.speed);
+    // a chat with no stored effort/speed inherits the admin defaults (the
+    // resolver's `undefined` branch); a stored null must not read as "the
+    // provider's own default", which is spelled 'default' on the wire
+    const requested = { model: input.model ?? settings.model, effort: input.effort ?? settings.effort ?? undefined, speed: input.speed ?? settings.speed ?? undefined };
+    let choice: AiWorkflowModelChoice | null = null;
+    if (catalog.models.length) {
+      // explicit overrides are strict (a bad model is a 400); stored settings
+      // are lenient (an admin may have disabled the chat's model since), and so
+      // is everything on a vault turn — the connection's own model runs it
+      const resolved = resolveLopuModelChoice(requested, catalog.models, { defaults: catalog.defaults, lenient: !overrides || !!vaultProvider });
+      if (resolved.ok === false) {
+        if (overrides) return json({ ok: false, error: resolved.error }, { status: 400 });
+      } else if (catalog.defaults.model || resolved.available) {
+        choice = resolved.choice;
+      }
+    }
+    if (vaultProvider) {
+      // the chat's effort travels to the user's provider (the decorated → bare
+      // retry ladder covers an endpoint that rejects it); the model is the
+      // connection's own, or the requested one for a connection saved without
+      vaultProvider.effort = isAiModelEffort(requested.effort) ? requested.effort : (choice?.effort ?? null);
+      vaultProvider.requestedModel = requested.model;
+    }
 
-  // --- the stream -----------------------------------------------------------
-  const abort = new AbortController();
-  const requestSignal = (request as Request & { signal?: AbortSignal }).signal;
-  if (requestSignal) {
-    if (requestSignal.aborted) abort.abort();
-    else requestSignal.addEventListener('abort', () => abort.abort(), { once: true });
-  }
-  const encoder = new TextEncoder();
-  const persistedChatId = chatId;
-
-  const stream = new ReadableStream({
-    async start(controller) {
-      let closed = false;
-      const send = (event: LopuChatEvent) => {
-        if (closed) return;
-        try {
-          controller.enqueue(encoder.encode(JSON.stringify(event) + '\n'));
-        } catch {
-          closed = true;
-        }
-      };
-
-      let outcome: LopuChatTurnOutcome | null = null;
-      const generator = streamLopuChatTurn({
-        viewer,
-        chatId: persistedChatId,
-        userMessageId,
-        requestId: input.requestId,
-        text: input.text,
-        history,
-        choice,
-        vaultProvider,
-        context: input.context,
-        approvedConfirmations: approved,
-        signal: abort.signal
+    let createdHere = false;
+    if (!chatId) {
+      const created = await createLopuChat(user.id, {
+        title: titleFromMessage(input.text),
+        ...(choice ? { model: choice.model, effort: choice.effort, speed: choice.speed } : {}),
+        ...(providerExplicit && vaultProvider ? { providerId: vaultProvider.id } : {})
       });
-      try {
-        for (;;) {
-          const step = await generator.next();
-          if (step.done === true) {
-            outcome = step.value;
-            break;
+      if (created.ok === false) return json({ ok: false, error: created.error }, { status: created.status });
+      chatId = created.chat.id;
+      createdHere = true;
+    } else {
+      // a per-turn override becomes the conversation's setting (best effort —
+      // the turn itself already carries the resolved choice); an explicit
+      // providerId (or null) does too, and a stored connection that no longer
+      // resolves is cleared so the picker stops showing it
+      const patch: { model?: string; effort?: string | null; speed?: string; providerId?: string | null } = {};
+      if (overrides && choice) Object.assign(patch, { model: choice.model, effort: choice.effort, speed: choice.speed });
+      if (providerExplicit) patch.providerId = vaultProvider?.id ?? null;
+      else if (clearStoredProvider) patch.providerId = null;
+      if (Object.keys(patch).length) await updateLopuChat(user.id, chatId, patch).catch(() => null);
+    }
+
+    // --- history + the user turn ------------------------------------------
+    const loaded = await loadLopuHistory(user.id, chatId, { limit: HISTORY_TURNS });
+    const history = loaded.ok === false ? [] : loaded.history;
+
+    // a conversation created by THIS request must not outlive a first turn
+    // that failed to persist (an empty, titled chat would surface on reload)
+    const discardCreated = async () => {
+      if (createdHere && chatId) await deleteLopuChat(user.id, chatId).catch(() => null);
+    };
+    let userTurn: Awaited<ReturnType<typeof persistLopuUserTurn>>;
+    try {
+      userTurn = await persistLopuUserTurn(user.id, { chatId, requestId: input.requestId, text: input.text });
+    } catch (error) {
+      await discardCreated();
+      throw error;
+    }
+    if (userTurn.ok === false) {
+      await discardCreated();
+      return json({ ok: false, error: userTurn.error }, { status: userTurn.status });
+    }
+    if (userTurn.existing) return json({ ok: false, error: 'A message with this requestId already exists — send a fresh message' }, { status: 409 });
+    const userMessageId = userTurn.message.id;
+
+    // --- the stream -----------------------------------------------------------
+    const startedAt = Date.now();
+    const abort = new AbortController();
+    const requestSignal = (request as Request & { signal?: AbortSignal }).signal;
+    if (requestSignal) {
+      if (requestSignal.aborted) abort.abort();
+      else requestSignal.addEventListener('abort', () => abort.abort(), { once: true });
+    }
+    const encoder = new TextEncoder();
+    const persistedChatId = chatId;
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        let closed = false;
+        const send = (event: LopuChatEvent) => {
+          if (closed) return;
+          try {
+            controller.enqueue(encoder.encode(JSON.stringify(event) + '\n'));
+          } catch {
+            closed = true;
           }
-          send(step.value);
-        }
-      } catch (error: any) {
-        console.error('[lopu] reply stream failed:', error?.message || error);
-        send({ type: 'error', message: 'Lopu lost the thread mid-reply — what streamed so far is kept.', retryable: true });
-      } finally {
-        // persist whatever streamed, even after an error or a disconnect
-        const finished = outcome?.stopReason === 'end_turn' || outcome?.stopReason === 'fallback' || outcome?.stopReason === 'tool_limit' || outcome?.stopReason === 'hop_limit' || outcome?.stopReason === 'time_limit' || outcome?.stopReason === 'max_tokens';
-        const text = finished && outcome?.text.trim() ? outcome.text : interruptedNote(outcome);
-        const stopReason = outcome?.stopReason || 'error';
-        let assistantMessageId = '';
-        let messages: PublicChatMessage[] = [];
+        };
+
+        let outcome: LopuChatTurnOutcome | null = null;
+        const generator = streamLopuChatTurn({
+          viewer,
+          chatId: persistedChatId,
+          userMessageId,
+          requestId: input.requestId,
+          text: input.text,
+          history,
+          choice,
+          vaultProvider,
+          context: input.context,
+          approvedConfirmations: approved,
+          signal: abort.signal
+        });
         try {
-          const persisted = await persistLopuAssistantTurn(user.id, {
-            chatId: persistedChatId,
-            requestId: input.requestId,
-            text,
-            lopu: {
-              model: outcome?.model ?? choice?.model ?? null,
-              effort: outcome?.effort ?? choice?.effort ?? null,
-              speed: outcome?.speed ?? choice?.speed ?? 'normal',
-              provider: outcome?.provider ?? 'fallback',
-              ...(outcome?.providerLabel ? { providerLabel: outcome.providerLabel } : {}),
-              usage: outcome?.usage,
-              toolCalls: outcome?.toolCalls ?? [],
-              stopReason
+          for (;;) {
+            const step = await generator.next();
+            if (step.done === true) {
+              outcome = step.value;
+              break;
             }
-          });
-          if (persisted.ok !== false) {
-            messages = persisted.messages;
-            assistantMessageId = persisted.messages[0]?.id || '';
-          } else {
-            console.error('[lopu] assistant turn not persisted:', persisted.error);
+            send(step.value);
           }
         } catch (error: any) {
-          console.error('[lopu] assistant turn persist threw:', error?.message || error);
-        }
-        send({ type: 'done', assistantMessageId, messages, ...(outcome?.usage ? { usage: outcome.usage } : {}), stopReason });
-        try {
-          controller.close();
-        } catch {
-          // already closed by a cancel
-        }
-      }
-    },
-    cancel() {
-      abort.abort();
-    }
-  });
+          console.error('[lopu] reply stream failed:', error?.message || error);
+          send({ type: 'error', message: 'Lopu lost the thread mid-reply — what streamed so far is kept.', retryable: true });
+        } finally {
+          // persist whatever streamed, even after an error or a disconnect
+          const finished = outcome?.stopReason === 'end_turn' || outcome?.stopReason === 'fallback' || outcome?.stopReason === 'tool_limit' || outcome?.stopReason === 'hop_limit' || outcome?.stopReason === 'time_limit' || outcome?.stopReason === 'max_tokens';
+          const text = finished && outcome?.text.trim() ? outcome.text : interruptedNote(outcome);
+          const stopReason = outcome?.stopReason || 'error';
 
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'application/x-ndjson; charset=utf-8',
-      'Cache-Control': 'no-store',
-      'X-Accel-Buffering': 'no',
-      'X-Thingtime-Lopu-RateLimit-Remaining': String(limit.remaining)
-    }
-  });
+          // --- accounting (verified-access design note §2) ----------------------
+          // price what the provider reported and record the turn; thingtime
+          // billing is debited (the test provider prices against `test-model`),
+          // byo/free turns are recorded only. Never a chat error — the reply
+          // already streamed; the writer logs and retries once on its own.
+          const turnProvider = outcome?.provider ?? 'fallback';
+          const billing = billingForProvider(turnProvider);
+          const turnModel = outcome?.model ?? choice?.model ?? null;
+          const accounted = await debitLopuUsage(user.id, {
+            surface: 'chat',
+            billing,
+            provider: turnProvider,
+            providerLabel: outcome?.providerLabel ?? null,
+            model: turnModel,
+            pricingModel: turnProvider === 'test' ? LOPU_TEST_MODEL_ID : turnModel,
+            usage: outcome?.usage ?? null,
+            chatId: persistedChatId,
+            requestId: input.requestId,
+            toolCalls: outcome?.toolCalls?.length ?? 0,
+            hops: outcome?.hops ?? 0,
+            durationMs: Date.now() - startedAt
+          });
+          // the turn is on the ledger: hand the in-flight slot back so the
+          // next turn sees the balance this one moved
+          await releaseTurn();
+          const costMicros = accounted.ok ? accounted.costMicros : 0;
+          const priced = accounted.ok ? accounted.priced : false;
+          const balanceMicros: number | null = accounted.ok ? accounted.balanceMicros : access.account?.crystal.balanceMicros ?? null;
+
+          let assistantMessageId = '';
+          let messages: PublicChatMessage[] = [];
+          try {
+            const persisted = await persistLopuAssistantTurn(user.id, {
+              chatId: persistedChatId,
+              requestId: input.requestId,
+              text,
+              lopu: {
+                model: outcome?.model ?? choice?.model ?? null,
+                effort: outcome?.effort ?? choice?.effort ?? null,
+                speed: outcome?.speed ?? choice?.speed ?? 'normal',
+                provider: outcome?.provider ?? 'fallback',
+                ...(outcome?.providerLabel ? { providerLabel: outcome.providerLabel } : {}),
+                usage: outcome?.usage,
+                billing,
+                costMicros,
+                priced,
+                balanceMicros,
+                toolCalls: outcome?.toolCalls ?? [],
+                stopReason
+              }
+            });
+            if (persisted.ok !== false) {
+              messages = persisted.messages;
+              assistantMessageId = persisted.messages[0]?.id || '';
+            } else {
+              console.error('[lopu] assistant turn not persisted:', persisted.error);
+            }
+          } catch (error: any) {
+            console.error('[lopu] assistant turn persist threw:', error?.message || error);
+          }
+          send({ type: 'done', assistantMessageId, messages, ...(outcome?.usage ? { usage: outcome.usage } : {}), billing, costMicros, priced, balanceMicros, stopReason });
+          try {
+            controller.close();
+          } catch {
+            // already closed by a cancel
+          }
+        }
+      },
+      cancel() {
+        abort.abort();
+      }
+    });
+
+    // the stream owns the in-flight slot from here: it releases it once the
+    // turn is accounted for, whatever the outcome
+    streaming = true;
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'application/x-ndjson; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'X-Accel-Buffering': 'no',
+        'X-Thingtime-Lopu-RateLimit-Remaining': String(limit.remaining)
+      }
+    });
+  } finally {
+    // every path that never reaches the provider — a 400/409, a throw —
+    // hands the slot straight back
+    if (!streaming) await releaseTurn();
+  }
 };

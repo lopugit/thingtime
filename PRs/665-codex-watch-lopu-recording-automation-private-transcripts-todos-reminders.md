@@ -147,6 +147,14 @@ test items; no answer has been received yet.
 
 ## Shared AI router and accepted runtime direction — 2026-09-08
 
+Main reconciliation: merge main 2fea784bb (Desktop Node ownership plus subspaces)
+into this feature branch, preserving private recording reminders and all six
+subspace notification types. Notification list/settings publish 1.4.0/1.3.0
+so the combined additions do not reuse two independently assigned versions.
+Email remains opt-in for recording reminders and mod queues. Delete cascades
+retain both up/down votes and recording job/reminder children. This merge does
+not enable production automation or remove the final acceptance hold.
+
 Subsequent local-runtime acceptance: installed whisper.cpp 1.9.2 and verified
 the documented base.en model SHA-256 before processing the existing synthetic
 fixture. The reusable local adapter decoded audio, transcribed it locally,
