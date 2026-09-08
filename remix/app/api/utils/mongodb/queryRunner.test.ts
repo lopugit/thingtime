@@ -10,6 +10,32 @@ const normalized = async (body: Record<string, unknown>) => {
   return result as Exclude<Awaited<ReturnType<typeof normalizeMongoQueryRequest>>, { status: number }>;
 };
 
+test('index statistics lead the pipeline without weakening document ingress protection', async () => {
+  const result = hardenThingsQuery(await normalized({
+    collection: 'things', operation: 'aggregate',
+    pipeline: [{ $indexStats: {} }, { $unionWith: { coll: 'things', pipeline: [] } }]
+  }));
+  assert.equal('status' in result, false);
+  if ('status' in result) return;
+  const strip = { $project: { secure: 0, uniqueKeys: 0, linkKey: 0 } };
+  assert.deepEqual(result.pipeline[0], { $indexStats: {} });
+  assert.deepEqual(result.pipeline[1], strip);
+  assert.deepEqual((result.pipeline[2] as any).$unionWith.pipeline[0], strip);
+
+  // Malformed/non-empty statistics arguments cannot acquire the exception.
+  const ordinary = await normalized({ collection: 'things', operation: 'aggregate', pipeline: [] });
+  for (const argument of [null, [], 'x', { unexpected: true }]) {
+    const malformed = hardenThingsQuery({ ...ordinary, pipeline: [{ $indexStats: argument }] });
+    assert.equal('status' in malformed, false);
+    if (!('status' in malformed)) assert.deepEqual(malformed.pipeline[0], strip);
+  }
+  const protectedProbe = await normalizeMongoQueryRequest({
+    collection: 'things', operation: 'aggregate',
+    pipeline: [{ $indexStats: {} }, { $project: { leaked: '$uniqueKeys' } }]
+  });
+  assert.equal('status' in protectedProbe, true);
+});
+
 test('rejects writes and server-side JavaScript at any depth', async () => {
   const merge = await normalizeMongoQueryRequest({
     operation: 'aggregate',
