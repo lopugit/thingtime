@@ -548,7 +548,8 @@ function associatedPr(sha) {
 }
 
 // ---------------------------------------------------------------------------
-// Self-test (pure helpers only — no git/gh needed)
+// Self-test. No gh and no repo state; pure helpers except the treesMatch
+// probe, which builds and removes a throwaway git repo under os.tmpdir().
 // ---------------------------------------------------------------------------
 
 function selfTest() {
@@ -567,6 +568,19 @@ function selfTest() {
   assert(escapeCell("a|b") === "a\\|b", "cell pipe escape");
   assert(escapeCell("a\\b") === "a\\\\b", "cell backslash escape");
   assert(escapeCell("x".repeat(200)).length <= 101, "cell truncation");
+
+  // Run the argv guard main() actually applies, rather than restating it.
+  // --self-test is CI's only gate on this file, so a guard nothing exercises
+  // can regress to a no-op and let a mistyped flag through to the live path
+  // that rewrites the standing promotion PR.
+  assert(unrecognizedArgs([]).length === 0, "bare invocation is recognized");
+  assert(unrecognizedArgs(["--self-test"]).length === 0, "the self-test flag is recognized");
+  assert(unrecognizedArgs(["--selftest"]).join(" ") === "--selftest", "a near-miss flag is rejected");
+  assert(unrecognizedArgs(["--dry-run"]).join(" ") === "--dry-run", "DRY_RUN is env-only, not a flag");
+  assert(
+    unrecognizedArgs(["--self-test", "--dry-run"]).join(" ") === "--dry-run",
+    "an unknown flag riding alongside --self-test is still rejected",
+  );
 
   const section = buildSection({
     prs: [
@@ -707,27 +721,36 @@ const PREAMBLE =
   "Merge it whenever main should catch up — the workflow opens the next one after the following push to `develop`. " +
   "The *Sync main into develop* workflow levels develop with main again after each promotion.";
 
+// Fail closed on anything that is not the one recognized flag. The
+// no-argument form is the workflow's live path: it rewrites the promotion PR's
+// body and posts a delta comment. So a near-miss flag -- `self-test`,
+// `--selftest`, `--dry-run` -- silently became a live mutation of the standing
+// promotion PR rather than the local check the operator asked for, with the
+// wrong figures whenever the checkout's refs are not the workflow's (a
+// detached review worktree resolves `CFG.gitBase`/`CFG.gitHead` to a different
+// range and reports a promotion carrying nothing). Recognizing only the exact
+// flag keeps the bare invocation working for the workflow while making a typo
+// a usage error, the way workflow-control-plane-contract.mjs already behaves.
+const KNOWN_FLAGS = new Set(["--self-test"]);
+function unrecognizedArgs(argv) {
+  return argv.filter((arg) => !KNOWN_FLAGS.has(arg));
+}
+
 function main() {
-  if (process.argv.includes("--self-test")) {
-    selfTest();
-    return;
-  }
-  // Fail closed on anything else. The no-argument form is the workflow's live
-  // path: it rewrites the promotion PR's body and posts a delta comment. So a
-  // near-miss flag -- `self-test`, `--selftest`, `--dry-run` -- silently became
-  // a live mutation of the standing promotion PR rather than the local check
-  // the operator asked for, with the wrong figures whenever the checkout's
-  // refs are not the workflow's (a detached review worktree resolves
-  // `CFG.gitBase`/`CFG.gitHead` to a different range and reports a promotion
-  // carrying nothing). Recognizing only the exact flag keeps the bare
-  // invocation working for the workflow while making a typo a usage error, the
-  // way workflow-control-plane-contract.mjs already behaves.
-  const unknown = process.argv.slice(2).filter((arg) => arg !== "--self-test");
+  // Before the --self-test branch, so a near-miss is caught whether it arrives
+  // alone or alongside the real flag. Checked after it, `--self-test
+  // --dry-run` printed "self-test OK" and dropped the second flag with no
+  // signal that nothing was previewed.
+  const unknown = unrecognizedArgs(process.argv.slice(2));
   if (unknown.length) {
     console.error(`Unrecognized argument(s): ${unknown.join(" ")}`);
     console.error("Usage: promotion-pr-changelog.mjs [--self-test]");
     console.error("  (no arguments) refresh the live promotion PR; DRY_RUN=1 to preview");
     process.exitCode = 2;
+    return;
+  }
+  if (process.argv.includes("--self-test")) {
+    selfTest();
     return;
   }
   if (!CFG.repo) throw new Error("GH_REPO or GITHUB_REPOSITORY must be set");
