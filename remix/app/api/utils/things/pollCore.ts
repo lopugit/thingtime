@@ -33,8 +33,8 @@ export const pollShapeOfCrystal = (crystal: Record<string, unknown> | null | und
 	return { question: String(source.question).trim(), optionCount: options.length };
 };
 
-// One vote per (poll, user), enforced by the protected Binary voteKey slot
-// in the shared uniqueKeys_1 index (see mongodb/pollVoteIndex.ts).
+// One vote per (poll, user), enforced structurally by the
+// protected Binary voteKey entry in the shared uniqueKeys index.
 export const voteKeyOf = (pollShareId: string, userId: string): string => `${pollShareId}~${userId}`;
 
 export type PollVoteEntry = { userId: string; optionIndex: number };

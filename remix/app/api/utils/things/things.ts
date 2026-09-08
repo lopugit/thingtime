@@ -1,9 +1,10 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { ObjectId, type Binary } from 'mongodb';
 
 import { getHomeThingsCollection, getThingsCollection, getUsersCollection, withMongoTransaction } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
+import { legacyThingReadsRequired } from '../mongodb/legacyThingLayout';
 import { findUserByUsername, pushUserRecentReaction, unpackSecure } from '../auth/users';
 import {
 	CONTROL_PLANE_STORAGE_THINGTIMES,
@@ -40,10 +41,15 @@ import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
 import {
   ACL_ALL,
+  ACL_CUSTOM,
   ACL_FAMILY,
   ACL_FRIENDS,
+  ACL_GROUP_PREFIX,
+  ACL_HIDDEN,
   ACL_INHERIT,
   ACL_OWNER,
+  ACL_USER_PREFIX,
+  aclCapabilityFor,
 	APP_STORAGE_RESERVED_ID_PREFIX,
 	CASCADE_CHILD_THINGTIME,
   COLLECTION_SCHEMA_VERSIONS,
@@ -113,7 +119,7 @@ import { resolveAppScopedAcl } from '../apps/namespace';
 import { resolveViewStats } from './views';
 import { emitNotification, emitNotificationsBulk, type NotificationActor } from '../notifications/notifications';
 import { emitMentionNotifications } from '../notifications/mentions';
-import { followerIdsOf, friendIdsOf } from '../users/social';
+import { followerIdsOf, friendIdsOf, groupIdsOf } from '../users/social';
 import { ANONYMOUS_USER_NAME } from '~/utils/userIdentity';
 
 // Everything in thingtime.things is a thing (see app/schemas/registry.ts):
@@ -134,7 +140,7 @@ export { REACTION_EMOJIS };
 // derived from the registry's whitelist so the validation gate and the feed's
 // type filters can never drift
 export type PostType = (typeof REGISTRY_POST_TYPES)[number];
-export type PostVisibility = 'public' | 'friends' | 'family' | 'private';
+export type PostVisibility = 'public' | 'friends' | 'family' | 'private' | 'hidden' | 'custom';
 export type MarketplaceCategory = 'car' | 'tool' | 'furniture' | 'service' | 'other';
 
 export type MarketplaceListing = {
@@ -184,6 +190,11 @@ export type ThingDoc = {
   ownerId: string;
   acl?: string[]; // v2 — tt: grants/exclusions (see schemas/registry.ts)
   visibility?: ThingVisibility; // v1 residue (mapped onto acl at read time)
+  // hidden (unlisted) things: the randomly generated secret that makes the
+  // thing viewable to ANYONE presenting it (?key= URLs). Minted whenever the
+  // acl enters tt:hidden (fresh each time, so old links never resurrect);
+  // inert while the acl says anything else. Owner-only in projections.
+  linkKey?: string | null;
   targetId?: string | null;
   // Drive-style organization (v2 only): shareId of a folder thing the SAME
   // owner holds, or null/absent for the root of /things. Containment lives on
@@ -325,6 +336,9 @@ export type PublicPost = {
   // legacy name derived from acl so old clients keep working
   visibility: PostVisibility;
   acl: string[];
+  // owner-only, hidden things only: the secret behind the shareable
+  // /post/<id>?key=<linkKey> URL
+  linkKey?: string;
   text: string;
   richText: Record<string, any> | null;
   images: string[];
@@ -416,6 +430,8 @@ export type PublicThing = {
   // same vocabulary the KV surface speaks; first-party projections never emit it
   visibility: ThingVisibility | 'app';
   acl: string[];
+  // owner-only, hidden things only: the ?key= secret for the hidden link
+  linkKey?: string;
   targetId: string | null;
   folderId: string | null;
   crystal: Record<string, any>;
@@ -441,31 +457,64 @@ export type PublicThing = {
 export type Viewer = {
   id: string;
   username?: string | null;
-  pat?: { tokenId: string; onlyCreatedThings: boolean; visibility?: 'all' | 'public' | 'private' } | null;
+  pat?: { tokenId: string; onlyCreatedThings: boolean; visibility?: 'all' | 'public' | 'private' | 'hidden' } | null;
   friendIds?: ReadonlySet<string>;
   // the viewer's subspace memberships (api/utils/subspaces/gate.ts), loaded
   // beside friendIds so private-subspace posts resolve for real members
   subspaceRoles?: ViewerSubspaceRoles;
+  // audience-group memberships (tt:group/<id> acl entries resolve against
+  // this) — loaded alongside friendIds by withFriendIds
+  groupIds?: ReadonlySet<string>;
+  // hidden-link keys presented with THIS request (?key= / body.key) — canView
+  // grants a hidden thing to whoever carries its linkKey here
+  linkKeys?: ReadonlySet<string>;
 } | null;
 export const asViewer = (value: string | Viewer | null | undefined): Viewer => (typeof value === 'string' ? { id: value } : value || null);
+
+// 32 base64url chars (~192 bits) — the whole security of a hidden link is
+// this string being unguessable
+const generateLinkKey = (): string => randomBytes(24).toString('base64url');
+
+// Attach presented hidden-link keys to a viewer. Works for logged-out callers
+// too: an anonymous key-holder rides an id-less viewer shell (id '' is falsy,
+// so every viewer?.id check still reads it as anonymous — the key is its only
+// power). No keys = the viewer passes through untouched.
+export const withLinkKeys = (viewer: Viewer, keys: readonly string[]): Viewer => {
+  const presented = keys.map((key) => key.trim()).filter(Boolean);
+  if (!presented.length) return viewer;
+  return viewer ? { ...viewer, linkKeys: new Set(presented) } : { id: '', linkKeys: new Set(presented) };
+};
 
 // Attach the viewer's accepted-friend set (one indexed query, memoised on the
 // viewer object — already-enriched viewers pass straight through). Read paths
 // call this before acl evaluation so friends-only things resolve for real
 // friends instead of only their owner.
 export const withFriendIds = async (viewer: Viewer): Promise<Viewer> => {
-  if (!viewer?.id || (viewer.friendIds && viewer.subspaceRoles)) return viewer;
-  // the subspace roster rides along (one indexed query, same memo) so the sync
-  // canView can fence private-subspace posts and moderators see removed ones
-  const [friendIds, subspaceRoles] = await Promise.all([
+  if (!viewer?.id || (viewer.friendIds && viewer.subspaceRoles && viewer.groupIds)) return viewer;
+  // the subspace roster and the audience-group set ride along (one indexed
+  // query each, same memo) so the sync canView can fence private-subspace
+  // posts, let moderators see removed ones, and resolve tt:group/<id>
+  const [friendIds, subspaceRoles, groupIds] = await Promise.all([
     viewer.friendIds ? Promise.resolve(viewer.friendIds) : friendIdsOf(viewer.id),
-    viewer.subspaceRoles ? Promise.resolve(viewer.subspaceRoles) : loadViewerSubspaceRoles(viewer.id)
+    viewer.subspaceRoles ? Promise.resolve(viewer.subspaceRoles) : loadViewerSubspaceRoles(viewer.id),
+    viewer.groupIds ? Promise.resolve(viewer.groupIds) : groupIdsOf(viewer.id)
   ]);
-  return { ...viewer, friendIds, subspaceRoles };
+  return { ...viewer, friendIds, subspaceRoles, groupIds };
 };
 
 export const POST_TYPES: PostType[] = [...REGISTRY_POST_TYPES];
+// The DEFAULT circle set: what an unfiltered feed/search covers. 'hidden' and
+// 'custom' are deliberately absent — an unlisted thing is reachable by its
+// link key, and a custom-audience thing by its baseline or an explicit grant
+// (or, for either, by its owner's own-things clause), never by simply not
+// filtering.
 export const VISIBILITIES: PostVisibility[] = ['public', 'friends', 'family', 'private'];
+// What a caller may ASK for. Wider than the default set: 'hidden' and 'custom'
+// are real circles the composer, post menu and feed/search filter chips all
+// offer (CIRCLE_META drives both menus), so `circles=hidden` / `circles=custom`
+// have to survive input validation — dropping one silently widens the query
+// back to every default circle, i.e. the opposite filter.
+export const REQUESTABLE_VISIBILITIES: PostVisibility[] = [...VISIBILITIES, 'hidden', 'custom'];
 
 const MAX_TAGS = 12;
 const MAX_TAG_CHARS = 40;
@@ -692,7 +741,7 @@ export const isFail = (value: unknown): value is Fail => !!value && typeof value
 // sandboxed tokens stay inside their own creations.
 export const viewerOf = (
   user: { id: string; username: string } | null,
-  pat?: { jti: string; onlyCreatedThings?: boolean; visibility?: 'all' | 'public' | 'private' } | null
+  pat?: { jti: string; onlyCreatedThings?: boolean; visibility?: 'all' | 'public' | 'private' | 'hidden' } | null
 ): Viewer =>
   user
     ? {
@@ -703,7 +752,8 @@ export const viewerOf = (
               pat: {
                 tokenId: pat.jti,
                 onlyCreatedThings: pat.onlyCreatedThings === true,
-                visibility: pat.visibility === 'public' || pat.visibility === 'private' ? pat.visibility : 'all'
+                visibility:
+                  pat.visibility === 'public' || pat.visibility === 'private' || pat.visibility === 'hidden' ? pat.visibility : 'all'
               }
             }
           : {})
@@ -783,29 +833,38 @@ const patSandboxFail = (): Fail => fail(403, 'This token is sandboxed — it can
 // private data, so out-of-audience things are invisible, not just
 // untouchable.
 
-export const patVisibilityOf = (viewer: Viewer): 'public' | 'private' | null =>
-  viewer?.pat?.visibility === 'public' || viewer?.pat?.visibility === 'private' ? viewer.pat.visibility : null;
+export const patVisibilityOf = (viewer: Viewer): 'public' | 'private' | 'hidden' | null =>
+  viewer?.pat?.visibility === 'public' || viewer?.pat?.visibility === 'private' || viewer?.pat?.visibility === 'hidden'
+    ? viewer.pat.visibility
+    : null;
 
 // Fence check on a CONCRETE acl. tt:inherit means the audience lives on the
 // target chain — the inherit-aware paths (canViewInherited, the mutation-site
 // patVisibilityBlocksDoc) resolve it first; a direct hit on an unresolved
-// inherit acl fails closed. Exported for patVisibility.test.ts: this one
-// expression IS the fence, so its truth table is pinned rather than left to a
-// live stack (same reason visibleRelatedModerationClause is exported).
+// inherit acl fails closed. Buckets: 'public' = carries tt:all; 'hidden' =
+// carries tt:hidden; 'private' = everything NOT public (hidden included —
+// hidden is a species of non-public). Exported for patVisibility.test.ts: this
+// one expression IS the fence, so its truth table is pinned rather than left to
+// a live stack (same reason visibleRelatedModerationClause is exported).
 export const patVisibilityBlocksAcl = (viewer: Viewer, acl: string[]): boolean => {
   const mode = patVisibilityOf(viewer);
   if (!mode) return false;
   if (acl.includes(ACL_INHERIT)) return true;
+  if (mode === 'hidden') return !acl.includes(ACL_HIDDEN);
   return acl.includes(ACL_ALL) !== (mode === 'public');
 };
 
-const patVisibilityFail = (viewer: Viewer): Fail =>
-  fail(
+const patVisibilityFail = (viewer: Viewer): Fail => {
+  const mode = patVisibilityOf(viewer);
+  return fail(
     403,
-    patVisibilityOf(viewer) === 'public'
+    mode === 'public'
       ? 'This token is public-only — it can only see and touch public things 🌐'
-      : 'This token is private-only — it can only see and touch private (non-public) things 🔒'
+      : mode === 'hidden'
+        ? 'This token is hidden-only — it can only see and touch hidden link-key things 🕵️'
+        : 'This token is private-only — it can only see and touch private (non-public) things 🔒'
   );
+};
 
 // ---------------------------------------------------------------------------
 // Era helpers — one place that knows how to read both doc generations.
@@ -851,18 +910,20 @@ const folderIdOf = (doc: ThingDoc): string | null => (isV2(doc) ? doc.folderId |
 // under their target, never in feeds/profiles, so the comment id is excluded.
 // (exported for things/trending.ts, which selects its candidate window with
 // the exact same era semantics as the feed)
-export const postMatch = () => ({ $or: [{ thingtime: 'post' }, { kind: 'post' }], thingtime: { $ne: 'comment' } });
+export const postMatch = async () => await legacyThingReadsRequired()
+  ? { $or: [{ thingtime: 'post' }, { kind: 'post' }], thingtime: { $ne: 'comment' } }
+  : { thingtime: { $eq: 'post', $ne: 'comment' } };
 
 // Any post-shaped thing, including rich comments — for share-original lookups,
 // where the target may legitimately be a ["post","comment"] thing.
-export const postThingMatch = () => ({ $or: [{ thingtime: 'post' }, { kind: 'post' }] });
+export const postThingMatch = async () => await legacyThingReadsRequired() ? { $or: [{ thingtime: 'post' }, { kind: 'post' }] } : { thingtime: 'post' };
 
 // Query fragment for a `thingtime in [...]` filter that stays era-correct: v1
 // posts have no thingtime array, so a 'post' filter must also match kind:'post'.
 // Shared by listThings and things/search so the two never disagree on which
 // legacy posts exist (the single source the era semantics live behind).
-export const thingtimeInClause = (thingtime: string[]) =>
-  thingtime.includes('post') ? { $or: [{ thingtime: { $in: thingtime } }, { kind: 'post' }] } : { thingtime: { $in: thingtime } };
+export const thingtimeInClause = async (thingtime: string[]) =>
+  thingtime.includes('post') && await legacyThingReadsRequired() ? { $or: [{ thingtime: { $in: thingtime } }, { kind: 'post' }] } : { thingtime: { $in: thingtime } };
 
 export const withMatch = (base: Record<string, any>, ...clauses: Record<string, any>[]) => {
   const and = [base, ...clauses].filter((clause) => Object.keys(clause).length);
@@ -1235,6 +1296,14 @@ export const createThing = async (
     // shares this applies to the final root — re-sharing a token-created share
     // of someone else's post would attach to that foreign root, so it blocks.
     if (patSandboxBlocks(viewer, target)) return patSandboxFail();
+    // custom audiences gate engagement (comment/react/share) behind the
+    // comment capability — saves stay personal and exempt
+    if (
+      (validated.thingtime.includes('comment') || validated.thingtime.includes('reaction') || validated.thingtime.includes('share')) &&
+      (await customEngageBlocks(asOwner, target))
+    ) {
+      return customEngageFail();
+    }
     targetId = target.shareId;
   } else if (input.targetId !== undefined && input.targetId !== null) {
     return fail(400, `thingtime ${validated.thingtime.join('+')} does not take a targetId`);
@@ -1258,9 +1327,11 @@ export const createThing = async (
     // the public default for standalone content things
     acl = inputAcl || [ACL_OWNER];
   } else {
-    // a private-only token's standalone creations default private — the
-    // public default would only ever 403 on the visibility fence below
-    acl = inputAcl || (patVisibilityOf(viewer) === 'private' ? [ACL_OWNER] : [ACL_ALL]);
+    // fenced tokens' standalone creations default INSIDE their fence — the
+    // public default would only ever 403 on the check below (private-only →
+    // private; hidden-only → hidden, which mints its secret link)
+    const fenceMode = patVisibilityOf(viewer);
+    acl = inputAcl || (fenceMode === 'private' ? [ACL_OWNER] : fenceMode === 'hidden' ? [ACL_HIDDEN, ACL_OWNER] : [ACL_ALL]);
   }
 
   // The token visibility fence on the NEW thing's audience. By-design
@@ -1271,6 +1342,10 @@ export const createThing = async (
   if (!acl.includes(ACL_INHERIT) && !validated.thingtime.includes('save') && patVisibilityBlocksAcl(viewer, acl)) {
     return patVisibilityFail(viewer);
   }
+
+  // hidden things are born with their secret link key — the random URL that
+  // makes an unlisted thing reachable (canView honors it while acl says hidden)
+  const linkKey = acl.includes(ACL_HIDDEN) ? generateLinkKey() : null;
 
   const folderAssignment = await resolveFolderAssignment(ownerId, input.folderId, validated.thingtime);
   if (isFail(folderAssignment)) return folderAssignment;
@@ -1333,6 +1408,7 @@ export const createThing = async (
     // free provenance) plus any entries the caller seeded; a sandboxed
     // creator listing peers here is delegation at birth
     ...(tokenAclDoc.length ? { tokenAcl: tokenAclDoc } : {}),
+    ...(linkKey ? { linkKey } : {}),
     createdAt: now,
     updatedAt: now,
 		...(app ? appNamespaceStamp(app, sizeBytes) : {}),
@@ -1825,6 +1901,7 @@ export const visibleRelatedModerationClause = (viewerId: string | null): Record<
 		: { 'moderation.status': { $nin: ['blocked', 'pending'] } };
 
 const resolveRelated = async (docs: ThingDoc[], viewerId: string | null): Promise<RelatedThings> => {
+  const legacy = await legacyThingReadsRequired();
   const ids = docs.map((doc) => doc.shareId);
   const commentsByTarget = new Map<string, CommentEntry[]>();
   const reactionsByTarget = new Map<string, ReactionEntry[]>();
@@ -1845,16 +1922,16 @@ const resolveRelated = async (docs: ThingDoc[], viewerId: string | null): Promis
     // interim relational era: kind:'reaction'/'comment' docs linked by parentId
     // (written by the pre-unification relational model; converted by the things
     // migration, folded here until then)
-    things
+    legacy ? things
       .find(withMatch({ kind: { $in: ['comment', 'reaction'] }, parentId: { $in: ids } }, moderation) as any)
       .project(RELATED_LEGACY_PROJECTION)
       .sort({ createdAt: 1 })
-      .toArray() as Promise<any[]>,
+      .toArray() as Promise<any[]> : Promise.resolve([]),
     things
       .aggregate([
         {
 					$match: withMatch(
-						{ $or: [{ thingtime: 'share', targetId: { $in: ids } }, { shareOfId: { $in: ids } }] },
+						legacy ? { $or: [{ thingtime: 'share', targetId: { $in: ids } }, { shareOfId: { $in: ids } }] } : { thingtime: 'share', targetId: { $in: ids } },
 						moderation
 					)
 				},
@@ -2216,7 +2293,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   // one level of share resolution
   const shareTargets = [...new Set(docs.map((doc) => targetIdOf(doc)).filter(Boolean))] as string[];
   const originals = shareTargets.length
-    ? ((await things.find(withMatch({ shareId: { $in: shareTargets } }, postThingMatch()) as any).toArray()) as any as ThingDoc[])
+    ? ((await things.find(withMatch({ shareId: { $in: shareTargets } }, await postThingMatch()) as any).toArray()) as any as ThingDoc[])
     : [];
   const originalsById = new Map(originals.map((doc) => [doc.shareId, doc]));
 
@@ -2410,7 +2487,11 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       author: profiles.get(doc.ownerId) || null,
       visibility: visibilityFromAcl(aclOf(doc)) as PostVisibility,
       acl: aclOf(doc),
-      // a moderator-removed post shows no body to anyone but its author
+      // owner-only: the hidden-link secret, only while the acl says hidden
+      ...(viewer?.id && viewer.id === doc.ownerId && typeof doc.linkKey === 'string' && doc.linkKey && aclOf(doc).includes(ACL_HIDDEN)
+        ? { linkKey: doc.linkKey }
+        : {}),
+      // …but a moderator-removed post shows no body to anyone but its author
       text: redacted ? '' : String(crystal.text || ''),
       richText:
         !redacted && crystal.richText && typeof crystal.richText === 'object' && !Array.isArray(crystal.richText)
@@ -2479,12 +2560,19 @@ export const toPublicThings = async (docs: ThingDoc[], viewerInput: string | Vie
     // token grants are owner-facing management data, not audience — only the
     // owner's own credentials (session or their tokens) see them
     const tokenAcl = viewer?.id && viewer.id === doc.ownerId ? tokenAclOf(doc) : [];
+    // the hidden-link secret is owner-facing too, and only meaningful while
+    // the acl still says hidden
+    const linkKey =
+      viewer?.id && viewer.id === doc.ownerId && typeof doc.linkKey === 'string' && doc.linkKey && aclOf(doc).includes(ACL_HIDDEN)
+        ? doc.linkKey
+        : null;
     return {
       id: doc.shareId,
       thingtime: thingtimeOf(doc),
       author: profiles.get(doc.ownerId) || null,
       visibility: visibilityFromAcl(aclOf(doc)),
       acl: aclOf(doc),
+      ...(linkKey ? { linkKey } : {}),
       targetId: targetIdOf(doc),
       folderId: folderIdOf(doc),
       crystal: crystalOf(doc),
@@ -2530,6 +2618,18 @@ export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
   // private things (inherit acls are judged on their resolved terminal via
   // canViewInherited; a direct hit on one fails closed).
   if (patVisibilityBlocksAcl(viewer, aclOf(doc))) return false;
+  // hidden (unlisted) things: the random link key IS the audience — anyone
+  // presenting it may view, logged out included. The key only grants while
+  // the acl still says hidden, so un-hiding instantly retires shared links.
+  if (
+    viewer?.linkKeys?.size &&
+    typeof doc.linkKey === 'string' &&
+    doc.linkKey &&
+    viewer.linkKeys.has(doc.linkKey) &&
+    aclOf(doc).includes(ACL_HIDDEN)
+  ) {
+    return true;
+  }
   if (viewer?.id && doc.ownerId === viewer.id) return true;
   // private-subspace posts are fenced to that subspace's active members and
   // moderators (the enriched viewer carries the roster; a bare viewer fails
@@ -2541,6 +2641,38 @@ export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
   }
   return aclAllows(aclOf(doc), viewer, doc.ownerId);
 };
+
+// ---------------------------------------------------------------------------
+// Custom audiences — tt:custom flips a thing into capability mode: the acl's
+// baseline entries (tt:all / tt:hidden / nothing) say who may READ, and the
+// per-user / per-group grants (tt:user/<name>[/comment|/write],
+// tt:group/<id>[…]) say who may do MORE. Engagement (comment, react, share)
+// needs at least the comment capability; shared editing (PATCH crystal) needs
+// write. Saves are exempt — a save is a private bookmark that reveals nothing
+// to anyone else. Non-custom things are byte-for-byte unchanged: every
+// viewer keeps today's engage-if-you-can-see rule.
+
+const customEngageBlocksAcl = (viewer: Viewer, acl: string[], ownerId: string): boolean => {
+  if (!acl.includes(ACL_CUSTOM)) return false;
+  const cap = aclCapabilityFor(acl, viewer, ownerId);
+  return cap !== 'comment' && cap !== 'write';
+};
+
+// engagement targets can be inherit-acl children (replying to a comment under
+// a custom post) — judge the chain terminal, with the viewer's friend/group
+// sets loaded so grants can match
+const customEngageBlocks = async (viewer: Viewer, doc: ThingDoc): Promise<boolean> => {
+  const terminal = aclOf(doc).includes(ACL_INHERIT)
+    ? await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findThing)
+    : doc;
+  if (!terminal) return true; // broken chain fails closed
+  if (!aclOf(terminal).includes(ACL_CUSTOM)) return false;
+  const enriched = await withFriendIds(viewer);
+  return customEngageBlocksAcl(enriched, aclOf(terminal), String(terminal.ownerId));
+};
+
+const customEngageFail = (): Fail =>
+  fail(403, 'This thing has a custom audience — you don’t have comment access here 🎭');
 
 // Target-attached things resolve visibility through their inherit chain (see
 // aclChainCore for the cycle-safe walk — legitimate deep comment chains must
@@ -2636,10 +2768,20 @@ const circleClause = (circle: PostVisibility) => {
     case 'family':
       return { $or: [{ acl: ACL_FAMILY }, { visibility: 'family' }] };
     case 'private':
-      // $nin on an array field means "contains none of these"
+      // $nin on an array field means "contains none of these". ACL_HIDDEN and
+      // ACL_CUSTOM are excluded too: neither carries a broad grant, so without
+      // them every unlisted 🕵️ and custom-audience 🎭 thing would ALSO answer
+      // the 'private' chip — each is its own circle below.
       return {
-        $or: [{ acl: { $exists: true, $nin: [ACL_ALL, ACL_FRIENDS, ACL_FAMILY] } }, { visibility: 'private' }]
+        $or: [{ acl: { $exists: true, $nin: [ACL_ALL, ACL_FRIENDS, ACL_FAMILY, ACL_HIDDEN, ACL_CUSTOM] } }, { visibility: 'private' }]
       };
+    case 'hidden':
+      // v2-only (no legacy enum era) — reachable only by explicit circle
+      // filters; 'hidden' is deliberately NOT in the default VISIBILITIES set
+      return { acl: ACL_HIDDEN };
+    case 'custom':
+      // v2-only, explicit-filter-only, exactly like hidden
+      return { acl: ACL_CUSTOM };
   }
 };
 
@@ -2653,6 +2795,7 @@ const circleClause = (circle: PostVisibility) => {
 export const patVisibilityMatchClause = (viewer: Viewer): Record<string, any> | null => {
   const mode = patVisibilityOf(viewer);
   if (!mode) return null;
+  if (mode === 'hidden') return { $or: [{ acl: ACL_HIDDEN }, { acl: ACL_INHERIT }] };
   return mode === 'public' ? { $or: [circleClause('public'), { acl: ACL_INHERIT }] } : { $nor: [circleClause('public')] };
 };
 
@@ -2668,11 +2811,48 @@ export const visibilityQueryFor = (viewer: Viewer, circles: PostVisibility[]) =>
   if (viewer?.id && viewer.friendIds?.size && wanted.includes('friends')) {
     clauses.push({ $and: [{ ownerId: { $in: [...viewer.friendIds] } }, circleClause('friends')] });
   }
+  // The unnarrowed shortcut is only sound when the caller asked for NO filter,
+  // or asked for every circle they could ask for. A bare length comparison
+  // would also fire for a same-sized but different selection (say
+  // public+friends+family+hidden), silently pulling the viewer's private
+  // things back into a feed they filtered them out of — and covering only the
+  // DEFAULT set has the same shape of bug one circle over: ticking exactly
+  // public+friends+family+private (i.e. everything except 🕵️ Hidden) would
+  // take the shortcut and hand back the hidden things the caller just
+  // excluded. An omitted circle must always really be omitted, so only the two
+  // genuinely unfiltered cases skip narrowing (fleet review fix, extended for
+  // 🎭).
+  const unfiltered = !circles.length || REQUESTABLE_VISIBILITIES.every((circle) => wanted.includes(circle));
+  const narrowToWanted = (clause: Record<string, any>) =>
+    unfiltered ? clause : { $and: [clause, { $or: wanted.map((circle) => circleClause(circle)) }] };
   if (viewer?.id) {
     // the viewer's own things, optionally narrowed to the requested circles
     clauses.push(
-      wanted.length === VISIBILITIES.length ? { ownerId: viewer.id } : { ownerId: viewer.id, $or: wanted.map((circle) => circleClause(circle)) }
+      unfiltered ? { ownerId: viewer.id } : { ownerId: viewer.id, $or: wanted.map((circle) => circleClause(circle)) }
     );
+  }
+  // Things granted to the viewer BY NAME or through a group (custom
+  // audiences: tt:user/<name>[/cap], tt:group/<id>[/cap]) land in their feed
+  // too — the DB match is a superset; canView judges the fetched page exactly.
+  // Gated on the circle filter like every other clause above: an unfiltered
+  // feed carries grants, but once the caller narrows, grants ride the 🎭
+  // Custom chip alone (every granted thing is a tt:custom thing), so omitting
+  // that circle really omits them instead of leaking them back in. The clause
+  // that survives that gate is then narrowed to the requested circles for the
+  // same reason the own-things clause is: a grant must not smuggle a 🎭 thing
+  // into a 🌐-only filter.
+  const grantsWanted = !circles.length || wanted.includes('custom');
+  if (viewer?.id && grantsWanted && (viewer.username || viewer.groupIds?.size)) {
+    const grantEntries: string[] = [];
+    if (viewer.username) {
+      const base = `${ACL_USER_PREFIX}${viewer.username.toLowerCase()}`;
+      grantEntries.push(base, `${base}/comment`, `${base}/write`);
+    }
+    for (const groupId of viewer.groupIds || []) {
+      const base = `${ACL_GROUP_PREFIX}${groupId}`;
+      grantEntries.push(base, `${base}/comment`, `${base}/write`);
+    }
+    if (grantEntries.length) clauses.push(narrowToWanted({ acl: { $in: grantEntries } }));
   }
   // nothing requested that the viewer could ever see
   if (!clauses.length) return null;
@@ -2849,6 +3029,7 @@ const countCommentsOf = async (
 	target: ThingDoc,
 	options: { includeBlocked?: boolean; viewerId?: string | null } = {}
 ): Promise<number> => {
+  const legacy = await legacyThingReadsRequired();
   const things = await getThingsCollection();
 	// visible counts must match what the read paths render (blocked comments
 	// are excluded everywhere); the comment CAP passes includeBlocked because
@@ -2856,7 +3037,7 @@ const countCommentsOf = async (
 	const blockedClause = options.includeBlocked ? {} : visibleRelatedModerationClause(options.viewerId ?? null);
   const [standalone, legacyRelational] = await Promise.all([
     things.countDocuments(withMatch({ targetId: target.shareId, thingtime: 'comment' }, blockedClause) as any),
-    things.countDocuments(withMatch({ kind: 'comment', parentId: target.shareId }, blockedClause) as any)
+    legacy ? things.countDocuments(withMatch({ kind: 'comment', parentId: target.shareId }, blockedClause) as any) : Promise.resolve(0)
   ]);
   return standalone + legacyRelational + (target.comments || []).length;
 };
@@ -2866,21 +3047,22 @@ const countCommentsOf = async (
 // POST /api/v1/things path both funnel through createThing). Counts across
 // both eras: v2 crystal.emoji reaction things and interim kind:'reaction' docs.
 const enforceReactionCaps = async (targetShareId: string, ownerId: string, token: string): Promise<Fail | null> => {
+  const legacy = await legacyThingReadsRequired();
   const things = await getThingsCollection();
   const [ownV2, ownKind] = await Promise.all([
     things.countDocuments({ targetId: targetShareId, thingtime: 'reaction', ownerId } as any),
-    things.countDocuments({ kind: 'reaction', parentId: targetShareId, ownerId } as any)
+    legacy ? things.countDocuments({ kind: 'reaction', parentId: targetShareId, ownerId } as any) : Promise.resolve(0)
   ]);
   if (ownV2 + ownKind >= MAX_REACTIONS_PER_USER_PER_POST) {
     return fail(400, `You can add at most ${MAX_REACTIONS_PER_USER_PER_POST} reactions to a post`);
   }
   const tokenAlreadyOnPost =
     (await things.countDocuments({ targetId: targetShareId, thingtime: 'reaction', 'crystal.emoji': token } as any, { limit: 1 })) ||
-    (await things.countDocuments({ kind: 'reaction', parentId: targetShareId, token } as any, { limit: 1 }));
+    (legacy && await things.countDocuments({ kind: 'reaction', parentId: targetShareId, token } as any, { limit: 1 }));
   if (!tokenAlreadyOnPost) {
     const [v2Tokens, kindTokens] = await Promise.all([
       things.distinct('crystal.emoji', { targetId: targetShareId, thingtime: 'reaction' } as any),
-      things.distinct('token', { kind: 'reaction', parentId: targetShareId } as any)
+      legacy ? things.distinct('token', { kind: 'reaction', parentId: targetShareId } as any) : Promise.resolve([])
     ]);
     if (new Set([...v2Tokens, ...kindTokens]).size >= MAX_REACTION_KEYS_PER_POST) {
       return fail(400, 'This post has reached its reaction limit');
@@ -2946,7 +3128,9 @@ export const getFeed = async (
   const scope: FeedScope = query.scope === 'subspaces' ? 'subspaces' : 'all';
   const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_LIMIT), MAX_FEED_LIMIT);
   const types = (query.types || []).filter((type) => POST_TYPES.includes(type));
-  const circles = (query.circles || []).filter((circle) => VISIBILITIES.includes(circle));
+  // REQUESTABLE, not the default set — 'hidden' and 'custom' are chips the
+  // filter menu offers, and a dropped circle reads as "no filter" downstream
+  const circles = (query.circles || []).filter((circle) => REQUESTABLE_VISIBILITIES.includes(circle));
   // same normalization sanitizeTags applies at write time — the stored tags
   // are already trimmed/lowercased/capped, so an un-normalized filter could
   // never match anything
@@ -2969,7 +3153,7 @@ export const getFeed = async (
     if (query.to) range.createdAt.$lte = query.to;
   }
   const match = withMatch(
-    postMatch(),
+    await postMatch(),
     visibility,
     typeClause(types),
     tag ? { tags: tag } : {},
@@ -3025,7 +3209,7 @@ export const getFeed = async (
 
   const pageIds = scored.slice(offset, offset + limit).map((entry) => entry.doc.shareId);
   const pageDocs = pageIds.length
-    ? ((await things.find(withMatch({ shareId: { $in: pageIds } }, postMatch()) as any).toArray()) as any as ThingDoc[])
+    ? ((await things.find(withMatch({ shareId: { $in: pageIds } }, await postMatch()) as any).toArray()) as any as ThingDoc[])
     : [];
   const docsById = new Map(pageDocs.map((doc) => [doc.shareId, doc]));
   const page = pageIds.map((id) => docsById.get(id)).filter(Boolean) as ThingDoc[];
@@ -3059,10 +3243,10 @@ export const listUserPosts = async (
   // a friend browsing this profile also sees the owner's friends-circle posts
   const friendOfOwner = !!viewer?.friendIds?.has(ownerId);
   const baseMatch = own
-    ? withMatch(postMatch(), { ownerId })
+    ? withMatch(await postMatch(), { ownerId })
     : friendOfOwner
-      ? withMatch(postMatch(), { ownerId }, { $or: [circleClause('public'), circleClause('friends')] })
-      : withMatch(postMatch(), { ownerId }, circleClause('public'));
+      ? withMatch(await postMatch(), { ownerId }, { $or: [circleClause('public'), circleClause('friends')] })
+      : withMatch(await postMatch(), { ownerId }, circleClause('public'));
   // visibility-restricted tokens: conjoin the audience fence the same way
   // listThings does. Not just paging hygiene (without it a public-only token
   // pages an owner's mostly-private profile in near-empty slices while the
@@ -3213,7 +3397,7 @@ export const listThings = async (
     match = {
       ownerId: viewer.id,
       thingtime: { $nin: [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME, ...SUBSPACE_THINGTIME, UPDOWN_THINGTIME] },
-      $or: [{ thingtime: { $exists: true } }, { kind: 'post' }]
+      ...await legacyThingReadsRequired() ? { $or: [{ thingtime: { $exists: true } }, { kind: 'post' }] } : { $and: [{ thingtime: { $exists: true } }] }
     };
     const folder = typeof query.folder === 'string' ? query.folder.trim() : '';
     if (folder) {
@@ -3237,7 +3421,7 @@ export const listThings = async (
     }
   }
   if (thingtime.length) {
-    match = withMatch(match, thingtimeInClause(thingtime));
+    match = withMatch(match, await thingtimeInClause(thingtime));
   }
   if (!app) {
     // visibility-restricted tokens: conjoin the audience fence so pages stay
@@ -3530,6 +3714,8 @@ export const toggleReaction = async (
   if (!target) return fail(404, 'Post not found');
   // guard the REMOVE path too — createThing only covers the add
   if (patSandboxBlocks(viewer, target)) return patSandboxFail();
+  // custom audiences: reacting needs the comment capability (both directions)
+  if (await customEngageBlocks(viewer, target)) return customEngageFail();
 
   // the reaction unique index exists before any insert: it is created at
   // instance boot (server/plugins/mongo-warmup) and awaited during register,
@@ -3554,7 +3740,7 @@ export const toggleReaction = async (
         ownerId: viewerId,
         'crystal.emoji': token
       } as any),
-      things.findOne({ kind: 'reaction', parentId: target.shareId, ownerId: viewerId, token } as any)
+      await legacyThingReadsRequired() ? things.findOne({ kind: 'reaction', parentId: target.shareId, ownerId: viewerId, token } as any) : Promise.resolve(null)
     ]);
     if (existingV2 || existingKind) {
 			try {
@@ -3726,6 +3912,8 @@ export const addComment = async (
   // fail before the residue migration + count queries (createThing would
   // catch it anyway — this is the earlier, cheaper exit)
   if (patSandboxBlocks(viewer, target)) return patSandboxFail();
+  // custom audiences: commenting needs the comment capability
+  if (await customEngageBlocks(viewer, target)) return customEngageFail();
 
   // first write claims any legacy embedded residue into standalone things
   // (namespace targets are always v2 — nothing to claim under the app lens)
@@ -3893,6 +4081,8 @@ export const sharePost = async (
   const original = await findViewableThing(shareId, viewer);
   if (!original || !isPostThing(original)) return fail(404, 'Post not found');
   if (patSandboxBlocks(viewer, original)) return patSandboxFail();
+  // custom audiences: sharing is amplification — comment capability required
+  if (await customEngageBlocks(viewer, original)) return customEngageFail();
   if (original.ownerId !== viewerId && !aclOf(original).includes(ACL_ALL)) {
     return fail(403, 'Only public posts can be shared');
   }
@@ -3946,7 +4136,7 @@ export const refundDeletedNamespaceDocs = async (docs: ThingDoc[]): Promise<void
   }
 };
 
-const cascadeAttachmentFilter = (parentIds: string[]) => ({
+const cascadeAttachmentFilter = async (parentIds: string[]) => ({
 	$or: [
 		{
 			targetId: { $in: parentIds },
@@ -3957,11 +4147,11 @@ const cascadeAttachmentFilter = (parentIds: string[]) => ({
 			// visible exactly when the poll is and must go when the poll goes.
 			thingtime: { $in: [...CASCADE_CHILD_THINGTIME, 'vote'], $nin: ['share'] }
 		},
-		{
+		...await legacyThingReadsRequired() ? [{
 			parentId: { $in: parentIds },
 			kind: { $in: ['comment', 'reaction'] },
 			thingtime: { $nin: ['share'] }
-		}
+		}] : []
 	]
 });
 
@@ -4008,7 +4198,7 @@ const discoverCascadeDescendants = async (root: ThingDoc): Promise<ThingDoc[]> =
 		const parents = frontier.slice(offset, offset + STORAGE_DELETE_TRANSACTION_BATCH);
 		offset += parents.length;
 		const cursor = things
-			.find(cascadeAttachmentFilter(parents) as any)
+			.find(await cascadeAttachmentFilter(parents) as any)
 			.project({ _id: 1, shareId: 1, commentId: 1, targetId: 1, parentId: 1, thingtime: 1, kind: 1 })
 			.sort({ shareId: 1, commentId: 1, _id: 1 })
 			.batchSize(STORAGE_DELETE_TRANSACTION_BATCH);
@@ -4220,7 +4410,7 @@ const deleteCascadeBatchAtomically = async (batch: ThingDoc[], rootMongoId: unkn
 	return withMongoTransaction(async (session) => {
 		const externalChild = await things.findOne(
 			{
-				...cascadeAttachmentFilter(parentIds),
+				...await cascadeAttachmentFilter(parentIds),
 				...(mongoIds.length ? { _id: { $nin: mongoIds } } : {})
 			} as any,
 			{ session, projection: { _id: 1 } }
@@ -4243,7 +4433,7 @@ const deleteDrainedRootAtomically = async (deleteFilter: Record<string, any>): P
 	return withMongoTransaction(async (session) => {
 		const root = (await things.findOne(deleteFilter as any, { session })) as any as ThingDoc | null;
 		if (!root) return { state: 'missing' };
-		const child = await things.findOne({ ...cascadeAttachmentFilter(cascadeLinkIdsOf(root)), _id: { $ne: (root as any)._id } } as any, {
+		const child = await things.findOne({ ...await cascadeAttachmentFilter(cascadeLinkIdsOf(root)), _id: { $ne: (root as any)._id } } as any, {
 			session,
 			projection: { _id: 1 }
 		});
@@ -4472,8 +4662,28 @@ export const updateThing = async (
   if (!viewer?.id) return fail(401, 'Unauthorized');
   if (typeof shareId !== 'string' || !shareId.trim()) return fail(400, 'Thing id is required');
   const things = await getThingsCollection();
-  const doc = (await things.findOne({ shareId: shareId.trim(), ownerId: viewer.id } as any)) as any as ThingDoc | null;
+  const doc = (await things.findOne({ shareId: shareId.trim() } as any)) as any as ThingDoc | null;
   if (!doc || (!isV2(doc) && !isPostThing(doc))) return fail(404, 'Thing not found');
+  if (String(doc.ownerId) !== viewer.id) {
+    // Shared editing — custom audiences may grant WRITE to picked users or
+    // groups. Everything else stays a plain 404 (no existence oracle), and
+    // apps never edit outside the acting user's own things. Writers touch
+    // CONTENT only (crystal/extended/tags): audience, folder, and token
+    // grants remain the owner's alone. Storage deltas keep billing the
+    // OWNER (doc.ownerId drives every ledger below) — granting write shares
+    // your quota with your writers.
+    if (app) return fail(404, 'Thing not found');
+    const enriched = await withFriendIds(viewer);
+    if (!aclOf(doc).includes(ACL_CUSTOM) || !(await canViewInherited(doc, enriched))) {
+      return fail(404, 'Thing not found');
+    }
+    if (aclCapabilityFor(aclOf(doc), enriched, String(doc.ownerId)) !== 'write') {
+      return fail(403, 'This thing has a custom audience — you don’t have edit access 🎭');
+    }
+    if (input.acl !== undefined || input.visibility !== undefined || input.folderId !== undefined || input.tokenAcl !== undefined) {
+      return fail(403, 'Only the owner can change a thing’s audience, folder, or token grants');
+    }
+  }
   if (options.expectedUpdatedAt !== undefined && options.expectedUpdatedAt !== null) {
     if (typeof options.expectedUpdatedAt !== 'string' || Number.isNaN(new Date(options.expectedUpdatedAt).getTime())) {
       return fail(400, 'expectedUpdatedAt must be an ISO timestamp');
@@ -4622,6 +4832,13 @@ export const updateThing = async (
   // boundary in either direction (publishing private data, or hiding public)
   if (!acl.includes(ACL_INHERIT) && patVisibilityBlocksAcl(viewer, acl)) return patVisibilityFail(viewer);
 
+  // Entering hidden mints a FRESH link key — links that circulated during an
+  // earlier hidden period must never resurrect on re-hide. Leaving hidden
+  // keeps the field (inert: canView only honors it while acl says hidden).
+  const wasHidden = aclOf(doc).includes(ACL_HIDDEN);
+  const nowHidden = acl.includes(ACL_HIDDEN);
+  const nextLinkKey = nowHidden && (!wasHidden || typeof doc.linkKey !== 'string' || !doc.linkKey) ? generateLinkKey() : undefined;
+
   // extended replaces as a whole value only when provided (undefined leaves it
   // untouched, null clears it) — both PATCH and PUT, since deep-merging
   // arbitrary JSON is ambiguous
@@ -4703,6 +4920,7 @@ export const updateThing = async (
     ...(hasFolderChange ? { folderId: nextFolderId } : {}),
     tags,
     acl,
+    ...(nextLinkKey ? { linkKey: nextLinkKey } : {}),
     updatedAt: now,
     ...(nextSubspacePrivate === true ? { subspacePrivate: true } : {}),
 		...(storageScope ? { appId: storageScope.appId } : {}),
@@ -5137,7 +5355,7 @@ export const bulkThings = async (
 // things collection directly.
 export const countPublicPosts = async (ownerId: string): Promise<number> => {
   const things = await getThingsCollection();
-  return things.countDocuments(withMatch(postMatch(), { ownerId }, circleClause('public')) as any);
+  return things.countDocuments(withMatch(await postMatch(), { ownerId }, circleClause('public')) as any);
 };
 
 // Activity heatmap window: exactly the days the client's 53-column
@@ -5232,7 +5450,7 @@ export const getPostFeatures = async (viewerInput: string | Viewer, shareIds: st
   if (!wanted.length) return new Map();
   const things = await getThingsCollection();
   const docs = (await things
-    .find(withMatch({ shareId: { $in: wanted } }, postMatch()) as any)
+    .find(withMatch({ shareId: { $in: wanted } }, await postMatch()) as any)
     .project(FEATURE_PROJECTION)
     .toArray()) as any as ThingDoc[];
   return new Map(docs.filter((doc) => canView(doc, viewer)).map((doc) => [doc.shareId, featuresOf(doc)]));

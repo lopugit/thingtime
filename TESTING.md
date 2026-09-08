@@ -114,7 +114,7 @@ is fixed, and cite the checklist you ran in the PR description.
 ## ChatGPT / Codex MCP connector
 
 - [ ] `GET /.well-known/oauth-protected-resource`, `GET
-    /.well-known/oauth-authorization-server`, and the Thingtime capability
+      /.well-known/oauth-authorization-server`, and the Thingtime capability
       manifest return the deployed HTTPS origin and the MCP path exactly.
 - [ ] From ChatGPT Developer mode, add the deployed MCP URL. The authorization
       page works at desktop and a 390px mobile viewport, requires `resource`,
@@ -1603,8 +1603,16 @@ email whose link points at the attacker.
       your own option again REMOVES it. `POST /api/v1/things/vote` returns
       `pollVotes { counts, totalVotes, viewerVote }` matching what renders.
 - [ ] One vote per user per poll survives races: double-tap fast / two tabs —
-      the protected `uniqueKeys_1` index keeps ONE Binary `voteKey:` slot per
-      user/poll; reloads converge. New writes stamp the root slot explicitly.
+      the protected Binary `voteKey` in `uniqueKeys_1` keeps at most ONE vote
+      doc per (`crystal.voteKey` = `<pollId>~<userId>`); reloads converge. Run
+      `npm --prefix remix run verify:poll-unique-keys` against its explicitly
+      allowed disposable replica set to exercise 16 concurrent real-utility calls.
+- [ ] Watch preview startup and poll voting retain `things_vote_key_lookup`,
+      matching released readers, while `lopu_recording_due` remains available.
+      Relationship/legacy index retirement happens only via leased admin migrations.
+- [ ] Poll insert/change/removal leaves the account ledger unchanged (protected
+      engagement is unbilled), including full accounts. Conflicting vote writes
+      return 409 instead of silently reporting an unwritten vote as successful.
 - [ ] Logged out: the poll shows results only (bars + percentages visible,
       no vote recorded); tapping toasts "Log in to vote 🗳️".
 - [ ] A poll on a private/friends-only post can't be voted on by a viewer
@@ -1621,17 +1629,8 @@ email whose link points at the attacker.
 - [ ] Deleting a poll post cascade-deletes its vote things (no orphan `vote`
       docs pointing at the gone poll); vote docs never list as /things rows
       and folder copy skips them like reactions/saves.
-- [ ] A free-form data crystal containing the same `voteKey` cannot reserve
-      a protected slot or prevent a legitimate vote. A conflicting protected
-      root slot still fails loudly rather than silently losing the vote.
-- [ ] Before retiring the home `things_vote_key_lookup`, ensure the replacement
-      unique index exists and legacy genuine votes have been validated and
-      backfilled. Duplicate/malformed legacy votes must fail without deleting
-      votes or retiring the old index. Custom databases retain their named
-      indexes. Run `node --import tsx scripts/verify-poll-index-layout.mts
-      /absolute/path/to/mongod` from `remix/` for a disposable local MongoDB
-      proof: 60 total indexes, four free slots, and one document examined for
-      a poll point lookup. No production URI is accepted by this verifier.
+- [ ] A free-form data crystal with the same `voteKey` cannot squat another
+      user's protected vote identity. Generic inputs cannot stamp `uniqueKeys`.
 
 ## Subspaces (`remix/app/components/Subspaces/`, `remix/app/api/utils/subspaces/`, `/api/v1/subspaces*`)
 
@@ -3694,8 +3693,11 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       (children carry ['tt:inherit']). 'all' and legacy pre-field tokens stay
       unrestricted; mint 400s on unknown visibility values; /tokens/self and
       the mint response report the fence; the settings row badges 🌐/🔒
-      restricted tokens; combines with the 🧸 sandbox. Covered by section F
-      of `node scripts/verify-pat-tokens.mjs`.
+      restricted tokens; combines with the 🧸 sandbox. The fence also rides
+      /api/v1/things/user: a fenced token's profile pages AND postCount only
+      cover in-fence posts (regression: a stacked-branch restructure once
+      dropped this clause, leaking private-post counts to public-only
+      tokens). Covered by section F of `node scripts/verify-pat-tokens.mjs`.
 - [ ] The fence survives the edge cache: `?anon=1` on feed/search is answered
       as the Bearer credential rather than anonymously, the fenced answer
       carries `private, no-store`, and the credential-less cacheable answer
@@ -3704,6 +3706,82 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       Authorization-carrying request, so without the Vary a warm anon entry
       reaches a fenced token without the origin ever being asked. Same
       section F.
+- [ ] Hidden visibility ('hidden', acl ['tt:hidden','tt:user'] + random
+      linkKey): composer/post-menu offer 🕵️ Hidden; the created/edited thing
+      returns owner-only linkKey (never in non-owner projections); anonymous
+      GET ?id= 404s without the key, 200s with ?key=<linkKey>, wrong keys stay
+      blind; the post never appears in the public feed, other users' profile
+      view, or search — the owner still sees it in their own feed/listings;
+      body.key admits other users to comment/react/save/share; PATCHing the
+      audience away from hidden kills the link INSTANTLY, and re-hiding mints
+      a FRESH key (old links stay dead — key rotation on every entry into
+      hidden); "Copy hidden link 🕵️" in the post menu copies
+      /post/<id>?key=<linkKey> and the /post page threads ?key= through to
+      the API. Covered by section G of `node scripts/verify-pat-tokens.mjs`.
+- [ ] GET bridge (/api/v1/get + per-token allowGet, "Works via GET links 🌍"
+      in the minter): only tokens minted with the tick resolve there (others
+      403), the token rides ?token= (Bearer also accepted, cookies NEVER —
+      a cookie-only request 401s, so mutating GETs can't be CSRF'd), op ∈
+      get/list/search/feed/self/create/update/upsert/delete/react/comment/
+      save/share behave exactly like their endpoints: same scopes (403s free),
+      same atomic use accounting (op=self is free introspection), same
+      sandbox + visibility fence, mirrored rate-limit keys. Args = body JSON
+      param + query params overlaid ({/[/" values parse as JSON, bare words
+      stay strings, thingtime accepts csv); responses carry Cache-Control:
+      private, no-store + Referrer-Policy: no-referrer; unknown ops 400.
+      Minted rows badge 🌍 GET links. Covered by section H of
+      `node scripts/verify-pat-tokens.mjs`.
+- [ ] Custom audiences 🎭 ('custom', acl marker tt:custom + baseline +
+      capability grants): the composer/post-menu Custom option opens the
+      audience picker (baseline chips Only-these-people / +secret-link /
+      +everyone; user search via /api/v1/users/search; prefilled Recents /
+      Friends / Connections sections filtered by the search box; per-entry
+      capability select Read/Comment/Edit; save-selection-as-group and
+      pick-existing-group). Applying composes acl ['tt:custom','tt:user',
+      baseline?, 'tt:user/<name>[/comment|/write]'…, 'tt:group/<id>[…]'…] and
+      the wire round-trips visibility 'custom'. Enforcement: read grant =
+      view only (comment/react 403 — general baseline viewers TOO, even with
+      a public baseline or a hidden link key); write ⊃ comment ⊃ read; write
+      grantees PATCH crystal/extended/tags but NEVER acl/visibility/folder/
+      tokenAcl (403) and never delete (owner-only); storage stays billed to
+      the owner. Group grants resolve live: PATCHing the group's member list
+      (replacement semantics) grants/revokes instantly on every thing that
+      references tt:group/<id>; deleting the group makes its entries inert.
+      Granted things land in the grantee's FEED (visibilityQueryFor grant
+      clause); hidden baseline mints a linkKey (key = read only). Groups are
+      protected kinds managed solely via /api/v1/groups (+ audience-sources).
+      Covered by section I of `node scripts/verify-pat-tokens.mjs`.
+- [ ] Unified Thing sharing: `/things` Share, Builder page settings,
+      component-card Save version, and component-detail Save version all offer
+      Public / Friends / Family / Private / Anyone with the link / Custom from
+      the same audience control. Custom opens the people + groups capability
+      picker. At a mobile viewport, open Custom from the Builder inspector and
+      confirm the entire picker (including its buttons) layers above the drawer
+      and remains usable. Saving a standalone Builder page with the link option
+      mints an owner-only key; its copied `/p/<id>?key=<key>` URL resolves while
+      logged out, and the same key pattern opens non-page/non-post Things through
+      `/thing/<id>?key=<key>`. A no-key visit remains 404 and never paints a
+      bearer-key response from local cache. Moving away from hidden invalidates
+      the old link.
+- [ ] Token visibility fence 'hidden' mode ("Hidden only 🕵️" chip): the token
+      lives entirely in hidden link-key things — its no-acl creates are born
+      hidden WITH a fresh linkKey, public/private things 404, creating
+      outside the fence 403s; composes with the sandbox and the GET bridge.
+      Covered by section I of the verify suite.
+- [ ] Circle filters honour every circle they offer (regression: a new circle
+      that the filter menu shows but the API drops reads downstream as "no
+      circle filter", so the chip WIDENS the result set instead of narrowing
+      it). Tick 🕵️ Hidden alone in the feed/search Advanced panel: only your
+      hidden things come back, not the whole feed. Tick 🔒 Private alone: no
+      hidden things in the result. Tick 🎭 Custom alone: your custom-audience
+      things plus the ones granted to you by name/group, nothing else. Tick
+      any five of the six circles: the omitted circle really is omitted (this
+      used to fall through to an "all circles" shortcut keyed on selection
+      COUNT) — including 🎭 Custom, whose grant clause is gated on the filter
+      like every other clause, so omitting it really does drop the things
+      other people granted you. Leaving every circle unticked is unchanged —
+      the default feed still shows all of your own things, hidden included,
+      plus everything granted to you.
 - [ ] PAT × app-token coexistence on the shared things routes (one resolver,
       three credential kinds): a PAT ignores Origin (no app binding), the
       OPTIONS preflight for app SDKs still serves with Authorization allowed,
@@ -6000,3 +6078,18 @@ approval; `access.test.ts` — the reservation matrix) and
 - As an admin, dry-run `backfill-user-storage-accounting`; invalid ledgers must report only deterministic ledger IDs and fixed validation-field labels, at most ten records. Confirm zero ledger writes, no raw values or arbitrary key names, and unchanged strict envelope validation. Anonymous and non-admin callers remain denied by the existing migrations API gate.
 
 - Desktop privacy status: grant/revoke each permission, return from System Settings, and confirm live status refreshes without prompting. Stop the node and confirm failed checks show last-known status, not a new denial or false success. Restart and use Check access to recover; a signing migration must explain the one-time off/on grant refresh.
+# Index consolidation regression checks
+
+- Two-stage retirement: the first real run activates each layout but preserves all old indexes. A second run before one minute must preserve them without resetting activation time. After the drain, verify exact retirement, zero pending work, and continued canonical reads. Old/malformed/future markers start a fresh drain. Lease loss never starts activation or further cleanup.
+
+- Legacy cutover: incompatible root-kind/shareOfId documents block cleanup; only exactly canonical schema-v2 embeds may lose redundant kind metadata. Check private embed denial, owner listing and CAS updates; feed/profile exclusion of rich comments; engagement-filtered search; and comment/attachment cascades. Native owner post/embed plans must avoid blocking sorts. Custom data planes retain legacy compatibility; no Thing is deleted by the index migration.
+
+- In the admin workbench, an aggregation starting with `$indexStats: {}` must run without MongoDB Location40602. Keep protected-field probes rejected and strip protected Thing fields from later joins; do not generalize the first-stage exception to document-reading expressions.
+
+- Relationship-key migrations must count missing individual keys, preserve all existing keys, compare the source identity, and stop safely on lease loss. More than one batch of duplicate slots must terminate, remain pending, and never disclose key values or delete a relationship.
+
+- Shared relationship cutover: before activation, home and custom reads use legacy indexed fields; afterward, home uses `uniqueKeys` plus original identity/kind/ACL guards. A normal or cold read must never scan/backfill data or perform index DDL. Dry-run must not write. A missing lease, duplicate, or failed validation must not activate readiness. Verify follow/friend, DM, membership batches, invites, attachment authorization and device/AI-import upserts before/after migration; stale keys must not return a changed identity. Exact redefined/unique/TTL indexes and custom databases must remain untouched. Re-run after the 30-second readiness window and confirm no old workers recreate the five indexes.
+
+- Run `cd remix && node --import tsx scripts/audit-things-indexes.mts`; source-plan replay must work without database credentials, include Mongo's `_id_`, and preserve exact key order, unique/partial/sparse/TTL options.
+- Run `pnpm --dir remix run test:collections`. The unused emoji lookup must not be recreated; protected `uniqueKeys_1` must stay unique and the legacy unique ancestor must not be blindly retired.
+- Before any live index retirement, compare exact production/develop index definitions with the source inventory, preserve unknown indexes, and prove the actual query and concurrent-write paths. A low count alone is not acceptance. See `docs/architecture/thing-index-consolidation.md` for the full rollout gates.

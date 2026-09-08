@@ -18,6 +18,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-09: Bring the Watch preview onto the released staged index migrations and poll writer. Remove its competing startup-only poll-index retirement while preserving the recording scheduler index. Retire obsolete deployment URLs only after exact project, live alias and active-head checks; production/develop migration activation remains pending. — Codex (AI)
+
 - 2026-09-08: Restore four-slot MongoDB index headroom by moving poll point reads/writes to protected Binary unique keys; validate/backfill legacy votes before retiring the home lookup index. A disposable MongoDB test proves 60 indexes, indexed lookups and duplicate protection. Poll contract/client minimum is 1.0.1. — Codex (AI)
 
 - 2026-09-08: Reconcile PR #665 with released Desktop Node ownership and subspace notifications. Preserve both notification families, opt-in email defaults, and relational delete cascades; publish compatible notification list/settings contracts 1.4.0/1.3.0. — Codex (AI)
@@ -42,6 +44,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   provider setup. Browser checks cover persisted settings and mobile layout;
   live audio and native push acceptance remain release gates. See the
   [PR #665 verification note](../PRs/665-codex-watch-lopu-recording-automation-private-transcripts-todos-reminders.md). — Codex (AI)
+- Repair a poll writer found during the index audit: stamp the shared protected vote identity (no new index), preserve legacy lookup compatibility and unbilled engagement policy. Native regression reproduces 16 duplicate rows before the fix and checks concurrent votes, toggles, private access and cascade cleanup. — Codex (AI), 2026-09-08
+
+- Extend [Thing index consolidation](../PRs/692-thing-index-consolidation-shared-plan-audit.md) to a 47-index candidate: canonical legacy/feed/search/embed readers, eight exact retirements, one shared updated-order index, and two-stage cache-drained migrations. Native MongoDB verifies 60 → 47 with bounded sampled plans and preserved ACL/CAS behavior. Production/develop rollout remains pending. — Codex (AI), 2026-09-08
+
+- Prepare five relationship lookup families to share the existing protected unique-key index (54-index intended home plan). Keep legacy/custom reads until an explicit leased migration validates keys and activates the layout; cold requests do not backfill. Preserve identity and attachment permission guards. Native/live rollout remains pending; see [PR #692](../PRs/692-thing-index-consolidation-shared-plan-audit.md). — Codex (AI), 2026-09-08
+
+- Fix index-usage statistics in the admin workbench by keeping MongoDB's metadata-only `$indexStats` stage first, while retaining protected-field and join safeguards. See [PR #692](../PRs/692-thing-index-consolidation-shared-plan-audit.md). — Codex (AI), 2026-09-08
+
+- Begin [Thing index consolidation](../PRs/692-thing-index-consolidation-shared-plan-audit.md): inventory the executable plan, retire the unused emoji lookup while retaining protected uniqueness, and repair relationship-key backfills to preserve partial keys and terminate on duplicate batches. Production/develop migrations and the broader reduction remain in progress. — Codex (AI), 2026-09-08
 - 2026-09-07: Desktop privacy status now refreshes while visible and on return from System Settings, exposes Check access, distinguishes unknown/stale results from macOS denial, and explains recovery for grants tied to an older signing identity.
 
 - Add Desktop Node start/stop/restart controls with serialized lifecycle operations and a native Node About panel showing installed build metadata. — Codex (AI), 2026-09-07
@@ -263,6 +274,30 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Main promotion: [PR #654](../PRs/654-codex-persistent-media-cache-main-production-promotion.md), explicitly authorized by the owner. — Codex (AI)
 
 - 2026-09-05: Promote PR #611 notification history and placement settings to main, including drawer-relative toast alignment. — Codex (AI)
+
+### 2026-09-05 — Re-land hidden 🕵️ links, the PAT GET bridge and custom audiences 🎭 — Claude (AI)
+
+- PRs #413 and #431 merged into their stacked base branches a minute after that base (#411)
+  had merged into develop, so the feature stack never reached develop or main. PR #613
+  re-lands `origin/claude/hidden-links-get-bridge` on current develop; conflict
+  resolutions and the 149-check `verify-pat-tokens.mjs` run are recorded in
+  `PRs/613-claude-hidden-links-custom-audiences-reland--re-land-hidden-links-get-bridge-custom-audiences.md`.
+- `scripts/verify-pat-tokens.mjs` now reads search/feed `posts` keyed by thing id
+  (develop's shape) as well as the older array form.
+- GET bridge `op=update` / `op=delete` now honour `expectedUpdatedAt`, the
+  optimistic-concurrency guard `PATCH`/`DELETE /api/v1/things` already anchor into
+  the write filter. The bridge was dropping it silently, so a caller asking for a
+  compare-and-swap got an unguarded write and a 200 — which this branch makes
+  reachable in earnest, since a custom audience can grant `tt:user/<name>/write`
+  to other people and give one thing concurrent writers. — Lopu (AI)
+- "Copy hidden link 🕵️" now appears for a custom audience 🎭 that picked the
+  "+ secret link" baseline. The server mints, projects and honours `linkKey`
+  off `acl.includes('tt:hidden')`, but `visibilityFromAcl` reports `custom`
+  whenever `tt:custom` rides along, so the post menu's `visibility === 'hidden'`
+  gate never fired for those things — the key existed and the owner already held
+  it in their own payload, with no UI to reach it. The menu now derives the link
+  from `post.linkKey`, which is already owner-only and hidden-only, and a new
+  `hiddenLinkContract.test.ts` pins the derivation. — Lopu (AI)
 
 ### 2026-09-02 — Lopu toast position setting + `/notifications` history page — Claude (AI)
 

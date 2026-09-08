@@ -1,6 +1,7 @@
 import { getThingsCollection } from '../mongodb/collections';
 import {
 	fail,
+	findViewableThing,
 	toPublicThings,
 	visibilityQueryFor,
 	withMatch,
@@ -177,6 +178,21 @@ export const resolveWebpage = async (
 		? withMatch({ shareId: id, thingtime: 'webpage' }, visibility)
 		: { shareId: id, thingtime: 'webpage', acl: 'tt:all' };
 	let doc = (await collection.findOne(match as any)) as any as ThingDoc | null;
+
+	// Hidden 🕵️ pages are unlisted, so they can NEVER come back from the match
+	// above: visibilityQueryFor only knows circles, own-things and grants, and
+	// tt:hidden deliberately matches no viewer — the audience of a hidden page
+	// is whoever presents its secret linkKey. The reader threads that key here
+	// (/p/<id>?key= → _resolve.tsx → withLinkKeys), so consult it with the same
+	// authority /api/v1/things uses: findViewableThing → canView, which admits a
+	// key holder (logged out included) only while the acl still says hidden, so
+	// un-hiding a page instantly retires every link that circulated. Narrow by
+	// design — a miss stays a plain 404, and nothing here widens feeds, search,
+	// or any listing path.
+	if (!doc && viewer?.linkKeys?.size) {
+		const byKey = await findViewableThing(id, viewer);
+		if (byKey && (byKey.thingtime || []).includes('webpage')) doc = byKey;
+	}
 
 	// PAGE KEYS personalise like site routes: `/p/<pageKey>` (or the seeded
 	// `/p/webpage-<pageKey>`) resolves the VIEWER'S OWN page carrying that

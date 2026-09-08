@@ -3,6 +3,17 @@
 Updated 2026-09-07. [Pull request](https://github.com/lopugit/thingtime/pull/665).
 Branch: `codex/watch-lopu-recording-automation`.
 
+## 2026-09-09 index rollout compatibility
+
+Merged released main `60b4c4bd638728aed7126112a314a658e1bede93` into the
+feature branch without promoting unfinished recording functionality to main.
+The Watch startup poll-index retirement conflicted with released indexed poll
+readers; removed that competing layout gate and retained the production poll
+writer and regression verifier. The recording scheduler index is preserved:
+the steady-state branch plan is 48 indexes (released 47 plus `lopu_recording_due`).
+The Vite/Nitro build and Vercel output checks pass. Production/develop migration
+activation and the replacement preview's live validation remain pending.
+
 ## Implemented
 
 - Explicit account opt-in for NEW private Apple Watch audio uploads, with a

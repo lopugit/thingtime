@@ -77,7 +77,7 @@ test('current Things index plan keeps four slots free below MongoDB hard limit',
 	// CI control-plane rows live on the ciControl satellite: `things` must not
 	// carry their dashboard sort or per-parent history indexes any more
 	assert.equal(desired.has('things_ci_repository_updated'), false);
-	assert.equal(desired.has('things_vote_key_lookup'), false, 'poll point reads reuse uniqueKeys_1');
+	assert.equal(desired.has('things_vote_key_lookup'), true, 'poll legacy reads retain their index until a separately verified migration');
 	assert.equal(desired.has('thingtime_1_parentId_1_createdAt_-1_shareId_1'), false);
 });
 
@@ -98,7 +98,7 @@ test('the five dead pre-Things indexes measured on production are retired by nam
 
 test('v1-era kind indexes and the sandbox TTL are partial, and their unfiltered originals retire', async () => {
 	const fixture = fakeThingsDb();
-	await Promise.all(createThingsDataIndexes(fixture.db));
+	await Promise.all(createThingsDataIndexes(fixture.db, { legacyLookups: true }));
 	const retired = new Set<string>(RETIRED_THINGS_INDEXES);
 	const partialByName = new Map(fixture.options.map((entry) => [entry.name, entry.options.partialFilterExpression]));
 	for (const [name, legacy] of [
