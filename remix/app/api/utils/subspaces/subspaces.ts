@@ -408,7 +408,7 @@ const recentPostCountsFor = async (subspaceIds: string[], since: Date): Promise<
 	const things = await getThingsCollection();
 	const rows = (await things
 		.aggregate([
-			{ $match: withMatch(postMatch(), { 'crystal.subspaceId': { $in: subspaceIds }, 'subspaceMod.status': { $ne: 'removed' }, createdAt: { $gte: since } }) },
+			{ $match: withMatch(await postMatch(), { 'crystal.subspaceId': { $in: subspaceIds }, 'subspaceMod.status': { $ne: 'removed' }, createdAt: { $gte: since } }) },
 			{ $group: { _id: '$crystal.subspaceId', count: { $sum: 1 } } }
 		])
 		.toArray()) as any[];
@@ -460,7 +460,7 @@ const resolveOpenReports = async (things: any, subspaceId: string, postId: strin
 	return Number(result?.modifiedCount) || 0;
 };
 
-const livePostMatch = (subspaceId: string) => withMatch(postMatch(), { 'crystal.subspaceId': subspaceId, 'subspaceMod.status': { $ne: 'removed' } });
+const livePostMatch = async (subspaceId: string) => withMatch(await postMatch(), { 'crystal.subspaceId': subspaceId, 'subspaceMod.status': { $ne: 'removed' } });
 
 const ownedSubspaceCount = async (userId: string, session?: any): Promise<number> => {
 	const things = await getThingsCollection();
@@ -759,7 +759,7 @@ export const getSubspace = async (viewerInput: string | Viewer, ref: SubspaceRef
 	const things = await getThingsCollection();
 	const [counts, postCount, membership, modDocs] = await Promise.all([
 		memberCountsFor([id]),
-		things.countDocuments(livePostMatch(id) as any),
+		things.countDocuments(await livePostMatch(id) as any),
 		membershipOf(id, viewer?.id),
 		things
 			.find({ thingtime: 'subspace-member', targetId: id, 'crystal.role': { $in: ['owner', 'moderator'] }, 'crystal.left': { $ne: true } } as any)
@@ -913,7 +913,7 @@ export const updateSubspace = async (viewerInput: string | Viewer, input: Update
 		const nextAccess = set['crystal.access'] as SubspaceAccessMode;
 		// private ⇄ public flips re-stamp existing posts so feed clauses stay exact
 		await things.updateMany(
-			withMatch(postMatch(), { 'crystal.subspaceId': id }) as any,
+			withMatch(await postMatch(), { 'crystal.subspaceId': id }) as any,
 			nextAccess === 'private' ? ({ $set: { subspacePrivate: true } } as any) : ({ $unset: { subspacePrivate: '' } } as any)
 		);
 		// the request queues follow the access mode. Leaving PRIVATE: whoever
@@ -1530,7 +1530,7 @@ export const transferSubspace = async (
 // the passes are spent — the caller refuses to drop the doc while it is > 0.
 type ReleaseTally = { released: number; privatized: number; remaining: number };
 const releaseSubspacePosts = async (things: any, subspaceId: string, access: SubspaceAccessMode): Promise<ReleaseTally> => {
-	const fenced = withMatch(postThingMatch(), { 'crystal.subspaceId': subspaceId });
+	const fenced = withMatch(await postThingMatch(), { 'crystal.subspaceId': subspaceId });
 	const tally: ReleaseTally = { released: 0, privatized: 0, remaining: 0 };
 	let conflicts = 0;
 	for (let pass = 0; pass < MAX_RELEASE_PASSES; pass++) {
@@ -1656,7 +1656,7 @@ export const moderatePost = async (viewerInput: string | Viewer, input: Moderate
 	if (!action) return fail(400, `action must be one of ${POST_MOD_ACTIONS.join(', ')}`);
 
 	const things = await getThingsCollection();
-	const post = (await things.findOne(withMatch(postMatch(), { shareId: input.id.trim() }) as any)) as any as ThingDoc | null;
+	const post = (await things.findOne(withMatch(await postMatch(), { shareId: input.id.trim() }) as any)) as any as ThingDoc | null;
 	const subspaceId = typeof post?.crystal?.subspaceId === 'string' ? post!.crystal!.subspaceId : null;
 	if (!post || !subspaceId) return fail(404, 'Post not found in a subspace');
 	const gate = await requireModerator(subspaceId, actorId);
@@ -1720,7 +1720,7 @@ export const moderatePost = async (viewerInput: string | Viewer, input: Moderate
 			unset['subspaceMod.ruleIndex'] = '';
 			break;
 		case 'pin': {
-			const pinned = await things.countDocuments({ ...livePostMatch(subspaceId), 'subspaceMod.pinned': true } as any);
+			const pinned = await things.countDocuments({ ...await livePostMatch(subspaceId), 'subspaceMod.pinned': true } as any);
 			if (!current.pinned && pinned >= MAX_PINNED) return fail(400, `A subspace can pin at most ${MAX_PINNED} posts`);
 			set['subspaceMod.pinned'] = true;
 			break;
@@ -1997,7 +1997,7 @@ export const listReports = async (viewerInput: string | Viewer, query: ListRepor
 	const postIds = page.map((group) => String(group._id));
 	const viewer = await withFriendIds(auth.viewer);
 	const [postDocs, openReportCount] = await Promise.all([
-		postIds.length ? (things.find(withMatch(postThingMatch(), { shareId: { $in: postIds } }) as any).toArray() as Promise<any[]>) : Promise.resolve([] as any[]),
+		postIds.length ? (things.find(withMatch(await postThingMatch(), { shareId: { $in: postIds } }) as any).toArray() as Promise<any[]>) : Promise.resolve([] as any[]),
 		openReportCountFor(id)
 	]);
 	// a post that left the subspace (or was deleted) is no longer this queue's
@@ -2062,7 +2062,7 @@ export const mutateReports = async (viewerInput: string | Viewer, input: MutateR
 		// the open rows name their own queue; the post's current subspace is
 		// the fallback so a non-moderator still meets the 403 wall and a
 		// moderator the 404 when nothing is open anywhere
-		const post = (await things.findOne(withMatch(postThingMatch(), { shareId: postId }) as any)) as any;
+		const post = (await things.findOne(withMatch(await postThingMatch(), { shareId: postId }) as any)) as any;
 		const openTargets = ((await things.distinct('targetId', { ...OPEN_REPORT_MATCH, 'crystal.postId': postId } as any)) as unknown[]).map(String);
 		subspaceId = pickReportQueueSubspace(subspaceIdOfDoc(post), openTargets);
 	}
@@ -2153,7 +2153,7 @@ export const subspaceFeed = async (viewerInput: string | Viewer, query: Subspace
 
 	const audience = visibilityQueryFor(viewer, []);
 	if (!audience) return { ok: true, subspace: publicSubspace, posts: [], nextCursor: null, sort };
-	const base = withMatch(postMatch(), { 'crystal.subspaceId': id }, audience, includeRemoved ? {} : { 'subspaceMod.status': { $ne: 'removed' } });
+	const base = withMatch(await postMatch(), { 'crystal.subspaceId': id }, audience, includeRemoved ? {} : { 'subspaceMod.status': { $ne: 'removed' } });
 
 	if (sort === 'new') {
 		const cursor = parseChronoCursor(typeof query.cursor === 'string' ? query.cursor : null);
@@ -2209,7 +2209,7 @@ export const subspaceFeed = async (viewerInput: string | Viewer, query: Subspace
 	);
 	const offset = Math.max(0, Number(query.cursor) || 0);
 	const pageIds = ranked.slice(offset, offset + limit);
-	const pageDocs = pageIds.length ? ((await things.find(withMatch({ shareId: { $in: pageIds } }, postMatch()) as any).toArray()) as any as ThingDoc[]) : [];
+	const pageDocs = pageIds.length ? ((await things.find(withMatch({ shareId: { $in: pageIds } }, await postMatch()) as any).toArray()) as any as ThingDoc[]) : [];
 	const docsById = new Map(pageDocs.map((doc) => [doc.shareId, doc]));
 	const page = pageIds.map((pageId) => docsById.get(pageId)).filter(Boolean) as ThingDoc[];
 	const visible = page.filter((doc) => canView(doc, viewer));
