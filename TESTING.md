@@ -1552,8 +1552,13 @@ email whose link points at the attacker.
       your own option again REMOVES it. `POST /api/v1/things/vote` returns
       `pollVotes { counts, totalVotes, viewerVote }` matching what renders.
 - [ ] One vote per user per poll survives races: double-tap fast / two tabs —
-      the `things_vote_key_unique` index keeps ONE vote doc per
-      (`crystal.voteKey` = `<pollId>~<userId>`); reloads converge.
+      the protected Binary `voteKey` in `uniqueKeys_1` keeps at most ONE vote
+      doc per (`crystal.voteKey` = `<pollId>~<userId>`); reloads converge. Run
+      `npm --prefix remix run verify:poll-unique-keys` against its explicitly
+      allowed disposable replica set to exercise 16 concurrent real-utility calls.
+- [ ] Poll insert/change/removal leaves the account ledger unchanged (protected
+      engagement is unbilled), including full accounts. Conflicting vote writes
+      return 409 instead of silently reporting an unwritten vote as successful.
 - [ ] Logged out: the poll shows results only (bars + percentages visible,
       no vote recorded); tapping toasts "Log in to vote 🗳️".
 - [ ] A poll on a private/friends-only post can't be voted on by a viewer
@@ -1570,9 +1575,8 @@ email whose link points at the attacker.
 - [ ] Deleting a poll post cascade-deletes its vote things (no orphan `vote`
       docs pointing at the gone poll); vote docs never list as /things rows
       and folder copy skips them like reactions/saves.
-- [ ] A foreign doc squatting the `crystal.voteKey` slot (e.g. a free-form
-      data crystal) makes the vote endpoint answer 409 — never a silent
-      `ok: true` that drops the vote.
+- [ ] A free-form data crystal with the same `voteKey` cannot squat another
+      user's protected vote identity. Generic inputs cannot stamp `uniqueKeys`.
 
 ## Subspaces (`remix/app/components/Subspaces/`, `remix/app/api/utils/subspaces/`, `/api/v1/subspaces*`)
 

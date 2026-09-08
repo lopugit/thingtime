@@ -10405,6 +10405,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-vote',
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     group: 'things',
     title: 'Vote on poll',
     endpoint: '/api/v1/things/vote',
@@ -10413,8 +10415,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Polls are posts (or data things) whose thing carries a string question plus an options ' +
       'list of 2+ entries. One vote per (user, poll), enforced structurally: votes are standalone ' +
       'things (thingtime ["vote"], crystal.optionIndex, targetId = the poll, acl ["tt:inherit"]) ' +
-      'deduped by a server-written crystal.voteKey ("<pollId>~<userId>") under a partial unique ' +
-      'index. Voting a DIFFERENT option moves your vote (the doc updates in place); voting the ' +
+      'deduped by a server-written Binary voteKey entry in the shared protected uniqueKeys ' +
+      'index. Votes remain unbilled engagement records. Voting a DIFFERENT option moves your vote (the doc updates in place); voting the ' +
       'SAME option again removes it (toggle off, matching reactions). The poll must be visible ' +
       'to the caller — acl and inherit chains are re-checked on every vote. Live tallies ride ' +
       'poll posts as pollVotes wherever posts are projected (feed, /post/:id, profiles).',
@@ -10427,7 +10429,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'POST the poll thing id and the zero-based optionIndex to vote for.',
       'The poll must be visible to the current user and optionIndex must be inside its options list.',
       'Use the returned pollVotes (counts per option, totalVotes, viewerVote) to reconcile the card.',
-      'Handle 401 unauthenticated, 404 for missing or not-visible polls, and 400 for non-polls or out-of-range options.'
+      'Handle 401 unauthenticated, 404 for missing or not-visible polls, and 400 for non-polls or out-of-range options.',
+      'Handle 409 for a concurrent toggle or conflicting legacy vote identity; retry after refreshing the poll.'
     ],
     requestExamples: [
       {
