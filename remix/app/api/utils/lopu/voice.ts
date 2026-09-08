@@ -10,9 +10,11 @@ import {
 	type LopuProviderEffort,
 	type LopuProviderSpeed
 } from './userVaultCore';
+import { debitLopuUsage, type LopuDebitResult, type LopuUsageInput } from './accounting';
+import type { LopuBilling, LopuChatUsage } from './chatEvents';
 import { getUserVaultProvider } from './userVault';
 import {
-	callVaultProviderPlainCompletion,
+	callVaultProviderCompletion,
 	mintVaultProviderRealtimeSession,
 	type LopuVaultHistoryMessage,
 	type LopuVaultProviderRecord,
@@ -49,11 +51,18 @@ export type LopuVoiceInput = {
 };
 
 export type LopuVoiceEvent =
-	| { type: 'meta'; mode: 'conversation' | 'transcribe'; provider?: string; sessionId: string }
+	| { type: 'meta'; mode: 'conversation' | 'transcribe'; provider?: string; sessionId: string; billing?: LopuBilling }
 	| { type: 'quote'; text: string; page: { id: string; title: string; pageNumber: number; createdAt: string } }
 	| { type: 'delta'; text: string }
 	| { type: 'error'; error: string }
-	| { type: 'done' };
+	// a conversation turn's done carries what the provider reported and the
+	// list price of the turn (byo: recorded, never debited — design note §2)
+	| { type: 'done'; usage?: LopuChatUsage; billing?: LopuBilling; costMicros?: number };
+
+export type LopuVoiceReplyDependencies = {
+	// the accounting writer (never throws); injectable for tests
+	recordUsage?: (ownerId: string, input: LopuUsageInput) => Promise<LopuDebitResult>;
+};
 
 const SYSTEM_PROMPT =
 	'You are Lopu, Thingtime’s warm, capable unicorn assistant. Respond conversationally and concisely for spoken playback. ' +
@@ -136,7 +145,7 @@ export const createTranscriptPage = async (ownerId: string, sessionId: string, t
 
 const wordChunks = (text: string) => text.match(/\S+\s*/g) || [text];
 
-export async function* streamLopuVoiceReply(ownerId: string, input: LopuVoiceInput): AsyncGenerator<LopuVoiceEvent> {
+export async function* streamLopuVoiceReply(ownerId: string, input: LopuVoiceInput, deps: LopuVoiceReplyDependencies = {}): AsyncGenerator<LopuVoiceEvent> {
 	const transcript = boundedVaultText(input.transcript, MAX_PROMPT_CHARS);
 	if (!transcript) throw new Error('A non-empty transcript is required.');
 	const sessionId = normalizeSessionId(input.sessionId);
@@ -147,13 +156,14 @@ export async function* streamLopuVoiceReply(ownerId: string, input: LopuVoiceInp
 		yield { type: 'done' };
 		return;
 	}
+	const startedAt = Date.now();
 	const provider = await getUserVaultProvider(ownerId, input.providerId);
-	yield { type: 'meta', mode: 'conversation', provider: provider.name, sessionId };
+	yield { type: 'meta', mode: 'conversation', provider: provider.name, sessionId, billing: 'byo' };
 	const model = safeVaultModelId(input.model);
 	const effort = normalizeLopuVoiceEffort(input.effort);
 	const speed = normalizeLopuVoiceSpeed(input.speed);
 	assertTuningFits(provider, provider.model || model, effort, speed);
-	const reply = await callVaultProviderPlainCompletion(provider, {
+	const completion = await callVaultProviderCompletion(provider, {
 		system: SYSTEM_PROMPT,
 		history: normalizeHistory(input.history),
 		prompt: transcript,
@@ -162,8 +172,25 @@ export async function* streamLopuVoiceReply(ownerId: string, input: LopuVoiceInp
 		effort,
 		speed
 	});
-	for (const chunk of wordChunks(reply)) yield { type: 'delta', text: chunk };
-	yield { type: 'done' };
+	for (const chunk of wordChunks(completion.text)) yield { type: 'delta', text: chunk };
+	// a voice turn always runs on the viewer's own provider: recorded as a
+	// byo usage row (what the provider reported), never debited
+	const recorded = await (deps.recordUsage ?? debitLopuUsage)(ownerId, {
+		surface: 'voice',
+		billing: 'byo',
+		provider: provider.provider,
+		providerLabel: provider.name,
+		model: completion.model,
+		usage: completion.usage,
+		hops: 1,
+		durationMs: Date.now() - startedAt
+	});
+	yield {
+		type: 'done',
+		...(completion.usage ? { usage: completion.usage } : {}),
+		billing: 'byo',
+		costMicros: recorded.ok ? recorded.costMicros : 0
+	};
 }
 
 // ── direct voice (design note §6.1) ─────────────────────────────────────────

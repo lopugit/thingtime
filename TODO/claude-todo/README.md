@@ -36,6 +36,7 @@ future Claude sessions (use alongside `graphify-out/` for codebase orientation).
 | 22 | Everything is a thing — collapse satellite collections (users/themes/feedAlgorithms/waitlist → `things`; `uniqueKeys` + `secure` mechanisms, dual-era migrations) | 🟡 In build (PR #69 stack) | [22-everything-is-a-thing-collections.md](./22-everything-is-a-thing-collections.md) |
 | 23 | Custom schema presentation via declarative vocabulary (data describes; versioned code interprets — never hydrate functions from documents) | 📐 Standing principle | [23-declarative-schema-presentation-vocabulary.md](./23-declarative-schema-presentation-vocabulary.md) |
 | 24 | Migration-safe continuous availability (pending storage migrations never block established reads or writes; expand/coexist/migrate/verify/contract) | 🔴 P0 invariant · not started | [24-migration-safe-continuous-availability.md](./24-migration-safe-continuous-availability.md) |
+| 25 | Subspaces 🪐 — Reddit-style communities (branding, rules, flairs, access modes, moderation, mod log, hot/new/top/rising/controversial) + up/down votes as a separate focused reaction kind | 🟢 Built, live-walked | [25-subspaces.md](./25-subspaces.md) |
 
 ## Conventions (see `FUNDAMENTALS.md`)
 

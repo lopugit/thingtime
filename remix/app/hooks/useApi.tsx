@@ -273,7 +273,10 @@ export function useApi() {
       // waterfall as the admin UI without inheriting an admin browser session.
 			prConflictResolverModelWaterfall: useCallback(async () => getJson('/api/v1/settings/pr-conflict-auto-resolver-model-waterfall'), []),
 			// Lopu's stored chat defaults ({ model, effort, speed }); public GET, admin POST (admin.setLopuChatDefaults)
-			lopuChatDefaults: useCallback(async () => getJson('/api/v1/settings/lopu-chat-defaults'), [])
+			lopuChatDefaults: useCallback(async () => getJson('/api/v1/settings/lopu-chat-defaults'), []),
+			// Thingtime.LopuAccess ({ requireVerification, allowByoUnverified, starterCredits,
+			// lowBalanceWarningCredits }); public GET, admin POST (admin.setLopuAccess)
+			lopuAccess: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/settings/lopu-access', options), [])
     },
     // the `ai-model` catalog Lopu thinks with (public; { models, defaults, providers }
     // + for a signed-in viewer their Secure Vault providers as metadata only:
@@ -295,6 +298,40 @@ export function useApi() {
             { model: args?.model ?? null, effort: args?.effort ?? null, speed: args?.speed ?? null },
             { action: '/api/v1/settings/lopu-chat-defaults', errorContext: 'save the Lopu chat defaults' }
           ),
+        [asyncFetcher]
+      ),
+      // Thingtime.LopuAccess — who may use Lopu and what a new account starts with
+      setLopuAccess: useCallback(
+        async (args: { requireVerification?: boolean; allowByoUnverified?: boolean; starterCredits?: number; lowBalanceWarningCredits?: number }) =>
+          asyncFetcher.submit(args, { action: '/api/v1/settings/lopu-access', errorContext: 'save the Lopu access settings' }),
+        [asyncFetcher]
+      ),
+      // { userId, verified } — the per-account Lopu verified flag (meta.lopuVerified)
+      setUserLopuAccess: useCallback(
+        async (args: { userId: string; verified: boolean }) =>
+          asyncFetcher.submit(
+            { userId: args?.userId, verified: args?.verified },
+            { action: '/api/v1/admin/users/lopu-access', errorContext: `${args?.verified ? 'verify' : 'unverify'} Lopu access` }
+          ),
+        [asyncFetcher]
+      ),
+      // Admin → Lopu accounts: rows { user, balanceMicros, month, lifetime, pendingRequest }, cursor-paged
+      lopuAccounts: useCallback(
+        async (args?: { q?: string; cursor?: string; limit?: number }, options?: { signal?: AbortSignal }) =>
+          getJson(`/api/v1/admin/lopu/accounts${toQuery(args)}`, options),
+        []
+      ),
+      // grant / adjust credits ({ userId, credits, entry, reason }), approve a
+      // request ({ ...same, requestId }) or decline one ({ requestId, decline: true, reason })
+      lopuCredits: useCallback(
+        async (args: {
+          userId?: string;
+          credits?: number;
+          entry?: 'grant' | 'topup' | 'adjust' | 'refund';
+          reason?: string;
+          requestId?: string;
+          decline?: boolean;
+        }) => asyncFetcher.submit(args, { action: '/api/v1/admin/lopu/credits', errorContext: 'update Lopu credits' }),
         [asyncFetcher]
       ),
       integrations: useCallback(async () => getJson('/api/v1/admin/integrations'), []),
@@ -482,7 +519,24 @@ export function useApi() {
         async (args: { providerId: string; model?: string | null; effort?: string | null; textResponse?: boolean }, options?: { signal?: AbortSignal }) =>
           asyncFetcher.submit(args, { action: '/api/v1/lopu/voice/session', errorContext: 'start direct voice', signal: options?.signal }),
         [asyncFetcher]
-      )
+      ),
+      // the viewer's Lopu account (verified flag, credits, usage — design note
+      // "Lopu verified access, usage accounting and credits" §3); session only
+      account: {
+        get: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/lopu/account', options), []),
+        // ledger rows + the usage rows of the same window, newest first, cursor-paged (limit ≤ 100)
+        history: useCallback(
+          async (args?: { cursor?: string | null; limit?: number }, options?: { signal?: AbortSignal }) =>
+            getJson(`/api/v1/lopu/account/history${toQuery({ cursor: args?.cursor ?? undefined, limit: args?.limit })}`, options),
+          []
+        ),
+        // { credits: 0.5..1000, note? } — one pending request at a time (409)
+        requestTopup: useCallback(
+          async (args: { credits: number; note?: string }) =>
+            asyncFetcher.submit({ credits: args?.credits, ...(args?.note ? { note: args.note } : {}) }, { action: '/api/v1/lopu/account/topup-request', errorContext: 'request Lopu credits' }),
+          [asyncFetcher]
+        )
+      }
     },
     mongodb: {
       capabilities: useCallback(async () => getJson('/api/v1/mongodb/raw-results'), []),
@@ -687,7 +741,117 @@ export function useApi() {
 				[asyncFetcher]
 			)
 		},
+    // Subspaces — Reddit-style communities (api/utils/subspaces). Reads are
+    // plain GETs (guest-visible); every mutation goes through the fetcher so
+    // failures surface through the shared API-failure path.
+    subspaces: {
+      // sort: new (default, cursor-paged) | members | active (ranked over a
+      // bounded window, offset-paged; rows under active carry recentPostCount
+      // — a private subspace's only for its members). `anon: 1` keeps
+      // logged-out requests edge-cacheable, mirroring feed / trending
+      list: useCallback(
+        async (args?: { q?: string; mine?: boolean; sort?: 'new' | 'members' | 'active'; cursor?: string; limit?: number; anon?: 1 }) =>
+          getJson(`/api/v1/subspaces${toQuery({ q: args?.q, mine: args?.mine ? 1 : undefined, sort: args?.sort, cursor: args?.cursor, limit: args?.limit, anon: args?.anon })}`),
+        []
+      ),
+      get: useCallback(async (args: { slug?: string; id?: string }) => getJson(`/api/v1/subspaces/get${toQuery(args)}`), []),
+      create: useCallback(async (body: Record<string, unknown>) => asyncFetcher.submit(body, { action: '/api/v1/subspaces', errorContext: 'create the subspace' }), [asyncFetcher]),
+      update: useCallback(
+        async (body: Record<string, unknown>) => asyncFetcher.submit(body, { action: '/api/v1/subspaces/update', errorContext: 'save the subspace settings' }),
+        [asyncFetcher]
+      ),
+      // join answers { joined, pending }: a PRIVATE subspace files a join
+      // request (pending: true) for the mods' Requests queue; leave cancels it
+      join: useCallback(async (args: { slug?: string; id?: string }) => asyncFetcher.submit(args, { action: '/api/v1/subspaces/join', errorContext: 'join the subspace' }), [asyncFetcher]),
+      leave: useCallback(async (args: { slug?: string; id?: string }) => asyncFetcher.submit(args, { action: '/api/v1/subspaces/leave', errorContext: 'leave the subspace' }), [asyncFetcher]),
+      // pending=1 → join requests, approvalRequests=1 → posting-approval
+      // requests (both moderator-only, newest first)
+      members: useCallback(
+        async (args: { slug?: string; id?: string; role?: string; banned?: boolean; pending?: boolean; approvalRequests?: boolean; cursor?: string; limit?: number }) =>
+          getJson(
+            `/api/v1/subspaces/members${toQuery({
+              ...args,
+              banned: args?.banned ? 1 : undefined,
+              pending: args?.pending ? 1 : undefined,
+              approvalRequests: args?.approvalRequests ? 1 : undefined
+            })}`
+          ),
+        []
+      ),
+      // actions: add | remove | approve | unapprove | ban (reason shown to the
+      // user, banDays, and a private mod-log `note`) | unban | role |
+      // accept | deny (the Requests queue) | request-approval (self — an
+      // active member of a restricted subspace asks for posting rights)
+      mutateMember: useCallback(
+        async (body: Record<string, unknown>) => asyncFetcher.submit(body, { action: '/api/v1/subspaces/members', errorContext: 'update the member' }),
+        [asyncFetcher]
+      ),
+      requestApproval: useCallback(
+        async (args: { slug?: string; id?: string }) =>
+          asyncFetcher.submit({ ...args, action: 'request-approval' }, { action: '/api/v1/subspaces/members', errorContext: 'request posting approval' }),
+        [asyncFetcher]
+      ),
+      // user flair beside a member's name: no userId → your own (a template
+      // id, or custom text + optional emoji/color; neither clears); mods may
+      // name anyone
+      setUserFlair: useCallback(
+        async (args: { slug?: string; id?: string; userId?: string; username?: string; flairId?: string | null; text?: string | null; emoji?: string | null; color?: string | null }) =>
+          asyncFetcher.submit({ ...args, action: 'userFlair' }, { action: '/api/v1/subspaces/members', errorContext: 'set the flair' }),
+        [asyncFetcher]
+      ),
+      // remove: reason (free text) and/or reasonId (one of the subspace's
+      // removalReasons — title — message become the stored reason, the free
+      // text rides along as a note) or ruleIndex (cites a rule the same way,
+      // 0-based); the author is notified; a second remove on a removed post
+      // is a no-op
+      moderate: useCallback(
+        async (body: { id: string; action: string; reason?: string; reasonId?: string | null; ruleIndex?: number | null; value?: boolean; flairId?: string | null }) =>
+          asyncFetcher.submit(body, { action: '/api/v1/subspaces/moderate', errorContext: 'moderate the post' }),
+        [asyncFetcher]
+      ),
+      modlog: useCallback(async (args: { slug?: string; id?: string; cursor?: string; limit?: number }) => getJson(`/api/v1/subspaces/modlog${toQuery(args)}`), []),
+      // report a post (or a comment — resolved to its root post) to the
+      // subspace's mods: reason (a rule title / removal-reason id / free
+      // text, ≤120) + optional note (≤500); a repeat by the same reporter
+      // refreshes their row (updated: true)
+      report: useCallback(
+        async (body: { id: string; reason: string; note?: string | null }) => asyncFetcher.submit(body, { action: '/api/v1/subspaces/report', errorContext: 'report the post' }),
+        [asyncFetcher]
+      ),
+      // the mods' Reports queue: reports grouped by post (status open |
+      // resolved, offset cursor); moderator-only
+      reports: useCallback(
+        async (args: { slug?: string; id?: string; status?: 'open' | 'resolved'; cursor?: string; limit?: number }) => getJson(`/api/v1/subspaces/reports${toQuery(args)}`),
+        []
+      ),
+      // dismiss every open report on a post (the post stays); remove /
+      // approve through `moderate` settle them implicitly
+      dismissReports: useCallback(
+        async (body: { postId: string; slug?: string; id?: string }) =>
+          asyncFetcher.submit({ ...body, action: 'dismiss' }, { action: '/api/v1/subspaces/reports', errorContext: 'dismiss the reports' }),
+        [asyncFetcher]
+      ),
+      feed: useCallback(
+        async (args: { slug?: string; id?: string; sort?: string; range?: string; cursor?: string; limit?: number; includeRemoved?: boolean }) =>
+          getJson(`/api/v1/subspaces/feed${toQuery({ ...args, includeRemoved: args?.includeRemoved ? 1 : undefined })}`),
+        []
+      ),
+      // owner-only lifecycle: hand the subspace to an active member / delete
+      // it (posts survive as plain posts) after retyping the slug
+      transfer: useCallback(
+        async (body: { slug?: string; id?: string; userId?: string; username?: string }) =>
+          asyncFetcher.submit(body, { action: '/api/v1/subspaces/transfer', errorContext: 'transfer the subspace' }),
+        [asyncFetcher]
+      ),
+      delete: useCallback(
+        async (body: { slug?: string; id?: string; confirmSlug: string }) =>
+          asyncFetcher.submit(body, { action: '/api/v1/subspaces/delete', errorContext: 'delete the subspace' }),
+        [asyncFetcher]
+      )
+    },
     things: {
+      // scope: 'subspaces' narrows the page to posts from the viewer's ACTIVE
+      // subspaces (the "🪐 My subspaces" chip); default all
       feed: useCallback(async (args) => getJson(`/api/v1/things/feed${toQuery(args)}`), []),
       // the explore board — public trending posts; `anon: 1` keeps logged-out
       // requests edge-cacheable, mirroring feed
@@ -717,9 +881,15 @@ export function useApi() {
         [asyncFetcher]
       ),
       userPosts: useCallback(async (args) => getJson(`/api/v1/things/user${toQuery(args)}`), []),
-			// key: a hidden thing's secret link key (?key= on /post pages) — lets
-			// anyone holding the link view the unlisted thing
-			get: useCallback(async (args, options?: { signal?: AbortSignal }) => getJson(`/api/v1/things${toQuery({ id: args?.id, key: args?.key })}`, options), []),
+			// commentSort: 'top' | 'new' | 'old' re-orders the shipped comment page
+			// of the post projection (PostCard's Top / New / Old menu); omit for
+			// the default page. key: a hidden thing's secret link key (?key= on
+			// /post pages) — lets anyone holding the link view the unlisted thing
+			get: useCallback(
+				async (args, options?: { signal?: AbortSignal }) =>
+					getJson(`/api/v1/things${toQuery({ id: args?.id, commentSort: args?.commentSort, key: args?.key })}`, options),
+				[]
+			),
       list: useCallback(
         async (args) =>
           getJson(
@@ -816,6 +986,13 @@ export function useApi() {
       vote: useCallback(
         async (args: { id: string; optionIndex: number }) =>
           asyncFetcher.submit({ id: args?.id, optionIndex: args?.optionIndex }, { action: '/api/v1/things/vote', errorContext: 'save your vote' }),
+        [asyncFetcher]
+      ),
+      // up/down vote (the separate focused reaction kind): 'up' | 'down' casts
+      // or flips, the same direction again clears, null clears
+      updown: useCallback(
+        async (args: { id: string; direction: 'up' | 'down' | null }) =>
+          asyncFetcher.submit({ id: args?.id, direction: args?.direction ?? null }, { action: '/api/v1/things/updown', errorContext: 'save your vote' }),
         [asyncFetcher]
       ),
       comment: useCallback(

@@ -448,6 +448,82 @@ export const MAX_COMMUNITY_DESCRIPTION_CHARS = 500;
 export const MAX_SECTION_NAME_CHARS = 60;
 export const MAX_CHATS_PER_COMMUNITY = 500;
 export const MAX_COMMUNITIES_PER_USER = 50;
+// Subspaces (see api/utils/subspaces): Reddit-style communities — a subspace
+// thing with branding/rules/flairs, relational subspace-member docs, a mod log,
+// and post-level moderation state on a server-owned root field. Up/down votes
+// are their own focused reaction kind (`updown`) beside the open-vocabulary
+// emoji reactions. All bounds live here so no write path can disagree.
+export const SUBSPACE_SLUG_PATTERN = /^[a-z0-9_]{3,30}$/;
+export const MIN_SUBSPACE_SLUG_CHARS = 3;
+export const MAX_SUBSPACE_SLUG_CHARS = 30;
+export const MAX_SUBSPACE_NAME_CHARS = 80;
+export const MAX_SUBSPACE_DESCRIPTION_CHARS = 1000;
+export const MAX_SUBSPACE_RULES = 15;
+export const MAX_SUBSPACE_RULE_TITLE_CHARS = 100;
+export const MAX_SUBSPACE_RULE_TEXT_CHARS = 500;
+export const MAX_SUBSPACE_FLAIRS = 50;
+export const MAX_SUBSPACE_FLAIR_ID_CHARS = 40;
+export const MAX_SUBSPACE_FLAIR_LABEL_CHARS = 64;
+export const MAX_SUBSPACE_ACCENT_CHARS = 32;
+export const MAX_SUBSPACE_ICON_CHARS = 16;
+// custom user-flair text (allowCustomUserFlair) — shorter than a template label
+export const MAX_SUBSPACE_USER_FLAIR_TEXT_CHARS = 40;
+export const MAX_SUBSPACES_PER_USER = 25;
+export const MAX_SUBSPACE_MEMBERSHIPS_PER_USER = 500;
+export const MAX_SUBSPACE_MOD_REASON_CHARS = 300;
+// Removal reasons (round 2, S4): a per-subspace list of canned reasons a
+// moderator picks when removing a post — { id, title, message }; the title +
+// message (+ the mod's free-text note) become the post's stored removal reason
+// and the author's subspace-post-removed notification.
+export const MAX_SUBSPACE_REMOVAL_REASONS = 20;
+export const MAX_SUBSPACE_REMOVAL_REASON_TITLE_CHARS = 80;
+export const MAX_SUBSPACE_REMOVAL_REASON_MESSAGE_CHARS = 500;
+// the composed stored reason on a removed post: title — message · note
+export const MAX_SUBSPACE_POST_REMOVAL_REASON_CHARS = 900;
+// Reports (round 2, S5): a viewer flags a post (or a comment — resolved to its
+// root post) to the subspace's moderators. One `subspace-report` thing per
+// (post, reporter) — a repeat updates the reason / note; the mods' Reports
+// queue groups them by post. `reason` is a rule title, a removal-reason id or
+// free text; `note` is the reporter's optional context.
+export const MAX_SUBSPACE_REPORT_REASON_CHARS = 120;
+export const MAX_SUBSPACE_REPORT_NOTE_CHARS = 500;
+// how many reporters a grouped Reports-queue row lists (the count is exact)
+export const MAX_SUBSPACE_REPORT_REPORTERS_LISTED = 20;
+export const SUBSPACE_REPORT_STATUSES = ['open', 'resolved'] as const;
+export type SubspaceReportStatus = (typeof SUBSPACE_REPORT_STATUSES)[number];
+// how an open report was settled: the post was removed / approved by a mod
+// (auto-resolved by `moderate`), or the mods dismissed the reports outright
+export const SUBSPACE_REPORT_RESOLUTIONS = ['removed', 'approved', 'dismissed'] as const;
+export type SubspaceReportResolution = (typeof SUBSPACE_REPORT_RESOLUTIONS)[number];
+export const MAX_POST_TITLE_CHARS = 300;
+export const SUBSPACE_ACCESS_MODES = ['public', 'restricted', 'private'] as const;
+export type SubspaceAccessMode = (typeof SUBSPACE_ACCESS_MODES)[number];
+export const SUBSPACE_ROLES = ['owner', 'moderator', 'member'] as const;
+export type SubspaceRole = (typeof SUBSPACE_ROLES)[number];
+export const SUBSPACE_FEED_SORTS = ['hot', 'new', 'top', 'rising', 'controversial'] as const;
+export type SubspaceFeedSort = (typeof SUBSPACE_FEED_SORTS)[number];
+// the /s directory's orders: newest first (cursor-paged), most members, most
+// active (posts in the last SUBSPACE_ACTIVE_WINDOW_DAYS) — the last two are
+// ranked in memory over a bounded newest-first window (subspaceCore.ts)
+export const SUBSPACE_LIST_SORTS = ['new', 'members', 'active'] as const;
+export type SubspaceListSort = (typeof SUBSPACE_LIST_SORTS)[number];
+export const SUBSPACE_ACTIVE_WINDOW_DAYS = 7;
+// the home feed's scope: every visible post, or only posts from the viewer's
+// ACTIVE subspaces (empty for guests / non-members)
+export const FEED_SCOPES = ['all', 'subspaces'] as const;
+export type FeedScope = (typeof FEED_SCOPES)[number];
+export const UPDOWN_DIRECTIONS = ['up', 'down'] as const;
+export type UpdownDirection = (typeof UPDOWN_DIRECTIONS)[number];
+// A deleted subspace leaves a slug tombstone (kind `subspace-tombstone`) that
+// keeps holding the `subspaceSlug` uniqueKey: the previous owner may re-found
+// the slug at once, anyone else only after the hold — so bell / email deep
+// links to /s/<slug> can't be hijacked by whoever re-registers it first.
+export const SUBSPACE_SLUG_HOLD_DAYS = 30;
+// Dedicated-endpoint kinds of the family (no generic crystal sanitizers, so
+// /api/v1/things refuses them; excluded from own-things listings + generic
+// DELETE the way the messenger family is).
+export const SUBSPACE_THINGTIME = ['subspace', 'subspace-member', 'subspace-modlog', 'subspace-tombstone', 'subspace-report'] as const;
+export const UPDOWN_THINGTIME = 'updown';
 // Custom emoji: the image is an inline data URI stored on its own thing doc
 // (the avatar pattern, FUNDAMENTALS §3 relational rule) — ~512KB binary ≈
 // 700K base64 chars. Names are the `:name:` vocabulary, Mongo-key-safe.
@@ -684,6 +760,21 @@ const rootThingSchema: ThingtimeSchema = {
 				'Protected server-owned moderation state. Generic Thing create/update input never writes it; only moderation analysis and admin review may stamp it.'
 		},
 		{
+			name: 'subspaceMod',
+			type: 'object',
+			required: false,
+			system: true,
+			description:
+				'Protected subspace moderation state on posts: { status: approved|removed, removedById, removedAt, reason, reasonId?, ruleIndex?, pinned, locked, nsfw, spoiler }. Written only by subspace moderators through POST /api/v1/subspaces/moderate (a remove on an already-removed post changes nothing); removed posts are redacted for everyone but the author and mods and hidden from feeds. The projection shows the author the reason, never removedById.'
+		},
+		{
+			name: 'subspacePrivate',
+			type: 'boolean',
+			required: false,
+			system: true,
+			description: 'Server-stamped when a post is published into a private subspace: visible to that subspace’s members (and the author) only, on every read surface.'
+		},
+		{
 			name: 'attachmentFinalizationLeaseId',
 			type: 'string',
 			required: false,
@@ -834,6 +925,27 @@ const postSchema: ThingtimeSchema = {
       required: false,
       description:
         'Free-form structured thing payload — required for thingtime posts, bounded like data crystals (searchable as crystal.thing.<field>). Thingtime posts can also carry images and a listing.'
+    },
+    {
+      name: 'title',
+      type: 'string',
+      required: false,
+      max: MAX_POST_TITLE_CHARS,
+      description: `Optional headline (Reddit-style post title), max ${MAX_POST_TITLE_CHARS} chars. Subspace posts usually carry one; ordinary feed posts may too.`
+    },
+    {
+      name: 'subspaceId',
+      type: 'id',
+      required: false,
+      description:
+        'shareId of the subspace this post is published into. Validated on every write: the author must be allowed to post there (not banned; approved in restricted subspaces; a member in private ones).'
+    },
+    {
+      name: 'flairId',
+      type: 'string',
+      required: false,
+      max: MAX_SUBSPACE_FLAIR_ID_CHARS,
+      description: 'Id of one of the subspace’s post flairs (validated against the subspace; mod-only flairs need a moderator).'
     }
   ],
   example: {
@@ -1676,6 +1788,255 @@ const voteSchema: ThingtimeSchema = {
   example: { optionIndex: 1, voteKey: 'poll_123~664f1c2a9d3e5b0012345678' }
 };
 
+// Up/down votes — Reddit-style scoring as a SEPARATE, deliberately limited
+// reaction kind beside the open-vocabulary emoji reactions (which stay exactly
+// as they are, multi-token and all). One relational child thing per
+// (user, target) — FUNDAMENTALS §3 — minted only by POST /api/v1/things/updown
+// (no generic sanitizer: a client-written updownKey could squat another
+// user's slot). Same-direction again removes the vote; the other direction
+// flips it in place. Aggregated on read as `votes` on posts and comments.
+const updownSchema: ThingtimeSchema = {
+  id: UPDOWN_THINGTIME,
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Up/down vote',
+  summary: 'One user’s upvote or downvote on a post or comment — one doc per (user, target).',
+  detail:
+    'Created/flipped/removed only by POST /api/v1/things/updown { id, direction }. A standalone thing ' +
+    'pointing at the voted post or comment via targetId, carrying acl ["tt:inherit"] so it is visible ' +
+    'exactly when its target is. crystal.direction is "up" or "down"; crystal.updownKey ' +
+    '("<targetId>~<userId>", server-written) rides the root uniqueKeys namespace so one vote per ' +
+    'user per target is structural. Tallies are batch-aggregated onto posts/comments as ' +
+    '`votes { up, down, score, viewerVote }` — native emoji reactions are untouched by this kind.',
+  requiresTarget: true,
+  createdVia: 'POST /api/v1/things/updown',
+  fields: [
+    { name: 'direction', type: 'enum', required: true, values: [...UPDOWN_DIRECTIONS], description: 'up or down.' },
+    { name: 'updownKey', type: 'string', required: true, description: 'Canonical dedupe key <targetId>~<userId> — unique per (target, user), server-written.' }
+  ],
+  example: { direction: 'up', updownKey: '4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f~664f1c2a9d3e5b0012345678' }
+};
+
+// Subspaces — Reddit-style communities. Everything is a thing: the subspace
+// itself (branding, rules, flairs, access mode), one relational member doc per
+// (subspace, user) carrying role/approval/ban state, and an append-only mod
+// log. Posts join a subspace through crystal.subspaceId (validated on every
+// write by api/utils/subspaces/gate.ts) and carry moderation state on the
+// server-owned root `subspaceMod` field. Written ONLY through
+// /api/v1/subspaces* — no generic sanitizers.
+const subspaceSchema: ThingtimeSchema = {
+  id: 'subspace',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Subspace',
+  summary: 'A Reddit-style community: slug, branding, rules, post flairs, user flairs, and an access mode.',
+  detail:
+    'Created through POST /api/v1/subspaces; the creator becomes its owner and first member. The ' +
+    'slug is unique (root uniqueKeys `subspaceSlug:<slug>`), lowercase [a-z0-9_] 3–30 chars, and is ' +
+    'the /s/<slug> URL. Membership is relational subspace-member things (never an embedded member ' +
+    'array); member counts are aggregated on read. access: public (anyone posts), restricted (only ' +
+    'approved posters/mods post, everyone reads), private (members only — posts are hidden from ' +
+    'non-members everywhere). Subspace things themselves are always listable (acl ["tt:all"]). userFlairs are ' +
+    'the templates members wear beside their name (stored on their subspace-member row as userFlair); ' +
+    'userFlairSelfAssign (default true) lets members pick one themselves, allowCustomUserFlair (default false) ' +
+    'lets them type their own text (≤40 chars) — moderators may set anyone’s, modOnly templates included. ' +
+    'removalReasons are the canned reasons moderators pick when removing a post (title + message become the stored ' +
+    'reason on the post and the author’s subspace-post-removed notification).',
+  createdVia: 'POST /api/v1/subspaces',
+  fields: [
+    { name: 'slug', type: 'string', required: true, max: MAX_SUBSPACE_SLUG_CHARS, description: 'Unique URL slug, lowercase [a-z0-9_], 3–30 chars.' },
+    { name: 'name', type: 'string', required: true, max: MAX_SUBSPACE_NAME_CHARS, description: 'Display name.' },
+    { name: 'description', type: 'string', required: false, max: MAX_SUBSPACE_DESCRIPTION_CHARS, description: 'About text shown in the sidebar.' },
+    { name: 'access', type: 'enum', required: true, values: [...SUBSPACE_ACCESS_MODES], description: 'public / restricted / private.' },
+    { name: 'nsfw', type: 'boolean', required: false, description: 'Marks the whole subspace 18+.' },
+    {
+      name: 'rules',
+      type: 'record',
+      required: false,
+      description: `Ordered community rules — a list of { title (≤${MAX_SUBSPACE_RULE_TITLE_CHARS}), text (≤${MAX_SUBSPACE_RULE_TEXT_CHARS}) }, max ${MAX_SUBSPACE_RULES}.`
+    },
+    {
+      name: 'flairs',
+      type: 'record',
+      required: false,
+      description: `Post flairs authors (or mods, when modOnly) can tag posts with — a list of { id (slug ≤${MAX_SUBSPACE_FLAIR_ID_CHARS}), label (≤${MAX_SUBSPACE_FLAIR_LABEL_CHARS}), emoji, color, modOnly }, max ${MAX_SUBSPACE_FLAIRS}.`
+    },
+    {
+      name: 'userFlairs',
+      type: 'record',
+      required: false,
+      description: `User-flair templates members wear beside their name — the same shape as post flairs ({ id, label, emoji, color, modOnly }), max ${MAX_SUBSPACE_FLAIRS}; modOnly templates are assigned by moderators only.`
+    },
+    {
+      name: 'removalReasons',
+      type: 'record',
+      required: false,
+      description: `Canned removal reasons moderators pick when removing a post — a list of { id (slug ≤${MAX_SUBSPACE_FLAIR_ID_CHARS}), title (≤${MAX_SUBSPACE_REMOVAL_REASON_TITLE_CHARS}), message (≤${MAX_SUBSPACE_REMOVAL_REASON_MESSAGE_CHARS}) }, max ${MAX_SUBSPACE_REMOVAL_REASONS}; title + message become the post’s stored reason and the author’s notification.`
+    },
+    { name: 'userFlairSelfAssign', type: 'boolean', required: false, description: 'Members may pick their own user flair (default true; moderators always can, for anyone).' },
+    {
+      name: 'allowCustomUserFlair',
+      type: 'boolean',
+      required: false,
+      description: `Members may type a custom user-flair text (≤${MAX_SUBSPACE_USER_FLAIR_TEXT_CHARS} chars) instead of picking a template (default false; moderators always may).`
+    },
+    {
+      name: 'branding',
+      type: 'object',
+      required: false,
+      description: 'Visual identity of the subspace.',
+      children: [
+        { name: 'icon', type: 'string', required: false, max: MAX_SUBSPACE_ICON_CHARS, description: 'Emoji icon.' },
+        { name: 'iconUrl', type: 'string', required: false, description: 'http(s) icon image URL.' },
+        { name: 'bannerUrl', type: 'string', required: false, description: 'http(s) banner image URL.' },
+        { name: 'accent', type: 'string', required: false, max: MAX_SUBSPACE_ACCENT_CHARS, description: 'CSS accent color.' }
+      ]
+    }
+  ],
+  example: {
+    slug: 'rainbows',
+    name: 'Rainbows',
+    description: 'All things prismatic 🌈',
+    access: 'public',
+    nsfw: false,
+    rules: [{ title: 'Be kind', text: 'No gatekeeping the spectrum.' }],
+    flairs: [{ id: 'photo', label: 'Photo', emoji: '📸', color: '#7c5cff', modOnly: false }],
+    userFlairs: [{ id: 'prism', label: 'Prism', emoji: '🔮', color: '#7c5cff', modOnly: false }],
+    userFlairSelfAssign: true,
+    allowCustomUserFlair: false,
+    removalReasons: [{ id: 'no-spam', title: 'No spam', message: 'Posts that only advertise are removed.' }],
+    branding: { icon: '🌈', iconUrl: null, bannerUrl: null, accent: '#7c5cff' }
+  }
+};
+
+const subspaceMemberSchema: ThingtimeSchema = {
+  id: 'subspace-member',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Subspace member',
+  summary: "One user's membership of one subspace — role, posting approval, ban state, the two request flags and the user flair (relational child doc).",
+  detail:
+    'targetId = the subspace shareId, ownerId = the member. Uniqueness rides the root uniqueKeys ' +
+    'namespace (`subspaceMemberKey:<subspaceId>:<userId>`). Roles: owner > moderator > member. A ' +
+    'banned user keeps a member doc (banned: true) so the ban outlives leaving/rejoining; approved ' +
+    'marks a trusted poster in restricted subspaces. A JOIN REQUEST to a private subspace is the same ' +
+    'row with pending: true — not a membership (isActiveMember = row && !left && !banned && !pending; ' +
+    'member counts exclude it) until a moderator accepts it (or adds the user); deny drops the row, ' +
+    'leave cancels it. approvalRequested marks an active member of a restricted subspace who asked ' +
+    'for posting rights (approve grants + clears, unapprove/deny clear). userFlair is the flair the member wears ' +
+    'beside their name in this subspace ({ id (template id or null for custom text), text, emoji, color } | null) — ' +
+    'projected as authorFlair on their posts and comments there while they are an active member. Written only by ' +
+    '/api/v1/subspaces/join, /leave and /members.',
+  createdVia: 'POST /api/v1/subspaces (creator) / POST /api/v1/subspaces/join',
+  fields: [
+    { name: 'memberKey', type: 'string', required: true, description: 'Unique `<subspaceId>:<userId>` pair key.' },
+    { name: 'role', type: 'enum', required: true, values: [...SUBSPACE_ROLES], description: 'owner / moderator / member.' },
+    { name: 'approved', type: 'boolean', required: false, description: 'Approved poster (restricted subspaces).' },
+    { name: 'banned', type: 'boolean', required: false, description: 'Banned from posting, commenting and voting here.' },
+    { name: 'banReason', type: 'string', required: false, max: MAX_SUBSPACE_MOD_REASON_CHARS, description: 'Shown to the banned user.' },
+    { name: 'banUntil', type: 'date', required: false, description: 'Temporary ban expiry (null = permanent).' },
+    { name: 'left', type: 'boolean', required: false, description: 'True once the user left (kept for bans); rejoining clears it.' },
+    { name: 'pending', type: 'boolean', required: false, description: 'A join request awaiting a moderator (private subspaces) — not yet a member.' },
+    { name: 'approvalRequested', type: 'boolean', required: false, description: 'An active member asked for posting approval (restricted subspaces).' },
+    {
+      name: 'userFlair',
+      type: 'object',
+      required: false,
+      description: 'The flair worn beside the member’s name in this subspace (null = none).',
+      children: [
+        { name: 'id', type: 'string', required: false, max: MAX_SUBSPACE_FLAIR_ID_CHARS, description: 'Template id (null for custom text).' },
+        { name: 'text', type: 'string', required: true, max: MAX_SUBSPACE_FLAIR_LABEL_CHARS, description: 'The text shown (a template’s label snapshot, or the custom text ≤40).' },
+        { name: 'emoji', type: 'string', required: false, max: MAX_SUBSPACE_ICON_CHARS, description: 'Optional emoji.' },
+        { name: 'color', type: 'string', required: false, max: MAX_SUBSPACE_ACCENT_CHARS, description: 'Optional CSS color (hex or named).' }
+      ]
+    }
+  ],
+  example: { memberKey: 'c0ffee…:5eed…', role: 'member', approved: false, banned: false, pending: false, approvalRequested: false, userFlair: { id: 'prism', text: 'Prism', emoji: '🔮', color: '#7c5cff' } }
+};
+
+const subspaceModlogSchema: ThingtimeSchema = {
+  id: 'subspace-modlog',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Subspace mod log entry',
+  summary: 'One moderator action in a subspace (append-only audit trail).',
+  detail:
+    'targetId = the subspace shareId, ownerId = the acting moderator. Written beside every ' +
+    'moderation mutation (remove/approve/pin/lock/flair/ban/unban/role/approve-poster/settings) so ' +
+    '/s/<slug>/mod can show who did what (member.accept / member.deny cover the Requests queue); listed via GET /api/v1/subspaces/modlog.',
+  createdVia: 'moderation mutations under /api/v1/subspaces/*',
+  fields: [
+    { name: 'action', type: 'string', required: true, max: 40, description: 'Action key, e.g. post.remove, member.ban.' },
+    { name: 'postId', type: 'id', required: false, description: 'Affected post/comment shareId.' },
+    { name: 'userId', type: 'id', required: false, description: 'Affected user id.' },
+    { name: 'reason', type: 'string', required: false, max: MAX_SUBSPACE_MOD_REASON_CHARS, description: 'Moderator note.' },
+    { name: 'detail', type: 'record', required: false, description: 'Small bounded extra (e.g. { flairId, role }).' }
+  ],
+  example: { action: 'post.remove', postId: '4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', reason: 'Rule 1' }
+};
+
+const subspaceTombstoneSchema: ThingtimeSchema = {
+  id: 'subspace-tombstone',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Subspace slug tombstone',
+  summary: 'Holds a deleted subspace’s slug so its deep links can’t be hijacked (control-plane row).',
+  detail:
+    'Written by POST /api/v1/subspaces/delete in the same transaction that removes the subspace thing; carries ' +
+    'the subspaceSlug uniqueKey the subspace held. targetId = the deleted subspace shareId, ownerId = its last ' +
+    `owner, who may re-found the slug immediately; anyone else only once the ${SUBSPACE_SLUG_HOLD_DAYS}-day hold ` +
+    'has passed (POST /api/v1/subspaces answers 409 until then). Re-founding the slug consumes the tombstone. ' +
+    'Never listed: /s/<slug> and GET /api/v1/subspaces/get answer 404 for a tombstoned slug.',
+  createdVia: 'POST /api/v1/subspaces/delete',
+  fields: [
+    { name: 'slug', type: 'string', required: true, max: MAX_SUBSPACE_SLUG_CHARS, description: 'The held slug.' },
+    { name: 'subspaceId', type: 'id', required: true, description: 'shareId of the deleted subspace.' },
+    { name: 'previousOwnerId', type: 'id', required: true, description: 'Who owned it at deletion (may re-found at once).' },
+    { name: 'deletedAt', type: 'date', required: true, description: 'When the subspace was deleted (the hold counts from here).' }
+  ],
+  example: { slug: 'rainbows', subspaceId: 'c0ffee12-dddd-4ddd-8ddd-000000000004', previousOwnerId: '5eed…', deletedAt: '2026-09-05T00:00:00.000Z' }
+};
+
+const subspaceReportSchema: ThingtimeSchema = {
+  id: 'subspace-report',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Subspace report',
+  summary: 'One viewer’s report of a post to a subspace’s moderators (relational row; the Reports queue groups them by post).',
+  detail:
+    'targetId = the subspace the report sits in (the post’s subspace when it was filed — a repeat re-files a row ' +
+    'in the subspace the post lives in now), ownerId = the reporter, acl ["tt:user"] — the OWNER acl: the ' +
+    'reporter can read their own row through the generic single read, every other viewer gets 404; the ' +
+    'moderators read the collection through the dedicated /reports endpoint, never through canView. One row per ' +
+    '(post, reporter) — uniqueness rides the root uniqueKeys namespace (`subspaceReportKey:<postId>:<reporterId>`): ' +
+    'reporting the same post again updates the reason / note (and re-opens a resolved row). Reports of a COMMENT ' +
+    'resolve to the root post (postId = the post; commentId keeps which comment was flagged). A post the ' +
+    'moderators already removed takes no new report (409). status open → resolved with a resolution: removed / ' +
+    'approved (a moderator’s `moderate` remove / approve settles every open report on the post) or dismissed ' +
+    '(POST /api/v1/subspaces/reports { postId, action: "dismiss" }). Control-plane storage — never billable ' +
+    'content. Written only by POST /api/v1/subspaces/report and settled by /moderate and /reports; deleted with ' +
+    'the subspace, with the post, and (the rows that flagged it) with a deleted comment.',
+  createdVia: 'POST /api/v1/subspaces/report',
+  fields: [
+    { name: 'postId', type: 'id', required: true, description: 'The reported (root) post’s shareId.' },
+    { name: 'commentId', type: 'id', required: false, description: 'The flagged comment’s shareId when a comment was reported (null for the post itself).' },
+    { name: 'reason', type: 'string', required: true, max: MAX_SUBSPACE_REPORT_REASON_CHARS, description: 'A rule title, a removal-reason id, or free text.' },
+    { name: 'note', type: 'string', required: false, max: MAX_SUBSPACE_REPORT_NOTE_CHARS, description: 'The reporter’s optional context (moderators only).' },
+    { name: 'status', type: 'enum', required: true, values: [...SUBSPACE_REPORT_STATUSES], description: 'open until a moderator settles it.' },
+    { name: 'resolution', type: 'enum', required: false, values: [...SUBSPACE_REPORT_RESOLUTIONS], description: 'How it was settled (null while open).' },
+    { name: 'resolvedById', type: 'id', required: false, description: 'The moderator who settled it (null while open).' },
+    { name: 'resolvedAt', type: 'date', required: false, description: 'When it was settled (null while open).' },
+    { name: 'reportKey', type: 'string', required: true, description: 'Unique `<postId>:<reporterId>` pair key.' }
+  ],
+  example: { postId: '4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', commentId: null, reason: 'No spam', note: 'Third ad this week from the same account', status: 'open', resolution: null, resolvedById: null, resolvedAt: null, reportKey: '4f6b2c1e…:5eed…' }
+};
+
 const subscriptionSchema: ThingtimeSchema = {
   id: 'subscription',
 	version: 3,
@@ -2138,6 +2499,12 @@ const friendThingSchema: ThingtimeSchema = {
 // an action you ran finished (or failed) — see emitSystemNotification. Reads
 // ALWAYS filter by the recipient's prefs, so a fanned-out notification written
 // before a pref flip stays hidden.
+//
+// The subspace-* family (api/utils/subspaces): join-request (a private-subspace
+// join request or a restricted-subspace "wants to post" request, to the mods),
+// join-accepted (to the requester), post-removed (to the author, preview =
+// the removal reason), report (a post report, to the mods), role (promoted /
+// demoted / made owner / "s/<slug> was deleted"), ban (banned / unbanned).
 export const NOTIFICATION_TYPES = [
   'friend-request',
   'friend-accepted',
@@ -2150,10 +2517,49 @@ export const NOTIFICATION_TYPES = [
   'share',
   'mention',
   'groups',
+  'subspace-join-request',
+  'subspace-join-accepted',
+  'subspace-post-removed',
+  'subspace-report',
+  'subspace-role',
+  'subspace-ban',
   'action-run'
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
+// Subspace notifications that are about the SUBSPACE (not a post) link to
+// /s/<slug>: the slug rides at the head of the preview ("s/<slug> · …") while
+// targetId carries the subspace shareId, so the bell, the email CTA and API
+// clients can all deep-link without a projection change. Post-scoped
+// subspace notifications (post-removed, report) set postId like every other
+// post notification and link to /post/<id>.
+export const SUBSPACE_NOTIFICATION_TYPES: readonly NotificationType[] = [
+  'subspace-join-request',
+  'subspace-join-accepted',
+  'subspace-post-removed',
+  'subspace-report',
+  'subspace-role',
+  'subspace-ban'
+];
+export const subspaceNotificationPreview = (slug: string, detail: string): string => {
+  const text = String(detail || '').replace(/\s+/g, ' ').trim();
+  return text ? `s/${slug} · ${text}` : `s/${slug}`;
+};
+const SUBSPACE_PREVIEW_SLUG_PATTERN = /^s\/([a-z0-9_]{1,30})(?=\s|$)/;
+export const subspaceSlugFromNotificationPreview = (preview: unknown): string | null => {
+  const match = SUBSPACE_PREVIEW_SLUG_PATTERN.exec(typeof preview === 'string' ? preview.trim() : '');
+  return match ? match[1] : null;
+};
+// The detail half of a subspace preview ("you are now a moderator 🎩") with
+// the slug head stripped — anything that keys copy off the preview text (the
+// bell's verb, an email line) must match against THIS, never the whole
+// preview: a slug like s/deleted_scenes or s/uplifted_minds would otherwise
+// read as a deletion / a lifted ban.
+const SUBSPACE_PREVIEW_HEAD_PATTERN = /^s\/[a-z0-9_]{1,30}(?:\s*·\s*|\s+|$)/;
+export const subspaceNotificationDetail = (preview: unknown): string => {
+  const text = typeof preview === 'string' ? preview.trim() : '';
+  return SUBSPACE_PREVIEW_SLUG_PATTERN.test(text) ? text.replace(SUBSPACE_PREVIEW_HEAD_PATTERN, '').trim() : text;
+};
 // Notification families — what the history page (/notifications) filters by,
 // and how a row knows whether a person acted (social/engagement/feed) or the
 // platform is speaking through Lopu (system). Every type belongs to exactly
@@ -2163,8 +2569,8 @@ export const NOTIFICATION_CATEGORIES = ['social', 'engagement', 'feed', 'system'
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 
 export const NOTIFICATION_CATEGORY_META: Record<NotificationCategory, { label: string; emoji: string; hint: string }> = {
-  social: { label: 'Social', emoji: '🤝', hint: 'Follows, friend requests, and groups' },
-  engagement: { label: 'Engagement', emoji: '💬', hint: 'Comments, replies, reactions, shares, and mentions' },
+  social: { label: 'Social', emoji: '🤝', hint: 'Follows, friend requests, groups, and subspace membership' },
+  engagement: { label: 'Engagement', emoji: '💬', hint: 'Comments, replies, reactions, shares, mentions, and subspace moderation' },
   feed: { label: 'Feed', emoji: '📰', hint: 'New posts from people you follow and your friends' },
   system: { label: 'System', emoji: '⚙️', hint: 'Action runs and other platform notes from Lopu' }
 };
@@ -2181,6 +2587,14 @@ export const NOTIFICATION_TYPE_CATEGORY: Record<NotificationType, NotificationCa
   mention: 'engagement',
   'post-from-followed': 'feed',
   'post-from-friend': 'feed',
+  // subspaces: membership/role events are social, moderation of your content
+  // and the mod queue are engagement
+  'subspace-join-request': 'social',
+  'subspace-join-accepted': 'social',
+  'subspace-role': 'social',
+  'subspace-ban': 'social',
+  'subspace-post-removed': 'engagement',
+  'subspace-report': 'engagement',
   'action-run': 'system'
 };
 
@@ -2200,7 +2614,6 @@ export const notificationTypesInCategory = (category: NotificationCategory): Not
 // The platform's own voice on a system notification: no user thing exists for
 // this id, so actor enrichment falls back to the stored 'Lopu' snapshot.
 export const SYSTEM_NOTIFICATION_ACTOR_ID = 'thingtime';
-
 // Email-channel notification switches. Every bell type can also send an email,
 // plus email-only types (weekly-summary) that never mint a bell notification.
 export const EMAIL_ONLY_NOTIFICATION_TYPES = ['weekly-summary'] as const;
@@ -2208,9 +2621,11 @@ export const EMAIL_NOTIFICATION_TYPES = [...NOTIFICATION_TYPES, ...EMAIL_ONLY_NO
 export type EmailNotificationType = (typeof EMAIL_NOTIFICATION_TYPES)[number];
 
 // High-volume types whose EMAIL channel defaults OFF (the bell stays ON): a
-// busy follow graph would otherwise turn every post into an email, and a
-// scripted action can run sixty times a minute.
-export const EMAIL_DEFAULT_OFF_TYPES: readonly string[] = ['post-from-followed', 'post-from-friend', 'action-run'];
+// busy follow graph would otherwise turn every post into an email, a scripted
+// action can run sixty times a minute, and the mod-queue traffic of a big
+// subspace (join requests, reports) is the same class of firehose —
+// moderators opt in per type.
+export const EMAIL_DEFAULT_OFF_TYPES: readonly string[] = ['post-from-followed', 'post-from-friend', 'action-run', 'subspace-join-request', 'subspace-report'];
 
 export type NotificationChannelMasters = { push: boolean; email: boolean };
 export type NormalizedNotificationPrefs = {
@@ -2256,9 +2671,12 @@ const notificationThingSchema: ThingtimeSchema = {
   detail:
     'Minted by the server when someone else follows you, sends/accepts a friend request, ' +
     'comments, replies, reacts, shares, @mentions you in a post or comment, or (fan-out, ' +
-    'capped) posts while you follow them — plus SYSTEM notes (category system, actorId ' +
+    'capped) posts while you follow them — by subspace moderation (subspace-* types: join ' +
+    'requests/accepts, post removals, reports, role changes incl. ownership transfer and deletion, ' +
+    'bans; subspace-scoped ones put "s/<slug> · …" in preview and the subspace shareId in targetId, ' +
+    'post-scoped ones set postId) — plus SYSTEM notes (category system, actorId ' +
     '"thingtime", actor name Lopu) such as action-run, written when an action you ran ' +
-    'finishes. ownerId is the recipient, targetId the subject thing (post/comment/user, ' +
+    'finishes. ownerId is the recipient, targetId the subject thing (post/comment/user/subspace, ' +
     'or the action-run record), root readAt flips when read. Listed via ' +
     "GET /api/v1/notifications (filtered by the recipient's meta.notificationPrefs, " +
     'searchable and filterable by category/type/unread/date for the /notifications history ' +
@@ -3017,6 +3435,156 @@ const aiModelSchema: ThingtimeSchema = {
   }
 };
 
+// Lopu usage accounting and credits (design note "Lopu verified access, usage
+// accounting and credits" §2–§3): three protected, owner-private control-plane
+// kinds written ONLY by api/utils/lopu/accounting.ts — a forged account or
+// ledger row would be free credits, so generic Thing CRUD refuses them and
+// they never appear in generic listings. No crystal sanitizer, no new index:
+// the account rides the root uniqueKeys index (lopuAccount:<userId>), the
+// rows the ownerId/thingtime/createdAt index, and "one pending top-up
+// request at a time" is the lopuTopupPending:<userId> unique key.
+const lopuAccountSchema: ThingtimeSchema = {
+  id: 'lopu-account',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Lopu account',
+  summary: 'One per user — the Lopu credit balance plus lifetime and monthly usage counters.',
+  detail:
+    'Created lazily by ensureLopuAccount (the first gated Lopu turn or GET /api/v1/lopu/account), which grants the ' +
+    'Thingtime.LopuAccess starterCredits exactly once. ownerId = the user, acl ["tt:user"], storageClass "control", root ' +
+    'uniqueKeys lopuAccount:<userId>. Every debit is ONE $inc on this row (balance, lifetime, month — the month counters ' +
+    'reset when monthKey moves on), guarded by the write id in appliedIds so a retried $inc cannot land twice; the ' +
+    'balance may go negative by at most one turn and the next turn is refused with 402 LOPU_NO_CREDITS. A billed turn ' +
+    'also holds an inflight slot for as long as the provider call runs (429 LOPU_TURN_IN_FLIGHT past the cap), so ' +
+    'concurrent turns cannot each spend the same last credit. 1 credit = 1 USD of list price = 1,000,000 micros.',
+  createdVia: 'api/utils/lopu/accounting.ts ensureLopuAccount (first gated Lopu turn, GET /api/v1/lopu/account, admin credit grant)',
+  fields: [
+    { name: 'balanceMicros', type: 'number', required: true, description: 'Current credit balance in micro-USD (signed; negative by at most one turn).' },
+    { name: 'lifetimeCostMicros', type: 'number', required: true, min: 0, description: 'Micros ever debited from this account.' },
+    { name: 'lifetimeInputTokens', type: 'number', required: true, min: 0, description: 'Input tokens across every recorded turn (all billings).' },
+    { name: 'lifetimeOutputTokens', type: 'number', required: true, min: 0, description: 'Output tokens across every recorded turn (all billings).' },
+    { name: 'turns', type: 'number', required: true, min: 0, description: 'Recorded turns (chat, voice, voice sessions).' },
+    { name: 'monthKey', type: 'string', required: true, max: 7, description: 'UTC month the month counters belong to (YYYY-MM).' },
+    { name: 'monthCostMicros', type: 'number', required: true, min: 0, description: 'Micros debited in monthKey.' },
+    { name: 'monthTurns', type: 'number', required: true, min: 0, description: 'Turns recorded in monthKey.' },
+    { name: 'starterGranted', type: 'boolean', required: true, description: 'The one-time starter grant was applied (also true when starterCredits was 0).' },
+    { name: 'starterMicros', type: 'number', required: true, min: 0, description: 'The starter amount that was granted, in micros.' },
+    { name: 'lowBalanceNotifiedAt', type: 'string', required: false, max: 40, description: 'When the balance last dropped under the low-balance threshold (null once lifted).' },
+    { name: 'inflight', type: 'number', required: false, min: 0, description: 'Billed turns currently running for this account (the concurrency cap the gate enforces).' },
+    { name: 'inflightSince', type: 'string', required: false, max: 40, description: 'When a slot was last taken — a slot older than the TTL is swept by the next reservation.' },
+    { name: 'appliedIds', type: 'string[]', required: false, max: 8, description: 'The last few write ids applied to the balance (bounded by $slice) so a retried $inc is a no-op.' }
+  ],
+  example: {
+    balanceMicros: 1400000,
+    lifetimeCostMicros: 600000,
+    lifetimeInputTokens: 300,
+    lifetimeOutputTokens: 150,
+    turns: 1,
+    monthKey: '2026-09',
+    monthCostMicros: 600000,
+    monthTurns: 1,
+    starterGranted: true,
+    starterMicros: 2000000
+  }
+};
+
+const lopuUsageSchema: ThingtimeSchema = {
+  id: 'lopu-usage',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Lopu usage',
+  summary: 'One row per Lopu turn — tokens, the list price, and what was actually debited.',
+  detail:
+    'Written by debitLopuUsage after every chat reply, voice turn and direct-voice session (ownerId = the user, acl ' +
+    '["tt:user"], storageClass "control"; the chat row’s shareId derives from the requestId so a retried debit never ' +
+    'doubles). billing says who paid: "thingtime" (server keys — debited), "byo" (the viewer’s own Secure Vault provider — ' +
+    'recorded, never debited) or "free" (the canned fallback). costMicros is the list price from api/utils/ai/pricing.ts ' +
+    '(priced: false for a model outside the pricing table, estimated: true for a sibling-priced row); debitedMicros is ' +
+    'the amount taken from the account. Listed through GET /api/v1/lopu/account/history beside the debits that point at it.',
+  createdVia: 'api/utils/lopu/accounting.ts debitLopuUsage (chats reply, voice reply, voice session)',
+  fields: [
+    { name: 'chatId', type: 'string', required: false, max: 160, description: 'The Lopu conversation (chat turns).' },
+    { name: 'requestId', type: 'string', required: false, max: 160, description: 'The client request id of the turn.' },
+    { name: 'surface', type: 'enum', required: true, values: ['chat', 'voice', 'voice-session'], description: 'Which Lopu surface ran the turn.' },
+    { name: 'provider', type: 'string', required: true, max: 40, description: 'claude | openai | vault | test | fallback, or the vault connection kind.' },
+    { name: 'providerLabel', type: 'string', required: false, max: 80, description: 'The vault connection’s display name (byo turns).' },
+    { name: 'model', type: 'string', required: false, max: 128, description: 'The model that answered.' },
+    { name: 'billing', type: 'enum', required: true, values: ['thingtime', 'byo', 'free'], description: 'Who paid for the turn.' },
+    { name: 'inputTokens', type: 'number', required: true, min: 0, description: 'Uncached input tokens.' },
+    { name: 'outputTokens', type: 'number', required: true, min: 0, description: 'Output tokens.' },
+    { name: 'cacheReadTokens', type: 'number', required: true, min: 0, description: 'Prompt-cache read tokens when the provider reported them.' },
+    { name: 'cacheWriteTokens', type: 'number', required: true, min: 0, description: 'Prompt-cache write tokens when the provider reported them.' },
+    { name: 'costMicros', type: 'number', required: true, min: 0, description: 'List price of the turn in micro-USD.' },
+    { name: 'priced', type: 'boolean', required: true, description: 'The model has a pricing row.' },
+    { name: 'estimated', type: 'boolean', required: true, description: 'The pricing row is a sibling estimate.' },
+    { name: 'debitedMicros', type: 'number', required: true, min: 0, description: 'Micros actually taken from the account (0 for byo / free).' },
+    { name: 'toolCalls', type: 'number', required: true, min: 0, description: 'Tool executions in the turn.' },
+    { name: 'hops', type: 'number', required: true, min: 0, description: 'Model hops in the turn.' },
+    { name: 'durationMs', type: 'number', required: true, min: 0, description: 'Wall-clock time of the turn.' }
+  ],
+  example: {
+    chatId: 'lopu-chat-7d1f2c1a-3b7e-4d0a-9c1d-000000000001',
+    requestId: '0f7d2c3a-8b1e-4c2d-9a4f-000000000002',
+    surface: 'chat',
+    provider: 'claude',
+    model: 'claude-opus-5',
+    billing: 'thingtime',
+    inputTokens: 1200,
+    outputTokens: 380,
+    cacheReadTokens: 8000,
+    cacheWriteTokens: 0,
+    costMicros: 19500,
+    priced: true,
+    estimated: false,
+    debitedMicros: 19500,
+    toolCalls: 2,
+    hops: 3,
+    durationMs: 8400
+  }
+};
+
+const lopuCreditSchema: ThingtimeSchema = {
+  id: 'lopu-credit',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Lopu credit ledger row',
+  summary: 'One signed movement of a Lopu credit balance, or a top-up request waiting for an admin.',
+  detail:
+    'The ledger (ownerId = the user, acl ["tt:user"], storageClass "control"): entry "starter" (the one-time grant), ' +
+    '"grant" / "topup" / "adjust" / "refund" (admin movements through POST /api/v1/admin/lopu/credits, adjust and refund ' +
+    'may be negative), "debit" (one per debited turn, usageId points at the lopu-usage row) — each carrying ' +
+    'balanceAfterMicros — and "request" (POST /api/v1/lopu/account/topup-request: amountMicros is the requested amount, ' +
+    'balanceAfterMicros null, requestStatus pending → approved | declined; while pending the row also carries the root ' +
+    'uniqueKeys lopuTopupPending:<userId>, so an account can only have one open request). Newest first through ' +
+    'GET /api/v1/lopu/account/history.',
+  createdVia: 'api/utils/lopu/accounting.ts (ensureLopuAccount, debitLopuUsage, grantLopuCredits, createLopuTopupRequest, resolveLopuTopupRequest)',
+  fields: [
+    { name: 'entry', type: 'enum', required: true, values: ['starter', 'grant', 'topup', 'debit', 'adjust', 'refund', 'request'], description: 'What kind of movement or request this is.' },
+    { name: 'amountMicros', type: 'number', required: true, description: 'Signed movement in micro-USD (a request carries the requested amount, positive).' },
+    { name: 'balanceAfterMicros', type: 'number', required: false, description: 'The balance after the movement (null on a request).' },
+    { name: 'reason', type: 'string', required: true, max: 300, description: 'Why — the admin’s reason, the turn, or the request kind.' },
+    { name: 'actorId', type: 'string', required: true, max: 128, description: 'Who caused it: the admin, the user, or "system".' },
+    { name: 'usageId', type: 'string', required: false, max: 160, description: 'The lopu-usage row a debit paid for.' },
+    { name: 'requestId', type: 'string', required: false, max: 160, description: 'The request row a topup grant answered.' },
+    { name: 'requestStatus', type: 'enum', required: false, values: ['pending', 'approved', 'declined'], description: 'Request rows only.' },
+    { name: 'note', type: 'string', required: false, max: 500, description: 'The user’s note on a request, or the admin’s note on a grant.' },
+    { name: 'resolvedAt', type: 'string', required: false, max: 40, description: 'When a request was approved or declined.' },
+    { name: 'resolvedBy', type: 'string', required: false, max: 128, description: 'The admin who resolved a request.' },
+    { name: 'grantedMicros', type: 'number', required: false, min: 0, description: 'What an approved request actually granted.' }
+  ],
+  example: {
+    entry: 'debit',
+    amountMicros: -19500,
+    balanceAfterMicros: 1980500,
+    reason: 'Chat turn · claude-opus-5',
+    actorId: '64f000000000000000000002',
+    usageId: 'lopu-usage-3f9c2a1b7d5e4c6a8b0f1e2d3c4b5a69'
+  }
+};
+
 const aiConnectionSchema: ThingtimeSchema = {
   id: 'ai-connection',
   version: 1,
@@ -3495,7 +4063,12 @@ export const PROTECTED_THINGTIME = [
   // the Lopu model catalog (api/utils/ai/models.ts): catalog fields are code
   // and `enabled` is admin-only, so nothing may mint a model or flip
   // availability through generic Thing CRUD
-  'ai-model'
+  'ai-model',
+  // Lopu credits and usage (api/utils/lopu/accounting.ts): a forged account,
+  // ledger row or usage row would be free credits or a falsified bill
+  'lopu-account',
+  'lopu-usage',
+  'lopu-credit'
 ] as const;
 export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) => (PROTECTED_THINGTIME as readonly string[]).includes(id));
 
@@ -3514,7 +4087,7 @@ export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) =>
 // unreachable, unaccounted, and never pruned again — so create/run/delete
 // cycles would re-open exactly the unbounded accumulation the retention cap
 // closes. Cascading is also the only way an owner can ever remove them.
-export const CASCADE_CHILD_THINGTIME = [ATTACHMENT_THINGTIME, 'comment', 'reaction', 'save', 'action-run'] as const;
+export const CASCADE_CHILD_THINGTIME = [ATTACHMENT_THINGTIME, 'comment', 'reaction', 'save', 'action-run', UPDOWN_THINGTIME] as const;
 
 // Messenger kinds are owned by /api/v1/chats* end to end. Create/update are
 // already refused by the missing crystal sanitizers, and DELETE must be too:
@@ -3653,6 +4226,12 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   actionRunSchema,
   saveThingSchema,
   voteSchema,
+  updownSchema,
+  subspaceSchema,
+  subspaceMemberSchema,
+  subspaceModlogSchema,
+  subspaceTombstoneSchema,
+  subspaceReportSchema,
   folderSchema,
   appSchema,
   appDataSchema,
@@ -3665,6 +4244,10 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   migrationDiagnosticSchema,
   // the Lopu model catalog (protected, seeded by api/utils/ai/models.ts)
   aiModelSchema,
+  // Lopu credits + usage accounting (protected, api/utils/lopu/accounting.ts)
+  lopuAccountSchema,
+  lopuUsageSchema,
+  lopuCreditSchema,
   ...ciControlSchemas,
   // social graph + notifications (protected, server-minted). The `follow`
   // kind registers ONCE, below with the messenger family: followSchema is the
@@ -3819,6 +4402,12 @@ const sanitizeMediaLayout = (value: unknown): { ok: true; mediaLayout: PostMedia
 	return { ok: true, mediaLayout: { mode, columns, ...(spans ? { spans } : {}) } };
 };
 
+// Post → subspace references are shareIds (uuid / seeded ids) and flair ids
+// are short slugs; both are bounded here so the multikey/lookup indexes never
+// see arbitrary strings.
+const SUBSPACE_REF_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+const SUBSPACE_FLAIR_ID_PATTERN = /^[A-Za-z0-9_-]{1,40}$/;
+
 const sanitizePostCrystal = (
 	input: Record<string, unknown>,
 	appliedIds: string[],
@@ -3921,6 +4510,32 @@ const sanitizePostCrystal = (
 	const layout = sanitizeMediaLayout(input.mediaLayout);
 	if (layout.ok === false) return layout;
 
+	// Subspace vocabulary (title / subspaceId / flairId). Shape-only here — the
+	// registry is pure; whether the author may post into that subspace with
+	// that flair is decided by api/utils/subspaces/gate.ts on every write.
+	// Empty/null values drop the key, so a PATCH with `title: ''` clears the
+	// headline and `subspaceId: null` pulls the post out of its subspace.
+	if (input.title !== undefined && input.title !== null && typeof input.title !== 'string') {
+		return fail(400, 'title must be a string');
+	}
+	const title = typeof input.title === 'string' ? input.title.replace(/\s+/g, ' ').trim() : '';
+	if (title.length > MAX_POST_TITLE_CHARS) return fail(400, `Post title is too long (max ${MAX_POST_TITLE_CHARS})`);
+	let subspaceId: string | null = null;
+	if (input.subspaceId !== undefined && input.subspaceId !== null && input.subspaceId !== '') {
+		if (typeof input.subspaceId !== 'string' || !SUBSPACE_REF_PATTERN.test(input.subspaceId.trim())) {
+			return fail(400, 'subspaceId must be a subspace id');
+		}
+		subspaceId = input.subspaceId.trim();
+	}
+	let flairId: string | null = null;
+	if (input.flairId !== undefined && input.flairId !== null && input.flairId !== '') {
+		if (typeof input.flairId !== 'string' || !SUBSPACE_FLAIR_ID_PATTERN.test(input.flairId.trim())) {
+			return fail(400, 'flairId must be a flair id');
+		}
+		flairId = input.flairId.trim();
+	}
+	if (flairId && !subspaceId) return fail(400, 'Flairs belong to subspace posts — set subspaceId too');
+
 	return {
 		ok: true,
 		crystal: {
@@ -3930,7 +4545,10 @@ const sanitizePostCrystal = (
 			images,
 			listing,
 			thing,
-			...(layout.mediaLayout ? { mediaLayout: layout.mediaLayout } : {})
+			...(layout.mediaLayout ? { mediaLayout: layout.mediaLayout } : {}),
+			...(title ? { title } : {}),
+			...(subspaceId ? { subspaceId } : {}),
+			...(flairId ? { flairId } : {})
 		}
 	};
 };
