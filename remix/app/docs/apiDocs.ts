@@ -12242,6 +12242,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-resolve',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'webpages',
     title: 'Resolve a webpage',
     endpoint: '/api/v1/webpages/resolve',
@@ -12256,10 +12258,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'visible shareIds first, then the seeded platform doc (component-<ref>), then the caller’s own latest ' +
       'componentKey match; the refs map records each resolution. Pages are created and edited through the ' +
       'ordinary /api/v1/things write path (the webpage crystal sanitizer is the write gate) — this endpoint ' +
-      'only reads.',
+      'only reads. A standalone hidden page also accepts its owner-issued key query parameter, matching the ' +
+      'ordinary Things hidden-link contract; the bearer key is never returned to non-owners.',
     auth: {
       mode: 'optional',
-      description: 'Anonymous callers resolve public pages and the seeded site defaults; signed-in callers also get their own pages and personalised site docs.'
+      description: 'Anonymous callers resolve public pages, hidden standalone pages when they present the exact key, and seeded site defaults; signed-in callers also get their own pages and personalised site docs.'
     },
     methods: ['GET'],
     steps: [
@@ -12275,6 +12278,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'The read behind /p/<id>.',
         method: 'GET',
         query: { id: 'my-launch-page' }
+      },
+      {
+        name: 'Resolve an unlisted page by secret link',
+        description: 'The key is the bearer secret copied by the page owner.',
+        method: 'GET',
+        query: { id: 'my-unlisted-page', key: 'owner-issued-link-key' }
       },
       {
         name: 'Resolve a site page',
