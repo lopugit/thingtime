@@ -151,6 +151,11 @@ export type PublicDevice = {
 	pairedAt: string;
 	online: boolean;
 	lastSeenAt: string | null;
+	lastSyncAt: string | null;
+	syncStatus: 'paired' | 'healthy' | 'error' | null;
+	watchHealth: { batteryLevel: number | null; lowPowerMode: boolean; error: string | null; updatedAt: string | null } | null;
+	createdThingCount: number;
+	recentThings: Array<{ id: string; label: string; createdAt: string }>;
 	locked: boolean | null;
 	volume: number | null;
 	brightness: number | null;
@@ -327,7 +332,10 @@ type ClaimDeviceResult =
 const minimalPublicDevice = (doc: any): PublicDevice => ({
 	id: String(doc.shareId),
 	name: String(doc.crystal?.name || 'Computer'),
-	platform: doc.crystal?.platform === 'windows' || doc.crystal?.platform === 'linux' ? doc.crystal.platform : 'macos',
+	platform:
+		doc.crystal?.platform === 'windows' || doc.crystal?.platform === 'linux' || doc.crystal?.platform === 'watchos'
+			? doc.crystal.platform
+			: 'macos',
 	model: typeof doc.crystal?.model === 'string' ? doc.crystal.model : null,
 	osVersion: typeof doc.crystal?.osVersion === 'string' ? doc.crystal.osVersion : null,
 	appVersion: typeof doc.crystal?.appVersion === 'string' ? doc.crystal.appVersion : null,
@@ -335,6 +343,11 @@ const minimalPublicDevice = (doc: any): PublicDevice => ({
 	pairedAt: iso(doc.crystal?.pairedAt) || new Date(doc.createdAt).toISOString(),
 	online: false,
 	lastSeenAt: null,
+	lastSyncAt: null,
+	syncStatus: null,
+	watchHealth: null,
+	createdThingCount: 0,
+	recentThings: [],
 	locked: null,
 	volume: null,
 	brightness: null,
@@ -623,7 +636,7 @@ export const listDevices = async (
 	if (!ids.length) return { ok: true, devices: [] };
 
 	const sessions = await getSessionsCollection();
-	const [states, connectors, commands, approvals, liveSessions] = await Promise.all([
+	const [states, connectors, commands, approvals, liveSessions, createdCounts, recentCreatedThingGroups] = await Promise.all([
 		things.find({ thingtime: 'device-state', ownerId, targetId: { $in: ids } } as any).toArray(),
 		things
 			.find({ thingtime: 'device-connector', ownerId, targetId: { $in: ids } } as any)
@@ -656,9 +669,39 @@ export const listDevices = async (
 			.find(
 				{ purpose: 'device', userId: ownerId, 'meta.deviceId': { $in: ids }, revokedAt: null },
 				{
-					projection: { 'meta.deviceId': 1, 'meta.lastSeenAt': 1, expiresAt: 1 }
+					projection: {
+						'meta.deviceId': 1,
+						'meta.lastSeenAt': 1,
+						'meta.lastSyncAt': 1,
+						'meta.lastSyncStatus': 1,
+						'meta.watchHealth': 1,
+						expiresAt: 1
+					}
 				}
 			)
+			.toArray(),
+		things
+			.aggregate([
+				{ $match: { ownerId, sourceDeviceId: { $in: ids } } },
+				{ $group: { _id: '$sourceDeviceId', count: { $sum: 1 } } }
+			])
+			.toArray(),
+		things
+			.aggregate([
+				{ $match: { ownerId, sourceDeviceId: { $in: ids } } },
+				{
+					$group: {
+						_id: '$sourceDeviceId',
+						things: {
+							$topN: {
+								n: 10,
+								sortBy: { createdAt: -1, shareId: 1 },
+								output: { shareId: '$shareId', thingtime: '$thingtime', crystal: '$crystal', createdAt: '$createdAt' }
+							}
+						}
+					}
+				}
+			])
 			.toArray()
 	]);
 
@@ -677,6 +720,10 @@ export const listDevices = async (
 	const approvalCounts = new Map<string, number>();
 	for (const doc of approvals as any[]) approvalCounts.set(String(doc.targetId), (approvalCounts.get(String(doc.targetId)) ?? 0) + 1);
 	const lastSeenByDevice = new Map<string, Date>();
+	const lastSyncByDevice = new Map<
+		string,
+		{ at: Date; status: PublicDevice['syncStatus']; health: PublicDevice['watchHealth'] }
+	>();
 	for (const session of liveSessions as any[]) {
 		if (session.expiresAt && new Date(session.expiresAt).getTime() <= Date.now()) continue;
 		const id = typeof session.meta?.deviceId === 'string' ? session.meta.deviceId : '';
@@ -684,16 +731,59 @@ export const listDevices = async (
 		if (!id || !lastSeenAt || !Number.isFinite(lastSeenAt.getTime())) continue;
 		const previous = lastSeenByDevice.get(id);
 		if (!previous || previous < lastSeenAt) lastSeenByDevice.set(id, lastSeenAt);
+		const syncAt = session.meta?.lastSyncAt ? new Date(session.meta.lastSyncAt) : null;
+		if (syncAt && Number.isFinite(syncAt.getTime())) {
+			const syncStatus =
+				session.meta?.lastSyncStatus === 'healthy' || session.meta?.lastSyncStatus === 'error' || session.meta?.lastSyncStatus === 'paired'
+					? session.meta.lastSyncStatus
+					: null;
+			const priorSync = lastSyncByDevice.get(id);
+			if (!priorSync || priorSync.at < syncAt) {
+				const rawHealth = session.meta?.watchHealth;
+				const health = rawHealth && typeof rawHealth === 'object'
+					? {
+						batteryLevel: typeof rawHealth.batteryLevel === 'number' ? Math.max(0, Math.min(1, rawHealth.batteryLevel)) : null,
+						lowPowerMode: rawHealth.lowPowerMode === true,
+						error: typeof rawHealth.error === 'string' ? rawHealth.error.slice(0, 200) : null,
+						updatedAt: iso(rawHealth.updatedAt)
+					}
+					: null;
+				lastSyncByDevice.set(id, { at: syncAt, status: syncStatus, health });
+			}
+		}
+	}
+	const createdCountByDevice = new Map<string, number>(
+		(createdCounts as any[]).map((entry) => [String(entry._id), Number(entry.count) || 0])
+	);
+	const recentByDevice = new Map<string, PublicDevice['recentThings']>();
+	for (const group of recentCreatedThingGroups as any[]) {
+		const id = typeof group._id === 'string' ? group._id : '';
+		if (!id) continue;
+		const bucket = (Array.isArray(group.things) ? group.things : []).slice(0, 10).map((doc: any) => {
+			const crystal = doc.crystal && typeof doc.crystal === 'object' ? doc.crystal : {};
+			const label =
+				(typeof crystal.text === 'string' && crystal.text.trim()) ||
+				(typeof crystal.name === 'string' && crystal.name.trim()) ||
+				(Array.isArray(doc.thingtime) && doc.thingtime.length ? doc.thingtime.join(' + ') : 'Thing');
+			return { id: String(doc.shareId), label: String(label).slice(0, 140), createdAt: new Date(doc.createdAt).toISOString() };
+		});
+		recentByDevice.set(id, bucket);
 	}
 
 	const publicDevices = docs.map((doc: any) => {
 		const base = minimalPublicDevice(doc);
 		const state = publicDeviceState(stateByDevice.get(base.id));
 		const lastSeenAt = lastSeenByDevice.get(base.id) ?? null;
+		const lastSync = lastSyncByDevice.get(base.id) ?? null;
 		return {
 			...base,
 			online: !!lastSeenAt && Date.now() - lastSeenAt.getTime() <= ONLINE_WINDOW_MS,
 			lastSeenAt: lastSeenAt?.toISOString() ?? null,
+			lastSyncAt: lastSync?.at.toISOString() ?? null,
+			syncStatus: lastSync?.status ?? null,
+			watchHealth: lastSync?.health ?? null,
+			createdThingCount: createdCountByDevice.get(base.id) ?? 0,
+			recentThings: recentByDevice.get(base.id) ?? [],
 			locked: state?.locked ?? null,
 			volume: state?.volume ?? null,
 			brightness: state?.brightness ?? null,

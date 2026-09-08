@@ -8,7 +8,7 @@ APP_PATH="${CACHE_ROOT}/bundle-stage/Thingtime Recovery.app"
 RELEASE_VERSION="${THINGTIME_RECOVERY_VERSION:?THINGTIME_RECOVERY_VERSION is required}"
 RELEASE_ROOT="${PACKAGE_ROOT}/release"
 FINAL_ARCHIVE="${RELEASE_ROOT}/Thingtime-Recovery-App-UNSIGNED-Release-${RELEASE_VERSION}-macos-$(uname -m).zip"
-ARCHIVE_VERIFY_ROOT="$(mktemp -d "${CACHE_ROOT}/archive-verify.XXXXXX")"
+ARCHIVE_VERIFY_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/thingtime-recovery-archive-verify.XXXXXX")"
 trap '/bin/rm -rf -- "${ARCHIVE_VERIFY_ROOT}"' EXIT
 
 case "${RELEASE_VERSION}" in

@@ -20,7 +20,7 @@ on:
 jobs:
   release:
     steps:
-      - run: corepack pnpm --dir MCP install --frozen-lockfile
+      - run: npm ci --prefix MCP
       - run: |
           corepack pnpm --dir MCP run typecheck
           corepack pnpm --dir MCP test
@@ -61,7 +61,7 @@ on:
 jobs:
   release:
     steps:
-      - run: corepack pnpm --dir MCP install --frozen-lockfile
+      - run: npm ci --prefix MCP
       - run: |
           corepack pnpm --dir MCP run typecheck
           corepack pnpm --dir MCP test

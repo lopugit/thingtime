@@ -1,7 +1,7 @@
 export type LopuMessageInput = {
   title?: unknown;
   description?: unknown;
-  status?: 'success' | 'error' | 'info';
+  status?: 'success' | 'error' | 'info' | 'warning';
 };
 
 const cleanText = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : undefined);

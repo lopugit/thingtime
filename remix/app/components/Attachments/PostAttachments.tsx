@@ -1,3 +1,4 @@
+import { ProgressiveImage } from './ProgressiveImage';
 import React from 'react';
 // Grid/Image are gone: the owner-chosen layouts below render their own
 // masonry/rows/grid containers, and each image tile is a Box `as="img"`.
@@ -278,12 +279,10 @@ export const PostAttachments = ({
 		// before the viewer opts in. Revealing turns it back into a normal tile.
 		const shielded = attachment.nsfw === true && !revealedIds.has(attachment.id);
 		const image = (
-			<Box
-				as="img"
+			<ProgressiveImage
 				src={attachmentMediaSrc(attachment)}
 				alt={attachment.title || attachmentDisplayName(attachment) || `Post image ${index + 1}`}
 				loading="lazy"
-				referrerPolicy="no-referrer"
 				width="100%"
 				display="block"
 				// fill mode: the tile's aspect-ratio owns the box, the image covers it

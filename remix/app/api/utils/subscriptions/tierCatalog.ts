@@ -15,6 +15,8 @@ export type TierQuotas = {
   userStorageBytes: number | null;
   maxApps: number | null;
   maxPats: number | null;
+  // Absent only on immutable revisions predating network-test entitlements.
+  speedTestsPerHour?: number | null;
 };
 
 export type TierPricePeriod = 'daily' | 'weekly' | 'monthly' | 'yearly';
@@ -185,25 +187,29 @@ export const SUBSCRIPTION_TIER_CATALOG: SubscriptionTierDescriptor[] = [
     appStorageBytes: DEFAULT_APP_STORAGE_ALLOWANCE_BYTES,
     userStorageBytes: 500 * MB,
     maxApps: MAX_APPS_PER_USER,
-    maxPats: 200
+    maxPats: 200,
+    speedTestsPerHour: 4
   }),
   builtIn('plus', 'Plus', 'Roomier budgets for active builders.', '🌿', 10, false, {
     appStorageBytes: 25 * GB,
     userStorageBytes: 5 * GB,
     maxApps: 50,
-    maxPats: 500
+    maxPats: 500,
+    speedTestsPerHour: 20
   }),
   builtIn('pro', 'Pro', 'High ceilings for heavy apps and fleets of tokens.', '🌳', 20, false, {
     appStorageBytes: 100 * GB,
     userStorageBytes: 20 * GB,
     maxApps: 100,
-    maxPats: 1000
+    maxPats: 1000,
+    speedTestsPerHour: null
   }),
   builtIn('payg', 'Pay as you go', 'No hard caps — usage is metered by the byte ledgers and billed.', '⚡️', 30, true, {
     appStorageBytes: null,
     userStorageBytes: null,
     maxApps: null,
-    maxPats: null
+    maxPats: null,
+    speedTestsPerHour: null
   })
 ];
 
@@ -219,13 +225,15 @@ export const subscriptionTierById = (id: SubscriptionTierId): SubscriptionTierDe
 
 export type QuotaOverrides = Partial<TierQuotas>;
 
-export const QUOTA_OVERRIDE_FIELDS = ['appStorageBytes', 'userStorageBytes', 'maxApps', 'maxPats'] as const;
+export const REQUIRED_TIER_QUOTA_FIELDS = ['appStorageBytes', 'userStorageBytes', 'maxApps', 'maxPats'] as const;
+export const QUOTA_OVERRIDE_FIELDS = [...REQUIRED_TIER_QUOTA_FIELDS, 'speedTestsPerHour'] as const;
 
 export const QUOTA_OVERRIDE_BOUNDS: Record<keyof TierQuotas, { min: number; max: number }> = {
   appStorageBytes: { min: 0, max: 1024 * GB },
   userStorageBytes: { min: 0, max: 1024 * GB },
   maxApps: { min: 0, max: 100000 },
-  maxPats: { min: 0, max: 1000000 }
+  maxPats: { min: 0, max: 1000000 },
+  speedTestsPerHour: { min: 0, max: 1000 }
 };
 
 export const sanitizeQuotaOverrides = (input: unknown): { ok: true; overrides: QuotaOverrides | null } | { ok: false; error: string } => {
@@ -262,7 +270,7 @@ export const sanitizeTierQuotas = (input: unknown): { ok: true; quotas: TierQuot
   const sanitized = sanitizeQuotaOverrides(input);
   if (sanitized.ok === false) return sanitized;
   const quotas = sanitized.overrides;
-  if (!quotas || QUOTA_OVERRIDE_FIELDS.some((field) => !(field in quotas))) {
+  if (!quotas || REQUIRED_TIER_QUOTA_FIELDS.some((field) => !(field in quotas))) {
     return { ok: false, error: 'quotas must include appStorageBytes, userStorageBytes, maxApps, and maxPats' };
   }
   return { ok: true, quotas: quotas as TierQuotas };
@@ -279,3 +287,15 @@ export const resolveQuotas = (base: TierQuotas, overrides?: QuotaOverrides | nul
 
 export const resolveTierQuotas = (tierId: SubscriptionTierId, overrides?: QuotaOverrides | null): TierQuotas =>
   resolveQuotas(subscriptionTierById(tierId).quotas, overrides);
+
+// New entitlements must also work for historical, pinned assignments without
+// rewriting their pricing/storage history. Explicit revision/admin values win.
+export const speedTestsPerHour = (tierId: string, quotas: Pick<TierQuotas, 'speedTestsPerHour'>): number | null => {
+  const value = quotas.speedTestsPerHour;
+  if (value === null) return null;
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= 1000) return value;
+  if (value !== undefined) return 0; // malformed entitlement never grants access
+  return subscriptionTierById(tierId).quotas.speedTestsPerHour ?? null;
+};
+
+export const speedTestAllowanceLabel = (allowance: number | null): string => (allowance === null ? 'Unlimited' : `${allowance} tests / hour`);

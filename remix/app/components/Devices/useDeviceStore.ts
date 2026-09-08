@@ -389,12 +389,17 @@ export const publicDeviceToSummary = (device: PublicDevice): DeviceSummary => {
 		transportStatus: device.online ? 'online' : 'offline',
 		revision,
 		lastSeenAt: device.lastSeenAt,
+		lastSyncAt: device.lastSyncAt,
+		syncStatus: device.syncStatus,
+		watchHealth: device.watchHealth,
+		createdThingCount: device.createdThingCount,
+		recentThings: device.recentThings,
 		appVersion: device.appVersion,
 		system: {
 			model: device.model,
 			osName: device.platform,
 			osVersion: device.osVersion,
-			batteryPercent: device.battery?.level ?? null,
+			batteryPercent: device.watchHealth?.batteryLevel ?? device.battery?.level ?? null,
 			charging: device.battery?.charging ?? null
 		},
 		capabilities: runtimeCapabilities(allCapabilities),

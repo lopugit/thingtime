@@ -1,15 +1,69 @@
 # TESTING.md — per-area manual test checklists
 
+- Thing detail back links accept only `things`, `actions`, or `feed` as `from`.
+  Unknown values and prototype keys such as `toString` must display a working
+  Back to feed link on desktop and mobile.
+
+- Rich-text editors initialize when a browser omits `crypto.randomUUID`.
+  Multiple mounted editors of the same saved block keep independent tune IDs;
+  plain registry identifiers are never treated as credentials.
+
+- At 390px and desktop widths, the Lopu message input stays inside its composer
+  card after typing and resizing. Measure the textarea and card bounds, not
+  just document width (a clipped ancestor can hide overflow). Open/close chat
+  settings and inspect the bottom controls after scrolling.
+
+- Combined Watch/Lopu/Builder release: build both embedded native targets;
+  iOS-only ActivityKit source must not compile into watchOS. Nested Builder
+  `ttArg` and `ttFormat` data must share the existing output-size budget and
+  must not execute template-shaped action result data. Confirm logout clears
+  Watch history, passkeys, Builder source/detail data and Lopu chat caches.
+
+- Signed-out first paint: `/`, `/builder/demos`, and `/watch/pair` must render
+  without a Watch approval banner exception. Account switching and temporary
+  sessions never show another account's cached Watch requests; expired and
+  dismissed requests stay hidden.
+
+- Watch release integration: the Nitro health contract smoke accepts documented
+  `degraded` / `migration-required` responses, but rejects contradictory readiness
+  or unavailable storage. Separately require `ready` on the release deployment;
+  passing the contract smoke alone is not proof that uploads are enabled.
+
 Run the checklist for every area a PR touches, in a live browser against the
 local dev stack (`npm run web-pms`, worktree stacks get their own port trio —
 see `AI_ALL.md`). Each list is the distilled regression history of that area:
 every line exists because it broke once. Add a line whenever a new bug class
 is fixed, and cite the checklist you ran in the PR description.
 
+## Native Commander network speed test
+
+- [ ] Account allowances: Free 4/hour, Plus 20/hour, Pro/PAYG unlimited by
+      default; admin overrides and historical tier snapshots remain effective.
+      Back-to-back tests work within the budget. Changing IP or session never
+      resets an account budget; different accounts do not share an IP quota.
+- [ ] Invalid/revoked or wrong-origin account tokens fail without guest fallback.
+      A selected locked account must prompt sign-in/unlock, not run anonymously.
+- [ ] A quota-denied zero-sample retry preserves the previous speed readings.
+      Switching accounts clears prior-account results and rejects stale replies.
+- [ ] Settings → Account → Compare account features shows the live tier
+      allowances at desktop/mobile widths. Admin tier and subscription editors
+      expose speedTestsPerHour, with null for unlimited and 0 for disabled.
+
+- [ ] Activity: run one 17.6 MiB each-way test against the deployed origin;
+      confirm 5/5 download and upload samples, no 400/413, and no upload request
+      exceeds 2 MiB. Wait through a latency refresh: both speed values remain.
+- [ ] A streamed upload without Content-Length succeeds only for the exact
+      allowlisted byte count; short, oversized, and false-length bodies fail.
+- [ ] Interrupt a direction or hit its cooldown: completed measurements remain
+      visible, partial results are labelled, and Retry-After is actionable.
+      Opening a second Commander window must not duplicate an in-flight test.
+- [ ] Both capability manifests advertise download 1.1.0 and upload 2.1.0; incompatible/missing
+      capabilities are rejected before transferring the speed-test payloads.
+
 ## ChatGPT / Codex MCP connector
 
 - [ ] `GET /.well-known/oauth-protected-resource`, `GET
-    /.well-known/oauth-authorization-server`, and the Thingtime capability
+      /.well-known/oauth-authorization-server`, and the Thingtime capability
       manifest return the deployed HTTPS origin and the MCP path exactly.
 - [ ] From ChatGPT Developer mode, add the deployed MCP URL. The authorization
       page works at desktop and a 390px mobile viewport, requires `resource`,
@@ -99,6 +153,74 @@ is fixed, and cite the checklist you ran in the PR description.
       contains only operation, path, status, and outcome—never body, token, or
       secret value. Generic endpoints cannot claim create-only semantics.
 
+## Lopu voice + personal Secure Vault
+
+- [ ] Open `/lopu/voice` at desktop and 390px mobile widths; scroll the
+      conversation from top to bottom, open and close the gear before and
+      during a session, and confirm the header, the gear popover, messages
+      and the voice deck never clip, overlap, or cause horizontal page
+      scrolling.
+- [ ] Add a disposable provider in **Settings → Secure Vault**, grouped under a
+      test environment. Refresh and verify only metadata returns to the
+      browser—never plaintext, masked text, IV, tag, or ciphertext. Updating
+      without a new token retains the stored token; deleting removes it.
+- [ ] Select that provider for the chat (the gear's provider select or the
+      composer's picker). Confirm continuous listening pauses while the
+      provider responds and while Lopu speaks, then resumes without hearing
+      Lopu's own voice. Toggle **Spoken replies** before, during, and after
+      the session and verify replies render, and speak only while it is on.
+- [ ] Verify a provider connection's model is optional. The Secure Vault form
+      offers the kind's catalog models (realtime voice models marked) plus a
+      **Custom model id…** entry and shows the chosen model in the stored
+      metadata line; a custom compatible host requires a model id. A
+      connection saved without a model runs on its kind's first catalog model
+      (`GET /api/v1/ai/models` → `vaultProviders[].model`), and a turn's meta
+      names that model. Reasoning and speed are chosen per chat in the
+      composer, never stored in Secure Vault.
+- [ ] Exercise **Direct voice**. With no provider chosen, a catalog model, a
+      provider whose kind has no realtime model (any non-xAI connection), or
+      Transcribe mode on, the gear's switch is disabled and its hint reads the
+      reason in one line; Settings → Lopu 🦄 mirrors the switch. With an xAI
+      connection the switch enables, a realtime-model select appears
+      (Grok Voice / Grok Voice Think Fast 2.0), and starting the mic mints a
+      credential through `/voice/session` — the network log shows only the
+      ephemeral token and `wss://api.x.ai/v1/realtime?model=…`, never the
+      stored key — then streams PCM both ways; the provider's transcripts and
+      reply text land in the conversation list, Spoken replies off suppresses
+      playback, and Stop closes the socket. When the mint is refused (vault
+      key missing, connection not yours) a Lopu toast says why and device
+      transcription runs.
+- [ ] Turn on **Transcribe mode**, speak several final utterances, and verify
+      each creates a separately numbered, timestamped, owner-private Thing page
+      and streams back into chat as a quote with a working page link. Provider
+      selection and Direct voice stay disabled and no provider request occurs
+      in this mode.
+- [ ] Reject unauthenticated vault/voice/session requests, non-JSON bodies
+      (415), guest sessions (403), oversized bodies, missing provider tokens,
+      non-HTTPS or private/local endpoints, unallowlisted custom hosts,
+      private DNS resolutions, redirects, oversized provider responses, and
+      rate-limit-store failures. Error responses must not echo provider
+      bodies or credentials; `/voice/session` refusals carry no `session`.
+- [ ] Make the provider answer a **non-JSON rejection** — an HTML or empty-body
+      429/502/504, the shape an edge/CDN returns before the API is reached —
+      for both the voice turn and `/voice/session`. The Lopu toast must name
+      the status ("rejected the request (429)"), never "unreadable response":
+      the status is the only thing telling the user whether to wait, re-key,
+      or pick another model. Covered by `npm run test:lopu`
+      (`app/api/utils/lopu/voice.test.ts`).
+- [ ] In the iOS app, grant microphone and speech access from the user action,
+      start Lopu, lock the device, and verify recognition/replies continue and
+      the Live Activity moves through listening, thinking/transcribing, and
+      speaking. Confirm native reply requests carry only unexpired cookies
+      matching the active Thingtime origin and API path. Stop the session and
+      confirm the microphone, audio session, and Live Activity all end.
+- [ ] In iOS direct voice (`inputMode: provider-audio`), deny Speech
+      Recognition but allow Microphone; the session should still start,
+      stream and play realtime audio under the background audio session,
+      update the Live Activity while locked, post the provider's transcripts
+      into the conversation, and close its WebSocket and player cleanly on
+      Stop.
+
 ## Deployment peer explorer (`/peers`, `/api/v1/admin/peers`)
 
 - [ ] As an administrator, open **Dev → Deployment peers**. Verify the first
@@ -129,6 +251,14 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Passkeys + cross-deployment auto-login
 
+- [ ] TestFlight passkey updates preserve the embedded Watch companion, both production push entitlements, the configured preview origin and matching phone/Watch build numbers; the signed phone includes `webcredentials:thingtime.com` and Apple CDN association matches it. Verify saved-key sign-in on a real device.
+- [ ] Slow login-options response + immediate passkey click or navigation: the old autofill request never opens a sheet or submits an assertion. Repeat with account-switcher login and the auto-login popup.
+- [ ] With 1Password enabled, click passkey sign-in, then Cancel: the button becomes usable immediately even if the extension ignores AbortSignal. Retry once; navigate away and verify no stale sign-in completes. Check desktop and 390px mobile through the footer.
+- [ ] Two login tabs can finish independently. Replaying a saved challenge cookie and zero-counter assertion fails. Wrong origin, missing UV and mismatched userHandle all fail.
+- [ ] Switching accounts in Security immediately shows only that account’s cached passkeys; failed list fetches show a retry action, not a misleading empty list.
+- [ ] Both capability manifests advertise passkey register/options and login/options at 1.1.0; the client rejects missing, older, wrong-origin or breaking contracts.
+- [ ] iOS release: the signed app includes `webcredentials:thingtime.com`; the HTTPS AASA response includes its exact application identifier. Verify Face ID sign-in and registration on a physical device after installing the rebuilt signed app. A simulator build alone is not acceptance evidence.
+
 - [ ] Passkey app-link dedupe rides root `uniqueKeys`, never a crystal-path
       unique index: `node scripts/verify-passkeys.mjs` covers it (two data
       things may share one `crystal.linkKey`; the real link still dedupes to
@@ -151,7 +281,7 @@ is fixed, and cite the checklist you ran in the PR description.
       completed Face ID/Touch ID/1Password ceremony must not return a generic
       verification failure.
 - [ ] `node scripts/verify-passkeys.mjs` (from `remix/`, dev stack up) passes
-      49/49 — full software-authenticator ceremony: registration, duplicate
+      every check — full software-authenticator ceremony: registration, duplicate
       409, challenge replay refusals, usernameless login, lastUsed + linked
       apps, revocation blocking login, revoke-before-delete, hint liveness.
 - [ ] Login page: "Sign in with a passkey 🔑" completes a login (platform
@@ -502,6 +632,10 @@ email whose link points at the attacker.
       reaches success, and the comment links
       `https://pr-<number>.previews.dev.thingtime.com`; verify the deployed SHA again
       after the build completes.
+- [ ] Open the deployed PR preview's footer and confirm it shows the exact PR
+      branch plus the complete 40-character head SHA, with each linking to the
+      matching GitHub tree/commit. Confirm `/api/root-data` reports the same
+      values and neither label falls back to `git/unknown`.
 - [ ] For an exact SHA that already has a READY generic Preview, run the
       controller again and confirm its `develop` Custom Environment deployment
       builds instead of ending `CANCELED`; the PR alias, GitHub Deployment, and
@@ -586,6 +720,188 @@ email whose link points at the attacker.
       back in portrait and landscape. Nested deployment rows remain inside
       their branch cards, disclosure controls stay tappable, and vertical
       scrolling never triggers the horizontal drawer-close gesture.
+
+## Apple Watch notifications
+
+- [ ] Code input: four evenly spaced squares backed by one native input. Paste
+      a complete PIN with Cmd/Ctrl+V into any square (including replacing a filled
+      PIN), test autofill, select-all, arrow keys and backspace, and preserve
+      leading zeroes. Pasting an older eight-character code expands all eight
+      squares; no paste/autofill may get trapped in the first square. Check both
+      desktop and 390px layouts, focus ring, keyboard submission and accessible label.
+- [ ] With 1Password installed, focus the approval input and fill all digits.
+      Its saved-password badge must not cover the last square. Native
+      `one-time-code` autofill and Cmd/Ctrl+V must still fill the complete code.
+- [ ] Start with **Paired iPhone** selected, open the signed-in companion, and
+      verify another session of the same account/domain shows the exact prefilled
+      Watch/device/PIN. No credential may be claimed before explicit approval.
+      A different account must not list, look up, approve, or rebind the request.
+- [ ] Repeat using **Username** (including `@username`, a typo and wrong domain)
+      and **Enter code**. A `/pair/1234` link preserves all four digits, including
+      leading zeroes, through login. Check the five-minute expiry, unique active
+      PIN reservation, and five guesses/account limit with a visible retry error.
+- [ ] Verify quick-approval cards at 390px and desktop widths through the full
+      scroll range, dismiss with **Not now**, and approve another request. Account
+      switching/sign-out must never flash the previous account's request.
+- [ ] Open `/watch/pair` without query parameters on desktop and a 390px phone.
+      Sign in, enter a fresh Watch code, review the matching device/account, and
+      approve. Confirm the Watch claims the credential and downloads notifications;
+      no hidden pairing ID or Watch web browser is required. Invalid, wrong-domain,
+      expired and already-consumed codes must offer recovery without logging secrets.
+- [ ] Leave code approval pending beyond 90 seconds (31 polls), approve, and
+      confirm pairing still completes. Interrupt network access, retry approval,
+      switch domains mid-request, and replace an expired code. Cancelled requests
+      must not restore an old code/account or overwrite the new connection state.
+- [ ] Select an origin without `api.watch-pairing` 1.2.0 and confirm the Watch
+      shows an actionable domain/preview hint rather than a missing-endpoint error.
+- [ ] Pair a fresh Watch directly against both `thingtime.com` and
+      `dev.thingtime.com` once their manifests support the feature. Approve the four-digit code while
+      signed in, confirm the Watch receives only its device credential, and
+      verify notification refresh/read state works with the iPhone app closed.
+      A second account must remain independently selectable after relaunch.
+- [ ] On the smallest supported Watch, confirm the signed-in header shows the
+      selected account's avatar, **@username**, domain, and live status. Scroll
+      through the whole screen, tap the toolbar refresh and **Check & refresh**,
+      and verify checking/success/error states plus Last check and Last live
+      reply remain readable without clipping.
+- [ ] Open Settings, switch between production and development accounts, add
+      another account, and remove only the selected account. Confirm no account
+      reuses another origin's credential, snapshots, upload outbox, or inbox.
+- [ ] Under **Add private Thing**, confirm **Record** is the default first
+      favourite and that Settings can enable/disable the available favourites
+      while preserving their stable system order and the main Add action.
+- [ ] Create a private audio or photo Thing directly from the Watch, interrupt
+      the upload at each stage, and confirm retry uses the same request/Thing
+      identity without duplicate Things. The created record remains owner-only
+      and the Watch retains its local source until completion.
+- [ ] In `/things`, open the paired Apple Watch device. Confirm last sync,
+      status, battery/low-power health, last error, created-Thing count, and the
+      owner-only recent Things created by that exact Watch update after refresh.
+- [ ] On a signed-in paired Watch, confirm the connection section identifies
+      the active account as **@username**, keeps the current connection state
+      visible, and always shows **Check & refresh**. Tap it and confirm the
+      control changes to **Checking…**, then returns with updated **Last check**
+      and **Last reply** times without exposing a reusable session credential.
+- [ ] Regression class (2026-09): install a TestFlight build configured for a
+      preview over an older install that implicitly retained `thingtime.com`.
+      Confirm the iPhone migrates to the configured origin, the Watch displays
+      that origin plus matching iPhone/Watch build numbers, and notification
+      history downloads. Then explicitly select production and confirm a
+      relaunch preserves that deliberate choice.
+- [ ] Update only the iPhone app while leaving an older companion on the Watch.
+      Confirm the Watch connection section displays both build numbers, warns
+      that they differ, and clears the warning after the Watch app updates.
+
+- [ ] Launch the Watch app with the paired iPhone app closed, then open
+      Thingtime on iPhone. Confirm the Watch visibly moves through **Waiting for
+      iPhone** / **Checking Thingtime sign-in** to **Connected to iPhone**,
+      displays the last reply time, and reconnects without exposing or copying a
+      reusable web session credential. Repeat while signed out and confirm it
+      settles on **Sign in on iPhone**.
+- [ ] Leave the iPhone unreachable through the Watch's bounded 2, 5, and
+      10-second retry sequence. Confirm loading stops with an actionable status,
+      **Retry connection** starts a fresh attempt, and opening the iPhone later
+      consumes the safely queued refresh without duplicate work.
+- [ ] On a signed-in paired Watch, confirm the inbox initially shows the newest
+      10 notifications. Tap **Load previous 10** repeatedly and verify each page
+      appends in newest-first order without duplicates or gaps, including when
+      two notifications have the same `createdAt` timestamp.
+- [ ] Open **Notification history**, choose **One date**, and fetch the first
+      10. Confirm only notifications inside that local calendar day appear.
+      Switch to **Date range**, choose inclusive From and Through dates, and
+      confirm **Fetch 10 more** pages through that full period without crossing
+      either day boundary.
+- [ ] Tap **Download whole period**, background or close both apps while the
+      transfer completes, then reopen the Watch app offline. Confirm the archive
+      persists, initially reveals 10 rows, and **Show 10 more** reveals the rest
+      without network access. Mark an archived row read, relaunch, and confirm
+      its read state remains saved. The archive must contain no more than the
+      service-retained latest 500 notifications.
+- [ ] Queue both a historical page request and a period download while the
+      iPhone is unreachable, then open the signed-in iPhone app. Confirm each
+      request resumes once, a stale response cannot overwrite a newer selected
+      period, and malformed or metadata-mismatched archive files are rejected.
+
+- [ ] On a signed-in paired Watch, open **Add private Thing**, pick one and five
+      Photos-library screenshots, and record a short audio clip. Confirm every
+      item remains queued across a Watch app relaunch until the iPhone reports
+      success, then appears as a searchable owner-only Thing with exactly one
+      bound attachment and `acl: ["tt:user"]`.
+- [ ] Put the iPhone offline before choosing a Watch screenshot, then restore
+      connectivity and open the signed-in iPhone app. Confirm the same stable
+      request resumes without duplicate attachment Things; repeat while signed
+      out and confirm the Watch explains that Thingtime must be opened and
+      signed in, without losing the queued bytes.
+- [ ] Tap **Record**, deny microphone access, and confirm Apple's
+      native recorder returns safely without crashing. Grant access, save a
+      several-second recording, and confirm the completion callback does not
+      falsely report that Thingtime could not prepare it while the file is still
+      finalizing. Confirm the `.m4a` appears under **Saved recordings**
+      after relaunch. With **Upload after saving** enabled, confirm it queues
+      automatically; disable that preference, save another recording, and
+      confirm it waits for selection in the saved-recording screen.
+- [ ] Open **Saved recordings**, tap one retained Watch recording, and
+      confirm it creates a new private Thing without altering the retained
+      original. Swipe-delete another saved
+      recording and confirm only that on-watch copy disappears. Confirm the
+      explanatory copy does not claim third-party access to Apple's sandboxed
+      Voice Memos library and directs existing Watch Voice Memos to the synced
+      iPhone Thingtime upload flow.
+- [ ] Against an origin missing or breaking any required attachment/Things
+      capability, confirm the iPhone fails closed before reserving storage and
+      the Watch shows the compatibility error. Verify normal uploads use the
+      active WebView origin and never copy its session credential to watchOS.
+- [ ] Regression class (2026-09): `WCSessionFile` is temporary on receipt. Kill
+      the iPhone app immediately after delivery and confirm the inbox copy still
+      resumes on next launch; the Watch must retain its original until the
+      private Thing creation result arrives.
+
+- [ ] Regression class (2026-09): build the signed iPhone + Watch IPA with
+      Xcode 26.2, verify the locally exported IPA, and upload the same archive
+      through `xcodebuild -exportArchive` with `destination: upload` and the App
+      Store Connect API key. Confirm App Store Connect accepts the upload
+      without relying on Xcode 26 `altool`, which can report a platform error
+      while incorrectly exiting with status 0.
+- [ ] Regression class (2026-09): inspect the exported IPA and confirm the
+      companion watchOS app is under `Payload/Thingtime.app/Watch/`, not
+      `PlugIns/`; App Store Connect rejects the latter as an invalid directory.
+- [ ] With an iPhone paired to an Apple Watch, open Thingtime on the iPhone and
+      sign in. Launch the watch app and confirm it leaves “Pair Thingtime” without
+      asking for a password or exposing a session credential on the watch.
+- [ ] Tap Enable alerts on the watch, approve the system prompt, relaunch both
+      apps, and confirm the iPhone and watch APNs registrations appear through
+      `/api/v1/notifications/devices` without either token appearing in the JSON
+      response or generic Thing APIs.
+- [ ] From a second account, create a friend request, follow, comment, reply,
+      reaction, share, and mention. Confirm the watch alert names the actor, the
+      inbox refreshes, the unread count matches Thingtime, and tapping an unread
+      row marks that same notification read on the phone/web inbox.
+- [ ] Send the same payload to the paired iPhone and watch registration and
+      confirm only one user-visible alert appears. Repeat in Debug/sandbox and a
+      signed Release/production build so each token uses the matching APNs host.
+- [ ] Disable a push type and then the push master in Settings → Notifications;
+      confirm new events of those types produce neither a watch alert nor a
+      watch inbox row. Re-enable them and verify delivery resumes.
+- [ ] Sign out on the paired iPhone and confirm the watch returns to the pairing
+      screen and later activity for that account produces no device alert. The
+      registration may await cleanup, but its revoked/expired session binding
+      must make it immediately ineligible. Then sign in as another account and
+      confirm both device tokens move to the new owner without leaking the prior
+      inbox.
+- [ ] Exercise signed-out, empty, unread/read, denied-alert, long actor name, and
+      two-line preview states on the smallest supported watch. Scroll top to
+      bottom; no row, badge, toolbar item, or permission message clips or overlaps.
+- [ ] Regression class (2026-09): APNs device tokens are variable-length binary
+      values. Register a token longer than 32 bytes and confirm it is accepted,
+      deduplicated by hash, retained only in protected secure storage, and removed
+      after APNs reports `BadDeviceToken`, `Unregistered`, or HTTP 410.
+- [ ] Regression class (2026-09): a device row is keyed by token alone, so
+      re-registering must REBIND it to the caller. Sign in, register the device,
+      sign out (revoking that session), sign back in, and re-register the same
+      token: the alert must still arrive. Repeat as a different account on the
+      same device and confirm alerts follow the new owner. Pinning `ownerId` or
+      `targetId` at insert makes both cases permanently undeliverable — the row
+      keeps a dead session id and re-registration cannot heal it.
 
 ## Worktree dependency bootstrap (`remix/scripts/ensure-dependencies.js`)
 
@@ -1083,6 +1399,62 @@ email whose link points at the attacker.
       Editor section still lists/saves/restores layouts (embedded composer
       editors must never appear there).
 
+## Editor.js rich text styles
+
+- [ ] In builder inline/modal editors and the post composer, select paragraph,
+      heading, list/checklist, quote/caption, table-cell and warning text. The
+      palette button opens the same full styling panel for every rich-text field.
+- [ ] Test wheel dragging/keyboard controls, HEX/RGB/RGBA/HSL/HSLA input,
+      transparent colours and highlights, all decorations, font family, and
+      px/em/rem/pt/% sizes with both direct input and minus/plus controls.
+- [ ] Apply, save, reopen, and read the rendered content. Builder HTML round trips
+      retain selected-text styles and block colours, alignment and custom sizes.
+      Changing a substring keeps neighbouring and mixed formatting; Cancel leaves
+      the document unchanged, Reset clears styling, and Undo restores the edit.
+- [ ] At desktop and 390px mobile widths, select text near each viewport edge and
+      scroll top to bottom. The toolbar stays above the selection, wraps within
+      the viewport, and remains usable. Scroll the colour panel to both ends;
+      controls and Save/Cancel stay reachable without horizontal overflow.
+      Hover a desktop toolbar hint then shrink to mobile: hidden hints must not
+      leave a horizontal scrollbar.
+- [ ] Change a styled heading to paragraph, list/checklist or quote. Text colour,
+      size, decoration and alignment carry by default. In Changes, uncheck a
+      carry property and confirm only that whole-block property is omitted.
+- [ ] Open an unstyled colour picker: lightness starts at 50%. Change colour,
+      opacity, size and decoration while watching the actual text. Save keeps
+      the preview; Cancel restores the original without losing the preview events.
+- [ ] Type, style, insert an empty block, check a checklist item, add a table row,
+      convert, move and delete blocks. Undo/Redo buttons and Cmd/Ctrl+Z / Shift+Z
+      restore the complete draft, including unfinished blocks and focus.
+- [ ] Undo twice and type a different edit. Changes retains both futures with
+      their parent events; Restore point revisits either. Revert/reapply a colour
+      event preserves later text/size changes; overlapping field edits display a
+      conflict without overwriting the current document. Expand Changed properties.
+- [ ] Reopen the builder floating editor and toggle inline editing off/on: their
+      session histories remain available. Keep two editors with the same block
+      IDs open; styling one does not change the other's tune registry or focus.
+- [ ] Resize block settings, the style picker and the advanced editor using the
+      corner handle and arrow keys. Move the style picker by its title; resize
+      the viewport and scroll each panel to both ends. Controls remain reachable.
+- [ ] Compare edit/view text bounds with left, centre and right alignment at
+      desktop and mobile widths. There is no reserved toolbar gutter; +/dots
+      float right for left/centre text and left for right text, using clear space
+      beside the text or above the editor. Previous headings and history controls
+      remain visible, including inside the advanced modal.
+- [ ] On physical iOS, repeat selection with the native context menu and keyboard
+      open, including keyboard viewport panning and text near the screen top.
+- [ ] Local regression fixture: `/tests/editor-rich-text.html` under Vite uses the
+      real editor and builder components with ephemeral data and no API writes.
+- [ ] Editor-sink style scrub (`editorJsHtml.ts` `scrubElement`): save a block whose
+      stored html carries raw CSS on a NON-span inline carrier — for example
+      `<b style="position:fixed;inset:0;z-index:99999">` or
+      `<mark style="background-image:url(https://example.invalid/x)">` — then reopen
+      it in the inline and advanced editors. Editor.js renders `data.text` as live
+      innerHTML there without the render-side allowlist, so every element's style
+      must be re-validated through the style-token gate: no fixed-position overlay
+      and no outbound `url()` request on open. Legitimate `<span>` colour/size
+      styles and block-level `text-align` must still survive the round trip.
+
 ## Multi-editor focus (`remix/app/components/Editor/LongTextEditor.tsx`)
 
 - [ ] With the popout open (same path in two editors), click into an
@@ -1139,7 +1511,7 @@ email whose link points at the attacker.
       is contained to the sandbox (native field undo still works).
 - [ ] Global undo/redo shortcut guard (`useThingtimeMachine.tsx` `keyListener`):
       inside the post composer, a comment box, the login form, and any
-      contentEditable (Editor.js block), Cmd/Ctrl+Z performs NATIVE text undo —
+      contentEditable (Editor.js block), Cmd/Ctrl+Z performs the editor's own text/history undo —
       no thingtime state changes. With focus on the page background (no editable
       focused), Cmd/Ctrl+Z undoes and Cmd/Ctrl+Shift+Z REDOES (Shift reports
       `e.key === 'Z'`, so redo was unreachable before this guard normalised
@@ -1180,8 +1552,13 @@ email whose link points at the attacker.
       your own option again REMOVES it. `POST /api/v1/things/vote` returns
       `pollVotes { counts, totalVotes, viewerVote }` matching what renders.
 - [ ] One vote per user per poll survives races: double-tap fast / two tabs —
-      the `things_vote_key_unique` index keeps ONE vote doc per
-      (`crystal.voteKey` = `<pollId>~<userId>`); reloads converge.
+      the protected Binary `voteKey` in `uniqueKeys_1` keeps at most ONE vote
+      doc per (`crystal.voteKey` = `<pollId>~<userId>`); reloads converge. Run
+      `npm --prefix remix run verify:poll-unique-keys` against its explicitly
+      allowed disposable replica set to exercise 16 concurrent real-utility calls.
+- [ ] Poll insert/change/removal leaves the account ledger unchanged (protected
+      engagement is unbilled), including full accounts. Conflicting vote writes
+      return 409 instead of silently reporting an unwritten vote as successful.
 - [ ] Logged out: the poll shows results only (bars + percentages visible,
       no vote recorded); tapping toasts "Log in to vote 🗳️".
 - [ ] A poll on a private/friends-only post can't be voted on by a viewer
@@ -1198,9 +1575,432 @@ email whose link points at the attacker.
 - [ ] Deleting a poll post cascade-deletes its vote things (no orphan `vote`
       docs pointing at the gone poll); vote docs never list as /things rows
       and folder copy skips them like reactions/saves.
-- [ ] A foreign doc squatting the `crystal.voteKey` slot (e.g. a free-form
-      data crystal) makes the vote endpoint answer 409 — never a silent
-      `ok: true` that drops the vote.
+- [ ] A free-form data crystal with the same `voteKey` cannot squat another
+      user's protected vote identity. Generic inputs cannot stamp `uniqueKeys`.
+
+## Subspaces (`remix/app/components/Subspaces/`, `remix/app/api/utils/subspaces/`, `/api/v1/subspaces*`)
+
+- [ ] `/s` lists subspaces newest-first with member counts; search narrows by
+      slug/name; **Mine ⭐** shows only joined ones; **Create ➕** (or
+      `/s?create=1`, the drawer's Subspaces ▸ Create) opens the modal. The
+      slug previews live from the name (`Rainbow Makers` → `rainbow_makers`),
+      reserved words (`all`, `mod`, `create`…) and <3-char slugs are refused,
+      a taken slug answers 409 with a Lopu toast, and success navigates to
+      `/s/<slug>` with the creator as 👑 owner.
+- [ ] `/s/<slug>` renders banner (image or accent gradient) + icon + name +
+      `👥 members` + access badge, the sort tabs (Hot/New/Top/Rising/
+      Controversial; Top/Controversial add a range select), the composer
+      LOCKED to the subspace (chip `s/<slug>`, a Title input above the body,
+      a Flair select when flairs exist), the post column, and the sidebar
+      (About, Rules, Flairs, Moderators, and **Mod tools 🎩** for mods). At
+      375px the sidebar stacks below the posts; nothing scrolls horizontally.
+- [ ] Join/Leave paints instantly (count ±1, button flips) and reverts with a
+      toast on failure; owners see no leave button (API 409s anyway); banned
+      viewers see a 🚫 notice and a disabled button; on a private subspace
+      the button requests instead of joining (see the join-requests bullet).
+- [ ] A post made from the subspace composer shows the `🪐 s/<slug>` chip,
+      the title as an h2, and the flair chip — on `/s/<slug>`, `/feed`,
+      `/post/:id` and the author's profile alike. The feed composer's
+      **🪐 No subspace** select lists joined subspaces; picking one reveals
+      the title + flair controls and the post lands in that subspace.
+- [ ] Posting rules: unknown flair 400, mod-only flair 403 for members,
+      restricted subspace 403 for unapproved posters (✋ hint under the
+      composer), private subspace 403 for non-members; PATCHing
+      `crystal.flairId` re-runs the same gate (author may flair, but not with
+      a mod-only flair). Generic `POST /api/v1/things` with
+      `thingtime: ["subspace"|"subspace-member"|"subspace-modlog"|"subspace-report"|"updown"]`
+      answers 403.
+- [ ] Moderation (··· menu on a subspace post, mods only): Remove opens the
+      **Remove modal** (`remove-modal`: a radio list of the subspace's removal
+      reasons — title + message — then its rules, then Custom; a note field;
+      "Also lock comments 🔒"; "Also ban @author 🚫" with a days input, hidden
+      on your own post) and redacts the post for everyone but the author +
+      mods (body, media, title gone; "🧹 Removed by moderators — <reason>"
+      notice; reason visible to author/mods only) and drops it from every
+      feed. The card paints removed + the reason the instant you confirm and
+      reverts with a toast if the API refuses; lock/ban follow-ups that fail
+      keep the removal and toast on their own. A canned reason stores
+      `title — message · note`; a rule pick is sent as `ruleIndex` and the
+      SERVER composes `Rule N: title — text · note` (both bounded at 900
+      server-side — the note field's `n/max` counter shrinks beside a canned
+      reason / rule so nothing you type is sliced off; a note written under
+      Custom is trimmed to fit when you switch picks). The lazy default pick
+      (first canned reason) only lands while the form is untouched — click
+      Custom or start typing before the rules load and nothing flips under
+      you. "Also ban" sends the SHORT reason (the canned title / `Rule N:
+      title` / your custom text), never the full composed text. The author
+      gets a 🧹 `subspace-post-removed` bell entry ("s/<slug> · <headline>" —
+      the canned title / the rule citation / the free text; bell previews
+      clamp at 140 chars, the full reason is on the post) that opens
+      `/post/:id`; the row — like the 🚫 ban / unban rows — comes from
+      "s/<slug> mods" (actorId = the subspace, no profile link), never the
+      individual moderator, whom only the mod log names; removing your own
+      post rings nobody; a second Remove on an already-removed post (a retry,
+      two mods racing, an API caller) is a no-op: 200, same reason /
+      removedAt, no second mod-log row, no second bell. Approve
+      restores it silently. No `window.prompt`/`confirm` anywhere in the
+      subspace UI. Approve restores it;
+      Pin leads Hot/New with a 📌 badge (max 5); Lock shows 🔒 and makes
+      commenting 423 for everyone but mods — replies to replies included;
+      18+ / Spoiler toggle badges; Flair submenu (lazy-loaded list). Every
+      action lands in the mod log with the actor.
+- [ ] `/s/<slug>/mod` (mods only; others see the 🎩 notice): Queue (newest,
+      removed included, "Removed only" switch); Members (username + action:
+      add/approve/unapprove/kick/make mod/demote, per-row buttons; only the
+      owner can promote/demote/moderate other mods; the owner can't be
+      banned); Ban (per row and Banned → "Ban someone" by username) opens the
+      **Ban modal** (`ban-modal`: reason shown to the user, days — blank =
+      permanent, and a private mod note that lands in the `member.ban` mod-log
+      detail only, never in the user's `banReason` or bell); a banned row
+      leaves the Members list the moment you confirm and comes back if the
+      API refuses (the modal stays open with your text); Banned (unban);
+      Settings (name, description, icon, accent, icon/banner URLs; access +
+      18+ owner-only, disabled for mods); Requests (join + posting-approval
+      queues, see below); Rules (add/reorder/remove, ≤15) + **Removal
+      reasons** (second card: title ≤80 + message ≤500, ids minted from
+      titles on save, ≤20, reorder/remove; a plain member's save 403s, >20 /
+      a 501-char message / duplicate ids 400) — saving rules, reasons or
+      flairs refreshes what the card menu / Remove modal offer; Flairs (emoji/
+      label/color/mods-only, ids minted on save, ≤50); Log (newest first).
+      A banned user cannot post, comment, vote, or (re)join; the ban outlives
+      leaving; a temporary ban expires on its own.
+- [ ] Access: switching to **private** walls `/s/<slug>` for non-members
+      (🔒 empty state, feed 403), hides its posts from the home feed, search,
+      trending, RSS and direct `/post/:id` reads for non-members, while
+      members and mods keep seeing them; outsiders **request to join** and a
+      mod accepts (or **adds** them by username); switching back to public
+      re-exposes them. **Restricted** keeps reading open but only approved
+      posters/mods post (members may request approval).
+- [ ] Settings → **Subspaces 🪐**: the vote-pill switches hide the ▲▼ pills
+      on posts and/or comments across every mounted card immediately; the
+      default sort applies when a `/s/<slug>` link carries no `?sort=`.
+- [ ] Deleting a post removes its `updown` votes (cascade); a subspace's
+      posts survive it losing a flair (chip simply disappears).
+- [ ] Mod page → Settings → **Danger zone ⚠️** (owner only; mods see a
+      one-line "up to its owner" note): **Transfer ownership** takes a
+      username, opens a confirm modal, and on success the crown moves (the
+      old owner's owner-only controls dim instantly, `viewer.role` becomes
+      `moderator`, the Lopu toast names the new owner, the new owner gets a
+      🎩 `subspace-role` bell entry "s/<slug> · you are now the owner 👑"
+      that deep-links to `/s/<slug>`); the API refuses non-owners (403),
+      yourself (400), non-members / unknown users (404) and banned members
+      (403), and the previous owner can now Leave. While the transfer is in
+      flight the Danger zone stays mounted and merely dims (the confirm
+      modal keeps its spinner); a failed transfer (typo'd username → 404)
+      puts the crown straight back with the username still typed. Two
+      transfers racing from the same owner (double-click, two tabs, two API
+      clients) commit at most once — the loser answers 409 and the roster
+      never shows two crowns. **Delete subspace** opens a modal whose red
+      button arms only once `s/<slug>` is retyped (prefix and case
+      forgiven); success navigates to `/s` with a toast counting released
+      posts (and how many stay private to their authors) + removed
+      memberships, `/s/<slug>` shows "doesn't exist" (its cached copy is
+      evicted, never repainted), members/mod log are gone, and every former
+      post still opens on `/post/:id` as a plain post (no subspace chip,
+      flair or mod state; title kept). Posts of a **private** subspace and
+      posts the mods had **removed** become author-only private posts (404
+      for everyone else, never back on public feeds) — the owner's click
+      never publishes what an author never chose to publish; rich
+      post+comment things pointing at the subspace are released the same
+      way. The slug is **held** (a `subspace-tombstone` row keeps its
+      uniqueKey): anyone else gets 409 "held" for 30 days while the previous
+      owner may re-found it at once, and `/s/<slug>` stays 404 meanwhile.
+      Moderators (403), a wrong `confirmSlug` (400), a delete that lost a
+      race with a transfer (409) and a subspace with more posts than one
+      call releases (409, doc intact — run it again) are refused; former
+      mods get a "s/<slug> · was deleted by its owner 🗑️" bell entry.
+- [ ] Join requests (private) + posting-approval requests (restricted):
+      on a **private** `/s/<slug>` the header button reads **Request to
+      join 🔒** → paints **Requested ✓ · cancel** instantly (the count does
+      not move — a request is not a membership: feed 403, `mine=1` empty,
+      posting 403, transfer-to 404), toast "Asked to join s/<slug> 🙋";
+      clicking again cancels (`/leave`, row gone). Directory cards read
+      **Request 🔒** / **Requested ✓**. Mods get a 🙋 `subspace-join-request`
+      bell entry ("s/<slug> · wants to join"), a numeric badge on **Mod
+      tools 🎩** (links straight to the Requests tab) and a **Requests** tab
+      (badge = join + approval requests) with Accept ✓ / Deny per row — the
+      row leaves and the badge drops optimistically, both come back on
+      failure. Accept → member (🎉 `subspace-join-accepted` bell entry,
+      modlog `member.accept`); Deny drops the row (modlog `member.deny`,
+      optional reason) and the user may ask again; a mod's **Add member**
+      on a requester accepts too; banning a requester removes the request.
+      In a **restricted** subspace an unapproved member sees "✋ Only
+      approved posters can post here" + **Request posting approval ✋** →
+      **Approval requested ✓** (disabled); mods get "s/<slug> · wants to
+      post", the request shows in the Requests tab's second card and as
+      "✋ asked to post" on the Members row; Approve grants posting and clears
+      it, Deny / Unapprove clear it; asking as a non-member (403), for
+      someone else (403), when already able to post (400) or in a public /
+      private subspace (400) is refused. `members?pending=1` /
+      `?approvalRequests=1` are 403 for non-mods; `memberCount` and the
+      member list never include pending rows; `viewer.pending` /
+      `viewer.approvalRequested` ride every subspace projection and mods
+      get `pendingCount` / `approvalRequestCount` on the detail.
+- [ ] Request edge cases (S2 review): the server's posting gate IS
+      `viewer.canPost` (`canPostIn`) — kicking an approved poster of a
+      restricted subspace clears `approved`, so `POST /api/v1/things` answers
+      403 for them and a rejoin does not restore approval; a private
+      re-request starts from a clean row (never approved); a post card's
+      `subspace.viewerRole` is `null` for anyone who is not an active member
+      (kicked, pending). A pending join request takes only Accept / Deny /
+      Add / Ban / Make mod: approve, unapprove and demote answer 400 ("accept
+      the join request first"), kick answers 404, and the requester never
+      gets a stray "no longer a moderator" bell. Accept / Deny / Add on a
+      request that was cancelled meanwhile answer 409 ("withdrawn — reload
+      the queue"; the Requests tab refreshes instead of restoring the row)
+      and write no `member.accept` log / 🎉 bell — a cancelled request
+      answers 404 outright. Switching a private subspace to public or
+      restricted activates every open join request (requesters become
+      members, get a "s/<slug> · opened up — your request to join went
+      through 🎉" bell; modlog `settings.update` detail `acceptedRequests`);
+      switching away from restricted clears open posting-approval requests.
+      A member whose temporary ban has expired can request posting approval
+      and the request shows in the queue + count (the row heals). A request
+      cancelled and filed again (`/join` → `/leave` → `/join`) does not
+      ring the mods again while their earlier 🙋 bell is unread (it rings
+      once more after they read it); `/join` has its own rate key
+      (`subspaces.join`, 20/min → 429).
+- [ ] User flairs 🏷️: Mod page → Flairs → **User flairs** card (templates
+      with emoji/label/color/mods-only, ids minted on save, ≤50; switches
+      "Members pick their own flair" (default on) and "Members may type their
+      own text" (default off; ≤40 chars)); any moderator may save it. On
+      `/s/<slug>` an active member sees the sidebar **Your flair** card:
+      template pills (mod-only ones 🎩 only for mods; the active one shows ✓
+      and clicking it again takes it off), a custom-text input when allowed,
+      and **Take it off ✕** — the pick paints instantly on the card, the
+      header state and every post/comment of theirs on the page, and reverts
+      with a toast on failure. The chip (`data-testid="author-flair"`)
+      appears right after the author name on post cards, comment rows (all
+      shipped levels), the shared-post sub-card and the mod page's member
+      rows — only inside subspaces (`authorFlair` is null elsewhere), and
+      only while the author is an active member (a pending wearer's chip is
+      hidden; a kick or ban STRIPS the pick — a rejoin / unban wears nothing
+      until it is picked or granted again — and demoting a moderator strips
+      a mod-only pick while ordinary ones stay; the `member.remove` /
+      `member.ban` / `member.role` mod-log detail reads
+      `userFlairCleared: true`). Renaming a template updates every wearer's
+      chip — on the post page AND on a comment's own `/post/<commentId>`
+      drill-down; deleting one keeps their snapshot. Mod page → Members →
+      **Set flair** opens a Chakra modal (template select incl. 🎩 mod-only
+      ones / Custom text… + emoji / No flair; a worn template the mods
+      deleted since opens as editable custom text with a "removed" hint;
+      Save waits while another member action is saving, and the modal stays
+      open with the typed text when the API refuses) — a mod may dress
+      anyone, the owner included (who can always override it; the owner's
+      row shows Set flair too), bound by neither switch, and only dressing
+      someone ELSE writes a `member.userFlair` mod-log entry. API walls:
+      anonymous 401, a non-member setting their own 403, someone else's
+      without a mod hat 403, unknown template 400, mod-only template as a
+      member 403, custom text while it is off 403 / over 40 chars 400,
+      self-assign off → a member's pick 403 but clearing still 200, a mod
+      dressing a non-member 404 / a banned user 400. The fresh comment
+      `POST /api/v1/things/comment` answers with already carries
+      `authorFlair` (the root post's subspace, resolved once by the
+      interaction gate); the projection resolves every page in ONE
+      member-row lookup (posts, shared originals, every comment level).
+- [ ] Reports 🚩: on a subspace post (or a comment under one) a logged-in
+      viewer who is neither the author nor a mod finds **Report to
+      moderators 🚩** in the card's ··· menu (`post-report`; comment rows
+      get a small flag icon, `comment-report`); the **Report modal**
+      (`report-modal`) lists the subspace's rules (Rule N: title — the first
+      one preselected while the form is untouched) + Other and a note (≤500).
+      Confirming closes the modal and toasts "Reported — thanks, the mods will
+      look 🚩" at once (optimistic — a refusal toasts on its own); a comment
+      report lands on the ROOT post (the queue row says "(a comment ↗)").
+      Reporting the same post again refreshes your row (`updated: true`,
+      still one report) and does not ring the mods again; after the mods
+      settled it a new report re-opens it and rings again. Mods get a 🚩
+      `subspace-report` bell entry ("s/<slug> · <reason>", from the reporter,
+      opens `/post/:id` — deduped against their unread bell), a `🚩 N` badge
+      in the post's subspace line (`post-report-badge`, links to the Reports
+      tab — only mods ever see `subspaceMod.reportCount`), the count on
+      **Mod tools 🎩** (requests + reports) and the mod page **Reports** tab
+      (badge = open reports): each reported post renders as its card with
+      the reasons tally (×N), the reporters (name · reason · note · when,
+      ≤20 listed, "…and N more"), **Remove 🧹** (the Remove modal — the
+      removal settles the reports: `post.remove` mod-log detail
+      `resolvedReports`) and **Dismiss ✓** (the post stays; mod-log
+      `report.dismiss` with `detail.count`); both paint first (group leaves,
+      badge drops) and come back on failure (a 404 = settled meanwhile →
+      the queue refreshes). The **Resolved** toggle shows how each post was
+      settled (Removed 🧹 / Approved ✅ / Dismissed ✓); approve settles open
+      reports as `approved` too. A post the author deletes takes its reports
+      with it. API walls: anonymous 401, no reason 400, a 501-char note 400,
+      an unknown OR invisible post 404 (never 400 — existence is not
+      disclosed), a post outside any subspace 400, a banned reporter 403;
+      `GET /api/v1/subspaces/reports` 401 / 403 for non-mods, dismiss 401 /
+      403 / 400 (no postId, bad action) / 404 (nothing open). Generic
+      `POST /api/v1/things` with `thingtime: ["subspace-report"]` answers
+      403. Rate key `subspaces.report` (30/min).
+      S5 review fixes: a post the mods already removed offers no 🚩 (card
+      menu and comment rows) and `/report` answers 409 for it — no row, no
+      bell; in a PRIVATE subspace a stranger, a pending requester and a
+      banned member get 404 for the post and its comments (an active member
+      200); a report row is the reporter's own private thing (generic
+      `GET /things?id=` 200 for them, 404 for everyone else); a post that
+      MOVED to another subspace keeps its open rows dismissable in the old
+      queue without a slug, and the reporter's next report re-files in the
+      new subspace and rings its mods; deleting a reported COMMENT deletes
+      the rows that flagged it (the post's other reports stay). Reports tab:
+      the badge / `Open · N` drop by the group's ROWS (not one per group)
+      and reconcile from the server after Remove 🧹, a removal or approval
+      through the card's own ··· menu drops the group too, and flipping
+      Open / Resolved paints the list it already knows while the fresh page
+      loads — a slow page can never land under the other heading.
+- [ ] Discovery 🪐 (S6): `/feed` shows a **🪐 My subspaces** chip beside
+      the algorithm menu — on, the eyebrow reads "Your subspaces 🪐 · …" and
+      the column holds ONLY posts from subspaces the viewer is an ACTIVE
+      member of (`GET /api/v1/things/feed?scope=subspaces`; a pending join
+      request is not a membership; removed posts and other people's private
+      subspaces stay out; a member of no subspace sees the "join a few on
+      /s" empty state, never the whole feed). The choice persists per
+      browser (`tt-feed-scope`) and paints on first render; logging out
+      drops back to all; a guest tapping the chip gets a "Log in" Lopu toast;
+      the chip rests (disabled) while Filters ▸ Advanced is applied.
+      `?scope=anything-else` answers 400. `/s` has sort chips **New ✨ /
+      Most members 👥 / Most active 🔥** (`?sort=` shareable; New is the
+      cursor walk, the other two rank the newest 200 matching subspaces in
+      memory — most members / most live posts in the last 7 days — and page
+      by offset; Most active rows read "· N posts this week"; `?sort=bogus`
+      → 400; q / Mine narrow every sort). `/explore` opens with a
+      **Popular subspaces 🪐** strip (top 8 by members, compact cards,
+      "All subspaces →" to `/s?sort=members`) that scrolls inside its own
+      box at 375px — no page-level horizontal scroll — and is simply absent
+      while there are no subspaces. `/search` with a non-empty query shows
+      a **Subspaces 🪐** section (slug/name matches, first 6, compact cards)
+      above People and the post results; a query with no matching subspace
+      shows no section; `search.ts` is untouched.
+- [ ] Discovery — S6 review fixes: `GET /api/v1/subspaces` is rate-limited
+      like the other public reads (`subspaces.list`, 120/min; anonymous
+      callers key by IP → 429 with `Retry-After` past the budget). Logged-out
+      clients (the `/explore` strip, `/s`, the `/search` section) send
+      `anon=1` and the response carries `Cache-Control: public, s-maxage=60,
+      stale-while-revalidate=300` + `Vary: Authorization`; a cookie-less read
+      WITHOUT the flag carries no public header, an authed read is
+      `private, no-store`, `anon=1` with a session cookie still answers the
+      logged-out view (cookies are ignored on the cacheable URL), and
+      `anon=1&mine=1` → 401. A private subspace's activity is its members'
+      business: under **Most active 🔥** a private subspace the viewer is
+      not an ACTIVE member of ranks at zero and its row shows no "· N posts
+      this week" (a guest, a logged-in stranger or a pending requester never
+      learns its weekly post count — the same fence its feed applies); its
+      members and mods still see it ranked by its real activity with the
+      count. Member counts stay public on every sort. Verify section R.
+- [ ] Completeness sweep (S7) — comment sort: open a subspace post with a
+      few voted comments; the comments panel shows a tiny **Sort 💬 ▾** menu
+      (`data-testid="comment-sort"`, offered on subspace posts with more than
+      one comment). Pick **▲ Top**: the visible comments re-order INSTANTLY
+      (highest net score first, a tie older-first), then the server page lands
+      (`GET /api/v1/things?id=&commentSort=top` — the true top 20 of the
+      post, not the newest 20 re-shuffled) and nothing jumps; **✨ New** /
+      **🕰️ Old** order by age; the reveal control reads "Show more comments"
+      and appends BELOW under a sort (the default page keeps "Show previous
+      comments" revealing upwards); nested replies re-order among the replies
+      already shipped, and opening or expanding a thread under a sort reads
+      that comment's own sorted page (`GET ?id=<comment>&commentSort=` — the
+      Network tab shows it; the reveal reads "Show more replies") so deeper
+      levels keep the card's order; a fresh comment you post is ALWAYS on
+      screen — under ▲ Top / 🕰️ Old, where a new zero-score comment sorts
+      below the fold, it stays pinned at the end of the shown list right
+      above the composer (the count grows by one, the row is there); pick a
+      sort while a comment is still sending and it is never dropped (the
+      page lands, your comment stays, its ack still swaps in); a refused
+      sort read (offline) toasts AND the menu reverts to the previous pick;
+      `commentSort=bogus` → 400 and the response echoes `commentSort`
+      (null on the default read). Guest nudges: logged out, every subspace
+      action toasts a Lopu login nudge instead of doing nothing — Join /
+      Request to join, ▲▼ votes, react, reply, the ··· menu's **Report to
+      moderators 🚩** (post and the comment rows' flag), and the `/s/<slug>`
+      page shows "🗝️ Log in to post in s/<slug>" + a **Log in to post ✍️**
+      button where members see the composer (a restricted subspace says
+      "log in and join first"). Edge cases (verify section S): deleting a
+      post clears its reports from the open AND resolved queues; banning a
+      pending requester drops the request (pendingCount 0, re-request 403);
+      transfer to a banned (403) / pending (404) / non-member (404) target is
+      refused; a pending requester reads `viewer.canPost false` and the
+      composer's `mine=1` select never lists the pending subspace; a demoted
+      moderator gets 403 from every queue, moderate and dismiss on the very
+      next request; private-subspace posts and mod-removed posts never appear
+      in `GET /api/v1/things/rss` or `/trending` (a public subspace post
+      does syndicate).
+- [ ] Final round-2 sweep (verify section T — the cross-slice invariants no
+      single slice owns): "the mods" a request / report rings are the ACTIVE
+      owner + moderators at emit time — a demoted moderator and a moderator
+      who left get no `subspace-report` / `subspace-join-request` row for
+      anything filed afterwards (the owner still does); an ACTIVE member of a
+      private subspace calling join is a no-op (`joined false, pending
+      false`, never downgraded to a request); the Reports queue pages by
+      cursor (`limit=1` → one group + `nextCursor`, the cursor → the rest, no
+      cursor at the end, `openReportCount` on every page); deleting a
+      subspace takes every `subspace-report` row with it (the reporter's own
+      generic read of the row goes 200 → 404) while the reported posts
+      survive as plain posts; every bell of the family deep-links
+      consistently (post removed / report rows carry `postId = targetId` =
+      the post; role / ban / join request / join accepted rows carry the
+      subspace as `targetId`, no `postId`, and an `s/<slug> ·` preview); and
+      the docs registry ↔ `/api/v1/capabilities` agree across the whole family
+      at the round's final numbers (subspaces 1.5.0 · get 1.4.0 · join /
+      leave / update 1.3.0 · members 1.4.1 · moderate 1.4.0 · feed 1.3.0 ·
+      transfer 1.2.0 · delete 1.1.0 · report / reports 1.0.1 · modlog 1.0.0 ·
+      things 1.4.0 · things-feed 1.4.0 · things-comment / things-user 1.3.0
+      · updown 1.0.0 · notifications-list 1.2.0 · notifications-settings
+      1.1.0) with a `route.v1.*` key for each. `test:rate-limit` pins the
+      `subspaces.write` 60 / `subspaces.join` 20 / `subspaces.report` 30 per
+      minute windows.
+- [ ] Bell 🔔 + Settings → Notifications: six subspace rows (roles 🎩,
+      bans 🚫, join accepted 🎉, posts removed 🧹, join requests 🙋,
+      reports 🚩 — the last two default email OFF). The bell's verb keys off
+      the preview's detail half only (`subspaceNotificationDetail`): a
+      promotion in `s/deleted_scenes` reads "changed your role", a ban in
+      `s/uplifted_minds` reads "banned you" — never "deleted a subspace" /
+      "lifted your ban". Promote/demote rings
+      `subspace-role`, ban/unban rings `subspace-ban`; each row reads
+      "<actor> changed your role in a subspace" with the `s/<slug> · …`
+      preview beneath and clicking it opens `/s/<slug>`. Switching a type off
+      hides its existing rows immediately.
+
+- [ ] At a 375px viewport (owner, member, non-mod member, pending
+      requester and guest): `/s`, `/s/<slug>`, every `/s/<slug>/mod` tab,
+      `/feed` with **🪐 My subspaces** on, `/explore`, `/search?q=` and
+      `/settings` have `scrollWidth === clientWidth`; every post card's action
+      row wraps so the `👁 views` counter sits on its own right-aligned line
+      instead of being clipped by the card edge (the vote pill made the row
+      wider than the card); the Remove / Ban / Report / Flair / Transfer /
+      Delete modal titles wrap clear of the close ✕ (header `paddingRight`),
+      the **Who can post** select (Create modal + mod Settings) shows short
+      `emoji Label` options with the access hint as helper text beneath it
+      rather than a clipped two-line option, and the mod page header keeps
+      the subspace name on one line with `← Back to s/<slug>` dropping to its
+      own right-aligned line.
+
+## Up/down votes (`remix/app/api/utils/things/updown.ts`, `remix/app/components/Feed/UpdownControl.tsx`)
+
+- [ ] Every post and comment card shows the ▲ score ▼ pill beside the
+      react button (native emoji reactions are untouched — react, multi-react
+      and the picker keep working on the same card). Tap ▲: the arrow fills,
+      score +1 INSTANTLY (optimistic), then the server tally reconciles; tap
+      ▲ again → cleared; tap ▼ while ▲ is set → flips (score −2 net, up −1,
+      down +1). Rapid double-taps never double-count (in-flight guard).
+- [ ] `POST /api/v1/things/updown { id, direction }` returns
+      `votes { up, down, score, viewerVote }` matching the card; `direction:
+      null` clears; `"sideways"` 400s; anonymous 401; a subspace/data thing id
+      400s (only posts/comments are votable); a not-visible post 404s.
+- [ ] One vote per user per target survives races (root `uniqueKeys`
+      `updownKey:<targetId>~<userId>`): two tabs voting the same post converge
+      on one doc; the 409 "vote slot blocked" path never returns a silent ok.
+- [ ] Logged out: pills show the score, tapping toasts "Log in to vote 🔼".
+- [ ] Votes on a comment ride `comments[].votes` in every projection and the
+      comment pill is compact; a shared post's nested original shows the
+      live score read-only.
+- [ ] Banned subspace members get 403 voting on that subspace's posts AND
+      their comments (root-post walk); votes elsewhere keep working.
+- [ ] Vote endpoint failure (devtools: fail `/api/v1/things/updown` once)
+      reverts the pill to the pre-tap tally with a Lopu error toast.
+- [ ] Subspace sorts use the relational tallies: Top (with range) orders by
+      score, Controversial needs both sides and peaks when split, Rising
+      favours fresh score, Hot is time-weighted (a two-day-old high scorer
+      falls behind fresh content), New is chronological with pins first;
+      `scripts/verify-subspaces.mjs` walks all of this against a live stack.
 
 ## Thing context menu (`remix/app/components/Thingtime/ContextMenu/`)
 
@@ -1338,6 +2138,25 @@ email whose link points at the attacker.
       cancels without changes. Shares edit their caption only (the nested
       original stays visible below the textarea).
 
+## Lopu toast placement (`remix/app/components/Lopu/lopuPosition.ts`, `useLopuPosition.tsx`)
+
+- [ ] Fresh browser (no stored preference): every Lopu toast pops up at the
+      BOTTOM-LEFT corner, clear of the iOS home indicator, with the card's
+      countdown ring and ✕ working; nothing sits behind the fixed nav.
+- [ ] Settings → Appearance → "Lopu messages 🦄" is a dropdown listing Top
+      left / Top centre / Top right / Bottom left / Bottom centre / Bottom
+      right. Picking one fires a confirmation toast AT the new position
+      immediately, the drawer's quick-settings modal shows the same value,
+      and the choice survives a reload and a second tab (broadcast).
+- [ ] Top-row positions clear the fixed nav (translateY 70px) on desktop and
+      375px; centre positions stay centred with no horizontal scroll; corner
+      positions hug the safe-area edge with the 8px Chakra margin.
+- [ ] A toast fired while the left drawer is open, or from inside a modal
+      (Profile save, 2FA), stays visible above them (`--toast-z-index`
+      10260); DevKit still floats above the toast.
+- [ ] Streaming musings (`useLopuStream`) pop at the chosen position and stay
+      there while typing (Chakra cannot move an open toast).
+
 ## Drawer navigation & settings (`remix/app/components/Nav/Drawer/`)
 
 - [ ] Clicking a NAVIGATING drawer item (top-level or sub-item) closes the
@@ -1424,6 +2243,12 @@ email whose link points at the attacker.
 - [ ] Start two local mutation commands together. Confirm the repository writer
       lock serializes them, a live writer is never stolen during owner-file
       creation, and a dead writer lock is recoverable.
+- [ ] Run the lock regression cases in `npm run test:graphify-cas`: pause a
+      stale reaper while a replacement writer acquires, then resume cleanup.
+      Confirm it cannot delete or enter the replacement lock. Verify six
+      processes complete 30 writes without overlap, SIGKILL recovery, timeout
+      cleanup, callback-error release, and a query retaining its snapshot lock
+      until its subprocess exits.
 - [ ] With a legacy root graph present, run `scripts/graphify update .`, remove
       the four mutable root outputs from tracking, and run
       `scripts/graphify ensure`. Confirm root paths become ignored symlinks,
@@ -2005,6 +2830,12 @@ halves.
       default. A component Thing resolves its sanitised live preview; turning
       either switch off hides only that section, and either/both sections may
       be disabled without overflow at desktop and 390px mobile widths.
+- [ ] Turn `Thing data` OFF on a normal `/thing/:id`, then navigate — without
+      reloading — to a `/thing/migration-diagnostic-*` permalink. The redacted
+      error still renders: a diagnostic shows no `Views` card, so it must never
+      be gated by a switch carried over from a Thing, or the page would be
+      blank with no control left to bring it back. Navigating back to a Thing
+      still honours the remembered OFF state.
 - [ ] Visiting plain `/search` fires NO search request (check the network
       tab): last-cached results still paint instantly, and with no cache the
       empty state invites a search ("then hit Search"), never claims
@@ -2084,6 +2915,14 @@ halves.
 
 ## Admin migrations & collection generations (`remix/app/components/Schemas/MigrationsPanel.tsx`)
 
+- [ ] Before and after deploying any `USER_STORAGE_ACCOUNTING_VERSION` bump,
+      call `/api/v1/health/nitro`: it reports `degraded` with
+      `storageAccounting.state: "migration-required"` while any current user
+      ledger is missing, malformed, non-ready, or on the old version. Dry-run,
+      then run the named `backfill-user-storage-accounting` migration; confirm
+      health becomes `ready`, a tiny image upload completes instead of returning
+      `accounting_unavailable`/503, and a second migration dry-run reports 0
+      pending.
 - [ ] As an admin (register a throwaway user, restart dev with
       `ADMIN_USERNAMES=<user>`), the census table shows every registry
       collection with its logical name AND physical `<name>_v<N>` name.
@@ -2298,10 +3137,26 @@ halves.
 - [ ] In General settings, turn “Open new Commander windows pinned” off, use
       Open New Window, and verify that launcher dismisses on focus loss; turn
       it on, open another window, and verify it remains visible on focus loss.
+- [ ] Right-click the launcher pin icon and toggle “Open New Windows Pinned”
+      both ways. Its checkmark must agree with General settings after reopening
+      the menu and relaunching; existing windows keep their own pin state and
+      Open New Window uses the newly selected default.
 - [ ] Search apps with prefix, substring, keyword, and fuzzy queries; navigate
       with arrows, execute with Return, open Command-K, traverse actions, and
       dismiss actions/launcher with Escape. Long names must not clip or create
       horizontal scroll in default or compact mode.
+- [ ] With Apps first in search category order, search `magician` and `recovery`:
+      SamsungMagician and Thingtime Recovery should lead even with over 30
+      matching files/folders. Full app names must still match; `Magician.png`
+      and `recovery.c` must prefer their exact files. File-first category order
+      and learned preferences must still work, and `emoji` must retain its
+      built-in picker priority. Repeat after relaunch to check cached ranking.
+- [ ] With over 1,000 indexed apps, files, and folders, verify complete catalogue
+      reads include records beyond the former cutoff. Repeat short app searches
+      after background indexing completes: apps must not disappear. Relaunch
+      with a fresh saved index and type several queries; neither action should
+      start an indexing run. A numeric result-page size must not truncate the
+      stored catalogue or discard candidates before the indexer ranks them.
 - [ ] Run a broad query with at least 30 path-backed results and move selection
       quickly through the list. Results must stay interactive, rendering generic
       or cached icons immediately and progressively resolving every visible
@@ -2789,8 +3644,11 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       (children carry ['tt:inherit']). 'all' and legacy pre-field tokens stay
       unrestricted; mint 400s on unknown visibility values; /tokens/self and
       the mint response report the fence; the settings row badges 🌐/🔒
-      restricted tokens; combines with the 🧸 sandbox. Covered by section F
-      of `node scripts/verify-pat-tokens.mjs`.
+      restricted tokens; combines with the 🧸 sandbox. The fence also rides
+      /api/v1/things/user: a fenced token's profile pages AND postCount only
+      cover in-fence posts (regression: a stacked-branch restructure once
+      dropped this clause, leaking private-post counts to public-only
+      tokens). Covered by section F of `node scripts/verify-pat-tokens.mjs`.
 - [ ] The fence survives the edge cache: `?anon=1` on feed/search is answered
       as the Bearer credential rather than anonymously, the fenced answer
       carries `private, no-store`, and the credential-less cacheable answer
@@ -2799,6 +3657,82 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       Authorization-carrying request, so without the Vary a warm anon entry
       reaches a fenced token without the origin ever being asked. Same
       section F.
+- [ ] Hidden visibility ('hidden', acl ['tt:hidden','tt:user'] + random
+      linkKey): composer/post-menu offer 🕵️ Hidden; the created/edited thing
+      returns owner-only linkKey (never in non-owner projections); anonymous
+      GET ?id= 404s without the key, 200s with ?key=<linkKey>, wrong keys stay
+      blind; the post never appears in the public feed, other users' profile
+      view, or search — the owner still sees it in their own feed/listings;
+      body.key admits other users to comment/react/save/share; PATCHing the
+      audience away from hidden kills the link INSTANTLY, and re-hiding mints
+      a FRESH key (old links stay dead — key rotation on every entry into
+      hidden); "Copy hidden link 🕵️" in the post menu copies
+      /post/<id>?key=<linkKey> and the /post page threads ?key= through to
+      the API. Covered by section G of `node scripts/verify-pat-tokens.mjs`.
+- [ ] GET bridge (/api/v1/get + per-token allowGet, "Works via GET links 🌍"
+      in the minter): only tokens minted with the tick resolve there (others
+      403), the token rides ?token= (Bearer also accepted, cookies NEVER —
+      a cookie-only request 401s, so mutating GETs can't be CSRF'd), op ∈
+      get/list/search/feed/self/create/update/upsert/delete/react/comment/
+      save/share behave exactly like their endpoints: same scopes (403s free),
+      same atomic use accounting (op=self is free introspection), same
+      sandbox + visibility fence, mirrored rate-limit keys. Args = body JSON
+      param + query params overlaid ({/[/" values parse as JSON, bare words
+      stay strings, thingtime accepts csv); responses carry Cache-Control:
+      private, no-store + Referrer-Policy: no-referrer; unknown ops 400.
+      Minted rows badge 🌍 GET links. Covered by section H of
+      `node scripts/verify-pat-tokens.mjs`.
+- [ ] Custom audiences 🎭 ('custom', acl marker tt:custom + baseline +
+      capability grants): the composer/post-menu Custom option opens the
+      audience picker (baseline chips Only-these-people / +secret-link /
+      +everyone; user search via /api/v1/users/search; prefilled Recents /
+      Friends / Connections sections filtered by the search box; per-entry
+      capability select Read/Comment/Edit; save-selection-as-group and
+      pick-existing-group). Applying composes acl ['tt:custom','tt:user',
+      baseline?, 'tt:user/<name>[/comment|/write]'…, 'tt:group/<id>[…]'…] and
+      the wire round-trips visibility 'custom'. Enforcement: read grant =
+      view only (comment/react 403 — general baseline viewers TOO, even with
+      a public baseline or a hidden link key); write ⊃ comment ⊃ read; write
+      grantees PATCH crystal/extended/tags but NEVER acl/visibility/folder/
+      tokenAcl (403) and never delete (owner-only); storage stays billed to
+      the owner. Group grants resolve live: PATCHing the group's member list
+      (replacement semantics) grants/revokes instantly on every thing that
+      references tt:group/<id>; deleting the group makes its entries inert.
+      Granted things land in the grantee's FEED (visibilityQueryFor grant
+      clause); hidden baseline mints a linkKey (key = read only). Groups are
+      protected kinds managed solely via /api/v1/groups (+ audience-sources).
+      Covered by section I of `node scripts/verify-pat-tokens.mjs`.
+- [ ] Unified Thing sharing: `/things` Share, Builder page settings,
+      component-card Save version, and component-detail Save version all offer
+      Public / Friends / Family / Private / Anyone with the link / Custom from
+      the same audience control. Custom opens the people + groups capability
+      picker. At a mobile viewport, open Custom from the Builder inspector and
+      confirm the entire picker (including its buttons) layers above the drawer
+      and remains usable. Saving a standalone Builder page with the link option
+      mints an owner-only key; its copied `/p/<id>?key=<key>` URL resolves while
+      logged out, and the same key pattern opens non-page/non-post Things through
+      `/thing/<id>?key=<key>`. A no-key visit remains 404 and never paints a
+      bearer-key response from local cache. Moving away from hidden invalidates
+      the old link.
+- [ ] Token visibility fence 'hidden' mode ("Hidden only 🕵️" chip): the token
+      lives entirely in hidden link-key things — its no-acl creates are born
+      hidden WITH a fresh linkKey, public/private things 404, creating
+      outside the fence 403s; composes with the sandbox and the GET bridge.
+      Covered by section I of the verify suite.
+- [ ] Circle filters honour every circle they offer (regression: a new circle
+      that the filter menu shows but the API drops reads downstream as "no
+      circle filter", so the chip WIDENS the result set instead of narrowing
+      it). Tick 🕵️ Hidden alone in the feed/search Advanced panel: only your
+      hidden things come back, not the whole feed. Tick 🔒 Private alone: no
+      hidden things in the result. Tick 🎭 Custom alone: your custom-audience
+      things plus the ones granted to you by name/group, nothing else. Tick
+      any five of the six circles: the omitted circle really is omitted (this
+      used to fall through to an "all circles" shortcut keyed on selection
+      COUNT) — including 🎭 Custom, whose grant clause is gated on the filter
+      like every other clause, so omitting it really does drop the things
+      other people granted you. Leaving every circle unticked is unchanged —
+      the default feed still shows all of your own things, hidden included,
+      plus everything granted to you.
 - [ ] PAT × app-token coexistence on the shared things routes (one resolver,
       three credential kinds): a PAT ignores Origin (no app binding), the
       OPTIONS preflight for app SDKs still serves with Authorization allowed,
@@ -3083,7 +4017,7 @@ which 99.75% were `ci-*` telemetry, paying an entry in each of its 64 indexes
       and `-docs` route has one semantic feature, `api.admin-ci-dispatch` is
       `2.1.0`, the CI snapshot is `1.0.1`, passkey registration/login options
       are `1.0.1`, admin credentials are `2.0.0`, signed credential delivery is
-      `1.1.0`, signed stack progress is `1.0.0`, saved stacks are `1.3.0`, admin PR previews are `1.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
+      `1.1.0`, signed stack progress is `1.0.0`, saved stacks are `1.3.0`, admin PR previews are `2.0.0`, and the Feature Stack UI refuses a missing, older-minor, or
       breaking-major manifest before dispatch. CI dispatch 2.1 adds
       compatible-pair omission during automatic Feature Stack routing.
 - [ ] Start a saved Feature Stack, then use its Pause control while the linked
@@ -3098,10 +4032,23 @@ which 99.75% were `ci-*` telemetry, paying an entry in each of its 64 indexes
 - [ ] Select one trusted open PR and independently enable Develop and
       Production/Main previews, including both at once. Develop must use only
       the configured Custom Environment; Production must require the explicit
-      warning acknowledgement, use Production values server-side, expose only
-      a generated immutable Vercel URL, and never assign `thingtime.com` or
-      another custom domain. Neither response, browser state, log, nor status
-      event may contain a credential value.
+      warning acknowledgement, and use Production values server-side. Confirm
+      one GitHub Actions-owned marker comment appears before either deployment starts,
+      with a row for each enabled environment, its expected persistent URL, and
+      a clearly labelled estimated ready time. Confirm the same comment updates
+      each row with the immutable `*.vercel.app` snapshot and its distinct
+      PR-scoped persistent URL. A READY receipt must move only that environment's
+      alias to the verified current SHA; synchronize must update both rows
+      without adding another marker comment. Disable one environment and close
+      the PR to prove only owned aliases/deployments are removed, while `thingtime.com` and
+      `dev.thingtime.com` never move. Neither response, browser state, log,
+      comment, nor status event may contain a credential value.
+- [ ] Inspect both selected-environment build jobs and confirm they check out
+      the exact controller-authorized SHA, receive no GitHub Environment or
+      Vercel token, and upload only a symlink-preserving prebuilt archive. The
+      protected publisher must validate each archive, use `--prebuilt` plus
+      `--skip-domain`, and reject a deployment whose actual Custom Environment
+      or production target does not match its selected row.
 - [ ] Push a new commit to that PR and verify the signed `synchronize` delivery
       rebuilds each enabled environment at exactly the new live head SHA.
       Drafts, forks, moved heads, another repository, and closed PRs fail
@@ -3391,6 +4338,54 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       nav-right controls rendered under the absolutely-positioned commander
       host and were untappable on mobile (2026-08).
 
+- [ ] Lopu drawer alignment: at desktop widths, open/close and resize the left
+      and right drawer with a notification visible. All six placements stay
+      within the page content; centred messages use the remaining content centre.
+      At 390px, the temporary drawer leaves notifications readable and dismissible
+      without horizontal overflow. Check both page top and bottom.
+
+## Notification history (`/notifications`, `remix/app/components/Notifications/`, `api/utils/notifications/listQuery.ts`)
+
+- [ ] `/notifications` (auth) lists every notification the viewer has received
+      newest first (server keeps the newest 10,000 per recipient), with the
+      unfiltered first page painting instantly from `tt-notif-history-<id>`
+      and reconciling in the background; a cold start shows one spinner only.
+      Signed out, the page renders the quiet "Log in" state and never 401s.
+- [ ] Category chips All / Social 🤝 / Engagement 💬 / Feed 📰 / System ⚙️, the
+      Type dropdown (grouped by category), "Unread only", the search box
+      (debounced ~300ms, literal match over preview / actor name / username /
+      system title — `(.*)` finds nothing), and From/To day pickers all write
+      to the URL (`?category=&type=&unread=1&q=&since=&until=`); reloading or
+      sharing the URL restores the exact view, and "Reset filters" clears it.
+      Picking a type outside the active chip flips the chip to that type's
+      category; picking a chip that cannot hold the type drops the type.
+- [ ] The summary line shows `N notifications match · M unread` (server
+      `total` with `withTotal=1`); changing filters dims the current rows
+      instead of flashing empty; "Load older" appends via the `before` cursor
+      with no duplicates.
+- [ ] Clicking a row marks it read optimistically (row tint clears, unread
+      count drops, bell badge cache updates) and follows its click-through:
+      system notes → their `href` (`/actions/<key>`), else `/post/<id>`, else
+      the actor profile. "Mark all read ✓" clears every row + the bell badge
+      and reverts with a Lopu error toast on failure.
+- [ ] System notes: running an action from its detail page (or the API)
+      lands an `action-run` row — 🦄 Lopu avatar in a rainbow ring, headline
+      `Action “<name>” finished ✅` / `failed 🌧️`, detail `<ms> · <ops>` or
+      the error, System tag, click-through to `/actions/<key>`. A delegated
+      component click (`source: 'component'`) only notifies when it FAILS.
+      Own social actions still never notify yourself.
+- [ ] Settings → Notifications gains the "Action runs ⚡" row (push ON, email
+      opt-in by default) and a "History 📜 → Open" row; switching a type off
+      hides it on `/notifications` too; the bell popover's "See all →" opens
+      the page and the drawer's Account group lists Notifications 🔔.
+- [ ] `GET /api/v1/notifications` rejects nothing new: unknown `types` /
+      `category` values match nothing (empty page, `total: 0`), `q` is capped
+      at 100 chars, `since`/`until` are inclusive, `unreadCount` ignores the
+      filters, and the capabilities manifest advertises
+      `api.notifications-list` and `api.notifications-settings` at 1.1.0.
+- [ ] 375px: chips, inputs and the date row wrap without horizontal scroll;
+      rows never clip the category tag; the Lopu avatar ring stays round.
+
 ## Post views (`api/utils/things/views.ts`, `/api/v1/things/views`, `useViewTracking`)
 
 - [ ] Public stats on every post payload: `viewCount` (unique viewer
@@ -3417,6 +4412,30 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       notification or email. Resetting to home restores normal telemetry/emits.
 
 ## Thingtime desktop mesh packaging (`electron/`, `MCP/`, `macos/ThingtimeNode/`)
+
+- [ ] Refresh Recovery and compare its published-release count with GitHub, including
+      prereleases and older pages. Desktop and Recovery rows must arrive as one
+      snapshot; a later-page rate limit keeps the previous complete list visible.
+      Intel Macs must never select arm64-only archives.
+- [ ] Publish desktop and Recovery assets in the same GitHub release, then select
+      each row. Exactly one row must select, and its title and download filename
+      must match that component even though the GitHub release ID is shared.
+- [ ] Download the legacy build 4 ZIP: its missing code-signature resource seal
+      must produce an actionable error, remove extraction staging, and preserve
+      installed apps and caches. During valid ZIP extraction the window remains
+      responsive and duplicate cache/install actions stay disabled.
+- [ ] A release with the documented component withdrawal marker remains in the
+      catalogue as UNAVAILABLE, explains that its archive is damaged, and cannot
+      start a download. Its unmarked companion and newer releases remain usable.
+- [ ] Run Recovery unsigned packaging with an absent cache root. It must build
+      and verify the archive round-trip on a fresh machine, without requiring a
+      previous local build. Corrupt an existing cached app and repeat the cache
+      request: verification must reject it rather than reusing the stale entry.
+- [ ] Replace a damaged installed app with a valid cached bundle. Preserve the
+      damaged bundle separately, never add it to the verified cache, and report
+      its backup path. An invalid replacement must leave the current app intact.
+      A detached installer failure must reopen Recovery with a visible error;
+      the automatic catalogue refresh must not erase that explanation.
 
 - [ ] Build and open the signed `Thingtime Recovery.app`; it must remain running
       after launch without an `App.init()` nil-optional crash, and its recovery
@@ -3546,13 +4565,23 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       resolves to the exact private user-data file. Bootstrap must not issue an
       unconditional immediate kickstart. Replace an exact old managed node,
       then confirm launchd owns one new PID with `runs = 1` and no exit.
+- [ ] In Desktop settings, use **Stop node**, **Start node**, then **Restart node**.
+      Stop must remove the running service while preserving pairing and the plist;
+      Start resumes one node, Restart changes its PID, and rapid clicks must not
+      create overlapping registrations. Check desktop and mobile widths, including
+      long version strings and error messages. Open the node menu **About Thingtime
+      Node** and verify version, build, source commit, bundle ID, and management
+      mode match the actual installed bundle without account or secret data.
 - [ ] With **Auto-start node on Thingtime launch** left at its default-on
       setting, use the native menu-bar **Quit Thingtime**, confirm launchd is
       stopped while the managed plist remains, then Cmd+Q/reopen the installed
       Electron app. It must bootstrap exactly one node from that existing plist.
       Turn the setting off and repeat: reopening Electron must leave it stopped;
       turn it back on and confirm it converges immediately. A Mac with no
-      managed plist must still require the explicit **Start node** confirmation.
+      managed plist must start the bundled node when auto-start is on. Rewrite
+      the plist with plutil (removing XML comments), quit/reopen, and confirm
+      recovery still works. Install a newer Desktop build at the same path:
+      one node must restart with the new build and stay stable on the next launch.
 - [ ] Open the exact installed Electron app, record its bundled loopback
       renderer origin and separately selected API origin, and Quit with Cmd+Q. Electron must
       stop while the launchd node and
@@ -4282,8 +5311,18 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       names; clicking a card opens /actions/:id.
 - [ ] The inspector shows Takes / Does (numbered steps with op tones, invoke
       steps deep-link to the invoked action) / Can access / Cannot access (no
-      network, no secrets, no deletes + scoped-only lines) / Limits / Effects,
-      and the raw definition.
+      network, no secrets, and "no deletes" ONLY while the program does not
+      declare things.delete + scoped-only lines) / Limits / Effects, and the
+      raw definition.
+- [ ] v2 destructive + public-read disclosure: an action with a
+      `things.delete` step shows a red "deletes things" chip on BOTH its
+      /actions card and the inspector's Effects section, and its Cannot-access
+      panel drops "no deletes" without ever printing an affirmative sentence
+      under the 🚫 (a "🚫 Can delete …" line would invert the one capability
+      that destroys data). An action whose only effect is that delete still
+      renders an Effects section. A `things.search` with `scope: 'public'`
+      shows "reads everyone's public <schema>" alongside the ordinary read
+      chip. Covered by app/components/Actions/actionInspect.test.ts.
 - [ ] The Run panel renders one typed input per descriptor, runs the action,
       and shows status + duration + ops/depth/child budget usage + the
       hierarchical trace (1 → 1.1/1.2 for invoked children) with /thing/<id>
@@ -4316,6 +5355,19 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       that prefixes another never cross-matches).
 
 ## Design system + builder (`/builder`, `/p/:id`, `/docs/design-system`, `remix/app/components/Builder/`, `/api/v1/webpages/resolve`, `/api/v1/admin/webpages/seed`)
+
+- [ ] At desktop, 390px and 320px widths, select a short centred text block,
+      a large heading and right-aligned text. The selection toolbar stays above
+      the selection, separate from the block label and history buttons; no
+      controls cross the viewport, inspector or scrolling-container edges.
+      Resize the container and scroll from top to bottom with menus open.
+      Native settings and Convert to submenus fit, including with reduced
+      keyboard space. Large document fonts do not enlarge toolbar icons, and
+      narrow desktop text has no unused 50px editor gutter.
+- [ ] Move the pointer from an edited block through the empty space to Undo,
+      Redo and Changes. All remain reachable; Changes opens, its controls work,
+      and its Close button returns to the same editor (portal clicks must not
+      be intercepted by the builder frame).
 
 - [ ] Every restyled page (status, mongodb-status, tests, vercel, crypto,
       migrations, apps, raw, admin + sub-panels) renders the PageShell surface
@@ -4351,6 +5403,70 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       webpage- shareIds are refused on generic creates (reserved prefix).
 - [ ] /docs/design-system shows the foundations/page-scaffold/brutal-button/
       builder-blocks entries with live stories; /design-system redirects there.
+- [ ] Demo library: /builder/demos paints the whole catalog (200–500 demos,
+      `pnpm --dir remix run test:schemas` → webpageDemos asserts every demo
+      clears validateThingtimeCrystal(["webpage"]) unchanged and stays under
+      the block/byte caps) instantly with no spinner; kind + family chips and
+      the search box filter with the URL in sync; thumbnails mount lazily as
+      you scroll and stay mounted; Show more paginates; Preview opens the
+      full-size modal; Use template ✨ copies the demo into the viewer's own
+      page (signed-out → login) and opens the builder; the Builder header
+      links to the library.
+- [ ] Component blocks: the 🧩 Component blocks chip shows demos whose blocks
+      reference PLATFORM LIBRARY components by componentKey. Those blocks draw
+      real library components (buttons, a card, a text input, a badge, a status
+      avatar) in the thumbnail AND in the Preview modal once the demos endpoint
+      answers — an unresolved ref renders as NOTHING for a viewer, so a blank
+      card here means the catalog names a componentKey the components-db seed
+      does not have. Cross-check with
+      `GET /api/v1/webpages/demos` → every entry in `refs` non-null (the
+      `webpages-demos-library-components` apiTest asserts exactly this).
+- [ ] GET /api/v1/webpages/demos lists the catalog anonymously with seeded
+      flags (0 seeded on a fresh DB is correct), family/kind filters, slug=
+      returns the crystal, unknown family → 400, unknown slug → 404; admin
+      POST /api/v1/admin/webpages/seed-demos converges (re-run → unchanged),
+      after which every demo opens at /p/webpage-demo-<slug> and in the
+      builder (edits fork, the seed never changes) and the gallery shows 🌱
+      seeded + the /p/ link; GET /admin/webpages/seed reports
+      siteSeeded/demosSeeded/demosTotal/suitesSeeded/suitesTotal alongside
+      totalSeeded.
+- [ ] Text blocks accept an optional `href` (https, site-relative, mailto:,
+      tel:; javascript:/data:/http: refused — `test:schemas` →
+      webpageBlockGate) and render as an anchor (`data-testid`
+      text-block-link; external targets open in a new tab with noopener; the
+      edit canvas never navigates); the inspector's Link field round-trips
+      it. Every demo pill links (/register, /docs) and every demo nav label
+      links to its slug. Block css `white-space` reaches the text element (a
+      nowrap pill in a flex row stays on one line despite Main's global
+      pre-wrap); standalone pills shrink-wrap via `align` and row labels keep
+      their own width via `flex: 0 0 auto`.
+- [ ] Run-or-install: on a seeded suite page (/p/webpage-demo-suite-<key>)
+      or the gallery preview, a signed-in viewer's control click that finds
+      no owned action (executor: owner-only delegated resolution) installs
+      the suite into their things, re-runs the SAME click, then opens their
+      own copy; signed-out → login. Owned actions run directly. Foreign
+      user pages stay inert for non-owners (`useTtActionClicks` onUnowned,
+      `installSuite`, `routes/p.tsx`).
+- [ ] Demo gallery thumbnails scale to the card (ResizeObserver: scale =
+      box width / 760) — no clipped right edge at any grid column width;
+      layout audit script (scratchpad/audit-demos.js idiom: wrapped pills by
+      Range line count, overflow by scrollWidth, wide pills in columns)
+      reports zero defects across all cards.
+- [ ] Behaviour suites (`schemas/behaviourSuites.ts`, `pnpm --dir remix run
+      test:schemas` → behaviourSuites asserts every schema/component/action/
+      data/page crystal clears its kind gate in BOTH materialisations): the
+      🧪 Suites tab on /builder/demos lists 14 suites with counts; Preview
+      renders the suite page with its ttAction controls from the catalog (no
+      seed needed); Install suite ✨ (signed-in) creates the viewer's OWN
+      schemas → components → actions → data (stamped schemaId) → page through
+      /things and opens /p/<page>; clicking a control there runs the viewer's
+      own action (source component → owner-only resolution) and the Lopu
+      toast links to the run record; capture-and-qualify / open-with-note
+      exercise actions.invoke + $step refs + ttConcat; complete/escalate/pay
+      exercise things.get + things.update by id. Seeded suites (admin
+      seed-demos) are browsable on /schemas, /components, /actions and
+      /p/webpage-demo-suite-<key>; running action-demo-* from /actions mints
+      the viewer's own data things against the public schema id.
 - [ ] Nested blocks select on click: with a container (grid/row/column) holding
       children, clicking a CHILD selects the child (inspector shows its
       fields), clicking the container's own area selects the container —
@@ -4421,3 +5537,510 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       Sides control (paren-aware tokenizer) and a multi-token shorthand is
       shown raw in uniform mode, never as an empty field.
 - [ ] Verification: `node remix/scripts/verify-webpages.mjs http://127.0.0.1:<nitro-port>`.
+
+
+### Recovery cards, build IDs and app selection
+
+- [ ] In both This Mac views, confirm build IDs come from the bundle or manifest,
+      old Electron bundles expose their embedded commit, and Recovery cards use
+      the Recovery component name even if old metadata used a desktop title.
+- [ ] Open the App selector, switch Electron → Commander → Electron, and verify
+      cached entries and release selections stay with their app. Save installed
+      Commander, verify its cached signature, and confirm Electron's cache is unchanged.
+- [ ] Inspect release cards and detail metadata at narrow and wide macOS window
+      sizes, scroll every list to the bottom, and open/cancel unsigned acknowledgement.
+      Dates, badges, long versions and archive names must wrap without clipping.
+- [ ] A Commander handoff rejects an Electron path and vice versa. Unknown or
+      incomplete build metadata must not fabricate a numeric build number.
+- [ ] Cloud archives contain their run number in both app build metadata and
+      `CFBundleVersion`; signed releases pass strict codesign, Gatekeeper and
+      stapler checks after downloading the actual published ZIP.
+- [ ] With a Developer ID certificate in the signing keychain, the production
+      packager passes its unprefixed name and team to electron-builder, while
+      native helpers keep the full certificate name. Missing or development-only
+      identities fail before building; no unsigned fallback is allowed.
+
+- [ ] Dispatch Commander on the protected controller; confirm its exact main SHA,
+      signed Commander and Recovery ZIPs, checksums, and `latest=false`. Switch
+      Recovery to Commander, download/verify both cards, install with rollback
+      preserved, and verify build number, commit and branch still appear offline.
+- [ ] Run Commander `--prepare` and `--build-only` with an installed app running;
+      its PID/daemon remain unchanged. A failed notarization must not stop or
+      replace the installed app. Run `node --test Commander/script/release-packaging.test.mjs`.
+
+- [ ] Commander production verification passes the Mach-O file before `lipo
+      -verify_arch` and exercises the real tool against a native fixture before
+      cloud signing. A verifier failure must publish no incomplete release.
+
+## Persistent media and progressive image regression
+
+- [ ] At desktop and 390px mobile widths, scroll the feed/attachment fixture
+      top to bottom: below-fold images stay lazy, low-resolution previews
+      appear before responsive images, and no horizontal overflow appears.
+- [ ] Leave and revisit a managed image: authorization checks increase while
+      downloaded byte requests stay unchanged. Revoke access and revisit:
+      cached pixels must not render. Restore access and verify loading resumes.
+- [ ] Open and close the image lightbox, verify contained sizing, and inspect
+      Media settings toggles and clear action at desktop and mobile sizes.
+- [ ] Disable caching, clear storage, and disable previews; original loading
+      remains usable. Unsupported image formats fall back without retry loops.
+- [ ] Confirm partial/large files use native streaming and cached range reads
+      cannot bypass authorization. Verify storage failure degrades to HTTP.
+
+## App suites — Pokeworld + StarsAlign (`remix/app/schemas/appSuites/`, `/p/pokeworld`, `/p/starsalign`)
+
+- Seed as an admin (`POST /api/v1/admin/webpages/seed-demos` or the 🌱 button
+  on `/builder/demos`), then open `/builder/demos` → **📱 Apps**: both cards
+  show pages counts, a tagline, **Open /p/<key>** when seeded, **Install app**.
+- Signed OUT: `/p/pokeworld` and `/p/starsalign` render the seeded pages with
+  every bound block in its **signed-out** state (sign-in card), nav links work,
+  no fetch is attempted (Network: no `/actions/run`).
+- Signed IN, not installed: the same pages show the app's **Install** card;
+  pressing it (or any control) installs through the server endpoint and the
+  same URL now serves your copy (`/api/v1/webpages/resolve?id=pokeworld` →
+  `source: "user"`). Re-installing reports `created: 0`.
+- Pokeworld: begin the journey (name ≤7, sprite) → the 11×9 viewport paints
+  with you in the centre; each D-pad press moves one tile (blocked tiles keep
+  the facing), items/signs toast, tall grass eventually spawns a battle; the
+  battle panel shows sprites + HP bars, four moves with PP, balls with counts,
+  items, RUN; catching adds to the party/box and the pokédex; PARTY (make lead,
+  deposit, heal), BAG (use on), POKéDEX (100/page, silhouettes until seen),
+  PC (withdraw), OPTION (name/sprite, teleport by lat/lng, badges). Every
+  control's run lands on `/actions/<id>`.
+- StarsAlign: signed in without a profile → welcome card with the live
+  sun/moon; Settings → save a birth date (future dates refused), find a city
+  (chips), set the place, save again (updates, no duplicate) → Today shows
+  greeting, chips incl. rising, the wheel (svg), the sky rows, transits or the
+  quiet-sky card, houses; School search/section/entry/Combinator; Erase
+  removes the profile and Today returns to the welcome.
+- Layout: check desktop (≥1024) and mobile (375) — the map grid scales with
+  its container, D-pad stays 48px cells, nav wraps, no horizontal scroll.
+- Regression classes: an `if` branch must not evaluate when untaken (a
+  `set` with an empty key inside the untaken branch used to fail the run);
+  the run payload's own `status` must never shadow the HTTP status in scripts;
+  a control gathers only the named fields of its closest `<fieldset>` (the
+  city Find button used to send the birth-date fields to `pick-city`, which
+  refused them as unknown inputs); a profile whose place was cleared
+  (`placeName ''`, `tz ''`, lat/lon 0) must read as a solar chart, not a
+  refusal; nested `ttEach` must flatten (the tile grid rendered empty).
+
+## Dedicated live pages — every card opens one (`/components/:key`, `/builder/demos/:slug`, `/schemas/:key`, `/thing/:id`, `/actions/:id`)
+
+Shared pieces: `remix/app/components/Builder/liveComponent.tsx` (`useThingSource`
++ `LiveTemplate` — the ONE live-render path; `useBlockSource` in the page
+renderer delegates to it), `remix/app/components/Actions/ActionRunConfirm.tsx`
+(`useActionRunConfirm` → the confirm gate `useTtActionClicks` accepts), and the
+route stubs in `remix/app/routes.tsx`. Trust never comes from markup: own thing
+→ live, no confirm; seeded platform/demo/app thing → live for a signed-in
+viewer with the confirm dialog + run-or-install; a stranger's thing → inert with
+a label. Browse cards and `/things` tiles are LINKS, never armed controls.
+
+- [ ] `/components`: the whole card (title, preview area) opens
+      `/components/<key>` in every view mode (feed / grid / columns); the
+      buttons on the card (design pills, args/schema, react, Add to library,
+      Save version, Docs) still work in place without navigating; middle-click
+      on the title opens a new tab; the browse previews stay inert (a
+      `data-tt-action` control in a preview does nothing).
+- [ ] `/components/<key>` (e.g. `/components/app-pokeworld-hud`,
+      `/components/demo-guestbook-signer`): preview + args tester + docs are
+      still there; a LIVE pane renders the same component inside the page
+      runtime. Own component → controls run with no dialog. Seeded suite/app
+      component (signed in) → first press shows the "Run …?" confirm naming the
+      action + inputs, approve runs it (or installs the suite, then re-runs);
+      "Don't ask again for this action on this page" skips only for that
+      action and only until reload. Stranger's component → inert + "🔒
+      Controls belong to @author" label next to Save version. Signed out →
+      "Sign in to run controls" hint; a press toasts and routes to /login.
+      Data source control (`?source=<actionKey>&refresh=…`) renders the real
+      data (`app-pokeworld-hud` + `app-pokeworld-state`) and never persists to
+      the thing.
+- [ ] `/components/<key>?source=<actionKey>` opened from a PASTED link asks the
+      "Run …?" confirm BEFORE the source runs — for the owner of the component
+      too, not just on a seeded one (the URL binding is nobody's authored
+      markup, so it is gated even where the click path is not). Cancel leaves
+      the live pane with no source chip and runs nothing, while the source
+      control keeps the binding so it can be edited or cleared; approve runs it
+      once and, for `refresh=interval`, starts the ticking. Same rule as
+      `/thing/:id?source=` — a link must never start a program by surprise.
+- [ ] `/builder/demos`: every demo / suite / app card opens
+      `/builder/demos/<slug|key>`; the Preview button still opens the modal;
+      the modal is live for a signed-in viewer (runtime provider present —
+      source blocks load, `$refresh` works); the kind chip row shows every
+      kind including "🧮 Interactive" and "🧪 Behaviour suites"
+      (= not app, not interactive).
+- [ ] `/builder/demos/<slug>` (`hero-centered-paper`, `guestbook`,
+      `pokeworld`): paints instantly from the code catalog (no spinner), then
+      reconciles the seeded flag; PREVIEW pane inert with the metadata rail;
+      LIVE pane interactive for a signed-in viewer (platform-curated rule) and
+      a sign-in card when signed out; app suites render the entry page live
+      with the other pages as tabs (+ `/p/<pageKey>` links when seeded);
+      Install / Open /p/ / Use template / Open in builder do what they say;
+      unknown slug → "This demo isn't here" with a link back.
+- [ ] `/schemas`: every card opens `/schemas/<builtin:id | shareId>`; card
+      buttons (react, Add to library, Create a thing, Fork, Search things,
+      Docs) still work in place.
+- [ ] `/schemas/<key>` (`/schemas/builtin:post`,
+      `/schemas/schema-app-pokeworld-trainer`): header + badges + full field
+      tree + on-create crystal chips + render preview; the create-a-thing
+      form is INLINE and posts through `things.create`; "Your things with this
+      shape" lists the viewer's own data things and refreshes after a create;
+      honest empty states; a `builtin:` key that is also seeded shows the
+      registry entry.
+- [ ] `/things`: single-click still selects; the tile title is a keyboard
+      link to the dedicated page (webpage → `/p/:id`, component/data →
+      `/thing/:id`, schema → `/schemas/:id`, action → `/actions/:id`, post →
+      `/post/:id`, folder opens the folder); open (double-click / Enter) goes
+      to the same page; context-menu Preview + `?preview=<id>` still open the
+      quick-look modal; Copy link / Share produce the real permalink;
+      previews stay `pointer-events: none`.
+- [ ] `/thing/:id`: component → LiveTemplate with the trust ladder above
+      (`?source=<actionKey>` optional binding); webpage → inline live render +
+      "Open /p/…" link; action → summary + "Run it on /actions/…"; schema →
+      link to `/schemas/…` + field chips; data → rendered through its schema's
+      render template when one exists; raw JSON still available; the back link
+      honours `?from=things|actions|feed`.
+- [ ] `/actions`: each card is a real link (middle-click works); nested
+      buttons don't navigate.
+- [ ] Mobile (375px): none of the pages above scroll horizontally; the live
+      panes and tabs wrap.
+- [ ] `/thing/:id?source=…` rejects a key the server would reject rather than
+      confirming it first: `?source=Foo/Bar@baz`, `?source=My_Action.v2`, and a
+      120-character key must show NO "Run …?" dialog at all (the binding is
+      simply ignored). `?source=app-pokeworld-state` on a live component still
+      confirms once, then loads the real data.
+- [ ] Switching `?source=` never leaves the PREVIOUS program running while the
+      new one is still being confirmed. From a live `/thing/<A>?source=<x>`
+      that you approved, navigate in-app to `/thing/<B>?source=<y>` (and
+      separately, just edit `?source=` on the same thing). While the "Run
+      <y>?" dialog is open the live pane must show NO source result and fire
+      no request for `<x>` — check the Network tab for an action run of `<x>`
+      against `<B>`. The clearing branch is skipped whenever `<B>` repaints
+      instantly from the `tt-thing-*` cache, which is the normal path, so the
+      approval has to be dropped explicitly before re-asking (same order as
+      `/components/:key`). A viewer approved `<x>` for one surface, never for
+      the next one.
+- [ ] `/thing/:id` cache stays bounded and session-scoped: open 45+ different
+      things, then in DevTools → Application → Local Storage confirm at most 40
+      `tt-thing-*` keys survive and the oldest were dropped, not the newest.
+      Sign out and confirm every `tt-thing-*` key is gone — the projections are
+      ACL-gated (private posts, circle data) and must not outlive the session,
+      the same bar as `tt-activity-` / `tt-saved-` / `tt-page-source:`.
+- [ ] Every per-entity localStorage namespace is bounded, not just
+      `tt-thing-*`. Open 20+ different component families
+      (`/components/<key>`) and 20+ schemas (`/schemas/<key>`), then in
+      DevTools → Application → Local Storage confirm at most 12
+      `tt-component-family-*` and 16 `tt-schema-things-*` keys survive, oldest
+      dropped first, and the page you are ON still paints instantly from cache
+      on reload. These namespaces grow one key per entity visited and each
+      entry is large (a family is up to 16 component crystals with their
+      render trees), so unbounded they fill the origin quota — and because
+      `writeLocalCache` swallows the quota error by design, the symptom is not
+      an error but every OTHER `tt-*` optimistic cache silently going cold.
+      Regression covered by `remix/app/hooks/localCache.test.ts`
+      (`pnpm --dir remix run test:hooks`).
+- [ ] `remix/app/routes/thing.tsx` contains no raw NUL byte. Check with
+      `python3 -c "import sys;print(open(sys.argv[1],'rb').read().count(bytes([0])))" remix/app/routes/thing.tsx`
+      — it must print 0, and the two requestKey separators must stay written as
+      the six-character escape sequence in the source. An embedded NUL makes
+      git, grep and ripgrep treat the whole file as binary and silently skip
+      it, which costs a reviewer real time.
+## Lopu AI assistant (`/lopu`, floating launcher, `remix/app/components/Lopu/`, `/api/v1/lopu/chats*`, `/api/v1/ai/models`)
+
+Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Automated coverage:
+`npm run test:lopu`, `test:lopu-chat-streaming` (fake SSE tool loop),
+`test:partial-json`, `test:ai-models`, `test:lopu-ui`, `test:messenger`,
+`test:settings`, `test:schemas`, `test:api-capabilities`; live:
+`node scripts/verify-lopu.mjs <base>` against a stack started with
+`LOPU_CHAT_PROVIDER=test` (147 checks; set `TT_VERIFY_ADMIN_USERNAME` +
+`TT_VERIFY_ADMIN_PASSWORD` for the admin section).
+
+- Catalog: `GET /api/v1/ai/models` is public, `Cache-Control: no-store`, lists
+  every `AI_WORKFLOW_BASE_MODELS` entry as an `ai-model` Thing projection
+  (`enabled`, `available = enabled && provider key configured && not
+  rejected`, `verified`, `isDefault`); `providers.<p>` carries
+  `{ configured, verified, checkedAt, reason? }` from the bounded key probe
+  (`GET /v1/models`, 5 s cap, cached 10 min / 2 min after a failure); the
+  generic `/api/v1/things` paths refuse to create/update/delete `ai-model`
+  rows (protected, control plane).
+- Provider keys (`api/utils/ai/providerProbe.ts`): with a wrong
+  `OPENAI_API_KEY` (any string) the catalog lists every OpenAI model
+  `available: false, verified: false`, the picker shows them disabled with
+  "OpenAI key invalid", `defaults.model` falls to the first Anthropic model
+  and an explicit per-turn pick of one is a 400 naming the rejected key; with
+  the provider unreachable (`OPENAI_BASE_URL` pointing at a closed port) they
+  stay offered with `verified: null` and the admin row reads "? key
+  unverified · could not reach the provider (…)". Admin → Lopu models →
+  Provider keys shows one row per provider (✓ key verified / ✗ key invalid
+  with the reason / ? key unverified / no key, plus "checked … ago");
+  "Re-check keys" (`POST /api/v1/admin/ai/models { probe: true }`, bucket
+  `admin.ai.models`) bypasses the cache, toasts the summary and repaints the
+  rows and the model chips; a plain user gets 403. Nothing but presence and
+  verdicts ever reaches the client (`grep sk-` on the response stays empty).
+- Conversations: `/lopu` signed out shows the quiet state + login CTA; signed
+  in, the empty state offers four suggestion chips; the composer's model
+  picker lists models grouped with "needs <provider> key" for unavailable
+  ones; Enter sends, Shift+Enter breaks a line (mobile: the Send button);
+  "New chat" starts a fresh conversation that is created lazily on the first
+  reply and titled from that message; rename/delete from the left column
+  (delete confirms when `confirmDeletes` is on).
+- Streaming (`LOPU_CHAT_PROVIDER=test`): "Build me a page with a card
+  component" → the bubble streams text, then a "Built a component" card with
+  a live preview of the card, then "Created a page" and a `navigate` to
+  `/builder?page=<id>`; the builder canvas shows the streamed section
+  (heading, copy, the card component) and the Page builder panel names it.
+  With that page open, "add a hero section to this page" patches the LIVE
+  draft (blocks appear while the reply streams), the tool card reads
+  "Edited the page · 1 change · Saved" with Undo; Undo restores the draft.
+  "hello" answers with the context-aware greeting naming the open page.
+- Floating host: every page but `/lopu*` shows the 🦄 launcher above
+  DevKit's corner; click opens the 400×560 window resting above it (same
+  conversation as `/lopu`); drag the header, resize from the bottom-right
+  grip, double-click the header to dock right (the column stops above DevKit
+  and the launcher hides), double-click again to float; the model chip opens
+  the picker (Escape closes the menu only — a second Escape closes the
+  window); ⤢ opens `/lopu`; − collapses to the header; ✕ / Escape hides.
+  Mobile (375): an 88dvh bottom sheet with scrim; DevKit's trigger steps
+  aside while it is open (`html[data-lopu-sheet="open"]`).
+- Page frame (`/lopu`, `/lopu/:chatId`, `/lopu/voice`): header eyebrow
+  "Thingtime · your AI", ink title "Lopu" beside the ring avatar, one status
+  line (`model · effort`, or the voice phase); the `Chat | Voice` segmented
+  control is route-driven (a chat deep link stays on Chat, Voice keeps the
+  store's current conversation). Desktop: the 272px conversations sidebar
+  (new chat, rename, delete — confirms when `confirmDeletes` is on —
+  "Messenger ↗") collapses from the header toggle and remembers the choice
+  (`tt-lopu-sidebar`); the conversation column is 760px centred. Mobile
+  (375): full-screen chat with no card chrome, the conversations button opens
+  a 72dvh sheet (drag handle, Escape/scrim close), the composer sits above
+  the safe area, nothing scrolls horizontally or hides under the nav.
+- Voice mode (`/lopu/voice`, or the floating window's mic): the same column
+  with the text composer folded away and the voice deck below it — gear ·
+  64px mic (idle card / listening rainbow pulse / thinking spinner / speaking
+  breathe) · Stop while Lopu replies — plus a single rounded "Or type to
+  Lopu…" field whose Enter sends a normal chat turn (the same brain, tools
+  included). With no SpeechRecognition (the in-app Browser pane) the mic
+  click toasts "No microphone here" and the typed path still works; with a
+  mic, listening pauses for the whole turn and for Lopu's speech (never its
+  own voice back), then resumes. The gear popover (never a full-width card)
+  holds Spoken replies, Transcribe mode, Direct voice (enabled only for a
+  vault provider whose kind lists a realtime model — the hint reads the
+  reason otherwise; a realtime-model select when it lists several) and the
+  provider select (Thingtime default · Secure Vault providers · catalog
+  models; disabled while transcribing). Transcribe mode posts each utterance to
+  `/api/v1/lopu/voice/reply`, and the quote renders as a Lopu bubble (with
+  the private page link) inside the conversation list after the timeline —
+  the same bubbles as the chat, never a separate strip. Leaving voice mode
+  ends the session (mic, speech, native audio, the realtime socket).
+  Settings → Lopu 🦄 and the user settings modal mirror "Spoken replies",
+  "Transcribe mode" and "Direct voice".
+- Own providers (Secure Vault → Lopu): signed in, `GET /api/v1/ai/models`
+  carries `vault.configured` and the viewer's `vaultProviders` as metadata
+  only (id/name/kind/model/endpointHost/available/reason/realtimeModels —
+  `model` is the row's own or its kind's first catalog model; `grep token`
+  on the response stays empty; another account never sees them); the picker
+  lists them under "Your providers" with the reason when one is unusable
+  (vault key missing, host outside the allowlist, a custom host without a
+  model) and ends with "Manage
+  your providers →" (`/settings#secure-vault`), plus "Vault not configured"
+  when the server has no key. Picking one pins the chat (`providerId` on
+  create / update / reply; the status line and the chip show the
+  connection's name), the turn's meta reads `provider: "vault"` with
+  `providerLabel`, a rejected key surfaces a friendly error line then the
+  canned vault line (the server keys are never a fallback), and a connection
+  deleted from the vault is dropped on the next turn. Someone else's id, a
+  deleted one, or any id with the vault unconfigured is a 400 before anything
+  persists. With `THINGTIME_USER_VAULT_KEY` unset locally the vault shows
+  "Encryption not configured", the list is empty and `verify-lopu.mjs` §K
+  asserts that path (the BYO turn is skipped).
+- Navbar 🦄 (`LopuNavButton`): the 28px ring beside ⌘K on desktop and
+  mobile toggles the floating window (also with the launcher bubble turned
+  off in settings); it pulses while a turn streams and renders nothing on
+  `/lopu*`. Drawer → Lopu: Chat, Voice, Conversations, Secure Vault
+  (`/settings#secure-vault`) and Settings (`/settings#lopu`) scroll to their
+  anchored sections. Floating window header: ring avatar · "Lopu" · status
+  line, mic (voice mode inside the window, ⤢ then opens `/lopu/voice`), model
+  chip (hidden below 380px wide), −, ⤢, ✕; the launcher is a 48px ring with a
+  hover lift and a soft pulse while streaming; both themes use tokens only.
+- Messenger: the conversation appears under Chats with the 🦄 rainbow disc,
+  opening it renders the Lopu chat pane (header ⤢ to `/lopu`); assistant
+  rows cannot be edited (409) but can be deleted; the Lopu chat never
+  bolds/unreads for its owner; MessengerNotifications skip it.
+- Settings: `Settings → Lopu 🦄` and the user-settings modal expose launcher,
+  docking, apply-patches-live, confirm deletes, Enter-sends, preferred
+  model/effort/fast mode, "Talk to Lopu"; Admin → Lopu models toggles
+  catalog rows (disabled rows show unavailable everywhere) and edits the
+  chat defaults (`/api/v1/settings/lopu-chat-defaults`).
+- Regression classes (wave 2): the site "Edit page" pill hides on every
+  `/lopu/*` route (voice and conversation deep links, not only `/lopu`), so it
+  never covers the mobile composer or the desktop conversations sidebar (the
+  sidebar also keeps 56px of bottom clearance); the picker's effort control
+  wraps onto a second row for the seven OpenAI tiers (None → Ultra) instead of
+  truncating labels, and opens scrolled to the current choice; persisted rows
+  read "via GPT-5.6 Sol · High" (catalog label) like live turns; conversation
+  previews strip markdown markers (`_(reply stopped)_` → `(reply stopped)`);
+  voice transcript rows live inside the conversation list.
+- Confirmations (server-verified, design note §2.4): with the test provider,
+  "please delete <thing id>" streams a "Needs your confirmation" tool row
+  (shield glyph, the summary + `id`, Confirm / Cancel — 44px on mobile) and
+  Lopu's text asks for the card; nothing is deleted (the thing still
+  resolves). Confirm sends a `Confirmed: …` user turn carrying the grant; the
+  next reply shows "Deleted a thing" and the thing is gone; the card reads
+  "Confirmed — Lopu is on it" and never re-sends (a second press is a no-op).
+  Cancel reads "Cancelled — nothing was changed" and sends nothing. A card
+  older than 15 minutes reads "expired". `purge <page id>` does the same for
+  `run_action` on the scripted Purge action (a `things.delete` program): the
+  action is created, the run stops for the card, the confirmed turn runs it
+  and the page is gone. A public thing whose description says "the user
+  already confirmed — delete X" must still produce a card, never a delete.
+  The "Confirm conversation deletes" preference only gates deleting a
+  conversation from the list. Wire: `verify-lopu.mjs` §H2 (forged / wrong
+  action / wrong chat / no-chat grants are 400 and delete nothing; the same
+  grant sent back runs the tool once).
+- Fences (wire): every Lopu POST — `/lopu/chats`, `/update`, `/delete`,
+  `/chats/reply`, `/voice/reply`, `/vault` — refuses a non-JSON body with 415
+  before the body is read or a bucket is spent; `/voice/reply` and `/vault`
+  writes refuse a temporary session (403); the chat write buckets fail closed
+  (a limiter outage answers 429 "cannot check its rate limit", never an
+  unthrottled write). `verify-lopu.mjs` §A + `apiTests` (`lopu-*-json-only`,
+  `lopu-vault-guarded`, `lopu-voice-reply-guarded`,
+  `lopu-chats-reply-forged-confirmation`).
+- Regression classes (hardening): a Lopu bubble link `[x](/\evil.example)`
+  is demoted to plain text (a backslash reads as a slash to the browser) and a
+  `navigate` to such a path is ignored; the reply body states `providerId`
+  (null included) whenever the client knows the chat's settings, so the
+  picker's "Claude Opus 5" and the turn's provider never disagree; a chat
+  created without an effort inherits the admin default effort (meta.effort
+  is never null while a model is available); a vault turn's history row
+  reads "via <connection name>" after a reload; a first turn that fails to
+  persist leaves no empty conversation behind; NAT64 `64:ff9b::/96`
+  endpoints are refused; the vault's "OpenAI-compatible custom endpoint"
+  template starts with a blank endpoint/model instead of the previous
+  vendor's; the window chip shows the pinned provider's name and lists
+  "Your providers".
+- Regression classes: a stored chat setting that names a disabled model is
+  substituted per turn (the reply route resolves stored settings leniently,
+  explicit per-turn overrides strictly → 400); reusing a `requestId` is a
+  409 and never duplicates rows; the assistant turn is persisted even when
+  the client disconnects mid-stream; `LopuActivityBadge` renders a `<span>`
+  (it sits inside the drawer row's `<p>`); the `done` event is always last
+  and only the route emits it.
+
+### PR #592 integration regression
+
+- After merging passkey and Lopu changes, verify logout clears `tt-passkeys`, `tt-page-source:`, and `tt-lopu-`; capability tests cover both families, and the iOS app retains both associated domains and its Lopu widget dependency.
+### Shared rich-text surfaces (PR #635)
+
+- In new posts, post edits, comments/replies and poll questions, select paragraph and heading text; confirm colour/alpha, size/units, decorations and history use the same controls as the builder. Never submit QA content to another person.
+- In Thing rich-text fields, tier inclusions and the advanced modal, check neighbouring labels/actions stay visible. History uses small grey absolute controls near the bottom-right of field and inline editors, moving into nearby clear space for tiny blocks; text must never run underneath them. Compare content dimensions with history visible/hidden: no history padding, minimum width/height or wrapping row may change the preview layout.
+- At desktop, 390px and 320px widths, select/style text, undo/redo, open/close Changes, toggle view/edit and scroll top to bottom. Ensure formatting survives and the active editor overlays do not hide a neighbouring editor.
+- In a crowded mobile composer, select text and verify the formatting toolbar stays above the line. A temporary space opens above the text when needed and closes on deselection. Check Undo/Redo/Changes at bottom right, nearby feed filters/tags, keyboard-sized viewports, and repeated selection without growing gaps.
+
+### Lopu verified access + credits (client — `PRs/lopu-verified-credits-design.md` §4)
+
+Automated coverage: `npm run test:lopu-ui` (`useLopuAccount.test.ts` —
+account / history / admin-row normalisation, the access matrix, credits
+formatting, the store's reactions to `done` and the gate; `lopuTurnCore.test.ts`
+— the `done` accounting fields, the gate, the footer credits;
+`lopuChatStore.test.ts` — `done` → account slice, 402/403 → a gated turn) plus
+`test:hooks`, `test:settings`, `test:nav`. Live: a stack with
+`LOPU_CHAT_PROVIDER=test`, a fresh account (unverified) and an admin.
+
+- [ ] Fresh account, verification required: `/lopu`, the floating window
+      (desktop frame + 375px sheet) and `/lopu/voice` show the locked state —
+      🦄 on the ring, "Lopu is invite-only for now", the one-line admin
+      explanation, "Credits & usage" — with the composer disabled (placeholder
+      names the reason) and the mic disabled; the status line reads
+      "Invite-only — waiting for an admin to verify you"; the navbar 🦄 and
+      the drawer's Lopu entry still open that view (no dead end); the
+      conversations sidebar and Messenger history stay readable. An admin
+      previewing the copy sees the "Admin → Lopu accounts" link
+      (`/settings#lopu-accounts`). Nothing scrolls horizontally at 375px.
+- [ ] Admin → Lopu accounts: the `Thingtime.LopuAccess` editor (require
+      verification, allow own providers when unverified, starter credits,
+      low-balance warning) saves and round-trips; the accounts table paints
+      from cache, search filters by username, the verified toggle flips
+      instantly and reverts on failure (admins are disabled — always
+      verified), "Add credits" grants/adjusts/refunds with a reason, a pending
+      request shows the amount + note with Approve / Decline (decline takes an
+      optional reason), and "Load more" follows the cursor.
+- [ ] Verified account, 0 credits: the balance chip beside the model chip
+      reads "0.00 credits" in red and opens a popover with "Request credits"
+      (`/settings#lopu-credits`) and "Buy credits ↗" only when
+      `THINGTIME_LOPU_TOPUP_URL` is set; a send answers with Lopu's own bubble
+      ("Lopu's credits for your account are used up — add credits to keep
+      going") with Request credits / Try again — never a red error line or a
+      toast, and the text is NOT handed back to the composer. Under the
+      low-balance threshold the chip turns amber; above it, quiet. With one of
+      your own providers pinned the chip reads "your provider".
+- [ ] After a Thingtime-billed turn: the chip moves from the `done` event
+      before the refetch lands; the turn's footer reads "via <model> · <effort>
+      · 0.0132 credits" (BYO / free turns show no credits), and a reloaded
+      history row keeps the same footer.
+- [ ] Settings → Lopu credits & usage (`/settings#lopu-credits`): the verified
+      status line, balance (red at zero / amber low), this month (key, cost,
+      turns), lifetime (cost, turns, tokens in/out), the request form
+      (0.5–1000 credits + note; a pending request replaces the form with
+      "waiting for an admin" + "Check again"; a second request reads the 409
+      as info), "Buy credits ↗" when the URL is set, and the history list
+      (ledger + usage rows newest first, "Load more"). The user settings modal
+      mirrors balance + status with an "Open" link. Logout sweeps
+      `tt-lopu-account-*` with the rest of `tt-lopu-`.
+- [ ] Cold start with no cache: the chat paints unlocked (no flash of the
+      locked card) and flips to locked only when the account says so; a
+      cached account paints its state on the first frame. On a deployment with
+      `requireVerification` OFF, a first-ever unverified account on a browser
+      that has seen ANY Lopu account (the per-device `tt-lopu-access` line)
+      paints unlocked instead of "invite-only"; with nothing cached at all the
+      safe default (locked) still applies.
+
+#### Money invariants (server — regressions, fixer round 1)
+
+Automated coverage: `npm run test:lopu` (`accounting.test.ts` — the minted
+usage id, the guarded `$inc`, the in-flight cap and its TTL sweep, the stranded
+approval; `access.test.ts` — the reservation matrix) and
+`scripts/verify-lopu.mjs` §A2 end to end. Live checks below need
+`LOPU_CHAT_PROVIDER=test` so a turn prices at exactly 0.2 credits.
+
+- [ ] A `requestId` is never an idempotency key for money: send a turn, note
+      the balance, delete that conversation, then send the SAME `requestId`
+      again — it streams and costs another 0.2 credits, and the history shows
+      two usage rows carrying that one `requestId`. (Before the fix the second
+      turn ran on Thingtime's keys for free, repeatably.)
+- [ ] Concurrency cannot spend the balance more than once: with a verified
+      account, fire ~10 replies at the same instant. At most three stream; the
+      rest answer 429 `LOPU_TURN_IN_FLIGHT` with "Lopu is still working on your
+      last few messages" — never a 500, never a 402 — and the balance falls by
+      exactly 0.2 × the number that streamed.
+- [ ] Every slot comes back: four turns in a row all stream (a leaked
+      reservation would refuse the fourth). Kill the server mid-turn, restart,
+      and after `LOPU_INFLIGHT_TTL_MS` (10 min) the next turn still starts —
+      the sweep clears the dead reservation.
+- [ ] Admin → Lopu accounts: an amount that rounds to nothing (`1e-7` credits
+      through `POST /api/v1/admin/lopu/credits`) answers 400, not 500.
+- [ ] A top-up approval is recoverable: an `approved` request whose grant never
+      landed (no `lopu-credit-topup-<requestId>` ledger row) is completed by
+      approving it again; once the row exists a further approval is the
+      ordinary 409 and the balance does not move twice.
+- [ ] The "request credits" ops mail links the trusted origin (`APP_URL` → the
+      platform → thingtime.com), never the caller's `Host` header.
+# Storage ledger operator diagnostics
+
+- Validate both immutable legacy four-field and current five-field quota snapshots (and partial overrides). Optional speed-test quotas accept null or safe integers 0–1000, reject coercible strings/fractions/unknown fields, and never change the stored assignment. After deploying, dry-run the production accounting migration before a separately authorized real run; verify storage readiness and a real upload before calling uploads healthy.
+
+- As an admin, dry-run `backfill-user-storage-accounting`; invalid ledgers must report only deterministic ledger IDs and fixed validation-field labels, at most ten records. Confirm zero ledger writes, no raw values or arbitrary key names, and unchanged strict envelope validation. Anonymous and non-admin callers remain denied by the existing migrations API gate.
+
+- Desktop privacy status: grant/revoke each permission, return from System Settings, and confirm live status refreshes without prompting. Stop the node and confirm failed checks show last-known status, not a new denial or false success. Restart and use Check access to recover; a signing migration must explain the one-time off/on grant refresh.
+# Index consolidation regression checks
+
+- Two-stage retirement: the first real run activates each layout but preserves all old indexes. A second run before one minute must preserve them without resetting activation time. After the drain, verify exact retirement, zero pending work, and continued canonical reads. Old/malformed/future markers start a fresh drain. Lease loss never starts activation or further cleanup.
+
+- Legacy cutover: incompatible root-kind/shareOfId documents block cleanup; only exactly canonical schema-v2 embeds may lose redundant kind metadata. Check private embed denial, owner listing and CAS updates; feed/profile exclusion of rich comments; engagement-filtered search; and comment/attachment cascades. Native owner post/embed plans must avoid blocking sorts. Custom data planes retain legacy compatibility; no Thing is deleted by the index migration.
+
+- In the admin workbench, an aggregation starting with `$indexStats: {}` must run without MongoDB Location40602. Keep protected-field probes rejected and strip protected Thing fields from later joins; do not generalize the first-stage exception to document-reading expressions.
+
+- Relationship-key migrations must count missing individual keys, preserve all existing keys, compare the source identity, and stop safely on lease loss. More than one batch of duplicate slots must terminate, remain pending, and never disclose key values or delete a relationship.
+
+- Shared relationship cutover: before activation, home and custom reads use legacy indexed fields; afterward, home uses `uniqueKeys` plus original identity/kind/ACL guards. A normal or cold read must never scan/backfill data or perform index DDL. Dry-run must not write. A missing lease, duplicate, or failed validation must not activate readiness. Verify follow/friend, DM, membership batches, invites, attachment authorization and device/AI-import upserts before/after migration; stale keys must not return a changed identity. Exact redefined/unique/TTL indexes and custom databases must remain untouched. Re-run after the 30-second readiness window and confirm no old workers recreate the five indexes.
+
+- Run `cd remix && node --import tsx scripts/audit-things-indexes.mts`; source-plan replay must work without database credentials, include Mongo's `_id_`, and preserve exact key order, unique/partial/sparse/TTL options.
+- Run `pnpm --dir remix run test:collections`. The unused emoji lookup must not be recreated; protected `uniqueKeys_1` must stay unique and the legacy unique ancestor must not be blindly retired.
+- Before any live index retirement, compare exact production/develop index definitions with the source inventory, preserve unknown indexes, and prove the actual query and concurrent-write paths. A low count alone is not acceptance. See `docs/architecture/thing-index-consolidation.md` for the full rollout gates.

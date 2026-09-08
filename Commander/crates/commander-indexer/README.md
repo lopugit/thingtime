@@ -43,8 +43,18 @@ first-time scan. `includeHidden` defaults to `true` when omitted.
 ```sh
 commander-indexer index --database ./files.sqlite3 --config ./index.json
 commander-indexer query --database ./files.sqlite3 --query invoice --limit 30
+commander-indexer query --database ./files.sqlite3 --query '' --kind application --limit all
 commander-indexer status --database ./files.sqlite3
 ```
+
+Queries read the persisted SQLite index; they never run the scanner. There is
+no fixed record-count ceiling for any catalogue (apps, files, or directories).
+JSONL query `limit: null` / CLI `--limit all` returns all matching records;
+omitting the limit defaults to a 50-result output page. A numeric limit controls
+the returned page after ranking, not an arbitrary pre-ranking candidate slice.
+Typo/path fallback time budgets and explicit indexing resource settings remain
+in place to protect responsiveness. The Node client's `catalogue(kinds)` reads
+the complete catalogue without being cancelled by newer interactive queries.
 
 An index configuration looks like this:
 

@@ -196,6 +196,11 @@ export type DeviceSummary = {
 	transportStatus: DeviceTransportStatus;
 	revision: number;
 	lastSeenAt: string | null;
+	lastSyncAt?: string | null;
+	syncStatus?: 'paired' | 'healthy' | 'error' | null;
+	watchHealth?: { batteryLevel: number | null; lowPowerMode: boolean; error: string | null; updatedAt: string | null } | null;
+	createdThingCount?: number;
+	recentThings?: Array<{ id: string; label: string; createdAt: string }>;
 	appVersion?: string | null;
 	nodeVersion?: string | null;
 	system?: DeviceSystemProperties;

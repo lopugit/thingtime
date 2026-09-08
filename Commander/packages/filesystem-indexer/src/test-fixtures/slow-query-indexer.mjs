@@ -20,6 +20,7 @@ async function processNext() {
   const result =
     request.operation === 'query'
       ? {
+          request: request.request,
           records: [
             {
               path: `/tmp/${request.request.query}.txt`,

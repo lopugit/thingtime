@@ -1,0 +1,25 @@
+{
+  "verifiedOn": "2026-09-05",
+  "region": "ap-southeast-2",
+  "source": "AWS SES configuration set Overview and Event destinations tabs",
+  "sets": [
+    "my-first-configuration-set",
+    "thingtime"
+  ],
+  "eventDestinationCountPerSet": 0,
+  "defaultIdentitySet": "my-first-configuration-set",
+  "inheritedAccountSettings": [
+    "Suppression",
+    "Auto validation",
+    "VDM engagement tracking",
+    "VDM optimized shared delivery"
+  ],
+  "archiving": "Disabled",
+  "smimeSigning": "Disabled",
+  "tags": [],
+  "unverified": [
+    "Account-level inherited settings",
+    "Dedicated IP pool thingtime configuration and assigned IPs"
+  ],
+  "note": "Create-input JSON omits unset fields and inherited options. The default pool is implicit. Restore the thingtime pool separately before applying its set; do not provision paid dedicated IPs automatically."
+}

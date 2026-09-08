@@ -1,3 +1,4 @@
+import { ProgressiveImage } from './ProgressiveImage';
 import React from 'react';
 import { Box, Flex, IconButton, Modal, ModalContent, ModalOverlay, Text } from '@chakra-ui/react';
 import { Link } from 'react-router';
@@ -148,12 +149,14 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose }: MediaLigh
 								}}
 							/>
 						)}
-						<Box
-							as="img"
+						<ProgressiveImage
+							width="100%"
+							height="100%"
+							loading="eager"
+							sizes="100vw"
 							key={attachment.id}
 							src={attachmentMediaSrc(attachment)}
 							alt={attachment.title || attachmentDisplayName(attachment)}
-							referrerPolicy="no-referrer"
 							maxWidth="100%"
 							maxHeight="100%"
 							objectFit="contain"

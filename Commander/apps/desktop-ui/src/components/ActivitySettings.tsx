@@ -43,12 +43,14 @@ export function ActivitySettings({
   const [metrics, setMetrics] = useState<SystemMetrics>();
   const [network, setNetwork] = useState<ThingtimeNetworkProbe>();
   const [networkError, setNetworkError] = useState<string>();
+  const [speedError, setSpeedError] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [speedTesting, setSpeedTesting] = useState(false);
   const [sortKey, setSortKey] = useState<ProcessSortKey>('cpu');
   const [sortDirection, setSortDirection] = useState<SortDirection>('descending');
   const [groupByParent, setGroupByParent] = useState(false);
   const speedTestInFlight = useRef(false);
+  const networkGeneration = useRef(0);
 
   useEffect(() => {
     if (!nativeBridgeAvailable()) {
@@ -81,11 +83,16 @@ export function ActivitySettings({
 
   useEffect(() => {
     let cancelled = false;
+    networkGeneration.current += 1;
+    setNetwork(undefined);
+    setNetworkError(undefined);
+    setSpeedError(undefined);
     const refresh = async () => {
+      if (speedTestInFlight.current) return;
       try {
         const next = await api.activityNetwork();
         if (!cancelled) {
-          setNetwork(next);
+          setNetwork((previous) => ({ ...next, ...(previous?.speed ? { speed: previous.speed } : {}) }));
           setNetworkError(undefined);
         }
       } catch (error) {
@@ -97,20 +104,30 @@ export function ActivitySettings({
     const timer = window.setInterval(() => void refresh(), NETWORK_PING_INTERVAL_MS);
     return () => {
       cancelled = true;
+      networkGeneration.current += 1;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [settings.thingtimeBaseUrl, settings.activeAccountId]);
 
   const runSpeedTest = useCallback(async () => {
     if (speedTestInFlight.current) return;
     speedTestInFlight.current = true;
+    const generation = networkGeneration.current;
     setSpeedTesting(true);
     try {
       const next = await api.activityNetworkSpeed();
-      setNetwork(next);
+      if (generation !== networkGeneration.current) return;
+      const hasSamples = Boolean(next.speed?.downloads.length || next.speed?.uploads.length);
+      setNetwork((previous) => (hasSamples || !previous?.speed ? next : { ...next, speed: previous.speed }));
       setNetworkError(undefined);
+      setSpeedError(
+        !hasSamples && next.speed?.errors?.length
+          ? next.speed.errors.map((error) => error.message).join(' ')
+          : undefined,
+      );
     } catch (error) {
-      setNetworkError(error instanceof Error ? error.message : 'Thingtime speed test failed');
+      if (generation === networkGeneration.current)
+        setSpeedError(error instanceof Error ? error.message : 'Thingtime speed test failed');
     } finally {
       speedTestInFlight.current = false;
       setSpeedTesting(false);
@@ -270,7 +287,17 @@ export function ActivitySettings({
 
       <NetworkCard
         network={network}
-        error={networkError}
+        error={
+          [
+            networkError,
+            speedError,
+            ...(network?.speed?.errors ?? []).map(
+              ({ direction, message }) => `${direction === 'download' ? 'Download' : 'Upload'}: ${message}`,
+            ),
+          ]
+            .filter(Boolean)
+            .join(' ') || undefined
+        }
         speedTesting={speedTesting}
         periodicEnabled={settings.activity.periodicSpeedTestEnabled}
         periodicIntervalMinutes={settings.activity.periodicSpeedTestIntervalMinutes}
@@ -498,7 +525,7 @@ function NetworkCard({
           <h3 id="network-usage-title">
             <Network /> Thingtime network
           </h3>
-          <p>Direct, uncached latency to thingtime.com. Speed tests are explicit and bounded.</p>
+          <p>Direct, uncached latency to your Thingtime server. Speed tests are explicit and bounded.</p>
         </div>
         <span>
           {network
@@ -550,8 +577,16 @@ function NetworkCard({
       </div>
       <small className="activity-network-note">
         Each complete test transfers 17.6 MiB down and 17.6 MiB up across 56 KiB, 500 KiB, 2 MiB, 5 MiB, and
-        10 MiB packets. Automatic testing is off by default.
+        10 MiB samples. Uploads use serial chunks of at most 2 MiB. Automatic testing is off by default.
       </small>
+      {network?.speed ? (
+        <p className="activity-network-note">
+          Speed test: {network.speed.downloads.length}/{network.speed.packetBytes.length} download and{' '}
+          {network.speed.uploads.length}/{network.speed.packetBytes.length} upload samples completed
+          {network.speed.sampledAtMs ? ` at ${new Date(network.speed.sampledAtMs).toLocaleTimeString()}` : ''}
+          .{network.speed.errors?.length ? ' Partial results shown.' : ''}
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -771,9 +806,11 @@ function processSortValue(
   if (key === 'network') return process.networkBytesPerSecond;
   return process.diskReadBytesPerSecond + process.diskWriteBytesPerSecond;
 }
-function averageSpeed(values: Array<{ megabitsPerSecond: number }> | undefined): number | undefined {
+function averageSpeed(values: Array<{ bytes: number; durationMs: number }> | undefined): number | undefined {
   if (!values?.length) return undefined;
-  return values.reduce((total, value) => total + value.megabitsPerSecond, 0) / values.length;
+  const bytes = values.reduce((total, value) => total + value.bytes, 0);
+  const durationMs = values.reduce((total, value) => total + value.durationMs, 0);
+  return durationMs > 0 ? (bytes * 8) / (durationMs * 1000) : undefined;
 }
 function formatBytes(value: number | undefined): string {
   if (value === undefined || value < 0) return '—';

@@ -1217,7 +1217,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		viewer: AttachmentViewer,
 		idInput: unknown,
 		forceDownload: boolean
-	): Promise<AttachmentResult<{ url: string; expiresAt: string }>> => {
+	): Promise<AttachmentResult<{ url: string; expiresAt: string; cacheKey: string; size: number; contentType: string; disposition: string; image: boolean }>> => {
 		try {
 			const id = normalizeId(idInput);
 			if (!id) return fail(404, 'Attachment not found');
@@ -1269,7 +1269,18 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				contentDisposition: attachmentContentDisposition(doc.crystal.name, inline),
 				contentType: inline ? doc.crystal.contentType : 'application/octet-stream'
 			});
-			return { ok: true, ...signed };
+			return {
+				ok: true,
+				...signed,
+				// Opaque and viewer-scoped: never expose an object key, bucket or VersionId.
+				cacheKey: createHash('sha256')
+					.update(JSON.stringify([doc.shareId, doc.objectVersionId, viewer?.id || 'anonymous', forceDownload, doc.crystal.contentType]))
+					.digest('hex'),
+				size: doc.objectSizeBytes,
+				contentType: inline ? doc.crystal.contentType : 'application/octet-stream',
+				disposition: attachmentContentDisposition(doc.crystal.name, inline),
+				image: inline && doc.crystal.mediaKind === 'image'
+			};
 		} catch (error) {
 			return knownFailure(error) || unavailable('download', error);
 		}

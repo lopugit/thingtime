@@ -9,6 +9,7 @@ const TEST_ENV_KEYS = [
   'VERCEL_GIT_COMMIT_REF',
   'VERCEL_GIT_COMMIT_SHA',
   'VERCEL_URL',
+  'THINGTIME_BRANCH_NAME',
   'THINGTIME_CI_ROUTER_SECRET',
   'THINGTIME_DEVELOPMENT_STATUS_ORIGIN',
   'THINGTIME_DATA_ENV',
@@ -17,6 +18,7 @@ const TEST_ENV_KEYS = [
   'THINGTIME_DEV_STATUS_ORIGIN',
   'THINGTIME_EMAIL_UNSUB_SECRET',
   'THINGTIME_GITHUB_WEBHOOK_SECRET',
+  'THINGTIME_GIT_COMMIT_SHA',
   'THINGTIME_LOCAL_STATUS_ORIGIN',
   'THINGTIME_PRODUCTION_STATUS_ORIGIN',
   'THINGTIME_PROD_STATUS_ORIGIN',
@@ -91,6 +93,23 @@ test('root data exposes only explicit browser-safe deployment values', async () 
     assert.equal('THINGTIME_PUBLIC_LABEL' in env, false);
     assert.equal('THINGTIME_VERCEL_WEBHOOK_SECRET' in env, false);
     assert.equal(Object.keys(env).some((key) => /SECRET|TOKEN|PASSWORD|CREDENTIAL|PRIVATE_KEY/i.test(key)), false);
+  });
+});
+
+test('root data exposes controller-provided source identity for prebuilt previews', async () => {
+  await withTestEnv(async () => {
+    delete process.env.VERCEL_GIT_COMMIT_REF;
+    delete process.env.VERCEL_GIT_COMMIT_SHA;
+    process.env.THINGTIME_BRANCH_NAME = 'claude/marketing-suite';
+    process.env.THINGTIME_GIT_COMMIT_SHA = '91a64f34d0b1408b1d9404b4942fa517bd07f21b';
+
+    const response = await rootDataResponse(new Request('https://pr-610.previews.dev.thingtime.com/api/root-data'));
+    const body = await response.json();
+    const env = body.envFromCookie as Record<string, string | undefined>;
+
+    assert.equal(env.THINGTIME_BRANCH_NAME, 'claude/marketing-suite');
+    assert.equal(env.THINGTIME_VERCEL_GIT_COMMIT_SHA, '91a64f34d0b1408b1d9404b4942fa517bd07f21b');
+    assert.equal('THINGTIME_GIT_COMMIT_SHA' in env, false);
   });
 });
 

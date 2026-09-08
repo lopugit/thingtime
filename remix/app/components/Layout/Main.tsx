@@ -6,15 +6,17 @@ import { drawerWidthCss, useDrawer, useDrawerLiveWidth, useIsMobileViewport } fr
 
 // Full-bleed app surfaces own the whole viewport (fixed-height panes with
 // their own internal scroll), so the footer and its tail spacer stay off —
-// a chat that scrolls the page under the composer is unusable.
-const FULL_BLEED_PATHS = ['/messages'];
+// a chat that scrolls the page under the composer is unusable. Matched by
+// prefix so /lopu/:chatId deep links stay full-bleed too.
+const FULL_BLEED_PATHS = ['/messages', '/lopu'];
+const isFullBleedPath = (pathname: string) => FULL_BLEED_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 
 export const Main = (props) => {
 	const { loading, open, direction } = useDrawer();
 	const { width: drawerWidth, resizing } = useDrawerLiveWidth();
 	const isMobile = useIsMobileViewport();
 	const { pathname } = useLocation();
-	const fullBleed = FULL_BLEED_PATHS.includes(pathname);
+	const fullBleed = isFullBleedPath(pathname);
 
 	// viewport-clamped drawer width shared with NavDrawer/Nav
 	const shiftCss = drawerWidthCss(drawerWidth);

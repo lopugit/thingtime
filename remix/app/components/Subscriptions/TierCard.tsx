@@ -4,6 +4,8 @@ import { Badge, Box, Button, Flex, Heading, SimpleGrid, Text } from '@chakra-ui/
 import {
   TIER_DISCOUNT_COMPARISONS,
   currencyMinorUnitFactor,
+  speedTestsPerHour,
+  speedTestAllowanceLabel,
   type SubscriptionTierDescriptor,
   type TierPricePeriod
 } from '~/api/utils/subscriptions/tierCatalog';
@@ -156,6 +158,8 @@ export const TierCard = ({
             <RichTextBlocks blocks={tier.inclusions.blocks} />
           </Box>
         ) : null}
+
+        {showStatus ? <Text fontSize="sm">Account speed tests: {speedTestAllowanceLabel(speedTestsPerHour(tier.id, tier.quotas))}</Text> : null}
 
         <Box mt="auto" pt={1}>
           {onAction && actionLabel ? (

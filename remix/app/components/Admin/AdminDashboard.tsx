@@ -221,12 +221,13 @@ const StorageUsage = ({ storage }: { storage: AdminStorageProjection | null | un
 	);
 };
 
-const QUOTA_FIELDS = ['appStorageBytes', 'userStorageBytes', 'maxApps', 'maxPats'] as const;
+const QUOTA_FIELDS = ['appStorageBytes', 'userStorageBytes', 'maxApps', 'maxPats', 'speedTestsPerHour'] as const;
 const QUOTA_QUERY_LABELS: Record<(typeof QUOTA_FIELDS)[number], string> = {
   appStorageBytes: 'app storage',
   userStorageBytes: 'user storage',
   maxApps: 'max apps',
-  maxPats: 'max access tokens'
+  maxPats: 'max access tokens',
+  speedTestsPerHour: 'speed tests per hour'
 };
 
 const subscriptionQueryFields = <T,>(prefix = 'subscription'): AdminRowField<T>[] => [

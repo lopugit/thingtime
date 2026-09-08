@@ -1,5 +1,6 @@
 import { escapeRegex, findUserByUsername } from '../auth/users';
 import { getThingsCollection } from '../mongodb/collections';
+import { legacyThingReadsRequired } from '../mongodb/legacyThingLayout';
 import { fetchCappedTotal } from '../mongodb/cappedTotal';
 import {
   ACL_INHERIT,
@@ -11,7 +12,7 @@ import {
 } from '~/schemas/registry';
 import {
   POST_TYPES,
-  VISIBILITIES,
+  REQUESTABLE_VISIBILITIES,
   appMatchClauses,
   appShapeProjections,
   appVisiblePage,
@@ -39,6 +40,7 @@ import {
   type ThingDoc,
   type Viewer
 } from './things';
+import { subspaceFeedClauses } from '../subspaces/gate';
 import { attachRankScores, type RankedSearchSource } from './searchRanking';
 import { emojiTokensForSearchTerm } from './emojiSearch';
 
@@ -462,7 +464,7 @@ export const searchThings = async (
 
   const thingtime = csvList(query.thingtime);
   if (thingtime.length) {
-    clauses.push(thingtimeInClause(thingtime));
+    clauses.push(await thingtimeInClause(thingtime));
   }
 
   // Protected system kinds are NOT discoverable through the generic search:
@@ -495,9 +497,11 @@ export const searchThings = async (
   const types = csvList(query.types).filter((entry): entry is PostType => POST_TYPES.includes(entry as PostType));
   if (types.length) clauses.push(typeClause(types));
 
-  // audience circles narrow the visibility superset below
+  // audience circles narrow the visibility superset below — validate against
+  // the REQUESTABLE set so 'hidden' survives (a dropped circle silently reads
+  // as "no circle filter", which widens rather than narrows)
   const circles = csvList(query.circles).filter((entry): entry is PostVisibility =>
-    VISIBILITIES.includes(entry as PostVisibility)
+    REQUESTABLE_VISIBILITIES.includes(entry as PostVisibility)
   );
 
   // author: one username → ownerId. An unknown username matches nothing —
@@ -557,7 +561,8 @@ export const searchThings = async (
       : directVisibility;
   if (!visibility) return emptyResult;
 
-  const baseMatch = withMatch(visibility, ...clauses);
+  // subspace fences (removed / private-subspace posts) — same clauses the feeds use
+  const baseMatch = withMatch(visibility, ...clauses, ...subspaceFeedClauses(viewer));
   const ranked = sort === 'relevance';
 
   // A cursor is minted for one paging mode and is meaningless in another: offset
@@ -644,7 +649,7 @@ export const searchThings = async (
               }
             ])
             .toArray() as Promise<any[]>,
-          things
+          await legacyThingReadsRequired() ? things
             .aggregate([
               { $match: { parentId: { $in: ids }, kind: { $in: ['comment', 'reaction'] } } },
               {
@@ -655,7 +660,7 @@ export const searchThings = async (
                 }
               }
             ])
-            .toArray() as Promise<any[]>
+            .toArray() as Promise<any[]> : Promise.resolve([])
         ])
       : [[], []];
 

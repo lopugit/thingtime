@@ -1,0 +1,18 @@
+{
+  "CORSRules": [
+    {
+      "AllowedHeaders": [
+        "x-amz-checksum-sha256"
+      ],
+      "AllowedMethods": [
+        "PUT"
+      ],
+      "AllowedOrigins": [
+        "https://thingtime.com",
+        "https://*.previews.thingtime.com"
+      ],
+      "ExposeHeaders": [],
+      "MaxAgeSeconds": 300
+    }
+  ]
+}

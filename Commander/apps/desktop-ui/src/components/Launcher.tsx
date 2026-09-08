@@ -4,6 +4,7 @@ import {
   AppWindow,
   ArrowRight,
   Calculator,
+  Check,
   Command,
   CornerDownLeft,
   Files,
@@ -660,6 +661,34 @@ export function Launcher({ state }: { state: CommanderState }) {
                 >
                   <Plus />
                   <span>Open New Window</span>
+                </button>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={state.bootstrap?.settings.windowPinning.defaultPinned ?? false}
+                  disabled={!state.bootstrap?.settings.windowPinning.enabled}
+                  onClick={() => {
+                    const settings = state.bootstrap?.settings;
+                    if (!settings) return;
+                    setPinMenuOpen(false);
+                    void state.saveSettings({
+                      ...settings,
+                      windowPinning: {
+                        ...settings.windowPinning,
+                        defaultPinned: !settings.windowPinning.defaultPinned,
+                      },
+                    });
+                  }}
+                >
+                  <Check
+                    aria-hidden="true"
+                    style={{
+                      visibility: state.bootstrap?.settings.windowPinning.defaultPinned
+                        ? 'visible'
+                        : 'hidden',
+                    }}
+                  />
+                  <span>Open New Windows Pinned</span>
                 </button>
               </aside>
             ) : null}
