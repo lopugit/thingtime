@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import dns from 'node:dns/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import test from 'node:test';
 
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
@@ -19,6 +21,21 @@ import { connectionProviderById, webLink } from './providers.ts';
 // out and we merely disliked the response.
 
 const rss: any = connectionProviderById('rss');
+
+// Fetch is stubbed, so DNS must be deterministic too: local resolvers may
+// map reserved .test hosts to loopback, preventing redirect assertions from
+// ever reaching the credential-stripping code. No real requests are made.
+const originalLookup = dns.lookup;
+const originalFetch = globalThis.fetch;
+test.before(() => {
+  dns.lookup = (async () => [{ address: '1.1.1.1', family: 4 }]) as typeof dns.lookup;
+  syncBuiltinESMExports();
+});
+test.after(() => {
+  dns.lookup = originalLookup;
+  globalThis.fetch = originalFetch;
+  syncBuiltinESMExports();
+});
 
 let calls: string[] = [];
 const stubFetch = (impl: (url: string) => Response) => {

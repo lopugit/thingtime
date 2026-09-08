@@ -10,6 +10,7 @@ import {
   getHomeThingsCollection,
   getHomeThingtimeDb,
   getSettingsCollection,
+  invalidateHomeRelationshipKeys,
   getThingtimeDb,
   thingsIndexPlanNames,
   withMongoTransaction
@@ -44,7 +45,10 @@ import {
 } from '../auth/users';
 import { waitlistEmailKey } from '../waitlist/waitlist';
 import { externalPostSourceKey, externalPostSourceShareId } from '../connections/connections';
-import { RELATIONSHIP_UNIQUE_CRYSTAL_KEYS, relationshipUniqueKeys } from '../messenger/shared';
+import { RELATIONSHIP_UNIQUE_CRYSTAL_KEYS } from '../messenger/shared';
+import { repairRelationshipKeys } from './relationshipKeys';
+import { migrateRelationshipIndexLayout } from '../mongodb/relationshipIndexLayout';
+import { migrateLegacyThingIndexLayout } from '../mongodb/legacyThingLayout';
 import { themeAcl } from '../themes/themes';
 import {
 	builtinSchemaSeedNeedsRefresh,
@@ -3056,12 +3060,6 @@ const staleGenerationBlocker = async (physical: string): Promise<string | null> 
 // that is the squat census; after the namespace reopens it may be intentional
 // ordinary data and remains operator information only.
 
-const relationshipBackfillTargets = (): Array<{ kind: string; field: string }> =>
-	Object.entries(RELATIONSHIP_UNIQUE_CRYSTAL_KEYS).map(([kind, field]) => ({ kind, field }));
-
-const relationshipBackfillFilter = (kind: string, field: string) =>
-	({ thingtime: kind, [`crystal.${field}`]: { $type: 'string' }, uniqueKeys: { $exists: false } }) as any;
-
 const backfillRelationshipUniqueKeys: Migration = {
 	id: 'backfill-relationship-unique-keys',
 	collection: 'things',
@@ -3071,58 +3069,19 @@ const backfillRelationshipUniqueKeys: Migration = {
 	description:
 		'Stamps the server-only root uniqueKeys dedupe entry (`<field>:<key>` BinData) onto legacy relationship ' +
 		'things whose uniqueness previously rode kind-blind crystal-path unique indexes (retired to lookup ' +
-		'indexes by the boot-time ensure). Idempotent: stamps are deterministic and only docs without ' +
-		'uniqueKeys are touched. Also counts — never modifies — free-form data things carrying a relationship ' +
+		'indexes by the boot-time ensure). Idempotent: adds only missing individual keys, preserving other ' +
+		'uniqueKeys and checking the source identity before each write. Conflicts remain pending without retry loops. Also counts — never modifies — free-form data things carrying a relationship ' +
 		'name at the crystal root: operator census only, because phase 2 makes those names valid ordinary data. ' +
 		'Targets are read from the relationship map, so a family that joins later (passkey-app-link, which ' +
 		'shipped mid-migration with its own crystal-path unique index) is covered by re-running this.',
 	pending: async () => {
 		const things = await getCollection('things');
-		let total = 0;
-		for (const { kind, field } of relationshipBackfillTargets()) {
-			total += await things.countDocuments(relationshipBackfillFilter(kind, field));
-		}
-		return total;
+		return (await repairRelationshipKeys(things, { dryRun: true })).matched;
 	},
 	run: async ({ dryRun, assertLease }) => {
 		const things = await getCollection('things');
-		const notes: string[] = [];
-		let matched = 0;
-		let migrated = 0;
-		let skipped = 0;
-		for (const { kind, field } of relationshipBackfillTargets()) {
-			const filter = relationshipBackfillFilter(kind, field);
-			const kindMatched = await things.countDocuments(filter);
-			matched += kindMatched;
-			if (dryRun || !kindMatched) continue;
-			let kindMigrated = 0;
-			while (true) {
-				await assertLease?.();
-				const batch = await things.find(filter).project({ shareId: 1, crystal: 1 }).limit(THINGS_BATCH).toArray();
-				if (!batch.length) break;
-				for (const doc of batch) {
-					const uniqueKeys = relationshipUniqueKeys(kind, doc.crystal);
-					if (!uniqueKeys) {
-						skipped += 1;
-						continue;
-					}
-					try {
-						await things.updateOne({ shareId: doc.shareId, uniqueKeys: { $exists: false } } as any, { $set: { uniqueKeys } } as any);
-						kindMigrated += 1;
-					} catch (err: any) {
-						if (err?.code !== 11000) throw err;
-						// The slot is already held by another doc — a twin from the
-						// pre-unique-index era. Leave it unstamped for operator review;
-						// guessing a winner here could delete a real relationship.
-						skipped += 1;
-						notes.push(`duplicate ${kind} ${field} slot left unstamped: ${doc.shareId}`);
-					}
-				}
-				if (batch.length < THINGS_BATCH) break;
-			}
-			migrated += kindMigrated;
-			if (kindMigrated) notes.push(`${kindMigrated} ${kind} doc(s) stamped`);
-		}
+		const result = await repairRelationshipKeys(things, { dryRun, assertLease });
+		const notes = result.notes;
 		const relationshipFields = Array.from(new Set(Object.values(RELATIONSHIP_UNIQUE_CRYSTAL_KEYS)));
 		for (const field of relationshipFields) {
 			await assertLease?.();
@@ -3133,7 +3092,7 @@ const backfillRelationshipUniqueKeys: Migration = {
 				);
 			}
 		}
-		return { dryRun, matched, migrated, created: 0, skipped, notes };
+		return result;
 	}
 };
 
@@ -3261,6 +3220,29 @@ const relationalExternalPostSources: Migration = {
 	}
 };
 
+const consolidateRelationshipIndexes: Migration = {
+	id: 'consolidate-relationship-lookup-indexes',
+	collection: 'things',
+	fromVersion: THINGS_VERSION,
+	toVersion: THINGS_VERSION,
+	title: 'Consolidate five relationship lookup indexes',
+	description: 'Home database only. Deploy compatible shared-key readers and key-stamping writers on every origin sharing this database first. First run repairs and validates keys and activates reads; run again after at least one minute to remove five exact non-unique legacy lookups after caches drain. Preserves custom databases, unique ancestors, unknown indexes and conflicting relationships. No document deletion.',
+	destructive: true,
+	pending: async () => (await migrateRelationshipIndexLayout(await getHomeThingsCollection(), await getSettingsCollection(), { dryRun: true })).matched,
+	run: async ({ dryRun, assertLease }) => {
+		try {
+			return await migrateRelationshipIndexLayout(await getHomeThingsCollection(), await getSettingsCollection(), { dryRun, assertLease });
+		} finally { if (!dryRun) invalidateHomeRelationshipKeys(); }
+	}
+};
+
+const retireLegacyThingIndexes: Migration = {
+	id: 'retire-legacy-thing-indexes', collection: 'things', fromVersion: THINGS_VERSION, toVersion: THINGS_VERSION,
+	title: 'Retire eight legacy Thing indexes', destructive: true,
+	description: 'After every shared-database origin supports canonical Thing reads, require no incompatible legacy rows, ensure the shared schema/owner updated-order index and activate home-only canonical reads. Run again after at least one minute to clean redundant embed kind metadata and remove eight exact legacy indexes after caches drain. Custom databases keep legacy compatibility. No Thing documents are deleted.',
+	pending: async () => (await migrateLegacyThingIndexLayout({ dryRun: true })).matched,
+	run: migrateLegacyThingIndexLayout
+};
 export const migrations: Migration[] = [
 	// Physical residue must land in the current generation before any logical
 	// shape or byte-ledger migration can declare its source universe complete.
@@ -3286,6 +3268,8 @@ export const migrations: Migration[] = [
 	// Shape first, then storage: relocate drains the ci-* rows out of things and
 	// rebuild reclaims the index bytes they left behind, so both run after every
 	// migration that still reads or rewrites things documents.
+	consolidateRelationshipIndexes,
+	retireLegacyThingIndexes,
 	relocateCiControlTelemetry,
 	rebuildThingsIndexes,
   dropStaleCollectionGenerations

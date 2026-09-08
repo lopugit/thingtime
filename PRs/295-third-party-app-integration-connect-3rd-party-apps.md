@@ -3,6 +3,22 @@
 Branch `claude/third-party-app-integration-c96057` → `develop` ·
 [PR #295](https://github.com/lopugit/thingtime/pull/295)
 
+## 2026-09-09 — shared-index rollout compatibility
+
+Merged released main into this preview without releasing the unfinished
+connections feature to main. Connections adds no indexes: it retains the
+47-index post-migration plan and its relational external-post-source identity
+uses the shared Binary uniqueKeys index. The source family also participates
+in idempotent key repair; tests cover preservation of ordinary data keys.
+
+Merge resolutions retain both external-source authorization and the private
+subspace membership fence, plus comment-sort projection options, both drawer
+destinations and both test groups. Stubbed outbound redirect tests now stub DNS
+as well as fetch so local reserved-domain resolution cannot suppress the
+cross-origin credential assertions. Production network guards are unchanged.
+
+This is compatibility preparation, not evidence that the live migration ran.
+
 Link external accounts to a Thingtime account (one external account linkable
 from MULTIPLE Thingtime accounts), browse their feeds inside Thingtime with
 native Thingtime comments/reactions layered on the synced posts, and apply AI
