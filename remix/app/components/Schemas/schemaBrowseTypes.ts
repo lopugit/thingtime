@@ -1,7 +1,8 @@
-import { crystalSchemas } from '~/schemas/registry';
+import { crystalSchemas, getThingtimeSchema } from '~/schemas/registry';
 import type { SchemaThingField, ThingtimeSchema } from '~/schemas/registry';
 import { flattenSchemaFields } from '~/schemas/tools';
 import type { SchemaSource } from '~/components/Search/searchTypes';
+import { readLocalCache } from '~/hooks/localCache';
 
 // Client-side mirrors of /api/v1/schemas/browse shapes (server source of
 // truth: app/api/utils/schemas/browse.ts).
@@ -98,6 +99,91 @@ export const registryToCardSource = (schema: ThingtimeSchema): SchemaCardSource 
   fields: (schema.fields || []) as unknown as SchemaThingField[],
   registry: schema
 });
+
+// ---------------------------------------------------------------------------
+// The ONE key a schema is addressed by outside the browse list — the
+// /schemas/:key page and /search's ?schema= deep link both speak it: a builtin
+// registry schema is `builtin:<id>`, a community schema thing is its shareId.
+// Cards, the detail page, and every deep link derive from here so the rule
+// can never drift between them.
+
+const BUILTIN_KEY_PREFIX = 'builtin:';
+const SEEDED_MIRROR_PREFIX = 'schema-';
+
+export const schemaDetailKeyFor = (source: Pick<SchemaCardSource, 'origin' | 'id'>): string =>
+  source.origin === 'builtin' ? `${BUILTIN_KEY_PREFIX}${source.id}` : source.id;
+
+export const schemaDetailPath = (source: Pick<SchemaCardSource, 'origin' | 'id'>): string =>
+  `/schemas/${encodeURIComponent(schemaDetailKeyFor(source))}`;
+
+export const schemaSearchPath = (source: Pick<SchemaCardSource, 'origin' | 'id'>): string =>
+  `/search?schema=${encodeURIComponent(schemaDetailKeyFor(source))}`;
+
+// What a /schemas/:key param names. Builtins resolve first — `builtin:<id>`,
+// the bare registry id, and the seeded mirror's shareId (`schema-<id>`, the
+// system-owned copy the seed-builtin-schemas migration writes) all show the
+// registry entry, the same source of truth the browse page lists them from.
+// Anything else is a community schema thing's shareId, resolved by fetch.
+export type SchemaDetailKey = { origin: 'builtin'; id: string } | { origin: 'community'; id: string };
+
+export const builtinSchemaForKey = (key: string): ThingtimeSchema | null => {
+  const id = key.startsWith(BUILTIN_KEY_PREFIX)
+    ? key.slice(BUILTIN_KEY_PREFIX.length)
+    : seededBuiltinShareIds.has(key)
+      ? key.slice(SEEDED_MIRROR_PREFIX.length)
+      : key;
+  const schema = getThingtimeSchema(id);
+  return schema && (schema.kind === 'root' || schema.kind === 'crystal') ? schema : null;
+};
+
+export const parseSchemaDetailKey = (raw: string | undefined): SchemaDetailKey | null => {
+  const key = (raw || '').trim();
+  if (!key) return null;
+  const builtin = builtinSchemaForKey(key);
+  if (builtin) return { origin: 'builtin', id: builtin.id };
+  // an unknown builtin: key names nothing — never fall through to a fetch
+  if (key.startsWith(BUILTIN_KEY_PREFIX)) return null;
+  return { origin: 'community', id: key };
+};
+
+// ---------------------------------------------------------------------------
+// The browse page's per-user localCache line — the detail page paints a
+// community schema from it before its own fetch lands.
+//
+// A browse snapshot carries viewer-scoped data (viewerReactions/saved flags,
+// the viewer's own private schemas in mine/library scope, and even their
+// private things in 'all' scope via visibilityQueryFor) — so it must never
+// live under a shared global key that another account could paint from.
+// Mirrors SearchPage's tt-search-<userId> convention; the pre-scoping global
+// key is purged on mount by every page that reads the cache.
+
+export const SCHEMAS_LEGACY_CACHE_KEY = 'tt-schemas';
+export const schemasCacheKeyFor = (userId: string | null | undefined): string | null => (userId ? `tt-schemas-${userId}` : null);
+
+export type SchemasViewMode = 'feed' | 'grid' | 'columns';
+export type SchemasSortMode = 'newest' | 'popular' | 'oldest';
+export type SchemasScopeMode = 'all' | 'mine' | 'library';
+
+export type CachedSchemas = {
+  q: string;
+  sort: SchemasSortMode;
+  view: SchemasViewMode;
+  scope: SchemasScopeMode;
+  entries: BrowseSchemaEntry[];
+  nextCursor: string | null;
+  total: number | null;
+  totalCapped: boolean;
+};
+
+export const readCachedSchemas = (userId: string | null | undefined): CachedSchemas | null => {
+  const key = schemasCacheKeyFor(userId);
+  return key ? readLocalCache<CachedSchemas>(key) : null;
+};
+
+// The last-known browse entry for one community schema (null when the
+// viewer's snapshot never held it — nothing to paint optimistically).
+export const cachedSchemaEntry = (userId: string | null | undefined, id: string): BrowseSchemaEntry | null =>
+  readCachedSchemas(userId)?.entries.find((entry) => entry.id === id) || null;
 
 // ---------------------------------------------------------------------------
 // Seeded-builtin mirror rule — shared by /schemas and /search.

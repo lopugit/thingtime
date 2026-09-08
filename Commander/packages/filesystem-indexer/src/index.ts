@@ -49,7 +49,8 @@ export interface IndexRecord {
 export interface QueryRequest {
   query: string;
   kinds?: IndexKind[];
-  limit?: number;
+  /** Returned result count only; null returns the complete matching catalogue. */
+  limit?: number | null;
 }
 
 export interface QueryResponse {
@@ -245,6 +246,14 @@ export class FileSystemIndexerClient {
     });
     this.#queuedQuery = { key, request, promise, resolve, reject };
     return promise;
+  }
+
+  /** Complete catalogue reads must not be superseded by interactive typing. */
+  catalogue(kinds: IndexKind[]): Promise<QueryResponse> {
+    return this.#request<QueryResponse>({
+      operation: 'query',
+      request: { query: '', kinds, limit: null },
+    });
   }
 
   lookup(path: string, kind: IndexKind): Promise<IndexRecord | null> {

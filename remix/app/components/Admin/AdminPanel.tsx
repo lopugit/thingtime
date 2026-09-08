@@ -7,6 +7,8 @@ import { useLopu } from '~/components/Lopu/useLopu';
 
 import { AdminRowQueryControls, useAdminRowQuery } from './AdminRowQueryControls';
 import type { AdminRowField } from './adminRowQuery';
+import { LOPU_ACCOUNTS_ANCHOR_ID, LopuAccountsAdmin } from './LopuAccountsAdmin';
+import { LopuModelsEditor } from './LopuModelsEditor';
 import { PRConflictResolverModelWaterfallEditor } from './PRConflictResolverModelWaterfallEditor';
 
 // Admin-only control panel (rendered from SettingsPage when user.isAdmin).
@@ -373,6 +375,11 @@ const AdminManager = () => {
 export const AdminPanel = () => (
   <Flex flexDirection="column" rowGap={5}>
     <PRConflictResolverModelWaterfallEditor />
+    <LopuModelsEditor />
+    {/* anchored: the locked state's "Admin → Lopu accounts" link deep-links #lopu-accounts */}
+    <Box id={LOPU_ACCOUNTS_ANCHOR_ID} scrollMarginTop="calc(var(--tt-nav-clearance, 54px) + 16px)">
+      <LopuAccountsAdmin />
+    </Box>
     <RateLimitEditor />
     <AdminManager />
   </Flex>

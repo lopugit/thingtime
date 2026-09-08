@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS, USER_STORAGE_LEDGER_ENVELOPE_VERSION } from '../../../schemas/registry.ts';
+import { QUOTA_OVERRIDE_BOUNDS, QUOTA_OVERRIDE_FIELDS, REQUIRED_TIER_QUOTA_FIELDS } from './tierCatalog.ts';
 
 export type SubscriptionIdentitySubject = 'user' | 'app';
 
@@ -52,7 +53,18 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> => !!va
 const hasOnlyKeys = (value: Record<string, unknown>, allowed: readonly string[]): boolean => Object.keys(value).every((key) => allowed.includes(key));
 const validDate = (value: unknown): boolean => value instanceof Date && Number.isFinite(value.getTime());
 const validNullableQuota = (value: unknown): boolean => value === null || (Number.isSafeInteger(value) && Number(value) >= 0);
-const TIER_QUOTA_KEYS = ['appStorageBytes', 'userStorageBytes', 'maxApps', 'maxPats'] as const;
+// Validate stored snapshots without the input sanitizer's coercion/clamping.
+// Immutable older revisions legitimately omit newly introduced optional quotas.
+const storedQuotaFieldsAreTrusted = (value: unknown): value is Record<string, unknown> =>
+	isPlainObject(value) &&
+	hasOnlyKeys(value, QUOTA_OVERRIDE_FIELDS) &&
+	Object.entries(value).every(([key, quota]) =>
+		validNullableQuota(quota) &&
+		(key !== 'speedTestsPerHour' || quota === null || Number(quota) <= QUOTA_OVERRIDE_BOUNDS.speedTestsPerHour.max)
+	);
+const storedTierQuotasAreTrusted = (value: unknown): boolean =>
+	storedQuotaFieldsAreTrusted(value) && REQUIRED_TIER_QUOTA_FIELDS.every((key) => Object.prototype.hasOwnProperty.call(value, key));
+const storedOverridesAreTrusted = (value: unknown): boolean => value === null || storedQuotaFieldsAreTrusted(value);
 
 const tierAssignmentShapeIsTrusted = (crystal: Record<string, unknown>): boolean => {
 	const quotas = crystal.tierQuotas;
@@ -66,11 +78,8 @@ const tierAssignmentShapeIsTrusted = (crystal: Record<string, unknown>): boolean
 		Number(crystal.tierVersion) >= 1 &&
 		typeof crystal.tierName === 'string' &&
 		typeof crystal.tierMetered === 'boolean' &&
-		isPlainObject(quotas) &&
-		hasOnlyKeys(quotas, TIER_QUOTA_KEYS) &&
-		TIER_QUOTA_KEYS.every((key) => Object.prototype.hasOwnProperty.call(quotas, key) && validNullableQuota(quotas[key])) &&
-		(overrides === null ||
-			(isPlainObject(overrides) && hasOnlyKeys(overrides, TIER_QUOTA_KEYS) && Object.values(overrides).every(validNullableQuota))) &&
+		storedTierQuotasAreTrusted(quotas) &&
+		storedOverridesAreTrusted(overrides) &&
 		(crystal.note === null || typeof crystal.note === 'string') &&
 		(crystal.updatedBy === null || typeof crystal.updatedBy === 'string') &&
 		typeof crystal.isDefaultAssignment === 'boolean'
@@ -113,6 +122,54 @@ export const userSubscriptionLedgerEnvelopeIsTrusted = (doc: any, subjectId: str
 // root proof; a squatted row, wrong subject, or extra payload is never blessed.
 export const legacyUserSubscriptionLedgerEnvelopeCanUpgrade = (doc: any, subjectId: string): boolean =>
 	userSubscriptionIdentityIsTrusted(doc, subjectId, false);
+
+// Operator diagnostics contain only fixed field labels, never stored values or
+// arbitrary key names. This does not relax the validator or authorize a repair.
+export const userSubscriptionLedgerEnvelopeIssues = (doc: any, subjectId: string): string[] => {
+	if (!isPlainObject(doc)) return ['root.object'];
+	const issues: string[] = [];
+	const check = (field: string, valid: boolean) => {
+		if (!valid) issues.push(field);
+	};
+	check('root.fields', hasOnlyKeys(doc, USER_SUBSCRIPTION_ROOT_KEYS));
+	for (const key of ['extended', 'storageClass', 'sizeBytes', 'storageAccountingVersion', 'kind', 'parentId', 'secure', 'uniqueKeys']) {
+		if (Object.prototype.hasOwnProperty.call(doc, key)) issues.push(`root.unexpected.${key}`);
+	}
+	check('root.shareId', typeof subjectId === 'string' && !!subjectId && doc.shareId === subscriptionShareId('user', subjectId));
+	check('root.schemaVersion', doc.schemaVersion === COLLECTION_SCHEMA_VERSIONS.things);
+	check('root.thingtime', Array.isArray(doc.thingtime) && doc.thingtime.length === 1 && doc.thingtime[0] === 'subscription');
+	check('root.ownerId', doc.ownerId === subjectId);
+	check('root.acl', Array.isArray(doc.acl) && doc.acl.length === 1 && doc.acl[0] === ACL_OWNER);
+	check('root.targetId', doc.targetId === null);
+	check('root.tags', Array.isArray(doc.tags) && doc.tags.length === 0);
+	check(
+		'root.storageLedgerEnvelopeVersion',
+		!Object.prototype.hasOwnProperty.call(doc, 'storageLedgerEnvelopeVersion') ||
+			doc.storageLedgerEnvelopeVersion === USER_STORAGE_LEDGER_ENVELOPE_VERSION
+	);
+	check('root.createdAt', validDate(doc.createdAt));
+	check('root.updatedAt', validDate(doc.updatedAt));
+	if (!isPlainObject(doc.crystal)) return [...issues, 'crystal.object'];
+	const c = doc.crystal;
+	check('crystal.fields', hasOnlyKeys(c, USER_SUBSCRIPTION_CRYSTAL_KEYS));
+	check('crystal.quotaKind', c.quotaKind === 'subscription');
+	check('crystal.subjectType', c.subjectType === 'user');
+	check('crystal.subjectId', c.subjectId === subjectId);
+	check('crystal.tier', typeof c.tier === 'string' && !!c.tier.trim());
+	check('crystal.tierVersionId', typeof c.tierVersionId === 'string' && !!c.tierVersionId.trim());
+	check('crystal.tierVersion', Number.isSafeInteger(c.tierVersion) && Number(c.tierVersion) >= 1);
+	check('crystal.tierName', typeof c.tierName === 'string');
+	check('crystal.tierMetered', typeof c.tierMetered === 'boolean');
+	check('crystal.tierQuotas', storedTierQuotasAreTrusted(c.tierQuotas));
+	check('crystal.overrides', storedOverridesAreTrusted(c.overrides));
+	check('crystal.note', c.note === null || typeof c.note === 'string');
+	check('crystal.updatedBy', c.updatedBy === null || typeof c.updatedBy === 'string');
+	check('crystal.isDefaultAssignment', typeof c.isDefaultAssignment === 'boolean');
+	// Keep diagnostics fail-closed if the canonical validator gains a rule.
+	if (!issues.length && !userSubscriptionLedgerEnvelopeIsTrusted(doc, subjectId) && !legacyUserSubscriptionLedgerEnvelopeCanUpgrade(doc, subjectId))
+		issues.push('envelope.unclassified');
+	return issues;
+};
 
 const objectKeysSubsetExpression = (value: string, allowed: readonly string[]) => ({
 	$setIsSubset: [

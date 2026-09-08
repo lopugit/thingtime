@@ -11,6 +11,7 @@ import { createServer } from 'vite';
 const remixRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
 type NamespaceModule = typeof import('./namespace');
 type ThingsModule = typeof import('../things/things');
+type BehaviourSuitesModule = typeof import('../../../schemas/behaviourSuites');
 let vite: Awaited<ReturnType<typeof createServer>>;
 let APP_STORAGE_ACCOUNTING_VERSION: NamespaceModule['APP_STORAGE_ACCOUNTING_VERSION'];
 let appStorageAdmissionLedgerDecision: NamespaceModule['appStorageAdmissionLedgerDecision'];
@@ -32,6 +33,7 @@ let uncertainAppStorageLedgerMatch: ThingsModule['uncertainAppStorageLedgerMatch
 let uncertainAppUserStorageLedgerMatch: ThingsModule['uncertainAppUserStorageLedgerMatch'];
 let uncertainUserStorageLedgerMatch: ThingsModule['uncertainUserStorageLedgerMatch'];
 let validateLegacyInteractionResidue: ThingsModule['validateLegacyInteractionResidue'];
+let suiteDataShareId: BehaviourSuitesModule['suiteDataShareId'];
 
 test.before(async () => {
 	vite = await createServer({
@@ -67,6 +69,11 @@ test.before(async () => {
 	uncertainUserStorageLedgerMatch,
 	validateLegacyInteractionResidue
 	} = thingsModule);
+	// app-suite registration is a module side effect, and it decides whether a
+	// suite's parts slug as `demo-` or `app-` — load the registry first, or
+	// suiteDataShareId('pokeworld') answers with the wrong namespace
+	await vite.ssrLoadModule('/app/schemas/appSuites/index.ts');
+	({ suiteDataShareId } = (await vite.ssrLoadModule('/app/schemas/behaviourSuites.ts')) as BehaviourSuitesModule);
 });
 
 test.after(async () => {
@@ -379,6 +386,28 @@ test('generic Thing ids cannot squat protected control-plane namespaces', () => 
 	assert.equal(diagnostic?.ok, false);
 	assert.equal(diagnostic?.status, 400);
 	assert.equal(sanitizeShareId('ordinary-user-thing'), 'ordinary-user-thing');
+});
+
+// The demo/app seed is the only seeder that mints DATA things, and
+// upsertSystemThings will not touch a twin it does not own: a squatted
+// destination id is skipped on every future run, so the reservation is the
+// only thing keeping a seeded row reachable. Derived from the minting helper
+// rather than hardcoded, so renaming the prefix without reserving it fails
+// here instead of silently reopening the namespace.
+test('generic Thing ids cannot squat seeded suite/app data destinations', () => {
+	const suiteSample: any = sanitizeShareId(suiteDataShareId('tickets', 0));
+	assert.equal(suiteSample?.ok, false);
+	assert.equal(suiteSample?.status, 400);
+	const appSample: any = sanitizeShareId(suiteDataShareId('pokeworld', 0));
+	assert.equal(appSample?.ok, false);
+	assert.equal(appSample?.status, 400);
+	// app content rides the same data-app- namespace as the app suites
+	const appContent: any = sanitizeShareId('data-app-pokeworld-species-25');
+	assert.equal(appContent?.ok, false);
+	assert.equal(appContent?.status, 400);
+	// …and the reservation stays narrow: ordinary data ids are still the user's
+	assert.equal(sanitizeShareId('data-my-notes'), 'data-my-notes');
+	assert.equal(sanitizeShareId('database-backup'), 'database-backup');
 });
 
 test('uncertain delete fencing matches every current ledger status', () => {

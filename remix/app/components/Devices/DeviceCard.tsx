@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 
 import { Box, Flex, Text } from '@chakra-ui/react';
-import { Laptop, Monitor, Server, Smartphone } from 'lucide-react';
+import { Laptop, Monitor, Server, Smartphone, Watch as WatchIcon } from 'lucide-react';
 
 import { deriveDevicePresence } from './deviceCore';
 import type { DevicePresenceStatus, DeviceSnapshot, DeviceSummary } from './deviceTypes';
@@ -84,6 +84,7 @@ DeviceHealthBadges.displayName = 'DeviceHealthBadges';
 
 const DevicePlatformIcon = ({ platform }: { platform: string }) => {
 	const normalized = platform.toLowerCase();
+	if (normalized.includes('watch')) return <WatchIcon aria-hidden size={22} />;
 	if (normalized.includes('ios') || normalized.includes('android')) return <Smartphone aria-hidden size={22} />;
 	if (normalized.includes('server') || normalized.includes('linux')) return <Server aria-hidden size={22} />;
 	if (normalized.includes('desktop') || normalized.includes('windows')) return <Monitor aria-hidden size={22} />;
@@ -103,7 +104,7 @@ export type DeviceCardProps = {
 export const DeviceCard = memo(
 	({ device, snapshot = null, selected = false, pendingCommandCount = 0, pendingApprovalCount = 0, now, onSelect }: DeviceCardProps) => {
 		const observed = snapshot?.observed;
-		const model = device.system?.model || device.platform || 'Computer';
+		const model = device.system?.model || (device.platform === 'watchos' ? 'Apple Watch' : device.platform) || 'Device';
 		const version = device.system?.osVersion || device.nodeVersion || null;
 
 		return (

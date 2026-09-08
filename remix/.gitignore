@@ -15,3 +15,6 @@ api/index.js.map
 
 tmp/*
 /.swc
+
+# Local media QA process settings
+.media-cache-qa.config.cjs

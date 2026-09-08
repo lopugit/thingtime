@@ -1,10 +1,11 @@
 import React from 'react';
 import { Box } from '@chakra-ui/react';
+import { Global } from '@emotion/react';
 
 import { DrawerTrigger } from './DrawerTrigger';
 import { NavDrawer } from './NavDrawer';
 import { UserSettingsModal } from './UserSettingsModal';
-import { AccountModalProvider, DRAWER_Z, useDrawer, useIsMobileViewport } from './useDrawer';
+import { AccountModalProvider, DRAWER_Z, drawerWidthCss, useDrawer, useDrawerLiveWidth, useIsMobileViewport } from './useDrawer';
 
 // Hosts the whole drawer nav system (panel, trigger + hover popup, settings
 // modal, mobile scrim) and owns the cross-cutting behaviours: body scroll
@@ -13,8 +14,16 @@ import { AccountModalProvider, DRAWER_Z, useDrawer, useIsMobileViewport } from '
 // state, never persisted), so the inner component sits inside the provider.
 
 const DrawerSystemInner = () => {
-	const { open, setOpen, accountModalOpen } = useDrawer();
+	const { open, setOpen, accountModalOpen, direction, loading } = useDrawer();
+	const { width, resizing } = useDrawerLiveWidth();
 	const isMobile = useIsMobileViewport();
+
+	// Toasts live in a body portal, outside Main's desktop content padding.
+	// Move the lists themselves so existing and streaming messages follow too.
+	// Mobile has a temporary overlay drawer; keep messages readable at full width.
+	const inset = open && !isMobile ? drawerWidthCss(width) : '0px';
+	const left = direction === 'left' ? inset : '0px';
+	const right = direction === 'right' ? inset : '0px';
 
 	// freeze the shifted page while the mobile drawer is open
 	React.useEffect(() => {
@@ -59,6 +68,14 @@ const DrawerSystemInner = () => {
 
 	return (
 		<>
+			<Global styles={{
+				'[id^="chakra-toast-manager-"]': {
+					// Chakra sets inline edges, so these portal overrides need priority.
+					left: `calc(${left} + env(safe-area-inset-left, 0px)) !important`,
+					right: `calc(${right} + env(safe-area-inset-right, 0px)) !important`,
+					transition: loading || resizing ? 'none' : 'left 0.28s ease-out, right 0.28s ease-out'
+				}
+			}} />
 			{/* tap-away scrim over the shifted page on mobile */}
 			{isMobile && open && (
 				<Box

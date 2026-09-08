@@ -20,7 +20,7 @@ const fieldNames = (crystal: Record<string, unknown>): string[] => (crystal.fiel
 // reserved name) and the pin updated in the same change.
 const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
 	attachment: ['name', 'filenamePreview', 'title', 'description', 'size', 'contentType', 'mediaKind', 'detectedContentType'],
-  post: ['type', 'text', 'images', 'listing'], // thing: record → dropped
+  post: ['type', 'text', 'images', 'listing', 'title', 'subspaceId', 'flairId'], // thing + richText: records → dropped
   comment: ['text'],
   reaction: ['emoji'],
   share: [], // marker schema — the thingtime tag is the payload
@@ -36,6 +36,14 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   'action-run': ['status', 'startedAt', 'durationMs', 'opsUsed', 'depthUsed', 'childActionsUsed', 'error'],
   save: [], // marker schema
   vote: ['optionIndex', 'voteKey'],
+  updown: ['direction', 'updownKey'],
+  // rules + flairs + userFlairs: records → dropped; branding is a closed object → mirrored
+  subspace: ['slug', 'name', 'description', 'access', 'nsfw', 'userFlairSelfAssign', 'allowCustomUserFlair', 'branding'],
+  // userFlair is a closed object → mirrored
+  'subspace-member': ['memberKey', 'role', 'approved', 'banned', 'banReason', 'banUntil', 'left', 'pending', 'approvalRequested', 'userFlair'],
+  'subspace-modlog': ['action', 'postId', 'userId', 'reason'], // detail: record → dropped
+  'subspace-tombstone': ['slug', 'subspaceId', 'previousOwnerId', 'deletedAt'],
+  'subspace-report': ['postId', 'commentId', 'reason', 'note', 'status', 'resolution', 'resolvedById', 'resolvedAt', 'reportKey'],
   folder: ['name', 'icon', 'description'],
   app: [
     'clientId',
@@ -102,10 +110,32 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   'ci-dispatch': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-event': ['provider', 'repository', 'deliveryId', 'eventType', 'action', 'actor', 'statusFrom', 'statusTo', 'occurredAt'], // data: record → dropped
   friend: ['status', 'friendKey'],
-  notification: ['type', 'actorId', 'actorName', 'postId', 'preview'],
+  notification: ['type', 'actorId', 'actorName', 'actorUsername', 'postId', 'preview', 'title', 'href', 'outcome'],
+  'push-device': ['platform', 'environment', 'topic'],
   passkey: ['nickname', 'description', 'providerName', 'aaguid', 'deviceType', 'backedUp', 'transports', 'lastUsedAt', 'lastUsedOrigin', 'revokedAt'],
   'passkey-app-link': ['linkKey', 'appKey', 'appName', 'firstUsedAt', 'lastUsedAt', 'usageCount'],
   'account-link': ['linkKind', 'userId', 'targetId', 'role', 'createdBy'],
+  // Lopu model catalog — every field is scalar or string[], so all project
+  'ai-model': ['modelId', 'label', 'provider', 'efforts', 'speeds', 'family', 'enabled', 'sortOrder', 'contextWindow', 'notes'],
+  // Lopu credits + usage accounting (api/utils/lopu/accounting.ts) — scalars only, so all project
+  'lopu-account': [
+    'balanceMicros',
+    'lifetimeCostMicros',
+    'lifetimeInputTokens',
+    'lifetimeOutputTokens',
+    'turns',
+    'monthKey',
+    'monthCostMicros',
+    'monthTurns',
+    'starterGranted',
+    'starterMicros',
+    'lowBalanceNotifiedAt',
+    'inflight',
+    'inflightSince',
+    'appliedIds'
+  ],
+  'lopu-usage': ['chatId', 'requestId', 'surface', 'provider', 'providerLabel', 'model', 'billing', 'inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheWriteTokens', 'costMicros', 'priced', 'estimated', 'debitedMicros', 'toolCalls', 'hops', 'durationMs'],
+  'lopu-credit': ['entry', 'amountMicros', 'balanceAfterMicros', 'reason', 'actorId', 'usageId', 'requestId', 'requestStatus', 'note', 'resolvedAt', 'resolvedBy', 'grantedMicros'],
 	'ai-connection': [
 		'sourceType',
 		'provider',
@@ -180,6 +210,7 @@ test('registered server-owned Things are protected from generic Thing CRUD', () 
 	assert.ok(PROTECTED_THINGTIME.includes('device'));
 	assert.ok(PROTECTED_THINGTIME.includes('device-command'));
 	assert.ok(PROTECTED_THINGTIME.includes('device-ai-live-state'));
+	assert.ok(PROTECTED_THINGTIME.includes('push-device'));
 	assert.equal(isProtectedThingtime(['app']), true);
 	assert.equal(isProtectedThingtime(['attachment']), true);
 	assert.equal(isProtectedThingtime(['migration-diagnostic']), true);

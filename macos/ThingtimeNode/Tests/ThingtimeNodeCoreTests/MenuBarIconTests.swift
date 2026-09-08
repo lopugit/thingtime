@@ -27,11 +27,11 @@ final class MenuBarIconTests: XCTestCase {
     func testStatusMenuUsesThingtimeCopyAndProvidesARealQuitCommand() {
         XCTAssertEqual(
             ThingtimeStatusMenuCopy.commandTitles(launchdManaged: true),
-            ["Refresh Status", "Open Thingtime", "Restart Thingtime", "Quit Thingtime"]
+            ["Refresh Status", "Open Thingtime", "About Thingtime Node", "Restart Thingtime", "Quit Thingtime"]
         )
         XCTAssertEqual(
             ThingtimeStatusMenuCopy.commandTitles(launchdManaged: false),
-            ["Refresh Status", "Open Thingtime", "Quit Thingtime"]
+            ["Refresh Status", "Open Thingtime", "About Thingtime Node", "Quit Thingtime"]
         )
         XCTAssertEqual(ThingtimeStatusMenuCopy.healthy(accountCount: 0), "Ready to pair")
         XCTAssertEqual(ThingtimeStatusMenuCopy.healthy(accountCount: 1), "Paired · Thingtime healthy")
@@ -39,6 +39,7 @@ final class MenuBarIconTests: XCTestCase {
         XCTAssertFalse(
             (ThingtimeStatusMenuCopy.commandTitles(launchdManaged: true)
                 + [ThingtimeStatusMenuCopy.degraded, ThingtimeStatusMenuCopy.unavailable])
+                .filter { $0 != ThingtimeStatusMenuCopy.aboutThingtime }
                 .contains(where: { $0.contains("Thingtime Node") })
         )
     }

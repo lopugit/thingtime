@@ -16,10 +16,13 @@ import { VisualSettingsHost } from './components/VisualSettings/VisualSettingsHo
 import { ThemeHost } from './components/ThemeSettings/ThemeHost';
 import { ConfettiCanvas } from './components/Landing/ConfettiCanvas';
 import { EasterEggs } from './components/EasterEggs/EasterEggs';
+import { LopuPositionSync } from './components/Lopu/useLopuPosition';
 import { MessengerNotifications } from './components/Messenger/MessengerNotifications';
 import { QuickSwitcher } from './components/QuickSwitcher/QuickSwitcher';
 import { AutoLoginPopup } from './components/Account/AutoLoginPopup';
+import { WatchPendingApprovals } from './components/Watch/WatchPendingApprovals';
 import { SiteBlocksHost } from './components/Builder/SiteBlocksHost';
+import { LopuHost } from './components/Lopu/LopuHost';
 import { rememberAuthReturnTo } from './utils/authReturn';
 
 const setThingtime = (glob: any) => {
@@ -52,7 +55,7 @@ export default function App() {
   const rootData = useLoaderData() as RootLoaderData;
   const { envFromCookie, titlePrefix } = rootData;
   const { pathname, search, hash } = useLocation();
-  const isAuthorizePopup = pathname === '/authorize';
+  const isAuthorizePopup = pathname === '/authorize' || pathname === '/watch/pair' || pathname.startsWith('/pair/');
   const revalidator = useRevalidator();
   const [mounted, setMounted] = React.useState(false);
 
@@ -96,6 +99,10 @@ export default function App() {
                   ? `${baseTitle} - Admin`
                   : pathname === '/things'
                     ? `${baseTitle} - Things`
+                    : pathname === '/lopu/voice'
+                      ? `${baseTitle} - Lopu voice`
+                    : pathname.startsWith('/lopu')
+                      ? `${baseTitle} - Lopu`
                     : pathname.startsWith('/builder')
                       ? `${baseTitle} - Builder`
                     : pathname.startsWith('/actions')
@@ -126,6 +133,8 @@ export default function App() {
       <ThingtimeProvider>
         <VisualSettingsHost />
         <ThemeHost />
+        {/* Mirrors settings.lopu.position into the cache useLopu reads at fire time. */}
+        <LopuPositionSync />
         {mounted ? <ElectronBridgeHost /> : null}
         {mounted ? <NativeBridgeHost /> : null}
         {/* /authorize is the "Login with Thingtime" popup — a focused embed
@@ -145,10 +154,13 @@ export default function App() {
           </Main>
         )}
         {isAuthorizePopup ? null : <DrawerSystem />}
+        {/* 🦄 Lopu: global floating launcher + draggable chat window (hidden on /lopu). */}
+        {mounted && !isAuthorizePopup ? <LopuHost /> : null}
         {/* ⌘K quick switcher — global palette; renders nothing until opened. */}
         {mounted && !isAuthorizePopup ? <QuickSwitcher /> : null}
         {/* Messenger: global new-message watcher (Lopu toasts + unread badge). */}
         {mounted && !isAuthorizePopup ? <MessengerNotifications /> : null}
+        {mounted && !isAuthorizePopup ? <WatchPendingApprovals /> : null}
         {/* Signed out here but signed in on another Thingtime deployment →
             "continue as" suggestions (cross-deployment auto-login). */}
         {mounted && !isAuthorizePopup ? <AutoLoginPopup /> : null}

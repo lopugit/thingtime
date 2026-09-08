@@ -1,4 +1,6 @@
 require "base64"
+require "fileutils"
+require "plist"
 require "shellwords"
 require "tempfile"
 
@@ -7,10 +9,21 @@ ENV["FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT"] ||= "60"
 default_platform(:ios)
 
 SCHEME = "Thingtime"
-OUTPUT_DIRECTORY = "build"
+OUTPUT_DIRECTORY = File.expand_path("../build", __dir__)
 OUTPUT_NAME = "Thingtime.ipa"
 
 def api_key_xcargs
+  args = [
+    "-allowProvisioningUpdates",
+    "-authenticationKeyID #{ENV.fetch('ASC_KEY_ID')}",
+    "-authenticationKeyPath #{asc_p8_path}"
+  ]
+  issuer_id = asc_issuer_id
+  args << "-authenticationKeyIssuerID #{issuer_id}" if issuer_id
+  args.join(" ")
+end
+
+def asc_p8_path
   @asc_p8 ||= begin
     f = Tempfile.new(["AuthKey_#{ENV.fetch('ASC_KEY_ID')}", ".p8"])
     f.binmode
@@ -18,15 +31,19 @@ def api_key_xcargs
     f.flush
     f
   end
+  @asc_p8.path
+end
 
-  args = [
-    "-allowProvisioningUpdates",
-    "-authenticationKeyID #{ENV.fetch('ASC_KEY_ID')}",
-    "-authenticationKeyPath #{@asc_p8.path}"
-  ]
+def api_key_xcodebuild_args
   issuer_id = asc_issuer_id
-  args << "-authenticationKeyIssuerID #{issuer_id}" if issuer_id
-  args.join(" ")
+  UI.user_error!("ASC_ISSUER_ID is required for App Store upload") unless issuer_id
+
+  [
+    "-allowProvisioningUpdates",
+    "-authenticationKeyID", ENV.fetch("ASC_KEY_ID"),
+    "-authenticationKeyPath", asc_p8_path,
+    "-authenticationKeyIssuerID", issuer_id
+  ]
 end
 
 def asc_issuer_id
@@ -38,42 +55,64 @@ def thingtime_web_url_xcarg
   "THINGTIME_WEB_URL=#{Shellwords.escape(ENV.fetch('THINGTIME_WEB_URL', 'https://thingtime.com'))}"
 end
 
+def manual_profile_signing?
+  !ENV["PROVISIONING_PROFILE_SPECIFIER"].to_s.empty? ||
+    !ENV["WATCH_PROVISIONING_PROFILE_SPECIFIER"].to_s.empty?
+end
+
+def distribution_profile_suffix
+  certificate_id = ENV["IOS_DISTRIBUTION_CERTIFICATE_ID"].to_s.strip
+  certificate_id.empty? ? "" : " #{certificate_id}"
+end
+
+def ios_provisioning_profile_name
+  ENV.fetch(
+    "PROVISIONING_PROFILE_SPECIFIER",
+    "Thingtime App Store #{ENV.fetch('PRODUCT_BUNDLE_IDENTIFIER')}#{distribution_profile_suffix}"
+  )
+end
+
+def watch_provisioning_profile_name
+  ENV.fetch(
+    "WATCH_PROVISIONING_PROFILE_SPECIFIER",
+    "Thingtime Watch App Store #{ENV.fetch('WATCH_BUNDLE_IDENTIFIER')}#{distribution_profile_suffix}"
+  )
+end
+
 def xcodebuild_xcargs
   args = []
-  if ENV["PROVISIONING_PROFILE_SPECIFIER"].to_s.empty?
-    args << api_key_xcargs
-  else
+  if manual_profile_signing?
     args << "CODE_SIGN_STYLE=Manual"
     args << "CODE_SIGN_IDENTITY=#{Shellwords.escape('Apple Distribution')}"
-    args << "PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(ENV.fetch('PROVISIONING_PROFILE_SPECIFIER'))}"
+    args << "THINGTIME_IOS_PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(ios_provisioning_profile_name)}"
+    args << "THINGTIME_WATCH_PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(watch_provisioning_profile_name)}"
+  else
+    args << api_key_xcargs
   end
   args << "DEVELOPMENT_TEAM=#{ENV.fetch('DEVELOPMENT_TEAM')}"
   args << thingtime_web_url_xcarg
   args.join(" ")
 end
 
-def export_options
+def export_options(destination: "export")
   options = {
-    method: "app-store",
+    method: "app-store-connect",
+    destination: destination,
+    distributionBundleIdentifier: ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER"),
+    manageAppVersionAndBuildNumber: false,
     signingStyle: "automatic",
     uploadSymbols: false
   }
 
-  return options if ENV["PROVISIONING_PROFILE_SPECIFIER"].to_s.empty?
+  return options unless manual_profile_signing?
 
   options.merge(
     signingStyle: "manual",
     teamID: ENV.fetch("DEVELOPMENT_TEAM"),
     provisioningProfiles: {
-      ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER") => ENV.fetch("PROVISIONING_PROFILE_SPECIFIER")
+      ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER") => ios_provisioning_profile_name,
+      ENV.fetch("WATCH_BUNDLE_IDENTIFIER") => watch_provisioning_profile_name
     }
-  )
-end
-
-def provisioning_profile_name
-  ENV.fetch(
-    "PROVISIONING_PROFILE_SPECIFIER",
-    "Thingtime App Store #{ENV.fetch('PRODUCT_BUNDLE_IDENTIFIER')}"
   )
 end
 
@@ -88,58 +127,152 @@ platform :ios do
   lane :build do
     generate
     setup_ci if ENV["CI"]
+    keychain_path = if lane_context[SharedValues::KEYCHAIN_PATH]
+                      FastlaneCore::Helper.keychain_path(
+                        ENV.fetch("MATCH_KEYCHAIN_NAME", "fastlane_tmp_keychain")
+                      )
+                    end
+
+    if ENV["IOS_DISTRIBUTION_CERTIFICATE_PATH"]
+      UI.user_error!("Fastlane CI keychain was not created") unless keychain_path
+      import_certificate(
+        certificate_path: ENV.fetch("IOS_DISTRIBUTION_CERTIFICATE_PATH"),
+        certificate_password: ENV.fetch("IOS_DISTRIBUTION_CERT_P12_PASSWORD"),
+        keychain_name: ENV.fetch("MATCH_KEYCHAIN_NAME", "fastlane_tmp_keychain"),
+        keychain_path: keychain_path,
+        keychain_password: ENV.fetch("MATCH_KEYCHAIN_PASSWORD", "")
+      )
+    end
+
     unless ENV["SKIP_CERT_SYNC"] == "1"
       get_certificates(
         api_key: app_store_api_key,
         team_id: ENV.fetch("DEVELOPMENT_TEAM"),
         development: false,
-        output_path: OUTPUT_DIRECTORY
+        output_path: OUTPUT_DIRECTORY,
+        keychain_path: keychain_path,
+        keychain_password: ENV["MATCH_KEYCHAIN_PASSWORD"]
       )
+
+      expected_certificate_id = ENV["IOS_DISTRIBUTION_CERTIFICATE_ID"]
+      actual_certificate_id = lane_context[SharedValues::CERT_CERTIFICATE_ID]
+      if expected_certificate_id && actual_certificate_id != expected_certificate_id
+        UI.user_error!("Expected distribution certificate #{expected_certificate_id}, got #{actual_certificate_id}")
+      end
     end
 
     unless ENV["SKIP_PROFILE_SYNC"] == "1"
-      ENV["PROVISIONING_PROFILE_SPECIFIER"] = provisioning_profile_name
       get_provisioning_profile(
         api_key: app_store_api_key,
         team_id: ENV.fetch("DEVELOPMENT_TEAM"),
         app_identifier: ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER"),
-        provisioning_name: provisioning_profile_name,
+        provisioning_name: ios_provisioning_profile_name,
         cert_id: lane_context[SharedValues::CERT_CERTIFICATE_ID],
-        force: true,
+        force: false,
         output_path: OUTPUT_DIRECTORY
       )
+      ENV["PROVISIONING_PROFILE_SPECIFIER"] = lane_context[SharedValues::SIGH_NAME]
+
+      get_provisioning_profile(
+        api_key: app_store_api_key,
+        team_id: ENV.fetch("DEVELOPMENT_TEAM"),
+        app_identifier: ENV.fetch("WATCH_BUNDLE_IDENTIFIER"),
+        provisioning_name: watch_provisioning_profile_name,
+        cert_id: lane_context[SharedValues::CERT_CERTIFICATE_ID],
+        force: false,
+        output_path: OUTPUT_DIRECTORY
+      )
+      ENV["WATCH_PROVISIONING_PROFILE_SPECIFIER"] = lane_context[SharedValues::SIGH_NAME]
     end
 
+    archive_path = File.expand_path(File.join(OUTPUT_DIRECTORY, "Thingtime.xcarchive"))
+    FileUtils.mkdir_p(OUTPUT_DIRECTORY)
     build_app(
       scheme: SCHEME,
       configuration: "Release",
+      archive_path: archive_path,
       output_directory: OUTPUT_DIRECTORY,
       output_name: OUTPUT_NAME,
-      export_method: "app-store",
       include_symbols: false,
       xcargs: xcodebuild_xcargs,
-      export_options: export_options
+      skip_package_ipa: true
     )
+
+    Tempfile.create(["ThingtimeExportOptions", ".plist"]) do |export_options_file|
+        export_options_file.write(export_options(destination: "export").to_plist)
+      export_options_file.flush
+      sh(
+        "xcodebuild",
+        "-exportArchive",
+        "-archivePath", archive_path,
+        "-exportPath", File.expand_path(OUTPUT_DIRECTORY),
+        "-exportOptionsPlist", export_options_file.path
+      )
+    end
+
+    UI.user_error!("Xcode did not export #{OUTPUT_NAME}") unless File.exist?(File.join(OUTPUT_DIRECTORY, OUTPUT_NAME))
   end
 
   desc "Build and upload to TestFlight"
   lane :beta do
     build
-    upload_to_testflight(
-      api_key: app_store_api_key,
-      skip_waiting_for_build_processing: true,
-      distribute_external: false
-    )
+    upload_testflight_ipa(ipa_path: File.join(OUTPUT_DIRECTORY, OUTPUT_NAME))
   end
 
   desc "Upload an already-built IPA to TestFlight (IPA_PATH overrides the default build output)"
   lane :upload do
-    upload_to_testflight(
-      api_key: app_store_api_key,
-      ipa: ENV["IPA_PATH"] || File.join(OUTPUT_DIRECTORY, OUTPUT_NAME),
-      skip_waiting_for_build_processing: true,
-      distribute_external: false
+    upload_testflight_ipa(
+      ipa_path: ENV["IPA_PATH"] || File.join(OUTPUT_DIRECTORY, OUTPUT_NAME)
     )
+  end
+
+  desc "Report the latest or requested TestFlight build state without changing it"
+  lane :testflight_status do
+    app_store_api_key
+    app = Spaceship::ConnectAPI::App.find(ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER"))
+    UI.user_error!("App Store Connect app not found") unless app
+
+    expected_build_number = ENV["EXPECTED_BUILD_NUMBER"].to_s.strip
+    builds = Spaceship::ConnectAPI::Build.all(
+      app_id: app.id,
+      platform: "IOS",
+      limit: 10
+    )
+    build = if expected_build_number.empty?
+              builds.first
+            else
+              builds.find { |candidate| candidate.version == expected_build_number }
+            end
+    UI.user_error!("TestFlight build #{expected_build_number} was not found") unless build
+
+    detail = build.build_beta_detail
+    UI.message(
+      "TESTFLIGHT_BUILD_STATUS " \
+      "version=#{build.app_version} " \
+      "build=#{build.version} " \
+      "processing=#{build.processing_state} " \
+      "internal=#{detail&.internal_build_state || 'UNAVAILABLE'} " \
+      "external=#{detail&.external_build_state || 'UNAVAILABLE'} " \
+      "uploaded=#{build.uploaded_date}"
+    )
+  end
+
+  private_lane :upload_testflight_ipa do |options|
+    UI.user_error!("Xcode did not export #{options.fetch(:ipa_path)}") unless File.exist?(options.fetch(:ipa_path))
+
+    archive_path = File.expand_path(File.join(OUTPUT_DIRECTORY, "Thingtime.xcarchive"))
+    Tempfile.create(["ThingtimeUploadOptions", ".plist"]) do |upload_options_file|
+      upload_options_file.write(export_options(destination: "upload").to_plist)
+      upload_options_file.flush
+      sh(
+        "xcodebuild",
+        "-exportArchive",
+        "-archivePath", archive_path,
+        "-exportPath", File.expand_path(OUTPUT_DIRECTORY),
+        "-exportOptionsPlist", upload_options_file.path,
+        *api_key_xcodebuild_args
+      )
+    end
   end
 
   private_lane :app_store_api_key do

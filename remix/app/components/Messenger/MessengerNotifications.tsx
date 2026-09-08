@@ -4,7 +4,7 @@ import { useLocation } from 'react-router';
 import { useLopu } from '../Lopu/useLopu';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { MESSENGER_REFRESH_EVENT, readUnread, writeUnread } from './messengerCache';
-import { chatDisplayName, type ChatSummary } from './messengerTypes';
+import { chatDisplayName, isLopuAiSource, type ChatSummary } from './messengerTypes';
 
 const IDLE_POLL_MS = 25_000;
 const TOAST_THROTTLE_MS = 30_000;
@@ -58,6 +58,8 @@ export const MessengerNotifications = () => {
         for (const chat of chats) {
           const last = chat.lastMessage;
           if (!last) continue;
+          // Lopu answers the user's own turns while they watch — never a toast
+          if (isLopuAiSource(chat.externalSource)) continue;
           const prev = lastSeenRef.current.get(chat.id);
           lastSeenRef.current.set(chat.id, last.id);
           if (!primedRef.current) continue; // first poll only primes the diff

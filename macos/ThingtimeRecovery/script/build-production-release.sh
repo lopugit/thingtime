@@ -9,7 +9,7 @@ RELEASE_VERSION="${THINGTIME_RECOVERY_VERSION:?THINGTIME_RECOVERY_VERSION is req
 RELEASE_ROOT="${PACKAGE_ROOT}/release"
 NOTARY_ARCHIVE="${RELEASE_ROOT}/Thingtime-Recovery-notary-${RELEASE_VERSION}.zip"
 FINAL_ARCHIVE="${RELEASE_ROOT}/Thingtime-Recovery-App-Release-${RELEASE_VERSION}-macos-$(uname -m).zip"
-ARCHIVE_VERIFY_ROOT="$(mktemp -d "${CACHE_ROOT}/archive-verify.XXXXXX")"
+ARCHIVE_VERIFY_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/thingtime-recovery-archive-verify.XXXXXX")"
 trap '/bin/rm -rf -- "${ARCHIVE_VERIFY_ROOT}"' EXIT
 
 case "${THINGTIME_RECOVERY_SIGNING_IDENTITY:-}" in

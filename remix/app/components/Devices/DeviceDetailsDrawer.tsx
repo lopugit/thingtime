@@ -29,6 +29,7 @@ import {
 import { readDeviceDrawerPreferences, setDeviceDrawerSectionExpanded, setDeviceDrawerWidthPreference } from './deviceDrawerPreferences';
 import type { DeviceDrawerSectionId } from './deviceDrawerPreferences';
 import type { DeviceCommandStatus, DeviceExecutionPermissionMode, DeviceRuntimeState, DeviceScreenSession } from './deviceTypes';
+import { WatchDeviceDetails } from './WatchDeviceDetails';
 
 const Section = ({
 	deviceId,
@@ -173,6 +174,7 @@ export const DeviceDetailsDrawer = memo(
 		const [resizing, setResizing] = React.useState(false);
 		const resizeOrigin = React.useRef<{ pointerId: number; x: number; width: number } | null>(null);
 		const summary = state?.summary || null;
+		const isWatch = summary?.platform === 'watchos';
 		const snapshot = state?.snapshot || null;
 		const pendingCommands = state?.commands.filter((command) => NON_TERMINAL_COMMANDS.has(command.status)).length || 0;
 		const visibleApprovals = state
@@ -429,6 +431,10 @@ export const DeviceDetailsDrawer = memo(
 							</Box>
 						) : (
 							<>
+								{isWatch ? (
+									<WatchDeviceDetails now={now} summary={summary} />
+								) : (
+									<>
 								{presence !== 'online' ? (
 									<Notice icon={<WifiOff aria-hidden size={15} />}>
 										{presence === 'stale'
@@ -694,6 +700,8 @@ export const DeviceDetailsDrawer = memo(
 								>
 									<DeviceCommandTimeline commands={state.commands} controlFor={controlFor} deviceId={state.deviceId} now={now} onAction={onAction} />
 								</Section>
+									</>
+								)}
 							</>
 						)}
 					</DrawerBody>

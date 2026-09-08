@@ -537,7 +537,8 @@
   z-index: 22;
   right: 0;
   bottom: 28px;
-  width: 190px;
+  width: 240px;
+  max-width: calc(100vw - 24px);
   padding: 5px;
   border: 1px solid var(--line);
   border-radius: 11px;
@@ -562,6 +563,7 @@
   background: var(--selected);
 }
 .pin-menu svg {
+  flex-shrink: 0;
   width: 14px;
   height: 14px;
   color: var(--muted);

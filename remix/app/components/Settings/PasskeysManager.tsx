@@ -4,8 +4,9 @@ import { Badge, Box, Button, Flex, Input, Text } from '@chakra-ui/react';
 import { RainbowButton } from './SettingsSection';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useApi } from '~/hooks/useApi';
-import { isPasskeyCancel, passkeysSupported, usePasskeyAuth } from '~/hooks/usePasskeys';
+import { isPasskeyCancel, passkeyErrorMessage, passkeysSupported, usePasskeyAuth } from '~/hooks/usePasskeys';
 import type { PasskeyRecord } from '~/hooks/usePasskeys';
 
 // Settings → Security passkey manager: list (provider, dates, linked apps),
@@ -14,7 +15,7 @@ import type { PasskeyRecord } from '~/hooks/usePasskeys';
 // revoke-first). Optimistic rendering: the list seeds from localCache and
 // reconciles from the API in the background.
 
-const CACHE_KEY = 'tt-passkeys';
+const cacheKeyForUser = (userId: string) => `tt-passkeys:${userId}`;
 
 const inputSx = {
 	background: 'var(--tt-surface-alt, #f5f5f7)',
@@ -72,7 +73,7 @@ const PasskeyRow = (props: {
 				onChanged();
 			}
 		} catch (err: any) {
-			lopu({ title: 'Could not update passkey', description: err?.error || 'Try again in a moment.', status: 'error', duration: 6000 });
+			lopu({ title: 'Could not update passkey', description: passkeyErrorMessage(err), status: 'error', duration: 6000 });
 		} finally {
 			setSaving(false);
 		}
@@ -100,7 +101,7 @@ const PasskeyRow = (props: {
 		} catch (err: any) {
 			lopu({
 				title: confirming === 'revoke' ? 'Could not revoke passkey' : 'Could not delete passkey',
-				description: err?.error || 'Try again in a moment.',
+				description: passkeyErrorMessage(err),
 				status: 'error',
 				duration: 6000
 			});
@@ -243,15 +244,24 @@ const PasskeyRow = (props: {
 };
 
 export const PasskeysManager = () => {
+	const user = useCurrentUser();
+	return user ? <AccountPasskeysManager key={user.id} userId={user.id} /> : null;
+};
+
+const AccountPasskeysManager = ({ userId }: { userId: string }) => {
+	const cacheKey = cacheKeyForUser(userId);
 	const api = useApi();
 	const lopu = useLopu();
-	const { registerPasskey } = usePasskeyAuth();
+	const { registerPasskey, cancelPasskey } = usePasskeyAuth();
 
-	const [passkeys, setPasskeys] = React.useState<PasskeyRecord[]>(() => readLocalCache<PasskeyRecord[]>(CACHE_KEY) || []);
+	const [passkeys, setPasskeys] = React.useState<PasskeyRecord[]>(() => readLocalCache<PasskeyRecord[]>(cacheKey) || []);
 	const [adding, setAdding] = React.useState(false);
 	const [addPassword, setAddPassword] = React.useState('');
 	const [addNickname, setAddNickname] = React.useState('');
 	const [addBusy, setAddBusy] = React.useState(false);
+	const [listError, setListError] = React.useState(false);
+	const mounted = React.useRef(true);
+	React.useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
 	// apiRef idiom: useApi's identity changes per render — a [api]-dep callback
 	// would re-run the list effect every render (request loop).
@@ -261,13 +271,14 @@ export const PasskeysManager = () => {
 		apiRef.current.v1.auth.passkeys
 			.list()
 			.then((resp: any) => {
-				if (resp?.ok && Array.isArray(resp.passkeys)) {
+				if (mounted.current && resp?.ok && Array.isArray(resp.passkeys)) {
+					setListError(false);
 					setPasskeys(resp.passkeys);
-					writeLocalCache(CACHE_KEY, resp.passkeys);
+					writeLocalCache(cacheKey, resp.passkeys);
 				}
 			})
-			.catch(() => {});
-	}, []);
+			.catch(() => { if (mounted.current) setListError(true); });
+	}, [cacheKey]);
 
 	React.useEffect(() => {
 		refresh();
@@ -276,7 +287,7 @@ export const PasskeysManager = () => {
 	const supported = passkeysSupported();
 
 	const addPasskey = async () => {
-		if (!addPassword) return;
+		if (!addPassword || addBusy) return;
 		setAddBusy(true);
 		try {
 			const resp = await registerPasskey({ password: addPassword, nickname: addNickname || undefined });
@@ -284,8 +295,8 @@ export const PasskeysManager = () => {
 				lopu({
 					title: `Passkey added ✨`,
 					description: resp.passkey?.providerName
-						? `Saved with ${resp.passkey.providerName}. It works on every Thingtime deployment.`
-						: 'It works on every Thingtime deployment.',
+						? `Saved with ${resp.passkey.providerName}. Use it on Thingtime addresses that share this account environment.`
+						: 'Use it on Thingtime addresses that share this account environment.',
 					status: 'success',
 					duration: 8000
 				});
@@ -298,7 +309,7 @@ export const PasskeysManager = () => {
 			if (!isPasskeyCancel(err)) {
 				lopu({
 					title: 'Could not add passkey',
-					description: err?.error || 'Try again in a moment.',
+					description: passkeyErrorMessage(err),
 					status: 'error',
 					duration: 6000
 				});
@@ -310,19 +321,18 @@ export const PasskeysManager = () => {
 
 	return (
 		<Flex flexDirection="column" rowGap={3}>
-			<Flex alignItems="center" columnGap={4}>
+			<Flex flexDirection={['column', 'row']} alignItems={['flex-start', 'center']} columnGap={4} rowGap={2}>
 				<Box>
 					<Text fontSize="sm" color="var(--tt-ink, #16161a)">
 						Passkeys 🔑
 					</Text>
 					<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
-						Sign in with Touch ID, Face ID, or your password manager (iCloud Keychain, 1Password…) — one passkey works on every
-						Thingtime deployment. No password, no 2FA code.
+						Sign in with Touch ID, Face ID, or your password manager (iCloud Keychain, 1Password…) — passkeys belong to the account environment where you add them. Production and development accounts may differ. No password, no 2FA code.
 					</Text>
 				</Box>
-				<Box marginLeft="auto" flexShrink={0}>
+				<Box marginLeft={[0, 'auto']} flexShrink={0}>
 					{supported ? (
-						<RainbowButton size="xs" onClick={() => setAdding((current) => !current)}>
+						<RainbowButton size="xs" onClick={() => { cancelPasskey(); setAddPassword(''); setAdding((current) => !current); }}>
 							{adding ? 'Close' : 'Add a passkey ✨'}
 						</RainbowButton>
 					) : (
@@ -374,6 +384,7 @@ export const PasskeysManager = () => {
 				</Flex>
 			) : null}
 
+			{listError ? <Text fontSize="xs" role="alert">Could not load passkeys. <Button size="xs" variant="link" onClick={refresh}>Try again</Button></Text> : null}
 			{passkeys.length ? (
 				<Flex flexDirection="column" rowGap={2}>
 					{passkeys.map((passkey) => (
@@ -382,7 +393,7 @@ export const PasskeysManager = () => {
 				</Flex>
 			) : (
 				<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
-					No passkeys yet.
+					{listError ? 'Your passkey list is unavailable.' : 'No passkeys yet.'}
 				</Text>
 			)}
 		</Flex>

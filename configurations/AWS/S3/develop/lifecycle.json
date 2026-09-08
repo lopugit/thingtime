@@ -1,0 +1,17 @@
+{
+  "Rules": [
+    {
+      "ID": "thingtime-private-object-retention",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "objects/"
+      },
+      "NoncurrentVersionExpiration": {
+        "NoncurrentDays": 30
+      },
+      "AbortIncompleteMultipartUpload": {
+        "DaysAfterInitiation": 7
+      }
+    }
+  ]
+}

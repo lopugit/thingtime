@@ -70,6 +70,7 @@ try {
             '--mac',
             '--publish', 'never',
             '--config.forceCodeSigning=true',
+            ...(process.env.THINGTIME_ELECTRON_BUILD_NUMBER ? [`--config.buildVersion=${process.env.THINGTIME_ELECTRON_BUILD_NUMBER}`] : []),
             '--config.mac.identity=-',
             '--config.mac.notarize=false',
 			'--config.mac.entitlements=build/entitlements.unsigned.mac.plist',

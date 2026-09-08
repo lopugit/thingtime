@@ -5,7 +5,7 @@ import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { signJwt, signPurposeToken, verifyJwt, verifyPurposeToken } from '~/api/utils/auth/jwt';
 import { hashPassword, verifyPassword } from '~/api/utils/auth/passwords';
 import { mintPatToken, PAT_SCOPE_CATALOG, revokePatToken } from '~/api/utils/auth/patTokens';
-import { createSession, getLiveSession, revokeSession } from '~/api/utils/auth/sessions';
+import { createSession, getLiveSession, revokedSessionPipeline, revokeSession } from '~/api/utils/auth/sessions';
 import type { SessionDoc } from '~/api/utils/auth/sessions';
 import { getSessionsCollection } from '~/api/utils/mongodb/collections';
 import { normalizePkceVerifier, pkceVerifierMatches } from '~/api/utils/apps/desktopOAuthCore';
@@ -82,6 +82,18 @@ const noStoreHeaders = { 'Cache-Control': 'no-store', Pragma: 'no-cache' };
 const infiniteExpiryFilter = (now: Date) => ({
   $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }]
 });
+
+// Single-use grant consumption (refresh rotation) revokes the record it burns.
+// Rotation is the highest-frequency revoke on this bridge — every refresh burns
+// one never-expiring refresh session and mints another — so a plain
+// `$set: { revokedAt }` would leave each consumed row at expiresAt: null, which
+// the sessions TTL index skips, orphaning one document per rotation forever.
+// revokedSessionPipeline fills a missing expiry and preserves a real one, so
+// this is also correct for grants that already carry a short TTL.
+export const consumedSessionPipeline = (now: Date) => [
+  ...revokedSessionPipeline(now),
+  { $set: { 'meta.consumedAt': now } }
+];
 
 const requestOrigin = (request: Request) => new URL(request.url).origin;
 
@@ -736,7 +748,7 @@ const exchangeRefreshTokenGrant = async (params: URLSearchParams, origin: string
   if (resource) refreshFilter['meta.resource'] = resource;
   const consumed = await (await getSessionsCollection()).findOneAndUpdate(
     refreshFilter,
-    { $set: { revokedAt: now, 'meta.consumedAt': now } },
+    consumedSessionPipeline(now),
     { returnDocument: 'before' }
   );
   if (!consumed) return invalidGrant();
@@ -827,6 +839,12 @@ const revokeMcpConnection = async (context: McpSession) => {
   if (!reference) return revokeSession(context.session.jti);
   const sessions = await getSessionsCollection();
   const now = new Date();
+  // Bridge sessions no longer expire on their own, so a disconnect has to leave
+  // behind a reap date: the sessions TTL index skips expiresAt: null, and these
+  // revoked records would accumulate forever without one. revokedSessionPipeline
+  // fills a missing expiry and preserves a real one (legacy bridge sessions
+  // minted before the infinite-expiry switch still carry theirs).
+  const revoked = [...revokedSessionPipeline(now), { $set: { 'meta.revokedAt': now } }];
   await Promise.all([
     sessions.updateOne(
       {
@@ -836,7 +854,7 @@ const revokeMcpConnection = async (context: McpSession) => {
         revokedAt: null,
         'meta.connectionId': reference.connectionId
       },
-      { $set: { revokedAt: now, 'meta.revokedAt': now } }
+      revoked
     ),
     sessions.updateMany(
       {
@@ -845,7 +863,7 @@ const revokeMcpConnection = async (context: McpSession) => {
         revokedAt: null,
         'meta.connectionSessionJti': context.connection.jti
       },
-      { $set: { revokedAt: now, 'meta.revokedAt': now } }
+      revoked
     )
   ]);
 };

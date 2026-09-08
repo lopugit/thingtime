@@ -8,7 +8,7 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { readLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
-import { isPasskeyCancel, passkeysSupported, useAccountHints, usePasskeyAuth } from '~/hooks/usePasskeys';
+import { isPasskeyCancel, passkeyErrorMessage, passkeysSupported, useAccountHints, usePasskeyAuth } from '~/hooks/usePasskeys';
 import type { AccountHint } from '~/hooks/usePasskeys';
 
 // The first-party surface for cross-origin sign-in (the /authorize?self=1
@@ -50,7 +50,7 @@ const HIDDEN_PATHS = ['/login', '/register', '/authorize', '/reset-password'];
 export const AutoLoginPopup = () => {
 	const user = useCurrentUser();
 	const { hints } = useAccountHints();
-	const { loginWithPasskey } = usePasskeyAuth();
+	const { loginWithPasskey, cancelPasskey } = usePasskeyAuth();
 	const api = useApi();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
@@ -61,6 +61,9 @@ export const AutoLoginPopup = () => {
 	const [dismissed, setDismissed] = React.useState(false);
 	const [passkeyBusy, setPasskeyBusy] = React.useState(false);
 	const [ssoBusy, setSsoBusy] = React.useState(false);
+	React.useEffect(() => {
+		if (dismissed || user?.id || HIDDEN_PATHS.some((path) => pathname.startsWith(path))) cancelPasskey();
+	}, [dismissed, user?.id, pathname, cancelPasskey]);
 	// Snooze is browser state — read it after mount so SSR and the first client
 	// paint agree, then let the card pop in.
 	const [eligible, setEligible] = React.useState(false);
@@ -305,17 +308,18 @@ export const AutoLoginPopup = () => {
 		} catch (err: any) {
 			// explicit click → even a cancel/failed cross-device handoff gets
 			// feedback (the browser reports both with the same error)
+			if (err?.name === 'AbortError') return;
 			if (isPasskeyCancel(err)) {
 				lopu({
 					title: 'Passkey sign-in didn’t complete 🤏',
-					description: 'Try again, or continue with your password.',
+					description: passkeyErrorMessage(err),
 					status: 'info',
 					duration: 5000
 				});
 			} else {
 				lopu({
 					title: 'Passkey login failed',
-					description: err?.error || 'Try the password instead.',
+					description: passkeyErrorMessage(err),
 					status: 'error',
 					duration: 6000
 				});

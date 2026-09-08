@@ -2,6 +2,13 @@ import React from 'react';
 
 import { useApi } from '~/hooks/useApi';
 import { ACL_OWNER, MAX_WEBPAGE_ROUTE_CHARS, WEBPAGE_ROUTE_PATTERN } from '~/schemas/registry';
+import {
+	focusWebpageDraft,
+	notifyWebpageDraftChange,
+	registerWebpageDraft,
+	type LopuDraftHandle,
+	type LopuSavedThingLike
+} from '../Lopu/lopuBuildBridge';
 import { buildComponentsByRef, type ComponentsByRef, type ComponentThingLike } from './WebpageBlocksRenderer';
 import type { WebpageBlock, WebpageCrystal } from './webpageBlocks';
 
@@ -14,28 +21,21 @@ import type { WebpageBlock, WebpageCrystal } from './webpageBlocks';
 // callers render last-known state and reconcile when data lands.
 
 export type WebpageTarget =
-	| { kind: 'id'; id: string }
+	| { kind: 'id'; id: string; key?: string }
 	| { kind: 'path'; path: string }
 	| { kind: 'global' };
 
 export type ResolvedWebpage = {
-	page: { id: string; crystal: WebpageCrystal; author?: { id?: string } | null; updatedAt?: string; acl?: string[] } | null;
+	page: { id: string; crystal: WebpageCrystal; author?: { id?: string } | null; updatedAt?: string; acl?: string[]; linkKey?: string } | null;
 	source: 'user' | 'system' | null;
 	componentsByRef: ComponentsByRef;
 };
 
-// The public toggle must never bulldoze the rest of the acl — hidden links
-// (tt:hidden + link keys), custom audiences (tt:user/…, tt:group/…), and app
-// grants (tt:app/…) all live in the same list. Only the tt:all entry is the
-// toggle's to add or remove.
-export const webpageAclForToggle = (current: unknown, isPublic: boolean): string[] => {
-	const list = Array.isArray(current) ? current.filter((entry): entry is string => typeof entry === 'string') : [];
-	const others = list.filter((entry) => entry !== 'tt:all' && entry !== ACL_OWNER);
-	return isPublic ? [ACL_OWNER, ...others, 'tt:all'] : [ACL_OWNER, ...others];
-};
-
 const targetQuery = (target: WebpageTarget): string => {
-	if (target.kind === 'id') return `id=${encodeURIComponent(target.id)}`;
+	if (target.kind === 'id') {
+		const id = `id=${encodeURIComponent(target.id)}`;
+		return target.key ? `${id}&key=${encodeURIComponent(target.key)}` : id;
+	}
 	if (target.kind === 'path') return `path=${encodeURIComponent(target.path)}`;
 	return 'global=1';
 };
@@ -63,6 +63,71 @@ export const resolveWebpageClient = async (target: WebpageTarget): Promise<Resol
 	}
 };
 
+// The /p/ viewer only DISPLAYS its draft (p.tsx renders the resolved page
+// blocks, never the editable tree). Drafts mounted there register with the
+// Lopu bridge as read-only so a streamed builder patch can never target them;
+// everything else (BuilderCanvas, SiteBlocksEditor — which the host never
+// mounts under /p/) is editable. Callers can always say so explicitly.
+export const isReadOnlyWebpageViewerRoute = (pathname: string): boolean => /^\/p\//.test(pathname);
+
+export type UseWebpageDraftOptions = {
+	// whether Lopu may paint live builder patches into this draft
+	// (default: true everywhere except the /p/ viewer route)
+	editable?: boolean;
+};
+
+// A save adopted through markSaved (Lopu persisted a patch) can outrun a
+// resolve that was already in flight for the SAME page. Applying that older
+// answer would rewind updatedAt (so the next save's expectedUpdatedAt 409s)
+// and the blocks, so such a landing is skipped.
+export const isStaleWebpageLanding = (
+	saved: { id: string; updatedAt: string } | null,
+	landing: { id?: string; updatedAt?: string } | null | undefined
+): boolean =>
+	!!saved && !!landing && landing.id === saved.id && typeof landing.updatedAt === 'string' && landing.updatedAt < saved.updatedAt;
+
+// Fold a saved webpage thing into the resolved page: the save is the viewer's
+// own row (source 'user'), fields the save does not carry are kept.
+export const mergeSavedWebpage = (prev: ResolvedWebpage | null, thing: LopuSavedThingLike): ResolvedWebpage | null => {
+	const id = typeof thing?.id === 'string' && thing.id ? thing.id : prev?.page?.id || null;
+	if (!id) return prev;
+	const crystal =
+		thing?.crystal && typeof thing.crystal === 'object' && !Array.isArray(thing.crystal)
+			? (thing.crystal as unknown as WebpageCrystal)
+			: prev?.page?.crystal || null;
+	if (!crystal) return prev;
+	const updatedAt = typeof thing?.updatedAt === 'string' ? thing.updatedAt : prev?.page?.updatedAt;
+	const acl = Array.isArray(thing?.acl) ? thing.acl.filter((entry): entry is string => typeof entry === 'string') : prev?.page?.acl;
+	const savedAclPresent = Array.isArray(thing?.acl);
+	const linkKey =
+		typeof (thing as { linkKey?: unknown })?.linkKey === 'string'
+			? (thing as { linkKey: string }).linkKey
+			: savedAclPresent
+				? undefined
+				: prev?.page?.linkKey;
+	const author = thing?.author && typeof thing.author === 'object' ? thing.author : prev?.page?.author;
+	// Drop the previous linkKey from the carried-over base: `linkKey` above has
+	// already decided whether it survives (a save that carries an acl is the
+	// authoritative sharing state, so a key it omits was revoked). Spreading
+	// `{ linkKey: undefined }` over the base would clear it too, but it also
+	// materialises an own `linkKey` key, which deepStrictEqual reports as a
+	// difference from an unshared page that never had one.
+	const { linkKey: _supersededLinkKey, ...carried } = prev?.page || {};
+	return {
+		page: {
+			...carried,
+			id,
+			crystal,
+			...(author !== undefined ? { author } : {}),
+			...(updatedAt ? { updatedAt } : {}),
+			...(acl ? { acl } : {}),
+			...(linkKey ? { linkKey } : {})
+		},
+		source: 'user',
+		componentsByRef: prev?.componentsByRef || {}
+	};
+};
+
 export type UseWebpageDraft = {
 	loading: boolean;
 	resolved: ResolvedWebpage | null;
@@ -73,17 +138,22 @@ export type UseWebpageDraft = {
 	// make a just-inserted component renderable without a refetch
 	addComponent: (ref: string, component: ComponentThingLike | null) => void;
 	ensureComponent: (ref: string) => Promise<void>;
-	save: (options?: { name?: string; isPublic?: boolean }) => Promise<{ ok: boolean; id?: string; error?: string }>;
+	// adopt a save made elsewhere (Lopu's persisted patch/create): clears
+	// dirty, updates the resolved page (updatedAt/crystal/acl) and, when the
+	// saved thing carries blocks, converges the draft on them
+	markSaved: (thing: LopuSavedThingLike) => void;
+	save: (options?: { name?: string; acl?: string[] }) => Promise<{ ok: boolean; id?: string; thing?: Record<string, any>; error?: string }>;
 	// discard the viewer's personalised site doc (site targets only)
 	resetToDefault: () => Promise<{ ok: boolean; error?: string }>;
 	discardDraft: () => void;
 	refresh: () => void;
 };
 
-export const useWebpageDraft = (target: WebpageTarget | null): UseWebpageDraft => {
+export const useWebpageDraft = (target: WebpageTarget | null, options?: UseWebpageDraftOptions): UseWebpageDraft => {
 	const api = useApi();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
+	const editableOption = options?.editable;
 
 	const [resolved, setResolved] = React.useState<ResolvedWebpage | null>(null);
 	const [loading, setLoading] = React.useState(!!target);
@@ -100,14 +170,28 @@ export const useWebpageDraft = (target: WebpageTarget | null): UseWebpageDraft =
 	// server blocks wholesale.
 	const dirtyRef = React.useRef(false);
 	const appliedTargetRef = React.useRef<string | null>(null);
+	// the newest save adopted through markSaved for the current target — a
+	// resolve that was in flight when it landed must not rewind it
+	const savedRef = React.useRef<{ id: string; updatedAt: string } | null>(null);
+	const savedTargetRef = React.useRef<string | null>(null);
+	// the live handle registered with the Lopu build bridge (created once)
+	const handleRef = React.useRef<LopuDraftHandle | null>(null);
 
 	React.useEffect(() => {
 		if (!targetKey) return;
+		if (savedTargetRef.current !== targetKey) {
+			savedTargetRef.current = targetKey;
+			savedRef.current = null;
+		}
 		let cancelled = false;
 		setLoading(true);
 		(async () => {
 			const data = await resolveWebpageClient(JSON.parse(targetKey) as WebpageTarget);
 			if (cancelled) return;
+			if (isStaleWebpageLanding(savedRef.current, data?.page)) {
+				setLoading(false);
+				return;
+			}
 			setResolved(data);
 			const targetChanged = appliedTargetRef.current !== targetKey;
 			appliedTargetRef.current = targetKey;
@@ -128,6 +212,8 @@ export const useWebpageDraft = (target: WebpageTarget | null): UseWebpageDraft =
 		setBlocksState(next);
 		setDirty(true);
 		dirtyRef.current = true;
+		// an edit makes this the draft Lopu's 'active' patches go to
+		if (handleRef.current) focusWebpageDraft(handleRef.current);
 	}, []);
 
 	const componentsByRef = React.useMemo(
@@ -175,7 +261,7 @@ export const useWebpageDraft = (target: WebpageTarget | null): UseWebpageDraft =
 	};
 
 	const save = React.useCallback(
-		async (options?: { name?: string; isPublic?: boolean }) => {
+		async (options?: { name?: string; acl?: string[] }) => {
 			if (!targetKey) return { ok: false, error: 'Nothing to save' };
 			const target = JSON.parse(targetKey) as WebpageTarget;
 			const page = resolved?.page || null;
@@ -202,46 +288,43 @@ export const useWebpageDraft = (target: WebpageTarget | null): UseWebpageDraft =
 			};
 			try {
 				if (resolved?.source === 'user' && page) {
-					// the public toggle merges with the page's existing acl (hidden
-					// links, custom audiences, app grants survive the toggle)
-					let aclPatch: { acl: string[] } | Record<string, never> = {};
-					if (options?.isPublic !== undefined) {
-						let currentAcl: unknown = page.acl;
-						if (!Array.isArray(currentAcl)) {
-							try {
-								const current: any = await apiRef.current.v1.things.get({ id: page.id });
-								currentAcl = current?.thing?.acl ?? current?.things?.[0]?.acl;
-							} catch {
-								// fall through — the merge treats unknown as owner-only base
-							}
-						}
-						aclPatch = { acl: webpageAclForToggle(currentAcl, options.isPublic) };
-					}
 					const resp: any = await apiRef.current.v1.things.update({
 						id: page.id,
 						crystal,
 						// refuse to silently overwrite a save made from another tab or
 						// device since this draft loaded (server answers 409)
 						...(page.updatedAt ? { expectedUpdatedAt: page.updatedAt } : {}),
-						...aclPatch
+						...(options?.acl ? { acl: options.acl } : {})
 					});
 					if (!resp?.ok) return { ok: false, error: resp?.error || 'Save failed' };
 					setDirty(false);
 					dirtyRef.current = false;
 					const nextUpdatedAt = typeof resp?.thing?.updatedAt === 'string' ? resp.thing.updatedAt : page.updatedAt;
 					const nextAcl = Array.isArray(resp?.thing?.acl) ? (resp.thing.acl as string[]) : page.acl;
+					const nextLinkKey = typeof resp?.thing?.linkKey === 'string' ? resp.thing.linkKey : undefined;
 					setResolved((prev) =>
-						prev ? { ...prev, page: { ...prev.page!, crystal, updatedAt: nextUpdatedAt, acl: nextAcl } } : prev
+						prev
+							? {
+								...prev,
+								page: {
+									...prev.page!,
+									crystal,
+									updatedAt: nextUpdatedAt,
+									acl: nextAcl,
+									...(nextLinkKey ? { linkKey: nextLinkKey } : { linkKey: undefined })
+								}
+							}
+							: prev
 					);
 					announceSave(crystal);
-					return { ok: true, id: page.id };
+					return { ok: true, id: page.id, thing: resp?.thing };
 				}
 				// forking a system/site default or creating a brand-new page —
 				// personal site docs stay private, standalone pages honour the toggle
 				const resp: any = await apiRef.current.v1.things.create({
 					thingtime: ['webpage'],
 					crystal,
-					...(options?.isPublic ? {} : { acl: [ACL_OWNER] })
+					acl: options?.acl || [ACL_OWNER]
 				});
 				if (!resp?.ok) return { ok: false, error: resp?.error || 'Save failed' };
 				const id = resp?.thing?.id || resp?.id;
@@ -250,7 +333,7 @@ export const useWebpageDraft = (target: WebpageTarget | null): UseWebpageDraft =
 				// re-resolve so source flips to 'user' and future saves update in place
 				setRefreshTick((tick) => tick + 1);
 				announceSave(crystal);
-				return { ok: true, id };
+				return { ok: true, id, thing: resp?.thing };
 			} catch (err: any) {
 				return { ok: false, error: err?.error || err?.message || 'Save failed' };
 			}
@@ -283,6 +366,93 @@ export const useWebpageDraft = (target: WebpageTarget | null): UseWebpageDraft =
 
 	const refresh = React.useCallback(() => setRefreshTick((tick) => tick + 1), []);
 
+	// A save that happened elsewhere (Lopu persisted a patch or created this
+	// page): the saved thing is the truth — adopt its blocks (ids the server
+	// rewrote included), its updatedAt (so the next manual save's
+	// expectedUpdatedAt matches) and clear dirty. The bridge announces the
+	// thingtime:webpage-saved event itself.
+	const markSaved = React.useCallback((thing: LopuSavedThingLike) => {
+		const id = typeof thing?.id === 'string' && thing.id ? thing.id : null;
+		const updatedAt = typeof thing?.updatedAt === 'string' ? thing.updatedAt : null;
+		if (id && updatedAt) savedRef.current = { id, updatedAt };
+		const savedBlocks =
+			thing?.crystal && Array.isArray((thing.crystal as { blocks?: unknown }).blocks)
+				? ((thing.crystal as unknown as WebpageCrystal).blocks as WebpageBlock[])
+				: null;
+		if (savedBlocks) setBlocksState(savedBlocks);
+		setDirty(false);
+		dirtyRef.current = false;
+		setResolved((prev) => mergeSavedWebpage(prev, thing));
+	}, []);
+
+	// ——— Lopu build bridge registration ————————————————————————————————
+	// One LIVE handle per mount: getters read the latest state through refs,
+	// so the registry never sees a stale tree; the methods are the stable
+	// callbacks above. Editability and the target are fixed per registration.
+	const stateRef = React.useRef({ resolved, blocks, dirty, componentsByRef });
+	stateRef.current = { resolved, blocks, dirty, componentsByRef };
+	const metaRef = React.useRef<{ editable: boolean; target: WebpageTarget | null }>({ editable: true, target: null });
+	const handle = React.useMemo<LopuDraftHandle>(
+		() => ({
+			get id() {
+				return stateRef.current.resolved?.page?.id ?? null;
+			},
+			get source() {
+				return stateRef.current.resolved?.source ?? null;
+			},
+			get pageKey() {
+				const value = stateRef.current.resolved?.page?.crystal?.pageKey;
+				// mirror save(): an unseeded global doc still binds to site-global
+				return typeof value === 'string' && value ? value : metaRef.current.target?.kind === 'global' ? 'site-global' : null;
+			},
+			get siteRoute() {
+				const value = stateRef.current.resolved?.page?.crystal?.siteRoute;
+				return typeof value === 'string' && value ? value : metaRef.current.target?.kind === 'path' ? metaRef.current.target.path : null;
+			},
+			get updatedAt() {
+				return stateRef.current.resolved?.page?.updatedAt ?? null;
+			},
+			get name() {
+				const value = stateRef.current.resolved?.page?.crystal?.name;
+				return typeof value === 'string' && value ? value : null;
+			},
+			get blocks() {
+				return stateRef.current.blocks;
+			},
+			get dirty() {
+				return stateRef.current.dirty;
+			},
+			get editable() {
+				return metaRef.current.editable;
+			},
+			get target() {
+				return metaRef.current.target;
+			},
+			get componentsByRef() {
+				return stateRef.current.componentsByRef;
+			},
+			setBlocks,
+			addComponent,
+			markSaved
+		}),
+		[setBlocks, addComponent, markSaved]
+	);
+	handleRef.current = handle;
+
+	React.useEffect(() => {
+		if (!targetKey) return;
+		metaRef.current = {
+			target: JSON.parse(targetKey) as WebpageTarget,
+			editable: editableOption ?? !(typeof window !== 'undefined' && isReadOnlyWebpageViewerRoute(window.location.pathname))
+		};
+		return registerWebpageDraft(handle);
+	}, [handle, targetKey, editableOption]);
+
+	// the context chip (page name, dirty) follows the resolved page
+	React.useEffect(() => {
+		notifyWebpageDraftChange();
+	}, [resolved, dirty]);
+
 	return {
 		loading,
 		resolved,
@@ -292,6 +462,7 @@ export const useWebpageDraft = (target: WebpageTarget | null): UseWebpageDraft =
 		componentsByRef,
 		addComponent,
 		ensureComponent,
+		markSaved,
 		save,
 		resetToDefault,
 		discardDraft,

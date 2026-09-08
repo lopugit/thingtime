@@ -1,3 +1,4 @@
 #include "Base.xcconfig"
 
 SWIFT_COMPILATION_MODE = wholemodule
+APS_ENVIRONMENT = production

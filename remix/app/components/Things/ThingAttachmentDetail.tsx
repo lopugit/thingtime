@@ -1,3 +1,4 @@
+import { ProgressiveImage } from '~/components/Attachments/ProgressiveImage';
 import React from 'react';
 import { Box, Button, Flex, Heading, Stack, Text } from '@chakra-ui/react';
 import { ChevronDown, ChevronUp, Download, ExternalLink, EyeOff, Image as ImageIcon } from 'lucide-react';
@@ -115,8 +116,7 @@ export const ThingAttachmentDetail = ({ attachment, references }: { attachment: 
 				{isImage ? (
 					<Box mt={5} borderRadius="var(--tt-radius-lg, 14px)" overflow="hidden" background="var(--tt-surface-alt, #f5f5f7)">
 						{imageVisible ? (
-							<Box
-								as="img"
+							<ProgressiveImage
 								src={attachmentMediaSrc(attachment)}
 								alt={attachment.description || title}
 								display="block"
