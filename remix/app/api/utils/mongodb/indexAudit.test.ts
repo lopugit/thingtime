@@ -18,7 +18,7 @@ test('unused emoji lookup retires without removing its protected uniqueness or l
   assert.ok(RETIRED_THINGS_INDEXES.includes('things_emoji_key_lookup'));
   assert.equal((RETIRED_THINGS_INDEXES as readonly string[]).includes('things_emoji_key_unique'), false);
   assert.equal(entries.find(({ name }) => name === 'uniqueKeys_1')?.options.unique, true);
-  assert.equal(summarizeThingIndexPlan(entries).total, 54);
+  assert.equal(summarizeThingIndexPlan(entries).total, 47);
 });
 
 test('prefix audit never conflates constraint, partial, sparse, TTL, text or collation semantics', () => {

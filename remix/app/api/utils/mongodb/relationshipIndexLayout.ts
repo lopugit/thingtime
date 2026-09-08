@@ -1,4 +1,5 @@
 import { repairRelationshipKeys } from '../migrations/relationshipKeys';
+import { activateIndexLayout } from './indexLayoutActivation';
 
 export const SHARED_RELATIONSHIP_KINDS = ['friend', 'follow', 'chat-member', 'community-member', 'chat', 'community-invite'] as const;
 export const SHARED_RELATIONSHIP_LOOKUPS = {
@@ -59,9 +60,9 @@ export const migrateRelationshipIndexLayout = async (things: any, settings: any,
 	if (!assertLease) throw new Error('Relationship index migration requires an active lease.');
 	const repaired = await prepareRelationshipIndexLayout(things, assertLease);
 	await assertLease();
-	// Activate only after complete validation. A crash after this write leaves
-	// redundant old indexes, not missed relationships. Retrying safely removes them.
-	await settings.updateOne({ key: RELATIONSHIP_LAYOUT_KEY }, { $set: { ready: true, updatedAt: new Date() }, $setOnInsert: { key: RELATIONSHIP_LAYOUT_KEY } }, { upsert: true });
+	// Activation and retirement are separate leased runs, never a blocking wait.
+	const activation = await activateIndexLayout(settings, RELATIONSHIP_LAYOUT_KEY, assertLease);
+	if (!activation.retirementReady) return { ...repaired, notes: [`Shared relationship reads activated; old indexes preserved while readiness caches drain. Run again in at least ${Math.ceil(activation.remainingMs / 1000)} seconds to retire them.`] };
 	await retireRelationshipLookupIndexes(things, assertLease);
-	return { ...repaired, notes: ['Shared relationship reads activated; five legacy lookup indexes retired. Older workers may take 30 seconds to refresh readiness.'] };
+	return { ...repaired, notes: ['Shared relationship reads active; readiness cache drain complete and five legacy lookup indexes retired.'] };
 };

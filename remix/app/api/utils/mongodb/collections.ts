@@ -753,7 +753,7 @@ export const migrateDeviceIndexLayout = async (db: any) => {
 // things_app_data_unique (partial-filter equality on the multikey thingtime
 // array verifiedly includes array-contains matches on MongoDB 8.0).
 
-export const createThingsDataIndexes = (db: any, { relationshipLookups = false } = {}): Promise<any>[] => {
+export const createThingsDataIndexes = (db: any, { relationshipLookups = false, legacyLookups = false } = {}): Promise<any>[] => {
   // Tagged so a createIndex failure names the exact `things.<index>` that
   // broke, whether this runs on the home db or a custom endpoint.
   const col = taggedCollection(thingsCollection(db), 'things');
@@ -785,26 +785,28 @@ export const createThingsDataIndexes = (db: any, { relationshipLookups = false }
     // Custom data-plane endpoints holding unmigrated v1 docs keep exactly the
     // same coverage; the auto-named unfiltered originals are retired
     // (RETIRED_THINGS_INDEXES) or swapped in place here.
-    createIndexReplacing(
+    ...(legacyLookups ? [createIndexReplacing(
       col,
       { kind: 1, visibility: 1, createdAt: -1, shareId: 1 },
       { name: 'things_v1_kind_visibility_created', partialFilterExpression: { kind: { $exists: true } } },
       ['kind_1_visibility_1_createdAt_-1_shareId_1']
-    ),
-    createIndexReplacing(
+    )] : []),
+    ...(legacyLookups ? [createIndexReplacing(
       col,
       { kind: 1, ownerId: 1, createdAt: -1, shareId: 1 },
       { name: 'things_v1_kind_owner_created', partialFilterExpression: { kind: { $exists: true } } },
       ['kind_1_ownerId_1_createdAt_-1_shareId_1']
-    ),
+    )] : []),
     // embed SDK: listEmbeddedThings pages a single owner's `kind: 'embed'`
     // things by most-recently-updated, so that sort needs its own index
-    createIndexReplacing(
+    ...(legacyLookups ? [createIndexReplacing(
       col,
       { kind: 1, ownerId: 1, updatedAt: -1, shareId: 1 },
       { name: 'things_v1_kind_owner_updated', partialFilterExpression: { kind: { $exists: true } } },
       ['kind_1_ownerId_1_updatedAt_-1_shareId_1']
-    ),
+    )] : []),
+    // Shared schema/owner updated-order access, including the embed SDK.
+    col.createIndex({ thingtime: 1, ownerId: 1, updatedAt: -1, shareId: 1 }),
     // The feed and profile matches are $or over BOTH eras
     // ({thingtime:'post'} | {kind:'post'} — see postMatch in things.ts). The
     // thingtime side had its (createdAt desc, shareId asc) index above; the
@@ -820,12 +822,12 @@ export const createThingsDataIndexes = (db: any, { relationshipLookups = false }
     // Verified on a local dataset: the plan goes from SORT <- FETCH <- OR
     // (67 docs examined to return 21) to LIMIT <- FETCH <- SORT_MERGE with
     // no blocking sort (38 examined).
-    createIndexReplacing(
+    ...(legacyLookups ? [createIndexReplacing(
       col,
       { kind: 1, createdAt: -1, shareId: 1 },
       { name: 'things_v1_kind_created', partialFilterExpression: { kind: { $exists: true } } },
       ['kind_1_createdAt_-1_shareId_1']
-    ),
+    )] : []),
     // Admin user/app snapshots filter by thingtime without ownerId, then
     // take a small newest-first window with a stable shareId tiebreaker.
     col.createIndex({ thingtime: 1, createdAt: -1, shareId: 1 }),
@@ -934,7 +936,7 @@ export const createThingsDataIndexes = (db: any, { relationshipLookups = false }
     // more fragile across server versions. Additive — dropping the v1 branch
     // instead would be faster still but would silently stop counting
     // un-migrated v1 shares (thingtimeOf/targetIdOf still read that shape).
-    col.createIndex({ shareOfId: 1 }, { sparse: true }),
+    ...(legacyLookups ? [col.createIndex({ shareOfId: 1 }, { sparse: true })] : []),
     // Private-S3 attachment lifecycle scans. Deliberately NOT a TTL index:
     // expiry cleanup must delete/abort S3 first and refund the user ledger in
     // one Mongo transaction; TTL deletion would orphan bytes and accounting.
@@ -1019,14 +1021,14 @@ export const createThingsDataIndexes = (db: any, { relationshipLookups = false }
     // Legacy relational era (kind:'reaction'/'comment' docs written by the
     // pre-unification relational model): aggregation + dedup indexes stay
     // until the things migration converts those docs to thingtime things.
-    createIndexReplacing(
+    ...(legacyLookups ? [createIndexReplacing(
       col,
       { kind: 1, parentId: 1, createdAt: 1 },
       { name: 'things_v1_kind_parent_created', partialFilterExpression: { kind: { $exists: true } } },
       ['kind_1_parentId_1_createdAt_1']
     ),
 		col.createIndex({ parentId: 1, ownerId: 1, token: 1 }, { unique: true, partialFilterExpression: { kind: 'reaction' } }),
-		col.createIndex({ commentId: 1 }, { unique: true, partialFilterExpression: { kind: 'comment' } }),
+		col.createIndex({ commentId: 1 }, { unique: true, partialFilterExpression: { kind: 'comment' } })] : []),
     // Embed apps ("Login with Thingtime", api/utils/apps): one thing per
     // clientId, ever — a second doc claiming an existing clientId (however
     // created) could answer origin lookups with a different allowlist, so
@@ -1342,7 +1344,7 @@ export type ThingsIndexPlanEntry = {
 // Read-only inventory of the exact executable plan. Keeping keys and options
 // prevents an audit from treating a partial/unique/TTL index as an ordinary
 // prefix duplicate. This recorder never obtains a database connection.
-export const thingsIndexPlanEntries = async (): Promise<ThingsIndexPlanEntry[]> => {
+export const thingsIndexPlanEntries = async (options: { legacyLookups?: boolean } = {}): Promise<ThingsIndexPlanEntry[]> => {
   const entries = new Map<string, ThingsIndexPlanEntry>();
   const recorder = {
     collection: () => ({
@@ -1360,6 +1362,7 @@ export const thingsIndexPlanEntries = async (): Promise<ThingsIndexPlanEntry[]> 
     })
   };
   await ensureHomeThingsIndexPlan(recorder);
+  if (options.legacyLookups) await Promise.all(createThingsDataIndexes(recorder, options));
   return [...entries.values()];
 };
 
@@ -1376,7 +1379,7 @@ export const thingsIndexPlanNames = async (): Promise<Set<string>> =>
 const customIndexesEnsured = new Map<string, Promise<void>>();
 const ensureCustomDataIndexes = (uri: string, db: any) => {
   if (customIndexesEnsured.has(uri)) return;
-	const run = Promise.all(createThingsDataIndexes(db, { relationshipLookups: true })).then(
+	const run = Promise.all(createThingsDataIndexes(db, { relationshipLookups: true, legacyLookups: true })).then(
     () => undefined,
     (err) => {
       customIndexesEnsured.delete(uri);
@@ -1406,6 +1409,9 @@ export const ensureIndexes = async () => {
 			await pruneRebuildTwins(db);
 			await migrateDeviceIndexLayout(db);
 			let relationshipLookups = true;
+			let legacyLookups = true;
+			try { legacyLookups = !await (await import('./legacyThingLayout')).homeLegacyThingLayoutReady(); }
+			catch { console.error('[mongodb] Legacy Thing layout is unknown; preserving its indexes.'); }
 			try {
 				relationshipLookups = !await ensureHomeRelationshipKeys();
 			} catch {
@@ -1498,7 +1504,7 @@ export const ensureIndexes = async () => {
         col('themes').createIndex({ ownerId: 1 }),
         col('waitlist').createIndex({ email: 1 }, { unique: true }),
         // the shared data-plane (`things`) index set — see createThingsDataIndexes
-        ...createThingsDataIndexes(db, { relationshipLookups }),
+        ...createThingsDataIndexes(db, { relationshipLookups, legacyLookups }),
         // home-only `things` indexes (migration-diagnostic TTL)
         ...createHomeOnlyThingsIndexes(db),
         // the CI control-plane satellite — see createCiControlIndexes

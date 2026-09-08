@@ -7,7 +7,7 @@ import { thingUniqueKey } from './uniqueKeys';
 
 test('home shares five lookup families while custom/repair fallback retains their indexes', async () => {
 	const home = await thingsIndexPlanEntries();
-	assert.equal(home.length + 1, 54);
+	assert.equal(home.length + 1, 47);
 	for (const name of Object.keys(SHARED_RELATIONSHIP_LOOKUPS)) assert.equal(home.some(entry => entry.name === name), false);
 	const customNames: string[] = [];
 	await Promise.all(createThingsDataIndexes({ collection: () => ({
@@ -108,18 +108,23 @@ test('explicit migration dry-run does not write, and lease is mandatory for acti
 test('readiness is an indexed metadata read; validation precedes activation and retirement', async () => {
 	const db = fixture();
 	let ready = false;
+	let activatedAt: Date | undefined;
 	const settings = {
 		findOne: async (filter: unknown, options: unknown) => {
 			assert.deepEqual(filter, { key: RELATIONSHIP_LAYOUT_KEY });
-			assert.deepEqual(options, { projection: { ready: 1 } });
-			return { ready };
+			assert.ok((options as any).projection.ready);
+			return { ready, activatedAt };
 		},
-		updateOne: async () => { assert.ok(db.events.includes('repair')); db.events.push('activate'); ready = true; }
+		updateOne: async (_filter: any, update: any) => { assert.ok(db.events.includes('repair')); db.events.push('activate'); ready = true; activatedAt = update.$set.activatedAt; }
 	};
 	assert.equal(await relationshipIndexLayoutReady(settings), false);
 	assert.equal(db.events.length, 0);
 	await migrateRelationshipIndexLayout(db.things, settings, { dryRun: false, assertLease: async () => { db.events.push('lease'); } });
 	assert.equal(await relationshipIndexLayoutReady(settings), true);
+	assert.equal(db.events.some(event => event.startsWith('drop:')), false);
+	activatedAt = new Date(Date.now() - 60_000);
+	await migrateRelationshipIndexLayout(db.things, settings, { dryRun: false, assertLease: async () => { db.events.push('lease'); } });
+	assert.equal(db.events.filter(event => event === 'activate').length, 1);
 	assert.ok(db.events.indexOf('activate') < db.events.findIndex(event => event.startsWith('drop:')));
 	assert.ok(db.events.filter(event => event === 'lease').length >= 8);
 });

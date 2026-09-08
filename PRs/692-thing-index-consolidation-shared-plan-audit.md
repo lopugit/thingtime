@@ -41,7 +41,7 @@ and the 108-error typecheck ratchet passed for migration repair `96cbd6bd3`.
 That does not constitute native MongoDB or deployed migration proof.
 
 No production/develop migration or merge is claimed yet. The source count of
-54 is the intended post-migration home plan, not completion of the owner's request. The
+47 is the intended post-migration home plan, not completion of the owner's request. The
 deployed shared-key reader cutover, remaining index-family benchmarks, real API and
 Mongo query-plan acceptance, deployed manifests, exact-head CI, and final
 before/after production/develop inventory remain required.
@@ -76,3 +76,30 @@ nothing and reports zero pending work after completion. The reproducible
 `verify:relationship-indexes` script accepts only its explicitly opted-in
 disposable loopback replica set; it never inserts data through a raw Mongo
 handle. This is local sampled-plan proof, not production workload/latency proof.
+
+## Canonical legacy readers and cache-drain safety
+
+The next candidate retires eight legacy indexes while adding one shared
+schema/owner/update-order index: 47 steady-state, 60 during compatibility
+rollout. Feed/search/related/cascade and embed readers switch together; custom
+data planes retain old behavior. The active embed writer no longer requires
+root `kind` after readiness. Incompatible legacy rows block migration; only
+canonical embed metadata may be cleaned, with no Thing deletion.
+
+Both migrations now require two real leased runs. The first activates readers;
+old indexes stay for at least one minute before retirement. Early retries do
+not extend the deadline. This closes the cached-reader/full-scan window in the
+initial relationship checkpoint. Compatible code on every DB consumer is still
+a prerequisite; a timer cannot repair an undeployed old preview.
+
+Native regression now also exercises private embed ACL/version CAS, feed and
+profile exclusion of rich comments, engagement search, comment deletion,
+profile/embed unhinted sort plans, and zero-pending reruns. Live migration and
+main/develop merge remain outstanding.
+
+The expanded native MongoDB 8.0.1 run passed **60 → 47**, including the real
+61-second drain and both leased completion runs. All six relationship samples
+examined one key/document; profile posts examined two (excluding the rich
+comment) and returned one, while the embed list examined/returned one, both
+without blocking sorts. Engagement search passed before activation, during
+drain, and after retirement. Both final migration dry-runs reported zero.

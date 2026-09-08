@@ -47,6 +47,7 @@ import { waitlistEmailKey } from '../waitlist/waitlist';
 import { RELATIONSHIP_UNIQUE_CRYSTAL_KEYS } from '../messenger/shared';
 import { repairRelationshipKeys } from './relationshipKeys';
 import { migrateRelationshipIndexLayout } from '../mongodb/relationshipIndexLayout';
+import { migrateLegacyThingIndexLayout } from '../mongodb/legacyThingLayout';
 import { themeAcl } from '../themes/themes';
 import {
 	builtinSchemaSeedNeedsRefresh,
@@ -3098,7 +3099,7 @@ const consolidateRelationshipIndexes: Migration = {
 	fromVersion: THINGS_VERSION,
 	toVersion: THINGS_VERSION,
 	title: 'Consolidate five relationship lookup indexes',
-	description: 'Home database only. Deploy compatible shared-key readers and key-stamping writers on every origin sharing this database first. Repairs and validates keys, activates shared reads, then removes only the five exact non-unique legacy lookup definitions. Preserves custom databases, unique ancestors, unknown indexes and conflicting relationships. No document deletion.',
+	description: 'Home database only. Deploy compatible shared-key readers and key-stamping writers on every origin sharing this database first. First run repairs and validates keys and activates reads; run again after at least one minute to remove five exact non-unique legacy lookups after caches drain. Preserves custom databases, unique ancestors, unknown indexes and conflicting relationships. No document deletion.',
 	destructive: true,
 	pending: async () => (await migrateRelationshipIndexLayout(await getHomeThingsCollection(), await getSettingsCollection(), { dryRun: true })).matched,
 	run: async ({ dryRun, assertLease }) => {
@@ -3106,6 +3107,14 @@ const consolidateRelationshipIndexes: Migration = {
 			return await migrateRelationshipIndexLayout(await getHomeThingsCollection(), await getSettingsCollection(), { dryRun, assertLease });
 		} finally { if (!dryRun) invalidateHomeRelationshipKeys(); }
 	}
+};
+
+const retireLegacyThingIndexes: Migration = {
+	id: 'retire-legacy-thing-indexes', collection: 'things', fromVersion: THINGS_VERSION, toVersion: THINGS_VERSION,
+	title: 'Retire eight legacy Thing indexes', destructive: true,
+	description: 'After every shared-database origin supports canonical Thing reads, require no incompatible legacy rows, ensure the shared schema/owner updated-order index and activate home-only canonical reads. Run again after at least one minute to clean redundant embed kind metadata and remove eight exact legacy indexes after caches drain. Custom databases keep legacy compatibility. No Thing documents are deleted.',
+	pending: async () => (await migrateLegacyThingIndexLayout({ dryRun: true })).matched,
+	run: migrateLegacyThingIndexLayout
 };
 
 export const migrations: Migration[] = [
@@ -3130,6 +3139,7 @@ export const migrations: Migration[] = [
 	backfillUserStorageAccounting,
 	backfillRelationshipUniqueKeys,
 	consolidateRelationshipIndexes,
+	retireLegacyThingIndexes,
 	relocateCiControlTelemetry,
 	rebuildThingsIndexes,
   dropStaleCollectionGenerations

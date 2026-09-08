@@ -144,8 +144,8 @@ non-duplicate database errors close the cursor and stop the run.
 
 ### Shared relationship lookup cutover
 
-The intended steady-state home plan is now **54 including `_id_`**, with ten
-slots of headroom: the unused emoji lookup plus five additional indexes are
+The relationship-only checkpoint yielded **54 including `_id_`**, with ten
+slots of headroom: the unused emoji lookup plus five additional indexes were
 removed, without adding any new index. Friends, follows, chat/community
 memberships, DMs and invitation codes share the existing protected
 `uniqueKeys_1` index. Point and batched readers include attachment permission
@@ -154,7 +154,8 @@ crystal identity guards remain: a stale key must not identify a changed DM or
 grant access to the wrong membership.
 
 This is not automatic retirement at startup. Before activation, home readers
-and bootstrap keep the five legacy indexed lookups (59 planned indexes).
+and bootstrap keep the five legacy indexed lookups (59 at that checkpoint;
+60 with the additional shared embed ordering index below).
 Custom data planes keep those lookups permanently; explicit home identity and
 attachment paths remain pinned home even inside a custom-endpoint request.
 The selected home plan in the source audit is the intended **post-migration**
@@ -172,8 +173,9 @@ Run `consolidate-relationship-lookup-indexes` through the admin migration API:
    ensures the shared unique constraint, adds missing keys, then validates the
    entire selected family set. Duplicate/conflicting identities block
    activation without choosing winners or deleting relationships.
-4. The migration writes an indexed home-settings readiness marker only after
-   validation, then removes only the five exact expected non-unique partial
+4. The first real run writes an indexed home-settings readiness marker only
+   after validation, preserving old indexes for at least one minute. A second
+   leased run after that deadline removes only the five exact expected non-unique partial
    definitions. Unique, TTL, sparse, hidden, collated, redefined and unknown
    indexes are preserved. A crash after activation leaves redundant indexes;
    retry completes retirement. Lease loss stops further operations.
@@ -181,6 +183,10 @@ Run `consolidate-relationship-lookup-indexes` through the admin migration API:
    They never scan/backfill relationship data or perform index DDL. Migration
    completion invalidates the local cache; other workers converge within the
    cache window. Re-check pending work after old workers have drained.
+
+Repeated early runs preserve the original activation timestamp, not a moving
+deadline. Old markers without a timestamp and malformed/future timestamps
+start a fresh drain interval. No HTTP request sleeps waiting for the drain.
 
 The marker uses the existing home-only settings collection/key index; no
 new physical collection or index is introduced. The explicit migration's
@@ -195,6 +201,38 @@ chat exclusion, invite redemption, concurrent DM dedupe and repeated AI-import
 upserts passed before/after cutover. The final dry-run reported zero pending
 work. This establishes sampled query behavior, not production p95 latency or
 large-history performance for the other index families.
+
+### Canonical legacy-reader cutover — 47-index candidate
+
+Eight legacy indexes retire only after their query branches are no longer
+selected: five `kind` compound indexes, legacy reaction/comment uniqueness,
+and sparse `shareOfId`. Feed/profile, search (including engagement counts),
+related comments/reactions/shares, reaction caps, saved/RSS/trending/subspace
+readers, and attachment cascade queries switch to canonical fields on home.
+Custom data planes retain their legacy queries and indexes.
+
+The embed SDK remains active: its writer was still dual-stamping `kind: embed`.
+It now uses canonical `thingtime: embed` reads and stops adding that metadata
+after activation. A new multi-use `{thingtime, ownerId, updatedAt: -1, shareId}`
+index preserves the owner's recently-updated listing and stable cursor ties.
+The leased `retire-legacy-thing-indexes` migration refuses incompatible legacy
+rows, validates all exact index definitions, builds the replacement first,
+then activates canonical readers. After a separate one-minute cache-drain run,
+it removes only redundant `kind` metadata on schema-v2, exactly-embed Things
+and drops the eight allowlisted definitions. It never deletes Thing documents.
+
+The source budget is now **47** including `_id_` (54 minus eight plus one),
+**60** before either activation, and **55** after relationship retirement
+alone. Unknown indexes such as develop's Watch queue remain outside that
+budget and are preserved. Startup never automatically drops these 13 indexes.
+
+Native MongoDB 8.0.1 regression uses API utilities, not raw fixture inserts.
+It covers private embed access, version/CAS conflicts, public feed and profile
+excluding rich comments, engagement-filtered search, and comment cascade
+deletion, alongside the relationship checks above. Before/after unhinted
+profile/embed plans must avoid blocking sorts and examine bounded documents;
+both migration dry-runs must return zero pending work after retirement.
+This remains sampled local proof, not a live production latency measurement.
 
 ## Still required before claiming completion
 
@@ -212,6 +250,6 @@ large-history performance for the other index families.
   API utility layer, plus real API behavior (not synthetic index success alone).
 - Run the production/develop migrations and verify both deployed SHAs and
   index sets. No migration or merge is claimed by this initial audit.
-- Source regression tests enforce the 54-index intended home plan and the
+- Source regression tests enforce the 47-index intended home plan and the
   custom/pre-migration fallback. Native workload measurements and actual
   production/develop inventories must substantiate the cutover before release.

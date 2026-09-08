@@ -52,3 +52,22 @@ export const inspectHomeRelationshipLookups = async () => {
   }
   return { ready, indexCount: (await things.indexes()).length, rows };
 };
+
+export const inspectHomeLegacyThingQueries = async (ownerId: string) => {
+  const [{ getHomeThingsCollection }, { postMatch }, { embeddedThingListFilter }] = await Promise.all([
+    import('./collections'), import('../things/things'), import('../things/embeddedThings')
+  ]);
+  const things = await getHomeThingsCollection();
+  const queries = [
+    { name: 'profile-posts', filter: { ...await postMatch(), ownerId }, sort: { createdAt: -1, shareId: 1 } },
+    { name: 'owner-embeds', filter: await embeddedThingListFilter(ownerId), sort: { updatedAt: -1, shareId: 1 } }
+  ];
+  const hasSort = (node: any): boolean => !!node && typeof node === 'object' &&
+    (node.stage === 'SORT' || Object.values(node).some(value => typeof value === 'object' && hasSort(value)));
+  const rows = [];
+  for (const query of queries) {
+    const plan = await things.find(query.filter).sort(query.sort).limit(20).maxTimeMS(5000).explain('executionStats');
+    rows.push({ name: query.name, returned: plan.executionStats.nReturned, docsExamined: plan.executionStats.totalDocsExamined, keysExamined: plan.executionStats.totalKeysExamined, blockingSort: hasSort(plan.queryPlanner.winningPlan) });
+  }
+  return rows;
+};

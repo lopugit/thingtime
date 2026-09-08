@@ -7583,12 +7583,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'embed-things',
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     group: 'embed',
     title: 'Embedded things',
     endpoint: '/api/v1/embed/things',
     summary: 'Reads, lists, creates, and version-safely updates Thingtime data embedded on other websites.',
     detail:
-      'Public embedded things can be read cross-origin. Creating, listing, or updating uses the normal Thingtime session-or-bearer authentication path and stores JSON-safe values as kind: embed documents in the things collection.',
+      'Public embedded things can be read cross-origin. Creating, listing, or updating uses the normal Thingtime session-or-bearer authentication path and stores JSON-safe values as canonical embed Things. Owner listings sort by updatedAt descending with a stable shareId tie-breaker. Legacy kind reads/writes remain during migration and on custom data planes; after the explicit home cutover, embeds use the shared schema/owner updated-order index. Existing private-read and version-conflict checks are unchanged.',
     auth: {
       mode: 'optional',
       description:
@@ -12644,8 +12646,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.1.0: every generation row carries its storage census (dataBytes,
     // storageBytes, indexBytes, indexes) — additive. contractVersion is what
     // the capabilities manifest publishes.
-    contractVersion: '1.2.0',
-    featureVersion: '1.1.0',
+    contractVersion: '1.3.0',
+    featureVersion: '1.2.0',
     summary: 'Per-collection schema-version census, storage generations, and registered migrations with pending counts.',
     detail:
       'Every doc stores the root-level schemaVersion it was written at (docs without one count as version 1), and every ' +
@@ -12654,7 +12656,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'generation on the server (current, stale, or ahead), any legacy collections adoption could not rename, and which ' +
       'registered migrations still have work to do. Relationship-key pending counts include missing individual keys even when ' +
       'other protected keys are already present; unresolved duplicate slots remain pending. The home-only ' +
-      'consolidate-relationship-lookup-indexes migration reports key repair, readiness and legacy-index retirement work.',
+      'consolidate-relationship-lookup-indexes migration reports key repair, readiness and legacy-index retirement work. ' +
+      'retire-legacy-thing-indexes separately reports incompatible legacy rows, redundant canonical embed metadata and eight old indexes.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
@@ -12855,8 +12858,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
   endpoint({
     id: 'admin-migrations-run',
-    contractVersion: '1.1.0',
-    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
+    featureVersion: '1.3.0',
     group: 'admin',
     title: 'Run migration',
     endpoint: '/api/v1/admin/migrations/run',
@@ -12878,7 +12881,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'without repeatedly retrying them or deleting relationships. Re-check pending work after skipped concurrent changes. ' +
       'consolidate-relationship-lookup-indexes requires confirm: true for a real run: after deploying compatible code on ' +
       'all shared-database origins, it repairs and validates home relationship keys, activates shared reads, then retires ' +
-      'five exact non-unique lookup indexes. Reads never perform this migration; custom database indexes remain unchanged.',
+      'five exact non-unique lookup indexes. Reads never perform this migration; custom database indexes remain unchanged. ' +
+      'retire-legacy-thing-indexes also requires confirm: true and the shared-database rollout prerequisite. It refuses ' +
+      'incompatible legacy rows, ensures a shared schema/owner updated-order index, activates canonical home reads, removes ' +
+      'redundant kind metadata only on canonical embed Things, and retires eight exact legacy indexes. It deletes no Things. ' +
+      'Both layouts activate on the first real run while retaining old indexes. Repeat after at least one minute to finish ' +
+      'retirement after compatible workers drain their readiness caches; early reruns preserve the original deadline.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'

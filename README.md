@@ -2491,12 +2491,17 @@ Run `cd remix && node --import tsx scripts/audit-things-indexes.mts` for the
 exact source-plan inventory. It does not connect to a database or need secrets;
 live index counts must be checked separately through the admin workbench.
 
-The relationship-sharing increment targets 54 home indexes, but preserves the
-five legacy lookups until an administrator runs
-`consolidate-relationship-lookup-indexes` on that home database. Deploy the
+The combined relationship/legacy increment targets 47 home indexes, but keeps
+60 during compatibility rollout (unknown extra indexes are preserved). Run
+`consolidate-relationship-lookup-indexes` and `retire-legacy-thing-indexes`
+on that home database. Deploy the
 compatible code to every origin sharing it first, dry-run, then run with
 `confirm: true` under the migration lease. Duplicate keys block activation;
 no relationship documents are deleted. Custom endpoints are not migrated.
+Each migration first activates readers without dropping indexes; run it again
+after at least one minute to finish retirement. Repeated early runs do not
+reset the drain deadline. Legacy rows block retirement except canonical embeds,
+whose redundant `kind` metadata can be safely removed after readers drain.
 Readiness uses the existing home settings/key index and a 30-second cache;
 normal requests never backfill data. No additional secret or provider setup is
 required. Follow the linked rollout guide and verify native query plans and

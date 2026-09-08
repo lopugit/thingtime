@@ -6022,6 +6022,10 @@ approval; `access.test.ts` — the reservation matrix) and
 - Desktop privacy status: grant/revoke each permission, return from System Settings, and confirm live status refreshes without prompting. Stop the node and confirm failed checks show last-known status, not a new denial or false success. Restart and use Check access to recover; a signing migration must explain the one-time off/on grant refresh.
 # Index consolidation regression checks
 
+- Two-stage retirement: the first real run activates each layout but preserves all old indexes. A second run before one minute must preserve them without resetting activation time. After the drain, verify exact retirement, zero pending work, and continued canonical reads. Old/malformed/future markers start a fresh drain. Lease loss never starts activation or further cleanup.
+
+- Legacy cutover: incompatible root-kind/shareOfId documents block cleanup; only exactly canonical schema-v2 embeds may lose redundant kind metadata. Check private embed denial, owner listing and CAS updates; feed/profile exclusion of rich comments; engagement-filtered search; and comment/attachment cascades. Native owner post/embed plans must avoid blocking sorts. Custom data planes retain legacy compatibility; no Thing is deleted by the index migration.
+
 - In the admin workbench, an aggregation starting with `$indexStats: {}` must run without MongoDB Location40602. Keep protected-field probes rejected and strip protected Thing fields from later joins; do not generalize the first-stage exception to document-reading expressions.
 
 - Relationship-key migrations must count missing individual keys, preserve all existing keys, compare the source identity, and stop safely on lease loss. More than one batch of duplicate slots must terminate, remain pending, and never disclose key values or delete a relationship.
