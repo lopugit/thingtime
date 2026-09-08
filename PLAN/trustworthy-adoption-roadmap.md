@@ -38,6 +38,9 @@
 **Identity-agency dependency:**
 [Identity agency and context-safe presence](./identity-agency-and-context-safe-presence-roadmap.md)
 
+**Collective-decision dependency:**
+[Collective decision agency and accountable governance](./collective-decision-agency-and-accountable-governance-roadmap.md)
+
 ## Outcome
 
 Make Thingtime easier to discover, understand, trust, use repeatedly, share by
@@ -190,6 +193,9 @@ and error budgets stay within approved bounds.
   so handles, public presentation, app disclosure, pseudonymity, claims, roles,
   and authority remain distinct. A verified channel, signature, badge, or
   relationship must not become an identity or trust shortcut.
+- Apply the [collective decision agency and accountable governance roadmap](./collective-decision-agency-and-accountable-governance-roadmap.md)
+  before using polls to steer a shared outcome. Participation volume or a
+  majority must not become consent, representativeness, legitimacy, or mandate.
 
 **Gate:** recipient success improves, every permission/revoke test passes, and
 abuse/support volume remains below the approved stop threshold.
@@ -285,6 +291,7 @@ Every experiment copied into `TODO/` should contain:
 | Learning claims outrun evidence                                   | Saves, opens, completions, confidence, streaks, or time spent are labelled learning, mastery, or efficacy                                  | Remove the claim; preserve private reflection and source context, then satisfy the learning-agency gate before resuming.                                   |
 | AI fluency or tool activity is mistaken for authority or success  | Conversation history becomes implied consent, confirmations become blanket delegation, or tool completion is reported as a correct outcome | Stop the affected assistance path; restore human control, bounded context, current authorization, receipts, correction, and remedy before resuming.        |
 | Identity presentation becomes coercive or deceptive               | Public fields surprise people, contexts become linkable, or authentication/attestation is presented as truth, trust, or authority           | Stop expansion; restore exact audience projections, context separation, correction/recovery, honest evidence labels, and the identity-agency gate.         |
+| Poll engagement is mistaken for legitimate authority              | Mutable ballots, unclear eligibility, live-result pressure, missing denominators, or an unexplained organizer decision                       | Stop the decision path; restore the approved ballot, privacy, result, response, challenge, and collective-decision gate before resuming.                    |
 | Costs grow faster than usefulness                                 | Storage, compute, email, moderation, or support cost per useful return rises                                                               | Narrow the experiment, improve efficiency, or test an aligned paid tier.                                                                                   |
 | Metrics optimize the proxy                                        | Page views/time rise while useful outcomes or trust fall                                                                                   | Retire the proxy and return to outcome-based evaluation.                                                                                                   |
 

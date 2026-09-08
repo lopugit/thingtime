@@ -529,3 +529,20 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     accessibility profiles, accountable owners, and stop authority. Mutable
     usernames, new aliases, proofing, credentials, public badges or scores,
     minors, and sensitive or high-impact uses remain separately gated.
+
+36. **🗳️ Make collective decision agency and accountable governance a product contract.**
+
+    Preserve Thingtime's poll composer, relational vote Things, protected
+    one-account-per-poll slot, ACL checks, live tally, optimistic correction,
+    and capability registration while making their limits explicit. Start only
+    with one synthetic, non-sensitive, non-binding advisory decision in a
+    private adult test group, with immutable eligibility/ballot/rule versions,
+    server-enforced timing, hidden interim totals, explicit abstention and
+    withdrawal, denominator-aware final reporting, organizer response, challenge,
+    and remedy. Execute
+    `claude-todo/36-collective-decision-agency-and-accountable-governance.md`
+    only after the owner and qualified reviewers approve the decision charter,
+    data boundary, accessibility profiles, accountable owners, and stop
+    authority. Public or binding elections, proof of personhood, secret ballots,
+    minors, institutions, money, moderation verdicts, and high-impact uses remain
+    separately gated.

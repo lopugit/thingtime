@@ -434,3 +434,37 @@ and Claude TODO indexes, plus the ethical-adoption evidence, trustworthy-
 adoption roadmap, TODO 22, invite and anonymous-chat boundaries, and the older
 identity/governance idling. No runtime, API, schema, storage, authentication,
 profile, UI, analytics, or production behavior changed.
+
+## 2026-09-09 — collective decision agency and accountable governance
+
+This run distinguishes a poll, account-bound choice, and arithmetic tally from
+an eligible electorate, immutable ballot, legitimate decision, accountable
+response, and completed implementation. It adds:
+
+- `NOTES/collective-decision-agency-and-accountable-governance-baseline.md`, a
+  dated evidence ledger covering the shipped poll/vote primitive, account-
+  uniqueness boundary, mutable ballot and display-only close gaps, privacy and
+  accessibility inputs, decision vocabulary, risks, and a bounded pilot;
+- `PLAN/collective-decision-agency-and-accountable-governance-roadmap.md`, a
+  gated path from a decision charter and current-state characterization through
+  immutable advisory ballots, informed private participation, accountable
+  results/remedies, and one synthetic adult pilot; and
+- `TODO/claude-todo/36-collective-decision-agency-and-accountable-governance.md`,
+  an execution epic with owner decisions, protected relational records,
+  capability-manifest obligations, acceptance criteria, stop conditions, and
+  explicit non-goals.
+
+The recommended first experiment is one non-binding advisory poll in one
+private adult test group using a synthetic, non-sensitive question. It freezes
+purpose, eligibility, ballot, source context, timing, privacy, result rule, and
+organizer response; hides interim totals; distinguishes abstention from no
+response; and reports denominators and limitations without individual choices.
+
+One account slot is not one person. A tally is not consent, truth,
+representativeness, legitimacy, authority, or implementation. Public or binding
+elections, secret ballots, proof of personhood, delegated/quadratic/ranked/
+token-weighted voting, minors, institutions, money, moderation verdicts, and
+high-impact uses remain separately gated. The theme is linked from the NOTES,
+PLAN, main TODO, and Claude TODO indexes, plus the ethical-adoption evidence,
+trustworthy-adoption roadmap, TODO 22, and older governance idling. No runtime,
+API, schema, storage, UI, poll, vote, analytics, or production behavior changed.

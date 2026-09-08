@@ -87,6 +87,11 @@ experiment by itself.
   must not require real names, correlate pseudonyms, surprise people with public
   fields, or treat authentication, signatures, badges, roles, or relationships
   as proof of identity, truth, trust, or authority.
+- [TODO 36](./36-collective-decision-agency-and-accountable-governance.md) owns
+  eligibility, immutable ballots, timing, vote privacy, result rules, organizer
+  response, challenge, and remedy. Adoption experiments must not treat poll
+  participation or a majority as consent, representativeness, legitimacy,
+  authority, or successful implementation.
 - [TODO 10](./10-delight-and-growth-ideas.md) is the idea bank; this epic adds
   sequencing and outcome gates.
 - [TODO 18](./18-account-invite-links.md) owns the defensive account-invite

@@ -39,6 +39,7 @@ turns these observations into phases. The executable backlog lives in
 | Lopu's chat, model/provider choice, tools, confirmations, and summaries do not yet form a complete agency or accountability contract.                           | The [AI agency and accountable-assistance baseline](./ai-agency-and-accountable-assistance-baseline.md) separates conversation history from memory and consent, tool requests from authority, confirmations from delegation, results from correctness, and receipts from remedy, then proposes one bounded private draft pilot.                                                       | High for the 2026-09-06 repository snapshot. Re-run the dedicated baseline after model, provider, prompt, tool, confirmation, storage, or receipt changes. |
 | Thing ownership, ACL audiences, social relationships, Messenger roles, and invitations do not yet form a shared-artifact collaboration contract.               | The [collaboration agency and shared-stewardship baseline](./collaboration-agency-and-shared-stewardship-baseline.md) separates visibility from edit authority, membership from ownership, contribution from agreement, and removal from erasure, then proposes one named two-person private-draft pilot.                                             | High for the 2026-09-07 repository snapshot. Re-run the dedicated baseline after Thing authorization, ACL, Messenger, community, subspace, invitation, revision, or concurrency changes. |
 | Account records, authenticators, global handles, public profiles, app scopes, pseudonymous presentation, and future attestations do not yet form one identity-agency contract. | The [identity agency and context-safe presence baseline](./identity-agency-and-context-safe-presence-baseline.md) separates authentication from proofing, presentation from claims, signatures from truth, and identity from authority, then proposes one owner-only public-presence preview. | High for the 2026-09-08 repository snapshot. Re-run the dedicated baseline after account, profile, username, authenticator, OAuth, invite, anonymity, recovery, or projection changes. |
+| Poll composition, one-account vote slots, and live tallies do not yet form a legitimate collective-decision contract. | The [collective decision agency and accountable governance baseline](./collective-decision-agency-and-accountable-governance-baseline.md) separates expression from eligibility, ballots from mutable posts, tallies from results, and majorities from authority, then proposes one private non-binding advisory pilot. | High for the 2026-09-09 repository snapshot. Re-run after poll, vote, membership, lifecycle, result, privacy, or governance changes. |
 
 ## What the evidence suggests
 
@@ -78,6 +79,9 @@ turns these observations into phases. The executable backlog lives in
 7. **Identity assurance is fragmented.** Account access, global addressability,
    public presentation, scoped app disclosure, pseudonymity, claims, roles, and
    authorization lack a shared vocabulary and owner-facing audience preview.
+8. **Collective decisions are under-specified.** Polls count account choices,
+   but eligibility, ballot versions, enforced close, privacy, result rules,
+   organizer response, challenge, and implementation accountability are absent.
 
 ## Proposed outcome vocabulary
 
@@ -145,6 +149,9 @@ Any later measurement design should fail closed unless all of these are true:
 12. Which single creator value exchange, responsibility model, country/currency,
     provider boundary, remedy path, private data contract, and stop authority
     could be piloted without selling reach, trust, safety, access, or exit?
+13. Which one synthetic, low-stakes advisory decision can test eligibility,
+    immutable ballots, private participation, accountable response, and remedy
+    without implying personhood, consent, representativeness, or legitimacy?
 
 ## Refresh checklist
 
