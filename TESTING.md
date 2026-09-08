@@ -1552,8 +1552,13 @@ email whose link points at the attacker.
       your own option again REMOVES it. `POST /api/v1/things/vote` returns
       `pollVotes { counts, totalVotes, viewerVote }` matching what renders.
 - [ ] One vote per user per poll survives races: double-tap fast / two tabs —
-      the `things_vote_key_unique` index keeps ONE vote doc per
-      (`crystal.voteKey` = `<pollId>~<userId>`); reloads converge.
+      the protected Binary `voteKey` in `uniqueKeys_1` keeps at most ONE vote
+      doc per (`crystal.voteKey` = `<pollId>~<userId>`); reloads converge. Run
+      `npm --prefix remix run verify:poll-unique-keys` against its explicitly
+      allowed disposable replica set to exercise 16 concurrent real-utility calls.
+- [ ] Poll insert/change/removal leaves the account ledger unchanged (protected
+      engagement is unbilled), including full accounts. Conflicting vote writes
+      return 409 instead of silently reporting an unwritten vote as successful.
 - [ ] Logged out: the poll shows results only (bars + percentages visible,
       no vote recorded); tapping toasts "Log in to vote 🗳️".
 - [ ] A poll on a private/friends-only post can't be voted on by a viewer
@@ -1570,9 +1575,8 @@ email whose link points at the attacker.
 - [ ] Deleting a poll post cascade-deletes its vote things (no orphan `vote`
       docs pointing at the gone poll); vote docs never list as /things rows
       and folder copy skips them like reactions/saves.
-- [ ] A foreign doc squatting the `crystal.voteKey` slot (e.g. a free-form
-      data crystal) makes the vote endpoint answer 409 — never a silent
-      `ok: true` that drops the vote.
+- [ ] A free-form data crystal with the same `voteKey` cannot squat another
+      user's protected vote identity. Generic inputs cannot stamp `uniqueKeys`.
 
 ## Subspaces (`remix/app/components/Subspaces/`, `remix/app/api/utils/subspaces/`, `/api/v1/subspaces*`)
 
@@ -3693,6 +3697,21 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       clause); hidden baseline mints a linkKey (key = read only). Groups are
       protected kinds managed solely via /api/v1/groups (+ audience-sources).
       Covered by section I of `node scripts/verify-pat-tokens.mjs`.
+- [ ] Unified Thing sharing: `/things` Share, Builder page settings,
+      component-card Save version, and component-detail Save version all offer
+      Public / Friends / Family / Private / Anyone with the link / Custom from
+      the same audience control. Custom opens the people + groups capability
+      picker. At a mobile viewport, open Custom from the Builder inspector and
+      confirm the entire picker (including its buttons) layers above the drawer
+      and remains usable. Saving a standalone Builder page with the link option
+      mints an owner-only key; its copied `/p/<id>?key=<key>` URL resolves while
+      logged out, and the same key pattern opens non-page/non-post Things through
+      `/thing/<id>?key=<key>`. A no-key visit remains 404 and never paints a
+      bearer-key response from local cache. Moving away from hidden invalidates
+      the old link.
+- [ ] When reconciling older audience feature branches, each post/composer opens
+      exactly one Custom audience picker. Preserve the shared viewer fields,
+      composer state, ACL payload and drawer layering without duplicate blocks.
 - [ ] Token visibility fence 'hidden' mode ("Hidden only 🕵️" chip): the token
       lives entirely in hidden link-key things — its no-acl creates are born
       hidden WITH a fresh linkKey, public/private things 404, creating
@@ -4544,13 +4563,23 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       resolves to the exact private user-data file. Bootstrap must not issue an
       unconditional immediate kickstart. Replace an exact old managed node,
       then confirm launchd owns one new PID with `runs = 1` and no exit.
+- [ ] In Desktop settings, use **Stop node**, **Start node**, then **Restart node**.
+      Stop must remove the running service while preserving pairing and the plist;
+      Start resumes one node, Restart changes its PID, and rapid clicks must not
+      create overlapping registrations. Check desktop and mobile widths, including
+      long version strings and error messages. Open the node menu **About Thingtime
+      Node** and verify version, build, source commit, bundle ID, and management
+      mode match the actual installed bundle without account or secret data.
 - [ ] With **Auto-start node on Thingtime launch** left at its default-on
       setting, use the native menu-bar **Quit Thingtime**, confirm launchd is
       stopped while the managed plist remains, then Cmd+Q/reopen the installed
       Electron app. It must bootstrap exactly one node from that existing plist.
       Turn the setting off and repeat: reopening Electron must leave it stopped;
       turn it back on and confirm it converges immediately. A Mac with no
-      managed plist must still require the explicit **Start node** confirmation.
+      managed plist must start the bundled node when auto-start is on. Rewrite
+      the plist with plutil (removing XML comments), quit/reopen, and confirm
+      recovery still works. Install a newer Desktop build at the same path:
+      one node must restart with the new build and stay stable on the next launch.
 - [ ] Open the exact installed Electron app, record its bundled loopback
       renderer origin and separately selected API origin, and Quit with Cmd+Q. Electron must
       stop while the launchd node and
@@ -5996,3 +6025,20 @@ approval; `access.test.ts` — the reservation matrix) and
 - Validate both immutable legacy four-field and current five-field quota snapshots (and partial overrides). Optional speed-test quotas accept null or safe integers 0–1000, reject coercible strings/fractions/unknown fields, and never change the stored assignment. After deploying, dry-run the production accounting migration before a separately authorized real run; verify storage readiness and a real upload before calling uploads healthy.
 
 - As an admin, dry-run `backfill-user-storage-accounting`; invalid ledgers must report only deterministic ledger IDs and fixed validation-field labels, at most ten records. Confirm zero ledger writes, no raw values or arbitrary key names, and unchanged strict envelope validation. Anonymous and non-admin callers remain denied by the existing migrations API gate.
+
+- Desktop privacy status: grant/revoke each permission, return from System Settings, and confirm live status refreshes without prompting. Stop the node and confirm failed checks show last-known status, not a new denial or false success. Restart and use Check access to recover; a signing migration must explain the one-time off/on grant refresh.
+# Index consolidation regression checks
+
+- Two-stage retirement: the first real run activates each layout but preserves all old indexes. A second run before one minute must preserve them without resetting activation time. After the drain, verify exact retirement, zero pending work, and continued canonical reads. Old/malformed/future markers start a fresh drain. Lease loss never starts activation or further cleanup.
+
+- Legacy cutover: incompatible root-kind/shareOfId documents block cleanup; only exactly canonical schema-v2 embeds may lose redundant kind metadata. Check private embed denial, owner listing and CAS updates; feed/profile exclusion of rich comments; engagement-filtered search; and comment/attachment cascades. Native owner post/embed plans must avoid blocking sorts. Custom data planes retain legacy compatibility; no Thing is deleted by the index migration.
+
+- In the admin workbench, an aggregation starting with `$indexStats: {}` must run without MongoDB Location40602. Keep protected-field probes rejected and strip protected Thing fields from later joins; do not generalize the first-stage exception to document-reading expressions.
+
+- Relationship-key migrations must count missing individual keys, preserve all existing keys, compare the source identity, and stop safely on lease loss. More than one batch of duplicate slots must terminate, remain pending, and never disclose key values or delete a relationship.
+
+- Shared relationship cutover: before activation, home and custom reads use legacy indexed fields; afterward, home uses `uniqueKeys` plus original identity/kind/ACL guards. A normal or cold read must never scan/backfill data or perform index DDL. Dry-run must not write. A missing lease, duplicate, or failed validation must not activate readiness. Verify follow/friend, DM, membership batches, invites, attachment authorization and device/AI-import upserts before/after migration; stale keys must not return a changed identity. Exact redefined/unique/TTL indexes and custom databases must remain untouched. Re-run after the 30-second readiness window and confirm no old workers recreate the five indexes.
+
+- Run `cd remix && node --import tsx scripts/audit-things-indexes.mts`; source-plan replay must work without database credentials, include Mongo's `_id_`, and preserve exact key order, unique/partial/sparse/TTL options.
+- Run `pnpm --dir remix run test:collections`. The unused emoji lookup must not be recreated; protected `uniqueKeys_1` must stay unique and the legacy unique ancestor must not be blindly retired.
+- Before any live index retirement, compare exact production/develop index definitions with the source inventory, preserve unknown indexes, and prove the actual query and concurrent-write paths. A low count alone is not acceptance. See `docs/architecture/thing-index-consolidation.md` for the full rollout gates.

@@ -32,6 +32,7 @@ public enum ThingtimeMenuBarIconID: String, CaseIterable, Sendable {
 
 public enum ThingtimeStatusMenuCopy {
     public static let starting = "Starting…"
+    public static let aboutThingtime = "About Thingtime Node"
     public static let refreshStatus = "Refresh Status"
     public static let openThingtime = "Open Thingtime"
     public static let restartThingtime = "Restart Thingtime"
@@ -47,7 +48,7 @@ public enum ThingtimeStatusMenuCopy {
     }
 
     public static func commandTitles(launchdManaged: Bool) -> [String] {
-        [refreshStatus, openThingtime]
+        [refreshStatus, openThingtime, aboutThingtime]
             + (launchdManaged ? [restartThingtime] : [])
             + [quitThingtime]
     }

@@ -4,6 +4,7 @@
 
 import type { PublicAttachment } from '~/components/Attachments/attachmentTypes';
 import type { EditorJsDoc } from '~/components/Editor/editorJsValue';
+import { THING_AUDIENCE_META, type ThingAudience } from '~/components/Sharing/audienceCore';
 import type { PostMediaLayout } from '~/schemas/registry';
 
 export type { PostMediaLayout };
@@ -30,7 +31,7 @@ export type FeedAuthor = {
 };
 
 export type PostType = 'text' | 'image' | 'marketplace' | 'thingtime';
-export type PostVisibility = 'public' | 'friends' | 'family' | 'private' | 'hidden' | 'custom';
+export type PostVisibility = ThingAudience;
 
 export type MarketplaceCategory = 'car' | 'tool' | 'furniture' | 'service' | 'other';
 
@@ -334,14 +335,7 @@ export const POST_TYPE_META: Record<PostType, { label: string; emoji: string }> 
   thingtime: { label: 'Things', emoji: '📦' }
 };
 
-export const CIRCLE_META: Record<PostVisibility, { label: string; emoji: string; hint: string }> = {
-  public: { label: 'Public', emoji: '🌐', hint: 'Anyone on Thingtime' },
-  friends: { label: 'Friends', emoji: '🤝', hint: 'Your friends circle' },
-  family: { label: 'Family', emoji: '🏡', hint: 'Your family circle' },
-  private: { label: 'Private', emoji: '🔒', hint: 'Only you' },
-  hidden: { label: 'Hidden', emoji: '🕵️', hint: 'Unlisted — only people with its secret link' },
-  custom: { label: 'Custom', emoji: '🎭', hint: 'Pick exactly who can read, comment, or edit' }
-};
+export const CIRCLE_META = THING_AUDIENCE_META;
 
 export const MARKETPLACE_CATEGORY_META: Record<MarketplaceCategory, { label: string; emoji: string }> = {
   car: { label: 'Cars', emoji: '🚗' },

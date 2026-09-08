@@ -209,6 +209,13 @@ export const PostComposer = (props: PostComposerProps) => {
   const [listingLocation, setListingLocation] = React.useState(editPost?.listing?.location || '');
   const [tagsInput, setTagsInput] = React.useState(editPost?.tags?.join(', ') || '');
   const [visibility, setVisibility] = React.useState<PostVisibility>(editPost?.visibility || 'public');
+  // subspace vocabulary: headline + destination + flair. Locked to the page's
+  // subspace when one is passed; otherwise the feed composer offers the
+  // viewer's joined subspaces (lazy-loaded on first expand).
+  const [postTitle, setPostTitle] = React.useState(editPost?.title || '');
+  const [subspaceId, setSubspaceId] = React.useState<string | null>(editPost?.subspace?.id || subspace?.id || null);
+  const [flairId, setFlairId] = React.useState<string | null>(editPost?.flair?.id || null);
+  const [mySubspaces, setMySubspaces] = React.useState<SubspaceComposerContext[] | null>(null);
   // custom audience 🎭 — the picker composes a full tt:custom acl; while
   // visibility is 'custom' the payloads carry it (acl wins over the name)
   const [customAcl, setCustomAcl] = React.useState<string[] | null>(
@@ -222,13 +229,6 @@ export const PostComposer = (props: PostComposerProps) => {
   // `visibility` above so a brand-new post still falls back to 🌐 Public,
   // while an edit falls back to whatever the post actually was.
   const audiencePreviousVisibilityRef = React.useRef<PostVisibility>(editPost?.visibility || 'public');
-  // subspace vocabulary: headline + destination + flair. Locked to the page's
-  // subspace when one is passed; otherwise the feed composer offers the
-  // viewer's joined subspaces (lazy-loaded on first expand).
-  const [postTitle, setPostTitle] = React.useState(editPost?.title || '');
-  const [subspaceId, setSubspaceId] = React.useState<string | null>(editPost?.subspace?.id || subspace?.id || null);
-  const [flairId, setFlairId] = React.useState<string | null>(editPost?.flair?.id || null);
-  const [mySubspaces, setMySubspaces] = React.useState<SubspaceComposerContext[] | null>(null);
 	// gallery layout (crystal.mediaLayout): auto = masonry default, stored null
 	const [layoutMode, setLayoutMode] = React.useState<ComposerLayoutMode>(
 		editPost?.mediaLayout?.mode === 'rows' ? 'rows' : editPost?.mediaLayout?.mode === 'grid' ? 'grid' : 'auto'
@@ -594,9 +594,6 @@ export const PostComposer = (props: PostComposerProps) => {
 		if (currentPostShareId) currentPayload.shareId = currentPostShareId;
       // comments inherit the thread root's audience server-side
 		if (!isComment) currentPayload.visibility = visibility;
-		// custom audiences ride the explicit acl (the server prefers acl over the
-		// visibility name)
-		if (!isComment && visibility === 'custom' && customAcl) currentPayload.acl = customAcl;
 		// subspace vocabulary rides the crystal: a headline, the destination
 		// subspace, and its flair (the server re-validates posting rights)
 		if (!isComment) {
@@ -606,6 +603,9 @@ export const PostComposer = (props: PostComposerProps) => {
 				if (flairId) currentPayload.flairId = flairId;
 			}
 		}
+		// custom audiences ride the explicit acl (the server prefers acl over the
+		// visibility name)
+		if (!isComment && visibility === 'custom' && customAcl) currentPayload.acl = customAcl;
 		if (currentAttachmentIds.length > 0) currentPayload.attachmentIds = currentAttachmentIds;
 		if (showPhotos) currentPayload.images = canonicalImages;
 		if (apiType === 'thingtime') currentPayload.thing = canonicalThing;

@@ -942,11 +942,13 @@ function configuredNodeRegistration() {
 	};
 }
 
+let nodeStoppedForSession = false;
+
 async function reconcileConfiguredNode({ startIfStopped } = {}) {
 	if (process.platform !== 'darwin' || !desktopSettings) return null;
 	if (endpointCompatibility && endpointCompatibility.status !== 'compatible') return thingtimeNode.status();
 	await ensureLocalProjectRegistry(nodeProjectRegistryPath());
-	const shouldStart = typeof startIfStopped === 'boolean' ? startIfStopped : desktopSettings.snapshot().autoStartNodeOnLaunch;
+	const shouldStart = typeof startIfStopped === 'boolean' ? startIfStopped : desktopSettings.snapshot().autoStartNodeOnLaunch && !nodeStoppedForSession;
 	return thingtimeNode.reconcileRegisteredService(configuredNodeRegistration(), { startIfStopped: shouldStart });
 }
 
@@ -979,6 +981,20 @@ async function checkSelectedEndpointCompatibility({ syncNode = false } = {}) {
 		console.warn('Unable to reconcile Thingtime Node configuration', error);
 	}
 	return compatibility;
+}
+
+async function nodeControlService(event, request) {
+	requireMacNode(event);
+	const action = request?.action;
+	if (!['start', 'stop', 'restart'].includes(action)) throw new ThingtimeNodeBridgeError('invalid_request', 'Unsupported node control.');
+	if (action !== 'stop') {
+		const compatibility = await checkSelectedEndpointCompatibility();
+		if (compatibility.status !== 'compatible') throw compatibilityError(compatibility);
+		await ensureLocalProjectRegistry(nodeProjectRegistryPath());
+	}
+	const status = await thingtimeNode.controlService(action, configuredNodeRegistration());
+	nodeStoppedForSession = action === 'stop';
+	return status;
 }
 
 async function nodeRegisterService(event) {
@@ -1609,6 +1625,7 @@ ipcMain.handle('thingtime-desktop:ai-discover', (event) => discoverAiSources(eve
 ipcMain.handle('thingtime-desktop:ai-begin-sync', (event, request) => beginAiSync(event, request));
 ipcMain.handle('thingtime-desktop:ai-read-batch', (event, request) => readAiSyncBatch(event, request));
 ipcMain.handle('thingtime-desktop:ai-cancel-sync', (event, request) => cancelAiSync(event, request));
+ipcMain.handle('thingtime-desktop:node-control', (event, request) => nodeControlService(event, request));
 ipcMain.handle('thingtime-desktop:node-status', (event) => nodeGetStatus(event));
 ipcMain.handle('thingtime-desktop:node-register-service', (event) => nodeRegisterService(event));
 ipcMain.handle('thingtime-desktop:node-unregister-service', (event) => nodeUnregisterService(event));

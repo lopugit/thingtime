@@ -5161,10 +5161,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/mongodb/raw-results',
     // 1.1.0: the collection allowlist gained `ciControl` (additive).
     // contractVersion is what the capabilities manifest publishes.
-    contractVersion: '1.1.0',
+    contractVersion: '1.1.1',
+    featureVersion: '1.0.1',
     summary: 'Advertises and runs bounded, read-only MongoDB queries for the no-code admin workbench.',
     detail:
-      'GET returns the server-owned capability catalogue. POST accepts a structured query built from filters, typed Extended JSON values, projection, sort, collation, index hints, or a read-only aggregation pipeline. Results are capped by document count, response bytes, and execution time. Mutations, change streams, operational/session inspection, server-side JavaScript, arbitrary databases, and unknown collections are rejected recursively.',
+      'GET returns the server-owned capability catalogue. POST accepts a structured query built from filters, typed Extended JSON values, projection, sort, collation, index hints, or a read-only aggregation pipeline. Results are capped by document count, response bytes, and execution time. Mutations, change streams, operational/session inspection, server-side JavaScript, arbitrary databases, and unknown collections are rejected recursively. An initial empty $indexStats stage remains first as MongoDB requires; it emits only index metadata, while protected-field stripping remains active for document ingress and subsequent joins.',
     auth: {
       mode: 'session-or-bearer',
       description:
@@ -7582,12 +7583,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'embed-things',
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     group: 'embed',
     title: 'Embedded things',
     endpoint: '/api/v1/embed/things',
     summary: 'Reads, lists, creates, and version-safely updates Thingtime data embedded on other websites.',
     detail:
-      'Public embedded things can be read cross-origin. Creating, listing, or updating uses the normal Thingtime session-or-bearer authentication path and stores JSON-safe values as kind: embed documents in the things collection.',
+      'Public embedded things can be read cross-origin. Creating, listing, or updating uses the normal Thingtime session-or-bearer authentication path and stores JSON-safe values as canonical embed Things. Owner listings sort by updatedAt descending with a stable shareId tie-breaker. Legacy kind reads/writes remain during migration and on custom data planes; after the explicit home cutover, embeds use the shared schema/owner updated-order index. Existing private-read and version-conflict checks are unchanged.',
     auth: {
       mode: 'optional',
       description:
@@ -10402,6 +10405,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-vote',
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     group: 'things',
     title: 'Vote on poll',
     endpoint: '/api/v1/things/vote',
@@ -10410,8 +10415,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Polls are posts (or data things) whose thing carries a string question plus an options ' +
       'list of 2+ entries. One vote per (user, poll), enforced structurally: votes are standalone ' +
       'things (thingtime ["vote"], crystal.optionIndex, targetId = the poll, acl ["tt:inherit"]) ' +
-      'deduped by a server-written crystal.voteKey ("<pollId>~<userId>") under a partial unique ' +
-      'index. Voting a DIFFERENT option moves your vote (the doc updates in place); voting the ' +
+      'deduped by a server-written Binary voteKey entry in the shared protected uniqueKeys ' +
+      'index. Votes remain unbilled engagement records. Voting a DIFFERENT option moves your vote (the doc updates in place); voting the ' +
       'SAME option again removes it (toggle off, matching reactions). The poll must be visible ' +
       'to the caller — acl and inherit chains are re-checked on every vote. Live tallies ride ' +
       'poll posts as pollVotes wherever posts are projected (feed, /post/:id, profiles).',
@@ -10424,7 +10429,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'POST the poll thing id and the zero-based optionIndex to vote for.',
       'The poll must be visible to the current user and optionIndex must be inside its options list.',
       'Use the returned pollVotes (counts per option, totalVotes, viewerVote) to reconcile the card.',
-      'Handle 401 unauthenticated, 404 for missing or not-visible polls, and 400 for non-polls or out-of-range options.'
+      'Handle 401 unauthenticated, 404 for missing or not-visible polls, and 400 for non-polls or out-of-range options.',
+      'Handle 409 for a concurrent toggle or conflicting legacy vote identity; retry after refreshing the poll.'
     ],
     requestExamples: [
       {
@@ -12242,6 +12248,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-resolve',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'webpages',
     title: 'Resolve a webpage',
     endpoint: '/api/v1/webpages/resolve',
@@ -12256,10 +12264,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'visible shareIds first, then the seeded platform doc (component-<ref>), then the caller’s own latest ' +
       'componentKey match; the refs map records each resolution. Pages are created and edited through the ' +
       'ordinary /api/v1/things write path (the webpage crystal sanitizer is the write gate) — this endpoint ' +
-      'only reads.',
+      'only reads. A standalone hidden page also accepts its owner-issued key query parameter, matching the ' +
+      'ordinary Things hidden-link contract; the bearer key is never returned to non-owners.',
     auth: {
       mode: 'optional',
-      description: 'Anonymous callers resolve public pages and the seeded site defaults; signed-in callers also get their own pages and personalised site docs.'
+      description: 'Anonymous callers resolve public pages, hidden standalone pages when they present the exact key, and seeded site defaults; signed-in callers also get their own pages and personalised site docs.'
     },
     methods: ['GET'],
     steps: [
@@ -12275,6 +12284,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'The read behind /p/<id>.',
         method: 'GET',
         query: { id: 'my-launch-page' }
+      },
+      {
+        name: 'Resolve an unlisted page by secret link',
+        description: 'The key is the bearer secret copied by the page owner.',
+        method: 'GET',
+        query: { id: 'my-unlisted-page', key: 'owner-issued-link-key' }
       },
       {
         name: 'Resolve a site page',
@@ -12634,14 +12649,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.1.0: every generation row carries its storage census (dataBytes,
     // storageBytes, indexBytes, indexes) — additive. contractVersion is what
     // the capabilities manifest publishes.
-    contractVersion: '1.1.0',
+    contractVersion: '1.3.0',
+    featureVersion: '1.2.0',
     summary: 'Per-collection schema-version census, storage generations, and registered migrations with pending counts.',
     detail:
       'Every doc stores the root-level schemaVersion it was written at (docs without one count as version 1), and every ' +
       'collection lives in a versioned physical collection — logical `things` at version 2 is the physical collection ' +
       '`things_v2`. This endpoint reports how many docs sit at each version per collection, every physical collection ' +
       'generation on the server (current, stale, or ahead), any legacy collections adoption could not rename, and which ' +
-      'registered migrations still have work to do.',
+      'registered migrations still have work to do. Relationship-key pending counts include missing individual keys even when ' +
+      'other protected keys are already present; unresolved duplicate slots remain pending. The home-only ' +
+      'consolidate-relationship-lookup-indexes migration reports key repair, readiness and legacy-index retirement work. ' +
+      'retire-legacy-thing-indexes separately reports incompatible legacy rows, redundant canonical embed metadata and eight old indexes.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
@@ -12842,8 +12861,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
   endpoint({
     id: 'admin-migrations-run',
-    contractVersion: '1.0.1',
-    featureVersion: '1.1.1',
+    contractVersion: '1.2.0',
+    featureVersion: '1.3.0',
     group: 'admin',
     title: 'Run migration',
     endpoint: '/api/v1/admin/migrations/run',
@@ -12860,7 +12879,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'the deleted rows occupied is actually released — both destructive, both confirm: true. Failed real runs may return a private ' +
 			'diagnosticThingId for the same admin to open at /thing/:id; failed dry runs never create diagnostics and instead return ' +
 			'bounded redacted adminDetail inline. Storage-ledger validation accepts valid optional speedTestsPerHour quotas ' +
-      'without rewriting immutable tier snapshots, overrides, ownership, or allowances.',
+      'without rewriting immutable tier snapshots, overrides, ownership, or allowances. Relationship-key repair adds missing ' +
+      'individual keys without replacing existing keys, checks source identity before writing, and reports duplicate slots ' +
+      'without repeatedly retrying them or deleting relationships. Re-check pending work after skipped concurrent changes. ' +
+      'consolidate-relationship-lookup-indexes requires confirm: true for a real run: after deploying compatible code on ' +
+      'all shared-database origins, it repairs and validates home relationship keys, activates shared reads, then retires ' +
+      'five exact non-unique lookup indexes. Reads never perform this migration; custom database indexes remain unchanged. ' +
+      'retire-legacy-thing-indexes also requires confirm: true and the shared-database rollout prerequisite. It refuses ' +
+      'incompatible legacy rows, ensures a shared schema/owner updated-order index, activates canonical home reads, removes ' +
+      'redundant kind metadata only on canonical embed Things, and retires eight exact legacy indexes. It deletes no Things. ' +
+      'Both layouts activate on the first real run while retaining old indexes. Repeat after at least one minute to finish ' +
+      'retirement after compatible workers drain their readiness caches; early reruns preserve the original deadline.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'

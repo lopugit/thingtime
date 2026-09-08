@@ -18,6 +18,24 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Refresh the custom-audience promotion preview with released main's shared-index readers. Resolve equivalent ACL merge blocks and duplicate viewer fields, composer state, and modal rendering; retain main's unified audience controls and drawer layering. Database migration activation remains separate. — Codex (AI), 2026-09-09
+
+- Repair a poll writer found during the index audit: stamp the shared protected vote identity (no new index), preserve legacy lookup compatibility and unbilled engagement policy. Native regression reproduces 16 duplicate rows before the fix and checks concurrent votes, toggles, private access and cascade cleanup. — Codex (AI), 2026-09-08
+
+- Extend [Thing index consolidation](../PRs/692-thing-index-consolidation-shared-plan-audit.md) to a 47-index candidate: canonical legacy/feed/search/embed readers, eight exact retirements, one shared updated-order index, and two-stage cache-drained migrations. Native MongoDB verifies 60 → 47 with bounded sampled plans and preserved ACL/CAS behavior. Production/develop rollout remains pending. — Codex (AI), 2026-09-08
+
+- Prepare five relationship lookup families to share the existing protected unique-key index (54-index intended home plan). Keep legacy/custom reads until an explicit leased migration validates keys and activates the layout; cold requests do not backfill. Preserve identity and attachment permission guards. Native/live rollout remains pending; see [PR #692](../PRs/692-thing-index-consolidation-shared-plan-audit.md). — Codex (AI), 2026-09-08
+
+- Fix index-usage statistics in the admin workbench by keeping MongoDB's metadata-only `$indexStats` stage first, while retaining protected-field and join safeguards. See [PR #692](../PRs/692-thing-index-consolidation-shared-plan-audit.md). — Codex (AI), 2026-09-08
+
+- Begin [Thing index consolidation](../PRs/692-thing-index-consolidation-shared-plan-audit.md): inventory the executable plan, retire the unused emoji lookup while retaining protected uniqueness, and repair relationship-key backfills to preserve partial keys and terminate on duplicate batches. Production/develop migrations and the broader reduction remain in progress. — Codex (AI), 2026-09-08
+
+- 2026-09-07: Desktop privacy status now refreshes while visible and on return from System Settings, exposes Check access, distinguishes unknown/stale results from macOS denial, and explains recovery for grants tied to an older signing identity.
+
+- Add Desktop Node start/stop/restart controls with serialized lifecycle operations and a native Node About panel showing installed build metadata. — Codex (AI), 2026-09-07
+
+- Desktop recovers its bundled node after plist rewrites, records the owning Desktop build, and starts or refreshes the node on launch when auto-start is enabled. — Codex (AI), 2026-09-07
+
 - 2026-09-06: **Subspaces 🪐 round 2** — everything a subreddit needs to run:
   ownership transfer + owner-only delete (posts are released as plain posts;
   members/modlog/reports cascade), join requests for private subspaces and
@@ -61,6 +79,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   modal mirror and Admin → Lopu accounts (verified toggle, balances, pending
   requests, add credits, `Thingtime.LopuAccess` editor). Design note:
   [`PRs/lopu-verified-credits-design.md`](../PRs/lopu-verified-credits-design.md). — Claude (AI)
+
 - Fix production storage-ledger validation to accept the catalog's optional speed-test quota without coercion, subscription rewrites, or allowance resets; retain legacy snapshots and fail closed on malformed quotas. — Codex (AI), 2026-09-06
 
 - 2026-09-06: Add bounded, value-free admin dry-run diagnostics for malformed protected storage ledgers; preserve fail-closed validation and all subscription allowances.

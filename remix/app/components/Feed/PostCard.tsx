@@ -2287,14 +2287,6 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
               </MenuList>
             </Menu>
           )}
-          {isOwner && (
-            <CustomAudienceModal
-              isOpen={audienceOpen}
-              onClose={() => setAudienceOpen(false)}
-              initialAcl={post.visibility === 'custom' ? post.acl : undefined}
-              onApply={handleCustomApply}
-            />
-          )}
           {canModerate && post.subspace && !mediaThing && (
             <RemoveModal
               isOpen={removeOpen}
@@ -2310,6 +2302,14 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
           )}
           {canReport && post.subspace && reportOpen && (
             <ReportModal isOpen onClose={() => setReportOpen(false)} api={api} subspaceId={post.subspace.id} subspaceSlug={post.subspace.slug} target="post" onReport={handleReport} />
+          )}
+          {isOwner && (
+            <CustomAudienceModal
+              isOpen={audienceOpen}
+              onClose={() => setAudienceOpen(false)}
+              initialAcl={post.visibility === 'custom' ? post.acl : undefined}
+              onApply={handleCustomApply}
+            />
           )}
         </Flex>
 
