@@ -43,7 +43,8 @@ import {
 	userUsernameKey
 } from '../auth/users';
 import { waitlistEmailKey } from '../waitlist/waitlist';
-import { RELATIONSHIP_UNIQUE_CRYSTAL_KEYS, relationshipUniqueKeys } from '../messenger/shared';
+import { RELATIONSHIP_UNIQUE_CRYSTAL_KEYS } from '../messenger/shared';
+import { repairRelationshipKeys } from './relationshipKeys';
 import { themeAcl } from '../themes/themes';
 import {
 	builtinSchemaSeedNeedsRefresh,
@@ -3053,12 +3054,6 @@ const staleGenerationBlocker = async (physical: string): Promise<string | null> 
 // that is the squat census; after the namespace reopens it may be intentional
 // ordinary data and remains operator information only.
 
-const relationshipBackfillTargets = (): Array<{ kind: string; field: string }> =>
-	Object.entries(RELATIONSHIP_UNIQUE_CRYSTAL_KEYS).map(([kind, field]) => ({ kind, field }));
-
-const relationshipBackfillFilter = (kind: string, field: string) =>
-	({ thingtime: kind, [`crystal.${field}`]: { $type: 'string' }, uniqueKeys: { $exists: false } }) as any;
-
 const backfillRelationshipUniqueKeys: Migration = {
 	id: 'backfill-relationship-unique-keys',
 	collection: 'things',
@@ -3068,58 +3063,19 @@ const backfillRelationshipUniqueKeys: Migration = {
 	description:
 		'Stamps the server-only root uniqueKeys dedupe entry (`<field>:<key>` BinData) onto legacy relationship ' +
 		'things whose uniqueness previously rode kind-blind crystal-path unique indexes (retired to lookup ' +
-		'indexes by the boot-time ensure). Idempotent: stamps are deterministic and only docs without ' +
-		'uniqueKeys are touched. Also counts — never modifies — free-form data things carrying a relationship ' +
+		'indexes by the boot-time ensure). Idempotent: adds only missing individual keys, preserving other ' +
+		'uniqueKeys and checking the source identity before each write. Conflicts remain pending without retry loops. Also counts — never modifies — free-form data things carrying a relationship ' +
 		'name at the crystal root: operator census only, because phase 2 makes those names valid ordinary data. ' +
 		'Targets are read from the relationship map, so a family that joins later (passkey-app-link, which ' +
 		'shipped mid-migration with its own crystal-path unique index) is covered by re-running this.',
 	pending: async () => {
 		const things = await getCollection('things');
-		let total = 0;
-		for (const { kind, field } of relationshipBackfillTargets()) {
-			total += await things.countDocuments(relationshipBackfillFilter(kind, field));
-		}
-		return total;
+		return (await repairRelationshipKeys(things, { dryRun: true })).matched;
 	},
 	run: async ({ dryRun, assertLease }) => {
 		const things = await getCollection('things');
-		const notes: string[] = [];
-		let matched = 0;
-		let migrated = 0;
-		let skipped = 0;
-		for (const { kind, field } of relationshipBackfillTargets()) {
-			const filter = relationshipBackfillFilter(kind, field);
-			const kindMatched = await things.countDocuments(filter);
-			matched += kindMatched;
-			if (dryRun || !kindMatched) continue;
-			let kindMigrated = 0;
-			while (true) {
-				await assertLease?.();
-				const batch = await things.find(filter).project({ shareId: 1, crystal: 1 }).limit(THINGS_BATCH).toArray();
-				if (!batch.length) break;
-				for (const doc of batch) {
-					const uniqueKeys = relationshipUniqueKeys(kind, doc.crystal);
-					if (!uniqueKeys) {
-						skipped += 1;
-						continue;
-					}
-					try {
-						await things.updateOne({ shareId: doc.shareId, uniqueKeys: { $exists: false } } as any, { $set: { uniqueKeys } } as any);
-						kindMigrated += 1;
-					} catch (err: any) {
-						if (err?.code !== 11000) throw err;
-						// The slot is already held by another doc — a twin from the
-						// pre-unique-index era. Leave it unstamped for operator review;
-						// guessing a winner here could delete a real relationship.
-						skipped += 1;
-						notes.push(`duplicate ${kind} ${field} slot left unstamped: ${doc.shareId}`);
-					}
-				}
-				if (batch.length < THINGS_BATCH) break;
-			}
-			migrated += kindMigrated;
-			if (kindMigrated) notes.push(`${kindMigrated} ${kind} doc(s) stamped`);
-		}
+		const result = await repairRelationshipKeys(things, { dryRun, assertLease });
+		const notes = result.notes;
 		const relationshipFields = Array.from(new Set(Object.values(RELATIONSHIP_UNIQUE_CRYSTAL_KEYS)));
 		for (const field of relationshipFields) {
 			await assertLease?.();
@@ -3130,7 +3086,7 @@ const backfillRelationshipUniqueKeys: Migration = {
 				);
 			}
 		}
-		return { dryRun, matched, migrated, created: 0, skipped, notes };
+		return result;
 	}
 };
 

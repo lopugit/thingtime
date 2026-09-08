@@ -12643,14 +12643,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.1.0: every generation row carries its storage census (dataBytes,
     // storageBytes, indexBytes, indexes) — additive. contractVersion is what
     // the capabilities manifest publishes.
-    contractVersion: '1.1.0',
+    contractVersion: '1.1.1',
+    featureVersion: '1.0.1',
     summary: 'Per-collection schema-version census, storage generations, and registered migrations with pending counts.',
     detail:
       'Every doc stores the root-level schemaVersion it was written at (docs without one count as version 1), and every ' +
       'collection lives in a versioned physical collection — logical `things` at version 2 is the physical collection ' +
       '`things_v2`. This endpoint reports how many docs sit at each version per collection, every physical collection ' +
       'generation on the server (current, stale, or ahead), any legacy collections adoption could not rename, and which ' +
-      'registered migrations still have work to do.',
+      'registered migrations still have work to do. Relationship-key pending counts include missing individual keys even when ' +
+      'other protected keys are already present; unresolved duplicate slots remain pending.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
@@ -12851,8 +12853,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
   endpoint({
     id: 'admin-migrations-run',
-    contractVersion: '1.0.1',
-    featureVersion: '1.1.1',
+    contractVersion: '1.0.2',
+    featureVersion: '1.1.2',
     group: 'admin',
     title: 'Run migration',
     endpoint: '/api/v1/admin/migrations/run',
@@ -12869,7 +12871,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'the deleted rows occupied is actually released — both destructive, both confirm: true. Failed real runs may return a private ' +
 			'diagnosticThingId for the same admin to open at /thing/:id; failed dry runs never create diagnostics and instead return ' +
 			'bounded redacted adminDetail inline. Storage-ledger validation accepts valid optional speedTestsPerHour quotas ' +
-      'without rewriting immutable tier snapshots, overrides, ownership, or allowances.',
+      'without rewriting immutable tier snapshots, overrides, ownership, or allowances. Relationship-key repair adds missing ' +
+      'individual keys without replacing existing keys, checks source identity before writing, and reports duplicate slots ' +
+      'without repeatedly retrying them or deleting relationships. Re-check pending work after skipped concurrent changes.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'

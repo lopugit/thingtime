@@ -131,10 +131,30 @@ accounts for all 60 entries at the baseline, without double-counting.
    considered before switching layouts. Preserve unknown indexes, private
    data, ACLs and accounting. Record before/after counts for both origins.
 
+## Relationship migration preparation
+
+The existing `backfill-relationship-unique-keys` migration now checks individual
+Binary keys rather than only documents without a `uniqueKeys` field. It adds
+missing keys without replacing other keys, compares the source relationship
+identity before writing, and counts actual modified rows. A finite cursor
+replaces the repeated-first-page loop: more than 500 duplicate rows cannot
+trap the migration. Duplicate slots remain pending with bounded, identity-free
+notes; no winner is chosen and no relationship is deleted. Lease loss and
+non-duplicate database errors close the cursor and stop the run.
+
+This is preparation, not permission to remove the remaining relationship
+indexes. Readers still use those indexes until the backfill and cutover gates
+are satisfied. Census reads now stream only the identity field and protected
+keys for each relationship family; measure that cost on larger installations.
+
 ## Still required before claiming completion
 
-- Develop's extra index is identified and its full definition list captured;
-  capture the full production definitions and usage next. Metadata redaction
+- Both full definition lists were captured through the authenticated workbench
+  with its result limit raised to 100. Develop differs only by the Watch
+  `lopu_recording_due` index, which must remain. Exact counts of documents with
+  `{kind: {$exists: true}}` were **zero on both origins** on 2026-09-08. This
+  supports investigation, not immediate removal of legacy query indexes.
+  Capture workload usage and native explain plans next. Metadata redaction
   masks `uniqueKeys` and `token` directions in workbench output; do not mistake
   the redacted values for their real index specifications.
 - Complete the query-family reader/writer inventory beyond the first traced

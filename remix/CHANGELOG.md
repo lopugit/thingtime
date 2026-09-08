@@ -18,7 +18,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- Begin [Thing index consolidation](../docs/architecture/thing-index-consolidation.md): inventory the executable index plan without database access, protect specialized indexes from unsafe prefix deduplication, and retire the unused emoji lookup while retaining protected uniqueness. Production/develop migrations and the broader reduction remain in progress. — Codex (AI), 2026-09-08
+- Begin [Thing index consolidation](../PRs/692-thing-index-consolidation-shared-plan-audit.md): inventory the executable plan, retire the unused emoji lookup while retaining protected uniqueness, and repair relationship-key backfills to preserve partial keys and terminate on duplicate batches. Production/develop migrations and the broader reduction remain in progress. — Codex (AI), 2026-09-08
 
 - 2026-09-07: Desktop privacy status now refreshes while visible and on return from System Settings, exposes Check access, distinguishes unknown/stale results from macOS denial, and explains recovery for grants tied to an older signing identity.
 
