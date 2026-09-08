@@ -289,22 +289,34 @@ jobs:
       security-events: write
     strategy:
       fail-fast: false
-      # GitHub Advanced Security opens the PR's aggregate `CodeQL` check when
-      # the FIRST language analysis is uploaded and closes it `timed_out` if
-      # the remaining expected analysis has not landed roughly 6m45s later.
-      # `actions` finishes in well under a minute while `javascript-typescript`
-      # ranges from ~2.5 to ~8 minutes: it is diff-informed when GitHub can
-      # generate `base...head`, and falls back to a full-corpus scan (a ~250 MiB
-      # database instead of a ~200 KiB one) whenever that compare API times out
-      # on a long-running branch. Running the pair in parallel therefore starts
-      # GHAS's window at the fast analysis and loses the race whenever the slow
-      # one degrades, marking the check red even though both analyses succeed
-      # and report zero alerts. Analyze serially, slowest language first, so
-      # the window opens on `javascript-typescript` and `actions` follows a
-      # sub-minute later regardless of how slow the JavaScript scan gets.
-      max-parallel: 1
+      # The two legs are wildly uneven -- `actions` uploads in about a minute
+      # while `javascript-typescript` takes 2-8 minutes, because the latter is
+      # diff-informed when GitHub can generate `base...head` and falls back to
+      # a full-corpus scan (a ~250 MiB database instead of a ~200 KiB one)
+      # whenever that compare API times out on a long-running branch. Advanced
+      # Security opens the PR's aggregate `CodeQL` check on the FIRST analysis
+      # to land, so the fast leg must not be the one that opens it. That
+      # ordering is imposed at RUNTIME by the two steps below, not here.
+      #
+      # Do NOT add `max-parallel: 1` to serialize the legs instead. It looks
+      # equivalent and is not, for the same reason this repository already
+      # refuses it in resolve-pr-conflicts.yml: GitHub keeps later matrix
+      # members `queued` rather than merely unscheduled. That breaks both
+      # halves of the runtime ordering:
+      #   * `Wait for every sibling language leg to start` below releases when
+      #     every leg has left the queue. Under `max-parallel: 1` the second
+      #     leg cannot leave the queue until the first one finishes, so the
+      #     first leg can never satisfy its own barrier and burns the full
+      #     600s wait, then warns, on every single scan.
+      #   * A `queued` leg holds no runner, so it is not a configuration "in
+      #     flight" when the slow leg uploads -- which is exactly the #610
+      #     shape (aggregate check opened 06:09:39 and closed `timed_out`
+      #     06:09:41 because the sibling had no runner yet) that the barrier
+      #     exists to prevent. Serializing trades `timed_out`-on-the-largest-
+      #     PRs for `timed_out`-on-every-PR.
+      # Keep the legs concurrent and let the runtime hold order their uploads.
       matrix:
-        language: [javascript-typescript, actions]
+        language: [actions, javascript-typescript]
     concurrency:
       group: >-
         codeql-${{ matrix.language }}-${{ github.event_name }}-${{ needs.scope.outputs.analysis_sha || github.event.pull_request.head.sha || github.sha }}
