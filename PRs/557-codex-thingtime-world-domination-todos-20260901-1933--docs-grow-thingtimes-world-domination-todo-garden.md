@@ -394,3 +394,43 @@ NOTES, PLAN, main TODO, and Claude TODO indexes, plus the ethical-adoption
 evidence, trustworthy-adoption roadmap, and TODO 22 dependency list. No runtime,
 API, schema, storage, authorization, UI, analytics, or production behavior
 changed.
+
+## 2026-09-08 — identity agency and context-safe presence
+
+This run distinguishes account access, global addressability, self-
+presentation, context presence, issuer claims, identity proofing, roles, and
+authorization. It adds:
+
+- `NOTES/identity-agency-and-context-safe-presence-baseline.md`, a dated
+  evidence ledger covering protected user records, public profile projection,
+  owner-only email display, usernames and ACL addressability, OAuth scopes,
+  authentication limits, proposed anonymous-chat boundaries, standards input,
+  risks, measures, and open decisions;
+- `PLAN/identity-agency-and-context-safe-presence-roadmap.md`, a gated path from
+  an identity charter and current-state inventory through one exact public-
+  presence preview, correction/recovery proof, and separately reviewed context
+  identities or attestations; and
+- `TODO/claude-todo/35-identity-agency-and-context-safe-presence.md`, an
+  execution epic with owner decisions, dependency boundaries, canonical
+  projection and capability-manifest obligations, complete-journey validation,
+  acceptance criteria, stop conditions, and explicit non-goals.
+
+The recommended first experiment is intentionally small: one adult account
+owner compares server-generated “Only you” and “Anyone” projections for their
+current profile, predicts disclosure, and uses existing controls to correct it.
+The preview must share the actual projection allowlists and collect no profile
+values, identifiers, screenshots, relationship graphs, or preview views.
+
+A passkey authenticates an account but does not prove a legal identity. Email
+verification proves address control but not truth. A username is a platform
+address, not necessarily a real name. A signature preserves an issuer's
+assertion but does not make the issuer authoritative or the claim correct. A
+relationship, identity claim, or role does not grant resource authority.
+
+Mutable usernames, new aliases, chat anonymity implementation, credentials,
+proofing, public badges or scores, minors, and sensitive or high-impact uses
+remain separately gated. The theme is linked from the NOTES, PLAN, main TODO,
+and Claude TODO indexes, plus the ethical-adoption evidence, trustworthy-
+adoption roadmap, TODO 22, invite and anonymous-chat boundaries, and the older
+identity/governance idling. No runtime, API, schema, storage, authentication,
+profile, UI, analytics, or production behavior changed.

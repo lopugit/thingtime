@@ -81,6 +81,12 @@ experiment by itself.
   remedies. Adoption experiments must not infer edit authority from a
   relationship or treat members, invites, edits, or activity as useful
   collaboration.
+- [TODO 35](./35-identity-agency-and-context-safe-presence.md) owns exact
+  audience projections, assurance vocabulary, context separation, identity
+  correction, recovery, and separately gated attestations. Adoption experiments
+  must not require real names, correlate pseudonyms, surprise people with public
+  fields, or treat authentication, signatures, badges, roles, or relationships
+  as proof of identity, truth, trust, or authority.
 - [TODO 10](./10-delight-and-growth-ideas.md) is the idea bank; this epic adds
   sequencing and outcome gates.
 - [TODO 18](./18-account-invite-links.md) owns the defensive account-invite

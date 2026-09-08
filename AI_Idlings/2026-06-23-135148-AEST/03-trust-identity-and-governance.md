@@ -52,3 +52,14 @@ Then grow:
 Hard requirement:
 
 Voting should be boringly auditable before it becomes clever.
+
+## Current planning boundary
+
+The dated [identity agency and context-safe presence baseline](../../NOTES/identity-agency-and-context-safe-presence-baseline.md)
+and [roadmap](../../PLAN/identity-agency-and-context-safe-presence-roadmap.md)
+now govern further product planning. These ideas remain exploratory: a JWT or
+credential signature can establish integrity and issuer control, but not the
+truth, relevance, authority, or fairness of a claim. Signed profiles,
+attestations, organization identities, voting, and public trust signals require
+separate owner decisions, threat models, privacy and accessibility review,
+correction/revocation/remedy paths, and evidence before implementation.

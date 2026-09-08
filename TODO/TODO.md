@@ -514,3 +514,18 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     owners, and stop authority. Public groups, guests, anonymous participants,
     direct or real-time co-editing, rights transfer, money, apps, AI agents,
     minors, institutions, and high-impact use remain separately gated.
+
+35. **🪪 Make identity agency and context-safe presence a product contract.**
+
+    Preserve Thingtime's protected account records, allowlisted public profile
+    projection, app-scoped disclosure, authenticators, consentful invite
+    boundary, and proposed chat-local anonymity while keeping their meanings
+    distinct. Start only with an owner-facing, server-projected comparison of
+    “Only you” and “Anyone” profile state so people can predict and correct
+    disclosure. Execute
+    `claude-todo/35-identity-agency-and-context-safe-presence.md` only after the
+    owner and qualified reviewers approve the vocabulary, audiences, canonical
+    projectors, no-collection contract, correction/recovery journeys,
+    accessibility profiles, accountable owners, and stop authority. Mutable
+    usernames, new aliases, proofing, credentials, public badges or scores,
+    minors, and sensitive or high-impact uses remain separately gated.

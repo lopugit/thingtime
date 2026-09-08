@@ -22,6 +22,7 @@ engineering decisions in [`../DECISIONS.md`](../DECISIONS.md).
 | [Learning agency and knowledge-stewardship roadmap](./learning-agency-and-knowledge-stewardship-roadmap.md)     | User-approved one-shot revisit through private reflection, honest evaluation, reusable knowledge, and separately gated AI or institutional use  | Proposed |
 | [AI agency and accountable-assistance roadmap](./ai-agency-and-accountable-assistance-roadmap.md)               | Assistance charter through context agency, risk-tiered tools, bounded receipts, private pilot, change evaluation, and separately gated autonomy | Proposed |
 | [Collaboration agency and shared-stewardship roadmap](./collaboration-agency-and-shared-stewardship-roadmap.md)   | Collaboration charter through informed invitations, suggestion-only authority, exact-version proposals, safe stopping, and a two-person pilot  | Proposed |
+| [Identity agency and context-safe presence roadmap](./identity-agency-and-context-safe-presence-roadmap.md)     | Identity charter through exact audience projections, correction and recovery, one profile-preview pilot, and separately gated aliases or claims | Proposed |
 
 ## Conventions
 

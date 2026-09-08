@@ -22,6 +22,7 @@ actionable item in [`../TODO/`](../TODO/TODO.md) when it is ready to execute.
 | [Learning agency and knowledge-stewardship baseline](./learning-agency-and-knowledge-stewardship-baseline.md)     | Evidence on knowledge surfaces, private saves, calm resurfacing, source versions, learning claims, reflection privacy, and a bounded adult pilot        | 2026-09-06    |
 | [AI agency and accountable-assistance baseline](./ai-agency-and-accountable-assistance-baseline.md)               | Evidence on Lopu context, models/providers, tools, confirmations, receipts, memory boundaries, remedies, and one private draft pilot                    | 2026-09-06    |
 | [Collaboration agency and shared-stewardship baseline](./collaboration-agency-and-shared-stewardship-baseline.md)   | Evidence on Thing ownership, ACL visibility, roles, invitations, exact-version changes, contribution conflicts, departure, and one two-person pilot    | 2026-09-07    |
+| [Identity agency and context-safe presence baseline](./identity-agency-and-context-safe-presence-baseline.md)     | Evidence on accounts, authenticators, public profiles, app disclosure, pseudonymity, attestations, recovery, authority, and one disclosure-preview pilot | 2026-09-08    |
 
 ## Conventions
 

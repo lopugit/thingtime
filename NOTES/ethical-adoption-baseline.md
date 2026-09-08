@@ -38,6 +38,7 @@ turns these observations into phases. The executable backlog lives in
 | Knowledge-oriented Things, saves, and resurfacing do not yet form a learning-agency or evidence contract.                                                       | The [learning agency and knowledge-stewardship baseline](./learning-agency-and-knowledge-stewardship-baseline.md) separates knowledge presentation, bookmarks, anniversary memories, source versions, private reflection, and learning evidence, then proposes one bounded adult revisit pilot.                                                                                       | High for the 2026-09-06 repository snapshot. Re-run the dedicated baseline before making learning, assessment, credential, school, child, or AI claims.    |
 | Lopu's chat, model/provider choice, tools, confirmations, and summaries do not yet form a complete agency or accountability contract.                           | The [AI agency and accountable-assistance baseline](./ai-agency-and-accountable-assistance-baseline.md) separates conversation history from memory and consent, tool requests from authority, confirmations from delegation, results from correctness, and receipts from remedy, then proposes one bounded private draft pilot.                                                       | High for the 2026-09-06 repository snapshot. Re-run the dedicated baseline after model, provider, prompt, tool, confirmation, storage, or receipt changes. |
 | Thing ownership, ACL audiences, social relationships, Messenger roles, and invitations do not yet form a shared-artifact collaboration contract.               | The [collaboration agency and shared-stewardship baseline](./collaboration-agency-and-shared-stewardship-baseline.md) separates visibility from edit authority, membership from ownership, contribution from agreement, and removal from erasure, then proposes one named two-person private-draft pilot.                                             | High for the 2026-09-07 repository snapshot. Re-run the dedicated baseline after Thing authorization, ACL, Messenger, community, subspace, invitation, revision, or concurrency changes. |
+| Account records, authenticators, global handles, public profiles, app scopes, pseudonymous presentation, and future attestations do not yet form one identity-agency contract. | The [identity agency and context-safe presence baseline](./identity-agency-and-context-safe-presence-baseline.md) separates authentication from proofing, presentation from claims, signatures from truth, and identity from authority, then proposes one owner-only public-presence preview. | High for the 2026-09-08 repository snapshot. Re-run the dedicated baseline after account, profile, username, authenticator, OAuth, invite, anonymity, recovery, or projection changes. |
 
 ## What the evidence suggests
 
@@ -74,6 +75,9 @@ turns these observations into phases. The executable backlog lives in
 6. **Public content history is implicit.** A current author and creation time
    do not tell a recipient whether meaning changed, which source or parent was
    asserted, what the platform observed, or how a correction was resolved.
+7. **Identity assurance is fragmented.** Account access, global addressability,
+   public presentation, scoped app disclosure, pseudonymity, claims, roles, and
+   authorization lack a shared vocabulary and owner-facing audience preview.
 
 ## Proposed outcome vocabulary
 
