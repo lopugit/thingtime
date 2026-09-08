@@ -1263,7 +1263,7 @@ export const ThingsPage = () => {
           <Text {...monoLabel}>Thingtime · Things</Text>
         </Flex>
 				{devicesEnabled && !folderId && !searchMode ? (
-					<LocalNodeSetupCard controlFor={localDeviceControlFor} onAction={executeLocalDeviceAction} state={localNode} />
+					<LocalNodeSetupCard onRefresh={localNode.refresh} controlFor={localDeviceControlFor} onAction={executeLocalDeviceAction} state={localNode} />
 				) : null}
         <Flex alignItems="center" gap={3} wrap="wrap">
           <Text
