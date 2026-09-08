@@ -4544,13 +4544,23 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       resolves to the exact private user-data file. Bootstrap must not issue an
       unconditional immediate kickstart. Replace an exact old managed node,
       then confirm launchd owns one new PID with `runs = 1` and no exit.
+- [ ] In Desktop settings, use **Stop node**, **Start node**, then **Restart node**.
+      Stop must remove the running service while preserving pairing and the plist;
+      Start resumes one node, Restart changes its PID, and rapid clicks must not
+      create overlapping registrations. Check desktop and mobile widths, including
+      long version strings and error messages. Open the node menu **About Thingtime
+      Node** and verify version, build, source commit, bundle ID, and management
+      mode match the actual installed bundle without account or secret data.
 - [ ] With **Auto-start node on Thingtime launch** left at its default-on
       setting, use the native menu-bar **Quit Thingtime**, confirm launchd is
       stopped while the managed plist remains, then Cmd+Q/reopen the installed
       Electron app. It must bootstrap exactly one node from that existing plist.
       Turn the setting off and repeat: reopening Electron must leave it stopped;
       turn it back on and confirm it converges immediately. A Mac with no
-      managed plist must still require the explicit **Start node** confirmation.
+      managed plist must start the bundled node when auto-start is on. Rewrite
+      the plist with plutil (removing XML comments), quit/reopen, and confirm
+      recovery still works. Install a newer Desktop build at the same path:
+      one node must restart with the new build and stay stable on the next launch.
 - [ ] Open the exact installed Electron app, record its bundled loopback
       renderer origin and separately selected API origin, and Quit with Cmd+Q. Electron must
       stop while the launchd node and
@@ -5996,3 +6006,5 @@ approval; `access.test.ts` — the reservation matrix) and
 - Validate both immutable legacy four-field and current five-field quota snapshots (and partial overrides). Optional speed-test quotas accept null or safe integers 0–1000, reject coercible strings/fractions/unknown fields, and never change the stored assignment. After deploying, dry-run the production accounting migration before a separately authorized real run; verify storage readiness and a real upload before calling uploads healthy.
 
 - As an admin, dry-run `backfill-user-storage-accounting`; invalid ledgers must report only deterministic ledger IDs and fixed validation-field labels, at most ten records. Confirm zero ledger writes, no raw values or arbitrary key names, and unchanged strict envelope validation. Anonymous and non-admin callers remain denied by the existing migrations API gate.
+
+- Desktop privacy status: grant/revoke each permission, return from System Settings, and confirm live status refreshes without prompting. Stop the node and confirm failed checks show last-known status, not a new denial or false success. Restart and use Check access to recover; a signing migration must explain the one-time off/on grant refresh.

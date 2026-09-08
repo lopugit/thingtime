@@ -18,6 +18,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-07: Desktop privacy status now refreshes while visible and on return from System Settings, exposes Check access, distinguishes unknown/stale results from macOS denial, and explains recovery for grants tied to an older signing identity.
+
+- Add Desktop Node start/stop/restart controls with serialized lifecycle operations and a native Node About panel showing installed build metadata. — Codex (AI), 2026-09-07
+
+- Desktop recovers its bundled node after plist rewrites, records the owning Desktop build, and starts or refreshes the node on launch when auto-start is enabled. — Codex (AI), 2026-09-07
+
 - 2026-09-06: **Subspaces 🪐 round 2** — everything a subreddit needs to run:
   ownership transfer + owner-only delete (posts are released as plain posts;
   members/modlog/reports cascade), join requests for private subspaces and
