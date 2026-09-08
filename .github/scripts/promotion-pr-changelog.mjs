@@ -712,6 +712,24 @@ function main() {
     selfTest();
     return;
   }
+  // Fail closed on anything else. The no-argument form is the workflow's live
+  // path: it rewrites the promotion PR's body and posts a delta comment. So a
+  // near-miss flag -- `self-test`, `--selftest`, `--dry-run` -- silently became
+  // a live mutation of the standing promotion PR rather than the local check
+  // the operator asked for, with the wrong figures whenever the checkout's
+  // refs are not the workflow's (a detached review worktree resolves
+  // `CFG.gitBase`/`CFG.gitHead` to a different range and reports a promotion
+  // carrying nothing). Recognizing only the exact flag keeps the bare
+  // invocation working for the workflow while making a typo a usage error, the
+  // way workflow-control-plane-contract.mjs already behaves.
+  const unknown = process.argv.slice(2).filter((arg) => arg !== "--self-test");
+  if (unknown.length) {
+    console.error(`Unrecognized argument(s): ${unknown.join(" ")}`);
+    console.error("Usage: promotion-pr-changelog.mjs [--self-test]");
+    console.error("  (no arguments) refresh the live promotion PR; DRY_RUN=1 to preview");
+    process.exitCode = 2;
+    return;
+  }
   if (!CFG.repo) throw new Error("GH_REPO or GITHUB_REPOSITORY must be set");
 
   const spineRaw = git(
