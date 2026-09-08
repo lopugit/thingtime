@@ -54,11 +54,16 @@ assert.match(musing, /streamOpenAI\(SYSTEM_PROMPT, user, choices\.openai\)/);
 assert.doesNotMatch(musing, /model:\s*process\.env\.LOPU_CLAUDE_MODEL/);
 assert.doesNotMatch(musing, /model:\s*process\.env\.LOPU_OPENAI_MODEL/);
 
-// Recording organization follows the same admin OpenAI choice. Audio
+// Recording organization follows the matching admin provider choice unless
+// the owner explicitly selected a connection with its own model. Audio
 // transcription is deliberately an audio-capable model, not a chat alias.
 const recordings = readFileSync(join(remixRoot, 'app/api/utils/lopu/recordingsProvider.ts'), 'utf8');
-assert.match(recordings, /resolveAiPreferredOpenAiChoice\(await getAiPreferredModelWaterfall\(\)\)/);
-assert.match(recordings, /model: choice\?\.model \|\| process\.env\.LOPU_OPENAI_MODEL/);
+assert.match(recordings, /const preferences = await getAiPreferredModelWaterfall\(\)/);
+assert.match(recordings, /resolveAiPreferredOpenAiChoice\(preferences\)/);
+assert.match(recordings, /resolveAiPreferredAnthropicChoice\(preferences, process\.env\.LOPU_CLAUDE_MODEL/);
+assert.match(recordings, /model: connection\?\.model \|\| choice\?\.model \|\| process\.env\.LOPU_OPENAI_MODEL/);
+assert.match(recordings, /model: connection\.model \|\| choice\.model/);
+assert.match(recordings, /const usePreferredTuning = !connection\?\.model \|\| connection\.model === choice\?\.model/);
 assert.match(recordings, /model: 'gpt-4o-mini-transcribe'/);
 assert.match(recordings, /reasoning_effort: effort/);
 assert.match(recordings, /service_tier: 'priority'/);
