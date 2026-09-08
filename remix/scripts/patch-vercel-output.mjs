@@ -13,7 +13,7 @@ const apiRootDataRoute = routes.find((route) => route.src === '/api/root-data');
 const apiCatchAllRoute = routes.find((route) => route.src === '/api/(?:.*)');
 const serverFallbackRoute = routes.find((route) => route.dest === '/__server');
 const wellKnownDiscoveryRoute = {
-  src: '^/\\.well-known/(?:oauth-protected-resource|oauth-authorization-server|thingtime-chatgpt-capabilities\\.json|thingtime-capabilities\\.json)$',
+  src: '^/\\.well-known/(?:apple-app-site-association(?:-docs)?|oauth-protected-resource|oauth-authorization-server|thingtime-chatgpt-capabilities\\.json|thingtime-capabilities\\.json)$',
   dest: '/__server'
 };
 const appShellHeaders = {

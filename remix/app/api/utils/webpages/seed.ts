@@ -2,6 +2,11 @@ import { ensureIndexes, getThingsCollection } from '../mongodb/collections';
 import { toBin } from '../auth/users';
 import { WEBPAGE_RESERVED_ID_PREFIX } from '../things/things';
 import { ACL_ALL, COLLECTION_SCHEMA_VERSIONS, validateThingtimeCrystal } from '~/schemas/registry';
+import { isAppSuite, materializeSuite, summarizeBehaviourSuite } from '~/schemas/behaviourSuites';
+import { ALL_SUITES, APP_SUITE_LIST } from '~/schemas/appSuites/index';
+import { ASTRO_SCHOOL_ENTRIES } from '../actions/packs/astro/index';
+import { POKEWORLD_SPECIES_SEED } from '../actions/packs/pokeworld/index';
+import { WEBPAGE_DEMO_SLUG_PREFIX, getWebpageDemos, webpageDemoCrystal } from '~/schemas/webpageDemos';
 import { SITE_GLOBAL_PAGE_KEY } from './webpages';
 
 // Seed the built-in SITE PAGES: one system-owned webpage thing per app route
@@ -14,6 +19,14 @@ import { SITE_GLOBAL_PAGE_KEY } from './webpages';
 // 'system', storageClass 'control', acl ['tt:all'], reserved prefix,
 // uniqueKeys, reconciling genuineness-fenced upserts. The definitions live
 // server-side (deterministic table) so seeding takes no payload.
+//
+// The DEMO LIBRARY rides the same upsert: webpage demos (shareId
+// webpage-demo-<slug>) from the deterministic schemas/webpageDemos catalog,
+// and BEHAVIOUR SUITES (schemas/behaviourSuites) — bundles of schema,
+// component, action, data, and webpage things that together demonstrate a
+// program. One admin POST seeds hundreds of example things, every demo opens
+// at /p/ and in the builder, and every suite part is browsable on its kind's
+// page (viewers fork or install, never edit the seed).
 
 type SitePageSeed = {
 	key: string; // route key → shareId webpage-route-<key>, native block key
@@ -52,7 +65,8 @@ export const SITE_PAGE_SEEDS: SitePageSeed[] = [
 	{ key: 'crypto', path: '/crypto', name: 'Crypto' },
 	{ key: 'raw', path: '/raw', name: 'MongoDB query' },
 	{ key: 'ode', path: '/ode', name: 'Ode', sections: ['ode-poem'] },
-	{ key: 'builder', path: '/builder', name: 'Builder' }
+	{ key: 'builder', path: '/builder', name: 'Builder' },
+	{ key: 'builder-demos', path: '/builder/demos', name: 'Builder demos' }
 ];
 
 export type SeedWebpagesResult = {
@@ -66,24 +80,86 @@ export type SeedWebpagesResult = {
 	totalSeeded: number;
 };
 
+export type SeedWebpagesCensus = {
+	ok: true;
+	// every system-owned webpage thing (site pages + global doc + demos)
+	totalSeeded: number;
+	siteSeeded: number;
+	demosSeeded: number;
+	demosTotal: number;
+	// suites count by their seeded PAGE (one per suite)
+	suitesSeeded: number;
+	suitesTotal: number;
+	appsSeeded: number;
+	appsTotal: number;
+};
+
 type SeedFail = { ok: false; status: number; error: string };
 
 const fail = (status: number, error: string): SeedFail => ({ ok: false, status, error });
 
-const genuineSeededWebpage = (twin: any): boolean =>
-	!!twin && Array.isArray(twin.thingtime) && twin.thingtime.includes('webpage') && twin.ownerId === 'system';
-
-const seededCount = async (): Promise<number> => {
+const seededCount = async (tag?: string, withoutTag?: string): Promise<number> => {
 	const things = await getThingsCollection();
-	return things.countDocuments({ thingtime: 'webpage', ownerId: 'system' } as any);
+	const tagged = tag ? { tags: withoutTag ? { $all: [tag], $nin: [withoutTag] } : tag } : {};
+	return things.countDocuments({ thingtime: 'webpage', ownerId: 'system', ...tagged } as any);
 };
 
-export const countSeededWebpages = async (): Promise<{ ok: true; totalSeeded: number }> => ({
+const seededSuiteCount = async (): Promise<number> => {
+	const things = await getThingsCollection();
+	const docs = await things
+		.find({ thingtime: 'webpage', ownerId: 'system', tags: 'suite' } as any, { projection: { shareId: 1 } })
+		.limit(ALL_SUITES.length * 16 + 64)
+		.toArray();
+	const seeded = new Set(docs.map((doc: any) => doc.shareId));
+	return ALL_SUITES.filter((suite) => seeded.has(summarizeBehaviourSuite(suite).pageId)).length;
+};
+
+export const countSeededWebpages = async (): Promise<SeedWebpagesCensus> => ({
 	ok: true,
-	totalSeeded: await seededCount()
+	totalSeeded: await seededCount(),
+	siteSeeded: await seededCount('site'),
+	// suite pages carry BOTH 'demo' (so the gallery's seeded projection finds
+	// them) and 'suite', so the demo census must exclude them — otherwise
+	// demosSeeded counts the 14 suite pages against demosTotal and a fully
+	// seeded deployment reports more demos seeded than the catalog holds
+	demosSeeded: await seededCount('demo', 'suite'),
+	demosTotal: getWebpageDemos().length,
+	// a suite counts as seeded when its ENTRY page is — app suites carry
+	// several pages tagged 'suite', so counting pages would report more
+	// suites seeded than the registry holds
+	suitesSeeded: await seededSuiteCount(),
+	suitesTotal: ALL_SUITES.length,
+	// app suites count by their ENTRY page; app content (school entries,
+	// species) is system data that installs never copy
+	appsSeeded: await seededCount('app-entry'),
+	appsTotal: APP_SUITE_LIST.length
 });
 
-export const seedSiteWebpages = async (): Promise<SeedFail | SeedWebpagesResult> => {
+// One system thing to upsert: the kind names its gate, the shareId carries
+// the kind's reserved prefix, and uniqueKey namespaces stay per kind so the
+// demo docs never collide with the builtin schema/component seeds.
+type SeedDefinition = {
+	shareId: string;
+	uniqueKey: string;
+	kind: string;
+	tags: string[];
+	crystalInput: Record<string, unknown>;
+};
+
+const genuineSeeded = (twin: any, kind: string): boolean =>
+	!!twin && Array.isArray(twin.thingtime) && twin.thingtime.includes(kind) && twin.ownerId === 'system';
+
+// Reconciling upsert shared by every seed here: insert missing docs, refresh
+// drifted genuine ones in place, and never touch a foreign doc squatting a
+// destination id (genuineness lives IN the update filter).
+//
+// Two round trips regardless of size — one read of every destination id, one
+// unordered bulk write — instead of two per document. The demo library is
+// ~450 documents, and at serverless-to-Atlas latency the per-document loop
+// was a multi-minute request that a function timeout would cut short.
+const READ_CHUNK = 500;
+
+const upsertSystemThings = async (definitions: SeedDefinition[]): Promise<SeedWebpagesResult> => {
 	await ensureIndexes();
 	const things = await getThingsCollection();
 	const notes: string[] = [];
@@ -92,87 +168,110 @@ export const seedSiteWebpages = async (): Promise<SeedFail | SeedWebpagesResult>
 	let unchanged = 0;
 	let skipped = 0;
 
-	const definitions: Array<{ slug: string; crystalInput: Record<string, unknown> }> = [
-		...SITE_PAGE_SEEDS.map((seed) => ({
-			slug: `route-${seed.key}`,
-			crystalInput: {
-				name: seed.name,
-				description: `Site page for ${seed.path} — personalise it with the builder's site edit mode.`,
-				pageKey: `route-${seed.key}`,
-				siteRoute: seed.path,
-				version: 1,
-				blocks: (seed.sections || [seed.key]).map((sectionKey) => ({
-					id: `native-${sectionKey}`,
-					type: 'native',
-					native: sectionKey
-				}))
-			}
-		})),
-		{
-			slug: SITE_GLOBAL_PAGE_KEY,
-			crystalInput: {
-				name: 'Global blocks',
-				description:
-					'Blocks that render on every page and persist across navigation — personalise with the builder.',
-				pageKey: SITE_GLOBAL_PAGE_KEY,
-				version: 1,
-				blocks: []
-			}
-		}
-	];
-
+	const planned: Array<{ def: SeedDefinition; thingtime: string[]; crystal: Record<string, unknown> }> = [];
 	for (const def of definitions) {
-		const validated = validateThingtimeCrystal(['webpage'], def.crystalInput);
+		const validated = validateThingtimeCrystal([def.kind], def.crystalInput);
 		if (validated.ok === false) {
-			notes.push(`skipped ${def.slug}: ${validated.error}`);
+			notes.push(`skipped ${def.shareId}: ${validated.error}`);
 			skipped += 1;
 			continue;
 		}
+		planned.push({ def, thingtime: validated.thingtime, crystal: validated.crystal });
+	}
 
-		const tags = ['webpage', 'site'];
-		const shareId = `${WEBPAGE_RESERVED_ID_PREFIX}${def.slug}`;
-		const now = new Date();
-		const thing = {
-			shareId,
-			schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
-			thingtime: validated.thingtime,
-			crystal: validated.crystal,
-			ownerId: 'system',
-			storageClass: 'control',
-			acl: [ACL_ALL],
-			targetId: null,
-			tags,
-			uniqueKeys: [toBin(`webpage:${def.slug}`)],
-			createdAt: now,
-			updatedAt: now
-		};
+	const twins = new Map<string, any>();
+	const shareIds = planned.map((entry) => entry.def.shareId);
+	for (let index = 0; index < shareIds.length; index += READ_CHUNK) {
+		const docs = await things
+			.find({ shareId: { $in: shareIds.slice(index, index + READ_CHUNK) } } as any, {
+				projection: { shareId: 1, thingtime: 1, ownerId: 1, crystal: 1, tags: 1, storageClass: 1 }
+			})
+			.toArray();
+		for (const doc of docs as any[]) twins.set(doc.shareId, doc);
+	}
 
+	const now = new Date();
+	const ops: any[] = [];
+	// shareId per op index, so a partial bulk failure can be attributed
+	const opShareIds: string[] = [];
+	let refreshPlanned = 0;
+	for (const { def, thingtime, crystal } of planned) {
+		const { shareId, tags } = def;
+		const twin = twins.get(shareId);
+		if (!twin) {
+			ops.push({
+				insertOne: {
+					document: {
+						shareId,
+						schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
+						thingtime,
+						crystal,
+						ownerId: 'system',
+						storageClass: 'control',
+						acl: [ACL_ALL],
+						targetId: null,
+						tags,
+						uniqueKeys: [toBin(def.uniqueKey)],
+						createdAt: now,
+						updatedAt: now
+					}
+				}
+			});
+			opShareIds.push(shareId);
+			continue;
+		}
+		if (!genuineSeeded(twin, def.kind)) {
+			notes.push(`skipped ${shareId}: shareId held by a foreign doc — left unseeded`);
+			skipped += 1;
+			continue;
+		}
+		const crystalDrifted = JSON.stringify(twin.crystal ?? {}) !== JSON.stringify(crystal);
+		const tagsDrifted = JSON.stringify(twin.tags ?? []) !== JSON.stringify(tags);
+		const storageDrifted = twin.storageClass !== 'control';
+		if (crystalDrifted || tagsDrifted || storageDrifted) {
+			// genuineness lives IN the filter — a foreign doc matches nothing
+			ops.push({
+				updateOne: {
+					filter: { shareId, ownerId: 'system', thingtime: def.kind },
+					update: { $set: { crystal, tags, storageClass: 'control', updatedAt: now } }
+				}
+			});
+			opShareIds.push(shareId);
+			refreshPlanned += 1;
+			continue;
+		}
+		unchanged += 1;
+	}
+
+	if (ops.length) {
+		// unordered: one refused document never blocks the rest; the driver
+		// reports the partial result alongside the per-op errors
+		let result: any = null;
+		let writeErrors: any[] = [];
 		try {
-			const res = await things.updateOne({ shareId } as any, { $setOnInsert: thing }, { upsert: true });
-			if (res.upsertedCount) {
-				created += 1;
-				continue;
-			}
-			const twin = await things.findOne({ shareId } as any);
-			if (!genuineSeededWebpage(twin)) {
-				notes.push(`skipped ${def.slug}: shareId held by a foreign doc — left unseeded`);
-				skipped += 1;
-				continue;
-			}
-			const crystalDrifted = JSON.stringify(twin!.crystal ?? {}) !== JSON.stringify(validated.crystal);
-			const tagsDrifted = JSON.stringify(twin!.tags ?? []) !== JSON.stringify(tags);
-			const storageDrifted = twin!.storageClass !== 'control';
-			if (crystalDrifted || tagsDrifted || storageDrifted) {
-				// genuineness lives IN the filter — a foreign doc matches nothing
-				await things.updateOne({ shareId, ownerId: 'system', thingtime: 'webpage' } as any, {
-					$set: { crystal: validated.crystal, tags, storageClass: 'control', updatedAt: now }
-				});
-				refreshed += 1;
-				continue;
-			}
-			unchanged += 1;
+			result = await things.bulkWrite(ops, { ordered: false });
 		} catch (err: any) {
-			notes.push(`skipped ${def.slug}: write failed (${err?.codeName || err?.message || 'unknown error'})`);
+			result = err?.result ?? null;
+			writeErrors = Array.isArray(err?.writeErrors) ? err.writeErrors : [];
+			if (!result && !writeErrors.length) {
+				notes.push(`skipped ${ops.length} writes: bulk write failed (${err?.codeName || err?.message || 'unknown error'})`);
+				skipped += ops.length;
+			}
+		}
+		created += Number(result?.insertedCount) || 0;
+		// a refresh whose genuineness filter matched nothing lost a race to a
+		// foreign doc — it is skipped, not refreshed
+		const matched = Number(result?.matchedCount) || 0;
+		refreshed += Math.min(refreshPlanned, matched);
+		skipped += Math.max(0, refreshPlanned - matched);
+		for (const failure of writeErrors) {
+			const shareId = opShareIds[Number(failure?.index)] || 'unknown';
+			if (Number(failure?.code) === 11000) {
+				// a concurrent seed inserted it first — present, so nothing to do
+				unchanged += 1;
+				continue;
+			}
+			notes.push(`skipped ${shareId}: write failed (${failure?.codeName || failure?.errmsg || failure?.message || 'unknown error'})`);
 			skipped += 1;
 		}
 	}
@@ -187,4 +286,133 @@ export const seedSiteWebpages = async (): Promise<SeedFail | SeedWebpagesResult>
 		notes: notes.slice(0, 40),
 		totalSeeded: await seededCount()
 	};
+};
+
+const webpageDefinition = (slug: string, tags: string[], crystalInput: Record<string, unknown>): SeedDefinition => ({
+	shareId: `${WEBPAGE_RESERVED_ID_PREFIX}${slug}`,
+	uniqueKey: `webpage:${slug}`,
+	kind: 'webpage',
+	tags,
+	crystalInput
+});
+
+export const seedSiteWebpages = async (): Promise<SeedFail | SeedWebpagesResult> => {
+	const tags = ['webpage', 'site'];
+	const definitions: SeedDefinition[] = [
+		...SITE_PAGE_SEEDS.map((seed) =>
+			webpageDefinition(`route-${seed.key}`, tags, {
+				name: seed.name,
+				description: `Site page for ${seed.path} — personalise it with the builder's site edit mode.`,
+				pageKey: `route-${seed.key}`,
+				siteRoute: seed.path,
+				version: 1,
+				blocks: (seed.sections || [seed.key]).map((sectionKey) => ({
+					id: `native-${sectionKey}`,
+					type: 'native',
+					native: sectionKey
+				}))
+			})
+		),
+		webpageDefinition(SITE_GLOBAL_PAGE_KEY, tags, {
+			name: 'Global blocks',
+			description: 'Blocks that render on every page and persist across navigation — personalise with the builder.',
+			pageKey: SITE_GLOBAL_PAGE_KEY,
+			version: 1,
+			blocks: []
+		})
+	];
+	return upsertSystemThings(definitions);
+};
+
+// The demo library: shareId webpage-demo-<slug>, tags carry the family so the
+// gallery census and the seeded-flag projection are one indexed tag match.
+export const seedDemoWebpages = async (): Promise<SeedFail | SeedWebpagesResult> =>
+	upsertSystemThings(
+		getWebpageDemos().map((demo) =>
+			webpageDefinition(`${WEBPAGE_DEMO_SLUG_PREFIX}${demo.slug}`, ['webpage', 'demo', demo.family, demo.kind], webpageDemoCrystal(demo))
+		)
+	);
+
+// Behaviour suites: every part of every suite as a public system thing.
+// Schemas first in the list so a partial run still leaves the shapes the
+// actions reference; data things are stamped with the seeded schema's
+// shareId exactly as the executor stamps things it creates.
+export const seedDemoSuites = async (): Promise<SeedFail | SeedWebpagesResult> => {
+	const definitions: SeedDefinition[] = [];
+	for (const suite of ALL_SUITES) {
+		const materialized = materializeSuite(suite, 'system');
+		const app = isAppSuite(suite);
+		const tags = (kind: string) => [app ? 'app' : 'demo', 'suite', suite.key, kind];
+		for (const schema of materialized.schemas) {
+			definitions.push({ shareId: schema.shareId, uniqueKey: `demo:${schema.shareId}`, kind: 'schema', tags: tags('schema'), crystalInput: schema.crystal });
+		}
+		for (const component of materialized.components) {
+			definitions.push({ shareId: component.shareId, uniqueKey: `demo:${component.shareId}`, kind: 'component', tags: tags('component'), crystalInput: component.crystal });
+		}
+		for (const action of materialized.actions) {
+			definitions.push({ shareId: action.shareId, uniqueKey: `demo:${action.shareId}`, kind: 'action', tags: tags('action'), crystalInput: action.crystal });
+		}
+		const schemaIdByKey = new Map(materialized.schemas.map((schema) => [schema.key, schema.shareId]));
+		for (const entry of materialized.data) {
+			definitions.push({
+				shareId: entry.shareId,
+				uniqueKey: `demo:${entry.shareId}`,
+				kind: 'data',
+				tags: tags('data'),
+				crystalInput: { ...entry.crystal, schemaId: schemaIdByKey.get(entry.schemaKey) }
+			});
+		}
+		if (app) {
+			// app pages seed at webpage-<pageKey> (the entry page IS the suite
+			// key), every page tagged so the census finds the entry
+			for (const [index, page] of materialized.pages.entries()) {
+				definitions.push(webpageDefinition(page.pageKey, ['webpage', 'app', 'suite', suite.key, ...(index === 0 ? ['app-entry'] : [])], page.crystal));
+			}
+		} else {
+			definitions.push(webpageDefinition(`${WEBPAGE_DEMO_SLUG_PREFIX}${materialized.page.slug}`, ['webpage', 'demo', 'suite', suite.key], materialized.page.crystal));
+		}
+	}
+	definitions.push(...appContentDefinitions());
+	return upsertSystemThings(definitions);
+};
+
+// App CONTENT: public system data things the app suites read in public scope
+// (StarsAlign's 418 school entries, Pokeworld's 386 species). They are
+// seeded once here, browsable on /things, and never part of an install — an
+// installed program reads them exactly as the seeded one does.
+const appContentDefinitions = (): SeedDefinition[] => {
+	const definitions: SeedDefinition[] = [];
+	const schemaIdOf = (suiteKey: string, schemaKey: string) => `schema-app-${suiteKey}-${schemaKey}`;
+	const schemaNameOf = (suiteKey: string, schemaKey: string) => `app-${suiteKey}-${schemaKey}`;
+	for (const entry of ASTRO_SCHOOL_ENTRIES) {
+		const shareId = `data-app-starsalign-entry-${entry.id}`;
+		definitions.push({
+			shareId,
+			uniqueKey: `app:${shareId}`,
+			kind: 'data',
+			tags: ['app', 'starsalign', 'content', 'entry', entry.section],
+			crystalInput: {
+				entryId: entry.id,
+				section: entry.section,
+				title: entry.title,
+				essence: entry.essence,
+				keywords: entry.keywords,
+				short: entry.short,
+				deep: entry.deep,
+				schema: schemaNameOf('starsalign', 'entry'),
+				schemaId: schemaIdOf('starsalign', 'entry')
+			}
+		});
+	}
+	for (const species of POKEWORLD_SPECIES_SEED) {
+		const shareId = `data-app-pokeworld-species-${species.id}`;
+		definitions.push({
+			shareId,
+			uniqueKey: `app:${shareId}`,
+			kind: 'data',
+			tags: ['app', 'pokeworld', 'content', 'species', ...(species.isLegendary ? ['legendary'] : [])],
+			crystalInput: { ...species, schema: schemaNameOf('pokeworld', 'species'), schemaId: schemaIdOf('pokeworld', 'species') }
+		});
+	}
+	return definitions;
 };

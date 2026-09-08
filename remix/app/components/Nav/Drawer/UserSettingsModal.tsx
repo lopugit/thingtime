@@ -6,8 +6,12 @@ import { X } from 'lucide-react';
 import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z, DRAWER_TOP_LEVEL_DEFAULT_LIMIT, useDrawer, useIsMobileViewport } from './useDrawer';
 import { drawerItemClosesOnClick, drawerMenuItems, filterDrawerItemsByAuth } from './drawerMenu';
 import { AccountSwitcher } from '../../Account/AccountSwitcher';
+import { DesktopNodeControls } from './DesktopNodeControls';
 import { ElectronUpdateManager } from './ElectronUpdateManager';
+import { LopuCreditsSummary } from '../../Lopu/LopuCreditsPanel';
+import { LopuPositionSelect } from '../../Lopu/LopuPositionSelect';
 import { useLopu } from '../../Lopu/useLopu';
+import { LopuSettingsRows } from '../../Lopu/LopuHost';
 import { ColorControl, ThingsBadgePaddingControl } from '../../ThemeSettings/controls';
 import { useThingtime } from '../../Thingtime/useThingtime';
 import { useApi } from '~/hooks/useApi';
@@ -551,6 +555,7 @@ export const UserSettingsModal = () => {
 							</Button>
 						</Flex>
 					</Flex>
+					<DesktopNodeControls active={accountModalOpen} />
 					<Flex flexDirection="column" rowGap={2} paddingTop={2} borderTop="1px solid" borderColor="blackAlpha.100">
 						<Text fontSize="sm">Thingtime Node menu bar icon</Text>
 						<Select
@@ -578,7 +583,7 @@ export const UserSettingsModal = () => {
 						<Box minWidth={0}>
 							<Text fontSize="sm">Auto-start node on Thingtime launch</Text>
 							<Text fontSize="xs" opacity={0.55}>
-								Restarts a node you already enabled; it never installs a new node without asking first.
+								Starts the bundled node and keeps it up to date with this Desktop app.
 							</Text>
 						</Box>
 						<Switch
@@ -700,6 +705,25 @@ export const UserSettingsModal = () => {
 				</Flex>
 			</Flex>
 
+			{/* 🦄 Lopu — the assistant's launcher, window and defaults (mirrors
+			    SettingsPage's Lopu section; the rows come from LopuSettingsRows) */}
+			<Flex flexDirection="column" rowGap={0}>
+				<Text paddingBottom={2} fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" opacity={0.45}>
+					Lopu 🦄
+				</Text>
+				<LopuSettingsRows renderRow={settingRow} />
+				{/* the compact credits mirror (balance + verified status + the
+				    link to Settings → Lopu credits & usage) */}
+				{user && !user.temporary ? <LopuCreditsSummary admin={!!user.isAdmin} onNavigate={close} /> : null}
+				{settingRow(
+					'Talk to Lopu',
+					<Button size="xs" variant="outline" onClick={() => handleGoTo('/lopu')}>
+						Open 🦄
+					</Button>,
+					'The full chat page with every conversation'
+				)}
+			</Flex>
+
 			{/* theming */}
 			<Flex flexDirection="column" rowGap={0}>
 				<Text paddingBottom={2} fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" opacity={0.45}>
@@ -752,6 +776,8 @@ export const UserSettingsModal = () => {
 					<Switch isChecked={theme.general.motion} onChange={(e) => setGeneral('motion', e.target.checked)}></Switch>,
 					'Rainbow + decorative animation'
 				)}
+
+				{settingRow('Lopu messages 🦄', <LopuPositionSelect />, 'Where notifications pop up on screen')}
 
 				{settingRow(
 					'Theme Studio',

@@ -11,6 +11,7 @@ import { drawerWidthCss, useDrawer, useDrawerLiveWidth, useIsMobileViewport } fr
 import { useThingtime } from '../Thingtime/useThingtime';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from '../Lopu/useLopu';
+import { LopuNavButton } from '../Lopu/LopuNavButton';
 import { motionOK, partyConfetti } from '~/eggs/eggs';
 import { getUserDisplayName } from '~/utils/userIdentity';
 
@@ -320,6 +321,9 @@ export const Nav = (props) => {
 					position="relative"
 					zIndex={10000}
 				>
+						{/* 🦄 Lopu opener — toggles the floating chat window (hidden on
+						/lopu*, where the page is the chat); the same ring as the launcher */}
+						<LopuNavButton />
 						{/* ⌘K quick switcher trigger — the touch/mobile way in (desktop
 						has the chord); sits by the search pill, styled like the other
 						nav icon buttons */}

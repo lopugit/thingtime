@@ -32,6 +32,7 @@ export const QUICK_PAGES: (QuickRow & { keywords: string })[] = [
   { key: 'page:/feed', kind: 'page', label: 'Feed', href: '/feed', glyph: '📰', keywords: 'home posts timeline' },
   { key: 'page:/explore', kind: 'page', label: 'Explore', href: '/explore', glyph: '🧭', keywords: 'trending discover popular' },
   { key: 'page:/messages', kind: 'page', label: 'Messages', href: '/messages', glyph: '💬', keywords: 'messenger chats dm inbox' },
+  { key: 'page:/lopu', kind: 'page', label: 'Lopu', href: '/lopu', glyph: '🦄', keywords: 'ai assistant chat ask build unicorn' },
   { key: 'page:/things', kind: 'page', label: 'Things', href: '/things', glyph: '🗂️', keywords: 'drive files folders library' },
   { key: 'page:/search', kind: 'page', label: 'Search', href: '/search', glyph: '🔎', keywords: 'find query lookup' },
   { key: 'page:/themes', kind: 'page', label: 'Themes', href: '/themes', glyph: '🎨', keywords: 'appearance colors styling' },

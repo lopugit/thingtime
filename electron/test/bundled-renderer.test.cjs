@@ -45,7 +45,8 @@ test('deep-link reloads serve the packaged React shell from a bundled Nitro serv
 	assert.match(nitroConfigSource, /baseName:\s*'client'/u);
 	assert.match(nitroConfigSource, /pattern:\s*'index\.html'/u);
 	assert.match(fallbackRouteSource, /useStorage\('assets:client'\)\.getItem<string>\('index\.html'\)/u);
-	assert.doesNotMatch(fallbackRouteSource, /assets:server/u);
+	assert.match(fallbackRouteSource, /useStorage\('assets:shell'\)\.getItem<string>\('index\.html'\)/u);
+	assert.ok(fallbackRouteSource.indexOf("useStorage('assets:shell')") < fallbackRouteSource.indexOf("useStorage('assets:server')"));
 });
 
 test('desktop launch and settings expose the default-on managed node restart contract', async () => {

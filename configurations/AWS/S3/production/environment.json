@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "environment": "production",
+  "bucket": "thingtime-prod",
+  "region": "ap-southeast-2",
+  "verifiedOn": "2026-09-05",
+  "source": "Authenticated AWS console, Properties / Permissions / Management",
+  "observations": {
+    "mfaDelete": "Disabled",
+    "sseCustomerKeys": "Blocked",
+    "serverAccessLogging": "Disabled",
+    "objectLock": "Disabled",
+    "requesterPays": "Disabled",
+    "staticWebsiteHosting": "Disabled",
+    "transferAcceleration": "Disabled",
+    "replicationRules": 0,
+    "inventoryConfigurations": 0,
+    "eventBridgeEnabled": true
+  },
+  "unverified": [
+    "IAM policies and role bindings",
+    "CloudTrail data events"
+  ]
+}

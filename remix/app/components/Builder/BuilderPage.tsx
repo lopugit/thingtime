@@ -78,11 +78,16 @@ const PagesList = () => {
 				title="Builder 🧱"
 				subtitle="Build webpages from Thingtime components and actions — and personalise every Thingtime page with the ✏️ edit mode."
 				after={
-					user?.id ? (
-						<Button size="sm" onClick={createPage} isLoading={creating} data-testid="builder-new-page">
-							New page ✨
+					<Flex columnGap={2} alignItems="center">
+						<Button as={Link} to="/builder/demos" size="sm" variant="outline" data-testid="builder-demo-library">
+							Demo library 🧱
 						</Button>
-					) : undefined
+						{user?.id ? (
+							<Button size="sm" onClick={createPage} isLoading={creating} data-testid="builder-new-page">
+								New page ✨
+							</Button>
+						) : null}
+					</Flex>
 				}
 			/>
 			{!user?.id ? (
@@ -91,7 +96,7 @@ const PagesList = () => {
 						Sign in to build pages 🗝️
 					</Text>
 					<Text color="var(--tt-text, #5a5a66)" fontSize="sm">
-						Your pages are things — private by default, publishable at /p/&lt;id&gt; when you flip the toggle.
+						Your pages are things — private by default, with the same audience and link sharing options as everything else.
 					</Text>
 				</Flex>
 			) : pages === null ? null : (
@@ -168,7 +173,7 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 			? draft.resolved.page.crystal.previewBg
 			: 'var(--tt-card, #ffffff)';
 	const [pageName, setPageName] = React.useState('');
-	const [isPublic, setIsPublic] = React.useState(false);
+	const [audienceAcl, setAudienceAcl] = React.useState<string[]>(['tt:user']);
 	const drawerWidth = useBuilderDrawerWidth();
 
 	// the canvas owns window-level file drops — unhandled ones append to the
@@ -215,7 +220,7 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 		if (page && namedForRef.current !== page.id) {
 			namedForRef.current = page.id;
 			setPageName(page.crystal?.name || 'Untitled page');
-			setIsPublic(Array.isArray((page as any).acl) ? (page as any).acl.includes('tt:all') : false);
+			setAudienceAcl(Array.isArray(page.acl) && page.acl.length ? page.acl : ['tt:user']);
 		}
 		// unseeded deployments: the global doc may not exist yet — name the
 		// fork properly instead of "Untitled page"
@@ -290,8 +295,8 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 				mode={isSiteDoc ? 'site' : 'page'}
 				pageName={pageName}
 				onPageName={setPageName}
-				isPublic={isPublic}
-				onIsPublic={setIsPublic}
+				audienceAcl={audienceAcl}
+				onAudienceAcl={setAudienceAcl}
 				onSaved={(id) => {
 					if (!isGlobal && id !== pageId) navigate(`/builder?page=${encodeURIComponent(id)}`, { replace: true });
 				}}

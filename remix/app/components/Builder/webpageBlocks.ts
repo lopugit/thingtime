@@ -12,6 +12,16 @@ export type WebpageTextStyle = 'body' | 'heading' | 'eyebrow';
 export type WebpageBlockAlign = 'start' | 'center' | 'end' | 'stretch';
 export type WebpageMediaKind = 'image' | 'video' | 'audio';
 
+export interface WebpageBlockSource {
+	action: string;
+	// scalar inputs; string values may carry {arg} and {query.<name>} tokens
+	inputs?: Record<string, string | number | boolean>;
+	// 'load' (default) refetches after every control run; 'manual' only on
+	// load; 'interval' also every intervalMs (5s–1h, default 15s)
+	refresh?: 'load' | 'manual' | 'interval';
+	intervalMs?: number;
+}
+
 export interface WebpageBlock {
 	id: string;
 	type: WebpageBlockType;
@@ -35,6 +45,13 @@ export interface WebpageBlock {
 	// (render-side sanitised through the allowlist renderer — never trusted raw)
 	tag?: string;
 	html?: string;
+	// text: optional link target (https / site-relative / mailto: / tel:) —
+	// the text renders as an anchor, so a styled text block IS a button
+	href?: string;
+	// component: a DATA BINDING — the page runtime runs this action (by
+	// actionKey, as the viewer, owner-only) on load and after any control on
+	// the page runs, and hands the result to the template as `result`
+	source?: WebpageBlockSource;
 	// media
 	src?: string;
 	alt?: string;
@@ -51,6 +68,8 @@ export interface WebpageCrystal {
 	version?: number;
 	forkOf?: string;
 	previewBg?: string;
+	// the behaviour suite (installable app bundle) this page belongs to
+	suiteKey?: string;
 	blocks: WebpageBlock[];
 }
 

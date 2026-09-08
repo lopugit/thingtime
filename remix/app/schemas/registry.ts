@@ -15,6 +15,7 @@
 import { MAX_REACTION_EMOJIS, sanitizeReactionToken } from '../utils/reactionTokens.ts';
 // @ts-ignore Node 24 executes TypeScript directly and requires the extension.
 import { blocksToText, isEditorJsDoc, isEditorJsDocSafeToEdit } from '../components/Editor/editorJsValue.ts';
+import { MAX_EXPRESSION_ARGS, catalogueSignature, isLambdaArg } from './actionExpressions.ts';
 // Pure attachment metadata/envelope vocabulary shared with the server storage
 // layer. This module has no Node imports, so registry remains browser-safe.
 import {
@@ -78,7 +79,7 @@ export type ThingtimeSchema = {
   example: Record<string, unknown>;
 };
 
-export const THING_VISIBILITIES = ['public', 'friends', 'family', 'private', 'inherit'] as const;
+export const THING_VISIBILITIES = ['public', 'friends', 'family', 'private', 'hidden', 'custom', 'inherit'] as const;
 export type ThingVisibility = (typeof THING_VISIBILITIES)[number];
 
 // Protected operational Things created when an admin migration throws. The
@@ -129,6 +130,25 @@ export const CI_CONTROL_THINGTIME = [
 //                       through the generic routes; acl entries are not).
 //   tt:inherit          attached things (comments, reactions) — as visible as
 //                       their target
+//   tt:hidden           unlisted: matches NO viewer here (owner short-circuit
+//                       aside) — visibility comes from the doc's random
+//                       linkKey instead: anyone presenting it via a ?key= URL
+//                       may view (things.ts canView). Never in feeds/search.
+//   tt:custom           the custom-audience marker: matches nobody itself,
+//                       but flips the thing into capability mode — general
+//                       viewers (via a tt:all / tt:hidden baseline) get READ
+//                       ONLY, and engagement/edit rights come from the
+//                       per-user and per-group grants below.
+//   tt:group/<groupId>  members of one of the owner's groups (group things +
+//                       group-member docs, api/utils/groups). The read path
+//                       preloads the viewer's memberships into
+//                       AclViewer.groupIds, like friendIds.
+//
+// Capability suffixes (custom audiences): a tt:user/<username> or
+// tt:group/<id> grant may carry '/comment' or '/write' — write ⊃ comment ⊃
+// read. The suffix never changes WHO can view (the base entry grants view);
+// it feeds aclCapabilityFor, which the engagement gate (comment/react) and
+// the shared-edit path (PATCH crystal) consult on tt:custom things.
 //
 // Examples: ['tt:all'] is public; ['-tt:all', 'tt:userFriends', 'tt:user'] is
 // friends-only; ['tt:all', '-tt:user/somebody'] is public except one user.
@@ -146,11 +166,16 @@ export const ACL_OWNER = 'tt:user';
 export const ACL_FRIENDS = 'tt:userFriends';
 export const ACL_FAMILY = 'tt:userFamily';
 export const ACL_INHERIT = 'tt:inherit';
+export const ACL_HIDDEN = 'tt:hidden';
+export const ACL_CUSTOM = 'tt:custom';
 export const ACL_USER_PREFIX = 'tt:user/';
 export const ACL_APP_PREFIX = 'tt:app/';
+export const ACL_GROUP_PREFIX = 'tt:group/';
 
 const ACL_ENTRY_PATTERN = /^-?tt:[A-Za-z0-9][A-Za-z0-9._/-]*$/;
-const MAX_ACL_ENTRIES = 16;
+// raised from 16 for custom audiences (a hand-picked user list + groups);
+// still a hard bound so acl stays a bounded field, never an unbounded list
+const MAX_ACL_ENTRIES = 64;
 const MAX_ACL_ENTRY_CHARS = 64;
 
 // legacy visibility names map onto acls (accepted as input everywhere an acl
@@ -160,6 +185,10 @@ export const LEGACY_VISIBILITY_ACLS: Record<ThingVisibility, string[]> = {
   friends: ['-tt:all', ACL_FRIENDS, ACL_OWNER],
   family: ['-tt:all', ACL_FAMILY, ACL_OWNER],
   private: [ACL_OWNER],
+  hidden: [ACL_HIDDEN, ACL_OWNER],
+  // the minimal custom acl — real custom audiences arrive as explicit acls
+  // composed by the picker (marker + baseline + grants)
+  custom: [ACL_CUSTOM, ACL_OWNER],
   inherit: [ACL_INHERIT]
 };
 
@@ -168,9 +197,13 @@ export const aclFromVisibility = (visibility: unknown): string[] | null =>
 
 export const visibilityFromAcl = (acl: string[]): ThingVisibility => {
   if (acl.includes(ACL_INHERIT)) return 'inherit';
+  // custom outranks its own baseline entries (tt:all / tt:hidden may ride
+  // along as the general-audience toggle) so the wire round-trips 'custom'
+  if (acl.includes(ACL_CUSTOM)) return 'custom';
   if (acl.includes(ACL_ALL)) return 'public';
   if (acl.includes(ACL_FRIENDS)) return 'friends';
   if (acl.includes(ACL_FAMILY)) return 'family';
+  if (acl.includes(ACL_HIDDEN)) return 'hidden';
   return 'private';
 };
 
@@ -188,40 +221,143 @@ export const sanitizeAcl = (value: unknown): string[] | { ok: false; status: num
         error: `acl entries look like tt:all, tt:user, tt:userFriends, or tt:user/<username>, optionally '-' prefixed (got ${entry.slice(0, 80)})`
       };
     }
-    if (!entries.includes(entry)) entries.push(entry);
+    // A tt:user/ or tt:group/ grant is exactly ONE subject segment plus an
+    // optional /comment|/write capability suffix (splitCapability below).
+    // Anything deeper is ambiguous — "tt:user/a/b" could mean "user a with
+    // capability b" or "user a/b, read" — so refuse it instead of guessing.
+    const positive = entry.startsWith('-') ? entry.slice(1) : entry;
+    let normalized = entry;
+    for (const prefix of [ACL_USER_PREFIX, ACL_GROUP_PREFIX]) {
+      if (!positive.startsWith(prefix)) continue;
+      const subject = positive.slice(prefix.length).replace(/\/(comment|write)$/, '');
+      if (!subject || subject.includes('/')) {
+        return {
+          ok: false,
+          status: 400,
+          error: `${prefix}… entries take one name plus an optional /comment or /write (got ${entry.slice(0, 80)})`
+        };
+      }
+      // Canonicalize the USERNAME to lower case. aclEntryMatches compares it
+      // case-insensitively, but the feed/search grant clause (things.ts
+      // visibilityQueryFor) matches acl strings EXACTLY, against a lower-cased
+      // `tt:user/<username>` built from the viewer. Storing 'tt:user/Bob/write'
+      // verbatim therefore honours the grant on direct access (canView) while
+      // the grantee's own feed never surfaces it — a grant that half-works.
+      // Usernames are already stored lower case (auth/registerUser), so this
+      // only canonicalizes hand-authored acls and changes no view decision.
+      // Group ids are NOT folded: they are opaque and compared exactly
+      // (viewer.groupIds.has), so lower-casing one could break a real match.
+      if (prefix === ACL_USER_PREFIX) {
+        normalized = `${entry.startsWith('-') ? '-' : ''}${prefix}${subject.toLowerCase()}${positive.slice(prefix.length + subject.length)}`;
+      }
+    }
+    if (!entries.includes(normalized)) entries.push(normalized);
     if (entries.length > MAX_ACL_ENTRIES) return { ok: false, status: 400, error: `acl can have at most ${MAX_ACL_ENTRIES} entries` };
   }
   if (!entries.length) return { ok: false, status: 400, error: 'acl needs at least one entry' };
   return entries;
 };
 
-// friendIds: shareIds of users the viewer has an ACCEPTED friendship with,
-// preloaded by the read path (one batched query per request) so acl checks
-// stay sync + pure. Absent set = no friend info loaded = circle denies.
-export type AclViewer = { id: string | null; username?: string | null; friendIds?: ReadonlySet<string> } | null;
+// friendIds: shareIds of users the viewer has an ACCEPTED friendship with;
+// groupIds: shareIds of group things the viewer is a member of — both
+// preloaded by the read path (one batched query each per request) so acl
+// checks stay sync + pure. Absent set = not loaded = that circle denies.
+export type AclViewer = {
+  id: string | null;
+  username?: string | null;
+  friendIds?: ReadonlySet<string>;
+  groupIds?: ReadonlySet<string>;
+} | null;
+
+// Custom-audience capabilities: write ⊃ comment ⊃ read. A grant entry may
+// carry a '/comment' or '/write' suffix (tt:user/<name>/write,
+// tt:group/<id>/comment) — the base entry decides WHO, the suffix decides
+// HOW MUCH.
+export type AclCapability = 'none' | 'read' | 'comment' | 'write';
+const CAP_RANK: Record<AclCapability, number> = { none: 0, read: 1, comment: 2, write: 3 };
+
+// Only a SUBJECT grant carries a capability, and only over a non-empty
+// subject: 'tt:user/<name>' and 'tt:group/<id>'. Anchoring the strip is what
+// keeps `write` and `comment` usable as ordinary usernames — bare
+// `id.endsWith('/write')` reads the picker's own output for the account named
+// "write" (tt:user/write) as base 'tt:user', i.e. the OWNER entry, so that
+// account silently receives nothing and the acl gains a phantom owner grant.
+// Same ambiguity the '/'-in-username guard (auth/registerUser.ts) closes from
+// the other side; usernames are already '/'-free, so the base can never be a
+// deeper path here.
+const splitCapability = (id: string): { base: string; cap: 'read' | 'comment' | 'write' } => {
+  for (const [suffix, cap] of [
+    ['/write', 'write'],
+    ['/comment', 'comment']
+  ] as const) {
+    if (!id.endsWith(suffix)) continue;
+    const base = id.slice(0, -suffix.length);
+    const grantPrefix = [ACL_USER_PREFIX, ACL_GROUP_PREFIX].find((prefix) => base.startsWith(prefix));
+    if (grantPrefix && base.length > grantPrefix.length) return { base, cap };
+  }
+  return { base: id, cap: 'read' };
+};
 
 const aclSpecificity = (id: string): number => {
-  if (id === ACL_ALL) return 0;
-  if (id === ACL_OWNER) return 2;
-  if (id.startsWith(ACL_USER_PREFIX)) return 3;
-  return 1; // circles + future groups
+  const { base } = splitCapability(id);
+  if (base === ACL_ALL) return 0;
+  if (base === ACL_OWNER) return 2;
+  if (base.startsWith(ACL_USER_PREFIX)) return 3;
+  return 1; // circles + groups
 };
 
 const aclEntryMatches = (id: string, viewer: AclViewer, ownerId: string): boolean => {
-  if (id === ACL_ALL) return true;
+  const { base } = splitCapability(id);
+  if (base === ACL_ALL) return true;
   if (!viewer?.id) return false;
-  if (id === ACL_OWNER) return viewer.id === ownerId;
-  if (id.startsWith(ACL_USER_PREFIX)) {
-    const username = id.slice(ACL_USER_PREFIX.length).toLowerCase();
+  if (base === ACL_OWNER) return viewer.id === ownerId;
+  if (base.startsWith(ACL_USER_PREFIX)) {
+    const username = base.slice(ACL_USER_PREFIX.length).toLowerCase();
     return !!viewer.username && viewer.username.toLowerCase() === username;
+  }
+  // group grant: the viewer's preloaded memberships answer (owner counts too)
+  if (base.startsWith(ACL_GROUP_PREFIX)) {
+    const groupId = base.slice(ACL_GROUP_PREFIX.length);
+    return viewer.id === ownerId || viewer.groupIds?.has(groupId) === true;
   }
   // friends circle: real graph — the viewer sees it when they're an accepted
   // friend of the owner (friendship is mutual, so the viewer's own friend set
   // answers for any owner). Owner always counts as their own friend.
-  if (id === ACL_FRIENDS) return viewer.id === ownerId || viewer.friendIds?.has(ownerId) === true;
+  if (base === ACL_FRIENDS) return viewer.id === ownerId || viewer.friendIds?.has(ownerId) === true;
   // family circle: no family graph yet — owner only
-  if (id === ACL_FAMILY) return viewer.id === ownerId;
+  if (base === ACL_FAMILY) return viewer.id === ownerId;
   return false;
+};
+
+// The viewer's capability on a custom-audience thing. Owner → write. Grants
+// are positive entries only (exclusions shape VIEW, not capabilities); the
+// strongest matching suffix wins, and any plain view match floors at 'read'.
+// Callers only consult this when acl carries tt:custom.
+//
+// No view, no capability. An exclusion outranks a grant for VIEW under
+// most-specific-wins, so an acl carrying BOTH a grant and a same-specificity
+// exclusion for one subject — ['tt:custom','tt:all','tt:user',
+// 'tt:user/bob/write','-tt:user/bob'] — denies bob the thing entirely. Without
+// this floor the loop below still saw the positive 'tt:user/bob/write' and
+// handed back 'write', i.e. edit rights on a thing the same acl says he may
+// not even read. Every caller happens to prove view first today (updateThing
+// via canViewInherited, the engage gates via findViewableThingAs), so this was
+// unreachable rather than live — but that made the invariant a precondition
+// every future caller had to rediscover. Anchoring it here makes the function
+// answer correctly on its own.
+export const aclCapabilityFor = (acl: string[], viewer: AclViewer, ownerId: string): AclCapability => {
+  if (viewer?.id && viewer.id === ownerId) return 'write';
+  if (!aclAllows(acl, viewer, ownerId)) return 'none';
+  let best: AclCapability = 'read';
+  for (const raw of acl) {
+    if (raw.startsWith('-')) continue;
+    const { base, cap } = splitCapability(raw);
+    if (cap === 'read') continue;
+    if (base === ACL_INHERIT || base === ACL_CUSTOM) continue;
+    if (!aclEntryMatches(raw, viewer, ownerId)) continue;
+    if (CAP_RANK[cap] > CAP_RANK[best]) best = cap;
+  }
+  return best;
 };
 
 // Most-specific matching entry wins; exclusions win ties. Callers short-circuit
@@ -312,6 +448,82 @@ export const MAX_COMMUNITY_DESCRIPTION_CHARS = 500;
 export const MAX_SECTION_NAME_CHARS = 60;
 export const MAX_CHATS_PER_COMMUNITY = 500;
 export const MAX_COMMUNITIES_PER_USER = 50;
+// Subspaces (see api/utils/subspaces): Reddit-style communities — a subspace
+// thing with branding/rules/flairs, relational subspace-member docs, a mod log,
+// and post-level moderation state on a server-owned root field. Up/down votes
+// are their own focused reaction kind (`updown`) beside the open-vocabulary
+// emoji reactions. All bounds live here so no write path can disagree.
+export const SUBSPACE_SLUG_PATTERN = /^[a-z0-9_]{3,30}$/;
+export const MIN_SUBSPACE_SLUG_CHARS = 3;
+export const MAX_SUBSPACE_SLUG_CHARS = 30;
+export const MAX_SUBSPACE_NAME_CHARS = 80;
+export const MAX_SUBSPACE_DESCRIPTION_CHARS = 1000;
+export const MAX_SUBSPACE_RULES = 15;
+export const MAX_SUBSPACE_RULE_TITLE_CHARS = 100;
+export const MAX_SUBSPACE_RULE_TEXT_CHARS = 500;
+export const MAX_SUBSPACE_FLAIRS = 50;
+export const MAX_SUBSPACE_FLAIR_ID_CHARS = 40;
+export const MAX_SUBSPACE_FLAIR_LABEL_CHARS = 64;
+export const MAX_SUBSPACE_ACCENT_CHARS = 32;
+export const MAX_SUBSPACE_ICON_CHARS = 16;
+// custom user-flair text (allowCustomUserFlair) — shorter than a template label
+export const MAX_SUBSPACE_USER_FLAIR_TEXT_CHARS = 40;
+export const MAX_SUBSPACES_PER_USER = 25;
+export const MAX_SUBSPACE_MEMBERSHIPS_PER_USER = 500;
+export const MAX_SUBSPACE_MOD_REASON_CHARS = 300;
+// Removal reasons (round 2, S4): a per-subspace list of canned reasons a
+// moderator picks when removing a post — { id, title, message }; the title +
+// message (+ the mod's free-text note) become the post's stored removal reason
+// and the author's subspace-post-removed notification.
+export const MAX_SUBSPACE_REMOVAL_REASONS = 20;
+export const MAX_SUBSPACE_REMOVAL_REASON_TITLE_CHARS = 80;
+export const MAX_SUBSPACE_REMOVAL_REASON_MESSAGE_CHARS = 500;
+// the composed stored reason on a removed post: title — message · note
+export const MAX_SUBSPACE_POST_REMOVAL_REASON_CHARS = 900;
+// Reports (round 2, S5): a viewer flags a post (or a comment — resolved to its
+// root post) to the subspace's moderators. One `subspace-report` thing per
+// (post, reporter) — a repeat updates the reason / note; the mods' Reports
+// queue groups them by post. `reason` is a rule title, a removal-reason id or
+// free text; `note` is the reporter's optional context.
+export const MAX_SUBSPACE_REPORT_REASON_CHARS = 120;
+export const MAX_SUBSPACE_REPORT_NOTE_CHARS = 500;
+// how many reporters a grouped Reports-queue row lists (the count is exact)
+export const MAX_SUBSPACE_REPORT_REPORTERS_LISTED = 20;
+export const SUBSPACE_REPORT_STATUSES = ['open', 'resolved'] as const;
+export type SubspaceReportStatus = (typeof SUBSPACE_REPORT_STATUSES)[number];
+// how an open report was settled: the post was removed / approved by a mod
+// (auto-resolved by `moderate`), or the mods dismissed the reports outright
+export const SUBSPACE_REPORT_RESOLUTIONS = ['removed', 'approved', 'dismissed'] as const;
+export type SubspaceReportResolution = (typeof SUBSPACE_REPORT_RESOLUTIONS)[number];
+export const MAX_POST_TITLE_CHARS = 300;
+export const SUBSPACE_ACCESS_MODES = ['public', 'restricted', 'private'] as const;
+export type SubspaceAccessMode = (typeof SUBSPACE_ACCESS_MODES)[number];
+export const SUBSPACE_ROLES = ['owner', 'moderator', 'member'] as const;
+export type SubspaceRole = (typeof SUBSPACE_ROLES)[number];
+export const SUBSPACE_FEED_SORTS = ['hot', 'new', 'top', 'rising', 'controversial'] as const;
+export type SubspaceFeedSort = (typeof SUBSPACE_FEED_SORTS)[number];
+// the /s directory's orders: newest first (cursor-paged), most members, most
+// active (posts in the last SUBSPACE_ACTIVE_WINDOW_DAYS) — the last two are
+// ranked in memory over a bounded newest-first window (subspaceCore.ts)
+export const SUBSPACE_LIST_SORTS = ['new', 'members', 'active'] as const;
+export type SubspaceListSort = (typeof SUBSPACE_LIST_SORTS)[number];
+export const SUBSPACE_ACTIVE_WINDOW_DAYS = 7;
+// the home feed's scope: every visible post, or only posts from the viewer's
+// ACTIVE subspaces (empty for guests / non-members)
+export const FEED_SCOPES = ['all', 'subspaces'] as const;
+export type FeedScope = (typeof FEED_SCOPES)[number];
+export const UPDOWN_DIRECTIONS = ['up', 'down'] as const;
+export type UpdownDirection = (typeof UPDOWN_DIRECTIONS)[number];
+// A deleted subspace leaves a slug tombstone (kind `subspace-tombstone`) that
+// keeps holding the `subspaceSlug` uniqueKey: the previous owner may re-found
+// the slug at once, anyone else only after the hold — so bell / email deep
+// links to /s/<slug> can't be hijacked by whoever re-registers it first.
+export const SUBSPACE_SLUG_HOLD_DAYS = 30;
+// Dedicated-endpoint kinds of the family (no generic crystal sanitizers, so
+// /api/v1/things refuses them; excluded from own-things listings + generic
+// DELETE the way the messenger family is).
+export const SUBSPACE_THINGTIME = ['subspace', 'subspace-member', 'subspace-modlog', 'subspace-tombstone', 'subspace-report'] as const;
+export const UPDOWN_THINGTIME = 'updown';
 // Custom emoji: the image is an inline data URI stored on its own thing doc
 // (the avatar pattern, FUNDAMENTALS §3 relational rule) — ~512KB binary ≈
 // 700K base64 chars. Names are the `:name:` vocabulary, Mongo-key-safe.
@@ -433,6 +645,13 @@ const rootThingSchema: ThingtimeSchema = {
       description: `Schema-free sidecar: any JSON up to ${EXTENDED_MAX_BYTES} bytes, stored untouched, never validated, structured-searchable, or interpreted. Replace-on-write; null clears it.`
     },
     { name: 'ownerId', type: 'id', required: true, system: true, description: 'The owning user id.' },
+		{
+			name: 'sourceDeviceId',
+			type: 'id',
+			required: false,
+			system: true,
+			description: 'Paired device that created this Thing. Server-stamped and never accepted from generic Thing input.'
+		},
     {
       name: 'acl',
       type: 'string[]',
@@ -539,6 +758,21 @@ const rootThingSchema: ThingtimeSchema = {
 			system: true,
 			description:
 				'Protected server-owned moderation state. Generic Thing create/update input never writes it; only moderation analysis and admin review may stamp it.'
+		},
+		{
+			name: 'subspaceMod',
+			type: 'object',
+			required: false,
+			system: true,
+			description:
+				'Protected subspace moderation state on posts: { status: approved|removed, removedById, removedAt, reason, reasonId?, ruleIndex?, pinned, locked, nsfw, spoiler }. Written only by subspace moderators through POST /api/v1/subspaces/moderate (a remove on an already-removed post changes nothing); removed posts are redacted for everyone but the author and mods and hidden from feeds. The projection shows the author the reason, never removedById.'
+		},
+		{
+			name: 'subspacePrivate',
+			type: 'boolean',
+			required: false,
+			system: true,
+			description: 'Server-stamped when a post is published into a private subspace: visible to that subspace’s members (and the author) only, on every read surface.'
 		},
 		{
 			name: 'attachmentFinalizationLeaseId',
@@ -691,6 +925,27 @@ const postSchema: ThingtimeSchema = {
       required: false,
       description:
         'Free-form structured thing payload — required for thingtime posts, bounded like data crystals (searchable as crystal.thing.<field>). Thingtime posts can also carry images and a listing.'
+    },
+    {
+      name: 'title',
+      type: 'string',
+      required: false,
+      max: MAX_POST_TITLE_CHARS,
+      description: `Optional headline (Reddit-style post title), max ${MAX_POST_TITLE_CHARS} chars. Subspace posts usually carry one; ordinary feed posts may too.`
+    },
+    {
+      name: 'subspaceId',
+      type: 'id',
+      required: false,
+      description:
+        'shareId of the subspace this post is published into. Validated on every write: the author must be allowed to post there (not banned; approved in restricted subspaces; a member in private ones).'
+    },
+    {
+      name: 'flairId',
+      type: 'string',
+      required: false,
+      max: MAX_SUBSPACE_FLAIR_ID_CHARS,
+      description: 'Id of one of the subspace’s post flairs (validated against the subspace; mod-only flairs need a moderator).'
     }
   ],
   example: {
@@ -924,9 +1179,18 @@ export const MAX_SCHEMA_UNIT_CHARS = 20;
 export const MAX_SCHEMA_FIELD_DEPTH = 6;
 // `render`: the optional serialised component tree a schema can carry (chakra
 // or element shaped) — caps match the client renderers' node/depth gates.
-export const MAX_SCHEMA_RENDER_BYTES = 32 * 1024;
-export const MAX_SCHEMA_RENDER_DEPTH = 24;
-export const MAX_SCHEMA_RENDER_NODES = 600;
+// A stored render TEMPLATE counts every value (each style key is a node), so
+// an app screen with a few dozen styled elements runs to ~1500 nodes while
+// still drawing well under the renderers' 600-element DOM budget (branches
+// and repeats resolve to one path at draw time). 2000 / 48KB is the stored
+// bound; the resolver's MAX_RESOLVED_VALUES and the renderers' MAX_NODES
+// stay the draw-time bounds.
+export const MAX_SCHEMA_RENDER_BYTES = 48 * 1024;
+// stored depth counts wrapper objects (a ttIf → then → ttEach → node chain is
+// four levels for one drawn element), so it sits well above the renderers'
+// 24-level DOM cap, which the RESOLVED tree still has to clear
+export const MAX_SCHEMA_RENDER_DEPTH = 48;
+export const MAX_SCHEMA_RENDER_NODES = 2000;
 export const SCHEMA_FIELD_TYPES = ['string', 'number', 'boolean', 'date', 'enum', 'string[]', 'object', 'array'] as const;
 export type SchemaFieldType = (typeof SCHEMA_FIELD_TYPES)[number];
 
@@ -1078,6 +1342,11 @@ export const MAX_WEBPAGE_CSS_KEY_CHARS = 48;
 export const MAX_WEBPAGE_CSS_VALUE_CHARS = 240;
 export const MAX_WEBPAGE_HTML_CHARS = 20000;
 export const MAX_WEBPAGE_MEDIA_SRC_CHARS = 2048;
+// source-bound blocks may poll on an interval (a clock, a live tally):
+// bounded below so one page can never hammer the executor
+export const MIN_WEBPAGE_SOURCE_INTERVAL_MS = 5_000;
+export const MAX_WEBPAGE_SOURCE_INTERVAL_MS = 3_600_000;
+export const DEFAULT_WEBPAGE_SOURCE_INTERVAL_MS = 15_000;
 export const WEBPAGE_TEXT_TAGS = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'div', 'blockquote', 'pre', 'code'] as const;
 export const WEBPAGE_MEDIA_KINDS = ['image', 'video', 'audio'] as const;
 export const WEBPAGE_CSS_KEY_PATTERN = /^(--)?[a-z][a-z0-9-]*$/;
@@ -1206,7 +1475,7 @@ const webpageSchema: ThingtimeSchema = {
 			description:
 				`Ordered block tree, max ${MAX_WEBPAGE_BLOCKS} blocks / ${MAX_WEBPAGE_BLOCK_DEPTH} deep: ` +
 				'{ id, type: component (component ref + args), container (direction/gap/columns + children), ' +
-				'text (text + style), or native (built-in screen key) — plus align/maxWidth per block }.'
+				'text (text + style, optional href link), or native (built-in screen key) — plus align/maxWidth per block }.'
 		}
 	],
 	example: {
@@ -1238,20 +1507,65 @@ const webpageSchema: ThingtimeSchema = {
 // `actions.invoke` calls, and every run lands as a protected `action-run`
 // child thing (targetId = the action) so the program's behaviour stays
 // inspectable after the fact.
-export const ACTION_STEP_OPS = ['things.create', 'things.get', 'things.search', 'things.update', 'actions.invoke', 'return'] as const;
-export const ACTION_CAPABILITIES = ['things.read', 'things.create', 'things.update', 'actions.invoke'] as const;
+// v2 vocabulary (apps-on-Thingtime): `compute` binds a pure value (any step
+// value, typically a `{ ttExpr: [...] }` expression — schemas/actionExpressions.ts)
+// to a step result; `things.delete` removes ONE of the invoker's own data
+// things; `each` invokes a child action once per element of a bounded list
+// with `$item`/`$index` bound; `fail` refuses the run with an authored
+// message. Any step may carry `when: <value>` — falsy skips it (result null),
+// which is the whole of branching: there is still no loop primitive other
+// than the budget-bounded `each`, and no persisted code.
+export const ACTION_STEP_OPS = [
+	'things.create',
+	'things.get',
+	'things.search',
+	'things.update',
+	'things.delete',
+	'actions.invoke',
+	'compute',
+	'each',
+	'fail',
+	'return'
+] as const;
+export const ACTION_CAPABILITIES = ['things.read', 'things.create', 'things.update', 'things.delete', 'actions.invoke'] as const;
 export const ACTION_INPUT_TYPES = ['string', 'text', 'number', 'boolean', 'enum'] as const;
-export const MAX_ACTION_STEPS = 20;
+export const MAX_ACTION_STEPS = 40;
 export const MAX_ACTION_INPUTS = 16;
 export const MAX_ACTION_CAPABILITY_ENTRIES = 8;
 export const MAX_ACTION_CAPABILITY_SCOPES = 12;
 export const MAX_ACTION_KEY_CHARS = 80;
 export const MAX_ACTION_SCHEMA_REF_CHARS = 128;
-export const MAX_ACTION_STEP_VALUE_KEYS = 24;
+export const MAX_ACTION_STEP_VALUE_KEYS = 48;
 export const MAX_ACTION_STEP_STRING_CHARS = 2000;
-export const MAX_ACTION_STEP_VALUE_DEPTH = 5;
-export const MAX_ACTION_CONCAT_PARTS = 12;
-export const MAX_ACTION_SEARCH_LIMIT = 50;
+// expressions nest two levels per call ({ ttExpr: [ … ] }), so a readable
+// program composes six or seven calls deep — the run-time budget bounds cost
+export const MAX_ACTION_STEP_VALUE_DEPTH = 16;
+export const MAX_ACTION_CONCAT_PARTS = 24;
+export const MAX_ACTION_SEARCH_LIMIT = 100;
+export const MAX_ACTION_SEARCH_OFFSET = 1000;
+export const MAX_ACTION_SEARCH_WHERE_KEYS = 8;
+export const MAX_ACTION_SEARCH_MATCH_KEYS = 4;
+export const MAX_ACTION_SEARCH_MATCH_CHARS = 120;
+export const MAX_ACTION_EACH_ITEMS = 20;
+// A search reads ONE of three corpora. 'own' and 'public' differ only in
+// whose docs they match; 'system' is a different KIND of source and exists
+// because "public" is not the same claim as "platform-authored".
+//
+// Seeded app content (StarsAlign's school entries, Pokeworld's species) is
+// public data things, so a `public` search finds it — but it also finds
+// every OTHER public data thing carrying the same schema stamp, and
+// `crystal.schema` is a free-form convention field on the open `data`
+// crystal: any signed-in account can create a public data thing naming a
+// public schema (createThing only checks that a supplied `schemaId` resolves
+// to a schema the writer can SEE, and a seeded schema is world-readable).
+// A platform action reading its own seeded corpus in `public` scope
+// therefore reads a corpus strangers can write into: with the default
+// newest-first sort and `limit: 1`, the newest forged row wins and every
+// viewer of that app page reads it. 'system' pins `ownerId: 'system'` so a
+// program that means "the rows the seed wrote" says exactly that.
+export const ACTION_SEARCH_SCOPES = ['own', 'public', 'system'] as const;
+export const ACTION_SEARCH_SORT_DIRECTIONS = ['asc', 'desc'] as const;
+export const ACTION_SEARCH_FIELD_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]{0,59}$/;
 export const MAX_ACTION_TRACE_ENTRIES = 60;
 export const MAX_ACTION_RUN_ERROR_CHARS = 2000;
 // The most run records GET /api/v1/actions/runs will ever hand back in one
@@ -1273,7 +1587,7 @@ export const ACTION_KEY_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 // every knob; these are the hard caps the executor clamps against.
 export const ACTION_LIMIT_CEILINGS = {
 	timeoutMs: 10_000,
-	maxOperations: 50,
+	maxOperations: 100,
 	maxDepth: 8,
 	maxChildActions: 20,
 	maxResultBytes: 256 * 1024,
@@ -1281,7 +1595,7 @@ export const ACTION_LIMIT_CEILINGS = {
 } as const;
 export const ACTION_LIMIT_DEFAULTS = {
 	timeoutMs: 5_000,
-	maxOperations: 25,
+	maxOperations: 40,
 	maxDepth: 4,
 	maxChildActions: 10,
 	maxResultBytes: 64 * 1024,
@@ -1472,6 +1786,255 @@ const voteSchema: ThingtimeSchema = {
     { name: 'voteKey', type: 'string', required: true, description: 'Canonical dedupe key <pollId>~<userId> — unique per (poll, user), server-written.' }
   ],
   example: { optionIndex: 1, voteKey: 'poll_123~664f1c2a9d3e5b0012345678' }
+};
+
+// Up/down votes — Reddit-style scoring as a SEPARATE, deliberately limited
+// reaction kind beside the open-vocabulary emoji reactions (which stay exactly
+// as they are, multi-token and all). One relational child thing per
+// (user, target) — FUNDAMENTALS §3 — minted only by POST /api/v1/things/updown
+// (no generic sanitizer: a client-written updownKey could squat another
+// user's slot). Same-direction again removes the vote; the other direction
+// flips it in place. Aggregated on read as `votes` on posts and comments.
+const updownSchema: ThingtimeSchema = {
+  id: UPDOWN_THINGTIME,
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Up/down vote',
+  summary: 'One user’s upvote or downvote on a post or comment — one doc per (user, target).',
+  detail:
+    'Created/flipped/removed only by POST /api/v1/things/updown { id, direction }. A standalone thing ' +
+    'pointing at the voted post or comment via targetId, carrying acl ["tt:inherit"] so it is visible ' +
+    'exactly when its target is. crystal.direction is "up" or "down"; crystal.updownKey ' +
+    '("<targetId>~<userId>", server-written) rides the root uniqueKeys namespace so one vote per ' +
+    'user per target is structural. Tallies are batch-aggregated onto posts/comments as ' +
+    '`votes { up, down, score, viewerVote }` — native emoji reactions are untouched by this kind.',
+  requiresTarget: true,
+  createdVia: 'POST /api/v1/things/updown',
+  fields: [
+    { name: 'direction', type: 'enum', required: true, values: [...UPDOWN_DIRECTIONS], description: 'up or down.' },
+    { name: 'updownKey', type: 'string', required: true, description: 'Canonical dedupe key <targetId>~<userId> — unique per (target, user), server-written.' }
+  ],
+  example: { direction: 'up', updownKey: '4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f~664f1c2a9d3e5b0012345678' }
+};
+
+// Subspaces — Reddit-style communities. Everything is a thing: the subspace
+// itself (branding, rules, flairs, access mode), one relational member doc per
+// (subspace, user) carrying role/approval/ban state, and an append-only mod
+// log. Posts join a subspace through crystal.subspaceId (validated on every
+// write by api/utils/subspaces/gate.ts) and carry moderation state on the
+// server-owned root `subspaceMod` field. Written ONLY through
+// /api/v1/subspaces* — no generic sanitizers.
+const subspaceSchema: ThingtimeSchema = {
+  id: 'subspace',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Subspace',
+  summary: 'A Reddit-style community: slug, branding, rules, post flairs, user flairs, and an access mode.',
+  detail:
+    'Created through POST /api/v1/subspaces; the creator becomes its owner and first member. The ' +
+    'slug is unique (root uniqueKeys `subspaceSlug:<slug>`), lowercase [a-z0-9_] 3–30 chars, and is ' +
+    'the /s/<slug> URL. Membership is relational subspace-member things (never an embedded member ' +
+    'array); member counts are aggregated on read. access: public (anyone posts), restricted (only ' +
+    'approved posters/mods post, everyone reads), private (members only — posts are hidden from ' +
+    'non-members everywhere). Subspace things themselves are always listable (acl ["tt:all"]). userFlairs are ' +
+    'the templates members wear beside their name (stored on their subspace-member row as userFlair); ' +
+    'userFlairSelfAssign (default true) lets members pick one themselves, allowCustomUserFlair (default false) ' +
+    'lets them type their own text (≤40 chars) — moderators may set anyone’s, modOnly templates included. ' +
+    'removalReasons are the canned reasons moderators pick when removing a post (title + message become the stored ' +
+    'reason on the post and the author’s subspace-post-removed notification).',
+  createdVia: 'POST /api/v1/subspaces',
+  fields: [
+    { name: 'slug', type: 'string', required: true, max: MAX_SUBSPACE_SLUG_CHARS, description: 'Unique URL slug, lowercase [a-z0-9_], 3–30 chars.' },
+    { name: 'name', type: 'string', required: true, max: MAX_SUBSPACE_NAME_CHARS, description: 'Display name.' },
+    { name: 'description', type: 'string', required: false, max: MAX_SUBSPACE_DESCRIPTION_CHARS, description: 'About text shown in the sidebar.' },
+    { name: 'access', type: 'enum', required: true, values: [...SUBSPACE_ACCESS_MODES], description: 'public / restricted / private.' },
+    { name: 'nsfw', type: 'boolean', required: false, description: 'Marks the whole subspace 18+.' },
+    {
+      name: 'rules',
+      type: 'record',
+      required: false,
+      description: `Ordered community rules — a list of { title (≤${MAX_SUBSPACE_RULE_TITLE_CHARS}), text (≤${MAX_SUBSPACE_RULE_TEXT_CHARS}) }, max ${MAX_SUBSPACE_RULES}.`
+    },
+    {
+      name: 'flairs',
+      type: 'record',
+      required: false,
+      description: `Post flairs authors (or mods, when modOnly) can tag posts with — a list of { id (slug ≤${MAX_SUBSPACE_FLAIR_ID_CHARS}), label (≤${MAX_SUBSPACE_FLAIR_LABEL_CHARS}), emoji, color, modOnly }, max ${MAX_SUBSPACE_FLAIRS}.`
+    },
+    {
+      name: 'userFlairs',
+      type: 'record',
+      required: false,
+      description: `User-flair templates members wear beside their name — the same shape as post flairs ({ id, label, emoji, color, modOnly }), max ${MAX_SUBSPACE_FLAIRS}; modOnly templates are assigned by moderators only.`
+    },
+    {
+      name: 'removalReasons',
+      type: 'record',
+      required: false,
+      description: `Canned removal reasons moderators pick when removing a post — a list of { id (slug ≤${MAX_SUBSPACE_FLAIR_ID_CHARS}), title (≤${MAX_SUBSPACE_REMOVAL_REASON_TITLE_CHARS}), message (≤${MAX_SUBSPACE_REMOVAL_REASON_MESSAGE_CHARS}) }, max ${MAX_SUBSPACE_REMOVAL_REASONS}; title + message become the post’s stored reason and the author’s notification.`
+    },
+    { name: 'userFlairSelfAssign', type: 'boolean', required: false, description: 'Members may pick their own user flair (default true; moderators always can, for anyone).' },
+    {
+      name: 'allowCustomUserFlair',
+      type: 'boolean',
+      required: false,
+      description: `Members may type a custom user-flair text (≤${MAX_SUBSPACE_USER_FLAIR_TEXT_CHARS} chars) instead of picking a template (default false; moderators always may).`
+    },
+    {
+      name: 'branding',
+      type: 'object',
+      required: false,
+      description: 'Visual identity of the subspace.',
+      children: [
+        { name: 'icon', type: 'string', required: false, max: MAX_SUBSPACE_ICON_CHARS, description: 'Emoji icon.' },
+        { name: 'iconUrl', type: 'string', required: false, description: 'http(s) icon image URL.' },
+        { name: 'bannerUrl', type: 'string', required: false, description: 'http(s) banner image URL.' },
+        { name: 'accent', type: 'string', required: false, max: MAX_SUBSPACE_ACCENT_CHARS, description: 'CSS accent color.' }
+      ]
+    }
+  ],
+  example: {
+    slug: 'rainbows',
+    name: 'Rainbows',
+    description: 'All things prismatic 🌈',
+    access: 'public',
+    nsfw: false,
+    rules: [{ title: 'Be kind', text: 'No gatekeeping the spectrum.' }],
+    flairs: [{ id: 'photo', label: 'Photo', emoji: '📸', color: '#7c5cff', modOnly: false }],
+    userFlairs: [{ id: 'prism', label: 'Prism', emoji: '🔮', color: '#7c5cff', modOnly: false }],
+    userFlairSelfAssign: true,
+    allowCustomUserFlair: false,
+    removalReasons: [{ id: 'no-spam', title: 'No spam', message: 'Posts that only advertise are removed.' }],
+    branding: { icon: '🌈', iconUrl: null, bannerUrl: null, accent: '#7c5cff' }
+  }
+};
+
+const subspaceMemberSchema: ThingtimeSchema = {
+  id: 'subspace-member',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Subspace member',
+  summary: "One user's membership of one subspace — role, posting approval, ban state, the two request flags and the user flair (relational child doc).",
+  detail:
+    'targetId = the subspace shareId, ownerId = the member. Uniqueness rides the root uniqueKeys ' +
+    'namespace (`subspaceMemberKey:<subspaceId>:<userId>`). Roles: owner > moderator > member. A ' +
+    'banned user keeps a member doc (banned: true) so the ban outlives leaving/rejoining; approved ' +
+    'marks a trusted poster in restricted subspaces. A JOIN REQUEST to a private subspace is the same ' +
+    'row with pending: true — not a membership (isActiveMember = row && !left && !banned && !pending; ' +
+    'member counts exclude it) until a moderator accepts it (or adds the user); deny drops the row, ' +
+    'leave cancels it. approvalRequested marks an active member of a restricted subspace who asked ' +
+    'for posting rights (approve grants + clears, unapprove/deny clear). userFlair is the flair the member wears ' +
+    'beside their name in this subspace ({ id (template id or null for custom text), text, emoji, color } | null) — ' +
+    'projected as authorFlair on their posts and comments there while they are an active member. Written only by ' +
+    '/api/v1/subspaces/join, /leave and /members.',
+  createdVia: 'POST /api/v1/subspaces (creator) / POST /api/v1/subspaces/join',
+  fields: [
+    { name: 'memberKey', type: 'string', required: true, description: 'Unique `<subspaceId>:<userId>` pair key.' },
+    { name: 'role', type: 'enum', required: true, values: [...SUBSPACE_ROLES], description: 'owner / moderator / member.' },
+    { name: 'approved', type: 'boolean', required: false, description: 'Approved poster (restricted subspaces).' },
+    { name: 'banned', type: 'boolean', required: false, description: 'Banned from posting, commenting and voting here.' },
+    { name: 'banReason', type: 'string', required: false, max: MAX_SUBSPACE_MOD_REASON_CHARS, description: 'Shown to the banned user.' },
+    { name: 'banUntil', type: 'date', required: false, description: 'Temporary ban expiry (null = permanent).' },
+    { name: 'left', type: 'boolean', required: false, description: 'True once the user left (kept for bans); rejoining clears it.' },
+    { name: 'pending', type: 'boolean', required: false, description: 'A join request awaiting a moderator (private subspaces) — not yet a member.' },
+    { name: 'approvalRequested', type: 'boolean', required: false, description: 'An active member asked for posting approval (restricted subspaces).' },
+    {
+      name: 'userFlair',
+      type: 'object',
+      required: false,
+      description: 'The flair worn beside the member’s name in this subspace (null = none).',
+      children: [
+        { name: 'id', type: 'string', required: false, max: MAX_SUBSPACE_FLAIR_ID_CHARS, description: 'Template id (null for custom text).' },
+        { name: 'text', type: 'string', required: true, max: MAX_SUBSPACE_FLAIR_LABEL_CHARS, description: 'The text shown (a template’s label snapshot, or the custom text ≤40).' },
+        { name: 'emoji', type: 'string', required: false, max: MAX_SUBSPACE_ICON_CHARS, description: 'Optional emoji.' },
+        { name: 'color', type: 'string', required: false, max: MAX_SUBSPACE_ACCENT_CHARS, description: 'Optional CSS color (hex or named).' }
+      ]
+    }
+  ],
+  example: { memberKey: 'c0ffee…:5eed…', role: 'member', approved: false, banned: false, pending: false, approvalRequested: false, userFlair: { id: 'prism', text: 'Prism', emoji: '🔮', color: '#7c5cff' } }
+};
+
+const subspaceModlogSchema: ThingtimeSchema = {
+  id: 'subspace-modlog',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Subspace mod log entry',
+  summary: 'One moderator action in a subspace (append-only audit trail).',
+  detail:
+    'targetId = the subspace shareId, ownerId = the acting moderator. Written beside every ' +
+    'moderation mutation (remove/approve/pin/lock/flair/ban/unban/role/approve-poster/settings) so ' +
+    '/s/<slug>/mod can show who did what (member.accept / member.deny cover the Requests queue); listed via GET /api/v1/subspaces/modlog.',
+  createdVia: 'moderation mutations under /api/v1/subspaces/*',
+  fields: [
+    { name: 'action', type: 'string', required: true, max: 40, description: 'Action key, e.g. post.remove, member.ban.' },
+    { name: 'postId', type: 'id', required: false, description: 'Affected post/comment shareId.' },
+    { name: 'userId', type: 'id', required: false, description: 'Affected user id.' },
+    { name: 'reason', type: 'string', required: false, max: MAX_SUBSPACE_MOD_REASON_CHARS, description: 'Moderator note.' },
+    { name: 'detail', type: 'record', required: false, description: 'Small bounded extra (e.g. { flairId, role }).' }
+  ],
+  example: { action: 'post.remove', postId: '4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', reason: 'Rule 1' }
+};
+
+const subspaceTombstoneSchema: ThingtimeSchema = {
+  id: 'subspace-tombstone',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Subspace slug tombstone',
+  summary: 'Holds a deleted subspace’s slug so its deep links can’t be hijacked (control-plane row).',
+  detail:
+    'Written by POST /api/v1/subspaces/delete in the same transaction that removes the subspace thing; carries ' +
+    'the subspaceSlug uniqueKey the subspace held. targetId = the deleted subspace shareId, ownerId = its last ' +
+    `owner, who may re-found the slug immediately; anyone else only once the ${SUBSPACE_SLUG_HOLD_DAYS}-day hold ` +
+    'has passed (POST /api/v1/subspaces answers 409 until then). Re-founding the slug consumes the tombstone. ' +
+    'Never listed: /s/<slug> and GET /api/v1/subspaces/get answer 404 for a tombstoned slug.',
+  createdVia: 'POST /api/v1/subspaces/delete',
+  fields: [
+    { name: 'slug', type: 'string', required: true, max: MAX_SUBSPACE_SLUG_CHARS, description: 'The held slug.' },
+    { name: 'subspaceId', type: 'id', required: true, description: 'shareId of the deleted subspace.' },
+    { name: 'previousOwnerId', type: 'id', required: true, description: 'Who owned it at deletion (may re-found at once).' },
+    { name: 'deletedAt', type: 'date', required: true, description: 'When the subspace was deleted (the hold counts from here).' }
+  ],
+  example: { slug: 'rainbows', subspaceId: 'c0ffee12-dddd-4ddd-8ddd-000000000004', previousOwnerId: '5eed…', deletedAt: '2026-09-05T00:00:00.000Z' }
+};
+
+const subspaceReportSchema: ThingtimeSchema = {
+  id: 'subspace-report',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Subspace report',
+  summary: 'One viewer’s report of a post to a subspace’s moderators (relational row; the Reports queue groups them by post).',
+  detail:
+    'targetId = the subspace the report sits in (the post’s subspace when it was filed — a repeat re-files a row ' +
+    'in the subspace the post lives in now), ownerId = the reporter, acl ["tt:user"] — the OWNER acl: the ' +
+    'reporter can read their own row through the generic single read, every other viewer gets 404; the ' +
+    'moderators read the collection through the dedicated /reports endpoint, never through canView. One row per ' +
+    '(post, reporter) — uniqueness rides the root uniqueKeys namespace (`subspaceReportKey:<postId>:<reporterId>`): ' +
+    'reporting the same post again updates the reason / note (and re-opens a resolved row). Reports of a COMMENT ' +
+    'resolve to the root post (postId = the post; commentId keeps which comment was flagged). A post the ' +
+    'moderators already removed takes no new report (409). status open → resolved with a resolution: removed / ' +
+    'approved (a moderator’s `moderate` remove / approve settles every open report on the post) or dismissed ' +
+    '(POST /api/v1/subspaces/reports { postId, action: "dismiss" }). Control-plane storage — never billable ' +
+    'content. Written only by POST /api/v1/subspaces/report and settled by /moderate and /reports; deleted with ' +
+    'the subspace, with the post, and (the rows that flagged it) with a deleted comment.',
+  createdVia: 'POST /api/v1/subspaces/report',
+  fields: [
+    { name: 'postId', type: 'id', required: true, description: 'The reported (root) post’s shareId.' },
+    { name: 'commentId', type: 'id', required: false, description: 'The flagged comment’s shareId when a comment was reported (null for the post itself).' },
+    { name: 'reason', type: 'string', required: true, max: MAX_SUBSPACE_REPORT_REASON_CHARS, description: 'A rule title, a removal-reason id, or free text.' },
+    { name: 'note', type: 'string', required: false, max: MAX_SUBSPACE_REPORT_NOTE_CHARS, description: 'The reporter’s optional context (moderators only).' },
+    { name: 'status', type: 'enum', required: true, values: [...SUBSPACE_REPORT_STATUSES], description: 'open until a moderator settles it.' },
+    { name: 'resolution', type: 'enum', required: false, values: [...SUBSPACE_REPORT_RESOLUTIONS], description: 'How it was settled (null while open).' },
+    { name: 'resolvedById', type: 'id', required: false, description: 'The moderator who settled it (null while open).' },
+    { name: 'resolvedAt', type: 'date', required: false, description: 'When it was settled (null while open).' },
+    { name: 'reportKey', type: 'string', required: true, description: 'Unique `<postId>:<reporterId>` pair key.' }
+  ],
+  example: { postId: '4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', commentId: null, reason: 'No spam', note: 'Third ad this week from the same account', status: 'open', resolution: null, resolvedById: null, resolvedAt: null, reportKey: '4f6b2c1e…:5eed…' }
 };
 
 const subscriptionSchema: ThingtimeSchema = {
@@ -1932,8 +2495,16 @@ const friendThingSchema: ThingtimeSchema = {
 
 // Per-type notification switches users can flip in Settings → Notifications.
 // 'groups' is reserved for the future groups feature (the pref persists, no
-// emitter exists yet). Reads ALWAYS filter by the recipient's prefs, so a
-// fanned-out notification written before a pref flip stays hidden.
+// emitter exists yet). 'action-run' is the first SYSTEM type: Lopu telling you
+// an action you ran finished (or failed) — see emitSystemNotification. Reads
+// ALWAYS filter by the recipient's prefs, so a fanned-out notification written
+// before a pref flip stays hidden.
+//
+// The subspace-* family (api/utils/subspaces): join-request (a private-subspace
+// join request or a restricted-subspace "wants to post" request, to the mods),
+// join-accepted (to the requester), post-removed (to the author, preview =
+// the removal reason), report (a post report, to the mods), role (promoted /
+// demoted / made owner / "s/<slug> was deleted"), ban (banned / unbanned).
 export const NOTIFICATION_TYPES = [
   'friend-request',
   'friend-accepted',
@@ -1945,10 +2516,104 @@ export const NOTIFICATION_TYPES = [
   'reaction',
   'share',
   'mention',
-  'groups'
+  'groups',
+  'subspace-join-request',
+  'subspace-join-accepted',
+  'subspace-post-removed',
+  'subspace-report',
+  'subspace-role',
+  'subspace-ban',
+  'action-run'
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
+// Subspace notifications that are about the SUBSPACE (not a post) link to
+// /s/<slug>: the slug rides at the head of the preview ("s/<slug> · …") while
+// targetId carries the subspace shareId, so the bell, the email CTA and API
+// clients can all deep-link without a projection change. Post-scoped
+// subspace notifications (post-removed, report) set postId like every other
+// post notification and link to /post/<id>.
+export const SUBSPACE_NOTIFICATION_TYPES: readonly NotificationType[] = [
+  'subspace-join-request',
+  'subspace-join-accepted',
+  'subspace-post-removed',
+  'subspace-report',
+  'subspace-role',
+  'subspace-ban'
+];
+export const subspaceNotificationPreview = (slug: string, detail: string): string => {
+  const text = String(detail || '').replace(/\s+/g, ' ').trim();
+  return text ? `s/${slug} · ${text}` : `s/${slug}`;
+};
+const SUBSPACE_PREVIEW_SLUG_PATTERN = /^s\/([a-z0-9_]{1,30})(?=\s|$)/;
+export const subspaceSlugFromNotificationPreview = (preview: unknown): string | null => {
+  const match = SUBSPACE_PREVIEW_SLUG_PATTERN.exec(typeof preview === 'string' ? preview.trim() : '');
+  return match ? match[1] : null;
+};
+// The detail half of a subspace preview ("you are now a moderator 🎩") with
+// the slug head stripped — anything that keys copy off the preview text (the
+// bell's verb, an email line) must match against THIS, never the whole
+// preview: a slug like s/deleted_scenes or s/uplifted_minds would otherwise
+// read as a deletion / a lifted ban.
+const SUBSPACE_PREVIEW_HEAD_PATTERN = /^s\/[a-z0-9_]{1,30}(?:\s*·\s*|\s+|$)/;
+export const subspaceNotificationDetail = (preview: unknown): string => {
+  const text = typeof preview === 'string' ? preview.trim() : '';
+  return SUBSPACE_PREVIEW_SLUG_PATTERN.test(text) ? text.replace(SUBSPACE_PREVIEW_HEAD_PATTERN, '').trim() : text;
+};
+// Notification families — what the history page (/notifications) filters by,
+// and how a row knows whether a person acted (social/engagement/feed) or the
+// platform is speaking through Lopu (system). Every type belongs to exactly
+// one category; app/schemas/notificationCategories.test.ts keeps the map
+// exhaustive when a type is added.
+export const NOTIFICATION_CATEGORIES = ['social', 'engagement', 'feed', 'system'] as const;
+export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
+
+export const NOTIFICATION_CATEGORY_META: Record<NotificationCategory, { label: string; emoji: string; hint: string }> = {
+  social: { label: 'Social', emoji: '🤝', hint: 'Follows, friend requests, groups, and subspace membership' },
+  engagement: { label: 'Engagement', emoji: '💬', hint: 'Comments, replies, reactions, shares, mentions, and subspace moderation' },
+  feed: { label: 'Feed', emoji: '📰', hint: 'New posts from people you follow and your friends' },
+  system: { label: 'System', emoji: '⚙️', hint: 'Action runs and other platform notes from Lopu' }
+};
+
+export const NOTIFICATION_TYPE_CATEGORY: Record<NotificationType, NotificationCategory> = {
+  'friend-request': 'social',
+  'friend-accepted': 'social',
+  'new-follower': 'social',
+  groups: 'social',
+  comment: 'engagement',
+  reply: 'engagement',
+  reaction: 'engagement',
+  share: 'engagement',
+  mention: 'engagement',
+  'post-from-followed': 'feed',
+  'post-from-friend': 'feed',
+  // subspaces: membership/role events are social, moderation of your content
+  // and the mod queue are engagement
+  'subspace-join-request': 'social',
+  'subspace-join-accepted': 'social',
+  'subspace-role': 'social',
+  'subspace-ban': 'social',
+  'subspace-post-removed': 'engagement',
+  'subspace-report': 'engagement',
+  'action-run': 'system'
+};
+
+export const isNotificationType = (value: unknown): value is NotificationType =>
+  typeof value === 'string' && (NOTIFICATION_TYPES as readonly string[]).includes(value);
+
+export const isNotificationCategory = (value: unknown): value is NotificationCategory =>
+  typeof value === 'string' && (NOTIFICATION_CATEGORIES as readonly string[]).includes(value);
+
+// Unknown/legacy types read as social so a stray row never breaks a filter.
+export const notificationCategoryOf = (type: unknown): NotificationCategory =>
+  isNotificationType(type) ? NOTIFICATION_TYPE_CATEGORY[type] : 'social';
+
+export const notificationTypesInCategory = (category: NotificationCategory): NotificationType[] =>
+  NOTIFICATION_TYPES.filter((type) => NOTIFICATION_TYPE_CATEGORY[type] === category);
+
+// The platform's own voice on a system notification: no user thing exists for
+// this id, so actor enrichment falls back to the stored 'Lopu' snapshot.
+export const SYSTEM_NOTIFICATION_ACTOR_ID = 'thingtime';
 // Email-channel notification switches. Every bell type can also send an email,
 // plus email-only types (weekly-summary) that never mint a bell notification.
 export const EMAIL_ONLY_NOTIFICATION_TYPES = ['weekly-summary'] as const;
@@ -1956,8 +2621,11 @@ export const EMAIL_NOTIFICATION_TYPES = [...NOTIFICATION_TYPES, ...EMAIL_ONLY_NO
 export type EmailNotificationType = (typeof EMAIL_NOTIFICATION_TYPES)[number];
 
 // High-volume types whose EMAIL channel defaults OFF (the bell stays ON): a
-// busy follow graph would otherwise turn every post into an email.
-export const EMAIL_DEFAULT_OFF_TYPES: readonly string[] = ['post-from-followed', 'post-from-friend'];
+// busy follow graph would otherwise turn every post into an email, a scripted
+// action can run sixty times a minute, and the mod-queue traffic of a big
+// subspace (join requests, reports) is the same class of firehose —
+// moderators opt in per type.
+export const EMAIL_DEFAULT_OFF_TYPES: readonly string[] = ['post-from-followed', 'post-from-friend', 'action-run', 'subspace-join-request', 'subspace-report'];
 
 export type NotificationChannelMasters = { push: boolean; email: boolean };
 export type NormalizedNotificationPrefs = {
@@ -2003,20 +2671,50 @@ const notificationThingSchema: ThingtimeSchema = {
   detail:
     'Minted by the server when someone else follows you, sends/accepts a friend request, ' +
     'comments, replies, reacts, shares, @mentions you in a post or comment, or (fan-out, ' +
-    'capped) posts while you follow them. ' +
-    'ownerId is the recipient, targetId the subject thing (post/comment/user), root readAt ' +
-		"flips when read. Listed via GET /api/v1/notifications (filtered by the recipient's " +
-    'meta.notificationPrefs), marked via POST /api/v1/notifications/read. Always acl ' +
-    '["tt:user"]; the generic things CRUD refuses this kind.',
-  createdVia: 'server-side emission (social/engagement events)',
+    'capped) posts while you follow them — by subspace moderation (subspace-* types: join ' +
+    'requests/accepts, post removals, reports, role changes incl. ownership transfer and deletion, ' +
+    'bans; subspace-scoped ones put "s/<slug> · …" in preview and the subspace shareId in targetId, ' +
+    'post-scoped ones set postId) — plus SYSTEM notes (category system, actorId ' +
+    '"thingtime", actor name Lopu) such as action-run, written when an action you ran ' +
+    'finishes. ownerId is the recipient, targetId the subject thing (post/comment/user/subspace, ' +
+    'or the action-run record), root readAt flips when read. Listed via ' +
+    "GET /api/v1/notifications (filtered by the recipient's meta.notificationPrefs, " +
+    'searchable and filterable by category/type/unread/date for the /notifications history ' +
+    'page), marked via POST /api/v1/notifications/read. Always acl ["tt:user"]; the generic ' +
+    'things CRUD refuses this kind. A recipient keeps their newest 10,000.',
+  createdVia: 'server-side emission (social/engagement events + system notes)',
   fields: [
-    { name: 'type', type: 'enum', required: true, values: [...NOTIFICATION_TYPES], description: 'Notification type (drives prefs + copy).' },
-    { name: 'actorId', type: 'id', required: true, description: 'The user whose action triggered this.' },
-    { name: 'actorName', type: 'string', required: false, description: 'Actor display name snapshot.' },
+    { name: 'type', type: 'enum', required: true, values: [...NOTIFICATION_TYPES], description: 'Notification type (drives prefs, category + copy).' },
+    { name: 'actorId', type: 'id', required: true, description: 'The user whose action triggered this, or "thingtime" for system notes.' },
+    { name: 'actorName', type: 'string', required: false, description: 'Actor display name snapshot (Lopu for system notes).' },
+    { name: 'actorUsername', type: 'string', required: false, description: 'Actor username snapshot — searchable in history.' },
     { name: 'postId', type: 'id', required: false, description: 'Related post for click-through.' },
-    { name: 'preview', type: 'string', required: false, max: 140, description: 'Short content preview.' }
+    { name: 'preview', type: 'string', required: false, max: 140, description: 'Short content preview, or the detail line of a system note.' },
+    { name: 'title', type: 'string', required: false, max: 140, description: 'System notes only: the headline shown instead of "<actor> <verb>".' },
+    { name: 'href', type: 'string', required: false, max: 300, description: 'System notes only: internal click-through path (e.g. /actions/<key>).' },
+    { name: 'outcome', type: 'enum', required: false, values: ['ok', 'error'], description: 'System notes only: whether the thing being reported succeeded.' }
   ],
   example: { type: 'new-follower', actorId: '664f1c2a9d3e5b0012345678', actorName: 'Rick Deckard' }
+};
+
+const pushDeviceThingSchema: ThingtimeSchema = {
+  id: 'push-device',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Push Device',
+  summary: 'A protected APNs delivery target owned by one Thingtime account.',
+  detail:
+    'Registered only through /api/v1/notifications/devices. The public crystal contains platform, ' +
+    'environment, and server-selected topic metadata; the APNs token is encrypted-at-rest-compatible ' +
+    'binary secure data and is never returned by the API or exposed through generic Thing CRUD.',
+  createdVia: 'POST /api/v1/notifications/devices',
+  fields: [
+    { name: 'platform', type: 'enum', required: true, values: ['ios', 'watchos'], description: 'Apple device family.' },
+    { name: 'environment', type: 'enum', required: true, values: ['sandbox', 'production'], description: 'APNs gateway environment.' },
+    { name: 'topic', type: 'string', required: true, description: 'Server-selected application bundle topic.' }
+  ],
+  example: { platform: 'watchos', environment: 'sandbox', topic: 'com.thingtime.appletime.watchkitapp' }
 };
 
 // Folders: the Drive-style organization kind behind /things. A folder is an
@@ -2073,7 +2771,13 @@ const sessionSchema: ThingtimeSchema = {
       description:
         'Browser cookie session, service Bearer token, app-scoped grant, sandbox grant, personal access token, or one-time desktop OAuth code.'
     },
-    { name: 'expiresAt', type: 'date', required: false, description: 'Expiry (null = non-expiring service token).' },
+    {
+      name: 'expiresAt',
+      type: 'date',
+      required: false,
+      description:
+        'Expiry (null = non-expiring service token). Revoking a non-expiring session stamps a reap date here so the TTL index can clear the dead row; an existing expiry is never overwritten.'
+    },
     { name: 'revokedAt', type: 'date', required: false, description: 'Set when revoked — token stops working immediately.' },
     { name: 'meta', type: 'record', required: false, description: 'Session metadata.' },
     { name: 'schemaVersion', type: 'number', required: true, description: 'Collection schema version.' },
@@ -2682,6 +3386,205 @@ const chatMessageSchema: ThingtimeSchema = {
   example: { text: 'hello from the messenger 👋' }
 };
 
+// The Lopu model catalog: one protected, system-owned control-plane Thing per
+// base model in AI_WORKFLOW_BASE_MODELS (the `default` sentinel is routing,
+// not a model, so it never becomes a doc). Seeded idempotently by
+// api/utils/ai/models.ts — the catalog fields are code and get re-stamped on
+// every seed, `enabled` is the single admin-owned toggle — so the kind rides
+// PROTECTED_THINGTIME and CONTROL_PLANE_STORAGE_THINGTIMES with no crystal
+// sanitizer: generic Thing CRUD can neither mint a fake model nor flip
+// availability, and the catalog never bills anyone.
+const aiModelSchema: ThingtimeSchema = {
+  id: 'ai-model',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'AI model',
+  summary: 'One catalog model Lopu can chat with — provider, effort tiers, speeds, and the admin enabled toggle.',
+  detail:
+    'Written only by the catalog seed (api/utils/ai/models.ts): ownerId "system", storageClass "control", ' +
+    'acl ["tt:all"], deterministic shareId ai-model-<modelId>, root uniqueKeys aiModel:<modelId>. The seed ' +
+    'runs once per process on the first catalog read and on demand through POST /api/v1/admin/ai/models ' +
+    '{ seed: true }; it inserts missing rows and heals drifted catalog fields but never touches enabled. ' +
+    'GET /api/v1/ai/models projects every row publicly with available = enabled && provider key configured; ' +
+    'POST /api/v1/admin/ai/models { id, enabled } is the only writer of the toggle. Direct create/update/' +
+    'delete through the generic things routes is refused and the rows never appear in generic listings.',
+  createdVia: 'Seeded by api/utils/ai/models.ts (first catalog read, or POST /api/v1/admin/ai/models { seed: true })',
+  fields: [
+    { name: 'modelId', type: 'string', required: true, max: 128, description: 'Provider-native model id; equals the catalog id and the shareId suffix.' },
+    { name: 'label', type: 'string', required: true, max: 80, description: 'Display label from the catalog.' },
+    { name: 'provider', type: 'enum', required: true, values: ['anthropic', 'openai'], description: 'Which API serves the model.' },
+    { name: 'efforts', type: 'string[]', required: true, max: 8, description: 'Selectable reasoning-effort tiers; empty means provider-default effort only.' },
+    { name: 'speeds', type: 'string[]', required: true, max: 2, description: 'Offered lanes: normal, plus fast where the provider sells one.' },
+    { name: 'family', type: 'enum', required: true, values: ['claude', 'gpt', 'o-series'], description: 'Derived model family for grouping in pickers.' },
+    { name: 'enabled', type: 'boolean', required: true, description: 'Admin toggle; a disabled model is listed but never selectable.' },
+    { name: 'sortOrder', type: 'number', required: true, min: 0, description: 'Position in the base-model catalog.' },
+    { name: 'contextWindow', type: 'number', required: false, min: 1, description: 'Context window in tokens when the catalog knows it.' },
+    { name: 'notes', type: 'string', required: false, max: 500, description: 'Optional admin note.' }
+  ],
+  example: {
+    modelId: 'claude-opus-5',
+    label: 'Claude Opus 5',
+    provider: 'anthropic',
+    efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+    speeds: ['normal', 'fast'],
+    family: 'claude',
+    enabled: true,
+    sortOrder: 2,
+    contextWindow: 1000000
+  }
+};
+
+// Lopu usage accounting and credits (design note "Lopu verified access, usage
+// accounting and credits" §2–§3): three protected, owner-private control-plane
+// kinds written ONLY by api/utils/lopu/accounting.ts — a forged account or
+// ledger row would be free credits, so generic Thing CRUD refuses them and
+// they never appear in generic listings. No crystal sanitizer, no new index:
+// the account rides the root uniqueKeys index (lopuAccount:<userId>), the
+// rows the ownerId/thingtime/createdAt index, and "one pending top-up
+// request at a time" is the lopuTopupPending:<userId> unique key.
+const lopuAccountSchema: ThingtimeSchema = {
+  id: 'lopu-account',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Lopu account',
+  summary: 'One per user — the Lopu credit balance plus lifetime and monthly usage counters.',
+  detail:
+    'Created lazily by ensureLopuAccount (the first gated Lopu turn or GET /api/v1/lopu/account), which grants the ' +
+    'Thingtime.LopuAccess starterCredits exactly once. ownerId = the user, acl ["tt:user"], storageClass "control", root ' +
+    'uniqueKeys lopuAccount:<userId>. Every debit is ONE $inc on this row (balance, lifetime, month — the month counters ' +
+    'reset when monthKey moves on), guarded by the write id in appliedIds so a retried $inc cannot land twice; the ' +
+    'balance may go negative by at most one turn and the next turn is refused with 402 LOPU_NO_CREDITS. A billed turn ' +
+    'also holds an inflight slot for as long as the provider call runs (429 LOPU_TURN_IN_FLIGHT past the cap), so ' +
+    'concurrent turns cannot each spend the same last credit. 1 credit = 1 USD of list price = 1,000,000 micros.',
+  createdVia: 'api/utils/lopu/accounting.ts ensureLopuAccount (first gated Lopu turn, GET /api/v1/lopu/account, admin credit grant)',
+  fields: [
+    { name: 'balanceMicros', type: 'number', required: true, description: 'Current credit balance in micro-USD (signed; negative by at most one turn).' },
+    { name: 'lifetimeCostMicros', type: 'number', required: true, min: 0, description: 'Micros ever debited from this account.' },
+    { name: 'lifetimeInputTokens', type: 'number', required: true, min: 0, description: 'Input tokens across every recorded turn (all billings).' },
+    { name: 'lifetimeOutputTokens', type: 'number', required: true, min: 0, description: 'Output tokens across every recorded turn (all billings).' },
+    { name: 'turns', type: 'number', required: true, min: 0, description: 'Recorded turns (chat, voice, voice sessions).' },
+    { name: 'monthKey', type: 'string', required: true, max: 7, description: 'UTC month the month counters belong to (YYYY-MM).' },
+    { name: 'monthCostMicros', type: 'number', required: true, min: 0, description: 'Micros debited in monthKey.' },
+    { name: 'monthTurns', type: 'number', required: true, min: 0, description: 'Turns recorded in monthKey.' },
+    { name: 'starterGranted', type: 'boolean', required: true, description: 'The one-time starter grant was applied (also true when starterCredits was 0).' },
+    { name: 'starterMicros', type: 'number', required: true, min: 0, description: 'The starter amount that was granted, in micros.' },
+    { name: 'lowBalanceNotifiedAt', type: 'string', required: false, max: 40, description: 'When the balance last dropped under the low-balance threshold (null once lifted).' },
+    { name: 'inflight', type: 'number', required: false, min: 0, description: 'Billed turns currently running for this account (the concurrency cap the gate enforces).' },
+    { name: 'inflightSince', type: 'string', required: false, max: 40, description: 'When a slot was last taken — a slot older than the TTL is swept by the next reservation.' },
+    { name: 'appliedIds', type: 'string[]', required: false, max: 8, description: 'The last few write ids applied to the balance (bounded by $slice) so a retried $inc is a no-op.' }
+  ],
+  example: {
+    balanceMicros: 1400000,
+    lifetimeCostMicros: 600000,
+    lifetimeInputTokens: 300,
+    lifetimeOutputTokens: 150,
+    turns: 1,
+    monthKey: '2026-09',
+    monthCostMicros: 600000,
+    monthTurns: 1,
+    starterGranted: true,
+    starterMicros: 2000000
+  }
+};
+
+const lopuUsageSchema: ThingtimeSchema = {
+  id: 'lopu-usage',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Lopu usage',
+  summary: 'One row per Lopu turn — tokens, the list price, and what was actually debited.',
+  detail:
+    'Written by debitLopuUsage after every chat reply, voice turn and direct-voice session (ownerId = the user, acl ' +
+    '["tt:user"], storageClass "control"; the chat row’s shareId derives from the requestId so a retried debit never ' +
+    'doubles). billing says who paid: "thingtime" (server keys — debited), "byo" (the viewer’s own Secure Vault provider — ' +
+    'recorded, never debited) or "free" (the canned fallback). costMicros is the list price from api/utils/ai/pricing.ts ' +
+    '(priced: false for a model outside the pricing table, estimated: true for a sibling-priced row); debitedMicros is ' +
+    'the amount taken from the account. Listed through GET /api/v1/lopu/account/history beside the debits that point at it.',
+  createdVia: 'api/utils/lopu/accounting.ts debitLopuUsage (chats reply, voice reply, voice session)',
+  fields: [
+    { name: 'chatId', type: 'string', required: false, max: 160, description: 'The Lopu conversation (chat turns).' },
+    { name: 'requestId', type: 'string', required: false, max: 160, description: 'The client request id of the turn.' },
+    { name: 'surface', type: 'enum', required: true, values: ['chat', 'voice', 'voice-session'], description: 'Which Lopu surface ran the turn.' },
+    { name: 'provider', type: 'string', required: true, max: 40, description: 'claude | openai | vault | test | fallback, or the vault connection kind.' },
+    { name: 'providerLabel', type: 'string', required: false, max: 80, description: 'The vault connection’s display name (byo turns).' },
+    { name: 'model', type: 'string', required: false, max: 128, description: 'The model that answered.' },
+    { name: 'billing', type: 'enum', required: true, values: ['thingtime', 'byo', 'free'], description: 'Who paid for the turn.' },
+    { name: 'inputTokens', type: 'number', required: true, min: 0, description: 'Uncached input tokens.' },
+    { name: 'outputTokens', type: 'number', required: true, min: 0, description: 'Output tokens.' },
+    { name: 'cacheReadTokens', type: 'number', required: true, min: 0, description: 'Prompt-cache read tokens when the provider reported them.' },
+    { name: 'cacheWriteTokens', type: 'number', required: true, min: 0, description: 'Prompt-cache write tokens when the provider reported them.' },
+    { name: 'costMicros', type: 'number', required: true, min: 0, description: 'List price of the turn in micro-USD.' },
+    { name: 'priced', type: 'boolean', required: true, description: 'The model has a pricing row.' },
+    { name: 'estimated', type: 'boolean', required: true, description: 'The pricing row is a sibling estimate.' },
+    { name: 'debitedMicros', type: 'number', required: true, min: 0, description: 'Micros actually taken from the account (0 for byo / free).' },
+    { name: 'toolCalls', type: 'number', required: true, min: 0, description: 'Tool executions in the turn.' },
+    { name: 'hops', type: 'number', required: true, min: 0, description: 'Model hops in the turn.' },
+    { name: 'durationMs', type: 'number', required: true, min: 0, description: 'Wall-clock time of the turn.' }
+  ],
+  example: {
+    chatId: 'lopu-chat-7d1f2c1a-3b7e-4d0a-9c1d-000000000001',
+    requestId: '0f7d2c3a-8b1e-4c2d-9a4f-000000000002',
+    surface: 'chat',
+    provider: 'claude',
+    model: 'claude-opus-5',
+    billing: 'thingtime',
+    inputTokens: 1200,
+    outputTokens: 380,
+    cacheReadTokens: 8000,
+    cacheWriteTokens: 0,
+    costMicros: 19500,
+    priced: true,
+    estimated: false,
+    debitedMicros: 19500,
+    toolCalls: 2,
+    hops: 3,
+    durationMs: 8400
+  }
+};
+
+const lopuCreditSchema: ThingtimeSchema = {
+  id: 'lopu-credit',
+  version: 1,
+  kind: 'crystal',
+  collection: null,
+  title: 'Lopu credit ledger row',
+  summary: 'One signed movement of a Lopu credit balance, or a top-up request waiting for an admin.',
+  detail:
+    'The ledger (ownerId = the user, acl ["tt:user"], storageClass "control"): entry "starter" (the one-time grant), ' +
+    '"grant" / "topup" / "adjust" / "refund" (admin movements through POST /api/v1/admin/lopu/credits, adjust and refund ' +
+    'may be negative), "debit" (one per debited turn, usageId points at the lopu-usage row) — each carrying ' +
+    'balanceAfterMicros — and "request" (POST /api/v1/lopu/account/topup-request: amountMicros is the requested amount, ' +
+    'balanceAfterMicros null, requestStatus pending → approved | declined; while pending the row also carries the root ' +
+    'uniqueKeys lopuTopupPending:<userId>, so an account can only have one open request). Newest first through ' +
+    'GET /api/v1/lopu/account/history.',
+  createdVia: 'api/utils/lopu/accounting.ts (ensureLopuAccount, debitLopuUsage, grantLopuCredits, createLopuTopupRequest, resolveLopuTopupRequest)',
+  fields: [
+    { name: 'entry', type: 'enum', required: true, values: ['starter', 'grant', 'topup', 'debit', 'adjust', 'refund', 'request'], description: 'What kind of movement or request this is.' },
+    { name: 'amountMicros', type: 'number', required: true, description: 'Signed movement in micro-USD (a request carries the requested amount, positive).' },
+    { name: 'balanceAfterMicros', type: 'number', required: false, description: 'The balance after the movement (null on a request).' },
+    { name: 'reason', type: 'string', required: true, max: 300, description: 'Why — the admin’s reason, the turn, or the request kind.' },
+    { name: 'actorId', type: 'string', required: true, max: 128, description: 'Who caused it: the admin, the user, or "system".' },
+    { name: 'usageId', type: 'string', required: false, max: 160, description: 'The lopu-usage row a debit paid for.' },
+    { name: 'requestId', type: 'string', required: false, max: 160, description: 'The request row a topup grant answered.' },
+    { name: 'requestStatus', type: 'enum', required: false, values: ['pending', 'approved', 'declined'], description: 'Request rows only.' },
+    { name: 'note', type: 'string', required: false, max: 500, description: 'The user’s note on a request, or the admin’s note on a grant.' },
+    { name: 'resolvedAt', type: 'string', required: false, max: 40, description: 'When a request was approved or declined.' },
+    { name: 'resolvedBy', type: 'string', required: false, max: 128, description: 'The admin who resolved a request.' },
+    { name: 'grantedMicros', type: 'number', required: false, min: 0, description: 'What an approved request actually granted.' }
+  ],
+  example: {
+    entry: 'debit',
+    amountMicros: -19500,
+    balanceAfterMicros: 1980500,
+    reason: 'Chat turn · claude-opus-5',
+    actorId: '64f000000000000000000002',
+    usageId: 'lopu-usage-3f9c2a1b7d5e4c6a8b0f1e2d3c4b5a69'
+  }
+};
+
 const aiConnectionSchema: ThingtimeSchema = {
   id: 'ai-connection',
   version: 1,
@@ -2738,7 +3641,7 @@ const deviceSchema: ThingtimeSchema = {
 	fields: [
 		{ name: 'deviceKey', type: 'string', required: true, description: 'Server-hashed unique owner/device key.' },
 		{ name: 'name', type: 'string', required: true, max: 120, description: 'User-facing computer name.' },
-		{ name: 'platform', type: 'enum', required: true, values: ['macos', 'windows', 'linux'], description: 'Operating-system family.' },
+		{ name: 'platform', type: 'enum', required: true, values: ['macos', 'windows', 'linux', 'watchos'], description: 'Operating-system family.' },
 		{ name: 'model', type: 'string', required: false, max: 160, description: 'Bounded hardware model label.' },
 		{ name: 'osVersion', type: 'string', required: false, max: 80, description: 'Bounded OS version label.' },
 		{ name: 'appVersion', type: 'string', required: false, max: 80, description: 'Thingtime node version.' },
@@ -3128,6 +4031,9 @@ export const PROTECTED_THINGTIME = [
   'feed-algorithm',
   'waitlist',
 	'app',
+  // audience groups (custom visibility) — managed only via /api/v1/groups
+  'group',
+  'group-member',
   'subscription-tier',
   'subscription',
   'account-link',
@@ -3139,6 +4045,7 @@ export const PROTECTED_THINGTIME = [
   'follow',
   'friend',
   'notification',
+  'push-device',
   // auth-plane credentials: a forged passkey doc would BE a working login
   // credential, so these are server-minted end to end (auth/passkeys.ts)
   'passkey',
@@ -3152,7 +4059,16 @@ export const PROTECTED_THINGTIME = [
 	...DEVICE_THINGTIME,
   // executor-minted run records — a forged action-run would falsify the
   // audit trail the /actions inspector shows (api/utils/actions/)
-  'action-run'
+  'action-run',
+  // the Lopu model catalog (api/utils/ai/models.ts): catalog fields are code
+  // and `enabled` is admin-only, so nothing may mint a model or flip
+  // availability through generic Thing CRUD
+  'ai-model',
+  // Lopu credits and usage (api/utils/lopu/accounting.ts): a forged account,
+  // ledger row or usage row would be free credits or a falsified bill
+  'lopu-account',
+  'lopu-usage',
+  'lopu-credit'
 ] as const;
 export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) => (PROTECTED_THINGTIME as readonly string[]).includes(id));
 
@@ -3171,7 +4087,7 @@ export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) =>
 // unreachable, unaccounted, and never pruned again — so create/run/delete
 // cycles would re-open exactly the unbounded accumulation the retention cap
 // closes. Cascading is also the only way an owner can ever remove them.
-export const CASCADE_CHILD_THINGTIME = [ATTACHMENT_THINGTIME, 'comment', 'reaction', 'save', 'action-run'] as const;
+export const CASCADE_CHILD_THINGTIME = [ATTACHMENT_THINGTIME, 'comment', 'reaction', 'save', 'action-run', UPDOWN_THINGTIME] as const;
 
 // Messenger kinds are owned by /api/v1/chats* end to end. Create/update are
 // already refused by the missing crystal sanitizers, and DELETE must be too:
@@ -3310,6 +4226,12 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   actionRunSchema,
   saveThingSchema,
   voteSchema,
+  updownSchema,
+  subspaceSchema,
+  subspaceMemberSchema,
+  subspaceModlogSchema,
+  subspaceTombstoneSchema,
+  subspaceReportSchema,
   folderSchema,
   appSchema,
   appDataSchema,
@@ -3320,6 +4242,12 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   appStorageLedgerSchema,
 	serviceQuotaSchema,
   migrationDiagnosticSchema,
+  // the Lopu model catalog (protected, seeded by api/utils/ai/models.ts)
+  aiModelSchema,
+  // Lopu credits + usage accounting (protected, api/utils/lopu/accounting.ts)
+  lopuAccountSchema,
+  lopuUsageSchema,
+  lopuCreditSchema,
   ...ciControlSchemas,
   // social graph + notifications (protected, server-minted). The `follow`
   // kind registers ONCE, below with the messenger family: followSchema is the
@@ -3327,6 +4255,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   // supersedes the earlier followThingSchema (crystal.follow marker) draft.
   friendThingSchema,
   notificationThingSchema,
+  pushDeviceThingSchema,
   // auth-plane credentials (protected, server-minted by auth/passkeys.ts)
   passkeyThingSchema,
   passkeyAppLinkThingSchema,
@@ -3473,6 +4402,12 @@ const sanitizeMediaLayout = (value: unknown): { ok: true; mediaLayout: PostMedia
 	return { ok: true, mediaLayout: { mode, columns, ...(spans ? { spans } : {}) } };
 };
 
+// Post → subspace references are shareIds (uuid / seeded ids) and flair ids
+// are short slugs; both are bounded here so the multikey/lookup indexes never
+// see arbitrary strings.
+const SUBSPACE_REF_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+const SUBSPACE_FLAIR_ID_PATTERN = /^[A-Za-z0-9_-]{1,40}$/;
+
 const sanitizePostCrystal = (
 	input: Record<string, unknown>,
 	appliedIds: string[],
@@ -3575,6 +4510,32 @@ const sanitizePostCrystal = (
 	const layout = sanitizeMediaLayout(input.mediaLayout);
 	if (layout.ok === false) return layout;
 
+	// Subspace vocabulary (title / subspaceId / flairId). Shape-only here — the
+	// registry is pure; whether the author may post into that subspace with
+	// that flair is decided by api/utils/subspaces/gate.ts on every write.
+	// Empty/null values drop the key, so a PATCH with `title: ''` clears the
+	// headline and `subspaceId: null` pulls the post out of its subspace.
+	if (input.title !== undefined && input.title !== null && typeof input.title !== 'string') {
+		return fail(400, 'title must be a string');
+	}
+	const title = typeof input.title === 'string' ? input.title.replace(/\s+/g, ' ').trim() : '';
+	if (title.length > MAX_POST_TITLE_CHARS) return fail(400, `Post title is too long (max ${MAX_POST_TITLE_CHARS})`);
+	let subspaceId: string | null = null;
+	if (input.subspaceId !== undefined && input.subspaceId !== null && input.subspaceId !== '') {
+		if (typeof input.subspaceId !== 'string' || !SUBSPACE_REF_PATTERN.test(input.subspaceId.trim())) {
+			return fail(400, 'subspaceId must be a subspace id');
+		}
+		subspaceId = input.subspaceId.trim();
+	}
+	let flairId: string | null = null;
+	if (input.flairId !== undefined && input.flairId !== null && input.flairId !== '') {
+		if (typeof input.flairId !== 'string' || !SUBSPACE_FLAIR_ID_PATTERN.test(input.flairId.trim())) {
+			return fail(400, 'flairId must be a flair id');
+		}
+		flairId = input.flairId.trim();
+	}
+	if (flairId && !subspaceId) return fail(400, 'Flairs belong to subspace posts — set subspaceId too');
+
 	return {
 		ok: true,
 		crystal: {
@@ -3584,7 +4545,10 @@ const sanitizePostCrystal = (
 			images,
 			listing,
 			thing,
-			...(layout.mediaLayout ? { mediaLayout: layout.mediaLayout } : {})
+			...(layout.mediaLayout ? { mediaLayout: layout.mediaLayout } : {}),
+			...(title ? { title } : {}),
+			...(subspaceId ? { subspaceId } : {}),
+			...(flairId ? { flairId } : {})
 		}
 	};
 };
@@ -4342,13 +5306,22 @@ const isSafeWebpageCssValue = (value: string): boolean => {
 	const urlMatches = lower.matchAll(/url\(\s*['"]?([^'")]*)/g);
 	for (const match of urlMatches) {
 		const target = (match[1] || '').trim();
-		if (!/^(https:\/\/|\/(?!\/)|data:image\/)/.test(target)) return false;
+		if (!/^(https:\/\/|\/(?![/\\])|data:image\/)/.test(target)) return false;
 	}
 	return true;
 };
 
+// Site-relative or explicit https. The second character matters: the WHATWG URL
+// parser folds `\` into `/` for special schemes, so `/\evil.example` resolves to
+// https://evil.example — a protocol-relative URL wearing a site-relative coat.
+// Both slash shapes are refused so "site-relative" really means same-origin.
 const isSafeWebpageMediaSrc = (value: string): boolean =>
-	/^(https:\/\/|\/(?!\/))/.test(value) && !/\s/.test(value);
+	/^(https:\/\/|\/(?![/\\]))/.test(value) && !/\s/.test(value);
+
+// A text block's link target: the media-src screen plus mailto:/tel: (a page
+// button or nav link), never javascript:/data:/protocol-relative.
+const isSafeWebpageHref = (value: string): boolean =>
+	isSafeWebpageMediaSrc(value) || /^(mailto:|tel:)[^\s/][^\s]*$/i.test(value);
 
 const sanitizeWebpageBlock = (
 	input: unknown,
@@ -4441,6 +5414,56 @@ const sanitizeWebpageBlock = (
 			}
 			if (Object.keys(args).length) block.args = args;
 		}
+		// source: a DATA BINDING — the page runtime runs this action AS THE
+		// VIEWER (delegated, owner-only resolution like a ttAction click) when
+		// the page loads and again after any control on the page runs, and
+		// exposes the result to the component template as `result`. The action
+		// is named by actionKey (never a foreign id), inputs are bounded
+		// scalars whose strings may carry {arg} / {query.<name>} tokens, and
+		// nothing here widens what the viewer could run by hand.
+		if (raw.source !== undefined && raw.source !== null) {
+			if (typeof raw.source !== 'object' || Array.isArray(raw.source)) return fail(400, `Block ${id} source must be an object`);
+			const rawSource = raw.source as Record<string, unknown>;
+			const action = typeof rawSource.action === 'string' ? rawSource.action.trim() : '';
+			if (!action || action.length > MAX_ACTION_KEY_CHARS || !ACTION_KEY_PATTERN.test(action)) {
+				return fail(400, `Block ${id} source.action must be an actionKey (lowercase-dashed slug)`);
+			}
+			const source: Record<string, unknown> = { action };
+			if (rawSource.inputs !== undefined && rawSource.inputs !== null) {
+				if (typeof rawSource.inputs !== 'object' || Array.isArray(rawSource.inputs)) {
+					return fail(400, `Block ${id} source.inputs must be an object of scalar input values`);
+				}
+				const inputs: Record<string, unknown> = {};
+				const entries = Object.entries(rawSource.inputs as Record<string, unknown>);
+				if (entries.length > MAX_ACTION_INPUTS) return fail(400, `Block ${id} source.inputs can hold at most ${MAX_ACTION_INPUTS} entries`);
+				for (const [key, value] of entries) {
+					if (!COMPONENT_ARG_NAME_PATTERN.test(key) || key.length > MAX_COMPONENT_ARG_NAME_CHARS) {
+						return fail(400, `Block ${id} source input "${key.slice(0, 40)}" is not a valid input name`);
+					}
+					const scalar = sanitizeComponentArgScalar(value, MAX_COMPONENT_SAVED_ARG_CHARS);
+					if (scalar === null && value !== null) return fail(400, `Block ${id} source input ${key} must be a string, number, or boolean`);
+					if (scalar !== null) inputs[key] = scalar;
+				}
+				if (Object.keys(inputs).length) source.inputs = inputs;
+			}
+			// refresh: 'load' (default — again after every control run), 'manual'
+			// (once, on load), or 'interval' (also every intervalMs — a clock, a
+			// live tally; bounded so a page can never poll the executor hard)
+			if (rawSource.refresh !== undefined && rawSource.refresh !== null) {
+				if (rawSource.refresh !== 'load' && rawSource.refresh !== 'manual' && rawSource.refresh !== 'interval') {
+					return fail(400, `Block ${id} source.refresh must be load, manual, or interval`);
+				}
+				if (rawSource.refresh !== 'load') source.refresh = rawSource.refresh;
+			}
+			if (rawSource.intervalMs !== undefined && rawSource.intervalMs !== null) {
+				const intervalMs = Number(rawSource.intervalMs);
+				if (!Number.isInteger(intervalMs) || intervalMs < MIN_WEBPAGE_SOURCE_INTERVAL_MS || intervalMs > MAX_WEBPAGE_SOURCE_INTERVAL_MS) {
+					return fail(400, `Block ${id} source.intervalMs must be ${MIN_WEBPAGE_SOURCE_INTERVAL_MS}–${MAX_WEBPAGE_SOURCE_INTERVAL_MS}`);
+				}
+				if (source.refresh === 'interval') source.intervalMs = intervalMs;
+			}
+			block.source = source;
+		}
 		return { ok: true, block };
 	}
 
@@ -4499,6 +5522,15 @@ const sanitizeWebpageBlock = (
 				return fail(400, `Block ${id} tag must be ${WEBPAGE_TEXT_TAGS.join('/')}`);
 			}
 			block.tag = tag;
+		}
+		// optional link target — the text renders as an anchor (buttons, nav
+		// links); screened like a media src, with mailto:/tel: allowed
+		const href = typeof raw.href === 'string' ? raw.href.trim() : '';
+		if (href) {
+			if (href.length > MAX_WEBPAGE_MEDIA_SRC_CHARS || !isSafeWebpageHref(href)) {
+				return fail(400, `Block ${id} href must be an https, site-relative, mailto:, or tel: link`);
+			}
+			block.href = href;
 		}
 		return { ok: true, block };
 	}
@@ -4580,6 +5612,17 @@ const sanitizeWebpageCrystal = (input: Record<string, unknown>): { ok: true; cry
 		crystal.pageKey = pageKey;
 	}
 
+	// suiteKey names the behaviour suite (an installable app bundle —
+	// schemas/behaviourSuites.ts) this page belongs to, so a viewer of the
+	// seeded copy can install the whole program from the page itself.
+	if (input.suiteKey !== undefined && input.suiteKey !== null && input.suiteKey !== '') {
+		const suiteKey = typeof input.suiteKey === 'string' ? input.suiteKey.trim() : '';
+		if (!suiteKey || suiteKey.length > MAX_COMPONENT_KEY_CHARS || !COMPONENT_KEY_PATTERN.test(suiteKey)) {
+			return fail(400, 'suiteKey must be a lowercase-dashed slug');
+		}
+		crystal.suiteKey = suiteKey;
+	}
+
 	// siteRoute binds a site page (system default or a user's personal
 	// override) to an app route; /p/ pages leave it unset.
 	if (input.siteRoute !== undefined && input.siteRoute !== null && input.siteRoute !== '') {
@@ -4642,15 +5685,33 @@ const MAX_ACTION_REF_PATH_SEGMENTS = 6;
 export type ActionRef =
 	| { kind: 'input'; name: string }
 	| { kind: 'step'; step: number; path: string[] }
-	| { kind: 'now' };
+	| { kind: 'now' }
+	// the invoking viewer — $viewer.id / $viewer.username
+	| { kind: 'viewer'; field: 'id' | 'username' }
+	// the current element inside an `each` step or a list lambda — $item, $item.path
+	| { kind: 'item'; path: string[] }
+	// its 0-based position — $index
+	| { kind: 'index' };
 
-// Parse a whole-value reference string ("$input.name", "$step.1.id", "$now").
-// Returns null when the string is not a reference (plain literal data) and
-// Fail when it LOOKS like a reference but is malformed — a typo'd ref that
-// silently became a literal would be a debugging trap.
+const parseRefPath = (value: string, segments: string[]): string[] | Fail => {
+	if (segments.length > MAX_ACTION_REF_PATH_SEGMENTS) return fail(400, `Reference path is too deep "${value.slice(0, 80)}"`);
+	for (const segment of segments) {
+		if (!ACTION_REF_SEGMENT_PATTERN.test(segment) || ACTION_BANNED_SEGMENTS.has(segment)) {
+			return fail(400, `Invalid reference segment in "${value.slice(0, 80)}"`);
+		}
+	}
+	return segments;
+};
+
+// Parse a whole-value reference string ("$input.name", "$step.1.id", "$now",
+// "$viewer.id", "$item.hp", "$index"). Returns null when the string is not a
+// reference (plain literal data) and Fail when it LOOKS like a reference but
+// is malformed — a typo'd ref that silently became a literal would be a
+// debugging trap.
 export const parseActionRef = (value: string): ActionRef | null | Fail => {
 	if (!value.startsWith('$') || value.startsWith('$$')) return null;
 	if (value === '$now') return { kind: 'now' };
+	if (value === '$index') return { kind: 'index' };
 	const parts = value.slice(1).split('.');
 	if (parts[0] === 'input') {
 		if (parts.length !== 2 || !COMPONENT_ARG_NAME_PATTERN.test(parts[1])) {
@@ -4663,22 +5724,34 @@ export const parseActionRef = (value: string): ActionRef | null | Fail => {
 		if (!Number.isInteger(step) || step < 1 || step > MAX_ACTION_STEPS) {
 			return fail(400, `Invalid step reference "${value.slice(0, 80)}" (expected $step.<n> with n 1–${MAX_ACTION_STEPS})`);
 		}
-		const path = parts.slice(2);
-		if (path.length > MAX_ACTION_REF_PATH_SEGMENTS) return fail(400, `Step reference path is too deep "${value.slice(0, 80)}"`);
-		for (const segment of path) {
-			if (!ACTION_REF_SEGMENT_PATTERN.test(segment) || ACTION_BANNED_SEGMENTS.has(segment)) {
-				return fail(400, `Invalid step reference segment in "${value.slice(0, 80)}"`);
-			}
-		}
+		const path = parseRefPath(value, parts.slice(2));
+		if (!Array.isArray(path)) return path;
 		return { kind: 'step', step, path };
 	}
-	return fail(400, `Unknown reference root "${value.slice(0, 80)}" (expected $input, $step, or $now)`);
+	if (parts[0] === 'viewer') {
+		if (parts.length !== 2 || (parts[1] !== 'id' && parts[1] !== 'username')) {
+			return fail(400, `Invalid viewer reference "${value.slice(0, 80)}" (expected $viewer.id or $viewer.username)`);
+		}
+		return { kind: 'viewer', field: parts[1] };
+	}
+	if (parts[0] === 'item') {
+		const path = parseRefPath(value, parts.slice(1));
+		if (!Array.isArray(path)) return path;
+		return { kind: 'item', path };
+	}
+	return fail(400, `Unknown reference root "${value.slice(0, 80)}" (expected $input, $step, $now, $viewer, $item, or $index)`);
 };
 
-// Validate one step-value tree: literal JSON, whole-value refs, or
-// { ttConcat: [...] } string composition. stepIndex is 1-based; refs may only
-// point at EARLIER steps so the program is executable top to bottom.
-const validateActionValue = (value: unknown, stepIndex: number, depth = 0): Fail | { ok: true } => {
+// Where a value sits when it is validated: `itemDepth` > 0 means $item /
+// $index are bound (inside an `each` step's inputs or a list lambda).
+type ActionValueScope = { itemDepth: number };
+const TOP_SCOPE: ActionValueScope = { itemDepth: 0 };
+
+// Validate one step-value tree: literal JSON, whole-value refs,
+// { ttConcat: [...] } string composition, or { ttExpr: [fn, ...args] }
+// expressions over the closed function catalogue. stepIndex is 1-based; refs
+// may only point at EARLIER steps so the program is executable top to bottom.
+const validateActionValue = (value: unknown, stepIndex: number, depth = 0, scope: ActionValueScope = TOP_SCOPE): Fail | { ok: true } => {
 	if (depth > MAX_ACTION_STEP_VALUE_DEPTH) return fail(400, `Step ${stepIndex} values nest too deeply (max ${MAX_ACTION_STEP_VALUE_DEPTH})`);
 	if (value === null || typeof value === 'boolean') return { ok: true };
 	if (typeof value === 'number') {
@@ -4694,13 +5767,16 @@ const validateActionValue = (value: unknown, stepIndex: number, depth = 0): Fail
 		if (ref && 'kind' in ref && ref.kind === 'step' && ref.step >= stepIndex) {
 			return fail(400, `Step ${stepIndex} references $step.${ref.step} before it has run`);
 		}
+		if (ref && 'kind' in ref && (ref.kind === 'item' || ref.kind === 'index') && scope.itemDepth <= 0) {
+			return fail(400, `Step ${stepIndex} uses ${value.slice(0, 40)} outside an each step or a list lambda`);
+		}
 		return { ok: true };
 	}
 	if (typeof value !== 'object') return fail(400, `Step ${stepIndex} values must be JSON data`);
 	if (Array.isArray(value)) {
 		if (value.length > MAX_ACTION_STEP_VALUE_KEYS) return fail(400, `Step ${stepIndex} lists cap at ${MAX_ACTION_STEP_VALUE_KEYS} entries`);
 		for (const entry of value) {
-			const checked = validateActionValue(entry, stepIndex, depth + 1);
+			const checked = validateActionValue(entry, stepIndex, depth + 1, scope);
 			if (isFail(checked)) return checked;
 		}
 		return { ok: true };
@@ -4712,10 +5788,31 @@ const validateActionValue = (value: unknown, stepIndex: number, depth = 0): Fail
 			return fail(400, `ttConcat needs 1–${MAX_ACTION_CONCAT_PARTS} parts`);
 		}
 		for (const part of record.ttConcat) {
-			if (typeof part !== 'string' && typeof part !== 'number' && typeof part !== 'boolean') {
-				return fail(400, 'ttConcat parts must be strings, numbers, booleans, or refs');
+			if (typeof part !== 'string' && typeof part !== 'number' && typeof part !== 'boolean' && !(part && typeof part === 'object' && !Array.isArray(part))) {
+				return fail(400, 'ttConcat parts must be strings, numbers, booleans, refs, or expressions');
 			}
-			const checked = validateActionValue(part, stepIndex, depth + 1);
+			const checked = validateActionValue(part, stepIndex, depth + 1, scope);
+			if (isFail(checked)) return checked;
+		}
+		return { ok: true };
+	}
+	if (keys.length === 1 && keys[0] === 'ttExpr') {
+		const expression = record.ttExpr;
+		if (!Array.isArray(expression) || !expression.length || expression.length > MAX_EXPRESSION_ARGS + 1) {
+			return fail(400, `Step ${stepIndex} ttExpr needs [fn, ...args] with at most ${MAX_EXPRESSION_ARGS} args`);
+		}
+		const fn = typeof expression[0] === 'string' ? expression[0] : '';
+		const signature = catalogueSignature(fn);
+		if (!signature) {
+			return fail(400, `Step ${stepIndex} ttExpr names an unknown function "${String(expression[0]).slice(0, 40)}" (the catalogue is closed)`);
+		}
+		const args = expression.slice(1);
+		if (args.length < signature.min || args.length > signature.max) {
+			return fail(400, `Step ${stepIndex} ${fn} takes ${signature.min === signature.max ? signature.min : `${signature.min}–${signature.max}`} args`);
+		}
+		for (let index = 0; index < args.length; index += 1) {
+			const lambda = isLambdaArg(fn, index);
+			const checked = validateActionValue(args[index], stepIndex, depth + 1, lambda ? { itemDepth: scope.itemDepth + 1 } : scope);
 			if (isFail(checked)) return checked;
 		}
 		return { ok: true };
@@ -4725,7 +5822,7 @@ const validateActionValue = (value: unknown, stepIndex: number, depth = 0): Fail
 		if (!ACTION_STEP_KEY_PATTERN.test(key) || ACTION_BANNED_SEGMENTS.has(key)) {
 			return fail(400, `Step ${stepIndex} has an invalid key "${key.slice(0, 64)}"`);
 		}
-		const checked = validateActionValue(record[key], stepIndex, depth + 1);
+		const checked = validateActionValue(record[key], stepIndex, depth + 1, scope);
 		if (isFail(checked)) return checked;
 	}
 	return { ok: true };
@@ -4904,23 +6001,58 @@ const sanitizeActionSteps = (
 		if (!(ACTION_STEP_OPS as readonly string[]).includes(op)) {
 			return fail(400, `Step ${stepIndex} has an unknown op "${String(raw.op).slice(0, 40)}" (the vocabulary is closed: ${ACTION_STEP_OPS.join(', ')})`);
 		}
-		if (op === 'return' && stepIndex !== input.length) return fail(400, 'return must be the last step');
 		const step: ActionStep = { op };
-		const checkValues = (value: unknown, field: string, required: boolean): Fail | null => {
+		// `when` — the one branching primitive: any step may be guarded by a
+		// value; falsy skips the step (its result reads null). An unguarded
+		// return still has to be the last step; a guarded one is an early exit.
+		if (raw.when !== undefined && raw.when !== null) {
+			const checked = validateActionValue(raw.when, stepIndex);
+			if (isFail(checked)) return checked;
+			step.when = raw.when;
+		}
+		if (op === 'return' && step.when === undefined && stepIndex !== input.length) return fail(400, 'return must be the last step (guard it with `when` for an early exit)');
+		const checkValues = (value: unknown, field: string, required: boolean, scope: ActionValueScope = TOP_SCOPE): Fail | null => {
 			if (value === undefined || value === null) {
 				return required ? fail(400, `Step ${stepIndex} (${op}) needs ${field}`) : null;
 			}
+			// a whole-value ref ("$step.3.player") or one expression may stand in
+			// for the object — the executor still refuses a non-object at run time
+			if (typeof value === 'string') {
+				const ref = value.trim().startsWith('$') ? parseActionRef(value.trim()) : null;
+				if (!ref || !('kind' in ref)) return fail(400, `Step ${stepIndex} ${field} must be an object or a $ref to one`);
+				const checked = validateActionValue(value.trim(), stepIndex, 0, scope);
+				if (isFail(checked)) return checked;
+				step[field] = value.trim();
+				return null;
+			}
 			if (typeof value !== 'object' || Array.isArray(value)) return fail(400, `Step ${stepIndex} ${field} must be an object`);
-			const checked = validateActionValue(value, stepIndex);
+			const checked = validateActionValue(value, stepIndex, 0, scope);
 			if (isFail(checked)) return checked;
 			step[field] = value;
 			return null;
 		};
+		// an id / list / message is a ref string, a literal, or ONE expression
+		// object ({ ttExpr } / { ttConcat }) that resolves at run time
+		const isExpressionObject = (value: unknown): boolean =>
+			!!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value as object).length === 1 && ('ttExpr' in (value as object) || 'ttConcat' in (value as object));
 		const checkRefString = (value: unknown, field: string): Fail | null => {
+			if (isExpressionObject(value)) {
+				const checked = validateActionValue(value, stepIndex);
+				if (isFail(checked)) return checked;
+				step[field] = value;
+				return null;
+			}
 			if (typeof value !== 'string' || !value.trim()) return fail(400, `Step ${stepIndex} (${op}) needs ${field}`);
 			const checked = validateActionValue(value.trim(), stepIndex);
 			if (isFail(checked)) return checked;
 			step[field] = value.trim();
+			return null;
+		};
+		const checkAnyValue = (value: unknown, field: string, scope: ActionValueScope = TOP_SCOPE): Fail | null => {
+			if (value === undefined) return fail(400, `Step ${stepIndex} (${op}) needs ${field}`);
+			const checked = validateActionValue(value, stepIndex, 0, scope);
+			if (isFail(checked)) return checked;
+			step[field] = value;
 			return null;
 		};
 		let failure: Fail | null = null;
@@ -4944,28 +6076,99 @@ const sanitizeActionSteps = (
 				}
 				step.limit = limit;
 			}
-			failure = requireCapability(stepIndex, 'things.read', typeof step.schema === 'string' ? step.schema : undefined);
+			if (raw.offset !== undefined && raw.offset !== null) {
+				const offset = Number(raw.offset);
+				if (!Number.isInteger(offset) || offset < 0 || offset > MAX_ACTION_SEARCH_OFFSET) {
+					return fail(400, `Step ${stepIndex} offset must be 0–${MAX_ACTION_SEARCH_OFFSET}`);
+				}
+				step.offset = offset;
+			}
+			// scope: 'own' (default — the invoker's own data things), 'public'
+			// (tt:all data things from anyone) or 'system' (tt:all data things
+			// the SEED owns). The two non-own scopes REQUIRE a schema so a
+			// cross-owner search can never be the whole corpus.
+			if (raw.scope !== undefined && raw.scope !== null) {
+				const scope = typeof raw.scope === 'string' ? raw.scope : '';
+				if (!(ACTION_SEARCH_SCOPES as readonly string[]).includes(scope)) {
+					return fail(400, `Step ${stepIndex} scope must be ${ACTION_SEARCH_SCOPES.join(', ')}`);
+				}
+				if (scope !== 'own' && typeof step.schema !== 'string') return fail(400, `Step ${stepIndex} ${scope} searches must name a schema`);
+				step.scope = scope;
+			}
+			// where: equality on crystal fields; match: case-insensitive substring
+			// on crystal string fields. Values are ordinary step values.
+			const checkFieldMap = (value: unknown, field: string, maxKeys: number): Fail | null => {
+				if (value === undefined || value === null) return null;
+				if (typeof value !== 'object' || Array.isArray(value)) return fail(400, `Step ${stepIndex} ${field} must be an object of field → value`);
+				const entries = Object.entries(value as Record<string, unknown>);
+				if (!entries.length) return null;
+				if (entries.length > maxKeys) return fail(400, `Step ${stepIndex} ${field} caps at ${maxKeys} fields`);
+				for (const [key, entry] of entries) {
+					if (!ACTION_SEARCH_FIELD_PATTERN.test(key) || ACTION_BANNED_SEGMENTS.has(key) || key === 'schema' || key === 'schemaId') {
+						return fail(400, `Step ${stepIndex} ${field} field "${key.slice(0, 40)}" is not a plain crystal field name`);
+					}
+					if (entry !== null && typeof entry === 'object' && !Array.isArray(entry)) {
+						const keys = Object.keys(entry as Record<string, unknown>);
+						if (!(keys.length === 1 && (keys[0] === 'ttConcat' || keys[0] === 'ttExpr'))) {
+							return fail(400, `Step ${stepIndex} ${field}.${key} must be a scalar, a ref, or an expression`);
+						}
+					} else if (Array.isArray(entry)) {
+						return fail(400, `Step ${stepIndex} ${field}.${key} must be a scalar, a ref, or an expression`);
+					}
+					const checked = validateActionValue(entry, stepIndex);
+					if (isFail(checked)) return checked;
+				}
+				step[field] = value;
+				return null;
+			};
+			failure = checkFieldMap(raw.where, 'where', MAX_ACTION_SEARCH_WHERE_KEYS) || checkFieldMap(raw.match, 'match', MAX_ACTION_SEARCH_MATCH_KEYS);
+			if (!failure && raw.sort !== undefined && raw.sort !== null) {
+				const sort = raw.sort as Record<string, unknown>;
+				const field = typeof sort === 'object' && sort && typeof sort.field === 'string' ? sort.field.trim() : '';
+				const dir = typeof sort === 'object' && sort && typeof sort.dir === 'string' ? sort.dir : 'desc';
+				if (!field || (field !== 'createdAt' && field !== 'updatedAt' && !ACTION_SEARCH_FIELD_PATTERN.test(field)) || ACTION_BANNED_SEGMENTS.has(field)) {
+					return fail(400, `Step ${stepIndex} sort.field must be createdAt, updatedAt, or a crystal field name`);
+				}
+				if (!(ACTION_SEARCH_SORT_DIRECTIONS as readonly string[]).includes(dir)) return fail(400, `Step ${stepIndex} sort.dir must be asc or desc`);
+				step.sort = { field, dir };
+			}
+			if (!failure) failure = requireCapability(stepIndex, 'things.read', typeof step.schema === 'string' ? step.schema : undefined);
 		} else if (op === 'things.update') {
 			failure =
 				checkRefString(raw.id, 'id') ||
 				checkValues(raw.values, 'values', true) ||
 				requireCapability(stepIndex, 'things.update');
-		} else if (op === 'actions.invoke') {
+		} else if (op === 'things.delete') {
+			failure = checkRefString(raw.id, 'id') || requireCapability(stepIndex, 'things.delete');
+		} else if (op === 'actions.invoke' || op === 'each') {
 			const actionRef = sanitizeActionSchemaRef(raw.action, `Step ${stepIndex} action`);
 			if (isFail(actionRef)) return actionRef;
 			step.action = actionRef.ref;
-			failure = checkValues(raw.inputs, 'inputs', false) || requireCapability(stepIndex, 'actions.invoke');
+			if (op === 'each') {
+				// the list is any earlier value; inputs may read $item / $index
+				failure = checkAnyValue(raw.list, 'list');
+				if (!failure && raw.max !== undefined && raw.max !== null) {
+					const max = Number(raw.max);
+					if (!Number.isInteger(max) || max < 1 || max > MAX_ACTION_EACH_ITEMS) return fail(400, `Step ${stepIndex} max must be 1–${MAX_ACTION_EACH_ITEMS}`);
+					step.max = max;
+				}
+				if (!failure) failure = checkValues(raw.inputs, 'inputs', false, { itemDepth: 1 });
+			} else {
+				failure = checkValues(raw.inputs, 'inputs', false);
+			}
+			if (!failure) failure = requireCapability(stepIndex, 'actions.invoke');
 			if (!failure) {
 				const invoke = byCapability.get('actions.invoke');
 				if (invoke?.actions && !invoke.actions.includes(actionRef.ref)) {
 					failure = fail(400, `Step ${stepIndex} invokes "${actionRef.ref}" but the actions.invoke allowlist is ${invoke.actions.join(', ')}`);
 				}
 			}
+		} else if (op === 'compute') {
+			failure = checkAnyValue(raw.value, 'value');
+		} else if (op === 'fail') {
+			failure = checkAnyValue(raw.message, 'message');
 		} else if (op === 'return') {
-			if (raw.value === undefined) return fail(400, `Step ${stepIndex} (return) needs value`);
-			const checked = validateActionValue(raw.value, stepIndex);
-			if (isFail(checked)) return checked;
-			step.value = raw.value;
+			failure = checkAnyValue(raw.value, 'value');
 		}
 		if (failure) return failure;
 		steps.push(step);
@@ -4980,12 +6183,20 @@ export type ActionEffects = {
 	creates: string[];
 	reads: string[];
 	updates: boolean;
+	deletes: boolean;
 	invokes: string[];
 	returns: boolean;
+	// pure value computation (compute steps / expressions) — no data effect
+	computes: boolean;
+	// schemas searched across OTHER people's public data things
+	publicReads: string[];
+	// schemas searched across the SEED's own public data things — platform
+	// content, so a narrower claim than publicReads and worth its own chip
+	systemReads: string[];
 };
 
 export const deriveActionEffects = (steps: unknown): ActionEffects => {
-	const effects: ActionEffects = { creates: [], reads: [], updates: false, invokes: [], returns: false };
+	const effects: ActionEffects = { creates: [], reads: [], updates: false, deletes: false, invokes: [], returns: false, computes: false, publicReads: [], systemReads: [] };
 	if (!Array.isArray(steps)) return effects;
 	for (const entry of steps) {
 		if (!entry || typeof entry !== 'object') continue;
@@ -4996,10 +6207,18 @@ export const deriveActionEffects = (steps: unknown): ActionEffects => {
 		// an UNSCOPED get or search is the broadest read in the vocabulary —
 		// it must surface as the '*' ("reads things") effect, never as nothing
 		if ((step.op === 'things.get' || step.op === 'things.search') && !schema && !effects.reads.includes('*')) effects.reads.push('*');
+		// a public-scope search reads OTHER people's public data things of that
+		// schema — a distinct disclosure from "reads your own"
+		if (step.op === 'things.search' && step.scope === 'public' && schema && !effects.publicReads.includes(schema)) effects.publicReads.push(schema);
+		// a system-scope search reads only what the SEED wrote — no stranger's
+		// row can enter that corpus, so it is not a public-corpus disclosure
+		if (step.op === 'things.search' && step.scope === 'system' && schema && !effects.systemReads.includes(schema)) effects.systemReads.push(schema);
 		if (step.op === 'things.update') effects.updates = true;
-		if (step.op === 'actions.invoke' && typeof step.action === 'string' && !effects.invokes.includes(step.action)) {
+		if (step.op === 'things.delete') effects.deletes = true;
+		if ((step.op === 'actions.invoke' || step.op === 'each') && typeof step.action === 'string' && !effects.invokes.includes(step.action)) {
 			effects.invokes.push(step.action);
 		}
+		if (step.op === 'compute') effects.computes = true;
 		if (step.op === 'return') effects.returns = true;
 	}
 	return effects;

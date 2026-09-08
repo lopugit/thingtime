@@ -35,6 +35,10 @@ const getDeploymentBranchName = () => {
   );
 };
 
+const getDeploymentCommitSha = () => {
+  return process.env.VERCEL_GIT_COMMIT_SHA || process.env.THINGTIME_GIT_COMMIT_SHA;
+};
+
 export async function loadRootData(request: Request) {
   const cookieHeader = request.headers.get('Cookie');
   const cookie = ((await Session.parse(cookieHeader)) || {}) as Record<string, unknown>;
@@ -63,7 +67,7 @@ export async function loadRootData(request: Request) {
     process.env.VERCEL_TARGET_ENV || process.env.VERCEL_ENV;
   processEnv.THINGTIME_VERCEL_URL = process.env.VERCEL_URL;
   processEnv.THINGTIME_VERCEL_BRANCH_URL = process.env.VERCEL_BRANCH_URL;
-  processEnv.THINGTIME_VERCEL_GIT_COMMIT_SHA = process.env.VERCEL_GIT_COMMIT_SHA;
+  processEnv.THINGTIME_VERCEL_GIT_COMMIT_SHA = getDeploymentCommitSha();
   processEnv.THINGTIME_SHOW_DEPLOYMENT_STATUS = isVercelStatusEnabled() ? 'true' : 'false';
 
   return {

@@ -3,7 +3,7 @@ import { PublicError, safeErrorText } from '../errors/safeError';
 export type BasicServiceHealthStatus = {
   ok: boolean;
   service: 'frontend' | 'nitro';
-  state: 'ready' | 'unavailable' | 'unknown';
+  state: 'ready' | 'degraded' | 'unavailable' | 'unknown';
   label: string;
   checkedAt: string;
   origin: string;
@@ -15,6 +15,11 @@ export type BasicServiceHealthStatus = {
   shellDetected?: boolean;
   runtime?: string;
   nodeEnv?: string;
+  storageAccounting?: {
+    state: 'ready' | 'migration-required' | 'unavailable';
+    expectedVersion: number;
+    migrationId: string;
+  };
 };
 
 const REQUEST_TIMEOUT_MS = 3500;

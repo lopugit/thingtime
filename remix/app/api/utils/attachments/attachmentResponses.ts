@@ -1,6 +1,7 @@
 import { json, readJsonBody } from '../../http';
 import { getCurrentUser } from '../auth/getCurrentUser';
 import { enforceRateLimit, rateLimitedResponseInit } from '../rateLimit/enforce';
+import { resolveWatchDevice } from '../watch/watchPairing';
 
 export const ATTACHMENT_PRIVATE_CACHE_CONTROL = 'private, no-store, max-age=0';
 export const ATTACHMENT_JSON_BODY_BYTES = 16 * 1024;
@@ -37,6 +38,11 @@ export const isSameOriginAttachmentRequest = (request: Request): boolean => {
 	}
 };
 
+const usesDeviceCredential = (request: Request): boolean => {
+	const authorization = request.headers.get('Authorization')?.trim() || '';
+	return /^Bearer\s+ttnode_/i.test(authorization);
+};
+
 type MutationService = (
 	ownerId: string,
 	input: unknown
@@ -49,7 +55,11 @@ type AttachmentMutationDependencies = {
 };
 
 const defaultDependencies: AttachmentMutationDependencies = {
-	getUser: getCurrentUser,
+	getUser: async (request) => {
+		const user = await getCurrentUser(request);
+		if (user) return user;
+		return (await resolveWatchDevice(request, 'watch.things.create'))?.user ?? null;
+	},
 	enforceLimit: enforceRateLimit,
 	readBody: readJsonBody
 };
@@ -105,6 +115,9 @@ export const createAttachmentMutationAction = (
 			// mid-upload can't strand a paid-for reservation.
 			if (options.requireUploadPermission) {
 				const purpose = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>).purpose : undefined;
+				if (usesDeviceCredential(request) && purpose !== undefined && purpose !== 'post') {
+					return json({ ok: false, error: 'Apple Watch credentials can only start post-purpose uploads' }, { status: 403 });
+				}
 				const needsPublic = PUBLIC_UPLOAD_PURPOSES.has(purpose) && !user.publicUploadsEnabled;
 				const needsPrivate = PRIVATE_UPLOAD_PURPOSES.has(purpose) && !user.privateUploadsEnabled;
 				if (needsPublic || needsPrivate) {

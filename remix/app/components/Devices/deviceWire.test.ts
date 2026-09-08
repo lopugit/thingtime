@@ -15,6 +15,11 @@ const device = (): PublicDevice => ({
 	pairedAt: '2026-08-18T00:00:00.000Z',
 	online: false,
 	lastSeenAt: '2026-08-18T00:01:00.000Z',
+	lastSyncAt: null,
+	syncStatus: null,
+	watchHealth: null,
+	createdThingCount: 0,
+	recentThings: [],
 	locked: false,
 	volume: 0.42,
 	brightness: 0.7,
@@ -60,6 +65,41 @@ const device = (): PublicDevice => ({
 	pendingCommandCount: 2,
 	pendingApprovalCount: 1,
 	permissionMode: 'always-allow'
+});
+
+test('watchOS projections retain direct-sync health and created Thing provenance', () => {
+	const watch: PublicDevice = {
+		...device(),
+		id: 'watch-1',
+		name: 'Lopu’s Apple Watch',
+		platform: 'watchos',
+		model: 'Watch',
+		osVersion: '26.5',
+		appVersion: '23',
+		online: true,
+		lastSeenAt: '2026-09-05T01:00:05.000Z',
+		lastSyncAt: '2026-09-05T01:00:04.000Z',
+		syncStatus: 'healthy',
+		watchHealth: { batteryLevel: 0.72, lowPowerMode: false, error: null, updatedAt: '2026-09-05T01:00:04.000Z' },
+		createdThingCount: 1,
+		recentThings: [{ id: 'thing-1', label: 'Uploaded from Apple Watch: Recording.m4a', createdAt: '2026-09-05T01:00:00.000Z' }],
+		capabilities: ['watch.notifications.read', 'watch.things.create'],
+		state: null,
+		connectors: [],
+		battery: null,
+		openApps: [],
+		locked: null,
+		volume: null,
+		brightness: null,
+		pendingCommandCount: 0,
+		pendingApprovalCount: 0
+	};
+	const runtime = publicDeviceToRuntime(watch);
+	assert.equal(runtime.summary?.transportStatus, 'online');
+	assert.equal(runtime.summary?.syncStatus, 'healthy');
+	assert.equal(runtime.summary?.system?.batteryPercent, 0.72);
+	assert.equal(runtime.summary?.createdThingCount, 1);
+	assert.equal(runtime.summary?.recentThings?.[0]?.id, 'thing-1');
 });
 
 test('dedicated PublicDevice projections become capability-driven cached runtime state', () => {

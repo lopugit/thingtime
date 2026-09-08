@@ -1,6 +1,7 @@
 import { getThingsCollection } from '../mongodb/collections';
 import {
 	fail,
+	findViewableThing,
 	toPublicThings,
 	visibilityQueryFor,
 	withMatch,
@@ -111,6 +112,15 @@ const resolveComponents = async (
 	return { components, refs: resolved };
 };
 
+// Same batched resolution for a block list that is not a stored page — the
+// demo library resolves the library components its catalog demos reference so
+// a gallery thumbnail draws the same component things /p/ would.
+export const resolveBlockComponents = async (
+	viewer: Viewer,
+	blocks: unknown
+): Promise<{ components: PublicThing[]; refs: Record<string, string | null> }> =>
+	resolveComponents(viewer, { crystal: { blocks } } as unknown as ThingDoc);
+
 const resultFor = async (
 	viewer: Viewer,
 	doc: ThingDoc | null,
@@ -167,7 +177,37 @@ export const resolveWebpage = async (
 	const match = visibility
 		? withMatch({ shareId: id, thingtime: 'webpage' }, visibility)
 		: { shareId: id, thingtime: 'webpage', acl: 'tt:all' };
-	const doc = (await collection.findOne(match as any)) as any as ThingDoc | null;
+	let doc = (await collection.findOne(match as any)) as any as ThingDoc | null;
+
+	// Hidden 🕵️ pages are unlisted, so they can NEVER come back from the match
+	// above: visibilityQueryFor only knows circles, own-things and grants, and
+	// tt:hidden deliberately matches no viewer — the audience of a hidden page
+	// is whoever presents its secret linkKey. The reader threads that key here
+	// (/p/<id>?key= → _resolve.tsx → withLinkKeys), so consult it with the same
+	// authority /api/v1/things uses: findViewableThing → canView, which admits a
+	// key holder (logged out included) only while the acl still says hidden, so
+	// un-hiding a page instantly retires every link that circulated. Narrow by
+	// design — a miss stays a plain 404, and nothing here widens feeds, search,
+	// or any listing path.
+	if (!doc && viewer?.linkKeys?.size) {
+		const byKey = await findViewableThing(id, viewer);
+		if (byKey && (byKey.thingtime || []).includes('webpage')) doc = byKey;
+	}
+
+	// PAGE KEYS personalise like site routes: `/p/<pageKey>` (or the seeded
+	// `/p/webpage-<pageKey>`) resolves the VIEWER'S OWN page carrying that
+	// pageKey ahead of the system-seeded one. This is what makes an installed
+	// app suite work — its pages link to each other by key, the seeded copy
+	// answers for visitors, and the moment a viewer installs the suite the same
+	// URLs serve their own (interactive) twins. Only viewer-owned and
+	// system-owned docs take part: a stranger's page never resolves by key.
+	if (!doc || doc.ownerId === 'system') {
+		const pageKey = doc ? (typeof doc.crystal?.pageKey === 'string' ? doc.crystal.pageKey : null) : id;
+		if (pageKey && pageKey.length <= MAX_WEBPAGE_ROUTE_CHARS && COMPONENT_KEY_PATTERN.test(pageKey)) {
+			const { doc: keyed } = await findSitePage(viewer, { 'crystal.pageKey': pageKey });
+			if (keyed) doc = keyed;
+		}
+	}
 	if (!doc) return fail(404, 'Webpage not found');
 	// source 'user' means "the VIEWER owns this and saves update it in place".
 	// Someone else's shared page must report as 'system' so a viewer who edits

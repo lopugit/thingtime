@@ -4,6 +4,8 @@ import UIKit
 struct ThingtimeWebView: View {
     private enum StorageKey {
         static let selectedDestinationID = "thingtime.webDestination.selectedID"
+        static let lastConfiguredDestinationID = "thingtime.webDestination.lastConfiguredID"
+        static let hasExplicitDestinationSelection = "thingtime.webDestination.hasExplicitSelection"
     }
 
     enum DeploymentsLoadState: Equatable {
@@ -16,6 +18,8 @@ struct ThingtimeWebView: View {
     private let deploymentsClient = ThingtimeWebDeploymentsClient()
 
     @AppStorage(StorageKey.selectedDestinationID) private var selectedDestinationID = ThingtimeWebDestination.defaultDestinationID
+    @AppStorage(StorageKey.lastConfiguredDestinationID) private var lastConfiguredDestinationID = ""
+    @AppStorage(StorageKey.hasExplicitDestinationSelection) private var hasExplicitDestinationSelection = false
 
     @State private var deploymentGroups: [ThingtimeWebDestination.DeploymentGroup] = []
     @State private var isDestinationPickerOpen = false
@@ -112,6 +116,14 @@ struct ThingtimeWebView: View {
     }
 
     private func prepareDestinationState() {
+        let startupSelection = ThingtimeWebDestination.startupSelection(
+            selectedDestinationID: selectedDestinationID,
+            lastConfiguredDestinationID: lastConfiguredDestinationID,
+            hasExplicitSelection: hasExplicitDestinationSelection,
+            destinations: staticDestinations
+        )
+        selectedDestinationID = startupSelection.selectedDestinationID
+        lastConfiguredDestinationID = startupSelection.lastConfiguredDestinationID
         ensureSelectedDestinationIsAvailable()
     }
 
@@ -143,6 +155,7 @@ struct ThingtimeWebView: View {
 
     private func select(_ destination: ThingtimeWebDestination.Destination) {
         selectedDestinationID = destination.id
+        hasExplicitDestinationSelection = true
         closeDestinationPicker()
     }
 

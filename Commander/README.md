@@ -123,12 +123,20 @@ Set `COMMANDER_NOTARY_PROFILE` to use another Keychain profile. The GitHub relea
 
 ## GitHub Releases
 
-`.github/workflows/commander-release.yml` follows the native Electron release
-pattern. A qualifying `main` push, or an explicit dispatch, builds Commander on
-macOS and publishes a GitHub Release with a ZIP of `Commander.app` plus a
-SHA-256 checksum. Each release gets a monotonic SemVer build suffix and tag,
-such as `commander-v0.1.0+build.10423`; the app stores `0.1.0` as its marketing
-version and `10423` as its macOS build number.
+The main-branch `.github/workflows/commander-release.yml` is a thin caller of the
+protected `github-actions` implementation. Main pushes touching Commander, or an
+owner dispatch on main/github-actions, build the exact main commit on an Apple
+silicon macOS runner. The workflow publishes a Developer ID signed, notarized
+`Commander-App-Release-<version>-macos-arm64.zip`, a matching Thingtime Recovery
+ZIP, and `SHA256SUMS.txt`. Both final archives are extracted and verified before
+publication. Commander releases use `--latest=false` to preserve Electron's
+repository-wide latest release.
+
+Versions include the run number and source commit, for example
+`commander-v0.1.0+build.103.gabcdef123456`. The app keeps `0.1.0` as its marketing
+version and `103` as `CFBundleVersion`; signed bundle metadata retains the release
+tag, full commit and main branch. Recovery's Commander selector discovers these
+archives and preserves that provenance in This Mac even when offline.
 
 The base version is deliberately human-controlled and shared by every
 Commander workspace. Check it with `corepack pnpm version:check`; intentionally
@@ -142,9 +150,28 @@ corepack pnpm version:bump -- 1.2.3
 ```
 
 The workflow's build metadata never writes back to source, so repeat builds are
-uniquely versioned without noisy release-only commits. GitHub-hosted builds are
-ad-hoc signed until an Apple Developer certificate and notarization credentials
-are deliberately configured; the release notes make that trust boundary clear.
+uniquely versioned without noisy release-only commits. GitHub-hosted builds fail closed without the complete Developer ID and notarization
+credentials; there is no unsigned distribution fallback. Configure encrypted
+repository secrets `MAC_CSC_LINK` (base64 PKCS#12), `MAC_CSC_KEY_PASSWORD`,
+`APPLE_TEAM_ID`, and either `APPLE_API_KEY_BASE64` / `APPLE_API_KEY_ID` /
+`APPLE_API_ISSUER` or the existing `ASC_KEY_CONTENT` / `ASC_KEY_ID` /
+`ASC_ISSUER_ID` API-key secrets. The workflow imports an ephemeral Keychain only
+after source checks and removes its signing material on success or failure.
+Forks must configure their own approved controller, caller guard and credentials.
+
+For CI, `./script/build_and_run.sh --prepare` installs, compiles and tests without
+accessing signing credentials or stopping the installed app. After importing
+credentials, `./script/build-production-release.sh` packages those outputs,
+notarizes, staples and checks the extracted archive. `--build-only` also leaves
+the installed app running. Production packaging requires `COMMANDER_RELEASE_VERSION`,
+`COMMANDER_BUILD_NUMBER`, `COMMANDER_GIT_COMMIT`, `COMMANDER_SIGNING_IDENTITY`,
+`APPLE_TEAM_ID` and the three `APPLE_API_*` notarization variables; the workflow
+sets these without writing secrets to source. `COMMANDER_GIT_BRANCH` records main.
+
+Switching an existing local Apple Development build to a Developer ID release
+changes macOS's signing requirement. If a privacy permission stops working, use
+Commander's permission status and System Settings to grant that app access again;
+Recovery never changes privacy toggles or resets grants.
 
 ## Thingtime setup
 
