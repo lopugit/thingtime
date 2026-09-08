@@ -47,6 +47,7 @@ type PatTokenRow = {
   scopes: string[];
   onlyCreatedThings?: boolean;
   visibility?: PatVisibilityMode;
+  allowGet?: boolean;
   createdAt: string;
   expiresAt: string | null;
   maxUses: number | null;
@@ -125,7 +126,7 @@ const VISIBILITY_BY_ID = new Map(PAT_VISIBILITY_CATALOG.map((mode) => [mode.id, 
 
 // list-row badge for restricted tokens ('all' shows nothing — it's the default)
 const summarizeVisibility = (visibility: PatVisibilityMode | undefined): string => {
-  if (visibility !== 'public' && visibility !== 'private') return '';
+  if (visibility !== 'public' && visibility !== 'private' && visibility !== 'hidden') return '';
   const mode = VISIBILITY_BY_ID.get(visibility);
   return mode ? ` · ${mode.emoji} ${mode.title.toLowerCase()}` : '';
 };
@@ -172,6 +173,7 @@ export const TokenMinter = (props: { userId: string }) => {
   const [selectedScopes, setSelectedScopes] = React.useState<string[]>(['things']);
   const [onlyCreatedThings, setOnlyCreatedThings] = React.useState(false);
   const [visibility, setVisibility] = React.useState<PatVisibilityMode>('all');
+  const [allowGet, setAllowGet] = React.useState(false);
   const [expiresInMs, setExpiresInMs] = React.useState<number | null>(30 * 24 * 60 * 60 * 1000);
   const [customValue, setCustomValue] = React.useState('30');
   const [customUnit, setCustomUnit] = React.useState('d');
@@ -282,7 +284,8 @@ export const TokenMinter = (props: { userId: string }) => {
         expiresInMs,
         maxUses,
         onlyCreatedThings,
-        visibility
+        visibility,
+        allowGet
       });
       setMinted({ token: resp.token, example: resp.example, docs: resp.docs });
       if (resp.tokenInfo) saveTokens((prev) => [resp.tokenInfo, ...prev.filter((t) => t.id !== resp.tokenInfo.id)]);
@@ -400,6 +403,23 @@ export const TokenMinter = (props: { userId: string }) => {
           </Box>
         </Flex>
 
+        {/* GET bridge: opt-in because the token rides the URL itself */}
+        <Flex alignItems="center" columnGap={4} paddingTop={1}>
+          <Box minWidth={0}>
+            <Text fontSize="sm" color="var(--tt-ink, #16161a)">
+              Works via GET links 🌍
+            </Text>
+            <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)" whiteSpace="normal">
+              Opens /api/v1/get to this token — the whole API as plain GET URLs with the token in a query
+              param, so AIs that can only browse the web can still read and write your things. URLs land in
+              logs and browser history, so tick this only for tokens you scope tightly.
+            </Text>
+          </Box>
+          <Box marginLeft="auto" flexShrink={0}>
+            <Switch isChecked={allowGet} onChange={(e) => setAllowGet(e.target.checked)}></Switch>
+          </Box>
+        </Flex>
+
         {/* visibility fence: the third axis — WHAT (permission chips), WHICH
             things (sandbox switch), and WHICH AUDIENCE (these toggles) */}
         <Flex flexDirection="column" rowGap={1} paddingTop={1}>
@@ -422,7 +442,9 @@ export const TokenMinter = (props: { userId: string }) => {
               ? 'Public only — the token can only see and touch public things. Your private things stay invisible to it, and everything it creates must be public.'
               : visibility === 'private'
                 ? 'Private only — the token can only see and touch private (non-public) things. It can’t read the public feed, post publicly, or engage with public things; its creations default to private.'
-                : 'Public & private — no audience fence. The token reaches everything its permissions above allow.'}
+                : visibility === 'hidden'
+                  ? 'Hidden only — the token lives entirely in hidden link-key things 🕵️. Everything it creates is born hidden with a fresh secret link, and nothing outside the hidden world is visible or touchable to it.'
+                  : 'Public & private — no audience fence. The token reaches everything its permissions above allow.'}
           </Text>
         </Flex>
       </Flex>
@@ -627,6 +649,7 @@ export const TokenMinter = (props: { userId: string }) => {
                     {summarizeScopes(token.scopes)}
                     {token.onlyCreatedThings ? ' · 🧸 its own things only' : ''}
                     {summarizeVisibility(token.visibility)}
+                    {token.allowGet ? ' · 🌍 GET links' : ''}
                   </Text>
                   <Text fontSize="11px" color="var(--tt-muted, #9a9aa6)" whiteSpace="normal">
                     {meta.join(' · ')}
