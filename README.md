@@ -1217,6 +1217,53 @@ routes, and `THINGTIME_USER_VAULT_KEY` + the dev rewrite above on the server
 to exercise a BYO-provider turn end to end — otherwise that one check is
 skipped and the unconfigured-vault path is asserted instead).
 
+#### Verified access, usage accounting and credits
+
+Lopu is **invite-only by default**: every account starts with
+`meta.lopuVerified` unset (= not verified) and an admin verifies it from
+Admin → Lopu accounts (`POST /api/v1/admin/users/lopu-access { userId,
+verified }`); admins are always verified. The `Thingtime.LopuAccess` singleton
+(`GET|POST /api/v1/settings/lopu-access`, admin POST) holds the rules:
+`requireVerification` (default true), `allowByoUnverified` (let an unverified
+account still run turns on its own Secure Vault provider, default false),
+`starterCredits` (granted once when an account is first created, default 0)
+and `lowBalanceWarningCredits` (the amber threshold, default 1). The gate runs
+before any provider call in chats create, chats reply, voice reply and the
+direct-voice session and answers `403 { code: "LOPU_UNVERIFIED" }`, `402
+{ code: "LOPU_NO_CREDITS", balanceMicros }` or `403 { code: "LOPU_GUEST" }` for
+a temporary session; listing and reading conversations is never gated.
+
+Turns on Thingtime's server keys are **prepaid in credits** (1 credit = 1 USD
+of the provider's list price = 1,000,000 micros): every turn is priced from
+`remix/app/api/utils/ai/pricing.ts` (every catalog model, `estimated: true`
+where a sibling's price stands in; `GET /api/v1/ai/models` publishes
+`pricing` per model) and recorded as a protected `lopu-usage` row; a
+`thingtime` turn is debited from the user's `lopu-account` with a `lopu-credit`
+ledger row, a `byo` turn (the user's own Secure Vault provider) or the `free`
+canned fallback is recorded but never debited. The balance may go negative by
+at most one turn; the next turn is refused. Users see all of it at Settings →
+Lopu 🦄 → Credits & usage (`GET /api/v1/lopu/account`, `/history`) and ask for
+more with `POST /api/v1/lopu/account/topup-request { credits, note? }` (one
+pending request at a time; the admin inbox gets the same ops mail as the
+"new user" notification); admins list accounts at `GET
+/api/v1/admin/lopu/accounts?q` and grant, adjust, refund, approve or decline
+with `POST /api/v1/admin/lopu/credits`. The scripted test provider
+(`LOPU_CHAT_PROVIDER=test`) reports 100 input / 50 output tokens per hop and
+prices against the `test-model` row (0.2 credits per hop) so the whole flow is
+observable without a real key.
+
+```sh
+# optional: a "Buy credits" link shown beside "Request credits" — no payment
+# processor is wired in; unset it and the UI offers requests only
+THINGTIME_LOPU_TOPUP_URL="https://example.com/buy-lopu-credits"
+```
+
+Live check: `node remix/scripts/verify-lopu.mjs` (section A2) walks the whole
+flow — unverified 403 → admin verifies → 402 at zero credits → grant → a priced
+turn debits the balance → history rows → top-up request → approval — and needs
+`TT_VERIFY_ADMIN_USERNAME`/`TT_VERIFY_ADMIN_PASSWORD`, because under the
+default rules a fresh account cannot chat until an admin verifies it.
+
 ### Password reset + email 2FA
 
 `POST /api/v1/auth/password-reset` ({ email }) always answers `{ ok: true }` so
@@ -2434,3 +2481,5 @@ at http://localhost:13543/tests/media-cache.html is served by
 synthetic media and access revocation, without writing application data.
 Tailscale/Funnel could not be verified: the installed CLI wrapper points to a
 missing Tailscale.app executable. No public mapping was created or changed.
+
+Thingtime Desktop checks Node privacy access directly from the running helper. The Things setup card refreshes every five seconds while visible and on return from System Settings; **Check access** retries immediately. A failed check preserves and labels the last known result. If macOS shows access enabled but the helper reports denial after moving from a development build to Developer ID signing, switch **Thingtime Node** off and on once for each affected permission, restart the node in Desktop settings, and check again. Desktop never resets privacy grants automatically.

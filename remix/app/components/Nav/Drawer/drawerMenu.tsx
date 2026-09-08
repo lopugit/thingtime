@@ -50,9 +50,21 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		children: [
 			{ id: 'feed-home', label: 'Feed', icon: '📰', to: '/feed' },
 			{ id: 'feed-explore', label: 'Explore', icon: '🔥', to: '/explore' },
+			{ id: 'feed-subspaces', label: 'Subspaces', icon: '🪐', to: '/s' },
 			{ id: 'feed-saved', label: 'Saved', icon: '🔖', to: '/saved', authOnly: true },
 			{ id: 'feed-profile', label: 'Profile', icon: '👤', to: '/profile', authOnly: true },
 			{ id: 'feed-settings', label: 'Settings', icon: '⚙️', to: '/settings' }
+		]
+	},
+	{
+		id: 'subspaces',
+		label: 'Subspaces',
+		icon: '🪐',
+		to: '/s',
+		children: [
+			{ id: 'subspaces-browse', label: 'Browse', icon: '🪐', to: '/s' },
+			{ id: 'subspaces-mine', label: 'My subspaces', icon: '⭐', to: '/s?mine=1', authOnly: true },
+			{ id: 'subspaces-create', label: 'Create', icon: '➕', to: '/s?create=1', authOnly: true }
 		]
 	},
 	{

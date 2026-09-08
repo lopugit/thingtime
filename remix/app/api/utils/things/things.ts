@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { ObjectId, type Binary } from 'mongodb';
 
@@ -40,10 +40,15 @@ import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
 import {
   ACL_ALL,
+  ACL_CUSTOM,
   ACL_FAMILY,
   ACL_FRIENDS,
+  ACL_GROUP_PREFIX,
+  ACL_HIDDEN,
   ACL_INHERIT,
   ACL_OWNER,
+  ACL_USER_PREFIX,
+  aclCapabilityFor,
 	APP_STORAGE_RESERVED_ID_PREFIX,
 	CASCADE_CHILD_THINGTIME,
   COLLECTION_SCHEMA_VERSIONS,
@@ -61,12 +66,36 @@ import {
   sanitizeExtended,
   validateThingtimeCrystal,
   visibilityFromAcl,
+  type FeedScope,
   type NotificationType,
   type PostMediaLayout,
-  type ThingVisibility
+  type ThingVisibility,
+  SUBSPACE_THINGTIME,
+  UPDOWN_THINGTIME
 } from '~/schemas/registry';
 import { scorePost, type AlgorithmWeights, type PostFeatures } from './feedRanking';
 import { pollShapeOfCrystal, tallyPollVotes, type PollVoteEntry, type PublicPollVotes } from './pollCore';
+import { emptyUpdownVotes, orderCommentPage, tallyUpdown, type CommentSort, type PublicUpdownVotes, type UpdownEntry } from './updownCore';
+import {
+	assertSubspaceInteraction,
+	assertSubspacePosting,
+	authorFlairKey,
+	canModerate as canModerateSubspace,
+	isActiveMember as isActiveSubspaceMember,
+	loadAuthorFlairs,
+	loadOpenReportCounts,
+	loadSubspaceEmbeds,
+	loadViewerSubspaceRoles,
+	membershipOf as subspaceMembershipOf,
+	resolveRootPost,
+	subspaceFeedClauses,
+	subspaceIdOfDoc,
+	subspaceModHoldsPost,
+	type AuthorFlairs,
+	type SubspaceEmbed,
+	type ViewerSubspaceRoles
+} from '../subspaces/gate';
+import { liveUserFlair, toPublicUserFlair, type PublicUserFlair } from '../subspaces/subspaceCore';
 import { resolveInheritChain } from './aclChainCore';
 import {
   appAclEntry,
@@ -89,7 +118,7 @@ import { resolveAppScopedAcl } from '../apps/namespace';
 import { resolveViewStats } from './views';
 import { emitNotification, emitNotificationsBulk, type NotificationActor } from '../notifications/notifications';
 import { emitMentionNotifications } from '../notifications/mentions';
-import { followerIdsOf, friendIdsOf } from '../users/social';
+import { followerIdsOf, friendIdsOf, groupIdsOf } from '../users/social';
 import { ANONYMOUS_USER_NAME } from '~/utils/userIdentity';
 
 // Everything in thingtime.things is a thing (see app/schemas/registry.ts):
@@ -110,7 +139,7 @@ export { REACTION_EMOJIS };
 // derived from the registry's whitelist so the validation gate and the feed's
 // type filters can never drift
 export type PostType = (typeof REGISTRY_POST_TYPES)[number];
-export type PostVisibility = 'public' | 'friends' | 'family' | 'private';
+export type PostVisibility = 'public' | 'friends' | 'family' | 'private' | 'hidden' | 'custom';
 export type MarketplaceCategory = 'car' | 'tool' | 'furniture' | 'service' | 'other';
 
 export type MarketplaceListing = {
@@ -130,6 +159,23 @@ export type PostCommentDoc = {
   createdAt: Date;
 };
 
+// Subspace moderation state (api/utils/subspaces) — server-owned, lives at the
+// post ROOT so generic crystal input can never write it. Removed posts are
+// redacted for everyone but their author and the subspace's moderators and
+// stay out of every feed; locked posts take no new comments.
+export type SubspaceModState = {
+	status?: 'approved' | 'removed';
+	removedById?: string;
+	removedAt?: Date;
+	approvedById?: string;
+	approvedAt?: Date;
+	reason?: string | null;
+	pinned?: boolean;
+	locked?: boolean;
+	nsfw?: boolean;
+	spoiler?: boolean;
+};
+
 export type ThingDoc = {
   _id?: any;
   shareId: string;
@@ -143,6 +189,11 @@ export type ThingDoc = {
   ownerId: string;
   acl?: string[]; // v2 — tt: grants/exclusions (see schemas/registry.ts)
   visibility?: ThingVisibility; // v1 residue (mapped onto acl at read time)
+  // hidden (unlisted) things: the randomly generated secret that makes the
+  // thing viewable to ANYONE presenting it (?key= URLs). Minted whenever the
+  // acl enters tt:hidden (fresh each time, so old links never resurrect);
+  // inert while the acl says anything else. Owner-only in projections.
+  linkKey?: string | null;
   targetId?: string | null;
   // Drive-style organization (v2 only): shareId of a folder thing the SAME
   // owner holds, or null/absent for the root of /things. Containment lives on
@@ -225,6 +276,11 @@ export type ThingDoc = {
   comments?: PostCommentDoc[];
   shareOfId?: string | null;
   shareCount?: number;
+  // Subspace posts (api/utils/subspaces): moderation state at the root, and
+  // the private-subspace fence marker stamped when a post lands in a private
+  // subspace so feed clauses + canView can keep it members-only.
+  subspaceMod?: SubspaceModState;
+  subspacePrivate?: boolean;
 };
 
 // Lean author embed for feed payloads — identity only, never bio/bannerUrl
@@ -256,6 +312,11 @@ export type PublicComment = {
   tags: string[];
   reactionCounts: Record<string, number>;
   viewerReactions: string[];
+  // up/down votes — the separate focused reaction kind (things/updown.ts)
+  votes: PublicUpdownVotes;
+  // the author's user flair in the ROOT post's subspace (null outside
+  // subspaces / when they wear none / when they are no longer a member)
+  authorFlair: PublicAuthorFlair | null;
   // direct replies (comments are commentable — their own /post/:id page shows
   // the thread)
   commentCount: number;
@@ -274,6 +335,9 @@ export type PublicPost = {
   // legacy name derived from acl so old clients keep working
   visibility: PostVisibility;
   acl: string[];
+  // owner-only, hidden things only: the secret behind the shareable
+  // /post/<id>?key=<linkKey> URL
+  linkKey?: string;
   text: string;
   richText: Record<string, any> | null;
   images: string[];
@@ -286,6 +350,19 @@ export type PublicPost = {
   tags: string[];
   reactionCounts: Record<string, number>;
   viewerReactions: string[];
+  // up/down votes — the separate focused reaction kind (things/updown.ts);
+  // native emoji reactions above are untouched by it
+  votes: PublicUpdownVotes;
+  // Subspace vocabulary (api/utils/subspaces): optional headline, the
+  // subspace embed + the post's flair, and the moderation state. All null
+  // outside subspaces except `title`, which any post may carry.
+  title: string | null;
+  subspace: PublicPostSubspace | null;
+  flair: PublicPostFlair | null;
+  // the author's USER flair in this post's subspace (api/utils/subspaces —
+  // one batched member-row lookup per page); null outside subspaces
+  authorFlair: PublicAuthorFlair | null;
+  subspaceMod: PublicSubspaceMod | null;
   commentCount: number;
   // Viewer-relative layers: never disclose comments hidden by ACL/moderation.
   // `commentCount` remains the backward-compatible alias of total.
@@ -310,6 +387,39 @@ export type PublicPost = {
   createdAt: string;
 };
 
+// Lean subspace embed on subspace posts — identity + branding + the viewer's
+// own role there (never the member roster).
+export type PublicPostSubspace = {
+	id: string;
+	slug: string;
+	name: string;
+	icon: string | null;
+	iconUrl: string | null;
+	accent: string | null;
+	access: 'public' | 'restricted' | 'private';
+	nsfw: boolean;
+	viewerRole: 'owner' | 'moderator' | 'member' | null;
+};
+export type PublicPostFlair = { id: string; label: string; emoji: string | null; color: string | null };
+// a user flair beside an author's name: a template pick (id) or custom text
+// (id null) — the post-flair shape with a nullable id
+export type PublicAuthorFlair = PublicUserFlair;
+export type PublicSubspaceMod = {
+	status: 'approved' | 'removed';
+	removed: boolean;
+	// the removal reason is shown to the author and moderators only
+	reason: string | null;
+	removedAt: string | null;
+	pinned: boolean;
+	locked: boolean;
+	nsfw: boolean;
+	spoiler: boolean;
+	viewerCanModerate: boolean;
+	// moderators only: open reports against the post (the card's 🚩 badge, the
+	// mod page's Reports queue) — one $group per page; absent for everyone else
+	reportCount?: number;
+};
+
 // Generic projection for non-post things (and the unified read endpoint).
 export type PublicThing = {
   id: string;
@@ -319,6 +429,8 @@ export type PublicThing = {
   // same vocabulary the KV surface speaks; first-party projections never emit it
   visibility: ThingVisibility | 'app';
   acl: string[];
+  // owner-only, hidden things only: the ?key= secret for the hidden link
+  linkKey?: string;
   targetId: string | null;
   folderId: string | null;
   crystal: Record<string, any>;
@@ -344,22 +456,64 @@ export type PublicThing = {
 export type Viewer = {
   id: string;
   username?: string | null;
-  pat?: { tokenId: string; onlyCreatedThings: boolean; visibility?: 'all' | 'public' | 'private' } | null;
+  pat?: { tokenId: string; onlyCreatedThings: boolean; visibility?: 'all' | 'public' | 'private' | 'hidden' } | null;
   friendIds?: ReadonlySet<string>;
+  // the viewer's subspace memberships (api/utils/subspaces/gate.ts), loaded
+  // beside friendIds so private-subspace posts resolve for real members
+  subspaceRoles?: ViewerSubspaceRoles;
+  // audience-group memberships (tt:group/<id> acl entries resolve against
+  // this) — loaded alongside friendIds by withFriendIds
+  groupIds?: ReadonlySet<string>;
+  // hidden-link keys presented with THIS request (?key= / body.key) — canView
+  // grants a hidden thing to whoever carries its linkKey here
+  linkKeys?: ReadonlySet<string>;
 } | null;
 export const asViewer = (value: string | Viewer | null | undefined): Viewer => (typeof value === 'string' ? { id: value } : value || null);
+
+// 32 base64url chars (~192 bits) — the whole security of a hidden link is
+// this string being unguessable
+const generateLinkKey = (): string => randomBytes(24).toString('base64url');
+
+// Attach presented hidden-link keys to a viewer. Works for logged-out callers
+// too: an anonymous key-holder rides an id-less viewer shell (id '' is falsy,
+// so every viewer?.id check still reads it as anonymous — the key is its only
+// power). No keys = the viewer passes through untouched.
+export const withLinkKeys = (viewer: Viewer, keys: readonly string[]): Viewer => {
+  const presented = keys.map((key) => key.trim()).filter(Boolean);
+  if (!presented.length) return viewer;
+  return viewer ? { ...viewer, linkKeys: new Set(presented) } : { id: '', linkKeys: new Set(presented) };
+};
 
 // Attach the viewer's accepted-friend set (one indexed query, memoised on the
 // viewer object — already-enriched viewers pass straight through). Read paths
 // call this before acl evaluation so friends-only things resolve for real
 // friends instead of only their owner.
 export const withFriendIds = async (viewer: Viewer): Promise<Viewer> => {
-  if (!viewer?.id || viewer.friendIds) return viewer;
-  return { ...viewer, friendIds: await friendIdsOf(viewer.id) };
+  if (!viewer?.id || (viewer.friendIds && viewer.subspaceRoles && viewer.groupIds)) return viewer;
+  // the subspace roster and the audience-group set ride along (one indexed
+  // query each, same memo) so the sync canView can fence private-subspace
+  // posts, let moderators see removed ones, and resolve tt:group/<id>
+  const [friendIds, subspaceRoles, groupIds] = await Promise.all([
+    viewer.friendIds ? Promise.resolve(viewer.friendIds) : friendIdsOf(viewer.id),
+    viewer.subspaceRoles ? Promise.resolve(viewer.subspaceRoles) : loadViewerSubspaceRoles(viewer.id),
+    viewer.groupIds ? Promise.resolve(viewer.groupIds) : groupIdsOf(viewer.id)
+  ]);
+  return { ...viewer, friendIds, subspaceRoles, groupIds };
 };
 
 export const POST_TYPES: PostType[] = [...REGISTRY_POST_TYPES];
+// The DEFAULT circle set: what an unfiltered feed/search covers. 'hidden' and
+// 'custom' are deliberately absent — an unlisted thing is reachable by its
+// link key, and a custom-audience thing by its baseline or an explicit grant
+// (or, for either, by its owner's own-things clause), never by simply not
+// filtering.
 export const VISIBILITIES: PostVisibility[] = ['public', 'friends', 'family', 'private'];
+// What a caller may ASK for. Wider than the default set: 'hidden' and 'custom'
+// are real circles the composer, post menu and feed/search filter chips all
+// offer (CIRCLE_META drives both menus), so `circles=hidden` / `circles=custom`
+// have to survive input validation — dropping one silently widens the query
+// back to every default circle, i.e. the opposite filter.
+export const REQUESTABLE_VISIBILITIES: PostVisibility[] = [...VISIBILITIES, 'hidden', 'custom'];
 
 const MAX_TAGS = 12;
 const MAX_TAG_CHARS = 40;
@@ -586,7 +740,7 @@ export const isFail = (value: unknown): value is Fail => !!value && typeof value
 // sandboxed tokens stay inside their own creations.
 export const viewerOf = (
   user: { id: string; username: string } | null,
-  pat?: { jti: string; onlyCreatedThings?: boolean; visibility?: 'all' | 'public' | 'private' } | null
+  pat?: { jti: string; onlyCreatedThings?: boolean; visibility?: 'all' | 'public' | 'private' | 'hidden' } | null
 ): Viewer =>
   user
     ? {
@@ -597,7 +751,8 @@ export const viewerOf = (
               pat: {
                 tokenId: pat.jti,
                 onlyCreatedThings: pat.onlyCreatedThings === true,
-                visibility: pat.visibility === 'public' || pat.visibility === 'private' ? pat.visibility : 'all'
+                visibility:
+                  pat.visibility === 'public' || pat.visibility === 'private' || pat.visibility === 'hidden' ? pat.visibility : 'all'
               }
             }
           : {})
@@ -677,29 +832,38 @@ const patSandboxFail = (): Fail => fail(403, 'This token is sandboxed — it can
 // private data, so out-of-audience things are invisible, not just
 // untouchable.
 
-export const patVisibilityOf = (viewer: Viewer): 'public' | 'private' | null =>
-  viewer?.pat?.visibility === 'public' || viewer?.pat?.visibility === 'private' ? viewer.pat.visibility : null;
+export const patVisibilityOf = (viewer: Viewer): 'public' | 'private' | 'hidden' | null =>
+  viewer?.pat?.visibility === 'public' || viewer?.pat?.visibility === 'private' || viewer?.pat?.visibility === 'hidden'
+    ? viewer.pat.visibility
+    : null;
 
 // Fence check on a CONCRETE acl. tt:inherit means the audience lives on the
 // target chain — the inherit-aware paths (canViewInherited, the mutation-site
 // patVisibilityBlocksDoc) resolve it first; a direct hit on an unresolved
-// inherit acl fails closed. Exported for patVisibility.test.ts: this one
-// expression IS the fence, so its truth table is pinned rather than left to a
-// live stack (same reason visibleRelatedModerationClause is exported).
+// inherit acl fails closed. Buckets: 'public' = carries tt:all; 'hidden' =
+// carries tt:hidden; 'private' = everything NOT public (hidden included —
+// hidden is a species of non-public). Exported for patVisibility.test.ts: this
+// one expression IS the fence, so its truth table is pinned rather than left to
+// a live stack (same reason visibleRelatedModerationClause is exported).
 export const patVisibilityBlocksAcl = (viewer: Viewer, acl: string[]): boolean => {
   const mode = patVisibilityOf(viewer);
   if (!mode) return false;
   if (acl.includes(ACL_INHERIT)) return true;
+  if (mode === 'hidden') return !acl.includes(ACL_HIDDEN);
   return acl.includes(ACL_ALL) !== (mode === 'public');
 };
 
-const patVisibilityFail = (viewer: Viewer): Fail =>
-  fail(
+const patVisibilityFail = (viewer: Viewer): Fail => {
+  const mode = patVisibilityOf(viewer);
+  return fail(
     403,
-    patVisibilityOf(viewer) === 'public'
+    mode === 'public'
       ? 'This token is public-only — it can only see and touch public things 🌐'
-      : 'This token is private-only — it can only see and touch private (non-public) things 🔒'
+      : mode === 'hidden'
+        ? 'This token is hidden-only — it can only see and touch hidden link-key things 🕵️'
+        : 'This token is private-only — it can only see and touch private (non-public) things 🔒'
   );
+};
 
 // ---------------------------------------------------------------------------
 // Era helpers — one place that knows how to read both doc generations.
@@ -875,7 +1039,7 @@ export const sanitizeShareId = (value: unknown): string | null | Fail => {
 // and never surface as content — filing them is meaningless. Comments/shares/
 // posts are authored content and CAN be filed: folderId is pure owner-side
 // organization, orthogonal to targetId attachment and inherit visibility.
-const FOLDER_UNFILEABLE = ['reaction', 'save', 'vote'];
+const FOLDER_UNFILEABLE = ['reaction', 'save', 'vote', UPDOWN_THINGTIME];
 // Ancestor-walk bound. Legitimate folder trees are shallow; the walk fails
 // closed at the cap so a corrupt chain can never loop the server.
 const MAX_FOLDER_DEPTH = 64;
@@ -949,7 +1113,11 @@ export type CreateThingInput = {
   createdAt?: Date;
 };
 
-type CreateThingResult = Fail | { ok: true; doc: ThingDoc };
+// rootSubspaceId: for a comment / reaction the interaction gate judged, the
+// ROOT post's subspace it resolved on the way (null outside subspaces) — the
+// caller reuses it instead of walking the reply chain again; absent when the
+// gate did not run (standalone things)
+type CreateThingResult = Fail | { ok: true; doc: ThingDoc; rootSubspaceId?: string | null };
 
 // Dedicated server features may extend the atomic Thing insert without
 // opening their protected fields to generic client input. Hooks run after the
@@ -1043,6 +1211,24 @@ export const createThing = async (
   const provenance = await resolveDataSchemaProvenance(validated.thingtime, validated.crystal, asOwner);
   if (isFail(provenance)) return provenance;
 
+  // subspace posting gate (api/utils/subspaces/gate.ts): membership, ban,
+  // access-mode and flair rules run on EVERY post create — the generic route
+  // included — and a private subspace stamps the fence the feeds + canView honour
+  let subspacePrivate = false;
+  const postSubspaceId = validated.thingtime.includes('post') ? subspaceIdOfDoc({ crystal: validated.crystal }) : null;
+  if (postSubspaceId) {
+    const gate = await assertSubspacePosting(
+      ownerId,
+      postSubspaceId,
+      typeof validated.crystal.flairId === 'string' ? validated.crystal.flairId : null,
+      { roles: asOwner.subspaceRoles }
+    );
+    if (isFail(gate)) return gate;
+    if (gate.flairId) validated.crystal.flairId = gate.flairId;
+    else delete validated.crystal.flairId;
+    subspacePrivate = gate.private;
+  }
+
   const tags = sanitizeTags(input.tags);
   if (isFail(tags)) return tags;
 
@@ -1106,6 +1292,14 @@ export const createThing = async (
     // shares this applies to the final root — re-sharing a token-created share
     // of someone else's post would attach to that foreign root, so it blocks.
     if (patSandboxBlocks(viewer, target)) return patSandboxFail();
+    // custom audiences gate engagement (comment/react/share) behind the
+    // comment capability — saves stay personal and exempt
+    if (
+      (validated.thingtime.includes('comment') || validated.thingtime.includes('reaction') || validated.thingtime.includes('share')) &&
+      (await customEngageBlocks(asOwner, target))
+    ) {
+      return customEngageFail();
+    }
     targetId = target.shareId;
   } else if (input.targetId !== undefined && input.targetId !== null) {
     return fail(400, `thingtime ${validated.thingtime.join('+')} does not take a targetId`);
@@ -1129,9 +1323,11 @@ export const createThing = async (
     // the public default for standalone content things
     acl = inputAcl || [ACL_OWNER];
   } else {
-    // a private-only token's standalone creations default private — the
-    // public default would only ever 403 on the visibility fence below
-    acl = inputAcl || (patVisibilityOf(viewer) === 'private' ? [ACL_OWNER] : [ACL_ALL]);
+    // fenced tokens' standalone creations default INSIDE their fence — the
+    // public default would only ever 403 on the check below (private-only →
+    // private; hidden-only → hidden, which mints its secret link)
+    const fenceMode = patVisibilityOf(viewer);
+    acl = inputAcl || (fenceMode === 'private' ? [ACL_OWNER] : fenceMode === 'hidden' ? [ACL_HIDDEN, ACL_OWNER] : [ACL_ALL]);
   }
 
   // The token visibility fence on the NEW thing's audience. By-design
@@ -1143,8 +1339,25 @@ export const createThing = async (
     return patVisibilityFail(viewer);
   }
 
+  // hidden things are born with their secret link key — the random URL that
+  // makes an unlisted thing reachable (canView honors it while acl says hidden)
+  const linkKey = acl.includes(ACL_HIDDEN) ? generateLinkKey() : null;
+
   const folderAssignment = await resolveFolderAssignment(ownerId, input.folderId, validated.thingtime);
   if (isFail(folderAssignment)) return folderAssignment;
+
+  // subspace rules on attached things: banned users can't comment or react
+  // inside the subspace, and locked posts take no new comments (mods excepted).
+  // The gate walks to the root post once; its subspace rides the result so
+  // addComment never repeats the walk for the fresh comment's authorFlair.
+  let rootSubspaceId: string | null | undefined;
+  if (target && (validated.thingtime.includes('comment') || validated.thingtime.includes('reaction'))) {
+    const interaction = await assertSubspaceInteraction(ownerId, target, validated.thingtime.includes('comment') ? 'comment' : 'vote', {
+      roles: asOwner.subspaceRoles
+    });
+    if (isFail(interaction)) return interaction;
+    rootSubspaceId = interaction.rootSubspaceId;
+  }
 
   if (validated.thingtime.includes('comment') && target) {
 		// includeBlocked: the cap is a physical doc bound — blocked spam must not
@@ -1186,10 +1399,12 @@ export const createThing = async (
     targetId,
     folderId: folderAssignment.folderId,
     tags: allTags,
+    ...(subspacePrivate ? { subspacePrivate: true } : {}),
     // every PAT-created thing carries its creator's grant (sandboxed or not —
     // free provenance) plus any entries the caller seeded; a sandboxed
     // creator listing peers here is delegation at birth
     ...(tokenAclDoc.length ? { tokenAcl: tokenAclDoc } : {}),
+    ...(linkKey ? { linkKey } : {}),
     createdAt: now,
     updatedAt: now,
 		...(app ? appNamespaceStamp(app, sizeBytes) : {}),
@@ -1319,7 +1534,7 @@ export const createThing = async (
 	} else if (moderationPlan.queueAsync) {
 		queueTextModeration(doc.shareId);
 	}
-  return { ok: true, doc };
+  return { ok: true, doc, ...(rootSubspaceId !== undefined ? { rootSubspaceId } : {}) };
 };
 
 // Posts land in followers'/friends' notification feeds, capped — big accounts
@@ -1473,6 +1688,10 @@ export type CreatePostInput = {
   listing?: unknown;
   thing?: unknown;
 	mediaLayout?: unknown;
+  // subspace vocabulary (api/utils/subspaces): headline, destination, flair
+  title?: unknown;
+  subspaceId?: unknown;
+  flairId?: unknown;
   extended?: unknown;
   acl?: unknown;
   visibility?: unknown;
@@ -1502,7 +1721,10 @@ export const createPost = async (
 			images: input.images,
 			listing: input.listing,
 			thing: input.thing,
-			mediaLayout: input.mediaLayout
+			mediaLayout: input.mediaLayout,
+			title: input.title,
+			subspaceId: input.subspaceId,
+			flairId: input.flairId
 		},
       extended: input.extended,
       acl: input.acl,
@@ -1581,6 +1803,8 @@ type RelatedThings = {
   // poll vote things per page-doc shareId (see pollCore.ts) — one query for
   // the whole page, folded into the same fetch as comments/reactions
   votesByTarget: Map<string, PollVoteEntry[]>;
+  // up/down vote entries per post AND comment shareId (things/updownCore.ts)
+  updownByTarget: Map<string, UpdownEntry[]>;
   shareCountByTarget: Map<string, number>;
   // direct-reply counts per comment shareId
   commentCountByTarget: Map<string, number>;
@@ -1632,6 +1856,8 @@ export const RELATED_CHILD_PROJECTION = {
   // Number(undefined) — NaN option indexes, so a poll renders zero votes with
   // no error anywhere.
   'crystal.optionIndex': 1,
+  // up/down votes ride the same pass; the updown branch reads only this field
+  'crystal.direction': 1,
   // v1 residue: the fields thingtimeOf/crystalOf/targetIdOf fall back to for
   // pre-v2 docs, which this collection still legitimately holds.
   shareOfId: 1,
@@ -1654,7 +1880,7 @@ const RELATED_LEGACY_PROJECTION = {
 } as const;
 
 // Reactions only ever contribute (userId, emoji) pairs.
-const RELATED_REACTION_PROJECTION = { schemaVersion: 1, targetId: 1, ownerId: 1, 'crystal.emoji': 1 } as const;
+const RELATED_REACTION_PROJECTION = { schemaVersion: 1, targetId: 1, ownerId: 1, thingtime: 1, 'crystal.emoji': 1, 'crystal.direction': 1 } as const;
 
 // Related interaction projections must apply the same pending-content rule as
 // canView/canViewInherited: blocked content is invisible to everyone, while a
@@ -1675,15 +1901,16 @@ const resolveRelated = async (docs: ThingDoc[], viewerId: string | null): Promis
   const commentsByTarget = new Map<string, CommentEntry[]>();
   const reactionsByTarget = new Map<string, ReactionEntry[]>();
   const votesByTarget = new Map<string, PollVoteEntry[]>();
+  const updownByTarget = new Map<string, UpdownEntry[]>();
   const shareCountByTarget = new Map<string, number>();
   const commentCountByTarget = new Map<string, number>();
-  if (!ids.length) return { commentsByTarget, reactionsByTarget, votesByTarget, shareCountByTarget, commentCountByTarget };
+  if (!ids.length) return { commentsByTarget, reactionsByTarget, votesByTarget, updownByTarget, shareCountByTarget, commentCountByTarget };
 
   const things = await getThingsCollection();
 	const moderation = visibleRelatedModerationClause(viewerId);
   const [related, legacyRelational, shareCounts] = await Promise.all([
     things
-      .find(withMatch({ targetId: { $in: ids }, thingtime: { $in: ['comment', 'reaction', 'vote'] } }, moderation) as any)
+      .find(withMatch({ targetId: { $in: ids }, thingtime: { $in: ['comment', 'reaction', 'vote', UPDOWN_THINGTIME] } }, moderation) as any)
       .project(RELATED_CHILD_PROJECTION)
       .sort({ createdAt: 1, shareId: 1 })
       .toArray() as Promise<any[]>,
@@ -1721,6 +1948,11 @@ const resolveRelated = async (docs: ThingDoc[], viewerId: string | null): Promis
     list.push(entry);
     reactionsByTarget.set(target, list);
   };
+  const pushUpdown = (target: string, entry: UpdownEntry) => {
+    const list = updownByTarget.get(target) || [];
+    list.push(entry);
+    updownByTarget.set(target, list);
+  };
 
   for (const doc of related as ThingDoc[]) {
     const target = doc.targetId as string;
@@ -1738,6 +1970,8 @@ const resolveRelated = async (docs: ThingDoc[], viewerId: string | null): Promis
       const list = votesByTarget.get(target) || [];
       list.push({ userId: String(doc.ownerId), optionIndex: Number(doc.crystal?.optionIndex) });
       votesByTarget.set(target, list);
+    } else if (thingtimeOf(doc).includes(UPDOWN_THINGTIME)) {
+      pushUpdown(target, { userId: String(doc.ownerId), direction: doc.crystal?.direction });
     }
   }
   for (const doc of legacyRelational as ThingDoc[]) {
@@ -1773,7 +2007,7 @@ const resolveRelated = async (docs: ThingDoc[], viewerId: string | null): Promis
     const withDocs = depth < SHIPPED_REPLY_LEVELS;
     const [levelReactions, replyGroups] = await Promise.all([
       things
-        .find(withMatch({ targetId: { $in: levelIds }, thingtime: 'reaction' }, moderation) as any)
+        .find(withMatch({ targetId: { $in: levelIds }, thingtime: { $in: ['reaction', UPDOWN_THINGTIME] } }, moderation) as any)
         .project(RELATED_REACTION_PROJECTION)
         .sort({ createdAt: 1, shareId: 1 })
         .toArray() as Promise<any[]>,
@@ -1803,7 +2037,11 @@ const resolveRelated = async (docs: ThingDoc[], viewerId: string | null): Promis
         .toArray() as Promise<any[]>
     ]);
     for (const doc of levelReactions as ThingDoc[]) {
-      pushReaction(doc.targetId as string, { userId: doc.ownerId, emoji: String(doc.crystal?.emoji || '') });
+      if (thingtimeOf(doc).includes(UPDOWN_THINGTIME)) {
+        pushUpdown(doc.targetId as string, { userId: String(doc.ownerId), direction: doc.crystal?.direction });
+      } else {
+        pushReaction(doc.targetId as string, { userId: doc.ownerId, emoji: String(doc.crystal?.emoji || '') });
+      }
     }
     const nextLevelIds: string[] = [];
     for (const group of replyGroups) {
@@ -1825,7 +2063,7 @@ const resolveRelated = async (docs: ThingDoc[], viewerId: string | null): Promis
     levelIds = nextLevelIds;
   }
 
-  return { commentsByTarget, reactionsByTarget, votesByTarget, shareCountByTarget, commentCountByTarget };
+  return { commentsByTarget, reactionsByTarget, votesByTarget, updownByTarget, shareCountByTarget, commentCountByTarget };
 };
 
 // Attachments are relational protected Things. Resolve one bounded query for
@@ -1979,10 +2217,72 @@ const viewerReactionsOf = (entries: ReactionEntry[], viewerId: string | null): s
 
 const liveShareCountOf = (doc: ThingDoc, related: RelatedThings): number => related.shareCountByTarget.get(doc.shareId) || 0;
 
-export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | Viewer): Promise<PublicPost[]> => {
+// The root post's subspace for every COMMENT doc on a page that carries no
+// crystal.subspaceId of its own: parents are fetched one reply level at a
+// time ({ shareId: $in } per hop, bounded), so a page of N comment docs costs
+// at most MAX_ROOT_HOPS queries instead of N walks. Docs that are not
+// comments, or already carry a subspaceId, are skipped.
+const MAX_ROOT_HOPS = 16;
+const resolveCommentRootSubspaces = async (things: Awaited<ReturnType<typeof getThingsCollection>>, docs: ThingDoc[]): Promise<Map<string, string | null>> => {
+  const roots = new Map<string, string | null>();
+  // parentId → the comment docs waiting on it
+  let frontier = new Map<string, string[]>();
+  const waitOn = (map: Map<string, string[]>, parentId: string, docId: string) => map.set(parentId, [...(map.get(parentId) || []), docId]);
+  for (const doc of docs) {
+    const parentId = targetIdOf(doc);
+    if (parentId && thingtimeOf(doc).includes('comment') && !subspaceIdOfDoc(doc)) waitOn(frontier, parentId, doc.shareId);
+  }
+  const seen = new Set<string>();
+  for (let hop = 0; hop < MAX_ROOT_HOPS && frontier.size; hop++) {
+    const parentIds = [...frontier.keys()].filter((id) => !seen.has(id));
+    if (!parentIds.length) break;
+    parentIds.forEach((id) => seen.add(id));
+    const parents = (await things
+      .find({ shareId: { $in: parentIds } } as any)
+      .project({ shareId: 1, thingtime: 1, targetId: 1, 'crystal.subspaceId': 1 })
+      .toArray()) as any[];
+    const next = new Map<string, string[]>();
+    for (const parent of parents) {
+      const waiting = frontier.get(String(parent.shareId)) || [];
+      const grandparentId = typeof parent.targetId === 'string' ? parent.targetId : null;
+      const subspaceId = subspaceIdOfDoc(parent);
+      if (!subspaceId && grandparentId && thingtimeOf(parent).includes('comment')) {
+        for (const docId of waiting) waitOn(next, grandparentId, docId);
+      } else {
+        for (const docId of waiting) roots.set(docId, subspaceId);
+      }
+    }
+    frontier = next;
+  }
+  return roots;
+};
+
+// an author's user flair in one subspace, from the page's batched member-row
+// lookup, resolved against the embed's live templates (a renamed template
+// updates every wearer; a deleted one keeps its snapshot)
+const authorFlairFor = (flairs: AuthorFlairs, embed: SubspaceEmbed | null, subspaceId: string, userId: string): PublicAuthorFlair | null =>
+  toPublicUserFlair(liveUserFlair(flairs.get(authorFlairKey(subspaceId, userId)) || null, embed?.userFlairs));
+
+// Per-read projection options. `commentSort` (GET /api/v1/things?id=…&
+// commentSort=top|new|old — round 2 S7) re-orders the SHIPPED comment page:
+// null keeps the default (the newest RETURNED_COMMENTS, oldest → newest);
+// `top` = votes.score desc then older-first, `new` / `old` = by createdAt.
+// Level 1 is loaded whole per post (MAX_COMMENTS_PER_POST bounds it), so a
+// sorted page is the true best / newest / oldest of the level. The deeper
+// shipped levels are DB-sliced to the newest REPLIES_PER_LEVEL per parent
+// before any score is known (resolveRelated), so they re-order among the
+// replies that already ship rather than re-querying per parent — the
+// non-intrusive half the spec allowed; the docs say so.
+export type PostProjectionOptions = { commentSort?: CommentSort | null };
+
+export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | Viewer, options: PostProjectionOptions = {}): Promise<PublicPost[]> => {
   const viewer = await withFriendIds(asViewer(viewerInput));
   const viewerId = viewer?.id || null;
   if (!docs.length) return [];
+  const commentSort = options.commentSort ?? null;
+  // a sorted page can ship ANY of the level's comments, so the legacy
+  // embedded entries (a bounded v1 array) all need their authors resolved
+  const embeddedPage = (doc: ThingDoc) => (commentSort ? doc.comments || [] : (doc.comments || []).slice(-RETURNED_COMMENTS));
   const things = await getThingsCollection();
 
   // one level of share resolution
@@ -2019,27 +2319,82 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   const userIds: string[] = [];
   [...docs, ...originals].forEach((doc) => {
     userIds.push(doc.ownerId);
-    (doc.comments || []).slice(-RETURNED_COMMENTS).forEach((comment) => userIds.push(comment.userId));
+    embeddedPage(doc).forEach((comment) => userIds.push(comment.userId));
   });
   // every standalone comment entry across all levels (level-2 replies included)
   for (const entries of related.commentsByTarget.values()) {
     entries.forEach((entry) => userIds.push(entry.userId));
   }
+  // Comments wear the ROOT POST's subspace flair. A comment doc projected as
+  // a root here (GET ?id=<comment> — a thread drill-down, a comment's own
+  // /post/:id page) carries no crystal.subspaceId of its own, so its root
+  // post is resolved in bounded batched hops — one $in per level up the
+  // reply chain for the whole page, never a per-doc walk.
+  const rootSubspaceByDocId = await resolveCommentRootSubspaces(things, allDocs);
+  const rootSubspaceOf = (doc: ThingDoc): string | null => subspaceIdOfDoc(doc) ?? rootSubspaceByDocId.get(doc.shareId) ?? null;
+  // author flairs: every (subspace, author) pair on the page — the post's
+  // author plus every shipped comment level under it — ONE uniqueKeys $in,
+  // never per doc
+  const flairPairs: { subspaceId: string; userId: string }[] = [];
+  const collectCommentAuthors = (parentId: string, subspaceId: string, depth: number) => {
+    if (depth > 8) return;
+    for (const entry of related.commentsByTarget.get(parentId) || []) {
+      flairPairs.push({ subspaceId, userId: entry.userId });
+      collectCommentAuthors(entry.id, subspaceId, depth + 1);
+    }
+  };
+  for (const doc of allDocs) {
+    const subspaceId = rootSubspaceOf(doc);
+    if (!subspaceId) continue;
+    flairPairs.push({ subspaceId, userId: doc.ownerId });
+    embeddedPage(doc).forEach((comment) => flairPairs.push({ subspaceId, userId: comment.userId }));
+    collectCommentAuthors(doc.shareId, subspaceId, 1);
+  }
+  // open-report counts: only for the subspace posts this viewer MODERATES
+  // (the pairs are known from the roster already on the viewer), ONE $group
+  // for the page — everyone else's read never touches the report rows
+  const reportPairs: { subspaceId: string; postId: string }[] = [];
+  for (const doc of allDocs) {
+    const subspaceId = subspaceIdOfDoc(doc);
+    if (subspaceId && canModerateSubspace(viewer?.subspaceRoles?.get(subspaceId) || null)) reportPairs.push({ subspaceId, postId: doc.shareId });
+  }
   // Attachments and profiles both derive from `related`, but NOT from each
   // other — running them together keeps the second off the critical path.
-  const [attachmentsByTarget, profiles] = await Promise.all([
+  const [attachmentsByTarget, profiles, subspaces, authorFlairs, openReportCounts] = await Promise.all([
     resolvePostAttachments(attachmentTargetIds, expectedAttachmentTargets, viewerId),
-    resolveProfiles(userIds)
+    resolveProfiles(userIds),
+    // subspace embeds for the page — one $in over the subspace kind. Keyed by
+    // the ROOT subspace (rootSubspaceOf, not the doc's own pointer) so a
+    // comment projected as the root still resolves its authorFlair against
+    // the live templates: a renamed template follows the wearer on the
+    // thread drill-down too, not only on the post page.
+    loadSubspaceEmbeds(allDocs.map((doc) => rootSubspaceOf(doc)).filter(Boolean) as string[]),
+    loadAuthorFlairs(flairPairs),
+    loadOpenReportCounts(reportPairs)
   ]);
+  const authorFlairOf = (subspaceId: string | null, userId: string): PublicAuthorFlair | null =>
+    subspaceId ? authorFlairFor(authorFlairs, subspaces.get(subspaceId) || null, subspaceId, userId) : null;
 
   // comments share the post schema — surface the post vocabulary (rich
   // ["post","comment"] bodies, reactions, reply counts); legacy-era entries
   // (no doc) fall back to the text-only defaults. Recurses through the
   // preloaded reply levels (resolveRelated ships two).
-  const buildComment = (comment: CommentEntry, parentId: string): PublicComment => {
+  // the sort key of a loaded comment: its relational net score + age
+  const sortableOf = (entry: CommentEntry) => ({
+    entry,
+    id: entry.id,
+    createdAtMs: entry.createdAt.getTime(),
+    score: commentSort === 'top' ? tallyUpdown(related.updownByTarget.get(entry.id) || [], null).score : 0
+  });
+  // one level's shipped page in the requested order (null = today's page)
+  const pageOf = (entries: CommentEntry[], limit: number): CommentEntry[] =>
+    commentSort ? orderCommentPage(entries.map(sortableOf), commentSort, limit).map((row) => row.entry) : entries.slice(-limit);
+  const buildComment = (comment: CommentEntry, parentId: string, rootSubspaceId: string | null): PublicComment => {
     const commentCrystal = comment.doc ? crystalOf(comment.doc) : {};
     const commentReactions = related.reactionsByTarget.get(comment.id) || [];
-    const replies = related.commentsByTarget.get(comment.id) || [];
+    const loadedReplies = related.commentsByTarget.get(comment.id) || [];
+    // every shipped reply stays shipped — a sort only re-orders the level
+    const replies = commentSort ? pageOf(loadedReplies, loadedReplies.length) : loadedReplies;
     return {
       id: comment.id,
       thingtime: comment.doc ? thingtimeOf(comment.doc) : ['comment'],
@@ -2061,8 +2416,10 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       tags: comment.doc?.tags || [],
       reactionCounts: reactionCountsOf(commentReactions),
       viewerReactions: viewerReactionsOf(commentReactions, viewerId),
+      votes: tallyUpdown(related.updownByTarget.get(comment.id) || [], viewerId),
+      authorFlair: authorFlairOf(rootSubspaceId, comment.userId),
       commentCount: related.commentCountByTarget.get(comment.id) || 0,
-      comments: replies.map((reply) => buildComment(reply, comment.id)),
+      comments: replies.map((reply) => buildComment(reply, comment.id, rootSubspaceId)),
       targetId: parentId,
       createdAt: comment.createdAt.toISOString()
     };
@@ -2071,7 +2428,8 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   const project = (doc: ThingDoc, withShare: boolean): PublicPost => {
     const crystal = crystalOf(doc);
     const allComments = mergedCommentsOf(doc, related);
-    const comments = allComments.slice(-RETURNED_COMMENTS).map((comment) => buildComment(comment, doc.shareId));
+    const rootSubspaceId = rootSubspaceOf(doc);
+    const comments = pageOf(allComments, RETURNED_COMMENTS).map((comment) => buildComment(comment, doc.shareId, rootSubspaceId));
     // the counter reports the WHOLE thread: v2 descendants via $graphLookup
     // plus the legacy-era entries (no doc) that graph traversal can't see
     const totalComments = (threadCounts.get(doc.shareId) ?? 0) + allComments.filter((entry) => !entry.doc).length;
@@ -2081,6 +2439,36 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
     // only SHARES nest their target — a comment doc projected through here
     // (its /post/:id page) must not render its parent as a pseudo-share
     const original = withShare && shareTarget && thingtimeOf(doc).includes('share') ? originalsById.get(shareTarget) : null;
+
+    // subspace vocabulary: embed + flair + moderation state. A REMOVED post is
+    // redacted (body, media, title) for everyone but its author and the
+    // subspace's moderators — the doc still projects so the card can say
+    // "removed by moderators" in place instead of vanishing mid-thread.
+    const subspaceId = subspaceIdOfDoc(doc);
+    const subspaceEmbed = subspaceId ? subspaces.get(subspaceId) || null : null;
+    const subspaceMembership = subspaceId ? viewer?.subspaceRoles?.get(subspaceId) || null : null;
+    const viewerCanModerate = canModerateSubspace(subspaceMembership);
+    const modState = doc.subspaceMod || null;
+    const removed = modState?.status === 'removed';
+    const viewerOwns = !!viewerId && doc.ownerId === viewerId;
+    const redacted = removed && !viewerOwns && !viewerCanModerate;
+    const flairId = typeof crystal.flairId === 'string' ? crystal.flairId : null;
+    const flairEntry = subspaceEmbed && flairId ? subspaceEmbed.flairs.find((entry) => entry.id === flairId) || null : null;
+    const subspaceMod: PublicSubspaceMod | null = subspaceId
+      ? {
+          status: removed ? 'removed' : 'approved',
+          removed,
+          reason: removed && !redacted ? modState?.reason ?? null : null,
+          removedAt: removed && modState?.removedAt ? new Date(modState.removedAt).toISOString() : null,
+          pinned: modState?.pinned === true,
+          locked: modState?.locked === true,
+          nsfw: modState?.nsfw === true || subspaceEmbed?.nsfw === true,
+          spoiler: modState?.spoiler === true,
+          viewerCanModerate,
+          // the 🚩 count is the mods' business only
+          ...(viewerCanModerate ? { reportCount: openReportCounts.get(doc.shareId) || 0 } : {})
+        }
+      : null;
 
     // poll posts carry their live tally (votes were fetched in the same
     // batched resolveRelated pass as comments/reactions — no extra query)
@@ -2094,19 +2482,44 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       author: profiles.get(doc.ownerId) || null,
       visibility: visibilityFromAcl(aclOf(doc)) as PostVisibility,
       acl: aclOf(doc),
-      text: String(crystal.text || ''),
+      // owner-only: the hidden-link secret, only while the acl says hidden
+      ...(viewer?.id && viewer.id === doc.ownerId && typeof doc.linkKey === 'string' && doc.linkKey && aclOf(doc).includes(ACL_HIDDEN)
+        ? { linkKey: doc.linkKey }
+        : {}),
+      // …but a moderator-removed post shows no body to anyone but its author
+      text: redacted ? '' : String(crystal.text || ''),
       richText:
-        crystal.richText && typeof crystal.richText === 'object' && !Array.isArray(crystal.richText)
+        !redacted && crystal.richText && typeof crystal.richText === 'object' && !Array.isArray(crystal.richText)
           ? (crystal.richText as Record<string, any>)
           : null,
-      images: (crystal.images as string[]) || [],
-			attachments: attachmentsByTarget.get(doc.shareId) || [],
+      images: redacted ? [] : (crystal.images as string[]) || [],
+			attachments: redacted ? [] : attachmentsByTarget.get(doc.shareId) || [],
 			mediaLayout: mediaLayoutOf(crystal),
-      listing: (crystal.listing as MarketplaceListing) || null,
-      thing: crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing) ? (crystal.thing as Record<string, any>) : null,
+      listing: redacted ? null : (crystal.listing as MarketplaceListing) || null,
+      thing: !redacted && crystal.thing && typeof crystal.thing === 'object' && !Array.isArray(crystal.thing) ? (crystal.thing as Record<string, any>) : null,
       tags: doc.tags || [],
       reactionCounts: reactionCountsOf(reactions),
       viewerReactions: viewerReactionsOf(reactions, viewerId),
+      votes: tallyUpdown(related.updownByTarget.get(doc.shareId) || [], viewerId),
+      title: redacted ? null : typeof crystal.title === 'string' && crystal.title ? crystal.title : null,
+      subspace: subspaceEmbed
+        ? {
+            id: subspaceEmbed.id,
+            slug: subspaceEmbed.slug,
+            name: subspaceEmbed.name,
+            icon: subspaceEmbed.icon,
+            iconUrl: subspaceEmbed.iconUrl,
+            accent: subspaceEmbed.accent,
+            access: subspaceEmbed.access,
+            nsfw: subspaceEmbed.nsfw,
+            // a pending join request holds no role (same predicate as the
+            // subspace detail's viewer.role — never 'member' for a requester)
+            viewerRole: isActiveSubspaceMember(subspaceMembership) ? subspaceMembership!.role : null
+          }
+        : null,
+      flair: flairEntry ? { id: flairEntry.id, label: flairEntry.label, emoji: flairEntry.emoji, color: flairEntry.color } : null,
+      authorFlair: authorFlairOf(rootSubspaceId, doc.ownerId),
+      subspaceMod,
       commentCount: totalComments,
       commentCounts: layeredPostCommentCounts(allComments.length, totalComments, comments.length),
       comments,
@@ -2142,12 +2555,19 @@ export const toPublicThings = async (docs: ThingDoc[], viewerInput: string | Vie
     // token grants are owner-facing management data, not audience — only the
     // owner's own credentials (session or their tokens) see them
     const tokenAcl = viewer?.id && viewer.id === doc.ownerId ? tokenAclOf(doc) : [];
+    // the hidden-link secret is owner-facing too, and only meaningful while
+    // the acl still says hidden
+    const linkKey =
+      viewer?.id && viewer.id === doc.ownerId && typeof doc.linkKey === 'string' && doc.linkKey && aclOf(doc).includes(ACL_HIDDEN)
+        ? doc.linkKey
+        : null;
     return {
       id: doc.shareId,
       thingtime: thingtimeOf(doc),
       author: profiles.get(doc.ownerId) || null,
       visibility: visibilityFromAcl(aclOf(doc)),
       acl: aclOf(doc),
+      ...(linkKey ? { linkKey } : {}),
       targetId: targetIdOf(doc),
       folderId: folderIdOf(doc),
       crystal: crystalOf(doc),
@@ -2169,7 +2589,7 @@ export const toPublicThings = async (docs: ThingDoc[], viewerInput: string | Vie
 
 const aclOf = (doc: ThingDoc): string[] => (Array.isArray(doc.acl) && doc.acl.length ? doc.acl : aclFromVisibility(doc.visibility) || [ACL_OWNER]);
 
-const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
+export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
 	// Operational diagnostics have a stricter boundary than ordinary private
 	// Things: only the dedicated current-admin endpoint may decode/read them.
 	if (thingtimeOf(doc).includes(MIGRATION_DIAGNOSTIC_THINGTIME)) return false;
@@ -2193,9 +2613,61 @@ const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
   // private things (inherit acls are judged on their resolved terminal via
   // canViewInherited; a direct hit on one fails closed).
   if (patVisibilityBlocksAcl(viewer, aclOf(doc))) return false;
+  // hidden (unlisted) things: the random link key IS the audience — anyone
+  // presenting it may view, logged out included. The key only grants while
+  // the acl still says hidden, so un-hiding instantly retires shared links.
+  if (
+    viewer?.linkKeys?.size &&
+    typeof doc.linkKey === 'string' &&
+    doc.linkKey &&
+    viewer.linkKeys.has(doc.linkKey) &&
+    aclOf(doc).includes(ACL_HIDDEN)
+  ) {
+    return true;
+  }
   if (viewer?.id && doc.ownerId === viewer.id) return true;
+  // private-subspace posts are fenced to that subspace's active members and
+  // moderators (the enriched viewer carries the roster; a bare viewer fails
+  // closed — comments/reactions inherit the fence through their chain)
+  if (doc.subspacePrivate === true) {
+    const subspaceId = subspaceIdOfDoc(doc);
+    const membership = subspaceId ? viewer?.subspaceRoles?.get(subspaceId) || null : null;
+    if (!isActiveSubspaceMember(membership) && !canModerateSubspace(membership)) return false;
+  }
   return aclAllows(aclOf(doc), viewer, doc.ownerId);
 };
+
+// ---------------------------------------------------------------------------
+// Custom audiences — tt:custom flips a thing into capability mode: the acl's
+// baseline entries (tt:all / tt:hidden / nothing) say who may READ, and the
+// per-user / per-group grants (tt:user/<name>[/comment|/write],
+// tt:group/<id>[…]) say who may do MORE. Engagement (comment, react, share)
+// needs at least the comment capability; shared editing (PATCH crystal) needs
+// write. Saves are exempt — a save is a private bookmark that reveals nothing
+// to anyone else. Non-custom things are byte-for-byte unchanged: every
+// viewer keeps today's engage-if-you-can-see rule.
+
+const customEngageBlocksAcl = (viewer: Viewer, acl: string[], ownerId: string): boolean => {
+  if (!acl.includes(ACL_CUSTOM)) return false;
+  const cap = aclCapabilityFor(acl, viewer, ownerId);
+  return cap !== 'comment' && cap !== 'write';
+};
+
+// engagement targets can be inherit-acl children (replying to a comment under
+// a custom post) — judge the chain terminal, with the viewer's friend/group
+// sets loaded so grants can match
+const customEngageBlocks = async (viewer: Viewer, doc: ThingDoc): Promise<boolean> => {
+  const terminal = aclOf(doc).includes(ACL_INHERIT)
+    ? await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findThing)
+    : doc;
+  if (!terminal) return true; // broken chain fails closed
+  if (!aclOf(terminal).includes(ACL_CUSTOM)) return false;
+  const enriched = await withFriendIds(viewer);
+  return customEngageBlocksAcl(enriched, aclOf(terminal), String(terminal.ownerId));
+};
+
+const customEngageFail = (): Fail =>
+  fail(403, 'This thing has a custom audience — you don’t have comment access here 🎭');
 
 // Target-attached things resolve visibility through their inherit chain (see
 // aclChainCore for the cycle-safe walk — legitimate deep comment chains must
@@ -2291,10 +2763,20 @@ const circleClause = (circle: PostVisibility) => {
     case 'family':
       return { $or: [{ acl: ACL_FAMILY }, { visibility: 'family' }] };
     case 'private':
-      // $nin on an array field means "contains none of these"
+      // $nin on an array field means "contains none of these". ACL_HIDDEN and
+      // ACL_CUSTOM are excluded too: neither carries a broad grant, so without
+      // them every unlisted 🕵️ and custom-audience 🎭 thing would ALSO answer
+      // the 'private' chip — each is its own circle below.
       return {
-        $or: [{ acl: { $exists: true, $nin: [ACL_ALL, ACL_FRIENDS, ACL_FAMILY] } }, { visibility: 'private' }]
+        $or: [{ acl: { $exists: true, $nin: [ACL_ALL, ACL_FRIENDS, ACL_FAMILY, ACL_HIDDEN, ACL_CUSTOM] } }, { visibility: 'private' }]
       };
+    case 'hidden':
+      // v2-only (no legacy enum era) — reachable only by explicit circle
+      // filters; 'hidden' is deliberately NOT in the default VISIBILITIES set
+      return { acl: ACL_HIDDEN };
+    case 'custom':
+      // v2-only, explicit-filter-only, exactly like hidden
+      return { acl: ACL_CUSTOM };
   }
 };
 
@@ -2308,6 +2790,7 @@ const circleClause = (circle: PostVisibility) => {
 export const patVisibilityMatchClause = (viewer: Viewer): Record<string, any> | null => {
   const mode = patVisibilityOf(viewer);
   if (!mode) return null;
+  if (mode === 'hidden') return { $or: [{ acl: ACL_HIDDEN }, { acl: ACL_INHERIT }] };
   return mode === 'public' ? { $or: [circleClause('public'), { acl: ACL_INHERIT }] } : { $nor: [circleClause('public')] };
 };
 
@@ -2323,11 +2806,48 @@ export const visibilityQueryFor = (viewer: Viewer, circles: PostVisibility[]) =>
   if (viewer?.id && viewer.friendIds?.size && wanted.includes('friends')) {
     clauses.push({ $and: [{ ownerId: { $in: [...viewer.friendIds] } }, circleClause('friends')] });
   }
+  // The unnarrowed shortcut is only sound when the caller asked for NO filter,
+  // or asked for every circle they could ask for. A bare length comparison
+  // would also fire for a same-sized but different selection (say
+  // public+friends+family+hidden), silently pulling the viewer's private
+  // things back into a feed they filtered them out of — and covering only the
+  // DEFAULT set has the same shape of bug one circle over: ticking exactly
+  // public+friends+family+private (i.e. everything except 🕵️ Hidden) would
+  // take the shortcut and hand back the hidden things the caller just
+  // excluded. An omitted circle must always really be omitted, so only the two
+  // genuinely unfiltered cases skip narrowing (fleet review fix, extended for
+  // 🎭).
+  const unfiltered = !circles.length || REQUESTABLE_VISIBILITIES.every((circle) => wanted.includes(circle));
+  const narrowToWanted = (clause: Record<string, any>) =>
+    unfiltered ? clause : { $and: [clause, { $or: wanted.map((circle) => circleClause(circle)) }] };
   if (viewer?.id) {
     // the viewer's own things, optionally narrowed to the requested circles
     clauses.push(
-      wanted.length === VISIBILITIES.length ? { ownerId: viewer.id } : { ownerId: viewer.id, $or: wanted.map((circle) => circleClause(circle)) }
+      unfiltered ? { ownerId: viewer.id } : { ownerId: viewer.id, $or: wanted.map((circle) => circleClause(circle)) }
     );
+  }
+  // Things granted to the viewer BY NAME or through a group (custom
+  // audiences: tt:user/<name>[/cap], tt:group/<id>[/cap]) land in their feed
+  // too — the DB match is a superset; canView judges the fetched page exactly.
+  // Gated on the circle filter like every other clause above: an unfiltered
+  // feed carries grants, but once the caller narrows, grants ride the 🎭
+  // Custom chip alone (every granted thing is a tt:custom thing), so omitting
+  // that circle really omits them instead of leaking them back in. The clause
+  // that survives that gate is then narrowed to the requested circles for the
+  // same reason the own-things clause is: a grant must not smuggle a 🎭 thing
+  // into a 🌐-only filter.
+  const grantsWanted = !circles.length || wanted.includes('custom');
+  if (viewer?.id && grantsWanted && (viewer.username || viewer.groupIds?.size)) {
+    const grantEntries: string[] = [];
+    if (viewer.username) {
+      const base = `${ACL_USER_PREFIX}${viewer.username.toLowerCase()}`;
+      grantEntries.push(base, `${base}/comment`, `${base}/write`);
+    }
+    for (const groupId of viewer.groupIds || []) {
+      const base = `${ACL_GROUP_PREFIX}${groupId}`;
+      grantEntries.push(base, `${base}/comment`, `${base}/write`);
+    }
+    if (grantEntries.length) clauses.push(narrowToWanted({ acl: { $in: grantEntries } }));
   }
   // nothing requested that the viewer could ever see
   if (!clauses.length) return null;
@@ -2559,7 +3079,17 @@ export type FeedQuery = {
   cursor?: string | null;
   limit?: number;
   weights?: AlgorithmWeights | null;
+  // 'subspaces' narrows to posts from the viewer's ACTIVE subspaces (a
+  // guest / non-member gets an empty page); default 'all'. The route
+  // validates the raw param — an unknown scope is its 400.
+  scope?: FeedScope | null;
 };
+
+// The subspace ids an enriched viewer is an ACTIVE member of — what
+// scope=subspaces narrows the home feed to (pending / left / banned rows
+// are not memberships, same predicate as the private-subspace fence).
+export const activeSubspaceIdsOf = (viewer: Viewer): string[] =>
+  viewer?.subspaceRoles ? [...viewer.subspaceRoles.values()].filter(isActiveSubspaceMember).map((membership) => membership.subspaceId) : [];
 
 export const parseChronoCursor = (cursor: string | null | undefined): { createdAt: Date; id: string } | null => {
   if (!cursor) return null;
@@ -2586,18 +3116,28 @@ export const typeClause = (types: PostType[]) => (types.length ? { $or: [{ 'crys
 export const getFeed = async (
   viewerInput: string | Viewer,
   query: FeedQuery
-): Promise<{ ok: true; posts: PublicPost[]; nextCursor: string | null; ranked: boolean } | Fail> => {
+): Promise<{ ok: true; posts: PublicPost[]; nextCursor: string | null; ranked: boolean; scope: FeedScope } | Fail> => {
   const viewer = await withFriendIds(asViewer(viewerInput));
+  const scope: FeedScope = query.scope === 'subspaces' ? 'subspaces' : 'all';
   const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_LIMIT), MAX_FEED_LIMIT);
   const types = (query.types || []).filter((type) => POST_TYPES.includes(type));
-  const circles = (query.circles || []).filter((circle) => VISIBILITIES.includes(circle));
+  // REQUESTABLE, not the default set — 'hidden' and 'custom' are chips the
+  // filter menu offers, and a dropped circle reads as "no filter" downstream
+  const circles = (query.circles || []).filter((circle) => REQUESTABLE_VISIBILITIES.includes(circle));
   // same normalization sanitizeTags applies at write time — the stored tags
   // are already trimmed/lowercased/capped, so an un-normalized filter could
   // never match anything
   const tag = typeof query.tag === 'string' ? query.tag.trim().toLowerCase().slice(0, MAX_TAG_CHARS) : '';
 
   const visibility = visibilityQueryFor(viewer, circles);
-  if (!visibility) return { ok: true, posts: [], nextCursor: null, ranked: false };
+  if (!visibility) return { ok: true, posts: [], nextCursor: null, ranked: false, scope };
+
+  // "My subspaces": only posts from the viewer's ACTIVE subspaces, on top of
+  // (never instead of) every fence below — removed posts stay out, private
+  // subspaces still need the membership. Nobody to scope to → an empty page,
+  // not the whole feed.
+  const scopedSubspaceIds = scope === 'subspaces' ? activeSubspaceIdsOf(viewer) : null;
+  if (scopedSubspaceIds && !scopedSubspaceIds.length) return { ok: true, posts: [], nextCursor: null, ranked: false, scope };
 
   const range: any = {};
   if (query.from || query.to) {
@@ -2605,7 +3145,15 @@ export const getFeed = async (
     if (query.from) range.createdAt.$gte = query.from;
     if (query.to) range.createdAt.$lte = query.to;
   }
-  const match = withMatch(postMatch(), visibility, typeClause(types), tag ? { tags: tag } : {}, range);
+  const match = withMatch(
+    postMatch(),
+    visibility,
+    typeClause(types),
+    tag ? { tags: tag } : {},
+    range,
+    scopedSubspaceIds ? { 'crystal.subspaceId': { $in: scopedSubspaceIds } } : {},
+    ...subspaceFeedClauses(viewer)
+  );
 
   const things = await getThingsCollection();
   const weights = query.weights || null;
@@ -2628,7 +3176,7 @@ export const getFeed = async (
     // is only a superset; the cursor advances over the raw page so filtered
     // docs are skipped, not resurfaced
     const visible = page.filter((doc) => canView(doc, viewer));
-    return { ok: true, posts: await toPublicPosts(visible, viewer), nextCursor, ranked: false };
+    return { ok: true, posts: await toPublicPosts(visible, viewer), nextCursor, ranked: false, scope };
   }
 
   // ranked: score a lean projection of the newest candidate window, page by
@@ -2660,7 +3208,7 @@ export const getFeed = async (
   const page = pageIds.map((id) => docsById.get(id)).filter(Boolean) as ThingDoc[];
   const visible = page.filter((doc) => canView(doc, viewer));
   const nextCursor = offset + limit < scored.length ? String(offset + limit) : null;
-  return { ok: true, posts: await toPublicPosts(visible, viewer), nextCursor, ranked: true };
+  return { ok: true, posts: await toPublicPosts(visible, viewer), nextCursor, ranked: true, scope };
 };
 
 export const featuresOf = (doc: ThingDoc): PostFeatures => ({
@@ -2699,7 +3247,9 @@ export const listUserPosts = async (
   // unfenced match would report the owner's private posts to a token that
   // must never learn they exist.
   const fence = patVisibilityMatchClause(viewer);
-  const match = fence ? withMatch(baseMatch, fence) : baseMatch;
+  // subspace fences (removed / private-subspace posts) apply to every visitor
+  // but the owner, who keeps seeing their own removed posts on their profile
+  const match = withMatch(baseMatch, fence || {}, ...(own ? [] : subspaceFeedClauses(viewer)));
 
   const things = await getThingsCollection();
   const parsed = parseChronoCursor(cursor);
@@ -2730,7 +3280,8 @@ export const listUserPosts = async (
 export const getThing = async (
   viewerInput: string | Viewer,
   shareId: unknown,
-  app: AppLens = null
+  app: AppLens = null,
+  options: PostProjectionOptions = {}
 ): Promise<Fail | { ok: true; thing: PublicThing; post: PublicPost | null; parent: PublicPost | null; root: PublicPost | null }> => {
   const viewer = await withFriendIds(asViewer(viewerInput));
   const doc = await findViewableThingAs(shareId, viewer, app);
@@ -2752,7 +3303,7 @@ export const getThing = async (
 	// aggregates (those resolvers are target-generic), and the parent walk
 	// links the page back to the post the media is bound to.
 	const isMediaAttachment = thingtimeOf(doc).includes('attachment');
-	const post = isPostThing(doc) || isComment || isMediaAttachment ? (await toPublicPosts([doc], viewer))[0] : null;
+	const post = isPostThing(doc) || isComment || isMediaAttachment ? (await toPublicPosts([doc], viewer, options))[0] : null;
 
   let parent: PublicPost | null = null;
   let root: PublicPost | null = null;
@@ -2782,7 +3333,7 @@ export const getThing = async (
     const verdicts = await Promise.all(chain.map((entry) => canViewInherited(entry, viewer, lookup)));
     const visibleChain = chain.filter((_, index) => verdicts[index]);
     if (visibleChain.length) {
-      const projected = await toPublicPosts([...new Map(visibleChain.map((entry) => [entry.shareId, entry])).values()], viewer);
+      const projected = await toPublicPosts([...new Map(visibleChain.map((entry) => [entry.shareId, entry])).values()], viewer, options);
       const byId = new Map(projected.map((entry) => [entry.id, entry]));
       parent = byId.get(chain[0]?.shareId) || null;
       const last = chain[chain.length - 1];
@@ -2838,7 +3389,7 @@ export const listThings = async (
     // same reason — /messages is its browser.
     match = {
       ownerId: viewer.id,
-      thingtime: { $nin: [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME] },
+      thingtime: { $nin: [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME, ...SUBSPACE_THINGTIME, UPDOWN_THINGTIME] },
       $or: [{ thingtime: { $exists: true } }, { kind: 'post' }]
     };
     const folder = typeof query.folder === 'string' ? query.folder.trim() : '';
@@ -3156,6 +3707,8 @@ export const toggleReaction = async (
   if (!target) return fail(404, 'Post not found');
   // guard the REMOVE path too — createThing only covers the add
   if (patSandboxBlocks(viewer, target)) return patSandboxFail();
+  // custom audiences: reacting needs the comment capability (both directions)
+  if (await customEngageBlocks(viewer, target)) return customEngageFail();
 
   // the reaction unique index exists before any insert: it is created at
   // instance boot (server/plugins/mongo-warmup) and awaited during register,
@@ -3325,6 +3878,18 @@ const transactionOutcomeUnknown = (error: unknown): boolean =>
 	((error as { errorLabels: unknown[] }).errorLabels.includes('UnknownTransactionCommitResult') ||
 		(error as { errorLabels: unknown[] }).errorLabels.includes('TransientTransactionError'));
 
+// the commenter's own user flair in a subspace, for the single fresh comment
+// addComment answers with (one membership read — the viewer's preloaded
+// roster when withFriendIds already ran — plus the subspace embed only when
+// they actually wear one)
+const freshCommentAuthorFlair = async (viewer: NonNullable<Viewer>, subspaceId: string | null): Promise<PublicAuthorFlair | null> => {
+  if (!subspaceId || !viewer.id) return null;
+  const membership = viewer.subspaceRoles ? viewer.subspaceRoles.get(subspaceId) || null : await subspaceMembershipOf(subspaceId, viewer.id);
+  if (!membership?.userFlair || !isActiveSubspaceMember(membership)) return null;
+  const embeds = await loadSubspaceEmbeds([subspaceId]);
+  return toPublicUserFlair(liveUserFlair(membership.userFlair, embeds.get(subspaceId)?.userFlairs));
+};
+
 export const addComment = async (
   viewerInput: string | Viewer,
   shareId: unknown,
@@ -3340,6 +3905,8 @@ export const addComment = async (
   // fail before the residue migration + count queries (createThing would
   // catch it anyway — this is the earlier, cheaper exit)
   if (patSandboxBlocks(viewer, target)) return patSandboxFail();
+  // custom audiences: commenting needs the comment capability
+  if (await customEngageBlocks(viewer, target)) return customEngageFail();
 
   // first write claims any legacy embedded residue into standalone things
   // (namespace targets are always v2 — nothing to claim under the app lens)
@@ -3443,7 +4010,13 @@ export const addComment = async (
 
   const doc = created.doc;
   const crystal = crystalOf(doc);
-  const profiles = await resolveProfiles([viewerId]);
+  // the fresh comment wears the author's user flair in the ROOT post's
+  // subspace (the same resolution the page projection runs). createThing's
+  // interaction gate already walked to the root — reuse its answer; only a
+  // comment reconciled after an unknown transaction outcome (no gate result
+  // on that path) walks again.
+  const rootSubspaceId = created.rootSubspaceId !== undefined ? created.rootSubspaceId : subspaceIdOfDoc((await resolveRootPost(target)).root);
+  const [profiles, authorFlair] = await Promise.all([resolveProfiles([viewerId]), freshCommentAuthorFlair(viewer, rootSubspaceId)]);
   const comment: PublicComment = {
     id: doc.shareId,
     thingtime: thingtimeOf(doc),
@@ -3462,6 +4035,8 @@ export const addComment = async (
     tags: doc.tags || [],
     reactionCounts: {},
     viewerReactions: [],
+    votes: emptyUpdownVotes(),
+    authorFlair,
     commentCount: 0,
     targetId: target.shareId,
     createdAt: new Date(doc.createdAt).toISOString()
@@ -3499,6 +4074,8 @@ export const sharePost = async (
   const original = await findViewableThing(shareId, viewer);
   if (!original || !isPostThing(original)) return fail(404, 'Post not found');
   if (patSandboxBlocks(viewer, original)) return patSandboxFail();
+  // custom audiences: sharing is amplification — comment capability required
+  if (await customEngageBlocks(viewer, original)) return customEngageFail();
   if (original.ownerId !== viewerId && !aclOf(original).includes(ACL_ALL)) {
     return fail(403, 'Only public posts can be shared');
   }
@@ -3863,6 +4440,31 @@ const deleteDrainedRootAtomically = async (deleteFilter: Record<string, any>): P
 	});
 };
 
+// Subspace report rows hang off the ROOT post by crystal.postId (targetId =
+// the subspace), so the targetId cascade never sees them; they are plumbing
+// rows with nothing to refund. A deleted subspace post takes every report
+// against it. A deleted COMMENT under a subspace post (with the replies that
+// went with it) takes the rows that flagged one of those comments — left
+// behind, the queue would keep asking the mods to judge a comment that no
+// longer exists ("(a comment ↗)" 404s, and Remove would hit the innocent
+// parent post). A reported comment's other rows (the post itself, other
+// comments) stay.
+const clearSubspaceReportsFor = async (root: ThingDoc, deletedCommentIds: ReadonlySet<string>): Promise<void> => {
+	const things = await getThingsCollection();
+	const kinds = thingtimeOf(root);
+	if (kinds.includes('comment')) {
+		const commentIds = [...new Set([root.shareId, ...deletedCommentIds])].filter(Boolean);
+		// an unresolved chain leaves any rows alone (nothing to file them under)
+		const { root: post } = await resolveRootPost(root);
+		const subspaceId = subspaceIdOfDoc(post);
+		if (!post?.shareId || !subspaceId || !commentIds.length) return;
+		await things.deleteMany({ thingtime: 'subspace-report', targetId: subspaceId, 'crystal.postId': post.shareId, 'crystal.commentId': { $in: commentIds } } as any);
+		return;
+	}
+	const subspaceId = kinds.includes('post') ? subspaceIdOfDoc(root) : null;
+	if (subspaceId) await things.deleteMany({ thingtime: 'subspace-report', targetId: subspaceId, 'crystal.postId': root.shareId } as any);
+};
+
 export type DeleteThingHooks = {
 	// External objects must become inaccessible before their protected source
 	// Things are removed and quota is refunded. A failure leaves the root and
@@ -3897,7 +4499,7 @@ export const deleteThing = async (
 	const deleteFilter = {
     shareId: shareId.trim(),
     ownerId: viewer.id,
-    thingtime: { $nin: [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME] },
+    thingtime: { $nin: [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME, ...SUBSPACE_THINGTIME, UPDOWN_THINGTIME] },
     ...(app ? { appId: app.appId } : {}),
     ...(sandboxTokenId ? { $or: [{ tokenAcl: tokenAclEntryFor(sandboxTokenId) }, { createdByTokenId: sandboxTokenId }] } : {})
 	};
@@ -3950,6 +4552,9 @@ export const deleteThing = async (
 			);
 			if (attachmentChild) return fail(409, 'Attachment cleanup must finish before this Thing can be deleted');
 		}
+		// the comments deleted along the way (a reported comment takes the rows
+		// that flagged it — clearSubspaceReportsFor below)
+		const deletedCommentIds = new Set<string>();
 		// Descendants commit leaf-first in deterministic <=100-row transactions;
 		// the root remains as a durable retry anchor until the closure is empty.
 		// Each batch uses exact findOneAndDelete before-images, so Mongo callback
@@ -3986,6 +4591,7 @@ export const deleteThing = async (
 					break;
 				}
 				await refundDeletedNamespaceDocs(result.deleted);
+				for (const gone of result.deleted) if (thingtimeOf(gone).includes('comment') && gone.shareId) deletedCommentIds.add(gone.shareId);
 			}
 			if (rewalk) continue;
 
@@ -3993,6 +4599,7 @@ export const deleteThing = async (
 			if (rootResult.state === 'blocked') continue;
 			if (rootResult.state === 'deleted') {
 				await refundDeletedNamespaceDocs([rootResult.doc]);
+				await clearSubspaceReportsFor(rootResult.doc, deletedCommentIds);
 				// deleting a folder never deletes what's inside it — contents (and
 				// subfolders) re-parent to the deleted folder's own parent, so the
 				// worst a folder delete can do to your things is flatten them one level
@@ -4048,8 +4655,28 @@ export const updateThing = async (
   if (!viewer?.id) return fail(401, 'Unauthorized');
   if (typeof shareId !== 'string' || !shareId.trim()) return fail(400, 'Thing id is required');
   const things = await getThingsCollection();
-  const doc = (await things.findOne({ shareId: shareId.trim(), ownerId: viewer.id } as any)) as any as ThingDoc | null;
+  const doc = (await things.findOne({ shareId: shareId.trim() } as any)) as any as ThingDoc | null;
   if (!doc || (!isV2(doc) && !isPostThing(doc))) return fail(404, 'Thing not found');
+  if (String(doc.ownerId) !== viewer.id) {
+    // Shared editing — custom audiences may grant WRITE to picked users or
+    // groups. Everything else stays a plain 404 (no existence oracle), and
+    // apps never edit outside the acting user's own things. Writers touch
+    // CONTENT only (crystal/extended/tags): audience, folder, and token
+    // grants remain the owner's alone. Storage deltas keep billing the
+    // OWNER (doc.ownerId drives every ledger below) — granting write shares
+    // your quota with your writers.
+    if (app) return fail(404, 'Thing not found');
+    const enriched = await withFriendIds(viewer);
+    if (!aclOf(doc).includes(ACL_CUSTOM) || !(await canViewInherited(doc, enriched))) {
+      return fail(404, 'Thing not found');
+    }
+    if (aclCapabilityFor(aclOf(doc), enriched, String(doc.ownerId)) !== 'write') {
+      return fail(403, 'This thing has a custom audience — you don’t have edit access 🎭');
+    }
+    if (input.acl !== undefined || input.visibility !== undefined || input.folderId !== undefined || input.tokenAcl !== undefined) {
+      return fail(403, 'Only the owner can change a thing’s audience, folder, or token grants');
+    }
+  }
   if (options.expectedUpdatedAt !== undefined && options.expectedUpdatedAt !== null) {
     if (typeof options.expectedUpdatedAt !== 'string' || Number.isNaN(new Date(options.expectedUpdatedAt).getTime())) {
       return fail(400, 'expectedUpdatedAt must be an ISO timestamp');
@@ -4128,6 +4755,32 @@ export const updateThing = async (
     if (isFail(provenance)) return provenance;
   }
 
+  // subspace re-gate: a write that enters/changes a subspace or its flair
+  // proves posting rights again (the private fence follows the destination);
+  // leaving a subspace drops the moderation state and the fence with it
+  const prevSubspaceId = thingtime.includes('post') ? subspaceIdOfDoc(doc) : null;
+  const nextSubspaceId = thingtime.includes('post') ? subspaceIdOfDoc({ crystal: validated.crystal }) : null;
+  const subspaceChanged = prevSubspaceId !== nextSubspaceId;
+  // ...but a live moderator action holds the post where it is: the drop below
+  // is what makes the state subspace-local, so without this an author could
+  // PATCH a removed/locked post out of its subspace and back in to land it
+  // clean. Every other edit of the post still goes through.
+  if (subspaceChanged && prevSubspaceId && subspaceModHoldsPost(doc.subspaceMod)) {
+    return fail(403, 'Moderators have actioned this post — it can’t be moved out of its subspace 🔒');
+  }
+  const prevFlairId = typeof crystalOf(doc).flairId === 'string' ? (crystalOf(doc).flairId as string) : null;
+  const nextFlairId = typeof validated.crystal.flairId === 'string' ? (validated.crystal.flairId as string) : null;
+  let nextSubspacePrivate: boolean | null = null; // null = leave the stamp as is
+  if (nextSubspaceId && (subspaceChanged || prevFlairId !== nextFlairId)) {
+    const gate = await assertSubspacePosting(doc.ownerId, nextSubspaceId, nextFlairId, { roles: viewer.subspaceRoles });
+    if (isFail(gate)) return gate;
+    if (gate.flairId) validated.crystal.flairId = gate.flairId;
+    else delete validated.crystal.flairId;
+    if (subspaceChanged) nextSubspacePrivate = gate.private;
+  } else if (!nextSubspaceId && prevSubspaceId) {
+    nextSubspacePrivate = false;
+  }
+
   // post crystals only — see the identical guard in createThing
   const patchedListing = thingtime.includes('post') ? (validated.crystal.listing as MarketplaceListing | null | undefined) : null;
   const categoryTag = patchedListing && typeof patchedListing.category === 'string' ? [patchedListing.category] : [];
@@ -4171,6 +4824,13 @@ export const updateThing = async (
   // a restricted token can never move a thing across the public/private
   // boundary in either direction (publishing private data, or hiding public)
   if (!acl.includes(ACL_INHERIT) && patVisibilityBlocksAcl(viewer, acl)) return patVisibilityFail(viewer);
+
+  // Entering hidden mints a FRESH link key — links that circulated during an
+  // earlier hidden period must never resurrect on re-hide. Leaving hidden
+  // keeps the field (inert: canView only honors it while acl says hidden).
+  const wasHidden = aclOf(doc).includes(ACL_HIDDEN);
+  const nowHidden = acl.includes(ACL_HIDDEN);
+  const nextLinkKey = nowHidden && (!wasHidden || typeof doc.linkKey !== 'string' || !doc.linkKey) ? generateLinkKey() : undefined;
 
   // extended replaces as a whole value only when provided (undefined leaves it
   // untouched, null clears it) — both PATCH and PUT, since deep-merging
@@ -4253,7 +4913,9 @@ export const updateThing = async (
     ...(hasFolderChange ? { folderId: nextFolderId } : {}),
     tags,
     acl,
+    ...(nextLinkKey ? { linkKey: nextLinkKey } : {}),
     updatedAt: now,
+    ...(nextSubspacePrivate === true ? { subspacePrivate: true } : {}),
 		...(storageScope ? { appId: storageScope.appId } : {}),
 		...(isBillable || storageScope ? { sizeBytes: newSize } : {}),
 		...(isBillable
@@ -4276,6 +4938,8 @@ export const updateThing = async (
     shareOfId: '',
     shareCount: '',
     visibility: '',
+    ...(nextSubspacePrivate === false ? { subspacePrivate: '' } : {}),
+    ...(subspaceChanged ? { subspaceMod: '' } : {}),
 		...(nextTokenAcl !== undefined ? { createdByTokenId: '' } : {}),
 		...(!isBillable ? { storageClass: '', storageAccountingVersion: '' } : {}),
 		...(!isBillable && !storageScope ? { sizeBytes: '' } : {})
@@ -4339,6 +5003,8 @@ export const updateThing = async (
   delete (updated as any).shareCount;
   delete (updated as any).visibility;
   if (nextTokenAcl !== undefined) delete (updated as any).createdByTokenId;
+  if (subspaceChanged) delete (updated as any).subspaceMod;
+  if (nextSubspacePrivate === false) delete (updated as any).subspacePrivate;
 	if (!isBillable) {
 		delete updated.storageClass;
 		delete updated.storageAccountingVersion;
@@ -4468,7 +5134,7 @@ export type BulkItemResult = {
 // Kinds that can't be duplicated: attached children live under their target
 // (a copy would dangle). Folders CAN be copied — the whole subtree is walked
 // through the same per-item create path, skipping these kinds inside.
-const UNCOPYABLE = ['comment', 'reaction', 'save', 'share', 'vote'];
+const UNCOPYABLE = ['comment', 'reaction', 'save', 'share', 'vote', UPDOWN_THINGTIME];
 
 // Recursive folder op bound (copy / recursive share): the subtree walk fails
 // loudly past this many things instead of silently truncating.
