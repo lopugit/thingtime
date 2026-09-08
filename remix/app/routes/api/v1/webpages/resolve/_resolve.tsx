@@ -2,12 +2,14 @@ import { json } from '~/api/http';
 
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
+import { withLinkKeys } from '~/api/utils/things/things';
 import { resolveWebpage } from '~/api/utils/webpages/webpages';
 
 // GET /api/v1/webpages/resolve — resolve ONE webpage thing together with every
 // component thing its blocks reference (one batched query, no client N+1).
 //
-//   ?id=<shareId>   a standalone page (the /p/<id> route)
+//   ?id=<shareId>   a standalone page (the /p/<id> route); a hidden page
+//                   also accepts its owner-issued ?key=<linkKey>
 //   ?path=</route>  the site page bound to an app route — the viewer's own
 //                   personalised doc outranks the seeded system default
 //   ?global=1       the site-global block doc (blocks on every page)
@@ -24,7 +26,7 @@ export const loader = async ({ request }: { request: Request }) => {
 	}
 
 	const params = new URL(request.url).searchParams;
-	const result = await resolveWebpage(user ? { id: user.id, username: user.username } : null, {
+	const result = await resolveWebpage(withLinkKeys(user ? { id: user.id, username: user.username } : null, [(params.get('key') || '').trim()]), {
 		id: params.get('id') || undefined,
 		path: params.get('path') || undefined,
 		global: params.get('global') || undefined

@@ -13,6 +13,7 @@ import { ChakraThingRenderer, HtmlThingRenderer, isChakraThingNode } from '~/com
 import type { ChakraThingNode, HtmlThingNode } from '~/components/Kinds';
 import { isSafeCssText } from '~/components/Kinds/safeUrl';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { ThingAudienceControl } from '~/components/Sharing/ThingAudienceControl';
 import { pruneCacheNamespace, readStampedCache, writeStampedCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -22,7 +23,7 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { ALL_SUITES } from '~/schemas/appSuites/index';
 import { materializeSuite, suiteSlug } from '~/schemas/behaviourSuites';
 import type { BehaviourSuite, MaterializedSuite } from '~/schemas/behaviourSuites';
-import { ACL_OWNER, DEFAULT_WEBPAGE_SOURCE_INTERVAL_MS, getThingtimeSchema } from '~/schemas/registry';
+import { DEFAULT_WEBPAGE_SOURCE_INTERVAL_MS, getThingtimeSchema } from '~/schemas/registry';
 import type { SchemaThingField } from '~/schemas/registry';
 import { describeSchemaField } from '~/schemas/tools';
 
@@ -570,8 +571,17 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
   }, [bindingKey, interactive, active?.id]);
 
   const [values, setValues] = React.useState<ComponentArgValues>({});
+  const [versionOpen, setVersionOpen] = React.useState(false);
+  const [versionName, setVersionName] = React.useState('');
+  const [versionAcl, setVersionAcl] = React.useState<string[]>(['tt:user']);
+  const [savingVersion, setSavingVersion] = React.useState(false);
   React.useEffect(() => {
-    if (active) setValues({ ...defaultsFromArgs(active.args), ...(active.savedArgs || {}) });
+    if (active) {
+      setValues({ ...defaultsFromArgs(active.args), ...(active.savedArgs || {}) });
+      setVersionName(`${active.name} v${(active.entry.usageCount || 0) + 2}`);
+      setVersionAcl(['tt:user']);
+      setVersionOpen(false);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active?.id]);
 
@@ -711,16 +721,22 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
       lopuRef.current({ title: 'Sign in to save component versions ✨', status: 'info', duration: 6000 });
       return;
     }
+    const name = versionName.trim();
+    if (!name) {
+      lopuRef.current({ title: 'Give your version a name 🌱', status: 'info' });
+      return;
+    }
     const savedArgs: Record<string, string | number | boolean> = {};
     for (const spec of active.args) {
       const value = values[spec.name];
       if (value !== undefined) savedArgs[spec.name] = value;
     }
+    setSavingVersion(true);
     try {
       const resp: any = await apiRef.current.v1.things.create({
         thingtime: ['component'],
         crystal: {
-          name: `${active.name} v${(active.entry.usageCount || 0) + 2}`,
+          name,
           description: active.description,
           library: active.library,
           category: active.category,
@@ -733,7 +749,7 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
           ...(active.previewBg ? { previewBg: active.previewBg } : {}),
           forkOf: active.id
         },
-        acl: [ACL_OWNER]
+        acl: versionAcl
       });
       if (!resp?.ok) throw resp;
       lopuRef.current({ title: 'Saved a version to your Things ✨', description: 'Your copy fronts this page now — its controls run as you.', status: 'success' });
@@ -741,6 +757,8 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
       loadFamily();
     } catch (err: any) {
       lopuRef.current({ title: err?.error || 'Version didn’t save — try again 🌈', status: 'error' });
+    } finally {
+      setSavingVersion(false);
     }
   };
 
@@ -997,10 +1015,38 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
                   </Text>
                 )}
                 <Box flex={1} />
-                <Button colorScheme="pink" onClick={saveVersion} size="xs" data-testid="component-save-version">
-                  Save version to my Things
+                <Button colorScheme="pink" onClick={() => setVersionOpen((open) => !open)} size="xs" data-testid="component-save-version">
+                  {versionOpen ? 'Close save options' : 'Save version to my Things'}
                 </Button>
               </Flex>
+              {versionOpen ? (
+                <Flex
+                  background="var(--tt-surface, #fafafb)"
+                  border="1px solid var(--tt-border, #ececef)"
+                  borderRadius="var(--tt-radius-md, 12px)"
+                  direction="column"
+                  gap={3}
+                  padding={3}
+                  data-testid="component-save-version-options"
+                >
+                  <Input
+                    background="var(--tt-card, #ffffff)"
+                    onChange={(event) => setVersionName(event.target.value)}
+                    placeholder="Version name"
+                    size="sm"
+                    value={versionName}
+                  />
+                  <ThingAudienceControl
+                    acl={versionAcl}
+                    label="Who can use this version?"
+                    onChange={setVersionAcl}
+                    testId="component-detail-version-audience"
+                  />
+                  <Button alignSelf="flex-end" colorScheme="pink" isLoading={savingVersion} onClick={saveVersion} size="sm">
+                    Save with this audience
+                  </Button>
+                </Flex>
+              ) : null}
             </Flex>
 
             {/* ------------------------------ docs ------------------------------ */}
