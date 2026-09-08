@@ -7,6 +7,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { AlgorithmManager } from './AlgorithmManager';
 import { LinkedDeployments } from './LinkedDeployments';
 import { NotificationSettingsSection } from './NotificationSettings';
+import { SubspacePreferencesSection } from '~/components/Subspaces/SubspacePreferencesSection';
 import { PasskeysManager } from './PasskeysManager';
 import { TokenMinter } from './TokenMinter';
 import { RainbowButton, SettingRow, SettingsSection } from './SettingsSection';
@@ -14,6 +15,7 @@ import { SecureVault } from './SecureVault';
 import { AccountSwitcher } from '~/components/Account/AccountSwitcher';
 import { AdminPanel } from '~/components/Admin/AdminPanel';
 import { ConnectedAppsSection } from '~/components/Apps/ConnectedAppsSection';
+import { LOPU_CREDITS_ANCHOR_ID, LopuCreditsPanel } from '~/components/Lopu/LopuCreditsPanel';
 import { LopuPositionSelect } from '~/components/Lopu/LopuPositionSelect';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { LopuSettingsRows } from '~/components/Lopu/LopuHost';
@@ -267,16 +269,56 @@ export const SettingsPage = () => {
   const navigate = useNavigate();
   const { hash } = useLocation();
 
-  // deep links (#secure-vault, #lopu — the drawer's Lopu rows) land on their
-  // section: the router does not scroll to fragments on its own, and the
-  // anchored sections mount only once the viewer is known
+  // deep links (#secure-vault, #lopu, #lopu-credits — the drawer's Lopu rows
+  // and Lopu's own "Credits & usage" links) land on their section: the router
+  // does not scroll to fragments on its own, and the anchored sections mount
+  // only once the viewer is known.
+  //
+  // One frame is not enough: a section near the bottom (#lopu-credits) only
+  // mounts once its own fetch resolves, and everything above it keeps changing
+  // height while panels and images settle — a single scroll lands short, or on
+  // nothing at all, dumping the viewer at the top of a very long page. Re-aim
+  // on a slow bounded poll until the target exists AND its offset has stopped
+  // moving, and give up the moment the viewer scrolls for themselves.
   React.useEffect(() => {
     const id = hash.replace(/^#/, '');
     if (!id) return;
-    const frame = window.requestAnimationFrame(() => {
-      document.getElementById(id)?.scrollIntoView({ block: 'start' });
-    });
-    return () => window.cancelAnimationFrame(frame);
+    const TICK_MS = 120;
+    const deadline = Date.now() + 10_000;
+    let timer = 0;
+    let settledTicks = 0;
+    let lastTop: number | null = null;
+    let cancelled = false;
+    const stop = () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+    // the viewer's own scroll always wins over a late correction
+    window.addEventListener('wheel', stop, { passive: true, once: true });
+    window.addEventListener('touchstart', stop, { passive: true, once: true });
+    window.addEventListener('keydown', stop, { once: true });
+    const aim = () => {
+      if (cancelled) return;
+      const target = document.getElementById(id);
+      if (target) {
+        const top = Math.round(target.getBoundingClientRect().top + window.scrollY);
+        // two consecutive ticks at the same offset means the layout settled
+        settledTicks = lastTop === top ? settledTicks + 1 : 0;
+        lastTop = top;
+        target.scrollIntoView({ block: 'start' });
+        if (settledTicks >= 2) return;
+      }
+      if (Date.now() > deadline) return;
+      timer = window.setTimeout(aim, TICK_MS);
+    };
+    timer = window.setTimeout(aim, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      window.removeEventListener('wheel', stop);
+      window.removeEventListener('touchstart', stop);
+      window.removeEventListener('keydown', stop);
+    };
   }, [hash, user?.id]);
 
   const {
@@ -343,6 +385,8 @@ export const SettingsPage = () => {
 		twoFactorCacheKey ? readLocalCache<boolean>(twoFactorCacheKey) === true : false
   );
   const [twoFactorSaving, setTwoFactorSaving] = React.useState(false);
+	const [hideEmailOnProfile, setHideEmailOnProfile] = React.useState(() => user?.hideEmailOnProfile !== false);
+	const [emailVisibilitySaving, setEmailVisibilitySaving] = React.useState(false);
 
   React.useEffect(() => {
     if (!user) return;
@@ -362,6 +406,10 @@ export const SettingsPage = () => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
+
+	React.useEffect(() => {
+		setHideEmailOnProfile(user?.hideEmailOnProfile !== false);
+	}, [user?.id, user?.hideEmailOnProfile]);
 
   const handleTwoFactorToggle = async (enabled: boolean) => {
     if (!user || twoFactorSaving) return;
@@ -395,6 +443,27 @@ export const SettingsPage = () => {
       setTwoFactorSaving(false);
     }
   };
+
+	const handleHideEmailOnProfileToggle = async (enabled: boolean) => {
+		if (!user || emailVisibilitySaving) return;
+		const previous = hideEmailOnProfile;
+		setHideEmailOnProfile(enabled);
+		setEmailVisibilitySaving(true);
+		try {
+			const resp = await api.v1.profile.update({ hideEmailOnProfile: enabled });
+			if (!resp?.ok) throw new Error(resp?.error || 'Please try again in a moment.');
+			lopu({
+				title: enabled ? 'Email hidden on your profile 🔒' : 'Email shown on your profile ✉️',
+				status: 'success',
+				duration: 6000
+			});
+		} catch (err: any) {
+			setHideEmailOnProfile(previous);
+			lopu({ title: 'Could not update email visibility', description: err?.message || err?.error, status: 'error', duration: 6000 });
+		} finally {
+			setEmailVisibilitySaving(false);
+		}
+	};
 
   const handleResendVerification = async () => {
     if (!user) return;
@@ -530,6 +599,20 @@ export const SettingsPage = () => {
           </SettingsSection>
         )}
 
+		{user && !user.temporary && (
+			<SettingsSection eyebrow="Privacy" description="Choose what other people can see on your public profile.">
+				<Flex flexDirection="column">
+					<SettingRow label="Hide email on profile" hint="On by default. Your email always stays private from other people; this controls whether you see it on your own profile page.">
+						<Switch
+							isChecked={hideEmailOnProfile}
+							isDisabled={emailVisibilitySaving}
+							onChange={(e) => handleHideEmailOnProfileToggle(e.target.checked)}
+						/>
+					</SettingRow>
+				</Flex>
+			</SettingsSection>
+		)}
+
         {/* connected apps — grants + everything each app stores */}
         {user && <ConnectedAppsSection userId={user.id} />}
 
@@ -556,6 +639,9 @@ export const SettingsPage = () => {
 
         {/* notifications (auth only) — per-type switches for the bell */}
         {user && <NotificationSettingsSection user={user} />}
+
+        {/* subspaces — vote pills + default sort (per-browser preferences) */}
+        <SubspacePreferencesSection />
 
         {/* admin (admins only) */}
         {user?.isAdmin && (
@@ -708,7 +794,7 @@ export const SettingsPage = () => {
         <Box id="lopu" width="100%" scrollMarginTop="calc(var(--tt-nav-clearance, 54px) + 16px)">
           <SettingsSection
             eyebrow="Lopu 🦄"
-            description="Your Thingtime assistant: the floating bubble, how her chat window sits, whether her builder edits paint live, her voice, and the model she thinks with."
+            description="Your Thingtime assistant: the floating bubble, how its chat window sits, whether its builder edits paint live, its voice, and the model it thinks with."
           >
             <Flex flexDirection="column">
               <LopuSettingsRows
@@ -731,6 +817,21 @@ export const SettingsPage = () => {
             </Flex>
           </SettingsSection>
         </Box>
+
+        {/* 7 · Lopu credits & usage (auth only) — the verified status, the
+            balance, this month / lifetime, history and the request form.
+            Anchored: the balance chip and the locked state deep-link
+            #lopu-credits. */}
+        {user && !user.temporary && (
+          <Box id={LOPU_CREDITS_ANCHOR_ID} width="100%" scrollMarginTop="calc(var(--tt-nav-clearance, 54px) + 16px)">
+            <SettingsSection
+              eyebrow="Lopu credits & usage 🦄"
+              description="What Lopu's turns on Thingtime's own models cost you, in credits (1 credit = 1 USD of list price). Turns on your own Secure Vault providers are free here."
+            >
+              <LopuCreditsPanel key={user.id} admin={user.isAdmin} />
+            </SettingsSection>
+          </Box>
+        )}
       </Flex>
     </Flex>
   );

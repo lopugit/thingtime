@@ -18,6 +18,70 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Repair a poll writer found during the index audit: stamp the shared protected vote identity (no new index), preserve legacy lookup compatibility and unbilled engagement policy. Native regression reproduces 16 duplicate rows before the fix and checks concurrent votes, toggles, private access and cascade cleanup. — Codex (AI), 2026-09-08
+
+- Extend [Thing index consolidation](../PRs/692-thing-index-consolidation-shared-plan-audit.md) to a 47-index candidate: canonical legacy/feed/search/embed readers, eight exact retirements, one shared updated-order index, and two-stage cache-drained migrations. Native MongoDB verifies 60 → 47 with bounded sampled plans and preserved ACL/CAS behavior. Production/develop rollout remains pending. — Codex (AI), 2026-09-08
+
+- Prepare five relationship lookup families to share the existing protected unique-key index (54-index intended home plan). Keep legacy/custom reads until an explicit leased migration validates keys and activates the layout; cold requests do not backfill. Preserve identity and attachment permission guards. Native/live rollout remains pending; see [PR #692](../PRs/692-thing-index-consolidation-shared-plan-audit.md). — Codex (AI), 2026-09-08
+
+- Fix index-usage statistics in the admin workbench by keeping MongoDB's metadata-only `$indexStats` stage first, while retaining protected-field and join safeguards. See [PR #692](../PRs/692-thing-index-consolidation-shared-plan-audit.md). — Codex (AI), 2026-09-08
+
+- Begin [Thing index consolidation](../PRs/692-thing-index-consolidation-shared-plan-audit.md): inventory the executable plan, retire the unused emoji lookup while retaining protected uniqueness, and repair relationship-key backfills to preserve partial keys and terminate on duplicate batches. Production/develop migrations and the broader reduction remain in progress. — Codex (AI), 2026-09-08
+
+- 2026-09-07: Desktop privacy status now refreshes while visible and on return from System Settings, exposes Check access, distinguishes unknown/stale results from macOS denial, and explains recovery for grants tied to an older signing identity.
+
+- Add Desktop Node start/stop/restart controls with serialized lifecycle operations and a native Node About panel showing installed build metadata. — Codex (AI), 2026-09-07
+
+- Desktop recovers its bundled node after plist rewrites, records the owning Desktop build, and starts or refreshes the node on launch when auto-start is enabled. — Codex (AI), 2026-09-07
+
+- 2026-09-06: **Subspaces 🪐 round 2** — everything a subreddit needs to run:
+  ownership transfer + owner-only delete (posts are released as plain posts;
+  members/modlog/reports cascade), join requests for private subspaces and
+  posting-approval requests for restricted ones (Requests mod tab), per-member
+  user flairs with `authorFlair` on every post/comment projection, removal
+  reasons + Chakra modals for remove/ban/report/transfer/delete (no browser
+  prompts), post/comment reports with a Reports mod queue and `reportCount`,
+  six `subspace-*` notification types (mod-team actor on the punitive pair),
+  `GET /api/v1/things/feed?scope=subspaces`, directory sorts (new / members /
+  active, rate-limited `subspaces.list`), an Explore "Popular subspaces" strip
+  and a Search "Subspaces" section, per-card comment sort (top / new / old),
+  guest nudges and a 375px layout pass. Live walk `remix/scripts/verify-subspaces.mjs`
+  sections A–T: 486 passed. See the [PR note](../PRs/subspaces-communities-and-updown-votes.md). — Claude (AI)
+
+- 2026-09-05: **Subspaces 🪐 + up/down votes 🔼** — Reddit-style communities as
+  things: `subspace` (slug, branding, rules, flairs, access), relational
+  `subspace-member` (role/approval/ban) and `subspace-modlog` docs, posts
+  gaining `title`/`subspaceId`/`flairId` with a server-side posting gate and a
+  root `subspaceMod` state (remove/approve/pin/lock/nsfw/spoiler, redaction for
+  non-mods, feed fences incl. private subspaces), `/api/v1/subspaces*` (list/
+  create, get, update, join, leave, members, moderate, modlog, feed with
+  hot/new/top/rising/controversial), and `updown` — a separate focused vote kind
+  (`POST /api/v1/things/updown`, one of up/down per user per post or comment,
+  aggregated as `votes`) beside the untouched native emoji reactions. UI: `/s`,
+  `/s/:slug`, `/s/:slug/mod`, the ▲ score ▼ pill on every post/comment card,
+  subspace/title/flair in the composer, mod menu on cards, drawer entry,
+  Settings → Subspaces. One new partial index (`things_subspace_posts`);
+  contracts `api.things`, `api.things-feed`, `api.things-comment`,
+  `api.things-user` bumped to 1.2.0. Live walk: `remix/scripts/verify-subspaces.mjs`.
+  See the [PR note](../PRs/subspaces-communities-and-updown-votes.md). — Claude (AI)
+
+- 2026-09-06: Lopu verified access + credits (client): a `tt-lopu-account-<uid>`
+  store slice + `useLopuAccount` (refreshed on mount, after every `done` and
+  slowly on focus), the invite-only locked state on `/lopu`, the floating
+  window / sheet and voice mode (composer + mic disabled, navbar 🦄 and the
+  drawer entry still open it), the composer's balance chip (amber under the
+  admin threshold, red at zero with the top-up action, "your provider" for
+  BYO), per-turn footer credits, 403/402 reply refusals as Lopu bubbles with
+  the matching action, Settings → Lopu "Credits & usage" (balance, month,
+  lifetime, cursor history, request form, Buy credits), the user settings
+  modal mirror and Admin → Lopu accounts (verified toggle, balances, pending
+  requests, add credits, `Thingtime.LopuAccess` editor). Design note:
+  [`PRs/lopu-verified-credits-design.md`](../PRs/lopu-verified-credits-design.md). — Claude (AI)
+
+- Fix production storage-ledger validation to accept the catalog's optional speed-test quota without coercion, subscription rewrites, or allowance resets; retain legacy snapshots and fail closed on malformed quotas. — Codex (AI), 2026-09-06
+
+- 2026-09-06: Add bounded, value-free admin dry-run diagnostics for malformed protected storage ledgers; preserve fail-closed validation and all subscription allowances.
+
 - 2026-09-06: Include #612's final detail-page review follow-up in the main
   release: reject inherited/unknown `from` parameters and keep the Back link
   functional. This completes the source revision beyond the initial #668 merge.
@@ -185,6 +249,30 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Main promotion: [PR #654](../PRs/654-codex-persistent-media-cache-main-production-promotion.md), explicitly authorized by the owner. — Codex (AI)
 
 - 2026-09-05: Promote PR #611 notification history and placement settings to main, including drawer-relative toast alignment. — Codex (AI)
+
+### 2026-09-05 — Re-land hidden 🕵️ links, the PAT GET bridge and custom audiences 🎭 — Claude (AI)
+
+- PRs #413 and #431 merged into their stacked base branches a minute after that base (#411)
+  had merged into develop, so the feature stack never reached develop or main. PR #613
+  re-lands `origin/claude/hidden-links-get-bridge` on current develop; conflict
+  resolutions and the 149-check `verify-pat-tokens.mjs` run are recorded in
+  `PRs/613-claude-hidden-links-custom-audiences-reland--re-land-hidden-links-get-bridge-custom-audiences.md`.
+- `scripts/verify-pat-tokens.mjs` now reads search/feed `posts` keyed by thing id
+  (develop's shape) as well as the older array form.
+- GET bridge `op=update` / `op=delete` now honour `expectedUpdatedAt`, the
+  optimistic-concurrency guard `PATCH`/`DELETE /api/v1/things` already anchor into
+  the write filter. The bridge was dropping it silently, so a caller asking for a
+  compare-and-swap got an unguarded write and a 200 — which this branch makes
+  reachable in earnest, since a custom audience can grant `tt:user/<name>/write`
+  to other people and give one thing concurrent writers. — Lopu (AI)
+- "Copy hidden link 🕵️" now appears for a custom audience 🎭 that picked the
+  "+ secret link" baseline. The server mints, projects and honours `linkKey`
+  off `acl.includes('tt:hidden')`, but `visibilityFromAcl` reports `custom`
+  whenever `tt:custom` rides along, so the post menu's `visibility === 'hidden'`
+  gate never fired for those things — the key existed and the owner already held
+  it in their own payload, with no UI to reach it. The menu now derives the link
+  from `post.linkKey`, which is already owner-only and hidden-only, and a new
+  `hiddenLinkContract.test.ts` pins the derivation. — Lopu (AI)
 
 ### 2026-09-02 — Lopu toast position setting + `/notifications` history page — Claude (AI)
 

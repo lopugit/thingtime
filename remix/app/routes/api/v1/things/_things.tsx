@@ -27,8 +27,10 @@ import {
   toPublicThings,
   updateThing,
   upsertThing,
-  viewerOf
+  viewerOf,
+  withLinkKeys
 } from '~/api/utils/things/things';
+import { parseCommentSort } from '~/api/utils/things/updownCore';
 
 // Route a unified mutation to the rate-limit key its dedicated sub-route would
 // use, so the generic endpoint can't be used to bypass the per-op limits.
@@ -74,8 +76,9 @@ const csv = (value: string | null): string[] =>
     .map((entry) => entry.trim())
     .filter(Boolean);
 
-// GET /api/v1/things?id=<shareId> — read one thing (post projection included
-// for post things).
+// GET /api/v1/things?id=<shareId>[&commentSort=top|new|old] — read one thing
+// (post projection included for post things; commentSort re-orders the
+// shipped comment page — default: the newest comments, oldest → newest).
 // GET /api/v1/things?target=<shareId>&thingtime=comment&cursor=&limit= — list
 // things attached to a viewable thing (its comments/reactions).
 // GET /api/v1/things?thingtime=&folder=&cursor=&limit= — list your own things
@@ -90,9 +93,12 @@ export const loader = async ({ request }: { request: Request }) => {
   const actor = await resolveActor(request, { thingsScope: 'things.read' });
   if (actor instanceof Response) return actor;
   const user = actorUser(actor);
+  const params = new URL(request.url).searchParams;
   // pat context rides reads too: a visibility-restricted token (public-only /
-  // private-only) must have its audience fence applied to everything it lists
-  const viewer = viewerOf(user, actorPat(actor));
+  // private-only) must have its audience fence applied to everything it lists.
+  // A presented ?key= rides along so hidden things resolve for key-holders —
+  // logged-out ones included.
+  const viewer = withLinkKeys(viewerOf(user, actorPat(actor)), [(params.get('key') || '').trim()]);
   const app = actor.kind === 'app' ? actor.scope : null;
   const cors = actorCors(actor);
 
@@ -108,18 +114,22 @@ export const loader = async ({ request }: { request: Request }) => {
     }
   }
 
-  const params = new URL(request.url).searchParams;
-
   const id = (params.get('id') || '').trim();
   if (id) {
-    const result = await getThing(viewer, id, app);
+    // commentSort=top|new|old re-orders the shipped comment page of the post
+    // projection (round 2 S7); absent keeps the default page, a typo is a 400
+    // (never a silently re-ordered thread)
+    const commentSort = parseCommentSort(params.get('commentSort') || undefined);
+    if (commentSort.ok === false) return json({ ok: false, error: commentSort.error }, { status: 400, headers: cors });
+    const result = await getThing(viewer, id, app, { commentSort: commentSort.sort });
     if (result.ok === false) {
       return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
     }
     // comments project as posts too; parent/root carry their thread context
-    // (post/parent/root are first-party projections — null under the app lens)
+    // (post/parent/root are first-party projections — null under the app lens);
+    // the response echoes the comment order it shipped (null = default)
     return json(
-      { ok: true, thing: result.thing, post: result.post, parent: result.parent, root: result.root },
+      { ok: true, thing: result.thing, post: result.post, parent: result.parent, root: result.root, commentSort: commentSort.sort },
       { headers: cors }
     );
   }
@@ -188,8 +198,10 @@ export const action = async ({ request }: { request: Request }) => {
   }
   const user = actorUser(actor)!;
   // pat context rides the viewer: creates stamp the token's tt:token grant,
-  // and a sandboxed token's writes stay inside its granted things (things.ts)
-  const viewer = viewerOf(user, actorPat(actor));
+  // and a sandboxed token's writes stay inside its granted things (things.ts).
+  // body.key lets a hidden-link holder attach to (comment on, react to) the
+  // hidden thing their key reveals.
+  const viewer = withLinkKeys(viewerOf(user, actorPat(actor)), [typeof body?.key === 'string' ? body.key : '']);
   const app = actor.kind === 'app' ? actor.scope : null;
   const cors = actorCors(actor);
 

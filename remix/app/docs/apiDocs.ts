@@ -1583,8 +1583,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'admin-subscriptions',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    contractVersion: '1.1.1',
+    featureVersion: '1.1.1',
     group: 'admin',
     title: 'Subscription tiers & quota overrides',
     endpoint: '/api/v1/admin/subscriptions',
@@ -1595,7 +1595,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'users or apps. Per-field admin overrides win over the snapshot (explicit null = unlimited). GET without ' +
       "params returns live revisions; with ?subjectType=user|app&subjectId= it also returns that subject's " +
       'assignment and its archived current revision when needed. POST { subjectType, subjectId, tier, ' +
-      'tierVersionId, overrides?, note? } assigns; clear pins the current default revision.',
+      'tierVersionId, overrides?, note? } assigns; clear pins the current default revision. Protected storage ledgers accept ' +
+      'the optional speedTestsPerHour quota in snapshots and overrides while preserving older four-field revisions.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET', 'POST'],
     steps: [
@@ -2494,6 +2495,139 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'admin-users-lopu-access',
+    group: 'admin',
+    title: 'Verify Lopu access',
+    endpoint: '/api/v1/admin/users/lopu-access',
+    summary: 'Verify or un-verify a user’s Lopu access (admin only).',
+    detail:
+      'POST { userId, verified } sets meta.lopuVerified (plus meta.lopuVerifiedAt / meta.lopuVerifiedBy) on the user. ' +
+      'Lopu is invite-only while the Thingtime.LopuAccess singleton says requireVerification (the default): every account ' +
+      'starts unverified and every Lopu turn — chats create, chats reply, voice reply, direct-voice session — answers ' +
+      '403 { code: "LOPU_UNVERIFIED" } until an admin verifies it here (an unverified account may still run turns on its own ' +
+      'Secure Vault provider when allowByoUnverified is on). Admins are always verified. The response is the same admin user ' +
+      'row the directory uses, now carrying lopuVerified; GET /api/v1/lopu/account and the user’s own profile read the flag back.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin). Bodies must be application/json (415 otherwise).' },
+    methods: ['POST'],
+    steps: [
+      'Find the user under Admin → Lopu accounts (GET /api/v1/admin/lopu/accounts?q=) or the Users tab.',
+      'POST { userId, verified: true } to let Lopu build with them; verified: false locks the account again.',
+      'Read user.lopuVerified back to update the toggle; the user’s next /api/v1/lopu/account read reflects it at once.',
+      'Non-admins receive 403; a missing userId or a non-boolean verified 400; an unknown user 404.'
+    ],
+    requestExamples: [
+      { name: 'Verify a user', description: 'Let Lopu build with this account.', method: 'POST', body: { userId: '64f000000000000000000002', verified: true } },
+      { name: 'Lock a user again', description: 'Withdraw Lopu access.', method: 'POST', body: { userId: '64f000000000000000000002', verified: false } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Updated user row.', body: { ok: true, user: { id: '64f000000000000000000002', username: 'nik', isAdmin: false, lopuVerified: true, publicUploadsEnabled: true, privateUploadsEnabled: true } } },
+      { status: 400, description: 'verified was not a boolean.', body: { ok: false, error: 'verified must be a boolean' } },
+      { status: 404, description: 'Unknown user.', body: { ok: false, error: 'User not found' } }
+    ],
+    notes: ['Rate limited per admin by admin.users.lopu-access (60 per minute), enforced fail-closed. Responses are private and uncacheable.']
+  }),
+  endpoint({
+    id: 'admin-lopu-accounts',
+    group: 'admin',
+    title: 'Lopu accounts directory',
+    endpoint: '/api/v1/admin/lopu/accounts',
+    summary: 'Lists Lopu accounts — verified status, credit balance, this month’s and lifetime usage, and pending top-up requests (admin only).',
+    detail:
+      'GET ?q&cursor&limit. Without q every lopu-account row is listed newest first (cursor-paged, limit ≤ 100, default 50); with q the ' +
+      'admin user search resolves the matching users and each is listed with their account — or without one (hasAccount: false, a zero ' +
+      'balance) when they never opened Lopu, so an admin can verify or grant credits before the first turn. Each row carries ' +
+      '{ user: { id, username, displayName, email, lopuVerified, isAdmin }, hasAccount, accountId, balanceMicros, balanceCredits, lowBalance, ' +
+      'month: { key, costMicros, turns }, lifetime: { costMicros, inputTokens, outputTokens, turns }, starterGranted, pendingRequest, createdAt, ' +
+      'updatedAt }; the response also returns the current Thingtime.LopuAccess settings so the editor and the table share one read. ' +
+      '1 credit = 1 USD of list price = 1,000,000 micros.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    methods: ['GET'],
+    steps: [
+      'GET to page through every account (follow nextCursor), or GET ?q=<username> to find one user.',
+      'Toggle user.lopuVerified through POST /api/v1/admin/users/lopu-access.',
+      'Grant credits or resolve pendingRequest through POST /api/v1/admin/lopu/credits.',
+      'Non-admins receive 403; a malformed cursor 400.'
+    ],
+    requestExamples: [
+      { name: 'Find a user', description: 'Search by username.', method: 'GET', query: { q: 'nik' } },
+      { name: 'Page through accounts', description: 'Newest accounts first, five per page.', method: 'GET', query: { limit: '5' } }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'One account row with a pending request.',
+        body: {
+          ok: true,
+          accounts: [
+            {
+              user: { id: '64f000000000000000000002', username: 'nik', displayName: 'Nik', email: 'nik@example.com', lopuVerified: true, isAdmin: false },
+              hasAccount: true,
+              accountId: 'lopu-account-3f9c2a1b-7d5e-4c6a-8b0f-1e2d3c4b5a69',
+              balanceMicros: 1980500,
+              balanceCredits: 1.9805,
+              lowBalance: false,
+              month: { key: '2026-09', costMicros: 19500, turns: 1 },
+              lifetime: { costMicros: 19500, inputTokens: 1200, outputTokens: 380, turns: 1 },
+              starterGranted: true,
+              pendingRequest: { id: 'lopu-credit-0a1b2c3d-…', entry: 'request', amountMicros: 3000000, amountCredits: 3, requestStatus: 'pending', note: 'Building a site', createdAt: '2026-09-06T10:00:00.000Z' },
+              createdAt: '2026-09-06T09:00:00.000Z',
+              updatedAt: '2026-09-06T10:00:00.000Z'
+            }
+          ],
+          nextCursor: null,
+          settings: { requireVerification: true, allowByoUnverified: false, starterCredits: 0, lowBalanceWarningCredits: 1 }
+        }
+      },
+      { status: 403, description: 'Caller is not an admin.', body: { ok: false, error: 'Admins only' } }
+    ],
+    notes: ['Rate limited per admin by admin.lopu.accounts (60 per minute). Responses are private and uncacheable.']
+  }),
+  endpoint({
+    id: 'admin-lopu-credits',
+    group: 'admin',
+    title: 'Lopu credits',
+    endpoint: '/api/v1/admin/lopu/credits',
+    summary: 'Grants, adjusts or refunds Lopu credits, or approves / declines a user’s top-up request (admin only).',
+    detail:
+      'Three shapes. { userId, credits, entry?, reason?, note? } moves a balance directly: credits is a number between −10000 and 10000 ' +
+      '(never 0), entry is grant (the default) | topup | adjust | refund — grant and topup must be positive, adjust and refund may be signed. ' +
+      '{ requestId, credits?, reason? } approves a pending top-up request: the requested amount is granted as a topup unless credits ' +
+      'overrides it, the request flips to approved (resolvedAt / resolvedBy / grantedMicros) and the topup ledger row links back to it. ' +
+      '{ requestId, decline: true, reason? } declines it with no balance change. Every grant is one $inc on the user’s lopu-account plus a ' +
+      'lopu-credit ledger row carrying balanceAfterMicros; a request can only be resolved once (409 afterwards), and a user has at most ' +
+      'one pending request. Answers { ok, account, ledger, request } — the admin account row, the ledger row written (null on a decline) ' +
+      'and the resolved request (null on a direct grant).',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin). Bodies must be application/json (415 otherwise).' },
+    methods: ['POST'],
+    steps: [
+      'POST { userId, credits, reason } to grant credits to any user (their account is created on the spot when missing).',
+      'POST { requestId } (from the directory’s pendingRequest) to approve a request as asked, or add credits to grant a different amount.',
+      'POST { requestId, decline: true, reason } to decline it.',
+      'Read account.balanceMicros back; 400 for a zero / out-of-range / mis-signed amount or an unknown entry, 404 for an unknown user or request, 409 for a request already resolved.'
+    ],
+    requestExamples: [
+      { name: 'Grant credits', description: 'Add five credits with a reason.', method: 'POST', body: { userId: '64f000000000000000000002', credits: 5, reason: 'Welcome to Lopu' } },
+      { name: 'Refund a turn', description: 'A signed refund of 0.02 credits.', method: 'POST', body: { userId: '64f000000000000000000002', credits: 0.02, entry: 'refund', reason: 'Provider error mid-reply' } },
+      { name: 'Approve a request', description: 'Grant what the user asked for.', method: 'POST', body: { requestId: 'lopu-credit-0a1b2c3d-…', reason: 'Approved' } },
+      { name: 'Decline a request', description: 'No balance change.', method: 'POST', body: { requestId: 'lopu-credit-0a1b2c3d-…', decline: true, reason: 'Not yet' } }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'A grant applied.',
+        body: {
+          ok: true,
+          account: { user: { id: '64f000000000000000000002', username: 'nik', displayName: 'Nik', email: 'nik@example.com', lopuVerified: true, isAdmin: false }, hasAccount: true, balanceMicros: 5000000, balanceCredits: 5, lowBalance: false, month: { key: '2026-09', costMicros: 0, turns: 0 }, lifetime: { costMicros: 0, inputTokens: 0, outputTokens: 0, turns: 0 }, starterGranted: true, pendingRequest: null },
+          ledger: { id: 'lopu-credit-…', entry: 'grant', amountMicros: 5000000, balanceAfterMicros: 5000000 },
+          request: null
+        }
+      },
+      { status: 400, description: 'A zero amount.', body: { ok: false, error: 'credits must be a non-zero number of credits between -10000 and 10000' } },
+      { status: 409, description: 'The request was already resolved.', body: { ok: false, error: 'That request was already approved' } }
+    ],
+    notes: ['Rate limited per admin by admin.lopu.credits (60 per minute), enforced fail-closed. Responses are private and uncacheable.']
+  }),
+  endpoint({
     id: 'admin-moderation',
     group: 'admin',
     title: 'Moderation review queue',
@@ -2637,10 +2771,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.1.0: a session also gets `vaultProviders` + `vault` (additive, design note §1.3);
     // 1.2.0: `models[].verified` + `providers.<p>.{verified, checkedAt, reason}` from the key
     // probe (additive); 1.3.0: `vaultProviders[].realtimeModels` (the kind’s direct-voice models, design
-    // note §6.1) and a row without a model reports its kind’s first catalog model (additive).
+    // note §6.1) and a row without a model reports its kind’s first catalog model (additive);
+    // 1.4.0: `models[].pricing` — the list price per million tokens with an `estimated` flag
+    // (verified-access design note §2, additive).
     // contractVersion feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.3.0',
-    featureVersion: '1.3.0',
+    contractVersion: '1.4.0',
+    featureVersion: '1.4.0',
     summary: 'Lists every AI model Lopu can chat with, its availability (provider keys verified, not merely detected), the resolved chat defaults, and (for a session) the caller’s own Secure Vault providers.',
     detail:
       'The public projection of the protected `ai-model` Things — one per base model in the Thingtime Admin catalog, ' +
@@ -2695,7 +2831,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               enabled: true,
               available: true,
               verified: true,
-              isDefault: true
+              isDefault: true,
+              pricing: { inputPerM: 5, outputPerM: 25, estimated: false }
             },
             {
               id: 'gpt-5.6-sol',
@@ -2707,7 +2844,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
               enabled: true,
               available: false,
               verified: null,
-              isDefault: false
+              isDefault: false,
+              pricing: { inputPerM: 2.5, outputPerM: 15, estimated: true }
             }
           ],
           defaults: { model: 'claude-opus-5', effort: 'high', speed: 'normal' },
@@ -2734,6 +2872,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     notes: [
       'Responses set Cache-Control: no-store so admin toggles and key changes are visible immediately.',
+      'models[].pricing = { inputPerM, outputPerM, estimated } is the list price in USD per million tokens the credit accounting bills a turn on Thingtime’s keys with (1 credit = 1 USD = 1,000,000 micros); estimated: true marks a row priced from its closest sibling. Public, never a secret.',
       'providers.<provider>.verified is the cached probe verdict (10 minutes after a success, 2 after anything else); administrators force a fresh check with POST /api/v1/admin/ai/models { probe: true }. A probe never blocks the catalog for more than its 5 s cap and never fails it.',
       'vaultProviders is empty for anonymous callers and when the Secure Vault key is not configured; a vault read failure degrades to an empty list, never a failed catalog.'
     ]
@@ -2888,6 +3027,40 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       { status: 403, description: 'POST caller is not an admin.', body: { ok: false, error: 'Admins only' } }
     ],
     notes: ['Responses set Cache-Control: no-store. Storage audit fields (updatedAt/updatedBy) are never exposed by this endpoint.']
+  }),
+  endpoint({
+    id: 'settings-lopu-access',
+    group: 'settings',
+    title: 'Lopu access rules',
+    endpoint: '/api/v1/settings/lopu-access',
+    summary: 'Read or administratively set whether Lopu is invite-only, whether unverified accounts may bring their own provider, the starter credits and the low-balance threshold.',
+    detail:
+      'The Thingtime.LopuAccess settings singleton: { requireVerification (default true — every account starts unverified and an admin ' +
+      'verifies it through POST /api/v1/admin/users/lopu-access; admins are always verified), allowByoUnverified (default false — let an ' +
+      'unverified account still run turns on its own Secure Vault provider), starterCredits (default 0 — granted exactly once when an ' +
+      'account is first created), lowBalanceWarningCredits (default 1 — the balance under which the client shows the amber warning) }. ' +
+      'GET is public (the client needs the rules to render the locked state; nothing here is secret). POST replaces the rules for ' +
+      'administrators and accepts the whole shape or just the fields being changed (merged over the stored value); booleans must be ' +
+      'booleans and the credit amounts numbers between 0 and 1000. A missing or corrupt stored document reads as the locked default — ' +
+      'an outage never opens Lopu to unverified accounts.',
+    auth: { mode: 'optional', description: 'GET is public. POST requires an authenticated administrator session; bodies must be application/json (415 otherwise).' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET to read the rules (key + settings).',
+      'Administrators POST { requireVerification?, allowByoUnverified?, starterCredits?, lowBalanceWarningCredits? } to change any subset.',
+      'Read settings back; the next gated Lopu turn already applies them (every read hits the durable singleton).'
+    ],
+    requestExamples: [
+      { name: 'Read the rules', description: 'Load the stored rules.', method: 'GET' },
+      { name: 'Grant two starter credits', description: 'Change one field as an administrator.', method: 'POST', body: { starterCredits: 2 } },
+      { name: 'Open Lopu to everyone', description: 'Turn verification off.', method: 'POST', body: { requireVerification: false } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Current rules.', body: { ok: true, key: 'Thingtime.LopuAccess', settings: { requireVerification: true, allowByoUnverified: false, starterCredits: 2, lowBalanceWarningCredits: 1 } } },
+      { status: 400, description: 'Invalid rule.', body: { ok: false, error: 'starterCredits must be a number of credits between 0 and 1000' } },
+      { status: 403, description: 'POST caller is not an admin.', body: { ok: false, error: 'Admins only' } }
+    ],
+    notes: ['Responses set Cache-Control: no-store. Rate limited by settings.lopu-access (30 per minute; the admin POST fails closed). Storage audit fields are never exposed.']
   }),
   endpoint({
     id: 'root-data',
@@ -4087,10 +4260,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/lopu/chats',
     // 1.1.0: `providerId` (a Secure Vault provider) on create + in every list entry's
     // `lopu` settings (additive). 1.1.1: POST fails closed on a limiter outage (429 with the
-    // unavailable copy instead of an unthrottled write). contractVersion feeds
-    // /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.1.1',
-    featureVersion: '1.1.1',
+    // unavailable copy instead of an unthrottled write). 1.2.0: POST runs the verified-access
+    // gate — 403 { code: LOPU_UNVERIFIED } for an unverified account, 402 { code: LOPU_NO_CREDITS,
+    // balanceMicros } when the conversation would run on Thingtime's keys with no credits, and a
+    // temporary session is 403 { code: LOPU_GUEST } like every other Lopu write (additive
+    // refusals; GET is never gated). contractVersion feeds /api/v1/capabilities, featureVersion
+    // the well-known Thingtime manifest.
+    contractVersion: '1.2.0',
+    featureVersion: '1.2.0',
     summary: 'Lists the caller’s conversations with Lopu, or starts a new one.',
     detail:
       'A Lopu conversation is an ordinary messenger chat (a one-member group owned by the caller) whose ' +
@@ -4158,6 +4335,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     notes: [
       'GET draws from the lopu.chats rate-limit bucket (120 per minute); POST from lopu.chats.write (30 per minute), enforced fail-closed — a limiter outage answers 429 rather than an unthrottled write.',
+      'POST is gated by verified access and credits (verified-access design note §1): 403 { code: "LOPU_UNVERIFIED" } while Thingtime.LopuAccess.requireVerification is on and the account is not verified (unless the body pins a providerId and allowByoUnverified is on), 402 { code: "LOPU_NO_CREDITS", balanceMicros } when the conversation would run on Thingtime’s keys with a balance of zero or less, 403 { code: "LOPU_GUEST" } for a temporary session. Listing is never gated.',
       'The generic /api/v1/things paths refuse messenger kinds, so a Lopu chat can only be changed through this family.'
     ]
   }),
@@ -4277,11 +4455,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // gains provider 'vault' + providerLabel (additive). 1.2.0: server-verified confirmations —
     // `confirmations: [{ key, token }]` in, the `confirm` event + tool_result.needsConfirmation out
     // (additive); the body is JSON-only (415), a stored null effort inherits the admin default,
-    // and 'vault' rows persist providerLabel. contractVersion feeds /api/v1/capabilities,
-    // featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.2.0',
-    featureVersion: '1.2.0',
-    summary: 'Sends one message to Lopu and streams her reply — text, tool calls and live builder patches — as newline-delimited JSON.',
+    // and 'vault' rows persist providerLabel. 1.3.0: the verified-access gate before any provider
+    // call (403 LOPU_UNVERIFIED / 402 LOPU_NO_CREDITS / 403 LOPU_GUEST) and usage accounting —
+    // `billing` on meta, `billing` / `costMicros` / `priced` / `balanceMicros` (+ cache tokens in
+    // `usage`) on done and on the persisted assistant row's lopu meta (additive). 1.4.0: a billed
+    // turn holds one of at most three in-flight slots on the account, so concurrent turns cannot
+    // each spend the same last credit — past the cap the request is refused 429
+    // LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted (additive). contractVersion
+    // feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
+    contractVersion: '1.4.0',
+    featureVersion: '1.4.0',
+    summary: 'Sends one message to Lopu and streams its reply — text, tool calls and live builder patches — as newline-delimited JSON.',
     detail:
       'POST { chatId?, text, requestId, model?, effort?, speed?, providerId?, context?, confirmations? }. The user turn is persisted first (omit chatId to start a ' +
       'conversation titled from the message), then the reply streams as application/x-ndjson, one JSON event per line: meta (chat, ' +
@@ -4353,7 +4537,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 200,
         description: 'NDJSON stream events (one per line).',
         body: [
-          { type: 'meta', chatId: 'lopu-chat-…', userMessageId: 'msg-…', requestId: '0f7d2c3a-…', model: 'claude-opus-5', effort: 'high', speed: 'normal', provider: 'claude', label: 'Claude Opus 5' },
+          { type: 'meta', chatId: 'lopu-chat-…', userMessageId: 'msg-…', requestId: '0f7d2c3a-…', model: 'claude-opus-5', effort: 'high', speed: 'normal', provider: 'claude', label: 'Claude Opus 5', billing: 'thingtime' },
           { type: 'delta', text: 'Adding a hero now ✨' },
           { type: 'tool_use_start', id: 'toolu_01', name: 'patch_page' },
           { type: 'tool_input_delta', id: 'toolu_01', name: 'patch_page', partial: '{"target":"active","ops":[{"op":"insert"' },
@@ -4361,19 +4545,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           { type: 'patch', id: 'toolu_01', target: 'active', ops: [{ op: 'insert', containerId: null, index: 1, block: { id: 'hero', type: 'container', direction: 'column', children: [] } }], pageId: 'my-landing-page', persisted: true },
           { type: 'tool_result', id: 'toolu_01', name: 'patch_page', ok: true, summary: 'Applied 1/1 op(s) to "Landing" and saved it' },
           { type: 'delta', text: 'Done — your hero is on the page 🦄' },
-          { type: 'done', assistantMessageId: 'msg-…', messages: [], stopReason: 'end_turn' }
+          { type: 'done', assistantMessageId: 'msg-…', messages: [], usage: { inputTokens: 1200, outputTokens: 380, cacheReadTokens: 8000 }, billing: 'thingtime', costMicros: 19500, priced: true, balanceMicros: 1980500, stopReason: 'end_turn' }
         ]
       },
       {
         status: 200,
         description: 'A destructive tool stops for the caller’s confirmation (NDJSON, one event per line).',
         body: [
-          { type: 'meta', chatId: 'lopu-chat-…', userMessageId: 'msg-…', requestId: '0f7d2c3a-…', model: 'claude-opus-5', effort: 'high', speed: 'normal', provider: 'claude', label: 'Claude Opus 5' },
+          { type: 'meta', chatId: 'lopu-chat-…', userMessageId: 'msg-…', requestId: '0f7d2c3a-…', model: 'claude-opus-5', effort: 'high', speed: 'normal', provider: 'claude', label: 'Claude Opus 5', billing: 'thingtime' },
           { type: 'tool_use', id: 'toolu_02', name: 'delete_thing', input: { id: 'old-page', name: 'Old page' } },
           { type: 'confirm', id: 'toolu_02', name: 'delete_thing', key: 'delete_thing:old-page', token: '<grant>', expiresAt: '2026-09-04T00:15:00.000Z', summary: 'Delete "Old page" (thing old-page)', subject: { id: 'old-page', name: 'Old page' } },
           { type: 'tool_result', id: 'toolu_02', name: 'delete_thing', ok: false, summary: 'Waiting for the user’s confirmation: Delete "Old page" (thing old-page). …', needsConfirmation: true },
           { type: 'delta', text: 'Press Confirm on the card and I will remove it 🗑️' },
-          { type: 'done', assistantMessageId: 'msg-…', messages: [], stopReason: 'end_turn' }
+          { type: 'done', assistantMessageId: 'msg-…', messages: [], usage: { inputTokens: 1200, outputTokens: 380, cacheReadTokens: 8000 }, billing: 'thingtime', costMicros: 19500, priced: true, balanceMicros: 1980500, stopReason: 'end_turn' }
         ]
       },
       {
@@ -4385,6 +4569,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         status: 401,
         description: 'No session.',
         body: { ok: false, error: 'Sign in to talk to Lopu' }
+      },
+      {
+        status: 403,
+        description: 'The account is not verified for Lopu (Thingtime.LopuAccess.requireVerification) — nothing is persisted.',
+        body: { ok: false, error: 'Lopu is invite-only for now — an admin needs to verify your account before it can build with you', code: 'LOPU_UNVERIFIED' }
+      },
+      {
+        status: 402,
+        description: 'The turn would run on Thingtime’s keys and the credit balance is zero or less — nothing is persisted.',
+        body: { ok: false, error: 'Lopu’s credits for your account are used up — add credits to keep going', code: 'LOPU_NO_CREDITS', balanceMicros: -19500 }
       },
       {
         status: 409,
@@ -4399,6 +4593,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     notes: [
       'Rate limited per user by lopu.chat (40 per 10 minutes), enforced fail-closed; vault turns share the bucket.',
+      'Verified access + credits (verified-access design note §1–§2): the gate runs after the body, conversation and provider are validated and BEFORE anything is persisted or any provider is dialed — 403 { code: "LOPU_UNVERIFIED" } for an unverified account (unless the turn runs on the caller’s own vault provider and Thingtime.LopuAccess.allowByoUnverified is on), 402 { code: "LOPU_NO_CREDITS", balanceMicros } when the turn would run on Thingtime’s keys with a balance of zero or less, 403 { code: "LOPU_GUEST" } for a temporary session. Every turn is then priced from the catalog list prices (GET /api/v1/ai/models pricing; the scripted test provider reports 100 in / 50 out tokens per hop and prices against test-model) and recorded as a lopu-usage row: meta carries billing ("thingtime" = server keys, debited from the credit balance with a lopu-credit ledger row; "byo" = the caller’s vault provider, recorded only; "free" = the canned fallback), done carries billing, costMicros (the list price in micro-USD), priced (the model had a price) and balanceMicros (the balance after the debit; null when no account is involved), and the persisted assistant row’s lopu meta keeps the same fields. The balance may go negative by at most one turn; the next one is refused. An accounting failure is logged and retried once, never surfaced as a chat error.',
       'Confirmations are purpose JWTs on the auth key material (15-minute expiry, bound to account + chat + action key); they are single-use within the turn that spends them and the client retires a card after one press. Nothing the model reads — tool results, page blocks, thing content — can grant one.',
       'Env: ANTHROPIC_API_KEY / OPENAI_API_KEY pick the providers; LOPU_CHAT_PROVIDER (auto|claude|openai|test) and LOPU_OPENAI_TOOLS (native|text) shape routing; LOPU_CLAUDE_MODEL / LOPU_OPENAI_MODEL are the provider defaults for the admin waterfall’s default slot.',
       'Vault turns need THINGTIME_USER_VAULT_KEY (or the admin vault key) and honour THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS for custom compatible hosts; a vault turn takes precedence over LOPU_CHAT_PROVIDER, test mode included.'
@@ -4454,8 +4649,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		// temporary (guest) session — compatible corrections.
 		// 1.1.0: optional per-turn `model`, `effort`, `speed` (validated against the
 		// provider’s catalog when it lists the model) — compatible additions.
-		contractVersion: '1.1.0',
-		featureVersion: '1.1.0',
+		// 1.2.0: conversation turns run the verified-access gate as byo turns (403 LOPU_UNVERIFIED
+		// unless Thingtime.LopuAccess.allowByoUnverified; transcribe mode is not gated) and are
+		// recorded as lopu-usage rows — meta carries billing "byo", done carries the provider's
+		// usage, billing and the list-price costMicros (never debited) — compatible additions.
+		contractVersion: '1.2.0',
+		featureVersion: '1.2.0',
 		group: 'lopu',
 		title: 'Lopu voice turn',
 		endpoint: '/api/v1/lopu/voice/reply',
@@ -4474,13 +4673,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			{ name: 'Transcription page', description: 'Persist and quote without an AI call.', method: 'POST', body: { sessionId: 'voice-session-1', transcript: 'Meeting note.', transcribeMode: true } }
 		],
 		responseExamples: [
-			{ status: 200, description: 'NDJSON conversation events.', body: [{ type: 'meta', mode: 'conversation', provider: 'My Claude' }, { type: 'delta', text: 'Start ' }, { type: 'done' }] },
+			{ status: 200, description: 'NDJSON conversation events.', body: [{ type: 'meta', mode: 'conversation', provider: 'My Claude', billing: 'byo' }, { type: 'delta', text: 'Start ' }, { type: 'done', usage: { inputTokens: 210, outputTokens: 42 }, billing: 'byo', costMicros: 1260 }] },
+			{ status: 403, description: 'The account is not verified for Lopu and unverified BYO turns are off.', body: { ok: false, error: 'Lopu is invite-only for now — an admin needs to verify your account before it can build with you', code: 'LOPU_UNVERIFIED' } },
 			{ status: 200, description: 'NDJSON transcribe events.', body: [{ type: 'meta', mode: 'transcribe' }, { type: 'quote', text: 'Meeting note.', page: { id: '<thing-id>', title: 'Lopu voice transcript · …', pageNumber: 1 } }, { type: 'done' }] }
 		]
 	}),
   endpoint({
 		id: 'lopu-voice-session',
-		contractVersion: '1.0.0',
+		// 1.1.0: the verified-access gate (a byo turn: 403 LOPU_UNVERIFIED unless
+		// allowByoUnverified) and one lopu-usage row per minted session — compatible additions.
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
 		group: 'lopu',
 		title: 'Lopu direct voice session',
 		endpoint: '/api/v1/lopu/voice/session',
@@ -4502,8 +4705,133 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			{ status: 400, description: 'The connection is not the caller’s, its kind has no realtime model, or the model/effort is not eligible.', body: { ok: false, error: 'Direct voice needs a provider with realtime speech (xAI Grok Voice) — this connection has none.' } },
 			{ status: 401, description: 'No live user session.', body: { ok: false, error: 'Unauthorized' } }
 		],
-		notes: ['Rate limited per user by lopu.voiceReply (30 per minute), enforced fail-closed and shared with the voice turn.']
+		notes: ['Rate limited per user by lopu.voiceReply (30 per minute), enforced fail-closed and shared with the voice turn.', 'Gated like a BYO turn (verified-access design note §1): 403 { code: "LOPU_UNVERIFIED" } for an unverified account unless Thingtime.LopuAccess.allowByoUnverified is on; each minted session is recorded as a lopu-usage row (surface voice-session, billing byo, zero tokens — minutes are not known at mint time).']
 	}),
+  endpoint({
+    id: 'lopu-account',
+    group: 'lopu',
+    title: 'Lopu account',
+    endpoint: '/api/v1/lopu/account',
+    summary: 'The caller’s Lopu account — verified status, the access rules, the credit balance, this month’s and lifetime usage, and a pending top-up request.',
+    detail:
+      'GET answers { ok, account: { userId, verified, requireVerification, allowByoUnverified, lowBalanceWarningCredits, balanceMicros, ' +
+      'balanceCredits, lowBalance, month: { key, costMicros, turns }, lifetime: { costMicros, inputTokens, outputTokens, turns }, ' +
+      'starterCredits, starterGranted, topupUrl, pendingRequest, createdAt, updatedAt } }. The lopu-account Thing is created lazily on ' +
+      'the first read (or the first gated turn) and the Thingtime.LopuAccess starterCredits are granted exactly once — so the very first ' +
+      'read already shows the starter balance. 1 credit = 1 USD of the provider’s list price = 1,000,000 micros; turns on Thingtime’s keys ' +
+      'are debited, turns on the caller’s own Secure Vault provider are recorded only. topupUrl is the optional THINGTIME_LOPU_TOPUP_URL ' +
+      '("Buy credits"); when null the client offers "Request credits" only. verified is false while an admin has not verified the ' +
+      'account (admins are always verified); lowBalance is true under lowBalanceWarningCredits.',
+    auth: { mode: 'session', description: 'Requires an auth cookie for a full (non-temporary) account — a temporary session is 403 { code: "LOPU_GUEST" }.' },
+    methods: ['GET'],
+    steps: [
+      'GET after sign-in, after every done event of a reply, and on focus (the client caches the last value and refreshes in the background).',
+      'Render the locked state when requireVerification && !verified; show the balance chip from balanceMicros / balanceCredits and the amber state from lowBalance.',
+      'Offer "Buy credits" when topupUrl is set and "Request credits" (POST /api/v1/lopu/account/topup-request) unless pendingRequest is set.'
+    ],
+    requestExamples: [{ name: 'Read my account', description: 'Load the balance and rules.', method: 'GET' }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'A verified account with credits.',
+        body: {
+          ok: true,
+          account: {
+            userId: '64f000000000000000000002',
+            verified: true,
+            requireVerification: true,
+            allowByoUnverified: false,
+            lowBalanceWarningCredits: 1,
+            balanceMicros: 1980500,
+            balanceCredits: 1.9805,
+            lowBalance: false,
+            month: { key: '2026-09', costMicros: 19500, turns: 1 },
+            lifetime: { costMicros: 19500, inputTokens: 1200, outputTokens: 380, turns: 1 },
+            starterCredits: 0,
+            starterGranted: true,
+            topupUrl: null,
+            pendingRequest: null,
+            createdAt: '2026-09-06T09:00:00.000Z',
+            updatedAt: '2026-09-06T10:00:00.000Z'
+          }
+        }
+      },
+      { status: 401, description: 'No session.', body: { ok: false, error: 'Sign in to see your Lopu account' } },
+      { status: 403, description: 'A temporary session.', body: { ok: false, error: 'Create an account to chat with Lopu — conversations are saved to your account', code: 'LOPU_GUEST' } }
+    ],
+    notes: ['Rate limited per user by lopu.account (120 per minute), shared with /history. Responses set Cache-Control: no-store.']
+  }),
+  endpoint({
+    id: 'lopu-account-history',
+    group: 'lopu',
+    title: 'Lopu credit history',
+    endpoint: '/api/v1/lopu/account/history',
+    summary: 'The caller’s credit ledger newest first, with the usage rows the page’s debits point at.',
+    detail:
+      'GET ?cursor&limit (≤ 100, default 50) answers { ok, entries, usage, nextCursor }. entries are lopu-credit rows newest first — ' +
+      '{ id, entry: starter | grant | topup | debit | adjust | refund | request, amountMicros (signed), amountCredits, balanceAfterMicros ' +
+      '(null on a request), reason, actorId, usageId, requestId, requestStatus (pending | approved | declined on requests), note, ' +
+      'resolvedAt, resolvedBy, grantedMicros, createdAt, updatedAt }; usage holds the lopu-usage rows the page’s debit entries reference — ' +
+      '{ id, chatId, requestId, surface: chat | voice | voice-session, provider, providerLabel, model, billing, inputTokens, outputTokens, ' +
+      'cacheReadTokens, cacheWriteTokens, costMicros, costCredits, priced, estimated, debitedMicros, toolCalls, hops, durationMs, createdAt }. ' +
+      'Follow nextCursor for older rows; a malformed cursor is a 400.',
+    auth: { mode: 'session', description: 'Requires an auth cookie for a full (non-temporary) account.' },
+    methods: ['GET'],
+    steps: [
+      'GET to render the "Credits & usage" history table; join usage rows to debits by usageId.',
+      'Pass nextCursor back as cursor for "Load more".'
+    ],
+    requestExamples: [{ name: 'First page', description: 'The newest ten rows.', method: 'GET', query: { limit: '10' } }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'A debit and the grant before it.',
+        body: {
+          ok: true,
+          entries: [
+            { id: 'lopu-credit-debit-3f9c…', entry: 'debit', amountMicros: -19500, amountCredits: -0.0195, balanceAfterMicros: 1980500, reason: 'Chat turn · claude-opus-5', actorId: '64f000000000000000000002', usageId: 'lopu-usage-3f9c…', requestId: null, requestStatus: null, note: null, createdAt: '2026-09-06T10:00:00.000Z' },
+            { id: 'lopu-credit-…', entry: 'grant', amountMicros: 2000000, amountCredits: 2, balanceAfterMicros: 2000000, reason: 'Welcome to Lopu', actorId: '64f000000000000000000001', usageId: null, requestId: null, requestStatus: null, note: null, createdAt: '2026-09-06T09:00:00.000Z' }
+          ],
+          usage: [
+            { id: 'lopu-usage-3f9c…', chatId: 'lopu-chat-…', requestId: '0f7d2c3a-…', surface: 'chat', provider: 'claude', providerLabel: null, model: 'claude-opus-5', billing: 'thingtime', inputTokens: 1200, outputTokens: 380, cacheReadTokens: 8000, cacheWriteTokens: 0, costMicros: 19500, costCredits: 0.0195, priced: true, estimated: false, debitedMicros: 19500, toolCalls: 2, hops: 3, durationMs: 8400, createdAt: '2026-09-06T10:00:00.000Z' }
+          ],
+          nextCursor: null
+        }
+      },
+      { status: 400, description: 'A malformed cursor.', body: { ok: false, error: 'cursor is not a history cursor' } },
+      { status: 401, description: 'No session.', body: { ok: false, error: 'Sign in to see your Lopu history' } }
+    ],
+    notes: ['Rate limited per user by lopu.account (120 per minute), shared with /account. Responses set Cache-Control: no-store.']
+  }),
+  endpoint({
+    id: 'lopu-account-topup-request',
+    group: 'lopu',
+    title: 'Request Lopu credits',
+    endpoint: '/api/v1/lopu/account/topup-request',
+    summary: 'Asks an admin for Lopu credits — one pending request per account.',
+    detail:
+      'POST { credits (0.5 … 1000), note? (≤ 500 chars) } writes a lopu-credit row with entry "request" and requestStatus "pending" and ' +
+      'answers { ok, request } (the same row shape /history lists). While a request is pending a second one is a 409; an admin approves ' +
+      '(the credits land as a topup ledger row) or declines it through POST /api/v1/admin/lopu/credits, and the account’s pendingRequest ' +
+      'clears. Admins are notified through the ops-mail boundary the "new user" notification uses (THINGTIME_ADMIN_NOTIFICATION_EMAIL) — ' +
+      'best effort, the request stands when mail is down. No payment processor is involved; THINGTIME_LOPU_TOPUP_URL, when set, is the ' +
+      'separate "Buy credits" link the account read surfaces.',
+    auth: { mode: 'session', description: 'Requires an auth cookie for a full (non-temporary) account. Bodies must be application/json (415 otherwise — the CSRF fence, before the rate limit).' },
+    methods: ['POST'],
+    steps: [
+      'POST { credits, note } with Content-Type: application/json from the "Request credits" form.',
+      'Show request.requestStatus (pending) on the account until an admin resolves it; 409 means one is already waiting.',
+      'Handle 400 for an amount outside 0.5 … 1000 or a note over 500 characters.'
+    ],
+    requestExamples: [{ name: 'Ask for three credits', description: 'With a short note for the admin.', method: 'POST', headers: { 'Content-Type': 'application/json' }, body: { credits: 3, note: 'Building the launch page' } }],
+    responseExamples: [
+      { status: 200, description: 'The pending request.', body: { ok: true, request: { id: 'lopu-credit-0a1b2c3d-…', entry: 'request', amountMicros: 3000000, amountCredits: 3, balanceAfterMicros: null, reason: 'Credit top-up request', actorId: '64f000000000000000000002', usageId: null, requestId: null, requestStatus: 'pending', note: 'Building the launch page', resolvedAt: null, resolvedBy: null, grantedMicros: null, createdAt: '2026-09-06T10:05:00.000Z', updatedAt: '2026-09-06T10:05:00.000Z' } } },
+      { status: 400, description: 'Amount out of range.', body: { ok: false, error: 'credits must be a number between 0.5 and 1000' } },
+      { status: 409, description: 'A request is already pending.', body: { ok: false, error: 'You already have a credit request waiting for an admin — Lopu will let you know when it is reviewed' } },
+      { status: 415, description: 'The body was not application/json.', body: { ok: false, error: 'Content-Type must be application/json' } }
+    ],
+    notes: ['Rate limited per user by lopu.account.write (10 per hour), enforced fail-closed. Responses set Cache-Control: no-store.']
+  }),
   endpoint({
     id: 'deployment-links',
     group: 'deployments',
@@ -4833,10 +5161,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/mongodb/raw-results',
     // 1.1.0: the collection allowlist gained `ciControl` (additive).
     // contractVersion is what the capabilities manifest publishes.
-    contractVersion: '1.1.0',
+    contractVersion: '1.1.1',
+    featureVersion: '1.0.1',
     summary: 'Advertises and runs bounded, read-only MongoDB queries for the no-code admin workbench.',
     detail:
-      'GET returns the server-owned capability catalogue. POST accepts a structured query built from filters, typed Extended JSON values, projection, sort, collation, index hints, or a read-only aggregation pipeline. Results are capped by document count, response bytes, and execution time. Mutations, change streams, operational/session inspection, server-side JavaScript, arbitrary databases, and unknown collections are rejected recursively.',
+      'GET returns the server-owned capability catalogue. POST accepts a structured query built from filters, typed Extended JSON values, projection, sort, collation, index hints, or a read-only aggregation pipeline. Results are capped by document count, response bytes, and execution time. Mutations, change streams, operational/session inspection, server-side JavaScript, arbitrary databases, and unknown collections are rejected recursively. An initial empty $indexStats stage remains first as MongoDB requires; it emits only index metadata, while protected-field stripping remains active for document ingress and subsequent joins.',
     auth: {
       mode: 'session-or-bearer',
       description:
@@ -7254,12 +7583,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'embed-things',
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     group: 'embed',
     title: 'Embedded things',
     endpoint: '/api/v1/embed/things',
     summary: 'Reads, lists, creates, and version-safely updates Thingtime data embedded on other websites.',
     detail:
-      'Public embedded things can be read cross-origin. Creating, listing, or updating uses the normal Thingtime session-or-bearer authentication path and stores JSON-safe values as kind: embed documents in the things collection.',
+      'Public embedded things can be read cross-origin. Creating, listing, or updating uses the normal Thingtime session-or-bearer authentication path and stores JSON-safe values as canonical embed Things. Owner listings sort by updatedAt descending with a stable shareId tie-breaker. Legacy kind reads/writes remain during migration and on custom data planes; after the explicit home cutover, embeds use the shared schema/owner updated-order index. Existing private-read and version-conflict checks are unchanged.',
     auth: {
       mode: 'optional',
       description:
@@ -8374,13 +8705,27 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things',
-    featureVersion: '1.1.0',
+    // 1.3.0 / contract 1.2.0: post + comment projections carry authorFlair —
+    // the author's USER flair in the post's subspace (additive). The shared
+    // post projection is versioned HERE and on things-comment / things-feed /
+    // things-user; things-search / -trending / -rss / -saved ride the same
+    // projection without a bump of their own (round-1 precedent for
+    // title / subspace / votes — see PRs/subspaces-communities-and-updown-votes.md)
+    // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
+    // subspace post, for that subspace's moderators only (S5, additive)
+    // 1.5.0 / contract 1.4.0: GET ?id= takes commentSort=top|new|old — the
+    // shipped comment page in Reddit's three orders (top = votes.score desc,
+    // then older first) and the response echoes commentSort; an unknown value
+    // is a 400. Only this read grew — the shared projection is unchanged, so
+    // things-comment / -feed / -user stay put (S7, additive)
+    featureVersion: '1.5.0',
+    contractVersion: '1.4.0',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares.',
     detail:
-      'Everything is a thing: one root Thing schema per doc, sub-schemas applied via the thingtime array of schema ids (see /schemas), the payload under crystal, and the audience under acl — tt: grants plus "-"-prefixed exclusions where the most specific matching entry wins (["tt:all"] public, ["-tt:all","tt:userFriends","tt:user"] friends-only, ["tt:all","-tt:user/somebody"] public except one user; owners always see their own things). POST creates (unified shape or the legacy post body — same path), GET reads one thing / lists a target’s attached things / lists your own, PUT upserts by id (create-or-replace), PATCH merges a partial update, DELETE removes an owned thing and its attached comments/reactions. The legacy visibility names still work as input and are derived on the wire. Crystals are optionally schema-less: omit thingtime and it defaults to ["data"], the bounded free-form crystal. Beside the crystal, every thing also carries a schema-free extended property — any JSON up to 512KB, stored and returned exactly as given, never validated or interpreted, and not structured-searchable (/search field conditions can’t target it, though its string content is indexed by the wildcard text index). extended replaces as a whole value on write (deep-merging arbitrary JSON is ambiguous) and null clears it — the open sidecar external apps park their data in. Things also carry a tokenAcl grant list (tt:token/<token id> entries, see /api/v1/tokens-docs): sandboxed personal-access-tokens may only mutate things carrying their entry; creators are auto-granted, the list replaces whole via tokenAcl on POST/PUT/PATCH (null clears, max 32 entries), it never affects visibility, and it projects to the owner only.',
+      'Everything is a thing: one root Thing schema per doc, sub-schemas applied via the thingtime array of schema ids (see /schemas), the payload under crystal, and the audience under acl — tt: grants plus "-"-prefixed exclusions where the most specific matching entry wins (["tt:all"] public, ["-tt:all","tt:userFriends","tt:user"] friends-only, ["tt:all","-tt:user/somebody"] public except one user; owners always see their own things). POST creates (unified shape or the legacy post body — same path), GET reads one thing / lists a target’s attached things / lists your own, PUT upserts by id (create-or-replace), PATCH merges a partial update, DELETE removes an owned thing and its attached comments/reactions. The legacy visibility names still work as input and are derived on the wire — including "hidden" (acl ["tt:hidden","tt:user"]): an unlisted thing that never appears in feeds, listings, profiles, or search for anyone but its owner, yet is viewable by ANYONE presenting its randomly generated linkKey — GET /api/v1/things?id=<id>&key=<linkKey>, or the /post/<id>?key=<linkKey> page. The server mints a fresh linkKey whenever a thing enters hidden (re-hiding rotates it, so previously shared links die), projects it to the owner only, and honors it on the engagement routes too (body.key on comment/react/save/share admits key-holders). Changing the audience away from hidden retires the link instantly. "custom" audiences go further: an acl carrying the tt:custom marker names exactly who can do what — a baseline (tt:all = everyone may read, tt:hidden = link-key holders may read, neither = only the people below), plus per-user grants tt:user/<username> (read), tt:user/<username>/comment, tt:user/<username>/write and per-group grants tt:group/<group id>[/comment|/write] (groups: /api/v1/groups-docs; write ⊃ comment ⊃ read). On custom things, general viewers READ ONLY — commenting, reacting, and sharing need the comment capability, and users with write may PATCH the thing’s crystal/extended/tags (never its audience, folder, or token grants; storage stays billed to the owner). Saves are exempt (a save is a private bookmark). The composer’s Custom option builds these acls visually. Crystals are optionally schema-less: omit thingtime and it defaults to ["data"], the bounded free-form crystal. Beside the crystal, every thing also carries a schema-free extended property — any JSON up to 512KB, stored and returned exactly as given, never validated or interpreted, and not structured-searchable (/search field conditions can’t target it, though its string content is indexed by the wildcard text index). extended replaces as a whole value on write (deep-merging arbitrary JSON is ambiguous) and null clears it — the open sidecar external apps park their data in. Things also carry a tokenAcl grant list (tt:token/<token id> entries, see /api/v1/tokens-docs): sandboxed personal-access-tokens may only mutate things carrying their entry; creators are auto-granted, the list replaces whole via tokenAcl on POST/PUT/PATCH (null clears, max 32 entries), it never affects visibility, and it projects to the owner only.',
     auth: {
       mode: 'session-or-bearer',
       description:
@@ -8396,6 +8741,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Optionally add extended: any JSON up to 512KB, stored untouched and returned as-is — replace-on-write, null clears it. It is not structured-searchable (/search field conditions can’t target it), though its string content is indexed by the wildcard text index like any field.',
       'Attached kinds (comment, reaction) require targetId and carry acl ["tt:inherit"]; shares carry thingtime ["post","share"]. tt:inherit is stamped by the SERVER on target-attached things — sending it yourself is a 400 on create and update alike, because a thing whose audience is detached from its own acl can never be judged or re-edited.',
       "GET ?id= reads one thing; post projections include viewer-relative commentCounts { direct, replies, total, loaded } while commentCount remains the backward-compatible total. Hidden ACL/moderation rows are never counted or disclosed. GET ?target=&thingtime=comment lists a visible thing’s comments; GET ?thingtime=&cursor=&limit= lists your own things. Session callers may add appId=<clientId> to the own-things list to browse ONE app's namespace (see /api/v1/apps/data-summary).",
+      "GET ?id=&commentSort=top|new|old orders the shipped comment page (the post’s direct comments, 20 per read): top = net up/down score descending, ties older first; new = newest first; old = oldest first. Absent keeps the default page — the newest 20 shown oldest → newest — and any other value is a 400. The response echoes commentSort (null when absent). The whole first level is ordered before the page is cut, so top is the highest-scoring comments of the post, not the newest ones re-shuffled; the nested reply levels that ship with a comment (the newest 5 per parent) are re-ordered among themselves the same way, never re-fetched per parent — a deeper thread’s full order comes from its own GET ?id=<comment>&commentSort=.",
       'PUT { id, thingtime, crystal, acl? } creates the thing at that id (201) or replaces the owned thing’s crystal whole (200); PATCH { id, crystal?, extended?, acl?, tags? } merges crystal fields (extended still replaces whole).',
       'PATCH { id, attachmentIds } syncs a post’s (or rich comment’s) private attachments: the list is the full desired display order — it must include every id already bound to that thing (removals are rejected; 409 when the bound set changed) and may append the ids of newly uploaded ready drafts, which are bound to the post with the same fences create-time binding uses. Same-origin JSON from a full user session only, like attachment creation.',
       'PATCH/PUT may include expectedUpdatedAt to fail with 409 if the Thing changed after a preview. PATCH may set replaceCrystal true for whole-crystal replacement.',
@@ -8498,6 +8844,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           'Fetch a thing by id (posts AND comments include the full post projection; comments also return parent and root for thread navigation — the /post/:id permalink pages are backed by this).',
         method: 'GET',
         query: { id: 'post_123' }
+      },
+      {
+        name: 'Read a post with its top comments',
+        description: 'commentSort=top ships the post’s highest-scoring comments first (net up/down score, ties older first); new / old order by age. The response echoes commentSort.',
+        method: 'GET',
+        query: { id: 'post_123', commentSort: 'top' }
       },
       {
         name: 'List comments of a post',
@@ -8605,6 +8957,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Every doc stores the root schemaVersion it was written at; admins migrate older docs via /api/v1/admin/migrations.',
       'Browse every schema kind at /schemas or GET /api/v1/schemas.',
       'The comment/react/share/update/delete sub-routes remain as sugar over this endpoint.',
+      'commentSort is a per-read view of the same thread — it changes the ORDER of the shipped comment page (and which 20 direct comments make it), never the counts: commentCounts.total / direct still describe the whole thread and loaded is the page size. Comments left out of a sorted page are still reachable through GET ?target=<post>&thingtime=comment (chronological, cursor-paged).',
       "App-token behaviour in one line: same verbs, own namespace only — a thing without the app's root appId stamp 404s for reads, writes, and deletes alike. Apps read children (comments/reactions) relationally via GET ?target=… inside the namespace; child counts never mix in first-party or other-app children."
     ]
   }),
@@ -8883,7 +9236,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-comment',
-    featureVersion: '1.1.0',
+    // 1.3.0 / contract 1.2.0: post + comment projections carry authorFlair —
+    // the author's USER flair in the post's subspace (additive)
+    // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
+    // subspace post, for that subspace's moderators only (S5, additive)
+    featureVersion: '1.4.0',
+    contractVersion: '1.3.0',
     group: 'things',
     title: 'Comment on post',
     endpoint: '/api/v1/things/comment',
@@ -9072,21 +9430,31 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-feed',
-    featureVersion: '1.1.0',
+    // 1.3.0 / contract 1.2.0: post + comment projections carry authorFlair —
+    // the author's USER flair in the post's subspace (additive)
+    // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
+    // subspace post, for that subspace's moderators only (S5, additive)
+    // 1.5.0 / contract 1.4.0: scope=all|subspaces — "My subspaces" narrows
+    // the page to posts from the viewer's ACTIVE subspaces (empty for guests /
+    // non-members, every other fence intact); the response echoes scope; an
+    // unknown scope answers 400 (S6, additive)
+    featureVersion: '1.5.0',
+    contractVersion: '1.4.0',
     group: 'things',
     title: 'Feed page',
     endpoint: '/api/v1/things/feed',
     summary: 'Returns public and viewer-visible feed posts with optional algorithm ranking.',
     detail:
-      'The feed reads recent posts whose acl admits the viewer (tt:all for logged-out callers, plus your own things when authenticated — acl exclusions like -tt:user/<you> are honoured), applies filters, then optionally ranks them with the selected or active feed algorithm. tag narrows to posts carrying one tag (normalized to the stored trim/lowercase form) — the public tag feeds behind /feed?tag=<tag>.',
+      'The feed reads recent posts whose acl admits the viewer (tt:all for logged-out callers, plus your own things when authenticated — acl exclusions like -tt:user/<you> are honoured), applies filters, then optionally ranks them with the selected or active feed algorithm. tag narrows to posts carrying one tag (normalized to the stored trim/lowercase form) — the public tag feeds behind /feed?tag=<tag>. scope=subspaces narrows the page to posts from the subspaces the viewer is an ACTIVE member of (the "🪐 My subspaces" chip on /feed) — a pending join request is not a membership, a guest or someone in no subspace gets an empty page, and the usual fences (removed posts hidden, private subspaces members-only) still apply on top; scope=all is the default and the response echoes the scope it served.',
     auth: {
       mode: 'optional',
       description: 'Anonymous callers see public posts; authenticated callers may also see their own visible circles.'
     },
     methods: ['GET'],
     steps: [
-      'Send optional types, circles, tag, from, to, algorithm, cursor, and limit query parameters.',
+      'Send optional types, circles, tag, from, to, algorithm, scope, cursor, and limit query parameters.',
       'Use algorithm=latest to force chronological ordering.',
+      'Use scope=subspaces for only the viewer’s subspaces (default all); anything else answers 400.',
       'Use nextCursor for infinite scrolling.',
       'Read ranked to know whether algorithm scoring affected the page.'
     ],
@@ -9096,13 +9464,24 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Fetch a public feed page.',
         method: 'GET',
         query: { types: 'marketplace', circles: 'public', limit: 5 }
+      },
+      {
+        name: 'My subspaces',
+        description: 'Only posts from the subspaces the caller belongs to, newest first.',
+        method: 'GET',
+        query: { scope: 'subspaces', algorithm: 'latest', limit: 20 }
       }
     ],
     responseExamples: [
       {
         status: 200,
         description: 'Feed page returned.',
-        body: { ok: true, posts: [], nextCursor: null, ranked: false }
+        body: { ok: true, posts: [], nextCursor: null, ranked: false, scope: 'all' }
+      },
+      {
+        status: 400,
+        description: 'Unknown scope.',
+        body: { ok: false, error: 'scope must be one of all, subspaces' }
       }
     ]
   }),
@@ -9308,8 +9687,726 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ],
     notes: ['Responses carry Cache-Control: private, no-store — the library is viewer-specific and never edge-cached.']
   }),
+  // ── Subspaces ─────────────────────────────────────────────────────────────
+  // Reddit-style communities (api/utils/subspaces): user-created subspaces
+  // with branding, rules, post flairs and an access mode; joining/leaving;
+  // moderation (remove/approve/pin/lock/flair, bans, roles, mod log); a
+  // per-subspace feed with hot/new/top/rising/controversial sorts. Up/down
+  // voting is its own focused reaction kind (see things-updown) and never
+  // touches the native emoji reactions.
+  endpoint({
+    id: 'subspaces',
+    // 1.1.0: every row's `viewer` carries pending (an open join request to a
+    // private subspace) + approvalRequested; memberCount excludes pending
+    // requesters and `mine=1` lists only ACTIVE memberships (additive)
+    // 1.2.0: rows carry userFlairs / userFlairSelfAssign / allowCustomUserFlair
+    // and viewer.userFlair — the user-flair vocabulary (additive)
+    // 1.3.0: rows carry removalReasons — the canned { id, title, message }
+    // reasons moderators remove posts with (S4, additive)
+    // 1.4.0: ?sort=new|members|active — the directory's orders (members /
+    // active rank the newest 200 matching subspaces in memory by member count
+    // / live posts in the last 7 days and page by offset; rows under active
+    // carry recentPostCount); the response echoes sort; an unknown sort
+    // answers 400 (S6, additive)
+    // 1.5.0 (S6 review): ?anon=1 — the logged-out view regardless of cookies,
+    // edge-cacheable (Cache-Control public, s-maxage=60, stale-while-
+    // revalidate=300, Vary Authorization; authed answers private, no-store)
+    // — additive; GET is rate-limited like the other public reads
+    // (subspaces.list, 120/min, anonymous callers by IP); a private
+    // subspace's activity is its ACTIVE members' business — under active it
+    // counts for, and shows recentPostCount to, them only; everyone else
+    // ranks it at zero and its row carries no recentPostCount (compatible
+    // corrections)
+    featureVersion: '1.5.0',
+    contractVersion: '1.5.0',
+    group: 'subspaces',
+    title: 'Subspaces',
+    endpoint: '/api/v1/subspaces',
+    summary: 'Browses the subspace directory or founds a new subspace.',
+    detail:
+      'GET lists subspaces (public; each row carries memberCount and the caller’s own membership ' +
+      'state under `viewer` — role, member, approved, banned, canModerate, canPost, pending, approvalRequested, ' +
+      'userFlair) plus the user-flair settings (userFlairs templates, userFlairSelfAssign, allowCustomUserFlair) — ' +
+      '`?q=` searches slug/name, `?mine=1` narrows to the caller’s ACTIVE memberships (a pending join request is ' +
+      'not one), `?sort=` orders them: new (default — newest first on a stable createdAt cursor), members ' +
+      '(highest member count) or active (most live posts in the last 7 days; rows carry recentPostCount). The ' +
+      'two ranked sorts are computed in memory over a bounded window — the newest 200 subspaces matching q / mine ' +
+      '— and paged by offset cursor, so a directory deeper than that ranks its newest 200; the response echoes ' +
+      '`sort`, and an unknown sort answers 400. A private subspace’s activity is fenced like its posts: under ' +
+      'active it counts for, and shows recentPostCount to, its ACTIVE members only — everyone else ranks it at ' +
+      'zero and its row carries no recentPostCount. GET is rate-limited like the other public reads ' +
+      '(subspaces.list, 120/min → 429; anonymous callers key by IP). Send `anon=1` from logged-out clients for ' +
+      'the edge-cacheable logged-out view (the response then depends only on the URL; `anon=1&mine=1` answers ' +
+      '401 — there is no caller to narrow to). POST ' +
+      'creates a subspace from a unique slug (3–30 chars of [a-z0-9_], the /s/<slug> URL) plus name, ' +
+      'description, access (public | restricted | private), nsfw, rules, flairs and branding; the creator ' +
+      'becomes owner and first member. Subspaces are things (thingtime ["subspace"]) with relational ' +
+      'subspace-member docs — the generic /api/v1/things CRUD refuses the whole family.',
+    auth: { mode: 'optional', description: 'GET works logged out; POST requires an auth cookie or Bearer token.' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET to browse; pass q to search, sort=new|members|active to order, and cursor/limit to page (nextCursor is null on the last page).',
+      'Send anon=1 from logged-out clients so the response is edge-cacheable (it then depends only on the URL).',
+      'POST slug + name (+ description, access, nsfw, rules, flairs, branding) to found one.',
+      'A taken slug answers 409; a reserved or malformed slug answers 400. The slug of a recently deleted subspace is ' +
+        'held for its previous owner (who may re-found it at once) and answers 409 to everyone else until the hold lapses.',
+      'Post into it with POST /api/v1/things { thingtime: ["post"], crystal: { subspaceId, title, flairId, … } }.'
+    ],
+    requestExamples: [
+      { name: 'Browse', description: 'Newest subspaces.', method: 'GET', query: { q: 'rain', limit: 20 } },
+      { name: 'My subspaces', description: 'Only the ones the caller joined.', method: 'GET', query: { mine: 1 } },
+      {
+        name: 'Popular',
+        description: 'The eight subspaces with the most members (the /explore strip; a logged-out client adds anon=1 so the edge can cache it).',
+        method: 'GET',
+        query: { sort: 'members', limit: 8, anon: 1 }
+      },
+      { name: 'Most active', description: 'Most live posts in the last 7 days; rows carry recentPostCount.', method: 'GET', query: { sort: 'active', limit: 20 } },
+      {
+        name: 'Found a subspace',
+        description: 'Create s/rainbows with a rule, a flair and branding.',
+        method: 'POST',
+        body: {
+          slug: 'rainbows',
+          name: 'Rainbows',
+          description: 'All things prismatic 🌈',
+          access: 'public',
+          rules: [{ title: 'Be kind', text: 'No gatekeeping the spectrum.' }],
+          flairs: [{ label: 'Photo', emoji: '📸', color: '#7c5cff' }],
+          branding: { icon: '🌈', accent: '#7c5cff' }
+        }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 201,
+        description: 'Founded.',
+        body: {
+          ok: true,
+          subspace: {
+            id: 'c0ffee12-dddd-4ddd-8ddd-000000000004',
+            slug: 'rainbows',
+            name: 'Rainbows',
+            access: 'public',
+            memberCount: 1,
+            viewer: { role: 'owner', member: true, canModerate: true, canPost: true, pending: false, approvalRequested: false }
+          }
+        }
+      },
+      {
+        status: 200,
+        description: 'Directory page (sort=active).',
+        body: {
+          ok: true,
+          subspaces: [{ id: 'c0ffee12-dddd-4ddd-8ddd-000000000004', slug: 'rainbows', name: 'Rainbows', access: 'public', memberCount: 12, recentPostCount: 5, viewer: { role: null, member: false, pending: false } }],
+          nextCursor: null,
+          sort: 'active'
+        }
+      },
+      { status: 400, description: 'Unknown sort.', body: { ok: false, error: 'sort must be one of new, members, active' } },
+      { status: 429, description: 'Rate limited (subspaces.list, 120/min).', body: { ok: false, error: 'You’re browsing subspaces very enthusiastically — take a breather 🌸' } },
+      { status: 409, description: 'Slug taken.', body: { ok: false, error: 's/rainbows is taken — pick another slug' } },
+      {
+        status: 409,
+        description: 'Slug held after a deletion (previous owner only until the hold lapses).',
+        body: { ok: false, error: 's/rainbows was deleted recently — its slug is held for its previous owner until 2026-10-05' }
+      }
+    ],
+    notes: [
+      'Anonymous (anon=1) responses carry Cache-Control: public, s-maxage=60, stale-while-revalidate=300 (Vary: Authorization) — the logged-out directory is served from the Vercel edge and can lag a fresh subspace or member count by a minute; authenticated responses are private, no-store.',
+      'Under sort=active a private subspace ranks by its live posts only for its ACTIVE members (who also see recentPostCount); everyone else sees it ranked at zero with no recentPostCount — the same fence its feed applies.'
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-get',
+    // 1.1.0: viewer.pending / viewer.approvalRequested, and for moderators
+    // pendingCount + approvalRequestCount (the Requests queue sizes) — additive
+    // 1.2.0: userFlairs / userFlairSelfAssign / allowCustomUserFlair on the
+    // subspace and viewer.userFlair (the flair the caller wears here) — additive
+    // 1.3.0: removalReasons — the subspace's canned removal reasons (S4,
+    // additive)
+    // 1.4.0: moderators get openReportCount — open reports waiting in the
+    // Reports queue (S5, additive)
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
+    group: 'subspaces',
+    title: 'Subspace detail',
+    endpoint: '/api/v1/subspaces/get',
+    summary: 'Reads one subspace by slug or id with counts, the moderator roster, and the caller’s permissions.',
+    detail:
+      'Returns the subspace (branding, rules, flairs, access, the user-flair vocabulary: userFlairs templates, ' +
+      'userFlairSelfAssign, allowCustomUserFlair, and removalReasons — the canned reasons its moderators remove ' +
+      'posts with), memberCount (active members — pending requesters excluded) + ' +
+      'postCount (live posts only), the public moderator roster, and `viewer` — the caller’s role, membership, ' +
+      'approval, ban state, canModerate, canPost, pending (an open join request to a private subspace), ' +
+      'approvalRequested (asked for posting rights in a restricted one) and userFlair (the flair they wear here: ' +
+      '{ id (template id or null for custom text), label, emoji, color } | null) — so the /s/<slug> page can ' +
+      'render its header, sidebar, Your flair card and post button from one call. Moderators additionally get ' +
+      'pendingCount and approvalRequestCount, the sizes of the two request queues, and openReportCount, the open ' +
+      'reports waiting in the Reports queue (together the badge on Mod tools 🎩 / the Requests and Reports tabs).',
+    auth: { mode: 'optional', description: 'Works logged out; the viewer block is empty for anonymous callers.' },
+    methods: ['GET'],
+    steps: ['GET with ?slug=<slug> (or ?id=<shareId>).', 'Unknown subspaces answer 404.'],
+    requestExamples: [{ name: 'By slug', description: 'Read s/rainbows.', method: 'GET', query: { slug: 'rainbows' } }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'The subspace.',
+        body: {
+          ok: true,
+          subspace: { id: 'c0ffee12-…', slug: 'rainbows', name: 'Rainbows', memberCount: 128, postCount: 42, viewer: { role: null, member: false, canModerate: false, canPost: true, pending: false, approvalRequested: false } },
+          moderators: [{ userId: '664f…', profile: { username: 'lopu' }, role: 'owner' }]
+        }
+      },
+      {
+        status: 200,
+        description: 'As a moderator: the request queue sizes and the open report count ride along.',
+        body: { ok: true, subspace: { slug: 'rainbows', access: 'private', memberCount: 128, pendingCount: 3, approvalRequestCount: 0, openReportCount: 2, viewer: { role: 'moderator', member: true, canModerate: true, canPost: true } }, moderators: [] }
+      },
+      { status: 404, description: 'No such subspace.', body: { ok: false, error: 'Subspace not found' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-update',
+    // 1.1.0: changing access resolves the request queues — leaving private
+    // activates every pending join request (and notifies them,
+    // subspace-join-accepted), leaving restricted clears open posting-approval
+    // requests; the settings.update mod-log detail reports the counts (additive)
+    // 1.2.0: user flairs — userFlairs (templates), userFlairSelfAssign,
+    // allowCustomUserFlair (moderators) — additive
+    // 1.3.0: removalReasons (moderators) — the canned { id, title, message }
+    // list moderate remove's reasonId picks from (S4, additive)
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
+    group: 'subspaces',
+    title: 'Subspace settings',
+    endpoint: '/api/v1/subspaces/update',
+    summary: 'Moderators edit branding, rules, post flairs, user flairs and removal reasons; the owner changes access and the 18+ flag.',
+    detail:
+      'POST { id|slug, name?, description?, rules?, flairs?, branding?, userFlairs?, userFlairSelfAssign?, ' +
+      'allowCustomUserFlair?, removalReasons? } as a moderator, plus access? and nsfw? as the owner. removalReasons ' +
+      'are the canned reasons moderators remove posts with — a list of { id (slug, minted from the title), title ' +
+      '(≤80), message (≤500) }, ≤20 — that POST /api/v1/subspaces/moderate { action: remove, reasonId } picks from ' +
+      '(the title — message become the stored reason the author sees). userFlairs are the templates ' +
+      'members wear beside their name (the post-flair shape — { id, label, emoji, color, modOnly }, ≤50; modOnly ' +
+      'ones are assigned by moderators only); userFlairSelfAssign (default true) lets members pick one themselves ' +
+      'and allowCustomUserFlair (default false) lets them type their own text (≤40 chars) — both switches gate ' +
+      'members only, moderators may always dress anyone (POST /api/v1/subspaces/members action userFlair). ' +
+      'Flipping access to/from private re-stamps the subspace’s posts so feeds fence them ' +
+      'correctly. The request queues follow the access mode: switching AWAY from private turns every open join ' +
+      'request into an active membership (the doors are open to everyone now; the requesters are notified with ' +
+      'subspace-join-accepted, the first 200 of them), and switching away from restricted clears open ' +
+      'posting-approval requests (anyone / every member may post now). Every change writes a settings.update ' +
+      'mod-log entry whose detail lists the changed fields plus acceptedRequests / clearedApprovalRequests when ' +
+      'an access change resolved any.',
+    auth: { mode: 'session-or-bearer', description: 'Requires a moderator (owner for access/nsfw).' },
+    methods: ['POST'],
+    steps: ['POST the fields to change.', 'Non-moderators receive 403; owner-only fields 403 for moderators.'],
+    requestExamples: [
+      { name: 'Add a flair', description: 'Replace the flair list.', method: 'POST', body: { slug: 'rainbows', flairs: [{ id: 'photo', label: 'Photo' }, { label: 'Question' }] } },
+      {
+        name: 'User flairs',
+        description: 'Two templates (one mod-only), members may self-assign and type their own text.',
+        method: 'POST',
+        body: { slug: 'rainbows', userFlairs: [{ label: 'Prism', emoji: '🔮', color: '#7c5cff' }, { id: 'staff', label: 'Staff', modOnly: true }], userFlairSelfAssign: true, allowCustomUserFlair: true }
+      },
+      {
+        name: 'Removal reasons',
+        description: 'Two canned reasons the Remove modal offers moderators.',
+        method: 'POST',
+        body: { slug: 'rainbows', removalReasons: [{ title: 'No spam', message: 'Posts that only advertise are removed.' }, { id: 'off-topic', title: 'Off topic' }] }
+      },
+      { name: 'Go private', description: 'Owner locks the subspace to members.', method: 'POST', body: { slug: 'rainbows', access: 'private' } }
+    ],
+    responseExamples: [{ status: 200, description: 'Updated.', body: { ok: true, subspace: { slug: 'rainbows', access: 'private', removalReasons: [{ id: 'no-spam', title: 'No spam', message: 'Posts that only advertise are removed.' }] } } }]
+  }),
+  endpoint({
+    id: 'subspaces-join',
+    // 1.1.0: joining a PRIVATE subspace files a join request (200, pending:
+    // true) instead of answering 403; the response gained `pending` (additive)
+    // 1.1.1: a re-request starts from a clean row (a kicked approved poster's
+    // old approval no longer rides through the queue), the moderators' bell
+    // is deduped against an unread copy, and join has its own rate key
+    // (subspaces.join, 20/min) — compatible corrections
+    // 1.2.0: the returned subspace carries userFlairs / userFlairSelfAssign /
+    // allowCustomUserFlair and viewer.userFlair (S3 user flairs, additive)
+    // 1.3.0: the returned subspace carries removalReasons (S4, additive)
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
+    group: 'subspaces',
+    title: 'Join subspace',
+    endpoint: '/api/v1/subspaces/join',
+    summary: 'Joins a public or restricted subspace, or files a join request with the moderators of a private one.',
+    detail:
+      'POST { id|slug }. Public and restricted subspaces: creates the caller’s relational subspace-member doc (or ' +
+      'restores it after leaving) and answers { joined: true, pending: false }. Private subspaces: files a JOIN ' +
+      'REQUEST — the same member row with pending: true, which is NOT a membership (no private feed, no posting, ' +
+      'not counted) — answers { joined: false, pending: true } and notifies the moderators (subspace-join-request, ' +
+      'preview "s/<slug> · wants to join 🙋"; each moderator’s bell rings once per open request — a request ' +
+      'cancelled and filed again is deduped against their unread copy); a moderator accepts or denies it from ' +
+      'the Requests queue (POST /api/v1/subspaces/members action accept | deny — a moderator’s `add` accepts ' +
+      'too), and POST /api/v1/subspaces/leave cancels it. A re-request starts from a clean row (never an ' +
+      'approved poster). Banned users receive 403 with the ban reason. Joining (or requesting) twice is a ' +
+      'friendly no-op (joined: false, and pending: true while the request is open). Rate-limited per user ' +
+      '(subspaces.join, 20/min → 429).',
+    auth: { mode: 'session-or-bearer', description: 'Requires an auth cookie or Bearer token.' },
+    methods: ['POST'],
+    steps: ['POST the subspace slug or id.', 'Read joined / pending and the returned subspace.viewer for your new state.'],
+    requestExamples: [{ name: 'Join', description: 'Join s/rainbows.', method: 'POST', body: { slug: 'rainbows' } }],
+    responseExamples: [
+      { status: 200, description: 'Joined.', body: { ok: true, joined: true, pending: false, subspace: { slug: 'rainbows', memberCount: 129, viewer: { role: 'member', member: true, pending: false } } } },
+      {
+        status: 200,
+        description: 'Private subspace — a join request is now waiting for the moderators.',
+        body: { ok: true, joined: false, pending: true, subspace: { slug: 'secret', access: 'private', memberCount: 12, viewer: { role: null, member: false, canPost: false, pending: true } } }
+      },
+      { status: 403, description: 'Banned.', body: { ok: false, error: 'You are banned from s/rainbows 🚫' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-leave',
+    // 1.1.0: leaving with an open join request cancels the request (additive)
+    // 1.2.0: the returned subspace carries userFlairs / userFlairSelfAssign /
+    // allowCustomUserFlair and viewer.userFlair (S3 user flairs, additive)
+    // 1.3.0: the returned subspace carries removalReasons (S4, additive)
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
+    group: 'subspaces',
+    title: 'Leave subspace',
+    endpoint: '/api/v1/subspaces/leave',
+    summary: 'Leaves a subspace — or cancels a pending join request (owners can’t leave their own).',
+    detail:
+      'POST { id|slug }. Removes the caller’s member doc — an active membership ends, a pending join request to a ' +
+      'private subspace is cancelled (its row goes, the moderators’ queue no longer lists it); a banned member’s ' +
+      'doc is kept (left: true) so the ban outlives the membership. Owners answer 409.',
+    auth: { mode: 'session-or-bearer', description: 'Requires an auth cookie or Bearer token.' },
+    methods: ['POST'],
+    steps: ['POST the subspace slug or id.'],
+    requestExamples: [{ name: 'Leave', description: 'Leave s/rainbows.', method: 'POST', body: { slug: 'rainbows' } }],
+    responseExamples: [
+      { status: 200, description: 'Left (or the pending request cancelled).', body: { ok: true, subspace: { slug: 'rainbows', viewer: { role: null, member: false, pending: false } } } },
+      { status: 409, description: 'Owner.', body: { ok: false, error: 'Owners can’t leave their own subspace 👑' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-members',
+    // 1.1.0: role / ban / unban now notify the affected member (subspace-role,
+    // subspace-ban) — an additive side effect
+    // 1.2.0: the Requests queue — GET pending=1 | approvalRequests=1 (mods),
+    // POST actions accept / deny / request-approval (self), rows carry
+    // pending + approvalRequested, `add` on a pending row accepts it, approve /
+    // unapprove settle an approval request (additive)
+    // 1.2.1: a decision on a request that was withdrawn meanwhile answers 409
+    // (accept / deny / add-on-pending are guarded writes — no accept mod-log
+    // entry or "welcome in" bell for a non-member); approve / unapprove /
+    // role member on a pending row answer 400, remove on one 404; `remove`
+    // clears restricted posting approval; request-approval heals an expired
+    // temporary ban so the request reaches the queue — compatible corrections
+    // 1.3.0: user flairs — rows carry userFlair; POST action userFlair
+    // (self, or any member as a moderator) picks a template / sets custom
+    // text / clears (additive)
+    // 1.3.1: remove and ban strip the user flair (the mod-log detail reads
+    // userFlairCleared: true), role member strips a mod-only pick, and
+    // moderators may dress the owner too (403 → 200, per the round-2 spec:
+    // "mods may set anyone's") — compatible corrections
+    // 1.4.0: ban takes an optional private `note` (mod log detail only, never
+    // shown to the banned user) — S4 BanModal (additive)
+    // 1.4.1 (S4 review): the ban / unban bell comes from the subspace's mod
+    // team (actorId = the subspace, actorName "s/<slug> mods") rather than
+    // the individual moderator — the same posture as a post removal; role
+    // changes and accepted requests still name the acting mod — a
+    // compatible correction
+    featureVersion: '1.4.1',
+    contractVersion: '1.4.1',
+    group: 'subspaces',
+    title: 'Subspace members',
+    endpoint: '/api/v1/subspaces/members',
+    summary: 'Lists members and the two request queues (mod roster public, everything else mod-only) and applies member actions — including user flairs.',
+    detail:
+      'GET ?slug=&role=owner|moderator|member&banned=1&pending=1&approvalRequests=1&cursor=&limit= — the moderator ' +
+      'roster is public; the full member list (active members, oldest-first), the ban list, the JOIN REQUEST ' +
+      'queue (pending=1: users who asked to join a private subspace, newest-first) and the POSTING-APPROVAL ' +
+      'queue (approvalRequests=1: active members of a restricted subspace who asked for posting rights) require a ' +
+      'moderator. Every row carries pending + approvalRequested + userFlair ({ id, label, emoji, color } | null — ' +
+      'the flair they wear here). POST { id|slug, userId|username, action, role?, reason?, banDays?, flairId?, ' +
+      'text?, emoji?, color?, note? } with action add (also accepts a pending join request), accept (pending → active member; ' +
+      'notifies subspace-join-accepted; 404 without a request), deny (drops a pending join request, or clears a ' +
+      'posting-approval request; optional reason; 404 without one), remove (kick — also revokes restricted ' +
+      'posting approval and strips the user flair), approve/unapprove (restricted posting rights — both settle an ' +
+      'open approval request), ban/unban (banDays for a temporary ban; bans on non-members are pre-emptive; banning ' +
+      'a pending requester removes the request; a ban strips the user flair too; an optional `note` (≤300) lands in the ' +
+      'member.ban mod-log detail only — the banned user sees `reason`, never the note), role (owner only: moderator | ' +
+      'member — demoting strips a mod-only user flair, ordinary picks stay), or request-approval — the one SELF action: ' +
+      'an active, unapproved member of a RESTRICTED subspace asks the mods for posting rights (approvalRequested: ' +
+      'true; notifies the mods with subspace-join-request "s/<slug> · wants to post ✋", deduped against each ' +
+      'mod’s unread copy; 400 unless the subspace is restricted, 403 for non-members / for someone else; an ' +
+      'expired temporary ban is healed on the row so the request reaches the queue), or userFlair — the flair ' +
+      'beside a member’s name: without userId/username (or naming yourself) an ACTIVE member picks a template ' +
+      '(flairId; not a modOnly one → 403) while the subspace’s userFlairSelfAssign is on, types custom text ' +
+      '(text ≤40 chars, optional emoji/color under the icon/color rules) while allowCustomUserFlair is on, and may ' +
+      'always clear their own (flairId null + empty text); a non-member answers 403, an unknown template 400. ' +
+      'Moderators set anyone’s — the owner’s included (who can always override it) — any template incl. modOnly ' +
+      'or custom text, bound by neither switch — a banned target answers 400, a pending requester / non-member ' +
+      '404 — and only a moderator dressing someone ELSE writes a member.userFlair mod-log entry. Posts and comments ' +
+      'project the flair as authorFlair while the wearer is an active member; a kick or ban clears the pick and a ' +
+      'demotion clears a mod-only one (that entry’s mod-log detail reads userFlairCleared: true), so no badge walks ' +
+      'back in with a rejoin or an unban that nobody re-granted. A pending join request is ' +
+      'not a membership: only accept, deny, add, ban and role moderator apply to one — approve, unapprove and ' +
+      'role member answer 400 ("accept the join request first"), remove answers 404. accept, deny and add on a ' +
+      'pending row are guarded writes: if the requester cancelled or re-filed meanwhile the decision answers 409 ' +
+      '("withdrawn — reload the queue") and logs / notifies nothing. role, ban, unban and accept notify the ' +
+      'affected user (bell types subspace-role / subspace-ban / subspace-join-accepted, preview "s/<slug> · …", ' +
+      'targetId = the subspace); a ban / unban row comes from the subspace’s mod team (actorId = the subspace ' +
+      'shareId, actorName "s/<slug> mods", actorUsername null — never the individual moderator, whom only the mod ' +
+      'log names), a role change / an accepted request from the acting moderator; join and approval requests notify ' +
+      'the moderators (subspace-join-request). ' +
+      'Moderators can’t moderate other moderators or the owner; every moderator action writes a member.<action> ' +
+      'mod-log entry (request-approval writes none).',
+    auth: { mode: 'optional', description: 'GET of the mod roster works logged out; request-approval needs the member’s own session; everything else needs a moderator session.' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET role=moderator for the public mod roster.',
+      'As a moderator, GET the full list, banned=1 for the ban list, pending=1 for join requests, approvalRequests=1 for posting-approval requests.',
+      'POST an action against a username or userId (request-approval acts on yourself).'
+    ],
+    requestExamples: [
+      { name: 'Mod roster', description: 'Who moderates s/rainbows.', method: 'GET', query: { slug: 'rainbows', role: 'moderator' } },
+      { name: 'Join requests', description: 'Who is waiting to get into s/secret.', method: 'GET', query: { slug: 'secret', pending: 1 } },
+      { name: 'Accept a request', description: 'Let a requester in.', method: 'POST', body: { slug: 'secret', username: 'newcomer', action: 'accept' } },
+      { name: 'Ask to post', description: 'A member of restricted s/rainbows asks for posting rights.', method: 'POST', body: { slug: 'rainbows', action: 'request-approval' } },
+      { name: 'Wear a flair', description: 'Pick the "prism" user-flair template for yourself.', method: 'POST', body: { slug: 'rainbows', action: 'userFlair', flairId: 'prism' } },
+      { name: 'Custom flair text', description: 'Type your own flair (allowCustomUserFlair must be on for members).', method: 'POST', body: { slug: 'rainbows', action: 'userFlair', text: 'Double rainbow hunter', emoji: '🌈' } },
+      { name: 'Dress a member', description: 'A moderator gives someone the mod-only "staff" template.', method: 'POST', body: { slug: 'rainbows', username: 'helper', action: 'userFlair', flairId: 'staff' } },
+      { name: 'Clear a flair', description: 'Take your flair off.', method: 'POST', body: { slug: 'rainbows', action: 'userFlair', flairId: null } },
+      { name: 'Ban for a week', description: 'Temporary ban with a reason (shown to the user) and a private mod note (mod log only).', method: 'POST', body: { slug: 'rainbows', username: 'spammer', action: 'ban', reason: 'Rule 2', banDays: 7, note: 'second strike — next one is permanent' } },
+      { name: 'Promote', description: 'Owner makes someone a moderator.', method: 'POST', body: { slug: 'rainbows', username: 'helper', action: 'role', role: 'moderator' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Members page.', body: { ok: true, members: [{ userId: '664f…', profile: { username: 'lopu' }, role: 'owner', approved: true, banned: false, pending: false, approvalRequested: false, userFlair: { id: 'prism', label: 'Prism', emoji: '🔮', color: '#7c5cff' }, joinedAt: '2026-09-05T00:00:00.000Z' }], nextCursor: null } },
+      { status: 200, description: 'Flair set — the row reads back with it.', body: { ok: true, member: { userId: '664f…', profile: { username: 'lopu' }, role: 'member', userFlair: { id: null, label: 'Double rainbow hunter', emoji: '🌈', color: null } } } },
+      { status: 403, description: 'Self-assign is off / a mod-only template / custom text while it is off.', body: { ok: false, error: 'Members can’t pick their own flair here — ask a moderator 🎩' } },
+      { status: 200, description: 'Accepted — the requester is a member now.', body: { ok: true, member: { userId: '664f…', profile: { username: 'newcomer' }, role: 'member', pending: false, left: false } } },
+      { status: 403, description: 'Not a moderator.', body: { ok: false, error: 'Moderators only — you need a mod hat for that 🎩' } },
+      { status: 404, description: 'accept/deny without an open request.', body: { ok: false, error: 'No pending join request from that user' } },
+      { status: 400, description: 'approve / unapprove / role member on a pending join request.', body: { ok: false, error: 'Accept the join request first — they are not a member yet' } },
+      { status: 409, description: 'The request was cancelled (or re-filed) between the queue read and the decision.', body: { ok: false, error: 'That request was withdrawn — reload the queue' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-moderate',
+    // 1.1.0: the re-projected post carries authorFlair — the author's user
+    // flair in the subspace (S3 user flairs, additive)
+    // 1.2.0: remove takes reasonId (one of the subspace's removalReasons —
+    // title — message · note become the stored reason; unknown → 400) and
+    // notifies the author (subspace-post-removed, preview = the reason,
+    // postId deep-links to the post); approve notifies nothing (S4, additive)
+    // 1.3.0 (S4 review): remove takes ruleIndex (cites one of the subspace's
+    // rules — "Rule N: title — text · note", composed and bounded server-side
+    // like a canned reason; both → 400), a remove on an already-removed post
+    // is a no-op (200 with the post as it is — no second mod-log row, no
+    // second bell), the author's bell comes from the subspace's mod team
+    // (actorId = the subspace, actorName "s/<slug> mods") rather than the
+    // individual moderator, and its preview carries the reason's HEADLINE
+    // (title / rule citation / free text; previews clamp at 140 chars)
+    // 1.4.0 (S5 reports): remove / approve settle every open report on the
+    // post (resolution removed / approved; the mod-log detail carries
+    // resolvedReports) and the re-projected post carries subspaceMod.reportCount
+    // for moderators (additive)
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
+    group: 'subspaces',
+    title: 'Moderate post',
+    endpoint: '/api/v1/subspaces/moderate',
+    summary: 'Moderator actions on a post in a subspace: remove (with a reason / canned removal reason / cited rule), approve, pin, lock, nsfw, spoiler, flair.',
+    detail:
+      'POST { id (post shareId), action, reason?, reasonId?, ruleIndex?, value?, flairId? }. Writes the server-owned root subspaceMod ' +
+      'state (never client-writable) and a post.<action> mod-log entry, then returns the re-projected post. ' +
+      'remove takes `reason` (free text, ≤300) and/or ONE of `reasonId` — one of the subspace’s removalReasons (see ' +
+      '/api/v1/subspaces/update): its title — message become the stored reason with the free text appended as a ' +
+      'note ("No spam — Posts that only advertise are removed. · third time"); an unknown reasonId answers 400 — or ' +
+      '`ruleIndex` (0-based, into the subspace’s rules): the citation "Rule N: title — text · note" is composed the same ' +
+      'way (out of range → 400; naming both → 400). The composed text is bounded server-side at 900 chars (title / ' +
+      'message / rule text / note never overflow it), so a client never guesses what got stored. ' +
+      'The author is notified (subspace-post-removed; preview "s/<slug> · <headline>" — the canned reason’s title, ' +
+      'the rule citation, or the free text; bell previews clamp at 140 chars and the full reason is on the post the row ' +
+      'opens; postId = the post so the bell opens /post/<id>). The row comes from the subspace’s MOD TEAM, not the ' +
+      'moderator: actorId = the subspace shareId, actorName "s/<slug> mods", actorUsername null — the projection hides ' +
+      'removedById from the author and the bell hides it too (the mod log still names the moderator); a moderator ' +
+      'removing their own post tells nobody. The mod-log entry carries the composed ' +
+      'reason and detail.reasonId / detail.ruleIndex, and the post’s subspaceMod.reason shows the author and moderators the reason. ' +
+      'A remove on a post that is already removed is idempotent: 200 with the post as it is — its reason, removedAt, ' +
+      'mod-log row and the author’s bell are left alone (approve first to remove it again with a different reason). ' +
+      'approve restores the post and notifies nothing. remove and approve are also the mods’ verdict on every OPEN ' +
+      'report against the post (see /api/v1/subspaces/report): they are settled with resolution removed / approved, ' +
+      'the mod-log detail carries resolvedReports when any were, and the returned post’s subspaceMod.reportCount ' +
+      '(moderators only) reads 0 again. ' +
+      'Removed posts are redacted for everyone but their author and the subspace’s moderators and vanish from ' +
+      'every feed; locked posts refuse new comments (423) from everyone but moderators; at most 5 posts are ' +
+      'pinned per subspace. The post keeps its author’s emoji reactions and up/down votes throughout.',
+    auth: { mode: 'session-or-bearer', description: 'Requires a moderator of the post’s subspace.' },
+    methods: ['POST'],
+    steps: ['POST the post id and an action.', 'Use the returned post to reconcile the card in place.'],
+    requestExamples: [
+      { name: 'Remove', description: 'Remove a post citing rule 1.', method: 'POST', body: { id: '4f6b2c1e-…', action: 'remove', reason: 'Rule 1' } },
+      { name: 'Remove with a canned reason', description: 'Pick the subspace’s "no-spam" removal reason and add a note.', method: 'POST', body: { id: '4f6b2c1e-…', action: 'remove', reasonId: 'no-spam', reason: 'third time this week' } },
+      { name: 'Remove citing a rule', description: 'Cite the subspace’s second rule (0-based ruleIndex) with a note — the server composes "Rule 2: <title> — <text> · <note>".', method: 'POST', body: { id: '4f6b2c1e-…', action: 'remove', ruleIndex: 1, reason: 'duplicate of yesterday’s thread' } },
+      { name: 'Pin', description: 'Pin to the top of hot/new.', method: 'POST', body: { id: '4f6b2c1e-…', action: 'pin' } },
+      { name: 'Flair', description: 'Set (or clear with null) the post flair.', method: 'POST', body: { id: '4f6b2c1e-…', action: 'flair', flairId: 'photo' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Applied.', body: { ok: true, post: { id: '4f6b2c1e-…', subspaceMod: { status: 'removed', removed: true, reason: 'Rule 1', pinned: false, locked: false } } } },
+      { status: 200, description: 'Removed with a canned reason — the composed text is what the author sees.', body: { ok: true, post: { id: '4f6b2c1e-…', subspaceMod: { status: 'removed', removed: true, reason: 'No spam — Posts that only advertise are removed. · third time this week' } } } },
+      { status: 200, description: 'Removed citing a rule — the citation, the rule’s text and the note make up the stored reason.', body: { ok: true, post: { id: '4f6b2c1e-…', subspaceMod: { status: 'removed', removed: true, reason: 'Rule 2: No spam — Ads go elsewhere. · duplicate of yesterday’s thread' } } } },
+      { status: 400, description: 'Unknown removal reason id.', body: { ok: false, error: 'No removal reason "ghost" here — pick one of the subspace’s reasons or write your own' } },
+      { status: 400, description: 'A rule index the subspace does not have.', body: { ok: false, error: 'No rule 4 here — the subspace has 2 rules' } },
+      { status: 404, description: 'Not a subspace post.', body: { ok: false, error: 'Post not found in a subspace' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-modlog',
+    group: 'subspaces',
+    title: 'Mod log',
+    endpoint: '/api/v1/subspaces/modlog',
+    summary: 'The subspace’s moderation log, newest first (moderators only).',
+    detail: 'GET ?slug=&cursor=&limit=. Each entry names the acting moderator, the affected post and/or user, the action key (post.remove, member.ban, settings.update, …), the reason and a small detail record.',
+    auth: { mode: 'session-or-bearer', description: 'Requires a moderator session.' },
+    methods: ['GET'],
+    steps: ['GET with the slug; page with cursor.'],
+    requestExamples: [{ name: 'Latest actions', description: 'Newest 20 entries.', method: 'GET', query: { slug: 'rainbows' } }],
+    responseExamples: [
+      { status: 200, description: 'Entries.', body: { ok: true, entries: [{ id: '…', action: 'post.remove', actor: { username: 'lopu' }, postId: '4f6b2c1e-…', reason: 'Rule 1', createdAt: '2026-09-05T00:00:00.000Z' }], nextCursor: null } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-report',
+    // 1.0.1 (S5 review): a post the moderators already removed answers 409
+    // (no row, no bell — the mods can't act on it again); a repeat after the
+    // post MOVED to another subspace re-files the row there (targetId follows
+    // the post) and rings the new subspace's mods; deleting a reported
+    // comment deletes the rows that flagged it — compatible corrections
+    featureVersion: '1.0.1',
+    contractVersion: '1.0.1',
+    group: 'subspaces',
+    title: 'Report a post to the moderators',
+    endpoint: '/api/v1/subspaces/report',
+    summary: 'A viewer flags a subspace post (or a comment under one) to the subspace’s moderators with a reason and an optional note.',
+    detail:
+      'POST { id (a post or comment shareId), reason (≤120 — a rule title, a removal-reason id, or free text), note? (≤500) }. ' +
+      'Any logged-in viewer who can SEE the target may report it (an invisible or unknown id answers 404, never ' +
+      'disclosing existence — a private subspace’s posts and comments are invisible to strangers, pending ' +
+      'requesters and banned members alike); a user banned in a public subspace answers 403; a post outside any ' +
+      'subspace 400; a post the moderators already removed 409 (no row, no bell — there is nothing left for the ' +
+      'mods to do). A comment resolves to its ROOT post: the report hangs off the post (commentId remembers which ' +
+      'comment). One report per (post, reporter) — a repeat by the same reporter updates the reason / note on ' +
+      'their row (and re-opens it when the mods had settled it) and answers { updated: true }; when the post moved ' +
+      'to another subspace since, the repeat re-files the row THERE (its subspaceId follows the post) and counts as ' +
+      'new for that subspace’s mods. Every new or re-opened report notifies the subspace’s active owner + moderators ' +
+      '(subspace-report; preview "s/<slug> · <reason>", postId = the post so the bell opens /post/<id>; deduped ' +
+      'against each moderator’s unread bell, so one reporter cannot ring the mods twice about one post). Reports ' +
+      'are subspace-report things (targetId = the subspace, ownerId = the reporter, control-plane storage; the ' +
+      'reporter alone can read their own row through GET /api/v1/things?id=) that the moderators’ Reports queue ' +
+      '(GET /api/v1/subspaces/reports) groups by post; moderate remove / approve settles them (resolution removed ' +
+      '/ approved), POST /api/v1/subspaces/reports dismisses them; deleting the post deletes them, deleting a ' +
+      'reported comment deletes the rows that flagged it. Rate-limited per user (subspaces.report, 30 / min).',
+    auth: { mode: 'session-or-bearer', description: 'Requires a logged-in viewer who can see the post; banned users are refused.' },
+    methods: ['POST'],
+    steps: ['POST the post (or comment) id with a reason.', 'A 200 with updated: true means you had already reported it — your reason was refreshed.', 'A 409 means the moderators already removed it — nothing more to report.'],
+    requestExamples: [
+      { name: 'Report a post', description: 'Cite a rule.', method: 'POST', body: { id: '4f6b2c1e-…', reason: 'Rule 2: No spam', note: 'Third ad from this account this week' } },
+      { name: 'Report a comment', description: 'The report lands on the root post; commentId names the comment.', method: 'POST', body: { id: '9a1c-comment-…', reason: 'Harassment' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Filed.', body: { ok: true, updated: false, report: { id: 'r3p0…', subspaceId: 'c0ffee12-…', postId: '4f6b2c1e-…', commentId: null, reason: 'Rule 2: No spam', note: 'Third ad from this account this week', status: 'open', resolution: null } } },
+      { status: 200, description: 'Reported again — the existing row was refreshed.', body: { ok: true, updated: true, report: { id: 'r3p0…', postId: '4f6b2c1e-…', reason: 'Spam, again', status: 'open' } } },
+      { status: 400, description: 'Not a subspace post.', body: { ok: false, error: 'Only posts in a subspace can be reported to its moderators 🚩' } },
+      { status: 403, description: 'Banned in the subspace.', body: { ok: false, error: 'You are banned from s/rainbows 🚫' } },
+      { status: 404, description: 'Unknown or invisible.', body: { ok: false, error: 'Post not found' } },
+      { status: 409, description: 'The moderators already removed it.', body: { ok: false, error: 'That post was already removed by the moderators 🧹' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-reports',
+    // 1.0.1 (S5 review): a dismiss without id | slug resolves the queue from
+    // the open rows' own targetId first (a post that moved after it was
+    // reported keeps its rows dismissable in the old subspace), the post's
+    // current subspace only when open rows sit there — a compatible correction
+    featureVersion: '1.0.1',
+    contractVersion: '1.0.1',
+    group: 'subspaces',
+    title: 'Reports queue',
+    endpoint: '/api/v1/subspaces/reports',
+    summary: 'Moderators read the subspace’s reports grouped by post and dismiss the ones that need no action.',
+    detail:
+      'GET ?slug=|id=&status=open|resolved&cursor=&limit= (moderators only; others 403). Answers { reports: [{ postId, ' +
+      'post (the PublicPost projection as the moderator sees it — removed content included, subspaceMod.reportCount ' +
+      'set; null when the post is gone or left the subspace), reportCount, reasons: [{ reason, count }] most-cited ' +
+      'first, reporters: [{ userId, profile, reason, note, commentId, createdAt }] newest first (≤20; reportCount is ' +
+      'the exact total), latestAt, status, resolution }], nextCursor, status, openReportCount }. Groups are ordered ' +
+      'by latest activity and page by offset over a bounded newest-first window of 2,000 report rows (the ' +
+      'ranked-feed pattern — deterministic for a fixed dataset). ' +
+      'POST { postId, action: "dismiss", id|slug? } settles every OPEN report on the post with resolution dismissed ' +
+      '(the post stays), writes a report.dismiss mod-log entry (detail.count) and answers { dismissed, openReportCount }; ' +
+      'nothing open → 404. Without id | slug the queue is the one the OPEN rows sit in (their own targetId — a post that ' +
+      'moved to another subspace after it was reported leaves its rows dismissable in the old one, listed there with ' +
+      'post null); the post’s current subspace decides when open rows sit there (or none exist anywhere, so a ' +
+      'non-moderator still meets the 403 wall); an explicit id | slug in the body wins over both. moderate remove / ' +
+      'approve settle open reports implicitly.',
+    auth: { mode: 'session-or-bearer', description: 'Requires a moderator of the subspace.' },
+    methods: ['GET', 'POST'],
+    steps: ['GET the open queue (status defaults to open).', 'Remove / approve the post through /moderate, or POST a dismiss when it may stay.', 'Feed nextCursor back until it is null.'],
+    requestExamples: [
+      { name: 'Open queue', description: 'What is waiting in s/rainbows.', method: 'GET', query: { slug: 'rainbows', status: 'open' } },
+      { name: 'Dismiss', description: 'The mods looked; the post stays.', method: 'POST', body: { postId: '4f6b2c1e-…', action: 'dismiss' } }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'The open queue.',
+        body: {
+          ok: true,
+          status: 'open',
+          openReportCount: 3,
+          reports: [
+            {
+              postId: '4f6b2c1e-…',
+              post: { id: '4f6b2c1e-…', title: 'Buy my thing', subspaceMod: { status: 'approved', removed: false, reportCount: 3, viewerCanModerate: true } },
+              reportCount: 3,
+              reasons: [{ reason: 'Rule 2: No spam', count: 2 }, { reason: 'Other', count: 1 }],
+              reporters: [{ userId: '664f…', profile: { username: 'alice' }, reason: 'Rule 2: No spam', note: null, commentId: null, createdAt: '2026-09-05T10:00:00.000Z' }],
+              latestAt: '2026-09-05T10:00:00.000Z',
+              status: 'open',
+              resolution: null
+            }
+          ],
+          nextCursor: null
+        }
+      },
+      { status: 200, description: 'Dismissed.', body: { ok: true, postId: '4f6b2c1e-…', dismissed: 3, openReportCount: 0 } },
+      { status: 403, description: 'Not a moderator.', body: { ok: false, error: 'Moderators only — you need a mod hat for that 🎩' } },
+      { status: 404, description: 'Nothing open on that post.', body: { ok: false, error: 'No open reports on that post' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-feed',
+    // 1.1.0: posts (and their comments) carry authorFlair; the subspace block
+    // carries the user-flair settings — additive
+    // 1.2.0: the subspace block carries removalReasons (S4, additive)
+    // 1.3.0: moderators' posts carry subspaceMod.reportCount — open reports
+    // against the post (S5, additive)
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
+    group: 'subspaces',
+    title: 'Subspace feed',
+    endpoint: '/api/v1/subspaces/feed',
+    summary: 'The posts of one subspace with hot/new/top/rising/controversial sorts.',
+    detail:
+      'GET ?slug=&sort=hot|new|top|rising|controversial&range=hour|day|week|month|year|all&cursor=&limit=. ' +
+      '`new` pages by (createdAt, id) cursor with pinned posts leading the first page; the ranked sorts score a ' +
+      'bounded newest-first window with the relational up/down tallies (Reddit’s hot/controversy formulas, ' +
+      'HN-style rising) and page by offset — deterministic for a fixed dataset + timestamp. Removed posts are ' +
+      'excluded (moderators may pass includeRemoved=1 to review them); private subspaces answer 403 to ' +
+      'non-members. Posts project exactly like the home feed plus title, flair, subspace, subspaceMod, votes and ' +
+      'authorFlair (the author’s user flair here — one batched member-row lookup per page, comments included); ' +
+      'for moderators subspaceMod.reportCount carries the open reports against each post (one $group per page).',
+    auth: { mode: 'optional', description: 'Works logged out for public/restricted subspaces; votes/viewerVote need a session.' },
+    methods: ['GET'],
+    steps: ['GET with the slug and a sort.', 'Feed nextCursor back until it is null.', 'Handle 403 for private subspaces you have not joined.'],
+    requestExamples: [
+      { name: 'Hot', description: 'Front page of s/rainbows.', method: 'GET', query: { slug: 'rainbows', sort: 'hot' } },
+      { name: 'Top this week', description: 'Highest-scoring posts of the week.', method: 'GET', query: { slug: 'rainbows', sort: 'top', range: 'week' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'A page.', body: { ok: true, sort: 'hot', subspace: { slug: 'rainbows' }, posts: [{ id: '4f6b2c1e-…', title: 'Double rainbow', votes: { up: 12, down: 1, score: 11, viewerVote: 'up' }, subspaceMod: { pinned: true } }], nextCursor: '20' } },
+      { status: 403, description: 'Private.', body: { ok: false, error: 's/secret is private — members only 🔒' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-transfer',
+    // 1.0.1: every write inside the transfer transaction is guarded by the
+    // ownership/membership the gate saw — a concurrent transfer commits at most
+    // once, the loser answers 409 (compatible correction)
+    // 1.1.0: newOwner carries userFlair and the returned subspace the
+    // user-flair settings + viewer.userFlair (S3 user flairs, additive)
+    // 1.2.0: the returned subspace carries removalReasons (S4, additive)
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
+    group: 'subspaces',
+    title: 'Transfer subspace ownership',
+    endpoint: '/api/v1/subspaces/transfer',
+    summary: 'The owner hands the subspace to an active member; the previous owner becomes a moderator.',
+    detail:
+      'POST { id|slug, userId|username } as the owner (the member row AND the subspace’s ownerId must both name ' +
+      'the caller). The target must be an ACTIVE member (joined, not banned, not left; banned → 403, otherwise ' +
+      'not a member → 404) and may not already run the per-user maximum of subspaces. The target becomes owner ' +
+      '(approved), the previous owner steps down to moderator — and may now leave — and the subspace thing ' +
+      'changes hands (its accounted bytes move ledgers in the same transaction). Every write in that transaction ' +
+      'is conditional on the state the gate saw, so two transfers racing from the same owner commit at most once: ' +
+      'the loser answers 409 and changes nothing. Writes an owner.transfer mod-log entry and notifies the new ' +
+      'owner (subspace-role, preview "s/<slug> · you are now the owner 👑"). Returns the subspace as the caller ' +
+      'now sees it plus the new owner’s member row.',
+    auth: { mode: 'session-or-bearer', description: 'Requires the subspace owner.' },
+    methods: ['POST'],
+    steps: [
+      'POST the subspace and the new owner (username or userId).',
+      'Non-owners receive 403; a non-member target 404; yourself 400; a transfer that lost a race with another transfer 409 (reload and retry if still intended).'
+    ],
+    requestExamples: [{ name: 'Hand over', description: 'Make @helper the owner of s/rainbows.', method: 'POST', body: { slug: 'rainbows', username: 'helper' } }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Transferred.',
+        body: { ok: true, subspace: { slug: 'rainbows', ownerId: '664f…helper', viewer: { role: 'moderator', member: true, canModerate: true } }, newOwner: { userId: '664f…helper', role: 'owner', approved: true } }
+      },
+      { status: 403, description: 'Not the owner.', body: { ok: false, error: 'Only the owner can transfer ownership 👑' } },
+      { status: 404, description: 'Target is not an active member.', body: { ok: false, error: 'The new owner has to be an active member of s/rainbows first' } },
+      { status: 409, description: 'Lost a race with another transfer.', body: { ok: false, error: 's/rainbows changed hands while you were transferring it — reload and try again' } }
+    ]
+  }),
+  endpoint({
+    id: 'subspaces-delete',
+    // 1.1.0: private-subspace posts and moderator-removed posts leave as
+    // author-only posts (privatePosts in the response), rich ['post','comment']
+    // things are released too, the slug is held for the previous owner
+    // (subspace-tombstone), and a subspace with posts still pointing at it after
+    // the release passes answers 409 instead of dropping its doc (additive)
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
+    group: 'subspaces',
+    title: 'Delete subspace',
+    endpoint: '/api/v1/subspaces/delete',
+    summary: 'The owner deletes the subspace after retyping its slug; posts survive — public ones as plain posts, private/removed ones as author-only posts.',
+    detail:
+      'POST { id|slug, confirmSlug } as the owner; confirmSlug must equal the slug (a leading "s/" and case are ' +
+      'forgiven) or the call answers 400. Cascade: every post-shaped thing of the subspace (plain posts and ' +
+      'rich ["post","comment"] things alike) is released in bounded accounted batches — crystal.subspaceId, ' +
+      'crystal.flairId, the root subspaceMod state and the subspacePrivate fence are stripped, titles stay. ' +
+      'A post written behind a PRIVATE subspace’s wall, or one the moderators REMOVED, is never made public by ' +
+      'the owner’s click: it leaves as an author-only post (acl narrowed to its author, who can re-share it ' +
+      'deliberately) and is counted in privatePosts. Then the subspace thing itself goes (accounted delete) ' +
+      'together with a subspace-tombstone that keeps holding the slug — its previous owner may re-found it at ' +
+      'once, anyone else only after the hold — then every subspace-member, subspace-modlog and subspace-report ' +
+      'row. Former moderators are notified (subspace-role, "s/<slug> · was deleted by its owner"); GET ' +
+      '/api/v1/subspaces/get answers 404 afterwards. The call is safe to retry: the release is idempotent, and ' +
+      'while any post still points at the subspace (more posts than one call releases) it answers 409 with the ' +
+      'doc intact so nothing is ever left fenced behind a missing subspace.',
+    auth: { mode: 'session-or-bearer', description: 'Requires the subspace owner.' },
+    methods: ['POST'],
+    steps: [
+      'POST the subspace with confirmSlug equal to its slug.',
+      'Moderators receive 403; a mismatching confirmSlug 400; a 409 means posts remain (or ownership just moved) — run it again.'
+    ],
+    requestExamples: [{ name: 'Delete', description: 'Delete s/rainbows for good.', method: 'POST', body: { slug: 'rainbows', confirmSlug: 'rainbows' } }],
+    responseExamples: [
+      { status: 200, description: 'Deleted — 42 posts left the subspace, 3 of them (removed by mods) now author-only.', body: { ok: true, releasedPosts: 42, privatePosts: 3, removedMembers: 128 } },
+      { status: 400, description: 'Confirmation mismatch.', body: { ok: false, error: 'Type the slug to confirm — s/rainbows' } },
+      { status: 403, description: 'Not the owner.', body: { ok: false, error: 'Only the owner can delete a subspace 👑' } },
+      { status: 409, description: 'Posts still pointing at the subspace after the release passes — retry.', body: { ok: false, error: 's/rainbows still has 1,204 posts to release — run delete again to continue (it is safe to retry)' } }
+    ]
+  }),
   endpoint({
     id: 'things-vote',
+    contractVersion: '1.0.1',
+    featureVersion: '1.0.1',
     group: 'things',
     title: 'Vote on poll',
     endpoint: '/api/v1/things/vote',
@@ -9318,8 +10415,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Polls are posts (or data things) whose thing carries a string question plus an options ' +
       'list of 2+ entries. One vote per (user, poll), enforced structurally: votes are standalone ' +
       'things (thingtime ["vote"], crystal.optionIndex, targetId = the poll, acl ["tt:inherit"]) ' +
-      'deduped by a server-written crystal.voteKey ("<pollId>~<userId>") under a partial unique ' +
-      'index. Voting a DIFFERENT option moves your vote (the doc updates in place); voting the ' +
+      'deduped by a server-written Binary voteKey entry in the shared protected uniqueKeys ' +
+      'index. Votes remain unbilled engagement records. Voting a DIFFERENT option moves your vote (the doc updates in place); voting the ' +
       'SAME option again removes it (toggle off, matching reactions). The poll must be visible ' +
       'to the caller — acl and inherit chains are re-checked on every vote. Live tallies ride ' +
       'poll posts as pollVotes wherever posts are projected (feed, /post/:id, profiles).',
@@ -9332,7 +10429,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'POST the poll thing id and the zero-based optionIndex to vote for.',
       'The poll must be visible to the current user and optionIndex must be inside its options list.',
       'Use the returned pollVotes (counts per option, totalVotes, viewerVote) to reconcile the card.',
-      'Handle 401 unauthenticated, 404 for missing or not-visible polls, and 400 for non-polls or out-of-range options.'
+      'Handle 401 unauthenticated, 404 for missing or not-visible polls, and 400 for non-polls or out-of-range options.',
+      'Handle 409 for a concurrent toggle or conflicting legacy vote identity; retry after refreshing the poll.'
     ],
     requestExamples: [
       {
@@ -9351,6 +10449,36 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           pollVotes: { counts: [3, 5, 1], totalVotes: 9, viewerVote: 1 }
         }
       }
+    ]
+  }),
+  endpoint({
+    id: 'things-updown',
+    group: 'things',
+    title: 'Upvote / downvote',
+    endpoint: '/api/v1/things/updown',
+    summary: 'Casts, flips, or clears the current user’s up/down vote on a visible post or comment.',
+    detail:
+      'Reddit-style scoring as a SEPARATE focused reaction kind: exactly one of "up" | "down" per (user, ' +
+      'target). The same direction again clears the vote, the other direction flips it in place, and ' +
+      'direction null clears. Votes are standalone things (thingtime ["updown"], crystal.direction, targetId = ' +
+      'the post or comment, acl ["tt:inherit"]) deduped through a server-written key in the root uniqueKeys ' +
+      'namespace, so /api/v1/things refuses the kind. Tallies ride every post and comment projection as ' +
+      '`votes { up, down, score, viewerVote }`. The native multi-emoji reactions (POST /api/v1/things/react) are ' +
+      'a different kind and are untouched by this endpoint. Banned members of a subspace can’t vote on its posts.',
+    auth: { mode: 'session-or-bearer', description: 'Requires an auth cookie or Authorization: Bearer token (PAT scope things.updown).' },
+    methods: ['POST'],
+    steps: [
+      'POST the post/comment id and direction "up" or "down" (null to clear).',
+      'Use the returned votes to reconcile the card optimistically.',
+      'Handle 401 unauthenticated, 404 for missing or not-visible targets, 403 when banned in the subspace.'
+    ],
+    requestExamples: [
+      { name: 'Upvote', description: 'Vote a post up.', method: 'POST', body: { id: '4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', direction: 'up' } },
+      { name: 'Clear', description: 'Remove your vote.', method: 'POST', body: { id: '4f6b2c1e-8f2a-4c3d-9e5b-2a1f0c9d8e7f', direction: null } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Fresh tally.', body: { ok: true, direction: 'up', votes: { up: 13, down: 1, score: 12, viewerVote: 'up' } } },
+      { status: 400, description: 'Bad direction.', body: { ok: false, error: 'direction must be "up", "down", or null to clear your vote' } }
     ]
   }),
   endpoint({
@@ -9485,7 +10613,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-user',
-    featureVersion: '1.1.0',
+    // 1.3.0 / contract 1.2.0: post + comment projections carry authorFlair —
+    // the author's USER flair in the post's subspace (additive)
+    // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
+    // subspace post, for that subspace's moderators only (S5, additive)
+    featureVersion: '1.4.0',
+    contractVersion: '1.3.0',
     group: 'things',
     title: 'User posts',
     endpoint: '/api/v1/things/user',
@@ -9525,7 +10658,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     endpoint: '/api/v1/tokens',
     summary: 'Mint and list scoped API tokens — hand one to an AI or script so it can work your things.',
     detail:
-      'Personal access tokens (minted in Settings → Token minter, or here) are scoped, revocable Bearer credentials for the things API — made to hand to an AI agent or script so it can push new things, update things, and scan your things without your password. GET lists your tokens plus the scope and visibility catalogs; POST mints one: { name?, scopes: string[], expiresInMs?: number|null, maxUses?: number|null, onlyCreatedThings?: boolean, visibility?: "all"|"public"|"private" }. Scopes are dot paths with ancestor coverage — "things" covers every "things.*" leaf (read, create, update, delete, comment, react, save, share); upserts (PUT /api/v1/things) need BOTH things.create and things.update. Lifetime is two independent dials: expiresInMs from 1 (one millisecond) to null (never expires), and maxUses from 1 to null (unlimited) — each successfully authenticated request consumes one use; a missing-scope 403 consumes nothing. onlyCreatedThings: true sandboxes the token to its granted things — every thing it creates carries its tt:token/<token id> entry in the thing’s tokenAcl grant list, and its updates, deletes, comments, reactions, saves and shares only work on things whose tokenAcl carries its entry (403 anywhere else; reads still follow things.read). Grants layer: put several tokens’ entries on one thing (tokenAcl on create, or replace it whole via PATCH/PUT /api/v1/things) and those sandboxed tokens overlap on it. visibility fences the token to one audience of things: "public" means it only sees and touches world-visible things (acl tt:all — your private things stay invisible to it, and everything it creates or edits must stay public), "private" means it only sees and touches non-public things (it cannot read the public feed, publish, or engage publicly; its standalone creations default to acl ["tt:user"]), and "all" (the default) applies no fence. The fence covers reads AND writes, resolves inherited audiences through the target chain (a comment is as public as its post), and 403s with a clear message when a mutation crosses it. The token string is returned ONCE and never shown again (only the revocable session record is kept). Tokens work ONLY on the things routes plus /api/v1/tokens/self — they cannot manage tokens, change auth settings, or reach any other surface.',
+      'Personal access tokens (minted in Settings → Token minter, or here) are scoped, revocable Bearer credentials for the things API — made to hand to an AI agent or script so it can push new things, update things, and scan your things without your password. GET lists your tokens plus the scope and visibility catalogs; POST mints one: { name?, scopes: string[], expiresInMs?: number|null, maxUses?: number|null, onlyCreatedThings?: boolean, visibility?: "all"|"public"|"private"|"hidden", allowGet?: boolean }. Scopes are dot paths with ancestor coverage — "things" covers every "things.*" leaf (read, create, update, delete, comment, react, save, share); upserts (PUT /api/v1/things) need BOTH things.create and things.update. Lifetime is two independent dials: expiresInMs from 1 (one millisecond) to null (never expires), and maxUses from 1 to null (unlimited) — each successfully authenticated request consumes one use; a missing-scope 403 consumes nothing. onlyCreatedThings: true sandboxes the token to its granted things — every thing it creates carries its tt:token/<token id> entry in the thing’s tokenAcl grant list, and its updates, deletes, comments, reactions, saves and shares only work on things whose tokenAcl carries its entry (403 anywhere else; reads still follow things.read). Grants layer: put several tokens’ entries on one thing (tokenAcl on create, or replace it whole via PATCH/PUT /api/v1/things) and those sandboxed tokens overlap on it. visibility fences the token to one audience of things: "hidden" means it lives entirely in hidden link-key things (its creates are born hidden and mint their secret link), "public" means it only sees and touches world-visible things (acl tt:all — your private things stay invisible to it, and everything it creates or edits must stay public), "private" means it only sees and touches non-public things (it cannot read the public feed, publish, or engage publicly; its standalone creations default to acl ["tt:user"]), and "all" (the default) applies no fence. The fence covers reads AND writes, resolves inherited audiences through the target chain (a comment is as public as its post), and 403s with a clear message when a mutation crosses it. The token string is returned ONCE and never shown again (only the revocable session record is kept). Tokens work ONLY on the things routes plus /api/v1/tokens/self — they cannot manage tokens, change auth settings, or reach any other surface.',
     auth: {
       mode: 'session',
       description: 'Full session (cookie or service-account Bearer) required — a personal access token can never mint or list tokens.'
@@ -9600,8 +10733,102 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Expiry is enforced at millisecond precision server-side; the sessions TTL index reaps expired tokens, so they eventually disappear from the list.',
       'onlyCreatedThings sandbox: scopes say WHAT verbs, tokenAcl grants say ON WHICH things. A sandboxed token needs its tt:token/<id> entry on the thing — its own creations carry it automatically, the owner (or any credential that can update the thing) layers more tokens on by editing tokenAcl, and removing an entry revokes that token’s reach immediately. Re-sharing a token-created share of a foreign post still blocks (shares attach to the root).',
       'visibility fence: the third axis — scopes say WHAT verbs, tokenAcl says WHICH things, visibility says WHICH AUDIENCE. "public" and "private" partition things by whether their (inherit-resolved) acl carries tt:all; both directions of the boundary are locked (a public-only token cannot make a public thing private, a private-only token cannot publish). Tokens minted before this field behave as "all". Combines freely with onlyCreatedThings.',
+      'allowGet: true additionally opens /api/v1/get to this token — the whole things surface as plain GET URLs with the token in a query param, for browse-only agents. Off by default: a token in a URL lands in logs and history, so it is a per-token informed opt-in. See the GET bridge endpoint below.',
       'tokenAcl entries for revoked or unknown tokens are inert (the credential can’t authenticate), so grant lists never need cleanup to stay safe.',
       'At most 200 tokens per user — revoke old ones to make room.'
+    ]
+  }),
+  endpoint({
+    id: 'get-bridge',
+    group: 'tokens',
+    title: 'GET bridge',
+    endpoint: '/api/v1/get',
+    summary: 'The whole token API as plain GET URLs — for agents that can only browse.',
+    detail:
+      'GET /api/v1/get?token=<personal access token>&op=<op>… exposes the personal-access-token things surface as single GET requests, for AIs and agents that can open URLs but cannot send headers, bodies, or non-GET verbs. Only tokens minted with allowGet: true (“Works via GET links” in the Settings token minter) resolve here — the query-param credential is a deliberate opt-in, because URLs land in logs and browser history. Cookies are never read on this route, so a mutating GET cannot be forged with ambient browser credentials; the unguessable token is the authorization. op is one of: get, list, search, feed, self, create, update, upsert, delete, react, comment, save, share — each behaves exactly like its normal endpoint: same scopes (checked before a use is consumed; missing-scope 403s are free), same atomic use accounting, same rate limits, and the same onlyCreatedThings sandbox and visibility fence. Arguments come from an optional body param holding a URL-encoded JSON object, with every other query parameter overlaid on top: values starting with { [ or " parse as JSON, everything else stays a string (so ?text=hello and ?emoji=🔥 mean what they look like; put numbers in body). thingtime and tags accept a bare csv (thingtime=post,comment, tags=travel,food). key admits hidden-link things exactly like ?key= on GET /api/v1/things. op=self is free introspection — the natural first call for an agent handed a bridge URL. Responses carry Cache-Control: private, no-store and Referrer-Policy: no-referrer.',
+    auth: {
+      mode: 'bearer',
+      description: 'A personal access token minted with allowGet, sent as ?token= (an Authorization: Bearer header also works). Sessions, cookies, and app tokens are rejected.'
+    },
+    methods: ['GET'],
+    steps: [
+      'Mint a token in Settings → Token minter with “Works via GET links” ticked (or POST /api/v1/tokens with allowGet: true).',
+      'Open /api/v1/get?token=<token>&op=self to see who you are and what the token can do (free).',
+      'Read: op=get&id=…, op=list&thingtime=…, op=search&body={…}, op=feed.',
+      'Write: op=create&thingtime=["post"]&crystal={"type":"text","text":"hi"}, op=update&id=…&crystal={…}, op=react&id=…&emoji=🔥, op=comment&id=…&text=…, op=delete&id=….',
+      'Every successful call consumes one use, exactly like the Bearer routes.'
+    ],
+    requestExamples: [
+      { name: 'Who am I', description: 'Free introspection.', method: 'GET', query: { token: '<token>', op: 'self' } },
+      {
+        name: 'Create a post',
+        description: 'A public text post via one URL.',
+        method: 'GET',
+        query: { token: '<token>', op: 'create', thingtime: '["post"]', crystal: '{"type":"text","text":"hello from a GET-only agent"}' }
+      },
+      { name: 'Read a thing', description: 'One thing (add key=… for hidden links).', method: 'GET', query: { token: '<token>', op: 'get', id: '<shareId>' } },
+      { name: 'React', description: 'Toggle a reaction.', method: 'GET', query: { token: '<token>', op: 'react', id: '<shareId>', emoji: '🔥' } }
+    ],
+    responseExamples: [
+      { status: 200, description: 'Same shapes as the underlying endpoints.', body: { ok: true, post: { id: 'shareId', visibility: 'public' } } },
+      { status: 403, description: 'Token minted without the GET tick.', body: { ok: false, error: 'This token is not enabled for GET links 🌍 — mint one with “Works via GET links” ticked' } }
+    ],
+    notes: [
+      'The token in the URL is a real credential: share bridge URLs only where you would share the token itself, scope tokens narrowly, cap uses, and revoke when done.',
+      'Attachments and app tokens are not available through the bridge — those flows need real sessions.',
+      'op maps: get/list/search/feed → things.read, create → things.create (or react/comment when thingtime says so), update → things.update, upsert → create+update, delete/react/comment/save/share → their scopes.',
+      'op=update and op=delete honour expectedUpdatedAt=<the updatedAt you read> exactly like PATCH/DELETE /api/v1/things: the write only lands if the thing has not changed since, otherwise 409. Worth sending whenever a thing has more than one writer (a custom audience granting tt:user/<name>/write).'
+    ]
+  }),
+  endpoint({
+    id: 'groups',
+    group: 'things',
+    title: 'Audience groups',
+    endpoint: '/api/v1/groups',
+    summary: 'Reusable "share with these people" lists for custom-audience things.',
+    detail:
+      'Groups power the custom visibility picker: make one once, then grant it on any thing with an acl entry tt:group/<group id> (optionally suffixed /comment or /write for capabilities — see the things endpoint). GET lists your groups with member profiles; POST { name, memberIds? } creates one (members are user ids); PATCH { id, name?, memberIds? } renames or REPLACES the member list whole (list semantics mirror tokenAcl — merging is ambiguous); DELETE { id } removes the group and its memberships. Members are stored relationally as group-member things (FUNDAMENTALS §3) so membership checks ride existing indexes. Bounds: 64 groups per user, 128 members per group. Deleting a group instantly retires every tt:group acl entry that referenced it (the entries become inert).',
+    auth: { mode: 'session', description: 'Full session only — tokens and apps cannot manage your audience groups.' },
+    methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+    steps: [
+      'GET to list your groups.',
+      'POST { name, memberIds } to create — pick members from /api/v1/groups/audience-sources or /api/v1/users/search.',
+      'Grant it on a thing: acl [..., "tt:group/<group id>/comment"].',
+      'PATCH { id, memberIds } to change who’s in it — every thing granted to the group follows automatically.'
+    ],
+    requestExamples: [
+      { name: 'List groups', description: 'Your groups + members.', method: 'GET' },
+      { name: 'Create', description: 'A study group.', method: 'POST', body: { name: 'Study group 📚', memberIds: ['<user id>', '<user id>'] } },
+      { name: 'Replace members', description: 'Member list replaces whole.', method: 'PATCH', body: { id: '<group id>', memberIds: ['<user id>'] } },
+      { name: 'Delete', description: 'Group + memberships.', method: 'DELETE', body: { id: '<group id>' } }
+    ],
+    responseExamples: [
+      {
+        status: 201,
+        description: 'Created.',
+        body: { ok: true, group: { id: 'group-uuid', name: 'Study group 📚', memberCount: 2, members: [] } }
+      },
+      { status: 400, description: 'Unknown member.', body: { ok: false, error: 'Unknown member user id: …' } }
+    ],
+    notes: [
+      'Group membership updates propagate live: acl entries reference the group by id, and the read path resolves the viewer’s memberships per request.',
+      'Members can see which groups they belong to only through what those groups unlock — the group itself stays the owner’s private thing.'
+    ]
+  }),
+  endpoint({
+    id: 'groups-audience-sources',
+    group: 'things',
+    title: 'Audience sources',
+    endpoint: '/api/v1/groups/audience-sources',
+    summary: 'Everything the custom-audience picker prefills: friends, connections, recent people, groups.',
+    detail:
+      'GET returns { friends, connections, recents, groups } for the signed-in user — friends are accepted friendships, connections are people you follow, recents are owners of things you recently engaged with (comments, reactions, saves, shares), and groups are your audience groups with member profiles. One call, viewer-private, no-store. Use /api/v1/users/search to find anyone outside these lists.',
+    auth: { mode: 'session', description: 'Full session only — this is your private social context.' },
+    methods: ['GET'],
+    steps: ['GET, then render the sections; search fills the gaps.'],
+    requestExamples: [{ name: 'Load sources', description: 'All four sections at once.', method: 'GET' }],
+    responseExamples: [
+      { status: 200, description: 'Sources.', body: { ok: true, friends: [], connections: [], recents: [], groups: [] } }
     ]
   }),
   endpoint({
@@ -9656,12 +10883,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'users-profile',
+		// 1.1.0: private hideEmailOnProfile preference for the owner's own profile UI.
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
     group: 'profile',
     title: 'User profile',
     endpoint: '/api/v1/users/profile',
     summary: 'Reads public profiles or updates the current user profile fields.',
     detail:
-      'GET returns a stripped public projection that never includes email, verification fields, or the ' +
+		'GET returns a stripped public projection that never includes email or verification fields, or the ' +
       'birthday, plus wornTheme ({id, name} of the profile owner’s active theme, resolved through the ' +
       'public share gate — null when unset or private). POST updates the caller display name, bio, ' +
       'avatar, banner, or birthday. Avatar/banner may use either one external http(s) URL or a ready ' +
@@ -9675,7 +10905,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['GET', 'POST'],
     steps: [
       'GET with username to read a public profile and post count.',
-			'POST displayName, bio, or birthday independently of profile media.',
+			'POST displayName, bio, birthday, or hideEmailOnProfile independently of profile media. hideEmailOnProfile defaults to true for existing and new accounts; it controls whether the owner sees their email on their own profile page and never changes public email privacy.',
 			'Use avatarAttachmentId or bannerAttachmentId to bind a ready owner-matched profile upload. Use avatarUrl or bannerUrl for the quota-saving external-link alternative; sending a URL clears that slot’s managed attachment.',
 			'Never send a non-null attachment id with a URL. Send both fields as null to clear a slot, or send only attachmentId:null to remove managed media while preserving its stored external fallback.',
 			'External writes accept structurally valid credential-free http(s) URLs; legacy data:image values remain read-compatible.',
@@ -10016,21 +11246,31 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'notifications-list',
-    // 1.1.0 added the history filters, 1.2.0 the stable cursor, from/to window
-    // and viewer object — this endpoint now ships both, so it publishes 1.2.0.
-    contractVersion: '1.2.0',
-    featureVersion: '1.2.0',
+    // 1.1.0: the subspace-* types (join-request, join-accepted, post-removed,
+    // report, role, ban) joined the type enum — additive
+    // 1.2.0: (develop) history filters, stable cursor, from/to window, viewer
+    // object; (subspaces) subspace-post-removed and subspace-ban rows carry the
+    // subspace's MOD TEAM as their actor (actorId = the subspace shareId,
+    // actorName "s/<slug> mods", actorUsername / actorAvatarUrl null)
+    // 1.3.0: both lines merged — this endpoint ships history filters AND the
+    // subspace family together; additive
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
     group: 'notifications',
     title: 'List notifications',
     endpoint: '/api/v1/notifications',
     summary: 'Your notifications, newest first, filtered by your notification prefs — searchable by category, type, unread, text and date — plus the unread count.',
     detail:
       'Notifications are server-minted things (new followers, friend requests/accepts, comments, ' +
-      'replies, reactions, shares, @mentions, capped posts-from-followed/friends fan-out) plus SYSTEM ' +
+      'replies, reactions, shares, @mentions, capped posts-from-followed/friends fan-out, and subspace ' +
+      'moderation: subspace-join-request, subspace-join-accepted, subspace-post-removed, ' +
+      'subspace-report, subspace-role, subspace-ban) plus SYSTEM ' +
       'notes from Lopu (category system — today action-run: an action you ran finished or failed; ' +
       'actorId "thingtime", the headline in title, an in-app href, outcome ok|error). Every row ' +
-      'carries its category: social (friend-request, friend-accepted, new-follower, groups), ' +
-      'engagement (comment, reply, reaction, share, mention), feed (post-from-followed, ' +
+      'carries its category: social (friend-request, friend-accepted, new-follower, groups, ' +
+      'subspace-join-request, subspace-join-accepted, subspace-role, subspace-ban), ' +
+      'engagement (comment, reply, reaction, share, mention, subspace-post-removed, subspace-report), ' +
+      'feed (post-from-followed, ' +
       'post-from-friend), system (action-run). The list is ALWAYS filtered by your current ' +
       'notification settings, so disabling a type hides even already-written notifications of that ' +
       'type. Optional filters back the /notifications history page: category=<one>, ' +
@@ -10043,7 +11283,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'are never skipped; legacy before=<nextBefore> remains supported. Optional from (inclusive) ' +
       'and to (exclusive) ISO timestamps bound historical pages and exports, alongside since/until. ' +
       'The viewer object identifies the authenticated account by username so native companions can ' +
-      'visibly confirm which account is connected. A recipient keeps their newest 10,000 notifications.',
+      'visibly confirm which account is connected. A recipient keeps their newest 10,000 notifications. ' +
+      'Subspace-scoped rows (role, ban, join…) carry the subspace shareId in targetId and lead their preview ' +
+      'with "s/<slug> · …" so clients can link to /s/<slug>; post-scoped ones (post-removed, report) set postId ' +
+      'like every other post notification. The punitive pair (subspace-post-removed, subspace-ban) is sent by the ' +
+      'subspace’s mod team: actorId is the SUBSPACE shareId, actorName "s/<slug> mods", actorUsername and ' +
+      'actorAvatarUrl null — the moderator who acted is named only in the mod log; every other subspace row names ' +
+      'the acting moderator.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -10053,7 +11299,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'GET ?limit=&cursor=&from=&to= — newest first. Use cursor for stable 10-at-a-time history; from is inclusive and to is exclusive.',
       'Show unreadCount on the bell; refetch on window focus.',
       'History page: add category / types / unread / q / since / until and withTotal=1; keep the filter set in the URL.',
-      'Click-through: href (system notes) → that path, else postId → /post/<id>, else actor → /profile/<username>.',
+      'Click-through: href (system notes) → that path, else postId → /post/<id>, else a subspace-* row → /s/<slug> (slug from the preview), else actor → /profile/<username>.',
       'Handle 401 unauthenticated and 429 rate-limited.'
     ],
     requestExamples: [
@@ -10225,8 +11471,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'notifications-settings',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    // 1.1.0: six subspace-* switches joined the matrix — additive; 1.2.0:
+    // merged with develop's 1.1.0 (action-run switch) — additive
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'notifications',
     title: 'Notification settings',
     endpoint: '/api/v1/notifications/settings',
@@ -10235,9 +11483,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Two channels: push (the bell/in-app channel) and email (SES-backed notification emails), each ' +
       'with a master switch and per-type switches. Types: friend-request, friend-accepted, ' +
       'new-follower, post-from-followed, post-from-friend, comment, reply, reaction, share, mention, groups ' +
-      '(reserved), action-run (system notes from Lopu about actions you run), plus the email-only ' +
-      'weekly-summary digest. Defaults ON, except email for the high-volume types (post-from-followed / ' +
-      'post-from-friend / action-run), which are opt-in. GET always ' +
+      '(reserved), action-run (system notes from Lopu about actions you run), the subspace family ' +
+      'subspace-join-request, subspace-join-accepted, subspace-post-removed, subspace-report, subspace-role, ' +
+      'subspace-ban, plus the email-only weekly-summary digest. Defaults ON, except email for the high-volume ' +
+      'types (post-from-followed / post-from-friend / action-run and the mod-queue pair subspace-join-request / ' +
+      'subspace-report), which are opt-in. GET always ' +
       'returns the full matrix. POST merges only the keys you send — the new channel shape ' +
       '{ prefs: { push?, email?, masters? } } or the original flat { prefs: { <type>: boolean } } ' +
       '(which patches the push channel); unknown keys 400. A disabled push type is hidden from your ' +
@@ -10998,6 +12248,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-resolve',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'webpages',
     title: 'Resolve a webpage',
     endpoint: '/api/v1/webpages/resolve',
@@ -11012,10 +12264,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'visible shareIds first, then the seeded platform doc (component-<ref>), then the caller’s own latest ' +
       'componentKey match; the refs map records each resolution. Pages are created and edited through the ' +
       'ordinary /api/v1/things write path (the webpage crystal sanitizer is the write gate) — this endpoint ' +
-      'only reads.',
+      'only reads. A standalone hidden page also accepts its owner-issued key query parameter, matching the ' +
+      'ordinary Things hidden-link contract; the bearer key is never returned to non-owners.',
     auth: {
       mode: 'optional',
-      description: 'Anonymous callers resolve public pages and the seeded site defaults; signed-in callers also get their own pages and personalised site docs.'
+      description: 'Anonymous callers resolve public pages, hidden standalone pages when they present the exact key, and seeded site defaults; signed-in callers also get their own pages and personalised site docs.'
     },
     methods: ['GET'],
     steps: [
@@ -11031,6 +12284,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'The read behind /p/<id>.',
         method: 'GET',
         query: { id: 'my-launch-page' }
+      },
+      {
+        name: 'Resolve an unlisted page by secret link',
+        description: 'The key is the bearer secret copied by the page owner.',
+        method: 'GET',
+        query: { id: 'my-unlisted-page', key: 'owner-issued-link-key' }
       },
       {
         name: 'Resolve a site page',
@@ -11390,14 +12649,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.1.0: every generation row carries its storage census (dataBytes,
     // storageBytes, indexBytes, indexes) — additive. contractVersion is what
     // the capabilities manifest publishes.
-    contractVersion: '1.1.0',
+    contractVersion: '1.3.0',
+    featureVersion: '1.2.0',
     summary: 'Per-collection schema-version census, storage generations, and registered migrations with pending counts.',
     detail:
       'Every doc stores the root-level schemaVersion it was written at (docs without one count as version 1), and every ' +
       'collection lives in a versioned physical collection — logical `things` at version 2 is the physical collection ' +
       '`things_v2`. This endpoint reports how many docs sit at each version per collection, every physical collection ' +
       'generation on the server (current, stale, or ahead), any legacy collections adoption could not rename, and which ' +
-      'registered migrations still have work to do.',
+      'registered migrations still have work to do. Relationship-key pending counts include missing individual keys even when ' +
+      'other protected keys are already present; unresolved duplicate slots remain pending. The home-only ' +
+      'consolidate-relationship-lookup-indexes migration reports key repair, readiness and legacy-index retirement work. ' +
+      'retire-legacy-thing-indexes separately reports incompatible legacy rows, redundant canonical embed metadata and eight old indexes.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
@@ -11598,6 +12861,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
   endpoint({
     id: 'admin-migrations-run',
+    contractVersion: '1.2.0',
+    featureVersion: '1.3.0',
     group: 'admin',
     title: 'Run migration',
     endpoint: '/api/v1/admin/migrations/run',
@@ -11613,7 +12878,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'pending is 0) and rebuild-things-indexes then drops and recreates the plan-owned things indexes so the storage ' +
       'the deleted rows occupied is actually released — both destructive, both confirm: true. Failed real runs may return a private ' +
 			'diagnosticThingId for the same admin to open at /thing/:id; failed dry runs never create diagnostics and instead return ' +
-			'bounded redacted adminDetail inline.',
+			'bounded redacted adminDetail inline. Storage-ledger validation accepts valid optional speedTestsPerHour quotas ' +
+      'without rewriting immutable tier snapshots, overrides, ownership, or allowances. Relationship-key repair adds missing ' +
+      'individual keys without replacing existing keys, checks source identity before writing, and reports duplicate slots ' +
+      'without repeatedly retrying them or deleting relationships. Re-check pending work after skipped concurrent changes. ' +
+      'consolidate-relationship-lookup-indexes requires confirm: true for a real run: after deploying compatible code on ' +
+      'all shared-database origins, it repairs and validates home relationship keys, activates shared reads, then retires ' +
+      'five exact non-unique lookup indexes. Reads never perform this migration; custom database indexes remain unchanged. ' +
+      'retire-legacy-thing-indexes also requires confirm: true and the shared-database rollout prerequisite. It refuses ' +
+      'incompatible legacy rows, ensures a shared schema/owner updated-order index, activates canonical home reads, removes ' +
+      'redundant kind metadata only on canonical embed Things, and retires eight exact legacy indexes. It deletes no Things. ' +
+      'Both layouts activate on the first real run while retaining old indexes. Repeat after at least one minute to finish ' +
+      'retirement after compatible workers drain their readiness caches; early reruns preserve the original deadline.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
@@ -11624,6 +12900,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Pass dryRun: true first to see matched counts without writing.',
       'Pass confirm: true when running a destructive migration for real.',
       'Read the report for matched, migrated, created, skipped, and notes.',
+      'Storage-accounting dry runs include up to ten invalid ledger IDs and fixed validation-field labels in notes; no stored values or arbitrary field names are exposed and no ledger is modified.',
 			'On failure, open diagnosticThingId as the same admin, or render adminDetail when persistence was skipped or unavailable.',
       'Handle 401 non-admin callers and 404 unknown migration ids.'
     ],

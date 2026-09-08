@@ -8,6 +8,7 @@
 // can ever surface them; membership (checked here on every call) is the only
 // door.
 import { getThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
+import { relationshipLookupFilter } from '../mongodb/relationshipLookup';
 import type { FeedAuthor} from '../things/things';
 import { resolveProfiles, parseChronoCursor, chronoCursorClause } from '../things/things';
 import { orderAttachmentDocsByStoredSort, toAttachmentPublicMetadata, type AttachmentPublicMetadata } from '../attachments/attachmentCore';
@@ -389,7 +390,7 @@ export const createChat = async (
     if (memberIds.length !== 1) return fail(400, 'A DM needs exactly one other person');
     const otherId = memberIds[0];
     const dmKey = dmKeyOf(viewerId, otherId);
-    const existing = await things.findOne({ thingtime: 'chat', 'crystal.dmKey': dmKey } as any);
+    const existing = await things.findOne({ thingtime: 'chat', ...await relationshipLookupFilter('dmKey', dmKey) } as any);
     if (existing) {
       // the initiator re-opening a DM is always active (accepting any pending
       // request they had); the OTHER side's state is never touched here
@@ -688,7 +689,7 @@ export const listChatsById = async (viewerId: string, chatIds: readonly string[]
   if (!ids.length) return [];
   const things = await getThingsCollection();
   const memberships = await things
-    .find({ thingtime: 'chat-member', 'crystal.memberKey': { $in: ids.map((id) => chatMemberKey(id, viewerId)) }, 'crystal.state': 'active' } as any)
+    .find({ thingtime: 'chat-member', ...await relationshipLookupFilter('memberKey', ids.map((id) => chatMemberKey(id, viewerId))), 'crystal.state': 'active' } as any)
     .toArray();
   if (!memberships.length) return [];
   const ctx = await buildSummaryContext(viewerId, memberships);
@@ -906,7 +907,7 @@ export const manageChatMembers = async (
     // update, fresh members in ONE insert, one member-added event naming
     // everyone who actually (re)entered
     const existingDocs = await things
-      .find({ thingtime: 'chat-member', 'crystal.memberKey': { $in: ids.map((id) => chatMemberKey(chat.shareId, id)) } } as any)
+      .find({ thingtime: 'chat-member', ...await relationshipLookupFilter('memberKey', ids.map((id) => chatMemberKey(chat.shareId, id))) } as any)
       .toArray();
     const existingByUser = new Map(existingDocs.map((doc: any) => [String(doc.ownerId), doc]));
     const toRevive = existingDocs.filter((doc: any) => doc.crystal?.state !== 'active');

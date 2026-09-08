@@ -70,6 +70,9 @@ export const LOPU_UI = {
 	link: 'var(--tt-link, #18181b)',
 	positive: 'var(--tt-positive, #2f9e6b)',
 	danger: 'var(--tt-danger, #d64545)',
+	// the theme's warning tone (the balance chip turning amber under the
+	// low-balance threshold — semantic, never decorative)
+	warning: 'var(--tt-warning, #ffbc48)',
 	// the compact (floating window) body size
 	fontCompact: '13px',
 	fontMono: 'var(--tt-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',
@@ -135,6 +138,13 @@ export const lopuChipSx = {
 	fontWeight: 600,
 	lineHeight: 1,
 	whiteSpace: 'nowrap' as const,
+	// The app shell sets `.mainFlexRoot * { white-space: pre-wrap }`, which has
+	// the same specificity as (and is declared after) the class Chakra compiles
+	// for a chip label's own `isTruncated`. Without this descendant rule a long
+	// label (the model chip once the balance chip shares the composer row on a
+	// 375px screen) WRAPS inside a fixed-height pill and the second line is
+	// clipped — chips truncate, they never wrap.
+	'& span': { whiteSpace: 'nowrap' as const },
 	cursor: 'pointer',
 	WebkitTapHighlightColor: 'transparent',
 	touchAction: 'manipulation',

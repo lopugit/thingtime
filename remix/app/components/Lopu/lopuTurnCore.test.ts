@@ -35,7 +35,10 @@ import {
 	lopuPlainText,
 	confirmationMessageText,
 	isLopuConfirmUsable,
-	resolveLopuToolConfirm
+	resolveLopuToolConfirm,
+	describeTurnCredits,
+	lopuGateFromResponse,
+	markLopuTurnGated
 } from './lopuTurnCore.ts';
 
 const fold = (events: LopuChatEvent[], start?: LopuTurnState): LopuTurnState =>
@@ -235,6 +238,67 @@ test('error events record the error and fail in-flight tools; done closes the tu
 	assert.equal(done.assistantMessageId, 'msg-a');
 	assert.deepEqual(done.usage, { inputTokens: 10, outputTokens: 20 });
 	assert.equal(done.stopReason, 'end_turn');
+	// a server that predates credits leaves the accounting fields unknown
+	assert.equal(done.costMicros, null);
+	assert.equal(done.billing, null);
+	assert.equal(done.balanceMicros, null);
+	assert.equal(done.gate, null);
+});
+
+test('done carries the turn accounting (usage incl. cache tokens, costMicros, billing, balanceMicros); meta names who pays', () => {
+	const billed = fold([
+		{ ...META, billing: 'thingtime' } as LopuChatEvent,
+		{ type: 'delta', text: 'hi' },
+		{ type: 'done', assistantMessageId: 'a1', messages: [], stopReason: 'end_turn', usage: { inputTokens: 100, outputTokens: 50, cacheReadTokens: 20, cacheWriteTokens: -1 }, costMicros: 13_200.4, billing: 'thingtime', balanceMicros: 4_956_800 }
+	]);
+	assert.equal(billed.meta?.billing, 'thingtime');
+	assert.deepEqual(billed.usage, { inputTokens: 100, outputTokens: 50, cacheReadTokens: 20 }, 'negative counters are dropped');
+	assert.equal(billed.costMicros, 13_200, 'micros are integers');
+	assert.equal(billed.billing, 'thingtime');
+	assert.equal(billed.balanceMicros, 4_956_800);
+	// the done event's billing wins over meta (a fallback mid-turn changes who pays)
+	const fell = fold([{ ...META, billing: 'thingtime' } as LopuChatEvent, { type: 'done', billing: 'free', costMicros: 0 }]);
+	assert.equal(fell.billing, 'free');
+	assert.equal(fell.costMicros, 0);
+	// junk billing reads as unknown, and a meta without billing keeps the null
+	const junk = fold([{ ...META, billing: 'martian' } as unknown as LopuChatEvent, { type: 'done', costMicros: 'lots' as unknown as number }]);
+	assert.equal(junk.billing, null);
+	assert.equal(junk.meta?.billing, null);
+	assert.equal(junk.costMicros, null);
+});
+
+test('the gate: a refused turn keeps the friendly copy and its code, and only streaming turns can be gated', () => {
+	const fresh = initialLopuTurn({ requestId: 'req-1', userText: 'build me a page', startedAt: 1000 });
+	const gated = markLopuTurnGated(fresh, lopuGateFromResponse(402, 'LOPU_NO_CREDITS', 'used up')!);
+	assert.equal(gated.status, 'error');
+	assert.deepEqual(gated.gate, { code: 'LOPU_NO_CREDITS', message: 'used up', status: 402 });
+	assert.equal(gated.error?.retryable, true, 'no credits → try again after topping up');
+	const unverified = markLopuTurnGated(fresh, lopuGateFromResponse(403, 'LOPU_UNVERIFIED')!);
+	assert.equal(unverified.gate?.code, 'LOPU_UNVERIFIED');
+	assert.equal(unverified.error?.retryable, false);
+	assert.match(unverified.error?.message ?? '', /invite-only/);
+	assert.equal(markLopuTurnGated(gated, { code: 'LOPU_UNVERIFIED', message: 'x', status: 403 }), gated, 'a finished turn is left alone');
+	// a gated turn streamed nothing, so it persists no optimistic assistant row
+	assert.deepEqual(buildAssistantMessages(gated, 'u1'), []);
+});
+
+test('the footer appends the credits a Thingtime-billed turn cost, never for BYO / free turns', () => {
+	const claude = { provider: 'claude' as const, label: 'Claude Opus 5', model: 'claude-opus-5', effort: 'high', speed: 'normal' };
+	assert.equal(describeLopuTurnMeta(claude, { billing: 'thingtime', costMicros: 13_200 }), 'via Claude Opus 5 · High · 0.0132 credits');
+	assert.equal(describeLopuTurnMeta(claude, { billing: 'thingtime', costMicros: 0 }), 'via Claude Opus 5 · High · 0.00 credits');
+	assert.equal(describeLopuTurnMeta(claude, { billing: 'byo', costMicros: 13_200 }), 'via Claude Opus 5 · High');
+	assert.equal(describeLopuTurnMeta(claude, { billing: 'free', costMicros: 13_200 }), 'via Claude Opus 5 · High');
+	assert.equal(describeLopuTurnMeta(claude, { billing: 'thingtime', costMicros: null }), 'via Claude Opus 5 · High');
+	assert.equal(describeLopuTurnMeta(claude, null), 'via Claude Opus 5 · High');
+	assert.equal(describeLopuTurnMeta({ provider: 'fallback', label: null, model: null, effort: null, speed: null }, { billing: 'thingtime', costMicros: 500_000 }), "from Lopu's little book · 0.50 credits");
+	assert.equal(describeTurnCredits({ billing: 'thingtime', costMicros: 1_250_000 }), '1.25 credits');
+	assert.equal(describeTurnCredits({ billing: 'thingtime', costMicros: -5 }), null);
+	// a persisted row remembers its billing + cost
+	const meta = lopuMessageMeta({ lopu: { role: 'assistant', provider: 'claude', model: 'claude-opus-5', billing: 'thingtime', costMicros: 13_200, usage: { inputTokens: 100, outputTokens: 50, cacheReadTokens: 20 } } });
+	assert.equal(meta?.billing, 'thingtime');
+	assert.equal(meta?.costMicros, 13_200);
+	assert.deepEqual(meta?.usage, { inputTokens: 100, outputTokens: 50, cacheReadTokens: 20 });
+	assert.equal(lopuMessageMeta({ lopu: { role: 'assistant', provider: 'claude' } })?.billing, null);
 });
 
 test('markLopuTurnFailed / markLopuTurnAborted are idempotent and only touch streaming turns', () => {
