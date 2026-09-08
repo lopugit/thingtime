@@ -17,6 +17,7 @@ import {
 
 import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z } from '~/components/Nav/Drawer/useDrawer';
 
 // The custom-audience picker 🎭 — composes a tt:custom acl visually: a
 // baseline (who may READ in general), hand-picked users and groups with
@@ -276,8 +277,8 @@ export const CustomAudienceModal = (props: {
 
   return (
     <Modal isOpen={props.isOpen} onClose={props.onClose} size="lg" scrollBehavior="inside">
-      <ModalOverlay />
-      <ModalContent borderRadius="var(--tt-radius-md, 12px)">
+      <ModalOverlay zIndex={DRAWER_MODAL_OVERLAY_Z} />
+      <ModalContent containerProps={{ zIndex: DRAWER_MODAL_Z }} borderRadius="var(--tt-radius-md, 12px)">
         <ModalHeader fontSize="md">Custom audience 🎭</ModalHeader>
         <ModalBody>
           <Flex flexDirection="column" rowGap={4}>
