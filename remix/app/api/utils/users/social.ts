@@ -10,15 +10,16 @@ import { findUserById, findUserByUsername } from '../auth/users';
 import type { PublicProfile } from '../auth/users';
 import { isFollowing, toggleFollow } from '../messenger/follows';
 import { relationshipUniqueKeys } from '../messenger/shared';
+import { relationshipLookupFilter } from '../mongodb/relationshipLookup';
 import { emitNotification } from '../notifications/notifications';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
 
 // Two separate relationship types (see registry.ts follow/friend schemas):
 //   follow — one-way, no approval; one thing per (follower, followed), deduped
-//            by crystal.followKey / the things_follow_key_unique partial index.
+//            by the protected followKey namespace in shared uniqueKeys.
 //   friend — mutual, request → accept; ONE thing per unordered pair keyed by
-//            crystal.friendKey ('<minId>~<maxId>', things_friend_unique), so
+//            friendKey ('<minId>~<maxId>') in that same shared index, so
 //            crossed/duplicate requests are structurally impossible.
 // Both kinds are PROTECTED: only these utils mint them.
 
@@ -131,7 +132,7 @@ export const friendAction = async (
 
   const things = await getThingsCollection();
   const key = friendKeyOf(viewer.id, targetId);
-  const existing = await things.findOne({ thingtime: 'friend', 'crystal.friendKey': key } as any);
+  const existing = await things.findOne({ thingtime: 'friend', ...await relationshipLookupFilter('friendKey', key, { home: true }) } as any);
   const now = new Date();
   const actor = { id: viewer.id, username: viewer.username, displayName: viewer.displayName };
 
@@ -184,7 +185,7 @@ export const friendAction = async (
       } catch (err: any) {
         if (!isDuplicateKey(err)) throw err;
         // raced a crossed request — re-read and report the real state
-        const raced = await things.findOne({ thingtime: 'friend', 'crystal.friendKey': key } as any);
+        const raced = await things.findOne({ thingtime: 'friend', ...await relationshipLookupFilter('friendKey', key, { home: true }) } as any);
         return { ok: true, friendState: friendStateOf(raced, viewer.id) };
       }
       await emitNotification({
@@ -310,7 +311,7 @@ export const relationshipSummary = async (viewerId: string | null, target: { _id
       const [followDoc, followedByDoc, friendDoc] = await Promise.all([
         things.findOne({ thingtime: 'follow', ownerId: viewerId, targetId: userId } as any, { projection: { _id: 1 } }),
         things.findOne({ thingtime: 'follow', ownerId: userId, targetId: viewerId } as any, { projection: { _id: 1 } }),
-        things.findOne({ thingtime: 'friend', 'crystal.friendKey': friendKeyOf(viewerId, userId) } as any)
+        things.findOne({ thingtime: 'friend', ...await relationshipLookupFilter('friendKey', friendKeyOf(viewerId, userId), { home: true }) } as any)
       ]);
       viewer = {
         following: !!followDoc,

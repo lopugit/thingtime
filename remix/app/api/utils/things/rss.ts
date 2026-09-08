@@ -94,7 +94,7 @@ export const buildPublicPostsAtomFeed = async (origin: string): Promise<{ ok: tr
   // emit exactly the coarse public superset clause (same match as trending,
   // minus the 7-day window: the feed is "latest", not "hot").
   // subspace fences: removed posts and private-subspace posts never syndicate
-  const match = withMatch(postMatch(), visibilityQueryFor(null, ['public']), ...subspaceFeedClauses(null));
+  const match = withMatch(await postMatch(), visibilityQueryFor(null, ['public']), ...subspaceFeedClauses(null));
   const candidates = (await things
     .find(match as any)
     .sort({ createdAt: -1, shareId: 1 })
