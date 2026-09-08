@@ -78,6 +78,10 @@ fi
 if [[ "${THINGTIME_NODE_EMBEDDED:-0}" == "1" ]]; then
     /usr/bin/plutil -replace ThingtimeNodeElectronManaged -bool true "${CONTENTS_PATH}/Info.plist"
 fi
+SOURCE_COMMIT="$(git -C "${PACKAGE_ROOT}" rev-parse HEAD 2>/dev/null || true)"
+if [[ "${SOURCE_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
+    /usr/bin/plutil -replace ThingtimeNodeSourceCommit -string "${SOURCE_COMMIT}" "${CONTENTS_PATH}/Info.plist"
+fi
 /usr/bin/xattr -cr "${APP_PATH}"
 
 case "${SIGNING_MODE}" in

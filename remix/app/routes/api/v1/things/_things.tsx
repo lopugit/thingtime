@@ -27,7 +27,8 @@ import {
   toPublicThings,
   updateThing,
   upsertThing,
-  viewerOf
+  viewerOf,
+  withLinkKeys
 } from '~/api/utils/things/things';
 import { parseCommentSort } from '~/api/utils/things/updownCore';
 
@@ -92,9 +93,12 @@ export const loader = async ({ request }: { request: Request }) => {
   const actor = await resolveActor(request, { thingsScope: 'things.read' });
   if (actor instanceof Response) return actor;
   const user = actorUser(actor);
+  const params = new URL(request.url).searchParams;
   // pat context rides reads too: a visibility-restricted token (public-only /
-  // private-only) must have its audience fence applied to everything it lists
-  const viewer = viewerOf(user, actorPat(actor));
+  // private-only) must have its audience fence applied to everything it lists.
+  // A presented ?key= rides along so hidden things resolve for key-holders —
+  // logged-out ones included.
+  const viewer = withLinkKeys(viewerOf(user, actorPat(actor)), [(params.get('key') || '').trim()]);
   const app = actor.kind === 'app' ? actor.scope : null;
   const cors = actorCors(actor);
 
@@ -109,8 +113,6 @@ export const loader = async ({ request }: { request: Request }) => {
       );
     }
   }
-
-  const params = new URL(request.url).searchParams;
 
   const id = (params.get('id') || '').trim();
   if (id) {
@@ -196,8 +198,10 @@ export const action = async ({ request }: { request: Request }) => {
   }
   const user = actorUser(actor)!;
   // pat context rides the viewer: creates stamp the token's tt:token grant,
-  // and a sandboxed token's writes stay inside its granted things (things.ts)
-  const viewer = viewerOf(user, actorPat(actor));
+  // and a sandboxed token's writes stay inside its granted things (things.ts).
+  // body.key lets a hidden-link holder attach to (comment on, react to) the
+  // hidden thing their key reveals.
+  const viewer = withLinkKeys(viewerOf(user, actorPat(actor)), [typeof body?.key === 'string' ? body.key : '']);
   const app = actor.kind === 'app' ? actor.scope : null;
   const cors = actorCors(actor);
 
