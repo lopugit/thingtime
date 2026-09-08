@@ -24,6 +24,37 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - Desktop recovers its bundled node after plist rewrites, records the owning Desktop build, and starts or refreshes the node on launch when auto-start is enabled. — Codex (AI), 2026-09-07
 
+- 2026-09-06: **Subspaces 🪐 round 2** — everything a subreddit needs to run:
+  ownership transfer + owner-only delete (posts are released as plain posts;
+  members/modlog/reports cascade), join requests for private subspaces and
+  posting-approval requests for restricted ones (Requests mod tab), per-member
+  user flairs with `authorFlair` on every post/comment projection, removal
+  reasons + Chakra modals for remove/ban/report/transfer/delete (no browser
+  prompts), post/comment reports with a Reports mod queue and `reportCount`,
+  six `subspace-*` notification types (mod-team actor on the punitive pair),
+  `GET /api/v1/things/feed?scope=subspaces`, directory sorts (new / members /
+  active, rate-limited `subspaces.list`), an Explore "Popular subspaces" strip
+  and a Search "Subspaces" section, per-card comment sort (top / new / old),
+  guest nudges and a 375px layout pass. Live walk `remix/scripts/verify-subspaces.mjs`
+  sections A–T: 486 passed. See the [PR note](../PRs/subspaces-communities-and-updown-votes.md). — Claude (AI)
+
+- 2026-09-05: **Subspaces 🪐 + up/down votes 🔼** — Reddit-style communities as
+  things: `subspace` (slug, branding, rules, flairs, access), relational
+  `subspace-member` (role/approval/ban) and `subspace-modlog` docs, posts
+  gaining `title`/`subspaceId`/`flairId` with a server-side posting gate and a
+  root `subspaceMod` state (remove/approve/pin/lock/nsfw/spoiler, redaction for
+  non-mods, feed fences incl. private subspaces), `/api/v1/subspaces*` (list/
+  create, get, update, join, leave, members, moderate, modlog, feed with
+  hot/new/top/rising/controversial), and `updown` — a separate focused vote kind
+  (`POST /api/v1/things/updown`, one of up/down per user per post or comment,
+  aggregated as `votes`) beside the untouched native emoji reactions. UI: `/s`,
+  `/s/:slug`, `/s/:slug/mod`, the ▲ score ▼ pill on every post/comment card,
+  subspace/title/flair in the composer, mod menu on cards, drawer entry,
+  Settings → Subspaces. One new partial index (`things_subspace_posts`);
+  contracts `api.things`, `api.things-feed`, `api.things-comment`,
+  `api.things-user` bumped to 1.2.0. Live walk: `remix/scripts/verify-subspaces.mjs`.
+  See the [PR note](../PRs/subspaces-communities-and-updown-votes.md). — Claude (AI)
+
 - 2026-09-06: Lopu verified access + credits (client): a `tt-lopu-account-<uid>`
   store slice + `useLopuAccount` (refreshed on mount, after every `done` and
   slowly on focus), the invite-only locked state on `/lopu`, the floating
