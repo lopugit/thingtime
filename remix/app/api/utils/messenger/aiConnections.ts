@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 
 import { getHomeThingsCollection, getThingsCollection } from '../mongodb/collections';
 import { thingUniqueKey, thingUniqueKeyFilter, thingUniqueKeysFilter } from '../mongodb/uniqueKeys';
+import { ensureRelationshipLookupReady, relationshipLookupFilter } from '../mongodb/relationshipLookup';
 import { MAX_MESSAGE_CHARS } from '~/schemas/registry';
 import { publicExternalAiSource, type AiMessageRole, type AiSourceProvider } from './externalAi';
 import { chatMemberKey, communityMemberKey, fail, newThingDoc, type Fail } from './shared';
@@ -198,8 +199,12 @@ const sourceStorageOptions = (source: AiSourceInput, options: Record<string, unk
 	...(source.deviceId ? { messengerPlane: 'home' as const } : {})
 });
 
-const withSourceStorageTransaction = <T>(source: AiSourceInput, work: (session: any) => Promise<T>) =>
-	withMessengerStorageTransaction(work, source.deviceId ? 'home' : 'active');
+const withSourceStorageTransaction = async <T>(source: AiSourceInput, work: (session: any) => Promise<T>) => {
+	// Resolve the cached home layout before opening the import snapshot. This
+	// metadata check never repairs data or performs DDL inside an upsert.
+	await ensureRelationshipLookupReady({ home: !!source.deviceId });
+	return withMessengerStorageTransaction(work, source.deviceId ? 'home' : 'active');
+};
 
 const ensureMembership = async (kind: 'community' | 'chat', targetId: string, ownerId: string, session: any, source: AiSourceInput) => {
 	const things = await sourceThings(source);
@@ -225,7 +230,7 @@ const ensureMembership = async (kind: 'community' | 'chat', targetId: string, ow
   const { crystal: _memberCrystal, updatedAt: _memberUpdatedAt, ...memberRoot } = base;
   await updateMessengerThing(
 		things,
-    { 'crystal.memberKey': memberKey } as any,
+    { thingtime: memberKind, ownerId, targetId, ...await relationshipLookupFilter('memberKey', memberKey, { home: !!source.deviceId }) } as any,
     {
       $setOnInsert: {
 				...memberRoot,
