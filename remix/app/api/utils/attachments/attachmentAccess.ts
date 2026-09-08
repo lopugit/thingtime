@@ -1,6 +1,7 @@
 import { ObjectId } from 'mongodb';
 
 import { getHomeThingsCollection, getUsersCollection } from '../mongodb/collections';
+import { relationshipLookupFilter } from '../mongodb/relationshipLookup';
 import { ACL_ALL, ACL_INHERIT, ACL_OWNER, aclAllows, aclFromVisibility, type ThingVisibility } from '../../../schemas/registry';
 import type { AttachmentPurpose, ProfileAttachmentSlot } from './attachmentCore';
 
@@ -87,6 +88,7 @@ export const profileAttachmentTargetAllows = (attachment: AttachmentAccessDocume
 };
 
 type AttachmentTargetAccessDependencies = {
+	memberFilter: (key: string) => Promise<Record<string, unknown>>;
 	getThings: typeof getHomeThingsCollection;
 	getUsers: typeof getUsersCollection;
 };
@@ -133,7 +135,8 @@ const canViewCommentAttachment = async (
 const canViewMessageAttachment = async (
 	things: Awaited<ReturnType<typeof getHomeThingsCollection>>,
 	viewer: AttachmentAccessViewer,
-	attachment: AttachmentAccessDocument
+	attachment: AttachmentAccessDocument,
+	memberFilter: AttachmentTargetAccessDependencies['memberFilter']
 ): Promise<boolean> => {
 	if (!viewer?.id || !attachment.targetId) return false;
 	const message = (await things.findOne({ shareId: attachment.targetId } as any, {
@@ -155,7 +158,7 @@ const canViewMessageAttachment = async (
 			thingtime: 'chat-member',
 			targetId: message.targetId,
 			ownerId: viewer.id,
-			'crystal.memberKey': memberKey,
+			...await memberFilter(memberKey),
 			'crystal.state': { $in: ['active', 'pending'] }
 		} as any,
 		{ projection: { shareId: 1 } }
@@ -166,7 +169,8 @@ const canViewMessageAttachment = async (
 const canViewEmojiAttachment = async (
 	things: Awaited<ReturnType<typeof getHomeThingsCollection>>,
 	viewer: AttachmentAccessViewer,
-	attachment: AttachmentAccessDocument
+	attachment: AttachmentAccessDocument,
+	memberFilter: AttachmentTargetAccessDependencies['memberFilter']
 ): Promise<boolean> => {
 	if (!viewer?.id || !attachment.targetId) return false;
 	const emoji = (await things.findOne({ shareId: attachment.targetId } as any, {
@@ -187,7 +191,7 @@ const canViewEmojiAttachment = async (
 			thingtime: 'community-member',
 			targetId: emoji.targetId,
 			ownerId: viewer.id,
-			'crystal.memberKey': `${emoji.targetId}:${viewer.id}`,
+			...await memberFilter(`${emoji.targetId}:${viewer.id}`),
 			'crystal.state': { $ne: 'left' }
 		} as any,
 		{ projection: { shareId: 1 } }
@@ -201,6 +205,7 @@ const canViewEmojiAttachment = async (
 // lookup, attachment aggregation, recursion, or caller-selected data plane.
 export const createCanViewHomeAttachmentTarget = (overrides: Partial<AttachmentTargetAccessDependencies> = {}) => {
 	const dependencies: AttachmentTargetAccessDependencies = {
+		memberFilter: (key) => relationshipLookupFilter('memberKey', key, { home: true }),
 		getThings: getHomeThingsCollection,
 		getUsers: getUsersCollection,
 		...overrides
@@ -247,10 +252,10 @@ export const createCanViewHomeAttachmentTarget = (overrides: Partial<AttachmentT
 			return canViewCommentAttachment(things, viewer, attachment);
 		}
 		if (attachment.attachmentPurpose === 'message') {
-			return canViewMessageAttachment(things, viewer, attachment);
+			return canViewMessageAttachment(things, viewer, attachment, dependencies.memberFilter);
 		}
 		if (attachment.attachmentPurpose === 'emoji') {
-			return canViewEmojiAttachment(things, viewer, attachment);
+			return canViewEmojiAttachment(things, viewer, attachment, dependencies.memberFilter);
 		}
 		if (attachment.attachmentPurpose !== undefined && attachment.attachmentPurpose !== 'post') return false;
 		// post-purpose media binds to top-level posts AND to webpages (builder
