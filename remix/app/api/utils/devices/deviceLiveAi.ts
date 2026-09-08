@@ -1,5 +1,6 @@
 import { getHomeThingsCollection } from '../mongodb/collections';
 import { thingUniqueKey, thingUniqueKeyFilter, thingUniqueKeysFilter } from '../mongodb/uniqueKeys';
+import { ensureRelationshipLookupReady, relationshipLookupFilter } from '../mongodb/relationshipLookup';
 import { deleteMessengerThings, updateMessengerThing, withMessengerStorageTransaction } from '../messenger/storage';
 import { chatMemberKey, fail, newThingDoc, type Fail } from '../messenger/shared';
 import type { AiSourceProvider } from '../messenger/externalAi';
@@ -277,7 +278,7 @@ const ensureLiveMembership = async (things: any, ownerId: string, chatId: string
 	const { crystal: _crystal, updatedAt: _updatedAt, ...root } = base;
 	await updateMessengerThing(
 		things,
-		{ 'crystal.memberKey': memberKey } as any,
+		{ thingtime: 'chat-member', ownerId, targetId: chatId, ...await relationshipLookupFilter('memberKey', memberKey, { home: true }) } as any,
 		{
 			$setOnInsert: {
 				...root,
@@ -896,6 +897,7 @@ export const syncDeviceLiveAi = async (
 		return fail(409, 'The live connector does not match the authenticated device connector');
 	const things = await getHomeThingsCollection();
 	try {
+		await ensureRelationshipLookupReady({ home: true });
 		return await withMessengerStorageTransaction(async (session) => {
 			const [currentConnector, currentState] = await Promise.all([
 				things.findOne(
