@@ -3,6 +3,7 @@
 // import it without dragging component code along.
 
 import { primaryKindOf, THING_KIND_ICONS } from './thingIcon';
+import { THING_AUDIENCE_META, sharePathForThing, thingPath } from '../Sharing/audienceCore';
 
 export { FILE_TYPE_ICON_RULES, THING_KIND_ICONS, fileIconForThing, primaryKindOf, thingIcon } from './thingIcon';
 
@@ -20,6 +21,7 @@ export type ThingsThing = {
   author: ThingsAuthor;
   visibility: string;
   acl: string[];
+  linkKey?: string;
   targetId: string | null;
   folderId: string | null;
   crystal: Record<string, any>;
@@ -128,39 +130,8 @@ export const thingDisplayName = (thing: Pick<ThingsThing, 'thingtime' | 'crystal
 };
 
 export const VISIBILITY_META: Record<string, { label: string; icon: string }> = {
-  public: { label: 'Public', icon: '🌐' },
-  friends: { label: 'Friends', icon: '🤝' },
-  family: { label: 'Family', icon: '🏡' },
-  private: { label: 'Private', icon: '🔒' },
+  ...Object.fromEntries(Object.entries(THING_AUDIENCE_META).map(([key, value]) => [key, { label: value.label, icon: value.emoji }])),
   inherit: { label: 'Inherits', icon: '🔗' }
-};
-
-// legacy circle names → acl arrays (mirrors LEGACY_VISIBILITY_ACLS in
-// schemas/registry.ts — the share dialog composes person grants on top)
-export const CIRCLE_BASE_ACLS: Record<string, string[]> = {
-  public: ['tt:all'],
-  friends: ['-tt:all', 'tt:userFriends', 'tt:user'],
-  family: ['-tt:all', 'tt:userFamily', 'tt:user'],
-  private: ['tt:user']
-};
-
-export const personGrantsOf = (acl: string[]): string[] =>
-  acl
-    .filter((entry) => entry.startsWith('tt:user/'))
-    .map((entry) => entry.slice('tt:user/'.length));
-
-export const circleOf = (acl: string[]): string => {
-  if (acl.includes('tt:inherit')) return 'inherit';
-  if (acl.includes('tt:all')) return 'public';
-  if (acl.includes('tt:userFriends')) return 'friends';
-  if (acl.includes('tt:userFamily')) return 'family';
-  return 'private';
-};
-
-export const composeAcl = (circle: string, people: string[]): string[] => {
-  const base = CIRCLE_BASE_ACLS[circle] || CIRCLE_BASE_ACLS.private;
-  const grants = people.map((username) => `tt:user/${username}`);
-  return [...base, ...grants].filter((entry, index, all) => all.indexOf(entry) === index);
 };
 
 export const formatWhen = (iso: string): string => {
@@ -178,10 +149,40 @@ export const formatWhen = (iso: string): string => {
   return date.toLocaleDateString();
 };
 
-// permalink for the share dialog's copy-link: posts have a page of their own,
-// everything else deep-links into the /things preview modal
-export const thingLink = (thing: Pick<ThingsThing, 'id' | 'thingtime'>): string =>
-  thing.thingtime.includes('post') ? `/post/${thing.id}` : `/things?preview=${encodeURIComponent(thing.id)}`;
+// Where a thing's OWN page lives — the permalink Copy link / Share hand out
+// and the page a double-click opens, so a pasted link and an opened tile
+// land on the same surface. Every kind with a dedicated page routes there
+// (folders open in place on /things); components, data and whatever kind
+// comes next land on the universal /thing/:id page. The /things?preview=
+// deep link stays the explicit quick-look, never the permalink.
+export const thingLink = (thing: Pick<ThingsThing, 'id' | 'thingtime'>): string => {
+  return thingPath(thing);
+};
+
+export const thingShareLink = (
+  thing: Pick<ThingsThing, 'id' | 'thingtime' | 'acl' | 'linkKey'>
+): string => sharePathForThing(thing);
+
+// The surfaces the universal page can send a viewer back to.
+export type ThingsReferrer = 'things' | 'actions' | 'feed';
+
+// The href a browse surface NAVIGATES to: the permalink plus the referrer
+// hint the universal /thing/:id page reads for its back link. Only that page
+// consumes the hint, so dedicated pages (post/action/webpage/schema) and the
+// shareable permalink itself never carry it.
+export const thingOpenHref = (thing: Pick<ThingsThing, 'id' | 'thingtime'>, from: ThingsReferrer): string => {
+  const href = thingLink(thing);
+  return href.startsWith('/thing/') ? `${href}?from=${from}` : href;
+};
+
+// What a `?from=` param names, defaulting to the feed. An OWN-property check,
+// not a truthiness one: `?from=toString` (or constructor / __proto__ /
+// valueOf) resolves through Object.prototype on a plain record lookup, so a
+// `REFERRERS[param] || REFERRERS.feed` fallback hands back a function instead
+// of falling through — and the back link then renders with no label and
+// navigates nowhere. Same guard demoDetail.parseKindFilter uses.
+export const parseThingsReferrer = (raw: string | null | undefined): ThingsReferrer =>
+  raw === 'things' || raw === 'actions' || raw === 'feed' ? raw : 'feed';
 
 // stable sort for browse views: folders first (Drive convention), then the
 // chosen order. Every comparator ends on id so the order is deterministic.
@@ -261,6 +262,17 @@ export const schemaIdOf = (thing: Pick<ThingsThing, 'thingtime' | 'crystal'>): s
   thing.thingtime.includes('data') && typeof thing.crystal?.schemaId === 'string' && thing.crystal.schemaId
     ? thing.crystal.schemaId
     : null;
+
+// The render template a SCHEMA thing declares (crystal.render, an object
+// tree), null when it has none or the response is not a schema. One reader
+// for the /things Previews cache and the universal /thing/:id page, so a data
+// thing draws through exactly the same template on both.
+export const schemaRenderOf = (schemaThing: unknown): Record<string, unknown> | null => {
+  const thing = schemaThing as { thingtime?: unknown; crystal?: { render?: unknown } | null } | null;
+  if (!thing || !Array.isArray(thing.thingtime) || !thing.thingtime.includes('schema')) return null;
+  const render = thing.crystal?.render;
+  return render && typeof render === 'object' && !Array.isArray(render) ? (render as Record<string, unknown>) : null;
+};
 
 // {field} token interpolation for schema render templates: every string in the
 // tree (props and children alike) swaps {dotted.path} tokens for the data

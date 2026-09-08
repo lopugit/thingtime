@@ -17,6 +17,34 @@ interface Pending {
 }
 
 const SEARCH_TIMEOUT_MS = 5_000;
+// Just below an exact title: the existing category preference can lift a
+// complete app-name word above an exact file, while learned/file-first
+// preferences still win. Keep in sync with commander-core.
+const APPLICATION_NAME_WORD_SCORE = 99_300;
+
+function matchesApplicationNameWords(query: string, title: string): boolean {
+  const needle = Array.from(query.trim())
+    .slice(0, 128)
+    .join('')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]/gu, '');
+  if (Array.from(needle).length < 3) return false;
+  const words = Array.from(title)
+    .slice(0, 512)
+    .join('')
+    .replace(/(\p{Ll})(\p{Lu})/gu, '$1 $2')
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+  for (let start = 0; start < words.length; start += 1) {
+    let phrase = '';
+    for (let end = start; end < words.length && phrase.length < needle.length; end += 1) {
+      phrase += words[end];
+      if (phrase === needle) return true;
+    }
+  }
+  return false;
+}
 
 export class SearchService {
   #items: SearchItem[] = [];
@@ -182,7 +210,10 @@ function score(query: string, item: SearchItem): number {
   const title = item.title.toLowerCase();
   const subtitle = item.subtitle?.toLowerCase() ?? '';
   const keyword = item.keywords.join(' ').toLowerCase();
-  const titleScore = fuzzyTextScore(needle, title);
+  let titleScore = fuzzyTextScore(needle, title);
+  if (titleScore >= 0 && item.kind === 'application' && matchesApplicationNameWords(query, item.title)) {
+    titleScore = Math.max(titleScore, APPLICATION_NAME_WORD_SCORE);
+  }
   const subtitleScore = fuzzyTextScore(needle, subtitle);
   const keywordScore = fuzzyTextScore(needle, keyword);
   const textScore = Math.max(

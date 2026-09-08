@@ -35,9 +35,11 @@ import {
   isFolder,
   primaryKindOf,
   schemaIdOf,
+  schemaRenderOf,
   sortThings,
   thingDisplayName,
-  thingLink,
+  thingShareLink,
+  thingOpenHref,
   thingsCacheKey
 } from './thingsCore';
 import type {
@@ -390,14 +392,7 @@ export const ThingsPage = () => {
       apiRef.current.v1.things
         .get({ id: schemaId })
         .then((resp: any) => {
-          const schemaThing = resp?.thing;
-          const render =
-            schemaThing?.thingtime?.includes?.('schema') &&
-            schemaThing?.crystal?.render &&
-            typeof schemaThing.crystal.render === 'object' &&
-            !Array.isArray(schemaThing.crystal.render)
-              ? (schemaThing.crystal.render as Record<string, unknown>)
-              : null;
+          const render = schemaRenderOf(resp?.thing);
           setSchemaRenders((prev) => ({ ...prev, [schemaId]: render }));
         })
         .catch(() => setSchemaRenders((prev) => ({ ...prev, [schemaId]: null })));
@@ -577,22 +572,17 @@ export const ThingsPage = () => {
     [currentKey, fetchFolder]
   );
 
+  // Open = the thing's OWN page (thingsCore.thingLink: post/action/webpage/
+  // schema pages, the universal /thing/:id for components, data and the
+  // rest) with the referrer hint for its back link; folders open in place.
+  // The PreviewModal stays the explicit quick-look ('preview' / ?preview=).
   const openThing = useCallback(
     (thing: ThingsThing) => {
       if (isFolder(thing)) {
         navigateToFolder(thing.id);
         return;
       }
-      if (thing.thingtime.includes('post')) {
-        navigate(`/post/${thing.id}`);
-        return;
-      }
-      // actions open their inspector — the /things half of the program loop
-      if (thing.thingtime.includes('action')) {
-        navigate(`/actions/${encodeURIComponent(thing.id)}`);
-        return;
-      }
-      setPreviewThing(thing);
+      navigate(thingOpenHref(thing, 'things'));
     },
     [navigate, navigateToFolder]
   );
@@ -895,10 +885,15 @@ export const ThingsPage = () => {
   );
 
   const copyLink = useCallback(async (thing: ThingsThing) => {
-    const url = `${window.location.origin}${thingLink(thing)}`;
+    const url = `${window.location.origin}${thingShareLink(thing)}`;
     try {
       await navigator.clipboard.writeText(url);
-      lopuRef.current({ title: 'Link copied 🔗', description: url, status: 'success', duration: 5000 });
+      lopuRef.current({
+        title: thing.acl.includes('tt:hidden') ? 'Secret link copied 🕵️' : 'Link copied 🔗',
+        description: url,
+        status: 'success',
+        duration: 5000
+      });
     } catch {
       lopuRef.current({ title: 'Couldn’t copy the link', description: url, status: 'error' });
     }
@@ -1047,7 +1042,11 @@ export const ThingsPage = () => {
       if (!menuThing) return;
       switch (action.command) {
         case 'open':
-          openThing(menuThing);
+          // thingsMenuModel labels this "Preview" for every kind without a
+          // folder/post entry, so it stays the quick-look here; the tile's
+          // title link, double-click and the kebab "Open" reach the page
+          if (isFolder(menuThing) || menuThing.thingtime.includes('post')) openThing(menuThing);
+          else setPreviewThing(menuThing);
           break;
         case 'copy-link':
           copyLink(menuThing);
@@ -1269,7 +1268,7 @@ export const ThingsPage = () => {
           <Text {...monoLabel}>Thingtime · Things</Text>
         </Flex>
 				{devicesEnabled && !folderId && !searchMode ? (
-					<LocalNodeSetupCard controlFor={localDeviceControlFor} onAction={executeLocalDeviceAction} state={localNode} />
+					<LocalNodeSetupCard onRefresh={localNode.refresh} controlFor={localDeviceControlFor} onAction={executeLocalDeviceAction} state={localNode} />
 				) : null}
         <Flex alignItems="center" gap={3} wrap="wrap">
           <Text

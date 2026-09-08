@@ -56,6 +56,10 @@ ICON_SIZES
 /usr/bin/iconutil -c icns "${ICONSET_PATH}" --output "${CONTENTS_PATH}/Resources/ThingtimeRecovery.icns"
 /usr/bin/plutil -replace CFBundleShortVersionString -string "${VERSION}" "${CONTENTS_PATH}/Info.plist"
 /usr/bin/plutil -replace CFBundleVersion -string "${BUILD_NUMBER}" "${CONTENTS_PATH}/Info.plist"
+/usr/bin/plutil -replace ThingtimeReleaseVersion -string "${VERSION}" "${CONTENTS_PATH}/Info.plist"
+/usr/bin/plutil -replace ThingtimeReleaseTag -string "${THINGTIME_RECOVERY_RELEASE_TAG:-recovery-v${VERSION}}" "${CONTENTS_PATH}/Info.plist"
+/usr/bin/plutil -replace ThingtimeGitCommit -string "${THINGTIME_RECOVERY_GIT_COMMIT:-$(git -C "${PACKAGE_ROOT}" rev-parse HEAD)}" "${CONTENTS_PATH}/Info.plist"
+/usr/bin/plutil -replace ThingtimeGitBranch -string "${THINGTIME_RECOVERY_GIT_BRANCH:-$(git -C "${PACKAGE_ROOT}" branch --show-current)}" "${CONTENTS_PATH}/Info.plist"
 /usr/bin/xattr -cr "${APP_PATH}"
 
 case "${SIGNING_MODE}" in

@@ -64,6 +64,46 @@ test('safe css url() targets pass, unsafe ones fail', () => {
 	assert.equal(page([{ id: 'u5', type: 'text', text: 'hi', css: { background: 'url(//protocol.relative/x)' } }]).ok, false);
 });
 
+test('text href accepts page links and refuses script/data/plain-http targets', () => {
+	const blocks = okBlocks(
+		page([
+			{ id: 'l1', type: 'text', text: 'Docs', href: 'https://thingtime.com/docs' },
+			{ id: 'l2', type: 'text', text: 'Register', href: '/register' },
+			{ id: 'l3', type: 'text', text: 'Mail', href: 'mailto:hello@example.com' },
+			{ id: 'l4', type: 'text', text: 'Call', href: 'tel:+61400000000' },
+			{ id: 'l5', type: 'text', text: 'Plain', href: '  ' }
+		])
+	);
+	assert.equal(blocks[0].href, 'https://thingtime.com/docs');
+	assert.equal(blocks[1].href, '/register');
+	assert.equal(blocks[2].href, 'mailto:hello@example.com');
+	assert.equal(blocks[3].href, 'tel:+61400000000');
+	// blank hrefs vanish rather than becoming empty anchors
+	assert.equal('href' in blocks[4], false);
+	assert.equal(page([{ id: 'b1', type: 'text', text: 'x', href: 'javascript:alert(1)' }]).ok, false);
+	assert.equal(page([{ id: 'b2', type: 'text', text: 'x', href: 'data:text/html,hi' }]).ok, false);
+	assert.equal(page([{ id: 'b3', type: 'text', text: 'x', href: 'http://plain.example/' }]).ok, false);
+	assert.equal(page([{ id: 'b4', type: 'text', text: 'x', href: '//protocol.relative/x' }]).ok, false);
+	assert.equal(page([{ id: 'b5', type: 'text', text: 'x', href: 'mailto: spaced@example.com' }]).ok, false);
+	assert.equal(page([{ id: 'b6', type: 'text', text: 'x', href: `/${'a'.repeat(3000)}` }]).ok, false);
+});
+
+// The URL parser folds `\` into `/` for http(s), so a single leading slash
+// followed by a backslash is protocol-relative in disguise: `/\evil.example`
+// resolves to https://evil.example. /p/ draws ANOTHER user's page, so a link
+// or media src that reads site-relative must never resolve off-origin.
+test('backslash-folded authorities are refused wherever a site-relative url is allowed', () => {
+	for (const href of ['/\\evil.example/login', '/\\\\evil.example', '/\\/evil.example']) {
+		assert.equal(page([{ id: 'bs1', type: 'text', text: 'x', href }]).ok, false, `expected href ${href} to be refused`);
+		assert.equal(page([{ id: 'bs2', type: 'media', src: href }]).ok, false, `expected media src ${href} to be refused`);
+		assert.equal(page([{ id: 'bs3', type: 'text', text: 'x', css: { background: `url(${href})` } }]).ok, false, `expected css url ${href} to be refused`);
+	}
+	// a backslash further along the path never forms an authority, and the
+	// ordinary site-relative link keeps working
+	assert.equal(page([{ id: 'bs4', type: 'text', text: 'x', href: '/docs/a\\b' }]).ok, true);
+	assert.equal(page([{ id: 'bs5', type: 'text', text: 'x', href: '/register' }]).ok, true);
+});
+
 test('media src and text tag stay on the allowlists', () => {
 	assert.equal(page([{ id: 'm1', type: 'media', src: 'ftp://nope.com/x.png' }]).ok, false);
 	assert.equal(page([{ id: 'm2', type: 'media', src: 'javascript:alert(1)' }]).ok, false);
@@ -109,4 +149,30 @@ test('previewBg refuses rule breakout and unsafe url() targets', () => {
 	]) {
 		assert.equal(pageBg(value).ok, false, `expected previewBg to refuse ${value}`);
 	}
+});
+
+// ── source-bound component blocks (the page runtime's data binding) ────────
+
+test('a component block keeps a well-formed source binding and refuses malformed ones', () => {
+	const base = { name: 'Bound page', blocks: [{ id: 'hud', type: 'component', component: 'app-pokeworld-hud', source: { action: 'app-pokeworld-state', inputs: { page: '{query.page}', n: 2, live: true }, refresh: 'interval', intervalMs: 15000 } }] };
+	const ok = validateThingtimeCrystal(['webpage'], base);
+	assert.equal(ok.ok, true, ok.ok === false ? ok.error : '');
+	if (ok.ok) {
+		const block = (ok.crystal.blocks as Record<string, unknown>[])[0];
+		assert.deepEqual(block.source, { action: 'app-pokeworld-state', inputs: { page: '{query.page}', n: 2, live: true }, refresh: 'interval', intervalMs: 15000 });
+	}
+	const loadDefault = validateThingtimeCrystal(['webpage'], { ...base, blocks: [{ ...base.blocks[0], source: { action: 'app-pokeworld-state', refresh: 'load' } }] });
+	assert.equal(loadDefault.ok, true);
+	if (loadDefault.ok) assert.deepEqual((loadDefault.crystal.blocks as Record<string, unknown>[])[0].source, { action: 'app-pokeworld-state' });
+	const badAction = validateThingtimeCrystal(['webpage'], { ...base, blocks: [{ ...base.blocks[0], source: { action: 'Not A Slug' } }] });
+	assert.equal(badAction.ok, false);
+	const badRefresh = validateThingtimeCrystal(['webpage'], { ...base, blocks: [{ ...base.blocks[0], source: { action: 'x', refresh: 'always' } }] });
+	assert.equal(badRefresh.ok, false);
+	const tooFast = validateThingtimeCrystal(['webpage'], { ...base, blocks: [{ ...base.blocks[0], source: { action: 'x', refresh: 'interval', intervalMs: 100 } }] });
+	assert.equal(tooFast.ok, false);
+	const objectInput = validateThingtimeCrystal(['webpage'], { ...base, blocks: [{ ...base.blocks[0], source: { action: 'x', inputs: { nested: { a: 1 } } } }] });
+	assert.equal(objectInput.ok, false);
+	const suiteKey = validateThingtimeCrystal(['webpage'], { ...base, suiteKey: 'pokeworld' });
+	assert.equal(suiteKey.ok, true);
+	if (suiteKey.ok) assert.equal(suiteKey.crystal.suiteKey, 'pokeworld');
 });

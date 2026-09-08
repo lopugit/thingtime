@@ -7,6 +7,7 @@ import {
 	RETIRED_THINGS_INDEXES,
 	backfillConsolidatedThingUniqueKeys,
 	createCiControlIndexes,
+	createWatchPairingIndexes,
 	createIndexReplacingForTests,
 	createThingsDataIndexes,
 	pruneRebuildTwins,
@@ -52,6 +53,16 @@ const fakeThingsDb = () => {
 	};
 };
 
+test('Watch PIN reservations are unique only for active requests and inboxes are indexed by recipient', async () => {
+	const fixture = fakeThingsDb();
+	await Promise.all(createWatchPairingIndexes(fixture.db.collection()));
+	const unique = fixture.options.find((index) => index.name === 'watch_active_pin_unique');
+	assert.equal(unique?.options.unique, true);
+	assert.deepEqual(unique?.keys, { 'meta.userCodeHash': 1 });
+	assert.deepEqual(unique?.options.partialFilterExpression, { purpose: 'watch-pairing', 'meta.shortCodeActive': true });
+	assert.ok(fixture.options.some((index) => index.keys['meta.recipientUserId'] === 1 && index.keys.createdAt === -1));
+});
+
 test('current Things index plan keeps four slots free below MongoDB hard limit', async () => {
 	const fixture = fakeThingsDb();
 	await Promise.all(createThingsDataIndexes(fixture.db));
@@ -86,7 +97,7 @@ test('the five dead pre-Things indexes measured on production are retired by nam
 
 test('v1-era kind indexes and the sandbox TTL are partial, and their unfiltered originals retire', async () => {
 	const fixture = fakeThingsDb();
-	await Promise.all(createThingsDataIndexes(fixture.db));
+	await Promise.all(createThingsDataIndexes(fixture.db, { legacyLookups: true }));
 	const retired = new Set<string>(RETIRED_THINGS_INDEXES);
 	const partialByName = new Map(fixture.options.map((entry) => [entry.name, entry.options.partialFilterExpression]));
 	for (const [name, legacy] of [

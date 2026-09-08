@@ -4,6 +4,8 @@ import { Box, Button, Flex, Input, Select, Switch, Text, Textarea } from '@chakr
 import { RichTextModal } from './RichTextModal';
 
 import { useLopu } from '~/components/Lopu/useLopu';
+import { ThingAudienceControl } from '~/components/Sharing/ThingAudienceControl';
+import { sharePathForThing } from '~/components/Sharing/audienceCore';
 import { DRAWER_Z } from '../Nav/Drawer/useDrawer';
 import { sanitizeArgSpecs, type ComponentArgSpec } from '../ComponentsLibrary/componentTemplate';
 import { BorderControl, CornersControl, SegmentedControl, ShadowControl, SidesControl } from './FigmaControls';
@@ -467,6 +469,15 @@ const BlockInspector = ({
 							</Select>
 						</FieldRow>
 					</FieldPair>
+					<FieldRow label="Link (https, /path, mailto:, tel:) — makes this text a button">
+						<Input
+							{...inputStyles}
+							value={block.href || ''}
+							placeholder="/register"
+							onChange={(event) => patch({ href: event.target.value || undefined })}
+							data-testid="text-block-href"
+						/>
+					</FieldRow>
 					<Flex flexWrap="wrap" gap={2}>
 						<CssField label="Font size" cssKey="font-size" block={block} onCss={setCss} placeholder="16px" />
 						<CssField label="Weight" cssKey="font-weight" block={block} onCss={setCss} placeholder="400" />
@@ -691,8 +702,8 @@ export const BuilderDrawer = (props: {
 	mode: 'page' | 'site';
 	pageName: string;
 	onPageName: (next: string) => void;
-	isPublic: boolean;
-	onIsPublic: (next: boolean) => void;
+	audienceAcl: string[];
+	onAudienceAcl: (next: string[]) => void;
 	onSaved?: (id: string) => void;
 	// dual-region site editing (page + global drafts share one drawer):
 	// onSaveAll saves every dirty draft, anyDirty drives the Save state, and
@@ -713,8 +724,8 @@ export const BuilderDrawer = (props: {
 		mode,
 		pageName,
 		onPageName,
-		isPublic,
-		onIsPublic,
+		audienceAcl,
+		onAudienceAcl,
 		onSaved,
 		onSaveAll,
 		anyDirty,
@@ -730,12 +741,20 @@ export const BuilderDrawer = (props: {
 	const selected = selectedId ? findBlock(draft.blocks, selectedId) : null;
 	const source = draft.resolved?.source || null;
 	const pageId = draft.resolved?.page?.id || null;
+	const pageLink = pageId
+		? sharePathForThing({
+				id: pageId,
+				thingtime: ['webpage'],
+				acl: audienceAcl,
+				linkKey: draft.resolved?.page?.linkKey
+		  })
+		: null;
 
 	const handleSave = async () => {
 		setSaving(true);
 		const result = onSaveAll
 			? await onSaveAll()
-			: await draft.save({ name: pageName, isPublic: mode === 'page' ? isPublic : false });
+			: await draft.save({ name: pageName, ...(mode === 'page' ? { acl: audienceAcl } : {}) });
 		setSaving(false);
 		if (result.ok) {
 			setMetaDirty(false);
@@ -747,6 +766,22 @@ export const BuilderDrawer = (props: {
 			if (savedId && onSaved) onSaved(savedId);
 		} else {
 			lopu({ title: result.error || 'Save didn’t stick — try again 🌈', status: 'error' });
+		}
+	};
+
+	const copyPageLink = async () => {
+		if (!pageLink || (audienceAcl.includes('tt:hidden') && !draft.resolved?.page?.linkKey)) return;
+		const url = `${window.location.origin}${pageLink}`;
+		try {
+			await navigator.clipboard.writeText(url);
+			lopu({
+				title: audienceAcl.includes('tt:hidden') ? 'Secret page link copied 🕵️' : 'Page link copied 🔗',
+				description: url,
+				status: 'success',
+				duration: 6000
+			});
+		} catch {
+			lopu({ title: 'Couldn’t copy the page link', description: url, status: 'error' });
 		}
 	};
 
@@ -865,20 +900,14 @@ export const BuilderDrawer = (props: {
 							/>
 						</FieldRow>
 						{mode === 'page' ? (
-							<Flex alignItems="center" justifyContent="space-between">
-								<Text color="var(--tt-text, #5a5a66)" fontSize="xs" fontWeight={600}>
-									Public page
-								</Text>
-								<Switch
-									isChecked={isPublic}
-									onChange={(event) => {
-										onIsPublic(event.target.checked);
-										setMetaDirty(true);
-									}}
-									size="sm"
-									data-testid="builder-public-toggle"
-								/>
-							</Flex>
+							<ThingAudienceControl
+								acl={audienceAcl}
+								onChange={(next) => {
+									onAudienceAcl(next);
+									setMetaDirty(true);
+								}}
+								testId="builder-page-audience"
+							/>
 						) : (
 							<Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" lineHeight="1.6">
 								{source === 'user'
@@ -887,10 +916,31 @@ export const BuilderDrawer = (props: {
 							</Text>
 						)}
 						{mode === 'page' && pageId && source === 'user' ? (
-							<Text fontFamily="var(--tt-font-mono, ui-monospace, monospace)" fontSize="11px">
-								<Box as="a" href={`/p/${pageId}`} color="var(--tt-link, #2f8fd6)" textDecoration="underline">
-									/p/{pageId}
+							<Flex alignItems="center" gap={2} minWidth={0}>
+								<Box
+									as="a"
+									href={pageLink || `/p/${pageId}`}
+									color="var(--tt-link, #2f8fd6)"
+									fontFamily="var(--tt-font-mono, ui-monospace, monospace)"
+									fontSize="11px"
+									noOfLines={1}
+									textDecoration="underline"
+								>
+									{pageLink || `/p/${pageId}`}
 								</Box>
+								<Button
+									isDisabled={audienceAcl.includes('tt:hidden') && !draft.resolved?.page?.linkKey}
+									onClick={copyPageLink}
+									size="xs"
+									variant="outline"
+								>
+									{audienceAcl.includes('tt:hidden') ? '🕵️ Copy secret link' : '🔗 Copy link'}
+								</Button>
+							</Flex>
+						) : null}
+						{mode === 'page' && audienceAcl.includes('tt:hidden') && !draft.resolved?.page?.linkKey ? (
+							<Text color="var(--tt-faint, #b6b6c0)" fontSize="11px">
+								Save once to mint the secret link.
 							</Text>
 						) : null}
 					</Flex>

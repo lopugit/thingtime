@@ -26,12 +26,15 @@ import { Server } from 'socket.io';
 
 // Cross-origin access is an explicit allowlist, never '*'.
 //
-// Comma-separated, e.g. CORS_ORIGINS="https://thingtime.app,http://localhost:3000".
+// Browser origins allowed to call this API. Comma-separated, e.g.
+// CORS_ORIGINS="https://thingtime.app,http://localhost:3000".
 // THINGTIME_API_ALLOWED_ORIGINS is accepted as an alias so either name keeps working.
-// Defaults to the local dev origin. A wildcard origin would let any website read this API's
-// authenticated cross-origin responses from a visitor's browser, so it is deliberately not
-// the fallback. An explicitly empty value grants no cross-origin access at all, which is the
-// safe setting for a service that is no longer deployed.
+// Defaults to the local dev origin. A wildcard origin would let ANY site drive /v1/thing
+// (an unauthenticated read/write store) from a visitor's browser and read this API's
+// cross-origin responses, so it is deliberately not the fallback. Set CORS_ORIGINS to
+// widen the allowlist deliberately.
+// An explicitly empty value grants no cross-origin access at all, which is the safe setting
+// for a service that is no longer deployed.
 //
 // Nothing builds or runs this package any more — it moved under deprecated/ in
 // the repo consolidation, its pm2 entry is commented out in

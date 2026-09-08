@@ -19,16 +19,31 @@ import { useApi } from '~/hooks/useApi';
 import { validateValueAgainstFields, type SchemaItemSpec, type SchemaThingField } from '~/schemas/registry';
 import { describeSchemaField } from '~/schemas/tools';
 
-import { searchableSchemaSource, type SchemaCardSource } from './schemaBrowseTypes';
+import { schemaSearchPath, searchableSchemaSource, type SchemaCardSource } from './schemaBrowseTypes';
 
 // "Create a thing using this schema" — a value form generated from the
 // schema's field tree (nesting included). Publishes a free-form data thing
 // whose crystal carries the schema-name convention (crystal.schema), so
 // /search finds it via the schema rail.
+//
+// SchemaThingFormBody is the form itself (state, validation, publish) and
+// renders inline on the schema's own page (/schemas/:key); SchemaThingForm
+// wraps that same body in the modal the browse cards open. One form, one
+// setPath, one publish payload — the two surfaces cannot drift.
 
 type SchemaThingFormProps = {
   source: SchemaCardSource;
   onClose: () => void;
+};
+
+export type SchemaThingFormBodyProps = {
+  source: SchemaCardSource;
+  // the created thing (the API's public projection) — the modal closes on it,
+  // the inline page refreshes its "your things" list
+  onCreated?: (thing: Record<string, any> | null) => void;
+  // inline surfaces start a fresh blank form after each create; the modal
+  // closes instead, so it keeps the values until unmount
+  resetOnCreate?: boolean;
 };
 
 const inputSx = {
@@ -303,7 +318,7 @@ const FieldRow = ({ field, value, onChange, base }: FieldRowProps) => {
   );
 };
 
-export const SchemaThingForm = ({ source, onClose }: SchemaThingFormProps) => {
+export const SchemaThingFormBody = ({ source, onCreated, resetOnCreate = false }: SchemaThingFormBodyProps) => {
   const api = useApi();
   const lopu = useLopu();
   const [value, setValue] = React.useState<Record<string, unknown>>({});
@@ -344,16 +359,13 @@ export const SchemaThingForm = ({ source, onClose }: SchemaThingFormProps) => {
         title: `Thing created with the ${source.name} schema ✨`,
         status: 'success',
         duration: 8000,
-        ...(searchableSchemaSource(source)
-          ? {
-              link: {
-                label: 'Find it on /search',
-                href: `/search?schema=${encodeURIComponent(source.origin === 'builtin' ? `builtin:${source.id}` : source.id)}`
-              }
-            }
-          : {})
+        ...(searchableSchemaSource(source) ? { link: { label: 'Find it on /search', href: schemaSearchPath(source) } } : {})
       });
-      onClose();
+      if (resetOnCreate) {
+        setValue({});
+        setTouched(false);
+      }
+      onCreated?.(resp.thing && typeof resp.thing === 'object' ? resp.thing : null);
     } catch (err: any) {
       lopu({ title: err?.error || 'Creating hiccuped — try again 🌈', status: 'error' });
     } finally {
@@ -362,50 +374,56 @@ export const SchemaThingForm = ({ source, onClose }: SchemaThingFormProps) => {
   };
 
   return (
-    <Modal isOpen onClose={onClose} scrollBehavior="inside" size="lg">
-      <ModalOverlay />
-      <ModalContent background="var(--tt-card, #ffffff)" borderRadius="var(--tt-radius-lg, 16px)">
-        <ModalBody padding={5}>
-          <Flex direction="column" gap={3}>
-            <Flex align="center" gap={2}>
-              <Text color="var(--tt-ink, #16161a)" fontSize="md" fontWeight={700}>
-                New {source.name} ✨
-              </Text>
-              <Box flex={1} />
-              <Button aria-label="Close" onClick={onClose} size="xs" variant="ghost">
-                <X size={14} />
-              </Button>
-            </Flex>
-            {source.description && (
-              <Text color="var(--tt-muted, #9a9aa6)" fontSize="13px">
-                {source.description}
-              </Text>
-            )}
-            {(source.fields || []).map((field) => (
-              <FieldRow base={[]} field={field} key={field.name} onChange={handleChange} value={value} />
-            ))}
-            {!source.fields?.length && (
-              <Text color="var(--tt-faint, #b6b6c0)" fontSize="sm">
-                This schema has no fields — the thing will just carry the schema tag.
-              </Text>
-            )}
-            {touched && !validation.ok && (
-              <Flex direction="column" gap={0.5}>
-                {validation.issues.slice(0, 3).map((issue) => (
-                  <Text color="var(--tt-muted, #9a9aa6)" fontSize="12px" key={`${issue.path}-${issue.message}`}>
-                    · {issue.path}: {issue.message}
-                  </Text>
-                ))}
-              </Flex>
-            )}
-            <Flex justify="flex-end">
-              <Button colorScheme="pink" isLoading={publishing} onClick={publish} size="sm">
-                Create thing
-              </Button>
-            </Flex>
-          </Flex>
-        </ModalBody>
-      </ModalContent>
-    </Modal>
+    <Flex direction="column" gap={3}>
+      {source.description && (
+        <Text color="var(--tt-muted, #9a9aa6)" fontSize="13px">
+          {source.description}
+        </Text>
+      )}
+      {(source.fields || []).map((field) => (
+        <FieldRow base={[]} field={field} key={field.name} onChange={handleChange} value={value} />
+      ))}
+      {!source.fields?.length && (
+        <Text color="var(--tt-faint, #b6b6c0)" fontSize="sm">
+          This schema has no fields — the thing will just carry the schema tag.
+        </Text>
+      )}
+      {touched && !validation.ok && (
+        <Flex direction="column" gap={0.5}>
+          {validation.issues.slice(0, 3).map((issue) => (
+            <Text color="var(--tt-muted, #9a9aa6)" fontSize="12px" key={`${issue.path}-${issue.message}`}>
+              · {issue.path}: {issue.message}
+            </Text>
+          ))}
+        </Flex>
+      )}
+      <Flex justify="flex-end">
+        <Button colorScheme="pink" isLoading={publishing} onClick={publish} size="sm">
+          Create thing
+        </Button>
+      </Flex>
+    </Flex>
   );
 };
+
+export const SchemaThingForm = ({ source, onClose }: SchemaThingFormProps) => (
+  <Modal isOpen onClose={onClose} scrollBehavior="inside" size="lg">
+    <ModalOverlay />
+    <ModalContent background="var(--tt-card, #ffffff)" borderRadius="var(--tt-radius-lg, 16px)">
+      <ModalBody padding={5}>
+        <Flex direction="column" gap={3}>
+          <Flex align="center" gap={2}>
+            <Text color="var(--tt-ink, #16161a)" fontSize="md" fontWeight={700}>
+              New {source.name} ✨
+            </Text>
+            <Box flex={1} />
+            <Button aria-label="Close" onClick={onClose} size="xs" variant="ghost">
+              <X size={14} />
+            </Button>
+          </Flex>
+          <SchemaThingFormBody onCreated={onClose} source={source} />
+        </Flex>
+      </ModalBody>
+    </ModalContent>
+  </Modal>
+);

@@ -50,9 +50,21 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		children: [
 			{ id: 'feed-home', label: 'Feed', icon: '📰', to: '/feed' },
 			{ id: 'feed-explore', label: 'Explore', icon: '🔥', to: '/explore' },
+			{ id: 'feed-subspaces', label: 'Subspaces', icon: '🪐', to: '/s' },
 			{ id: 'feed-saved', label: 'Saved', icon: '🔖', to: '/saved', authOnly: true },
 			{ id: 'feed-profile', label: 'Profile', icon: '👤', to: '/profile', authOnly: true },
 			{ id: 'feed-settings', label: 'Settings', icon: '⚙️', to: '/settings' }
+		]
+	},
+	{
+		id: 'subspaces',
+		label: 'Subspaces',
+		icon: '🪐',
+		to: '/s',
+		children: [
+			{ id: 'subspaces-browse', label: 'Browse', icon: '🪐', to: '/s' },
+			{ id: 'subspaces-mine', label: 'My subspaces', icon: '⭐', to: '/s?mine=1', authOnly: true },
+			{ id: 'subspaces-create', label: 'Create', icon: '➕', to: '/s?create=1', authOnly: true }
 		]
 	},
 	{
@@ -63,6 +75,21 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		children: [
 			{ id: 'messages-home', label: 'Messages', icon: '💬', to: '/messages', authOnly: true },
 			{ id: 'messages-requests', label: 'Requests', icon: '💌', to: '/messages?view=requests', authOnly: true }
+		]
+	},
+	{
+		// 🦄 Lopu, the Thingtime assistant: the chat page, its conversations
+		// (they live in Messenger) and its preferences
+		id: 'lopu',
+		label: 'Lopu',
+		icon: '🦄',
+		to: '/lopu',
+		children: [
+			{ id: 'lopu-chat', label: 'Chat', icon: '💬', to: '/lopu' },
+			{ id: 'lopu-voice', label: 'Voice', icon: '🎙️', to: '/lopu/voice', authOnly: true },
+			{ id: 'lopu-conversations', label: 'Conversations', icon: '🗂️', to: '/messages', authOnly: true },
+			{ id: 'lopu-vault', label: 'Secure Vault', icon: '🔐', to: '/settings#secure-vault', authOnly: true },
+			{ id: 'lopu-settings', label: 'Settings', icon: '⚙️', to: '/settings#lopu' }
 		]
 	},
 	{
@@ -135,6 +162,7 @@ export const drawerMenuItems: DrawerTopItem[] = [
 		to: '/profile',
 		children: [
 			{ id: 'account-profile', label: 'Profile', icon: '👤', to: '/profile', authOnly: true },
+			{ id: 'account-notifications', label: 'Notifications', icon: '🔔', to: '/notifications', authOnly: true },
 			{ id: 'account-settings', label: 'Settings', icon: '⚙️', to: '/settings' },
 			{ id: 'account-manage-apps', label: 'My apps', icon: '🧩', to: '/apps/manage', authOnly: true },
 			{ id: 'account-apps', label: 'App data', icon: '📦', to: '/apps', authOnly: true },

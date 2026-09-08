@@ -52,8 +52,8 @@ import { CALCULATOR_RESULT_ITEM_ID, calculatorSearchHit } from './services/calcu
 
 // Bump these whenever ranking or result-presentation semantics change so an
 // installed Commander never replays results produced by an older search core.
-const SEARCH_CONTEXT_VERSION = 3;
-const SEARCH_CACHE_KEY_VERSION = 2;
+const SEARCH_CONTEXT_VERSION = 4;
+const SEARCH_CACHE_KEY_VERSION = 3;
 const COMMANDER_NATIVE_REDIRECT_URI = 'com.thingtime.commander://oauth/callback';
 
 const MIME: Record<string, string> = {
@@ -303,7 +303,15 @@ export async function createCommanderServer(options: RuntimeOptions): Promise<Co
       return json(response, 200, await thingtime.networkProbe(state.settings));
     }
     if (request.method === 'POST' && url.pathname === '/api/activity/network/speed') {
-      return json(response, 200, await thingtime.networkProbe(state.settings, true));
+      return json(
+        response,
+        200,
+        await thingtime.networkProbe(
+          state.settings,
+          true,
+          networkProbeCredential(state.settings, state.accounts, credentials),
+        ),
+      );
     }
     if (request.method === 'GET' && url.pathname === '/api/search') {
       const query = url.searchParams.get('q') ?? '';
@@ -887,3 +895,4 @@ async function serveStatic(response: ServerResponse, root: string, pathname: str
   });
   createReadStream(candidate).pipe(response);
 }
+import { networkProbeCredential } from './services/networkProbe.js';

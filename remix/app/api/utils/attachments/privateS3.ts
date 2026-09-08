@@ -96,7 +96,7 @@ export const createPrivateS3 = (config: PrivateS3Config, client = makeClient(con
 				new CreateMultipartUploadCommand({
 					...common,
 					Key: objectKey,
-					CacheControl: 'private, no-store, max-age=0',
+					CacheControl: 'private, max-age=0, must-revalidate',
 					ContentDisposition: 'attachment',
 					ContentType: 'application/octet-stream',
 					ServerSideEncryption: 'AES256',
@@ -243,7 +243,7 @@ export const createPrivateS3 = (config: PrivateS3Config, client = makeClient(con
 				...common,
 				Key: objectKey,
 				VersionId: versionId,
-				ResponseCacheControl: 'private, no-store, max-age=0',
+				ResponseCacheControl: 'private, max-age=0, must-revalidate',
 				ResponseContentDisposition: contentDisposition,
 				ResponseContentType: contentType
 			});

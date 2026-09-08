@@ -210,3 +210,12 @@
 - [ ] Inspect every settings tab and the open Actions state at native window sizes.
 - [ ] Resize Settings to its minimum and a large desktop size; no clipping, overlap, or horizontal overflow.
 - [ ] Verify keyboard focus, VoiceOver labels, reduced motion, and high-contrast/dark appearance.
+
+
+## Signed releases
+
+- [ ] Follow the root TESTING.md Commander release checklist. Verify the downloaded
+      archive with `script/verify-production-bundle.sh`, then check the installed
+      copy's signature, bundled executable, daemon health, and launcher search.
+- [ ] Confirm Recovery lists the GitHub build and commit in Commander and Recovery
+      caches, preserves the previous app, and leaves Electron's cache unchanged.

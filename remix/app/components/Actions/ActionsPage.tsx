@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Button, Flex, Stack, Text } from '@chakra-ui/react';
-import { Link, useNavigate } from 'react-router';
+import { Link } from 'react-router';
 
 import { ActionBuilder } from './ActionBuilder';
 import { ActionChip, type ChipSize, type ChipTone } from './ActionChip';
@@ -95,9 +95,24 @@ export const ActionCard = ({
 							reads {schema === '*' ? 'things' : displayRef(schema, schemaNames)}
 						</ActionChip>
 					))}
+					{effects.publicReads.map((schema) => (
+						<ActionChip key={`pr-${schema}`} size={size} tone="read">
+							reads everyone’s public {displayRef(schema, schemaNames)}
+						</ActionChip>
+					))}
+					{effects.systemReads.map((schema) => (
+						<ActionChip key={`sr-${schema}`} size={size} tone="read">
+							reads the platform’s {displayRef(schema, schemaNames)}
+						</ActionChip>
+					))}
 					{effects.updates ? (
 						<ActionChip size={size} tone="write">
 							updates things
+						</ActionChip>
+					) : null}
+					{effects.deletes ? (
+						<ActionChip size={size} tone="danger">
+							deletes things
 						</ActionChip>
 					) : null}
 					{effects.invokes.map((key) => (
@@ -118,7 +133,6 @@ export const ActionsPage = () => {
 	const api = useApi();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
-	const navigate = useNavigate();
 	const user = useCurrentUser();
 	const cacheKey = cacheKeyFor(user?.id);
 	const cached = React.useMemo(() => readLocalCache<ActionsCache>(cacheKey), [cacheKey]);
@@ -218,8 +232,22 @@ export const ActionsPage = () => {
 					</Box>
 				) : (
 					<Stack spacing={3}>
+						{/* each card is a REAL link to the action's inspector — middle-click,
+						    ⌘-click and the keyboard all work; the card itself stays inert (no
+						    armed control ever lives on a browse surface). Any button that
+						    lands inside ActionCard must stopPropagation so it never follows
+						    the link. */}
 						{actions.map((action) => (
-							<Box cursor="pointer" key={action.id} onClick={() => navigate(`/actions/${encodeURIComponent(action.id)}`)}>
+							<Box
+								as={Link}
+								_focusVisible={{ outline: '2px solid var(--tt-accent, #7c6cff)', outlineOffset: '2px', borderRadius: 'var(--tt-radius-lg, 16px)' }}
+								color="inherit"
+								data-testid="action-card-link"
+								display="block"
+								key={action.id}
+								textDecoration="none"
+								to={`/actions/${encodeURIComponent(action.id)}`}
+							>
 								<ActionCard action={action} schemaNames={schemaNames} />
 							</Box>
 						))}
