@@ -63,7 +63,7 @@ is fixed, and cite the checklist you ran in the PR description.
 ## ChatGPT / Codex MCP connector
 
 - [ ] `GET /.well-known/oauth-protected-resource`, `GET
-    /.well-known/oauth-authorization-server`, and the Thingtime capability
+      /.well-known/oauth-authorization-server`, and the Thingtime capability
       manifest return the deployed HTTPS origin and the MCP path exactly.
 - [ ] From ChatGPT Developer mode, add the deployed MCP URL. The authorization
       page works at desktop and a 390px mobile viewport, requires `resource`,
@@ -3635,8 +3635,11 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       (children carry ['tt:inherit']). 'all' and legacy pre-field tokens stay
       unrestricted; mint 400s on unknown visibility values; /tokens/self and
       the mint response report the fence; the settings row badges 🌐/🔒
-      restricted tokens; combines with the 🧸 sandbox. Covered by section F
-      of `node scripts/verify-pat-tokens.mjs`.
+      restricted tokens; combines with the 🧸 sandbox. The fence also rides
+      /api/v1/things/user: a fenced token's profile pages AND postCount only
+      cover in-fence posts (regression: a stacked-branch restructure once
+      dropped this clause, leaking private-post counts to public-only
+      tokens). Covered by section F of `node scripts/verify-pat-tokens.mjs`.
 - [ ] The fence survives the edge cache: `?anon=1` on feed/search is answered
       as the Bearer credential rather than anonymously, the fenced answer
       carries `private, no-store`, and the credential-less cacheable answer
@@ -3645,6 +3648,82 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       Authorization-carrying request, so without the Vary a warm anon entry
       reaches a fenced token without the origin ever being asked. Same
       section F.
+- [ ] Hidden visibility ('hidden', acl ['tt:hidden','tt:user'] + random
+      linkKey): composer/post-menu offer 🕵️ Hidden; the created/edited thing
+      returns owner-only linkKey (never in non-owner projections); anonymous
+      GET ?id= 404s without the key, 200s with ?key=<linkKey>, wrong keys stay
+      blind; the post never appears in the public feed, other users' profile
+      view, or search — the owner still sees it in their own feed/listings;
+      body.key admits other users to comment/react/save/share; PATCHing the
+      audience away from hidden kills the link INSTANTLY, and re-hiding mints
+      a FRESH key (old links stay dead — key rotation on every entry into
+      hidden); "Copy hidden link 🕵️" in the post menu copies
+      /post/<id>?key=<linkKey> and the /post page threads ?key= through to
+      the API. Covered by section G of `node scripts/verify-pat-tokens.mjs`.
+- [ ] GET bridge (/api/v1/get + per-token allowGet, "Works via GET links 🌍"
+      in the minter): only tokens minted with the tick resolve there (others
+      403), the token rides ?token= (Bearer also accepted, cookies NEVER —
+      a cookie-only request 401s, so mutating GETs can't be CSRF'd), op ∈
+      get/list/search/feed/self/create/update/upsert/delete/react/comment/
+      save/share behave exactly like their endpoints: same scopes (403s free),
+      same atomic use accounting (op=self is free introspection), same
+      sandbox + visibility fence, mirrored rate-limit keys. Args = body JSON
+      param + query params overlaid ({/[/" values parse as JSON, bare words
+      stay strings, thingtime accepts csv); responses carry Cache-Control:
+      private, no-store + Referrer-Policy: no-referrer; unknown ops 400.
+      Minted rows badge 🌍 GET links. Covered by section H of
+      `node scripts/verify-pat-tokens.mjs`.
+- [ ] Custom audiences 🎭 ('custom', acl marker tt:custom + baseline +
+      capability grants): the composer/post-menu Custom option opens the
+      audience picker (baseline chips Only-these-people / +secret-link /
+      +everyone; user search via /api/v1/users/search; prefilled Recents /
+      Friends / Connections sections filtered by the search box; per-entry
+      capability select Read/Comment/Edit; save-selection-as-group and
+      pick-existing-group). Applying composes acl ['tt:custom','tt:user',
+      baseline?, 'tt:user/<name>[/comment|/write]'…, 'tt:group/<id>[…]'…] and
+      the wire round-trips visibility 'custom'. Enforcement: read grant =
+      view only (comment/react 403 — general baseline viewers TOO, even with
+      a public baseline or a hidden link key); write ⊃ comment ⊃ read; write
+      grantees PATCH crystal/extended/tags but NEVER acl/visibility/folder/
+      tokenAcl (403) and never delete (owner-only); storage stays billed to
+      the owner. Group grants resolve live: PATCHing the group's member list
+      (replacement semantics) grants/revokes instantly on every thing that
+      references tt:group/<id>; deleting the group makes its entries inert.
+      Granted things land in the grantee's FEED (visibilityQueryFor grant
+      clause); hidden baseline mints a linkKey (key = read only). Groups are
+      protected kinds managed solely via /api/v1/groups (+ audience-sources).
+      Covered by section I of `node scripts/verify-pat-tokens.mjs`.
+- [ ] Unified Thing sharing: `/things` Share, Builder page settings,
+      component-card Save version, and component-detail Save version all offer
+      Public / Friends / Family / Private / Anyone with the link / Custom from
+      the same audience control. Custom opens the people + groups capability
+      picker. At a mobile viewport, open Custom from the Builder inspector and
+      confirm the entire picker (including its buttons) layers above the drawer
+      and remains usable. Saving a standalone Builder page with the link option
+      mints an owner-only key; its copied `/p/<id>?key=<key>` URL resolves while
+      logged out, and the same key pattern opens non-page/non-post Things through
+      `/thing/<id>?key=<key>`. A no-key visit remains 404 and never paints a
+      bearer-key response from local cache. Moving away from hidden invalidates
+      the old link.
+- [ ] Token visibility fence 'hidden' mode ("Hidden only 🕵️" chip): the token
+      lives entirely in hidden link-key things — its no-acl creates are born
+      hidden WITH a fresh linkKey, public/private things 404, creating
+      outside the fence 403s; composes with the sandbox and the GET bridge.
+      Covered by section I of the verify suite.
+- [ ] Circle filters honour every circle they offer (regression: a new circle
+      that the filter menu shows but the API drops reads downstream as "no
+      circle filter", so the chip WIDENS the result set instead of narrowing
+      it). Tick 🕵️ Hidden alone in the feed/search Advanced panel: only your
+      hidden things come back, not the whole feed. Tick 🔒 Private alone: no
+      hidden things in the result. Tick 🎭 Custom alone: your custom-audience
+      things plus the ones granted to you by name/group, nothing else. Tick
+      any five of the six circles: the omitted circle really is omitted (this
+      used to fall through to an "all circles" shortcut keyed on selection
+      COUNT) — including 🎭 Custom, whose grant clause is gated on the filter
+      like every other clause, so omitting it really does drop the things
+      other people granted you. Leaving every circle unticked is unchanged —
+      the default feed still shows all of your own things, hidden included,
+      plus everything granted to you.
 - [ ] PAT × app-token coexistence on the shared things routes (one resolver,
       three credential kinds): a PAT ignores Origin (no app binding), the
       OPTIONS preflight for app SDKs still serves with Authorization allowed,
@@ -4477,13 +4556,23 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       resolves to the exact private user-data file. Bootstrap must not issue an
       unconditional immediate kickstart. Replace an exact old managed node,
       then confirm launchd owns one new PID with `runs = 1` and no exit.
+- [ ] In Desktop settings, use **Stop node**, **Start node**, then **Restart node**.
+      Stop must remove the running service while preserving pairing and the plist;
+      Start resumes one node, Restart changes its PID, and rapid clicks must not
+      create overlapping registrations. Check desktop and mobile widths, including
+      long version strings and error messages. Open the node menu **About Thingtime
+      Node** and verify version, build, source commit, bundle ID, and management
+      mode match the actual installed bundle without account or secret data.
 - [ ] With **Auto-start node on Thingtime launch** left at its default-on
       setting, use the native menu-bar **Quit Thingtime**, confirm launchd is
       stopped while the managed plist remains, then Cmd+Q/reopen the installed
       Electron app. It must bootstrap exactly one node from that existing plist.
       Turn the setting off and repeat: reopening Electron must leave it stopped;
       turn it back on and confirm it converges immediately. A Mac with no
-      managed plist must still require the explicit **Start node** confirmation.
+      managed plist must start the bundled node when auto-start is on. Rewrite
+      the plist with plutil (removing XML comments), quit/reopen, and confirm
+      recovery still works. Install a newer Desktop build at the same path:
+      one node must restart with the new build and stay stable on the next launch.
 - [ ] Open the exact installed Electron app, record its bundled loopback
       renderer origin and separately selected API origin, and Quit with Cmd+Q. Electron must
       stop while the launchd node and
@@ -5934,3 +6023,5 @@ approval; `access.test.ts` — the reservation matrix) and
 - Validate both immutable legacy four-field and current five-field quota snapshots (and partial overrides). Optional speed-test quotas accept null or safe integers 0–1000, reject coercible strings/fractions/unknown fields, and never change the stored assignment. After deploying, dry-run the production accounting migration before a separately authorized real run; verify storage readiness and a real upload before calling uploads healthy.
 
 - As an admin, dry-run `backfill-user-storage-accounting`; invalid ledgers must report only deterministic ledger IDs and fixed validation-field labels, at most ten records. Confirm zero ledger writes, no raw values or arbitrary key names, and unchanged strict envelope validation. Anonymous and non-admin callers remain denied by the existing migrations API gate.
+
+- Desktop privacy status: grant/revoke each permission, return from System Settings, and confirm live status refreshes without prompting. Stop the node and confirm failed checks show last-known status, not a new denial or false success. Restart and use Check access to recover; a signing migration must explain the one-time off/on grant refresh.
