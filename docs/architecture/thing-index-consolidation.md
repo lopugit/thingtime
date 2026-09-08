@@ -142,10 +142,59 @@ trap the migration. Duplicate slots remain pending with bounded, identity-free
 notes; no winner is chosen and no relationship is deleted. Lease loss and
 non-duplicate database errors close the cursor and stop the run.
 
-This is preparation, not permission to remove the remaining relationship
-indexes. Readers still use those indexes until the backfill and cutover gates
-are satisfied. Census reads now stream only the identity field and protected
-keys for each relationship family; measure that cost on larger installations.
+### Shared relationship lookup cutover
+
+The intended steady-state home plan is now **54 including `_id_`**, with ten
+slots of headroom: the unused emoji lookup plus five additional indexes are
+removed, without adding any new index. Friends, follows, chat/community
+memberships, DMs and invitation codes share the existing protected
+`uniqueKeys_1` index. Point and batched readers include attachment permission
+checks and AI/device import upserts. Original kind, owner, target, state and
+crystal identity guards remain: a stale key must not identify a changed DM or
+grant access to the wrong membership.
+
+This is not automatic retirement at startup. Before activation, home readers
+and bootstrap keep the five legacy indexed lookups (59 planned indexes).
+Custom data planes keep those lookups permanently; explicit home identity and
+attachment paths remain pinned home even inside a custom-endpoint request.
+The selected home plan in the source audit is the intended **post-migration**
+plan, not proof of the current live index count.
+
+Run `consolidate-relationship-lookup-indexes` through the admin migration API:
+
+1. Deploy compatible key-stamping writers and shared-key readers on **every
+   origin sharing the database**, including previews. Older readers retain
+   correct results but can scan after retirement, and older bootstraps can
+   recreate the redundant indexes; retire only after that rollout is resolved.
+2. Dry-run and inspect the pending key repairs, readiness marker and index
+   retirements. No data, settings, or indexes change during a dry run.
+3. Run with `confirm: true`. The migration requires the existing admin lease,
+   ensures the shared unique constraint, adds missing keys, then validates the
+   entire selected family set. Duplicate/conflicting identities block
+   activation without choosing winners or deleting relationships.
+4. The migration writes an indexed home-settings readiness marker only after
+   validation, then removes only the five exact expected non-unique partial
+   definitions. Unique, TTL, sparse, hidden, collated, redefined and unknown
+   indexes are preserved. A crash after activation leaves redundant indexes;
+   retry completes retirement. Lease loss stops further operations.
+5. Requests check one small indexed settings record, cached for 30 seconds.
+   They never scan/backfill relationship data or perform index DDL. Migration
+   completion invalidates the local cache; other workers converge within the
+   cache window. Re-check pending work after old workers have drained.
+
+The marker uses the existing home-only settings collection/key index; no
+new physical collection or index is introduced. The explicit migration's
+finite scan projects only each identity field and protected keys. Its cost
+still needs production-scale workload measurement before live cutover.
+
+Local native replica-set acceptance passed using the real API utilities and
+250 unrelated data Things: **59 → 54 indexes**, each sampled friend/follow/
+chat-member/community-member/chat/invite lookup returned one row with **one
+key and one document examined**, without hints. Batched reads, non-member
+chat exclusion, invite redemption, concurrent DM dedupe and repeated AI-import
+upserts passed before/after cutover. The final dry-run reported zero pending
+work. This establishes sampled query behavior, not production p95 latency or
+large-history performance for the other index families.
 
 ## Still required before claiming completion
 
@@ -163,5 +212,6 @@ keys for each relationship family; measure that cost on larger installations.
   API utility layer, plus real API behavior (not synthetic index success alone).
 - Run the production/develop migrations and verify both deployed SHAs and
   index sets. No migration or merge is claimed by this initial audit.
-- Tighten the enforced budget to the measured new steady-state count with
-  explicit rolling-upgrade headroom; do not merely change 60 to 10 in a test.
+- Source regression tests enforce the 54-index intended home plan and the
+  custom/pre-migration fallback. Native workload measurements and actual
+  production/develop inventories must substantiate the cutover before release.

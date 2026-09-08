@@ -18,6 +18,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Prepare five relationship lookup families to share the existing protected unique-key index (54-index intended home plan). Keep legacy/custom reads until an explicit leased migration validates keys and activates the layout; cold requests do not backfill. Preserve identity and attachment permission guards. Native/live rollout remains pending; see [PR #692](../PRs/692-thing-index-consolidation-shared-plan-audit.md). — Codex (AI), 2026-09-08
+
 - Fix index-usage statistics in the admin workbench by keeping MongoDB's metadata-only `$indexStats` stage first, while retaining protected-field and join safeguards. See [PR #692](../PRs/692-thing-index-consolidation-shared-plan-audit.md). — Codex (AI), 2026-09-08
 
 - Begin [Thing index consolidation](../PRs/692-thing-index-consolidation-shared-plan-audit.md): inventory the executable plan, retire the unused emoji lookup while retaining protected uniqueness, and repair relationship-key backfills to preserve partial keys and terminate on duplicate batches. Production/develop migrations and the broader reduction remain in progress. — Codex (AI), 2026-09-08

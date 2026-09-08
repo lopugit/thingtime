@@ -12644,8 +12644,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.1.0: every generation row carries its storage census (dataBytes,
     // storageBytes, indexBytes, indexes) — additive. contractVersion is what
     // the capabilities manifest publishes.
-    contractVersion: '1.1.1',
-    featureVersion: '1.0.1',
+    contractVersion: '1.2.0',
+    featureVersion: '1.1.0',
     summary: 'Per-collection schema-version census, storage generations, and registered migrations with pending counts.',
     detail:
       'Every doc stores the root-level schemaVersion it was written at (docs without one count as version 1), and every ' +
@@ -12653,7 +12653,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       '`things_v2`. This endpoint reports how many docs sit at each version per collection, every physical collection ' +
       'generation on the server (current, stale, or ahead), any legacy collections adoption could not rename, and which ' +
       'registered migrations still have work to do. Relationship-key pending counts include missing individual keys even when ' +
-      'other protected keys are already present; unresolved duplicate slots remain pending.',
+      'other protected keys are already present; unresolved duplicate slots remain pending. The home-only ' +
+      'consolidate-relationship-lookup-indexes migration reports key repair, readiness and legacy-index retirement work.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'
@@ -12854,8 +12855,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
   endpoint({
     id: 'admin-migrations-run',
-    contractVersion: '1.0.2',
-    featureVersion: '1.1.2',
+    contractVersion: '1.1.0',
+    featureVersion: '1.2.0',
     group: 'admin',
     title: 'Run migration',
     endpoint: '/api/v1/admin/migrations/run',
@@ -12874,7 +12875,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			'bounded redacted adminDetail inline. Storage-ledger validation accepts valid optional speedTestsPerHour quotas ' +
       'without rewriting immutable tier snapshots, overrides, ownership, or allowances. Relationship-key repair adds missing ' +
       'individual keys without replacing existing keys, checks source identity before writing, and reports duplicate slots ' +
-      'without repeatedly retrying them or deleting relationships. Re-check pending work after skipped concurrent changes.',
+      'without repeatedly retrying them or deleting relationships. Re-check pending work after skipped concurrent changes. ' +
+      'consolidate-relationship-lookup-indexes requires confirm: true for a real run: after deploying compatible code on ' +
+      'all shared-database origins, it repairs and validates home relationship keys, activates shared reads, then retires ' +
+      'five exact non-unique lookup indexes. Reads never perform this migration; custom database indexes remain unchanged.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Admin-only (meta.admin flag or the ADMIN_USERNAMES env allowlist): anonymous callers get 401, signed-in non-admins 403.'

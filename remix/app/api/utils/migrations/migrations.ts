@@ -10,6 +10,7 @@ import {
   getHomeThingsCollection,
   getHomeThingtimeDb,
   getSettingsCollection,
+  invalidateHomeRelationshipKeys,
   getThingtimeDb,
   thingsIndexPlanNames,
   withMongoTransaction
@@ -45,6 +46,7 @@ import {
 import { waitlistEmailKey } from '../waitlist/waitlist';
 import { RELATIONSHIP_UNIQUE_CRYSTAL_KEYS } from '../messenger/shared';
 import { repairRelationshipKeys } from './relationshipKeys';
+import { migrateRelationshipIndexLayout } from '../mongodb/relationshipIndexLayout';
 import { themeAcl } from '../themes/themes';
 import {
 	builtinSchemaSeedNeedsRefresh,
@@ -3090,6 +3092,22 @@ const backfillRelationshipUniqueKeys: Migration = {
 	}
 };
 
+const consolidateRelationshipIndexes: Migration = {
+	id: 'consolidate-relationship-lookup-indexes',
+	collection: 'things',
+	fromVersion: THINGS_VERSION,
+	toVersion: THINGS_VERSION,
+	title: 'Consolidate five relationship lookup indexes',
+	description: 'Home database only. Deploy compatible shared-key readers and key-stamping writers on every origin sharing this database first. Repairs and validates keys, activates shared reads, then removes only the five exact non-unique legacy lookup definitions. Preserves custom databases, unique ancestors, unknown indexes and conflicting relationships. No document deletion.',
+	destructive: true,
+	pending: async () => (await migrateRelationshipIndexLayout(await getHomeThingsCollection(), await getSettingsCollection(), { dryRun: true })).matched,
+	run: async ({ dryRun, assertLease }) => {
+		try {
+			return await migrateRelationshipIndexLayout(await getHomeThingsCollection(), await getSettingsCollection(), { dryRun, assertLease });
+		} finally { if (!dryRun) invalidateHomeRelationshipKeys(); }
+	}
+};
+
 export const migrations: Migration[] = [
 	// Physical residue must land in the current generation before any logical
 	// shape or byte-ledger migration can declare its source universe complete.
@@ -3111,6 +3129,7 @@ export const migrations: Migration[] = [
   backfillAppStorageAllowances,
 	backfillUserStorageAccounting,
 	backfillRelationshipUniqueKeys,
+	consolidateRelationshipIndexes,
 	relocateCiControlTelemetry,
 	rebuildThingsIndexes,
   dropStaleCollectionGenerations

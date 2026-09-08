@@ -41,7 +41,38 @@ and the 108-error typecheck ratchet passed for migration repair `96cbd6bd3`.
 That does not constitute native MongoDB or deployed migration proof.
 
 No production/develop migration or merge is claimed yet. The source count of
-59 is only the first increment, not completion of the owner's request. The
-shared-key reader cutover, remaining index-family benchmarks, real API and
+54 is the intended post-migration home plan, not completion of the owner's request. The
+deployed shared-key reader cutover, remaining index-family benchmarks, real API and
 Mongo query-plan acceptance, deployed manifests, exact-head CI, and final
 before/after production/develop inventory remain required.
+
+## Shared relationship lookups — implementation checkpoint
+
+Five more point/batch lookup indexes now share `uniqueKeys_1`, without adding
+an index. Attachment ACL and AI/device import paths participate; original
+identity/kind/owner/target/state guards remain. Custom data planes keep their
+legacy plan, and home-pinned identity paths do not follow custom overrides.
+
+The first draft's cold-start backfill was removed: requests now read a cached
+indexed home-settings readiness marker. An explicit, leased, confirmation-gated
+`consolidate-relationship-lookup-indexes` migration repairs/validates, activates,
+then retires exact known non-unique definitions. Before that migration, the
+home plan remains 59. Every origin sharing the database must be considered
+before retirement. Existing Watch `lopu_recording_due` is never touched.
+
+Local checks cover no-write dry runs, required leases, duplicate/lease failure,
+activation ordering, custom routing, source-plan count and manifest contracts.
+Full unit/build/output checks pass; the typecheck ratchet remains at its
+pre-existing 108 errors.
+
+Native disposable replica-set proof also passed: 59 indexes before activation,
+54 afterward, with all six sampled relationship kinds returning one document
+while examining one key and one document, without an index hint. The fixture
+adds 250 unrelated data Things through the real creation utility. It verifies
+before/after relationship and batched reads, unauthorized chat exclusion,
+invite redemption, four concurrent DM creates deduping to one conversation,
+and repeated AI-import membership upserts. The migration dry-run writes
+nothing and reports zero pending work after completion. The reproducible
+`verify:relationship-indexes` script accepts only its explicitly opted-in
+disposable loopback replica set; it never inserts data through a raw Mongo
+handle. This is local sampled-plan proof, not production workload/latency proof.

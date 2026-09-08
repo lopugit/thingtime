@@ -261,6 +261,22 @@ export const getRostersCollection = async () => getHomeCollection('rosters');
 // a custom endpoint can never capture logins or protected-kind writes.
 export const getThingsCollection = async () => getCollection('things');
 export const getHomeThingsCollection = async () => getHomeCollection('things');
+
+let homeRelationshipKeys: { promise: Promise<boolean>; expires: number } | null = null;
+export const ensureHomeRelationshipKeys = async () => {
+	if (!homeRelationshipKeys || homeRelationshipKeys.expires <= Date.now()) {
+		const promise = (async () => {
+			const { relationshipIndexLayoutReady } = await import('./relationshipIndexLayout');
+			return relationshipIndexLayoutReady(await getSettingsCollection());
+		})().catch((error) => {
+			homeRelationshipKeys = null;
+			throw error;
+		});
+		homeRelationshipKeys = { promise, expires: Date.now() + 30_000 };
+	}
+	return homeRelationshipKeys.promise;
+};
+export const invalidateHomeRelationshipKeys = () => { homeRelationshipKeys = null; };
 export const getEmailVerificationsCollection = async () => getHomeCollection('emailVerifications');
 export const getLopuMusingRateLimitsCollection = async () => getHomeCollection('lopuMusingRateLimits');
 export const getThemesCollection = async () => getHomeCollection('themes');
@@ -737,7 +753,7 @@ export const migrateDeviceIndexLayout = async (db: any) => {
 // things_app_data_unique (partial-filter equality on the multikey thingtime
 // array verifiedly includes array-contains matches on MongoDB 8.0).
 
-export const createThingsDataIndexes = (db: any): Promise<any>[] => {
+export const createThingsDataIndexes = (db: any, { relationshipLookups = false } = {}): Promise<any>[] => {
   // Tagged so a createIndex failure names the exact `things.<index>` that
   // broke, whether this runs on the home db or a custom endpoint.
   const col = taggedCollection(thingsCollection(db), 'things');
@@ -978,8 +994,8 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
       ['targetId_1_ownerId_1_crystal.emoji_1']
     ),
     // Retire the superseded follow-marker generation. Current follow writers
-    // use crystal.followKey for lookup and protected root uniqueKeys for
-    // dedupe; no registered schema mints crystal.follow. Leaving this old
+    // use protected root uniqueKeys for lookup and dedupe (custom endpoints
+    // retain crystal lookups); no registered schema mints crystal.follow. Leaving this old
     // kind-blind unique index behind would needlessly constrain ordinary data
     // Things after the crystal namespace reopens in phase 2.
     dropIndexRetrying(col, 'things_follow_unique'),
@@ -987,9 +1003,9 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // crystal.friendKey is '<minId>~<maxId>', written only by the friend
     // endpoint. Uniqueness rides uniqueKeys ('friendKey:<min>~<max>', stamped
     // at insert) so duplicate/crossed requests still die structurally; this
-    // index is now the LOOKUP only. createIndexReplacing keeps a friendKey
-    // index live throughout the swap and retires the old unique name.
-    createIndexReplacing(
+    // index is retained only for custom endpoints / an unready home layout.
+    // The steady-state home reader shares uniqueKeys_1 after awaited repair.
+    ...(relationshipLookups ? [createIndexReplacing(
       col,
       { 'crystal.friendKey': 1 },
       {
@@ -997,7 +1013,7 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
         partialFilterExpression: { 'crystal.friendKey': { $exists: true } }
       },
       ['things_friend_unique']
-    ),
+    )] : []),
     // (Notification list/unread queries are served by the general
     // { thingtime, ownerId, createdAt desc, shareId } index above.)
     // Legacy relational era (kind:'reaction'/'comment' docs written by the
@@ -1110,17 +1126,18 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
     // one follow edge per pair) ride the server-only uniqueKeys namespace
     // above — stamped in newThingDoc (messenger/shared.ts), backfilled onto
     // legacy docs by the backfill-relationship-unique-keys migration. The
-    // crystal-path indexes here serve the findOne/$in query shapes only;
+    // crystal-path indexes here serve custom / unready-home lookups only;
     // their old kind-blind UNIQUE ancestors were squattable through
     // free-form data crystals (see KIND-BLIND HISTORY above) and are
     // retired by each swap, create-then-drop, so a lookup index stays
-    // live throughout:
-    createIndexReplacing(
+    // live throughout that compatibility path. Home readers now await a
+    // complete key backfill and share uniqueKeys_1 instead:
+    ...(relationshipLookups ? [createIndexReplacing(
       col,
       { 'crystal.memberKey': 1 },
       { name: 'things_member_key_lookup', partialFilterExpression: { 'crystal.memberKey': { $type: 'string' } } },
       ['things_member_key_unique']
-    ),
+    )] : []),
     // Subspace post feeds (api/utils/subspaces): every /s/<slug> sort reads the
     // newest posts of ONE subspace — chronological pages for "new", a bounded
     // newest-first candidate window for hot/top/rising/controversial (the ranked
@@ -1132,27 +1149,27 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
       { 'crystal.subspaceId': 1, createdAt: -1, shareId: 1 },
       { name: 'things_subspace_posts', partialFilterExpression: { 'crystal.subspaceId': { $type: 'string' } } }
     ),
-    createIndexReplacing(
+    ...(relationshipLookups ? [createIndexReplacing(
       col,
       { 'crystal.dmKey': 1 },
       { name: 'things_dm_key_lookup', partialFilterExpression: { 'crystal.dmKey': { $type: 'string' } } },
       ['things_dm_key_unique']
-    ),
-    createIndexReplacing(
+    )] : []),
+    ...(relationshipLookups ? [createIndexReplacing(
       col,
       { 'crystal.inviteCode': 1 },
       { name: 'things_invite_code_lookup', partialFilterExpression: { 'crystal.inviteCode': { $type: 'string' } } },
       ['things_invite_code_unique']
-    ),
+    )] : []),
     // Emoji identity reads use shareId/scope and dedupe uses uniqueKeys_1;
     // a separate crystal.emojiKey lookup has no runtime reader. Old unique
     // ancestors are deliberately retained until their keys are verified.
-    createIndexReplacing(
+    ...(relationshipLookups ? [createIndexReplacing(
       col,
       { 'crystal.followKey': 1 },
       { name: 'things_follow_key_lookup', partialFilterExpression: { 'crystal.followKey': { $type: 'string' } } },
       ['things_follow_key_unique']
-    ),
+    )] : []),
     // Poll voting is deliberately outside this release, but its preview
     // branch already installed the old kind-blind index in the shared develop
     // database. Retire it here with the rest of the family so phase 2 can
@@ -1359,7 +1376,7 @@ export const thingsIndexPlanNames = async (): Promise<Set<string>> =>
 const customIndexesEnsured = new Map<string, Promise<void>>();
 const ensureCustomDataIndexes = (uri: string, db: any) => {
   if (customIndexesEnsured.has(uri)) return;
-	const run = Promise.all(createThingsDataIndexes(db)).then(
+	const run = Promise.all(createThingsDataIndexes(db, { relationshipLookups: true })).then(
     () => undefined,
     (err) => {
       customIndexesEnsured.delete(uri);
@@ -1388,6 +1405,15 @@ export const ensureIndexes = async () => {
 			await pruneRetiredHomeThingsIndexes(db);
 			await pruneRebuildTwins(db);
 			await migrateDeviceIndexLayout(db);
+			let relationshipLookups = true;
+			try {
+				relationshipLookups = !await ensureHomeRelationshipKeys();
+			} catch {
+				// Keep legacy lookups and unrelated login/registration operational.
+				// Reads never backfill or retire indexes. The leased admin migration
+				// activates shared reads; old/cold workers observe its marker shortly.
+				console.error('[mongodb] Shared relationship layout is not ready; preserving legacy lookup indexes.');
+			}
       // indexes land on the current-generation physical collections; createIndex
       // failures are tagged with `<logical>.<index name>` (via taggedCollection)
       // because Promise.all surfaces only the first rejection and driver
@@ -1472,7 +1498,7 @@ export const ensureIndexes = async () => {
         col('themes').createIndex({ ownerId: 1 }),
         col('waitlist').createIndex({ email: 1 }, { unique: true }),
         // the shared data-plane (`things`) index set — see createThingsDataIndexes
-        ...createThingsDataIndexes(db),
+        ...createThingsDataIndexes(db, { relationshipLookups }),
         // home-only `things` indexes (migration-diagnostic TTL)
         ...createHomeOnlyThingsIndexes(db),
         // the CI control-plane satellite — see createCiControlIndexes

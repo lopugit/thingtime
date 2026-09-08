@@ -6,7 +6,7 @@ import { RELATIONSHIP_UNIQUE_CRYSTAL_KEYS, relationshipUniqueKeys } from '../mes
 // crystal names without claiming a server-owned uniqueness slot.
 export const repairRelationshipKeys = async (
 	things: any,
-	{ dryRun, assertLease }: { dryRun: boolean; assertLease?: () => Promise<void> }
+	{ dryRun, assertLease, kinds }: { dryRun: boolean; assertLease?: () => Promise<void>; kinds?: readonly string[] }
 ) => {
 	let matched = 0;
 	let migrated = 0;
@@ -14,6 +14,7 @@ export const repairRelationshipKeys = async (
 	let duplicates = 0;
 	let changed = 0;
 	for (const [kind, field] of Object.entries(RELATIONSHIP_UNIQUE_CRYSTAL_KEYS)) {
+		if (kinds && !kinds.includes(kind)) continue;
 		await assertLease?.();
 		const cursor = things.find(
 			{ thingtime: kind, [`crystal.${field}`]: { $type: 'string', $ne: '' } },

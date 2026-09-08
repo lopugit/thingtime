@@ -6,13 +6,13 @@ import { routeModules } from '../../server/routes/api/[...]';
 import { thingtimeCapabilityManifest } from '../api/utils/capabilities/thingtimeCapabilities';
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 
-test('relationship repair publishes compatible patches on both manifests', () => {
+test('relationship consolidation publishes compatible additive migrations on both manifests', () => {
 	const route = createApiCapabilitiesManifest().features;
 	const wellKnown = thingtimeCapabilityManifest('https://thingtime.test').features;
-	assert.equal(route['api.admin-migrations'], '1.1.1');
-	assert.equal(route['api.admin-migrations-run'], '1.0.2');
-	assert.equal(wellKnown['api.admin-migrations'].version, '1.0.1');
-	assert.equal(wellKnown['api.admin-migrations-run'].version, '1.1.2');
+	assert.equal(route['api.admin-migrations'], '1.2.0');
+	assert.equal(route['api.admin-migrations-run'], '1.1.0');
+	assert.equal(wellKnown['api.admin-migrations'].version, '1.1.0');
+	assert.equal(wellKnown['api.admin-migrations-run'].version, '1.2.0');
 	// Existing clients retain their compatible minimum; a client requiring the
 	// repaired census can reject an older origin without guessing from routes.
 	assert.equal(capabilitySatisfies(route['api.admin-migrations'], '1.1.0'), true);
@@ -39,7 +39,7 @@ test('both capability manifests advertise the bounded upload v2 contract', () =>
 	}
 	assert.equal(manifest.features['api.admin-subscriptions'].version, '1.1.1');
 	assert.equal(createApiCapabilitiesManifest().features['api.admin-subscriptions'], '1.1.1');
-	assert.equal(createApiCapabilitiesManifest().features['api.admin-migrations-run'], '1.0.2');
+	assert.equal(createApiCapabilitiesManifest().features['api.admin-migrations-run'], '1.1.0');
 	assert.ok(manifest.operations.some((operation) => operation.feature === 'api.network-probe-upload' && operation.path === '/api/v1/network-probe/upload' && operation.methods.includes('POST')));
 });
 
@@ -102,7 +102,7 @@ test('capabilities publish the non-secret data authority used by a bundle', () =
 
 test('the storage census and ciControl workbench allowlist publish their minor capability updates', () => {
 	const manifest = createApiCapabilitiesManifest();
-	assert.equal(manifest.features['api.admin-migrations'], '1.1.1');
+	assert.equal(manifest.features['api.admin-migrations'], '1.2.0');
 	assert.equal(manifest.features['api.mongodb-raw-results'], '1.1.1');
 	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.mongodb-raw-results'].version, '1.0.1');
 });

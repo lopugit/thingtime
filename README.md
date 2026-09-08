@@ -2490,3 +2490,23 @@ The staged consolidation audit and production/develop rollout gates live in
 Run `cd remix && node --import tsx scripts/audit-things-indexes.mts` for the
 exact source-plan inventory. It does not connect to a database or need secrets;
 live index counts must be checked separately through the admin workbench.
+
+The relationship-sharing increment targets 54 home indexes, but preserves the
+five legacy lookups until an administrator runs
+`consolidate-relationship-lookup-indexes` on that home database. Deploy the
+compatible code to every origin sharing it first, dry-run, then run with
+`confirm: true` under the migration lease. Duplicate keys block activation;
+no relationship documents are deleted. Custom endpoints are not migrated.
+Readiness uses the existing home settings/key index and a 30-second cache;
+normal requests never backfill data. No additional secret or provider setup is
+required. Follow the linked rollout guide and verify native query plans and
+the live index set before retiring any supporting index.
+
+For isolated native regression checks, start a **fresh disposable** MongoDB
+replica set named `ttindex` on loopback port `27192` (never your normal local
+database). Then run `cd remix` and
+`TT_INDEX_TEST_ALLOW_LOCAL=1 MONGODB_CONNECTION_STRING='mongodb://127.0.0.1:27192/thingtime?replicaSet=ttindex' npm run verify:relationship-indexes`.
+The script creates fixture accounts/content through the real API utilities,
+runs the leased migration, checks behavior and emits identity-free native
+explain counts. It refuses any other URI. Stop the disposable server afterward;
+it is not a persistent development service.
