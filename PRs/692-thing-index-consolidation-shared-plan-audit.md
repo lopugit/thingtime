@@ -103,3 +103,23 @@ examined one key/document; profile posts examined two (excluding the rich
 comment) and returned one, while the embed list examined/returned one, both
 without blocking sorts. Engagement search passed before activation, during
 drain, and after retirement. Both final migration dry-runs reported zero.
+
+## Release and follow-up audit checkpoint
+
+PR #692 merged into develop as `04cb955e0ef11f360f673fe2500cad6e37dac4da`;
+PR #693 merged into main as `c711ad0c15ff89e7f58d929a0c4c66f2b988c264`.
+Production was verified on that main SHA. These are code releases, not index
+retirement: production still had 60 indexes and develop 61. Older immutable
+previews still connect to the develop database; retiring their indexes before
+upgrading or retiring those consumers would be unsafe. Deployment retirement
+is awaiting the owner's decision. Earlier pending-merge notes above describe
+the historical preparation stages, not the latest release status.
+
+The follow-up writer audit found `voteOnThing` did not stamp the existing
+protected Binary vote key after its old unique index became a lookup index.
+A disposable native MongoDB regression reproduced 16 concurrent vote rows for
+one user/poll. The fix shares `uniqueKeys_1` (no new index), retains the indexed
+legacy reader, and preserves other keys during updates. The regression verifies
+at most one row, explicit conflict responses, move/toggle semantics, independent
+voters, crystal-key squat isolation, private ACLs, invalid options, cascade
+cleanup, and the intentional unbilled-vote policy even for a full account.
