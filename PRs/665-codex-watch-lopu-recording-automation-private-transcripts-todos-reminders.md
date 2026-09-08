@@ -147,6 +147,22 @@ test items; no answer has been received yet.
 
 ## Shared AI router and accepted runtime direction — 2026-09-08
 
+Subsequent local-runtime acceptance: installed whisper.cpp 1.9.2 and verified
+the documented base.en model SHA-256 before processing the existing synthetic
+fixture. The reusable local adapter decoded audio, transcribed it locally,
+then sent only text through the personally signed-in unmodified Claude Code
+CLI. The production recording-insight parser accepted two grounded todos and
+no milk todo (already bought). The model heard the toothpaste name as AART,
+which remains an accuracy caveat, not silently corrected evidence.
+
+The adapter disables Claude tools/customizations, checks native account auth,
+excludes inherited API keys and endpoint overrides, limits subprocess time and
+output, and cleans up private temporary audio. Preserve USER/LOGNAME/SHELL with
+HOME/PATH: stripping native user identity made Claude report no sign-in during
+validation. Adapter regressions join test:ai-models. This is not yet a
+cloud-paired worker or a route from the shared endpoint to personal Claude;
+automation remains off and merge acceptance remains pending.
+
 The later user decision supersedes the historical credential blocker: use
 local/separate **speech-to-text**, then a personal signed-in Claude Code
 runtime for text. Keep a central Thingtime endpoint that supports multiple

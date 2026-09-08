@@ -1,5 +1,14 @@
 # TESTING.md — per-area manual test checklists
 
+- Personal recording runtime: run the synthetic WAV and M4A through local
+  decoding/transcription and native signed-in Claude Code. Verify grounded
+  todos exclude completed/negated actions; review proper-name accuracy.
+  Assert tools/customizations are disabled, prompts travel on stdin, inherited
+  API credentials/endpoint overrides are excluded, native user identity is
+  preserved for sign-in, output/time/audio limits apply, and temporary files
+  disappear on success, cancellation and failure. No automatic jobs should be
+  enabled merely by exercising this local adapter.
+
 - Recording reminders fan out to native push only after their private todo and
   daily notification transaction commits. Retries never send another push for
   the same daily ID; blocked preferences/checkpoints send none. A push transport

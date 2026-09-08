@@ -1672,6 +1672,32 @@ incomplete-MPU lifecycle remains a required independent guard.
 An MPU that never issued a part URL has no possible late browser PUT and can be
 refunded promptly after Abort/ListParts/HEAD proves it empty.
 
+### Personal recording runtime (local adapter)
+
+`remix/scripts/personal-recording-runtime.mjs` provides local `transcribe` and
+`complete` operations for the forthcoming personally paired recording worker.
+It is **not yet connected to cloud recording jobs or the shared HTTP endpoint**.
+No server, public listener, background service or automatic recording processing
+is started by importing this module.
+
+Fork setup: install `ffmpeg`, `whisper-cpp`, and the unmodified Claude Code CLI.
+Sign into Claude Code yourself (`claude auth login`); do not copy a Claude
+session token into a Thingtime endpoint credential. Obtain a compatible GGML
+Whisper model from the whisper.cpp project's documented model source and verify
+its checksum before use. Supply absolute `claudePath`, `whisperPath`,
+`ffmpegPath`, and `modelPath` values to `createPersonalRecordingRuntime` from
+machine-local, untracked setup. Models and credentials must stay outside git.
+
+Audio is decoded/transcribed locally, with a 24 MiB input and 20-minute duration
+limit. The English `base.en` model was exercised with synthetic audio; choose
+and validate a multilingual model when needed. Only the resulting text is sent
+to the personal Claude Code CLI. The CLI runs with customizations and tools
+disabled, native first-party sign-in checked, private text on stdin, bounded
+execution and output, and a temporary directory removed after success or failure.
+Inherited API keys and endpoint overrides are excluded from its environment.
+Transcription can mishear names; inspect the transcript before relying on tasks.
+Run `npm --prefix remix run test:ai-models` for its regression coverage.
+
 ### Shared AI endpoint waterfall
 
 `POST /api/v1/ai/complete` is the shared, non-streaming text completion entry
