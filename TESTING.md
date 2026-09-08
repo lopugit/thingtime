@@ -6020,3 +6020,8 @@ approval; `access.test.ts` — the reservation matrix) and
 - As an admin, dry-run `backfill-user-storage-accounting`; invalid ledgers must report only deterministic ledger IDs and fixed validation-field labels, at most ten records. Confirm zero ledger writes, no raw values or arbitrary key names, and unchanged strict envelope validation. Anonymous and non-admin callers remain denied by the existing migrations API gate.
 
 - Desktop privacy status: grant/revoke each permission, return from System Settings, and confirm live status refreshes without prompting. Stop the node and confirm failed checks show last-known status, not a new denial or false success. Restart and use Check access to recover; a signing migration must explain the one-time off/on grant refresh.
+# Index consolidation regression checks
+
+- Run `cd remix && node --import tsx scripts/audit-things-indexes.mts`; source-plan replay must work without database credentials, include Mongo's `_id_`, and preserve exact key order, unique/partial/sparse/TTL options.
+- Run `pnpm --dir remix run test:collections`. The unused emoji lookup must not be recreated; protected `uniqueKeys_1` must stay unique and the legacy unique ancestor must not be blindly retired.
+- Before any live index retirement, compare exact production/develop index definitions with the source inventory, preserve unknown indexes, and prove the actual query and concurrent-write paths. A low count alone is not acceptance. See `docs/architecture/thing-index-consolidation.md` for the full rollout gates.

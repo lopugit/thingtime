@@ -2483,3 +2483,10 @@ Tailscale/Funnel could not be verified: the installed CLI wrapper points to a
 missing Tailscale.app executable. No public mapping was created or changed.
 
 Thingtime Desktop checks Node privacy access directly from the running helper. The Things setup card refreshes every five seconds while visible and on return from System Settings; **Check access** retries immediately. A failed check preserves and labels the last known result. If macOS shows access enabled but the helper reports denial after moving from a development build to Developer ID signing, switch **Thingtime Node** off and on once for each affected permission, restart the node in Desktop settings, and check again. Desktop never resets privacy grants automatically.
+## Thing index audit
+
+The staged consolidation audit and production/develop rollout gates live in
+[Thing index consolidation](docs/architecture/thing-index-consolidation.md).
+Run `cd remix && node --import tsx scripts/audit-things-indexes.mts` for the
+exact source-plan inventory. It does not connect to a database or need secrets;
+live index counts must be checked separately through the admin workbench.

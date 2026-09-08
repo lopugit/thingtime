@@ -527,6 +527,10 @@ export const backfillConsolidatedThingUniqueKeys = async (raw: any) => {
 // rebuild both on EVERY bootstrap, leaving those two aggregations on a
 // collection scan for the length of each rebuild.
 export const RETIRED_THINGS_INDEXES = [
+	// Emoji lookup uses shareId and scope/target, never crystal.emojiKey.
+	// Dedupe is independently held by protected uniqueKeys_1. This name was
+	// always a non-unique lookup; do NOT retire the old unique ancestor here.
+	'things_emoji_key_lookup',
 	'sourceIds_1_createdAt_-1_shareId_1',
 	'thingtime_1_crystal.accountId_1_createdAt_-1_shareId_1',
 	// Device event pagination now supplies the deterministic control-scope key,
@@ -1140,12 +1144,9 @@ export const createThingsDataIndexes = (db: any): Promise<any>[] => {
       { name: 'things_invite_code_lookup', partialFilterExpression: { 'crystal.inviteCode': { $type: 'string' } } },
       ['things_invite_code_unique']
     ),
-    createIndexReplacing(
-      col,
-      { 'crystal.emojiKey': 1 },
-      { name: 'things_emoji_key_lookup', partialFilterExpression: { 'crystal.emojiKey': { $type: 'string' } } },
-      ['things_emoji_key_unique']
-    ),
+    // Emoji identity reads use shareId/scope and dedupe uses uniqueKeys_1;
+    // a separate crystal.emojiKey lookup has no runtime reader. Old unique
+    // ancestors are deliberately retained until their keys are verified.
     createIndexReplacing(
       col,
       { 'crystal.followKey': 1 },
@@ -1315,8 +1316,17 @@ export const ensureHomeThingsIndexPlan = (db: any): Promise<any> =>
 // createIndex calls, so this cannot drift from it). The rebuild migration
 // drops and recreates exactly these, and leaves every other index on the
 // collection alone.
-export const thingsIndexPlanNames = async (): Promise<Set<string>> => {
-  const names = new Set<string>();
+export type ThingsIndexPlanEntry = {
+  name: string;
+  keys: Record<string, unknown>;
+  options: Record<string, unknown>;
+};
+
+// Read-only inventory of the exact executable plan. Keeping keys and options
+// prevents an audit from treating a partial/unique/TTL index as an ordinary
+// prefix duplicate. This recorder never obtains a database connection.
+export const thingsIndexPlanEntries = async (): Promise<ThingsIndexPlanEntry[]> => {
+  const entries = new Map<string, ThingsIndexPlanEntry>();
   const recorder = {
     collection: () => ({
       createIndex: async (keys: Record<string, unknown>, options: Record<string, unknown> = {}) => {
@@ -1326,15 +1336,18 @@ export const thingsIndexPlanNames = async (): Promise<Set<string>> => {
               .map(([field, direction]) => `${field}_${direction}`)
               .join('_')
         );
-        names.add(name);
+        entries.set(name, { name, keys: { ...keys }, options: { ...options } });
         return name;
       },
       dropIndex: async () => undefined
     })
   };
   await ensureHomeThingsIndexPlan(recorder);
-  return names;
+  return [...entries.values()];
 };
+
+export const thingsIndexPlanNames = async (): Promise<Set<string>> =>
+  new Set((await thingsIndexPlanEntries()).map(({ name }) => name));
 
 // Lazily ensure the data-plane indexes on a CUSTOM endpoint's database, once
 // per URI per process. Fire-and-forget by design: the first requests against a
