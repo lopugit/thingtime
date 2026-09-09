@@ -17,6 +17,9 @@ import {
 
 // One row of GET /api/v1/notifications (PublicNotification on the server).
 export type NotificationItem = {
+  richText?: string | null;
+  image?: string | null;
+  delivery?: 'quiet' | 'normal' | 'urgent';
   detail?: string | null;
   id: string;
   type: string;
@@ -56,6 +59,8 @@ export const NOTIFICATION_TYPE_META: Record<NotificationType, { emoji: string; l
     label: 'Action runs',
     hint: 'Every run is saved, including component runs — email is opt-in'
   },
+  'recording-reminder': { emoji: '🦄', label: 'Recording reminders', hint: 'Daily reminders for unfinished todos from Watch recordings — email is opt-in' },
+  'lopu-reminder': { emoji: '⏰', label: 'Lopu reminders', hint: 'One-time and recurring reminders you ask Lopu to schedule' },
   'login-success': { emoji: '🗝️', label: 'Successful sign-ins', hint: 'A successful password, passkey, or SSO sign-in' },
   'system-message': { emoji: '🦄', label: 'Lopu messages', hint: 'In-app messages saved for later, without a second push or email' },
   // subspaces 🪐 — the member-facing four, then the two mod-queue types
@@ -105,6 +110,8 @@ export const notificationVerb = (item: Pick<NotificationItem, 'type' | 'preview'
       return 'mentioned you';
     case 'action-run':
       return 'ran an action';
+    case 'recording-reminder':
+      return 'has a reminder for you';
     case 'login-success':
       return 'welcomed you back';
     case 'system-message':

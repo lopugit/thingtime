@@ -1,4 +1,5 @@
 import React from 'react';
+import { useSharedMediaUrl } from '../Sharing/SharedMedia';
 import { Box, Flex, Grid, Text } from '@chakra-ui/react';
 
 import { ChakraThingRenderer, isChakraThingNode } from '../Kinds/ChakraThingRenderer';
@@ -921,6 +922,7 @@ const BlockView = (
 		containerId = null,
 		indexInParent = 0
 	} = props;
+	const mediaUrl = useSharedMediaUrl();
 
 	// Inspector typography (font-size, color, …) must reach the text itself,
 	// not just the wrapper — explicit sizes in the typo presets and the rich
@@ -1000,7 +1002,7 @@ const BlockView = (
 			);
 		}
 	} else if (block.type === 'media') {
-		const src = block.src || '';
+		const src = mediaUrl(block.src || '');
 		if (!src) {
 			// the placeholder is edit chrome — a live viewer sees nothing
 			body = !chrome ? null : (

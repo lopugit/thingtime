@@ -2,6 +2,7 @@ import React from 'react';
 import { Badge, Box, Button, Flex, Input, Select, Text } from '@chakra-ui/react';
 
 import { useLopu } from '~/components/Lopu/useLopu';
+import { VaultReveal } from './VaultReveal';
 
 type Group = { id: string; name: string };
 type Entry = {
@@ -113,7 +114,7 @@ export const SecureVault = () => {
 			<Flex alignItems="center" gap={2} flexWrap="wrap">
 				<Badge colorScheme={vault.vaultConfigured ? 'green' : 'orange'}>{vault.vaultConfigured ? 'Encryption ready' : 'Encryption not configured'}</Badge>
 				<Text fontSize="xs" color="var(--tt-muted, #777783)">
-					Values and AI tokens are write-only. Thingtime never sends them back to this browser.
+					Values and AI tokens stay encrypted and hidden. Verify your password or passkey to briefly show one.
 				</Text>
 			</Flex>
 
@@ -153,7 +154,7 @@ export const SecureVault = () => {
 					{providerModel === CUSTOM_MODEL || !templateModels.length ? (
 						<Input {...fieldStyles} value={customModel} onChange={(event) => setCustomModel(event.target.value)} placeholder="Provider model id" aria-label="Provider model id" />
 					) : null}
-					<Input {...fieldStyles} type="password" autoComplete="new-password" value={providerToken} onChange={(event) => setProviderToken(event.target.value)} placeholder="Provider token (write-only)" aria-label="Provider token" />
+					<Input {...fieldStyles} type="password" autoComplete="new-password" value={providerToken} onChange={(event) => setProviderToken(event.target.value)} placeholder="Provider token (encrypted)" aria-label="Provider token" />
 					<Select {...fieldStyles} value={groupId} onChange={(event) => setGroupId(event.target.value)} aria-label="Provider environment">
 						<option value="">No environment</option>
 						{vault.groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
@@ -167,7 +168,7 @@ export const SecureVault = () => {
 				<Flex flexDirection="column" gap={2}>
 					<Input {...fieldStyles} value={secretName} onChange={(event) => setSecretName(event.target.value)} placeholder="Display name" aria-label="Secret display name" />
 					<Input {...fieldStyles} value={secretKey} onChange={(event) => setSecretKey(event.target.value)} placeholder="Key, e.g. SERVICE_TOKEN" aria-label="Secret key" />
-					<Input {...fieldStyles} type="password" autoComplete="new-password" value={secretValue} onChange={(event) => setSecretValue(event.target.value)} placeholder="Value (write-only)" aria-label="Secret value" />
+					<Input {...fieldStyles} type="password" autoComplete="new-password" value={secretValue} onChange={(event) => setSecretValue(event.target.value)} placeholder="Value (encrypted)" aria-label="Secret value" />
 					<Button alignSelf="flex-start" isLoading={busy} isDisabled={!vault.vaultConfigured} onClick={() => run({ action: 'save-secret', name: secretName, key: secretKey, value: secretValue, groupId }, 'Secret saved', () => { setSecretName(''); setSecretKey(''); setSecretValue(''); })}>Save secret</Button>
 				</Flex>
 			</Box>
@@ -183,6 +184,7 @@ export const SecureVault = () => {
 								<Text fontSize="xs" color="var(--tt-muted, #777783)" wordBreak="break-word">{entry.kind === 'provider' ? [entry.provider, entry.model, entry.endpoint].filter(Boolean).join(' · ') : entry.key}</Text>
 							</Box>
 							<Badge>{vault.groups.find((group) => group.id === entry.groupId)?.name || 'Ungrouped'}</Badge>
+							<VaultReveal vault="personal" id={entry.id} label={entry.name} />
 							<Button size="xs" variant="ghost" onClick={() => deleteEntry(entry)}>Delete</Button>
 						</Flex>
 					))}

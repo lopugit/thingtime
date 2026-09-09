@@ -45,7 +45,10 @@ const personIntentScore = (person: SearchPerson, query: string): number => {
 	if (username === query) return 10_000;
 	if (displayName === query) return 9_500;
 	if (username.startsWith(query)) return 9_000;
-	if (startsWithWord(displayName, query)) return 8_500;
+	// Multi-word queries ("the lopu") never match a single split word, so the
+	// whole-string prefix is checked alongside the per-word one — same pairing
+	// thingIntentScore uses for titles.
+	if (displayName.startsWith(query) || startsWithWord(displayName, query)) return 8_500;
 	return 6_000;
 };
 
