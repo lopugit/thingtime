@@ -13,9 +13,16 @@
 //     after a promotion merges and "Sync main into develop" levels the
 //     branches again.
 //
-// The changelog is the first-parent spine of main..develop: exactly the PR
-// merges and direct pushes that landed on develop and that merging the
-// promotion PR would ship to main. Each spine commit is attributed to a
+// The changelog is the first-parent spine of main..develop: the PR merges and
+// direct pushes that landed on develop and that merging the promotion PR would
+// ship to main. Ancestry and content can disagree — the same work often reaches
+// main through its own main-based PR, and "Sync main into develop" then merges
+// main back into develop, leaving develop ahead by commits whose content main
+// already has. The spine is non-empty but the merge would change no files, so
+// the section leads with an explicit no-op warning (see contentEmpty in
+// buildSection) instead of claiming those PRs "will land in main". The no-op
+// test compares the two root tree OIDs, which holds whether or not main is an
+// ancestor of develop and needs no blobs. Each spine commit is attributed to a
 // merged develop-based PR by, in order:
 //   1. its subject ("Merge pull request #N ..." and squash-style "... (#N)");
 //   2. content matching against recently merged develop-based PRs — merge
@@ -121,6 +128,38 @@ function run(cmd, args, opts = {}) {
   return execFileSync(cmd, args, { ...EXEC_OPTS, ...opts });
 }
 const git = (...args) => run("git", args).trim();
+
+// True when merging the promotion would change no files. Compares the two
+// commits' root tree OIDs rather than ancestry: develop can sit several commits
+// ahead of main while carrying content main already has (work merged straight
+// to main, then synced back into develop). Equal root trees mean any merge of
+// the two produces main's current tree, so this holds whether or not main is an
+// ancestor of develop.
+//
+// rev-parse and not `git diff --quiet`, deliberately: promote-develop-to-main
+// checks out with filter=blob:none, and on differing trees — the normal case on
+// every real promotion — `git diff` lazily fetches the differing blobs from the
+// promisor remote. That is a needless network round trip on a 1.7 GB repo, and
+// it exits 128 rather than 1 whenever the remote is unreachable or the checkout
+// dropped its credentials (persist-credentials: false), which this function
+// rethrows and nothing above catches — a promisor hiccup would fail the whole
+// promotion job. Tree OIDs are already local in a blobless clone, so this needs
+// no blobs and no network. Same primitive build-all-branch.mjs uses to detect a
+// no-op rebuild. A missing rev still throws, so genuine git failures are never
+// silently read as "differs".
+//
+// One-sided on purpose: equal trees always mean a no-op merge, but a no-op
+// merge does not always mean equal trees — main strictly ahead in content
+// (a hotfix landed before "Sync main into develop" runs) still merges to main's
+// own tree while this reports "differs". A miss only falls back to the plain
+// carrying wording, never to a false no-op claim. Deciding it exactly needs
+// merge-tree, which this control plane runs only under the
+// core.attributesFile=/dev/null sandbox because gitattributes-selected merge
+// drivers are arbitrary code execution; that is not worth it for a transient
+// state the sync workflow collapses on every push to main.
+function treesMatch(base, head) {
+  return git("rev-parse", `${base}^{tree}`) === git("rev-parse", `${head}^{tree}`);
+}
 const gh = (args, opts = {}) => run("gh", args, opts);
 const ghJson = (args, opts = {}) => JSON.parse(gh(args, opts) || "null");
 
@@ -165,6 +204,7 @@ const fmtDate = (iso) => (iso ? String(iso).slice(0, 10) : "");
 export function buildSection(data) {
   const {
     prs, directs, totalCommits, headShort, headDate, base, head,
+    contentEmpty = false,
     maxPrRows = CFG.maxPrRows, maxDirectRows = CFG.maxDirectRows,
   } = data;
   const setLine = [...prs.map((p) => p.number)].sort((a, b) => a - b).join(",");
@@ -175,9 +215,19 @@ export function buildSection(data) {
   lines.push("");
   const prCount = `**${prs.length} pull request${prs.length === 1 ? "" : "s"}**`;
   const commitCount = `${totalCommits} commit${totalCommits === 1 ? "" : "s"}`;
+  if (contentEmpty) {
+    lines.push(
+      `> ⚠️ **This promotion would ship no file changes.** \`${head}\` and \`${base}\` have identical trees, ` +
+      `so merging this PR only reconciles history (\`${head}\` is ${commitCount} ahead). Everything listed below ` +
+      `already reached \`${base}\` by another route — nothing here is waiting to be released.`,
+    );
+    lines.push("");
+  }
   if (prs.length) {
     lines.push(
-      `${prCount} merged into \`${head}\` (${commitCount}) will land in \`${base}\` when this PR merges — newest first:`,
+      contentEmpty
+        ? `${prCount} merged into \`${head}\` (${commitCount}) — already present in \`${base}\`, listed for history, newest first:`
+        : `${prCount} merged into \`${head}\` (${commitCount}) will land in \`${base}\` when this PR merges — newest first:`,
     );
     lines.push("");
     lines.push("| PR | Title | Author | Source branch | Merged (UTC) |");
@@ -202,7 +252,9 @@ export function buildSection(data) {
     lines.push("");
     lines.push(
       `⚠️ **Carries \`no-promote\`-labeled PRs:** ${flagged.map((p) => `#${p.number}`).join(", ")}. ` +
-      `An omnibus \`${head}\` → \`${base}\` merge ships their changes anyway — split or revert them first if they must not reach \`${base}\`.`,
+      (contentEmpty
+        ? `Their changes are already in \`${base}\`, so holding this PR back no longer keeps them out — revert them on \`${base}\` if they must not be there.`
+        : `An omnibus \`${head}\` → \`${base}\` merge ships their changes anyway — split or revert them first if they must not reach \`${base}\`.`),
     );
   }
   if (directs.length) {
@@ -261,9 +313,10 @@ export function computeDelta(oldSet, newSet) {
   return { added, removed };
 }
 
-export function buildComment({ initialized, delta, prsByNumber, total, totalCommits, maxRows = CFG.maxCommentRows }) {
+export function buildComment({ initialized, delta, prsByNumber, total, totalCommits, contentEmpty = false, maxRows = CFG.maxCommentRows }) {
   const lines = [];
-  const carry = `**${total} PR${total === 1 ? "" : "s"}** (${totalCommits} commit${totalCommits === 1 ? "" : "s"})`;
+  const carry = `**${total} PR${total === 1 ? "" : "s"}** (${totalCommits} commit${totalCommits === 1 ? "" : "s"})`
+    + (contentEmpty ? " — ⚠️ no file changes; the content is already on the base branch" : "");
   const describe = (n) => {
     const pr = prsByNumber.get(n);
     if (!pr) return `- #${n}`;
@@ -495,7 +548,8 @@ function associatedPr(sha) {
 }
 
 // ---------------------------------------------------------------------------
-// Self-test (pure helpers only — no git/gh needed)
+// Self-test. No gh and no repo state; pure helpers except the treesMatch
+// probe, which builds and removes a throwaway git repo under os.tmpdir().
 // ---------------------------------------------------------------------------
 
 function selfTest() {
@@ -515,6 +569,19 @@ function selfTest() {
   assert(escapeCell("a\\b") === "a\\\\b", "cell backslash escape");
   assert(escapeCell("x".repeat(200)).length <= 101, "cell truncation");
 
+  // Run the argv guard main() actually applies, rather than restating it.
+  // --self-test is CI's only gate on this file, so a guard nothing exercises
+  // can regress to a no-op and let a mistyped flag through to the live path
+  // that rewrites the standing promotion PR.
+  assert(unrecognizedArgs([]).length === 0, "bare invocation is recognized");
+  assert(unrecognizedArgs(["--self-test"]).length === 0, "the self-test flag is recognized");
+  assert(unrecognizedArgs(["--selftest"]).join(" ") === "--selftest", "a near-miss flag is rejected");
+  assert(unrecognizedArgs(["--dry-run"]).join(" ") === "--dry-run", "DRY_RUN is env-only, not a flag");
+  assert(
+    unrecognizedArgs(["--self-test", "--dry-run"]).join(" ") === "--dry-run",
+    "an unknown flag riding alongside --self-test is still rejected",
+  );
+
   const section = buildSection({
     prs: [
       { number: 186, title: "ci: standing promo | workflow", author: "lopugit", branch: "claude/develop-main-auto-pr-365e02", mergedAt: "2026-08-07T10:00:00Z", flagged: true },
@@ -532,6 +599,33 @@ function selfTest() {
   assert(section.includes("ci: standing promo \\| workflow"), "escaped title in table");
   assert(section.includes("#186 ⚠️"), "flagged row marker");
   assert(section.includes("Direct commits"), "directs section");
+  assert(section.includes("will land in `main`"), "carrying promotion claims a landing");
+  assert(!section.includes("would ship no file changes"), "carrying promotion has no no-op warning");
+  // Positive, not just the noop-side negative: without this, making the
+  // contentEmpty branch unconditional still passes, and a genuinely shipping
+  // promotion would tell a maintainer a no-promote PR is already on main.
+  assert(section.includes("ships their changes anyway"), "carrying promotion keeps the will-ship no-promote advice");
+
+  // A promotion whose trees already match must never claim the listed PRs
+  // "will land in main" — that is the develop-ahead-but-content-identical
+  // state left behind when work reaches main directly and is synced back.
+  const noop = buildSection({
+    prs: [{ number: 635, title: "feat: editor", author: "lopugit", branch: "codex/editor", mergedAt: "2026-09-06T03:06:52Z", flagged: true }],
+    directs: [{ sha: "b1f8e212", subject: "Merge remote-tracking branch 'origin/main' into develop" }],
+    totalCommits: 3,
+    headShort: "b1f8e212",
+    headDate: "2026-09-06",
+    base: "main",
+    head: "develop",
+    contentEmpty: true,
+  });
+  assert(noop.includes("would ship no file changes"), "no-op promotion warns up front");
+  assert(!noop.includes("will land in `main`"), "no-op promotion drops the landing claim");
+  assert(noop.includes("already present in `main`"), "no-op promotion reframes the table");
+  assert(noop.includes("already in `main`"), "no-op promotion corrects no-promote advice");
+  assert(!noop.includes("ships their changes anyway"), "no-op promotion drops stale no-promote advice");
+  assert(noop.includes("promotion-changelog-prs: 635"), "no-op promotion keeps the delta set line");
+  assert(parsePrSet(noop).has(635), "no-op promotion set line stays parseable");
 
   const fresh = spliceSection("Preamble text.", section);
   assert(fresh.includes("Preamble text.\n\n<!-- promotion-changelog:start -->"), "append after preamble");
@@ -559,6 +653,59 @@ function selfTest() {
     totalCommits: 9,
   });
   assert(comment.includes("Added:") && comment.includes("#187") && comment.includes("#42"), "delta comment");
+  assert(!comment.includes("no file changes"), "carrying delta comment has no no-op note");
+
+  const noopComment = buildComment({
+    initialized: false,
+    delta: { added: [635], removed: [] },
+    prsByNumber: new Map([[635, { number: 635, title: "feat: editor", author: "lopugit", flagged: false }]]),
+    total: 1,
+    totalCommits: 3,
+    contentEmpty: true,
+  });
+  assert(noopComment.includes("no file changes"), "no-op delta comment flags the empty promotion");
+
+  // Everything above injects contentEmpty by hand, so nothing executes the
+  // probe that decides it. treesMatch carries the whole fix: get it wrong in
+  // the "always true" direction and every real promotion is labelled a no-op.
+  // Build a throwaway repo whose two heads diverged in history but converged
+  // in content — the ancestry-independence this claims, and the state
+  // main/develop actually reach — and run the real function against it.
+  const probeRepo = mkdtempSync(join(os.tmpdir(), "promotion-trees-"));
+  const startCwd = process.cwd();
+  try {
+    const g = (...args) => run("git", [
+      "-C", probeRepo,
+      "-c", "user.name=selftest", "-c", "user.email=selftest@example.invalid",
+      "-c", "commit.gpgsign=false", "-c", "init.defaultBranch=base",
+      "-c", "advice.detachedHead=false",
+      ...args,
+    ]).trim();
+    const file = join(probeRepo, "f.txt");
+    g("init", "--quiet");
+    writeFileSync(file, "one\n");
+    g("add", "f.txt");
+    g("commit", "--quiet", "--no-verify", "-m", "one");
+    const root = g("rev-parse", "HEAD");
+    writeFileSync(file, "two\n");
+    g("commit", "--quiet", "--no-verify", "-a", "-m", "left");
+    const left = g("rev-parse", "HEAD");
+    g("checkout", "--quiet", "--detach", root);
+    writeFileSync(file, "two\n");
+    g("commit", "--quiet", "--no-verify", "-a", "-m", "right");
+    const right = g("rev-parse", "HEAD");
+    // Distinct children of one root ⇒ neither is an ancestor of the other,
+    // which is the ancestry-independence the function claims.
+    assert(left !== right, "probe built two distinct commits");
+    assert(g("rev-parse", `${left}^`) === root && g("rev-parse", `${right}^`) === root,
+      "probe commits are siblings, not ancestor and descendant");
+    process.chdir(probeRepo);
+    assert(treesMatch(left, right) === true, "identical trees across divergent history are a no-op");
+    assert(treesMatch(root, left) === false, "differing content is not a no-op");
+  } finally {
+    process.chdir(startCwd);
+    rmSync(probeRepo, { recursive: true, force: true });
+  }
 
   if (process.exitCode) throw new Error("self-test failed");
   console.log("self-test OK");
@@ -574,7 +721,34 @@ const PREAMBLE =
   "Merge it whenever main should catch up — the workflow opens the next one after the following push to `develop`. " +
   "The *Sync main into develop* workflow levels develop with main again after each promotion.";
 
+// Fail closed on anything that is not the one recognized flag. The
+// no-argument form is the workflow's live path: it rewrites the promotion PR's
+// body and posts a delta comment. So a near-miss flag -- `self-test`,
+// `--selftest`, `--dry-run` -- silently became a live mutation of the standing
+// promotion PR rather than the local check the operator asked for, with the
+// wrong figures whenever the checkout's refs are not the workflow's (a
+// detached review worktree resolves `CFG.gitBase`/`CFG.gitHead` to a different
+// range and reports a promotion carrying nothing). Recognizing only the exact
+// flag keeps the bare invocation working for the workflow while making a typo
+// a usage error, the way workflow-control-plane-contract.mjs already behaves.
+const KNOWN_FLAGS = new Set(["--self-test"]);
+function unrecognizedArgs(argv) {
+  return argv.filter((arg) => !KNOWN_FLAGS.has(arg));
+}
+
 function main() {
+  // Before the --self-test branch, so a near-miss is caught whether it arrives
+  // alone or alongside the real flag. Checked after it, `--self-test
+  // --dry-run` printed "self-test OK" and dropped the second flag with no
+  // signal that nothing was previewed.
+  const unknown = unrecognizedArgs(process.argv.slice(2));
+  if (unknown.length) {
+    console.error(`Unrecognized argument(s): ${unknown.join(" ")}`);
+    console.error("Usage: promotion-pr-changelog.mjs [--self-test]");
+    console.error("  (no arguments) refresh the live promotion PR; DRY_RUN=1 to preview");
+    process.exitCode = 2;
+    return;
+  }
   if (process.argv.includes("--self-test")) {
     selfTest();
     return;
@@ -633,8 +807,22 @@ function main() {
   }
 
   verifyFlags(prs);
+  const contentEmpty = treesMatch(CFG.gitBase, CFG.gitHead);
+  // Tag the job summary too, not just the PR body. The body's ⚠️ warning is
+  // refreshed on every push (the footer pins headShort, so newBody differs and
+  // the already-current early return does not fire), but it is only seen by
+  // someone who opens the PR. The other push-time signal does not reach an
+  // operator at all: buildComment's note is gated on the carried PR set
+  // changing, and "Sync main into develop" empties the content by adding a
+  // direct commit, which leaves that set untouched — so the delta comment
+  // effectively never fires in this state (a live contentEmpty run reports
+  // "PR set unchanged, no comment"). That leaves the summary as the only
+  // place the operator watching the run learns this, and untagged its
+  // "carrying N PRs / M commits" reads as a pending release when nothing is.
+  const noopNote = contentEmpty ? ", no file changes vs base" : "";
   const section = buildSection({
     prs, directs, totalCommits, headShort, headDate, base: CFG.base, head: CFG.head,
+    contentEmpty,
   });
   const prsByNumber = new Map(prs.map((p) => [p.number, p]));
   const newSet = new Set(prsByNumber.keys());
@@ -658,7 +846,7 @@ function main() {
         console.log(url);
       }
       summary(
-        `Opened a promotion PR (${CFG.head} → ${CFG.base}) carrying ${prs.length} PRs / ${totalCommits} commits.`,
+        `Opened a promotion PR (${CFG.head} → ${CFG.base}) carrying ${prs.length} PRs / ${totalCommits} commits${noopNote}.`,
       );
       return;
     }
@@ -666,7 +854,7 @@ function main() {
     const oldBody = String(openPr.body ?? "").replace(/\r\n/g, "\n");
     const newBody = spliceSection(oldBody, section);
     if (newBody === oldBody) {
-      summary(`Changelog on PR #${openPr.number} is already current (${prs.length} PRs / ${totalCommits} commits).`);
+      summary(`Changelog on PR #${openPr.number} is already current (${prs.length} PRs / ${totalCommits} commits${noopNote}).`);
       return;
     }
 
@@ -688,7 +876,7 @@ function main() {
       : delta.added.length > 0 || delta.removed.length > 0;
     if (worthCommenting) {
       const comment = buildComment({
-        initialized, delta, prsByNumber, total: newSet.size, totalCommits,
+        initialized, delta, prsByNumber, total: newSet.size, totalCommits, contentEmpty,
       });
       if (CFG.dryRun) {
         console.log(`DRY_RUN: would comment on PR #${openPr.number}:\n${comment}`);
@@ -699,12 +887,12 @@ function main() {
         ]);
       }
       summary(
-        `Refreshed the changelog on PR #${openPr.number} (${prs.length} PRs / ${totalCommits} commits); ` +
+        `Refreshed the changelog on PR #${openPr.number} (${prs.length} PRs / ${totalCommits} commits${noopNote}); ` +
         `delta comment ${CFG.dryRun ? "planned" : "posted"} (+${delta.added.length} / −${delta.removed.length}${initialized ? ", initialized" : ""}).`,
       );
     } else {
       summary(
-        `Refreshed the changelog on PR #${openPr.number} (${prs.length} PRs / ${totalCommits} commits); PR set unchanged, no comment.`,
+        `Refreshed the changelog on PR #${openPr.number} (${prs.length} PRs / ${totalCommits} commits${noopNote}); PR set unchanged, no comment.`,
       );
     }
   } finally {
