@@ -11,6 +11,8 @@
   For production-client sharing coverage, build with `build:client` and set
   `TT_SHARED_BUILT_CLIENT=1` in the local-only shared composition fixture;
   API requests remain real while the browser consumes the built client bytes.
+  Combining media sharing with recording Things must retain the newer contract
+  on both manifests and keep standalone recordings owner-private by default.
 
 - After merging notification families, verify recording reminders and subspace
   moderation retain separate categories and all preference switches. Recording
@@ -226,6 +228,24 @@ is fixed, and cite the checklist you ran in the PR description.
       secret value. Generic endpoints cannot claim create-only semantics.
 
 ## Lopu voice + personal Secure Vault
+
+- [ ] With iOS build 29 and private uploads approved, finish a voice segment:
+      `/things` contains one playable owner-private M4A recording and Files
+      retains the original CAF/TXT. Open the saved notice at desktop and 390px;
+      its recording link is usable and long filenames do not overflow.
+- [ ] Interrupt upload completion, reopen Lopu, and confirm one recording Thing
+      with no duplicate PUT or storage reservation. Disconnect before upload,
+      reconnect, and confirm pending local work resumes. A server lacking
+      attachment upload/complete 1.2.0 receives no recording write.
+- [ ] Switch accounts/destinations with pending audio: the new account must not
+      receive the earlier recording. Denied private-upload approval or full
+      storage leaves the recording local and shows a pending notice.
+- [ ] Advance attachment draft cleanup past its TTL: completed recording Things
+      survive, while abandoned pending recordings and ordinary post drafts
+      still expire. Another account cannot read the private recording. The
+      /things listing includes ready standalone recordings but excludes pending
+      recordings, other attachment purposes and protected account records; root
+      and folder filters and token visibility restrictions remain effective.
 
 - [ ] With build 25's general native bridge (no `lopuVoiceVersion`), tapping
       voice says to update Thingtime and does not claim the mic is active.

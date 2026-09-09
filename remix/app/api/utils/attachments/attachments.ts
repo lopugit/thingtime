@@ -61,7 +61,7 @@ export const MAX_SESSION_REPLACEMENT_ATTACHMENT_CLEANUP = 25;
 export const MAX_ATTACHMENT_DETECTION_BACKFILL_PER_RUN = 200;
 export const ATTACHMENT_DETECTION_BACKFILL_WALL_CLOCK_MS = 25 * 1000;
 export const ATTACHMENT_DETECTION_BACKFILL_CONCURRENCY = 5;
-export const ATTACHMENT_UPLOAD_PURPOSES = ['post', 'comment', 'message', 'profile-avatar', 'profile-banner', 'custom-emoji'] as const;
+export const ATTACHMENT_UPLOAD_PURPOSES = ['post', 'comment', 'message', 'profile-avatar', 'profile-banner', 'custom-emoji', 'recording'] as const;
 export type AttachmentUploadPurpose = (typeof ATTACHMENT_UPLOAD_PURPOSES)[number];
 export const MAX_CUSTOM_EMOJI_ATTACHMENT_BYTES = 512 * 1024;
 export const CUSTOM_EMOJI_ATTACHMENT_CONTENT_TYPES = new Set(['image/gif', 'image/jpeg', 'image/png', 'image/webp']);
@@ -135,6 +135,7 @@ const attachmentUploadIntent = (
 	if (value === undefined || value === 'post') return { requestPurpose: 'post', purpose: 'post' };
 	if (value === 'comment') return { requestPurpose: value, purpose: 'comment' };
 	if (value === 'message') return { requestPurpose: value, purpose: 'message' };
+	if (value === 'recording') return { requestPurpose: value, purpose: 'recording' };
 	if (value === 'profile-avatar') return { requestPurpose: value, purpose: 'profile', profileSlot: 'avatar' };
 	if (value === 'profile-banner') return { requestPurpose: value, purpose: 'profile', profileSlot: 'banner' };
 	if (value === 'custom-emoji') return { requestPurpose: value, purpose: 'emoji' };
@@ -785,7 +786,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				id: doc.shareId,
 				partSizeBytes: plan.partSizeBytes,
 				partCount: plan.partCount,
-				expiresAt: doc.attachmentExpiresAt!.toISOString()
+				expiresAt: doc.attachmentExpiresAt?.toISOString() ?? null
 			});
 			const sameRequest = (doc: AttachmentDoc) =>
 				doc.ownerId === ownerId &&
@@ -822,6 +823,11 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 					}
 					reserved = raced;
 				}
+			}
+			// Recording starts can be replayed after a lost completion receipt.
+			// The owner and exact metadata fingerprint have already been checked.
+			if (intent.purpose === 'recording' && reserved.attachmentState === 'ready') {
+				return { ok: true, upload: { ...uploadPlan(reserved), state: 'ready' } };
 			}
 			if (
 				reserved.attachmentState !== 'pending' ||

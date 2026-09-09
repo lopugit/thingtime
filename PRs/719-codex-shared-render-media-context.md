@@ -7,7 +7,8 @@ media in page/block backgrounds, HTML styles and Chakra responsive/pseudo
 styles. CSS discovery and transport use the same parser. External URLs, quoted
 text, independent keys and non-render metadata do not delegate root access.
 Shared writers cannot inject unreadable private media. Attachment content is
-1.3.0; Things is feature 1.6.3 / contract 1.5.3.
+1.3.0; Things is feature 1.7.1 / contract 1.6.1 after integrating the
+newer recording-Things contract from develop.
 
 Visitors may use the app, but this does not grant saved-data or design mutation
 authority. They can copy the composition to fresh private Things. Physical
@@ -83,6 +84,37 @@ root bearer into a copy as a substitute.
   69.800 seconds), with no timeout changes. Fresh desktop/mobile sharing and
   recovery screenshots were inspected top-to-bottom. Current local validation
   is green; publication still needs fresh exact-head CI and preview receipts.
+
+## Integration with develop c06f8b4
+
+- Source a99ec728a passed Web/API run 34357599687. Both CodeQL languages
+  passed in run 34357599728 on GitHub merge candidate
+  bda602e9b21228a1d2daed58616d02542ad893aa, containing that source and develop
+  47ce9eb. Analyses are recorded under refs/pull/719/merge; older head-ref
+  uploads must not be confused with the current merged-candidate scan.
+- Exact-source preview deployment 6350969114 succeeded. The live Tarot page
+  rendered signed out at desktop and 390px widths, changed cards on Draw,
+  showed Copy but no edit control, and displayed the exact a99ec728a commit
+  with frontend/API/Vercel/database ready. Top/bottom layouts were inspected
+  and the temporary viewport reset. Chrome extension navigation timed out;
+  the final live preview check used the in-app browser.
+- Develop advanced to c06f8b4da1fe41a6ccd798e819f55743ef0d72fd before merge.
+  The safety check stopped without merging. Integrate its recording-Things
+  change, preserve both changelog entries and publish the combined compatible
+  correction as Things feature 1.7.1 / contract 1.6.1, not a downgrade of
+  develop's 1.7.0 / 1.6.0. Compare candidate parents with the live develop git
+  ref; the PR API base snapshot still reported an older commit.
+- Combined-tree validation: production client/embed build and changed-file
+  lint pass; 79 webpage tests, 26 API-contract tests and six origin-manifest
+  tests pass. The full real API plus bundled-client Chrome 152 fixture passes
+  in 41.942 seconds, with sample first renders 2.970 / 2.290 seconds. Local
+  runtime advertises Things 1.7.1. The earlier root-cwd unit invocation failed
+  to resolve the Remix alias; rerunning from remix resolved it without an app
+  code change. No app server restart or storage migration was needed.
+- All 18 startup/recovery tests pass again with Chrome 152 enabled (native
+  portion 20.180 seconds); fresh desktop/mobile screenshots were inspected.
+- This integrated tree needs its own published SHA, fresh CI and preview;
+  the a99ec728a receipts remain historical rather than being relabeled.
 
 ## Release relationship and remaining goal
 

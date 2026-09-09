@@ -18,6 +18,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Save new iOS Lopu voice recordings as owner-private playable audio Things,
+  retaining on-device recovery files and an account-bound retry outbox.
+  Completed recordings survive draft cleanup; upload/complete contracts are
+  1.2.0 and native delivery is build 29.
+  [Release and validation notes](../PRs/722-ios-voice-recording-things-save-ios-lopu-recordings-to-private-things.md).
+  — Codex (AI), 2026-09-09
+
 - Recover initial static-module download failures before the application entry
   can install its listeners. Preserve the shared URL, retry automatically at
   most once and provide an accessible manual fallback when recovery fails or
@@ -35,6 +42,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   independent protected-upload copying remain separate follow-ups.
   Cover escaped CSS function identifiers (including hex-terminating whitespace)
   with a bounded argument scanner shared by discovery and rendering.
+  Preserve recording-Thing support when integrating develop; publish the
+  combined Things feature 1.7.1 / contract 1.6.1 without a version downgrade.
   [PR #719 validation and remaining browser gate](../PRs/719-codex-shared-render-media-context.md).
   — Codex (AI), 2026-09-09
 
@@ -73,6 +82,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   live audio and native push acceptance remain release gates. See the
   [PR #665 verification note](../PRs/665-codex-watch-lopu-recording-automation-private-transcripts-todos-reminders.md). — Codex (AI)
 - Keep Commander's display-name prefix tier reachable for queries that span a space ("the lopu"), which previously matched no single split word and let a matching Thing title outrank the person. — Lopu (AI), 2026-09-09
+- Prepare the focused main promotion of shared Data/schema controls after
+  exact-head CI and logged-out Safari verification on PR #714. Preserve the
+  separate unresolved initial-load and protected-media-copy limitations in the
+  [delivery note](../PRs/714-codex-shared-schema-action-inheritance.md).
+  — Codex (AI), 2026-09-09
 
 - Include schema-template actions in shared-root dependency resolution and
   private copies. Data Thing detail controls use root-authorized read-only
@@ -83,6 +97,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   1.2.1). Validation and remaining scope:
   [PR #714](../PRs/714-codex-shared-schema-action-inheritance.md).
   — Codex (AI), 2026-09-09
+
 - 2026-09-09: Deliver native Lopu voice and its signed Live Activity extension
   in iOS build 27; older general bridges now show an update instruction.
   Repair iOS Lopu voice startup/stop races, preserve partial speech

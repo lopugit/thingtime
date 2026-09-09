@@ -47,6 +47,31 @@ sharing goal by itself.
   direct MongoDB writes. Local health still reports storage migration required;
   no migration was run. Media bytes in browser fixtures are stubs, not S3 proof.
 
+## Develop delivery and focused main promotion (2026-09-09)
+
+- PR #714 merged into develop as
+  `411c23ce94a88ec478fea1c674aa9e09537f6275`. Source head
+  `80be6d22f369bc91c3ef767b36ccfecc7508fa87` passed Web build, typecheck
+  ratchet, unit and API suites plus both CodeQL language scans.
+- GitHub deployment `6348337271` succeeded. The
+  [exact-head preview](https://pr-714.previews.dev.thingtime.com) rendered the
+  complete Tarot app in logged-out Safari, with a matching commit footer,
+  Copy to my Builder, no edit control, and Draw changing Strength to Temperance.
+  A temporary blank screen preceded rendering on the first navigation; this is
+  not proof that initial-load latency is fixed.
+- Main promotion cherry-picks only the sharing implementation commits onto
+  main. Unrelated develop Commander changes and graph retention cleanup are not
+  part of this promotion. Its own head still requires CI and deployment proof.
+- PR #716 passed its original exact-head CI, then main advanced with the iOS
+  voice release. Merge the released main base into the promotion, preserving
+  both changelog entries; no sharing implementation conflict was present.
+  Re-run exact-head checks after this merge rather than reusing the earlier
+  green result.
+- The focused main-tree API plus Chrome fixture passed in 192.9 seconds at
+  desktop and mobile widths, including signed-in copying and foreign-schema
+  authority refusal. The fixture retains the same failure diagnostics as the
+  validated develop source. This does not exercise real S3 object copying.
+
 ## Remaining broader-goal work
 
 - Copied protected uploads still need an independent, authorized media-copy

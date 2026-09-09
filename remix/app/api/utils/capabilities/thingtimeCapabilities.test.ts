@@ -42,7 +42,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // response echoes it; unknown → 400) — the single read only, the shared
   // projection is untouched (1.5.0, additive)
   // Included dependency reads add sharedRoot without widening standalone ACLs.
-  assert.equal(manifest.features['api.things']?.version, '1.6.3');
+  assert.equal(manifest.features['api.things']?.version, '1.7.1');
   // round 2 S6 — discovery: the home feed takes scope=all|subspaces ("My
   // subspaces" — only the viewer's ACTIVE subspaces, empty for guests) and
   // echoes it (1.5.0, additive)
@@ -187,5 +187,16 @@ test('both manifests publish notification history and system notification contra
   for (const [feature, version] of Object.entries(expected)) {
     assert.equal(originManifest.features[feature]?.version, version);
     assert.equal(apiManifest.features[feature], version);
+  }
+});
+
+
+test('native recording uploads negotiate durable private Things before sending bytes', () => {
+  const manifest = thingtimeCapabilityManifest('https://thingtime.com');
+  for (const feature of ['api.attachment-uploads', 'api.attachment-upload-complete']) {
+    assert.equal(manifest.features[feature]?.version, '1.2.0');
+    assert.equal(capabilitySatisfies(manifest.features[feature].version, '1.2.0'), true);
+    assert.equal(capabilitySatisfies('1.1.0', '1.2.0'), false);
+    assert.equal(capabilitySatisfies('2.0.0', '1.2.0'), false);
   }
 });
