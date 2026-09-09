@@ -9,6 +9,7 @@ export const notificationListResponse = <Notification,>(
   result: {
     notifications: Notification[];
     unreadCount: number;
+    historyUnreadCount?: number;
     total?: number | null;
     nextBefore: string | null;
     nextCursor: string | null;
@@ -18,6 +19,7 @@ export const notificationListResponse = <Notification,>(
   viewer: { username },
   notifications: result.notifications,
   unreadCount: result.unreadCount,
+  ...(result.historyUnreadCount === undefined ? {} : { historyUnreadCount: result.historyUnreadCount }),
   // only present for withTotal callers, so the bell's poll stays one query
   ...(result.total === null || result.total === undefined ? {} : { total: result.total }),
   nextBefore: result.nextBefore,
@@ -52,6 +54,7 @@ export const loader = async ({ request }: { request: Request }) => {
   const params = new URL(request.url).searchParams;
   const param = (name: string) => params.get(name) || undefined;
   const result = await listNotifications(user.id, {
+    history: param('history'),
     limit: param('limit'),
     before: param('before'),
     cursor: param('cursor'),

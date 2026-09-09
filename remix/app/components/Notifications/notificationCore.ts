@@ -17,6 +17,7 @@ import {
 
 // One row of GET /api/v1/notifications (PublicNotification on the server).
 export type NotificationItem = {
+  detail?: string | null;
   id: string;
   type: string;
   category?: string | null;
@@ -53,8 +54,10 @@ export const NOTIFICATION_TYPE_META: Record<NotificationType, { emoji: string; l
   'action-run': {
     emoji: '⚡',
     label: 'Action runs',
-    hint: 'Lopu reports each action you run yourself, plus any run that fails — email is opt-in'
+    hint: 'Every run is saved, including component runs — email is opt-in'
   },
+  'login-success': { emoji: '🗝️', label: 'Successful sign-ins', hint: 'A successful password, passkey, or SSO sign-in' },
+  'system-message': { emoji: '🦄', label: 'Lopu messages', hint: 'In-app messages saved for later, without a second push or email' },
   // subspaces 🪐 — the member-facing four, then the two mod-queue types
   // (those default to email OFF: a busy subspace is a firehose)
   'subspace-role': { emoji: '🎩', label: 'Subspace roles', hint: 'You are made a moderator or owner, demoted, or a subspace you moderate is deleted' },
@@ -102,6 +105,10 @@ export const notificationVerb = (item: Pick<NotificationItem, 'type' | 'preview'
       return 'mentioned you';
     case 'action-run':
       return 'ran an action';
+    case 'login-success':
+      return 'welcomed you back';
+    case 'system-message':
+      return 'sent you a message';
     // subspace moderation — the preview line ("s/<slug> · …") carries the
     // specifics, the verb names the event family. The verb keys off the
     // DETAIL half only, so a slug like s/deleted_scenes or s/uplifted_minds

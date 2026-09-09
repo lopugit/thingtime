@@ -370,6 +370,19 @@ Don't pass Chakra-native toast props (e.g. `isClosable`, `render`) to `lopu()` â
 the component owns presentation. `console.error`/logging is for developers and is
 not a user notification; surface anything the user should see through Lopu.
 
+Notification history is durable account-owned data, separate from delivery.
+`emitNotification` always saves a record before checking push/email settings;
+the shared Lopu hooks record signed-in messages through the authenticated,
+idempotent `/api/v1/notifications/record` API. Completed streams save their
+final text (cancellation saves the partial text), not one row per token.
+`history=1` reads all retained records; ordinary bell reads still honor delivery
+preferences and exclude quiet records. Never prune history by notification count
+or suppress repeated events just to silence delivery. Client messages remain
+`system-message`, never client-forged login/action audit records. Credential-like
+content is redacted before storage; messages without an authenticated owner are
+not attributed to an account. Password/passkey/SSO login, registration and logout
+record their successful outcome server-side across the session boundary.
+
 
 Passkey challenge replay protection uses the existing home `authOtps` satellite:
 server-only `webauthn:<ceremony>:<challenge SHA-256>` spent markers, unique by
