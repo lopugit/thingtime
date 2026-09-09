@@ -149,7 +149,7 @@ test('shared page audience includes its author components, never a foreign priva
 			{ tag: 'button', ttAction: sharedAction.id, children: ['Draw'] }, { tag: 'p', children: ['{last.result}'] },
 			...(process.env.TT_SHARED_PLAYWRIGHT_PATH ? [
 				{ tag: 'img', props: { src: '/api/v1/attachments/content?id=sharing-browser-transport', alt: 'Shared media transport' } },
-				{ tag: 'div', props: { style: { backgroundImage: `url(${mediaSource('html-css')})`, height: 20 } }, children: ['HTML background'] },
+				{ tag: 'div', props: { style: { backgroundImage: `u\\72 l(${mediaSource('html-css')})`, height: 20 } }, children: ['HTML background'] },
 				{ tag: 'img', props: { src: 'https://example.invalid/sharing-browser-transport.png', alt: 'External media transport' } }
 			] : [])
 		] } } }, owner)).response.status, 200);
@@ -166,7 +166,7 @@ test('shared page audience includes its author components, never a foreign priva
 		}
 		if (process.env.TT_SHARED_PLAYWRIGHT_PATH) {
 			const chakraMedia = await create(owner, ['component'], { name: 'Shared CSS card', componentKey: `${key}-css`, version: 1, render: {
-				type: 'chakra', chakra: 'Box', props: { 'data-testid': 'shared-chakra-css', backgroundImage: { base: `url(${mediaSource('chakra-css')})` }, _hover: { backgroundImage: `url(${mediaSource('hover-css')})` }, minHeight: 20 }, children: ['Chakra background']
+				type: 'chakra', chakra: 'Box', props: { 'data-testid': 'shared-chakra-css', backgroundImage: { base: `url(${mediaSource('chakra-css')})` }, _hover: { backgroundImage: `\\75 \\72 \\6c ("${mediaSource('hover-css')}")` }, minHeight: 20 }, children: ['Chakra background']
 			} });
 			const cssPage = await request('/api/v1/things', 'PATCH', { id: page.id, crystal: {
 				previewBg: `url(${mediaSource('page-css')})`,

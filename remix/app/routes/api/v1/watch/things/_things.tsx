@@ -8,6 +8,8 @@ import { getHomeThingsCollection } from '~/api/utils/mongodb/collections';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { createThing, toPublicPosts, viewerOf } from '~/api/utils/things/things';
 import { recordWatchSync, resolveWatchDevice } from '~/api/utils/watch/watchPairing';
+import { attachmentStore } from '~/api/utils/attachments/attachmentStore';
+import { watchUploadNeedsRestart } from '~/api/utils/watch/watchUploadRecovery';
 
 const MAX_BODY_BYTES = 768 * 1024;
 const noStore = { 'Cache-Control': 'no-store', Pragma: 'no-cache' };
@@ -55,7 +57,15 @@ export const action = async ({ request }: { request: Request }) => {
 		return json({ ok: false, error: 'Choose between 1 and 10 completed attachments' }, { status: 400, headers: noStore });
 	}
 	const inspected = await inspectReadyAttachmentsForPost(context.user.id, attachmentIds);
-	if (inspected.ok === false) return json(inspected, { status: inspected.status, headers: noStore });
+	if (inspected.ok === false) {
+		if (inspected.status === 409 && attachmentIds.every((id: unknown) => typeof id === 'string')) {
+			const owned = await attachmentStore.getOwnedMany(context.user.id, attachmentIds);
+			if (watchUploadNeedsRestart(owned, attachmentIds)) {
+				return json({ ok: false, code: 'watch_upload_restart_required', error: 'This upload draft expired. Your Watch can upload its saved recording again.' }, { status: 409, headers: noStore });
+			}
+		}
+		return json(inspected, { status: inspected.status, headers: noStore });
+	}
 	const filenames = Array.isArray(body?.filenames)
 		? body.filenames.filter((value: unknown): value is string => typeof value === 'string').map((value: string) => value.trim()).filter(Boolean)
 		: [];

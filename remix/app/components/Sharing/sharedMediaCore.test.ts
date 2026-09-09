@@ -39,6 +39,31 @@ test('CSS parsing never sends the root key into external URLs, quoted text, comm
 	assert.equal(literalAttachmentId('https://external.test' + fixtureUrl), null);
 });
 
+test('escaped CSS function names share the same bounded URL grammar as literal url', () => {
+	const names = [String.raw`u\72l`, String.raw`u\72 l`, String.raw`\75 \72 \6c `, 'u\\72\r\nl'];
+	for (const name of names) {
+		for (const argument of [fixtureUrl, `"${fixtureUrl}"`, String.raw`\2f api/v1/attachments/content?id=css-image`]) {
+			const value = `${name}(${argument})`;
+			const mapped = mapCssMediaUrls(value, withContext);
+			assert.ok(mapped.includes('key=read-key&sharedRoot=shared-page'), value);
+			assert.equal(mapCssMediaUrls(mapped, withContext), mapped);
+			const ids: string[] = [];
+			mapCssMediaUrls(value, (url) => { const id = literalAttachmentId(url); if (id) ids.push(id); return url; });
+			assert.deepEqual(ids, ['css-image'], value);
+		}
+		for (const argument of [`'https://external.test/?text=url("${fixtureUrl}")'`, `//external.test${fixtureUrl}`, `${fixtureUrl} invalid`, `${fixtureUrl}\\`, `url(${fixtureUrl})`]) {
+			const value = `${name}(${argument})`;
+			assert.equal(mapCssMediaUrls(value, withContext), value);
+		}
+	}
+	for (const name of [String.raw`u\72  l`, String.raw`u\\72 l`, String.raw`u\72 /* comment */l`]) {
+		const value = `${name}("${fixtureUrl}")`;
+		assert.equal(mapCssMediaUrls(value, withContext), value);
+	}
+	const imageSet = String.raw`image\2d set` + `("${fixtureUrl}" 1x)`;
+	assert.ok(mapCssMediaUrls(imageSet, withContext).includes('key=read-key&sharedRoot=shared-page'));
+});
+
 test('CSS wait-for-capability blanks media safely and parser discovery matches transport', () => {
 	assert.equal(mapCssMediaUrls(`url(${fixtureUrl})`, () => ''), 'url("")');
 	const value = `image-set("${fixtureUrl}" 1x, url('https://external.test/a.png') 2x)`;

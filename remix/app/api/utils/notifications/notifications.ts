@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
+import type { NotificationDelivery } from '../lopu/remindersCore';
 import { ObjectId } from 'mongodb';
 
 // Notifications are identity-adjacent (they belong to the RECIPIENT, not to
 // whatever data plane the actor's request was riding), so every access here is
 // home-pinned — same rationale as users.ts.
-import { getHomeThingsCollection as getThingsCollection, getUsersCollection } from '../mongodb/collections';
+import { getHomeThingsCollection as getThingsCollection, getUsersCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import { getUserNotificationPrefs } from '../auth/users';
 import {
   ACL_OWNER,
@@ -44,6 +45,9 @@ export type NotificationActor = {
 };
 
 export type EmitNotificationInput = {
+  richText?: string;
+  image?: string;
+  delivery?: NotificationDelivery;
   recipientId: string;
   type: NotificationType;
   actor: NotificationActor;
@@ -62,6 +66,9 @@ export type EmitNotificationInput = {
 };
 
 export type PublicNotification = {
+  richText?: string | null;
+  image?: string | null;
+  delivery?: NotificationDelivery;
   detail: string | null;
   id: string;
   type: NotificationType;
@@ -104,6 +111,9 @@ export const notificationDoc = (input: EmitNotificationInput, now: Date) => ({
   schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
   thingtime: ['notification'],
   crystal: {
+    ...(input.richText ? { richText: input.richText.slice(0, 2000) } : {}),
+    ...(input.image === '/notification-test.svg' ? { image: input.image } : {}),
+    ...(input.delivery ? { delivery: input.delivery } : {}),
     type: input.type,
     actorId: input.actor.id,
     actorName: input.actor.displayName || input.actor.username || null,
@@ -193,6 +203,10 @@ export const SYSTEM_NOTIFICATION_ACTOR: NotificationActor = {
 };
 
 export type EmitSystemNotificationInput = {
+  skipEmail?: boolean;
+  richText?: string;
+  image?: string;
+  delivery?: NotificationDelivery;
   historyOnly?: boolean;
   recipientId: string;
   type: NotificationType;
@@ -210,6 +224,9 @@ export const emitLoginNotification = (recipientId: string) => emitSystemNotifica
 
 export const emitSystemNotification = (input: EmitSystemNotificationInput): Promise<void> =>
   emitNotification({
+    richText: input.richText,
+    image: input.image,
+    delivery: input.delivery,
     historyOnly: input.historyOnly,
     recipientId: input.recipientId,
     type: input.type,
@@ -220,6 +237,35 @@ export const emitSystemNotification = (input: EmitSystemNotificationInput): Prom
     href: input.href ?? null,
     outcome: input.outcome ?? null
   });
+
+// Durable scheduler variant. The caller's unique id is server-generated and
+// reserved from generic Thing creation. Its checkpoint and bell entry commit
+// together; storage failures throw so the scheduler can retry, never silently
+// acknowledge a reminder that was not saved.
+export const emitSystemNotificationOnce = async (
+	input: EmitSystemNotificationInput,
+	uniqueId: string,
+	checkpoint: (session: any) => Promise<boolean>
+): Promise<boolean> => {
+	const prefs = normalizeNotificationPrefs(await getUserNotificationPrefs(input.recipientId));
+	if (!prefs.masters.push || prefs.push[input.type] === false) return false;
+	const things = await getThingsCollection();
+	const fullInput = { ...input, actor: SYSTEM_NOTIFICATION_ACTOR };
+	const doc = { ...notificationDoc(fullInput, new Date()), shareId: uniqueId };
+	const inserted = await withHomeMongoTransaction(async (session) => {
+		if (await things.findOne({ shareId: uniqueId }, { session })) return false;
+		if (!await checkpoint(session)) return false;
+		await things.insertOne(doc as any, { session });
+		return true;
+	});
+	if (!inserted) return false;
+	// Fan out only after the deduplicated bell/checkpoint transaction commits.
+	// Push is best-effort; a delivery failure must not duplicate the daily row.
+	await sendNotificationPush({ ...fullInput, notificationId: uniqueId }).catch(() => {});
+	if (!input.skipEmail) await maybeEmailNotification(fullInput).catch(() => {});
+	return true;
+};
+
 // Capped fan-out (posts from followed/friends): one insertMany, pref-agnostic
 // at write (only bell reads filter). recipients map lets followers and friends of the
 // same author get differently-typed notifications in one call. Never throws.
@@ -388,6 +434,9 @@ const publicNotification = (
   return {
     detail: typeof doc.crystal?.detail === 'string' ? doc.crystal.detail : null,
     id: String(doc.shareId),
+    delivery: ['quiet', 'normal', 'urgent'].includes(doc.crystal?.delivery) ? doc.crystal.delivery : 'normal',
+    richText: typeof doc.crystal?.richText === 'string' ? doc.crystal.richText.slice(0, 2000) : null,
+    image: doc.crystal?.image === '/notification-test.svg' ? doc.crystal.image : null,
     type: doc.crystal?.type,
     category: notificationCategoryOf(doc.crystal?.type),
     actorId,
