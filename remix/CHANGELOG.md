@@ -41,6 +41,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - Notification-history validation and rollout boundaries: [PR #705 notes](../PRs/705-codex-system-notification-history-save-system-events-and-retain-user-history.md).
 
 - Save notification history independently of delivery preferences, retain records without the former 10,000-item trim, log all action runs and successful sign-ins, and persist shared Lopu messages with account-fenced retry deduplication and credential redaction. History uses stable pagination and preserves bounded full message text. — Codex (AI), 2026-09-09
+- Share tabbed settings between the popup and dedicated page, with Profile as the default and category deep links. Keep Mac node recovery in Things settings and let healthy nodes hide the Things-page panel until a problem occurs. [PR 709 details](../PRs/709-codex-shared-settings-tabs-unify-settings-views.md). — Codex (AI), 2026-09-09
 
 - Route both permission-settings actions through the shared Open App Locations flow, so Finder always shows the combined app shortcuts. — Codex (AI), 2026-09-09
 
