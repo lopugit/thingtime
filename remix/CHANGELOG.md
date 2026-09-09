@@ -24,6 +24,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   and local audio/transcript files, save ordinary voice turns in the selected
   chat, and surface separate Speech Recognition and Live Activity failures.
   Native voice now checks the selected origin's semantic API capabilities.
+  [Release evidence and device checklist](../PRs/715-ios-lopu-voice-recovery-deliver-lopu-voice-recording-and-live-activities.md).
 
 - Add fresh-password or user-verified passkey Show controls for CI, admin integration and personal Secure Vault credentials. Keep normal reads redacted, bind passkey challenges to a single session/item/origin, and clear displayed values after 30 seconds or leaving the tab. [PR #710 security and verification notes](../PRs/710-vault-verified-reveal-verified-vault-credentials.md). — Codex (AI), 2026-09-09
 
