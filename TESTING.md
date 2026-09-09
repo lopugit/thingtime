@@ -6153,3 +6153,19 @@ approval; `access.test.ts` — the reservation matrix) and
 
 - Shared settings / Desktop persistence: dismiss a healthy Things node panel, quit and reopen Desktop (which changes the local port), and verify it remains hidden. Settings → Things must still show the card and its restore switch. Restore the switch, then confirm the Things page shows the panel again.
 - Shared settings / observed status: after the Mac reports connected with access allowed, switch between Things, the popup Things tab, and Open settings page. Keep the last observed status visible during the background check; do not briefly show Not running or a new permission denial. Pairing challenges and pending actions must not carry between views.
+
+## Shared Data Thing template controls
+
+- Share an action that searches public Data Things using its included private
+  schema. Verify it resolves the schema and returns public results when logged
+  out; an own-scope search must not borrow either the author's or a logged-in
+  visitor's private inventory. Wrong or revoked root keys must still fail.
+- Open a keyed Data Thing whose private same-author schema contains a button
+  invoking a private action. Logged out, the button must run read-only through
+  the Data Thing root, show its result, and refuse unrelated actions and revoked
+  keys/groups. A shared schema writer cannot insert an unreadable private action.
+- Copy that Data Thing: its schema and control action must receive fresh private
+  identities, and the copied button must reference the copied action. Owning data
+  with someone else's schema must never delegate the viewer's account authority.
+- Verify the detail page at desktop and mobile widths, including the visible
+  control/result and top-to-bottom scrolling. List/grid previews remain inert.

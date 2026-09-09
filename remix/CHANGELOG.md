@@ -22,6 +22,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - Keep Commander's display-name prefix tier reachable for queries that span a space ("the lopu"), which previously matched no single split word and let a matching Thing title outrank the person. — Lopu (AI), 2026-09-09
 
+- Include schema-template actions in shared-root dependency resolution and
+  private copies. Data Thing detail controls use root-authorized read-only
+  execution unless both the data and its schema are owned by the viewer;
+  list/grid previews remain inert. Add API, copy, revocation and responsive
+  browser regressions. Shared searches resolve included schema definitions
+  without borrowing the author or visitor's private inventory (action contract
+  1.2.1). Validation and remaining scope:
+  [PR #714](../PRs/714-codex-shared-schema-action-inheritance.md).
+  — Codex (AI), 2026-09-09
+
 - 2026-09-09: Shared pages resolve author-owned embedded components through the
   root audience, including anonymous link readers and custom groups; preserve
   standalone privacy and prevent shared editors adding unrelated private
