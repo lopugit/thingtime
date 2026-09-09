@@ -6050,3 +6050,11 @@ approval; `access.test.ts` — the reservation matrix) and
 - Run `cd remix && node --import tsx scripts/audit-things-indexes.mts`; source-plan replay must work without database credentials, include Mongo's `_id_`, and preserve exact key order, unique/partial/sparse/TTL options.
 - Run `pnpm --dir remix run test:collections`. The unused emoji lookup must not be recreated; protected `uniqueKeys_1` must stay unique and the legacy unique ancestor must not be blindly retired.
 - Before any live index retirement, compare exact production/develop index definitions with the source inventory, preserve unknown indexes, and prove the actual query and concurrent-write paths. A low count alone is not acceptance. See `docs/architecture/thing-index-consolidation.md` for the full rollout gates.
+
+### Desktop permission recovery
+
+- In Things and Desktop settings, use Open App Locations. Check that Finder contains symlinks to the running Desktop, its bundled Node, and installed Recovery/Commander/ThingDisk/ThingDock apps; an older standalone Node must not replace the bundled shortcut. Repeat after an update and verify targets refresh.
+- Return from the folder or Privacy settings: Thingtime offers Later / Restart Node Now once per explicit recovery flow. Later must not prompt again on routine focus or polling. Restart must preserve pairing and leave one Node process; handle failure visibly.
+- Re-add the affected app manually only with the owner’s consent. Apple controls its own Quit & Reopen prompt; if absent, use Thingtime’s restart control. Verify live permission checks and a protected operation after restarting.
+
+- Permission recovery follow-up: click Open System Settings for both Accessibility and Screen Recording. Confirm Finder opens the combined App Locations folder, not Contents/Helpers, alongside the correct privacy pane.
