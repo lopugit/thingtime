@@ -10,8 +10,8 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.origin, 'https://preview.example.test');
   assert.equal(manifest.schemaVersion, 1);
 	assert.equal(manifest.features['api.webpages-resolve']?.version, '1.2.0');
-	assert.equal(manifest.features['api.actions-run']?.version, '1.1.0');
-	assert.equal(manifest.features['api.things-fork']?.version, '1.1.0');
+	assert.equal(manifest.features['api.actions-run']?.version, '1.2.0');
+	assert.equal(manifest.features['api.things-fork']?.version, '1.1.1');
   assert.equal(manifest.features['api.admin-migrations-run']?.version, '1.3.0');
   assert.equal(manifest.features['api.admin-subscriptions']?.version, '1.1.1');
 	assert.equal(manifest.features['api.admin-ci-dispatch']?.version, '2.1.0');
@@ -42,7 +42,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // response echoes it; unknown → 400) — the single read only, the shared
   // projection is untouched (1.5.0, additive)
   // Included dependency reads add sharedRoot without widening standalone ACLs.
-  assert.equal(manifest.features['api.things']?.version, '1.6.1');
+  assert.equal(manifest.features['api.things']?.version, '1.6.2');
   // round 2 S6 — discovery: the home feed takes scope=all|subspaces ("My
   // subspaces" — only the viewer's ACTIVE subspaces, empty for guests) and
   // echoes it (1.5.0, additive)

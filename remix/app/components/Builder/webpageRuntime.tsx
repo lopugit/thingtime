@@ -168,7 +168,7 @@ export const WebpageRuntimeProvider = ({
 	);
 	const query = React.useMemo(() => queryScopeOf(location.search), [location.search]);
 	const sharedRun = React.useCallback(async (action: string, inputs: Record<string, unknown>) => {
-		await requireThingtimeCapability('api.actions-run', '1.1.0');
+		await requireThingtimeCapability('api.actions-run', '1.2.0');
 		const response = await fetch('/api/v1/actions/run', {
 			method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ action, inputs, sharedRoot: pageId, ...(linkKey ? { key: linkKey } : {}) })
