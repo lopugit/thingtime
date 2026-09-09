@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('thingtimeDesktop', {
 	removeCachedRelease: (request) => ipcRenderer.invoke('thingtime-desktop:remove-cached-release', request),
 	revealUpdateCache: () => ipcRenderer.invoke('thingtime-desktop:reveal-update-cache'),
 	getInfo: () => ipcRenderer.invoke('thingtime-desktop:get-info'),
+	getNodePanelPreference: (request) => ipcRenderer.invoke('thingtime-desktop:get-node-panel-preference', request),
+	setNodePanelPreference: (request) => ipcRenderer.invoke('thingtime-desktop:set-node-panel-preference', request),
 	getDesktopSettings: () => ipcRenderer.invoke('thingtime-desktop:get-settings'),
 	addEndpoint: (request) => ipcRenderer.invoke('thingtime-desktop:add-endpoint', request),
 	removeEndpoint: (request) => ipcRenderer.invoke('thingtime-desktop:remove-endpoint', request),
