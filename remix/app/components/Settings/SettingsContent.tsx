@@ -665,6 +665,15 @@ export const SettingsContent = ({
 									<Switch isChecked={theme.general.motion} onChange={(e) => setGeneral('motion', e.target.checked)}></Switch>
 								</SettingRow>
 
+								{/* Beside Motion rather than only in Theme Studio: the pet is
+								    permanent app-wide chrome, so "I don't want to see this"
+								    belongs on the settings surface AI_ALL.md asks every feature
+								    for, not behind the /themes editor. Separate from Motion in
+								    both directions — motion off leaves it still, this removes it. */}
+								<SettingRow label="Pet 🦄" hint="Floating unicorn on every page">
+									<Switch isChecked={theme.general.pet} onChange={(e) => setGeneral('pet', e.target.checked)}></Switch>
+								</SettingRow>
+
 								<SettingRow label="Lopu messages 🦄" hint="Where notifications pop up on screen">
 									<LopuPositionSelect />
 								</SettingRow>

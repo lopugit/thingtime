@@ -2308,6 +2308,11 @@ email whose link points at the attacker.
       switch was read from the async localforage blob, which resolves after
       first paint, so every load flashed the pet at users who turned it off).
       With it on, reload and confirm it does NOT pop in a beat late either.
+- [ ] The Pet switch is offered in BOTH Settings → Appearance (beside Motion)
+      and Theme Studio, and the two agree: flip it in one, reopen the other,
+      and it reads the new value (regression: it shipped only in the /themes
+      editor, so the most-likely-to-be-turned-off piece of app-wide chrome had
+      no row on the settings surface AI_ALL.md asks every feature for).
 - [ ] Settings → Motion off leaves the pet visible but completely still, and
       Pet off removes it while the rest of the app keeps animating — the two
       switches are independent in both directions.

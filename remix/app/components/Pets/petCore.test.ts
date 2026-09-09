@@ -145,3 +145,22 @@ test('the pet spends the pre-paint var on display, and reads no async tier', asy
 	// localforage blob's hydration flag again, which cannot seed a first render
 	assert.doesNotMatch(source, /\bloading\b/u, 'the pet must not gate its first paint on Tier-2 hydration');
 });
+
+test('the pet switch is reachable from Settings, not only from Theme Studio', async () => {
+	// AI_ALL.md ("Feature customization defaults") asks every user-facing
+	// addition for a settings surface, and the pet is permanent chrome on every
+	// non-full-bleed page — the one thing a user is most likely to want to turn
+	// off. Theme Studio alone is not that surface: it is a separate /themes
+	// editor, while Settings → Appearance is where the analogous (and strictly
+	// less intrusive) Motion switch already lives. TESTING.md's pet checklist
+	// says "Settings → Pet off" in two places, so a switch that only exists in
+	// /themes makes its own regression checklist unrunnable as written.
+	const source = await readFile(new URL('../Settings/SettingsContent.tsx', import.meta.url), 'utf8');
+
+	// anchor on Motion first: if the Appearance section is ever restructured,
+	// this fails asking to re-anchor rather than quietly asserting nothing
+	assert.match(source, /setGeneral\('motion', e\.target\.checked\)/u, 'lost the Motion row this scan anchors to — re-anchor rather than deleting');
+
+	assert.match(source, /isChecked=\{theme\.general\.pet\}/u, 'the Settings switch must reflect the stored pet value');
+	assert.match(source, /setGeneral\('pet', e\.target\.checked\)/u, 'the Settings switch must write general.pet');
+});
