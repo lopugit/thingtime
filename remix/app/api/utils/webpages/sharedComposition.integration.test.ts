@@ -77,8 +77,18 @@ test('shared page audience includes its author components, never a foreign priva
 			steps: [{ op: 'actions.invoke', action: childAction.id }, { op: 'return', value: '$step.1' }] });
 		const unrelatedAction = await create(owner, ['action'], { name: 'Not included', actionKey: `${key}-secret`, version: 1, capabilities: [], steps: [{ op: 'return', value: 'Private' }] });
 		const sourceData = await create(owner, ['data'], { schema: 'sharing-regression', value: 'unchanged' });
-		const dataSchema = await create(owner, ['schema'], { name: `${key}-schema`, title: 'Shared schema', fields: [{ name: 'value', type: 'string', required: true, description: 'Fixture value' }] });
+		const dataSchema = await create(owner, ['schema'], { name: `${key}-schema`, title: 'Shared schema', fields: [{ name: 'value', type: 'string', required: true, description: 'Fixture value' }], render: { tag: 'p', children: ['Shared value: {value}'] } });
 		const standalone = await create(owner, ['data'], { schemaId: dataSchema.id, value: 'Copy my content' }, ['tt:hidden', 'tt:user']);
+		const sharedSchemaUrl = `/api/v1/things?id=${dataSchema.id}&sharedRoot=${standalone.id}`;
+		assert.equal((await request(`/api/v1/things?id=${dataSchema.id}`)).response.status, 404);
+		assert.equal((await request(`${sharedSchemaUrl}&key=wrong`)).response.status, 404);
+		const sharedSchema = await request(`${sharedSchemaUrl}&key=${encodeURIComponent(standalone.linkKey)}`);
+		assert.equal(sharedSchema.response.status, 200, sharedSchema.data.error);
+		assert.equal(sharedSchema.data.thing.id, dataSchema.id);
+		assert.deepEqual(sharedSchema.data.thing.crystal.render, { tag: 'p', children: ['Shared value: {value}'] });
+		assert.equal(sharedSchema.response.headers.get('Cache-Control'), 'private, no-store');
+		assert.equal(sharedSchema.data.thing.linkKey, undefined);
+		assert.equal((await request(`/api/v1/things?id=${sourceData.id}&sharedRoot=${standalone.id}&key=${encodeURIComponent(standalone.linkKey)}`)).response.status, 404);
 		const extended = { notes: ['Keep this content'], nested: { value: 7 } };
 		assert.equal((await request('/api/v1/things', 'PATCH', { id: standalone.id, extended }, owner)).response.status, 200);
 		assert.equal((await request('/api/v1/things/fork', 'POST', { id: standalone.id, key: 'wrong' }, stranger)).response.status, 404);
@@ -166,6 +176,12 @@ test('shared page audience includes its author components, never a foreign priva
 					await tab.waitForURL('**/login');
 					await tab.goto(new URL(`/thing/${standalone.id}?key=${encodeURIComponent(standalone.linkKey)}`, base).href);
 					await tab.getByTestId('fork-shared-thing').waitFor();
+					try {
+						await tab.getByText('Shared value: Copy my content', { exact: true }).waitFor({ timeout: 30000 });
+					} catch (error) {
+						if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-data-render-failure.png` });
+						throw error;
+					}
 					const dataCopyBounds = await tab.getByTestId('fork-shared-thing').boundingBox();
 					assert.ok(dataCopyBounds && dataCopyBounds.x >= 0 && dataCopyBounds.x + dataCopyBounds.width <= width);
 					if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-data-${width}-top.png` });
@@ -249,6 +265,9 @@ test('shared page audience includes its author components, never a foreign priva
 		const group = await request('/api/v1/groups', 'POST', { name: 'Shared composition regression', memberIds: [member.data.user.id] }, owner);
 		assert.equal(group.response.status, 201, group.data.error);
 		groupId = group.data.group.id;
+		assert.equal((await request('/api/v1/things', 'PATCH', { id: standalone.id, acl: ['tt:custom', `tt:group/${groupId}`] }, owner)).response.status, 200);
+		assert.equal((await request(`${sharedSchemaUrl}&key=${encodeURIComponent(standalone.linkKey)}`)).response.status, 404, 'Retired root keys cannot read an included schema');
+		assert.equal((await request(sharedSchemaUrl, 'GET', undefined, stranger)).response.status, 200);
 		assert.equal((await request('/api/v1/things', 'PATCH', { id: page.id, acl: ['tt:custom', `tt:group/${groupId}`] }, owner)).response.status, 200);
 		assert.equal((await request(url)).response.status, 404);
 		assert.equal((await request(url, 'GET', undefined, stranger)).data.refs[key], component.id);
@@ -264,6 +283,7 @@ test('shared page audience includes its author components, never a foreign priva
 		}
 		assert.equal((await request('/api/v1/groups', 'PATCH', { id: groupId, memberIds: [] }, owner)).response.status, 200);
 		assert.equal((await request(url, 'GET', undefined, stranger)).response.status, 404);
+		assert.equal((await request(sharedSchemaUrl, 'GET', undefined, stranger)).response.status, 404);
 	} finally {
 		if (groupId) assert.equal((await request('/api/v1/groups', 'DELETE', { id: groupId }, owner)).response.status, 200);
 		for (const { id, cookie } of created.reverse()) {

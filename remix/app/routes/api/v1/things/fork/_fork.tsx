@@ -13,7 +13,7 @@ export const action = async ({ request }: { request: Request }) => {
 	const body = await readJsonBody(request, 4096);
 	if (typeof body?.id !== 'string' || !body.id || body.id.length > 128) return json({ ok: false, error: 'Pass the Thing id to copy' }, { status: 400 });
 	const viewer = await withFriendIds(withLinkKeys(viewerOf(user), [typeof body?.key === 'string' ? body.key : '']));
-	const composition = await resolveSharedComposition(viewer, body.id, { forCopy: true });
+	const composition = await resolveSharedComposition(viewer, body.id, { contentRoot: true });
 	if (isFail(composition)) return json({ ok: false, error: composition.error }, { status: composition.status });
 	const result = await forkComposition(viewer, composition);
 	return json(result, { status: isFail(result) ? result.status : 200, headers: { 'Cache-Control': 'private, no-store' } });

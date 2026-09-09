@@ -14,6 +14,7 @@ import { WebpageBlocksRenderer } from '~/components/Builder/WebpageBlocksRendere
 import { WebpageRuntimeProvider } from '~/components/Builder/webpageRuntime';
 import { ForkSharedThingButton } from '~/components/Sharing/ForkSharedThingButton';
 import { canForkThing } from '~/components/Sharing/forkThingCore';
+import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { PostCard } from '~/components/Feed/PostCard';
 import { mergeReactionOverlay } from '~/components/Feed/reactionOverlay';
 import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
@@ -564,25 +565,28 @@ export default function ThingPage() {
 	// a data thing's schema render template: the /things Previews cache paints
 	// it instantly, the schema fetch reconciles (null = fetched, has none)
 	const schemaId = thing && isData ? schemaIdOf({ thingtime: kinds, crystal: thing.crystal || {} }) : null;
-	const [schemaRender, setSchemaRender] = React.useState<{ schemaId: string; template: Record<string, unknown> | null } | null>(null);
+	const schemaContext = schemaId && thing ? JSON.stringify([thing.id, schemaId, currentUser?.id || '', linkKey || '']) : null;
+	const [schemaRender, setSchemaRender] = React.useState<{ context: string; template: Record<string, unknown> | null } | null>(null);
 	React.useEffect(() => {
-		if (!schemaId) return;
-		const cached = readLocalCache<ThingsCache>(thingsCacheKey(currentUser?.id))?.schemaRenders?.[schemaId];
-		if (cached !== undefined) setSchemaRender({ schemaId, template: cached });
+		if (!schemaId || !schemaContext || !thing?.id) return;
+		// Inherited templates are capabilities of this root/key/viewer, never a
+		// schema-only persistent cache entry reusable on a different shared page.
+		const cached = isThingOwner ? readLocalCache<ThingsCache>(thingsCacheKey(currentUser?.id))?.schemaRenders?.[schemaId] : undefined;
+		if (cached !== undefined) setSchemaRender({ context: schemaContext, template: cached });
 		let cancelled = false;
-		apiRef.current.v1.things
-			.get({ id: schemaId })
+		void requireThingtimeCapability('api.things', '1.6.0')
+			.then(() => cancelled ? null : apiRef.current.v1.things.get({ id: schemaId, sharedRoot: thing.id, ...(linkKey ? { key: linkKey } : {}) }))
 			.then((response: any) => {
-				if (!cancelled) setSchemaRender({ schemaId, template: schemaRenderOf(response?.thing) });
+				if (!cancelled) setSchemaRender({ context: schemaContext, template: schemaRenderOf(response?.thing) });
 			})
 			.catch(() => {
-				if (!cancelled) setSchemaRender((current) => current?.schemaId === schemaId ? current : { schemaId, template: null });
+				if (!cancelled) setSchemaRender((current) => isThingOwner && current?.context === schemaContext ? current : { context: schemaContext, template: null });
 			});
 		return () => {
 			cancelled = true;
 		};
-	}, [schemaId, currentUser?.id]);
-	const dataTemplate = schemaId && schemaRender?.schemaId === schemaId ? schemaRender.template : null;
+	}, [schemaId, schemaContext, thing?.id, currentUser?.id, linkKey, isThingOwner]);
+	const dataTemplate = schemaContext && schemaRender?.context === schemaContext ? schemaRender.template : null;
 
 	// ---------------------------------------------------------------- view
 

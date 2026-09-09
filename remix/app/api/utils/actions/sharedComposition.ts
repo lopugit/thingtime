@@ -1,5 +1,5 @@
 import { getThingsCollection } from '../mongodb/collections';
-import { batchedThingLookup, canViewInherited, fail, type Fail, type ThingDoc, type Viewer } from '../things/things';
+import { batchedThingLookup, canViewInherited, fail, isFail, toPublicThings, type Fail, type ThingDoc, type Viewer } from '../things/things';
 import { compositionReferences } from './sharedCompositionCore';
 import { canForkThing } from '~/components/Sharing/forkThingCore';
 
@@ -28,10 +28,10 @@ export type SharedComposition = {
 // Rebuilt per invocation: a revoked link/group grant cannot keep using an
 // earlier resolver response as a capability. The root's owner is a lookup
 // namespace, NEVER an execution identity.
-export const resolveSharedComposition = async (viewer: Viewer, id: string, options: { forCopy?: boolean } = {}): Promise<SharedComposition | Fail> => {
+export const resolveSharedComposition = async (viewer: Viewer, id: string, options: { contentRoot?: boolean } = {}): Promise<SharedComposition | Fail> => {
 	const collection = await getThingsCollection();
 	const root = await collection.findOne({ shareId: id } as any) as unknown as ThingDoc | null;
-	if (!root || !(await canViewInherited(root, viewer)) || !(options.forCopy ? canForkThing(root) : root.thingtime?.some((kind) => ['webpage', 'component', 'action'].includes(kind)))) {
+	if (!root || !(await canViewInherited(root, viewer)) || !(options.contentRoot ? canForkThing(root) : root.thingtime?.some((kind) => ['webpage', 'component', 'action'].includes(kind)))) {
 		return fail(404, 'Shared app not found');
 	}
 	const result: SharedComposition = { root, actions: new Map(), children: new Map(), data: new Map(), docs: new Map([[root.shareId, root]]), references: new Map() };
@@ -82,4 +82,14 @@ export const resolveSharedComposition = async (viewer: Viewer, id: string, optio
 		}
 	}
 	return result;
+};
+
+// Contextual reads do not alter standalone ACLs. Only a stored dependency of
+// the freshly authorized root can be projected; arbitrary ids fail closed.
+export const getSharedCompositionThing = async (viewer: Viewer, id: string, rootId: string) => {
+	const composition = await resolveSharedComposition(viewer, rootId, { contentRoot: true });
+	if (isFail(composition)) return composition;
+	const doc = composition.docs.get(id);
+	if (!doc) return fail(404, 'Shared dependency not found');
+	return { ok: true as const, thing: (await toPublicThings([doc], viewer))[0] };
 };

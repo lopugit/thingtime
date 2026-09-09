@@ -41,7 +41,8 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // top|new|old (the shipped comment page in Reddit's three orders; the
   // response echoes it; unknown → 400) — the single read only, the shared
   // projection is untouched (1.5.0, additive)
-  assert.equal(manifest.features['api.things']?.version, '1.5.1');
+  // Included dependency reads add sharedRoot without widening standalone ACLs.
+  assert.equal(manifest.features['api.things']?.version, '1.6.0');
   // round 2 S6 — discovery: the home feed takes scope=all|subspaces ("My
   // subspaces" — only the viewer's ACTIVE subspaces, empty for guests) and
   // echoes it (1.5.0, additive)

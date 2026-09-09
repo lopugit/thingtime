@@ -5436,6 +5436,13 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       and signed-out users reach sign-in. Wait for the copy control to mount
       before starting the response timer; byte-transport fixtures must not make
       real requests to deliberately invalid image URLs in the signed-in test.
+- [ ] Open a shared Data Thing whose rendering schema is private: the schema
+      template renders at desktop/mobile widths through `id` + `sharedRoot`
+      after negotiating `api.things >= 1.6.0`. Reading the schema independently
+      or an unrelated id through the root still fails. Wrong/retired keys and
+      removed group memberships fail on contextual reads. App tokens cannot
+      use this first-party mode to escape their namespace. Every response is
+      private/no-store; shared templates never enter a schema-only local cache.
 - [ ] Canvas: hovering a block draws its dashed boundary + label chip; nested
       sub-blocks highlight innermost-wins; clicking selects (solid outline)
       and opens the inspector in the right drawer.

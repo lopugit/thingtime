@@ -81,6 +81,29 @@ not add references to unrelated private author dependencies they cannot read.
   suite and CodeQL. Real logged-out Safari displayed that exact SHA and Draw
   changed The Emperor to Death. This receipt predates the standalone follow-up.
 
+## Data template inheritance follow-up, 2026-09-09
+
+- Shared Data Things now read included schema templates through the freshly
+  authorized root, rather than an independent schema request. Only stored
+  composition dependencies qualify; arbitrary ids, missing ids/list mode and
+  app-token namespace escapes fail closed. Actual viewer/PAT fences remain
+  intact. Contextual responses are private/no-store with no-referrer.
+- The Things API advertises feature 1.6.0 / contract 1.5.0 on its two manifests;
+  the renderer negotiates the feature before fetching. Shared templates are
+  scoped to the root, key and viewer in memory, never persisted under a
+  schema-only cache key. Owner-only optimistic cached rendering is retained.
+- Route boundary tests: 3 passed. Capability tests: 24 passed. Real API and
+  Chrome desktop/mobile regression passed for private template rendering,
+  unrelated-id refusal, key retirement and group removal. The first browser
+  run caught the client GET helper dropping `sharedRoot`; forwarding that
+  field restored the intended template. Screenshots and top/bottom checks
+  verify the template and Copy control at 1440px/390px. Changed-file lint passed.
+- A clean full browser rerun passed in 61 seconds. Whole-project TypeScript
+  still reports 108 existing errors, including the duplicate `headers` type
+  declarations in the API docs; no new shared-read implementation errors.
+- Previous pushed head `f8e8ec134b14a192f124e98da4bba176c92fdf95` passed build,
+  unit, API and CodeQL checks. That receipt predates this follow-up.
+
 ## Remaining verification
 
 The latest merged-head and develop/main rollout verification,
