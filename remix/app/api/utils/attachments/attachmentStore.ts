@@ -199,7 +199,8 @@ export const expiredAttachmentDraftFilter = (
 	thingtime: ATTACHMENT_THINGTIME,
 	attachmentExpiresAt: { $lte: expiredAtOrBefore },
 	$or: [
-		{ targetId: { $exists: false }, attachmentState: { $in: ['pending', 'ready'] } },
+		{ targetId: { $exists: false }, attachmentState: 'pending' },
+		{ targetId: { $exists: false }, attachmentState: 'ready', attachmentPurpose: { $ne: 'recording' } },
 		{
 			targetId: { $exists: false },
 			attachmentState: 'finalizing',
@@ -492,6 +493,8 @@ export const attachmentStore: AttachmentStore = {
 				attachmentExpiresAt: expiresAt,
 				updatedAt: new Date()
 			};
+			// A completed recording is an owner-private library Thing, not a draft.
+			if (before.attachmentPurpose === 'recording') delete next.attachmentExpiresAt;
 			delete next.uploadId;
 			delete next.attachmentFinalizationLeaseId;
 			delete next.attachmentPartsIssuedAt;
@@ -514,11 +517,11 @@ export const attachmentStore: AttachmentStore = {
 						objectVersionId,
 						attachmentState: 'ready',
 						moderation: { status: 'pending' },
-						attachmentExpiresAt: expiresAt,
+						...(before.attachmentPurpose === 'recording' ? {} : { attachmentExpiresAt: expiresAt }),
 						sizeBytes: nextSize,
 						updatedAt: next.updatedAt
 					},
-					$unset: { uploadId: '', attachmentFinalizationLeaseId: '', attachmentPartsIssuedAt: '' }
+					$unset: { uploadId: '', attachmentFinalizationLeaseId: '', attachmentPartsIssuedAt: '', ...(before.attachmentPurpose === 'recording' ? { attachmentExpiresAt: '' } : {}) }
 				},
 				{ session }
 			);
@@ -780,7 +783,7 @@ export const attachmentStore: AttachmentStore = {
 	}
 };
 
-type BindableAttachmentPurpose = Exclude<AttachmentPurpose, 'profile'>;
+type BindableAttachmentPurpose = Exclude<AttachmentPurpose, 'profile' | 'recording'>;
 
 const attachmentPurposeLabel: Record<BindableAttachmentPurpose, string> = {
 	post: 'post',

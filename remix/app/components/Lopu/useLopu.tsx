@@ -6,6 +6,8 @@ import { Link as RouterLink } from 'react-router';
 import { RAINBOW, RAINBOW_PALETTE } from '~/theme/rainbow';
 import { normalizeLopuMessage } from './lopuMessage';
 import { lopuToastPlacement } from './lopuPosition';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { saveLopuHistory } from './notificationHistory.client';
 
 // 🦄 Lopu — the Thingtime AI. A minimal, modern toast: a rainbow gradient
 // "unicorn vomit" border around a clean white card, shown as a little message
@@ -202,10 +204,12 @@ const LopuToast = ({
 
 export const useLopu = () => {
   const toast = useToast();
+  const user = useCurrentUser();
 
   return useCallback(
 		({ title, description, status, duration = 13000, link, announceDescription, descriptionLabel }: LopuArgs) => {
       const message = normalizeLopuMessage({ title, description, status });
+      void saveLopuHistory(user?.id, { ...message, status, link });
       return toast({
         duration,
         ...lopuToastPlacement(),
@@ -223,7 +227,7 @@ export const useLopu = () => {
         )
       });
     },
-    [toast]
+    [toast, user?.id]
   );
 };
 
@@ -241,6 +245,7 @@ const sourceLabel = (source?: string) =>
 // response types in live (NDJSON from /api/v1/lopu/musing), à la modern AI chat.
 export const useLopuStream = () => {
   const toast = useToast();
+  const user = useCurrentUser();
 
   return useCallback(
     async (url: string) => {
@@ -270,6 +275,7 @@ export const useLopuStream = () => {
 
       let text = '';
       let source: string | undefined;
+      let finalMessage: LopuArgs | undefined;
 
       try {
         const resp = await fetch(url, { signal: controller.signal });
@@ -303,12 +309,19 @@ export const useLopuStream = () => {
 
         // The read-timer starts now (stream finished), not when the toast popped,
         // so you get the full window to read the finished musing.
-        update({ title: text.trim() || 'Lopu is daydreaming…', description: sourceLabel(source), countdown: 16000 }, 16000);
+        finalMessage = { title: text.trim() || 'Lopu is daydreaming…', description: sourceLabel(source) };
+        update({ ...finalMessage, countdown: 16000 }, 16000);
       } catch (err: any) {
-        if (err?.name === 'AbortError') return; // user closed it — leave closed
-        update({ title: 'Lopu is daydreaming… try again 🔮', status: 'error', countdown: 13000 }, 13000);
+        if (err?.name === 'AbortError') {
+          finalMessage = { title: 'Lopu message closed', description: text || 'Closed before a response arrived.', status: 'info' };
+          return;
+        }
+        finalMessage = { title: 'Lopu is daydreaming… try again 🔮', description: text || undefined, status: 'error' };
+        update({ ...finalMessage, countdown: 13000 }, 13000);
+      } finally {
+        if (finalMessage) void saveLopuHistory(user?.id, finalMessage);
       }
     },
-    [toast]
+    [toast, user?.id]
   );
 };

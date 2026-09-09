@@ -13,6 +13,18 @@ const post = (overrides: Record<string, unknown> = {}) => ({
 	...overrides
 });
 
+test('attachment targets share the ordinary hidden-link, group, revocation and token fences', () => {
+	const hidden = post({ thingtime: ['webpage'], acl: ['tt:hidden'], linkKey: 'fixture-link' });
+	assert.equal(attachmentTargetAclAllows(hidden, null), false);
+	assert.equal(attachmentTargetAclAllows(hidden, { id: '', linkKeys: new Set(['wrong']) }), false);
+	assert.equal(attachmentTargetAclAllows(hidden, { id: '', linkKeys: new Set(['fixture-link']) }), true);
+	assert.equal(attachmentTargetAclAllows({ ...hidden, acl: ['tt:user'] }, { id: '', linkKeys: new Set(['fixture-link']) }), false);
+	const group = post({ acl: ['tt:custom', 'tt:group/group-1'] });
+	assert.equal(attachmentTargetAclAllows(group, { id: 'reader', groupIds: new Set(['group-1']) }), true);
+	assert.equal(attachmentTargetAclAllows(group, { id: 'reader', groupIds: new Set() }), false);
+	assert.equal(attachmentTargetAclAllows(hidden, { id: 'owner-1', pat: { tokenId: 'token', onlyCreatedThings: false, visibility: 'public' } }), false);
+});
+
 test('narrow attachment target ACL check handles owners, public grants, exclusions, and fails closed', () => {
 	assert.equal(attachmentTargetAclAllows(post(), null), true);
 	assert.equal(attachmentTargetAclAllows(post({ acl: ['tt:user'] }), { id: 'reader-1' }), false);
