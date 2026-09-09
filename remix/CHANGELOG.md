@@ -18,6 +18,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Save notification history independently of delivery preferences, retain records without the former 10,000-item trim, log all action runs and successful sign-ins, and persist shared Lopu messages with account-fenced retry deduplication and credential redaction. History uses stable pagination and preserves bounded full message text. — Codex (AI), 2026-09-09
+
 - Refresh the clipboard-attachment preview with released main's shared-index readers and poll writer, preserving its bounded paste queue and attachment permissions. Database migration activation remains separate. — Codex (AI), 2026-09-09
 
 - Repair a poll writer found during the index audit: stamp the shared protected vote identity (no new index), preserve legacy lookup compatibility and unbilled engagement policy. Native regression reproduces 16 duplicate rows before the fix and checks concurrent votes, toggles, private access and cascade cleanup. — Codex (AI), 2026-09-08
