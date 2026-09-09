@@ -33,6 +33,16 @@ test('poll votes publish the shared-identity correction', () => {
 	assert.ok(manifest.operations.some(operation => operation.feature === 'api.things-vote' && operation.path === '/api/v1/things/vote' && operation.methods.includes('POST')));
 });
 
+test('verified vault reveal is explicit on both manifests with compatible client requirements', () => {
+	assert.equal(createApiCapabilitiesManifest().features['api.vault-reveal'], '1.0.0');
+	const manifest = thingtimeCapabilityManifest('https://thingtime.test');
+	assert.equal(manifest.features['api.vault-reveal'].version, '1.0.0');
+	assert.ok(manifest.operations.some(operation => operation.feature === 'api.vault-reveal' && operation.path === '/api/v1/vault/reveal' && operation.methods.includes('POST')));
+	assert.equal(capabilitySatisfies('1.1.0', '1.0.0'), true);
+	assert.equal(capabilitySatisfies('2.0.0', '1.0.0'), false);
+	assert.equal(capabilitySatisfies('', '1.0.0'), false);
+});
+
 test('relationship consolidation publishes compatible additive migrations on both manifests', () => {
 	const route = createApiCapabilitiesManifest().features;
 	const wellKnown = thingtimeCapabilityManifest('https://thingtime.test').features;

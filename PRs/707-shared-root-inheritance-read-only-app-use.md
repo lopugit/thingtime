@@ -131,6 +131,10 @@ not add references to unrelated private author dependencies they cannot read.
   the fixture now derives its envelope from the root document. Rechecking
   TypeScript returned the existing 108 errors and no related implementation or
   fixture errors.
+- Integrated develop `60be520eed` after its verified-vault rollout. The only
+  conflict was adjacent changelog entries; both features were retained. The
+  combined tree passed the real-API/Chrome fixture (83 seconds), 73 webpage
+  unit tests and 25 capability tests.
 
 ## Remaining verification
 

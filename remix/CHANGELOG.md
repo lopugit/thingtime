@@ -36,6 +36,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Live target deployment and broader inheritance remain under
   active validation; see [PR #707](../PRs/707-shared-root-inheritance-read-only-app-use.md). — **Codex (AI)**
 
+- Add fresh-password or user-verified passkey Show controls for CI, admin integration and personal Secure Vault credentials. Keep normal reads redacted, bind passkey challenges to a single session/item/origin, and clear displayed values after 30 seconds or leaving the tab. [PR #710 security and verification notes](../PRs/710-vault-verified-reveal-verified-vault-credentials.md). — Codex (AI), 2026-09-09
+
 - Notification-history validation and rollout boundaries: [PR #705 notes](../PRs/705-codex-system-notification-history-save-system-events-and-retain-user-history.md).
 
 - Save notification history independently of delivery preferences, retain records without the former 10,000-item trim, log all action runs and successful sign-ins, and persist shared Lopu messages with account-fenced retry deduplication and credential redaction. History uses stable pagination and preserves bounded full message text. — Codex (AI), 2026-09-09
@@ -272,6 +274,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `api.notifications-devices` capability contract, token-based APNs delivery,
   invalid-token cleanup, configuration docs, and focused contract tests.
 - 2026-09-05: Reconcile PR #592 with current develop, preserving Lopu widget support and passkey entitlements, both capability suites, all private logout caches, and both unit-test lists. Verify its exact-SHA preview and make preview delivery visible above collapsed PR comments. — Codex (AI)
+
+- 2026-09-05: Fix Commander's emoji permission feedback widening the picker beyond its window, stop failed pastes changing ranking or the clipboard, and provide explicit Accessibility recovery for stale signing grants. [Investigation](../PRs/662-codex-commander-emoji-paste-recovery-picker-overflow.md). — Codex (AI)
 
 - 2026-09-05: Add bounded persistent media caching with access revalidation,
   responsive low-resolution image previews, and cache controls in Settings.

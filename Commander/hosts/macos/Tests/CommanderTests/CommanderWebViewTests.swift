@@ -40,6 +40,30 @@ final class CommanderWebViewTests: XCTestCase {
     XCTAssertNil(KeychainStore.environment(from: "https://thingtime.com||user"))
   }
 
+  func testDeniedEmojiPasteDoesNotTouchTheClipboard() async {
+    let ready = DaemonReady(
+      type: "ready", protocolVersion: 1, port: 1, url: "http://127.0.0.1:1",
+      sessionToken: "test-session", nativeToken: "test-native", pid: 1
+    )
+    let bridge = CommanderNativeBridge(
+      ready: ready, keychain: KeychainStore(), loginItem: LaunchAtLoginService(),
+      showLauncher: {}, hideLauncher: {}, showSettings: { _ in },
+      updateHotKeys: { _, _ in }, updateMenuBar: { _ in }, updateWindowMode: { _ in }
+    )
+    let controller = LauncherPanelController(
+      ready: ready, bridge: bridge, isAccessibilityTrusted: { false }
+    )
+    defer { controller.shutdown() }
+    let changeCount = NSPasteboard.general.changeCount
+
+    let result = await controller.paste("❤️", preserveClipboard: true)
+
+    XCTAssertEqual(result["requiresAccessibility"] as? Bool, true)
+    XCTAssertEqual(result["copied"] as? Bool, false)
+    XCTAssertEqual(result["pasted"] as? Bool, false)
+    XCTAssertEqual(NSPasteboard.general.changeCount, changeCount)
+  }
+
   func testTransparentCanvasDoesNotPaintAnOuterRectangle() {
     let ready = DaemonReady(
       type: "ready",
