@@ -21,7 +21,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - Save new iOS Lopu voice recordings as owner-private playable audio Things,
   retaining on-device recovery files and an account-bound retry outbox.
   Completed recordings survive draft cleanup; upload/complete contracts are
-  1.2.0 and native delivery is build 28. — Codex (AI), 2026-09-09
+  1.2.0 and native delivery is build 28.
+  [Release and validation notes](../PRs/722-ios-voice-recording-things-save-ios-lopu-recordings-to-private-things.md).
+  — Codex (AI), 2026-09-09
 
 - 2026-09-09: Deliver native Lopu voice and its signed Live Activity extension
   in iOS build 27; older general bridges now show an update instruction.
