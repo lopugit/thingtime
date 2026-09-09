@@ -1,4 +1,5 @@
 import React from 'react';
+import { useSharedMediaUrl } from '../Sharing/SharedMedia';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { Download, ListMusic } from 'lucide-react';
 
@@ -23,6 +24,7 @@ const releaseAudio = (audio: HTMLAudioElement) => {
 };
 
 export const AudioAttachmentPlayer = ({ attachments, compact = false }: { attachments: PublicAttachment[]; compact?: boolean }) => {
+	const mediaUrl = useSharedMediaUrl();
 	const user = useCurrentUser();
 	const audioRef = React.useRef<HTMLAudioElement | null>(null);
 	const [activeIndex, setActiveIndex] = React.useState(0);
@@ -77,7 +79,7 @@ export const AudioAttachmentPlayer = ({ attachments, compact = false }: { attach
 		return () => URL.revokeObjectURL(url);
 	}, [offlineCopy, usingOffline]);
 
-	const source = active ? offlineUrl || attachmentMediaSrc(active) : '';
+	const source = active ? offlineUrl || mediaUrl(attachmentMediaSrc(active)) : '';
 	const sourceType = active ? attachmentPlaybackContentType(active) : '';
 
 	React.useEffect(() => {
@@ -107,7 +109,7 @@ export const AudioAttachmentPlayer = ({ attachments, compact = false }: { attach
 		setSavingOffline(true);
 		setPlaybackError(null);
 		try {
-			const copy = await saveOfflineAudio(active, viewerId);
+			const copy = await saveOfflineAudio(active, viewerId, mediaUrl);
 			setOfflineCopy(copy);
 			setOfflineAvailable(true);
 			setUsingOffline(true);
@@ -117,7 +119,7 @@ export const AudioAttachmentPlayer = ({ attachments, compact = false }: { attach
 		} finally {
 			setSavingOffline(false);
 		}
-	}, [active, savingOffline, viewerId]);
+	}, [active, savingOffline, viewerId, mediaUrl]);
 
 	const clearActiveOffline = React.useCallback(async () => {
 		if (!active || active.url) return;
@@ -199,7 +201,7 @@ export const AudioAttachmentPlayer = ({ attachments, compact = false }: { attach
 
 			<Button
 				as="a"
-				href={active.url || attachmentContentUrl(active.id, true)}
+				href={mediaUrl(active.url || attachmentContentUrl(active.id, true))}
 				{...(active.url ? { target: '_blank', rel: 'noopener noreferrer' } : { download: active.name })}
 				mt={2}
 				size="xs"

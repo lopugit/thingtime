@@ -25,6 +25,25 @@ export const MAX_POST_ATTACHMENTS = 25;
 const MAX_POST_TAGS = 12;
 const MAX_POST_TAG_CHARS = 40;
 
+type ClipboardFileData = {
+	files?: ArrayLike<File> | null;
+	items?: ArrayLike<Pick<DataTransferItem, 'kind' | 'getAsFile'>> | null;
+};
+
+// Clipboard implementations normally expose pasted files through `files`,
+// but WebKit and embedded webviews can leave that list empty while retaining
+// file-kind items. Prefer the canonical list so the same item is never queued
+// twice, then fall back to item extraction for those browsers.
+export const attachmentFilesFromClipboard = (clipboardData: ClipboardFileData | null | undefined): File[] => {
+	const files = Array.from(clipboardData?.files || []);
+	if (files.length) return files;
+	return Array.from(clipboardData?.items || []).flatMap((item) => {
+		if (item.kind !== 'file') return [];
+		const file = item.getAsFile();
+		return file ? [file] : [];
+	});
+};
+
 export type AttachmentUploadScope = 'public' | 'private';
 
 export const attachmentUploadScopeForPurpose = (purpose: AttachmentUploadPurpose): AttachmentUploadScope =>
