@@ -2002,6 +2002,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-sso-session',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'auth',
     title: 'Redeem a sign-in code',
     endpoint: '/api/v1/auth/sso-session',
@@ -2012,7 +2014,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'revokes the session — theft signal), then runs the exact password-login tail: httpOnly auth cookie, ' +
       'switcher roster merge, cross-deployment hint pointer. Redemption only succeeds where this deployment ' +
       'shares the minting environment\'s database (an immutable preview and its alias twin do) — anything ' +
-      'else fails closed with a generic error.',
+      'else fails closed with a generic error. Successful redemption records a login-success notification, independent of delivery preferences.',
     auth: { mode: 'none', description: 'The code is the credential.' },
     methods: ['POST'],
     steps: [
@@ -2298,9 +2300,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-passkeys-login',
-    contractVersion: '1.1.0',
+    contractVersion: '1.2.0',
     group: 'auth',
-    featureVersion: '1.1.0',
+    featureVersion: '1.2.0',
     title: 'Finish passkey login',
     endpoint: '/api/v1/auth/passkeys/login',
     summary: 'Verify a passkey assertion and sign in — cookies, switcher roster, and hints included.',
@@ -2311,7 +2313,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'exactly like password login: httpOnly auth cookie, account merged into the switcher roster, ' +
       'cross-deployment hint updated. Passkeys bypass email-OTP 2FA by design (possession + on-device ' +
       'verification IS multi-factor). The optional clientId records which registered app the login served ' +
-      'on the passkey\'s linkedApps. Sessions carry meta.method:"passkey" for auditability.',
+      'on the passkey\'s linkedApps. Sessions carry meta.method:"passkey" for auditability. Successful login records a login-success notification, independent of delivery preferences.',
     auth: { mode: 'none', description: 'Anonymous — the assertion is the credential.' },
     methods: ['POST'],
     steps: [
@@ -3334,12 +3336,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-logout',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'auth',
     title: 'Logout',
     endpoint: '/api/v1/auth/logout',
     summary: 'Signs the active account out; other switcher accounts stay signed in unless all: true.',
     detail:
-      'Use this endpoint to end browser sessions or revoke a bearer token session server-side. The active account session is revoked and removed from the switcher roster; the next roster account becomes active and is returned as user. Pass all: true to revoke every roster session and clear both cookies. The route is idempotent and returns ok even without a token.',
+      'Use this endpoint to end browser sessions or revoke a bearer token session server-side. The active account session is revoked and removed from the switcher roster; the next roster account becomes active and is returned as user. Pass all: true to revoke every roster session and clear both cookies. The route is idempotent and returns ok even without a token. Revoking a live active session records a quiet sign-out notification for that account; expired or repeated calls do not.',
     auth: {
       mode: 'optional',
       description: 'Uses the auth cookie or Authorization: Bearer token when one exists.'
@@ -3573,11 +3577,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-register',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'auth',
     title: 'Register user',
     endpoint: '/api/v1/auth/register',
     summary: 'Creates a user account, starts email verification, logs the browser in, and sets the auth cookie.',
-    detail: 'This is the live user signup path. Tests and seed flows should call this endpoint instead of writing directly to MongoDB.',
+    detail: 'This is the live user signup path. Successful signup records a quiet account-created notification. Tests and seed flows should call this endpoint instead of writing directly to MongoDB.',
     auth: {
       mode: 'none',
       description: 'Public signup endpoint.'
@@ -4170,11 +4176,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'login',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'auth',
     title: 'Login',
     endpoint: '/api/v1/login',
     summary: 'Validates username/password credentials and sets the auth cookie.',
-    detail: 'Use this for browser login. API clients that need service integration should prefer the service-account endpoint and bearer token.',
+    detail: 'Use this for browser login. A completed login (after OTP when required) stores a private login-success notification without credentials. API clients that need service integration should prefer the service-account endpoint and bearer token.',
     auth: {
       mode: 'none',
       description: 'Public credential exchange endpoint.'
@@ -11255,36 +11263,37 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // actorName "s/<slug> mods", actorUsername / actorAvatarUrl null)
     // 1.3.0: both lines merged — this endpoint ships history filters AND the
     // subspace family together; additive
-    featureVersion: '1.3.0',
-    contractVersion: '1.3.0',
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
     group: 'notifications',
     title: 'List notifications',
     endpoint: '/api/v1/notifications',
-    summary: 'Your notifications, newest first, filtered by your notification prefs — searchable by category, type, unread, text and date — plus the unread count.',
+    summary: 'Your searchable notification history. Add history=1 to include all records regardless of delivery settings; the default bell view still applies preferences.',
     detail:
       'Notifications are server-minted things (new followers, friend requests/accepts, comments, ' +
       'replies, reactions, shares, @mentions, capped posts-from-followed/friends fan-out, and subspace ' +
       'moderation: subspace-join-request, subspace-join-accepted, subspace-post-removed, ' +
       'subspace-report, subspace-role, subspace-ban) plus SYSTEM ' +
-      'notes from Lopu (category system — today action-run: an action you ran finished or failed; ' +
+      'notes from Lopu (category system — action-run, login-success, and client-recorded system-message; ' +
       'actorId "thingtime", the headline in title, an in-app href, outcome ok|error). Every row ' +
       'carries its category: social (friend-request, friend-accepted, new-follower, groups, ' +
       'subspace-join-request, subspace-join-accepted, subspace-role, subspace-ban), ' +
       'engagement (comment, reply, reaction, share, mention, subspace-post-removed, subspace-report), ' +
       'feed (post-from-followed, ' +
-      'post-from-friend), system (action-run). The list is ALWAYS filtered by your current ' +
-      'notification settings, so disabling a type hides even already-written notifications of that ' +
-      'type. Optional filters back the /notifications history page: category=<one>, ' +
+      'post-from-friend), system (action-run, login-success, system-message). history=1 includes all saved ' +
+      'notifications independently of push and email preferences; without it the bell applies push settings. ' +
+      'System messages may include detail with the bounded, credential-redacted full text. ' +
+      'Optional filters back the /notifications history page: category=<one>, ' +
       'types=<csv> (intersected with category when both are given; unknown names match nothing), ' +
       'unread=1, q=<text ≤100 chars, literal case-insensitive match over preview / actor name / ' +
       'actor username / system title>, since=<ISO> and until=<ISO> (inclusive createdAt bounds), ' +
       'and withTotal=1 to also return total — the count of everything matching the filters, cursor ' +
-      'ignored. unreadCount is always the badge count (every enabled type, filters ignored). Cursor ' +
+      'ignored. unreadCount is always the badge count (enabled, non-quiet rows, filters ignored); history=1 also returns historyUnreadCount across all stored unread rows. Client popup records are already read because they were displayed. Cursor ' +
       'pagination uses the opaque cursor=<nextCursor> so notifications sharing the same timestamp ' +
       'are never skipped; legacy before=<nextBefore> remains supported. Optional from (inclusive) ' +
       'and to (exclusive) ISO timestamps bound historical pages and exports, alongside since/until. ' +
       'The viewer object identifies the authenticated account by username so native companions can ' +
-      'visibly confirm which account is connected. A recipient keeps their newest 10,000 notifications. ' +
+      'visibly confirm which account is connected. Records are no longer automatically pruned by count. ' +
       'Subspace-scoped rows (role, ban, join…) carry the subspace shareId in targetId and lead their preview ' +
       'with "s/<slug> · …" so clients can link to /s/<slug>; post-scoped ones (post-removed, report) set postId ' +
       'like every other post notification. The punitive pair (subspace-post-removed, subspace-ban) is sent by the ' +
@@ -11299,7 +11308,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'GET ?limit=&cursor=&from=&to= — newest first. Use cursor for stable 10-at-a-time history; from is inclusive and to is exclusive.',
       'Show unreadCount on the bell; refetch on window focus.',
-      'History page: add category / types / unread / q / since / until and withTotal=1; keep the filter set in the URL.',
+      'History page: add history=1, category / types / unread / q / since / until and withTotal=1; keep the filter set in the URL.',
       'Click-through: href (system notes) → that path, else postId → /post/<id>, else a subspace-* row → /s/<slug> (slug from the preview), else actor → /profile/<username>.',
       'Handle 401 unauthenticated and 429 rate-limited.'
     ],
@@ -11373,6 +11382,21 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         }
       }
     ]
+  }),
+  endpoint({
+    id: 'notifications-record',
+    featureVersion: '1.0.0',
+    contractVersion: '1.0.0',
+    group: 'notifications',
+    title: 'Save an in-app notification',
+    endpoint: '/api/v1/notifications/record',
+    summary: 'Save a private system-message for the authenticated account, without another popup, push or email.',
+    detail: 'Body: userId (must equal the current account), eventId (UUID v4 reused only for transport retries), title (1–400 characters), description (optional, up to 48000 characters), status (success/error/info/warning), href (optional internal path). Unknown fields are rejected. The server fixes actor, type, owner and creation time; clients cannot forge login-success or action-run records. Credential-like content is redacted and URL queries/fragments are dropped. Retries are idempotent and never overwrite a record or reset read state. Anonymous requests are refused, and rate limits bound ingestion. A successful response confirms the database write.',
+    auth: { mode: 'session', description: 'Requires the authenticated first-party account; app/PAT credentials remain default-denied.' },
+    methods: ['POST'],
+    steps: ['Negotiate api.notifications-record 1.0.0 at this origin.', 'POST the message and a new UUID for each event; reuse that UUID on retries.', 'Read it with GET /api/v1/notifications?history=1&category=system.'],
+    requestExamples: [{ name: 'Save a message', description: 'The owner is the current authenticated account.', method: 'POST', body: { userId: 'current-user-id', eventId: 'bb617572-ff32-4c98-b3e4-d668ac000fac', title: 'Saved successfully', status: 'success' } }],
+    responseExamples: [{ status: 200, description: 'Saved (or already recorded).', body: { ok: true, id: 'notification-message-…' } }, { status: 400, description: 'Invalid message or account changed.', body: { ok: false, error: 'Invalid notification message or account changed' } }]
   }),
   endpoint({
     id: 'notifications-read',
@@ -11474,8 +11498,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'notifications-settings',
     // 1.1.0: six subspace-* switches joined the matrix — additive; 1.2.0:
     // merged with develop's 1.1.0 (action-run switch) — additive
-    featureVersion: '1.2.0',
-    contractVersion: '1.2.0',
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
     group: 'notifications',
     title: 'Notification settings',
     endpoint: '/api/v1/notifications/settings',
@@ -11484,7 +11508,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Two channels: push (the bell/in-app channel) and email (SES-backed notification emails), each ' +
       'with a master switch and per-type switches. Types: friend-request, friend-accepted, ' +
       'new-follower, post-from-followed, post-from-friend, comment, reply, reaction, share, mention, groups ' +
-      '(reserved), action-run (system notes from Lopu about actions you run), the subspace family ' +
+      '(reserved), action-run, login-success, system-message (system notes; email defaults off), the subspace family ' +
       'subspace-join-request, subspace-join-accepted, subspace-post-removed, subspace-report, subspace-role, ' +
       'subspace-ban, plus the email-only weekly-summary digest. Defaults ON, except email for the high-volume ' +
       'types (post-from-followed / post-from-friend / action-run and the mod-queue pair subspace-join-request / ' +
@@ -11492,7 +11516,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'returns the full matrix. POST merges only the keys you send — the new channel shape ' +
       '{ prefs: { push?, email?, masters? } } or the original flat { prefs: { <type>: boolean } } ' +
       '(which patches the push channel); unknown keys 400. A disabled push type is hidden from your ' +
-      'list and unread count immediately; a disabled email type stops future emails. Emails only go ' +
+      'bell and unread badge immediately, but never from history=1 and never prevents storage; a disabled email type stops future emails. Emails only go ' +
       'to verified addresses and are capped per recipient per hour; every one carries a manage link ' +
       'and a one-click unsubscribe link.',
     auth: {
@@ -12096,7 +12120,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'It rechecks the root audience on every call, resolves only stored reachable actions in their author namespace, and permits ' +
       'read-only execution without signing in. It never borrows the author or viewer private-account authority, never mutates saved data, ' +
       'and creates no persistent run record or notification; its shared-run id is ephemeral. Explicit stored same-author data dependencies ' +
-      'inherit the root audience; dynamic ids retain ordinary anonymous read access.',
+      'inherit the root audience; dynamic ids retain ordinary anonymous read access. Every ordinary completed run also stores an action-run ' +
+      'notification, including successful component runs (quiet delivery).',
     auth: {
       mode: 'optional',
       description: 'A session is required for ordinary runs. Shared read-only runs require access to sharedRoot, with its key or group membership when applicable. PATs and app tokens do not grant execution authority.'

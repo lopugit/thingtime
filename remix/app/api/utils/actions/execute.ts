@@ -976,17 +976,16 @@ export const runAction = async (
 		trace: budget.trace
 	});
 
-	// System notification (category system, type action-run): every explicit
-	// run lands in the invoker's bell + /notifications history; a delegated
-	// component click (source 'component' — a button on a page can fire this
-	// dozens of times a minute) only reports when it FAILS. Fire-and-forget
-	// like the run record: a notification hiccup never touches the run result,
-	// and the recipient's 'action-run' switch can silence it entirely.
-	if (!shared && (!ownedOnly || status === 'error')) {
+	// Save every ordinary run, including successful component refreshes.
+	// Quiet delivery never means missing history. Await the non-throwing writer
+	// so a serverless response cannot cut off the history write. Shared runs
+	// are anonymous, ephemeral interactions and never write account history.
+	if (!shared) {
 		const actionKey =
 			typeof program.crystal.actionKey === 'string' && program.crystal.actionKey.trim() ? program.crystal.actionKey.trim() : program.id;
 		const opsLabel = `${budget.opsUsed} op${budget.opsUsed === 1 ? '' : 's'}`;
-		void emitSystemNotification({
+		await emitSystemNotification({
+			historyOnly: ownedOnly && status === 'ok',
 			recipientId: viewer.id,
 			type: 'action-run',
 			title: status === 'ok' ? `Action “${program.name}” finished ✅` : `Action “${program.name}” failed 🌧️`,

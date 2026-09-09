@@ -77,7 +77,7 @@ test('capabilities publish the native Apple notification device contract', () =>
 	const manifest = createApiCapabilitiesManifest();
 
 	assert.equal(manifest.features['api.notifications-devices'], '1.1.0');
-	assert.equal(manifest.features['api.notifications-list'], '1.3.0');
+	assert.equal(manifest.features['api.notifications-list'], '1.4.0');
 	assert.equal(manifest.features['api.watch-pairing'], '1.2.0');
 	assert.equal(manifest.features['api.watch-sync'], '1.0.0');
 	assert.equal(manifest.features['api.watch-things'], '1.0.0');
@@ -92,8 +92,8 @@ test('notification contracts publish the history filters and the system family a
 
 	// the history filters landed as 1.1.0; the list then took the cursor,
 	// from/to window and viewer object on top, so it publishes 1.2.0
-	assert.equal(manifest.features['api.notifications-list'], '1.3.0');
-	assert.equal(manifest.features['api.notifications-settings'], '1.2.0');
+	assert.equal(manifest.features['api.notifications-list'], '1.4.0');
+	assert.equal(manifest.features['api.notifications-settings'], '1.3.0');
 });
 
 test('capabilities publish the non-secret data authority used by a bundle', () => {
@@ -189,8 +189,8 @@ test('subspace lifecycle + notification type additions publish their contract ve
 	assert.equal(manifest.features['api.subspaces-delete'], '1.1.0');
 	// S4 review: subspace-post-removed / subspace-ban rows carry the subspace's
 	// mod team as their actor (1.2.0, additive)
-	assert.equal(manifest.features['api.notifications-list'], '1.3.0');
-	assert.equal(manifest.features['api.notifications-settings'], '1.2.0');
+	assert.equal(manifest.features['api.notifications-list'], '1.4.0');
+	assert.equal(manifest.features['api.notifications-settings'], '1.3.0');
 });
 
 test('subspace join requests + posting-approval requests publish their contract versions', () => {

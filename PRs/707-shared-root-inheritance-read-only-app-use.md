@@ -32,12 +32,14 @@ not add references to unrelated private author dependencies they cannot read.
   ESLint and whitespace checks passed.
 - Whole-project TypeScript still reports pre-existing unrelated errors. No new
   errors were reported in the implementation files.
-- Safari's existing Tarot tab still shows the old deployment and an empty
-  component result. This is not deployment proof for the fix.
+- Safari on preview commit `722c5f4bdbbc55d1ee348a652b83c689ed552525`,
+  logged out: the actual Tarot page renders its complete card and Draw control.
+  Clicking Draw changed Temperance to Judgement. Copy to my Builder is present
+  and original Edit is absent. The original develop URL still uses old code.
 
 ## Remaining verification
 
-Exact deployed Tarot page rendering and interaction in logged-out Safari,
+The latest merged-head and develop/main rollout verification,
 broader general-Thing/media inheritance and copy coverage, and the final
 security/completeness audit remain. Dynamic dependency identifiers are not
 treated as grants. Shared saved-data mutation workflows require an independent

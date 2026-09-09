@@ -2523,7 +2523,9 @@ export const NOTIFICATION_TYPES = [
   'subspace-report',
   'subspace-role',
   'subspace-ban',
-  'action-run'
+  'action-run',
+  'login-success',
+  'system-message'
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -2595,7 +2597,9 @@ export const NOTIFICATION_TYPE_CATEGORY: Record<NotificationType, NotificationCa
   'subspace-ban': 'social',
   'subspace-post-removed': 'engagement',
   'subspace-report': 'engagement',
-  'action-run': 'system'
+  'action-run': 'system',
+  'login-success': 'system',
+  'system-message': 'system'
 };
 
 export const isNotificationType = (value: unknown): value is NotificationType =>
@@ -2625,7 +2629,7 @@ export type EmailNotificationType = (typeof EMAIL_NOTIFICATION_TYPES)[number];
 // action can run sixty times a minute, and the mod-queue traffic of a big
 // subspace (join requests, reports) is the same class of firehose —
 // moderators opt in per type.
-export const EMAIL_DEFAULT_OFF_TYPES: readonly string[] = ['post-from-followed', 'post-from-friend', 'action-run', 'subspace-join-request', 'subspace-report'];
+export const EMAIL_DEFAULT_OFF_TYPES: readonly string[] = ['post-from-followed', 'post-from-friend', 'action-run', 'login-success', 'system-message', 'subspace-join-request', 'subspace-report'];
 
 export type NotificationChannelMasters = { push: boolean; email: boolean };
 export type NormalizedNotificationPrefs = {
@@ -2678,10 +2682,12 @@ const notificationThingSchema: ThingtimeSchema = {
     '"thingtime", actor name Lopu) such as action-run, written when an action you ran ' +
     'finishes. ownerId is the recipient, targetId the subject thing (post/comment/user/subspace, ' +
     'or the action-run record), root readAt flips when read. Listed via ' +
-    "GET /api/v1/notifications (filtered by the recipient's meta.notificationPrefs, " +
+    'GET /api/v1/notifications?history=1 (independent of delivery preferences, ' +
     'searchable and filterable by category/type/unread/date for the /notifications history ' +
     'page), marked via POST /api/v1/notifications/read. Always acl ["tt:user"]; the generic ' +
-    'things CRUD refuses this kind. A recipient keeps their newest 10,000.',
+    'things CRUD refuses this kind. History has no count-based pruning. Root historyOnly ' +
+    'marks quiet events excluded from the bell, not from history. Authenticated client ' +
+    'messages use the validated, idempotent /api/v1/notifications/record endpoint.',
   createdVia: 'server-side emission (social/engagement events + system notes)',
   fields: [
     { name: 'type', type: 'enum', required: true, values: [...NOTIFICATION_TYPES], description: 'Notification type (drives prefs, category + copy).' },
@@ -2690,7 +2696,8 @@ const notificationThingSchema: ThingtimeSchema = {
     { name: 'actorUsername', type: 'string', required: false, description: 'Actor username snapshot — searchable in history.' },
     { name: 'postId', type: 'id', required: false, description: 'Related post for click-through.' },
     { name: 'preview', type: 'string', required: false, max: 140, description: 'Short content preview, or the detail line of a system note.' },
-    { name: 'title', type: 'string', required: false, max: 140, description: 'System notes only: the headline shown instead of "<actor> <verb>".' },
+    { name: 'title', type: 'string', required: false, max: 400, description: 'System notes only: the headline shown instead of "<actor> <verb>".' },
+    { name: 'detail', type: 'string', required: false, max: 49152, description: 'Bounded, credential-redacted message detail retained beyond the short preview.' },
     { name: 'href', type: 'string', required: false, max: 300, description: 'System notes only: internal click-through path (e.g. /actions/<key>).' },
     { name: 'outcome', type: 'enum', required: false, values: ['ok', 'error'], description: 'System notes only: whether the thing being reported succeeded.' }
   ],
