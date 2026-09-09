@@ -24,6 +24,7 @@ import {
 import { FiChevronDown, FiChevronUp, FiKey, FiPlus, FiTrash2 } from 'react-icons/fi';
 
 import { useApi } from '~/hooks/useApi';
+import { VaultReveal } from '~/components/Settings/VaultReveal';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 
 type Credential = {
@@ -127,7 +128,7 @@ export const ClaudeCredentialWaterfall = ({
         <Box>
 					<Heading size="sm">AI credential waterfall</Heading>
           <Text fontSize="sm" opacity={0.62} mt={1} maxW="760px">
-            Lopu tries enabled accounts from top to bottom. Values are encrypted in Thingtime and are never shown again or stored in this browser.
+            Lopu tries enabled accounts from top to bottom. Values stay encrypted and hidden. Verify your password or passkey to briefly show one.
           </Text>
         </Box>
 				<Flex align="center" gap={2}>
@@ -204,6 +205,7 @@ export const ClaudeCredentialWaterfall = ({
 								>
 									Rotate
 								</Button>
+                <VaultReveal vault="ci" id={credential.id} label={credential.name} />
                 <IconButton
                   aria-label={`Delete ${credential.name}`}
                   icon={<FiTrash2 />}
@@ -298,7 +300,7 @@ export const ClaudeCredentialWaterfall = ({
 						autoComplete="new-password"
 						value={value}
 						onChange={(event) => setValue(event.target.value)}
-						placeholder="Paste once — it will not be shown again"
+						placeholder="Paste token — stored encrypted"
 					/>
         </FormControl>
         <Button

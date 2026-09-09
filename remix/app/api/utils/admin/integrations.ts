@@ -72,6 +72,12 @@ const vaultKey = (): Buffer | null => {
 
 export const vaultConfigured = () => vaultKey() !== null;
 
+// Caller must enforce fresh verification and current admin authorization.
+export const revealAdminSecret = async (id: string): Promise<string | null> => {
+	const record = await (await getAdminIntegrationSecretsCollection()).findOne({ id });
+	return record ? decryptSecret(record as StoredAdminSecret) : null;
+};
+
 const encryptSecret = (id: string, value: string) => {
 	const key = vaultKey();
 	if (!key) throw new Error('Secret vault is unavailable. Configure THINGTIME_ADMIN_VAULT_KEY with a 32-byte base64url key.');

@@ -1,4 +1,5 @@
 import React from 'react';
+import { VaultReveal } from '~/components/Settings/VaultReveal';
 import { Box, Button, Checkbox, Flex, Input, Select, Spinner, Text } from '@chakra-ui/react';
 
 import { useLopu } from '~/components/Lopu/useLopu';
@@ -114,7 +115,7 @@ export const IntegrationManager = () => {
 	};
 
 	const createSecret = async () => {
-		const response = await action('secret', { action: 'create-secret', label: secretLabel, value: secretValue }, 'Write-only secret saved ✨');
+		const response = await action('secret', { action: 'create-secret', label: secretLabel, value: secretValue }, 'Encrypted secret saved ✨');
 		if (response) {
 			setSecretLabel('');
 			setSecretValue('');
@@ -177,7 +178,7 @@ export const IntegrationManager = () => {
 			<Flex flexDirection="column" rowGap={2} padding={4} {...CARD_STYLES}>
 				<Text sx={eyebrow}>External integrations</Text>
 				<Text fontSize="xs" color="var(--tt-text, #5a5a66)" lineHeight="tall">
-					Credentials are write-only. The proxy only calls saved HTTPS origins and paths, and applies the permissions below before it decrypts a
+					Credentials stay encrypted and hidden until you verify your password or passkey. The proxy only calls saved HTTPS origins and paths, and applies the permissions below before it decrypts a
 					credential.
 				</Text>
 				{vaultConfigured === false ? (
@@ -205,7 +206,7 @@ export const IntegrationManager = () => {
 			</Flex>
 
 			<Flex flexDirection="column" rowGap={2} padding={4} {...CARD_STYLES}>
-				<Text sx={eyebrow}>Write-only secrets</Text>
+				<Text sx={eyebrow}>Encrypted secrets</Text>
 				<Flex columnGap={2} rowGap={2} flexWrap="wrap">
 					<Input
 						size="sm"
@@ -221,7 +222,7 @@ export const IntegrationManager = () => {
 						type="password"
 						value={secretValue}
 						onChange={(event) => setSecretValue(event.target.value)}
-						placeholder="Secret value (never shown again)"
+						placeholder="Secret value (encrypted)"
 						aria-label="Secret value"
 						autoComplete="off"
 					/>
@@ -245,7 +246,7 @@ export const IntegrationManager = () => {
 										{secret.label}
 									</Text>
 									<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
-										write-only · {new Date(secret.createdAt).toLocaleDateString()}
+										encrypted · {new Date(secret.createdAt).toLocaleDateString()}
 									</Text>
 								</Box>
 								<Button
@@ -256,6 +257,7 @@ export const IntegrationManager = () => {
 								>
 									Delete
 								</Button>
+								<VaultReveal vault="admin" id={secret.id} label={secret.label} />
 							</Flex>
 						))
 					) : (
@@ -302,7 +304,7 @@ export const IntegrationManager = () => {
 							onChange={(event) => setDraft((previous) => ({ ...previous, secretId: event.target.value }))}
 							aria-label="Endpoint secret"
 						>
-							<option value="">Select write-only secret…</option>
+							<option value="">Select encrypted secret…</option>
 							{secrets.map((secret) => (
 								<option value={secret.id} key={secret.id}>
 									{secret.label}
