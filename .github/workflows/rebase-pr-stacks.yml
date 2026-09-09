@@ -2300,7 +2300,7 @@ jobs:
           trailer="Lopu-Rebase-Completion: run=$GITHUB_RUN_ID pr=$PR_NUMBER"
           message="$RUNNER_TEMP/lopu-rebase-tip-message.txt"
           git log -1 --format=%B \
-            | sed -E '/^Lopu-(Conflict-Resolution|Rebase-Completion): run=[1-9][0-9]* pr=[1-9][0-9]*$/d' \
+            | sed -E '/^Lopu-(Conflict-Resolution|Rebase-Completion|Review-Publication): run=[1-9][0-9]* pr=[1-9][0-9]*$/d' \
             | git interpret-trailers \
                 --if-exists replace \
                 --if-missing add \
