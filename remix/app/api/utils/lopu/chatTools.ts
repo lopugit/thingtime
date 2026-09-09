@@ -23,6 +23,7 @@
 // on first use within a turn and expire on their own.
 
 import { createHash } from 'node:crypto';
+import { parseReminderInput } from './remindersCore';
 
 import { countBlocks, type WebpageBlock } from '~/components/Builder/webpageBlocks';
 import {
@@ -59,6 +60,11 @@ import type * as SuitesModule from '../webpages/suites';
 import type * as WebpagesModule from '../webpages/webpages';
 
 export const LOPU_TOOL_NAMES = [
+  'create_thing',
+  'create_reminder',
+  'send_notification',
+  'list_reminders',
+  'set_reminder_enabled',
   'search_things',
   'get_thing',
   'list_my_things',
@@ -152,6 +158,15 @@ const componentArgSchema = {
 };
 
 export const LOPU_TOOL_DEFINITIONS: readonly LopuToolDefinition[] = [
+  { name: 'create_thing', mutates: true, description: 'Create a private note, todo or ordinary Thing in the current account.', inputSchema: {
+    type: 'object', required: ['title'], properties: { title: { type: 'string', maxLength: 200 }, description: { type: 'string', maxLength: 5000 }, type: { type: 'string', enum: ['note', 'todo', 'data'] } }
+  } },
+  { name: 'create_reminder', mutates: true, description: 'Save a real one-time or recurring notification for the current user. Return the saved receipt. Use an ISO at timestamp with timezone offset; everyMinutes repeats (minimum 5), omit for once. Scheduler checks every five minutes, delivery is not exact to the second. Never claim a reminder was created unless this tool succeeds.', inputSchema: {
+    type: 'object', required: ['title', 'at'], properties: { title: { type: 'string', maxLength: 140 }, description: { type: 'string', maxLength: 2000 }, at: { type: 'string' }, everyMinutes: { type: ['integer', 'null'], minimum: 5 }, timeZone: { type: 'string' }, delivery: { type: 'string', enum: ['quiet', 'normal', 'urgent'] } }
+  } },
+  { name: 'list_reminders', description: 'List the current user’s saved reminders and their next run times.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'send_notification', mutates: true, description: 'Send an immediate notification to the current user only. Preferences apply. Use create_reminder for future/repeating notifications.', inputSchema: { type: 'object', required: ['title'], properties: { title: { type: 'string', maxLength: 140 }, description: { type: 'string', maxLength: 2000 }, delivery: { type: 'string', enum: ['quiet', 'normal', 'urgent'] } } } },
+  { name: 'set_reminder_enabled', mutates: true, description: 'Pause or resume one of the current user’s saved reminders. Use list_reminders to find its id.', inputSchema: { type: 'object', required: ['id', 'enabled'], properties: { id: { type: 'string' }, enabled: { type: 'boolean' } } } },
   {
     name: 'search_things',
     description:
@@ -570,6 +585,25 @@ export const validateLopuToolInput = (name: string, raw: unknown): LopuToolValid
   const fail = (error: string): LopuToolValidation => ({ ok: false, error });
 
   switch (name) {
+    case 'create_thing': {
+      const title = requiredString(input.title, 'title', 200);
+      if (isError(title)) return fail(title.error);
+      const description = optionalString(input.description, 'description', 5000);
+      if (isError(description)) return fail(description.error);
+      if (input.type !== undefined && !['note', 'todo', 'data'].includes(input.type as string)) return fail('Choose note, todo or data.');
+      return { ok: true, input: { title, description: description || '', type: input.type || 'note' } };
+    }
+    case 'create_reminder':
+      try { return { ok: true, input: { ...parseReminderInput(input) } }; } catch (error) { return fail((error as Error).message); }
+    case 'send_notification':
+      try { const value = parseReminderInput({ ...input, at: new Date().toISOString(), everyMinutes: null }); return { ok: true, input: { title: value.title, description: value.description, delivery: value.delivery } }; } catch (error) { return fail((error as Error).message); }
+    case 'list_reminders': return { ok: true, input: {} };
+    case 'set_reminder_enabled': {
+      const id = thingId(input.id);
+      if (isError(id)) return fail(id.error);
+      if (typeof input.enabled !== 'boolean') return fail('enabled must be true or false.');
+      return { ok: true, input: { id, enabled: input.enabled } };
+    }
     case 'search_things': {
       const query = requiredString(input.query, 'query', 200);
       if (isError(query)) return fail(query.error);
@@ -879,6 +913,7 @@ export type LopuActivePage = {
 export type LopuToolViewer = { id: string; username: string };
 
 export type LopuToolContext = {
+  requestScope?: string;
   viewer: LopuToolViewer;
   context: LopuChatContext;
   activePage: LopuActivePage | null;
@@ -913,9 +948,10 @@ export const createLopuToolContext = (
   viewer: LopuToolViewer,
   context: LopuChatContext | null | undefined,
   emit: (event: LopuToolEvent) => void,
-  options: { approved?: LopuApprovedAction[]; mint?: LopuConfirmationMinter } = {}
+  options: { approved?: LopuApprovedAction[]; mint?: LopuConfirmationMinter; requestScope?: string } = {}
 ): LopuToolContext => ({
   viewer,
+  requestScope: options.requestScope,
   context: context || {},
   activePage: activePageFromContext(context),
   emit,
@@ -1477,6 +1513,23 @@ export const runLopuTool = async (call: LopuToolCall, ctx: LopuToolContext): Pro
   const input = validated.input as any;
   try {
     switch (call.name as LopuToolName) {
+      case 'send_notification': {
+        const { emitSystemNotificationOnce } = await import('../notifications/notifications');
+        const { runWithMongoEndpoint } = await import('../mongodb/endpoint');
+        if (!ctx.requestScope) return { ok: false, error: 'Notification request identity is unavailable. Please send a new message.' };
+        const id = `lopu-recording-notification-${createHash('sha256').update(`${ctx.viewer.id}:${ctx.requestScope}:${call.id}`).digest('hex')}`;
+        const saved = await runWithMongoEndpoint(null, () => emitSystemNotificationOnce({ recipientId: ctx.viewer.id, type: 'lopu-reminder', title: input.title, preview: input.description, delivery: input.delivery, href: '/notifications' }, id, async () => true));
+        return { ok: true, summary: saved ? 'Notification saved. Device delivery is best-effort.' : 'No new notification: this type is muted or this request was already saved.', data: { id, saved } };
+      }
+      case 'create_reminder':
+      case 'list_reminders':
+      case 'set_reminder_enabled': {
+        const reminders = await import('./reminders');
+        const { runWithMongoEndpoint } = await import('../mongodb/endpoint');
+        if (call.name === 'list_reminders') return { ok: true, summary: 'Your saved reminders', data: await runWithMongoEndpoint(null, () => reminders.listLopuReminders(ctx.viewer.id)) };
+        const result = await runWithMongoEndpoint(null, () => call.name === 'create_reminder' ? reminders.createLopuReminder(ctx.viewer.id, input) : reminders.setLopuReminderEnabled(ctx.viewer.id, input.id, input.enabled));
+        return result.ok === true ? { ok: true, summary: 'Reminder saved. Check the receipt for its next run; notification preferences apply.', data: result.reminder } : { ok: false, error: result.error };
+      }
       case 'list_demos':
         return runListDemos(input);
       case 'get_demo':
@@ -1496,6 +1549,13 @@ export const runLopuTool = async (call: LopuToolCall, ctx: LopuToolContext): Pro
     }
     const deps = await loadServerDeps();
     switch (call.name as LopuToolName) {
+      case 'create_thing': {
+        const result = await deps.things.createThing(ctx.viewer.id, { thingtime: ['data'], crystal: { ...input, ...(input.type === 'todo' ? { completed: false } : {}) }, acl: [ACL_OWNER] }, ctx.viewer);
+        if (result.ok === false) return { ok: false, error: failText(result) };
+        const thing = (await deps.things.toPublicThings([result.doc], ctx.viewer))[0] as PublicThingLike;
+        emitThing(ctx, call.id, thing);
+        return { ok: true, summary: `Created private ${input.type}: ${thing.id}`, data: { thing: boundThing(thing) } };
+      }
       case 'search_things':
         return await runSearchThings(deps, ctx, input);
       case 'get_thing':

@@ -24,7 +24,7 @@ export const action = async ({ request }: { request: Request }) => {
 	}
 	if (!user && !sharedRoot) return json({ ok: false, error: 'Sign in to run actions' }, { status: 401 });
 	const viewer = await withFriendIds(withLinkKeys(user ? viewerOf(user) : null, [typeof body?.key === 'string' ? body.key : '']));
-	const shared = sharedRoot ? await resolveSharedComposition(viewer, sharedRoot) : undefined;
+	const shared = sharedRoot ? await resolveSharedComposition(viewer, sharedRoot, { contentRoot: true }) : undefined;
 	if (isFail(shared)) return json({ ok: false, error: shared.error }, { status: shared.status });
 	const result = await runAction(user ? viewerOf(user) : null, { action: body?.action, inputs: body?.inputs, source: body?.source }, shared);
 	if (result.ok === false) return json({ ok: false, error: result.error }, { status: result.status });

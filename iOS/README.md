@@ -148,3 +148,46 @@ App Store provisioning profiles with the App Store Connect API key before
 building. Set
 `SKIP_CERT_SYNC=1` or `SKIP_PROFILE_SYNC=1` only when the correct signing asset
 is already installed and you intentionally want to skip that step.
+
+## Lopu voice recovery
+
+Use build 29 for recording uploads together with the current Watch updates.
+
+Build 25's release source (`9a6f04d4e`) did not include the native voice
+controller or Live Activity extension. Build 27 advertises `lopuVoiceVersion`
+so the web controls can distinguish a capable app from the older general
+native bridge. Older apps receive an update instruction instead of a false
+listening indicator.
+
+Start voice while Thingtime is in the foreground. Device transcription needs
+both Microphone and Speech Recognition permission; Live Activities have a
+separate iOS setting. A pause submits speech, and Stop preserves the current
+partial utterance. Ordinary voice uses the saved chat endpoint and its model,
+provider, reasoning and speed settings. Transcribe mode creates private pages.
+
+Captured audio segments are saved as CAF files on the iPhone, with TXT sidecars
+when recognition produced text. Find them in Files → On My iPhone → Thingtime →
+Lopu Recordings. They remain available when the network or recognition fails;
+the Files app can play/share/delete them. Starting with build 28, each finished
+segment also exports a playable M4A and uploads it as an owner-private audio
+Thing under `/things`. The original CAF and TXT remain on the iPhone. Uploads
+use the existing private-upload approval and storage quota. A saved notice
+links to the recording; a pending notice means the local copy is retained.
+
+The disk outbox stores only file references, request IDs and the recording
+account/origin, never cookies. Reopening Lopu, returning to the foreground or
+regaining connectivity retries pending work for the same signed-in account.
+Changing account or destination stops that account's worker. An interrupted
+completion retries the same attachment instead of uploading a second copy.
+The selected server must advertise attachment upload/complete features 1.2.0
+in its canonical capability manifest before receiving audio. Build 27 and
+earlier recovery files are not automatically imported because they lack an
+authenticated account association. Completed recording Things have no draft
+expiry and remain owner-private. Direct voice also retains captured audio; provider
+transcript/reply rows on that path retain their existing session-only behavior.
+
+Validate with `xcodegen generate` then `DEST='platform=iOS Simulator,id=<id>'
+./scripts/test.sh`. `LopuVoiceRecoveryTests` covers permission cancellation,
+separate denial messages, origin-scoped feature negotiation and readable local
+audio/text. Physical-device recognition and lock-screen acceptance remain
+required; a simulator build does not prove them.
