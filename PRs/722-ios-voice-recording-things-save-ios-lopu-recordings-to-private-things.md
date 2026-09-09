@@ -7,7 +7,10 @@ Native release: build 28, `https://thingtime.com`
 New completed native Lopu audio segments export to M4A and upload through the
 canonical multipart attachment flow as `purpose: recording`. They are standalone
 owner-private attachment Things visible in `/things`, with no parent binding or
-draft expiry. The original CAF and any TXT transcript stay in Files → On My
+draft expiry. The own-things list admits only ready standalone recordings
+through a narrow protected-kind exception, before pagination and within the
+existing owner/folder/token fences. Generic attachment CRUD remains protected.
+The Things read feature is 1.7.0 (operation contract 1.6.0). The original CAF and any TXT transcript stay in Files → On My
 iPhone → Thingtime → Lopu Recordings. Transcripts retain their existing chat/page
 behavior; this change uploads the audio file.
 
@@ -32,7 +35,9 @@ authenticated account association.
 - 41 iOS simulator tests pass, including playable real CAF-to-M4A export,
   relaunch recovery after lost completion, wrong-account refusal and rejection of
   an unrelated presigned upload host. Existing voice recovery tests remain green.
-- 111 focused attachment, route-permission and capability tests pass. Targeted
+- Focused attachment, route-permission, capability and recording-library tests
+  cover finished audio, draft/foreign/protected-row exclusion, and folder/token
+  fences. The earlier attachment/capability run passed 111 tests. Targeted
   ESLint passes. Full TypeScript checking reports existing baseline errors; the
   required CI ratchet remains the merge gate.
 - Local voice UI inspected at desktop and 390 × 844. Opened settings are within
@@ -41,7 +46,7 @@ authenticated account association.
   out; the in-app browser was used for the rendered check.
 - The signed IPA contains build 28 and `ThingtimeWebURL=https://thingtime.com`;
   its Live Activity extension also has version 28. Apple upload succeeded.
-  Processing/internal TestFlight availability is checked separately after upload.
+  Apple reports processing VALID and internal IN_BETA_TESTING for build 28.
 - Physical iPhone microphone → production upload → Things playback and actual
   lock-screen Live Activity acceptance are not proven by the simulator. The new
   save/pending notice requires native upload events and awaits that device check.

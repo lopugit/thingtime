@@ -5688,8 +5688,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-content',
-		contractVersion: '1.2.0',
-		featureVersion: '1.2.0',
+		contractVersion: '1.2.1',
+		featureVersion: '1.2.1',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
@@ -8729,13 +8729,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // then older first) and the response echoes commentSort; an unknown value
     // is a 400. Only this read grew — the shared projection is unchanged, so
     // things-comment / -feed / -user stay put (S7, additive)
-    featureVersion: '1.6.1',
-    contractVersion: '1.5.1',
+    featureVersion: '1.7.0',
+    contractVersion: '1.6.0',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares.',
     detail:
+			'Own-things lists include completed standalone recording attachments; pending uploads and all other protected kinds remain excluded. Attachment creation, metadata mutation and deletion still use their dedicated endpoints. ' +
 			'Shared webpage writers may add component references only when they can independently read the referenced component; only the owner may delegate an unrelated private component through the page. ' +
 			'Shared writers also need independent access before inserting new first-party private media references in page, component or schema render positions. ' +
 			'GET id with sharedRoot and optional key reads an included component/action/schema/data dependency through the freshly authorized stored root. This first-party contextual mode preserves standalone ACLs and owner-only keys, refuses unrelated ids and app-token namespace escapes, and returns private no-store responses. It does not authorize mutations or shared-context list queries. ' +
@@ -12091,12 +12092,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-fork',
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    featureVersion: '1.1.1',
+    contractVersion: '1.1.1',
     group: 'things',
     title: 'Copy a shared composition',
     endpoint: '/api/v1/things/fork',
-    summary: 'Create an independent private copy of readable standalone content, including pages, components, actions, schemas and data with extended content.',
+    summary: 'Create an independent private copy of readable standalone content, including pages, components, actions, schema controls and data with extended content.',
     detail: 'Revalidates the root audience and traverses stored component, action, schema and data references. Creates fresh caller-owned private Things through normal quota and schema gates. Rewrites executable references and capability scopes to copied ids; never edits the original or overwrites a prior fork. Missing dependencies fail before writes. Failed writes trigger best-effort cleanup of exact newly created ids; a cleanup failure is reported explicitly. Repeated successful calls create separate copies.',
     auth: { mode: 'session', description: 'Requires a signed-in user and read access to id, including its key or group membership when needed.' },
     methods: ['POST'],
@@ -12106,8 +12107,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'actions-run',
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    featureVersion: '1.2.1',
+    contractVersion: '1.2.1',
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',
@@ -12121,11 +12122,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'depth, child actions, result bytes) is shared across the whole invocation including child actions.invoke ' +
       'calls, so recursive chains terminate by construction. Every run lands a protected action-run thing ' +
       '(targetId = the action) with a per-step trace; the response carries the same runId, status, result, ' +
-      'budget usage and trace. Shared mode accepts sharedRoot (a stored webpage, component or action id) and an optional key. ' +
+      'budget usage and trace. Shared mode accepts sharedRoot (a stored content Thing, including a webpage, component, action, data or schema id) and an optional key. Schema template controls participate in the same stored dependency graph. ' +
       'It rechecks the root audience on every call, resolves only stored reachable actions in their author namespace, and permits ' +
       'read-only execution without signing in. It never borrows the author or viewer private-account authority, never mutates saved data, ' +
       'and creates no persistent run record or notification; its shared-run id is ephemeral. Explicit stored same-author data dependencies ' +
-      'inherit the root audience; dynamic ids retain ordinary anonymous read access. Every ordinary completed run also stores an action-run ' +
+      'inherit the root audience; dynamic ids retain ordinary anonymous read access. Search schema definitions resolve through the current action’s stored composition edge, while the search itself retains ordinary anonymous/public/system data boundaries. Every ordinary completed run also stores an action-run ' +
       'notification, including successful component runs (quiet delivery).',
     auth: {
       mode: 'optional',

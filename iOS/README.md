@@ -181,7 +181,7 @@ The selected server must advertise attachment upload/complete features 1.2.0
 in its canonical capability manifest before receiving audio. Build 27 and
 earlier recovery files are not automatically imported because they lack an
 authenticated account association. Completed recording Things have no draft
-expiry and remain private unless the owner explicitly changes their audience. Direct voice also retains captured audio; provider
+expiry and remain owner-private. Direct voice also retains captured audio; provider
 transcript/reply rows on that path retain their existing session-only behavior.
 
 Validate with `xcodegen generate` then `DEST='platform=iOS Simulator,id=<id>'

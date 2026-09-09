@@ -26,7 +26,6 @@ import {
 	type SensitiveThingRevealDescriptor
 } from '~/components/Things/SensitiveThingReveal';
 import { isSourceActionKey } from '~/components/ComponentsLibrary/componentBrowseTypes';
-import { SchemaTemplateRender } from '~/components/Things/ThingsViews';
 import { parseThingsReferrer, schemaIdOf, schemaRenderOf, thingDisplayName, thingLink, thingsCacheKey } from '~/components/Things/thingsCore';
 import type { ThingsCache, ThingsReferrer } from '~/components/Things/thingsCore';
 import { apiErrorMessage } from '~/hooks/apiFailure';
@@ -220,6 +219,14 @@ const ComponentLive = ({
 			) : null}
 		</Box>
 	);
+};
+
+// Only the detail page arms schema controls; list/grid thumbnails stay inert.
+// The surrounding runtime chooses inherited read-only execution unless both
+// the data and its freshly fetched schema are owned by the viewer.
+const SchemaTemplateLive = ({ template, crystal, id }: { template: Record<string, unknown>; crystal: Record<string, unknown>; id: string }) => {
+	const { scope } = useThingSource({ source: null, cacheId: id, argValues: crystal, interactive: true });
+	return <LiveTemplate render={template} scope={{ ...crystal, ...scope }} interactive />;
 };
 
 // Why the controls are off: a stranger's thing (ownership is the only thing
@@ -566,21 +573,21 @@ export default function ThingPage() {
 	// it instantly, the schema fetch reconciles (null = fetched, has none)
 	const schemaId = thing && isData ? schemaIdOf({ thingtime: kinds, crystal: thing.crystal || {} }) : null;
 	const schemaContext = schemaId && thing ? JSON.stringify([thing.id, schemaId, currentUser?.id || '', linkKey || '']) : null;
-	const [schemaRender, setSchemaRender] = React.useState<{ context: string; template: Record<string, unknown> | null } | null>(null);
+	const [schemaRender, setSchemaRender] = React.useState<{ context: string; template: Record<string, unknown> | null; owned: boolean } | null>(null);
 	React.useEffect(() => {
 		if (!schemaId || !schemaContext || !thing?.id) return;
 		// Inherited templates are capabilities of this root/key/viewer, never a
 		// schema-only persistent cache entry reusable on a different shared page.
 		const cached = isThingOwner ? readLocalCache<ThingsCache>(thingsCacheKey(currentUser?.id))?.schemaRenders?.[schemaId] : undefined;
-		if (cached !== undefined) setSchemaRender({ context: schemaContext, template: cached });
+		if (cached !== undefined) setSchemaRender({ context: schemaContext, template: cached, owned: false });
 		let cancelled = false;
 		void requireThingtimeCapability('api.things', '1.6.0')
 			.then(() => cancelled ? null : apiRef.current.v1.things.get({ id: schemaId, sharedRoot: thing.id, ...(linkKey ? { key: linkKey } : {}) }))
 			.then((response: any) => {
-				if (!cancelled) setSchemaRender({ context: schemaContext, template: schemaRenderOf(response?.thing) });
+				if (!cancelled) setSchemaRender({ context: schemaContext, template: schemaRenderOf(response?.thing), owned: !!currentUser?.id && response?.thing?.author?.id === currentUser.id });
 			})
 			.catch(() => {
-				if (!cancelled) setSchemaRender((current) => isThingOwner && current?.context === schemaContext ? current : { context: schemaContext, template: null });
+				if (!cancelled) setSchemaRender((current) => isThingOwner && current?.context === schemaContext ? { ...current, owned: false } : { context: schemaContext, template: null, owned: false });
 			});
 		return () => {
 			cancelled = true;
@@ -783,7 +790,7 @@ export default function ThingPage() {
 			</Stack>
 		) : isData && dataTemplate ? (
 			<Box data-testid="thing-data-template" minW={0}>
-				<SchemaTemplateRender template={dataTemplate} crystal={(thing.crystal || {}) as Record<string, unknown>} />
+				<SchemaTemplateLive template={dataTemplate} crystal={(thing.crystal || {}) as Record<string, unknown>} id={thing.id} />
 			</Box>
 		) : (
 			<ThingView thing={thing.crystal} />
@@ -950,7 +957,7 @@ export default function ThingPage() {
 							<WebpageRuntimeProvider
 								key={`${thing.id}:${currentUser?.id || ''}:${linkKey}`}
 								pageId={thing.id}
-								shared={shared}
+								shared={shared || (isData && !(isThingOwner && schemaRender?.context === schemaContext && schemaRender.owned))}
 								linkKey={linkKey}
 								pageKey={isWebpage && typeof thing.crystal?.pageKey === 'string' ? thing.crystal.pageKey : null}
 								suiteKey={suiteKey ?? null}

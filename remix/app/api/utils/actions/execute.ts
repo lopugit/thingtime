@@ -628,7 +628,12 @@ const executeProgram = async (
 				const scopeKind = step.scope === 'public' || step.scope === 'system' ? step.scope : 'own';
 				const clauses: Record<string, unknown>[] = [];
 				if (typeof step.schema === 'string') {
-					const schema = await resolveSchemaRef(viewer, step.schema);
+					// Resolve the schema through this program's freshly authorized
+					// stored edge, without changing the search's account/ACL scope.
+					const included = budget.shared?.references.get(`${program.id}:schema:${step.schema}`);
+					const schema = included
+						? { id: included.shareId, name: typeof included.crystal?.name === 'string' ? included.crystal.name : step.schema }
+						: await resolveSchemaRef(viewer, step.schema);
 					clauses.push({ $or: [{ 'crystal.schemaId': schema.id }, { 'crystal.schema': schema.name }] });
 				}
 				// A scoped things.read capability constrains the QUERY too — a bare
