@@ -259,12 +259,18 @@ export type ThingtimeDesktopBridge = {
 	checkForUpdates?: () => Promise<ThingtimeDesktopUpdateInfo>;
 	downloadUpdateBundle?: () => Promise<ThingtimeDesktopUpdateInfo>;
 	listUpdateCatalog?: () => Promise<ThingtimeDesktopReleaseCatalog>;
-	cacheReleaseBundle?: (request: { releaseId: string }) => Promise<{ cachedBundle: ThingtimeDesktopCachedBundle; catalog: ThingtimeDesktopReleaseCatalog }>;
-	installCachedRelease?: (request: { key: string }) => Promise<{ cachedBundle: ThingtimeDesktopCachedBundle; message: string; status: 'relaunching' }>;
+	cacheReleaseBundle?: (request: {
+		releaseId: string;
+	}) => Promise<{ cachedBundle: ThingtimeDesktopCachedBundle; catalog: ThingtimeDesktopReleaseCatalog }>;
+	installCachedRelease?: (request: {
+		key: string;
+	}) => Promise<{ cachedBundle: ThingtimeDesktopCachedBundle; message: string; status: 'relaunching' }>;
 	launchCachedRelease?: (request: { key: string }) => Promise<{ cachedBundle: ThingtimeDesktopCachedBundle; message: string; status: 'relaunching' }>;
 	removeCachedRelease?: (request: { key: string }) => Promise<ThingtimeDesktopReleaseCatalog>;
 	revealUpdateCache?: () => Promise<{ cachePath: string }>;
 	getInfo?: () => Promise<ThingtimeDesktopInfo>;
+	getNodePanelPreference?: (request: { accountId: string }) => Promise<{ scope: string; dismissed: boolean }>;
+	setNodePanelPreference?: (request: { accountId: string; scope: string; dismissed: boolean }) => Promise<{ scope: string; dismissed: boolean }>;
 	getDesktopSettings?: () => Promise<ThingtimeDesktopSettings>;
 	addEndpoint?: (request: { label: string; url: string }) => Promise<ThingtimeDesktopSettings>;
 	removeEndpoint?: (request: { endpointId: string }) => Promise<ThingtimeDesktopSettings>;
@@ -278,6 +284,8 @@ export type ThingtimeDesktopBridge = {
 	// Narrow local-node setup and macOS privacy surface. Ordinary device
 	// commands deliberately do not travel through a loaded renderer page; they
 	// are authenticated server commands claimed by the local node.
+	openAppLocations?: () => Promise<{ opened: boolean; count: number }>;
+	restartAfterPermissions?: () => Promise<void>;
 	nodeControl?: (request: { action: 'start' | 'stop' | 'restart' }) => Promise<ThingtimeNodeStatus>;
 	nodeGetStatus?: () => Promise<ThingtimeNodeStatus>;
 	nodeRegisterService?: () => Promise<ThingtimeNodeStatus>;

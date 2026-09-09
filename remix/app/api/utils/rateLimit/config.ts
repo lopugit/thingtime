@@ -130,6 +130,7 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // readAt, settings is a rare interactive toggle
   'notifications.list': { limit: 120, windowMs: 60_000, enabled: true },
   'notifications.read': { limit: 60, windowMs: 60_000, enabled: true },
+  'notifications.record': { limit: 120, windowMs: 60_000, enabled: true },
   'notifications.settings': { limit: 30, windowMs: 60_000, enabled: true },
   'notifications.devices': { limit: 30, windowMs: 60_000, enabled: true },
   // one-click email unsubscribe — anonymous (keys by IP), tokens are HMACs so
@@ -240,6 +241,7 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // Lopu model catalog (GET /api/v1/ai/models) — public read of a code-backed
   // list plus one indexed row scan; browse-shaped, anonymous callers key by IP
   'ai.models': { limit: 120, windowMs: 60_000, enabled: true },
+  'ai.complete': { limit: 20, windowMs: 600_000, enabled: true },
   // admin catalog toggles, on-demand re-seed and provider-key re-check
   // (POST /api/v1/admin/ai/models { id, enabled } | { seed } | { probe }) —
   // the seed is a batch write and the probe dials the providers (5 s cap

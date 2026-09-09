@@ -9,6 +9,7 @@ const { pathToFileURL } = require('node:url');
 
 const { app, BrowserWindow, dialog, ipcMain, shell, Menu, nativeImage, session } = require('electron');
 const { checkEndpointCompatibility, compatibilityError, probeEndpointDevices } = require('./lib/endpoint-compatibility.cjs');
+const { prepareAppLocations } = require('./lib/app-locations.cjs');
 const { DesktopSettingsStore } = require('./lib/desktop-settings.cjs');
 const {
 	cacheInstalledBundle,
@@ -985,7 +986,10 @@ async function checkSelectedEndpointCompatibility({ syncNode = false } = {}) {
 
 async function nodeControlService(event, request) {
 	requireMacNode(event);
-	const action = request?.action;
+	return controlConfiguredNode(request?.action);
+}
+
+async function controlConfiguredNode(action) {
 	if (!['start', 'stop', 'restart'].includes(action)) throw new ThingtimeNodeBridgeError('invalid_request', 'Unsupported node control.');
 	if (action !== 'stop') {
 		const compatibility = await checkSelectedEndpointCompatibility();
@@ -1102,6 +1106,71 @@ const NODE_PERMISSION_SETTINGS = Object.freeze({
 	}
 });
 
+let permissionRecoveryPending = false;
+let permissionRecoveryAway = false;
+let permissionRestartPrompt = false;
+let appLocationsOperation = null;
+
+function armPermissionRecovery() {
+	permissionRecoveryPending = true;
+	permissionRecoveryAway = !mainWindow?.isFocused();
+}
+
+async function offerPermissionRestart() {
+	if (permissionRestartPrompt) return;
+	permissionRecoveryPending = false;
+	permissionRecoveryAway = false;
+	permissionRestartPrompt = true;
+	let restarting = false;
+	try {
+		const { response } = await dialog.showMessageBox(mainWindow || undefined, {
+			type: 'info', title: 'Thingtime permission recovery',
+			message: 'Restart Thingtime Node after changing permissions?',
+			detail: 'If you removed and re-added Thingtime Node in System Settings, restart it to apply the change. macOS controls its own restart prompts and may not show one. Pairing and settings are kept. For other Thingtime apps, quit and reopen the app you changed.',
+			buttons: ['Later', 'Restart Node Now'], defaultId: 0, cancelId: 0
+		});
+		if (response !== 1) return;
+		restarting = true;
+		await controlConfiguredNode('restart');
+	} catch (error) {
+		// Only a failed restart is worth reporting, and only the restart may claim
+		// it failed. A prompt that never appeared changed nothing, and this runs
+		// from the focus listener, so the report itself must not reject.
+		if (!restarting) return;
+		await dialog.showMessageBox(mainWindow || undefined, {
+			type: 'error', title: 'Thingtime Node', message: 'The node could not restart.',
+			detail: error instanceof Error ? error.message : 'Try Restart node in Desktop settings.'
+		}).catch(() => {});
+	} finally { permissionRestartPrompt = false; }
+}
+
+app.on('browser-window-blur', (_event, window) => {
+	if (window === mainWindow && permissionRecoveryPending) permissionRecoveryAway = true;
+});
+app.on('browser-window-focus', (_event, window) => {
+	if (window === mainWindow && permissionRecoveryPending && permissionRecoveryAway) void offerPermissionRestart();
+});
+
+async function openAppLocations(event) {
+	requireMacNode(event);
+	if (!app.isPackaged) throw new Error('Open App Locations is available in the installed Thingtime app.');
+	if (appLocationsOperation) return appLocationsOperation;
+	appLocationsOperation = (async () => {
+		const paths = thingtimeNode.paths();
+		await thingtimeNode.verify(paths);
+		const result = await prepareAppLocations({
+			root: path.join(app.getPath('userData'), 'App Locations'),
+			outerApp: paths.outerApp, helperApp: paths.helperApp,
+			applicationDirs: [path.join(app.getPath('home'), 'Applications'), '/Applications']
+		});
+		armPermissionRecovery();
+		const error = await shell.openPath(result.directory);
+		if (error) { permissionRecoveryPending = false; throw new Error(error); }
+		return { opened: true, count: result.count };
+	})().finally(() => { appLocationsOperation = null; });
+	return appLocationsOperation;
+}
+
 async function nodeOpenPermissionSettings(event, request) {
 	requireMacNode(event);
 	const kind = typeof request?.kind === 'string' && Object.hasOwn(NODE_PERMISSION_SETTINGS, request.kind) ? request.kind : null;
@@ -1109,11 +1178,9 @@ async function nodeOpenPermissionSettings(event, request) {
 	if (!permission) {
 		throw new ThingtimeNodeBridgeError('invalid_request', 'Choose a supported Thingtime Node permission.');
 	}
-	const paths = thingtimeNode.paths();
-	await thingtimeNode.verify(paths);
+	await openAppLocations(event);
 	const permissions = normalizePermissions(await thingtimeNode.request('permissions.request', { kind }, `permission-${crypto.randomUUID()}`));
-	shell.showItemInFolder(paths.helperApp);
-	await shell.openExternal(permission.url);
+	try { await shell.openExternal(permission.url); } catch (error) { permissionRecoveryPending = false; throw error; }
 	return { kind, opened: true, permissions: permissions.permissions };
 }
 
@@ -1574,6 +1641,15 @@ function createWindow() {
 }
 
 ipcMain.handle('thingtime-desktop:get-info', () => getDesktopInfo());
+ipcMain.handle('thingtime-desktop:get-node-panel-preference', (event, request) => {
+	requireTrustedAiBridgeEvent(event);
+	const store = requireDesktopSettings();
+	return store.enqueue(() => store.nodePanelPreference(request?.accountId));
+});
+ipcMain.handle('thingtime-desktop:set-node-panel-preference', (event, request) => {
+	requireTrustedAiBridgeEvent(event);
+	return requireDesktopSettings().setNodePanelPreference(request);
+});
 ipcMain.handle('thingtime-desktop:get-settings', (event) => {
 	requireTrustedAiBridgeEvent(event);
 	return requireDesktopSettings().snapshot();
@@ -1625,6 +1701,8 @@ ipcMain.handle('thingtime-desktop:ai-discover', (event) => discoverAiSources(eve
 ipcMain.handle('thingtime-desktop:ai-begin-sync', (event, request) => beginAiSync(event, request));
 ipcMain.handle('thingtime-desktop:ai-read-batch', (event, request) => readAiSyncBatch(event, request));
 ipcMain.handle('thingtime-desktop:ai-cancel-sync', (event, request) => cancelAiSync(event, request));
+ipcMain.handle('thingtime-desktop:open-app-locations', (event) => openAppLocations(event));
+ipcMain.handle('thingtime-desktop:permission-restart', (event) => { requireMacNode(event); return offerPermissionRestart(); });
 ipcMain.handle('thingtime-desktop:node-control', (event, request) => nodeControlService(event, request));
 ipcMain.handle('thingtime-desktop:node-status', (event) => nodeGetStatus(event));
 ipcMain.handle('thingtime-desktop:node-register-service', (event) => nodeRegisterService(event));

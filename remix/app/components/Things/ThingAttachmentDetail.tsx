@@ -1,5 +1,6 @@
 import { ProgressiveImage } from '~/components/Attachments/ProgressiveImage';
 import React from 'react';
+import { useSharedMediaUrl } from '../Sharing/SharedMedia';
 import { Box, Button, Flex, Heading, Stack, Text } from '@chakra-ui/react';
 import { ChevronDown, ChevronUp, Download, ExternalLink, EyeOff, Image as ImageIcon } from 'lucide-react';
 import { Link } from 'react-router';
@@ -69,6 +70,7 @@ const ReferenceRow = ({ reference }: { reference: PublicPost }) => {
 };
 
 export const ThingAttachmentDetail = ({ attachment, references }: { attachment: PublicAttachment; references: PublicPost[] }) => {
+	const mediaUrl = useSharedMediaUrl();
 	const [referencesOpen, setReferencesOpen] = React.useState(false);
 	const [showSensitiveImage, setShowSensitiveImage] = React.useState(false);
 	const [imageFailed, setImageFailed] = React.useState(false);
@@ -103,7 +105,7 @@ export const ThingAttachmentDetail = ({ attachment, references }: { attachment: 
 					</Box>
 					<Button
 						as="a"
-						href={attachment.url || attachmentContentUrl(attachment.id, true)}
+						href={mediaUrl(attachment.url || attachmentContentUrl(attachment.id, true))}
 						{...(attachment.url ? { target: '_blank', rel: 'noopener noreferrer' } : { download: attachment.name })}
 						size="sm"
 						variant="outline"
@@ -117,7 +119,7 @@ export const ThingAttachmentDetail = ({ attachment, references }: { attachment: 
 					<Box mt={5} borderRadius="var(--tt-radius-lg, 14px)" overflow="hidden" background="var(--tt-surface-alt, #f5f5f7)">
 						{imageVisible ? (
 							<ProgressiveImage
-								src={attachmentMediaSrc(attachment)}
+								src={mediaUrl(attachmentMediaSrc(attachment))}
 								alt={attachment.description || title}
 								display="block"
 								maxH={{ base: '62vh', md: '72vh' }}

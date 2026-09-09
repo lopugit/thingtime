@@ -43,7 +43,7 @@ test('types accept csv or arrays, dedupe, and drop unknown names', () => {
 });
 
 test('category expands to its types and intersects with an explicit type list', () => {
-  assert.deepEqual(resolveNotificationListQuery({ category: 'system' }).types, ['action-run']);
+  assert.deepEqual(resolveNotificationListQuery({ category: 'system' }).types, ['action-run', 'recording-reminder', 'lopu-reminder', 'login-success', 'system-message']);
   assert.deepEqual(resolveNotificationListQuery({ category: 'feed' }).types, ['post-from-followed', 'post-from-friend']);
   assert.deepEqual(resolveNotificationListQuery({ category: 'engagement', types: 'comment,new-follower' }).types, ['comment']);
   assert.deepEqual(resolveNotificationListQuery({ category: 'nope' }).types, []);
@@ -77,14 +77,28 @@ test('the push master off means nothing can match', () => {
 test('disabled types are excluded, explicit types are intersected with the enabled set', () => {
   const prefs = normalizeNotificationPrefs({ reaction: false, 'action-run': false });
   const plain = buildNotificationListFilters('u1', prefs, resolveNotificationListQuery({}));
-  assert.deepEqual(plain?.base, { thingtime: 'notification', ownerId: 'u1', 'crystal.type': { $nin: ['reaction', 'action-run'] } });
+  assert.deepEqual(plain?.base, { thingtime: 'notification', ownerId: 'u1', historyOnly: { $ne: true }, 'crystal.type': { $nin: ['reaction', 'action-run'] } });
 
   const explicit = buildNotificationListFilters('u1', prefs, resolveNotificationListQuery({ types: 'reaction,comment' }));
   assert.deepEqual(explicit?.base['crystal.type'], { $in: ['comment'] });
 
   // everything asked for is switched off → empty page, never a leak
-  assert.equal(buildNotificationListFilters('u1', prefs, resolveNotificationListQuery({ category: 'system' })), null);
+  assert.deepEqual(buildNotificationListFilters('u1', prefs, resolveNotificationListQuery({ category: 'system' }))?.base['crystal.type'], { $in: ['recording-reminder', 'lopu-reminder', 'login-success', 'system-message'] });
+  const allSystemOff = normalizeNotificationPrefs({ 'action-run': false, 'recording-reminder': false, 'lopu-reminder': false, 'login-success': false, 'system-message': false });
+  assert.equal(buildNotificationListFilters('u1', allSystemOff, resolveNotificationListQuery({ category: 'system' })), null);
+  assert.equal(buildNotificationListFilters('u1', prefs, resolveNotificationListQuery({ types: 'action-run' })), null);
   assert.equal(buildNotificationListFilters('u1', prefsOn, resolveNotificationListQuery({ types: 'bogus' })), null);
+});
+
+test('history includes muted types and ignores channel masters without widening ownership', () => {
+  const prefs = normalizeNotificationPrefs({ masters: { push: false, email: false }, push: { 'action-run': false } });
+  const query = resolveNotificationListQuery({ history: '1', category: 'system', unread: '1' });
+  assert.deepEqual(buildNotificationListFilters('owner', prefs, query)?.base, {
+    thingtime: 'notification', ownerId: 'owner', readAt: null,
+    'crystal.type': { $in: ['action-run', 'recording-reminder', 'lopu-reminder', 'login-success', 'system-message'] }
+  });
+  assert.equal(buildNotificationListFilters('owner', prefs, resolveNotificationListQuery({})), null);
+  assert.equal(buildNotificationListFilters('owner', prefs, resolveNotificationListQuery({ history: '1', types: 'unknown' })), null);
 });
 
 test('unread, date bounds and the cursor compose into base + page filters', () => {
