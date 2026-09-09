@@ -2822,7 +2822,8 @@ halves.
       person whose username is exactly `@lopu`, that person is the first remote
       row. Exact usernames rank above username/display-name prefixes, which rank
       above an exact Thing title; server relevance order remains stable within a
-      matching tier.
+      matching tier. A query spanning a space (`the lopu`) still reaches the
+      display-name prefix tier rather than falling behind a matching Thing title.
 - [ ] Commander result visuals use the shared `thingIcon` mapping (including
       filename-aware Thing icons). A person with `avatarUrl` shows that profile
       image with a small `👤` user-type badge; a person without one gets an

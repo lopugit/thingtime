@@ -18,6 +18,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Keep Commander's display-name prefix tier reachable for queries that span a space ("the lopu"), which previously matched no single split word and let a matching Thing title outrank the person. — Lopu (AI), 2026-09-09
+
 - Include schema-template actions in shared-root dependency resolution and
   private copies. Data Thing detail controls use root-authorized read-only
   execution unless both the data and its schema are owned by the viewer;
