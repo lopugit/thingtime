@@ -1179,7 +1179,10 @@ export function useApi() {
       )
     },
     notifications: {
-      list: useCallback(async (args?: Record<string, unknown>) => getJson(`/api/v1/notifications${toQuery(args)}`), []),
+      list: useCallback(async (args?: Record<string, unknown>) => {
+        if (args?.history) await requireThingtimeCapability('api.notifications-list', '1.4.0');
+        return getJson(`/api/v1/notifications${toQuery(args)}`);
+      }, []),
       markRead: useCallback(
 				async (args) => asyncFetcher.submit(args?.all ? { all: true } : { ids: args?.ids }, { action: '/api/v1/notifications/read' }),
         [asyncFetcher]

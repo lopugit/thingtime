@@ -38,7 +38,7 @@ test('unknown types read as social, unknown categories are rejected', () => {
 
 test('action-run is the system family: bell on by default, email opt-in', () => {
   assert.equal(NOTIFICATION_TYPE_CATEGORY['action-run'], 'system');
-  assert.deepEqual(notificationTypesInCategory('system'), ['action-run']);
+  assert.deepEqual(notificationTypesInCategory('system'), ['action-run', 'login-success', 'system-message']);
   assert.ok(EMAIL_DEFAULT_OFF_TYPES.includes('action-run'));
   const prefs = normalizeNotificationPrefs(null);
   assert.equal(prefs.push['action-run'], true);

@@ -17,6 +17,7 @@ import { signJwt, signPurposeToken, verifyPurposeToken } from './jwt';
 import { providerNameForAaguid } from './passkeyAaguids';
 import { resolvePublicOrigin } from './publicOrigin';
 import { createSession } from './sessions';
+import { emitLoginNotification } from '../notifications/notifications';
 import { findUserById, toPublicUserWithStorage } from './users';
 import type { PublicUser } from './users';
 import {
@@ -560,6 +561,7 @@ export const finishPasskeyLogin = async ({ request, response, appContext }: Fini
 	// surface (roster, revocation, resolveSessionUser) treats it identically.
 	const session = await createSession(String(user._id), { meta: { method: 'passkey', passkeyId: doc.shareId } });
 	const jwt = await signJwt({ sub: String(user._id), jti: session.jti });
+	await emitLoginNotification(String(user._id));
 
 	return {
 		ok: true,
