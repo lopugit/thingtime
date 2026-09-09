@@ -8,6 +8,41 @@ With Thingtime, you can create and share any abstract data structure you want, o
 
 At Thingtime, we believe that data and knowledge should be open, accessible, and empowering. We are building Thingtime to make this vision a reality. Join us and start exploring the limitless possibilities of data!
 
+## Lopu reminders and notification tests
+
+Lopu chat and the standard voice page share `create_thing`, `send_notification`,
+`create_reminder`, `list_reminders`, and `set_reminder_enabled`. Only the signed-in
+owner can receive or manage these reminders. Notes/todos and reminder content
+are ordinary private Things; linked protected schedules are control-plane data.
+Settings → Notifications provides pause/resume, refresh, delivery samples
+(Quiet, Normal, Urgent/time-sensitive), rich-text/image examples, and each
+registered notification type. Samples never email another account or bypass
+notification preferences. Native banners use plain text; the richer examples
+render in Thingtime history. Critical Apple alerts are not implemented.
+
+Fork setup: deploy the registered `/api/v1/lopu/recordings/run` scheduler with a
+distinct server-only `CRON_SECRET` and an authenticated five-minute schedule
+(the Vercel cron in this branch). No browser timer runs these reminders. Missed
+intervals advance without replaying a backlog. Keep the existing storage
+accounting migration healthy; content writes still use account quotas. Configure
+APNs as documented below, enable the Time Sensitive Notifications capability on
+both native bundle identifiers, and regenerate matching provisioning profiles.
+Provider configuration alone does not prove either push delivery or AI quota.
+
+“Send to Lopu” is a separate explicit recording action, available from the
+recordings activity menu and by holding/swiping a Watch recording. It requires
+the owner's recording-AI opt-in and a speech-capable transcription connection.
+Once its private transcript is ready, a saved chat receives it through normal
+Lopu billing/tools/confirmation gates. Retries do not silently repeat an
+ambiguous tool execution; inspect the linked conversation for results/questions.
+Automatic transcription/notes alone do not grant this execution consent.
+
+Local verification for this worktree: `http://localhost:16340/settings` and
+`http://localhost:16340/lopu/recordings` (API 16342, HMR 16341). PM2 uses
+`npm run web-pms` with automatic restart disabled. Tailscale/Funnel is currently
+unavailable: the installed CLI shim refers to a missing Tailscale app binary.
+These are worktree-local URLs, not a production deployment receipt.
+
 ## Account speed-test allowances
 
 Commander speed tests use the signed-in account's protected subscription and
@@ -1305,6 +1340,17 @@ stored entries intentionally makes them undecryptable. For a fork, create a
 new random 32-byte base64url key and add Claude accounts through Admin → CI
 Control; never copy Thingtime’s encrypted rows or production tokens.
 
+Hosted development also needs its own key, scoped to the deployment's actual
+Vercel custom environment (not the CLI-only Development target or every PR
+preview). Redeploy that environment to activate it; do not rotate an existing
+key without re-encrypting all affected vault entries. Admin External
+integrations, CI credential waterfall, and user Secure Vault are separate
+stores. Sharing server-provider environment variables does not copy saved CI
+OAuth credentials or user connections. An authorized cross-environment copy
+must use the credential store's authenticated transfer path or secure re-entry,
+preserve order and permissions, and re-encrypt with the destination key without
+logging values. Shared provider credentials also share upstream billing/quota.
+
 Do not reuse the JWT, session, peer-discovery, or cron secret. The policy proxy
 accepts a saved endpoint id rather than arbitrary URLs; it enforces HTTPS
 origins, closed path prefixes, byte bounds, no redirects, and selected read /
@@ -1720,6 +1766,181 @@ PUT that finishes late from escaping tier accounting; the seven-day S3
 incomplete-MPU lifecycle remains a required independent guard.
 An MPU that never issued a part URL has no possible late browser PUT and can be
 refunded promptly after Abort/ListParts/HEAD proves it empty.
+
+### Poll index headroom during the Watch rollout
+
+Poll writers share production's protected Binary `uniqueKeys_1` constraint and
+retain `things_vote_key_lookup` for indexed legacy reads. Startup and voting do
+not retire this lookup or run a separate poll backfill. The explicitly leased
+admin index migrations govern shared relationship/legacy layouts; custom data
+endpoints retain their compatibility indexes. The Watch scheduler's
+`lopu_recording_due` index remains part of this branch's plan.
+
+For production-free concurrency, ACL, toggle and quota verification, run
+`npm --prefix remix run verify:poll-unique-keys` against the verifier's explicitly
+allowed disposable loopback replica set. See the script's prerequisites; it
+does not accept production or develop database URIs.
+
+### Personal recording runtime (local adapter)
+
+`remix/scripts/personal-recording-runtime.mjs` provides local `transcribe` and
+`complete` operations for the forthcoming personally paired recording worker.
+It is **not yet connected to cloud recording jobs or the shared HTTP endpoint**.
+No server, public listener, background service or automatic recording processing
+is started by importing this module.
+
+Fork setup: install `ffmpeg`, `whisper-cpp`, and the unmodified Claude Code CLI.
+Sign into Claude Code yourself (`claude auth login`); do not copy a Claude
+session token into a Thingtime endpoint credential. Obtain a compatible GGML
+Whisper model from the whisper.cpp project's documented model source and verify
+its checksum before use. Supply absolute `claudePath`, `whisperPath`,
+`ffmpegPath`, and `modelPath` values to `createPersonalRecordingRuntime` from
+machine-local, untracked setup. Models and credentials must stay outside git.
+
+Audio is decoded/transcribed locally, with a 24 MiB input and 20-minute duration
+limit. The English `base.en` model was exercised with synthetic audio; choose
+and validate a multilingual model when needed. Only the resulting text is sent
+to the personal Claude Code CLI. The CLI runs with customizations and tools
+disabled, native first-party sign-in checked, private text on stdin, bounded
+execution and output, and a temporary directory removed after success or failure.
+Inherited API keys and endpoint overrides are excluded from its environment.
+Transcription can mishear names; inspect the transcript before relying on tasks.
+Run `npm --prefix remix run test:ai-models` for its regression coverage.
+
+### Shared AI endpoint waterfall
+
+AI completions and recording-automation mutations follow the protected account
+subscription, resolved on the home server for each request. Free and custom
+tiers retain the admin-configured `ai.complete`/`things.write` limits and
+windows; Plus receives five times the request allowance; Pro and Pay as you go
+have no Thingtime request-rate cap for these two product endpoints. The
+existing account bucket is preserved across tier, token, device and IP changes.
+No subscription migration or new credential is required for existing accounts.
+Entitlement/limiter outages return 503, not a misleading exhausted-quota 429.
+Provider quotas, attachment size/upload limits, storage allowances, bounded
+workers and authentication/credential-protection limits remain independent.
+
+`POST /api/v1/ai/complete` is the shared, non-streaming text completion entry
+point. A full signed-in user sends `{ connectionIds, prompt, system? }`.
+`connectionIds` is an explicit ordered list of one to four **owned Secure
+Vault connection IDs**, not tokens. Each connection keeps its own endpoint,
+credential and model. Choose that order per request; no provider is opted in
+implicitly. The `useApi().v1.ai.complete()` client negotiates the origin's
+`api.ai-complete` feature at version 1.1.0 before sending text.
+
+Fork setup: configure the existing Secure Vault encryption key in the host's
+secret store, add connections in Settings → Secure Vault, and admit custom
+HTTPS hosts with `THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS`. Never put credentials
+in source, URLs, prompts or request bodies. Existing Anthropic Messages,
+Gemini generateContent and OpenAI-compatible endpoint adapters are supported.
+All selected IDs are validated as owned before any external delivery; each
+key is resolved again immediately before its attempt. Platform/CI credentials
+are never implicitly selected. This endpoint does not persist prompts or
+responses; each selected provider's own data handling still applies.
+
+The shared waterfall policy also drives recording-stage retries. Each
+connection is tried once (20-second transport timeout, 80-second total
+budget); network, timeout, authentication, quota and selected 5xx failures
+permit fallback. Invalid configuration, unsafe endpoints, malformed replies
+and cancellation stop. Responses report `connectionId` and a bounded
+`attempts` trace containing IDs, outcomes and optional HTTP statuses, never
+tokens, endpoint URLs or upstream error bodies. All failures return a fixed
+safe message. There is a fail-closed limit of 20 requests per ten minutes per
+account. Scoped app/PAT/device credentials are not full account sessions.
+
+**Integration status:** this is text routing, not audio transcription or a
+Claude Code OAuth bridge. The planned personal runtime keeps Claude Code's
+sign-in inside the unmodified runtime and uses a separate endpoint credential
+to authenticate Thingtime. Do not place a Claude session token in an HTTP
+provider entry. Local speech-to-text, runtime pairing and real Watch recording
+acceptance remain separate release gates; no paid transcription key is
+required by this text endpoint.
+
+### Private Apple Watch recording automation
+
+`/lopu/recordings` (also linked from Settings) controls Lopu's recording
+automation. It is **off until each account opts in**: private audio and its
+transcript are sent to the account's explicitly selected AI providers. Only newly uploaded
+private `watch-upload-*` posts tagged `apple-watch` are discovered. Owners can
+explicitly queue an older private Watch post on the same page. This covers
+direct Watch uploads and the older paired-iPhone relay.
+
+Configure these values in your deployment's secret store, never in Git:
+
+```sh
+OPENAI_API_KEY="<server-side provider key>"
+ANTHROPIC_API_KEY="<optional server-side Anthropic API key for notes/todos>"
+CRON_SECRET="<long random scheduler secret>"
+# Optional operator-controlled compatible provider base and analysis model:
+OPENAI_BASE_URL="https://api.openai.com/v1"
+LOPU_OPENAI_MODEL="gpt-4o-mini"
+```
+
+Audio connections must support `gpt-4o-mini-transcribe`; a chat-only proxy or
+Claude API key cannot transcribe recordings. Analysis supports OpenAI and
+Anthropic API connections. It honors the connection's own model, otherwise
+the matching Thingtime Admin model preference (`LOPU_OPENAI_MODEL` /
+`LOPU_CLAUDE_MODEL` supply default-slot fallbacks). `Provider configured`
+means a key is present, not that a live transcription has passed. Audio is
+limited to 24 MiB; M4A/MP4, MP3, WAV and WebM are accepted. Never point the
+provider base at an untrusted service: it receives the key and private audio.
+
+For account-specific waterfalls, add API connections in **Settings → Secure
+Vault**, then order them separately under **Audio transcription** and **Notes
+and todos** on `/lopu/recordings`. Each list holds 1–4 unique connection IDs.
+Legacy settings keep the platform audio/text provider as their only entry;
+no extra provider is opted in automatically. Platform defaults are optional
+when the account supplies its own compatible keys. Secure Vault requires a
+stable `THINGTIME_USER_VAULT_KEY` (or the existing admin vault key), configured
+using the Secure Vault setup above. Keep encryption keys in the host's secret
+store. Choices return labels/capabilities only; keys are decrypted server-side
+only for that owner's selected attempt. GitHub Actions/CI credentials are not
+enumerated or inherited. Claude Code OAuth/setup tokens are not API keys and
+are rejected; use a separately billed Anthropic Console API key.
+
+Authentication, rate/quota, timeout and provider-availability failures try the
+next selected connection, at most once per connection (20 seconds each, 80
+seconds per stage). Invalid requests, unsafe endpoints and malformed outputs
+stop instead of forwarding the recording again. Consent, source privacy and
+the selected list are rechecked before every attempt. Disabling processing or
+changing the list stops further fallback. A successful transcript checkpoint
+is reused when retrying analysis. All provider endpoints, including custom
+platform bases, must pass the existing HTTPS/public-DNS guard and server
+`THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS` allowlist; redirects are refused.
+
+The repository-root Vercel cron calls `GET /api/v1/lopu/recordings/run` every
+five minutes using `Authorization: Bearer <CRON_SECRET>`. Other hosts must
+schedule that authenticated endpoint themselves. An administrator may use
+same-origin `POST` for a manual run. The scheduler discovers bounded batches,
+processes one recording per run, and resumes interrupted work through durable
+leases/checkpoints. A busy installation must schedule sufficient worker
+capacity; five minutes is polling cadence, not a completion guarantee.
+
+Transcripts become quota-billed, relational comments on the source private
+post (long transcripts are split). Derived notes and unfinished todos are
+ordinary owner-private Things linking back to that post. This feature creates
+reminders, not purchases, messages or executable actions. It rechecks source
+privacy and opt-in before every write; atomic checkpoints prevent duplicate
+comments/todos on retry. Processing scratch is non-indexed BinData and is
+discarded on completion. Activity and retry buttons expose failures without
+printing provider credentials or signed attachment URLs.
+
+Daily reminders use the account's selected IANA time zone and hour, with at
+most one bell entry per unfinished todo per local date, including DST days.
+Reminders arrive at or after that hour as the bounded queue is processed.
+Complete a todo, pause its reminders, or disable daily reminders globally to
+stop them. The normal notification preferences also apply; reminder emails
+are opt-in. Native delivery additionally requires the Watch push setup.
+
+API contracts: `api.lopu-recordings` and `api.lopu-recordings-run` 1.0.0;
+notification list/settings 1.2.0 add `recording-reminder`. Both manifests and
+the runtime route registry advertise these versions. Clients must negotiate
+against the selected origin before using recording operations.
+
+Local QA worktree: `thingtime-watch-recording-automation` uses Vite 17460,
+HMR 17461 and Nitro 17462, derived by `npm run web-ports`. Start with the
+repository PM2 lifecycle. No public Funnel was configured for this worktree
+during implementation: the machine's Tailscale CLI pointed at a missing app.
 
 ### Notification emails (SES notification stream)
 
@@ -2300,6 +2521,24 @@ integrations such as S3, and keep secrets such as MongoDB passwords and Vercel
 API tokens unprefixed and server-only.
 
 ## Native iOS TestFlight web URL
+
+Lopu voice requires build 27 or later; build 25's general native bridge did not
+include its recorder or Live Activity widget. Voice support is negotiated with
+`lopuVoiceVersion`, separately from the shell version. For a fork's signed build,
+register the app, its `.watchkitapp` companion, and its `.lopu-widget` extension
+under your own bundle prefix. The Fastlane build syncs a distribution profile
+for each target and includes all three in manual export. Override
+`LOPU_WIDGET_BUNDLE_IDENTIFIER` and `LOPU_WIDGET_PROVISIONING_PROFILE_SPECIFIER`
+only when your fork's Xcode bundle settings match those values; keep signing
+credentials in the ignored iOS env/Keychain. Audio recovery files stay on-device
+in Files → On My iPhone → Thingtime → Lopu Recordings. Build 28 also uploads
+new recordings as owner-private audio Things under `/things`. This requires
+private-upload approval, available account storage, and the selected origin
+advertising `api.attachment-uploads` and `api.attachment-upload-complete` 1.2.0
+in `/.well-known/thingtime-capabilities.json`. Forks use the existing private
+S3 attachment setup; no new credential is needed. Failed uploads remain local
+and retry when Lopu reopens or regains connectivity in the same account. See [voice recovery](iOS/README.md#lopu-voice-recovery).
+
 
 The native iOS app lives in `iOS/` and defaults its embedded `WKWebView` to
 `https://thingtime.com`. TestFlight builds can target a Vercel branch or preview

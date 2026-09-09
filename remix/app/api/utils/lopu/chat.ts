@@ -1139,6 +1139,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
   const approved = input.approvedConfirmations || [];
   const makeContext = (): LopuToolContext =>
     createLopuToolContext(input.viewer, input.context, () => {}, {
+      requestScope: `${input.chatId}:${input.requestId}`,
       approved,
       mint: (action) => deps.mintConfirmation({ userId: input.viewer.id, chatId: input.chatId, action })
     });

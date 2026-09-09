@@ -70,7 +70,7 @@ const defaultDependencies: AttachmentMutationDependencies = {
 // profile. An unknown purpose is left to the service's own 400 — nothing is
 // reserved either way.
 const PUBLIC_UPLOAD_PURPOSES = new Set<unknown>([undefined, 'post', 'comment', 'custom-emoji']);
-const PRIVATE_UPLOAD_PURPOSES = new Set<unknown>(['message', 'profile-avatar', 'profile-banner']);
+const PRIVATE_UPLOAD_PURPOSES = new Set<unknown>(['message', 'profile-avatar', 'profile-banner', 'recording']);
 
 export const createAttachmentMutationAction = (
 	options: { rateKey: string; service: MutationService; requireUploadPermission?: boolean },

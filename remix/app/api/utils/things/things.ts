@@ -1,3 +1,4 @@
+import { ownerLibraryMatch } from './ownerLibraryQuery';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { ObjectId, type Binary } from 'mongodb';
@@ -1011,6 +1012,7 @@ export const sanitizeShareId = (value: unknown): string | null | Fail => {
     return fail(400, 'shareId must be a short id without spaces, dots, or $');
   }
   if (
+    trimmed.startsWith('lopu-recording-') ||
     trimmed.startsWith(MIGRATION_RESERVED_ID_PREFIX) ||
     trimmed.startsWith(SCHEMA_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(COMPONENT_RESERVED_ID_PREFIX) ||
@@ -3393,19 +3395,14 @@ export const listThings = async (
     // up as inert, non-editable entries (edit/delete 403) in the data browser.
     // Messenger plumbing (chats, memberships, messages…) stays out for the
     // same reason — /messages is its browser.
-    match = {
-      ownerId: viewer.id,
-      thingtime: { $nin: [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME, ...SUBSPACE_THINGTIME, UPDOWN_THINGTIME] },
-      ...await legacyThingReadsRequired() ? { $or: [{ thingtime: { $exists: true } }, { kind: 'post' }] } : { $and: [{ thingtime: { $exists: true } }] }
-    };
     const folder = typeof query.folder === 'string' ? query.folder.trim() : '';
-    if (folder) {
-      // Folder browse: mechanical children (reactions, saves) are unfileable —
-      // they'd otherwise flood the root level (no folderId reads as root) with
-      // rows the browser hides anyway, wasting whole pages and one inherit
-      // walk each. Excluded server-side so folder pages carry real content.
-      match.thingtime = { $nin: [...PROTECTED_THINGTIME, ...FOLDER_UNFILEABLE] };
-    }
+    const hiddenKinds = folder
+      ? [...PROTECTED_THINGTIME, ...FOLDER_UNFILEABLE]
+      : [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME, ...SUBSPACE_THINGTIME, UPDOWN_THINGTIME];
+    match = withMatch(
+      ownerLibraryMatch(viewer.id, hiddenKinds),
+      await legacyThingReadsRequired() ? { $or: [{ thingtime: { $exists: true } }, { kind: 'post' }] } : { thingtime: { $exists: true } }
+    );
     if (folder === 'root') {
       // v1 docs and pre-folder v2 docs have no folderId at all — both read as root
       match.folderId = { $in: [null] };
