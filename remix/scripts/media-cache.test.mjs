@@ -66,6 +66,8 @@ test('real worker reauthorizes cache hits, deduplicates bytes, respects ranges, 
 		if (url.pathname.includes('capabilities'))
 			return Response.json({ schemaVersion: 1, origin, features: { 'api.attachment-content': { version: '1.1.0' } } });
 		if (url.searchParams.get('cache') === 'validate') {
+			assert.equal(url.searchParams.get('key'), 'fixture-key');
+			assert.equal(url.searchParams.get('sharedRoot'), 'page');
 			validations++;
 			return allowed ? Response.json({ ok: true, cacheKey: `${'b'.repeat(64)}:original`, size: 10 }) : new Response(null, { status: 404 });
 		}
@@ -81,7 +83,7 @@ test('real worker reauthorizes cache hits, deduplicates bytes, respects ranges, 
 			let result;
 			const work = [];
 			listeners.fetch({
-				request: new Request(`${origin}/api/v1/attachments/content?id=test`, { headers: range ? { Range: range } : {} }),
+				request: new Request(`${origin}/api/v1/attachments/content?id=test&key=fixture-key&sharedRoot=page`, { headers: range ? { Range: range } : {} }),
 				respondWith: (promise) => {
 					result = promise;
 				},

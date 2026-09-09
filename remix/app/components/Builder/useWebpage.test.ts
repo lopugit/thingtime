@@ -3,6 +3,7 @@ import { test } from 'node:test';
 
 import { mergeSavedWebpage, resolveWebpageClient, type ResolvedWebpage } from './useWebpage';
 import { MAX_WEBPAGE_ROUTE_CHARS } from '~/schemas/registry';
+import { THINGTIME_CAPABILITY_MANIFEST_PATH } from '~/api/utils/capabilities/capabilityContract';
 
 // SiteBlocksHost resolves the site doc for EVERY route a signed-in viewer
 // lands on, so resolveWebpageClient screens the path against the same bounds
@@ -16,7 +17,12 @@ const withFetch = async <T,>(
 ): Promise<{ result: T; calls: string[] }> => {
 	const calls: string[] = [];
 	const original = globalThis.fetch;
+	const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+	Object.defineProperty(globalThis, 'window', { configurable: true, value: { location: { origin: 'https://test.example' } } });
 	globalThis.fetch = ((url: string) => {
+		if (String(url) === THINGTIME_CAPABILITY_MANIFEST_PATH) {
+			return Promise.resolve({ ok: true, json: async () => ({ schemaVersion: 1, origin: 'https://test.example', features: { 'api.webpages-resolve': { version: '1.2.0' } } }) } as Response);
+		}
 		calls.push(String(url));
 		return impl(String(url));
 	}) as typeof globalThis.fetch;
@@ -24,6 +30,8 @@ const withFetch = async <T,>(
 		return { result: await run(), calls };
 	} finally {
 		globalThis.fetch = original;
+		if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+		else Reflect.deleteProperty(globalThis, 'window');
 	}
 };
 

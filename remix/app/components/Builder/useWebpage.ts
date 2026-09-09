@@ -1,4 +1,5 @@
 import React from 'react';
+import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 
 import { useApi } from '~/hooks/useApi';
 import { ACL_OWNER, MAX_WEBPAGE_ROUTE_CHARS, WEBPAGE_ROUTE_PATTERN } from '~/schemas/registry';
@@ -49,6 +50,7 @@ export const resolveWebpageClient = async (target: WebpageTarget): Promise<Resol
 	// behaviour, one less request per navigation.
 	if (target.kind === 'path' && (target.path.length > MAX_WEBPAGE_ROUTE_CHARS || !WEBPAGE_ROUTE_PATTERN.test(target.path))) return null;
 	try {
+		await requireThingtimeCapability('api.webpages-resolve', '1.2.0');
 		const response = await fetch(`/api/v1/webpages/resolve?${targetQuery(target)}`, { credentials: 'include' });
 		if (!response.ok) return null;
 		const data = await response.json();
