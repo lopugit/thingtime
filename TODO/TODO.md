@@ -546,3 +546,20 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     authority. Public or binding elections, proof of personhood, secret ballots,
     minors, institutions, money, moderation verdicts, and high-impact uses remain
     separately gated.
+
+37. **🔔 Make notification agency and accountable delivery a product contract.**
+
+    Preserve Thingtime's protected owner-private history, stable pagination,
+    bounded text, safe links, credential redaction, and delivery-independent
+    records while separating event observation, history persistence, channel
+    attempts, provider/device receipts, in-app presentation, read state, action
+    outcome, expiry, supersession, and remedy. Start only with one synthetic,
+    owner-triggered, non-sensitive action result in a private adult test account
+    and in-app delivery. Execute
+    `claude-todo/37-notification-agency-and-accountable-delivery.md` only after
+    the owner and qualified reviewers approve the lifecycle vocabulary,
+    producer authority, retention/export/delete rules, sensitivity boundary,
+    accessibility profiles, no-attention-analytics evaluation, accountable
+    owners, and stop authority. External channels, sender-visible read receipts,
+    marketing, safety, money, elections, minors, institutions, and high-impact
+    uses remain separately gated.

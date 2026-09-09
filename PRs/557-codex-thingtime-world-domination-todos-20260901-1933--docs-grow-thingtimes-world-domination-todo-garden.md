@@ -18,6 +18,35 @@ required sequence:
 The branch is intentionally cumulative. It does not merge itself, implement
 the product work, or treat a plausible idea as an approved decision.
 
+## 2026-09-09 — notification agency and accountable delivery
+
+This run grounds the garden in the newly merged owner-private notification
+history while refusing to treat a stored row as proof of delivery or human
+attention. It adds:
+
+- `NOTES/notification-agency-and-accountable-delivery-baseline.md`, a dated
+  evidence ledger covering producers, protected history, preferences,
+  delivery gaps, read semantics, retention, accessibility, and standards;
+- `PLAN/notification-agency-and-accountable-delivery-roadmap.md`, a gated path
+  from a shared lifecycle vocabulary through protected relational evidence,
+  one private in-app action pilot, remedies, and separately approved channels;
+- `TODO/claude-todo/37-notification-agency-and-accountable-delivery.md`, an
+  implementation epic with owner decisions, dependencies, complete-journey
+  tests, acceptance criteria, stop conditions, and explicit non-goals.
+
+The proposal keeps event observation, history recording, delivery request,
+provider acceptance, device acknowledgement, in-app presentation, read state,
+action outcome, expiry, supersession, and remedy distinct. It starts with one
+synthetic, owner-triggered, non-sensitive action result and no external
+channel. It rejects sender-visible read receipts, attention analytics,
+retroactive certainty for legacy rows, and notification state as proof of
+consent, truth, authority, or completed product work.
+
+The theme is linked from the NOTES, PLAN, main TODO, and Claude TODO indexes;
+the ethical-adoption baseline, trustworthy-adoption roadmap, TODO 22, and TODO
+24 now name its boundary. No runtime, API, schema, notification preference,
+channel, retention, or production behavior changed.
+
 ## 2026-09-02 — attention agency and calm use
 
 This run audits how feeds, ranking, training signals, notifications, and

@@ -194,6 +194,9 @@ person-level scroll/dwell histories or a deploy rollback.
 - [TODO 23](../TODO/claude-todo/23-data-portability-and-exit.md): owns export,
   deletion, and graceful exit; algorithm and preference treatment must appear
   in its data-class matrix.
+- [Notification agency and accountable delivery](./notification-agency-and-accountable-delivery-roadmap.md):
+  owns event/history/delivery/presentation/read/outcome/remedy evidence. This
+  plan owns interruption defaults, quiet windows, batching, and urgency.
 - Current feed, ranking, algorithm, notification, settings, email, and
   capability code is evidence to re-verify, not an approved implementation
   shape for these milestones.

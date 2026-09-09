@@ -165,6 +165,9 @@ privacy, reliability, or data-loss regression.
 - Treat the [attention agency and calm-use roadmap](./attention-agency-roadmap.md)
   as the feed and notification guardrail: useful return must not depend on
   automatic continuation, silent training, or unwanted delivery.
+- Treat the [notification agency and accountable-delivery roadmap](./notification-agency-and-accountable-delivery-roadmap.md)
+  as the evidence boundary: a stored row, provider receipt, display, or read
+  state must not be reported as human attention or a completed useful outcome.
 
 **Gate:** useful return improves while restore correctness, delete behavior,
 and error budgets stay within approved bounds.
@@ -196,6 +199,9 @@ and error budgets stay within approved bounds.
 - Apply the [collective decision agency and accountable governance roadmap](./collective-decision-agency-and-accountable-governance-roadmap.md)
   before using polls to steer a shared outcome. Participation volume or a
   majority must not become consent, representativeness, legitimacy, or mandate.
+- Apply the [notification agency and accountable-delivery roadmap](./notification-agency-and-accountable-delivery-roadmap.md)
+  when a shared journey communicates invitation, change, expiry, failure, or
+  remedy. Delivery evidence never substitutes for recipient consent or action.
 
 **Gate:** recipient success improves, every permission/revoke test passes, and
 abuse/support volume remains below the approved stop threshold.

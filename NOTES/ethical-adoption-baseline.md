@@ -40,6 +40,7 @@ turns these observations into phases. The executable backlog lives in
 | Thing ownership, ACL audiences, social relationships, Messenger roles, and invitations do not yet form a shared-artifact collaboration contract.               | The [collaboration agency and shared-stewardship baseline](./collaboration-agency-and-shared-stewardship-baseline.md) separates visibility from edit authority, membership from ownership, contribution from agreement, and removal from erasure, then proposes one named two-person private-draft pilot.                                             | High for the 2026-09-07 repository snapshot. Re-run the dedicated baseline after Thing authorization, ACL, Messenger, community, subspace, invitation, revision, or concurrency changes. |
 | Account records, authenticators, global handles, public profiles, app scopes, pseudonymous presentation, and future attestations do not yet form one identity-agency contract. | The [identity agency and context-safe presence baseline](./identity-agency-and-context-safe-presence-baseline.md) separates authentication from proofing, presentation from claims, signatures from truth, and identity from authority, then proposes one owner-only public-presence preview. | High for the 2026-09-08 repository snapshot. Re-run the dedicated baseline after account, profile, username, authenticator, OAuth, invite, anonymity, recovery, or projection changes. |
 | Poll composition, one-account vote slots, and live tallies do not yet form a legitimate collective-decision contract. | The [collective decision agency and accountable governance baseline](./collective-decision-agency-and-accountable-governance-baseline.md) separates expression from eligibility, ballots from mutable posts, tallies from results, and majorities from authority, then proposes one private non-binding advisory pilot. | High for the 2026-09-09 repository snapshot. Re-run after poll, vote, membership, lifecycle, result, privacy, or governance changes. |
+| Owner-private notification history does not yet prove delivery, attention, action outcome, or remedy. | The [notification agency and accountable-delivery baseline](./notification-agency-and-accountable-delivery-baseline.md) separates event observation, persistence, channel attempts, provider/device evidence, in-app presentation, read state, canonical outcome, and remedy, then proposes one private in-app action pilot. | High for the 2026-09-09 repository snapshot. Re-run after notification producers, history, preferences, channels, read semantics, retention, actions, or remedies change. |
 
 ## What the evidence suggests
 
@@ -82,6 +83,10 @@ turns these observations into phases. The executable backlog lives in
 8. **Collective decisions are under-specified.** Polls count account choices,
    but eligibility, ballot versions, enforced close, privacy, result rules,
    organizer response, challenge, and implementation accountability are absent.
+9. **Notification evidence is semantically incomplete.** History records can
+   survive quiet delivery, but persistence, transport, presentation, read,
+   acknowledgement, canonical outcome, expiry, and remedy are not one truthful
+   lifecycle contract.
 
 ## Proposed outcome vocabulary
 
@@ -152,6 +157,9 @@ Any later measurement design should fail closed unless all of these are true:
 13. Which one synthetic, low-stakes advisory decision can test eligibility,
     immutable ballots, private participation, accountable response, and remedy
     without implying personhood, consent, representativeness, or legitimacy?
+14. Which one synthetic, non-sensitive action result can test truthful event,
+    history, presentation, read, outcome, expiry, and remedy semantics without
+    adding an external channel or attention analytics?
 
 ## Refresh checklist
 

@@ -24,6 +24,7 @@ actionable item in [`../TODO/`](../TODO/TODO.md) when it is ready to execute.
 | [Collaboration agency and shared-stewardship baseline](./collaboration-agency-and-shared-stewardship-baseline.md)   | Evidence on Thing ownership, ACL visibility, roles, invitations, exact-version changes, contribution conflicts, departure, and one two-person pilot    | 2026-09-07    |
 | [Identity agency and context-safe presence baseline](./identity-agency-and-context-safe-presence-baseline.md)     | Evidence on accounts, authenticators, public profiles, app disclosure, pseudonymity, attestations, recovery, authority, and one disclosure-preview pilot | 2026-09-08    |
 | [Collective decision agency and accountable governance baseline](./collective-decision-agency-and-accountable-governance-baseline.md) | Evidence on polls, account-bound votes, mutable ballots, eligibility, privacy, result authority, remedies, and one private advisory pilot | 2026-09-09 |
+| [Notification agency and accountable-delivery baseline](./notification-agency-and-accountable-delivery-baseline.md) | Evidence on private history, event authority, delivery/display/read/outcome distinctions, retention, accessibility, remedies, and one in-app pilot | 2026-09-09 |
 
 ## Conventions
 

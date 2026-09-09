@@ -40,6 +40,9 @@ default change, new signal, or telemetry collection by itself.
   restoration after a person stops.
 - [TODO 23](./23-data-portability-and-exit.md) owns export/deletion treatment
   for algorithms and preferences.
+- [TODO 37](./37-notification-agency-and-accountable-delivery.md) owns truthful
+  event, history, channel receipt, presentation, read, canonical outcome, and
+  remedy semantics. This TODO owns whether, when, and where to interrupt.
 - Ranking, training, reporting, blocking, moderation, and account-security
   notifications remain distinct capabilities and user intents.
 - Calm controls and chronological/no-training mode apply to every account tier.

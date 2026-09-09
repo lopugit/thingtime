@@ -107,6 +107,10 @@ experiment by itself.
   ranking-versus-training control, corrective feedback, explanations, calm
   stopping points, and notification defaults. Useful return cannot treat more
   scrolling, training events, or notification opens as success.
+- [TODO 37](./37-notification-agency-and-accountable-delivery.md) owns the
+  event/history/delivery/presentation/read/outcome/remedy evidence vocabulary.
+  Adoption reporting cannot count persistence or transport as attention,
+  consent, or a useful completed outcome.
 - Open PRs are evidence of active work, not dependencies that may be assumed
   merged. Recheck their head, base, review, CI, preview, and shipped behavior
   immediately before implementation.

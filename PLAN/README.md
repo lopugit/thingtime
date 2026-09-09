@@ -24,6 +24,7 @@ engineering decisions in [`../DECISIONS.md`](../DECISIONS.md).
 | [Collaboration agency and shared-stewardship roadmap](./collaboration-agency-and-shared-stewardship-roadmap.md)   | Collaboration charter through informed invitations, suggestion-only authority, exact-version proposals, safe stopping, and a two-person pilot  | Proposed |
 | [Identity agency and context-safe presence roadmap](./identity-agency-and-context-safe-presence-roadmap.md)     | Identity charter through exact audience projections, correction and recovery, one profile-preview pilot, and separately gated aliases or claims | Proposed |
 | [Collective decision agency and accountable governance roadmap](./collective-decision-agency-and-accountable-governance-roadmap.md) | Decision charter through immutable advisory ballots, private participation, accountable results, remedies, and one bounded adult pilot | Proposed |
+| [Notification agency and accountable-delivery roadmap](./notification-agency-and-accountable-delivery-roadmap.md) | Lifecycle charter through protected event evidence, truthful owner-visible state, one in-app action pilot, remedies, and separately gated channels | Proposed |
 
 ## Conventions
 
