@@ -18,7 +18,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-09-09: Add Desktop permission recovery guidance, App Locations shortcuts to current installed apps, and a one-shot Node restart choice after returning from recovery.
+- Keep App Locations working when a neighbouring app in Applications cannot be read, stop the bundle scan once every known app is found, and report a failed Node restart only when one was actually attempted. — Lopu, 2026-09-09
+
+- Add Desktop permission recovery guidance, App Locations shortcuts to current installed apps, and a one-shot Node restart choice after returning from recovery. — Codex (AI), 2026-09-09
 
 - Refresh the clipboard-attachment preview with released main's shared-index readers and poll writer, preserving its bounded paste queue and attachment permissions. Database migration activation remains separate. — Codex (AI), 2026-09-09
 

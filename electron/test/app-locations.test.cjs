@@ -26,6 +26,13 @@ test('uses current embedded Node, includes installed family apps and refreshes i
 	await prepareAppLocations(options);
 	assert.equal((await fs.readdir(options.root)).length, 2); // Hidden backup must not reappear as Commander.
 });
+test('an unreadable neighbour in Applications does not break recovery', async (t) => {
+	const options = await fixture(t);
+	const loop = path.join(options.applicationDirs[0], 'Loop.app');
+	await fs.symlink(loop, loop); // realpath reports ELOOP, exactly like a broken install.
+	assert.equal((await prepareAppLocations(options)).count, 3);
+	assert.deepEqual((await fs.readdir(options.root)).sort(), ['Commander.app', 'Thingtime Node.app', 'Thingtime.app']);
+});
 test('refuses a symlinked output folder and preserves user files', async (t) => {
 	const options = await fixture(t);
 	await fs.symlink(options.applicationDirs[0], options.root);
