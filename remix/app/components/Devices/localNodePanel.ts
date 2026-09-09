@@ -7,7 +7,9 @@ export function localNodeIsHealthy(state: LocalThingtimeNodeState): boolean {
 			state.status.serviceStatus === 'running' &&
 			state.status.pairingStatus === 'paired' &&
 			state.pairedToCurrentAccount === true &&
-			state.status.transportStatus === 'online' &&
+			// The native bridge reports unknown when cloud transport is not exposed.
+			// Explicit transport failures still reveal the panel.
+			(state.status.transportStatus === 'online' || state.status.transportStatus === 'unknown') &&
 			!state.status.lastError &&
 			!state.permissionCheckError &&
 			state.permissionsCheckedAt &&

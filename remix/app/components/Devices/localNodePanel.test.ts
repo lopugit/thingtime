@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
 import { localNodeIsHealthy, shouldHideLocalNodePanel, nodePanelPreferenceKey } from './localNodePanel';
 import type { LocalThingtimeNodeState } from './useLocalThingtimeNode';
@@ -49,4 +50,24 @@ test('background checks keep healthy dismissal stable; initial checks do not fla
 	assert.equal(shouldHideLocalNodePanel({ ...healthy, pairedToCurrentAccount: null }, true), true);
 	assert.equal(shouldHideLocalNodePanel({ ...healthy, pairedToCurrentAccount: null, permissionCheckError: 'failed' }, true), false);
 	assert.equal(shouldHideLocalNodePanel({ ...healthy, status: null, checking: true }, true), true);
+});
+
+// Exercise the actual Desktop adapter rather than assuming every local status
+// includes a cloud transport observation.
+test('healthy status from the installed Desktop adapter can be dismissed', () => {
+	const { normalizeNodeStatus } = createRequire(import.meta.url)('../../../../electron/lib/thingtime-node-bridge.cjs');
+	const status = normalizeNodeStatus(
+		{
+			pairing: { paired: true, deviceID: 'mac' },
+			permissions: { accessibility: 'granted', screenRecording: 'granted' },
+			connector: { state: 'running' }
+		},
+		{ registered: true, label: 'node', state: 'enabled' },
+		'test'
+	);
+	const state = { ...healthy, status, permissions: status.permissions };
+	assert.equal(status.transportStatus, 'unknown');
+	assert.equal(localNodeIsHealthy(state), true);
+	assert.equal(shouldHideLocalNodePanel(state, true), true);
+	assert.equal(shouldHideLocalNodePanel({ ...state, status: { ...status, transportStatus: 'offline' } }, true), false);
 });
