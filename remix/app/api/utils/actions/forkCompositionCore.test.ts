@@ -16,3 +16,11 @@ test('forks retarget nested components and conditional controls', () => {
 	assert.equal(rewriteComposition(['webpage'], { blocks: [{ type: 'container', children: [{ type: 'component', component: 'card', source: { action: 'load' } }] }] }, (_kind, ref) => `copy-${ref}`).blocks[0].children[0].source.action, 'copy-load');
 	assert.equal(rewriteComposition(['component'], { render: { ttIf: { then: { ttAction: 'draw' } } } }, (_kind, ref) => `copy-${ref}`).render.ttIf.then.ttAction, 'copy-draw');
 });
+
+test('copied schema buttons run the copied action, without changing data or the original', () => {
+	const original = { render: { children: [{ ttAction: 'draw', ttActionInputs: { note: 'draw' } }] } };
+	const copy = rewriteComposition(['schema'], original, (_kind, ref) => `copy-${ref}`);
+	assert.equal(copy.render.children[0].ttAction, 'copy-draw');
+	assert.equal(copy.render.children[0].ttActionInputs.note, 'draw');
+	assert.equal(original.render.children[0].ttAction, 'draw');
+});
