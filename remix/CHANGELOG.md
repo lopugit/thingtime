@@ -18,6 +18,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Recover initial static-module download failures before the application entry
+  can install its listeners. Preserve the shared URL, retry automatically at
+  most once and provide an accessible manual fallback when recovery fails or
+  session storage is unavailable. Keep existing rendered content untouched.
+  Add desktop/mobile native-browser regressions and diagnostic bundled-client
+  sharing coverage. [Validation and rollout](../PRs/719-codex-shared-render-media-context.md).
+  — Codex (AI), 2026-09-09
+
 - Shared CSS media now carries the root audience through page/block backgrounds,
   HTML styles and Chakra responsive/pseudo styles. A shared parser recognizes
   literal URL/image-set references without granting quoted text or external

@@ -1,5 +1,17 @@
 # TESTING.md — per-area manual test checklists
 
+- Signed-out boot recovery: abort an initial static JavaScript dependency at
+  desktop and 390px widths. Recover once with the full share query/fragment
+  preserved; persistent failure shows a reachable manual retry, not a blank
+  root or reload loop. Storage-denied sessions offer manual retry only.
+  Existing rendered content and unrelated resource errors remain untouched.
+  Run `test:preview-build`; opt into its real Chrome tests with
+  `TT_SHARED_PLAYWRIGHT_PATH` and `TT_SHARED_CHROME_PATH`.
+  Record the actual browser version, not just the application bundle name.
+  For production-client sharing coverage, build with `build:client` and set
+  `TT_SHARED_BUILT_CLIENT=1` in the local-only shared composition fixture;
+  API requests remain real while the browser consumes the built client bytes.
+
 - After merging notification families, verify recording reminders and subspace
   moderation retain separate categories and all preference switches. Recording
   reminders and mod-queue email stay opt-in. Confirm both capability manifests
