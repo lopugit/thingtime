@@ -78,7 +78,13 @@ export default function MarketingCategory() {
 	}, [categoryKey, query]);
 
 	const pages = React.useMemo(() => {
-		if (isSearch) return searchPages(query, 400);
+		// Ask for every match, not a fixed slice: `pages.length` is what the
+		// header, the meta description and "show more" all count, so a cap here
+		// under-reports the total and strands the rest. Common queries blow past
+		// any small cap — "thingtime" alone matches 1091 of the 1635 pages — and
+		// nothing is rendered eagerly anyway: `limit` (60 at a time) bounds the
+		// DOM, exactly as it does for the uncapped 552-page styles index.
+		if (isSearch) return searchPages(query, PAGES.length);
 		if (!category) return [];
 		return pagesInCategory(category.key);
 	}, [category, isSearch, query]);

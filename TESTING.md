@@ -1187,6 +1187,11 @@ email whose link points at the attacker.
       "Developers" sections render — the audience and the feature family — with
       their own counts, and the console logs no duplicate-key warning. Typing
       in the filter and clicking "Show more" keep both sections intact.
+- [ ] `/marketing/search?q=thingtime` (a query matching most of the catalog):
+      the heading reports the true match count — 1,091, not a round cap — and
+      clicking "Show more" all the way down reaches the last one instead of
+      stopping early. The count in the heading, the tab title/meta description
+      and the "n more of m" button must all agree.
 - [ ] A page from each kind opens by URL (`landing/feed`, `guides/passkeys`,
       `walkthroughs/feature-messages`, `compare/thingtime-vs-notion`,
       `compare/notion-alternative`, `compare/feed-vs-twitter`,
