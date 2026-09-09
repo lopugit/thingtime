@@ -1,5 +1,24 @@
 # TESTING.md — per-area manual test checklists
 
+- After merging notification families, verify recording reminders and subspace
+  moderation retain separate categories and all preference switches. Recording
+  reminders and mod-queue email stay opt-in. Confirm both capability manifests
+  advertise the combined additive versions and deleting parents retains both
+  vote and recording-job/reminder cascades.
+
+- Personal recording runtime: run the synthetic WAV and M4A through local
+  decoding/transcription and native signed-in Claude Code. Verify grounded
+  todos exclude completed/negated actions; review proper-name accuracy.
+  Assert tools/customizations are disabled, prompts travel on stdin, inherited
+  API credentials/endpoint overrides are excluded, native user identity is
+  preserved for sign-in, output/time/audio limits apply, and temporary files
+  disappear on success, cancellation and failure. No automatic jobs should be
+  enabled merely by exercising this local adapter.
+
+- Recording reminders fan out to native push only after their private todo and
+  daily notification transaction commits. Retries never send another push for
+  the same daily ID; blocked preferences/checkpoints send none. A push transport
+  failure does not erase or duplicate the durable bell reminder.
 ## Verified vault reveal
 
 - [ ] At desktop and 390px widths, CI, external integrations and personal Secure Vault offer Show without changing ordinary value-free list responses.
@@ -42,6 +61,39 @@ local dev stack (`npm run web-pms`, worktree stacks get their own port trio —
 see `AI_ALL.md`). Each list is the distilled regression history of that area:
 every line exists because it broke once. Add a line whenever a new bug class
 is fixed, and cite the checklist you ran in the PR description.
+
+## Lopu Apple Watch recording automation
+
+- [ ] Recording/AI subscription rates: Free retains configured windows, Plus receives 5x, Pro/PAYG bypass only the two product request-rate buckets. A spoofed request tier or foreign account cannot grant access. Upgrade/downgrade re-resolves the protected home assignment and keeps the same account bucket across sessions/devices/IPs. Entitlement/limiter outages return private 503 without provider calls; finite exhaustion returns 429/Retry-After. Authentication, upload constraints and provider quotas stay enforced. Negotiate ai-complete 1.1.0 and lopu-recordings 1.2.0; reject older/breaking manifests.
+
+- [ ] Shared AI endpoint: negotiate `api.ai-complete` on the selected origin, then submit text with 1–4 owned Secure Vault IDs. Reject inline URLs/tokens, audio, foreign IDs anywhere in the list, temporary/service/scoped accounts, cross-origin or non-JSON requests, duplicate IDs and oversized input before external delivery. Force a 429 on one endpoint and verify only the next selected endpoint receives its own credential; stop on success, malformed output, unsafe host, other 4xx or caller cancellation. Inspect redacted attempt receipts, no-store and fail-closed rate limiting. Existing recording retry/consent tests must still pass against the same shared waterfall engine.
+
+- [ ] Credential waterfall: select/reorder/remove up to four own API connections per stage; paste no keys into recording settings. A missing default or deleted last connection must not prevent replacing it. Claude must never be selectable for audio. Verify 429/401/timeout fallback, first-success stop, and no repeat per key; invalid output/unsafe endpoint must stop. Disable consent or change the selected list after the first failure and verify no second provider receives content. Another account's connection ID must be rejected and responses must contain no tokens/endpoints. Verify desktop and mobile controls, open selects, full-page scrolling and optimistic rollback.
+
+- [ ] Force a storage-download failure and provider 401/429 in the isolated test harness. Verify recording status identifies the failed step and never exposes raw errors, credentials, signed URLs, or transcript content. Retry must preserve completed checkpoints.
+
+- [ ] On desktop and 390px mobile, open `/lopu/recordings`, verify the account,
+      refresh status, save options/time zone/hour, and scroll to the bottom.
+      Inputs must not overlap; missing `AbortSignal.timeout` must not prevent
+      loading. Preserve loaded state during background refreshes.
+- [ ] With no provider configured, show that fact and prevent enabling; an
+      already-enabled account must still be able to disable automation.
+- [ ] With explicit opt-in and a configured provider, upload a new private
+      Watch recording. Verify transcript comments and private notes/todos,
+      source links, quota accounting, and a visible completed receipt.
+- [ ] Retry after a provider failure or interruption after a committed comment:
+      the transcript and derived Things must not duplicate. Long emoji
+      transcripts split into valid comments within the comment size limit.
+- [ ] A different account, temporary user, scoped credential, cross-origin
+      mutation, invalid settings or unauthenticated scheduler cannot change
+      state or disclose recordings. Switching accounts clears the prior view.
+- [ ] Disable automation or privatization eligibility during processing:
+      no later content write succeeds; re-enable without scanning old uploads.
+- [ ] Send reminders twice on one local date: one bell entry per unfinished
+      todo. Completion, paused reminders and disabled notification preferences
+      stop subsequent alerts. Check a DST transition and the next local day.
+- [ ] Verify actual native push on a paired Watch separately from bell history;
+      a provider-configured flag or HTTP 200 is not end-to-end proof.
 
 ## Native Commander network speed test
 
@@ -163,7 +215,7 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Lopu voice + personal Secure Vault
 
-- [ ] With iOS build 28 and private uploads approved, finish a voice segment:
+- [ ] With iOS build 29 and private uploads approved, finish a voice segment:
       `/things` contains one playable owner-private M4A recording and Files
       retains the original CAF/TXT. Open the saved notice at desktop and 390px;
       its recording link is usable and long filenames do not overflow.
@@ -1608,6 +1660,9 @@ email whose link points at the attacker.
       doc per (`crystal.voteKey` = `<pollId>~<userId>`); reloads converge. Run
       `npm --prefix remix run verify:poll-unique-keys` against its explicitly
       allowed disposable replica set to exercise 16 concurrent real-utility calls.
+- [ ] Watch preview startup and poll voting retain `things_vote_key_lookup`,
+      matching released readers, while `lopu_recording_due` remains available.
+      Relationship/legacy index retirement happens only via leased admin migrations.
 - [ ] Poll insert/change/removal leaves the account ledger unchanged (protected
       engagement is unbilled), including full accounts. Conflicting vote writes
       return 409 instead of silently reporting an unwritten vote as successful.
@@ -2856,6 +2911,12 @@ halves.
       result still wins, and `path = value` setters still execute instead of
       becoming searches. A failed typeahead leaves full search + local commands
       usable.
+- [ ] Commander intent ranking: with eight matching chat-message Things and a
+      person whose username is exactly `@lopu`, that person is the first remote
+      row. Exact usernames rank above username/display-name prefixes, which rank
+      above an exact Thing title; server relevance order remains stable within a
+      matching tier. A query spanning a space (`the lopu`) still reaches the
+      display-name prefix tier rather than falling behind a matching Thing title.
 - [ ] Commander result visuals use the shared `thingIcon` mapping (including
       filename-aware Thing icons). A person with `avatarUrl` shows that profile
       image with a small `👤` user-type badge; a person without one gets an
@@ -4337,6 +4398,11 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       `friend` doc would fake acl visibility).
 
 ## Notifications (`api/utils/notifications/notifications.ts`, `/api/v1/notifications*`, nav bell)
+
+- [ ] Watch recovery: an expired/deleting unbound draft returns `watch_upload_restart_required`; retain local bytes and persist a new request identity before re-upload. Lost successful responses retry the same identity; live/bound/foreign drafts never grant rebind permission. A failed file must not mark a healthy account offline or block unrelated queued files. Account switching must not attribute results to the wrong account.
+- [ ] Lopu: ask standard voice/chat to create a private note, an immediate notification, a one-off reminder and a five-minute repeating reminder. Confirm persisted IDs/next runs, pause/resume in Settings, and verify the server sends with the browser closed. Completing/deleting the source or pausing during emission must prevent the send. Late runs skip backlog; owner/auth/CSRF and subscription limits remain enforced.
+- [ ] Settings notification tests: desktop/mobile, scroll top to bottom, expand every-type tests, send Quiet/Normal/Urgent/Rich/Image to yourself, and inspect history. Quiet has no sound; Urgent requests time-sensitive (not Critical). Test the muted response and offline/retry states. Native banners use plain text; richer content is in Thingtime history. Physical Watch display is a separate acceptance check.
+- [ ] Send to Lopu: recording menu/Watch hold-or-swipe asks for explicit consent. Repeated sends produce one conversation; revoke recording consent or private-source access before dispatch and ensure no tool call. Ambiguous dispatch keeps the conversation/needs-attention receipt, never silently reruns actions. Normal tool confirmations are still required.
 
 - [ ] Emission: new follower, friend request, friend accepted, comment on your
       post, reply to your comment, reaction (preview = the token), repost, and

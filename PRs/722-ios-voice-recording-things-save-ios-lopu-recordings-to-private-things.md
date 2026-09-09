@@ -2,7 +2,7 @@
 
 PR: https://github.com/lopugit/thingtime/pull/722
 Branch: `codex/ios-voice-recording-things` → `main`
-Native release: build 28, `https://thingtime.com`
+Native release: build 29, `https://thingtime.com`
 
 New completed native Lopu audio segments export to M4A and upload through the
 canonical multipart attachment flow as `purpose: recording`. They are standalone
@@ -44,9 +44,11 @@ authenticated account association.
   the mobile viewport (300px wide, x=90), page width is 390px with no horizontal
   overflow, and bottom controls remain visible. Chrome control repeatedly timed
   out; the in-app browser was used for the rendered check.
-- The signed IPA contains build 28 and `ThingtimeWebURL=https://thingtime.com`;
+- The initial signed IPA contains build 28 and `ThingtimeWebURL=https://thingtime.com`;
   its Live Activity extension also has version 28. Apple upload succeeded.
   Apple reports processing VALID and internal IN_BETA_TESTING for build 28.
+  Final delivery uses build 29 to also include the Watch changes that merged
+  into main during validation; its release receipt is verified separately.
 - Physical iPhone microphone → production upload → Things playback and actual
   lock-screen Live Activity acceptance are not proven by the simulator. The new
   save/pending notice requires native upload events and awaits that device check.
@@ -59,7 +61,7 @@ Funnel is unavailable: the installed Tailscale shim points to a missing app.
 
 ## Acceptance
 
-Update TestFlight to build 28, reopen Thingtime on `thingtime.com`, record a short
+Update TestFlight to build 29, reopen Thingtime on `thingtime.com`, record a short
 voice segment, stop, and open the saved recording link or `/things`. Verify one
 private playable audio Thing, local CAF/TXT retention, and another-account denial.
 Exercise offline/reconnect and account switching with a pending recording. The

@@ -151,6 +151,8 @@ is already installed and you intentionally want to skip that step.
 
 ## Lopu voice recovery
 
+Use build 29 for recording uploads together with the current Watch updates.
+
 Build 25's release source (`9a6f04d4e`) did not include the native voice
 controller or Live Activity extension. Build 27 advertises `lopuVoiceVersion`
 so the web controls can distinguish a capable app from the older general
