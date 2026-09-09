@@ -62,6 +62,11 @@ sharing goal by itself.
 - Main promotion cherry-picks only the sharing implementation commits onto
   main. Unrelated develop Commander changes and graph retention cleanup are not
   part of this promotion. Its own head still requires CI and deployment proof.
+- PR #716 passed its original exact-head CI, then main advanced with the iOS
+  voice release. Merge the released main base into the promotion, preserving
+  both changelog entries; no sharing implementation conflict was present.
+  Re-run exact-head checks after this merge rather than reusing the earlier
+  green result.
 - The focused main-tree API plus Chrome fixture passed in 192.9 seconds at
   desktop and mobile widths, including signed-in copying and foreign-schema
   authority refusal. The fixture retains the same failure diagnostics as the

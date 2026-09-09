@@ -163,6 +163,26 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Lopu voice + personal Secure Vault
 
+- [ ] With build 25's general native bridge (no `lopuVoiceVersion`), tapping
+      voice says to update Thingtime and does not claim the mic is active.
+      With build 27's compatible voice capability, native recording starts.
+
+- [ ] iOS voice recovery: allow Microphone but deny Speech Recognition and verify
+      the distinct Settings instruction; allow both, speak, pause, then stop
+      mid-utterance. Each utterance is submitted once and remains in the selected
+      chat after reopening it. Stop during a permission sheet and rapidly
+      stop/start: no delayed callback may restart the microphone. Retry a
+      recognition failure three times: it stops with an actionable error.
+- [ ] After native voice capture, open Files → On My iPhone → Thingtime →
+      Lopu Recordings; play the CAF audio and read its TXT transcript. Repeat
+      with the reply endpoint offline; both local files must survive. Check the
+      recording notice at 390px and desktop widths with a long filename.
+- [ ] Disable Live Activities, start voice, and verify recording continues with
+      a clear Settings notice. Enable them and start in the foreground after
+      the microphone permission sheet closes; lock the physical iPhone and
+      verify the Live Activity. Stop/start must not end the replacement activity.
+
+
 - [ ] Open `/lopu/voice` at desktop and 390px mobile widths; scroll the
       conversation from top to bottom, open and close the gear before and
       during a session, and confirm the header, the gear popover, messages
