@@ -224,6 +224,7 @@ export const router = createBrowserRouter([
       { path: 's/:slug/mod', lazy: lazyRoute(() => import('./routes/subspace-mod')), loader: requireUser('/login') },      // the viewer's full notification history (search + category/type/
       // unread/date filters in the URL) — same signed-out quiet state posture
       { path: 'notifications', lazy: lazyRoute(() => import('./routes/notifications')) },
+      { path: 'lopu/recordings', lazy: lazyRoute(() => import('./routes/lopu.recordings')) },
       // Schema BROWSING/BUILDING lives at /schemas (standalone, like /search);
       // the registry reference docs moved to /docs/schemas.
       { path: 'schemas', lazy: lazyRoute(() => import('./routes/schemas')) },
@@ -253,6 +254,7 @@ export const router = createBrowserRouter([
         loader: vercelDeploymentsLoader
       },
       { path: 'settings', lazy: lazyRoute(() => import('./routes/settings')) },
+      { path: 'settings/:tab', lazy: lazyRoute(() => import('./routes/settings')) },
       { path: 'tests', lazy: lazyRoute(() => import('./routes/tests')) },
       { path: 'themes', lazy: lazyRoute(() => import('./routes/themes')) },
       { path: 'themes/gallery', lazy: lazyRoute(() => import('./routes/themes.gallery')) },

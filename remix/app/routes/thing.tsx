@@ -1,4 +1,5 @@
 import React from 'react';
+import { SharedMediaProvider } from '~/components/Sharing/SharedMedia';
 import { Badge, Box, Button, Center, Flex, Heading, Spinner, Stack, Switch, Text } from '@chakra-ui/react';
 import { ArrowLeft, Copy, ExternalLink } from 'lucide-react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
@@ -11,6 +12,9 @@ import { useWebpageDraft } from '~/components/Builder/useWebpage';
 import type { WebpageBlock } from '~/components/Builder/webpageBlocks';
 import { WebpageBlocksRenderer } from '~/components/Builder/WebpageBlocksRenderer';
 import { WebpageRuntimeProvider } from '~/components/Builder/webpageRuntime';
+import { ForkSharedThingButton } from '~/components/Sharing/ForkSharedThingButton';
+import { canForkThing } from '~/components/Sharing/forkThingCore';
+import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { PostCard } from '~/components/Feed/PostCard';
 import { mergeReactionOverlay } from '~/components/Feed/reactionOverlay';
 import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
@@ -22,7 +26,6 @@ import {
 	type SensitiveThingRevealDescriptor
 } from '~/components/Things/SensitiveThingReveal';
 import { isSourceActionKey } from '~/components/ComponentsLibrary/componentBrowseTypes';
-import { SchemaTemplateRender } from '~/components/Things/ThingsViews';
 import { parseThingsReferrer, schemaIdOf, schemaRenderOf, thingDisplayName, thingLink, thingsCacheKey } from '~/components/Things/thingsCore';
 import type { ThingsCache, ThingsReferrer } from '~/components/Things/thingsCore';
 import { apiErrorMessage } from '~/hooks/apiFailure';
@@ -218,6 +221,14 @@ const ComponentLive = ({
 	);
 };
 
+// Only the detail page arms schema controls; list/grid thumbnails stay inert.
+// The surrounding runtime chooses inherited read-only execution unless both
+// the data and its freshly fetched schema are owned by the viewer.
+const SchemaTemplateLive = ({ template, crystal, id }: { template: Record<string, unknown>; crystal: Record<string, unknown>; id: string }) => {
+	const { scope } = useThingSource({ source: null, cacheId: id, argValues: crystal, interactive: true });
+	return <LiveTemplate render={template} scope={{ ...crystal, ...scope }} interactive />;
+};
+
 // Why the controls are off: a stranger's thing (ownership is the only thing
 // that arms it), or a platform thing whose programs aren't installable — a
 // reserved-prefix demo page/component that resolves to no suite.
@@ -410,7 +421,8 @@ export default function ThingPage() {
 		!thing.author?.id &&
 		RESERVED_ID.test(thing.id) &&
 		(isWebpage ? suiteResolves && webpage.resolved?.source !== 'user' : !SUITE_PART_ID.test(thing.id) || suiteResolves);
-	const interactive = isThingOwner || seeded;
+	const shared = !isThingOwner && (isComponent || isWebpage) && (!seeded || !currentUser?.id);
+	const interactive = isThingOwner || seeded || shared;
 
 	// The catalog-side confirm: a seeded thing's controls name what will run
 	// before anything executes. The viewer's own thing skips it — except for
@@ -560,25 +572,28 @@ export default function ThingPage() {
 	// a data thing's schema render template: the /things Previews cache paints
 	// it instantly, the schema fetch reconciles (null = fetched, has none)
 	const schemaId = thing && isData ? schemaIdOf({ thingtime: kinds, crystal: thing.crystal || {} }) : null;
-	const [schemaRender, setSchemaRender] = React.useState<{ schemaId: string; template: Record<string, unknown> | null } | null>(null);
+	const schemaContext = schemaId && thing ? JSON.stringify([thing.id, schemaId, currentUser?.id || '', linkKey || '']) : null;
+	const [schemaRender, setSchemaRender] = React.useState<{ context: string; template: Record<string, unknown> | null; owned: boolean } | null>(null);
 	React.useEffect(() => {
-		if (!schemaId) return;
-		const cached = readLocalCache<ThingsCache>(thingsCacheKey(currentUser?.id))?.schemaRenders?.[schemaId];
-		if (cached !== undefined) setSchemaRender({ schemaId, template: cached });
+		if (!schemaId || !schemaContext || !thing?.id) return;
+		// Inherited templates are capabilities of this root/key/viewer, never a
+		// schema-only persistent cache entry reusable on a different shared page.
+		const cached = isThingOwner ? readLocalCache<ThingsCache>(thingsCacheKey(currentUser?.id))?.schemaRenders?.[schemaId] : undefined;
+		if (cached !== undefined) setSchemaRender({ context: schemaContext, template: cached, owned: false });
 		let cancelled = false;
-		apiRef.current.v1.things
-			.get({ id: schemaId })
+		void requireThingtimeCapability('api.things', '1.6.0')
+			.then(() => cancelled ? null : apiRef.current.v1.things.get({ id: schemaId, sharedRoot: thing.id, ...(linkKey ? { key: linkKey } : {}) }))
 			.then((response: any) => {
-				if (!cancelled) setSchemaRender({ schemaId, template: schemaRenderOf(response?.thing) });
+				if (!cancelled) setSchemaRender({ context: schemaContext, template: schemaRenderOf(response?.thing), owned: !!currentUser?.id && response?.thing?.author?.id === currentUser.id });
 			})
 			.catch(() => {
-				if (!cancelled) setSchemaRender((current) => current?.schemaId === schemaId ? current : { schemaId, template: null });
+				if (!cancelled) setSchemaRender((current) => isThingOwner && current?.context === schemaContext ? { ...current, owned: false } : { context: schemaContext, template: null, owned: false });
 			});
 		return () => {
 			cancelled = true;
 		};
-	}, [schemaId, currentUser?.id]);
-	const dataTemplate = schemaId && schemaRender?.schemaId === schemaId ? schemaRender.template : null;
+	}, [schemaId, schemaContext, thing?.id, currentUser?.id, linkKey, isThingOwner]);
+	const dataTemplate = schemaContext && schemaRender?.context === schemaContext ? schemaRender.template : null;
 
 	// ---------------------------------------------------------------- view
 
@@ -775,7 +790,7 @@ export default function ThingPage() {
 			</Stack>
 		) : isData && dataTemplate ? (
 			<Box data-testid="thing-data-template" minW={0}>
-				<SchemaTemplateRender template={dataTemplate} crystal={(thing.crystal || {}) as Record<string, unknown>} />
+				<SchemaTemplateLive template={dataTemplate} crystal={(thing.crystal || {}) as Record<string, unknown>} id={thing.id} />
 			</Box>
 		) : (
 			<ThingView thing={thing.crystal} />
@@ -791,7 +806,7 @@ export default function ThingPage() {
 			paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))"
 			paddingBottom={16}
 		>
-			<Stack spacing={5} width="100%" maxW="920px" px={{ base: 4, md: 6 }} pt={{ base: 4, md: 7 }} minW={0}>
+			<SharedMediaProvider linkKey={linkKey} sharedRoot={thing && !isThingOwner && canForkThing(thing) ? thing.id : undefined}><Stack spacing={5} width="100%" maxW="920px" px={{ base: 4, md: 6 }} pt={{ base: 4, md: 7 }} minW={0}>
 				<Flex align="center" justify="space-between" gap={3} wrap="wrap">
 					<Box minW={0}>
 						<Text color={MUTED} fontFamily="mono" fontSize="10px" fontWeight="700" letterSpacing="0.12em" textTransform="uppercase">
@@ -800,6 +815,7 @@ export default function ThingPage() {
 						<Heading as="h1" mt={1} fontSize={{ base: '2xl', md: '3xl' }} overflowWrap="anywhere">
 							{diagnostic ? `Migration error · ${diagnostic.migrationId}` : diagnosticRoute ? 'Migration error' : displayName || 'Thing'}
 						</Heading>
+						{thing && !isThingOwner && canForkThing(thing) ? <ForkSharedThingButton id={thing.id} linkKey={linkKey} webpage={isWebpage} /> : null}
 					</Box>
 					<Button
 						as={Link}
@@ -939,7 +955,10 @@ export default function ThingPage() {
 							// Its source is the viewer's ownership; its installer exists only
 							// for a seeded suite thing.
 							<WebpageRuntimeProvider
+								key={`${thing.id}:${currentUser?.id || ''}:${linkKey}`}
 								pageId={thing.id}
+								shared={shared || (isData && !(isThingOwner && schemaRender?.context === schemaContext && schemaRender.owned))}
+								linkKey={linkKey}
 								pageKey={isWebpage && typeof thing.crystal?.pageKey === 'string' ? thing.crystal.pageKey : null}
 								suiteKey={suiteKey ?? null}
 								source={isThingOwner ? 'user' : 'system'}
@@ -1002,7 +1021,7 @@ export default function ThingPage() {
 					</>
 				) : null}
 			</Stack>
-			{dialog}
+			{dialog}</SharedMediaProvider>
 		</Flex>
 	);
 }
