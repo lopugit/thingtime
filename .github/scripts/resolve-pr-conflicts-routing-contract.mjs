@@ -532,6 +532,21 @@ function assertWorkflowSource() {
       /Lopu-Rebase-Completion: run=\(\[1-9\]\[0-9\]\*\) pr=\(\[1-9\]\[0-9\]\*\)/,
       `${name} deferral recognizes the exact rebase run/PR trailer`,
     );
+    // Publishing a review moves the PR head, so an unrecognized review commit
+    // dispatches a review of itself, which can publish again. This kind must
+    // stay recognized or that loop returns.
+    assert.match(
+      block,
+      /Lopu-Review-Publication: run=\(\[1-9\]\[0-9\]\*\) pr=\(\[1-9\]\[0-9\]\*\)/,
+      `${name} deferral recognizes the exact review-publication run/PR trailer`,
+    );
+    // `review` must not fall through to the rebase branch: that branch demands
+    // a "/ Rebase PR #<n>" job the review worker never runs.
+    assert.match(
+      block,
+      /if \[ "\$marker_kind" != rebase \]; then/,
+      `${name} deferral verifies a review publication against the dispatch-worker run shape`,
+    );
     assert.match(block, /\.event == "repository_dispatch"/);
     assert.match(block, /actions\/runs\/\$run_id\/jobs\?per_page=100/);
     assert.match(block, /expected_job=" \/ Rebase PR #\$pr_number"/);
@@ -542,12 +557,23 @@ function assertWorkflowSource() {
   assert.match(source, /Verified Lopu conflict resolution is reviewed once by the batch finalizer/);
   assert.match(source, /Verified Lopu rebase is reviewed once by the rebase-fleet finalizer/);
   assert.match(
+    source,
+    /Verified Lopu review publication was already inspected by the review session that wrote it/,
+  );
+  // The producing half of the same contract: without this trailer the two
+  // deferrals above can never recognize Lopu's own review publication.
+  assert.match(
+    source,
+    /-m 'chore\(lopu\): apply repository review improvements' \\\n\s*-m "Lopu-Review-Publication: run=\$GITHUB_RUN_ID pr=\$number"/,
+    "every Lopu review publication carries a worker-run and PR-bound trailer",
+  );
+  assert.match(
     rebaseProvenanceBlock,
     /trailer="Lopu-Rebase-Completion: run=\$GITHUB_RUN_ID pr=\$PR_NUMBER"/,
   );
   assert.match(
     rebaseProvenanceBlock,
-    /Lopu-\(Conflict-Resolution\|Rebase-Completion\): run=\[1-9\]\[0-9\]\* pr=\[1-9\]\[0-9\]\*\$\/d/,
+    /Lopu-\(Conflict-Resolution\|Rebase-Completion\|Review-Publication\): run=\[1-9\]\[0-9\]\* pr=\[1-9\]\[0-9\]\*\$\/d/,
     "a new rebase replaces stale Lopu publication provenance on the rewritten tip",
   );
   assert.match(rebaseProvenanceBlock, /git interpret-trailers/);
@@ -1477,6 +1503,35 @@ function assertWorkflowSource() {
     reviewBlock,
     /outcome=updated-existing/u,
     "a successfully reused controller repair is reported separately from a newly opened PR",
+  );
+  // The publisher's fold is mechanical: it can only absorb a patch that 3-way
+  // applies onto the open repair. Two independent rewrites of the same lines
+  // never do, so the duplicate has to be prevented in the reviewer prompt --
+  // #671 and #675 are one defect fixed twice, each blocking the other. These
+  // pin the reviewer half of that contract so a prompt reflow cannot silently
+  // drop it while the publisher keeps failing open. Every gap inside a pinned
+  // phrase is `\s+` on purpose: the guard is against the instruction being
+  // deleted, not against rewrapping it, and this prompt shares a byte budget
+  // that makes rewrapping routine.
+  assert.match(
+    reviewBlock,
+    /inventory the repairs already open with\s+`gh pr list[^`]*--base github-actions\s+--limit 500[\s\S]*?thingtime-lopu-controller-repair:v1`, and read the paths and\s+hunks each one touches/u,
+    "the reviewer reads every open controller repair's paths and hunks before authoring a rival patch",
+  );
+  assert.match(
+    reviewBlock,
+    /If\s+an\s+open\s+repair\s+already\s+covers\s+the\s+defect,\s+do\s+not\s+restate\s+it:\s+revert\s+your\s+edits/u,
+    "a defect an open repair already covers is reported, not patched a second time",
+  );
+  assert.match(
+    reviewBlock,
+    /never\s+move\s+that\s+checkout's\s+`HEAD`:\s+the\s+publisher\s+drops\s+repairs\s+authored\s+off\s+a\s+moved\s+head/u,
+    "the reviewer leaves the trusted checkout on the head the publisher leases against",
+  );
+  assert.match(
+    reviewBlock,
+    /source_sha="\$\(git -C "\$trusted" rev-parse HEAD\)"[\s\S]*?git\/ref\/heads\/github-actions[\s\S]*?outcome=stale-controller/u,
+    "the lease the prompt promises exists: a repair authored off a moved controller head is preserved, not published",
   );
   assert.match(
     reviewBlock,
