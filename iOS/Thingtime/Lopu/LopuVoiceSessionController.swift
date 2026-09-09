@@ -16,6 +16,7 @@ final class LopuVoiceSessionController: NSObject, AVSpeechSynthesizerDelegate {
         var effort: String
         var speed: String
         var chatId: String? = nil
+        var ownerId: String? = nil
     }
 
     var sendToWeb: ((String, [String: Any]) -> Void)?
@@ -45,6 +46,8 @@ final class LopuVoiceSessionController: NSObject, AVSpeechSynthesizerDelegate {
     private var tapInstalled = false
     private var recordingURL: URL?
     private var recordingFile: AVAudioFile?
+    private var recordingContext: LopuRecordingUploads.Context?
+    private let recordingUploads = LopuRecordingUploads()
     private var recognitionFailures = 0
 
 
@@ -58,6 +61,7 @@ final class LopuVoiceSessionController: NSObject, AVSpeechSynthesizerDelegate {
         super.init()
         audioEngine.attach(realtimePlayer)
         speechSynthesizer.delegate = self
+        recordingUploads.notify = { [weak self] type, payload in self?.sendToWeb?(type, payload) }
     }
 
     func start(settings: Settings, baseURL: URL, cookieHeader: String) {
@@ -68,6 +72,7 @@ final class LopuVoiceSessionController: NSObject, AVSpeechSynthesizerDelegate {
         self.settings = settings
         self.baseURL = baseURL
         self.cookieHeader = cookieHeader
+        syncRecordings(ownerId: settings.ownerId, baseURL: baseURL, cookieHeader: cookieHeader)
         history = []
         active = true
         recognitionFailures = 0
@@ -151,6 +156,13 @@ final class LopuVoiceSessionController: NSObject, AVSpeechSynthesizerDelegate {
         sendToWeb?("lopu-voice-error", ["error": message])
     }
 
+    func syncRecordings(ownerId: String?, baseURL: URL, cookieHeader: String) {
+        if active, settings?.ownerId != ownerId { stop(flushTranscript: false) }
+        recordingUploads.activate(LopuRecordingUploads.context(ownerId: ownerId, baseURL: baseURL), cookie: cookieHeader)
+    }
+
+    func suspendRecordingUploads() { recordingUploads.activate(nil, cookie: "") }
+
     func makeRecording(format: AVAudioFormat) throws -> AVAudioFile {
         let directory = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             .appendingPathComponent("Lopu Recordings", isDirectory: true)
@@ -160,12 +172,15 @@ final class LopuVoiceSessionController: NSObject, AVSpeechSynthesizerDelegate {
         let file = try AVAudioFile(forWriting: url, settings: format.settings)
         recordingURL = url
         recordingFile = file
+        recordingContext = baseURL.flatMap { LopuRecordingUploads.context(ownerId: settings?.ownerId, baseURL: $0) }
         return file
     }
 
     func finishRecording(transcript: String) {
         guard let url = recordingURL else { return }
         let hasAudio = (recordingFile?.length ?? 0) > 0
+        let context = recordingContext
+        recordingContext = nil
         recordingURL = nil
         recordingFile = nil
         guard hasAudio else {
@@ -180,6 +195,10 @@ final class LopuVoiceSessionController: NSObject, AVSpeechSynthesizerDelegate {
             }
         }
         sendToWeb?("lopu-voice-recording", ["filename": url.lastPathComponent])
+        if let context {
+            do { try recordingUploads.enqueue(source: url, context: context) }
+            catch { sendToWeb?("lopu-voice-warning", ["message": "The recording is saved locally, but could not be queued for Things."]) }
+        }
     }
 
     private func requestSpeechAuthorization() async -> SFSpeechRecognizerAuthorizationStatus {

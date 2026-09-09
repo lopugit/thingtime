@@ -1800,7 +1800,8 @@ test('global expired draft scan is expiry-first, unattached, bounded, and repeat
 		thingtime: 'attachment',
 		attachmentExpiresAt: { $lte: now },
 		$or: [
-			{ targetId: { $exists: false }, attachmentState: { $in: ['pending', 'ready'] } },
+			{ targetId: { $exists: false }, attachmentState: 'pending' },
+			{ targetId: { $exists: false }, attachmentState: 'ready', attachmentPurpose: { $ne: 'recording' } },
 			{
 				targetId: { $exists: false },
 				attachmentState: 'finalizing',
@@ -2214,4 +2215,46 @@ test('detection backfill validates input, fails closed off the home plane, and s
 		stoppedForTimeBudget: true
 	});
 	assert.equal(detections, 0);
+});
+
+
+test('recording upload starts remain owner-bound and replay a completed Thing without a second reservation', async () => {
+  const stored = new Map<string, AttachmentDoc>();
+  let reservations = 0;
+  let creates = 0;
+  const store: any = {
+    listExpiredOwned: async () => [],
+    getById: async (id: string) => stored.get(id) ?? null,
+    reservePending: async (input: any) => {
+      reservations++;
+      const doc = attachmentDoc({ shareId: input.id, ownerId: input.ownerId, crystal: input.crystal,
+        attachmentPurpose: input.purpose, attachmentRequestFingerprint: input.requestFingerprint,
+        attachmentExpiresAt: input.expiresAt, uploadId: undefined });
+      stored.set(doc.shareId, doc);
+      return doc;
+    },
+    setUploadId: async (_owner: string, id: string, uploadId: string) => {
+      const doc = { ...stored.get(id)!, uploadId }; stored.set(id, doc); return doc;
+    }
+  };
+  const service = createAttachmentService({ store, now: () => now, customMongoActive: () => false,
+    getS3: () => noopS3({ createMultipartUpload: async () => { creates++; return { uploadId: 'mpu' }; } }) });
+  const input = { requestId: 'voice-recording-1', filename: 'Lopu.m4a', contentType: 'audio/mp4', sizeBytes: 100, purpose: 'recording' };
+  const start = await service.start('user-1', input);
+  assert.equal(start.ok, true);
+  if (!start.ok) return;
+  const id = start.upload.id as string;
+  const draft = stored.get(id)!;
+  assert.deepEqual(draft.acl, ['tt:user']);
+  assert.equal(draft.attachmentPurpose, 'recording');
+  stored.set(id, { ...draft, attachmentState: 'ready', attachmentExpiresAt: undefined, uploadId: undefined, objectVersionId: 'version-1' });
+  const replay = await service.start('user-1', input);
+  assert.equal(replay.ok, true);
+  if (replay.ok) { assert.equal(replay.upload.id, id); assert.equal(replay.upload.state, 'ready'); assert.equal(replay.upload.expiresAt, null); }
+  assert.equal(reservations, 1); assert.equal(creates, 1);
+  const wrongPurpose = await service.start('user-1', { ...input, purpose: 'post' });
+  assert.equal(wrongPurpose.ok, false);
+  const other = await service.start('user-2', input);
+  assert.equal(other.ok, true);
+  if (other.ok) assert.notEqual(other.upload.id, id);
 });

@@ -10,7 +10,7 @@ import { LopuRingAvatar } from './LopuActivityBadge';
 import { LopuAssistantRow, LopuChatView, LopuUserRow } from './LopuChatView';
 import { LopuProviderSelect, type LopuProviderSelectChange } from './LopuModelPicker';
 import { readNdjson } from './lopuChatStream';
-import { abortLopuTurn, getLopuStoreSnapshot, loadLopuChats, loadLopuMessages, selectLopuChat } from './lopuChatStore';
+import { abortLopuTurn, getLopuStoreSnapshot, loadLopuChats, loadLopuMessages, selectLopuChat, subscribeLopuStore } from './lopuChatStore';
 import { directVoiceUnavailableReason, findLopuVaultProvider, resolveDirectVoiceModel, type LopuVaultProvider } from './lopuProviderCore';
 import { LOPU_UI } from './lopuTheme';
 import { browserSupportsLopuRealtime, LOPU_REALTIME_UNSUPPORTED_MESSAGE, LopuVoiceRealtime } from './lopuVoiceRealtime';
@@ -370,8 +370,41 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 	// ——— the iOS bridge ———————————————————————————————————————————————————
 
 	React.useEffect(() => {
+		let previous: string | null | undefined;
+		const sync = (force = false) => {
+			const bridge = getNativeBridge();
+			const version = /^1\.(\d+)\.\d+$/.exec(bridge?.lopuVoiceVersion || '');
+			if (!bridge || !version || Number(version[1]) < 1) return;
+			const ownerId = getLopuStoreSnapshot().userId;
+			if (!force && ownerId === previous) return;
+			previous = ownerId;
+			bridge.postMessage({ type: 'lopu-voice-recordings-sync', payload: { ownerId } });
+		};
+		const retry = () => { if (document.visibilityState === 'visible') sync(true); };
+		sync();
+		const unsubscribe = subscribeLopuStore(() => sync());
+		window.addEventListener(nativeBridgeReadyEvent, retry);
+		window.addEventListener('online', retry);
+		document.addEventListener('visibilitychange', retry);
+		return () => {
+			unsubscribe();
+			window.removeEventListener(nativeBridgeReadyEvent, retry);
+			window.removeEventListener('online', retry);
+			document.removeEventListener('visibilitychange', retry);
+		};
+	}, []);
+
+	React.useEffect(() => {
 		const onMessage = (message: any) => {
 			const type = message?.type;
+			if (type === 'lopu-voice-recording-upload') {
+				const payload = message.payload;
+				if (!payload?.ownerId || payload.ownerId !== getLopuStoreSnapshot().userId) return;
+				lopu({ title: payload.state === 'saved' ? 'Recording saved to Things' : 'Recording upload pending',
+					description: payload.state === 'saved' ? payload.filename : payload.message, status: payload.state === 'saved' ? 'success' : 'info',
+					...(typeof payload.attachmentId === 'string' ? { link: { label: 'Open recording', href: `/thing/${encodeURIComponent(payload.attachmentId)}` } } : {}) });
+				return;
+			}
 			if (typeof type === 'string' && type.startsWith('lopu-voice-') &&
 				(!nativeOwnerRef.current || nativeOwnerRef.current !== getLopuStoreSnapshot().userId)) return;
 			if (type === 'native-ready') {
@@ -580,6 +613,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 					providerId: current.providerId ?? '',
 					sessionId: sessionIdRef.current,
 					chatId: current.chatId ?? null,
+					ownerId: getLopuStoreSnapshot().userId,
 					inputMode: nativeDirect ? 'provider-audio' : 'native-transcript',
 					model,
 					effort: current.effort ?? '',

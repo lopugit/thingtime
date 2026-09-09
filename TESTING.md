@@ -215,6 +215,24 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Lopu voice + personal Secure Vault
 
+- [ ] With iOS build 29 and private uploads approved, finish a voice segment:
+      `/things` contains one playable owner-private M4A recording and Files
+      retains the original CAF/TXT. Open the saved notice at desktop and 390px;
+      its recording link is usable and long filenames do not overflow.
+- [ ] Interrupt upload completion, reopen Lopu, and confirm one recording Thing
+      with no duplicate PUT or storage reservation. Disconnect before upload,
+      reconnect, and confirm pending local work resumes. A server lacking
+      attachment upload/complete 1.2.0 receives no recording write.
+- [ ] Switch accounts/destinations with pending audio: the new account must not
+      receive the earlier recording. Denied private-upload approval or full
+      storage leaves the recording local and shows a pending notice.
+- [ ] Advance attachment draft cleanup past its TTL: completed recording Things
+      survive, while abandoned pending recordings and ordinary post drafts
+      still expire. Another account cannot read the private recording. The
+      /things listing includes ready standalone recordings but excludes pending
+      recordings, other attachment purposes and protected account records; root
+      and folder filters and token visibility restrictions remain effective.
+
 - [ ] With build 25's general native bridge (no `lopuVoiceVersion`), tapping
       voice says to update Thingtime and does not claim the mic is active.
       With build 27's compatible voice capability, native recording starts.
