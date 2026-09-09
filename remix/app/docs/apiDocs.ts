@@ -12797,6 +12797,22 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		]
 	}),
 	endpoint({
+		id: 'vault-reveal',
+		contractVersion: '1.0.0',
+		featureVersion: '1.0.0',
+		group: 'auth',
+		title: 'Verify and reveal one vault credential',
+		endpoint: '/api/v1/vault/reveal',
+		summary: 'Fresh password or user-verified passkey confirmation for one saved credential.',
+		detail: 'Supports ci and admin vaults for current admins, and personal Secure Vault entries for their owner only. Lists remain value-free. Same-origin JSON POST, a live full account session, and fresh verification are required. Passkey options issue a two-minute single-use challenge bound to the current session, origin and selected item. Login assertions cannot be reused. Five reveal attempts per fifteen minutes, including successful requests, apply independently of subscription tier. No arbitrary secure fields, bulk export, cached reveal grants or server secrets are supported.',
+		auth: { mode: 'session-or-bearer', description: 'Live full account plus current password or a fresh user-verified passkey assertion; admin role for shared admin/CI vaults.' },
+		methods: ['POST'],
+		steps: ['Choose vault and id.', 'POST action options for passkey options and ticket, or use your current password.', 'POST action reveal with password OR ticket and response.', 'Keep the returned value transient and hide it after use.'],
+		requestExamples: [{ name: 'Verify selected entry', description: 'Current-password confirmation for one personal credential.', method: 'POST', body: { vault: 'personal', id: 'example-secret', action: 'reveal', password: '<current password>' } }],
+		responseExamples: [{ status: 200, description: 'One verified value; never stored in client caches.', body: { ok: true, vault: 'personal', id: 'example-secret', value: '<selected secret>' } }, { status: 401, description: 'Verification required or failed.', body: { ok: false, error: 'Verification failed' } }],
+		notes: ['All responses, including errors and unsupported methods, are private and no-store. Clients must negotiate api.vault-reveal >=1.0.0 with matching major at the current origin.', 'Options are limited to ten per fifteen minutes. Password/passkey attempts never bypass security limits for paid subscriptions.']
+	}),
+	endpoint({
 		id: 'things-sensitive-reveal',
 		group: 'things',
 		title: 'Reveal one protected Thing value',

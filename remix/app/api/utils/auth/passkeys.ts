@@ -13,7 +13,7 @@ import { relationshipUniqueKeys } from '../messenger/shared';
 import { getHomeThingsCollection as getThingsCollection, getAuthOtpsCollection } from '../mongodb/collections';
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 
-import { signJwt } from './jwt';
+import { signJwt, signPurposeToken, verifyPurposeToken } from './jwt';
 import { providerNameForAaguid } from './passkeyAaguids';
 import { resolvePublicOrigin } from './publicOrigin';
 import { createSession } from './sessions';
@@ -267,7 +267,7 @@ export const deletePasskey = async (userId: string, passkeyId: string): Promise<
 // Atomic spent markers share the existing authOtps unique challenge index and
 // TTL. Clearing a browser cookie alone does not prevent replaying a saved
 // cookie/assertion, especially with synced passkeys whose counter stays zero.
-const consumePasskeyChallenge = async (kind: 'reg' | 'auth', challenge: string): Promise<boolean> => {
+const consumePasskeyChallenge = async (kind: 'reg' | 'auth' | 'vault', challenge: string): Promise<boolean> => {
 	const collection = await getAuthOtpsCollection();
 	try {
 		await collection.insertOne({
@@ -282,6 +282,55 @@ const consumePasskeyChallenge = async (kind: 'reg' | 'auth', challenge: string):
 };
 
 // ── registration ceremony ──────────────────────────────────────────────────
+
+// A separate, single-use ceremony: a login assertion can never reveal a vault
+// value. Bind the signed challenge to the current session, origin and one item.
+export const startVaultPasskeyVerification = async (request: Request, userId: string, binding: string) => {
+	const { rpID, origin } = deriveWebAuthnParams(request);
+	const docs = await findPasskeyDocsForUser(userId);
+	const allowCredentials = docs.filter((doc) => !doc.crystal?.revokedAt).flatMap((doc) => {
+		const secure = unpackPasskeySecure(doc.secure);
+		return secure.credentialId && secure.publicKey ? [{ id: secure.credentialId }] : [];
+	});
+	if (!allowCredentials.length) return fail(409, 'No active passkey for this account. Use your current password.');
+	const options = await generateAuthenticationOptions({ rpID, userVerification: 'required', allowCredentials });
+	const ticket = await signPurposeToken('vault-reveal', { challenge: options.challenge, rpID, origin, userId, binding }, '2m');
+	return { ok: true as const, options, ticket };
+};
+
+const vaultPasskeyDependencies = {
+	find: findPasskeyByCredentialId,
+	verify: verifyAuthenticationResponse,
+	consume: consumePasskeyChallenge,
+	update: async (doc: any, userId: string, counter: number) => (await getThingsCollection()).updateOne(
+		{ shareId: doc.shareId, thingtime: 'passkey', ownerId: userId, 'crystal.revokedAt': null } as any,
+		{ $max: { secureCounter: counter }, $set: { 'crystal.lastUsedAt': new Date().toISOString(), updatedAt: new Date() } } as any
+	)
+};
+export const finishVaultPasskeyVerification = async (
+	request: Request, userId: string, binding: string, ticket: string, response: AuthenticationResponseJSON,
+	deps = vaultPasskeyDependencies
+): Promise<boolean> => {
+	const challenge = await verifyPurposeToken(ticket, 'vault-reveal');
+	const { rpID, origin } = deriveWebAuthnParams(request);
+	if (!challenge || challenge.userId !== userId || challenge.binding !== binding || challenge.origin !== origin || challenge.rpID !== rpID || typeof challenge.challenge !== 'string') return false;
+	const credentialId = response?.id;
+	if (typeof credentialId !== 'string' || credentialId.length > 2048) return false;
+	const doc = await deps.find(credentialId);
+	if (!doc || String(doc.ownerId) !== userId || doc.crystal?.revokedAt) return false;
+	const secure = unpackPasskeySecure(doc.secure);
+	if (!secure.publicKey || secure.credentialId !== credentialId) return false;
+	const handle = response?.response?.userHandle;
+	if (handle && Buffer.from(handle, 'base64url').toString('utf8') !== userId) return false;
+	let verified: Awaited<ReturnType<typeof verifyAuthenticationResponse>>;
+	try {
+		verified = await deps.verify({ response, expectedChallenge: challenge.challenge, expectedOrigin: origin, expectedRPID: rpID,
+			credential: { id: credentialId, publicKey: new Uint8Array(Buffer.from(secure.publicKey, 'base64url')), counter: doc.secureCounter || 0 }, requireUserVerification: true });
+	} catch { return false; }
+	if (!verified.verified || !await deps.consume('vault', challenge.challenge)) return false;
+	const result = await deps.update(doc, userId, verified.authenticationInfo.newCounter);
+	return result.matchedCount === 1;
+};
 
 export const startPasskeyRegistration = async (
 	user: PublicUser,

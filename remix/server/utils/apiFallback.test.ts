@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { getApiFallbackOrigin, shouldProxyApiToFallback } from './apiFallback';
+import handleApi from '../routes/api/[...]';
 
 const ENV_KEYS = ['JWT_PRIVATE_KEY', 'JWT_SECRET', 'MONGODB_CONNECTION_STRING', 'THINGTIME_API_FALLBACK_ORIGIN'] as const;
 
@@ -46,5 +47,16 @@ test('API fallback compares complete origins so two loopback ports do not bypass
 	await withFallbackEnv('http://127.0.0.1:18280/', () => {
 		assert.equal(shouldProxyApiToFallback(new Request('http://127.0.0.1:59892/api/v1/devices')), true);
 		assert.equal(shouldProxyApiToFallback(new Request('http://127.0.0.1:18280/api/v1/devices')), false);
+	});
+});
+
+test('vault verification refuses fallback without reading or forwarding credentials', async () => {
+	await withFallbackEnv('https://thingtime.com', async () => {
+		const request = new Request('http://127.0.0.1:17340/api/v1/vault/reveal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"password":"synthetic"}' });
+		const response = await (handleApi as any)({ req: request, context: { params: { path: 'v1/vault/reveal' } } });
+		assert.equal(response.status, 503);
+		assert.equal(response.headers.get('Cache-Control'), 'private, no-store, max-age=0');
+		assert.equal(request.bodyUsed, false);
+		assert.ok(!(await response.text()).includes('synthetic'));
 	});
 });

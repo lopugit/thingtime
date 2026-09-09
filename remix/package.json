@@ -80,7 +80,7 @@
     "verify:messenger-storage": "node --import tsx scripts/verify-messenger-storage.ts",
     "test:pat-scopes": "node --import tsx --test app/api/utils/auth/patScopes.test.ts",
     "test:preview-build": "node --import tsx --test app/utils/previewBuildFreshness.test.ts app/utils/staleChunkRecovery.test.ts",
-    "test:sensitive-reveal": "node --import tsx --test app/api/utils/auth/passwordConfirmation.test.ts app/api/utils/things/sensitiveReveal.test.ts app/routes/api/v1/things/reveal/reveal.test.ts",
+    "test:sensitive-reveal": "node --import tsx --test app/api/utils/auth/passwordConfirmation.test.ts app/api/utils/things/sensitiveReveal.test.ts app/routes/api/v1/things/reveal/reveal.test.ts app/routes/api/v1/vault/reveal/reveal.test.ts",
     "test:quota": "node --import tsx --test app/api/utils/things/quotaCore.test.ts",
     "test:rate-limit": "node --import tsx --test app/api/utils/rateLimit/*.test.ts app/api/utils/subscriptions/tierCatalog.test.ts && node --experimental-test-module-mocks --import tsx --test app/api/utils/networkProbeAccess.test.mts app/api/utils/subscriptions/tierCatalogStore.test.mts",
     "test:root-data": "node --import tsx --test app/root-data.server.test.ts server/utils/apiFallback.test.ts",
@@ -104,7 +104,7 @@
     "verify:vercel-output": "node scripts/verify-vercel-output.mjs",
     "test:moderation": "node --import tsx --test app/api/utils/moderation/*.test.ts",
     "verify:embed": "node scripts/verify-embed-bundle.mjs",
-    "test:passkeys": "node --import tsx --test app/hooks/passkey*.test.ts app/api/utils/auth/webauthnChallenge.test.ts app/api/utils/auth/appleAppAssociation.test.ts"
+    "test:passkeys": "node --import tsx --test app/hooks/passkey*.test.ts app/api/utils/auth/webauthnChallenge.test.ts app/api/utils/auth/vaultPasskey.test.ts app/api/utils/auth/appleAppAssociation.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.105.0",
