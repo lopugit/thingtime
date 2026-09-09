@@ -23,6 +23,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
 	'lopu-recording-settings': [],
 	'lopu-recording-job': [],
 	'lopu-recording-reminder': [],
+	'lopu-reminder': [],
 	attachment: ['name', 'filenamePreview', 'title', 'description', 'size', 'contentType', 'mediaKind', 'detectedContentType'],
   post: ['type', 'text', 'images', 'listing', 'title', 'subspaceId', 'flairId'], // thing + richText: records → dropped
   comment: ['text'],
@@ -114,7 +115,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   'ci-dispatch': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-event': ['provider', 'repository', 'deliveryId', 'eventType', 'action', 'actor', 'statusFrom', 'statusTo', 'occurredAt'], // data: record → dropped
   friend: ['status', 'friendKey'],
-  notification: ['type', 'actorId', 'actorName', 'actorUsername', 'postId', 'preview', 'title', 'detail', 'href', 'outcome'],
+  notification: ['type', 'actorId', 'actorName', 'actorUsername', 'postId', 'preview', 'title', 'delivery', 'richText', 'image', 'detail', 'href', 'outcome'],
   'push-device': ['platform', 'environment', 'topic'],
   passkey: ['nickname', 'description', 'providerName', 'aaguid', 'deviceType', 'backedUp', 'transports', 'lastUsedAt', 'lastUsedOrigin', 'revokedAt'],
   'passkey-app-link': ['linkKey', 'appKey', 'appName', 'firstUsedAt', 'lastUsedAt', 'usageCount'],
