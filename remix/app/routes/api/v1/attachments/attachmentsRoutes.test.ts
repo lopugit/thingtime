@@ -15,6 +15,34 @@ const allowed = async () => ({
 });
 const user = { id: 'user-1', accountKind: 'user' } as any;
 
+test('content authorization preserves the request link key and enriched audience without inventing an owner', async () => {
+	for (const currentUser of [null, user]) {
+		let observed: any;
+		const route = createAttachmentContentLoader({
+			getUser: async () => currentUser,
+			enforceLimit: allowed as any,
+			enrichViewer: async (viewer) => viewer?.id ? { ...viewer, groupIds: new Set(['group-1']) } : viewer,
+			download: async (viewer) => { observed = viewer; return { ok: false, status: 404, error: 'Attachment not found' }; }
+		});
+		const response = await route({ request: new Request('https://thingtime.example/api/v1/attachments/content?id=fixture&key=read-key&sharedRoot=page') });
+		assert.equal(response.status, 404);
+		assert.equal(observed.id, currentUser?.id || '');
+		assert.deepEqual([...observed.linkKeys], ['read-key']);
+		assert.equal(observed.sharedRoot, 'page');
+		assert.equal(observed.groupIds?.has('group-1') || false, !!currentUser);
+		assert.match(response.headers.get('Cache-Control')!, /no-store/);
+	}
+});
+
+test('malformed shared media roots are refused before authentication or storage access', async () => {
+	const route = createAttachmentContentLoader({ getUser: async () => { throw Error('must not authenticate'); } });
+	for (const root of ['', 'a'.repeat(129), '../other']) {
+		const response = await route({ request: new Request(`https://thingtime.example/api/v1/attachments/content?id=fixture&sharedRoot=${encodeURIComponent(root)}`) });
+		assert.equal(response.status, 400);
+		assert.match(response.headers.get('Cache-Control')!, /no-store/);
+	}
+});
+
 const post = (body: unknown, headers: Record<string, string> = {}) =>
 	new Request(endpoint, {
 		method: 'POST',
@@ -218,6 +246,7 @@ test('attachment mutation responses preserve bounded authored retry metadata', a
 test('content loader treats service credentials as anonymous and keeps signed redirects private', async () => {
 	let viewer: any = 'unset';
 	const loader = createAttachmentContentLoader({
+		enrichViewer: async (viewer) => viewer,
 		getUser: async () => ({ id: 'service-1', accountKind: 'service' } as any),
 		enforceLimit: allowed as any,
 		download: async (inputViewer) => {
@@ -400,6 +429,7 @@ test('cleanup route fails closed when CRON_SECRET is unavailable', async () => {
 test('cache receipts authorize every request without exposing signed URLs, and reject unsupported previews', async () => {
 	let allowedNow = true;
 	const route = createAttachmentContentLoader({
+		enrichViewer: async (viewer) => viewer,
 		getUser: async () => user,
 		enforceLimit: allowed as any,
 		download: async () =>
@@ -429,6 +459,7 @@ test('conditional byte reuse authorizes before returning a cacheable 304', async
 	let authorized = true;
 	let checks = 0;
 	const route = createAttachmentContentLoader({
+		enrichViewer: async (viewer) => viewer,
 		getUser: async () => user,
 		enforceLimit: allowed as any,
 		download: async () => {

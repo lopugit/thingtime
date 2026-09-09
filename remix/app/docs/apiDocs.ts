@@ -5686,19 +5686,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-content',
-		contractVersion: '1.1.0',
-		featureVersion: '1.1.0',
+		contractVersion: '1.2.0',
+		featureVersion: '1.2.0',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
 		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
 		detail:
 			'Owners may read live unattached drafts. Bound content is purpose-authorized against the exact target: post/comment ACL inheritance, active or pending chat membership, the current public profile slot, or the current personal/community emoji reference. The bucket never becomes public. ' +
-			'Only magic-byte-verified inline-safe types may render inline: AVIF/GIF/JPEG/PNG/WebP images and MP4/WebM/QuickTime/M4V/Ogg/3GPP/3GPP2/Matroska video. Add download=1 to force attachment/octet-stream for every type.',
+			'Optional sharedRoot authorizes post-purpose media attached to the root or explicitly embedded by a stored component/schema/native media block. Same-author references inherit the freshly checked root audience; foreign media still needs independent access. Unrelated ids, drafts, message/profile/emoji objects, retired keys and revoked groups do not gain access through this mode. Ready state, moderation, exact object version and home-storage guards remain enforced before every redirect, byte read or cache receipt. ' +
+			'Hidden post/page audiences accept the root key query parameter and custom audiences use current group/friend membership. Every content or cache-validation request rechecks the root. Only magic-byte-verified inline-safe types may render inline: AVIF/GIF/JPEG/PNG/WebP images and MP4/WebM/QuickTime/M4V/Ogg/3GPP/3GPP2/Matroska video. Add download=1 to force attachment/octet-stream for every type.',
 		auth: {
 			mode: 'optional',
 			description:
-				'Anonymous access works only for a publicly viewable post/comment or public profile slot. Messages and custom emojis require an authenticated eligible viewer.'
+				'Anonymous access works for public post/page/comment targets, a valid hidden root key, or a public profile slot. Custom group/friend audiences require a current eligible session. Messages and custom emojis require an authenticated eligible viewer.'
 		},
 		methods: ['GET'],
 		steps: [
@@ -8726,13 +8727,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // then older first) and the response echoes commentSort; an unknown value
     // is a 400. Only this read grew — the shared projection is unchanged, so
     // things-comment / -feed / -user stay put (S7, additive)
-    featureVersion: '1.5.0',
-    contractVersion: '1.4.0',
+    featureVersion: '1.6.1',
+    contractVersion: '1.5.1',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares.',
     detail:
+			'Shared webpage writers may add component references only when they can independently read the referenced component; only the owner may delegate an unrelated private component through the page. ' +
+			'Shared writers also need independent access before inserting new first-party private media references in page, component or schema render positions. ' +
+			'GET id with sharedRoot and optional key reads an included component/action/schema/data dependency through the freshly authorized stored root. This first-party contextual mode preserves standalone ACLs and owner-only keys, refuses unrelated ids and app-token namespace escapes, and returns private no-store responses. It does not authorize mutations or shared-context list queries. ' +
       'Everything is a thing: one root Thing schema per doc, sub-schemas applied via the thingtime array of schema ids (see /schemas), the payload under crystal, and the audience under acl — tt: grants plus "-"-prefixed exclusions where the most specific matching entry wins (["tt:all"] public, ["-tt:all","tt:userFriends","tt:user"] friends-only, ["tt:all","-tt:user/somebody"] public except one user; owners always see their own things). POST creates (unified shape or the legacy post body — same path), GET reads one thing / lists a target’s attached things / lists your own, PUT upserts by id (create-or-replace), PATCH merges a partial update, DELETE removes an owned thing and its attached comments/reactions. The legacy visibility names still work as input and are derived on the wire — including "hidden" (acl ["tt:hidden","tt:user"]): an unlisted thing that never appears in feeds, listings, profiles, or search for anyone but its owner, yet is viewable by ANYONE presenting its randomly generated linkKey — GET /api/v1/things?id=<id>&key=<linkKey>, or the /post/<id>?key=<linkKey> page. The server mints a fresh linkKey whenever a thing enters hidden (re-hiding rotates it, so previously shared links die), projects it to the owner only, and honors it on the engagement routes too (body.key on comment/react/save/share admits key-holders). Changing the audience away from hidden retires the link instantly. "custom" audiences go further: an acl carrying the tt:custom marker names exactly who can do what — a baseline (tt:all = everyone may read, tt:hidden = link-key holders may read, neither = only the people below), plus per-user grants tt:user/<username> (read), tt:user/<username>/comment, tt:user/<username>/write and per-group grants tt:group/<group id>[/comment|/write] (groups: /api/v1/groups-docs; write ⊃ comment ⊃ read). On custom things, general viewers READ ONLY — commenting, reacting, and sharing need the comment capability, and users with write may PATCH the thing’s crystal/extended/tags (never its audience, folder, or token grants; storage stays billed to the owner). Saves are exempt (a save is a private bookmark). The composer’s Custom option builds these acls visually. Crystals are optionally schema-less: omit thingtime and it defaults to ["data"], the bounded free-form crystal. Beside the crystal, every thing also carries a schema-free extended property — any JSON up to 512KB, stored and returned exactly as given, never validated or interpreted, and not structured-searchable (/search field conditions can’t target it, though its string content is indexed by the wildcard text index). extended replaces as a whole value on write (deep-merging arbitrary JSON is ambiguous) and null clears it — the open sidecar external apps park their data in. Things also carry a tokenAcl grant list (tt:token/<token id> entries, see /api/v1/tokens-docs): sandboxed personal-access-tokens may only mutate things carrying their entry; creators are auto-granted, the list replaces whole via tokenAcl on POST/PUT/PATCH (null clears, max 32 entries), it never affects visibility, and it projects to the owner only.',
     auth: {
       mode: 'session-or-bearer',
@@ -12084,6 +12088,21 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'things-fork',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
+    group: 'things',
+    title: 'Copy a shared composition',
+    endpoint: '/api/v1/things/fork',
+    summary: 'Create an independent private copy of readable standalone content, including pages, components, actions, schemas and data with extended content.',
+    detail: 'Revalidates the root audience and traverses stored component, action, schema and data references. Creates fresh caller-owned private Things through normal quota and schema gates. Rewrites executable references and capability scopes to copied ids; never edits the original or overwrites a prior fork. Missing dependencies fail before writes. Failed writes trigger best-effort cleanup of exact newly created ids; a cleanup failure is reported explicitly. Repeated successful calls create separate copies.',
+    auth: { mode: 'session', description: 'Requires a signed-in user and read access to id, including its key or group membership when needed.' },
+    methods: ['POST'],
+    steps: ['POST { id, key? }. Supported roots are post, data, schema, component, webpage and action content; organizational folders, managed records and target-attached relationship rows retain their dedicated lifecycle.', 'Open the returned id in Builder for a webpage or /thing/:id for other content.'],
+    requestExamples: [{ name: 'Copy a shared page', description: 'Save an editable private copy.', method: 'POST', body: { id: 'page-id', key: 'owner-issued-link-key' } }],
+    responseExamples: [{ status: 200, description: 'Independent private copy created.', body: { ok: true, id: 'new-page-id', copied: 3, ids: ['new-action-id', 'new-component-id', 'new-page-id'] } }]
+  }),
+  endpoint({
     id: 'actions-run',
     featureVersion: '1.1.0',
     contractVersion: '1.1.0',
@@ -12100,10 +12119,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'depth, child actions, result bytes) is shared across the whole invocation including child actions.invoke ' +
       'calls, so recursive chains terminate by construction. Every run lands a protected action-run thing ' +
       '(targetId = the action) with a per-step trace; the response carries the same runId, status, result, ' +
-      'budget usage and trace. Every completed run also stores an action-run notification, including successful component runs (quiet delivery).',
+      'budget usage and trace. Shared mode accepts sharedRoot (a stored webpage, component or action id) and an optional key. ' +
+      'It rechecks the root audience on every call, resolves only stored reachable actions in their author namespace, and permits ' +
+      'read-only execution without signing in. It never borrows the author or viewer private-account authority, never mutates saved data, ' +
+      'and creates no persistent run record or notification; its shared-run id is ephemeral. Explicit stored same-author data dependencies ' +
+      'inherit the root audience; dynamic ids retain ordinary anonymous read access. Every ordinary completed run also stores an action-run ' +
+      'notification, including successful component runs (quiet delivery).',
     auth: {
-      mode: 'session',
-      description: 'Session cookie required. PATs and app tokens are default-denied in v1.'
+      mode: 'optional',
+      description: 'A session is required for ordinary runs. Shared read-only runs require access to sharedRoot, with its key or group membership when applicable. PATs and app tokens do not grant execution authority.'
     },
     methods: ['POST'],
     steps: [
@@ -12274,8 +12298,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-resolve',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    contractVersion: '1.2.0',
+    featureVersion: '1.2.0',
     group: 'webpages',
     title: 'Resolve a webpage',
     endpoint: '/api/v1/webpages/resolve',
@@ -12287,8 +12311,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'ONE page — by id (a standalone /p/ page), by path (the site page bound to an app route, where a ' +
       'viewer-owned personalised doc outranks the seeded system default), or global=1 (the site-global block ' +
       'doc) — together with every referenced component in one batched query. Component refs resolve exact ' +
-      'visible shareIds first, then the seeded platform doc (component-<ref>), then the caller’s own latest ' +
-      'componentKey match; the refs map records each resolution. Pages are created and edited through the ' +
+      'shareIds first, then the seeded platform doc (component-<ref>), then the page author’s latest ' +
+      'componentKey match; the refs map records each resolution. Author-owned embedded components inherit ' +
+      'the resolved page audience for this response, including anonymous hidden-link readers and custom groups. ' +
+      'Standalone component ACLs are not rewritten; foreign components still require their own read access. ' +
+      'Pages are created and edited through the ' +
       'ordinary /api/v1/things write path (the webpage crystal sanitizer is the write gate) — this endpoint ' +
       'only reads. A standalone hidden page also accepts its owner-issued key query parameter, matching the ' +
       'ordinary Things hidden-link contract; the bearer key is never returned to non-owners.',
