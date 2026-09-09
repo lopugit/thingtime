@@ -1303,6 +1303,17 @@ stored entries intentionally makes them undecryptable. For a fork, create a
 new random 32-byte base64url key and add Claude accounts through Admin → CI
 Control; never copy Thingtime’s encrypted rows or production tokens.
 
+Hosted development also needs its own key, scoped to the deployment's actual
+Vercel custom environment (not the CLI-only Development target or every PR
+preview). Redeploy that environment to activate it; do not rotate an existing
+key without re-encrypting all affected vault entries. Admin External
+integrations, CI credential waterfall, and user Secure Vault are separate
+stores. Sharing server-provider environment variables does not copy saved CI
+OAuth credentials or user connections. An authorized cross-environment copy
+must use the credential store's authenticated transfer path or secure re-entry,
+preserve order and permissions, and re-encrypt with the destination key without
+logging values. Shared provider credentials also share upstream billing/quota.
+
 Do not reuse the JWT, session, peer-discovery, or cron secret. The policy proxy
 accepts a saved endpoint id rather than arbitrary URLs; it enforces HTTPS
 origins, closed path prefixes, byte bounds, no redirects, and selected read /
