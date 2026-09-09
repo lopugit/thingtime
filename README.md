@@ -2515,3 +2515,5 @@ The script creates fixture accounts/content through the real API utilities,
 runs the leased migration, checks behavior and emits identity-free native
 explain counts. It refuses any other URI. Stop the disposable server afterward;
 it is not a persistent development service.
+
+Desktop permission recovery includes **Open App Locations** in Things and Desktop settings. It opens a private folder of symlinks to the current Desktop and bundled Node, plus installed Thingtime Recovery, Commander, ThingDisk, and ThingDock apps from the standard Applications folders. Duplicate older installations are omitted. You may need to remove the affected app from a macOS permission list and re-add it using these shortcuts. Grant only the permissions you intend. macOS decides whether to display Quit & Reopen; Thingtime offers Later / Restart Node Now when you return from the recovery flow. Restart other affected apps separately. No permission is changed automatically.
