@@ -124,6 +124,39 @@ test('unknown slugs return null and search finds by title words', () => {
 	assert.ok(PAGE_BY_SLUG['landing/feed']);
 });
 
+// /marketing/search reports `pages.length` as the match total in its <h1>, its
+// meta description and its "show more" arithmetic, so whatever limit the route
+// passes IS the number the user is told and the last page they can reach. That
+// only stays honest while the route asks for the whole catalog: everyday words
+// match far more pages than any small cap, so a capped call silently strands
+// the remainder. Nothing is rendered eagerly — the route's own `limit` (60 at a
+// time) bounds the DOM — so the full result set is the correct request.
+test('searchPages is bounded only by its limit, so a small cap would strand matches', () => {
+	// Ordinary queries a visitor would actually type, including the product name.
+	for (const query of ['thingtime', 'thing', 'and', 'your', 'you', 'style']) {
+		const all = searchPages(query, PAGE_COUNT);
+		assert.ok(
+			all.length > 400,
+			`"${query}" matches only ${all.length} pages; this test exists because such queries exceed a fixed cap — re-pick the sample if the catalog shrank`
+		);
+		// The limit is a slice, never a filter: a smaller one hides real matches.
+		assert.deepEqual(searchPages(query, 400), all.slice(0, 400));
+		assert.ok(
+			all.length <= PAGE_COUNT,
+			`"${query}" returned ${all.length} results for a ${PAGE_COUNT}-page catalog`
+		);
+	}
+	// The whole-catalog request is what /marketing/search passes, and it must
+	// return every match rather than saturating at some internal ceiling.
+	const everything = searchPages('thingtime', PAGE_COUNT);
+	assert.equal(
+		everything.length,
+		PAGES.filter((entry) => `${entry.title} ${entry.description} ${entry.slug} ${entry.eyebrow}`.toLowerCase().includes('thingtime')).length,
+		'searchPages(query, PAGE_COUNT) must return every page whose searchable text matches'
+	);
+	assert.equal(new Set(everything.map((entry) => entry.slug)).size, everything.length, 'results must not repeat a page');
+});
+
 test('every walkthrough uses only targets its mock screen exposes', () => {
 	for (const walkthrough of WALKTHROUGHS) {
 		assert.ok(walkthrough.steps.length >= 3, `${walkthrough.key} has too few steps`);

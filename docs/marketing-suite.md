@@ -51,6 +51,7 @@ the counts, links and copy can never drift.
 - Copy generators fill every placeholder and stay deterministic per seed.
 - Every `*_BY_KEY` / `PAGE_BY_SLUG` map is null-prototype, so a URL segment or query value naming an `Object.prototype` member (`constructor`, `toString`, `__proto__`…) resolves to nothing and hits the normal not-found path instead of a half-built page.
 - Category and search indexes group pages under unique keys, and grouping keeps every page exactly once in first-seen order. `/marketing/search` mixes namespaces, and one name ("Developers") is both a persona and a feature family — so the section key is the namespaced group key, never the visible label.
+- `searchPages`' `limit` is a slice, never a filter, and `/marketing/search` passes the whole catalog. The count it returns is what the heading, the meta description and "show more" all report, so a fixed cap would both misstate the total and strand the remainder — ordinary queries run well past any small one ("thingtime" matches 1,091 of 1,635 pages). Only `limit` in the route (60 at a time) bounds what is rendered.
 
 ## Manual checks
 
