@@ -7,6 +7,7 @@ import { sendVerificationEmail } from './email';
 import { signJwt } from './jwt';
 import { hashPassword } from './passwords';
 import { createSession } from './sessions';
+import { emitSystemNotification } from '../notifications/notifications';
 import { findUserByEmail, findUserByUsername, insertUser, toPublicUser } from './users';
 import type { PublicUser, UserDoc } from './users';
 import { DEFAULT_SUBSCRIPTION_TIER, subscriptionTierById } from '../subscriptions/tierCatalog';
@@ -215,6 +216,7 @@ export const registerUser = async (input: RegisterInput): Promise<RegisterResult
   // session + JWT (logs the user in immediately; emailVerified stays false)
   const session = await createSession(userId);
   const jwt = await signJwt({ sub: userId, jti: session.jti });
+  await emitSystemNotification({ recipientId: userId, type: 'system-message', title: 'Account created successfully ✨', historyOnly: true, outcome: 'ok' });
 
   // email verification token + (stubbed) send
   const email = user.email;

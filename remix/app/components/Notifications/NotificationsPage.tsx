@@ -25,8 +25,8 @@ import {
 } from './notificationCore';
 
 // The /notifications page: every notification the viewer has received (the
-// server keeps their newest 10,000, filtered by their notification prefs
-// exactly like the bell), newest first, with the filter grammar in the URL so
+// server retains history independently of delivery preferences), newest first,
+// with the filter grammar in the URL so
 // a view is bookmarkable and shareable between tabs: category chips
 // (social / engagement / feed / system), a type dropdown, unread-only, free
 // text search, and a from/to day window. Optimistic first paint: the
@@ -54,10 +54,11 @@ type HistoryPage = {
   items: NotificationItem[];
   total: number | null;
   unreadCount: number;
-  nextBefore: string | null;
+  bellUnreadCount: number;
+  nextCursor: string | null;
 };
 
-const EMPTY_PAGE: HistoryPage = { at: 0, items: [], total: null, unreadCount: 0, nextBefore: null };
+const EMPTY_PAGE: HistoryPage = { at: 0, items: [], total: null, unreadCount: 0, bellUnreadCount: 0, nextCursor: null };
 
 const readCachedPage = (key: string): HistoryPage | null => {
   const entry = readLocalCache<HistoryPage>(key);
@@ -69,8 +70,9 @@ const toPage = (resp: any): HistoryPage => ({
   at: Date.now(),
   items: Array.isArray(resp?.notifications) ? resp.notifications : [],
   total: typeof resp?.total === 'number' ? resp.total : null,
-  unreadCount: typeof resp?.unreadCount === 'number' ? resp.unreadCount : 0,
-  nextBefore: typeof resp?.nextBefore === 'string' ? resp.nextBefore : null
+  unreadCount: typeof resp?.historyUnreadCount === 'number' ? resp.historyUnreadCount : 0,
+  bellUnreadCount: typeof resp?.unreadCount === 'number' ? resp.unreadCount : 0,
+  nextCursor: typeof resp?.nextCursor === 'string' ? resp.nextCursor : null
 });
 
 const dedupeById = (items: NotificationItem[]): NotificationItem[] => {
@@ -110,6 +112,26 @@ export const NotificationsPage = () => {
   const [loadingMore, setLoadingMore] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [marking, setMarking] = React.useState(false);
+  const [revision, setRevision] = React.useState(0);
+
+  React.useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const recorded = (event: Event) => {
+      if ((event as CustomEvent).detail?.userId !== user?.id) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => setRevision(value => value + 1), 300);
+    };
+    const failed = (event: Event) => {
+      if ((event as CustomEvent).detail?.userId === user?.id) setError('A recent message could not be saved to history. Check your connection.');
+    };
+    window.addEventListener('thingtime:notification-recorded', recorded);
+    window.addEventListener('thingtime:notification-save-failed', failed);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('thingtime:notification-recorded', recorded);
+      window.removeEventListener('thingtime:notification-save-failed', failed);
+    };
+  }, [user?.id]);
 
   const seqRef = React.useRef(0);
   const apiRef = React.useRef(api);
@@ -153,13 +175,13 @@ export const NotificationsPage = () => {
     setRefreshing(true);
     setError(null);
     apiRef.current.v1.notifications
-      .list({ limit: PAGE_SIZE, withTotal: 1, ...notificationFiltersToQuery(filters) })
+      .list({ history: 1, limit: PAGE_SIZE, withTotal: 1, ...notificationFiltersToQuery(filters) })
       .then((resp: any) => {
         if (seq !== seqRef.current) return;
         const next = toPage(resp);
         setPage(next);
         if (cacheKey && !active) writeLocalCache(cacheKey, next);
-        if (bellCacheKey) writeLocalCache(bellCacheKey, next.unreadCount);
+        if (bellCacheKey) writeLocalCache(bellCacheKey, next.bellUnreadCount);
       })
       .catch((err: any) => {
         if (seq !== seqRef.current) return;
@@ -172,21 +194,22 @@ export const NotificationsPage = () => {
       });
     // filtersKey is the URL-derived identity of `filters`; cache keys follow user.id
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, filtersKey]);
+  }, [user?.id, filtersKey, revision]);
 
   const loadMore = async () => {
-    if (!page.nextBefore || loadingMore) return;
+    if (!page.nextCursor || loadingMore) return;
     const seq = seqRef.current;
     setLoadingMore(true);
     try {
       const resp: any = await apiRef.current.v1.notifications.list({
         limit: PAGE_SIZE,
-        before: page.nextBefore,
+        history: 1,
+        cursor: page.nextCursor,
         ...notificationFiltersToQuery(filters)
       });
       if (seq !== seqRef.current) return;
       const more = toPage(resp);
-      setPage((prev) => ({ ...prev, items: dedupeById([...prev.items, ...more.items]), nextBefore: more.nextBefore }));
+      setPage((prev) => ({ ...prev, items: dedupeById([...prev.items, ...more.items]), nextCursor: more.nextCursor }));
     } catch (err: any) {
       lopu({ title: 'Could not load older notifications 😔', description: err?.error, status: 'error', duration: 6000 });
     } finally {
@@ -197,13 +220,11 @@ export const NotificationsPage = () => {
   const handleRowClick = (item: NotificationItem) => {
     if (!item.readAt) {
       const now = new Date().toISOString();
-      const unreadCount = Math.max(0, page.unreadCount - 1);
       setPage((prev) => ({
         ...prev,
         unreadCount: Math.max(0, prev.unreadCount - 1),
         items: prev.items.map((row) => (row.id === item.id ? { ...row, readAt: now } : row))
       }));
-      if (bellCacheKey) writeLocalCache(bellCacheKey, unreadCount);
       apiRef.current.v1.notifications.markRead({ ids: [item.id] }).catch(() => {});
     }
     const href = notificationHref(item);
@@ -222,7 +243,7 @@ export const NotificationsPage = () => {
       lopu({ title: 'All caught up ✨', status: 'success', duration: 4000 });
     } catch (err: any) {
       setPage(previous);
-      if (bellCacheKey) writeLocalCache(bellCacheKey, previous.unreadCount);
+      if (bellCacheKey) writeLocalCache(bellCacheKey, previous.bellUnreadCount);
       lopu({ title: 'Could not mark everything read 😔', description: err?.error, status: 'error', duration: 6000 });
     } finally {
       setMarking(false);
@@ -415,7 +436,7 @@ export const NotificationsPage = () => {
               <NotificationRow key={item.id} item={item} onClick={handleRowClick} />
             ))}
 
-            {page.nextBefore && !loading && (
+            {page.nextCursor && !loading && (
               <Center paddingTop={2} paddingBottom={1}>
                 <Button size="sm" variant="outline" isLoading={loadingMore} onClick={loadMore}>
                   Load older
@@ -425,7 +446,7 @@ export const NotificationsPage = () => {
           </Flex>
 
           <Text fontSize="10px" color={MUTED} paddingX={1}>
-            Types you switch off in Settings → Notifications stay hidden here too. Thingtime keeps your newest 10,000 notifications.
+            Your history is saved even when push or email is off. Delivery settings never hide or delete these records.
           </Text>
         </>
       ) : (
