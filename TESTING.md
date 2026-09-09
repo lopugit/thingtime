@@ -5443,6 +5443,17 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       removed group memberships fail on contextual reads. App tokens cannot
       use this first-party mode to escape their namespace. Every response is
       private/no-store; shared templates never enter a schema-only local cache.
+- [ ] Nested media inheritance: a literal first-party attachment URL in an
+      included author component/schema or native media block can use the root
+      audience even when its bound post is private. Unrelated private media,
+      foreign private media and author media referenced only by a foreign
+      component gain no access. Public profile/comment media retains its
+      independent access. Ready state, moderation, object versions and home
+      storage remain enforced. Revoked keys/group access fail on every read,
+      including cached-byte validation. Shared editors cannot inject new
+      private media refs. Negotiate `api.attachment-content >= 1.2.0`; forward
+      `sharedRoot` plus the key only to the exact first-party content endpoint.
+      Explicit audio downloads use the same context without persisting its URL.
 - [ ] Canvas: hovering a block draws its dashed boundary + label chip; nested
       sub-blocks highlight innermost-wins; clicking selects (solid outline)
       and opens the inspector in the right drawer.

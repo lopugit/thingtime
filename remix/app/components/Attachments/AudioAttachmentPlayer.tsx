@@ -109,7 +109,7 @@ export const AudioAttachmentPlayer = ({ attachments, compact = false }: { attach
 		setSavingOffline(true);
 		setPlaybackError(null);
 		try {
-			const copy = await saveOfflineAudio(active, viewerId);
+			const copy = await saveOfflineAudio(active, viewerId, mediaUrl);
 			setOfflineCopy(copy);
 			setOfflineAvailable(true);
 			setUsingOffline(true);
@@ -119,7 +119,7 @@ export const AudioAttachmentPlayer = ({ attachments, compact = false }: { attach
 		} finally {
 			setSavingOffline(false);
 		}
-	}, [active, savingOffline, viewerId]);
+	}, [active, savingOffline, viewerId, mediaUrl]);
 
 	const clearActiveOffline = React.useCallback(async () => {
 		if (!active || active.url) return;

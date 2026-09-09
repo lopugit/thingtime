@@ -30,6 +30,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   content and independently copied schema definitions. Restore shared Data
   Thing rendering through root-authorized private schema reads, preserving
   standalone ACLs and refusing app-token namespace escapes.
+  Carry the root context through explicitly embedded private media, persistent
+  cache validation and audio downloads; retain independent foreign/profile
+  access and prevent shared writers injecting private media references.
   Live target deployment and broader inheritance remain under
   active validation; see [PR #707](../PRs/707-shared-root-inheritance-read-only-app-use.md). — **Codex (AI)**
 

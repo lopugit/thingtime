@@ -2,6 +2,8 @@ import { getThingsCollection } from '../mongodb/collections';
 import { batchedThingLookup, canViewInherited, fail, isFail, toPublicThings, type Fail, type ThingDoc, type Viewer } from '../things/things';
 import { compositionReferences } from './sharedCompositionCore';
 import { canForkThing } from '~/components/Sharing/forkThingCore';
+import { compositionAttachmentIds } from './compositionMediaCore';
+import { canViewHomeAttachmentTarget, type AttachmentAccessDocument } from '../attachments/attachmentAccess';
 
 export const validateSharedReferenceAdditions = async (viewer: Viewer, doc: ThingDoc, crystal: Record<string, unknown>): Promise<Fail | null> => {
 	const before = new Set(compositionReferences(doc.thingtime || [], doc.crystal || {}).map(({ kind, ref }) => `${kind}:${ref}`));
@@ -12,6 +14,12 @@ export const validateSharedReferenceAdditions = async (viewer: Viewer, doc: Thin
 			{ sort: { 'crystal.version': -1, updatedAt: -1 } }) as unknown as ThingDoc | null;
 		if (!child && optional) continue;
 		if (!child || !(await canViewInherited(child, viewer))) return fail(403, 'Only the owner can include a private dependency you cannot already read');
+	}
+	const previousMedia = compositionAttachmentIds(doc.thingtime || [], doc.crystal || {});
+	for (const id of compositionAttachmentIds(doc.thingtime || [], crystal)) {
+		if (previousMedia.has(id)) continue;
+		const attachment = await collection.findOne({ shareId: id, thingtime: 'attachment' } as any) as unknown as ThingDoc | null;
+		if (!attachment || !(await canViewInherited(attachment, viewer))) return fail(403, 'Only the owner can include private media you cannot already read');
 	}
 	return null;
 };
@@ -93,3 +101,23 @@ export const getSharedCompositionThing = async (viewer: Viewer, id: string, root
 	if (!doc) return fail(404, 'Shared dependency not found');
 	return { ok: true as const, thing: (await toPublicThings([doc], viewer))[0] };
 };
+
+// The attachment service still owns ready-state, moderation, object-version,
+// expiry and home-storage checks. This only substitutes the composition's read
+// audience for a same-author, explicitly embedded, bound post-purpose object.
+export const createCanViewSharedCompositionAttachment = (resolve = resolveSharedComposition, independentlyVisible = canViewHomeAttachmentTarget) => async (viewer: Viewer, attachment: AttachmentAccessDocument, rootId: string): Promise<boolean> => {
+	if (!attachment.targetId) return false;
+	const composition = await resolve(viewer, rootId, { contentRoot: true });
+	if (isFail(composition)) return false;
+	const referencing = [...composition.docs.values()].filter((doc) => compositionAttachmentIds(doc.thingtime, doc.crystal || {}).has(attachment.shareId));
+	const rootBound = attachment.targetId === composition.root.shareId;
+	const inheritablePurpose = !attachment.attachmentPurpose || attachment.attachmentPurpose === 'post';
+	if (inheritablePurpose && attachment.ownerId === composition.root.ownerId && (rootBound || referencing.some((doc) => doc.ownerId === composition.root.ownerId))) {
+		return canViewInherited({ ...attachment, acl: ['tt:inherit'], targetId: composition.root.shareId } as ThingDoc, viewer, (id) => Promise.resolve(id === composition.root.shareId ? composition.root : null));
+	}
+	// Public profile media, comment chains and independently accessible foreign
+	// content keep their ordinary access. The root grants no extra authority.
+	return viewer?.id === attachment.ownerId || independentlyVisible(viewer, attachment);
+};
+
+export const canViewSharedCompositionAttachment = createCanViewSharedCompositionAttachment();

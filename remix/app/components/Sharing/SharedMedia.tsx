@@ -4,21 +4,22 @@ import { sharedAttachmentUrl } from './sharedMediaCore';
 
 const SharedMediaContext = React.createContext<(url: string) => string>((url) => url);
 export const useSharedMediaUrl = () => React.useContext(SharedMediaContext);
-export const SharedMediaProvider = ({ linkKey, children }: { linkKey?: string; children: React.ReactNode }) => {
+export const SharedMediaProvider = ({ linkKey, sharedRoot, children }: { linkKey?: string; sharedRoot?: string; children: React.ReactNode }) => {
+	const contextKey = JSON.stringify([linkKey || '', sharedRoot || '']);
 	const [readyKey, setReadyKey] = React.useState<string>();
 	const [failure, setFailure] = React.useState<string>();
 	React.useEffect(() => {
-		if (!linkKey) return;
+		if (!linkKey && !sharedRoot) return;
 		let cancelled = false;
 		setFailure(undefined);
-		void requireThingtimeCapability('api.attachment-content', '1.1.1').then(() => {
-			if (!cancelled) setReadyKey(linkKey);
-		}).catch(() => { if (!cancelled) setFailure(linkKey); });
+		void requireThingtimeCapability('api.attachment-content', sharedRoot ? '1.2.0' : '1.1.1').then(() => {
+			if (!cancelled) setReadyKey(contextKey);
+		}).catch(() => { if (!cancelled) setFailure(contextKey); });
 		return () => { cancelled = true; };
-	}, [linkKey]);
+	}, [linkKey, sharedRoot, contextKey]);
 	const mediaUrl = React.useCallback((url: string) => {
-		const authorized = sharedAttachmentUrl(url, linkKey);
-		return authorized !== url && readyKey !== linkKey ? '' : authorized;
-	}, [linkKey, readyKey]);
-	return <SharedMediaContext.Provider value={mediaUrl}>{children}{linkKey && failure === linkKey ? <p role="alert">Shared media requires a newer server. Please refresh after the update.</p> : null}</SharedMediaContext.Provider>;
+		const authorized = sharedAttachmentUrl(url, linkKey, sharedRoot);
+		return authorized !== url && readyKey !== contextKey ? '' : authorized;
+	}, [linkKey, sharedRoot, readyKey, contextKey]);
+	return <SharedMediaContext.Provider value={mediaUrl}>{children}{(linkKey || sharedRoot) && failure === contextKey ? <p role="alert">Shared media requires a newer server. Please refresh after the update.</p> : null}</SharedMediaContext.Provider>;
 };

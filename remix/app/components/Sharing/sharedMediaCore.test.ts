@@ -10,4 +10,8 @@ test('media key transport is restricted to the exact first-party content path', 
 		assert.equal(sharedAttachmentUrl(value, 'read-key'), value);
 	}
 	assert.equal(sharedAttachmentUrl(`${source}&key=independent`, 'read-key'), `${source}&key=independent`);
+	assert.equal(sharedAttachmentUrl(source, 'read-key', 'page'), `${source}&key=read-key&sharedRoot=page`);
+	assert.equal(sharedAttachmentUrl(source, undefined, 'public-page'), `${source}&sharedRoot=public-page`);
+	assert.equal(sharedAttachmentUrl(`${source}&sharedRoot=independent`, 'read-key', 'page'), `${source}&sharedRoot=independent`);
+	assert.equal(sharedAttachmentUrl('https://external.test/image.png', 'read-key', 'page'), 'https://external.test/image.png');
 });

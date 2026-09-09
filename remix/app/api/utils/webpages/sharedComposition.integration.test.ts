@@ -149,6 +149,7 @@ test('shared page audience includes its author components, never a foreign priva
 						const url = new URL(route.request().url());
 						if (url.searchParams.get('id') !== 'sharing-browser-transport') return route.continue();
 						assert.equal(url.searchParams.get('key'), page.linkKey);
+						assert.equal(url.searchParams.get('sharedRoot'), page.id);
 						mediaReads++;
 						await route.fulfill({ contentType: 'image/png', body: pixel });
 					});
@@ -277,6 +278,8 @@ test('shared page audience includes its author components, never a foreign priva
 		assert.equal(unchanged.response.status, 200, unchanged.data.error);
 		const injectedAction = await request('/api/v1/things', 'PATCH', { id: page.id, crystal: { blocks: [{ id: 'card', type: 'component', component: key, source: { action: unrelatedAction.id } }] } }, stranger);
 		assert.equal(injectedAction.response.status, 403, 'A shared writer cannot publish an unrelated private action');
+		const injectedMedia = await request('/api/v1/things', 'PATCH', { id: page.id, crystal: { blocks: [{ id: 'private-media', type: 'media', media: 'image', src: '/api/v1/attachments/content?id=guessed-private-attachment' }] } }, stranger);
+		assert.equal(injectedMedia.response.status, 403, 'A shared writer cannot add a media reference they cannot independently read');
 		for (const ref of [untouched.id, `${key}-unrelated`]) {
 			const refused = await request('/api/v1/things', 'PATCH', { id: page.id, crystal: { blocks: [{ id: 'stolen', type: 'component', component: ref }] } }, stranger);
 			assert.equal(refused.response.status, 403, 'A shared writer must not publish an unrelated private dependency');

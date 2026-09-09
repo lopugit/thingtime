@@ -25,6 +25,8 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 	return async ({ request }: { request: Request }) =>
 		withAttachmentPrivateResponse(async () => {
 			const url = new URL(request.url);
+			const sharedRoot = url.searchParams.get('sharedRoot');
+			if (sharedRoot !== null && !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(sharedRoot)) return json({ ok: false, error: 'Invalid shared root' }, { status: 400 });
 			const width = parseImageWidth(url.searchParams.get('width'));
 			if (width === null) return json({ ok: false, error: 'Unsupported image width' }, { status: 400 });
 			const resolvedUser = await dependencies.getUser(request);
@@ -45,7 +47,7 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 			const result = await dependencies.download(
 				// isAdmin rides along so admins can fetch quarantined (blocked)
 				// evidence for moderation review; everyone else 404s on blocked docs.
-				audience ? { ...audience, ...(user?.isAdmin ? { isAdmin: true } : {}) } : null,
+				audience || sharedRoot ? { id: '', ...audience, ...(user?.isAdmin ? { isAdmin: true } : {}), ...(sharedRoot ? { sharedRoot } : {}) } : null,
 				url.searchParams.get('id'),
 				url.searchParams.get('download') === '1'
 			);

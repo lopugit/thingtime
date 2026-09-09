@@ -232,7 +232,7 @@ export const WebpageRuntimeProvider = ({
 		[pageId, pageKey, suiteKey, source, viewer, query, version, last, installing, refresh, report, install, onInstall, load, shared, sharedRun]
 	);
 
-	return <WebpageRuntimeContext.Provider value={value}><SharedMediaProvider linkKey={linkKey}>{children}</SharedMediaProvider></WebpageRuntimeContext.Provider>;
+	return <WebpageRuntimeContext.Provider value={value}>{shared ? <SharedMediaProvider linkKey={linkKey} sharedRoot={pageId || undefined}>{children}</SharedMediaProvider> : children}</WebpageRuntimeContext.Provider>;
 };
 
 // The localStorage tier for source results — optimistic paint on the next

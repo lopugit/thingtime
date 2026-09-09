@@ -4751,7 +4751,7 @@ export const updateThing = async (
 		const denied = await validateSharedComponentAdditions(viewer, doc, validated.crystal);
 		if (denied) return denied;
 	}
-	if (doc.ownerId !== viewer.id && validated.thingtime.some((kind) => ['webpage', 'component', 'action'].includes(kind))) {
+	if (doc.ownerId !== viewer.id && validated.thingtime.some((kind) => ['webpage', 'component', 'action', 'schema'].includes(kind))) {
 		const { validateSharedReferenceAdditions } = await import('../actions/sharedComposition');
 		const denied = await validateSharedReferenceAdditions(await withFriendIds(viewer), doc, validated.crystal);
 		if (denied) return denied;

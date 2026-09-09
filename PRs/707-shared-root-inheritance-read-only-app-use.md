@@ -104,6 +104,34 @@ not add references to unrelated private author dependencies they cannot read.
 - Previous pushed head `f8e8ec134b14a192f124e98da4bba176c92fdf95` passed build,
   unit, API and CodeQL checks. That receipt predates this follow-up.
 
+## Nested media follow-up, 2026-09-09
+
+- Attachment content accepts a root context for literal first-party URLs in
+  included component/schema render positions and native media blocks. Only
+  same-author stored references inherit; unrelated/foreign private media gets
+  no new authority. Independently public profile media and comment chains keep
+  their normal access. Drafts, moderation, home storage and exact S3 object
+  versions remain guarded by the attachment service.
+- Shared writers must independently read newly inserted private media refs,
+  including schema templates. Attachment content advertises 1.2.0; Things
+  advertises feature 1.6.1 / contract 1.5.1. Renderers negotiate before adding
+  context, never rewrite external or independently keyed URLs, and explicit
+  audio downloads preserve the context. Saved audio records do not store URLs.
+- Service/route tests exercise per-read root checks, invalid input, revocation,
+  foreign access, readiness and moderation. The real cache worker retains root
+  context on validation. Real-API/Chrome regression passed at 1440px/390px with
+  root/key URL transport and shared-writer injection refusal. Image bytes are
+  still stubbed in that browser fixture; this is not physical-media-copy proof.
+- Prior pushed `52b67ebff0` passed build/unit, API and CodeQL checks. These
+  receipts predate this follow-up; independent S3 copying remains outstanding.
+- Attachment checks: 6 cache-worker tests and 160 service/route/UI-core tests
+  passed. Webpage tests: 73 passed plus the opt-in fixture; capability tests:
+  24 passed, with 5 explicit manifest assertions also passing. Changed-file
+  ESLint passed. TypeScript caught a test fixture missing the Thing envelope;
+  the fixture now derives its envelope from the root document. Rechecking
+  TypeScript returned the existing 108 errors and no related implementation or
+  fixture errors.
+
 ## Remaining verification
 
 The latest merged-head and develop/main rollout verification,

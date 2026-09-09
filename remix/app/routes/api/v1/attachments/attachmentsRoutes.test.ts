@@ -24,11 +24,21 @@ test('content authorization preserves the request link key and enriched audience
 			enrichViewer: async (viewer) => viewer?.id ? { ...viewer, groupIds: new Set(['group-1']) } : viewer,
 			download: async (viewer) => { observed = viewer; return { ok: false, status: 404, error: 'Attachment not found' }; }
 		});
-		const response = await route({ request: new Request('https://thingtime.example/api/v1/attachments/content?id=fixture&key=read-key') });
+		const response = await route({ request: new Request('https://thingtime.example/api/v1/attachments/content?id=fixture&key=read-key&sharedRoot=page') });
 		assert.equal(response.status, 404);
 		assert.equal(observed.id, currentUser?.id || '');
 		assert.deepEqual([...observed.linkKeys], ['read-key']);
+		assert.equal(observed.sharedRoot, 'page');
 		assert.equal(observed.groupIds?.has('group-1') || false, !!currentUser);
+		assert.match(response.headers.get('Cache-Control')!, /no-store/);
+	}
+});
+
+test('malformed shared media roots are refused before authentication or storage access', async () => {
+	const route = createAttachmentContentLoader({ getUser: async () => { throw Error('must not authenticate'); } });
+	for (const root of ['', 'a'.repeat(129), '../other']) {
+		const response = await route({ request: new Request(`https://thingtime.example/api/v1/attachments/content?id=fixture&sharedRoot=${encodeURIComponent(root)}`) });
+		assert.equal(response.status, 400);
 		assert.match(response.headers.get('Cache-Control')!, /no-store/);
 	}
 });
