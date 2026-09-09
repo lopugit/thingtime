@@ -16,9 +16,8 @@ import type { NormalizedNotificationPrefs } from '~/schemas/registry';
 // master switch per channel that mutes the whole column. Optimistic per the
 // house rule — first paint from the per-user localCache, background reconcile
 // from GET /api/v1/notifications/settings, each flip applies instantly and
-// reverts on failure. Disabling a push type hides even already-written
-// notifications of that type (the server filters reads); disabling an email
-// type stops future emails.
+// reverts on failure. Disabling a push type hides it from the bell only;
+// disabling an email type stops future emails. Neither affects history.
 
 type PrefRow = { type: string; label: string; hint: string; emailOnly?: boolean };
 
@@ -26,7 +25,7 @@ type PrefRow = { type: string; label: string; hint: string; emailOnly?: boolean 
 // NOTIFICATION_TYPE_META, so a new type shows up here automatically), plus the
 // email-only weekly digest.
 const PREF_ROWS: PrefRow[] = [
-  ...NOTIFICATION_TYPES.map((type) => ({
+  ...NOTIFICATION_TYPES.filter(type => type !== 'system-message').map((type) => ({
     type,
     label: `${NOTIFICATION_TYPE_META[type].label} ${NOTIFICATION_TYPE_META[type].emoji}`,
     hint: NOTIFICATION_TYPE_META[type].hint
@@ -158,10 +157,10 @@ export const NotificationSettingsSection = (props: { user: NonNullable<CurrentUs
   return (
     <SettingsSection
       eyebrow="Notifications"
-      description="Pick what lands in your bell 🔔 and your inbox 📬 — each type has its own push and email switch, and the top row mutes a whole channel."
+      description="Pick what lands in your bell 🔔 and your inbox 📬. These switches control delivery only — all notifications remain in your history."
     >
       <Flex flexDirection="column">
-        <RowShell label="History 📜" hint="Everything you've received — search it, filter by category or type, jump back in">
+        <RowShell label="History 📜" hint="Everything you've received, including Lopu messages — always saved, independent of delivery switches">
           <Button size="xs" variant="outline" onClick={() => navigate('/notifications')}>
             Open
           </Button>

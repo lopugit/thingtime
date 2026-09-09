@@ -127,6 +127,11 @@ const assertGroup = async (ownerId: string, groupId: unknown): Promise<string | 
 	return group.shareId;
 };
 
+export const revealUserVaultValue = async (ownerId: string, id: string): Promise<string | null> => {
+	const doc = await ownVaultDoc(ownerId, id);
+	return doc && ['secret', 'provider'].includes(doc.crystal.recordKind) && doc.crystal.encryptedValue ? decryptValue(doc) : null;
+};
+
 export const listUserVault = async (ownerId: string) => {
 	const docs = (await (
 		await getThingsCollection()
