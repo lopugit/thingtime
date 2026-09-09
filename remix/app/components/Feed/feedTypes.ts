@@ -242,47 +242,6 @@ export type FeedFilterMatch = {
   source: 'claude' | 'openai' | 'heuristic';
 };
 
-// Up/down vote tally carried on posts and comments (mirrors PublicUpdownVotes
-// in api/utils/things/updownCore.ts): raw counts, net score, the viewer's
-// own vote (null = hasn't voted).
-export type UpdownDirection = 'up' | 'down';
-export type PublicUpdownVotes = { up: number; down: number; score: number; viewerVote: UpdownDirection | null };
-export const EMPTY_VOTES: PublicUpdownVotes = { up: 0, down: 0, score: 0, viewerVote: null };
-
-// Lean subspace embed on subspace posts (mirrors PublicPostSubspace in
-// api/utils/things/things.ts) — identity + branding + the viewer's own role.
-export type SubspaceAccess = 'public' | 'restricted' | 'private';
-export type SubspaceRole = 'owner' | 'moderator' | 'member';
-export type PublicPostSubspace = {
-  id: string;
-  slug: string;
-  name: string;
-  icon: string | null;
-  iconUrl: string | null;
-  accent: string | null;
-  access: SubspaceAccess;
-  nsfw: boolean;
-  viewerRole: SubspaceRole | null;
-};
-export type PublicPostFlair = { id: string; label: string; emoji: string | null; color: string | null };
-// a user flair beside an author's name (mirrors PublicAuthorFlair in
-// api/utils/things/things.ts): a template pick (id) or custom text (id null)
-export type PublicAuthorFlair = { id: string | null; label: string; emoji: string | null; color: string | null };
-export type PublicSubspaceMod = {
-  status: 'approved' | 'removed';
-  removed: boolean;
-  reason: string | null;
-  removedAt: string | null;
-  pinned: boolean;
-  locked: boolean;
-  nsfw: boolean;
-  spoiler: boolean;
-  viewerCanModerate: boolean;
-  // moderators only: open reports against the post (the 🚩 badge in the
-  // subspace line); absent for everyone else
-  reportCount?: number;
-};
-
 // Apply one up/down tap to a post or comment optimistically: same direction
 // again clears, the other direction flips (both counters move), null clears.
 // Idempotent against the FRESHEST snapshot so concurrent reactions on other
@@ -345,6 +304,9 @@ export const isPendingComment = (comment: Pick<PostComment, 'id'>): boolean => c
 // the viewer just posted below the fold with nothing on screen to confirm it
 // landed (the optimistic-render rule: paint first).
 export const windowCommentPage = <T extends Pick<PostComment, 'id'>>(ordered: readonly T[], sort: CommentSort | null, visible: number, pinnedIds: readonly string[] = []): T[] => {
+  // guard before the default page's slice(-visible): slice(-0) is the WHOLE
+  // level, not an empty window
+  if (visible <= 0) return [];
   if (!sort) return ordered.slice(-visible);
   const shown = ordered.slice(0, visible);
   if (!pinnedIds.length || shown.length === ordered.length) return shown;
@@ -473,98 +435,6 @@ export const appendPostsDeduped = (prev: PublicPost[], page: PublicPost[]): Publ
     return true;
   });
   return fresh.length ? [...prev, ...fresh] : prev;
-};
-
-// Apply one up/down tap to a post or comment, optimistically. Tapping the
-// active arrow again clears the vote; tapping the other one moves it. Applied
-// against the FRESHEST row (a functional PostChange) so a concurrent vote is
-// never clobbered, and reverted the same way when the write fails.
-export const applyUpdownVote = <T extends { votes?: PublicUpdownVotes }>(prev: T, direction: UpdownDirection): T => {
-  const votes = prev.votes || EMPTY_VOTES;
-  const viewerVote = votes.viewerVote === direction ? null : direction;
-  const up = Math.max(0, votes.up - (votes.viewerVote === 'up' ? 1 : 0) + (viewerVote === 'up' ? 1 : 0));
-  const down = Math.max(0, votes.down - (votes.viewerVote === 'down' ? 1 : 0) + (viewerVote === 'down' ? 1 : 0));
-  return { ...prev, votes: { up, down, score: up - down, viewerVote } };
-};
-
-// A comment the viewer just sent, still in flight: it renders instantly under a
-// provisional id and swaps to the server's copy on ack. The prefix is the only
-// marker (`buildPendingComment` in PostCard mints it).
-export const isPendingComment = (comment: { id: string }): boolean => comment.id.startsWith('pending-');
-
-// ---------------------------------------------------------------------------
-// Comment order — Top / New / Old, null = the default page. The client mirrors
-// the server comparator (api/utils/things/updownCore.ts) exactly, so the
-// optimistic re-order and the sorted page that lands over it agree and the
-// reconcile never reshuffles.
-
-export const COMMENT_SORTS = ['top', 'new', 'old'] as const;
-export type CommentSort = (typeof COMMENT_SORTS)[number];
-
-export const isCommentSort = (value: unknown): value is CommentSort => (COMMENT_SORTS as readonly string[]).includes(value as string);
-
-export const COMMENT_SORT_META: Record<CommentSort, { label: string; emoji: string; hint: string }> = {
-  top: { label: 'Top', emoji: '🔥', hint: 'Highest score first' },
-  new: { label: 'New', emoji: '🆕', hint: 'Newest first' },
-  old: { label: 'Old', emoji: '📜', hint: 'Oldest first' }
-};
-
-// A comment row as the sorts read it: a row with no votes yet counts as score 0
-type SortableComment = { id: string; createdAt: string; votes?: PublicUpdownVotes | null };
-
-// A malformed createdAt sorts as the epoch rather than throwing — NaN would
-// make the comparator non-deterministic.
-const commentTime = (row: { createdAt?: string }): number => {
-  const ms = new Date(row.createdAt || '').getTime();
-  return Number.isFinite(ms) ? ms : 0;
-};
-const commentScore = (row: SortableComment): number => row.votes?.score ?? 0;
-
-// top: net score desc, ties older-first; new: newest first; old: oldest first —
-// deterministic whatever order the page arrived in. `null` keeps the page as
-// the server shipped it. Never mutates the input.
-export const sortCommentPage = <T extends SortableComment>(page: readonly T[], sort: CommentSort | null): T[] => {
-  if (!sort) return [...page];
-  return [...page].sort((a, b) => {
-    if (sort === 'top' && commentScore(a) !== commentScore(b)) return commentScore(b) - commentScore(a);
-    if (sort === 'new') return commentTime(b) - commentTime(a) || a.id.localeCompare(b.id);
-    return commentTime(a) - commentTime(b) || a.id.localeCompare(b.id);
-  });
-};
-
-// The rows one level actually shows. The default page reads bottom-up (newest
-// at the bottom, revealed upwards) so it reveals the LAST `limit`; a sort reads
-// top-down and takes the FIRST. Under a sort, comments the viewer just sent can
-// fall below the window (a new comment scores 0 and is the newest — Top and Old
-// would hide the comment they just posted), so those are pinned after it in the
-// level's own order. Ids that are not on this level are ignored.
-export const windowCommentPage = <T extends { id: string }>(page: readonly T[], sort: CommentSort | null, limit: number, freshIds: readonly string[] = []): T[] => {
-  if (limit <= 0) return [];
-  if (!sort) return page.slice(-limit);
-  const shown = page.slice(0, limit);
-  if (shown.length >= page.length || !freshIds.length) return shown;
-  const fresh = new Set(freshIds);
-  const pinned = page.slice(limit).filter((entry) => fresh.has(entry.id));
-  return pinned.length ? [...shown, ...pinned] : shown;
-};
-
-// Land a freshly-sorted page over the rows already on screen. The page wins the
-// order; a comment the viewer sent that the page cannot carry — still pending,
-// or acked after the read started — survives after it, so swapping the sort
-// never loses it and a pending row's ack still finds itself. Anything else the
-// page left out gives way. `unseen` is what the page's own commentCount could
-// not have counted yet.
-export const mergeCommentPage = <T extends { id: string; createdAt: string }>(
-  page: readonly T[],
-  held: readonly T[],
-  freshIds: readonly string[],
-  readStartedAt: number
-): { comments: T[]; unseen: number } => {
-  const onPage = new Set(page.map((entry) => entry.id));
-  const fresh = new Set(freshIds);
-  const kept = held.filter((entry) => !onPage.has(entry.id) && (isPendingComment(entry) || fresh.has(entry.id)));
-  const unseen = kept.filter((entry) => isPendingComment(entry) || commentTime(entry) >= readStartedAt).length;
-  return { comments: [...page, ...kept], unseen };
 };
 
 // The home feed's scope (GET /api/v1/things/feed?scope=): every visible post,
