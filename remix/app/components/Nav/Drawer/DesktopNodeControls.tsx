@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
+import { PermissionRecoveryControls } from '~/components/Devices/PermissionRecoveryControls';
 import { getElectronBridge, type ThingtimeNodeStatus } from '~/utils/electronBridge';
 
 export function DesktopNodeControls({ active }: { active: boolean }) {
@@ -66,6 +67,7 @@ export function DesktopNodeControls({ active }: { active: boolean }) {
 				</Button>
 			</Flex>
 			<Text fontSize="xs" color="gray.500" mt={2}>Stopping keeps your pairing and settings. Auto-start can resume the node next time you open Desktop.</Text>
+			<PermissionRecoveryControls />
 			{(error || status?.lastError?.message) && <Text role="alert" fontSize="sm" color="red.500" mt={2} overflowWrap="anywhere">{error || status?.lastError?.message}</Text>}
 		</Box>
 	);

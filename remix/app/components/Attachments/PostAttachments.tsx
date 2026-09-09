@@ -1,5 +1,6 @@
 import { ProgressiveImage } from './ProgressiveImage';
 import React from 'react';
+import { useSharedMediaUrl } from '../Sharing/SharedMedia';
 // Grid/Image are gone: the owner-chosen layouts below render their own
 // masonry/rows/grid containers, and each image tile is a Box `as="img"`.
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
@@ -163,10 +164,12 @@ const PendingBadge = () => (
 
 // Linked (external URL) rows open the original URL — the HTML download
 // attribute is ignored cross-origin, so they open in a new tab instead.
-const AttachmentFileRow = ({ attachment, compact }: { attachment: PublicAttachment; compact?: boolean }) => (
+const AttachmentFileRow = ({ attachment, compact }: { attachment: PublicAttachment; compact?: boolean }) => {
+	const mediaUrl = useSharedMediaUrl();
+	return (
 	<Flex
 		as="a"
-		href={attachment.url || attachmentContentUrl(attachment.id, true)}
+		href={mediaUrl(attachment.url || attachmentContentUrl(attachment.id, true))}
 		{...(attachment.url ? { target: '_blank', rel: 'noopener noreferrer' } : { download: attachment.name })}
 		alignItems="center"
 		columnGap={2.5}
@@ -208,8 +211,10 @@ const AttachmentFileRow = ({ attachment, compact }: { attachment: PublicAttachme
 		<Download size={15} color="var(--tt-link, #2f8fd6)" aria-label={`Download ${attachmentDisplayName(attachment)}`} />
 	</Flex>
 );
+};
 
 const AttachmentVideo = ({ attachment, compact }: { attachment: PublicAttachment; compact?: boolean }) => {
+	const mediaUrl = useSharedMediaUrl();
 	// The inline allowlist admits every container mainstream browsers can play,
 	// but codec support inside a container still varies (for example HEVC
 	// QuickTime on Firefox); an unplayable video degrades to its download row.
@@ -218,7 +223,7 @@ const AttachmentVideo = ({ attachment, compact }: { attachment: PublicAttachment
 	return (
 		<Box
 			as="video"
-			src={attachmentMediaSrc(attachment)}
+			src={mediaUrl(attachmentMediaSrc(attachment))}
 			aria-label={attachment.title || attachmentDisplayName(attachment)}
 			controls
 			playsInline
@@ -244,6 +249,7 @@ export const PostAttachments = ({
 	ariaLabel?: string;
 }) => {
 	// Per-render reveal consent; navigating away re-shields.
+	const mediaUrl = useSharedMediaUrl();
 	const [revealedIds, setRevealedIds] = React.useState<ReadonlySet<string>>(new Set());
 	const reveal = React.useCallback((id: string) => {
 		setRevealedIds((current) => {
@@ -280,7 +286,7 @@ export const PostAttachments = ({
 		const shielded = attachment.nsfw === true && !revealedIds.has(attachment.id);
 		const image = (
 			<ProgressiveImage
-				src={attachmentMediaSrc(attachment)}
+				src={mediaUrl(attachmentMediaSrc(attachment))}
 				alt={attachment.title || attachmentDisplayName(attachment) || `Post image ${index + 1}`}
 				loading="lazy"
 				width="100%"
