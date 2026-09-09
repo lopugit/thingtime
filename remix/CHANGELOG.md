@@ -18,6 +18,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-09: Tie shared AI completions and recording-automation mutations to the protected account subscription: Free/current configured limits, Plus 5x, Pro/PAYG unlimited product request rates. Preserve account windows across tier/device changes and fail closed on entitlement outages. Live index cutover separately completed: production 47, develop 48 including Watch scheduler. Personal Claude Code synthetic text completion passed; cloud recording bridge remains pending. — Codex (AI)
+
 - 2026-09-09: Bring the Watch preview onto the released staged index migrations and poll writer. Remove its competing startup-only poll-index retirement while preserving the recording scheduler index. Retire obsolete deployment URLs only after exact project, live alias and active-head checks; production/develop migration activation remains pending. — Codex (AI)
 
 - 2026-09-08: Restore four-slot MongoDB index headroom by moving poll point reads/writes to protected Binary unique keys; validate/backfill legacy votes before retiring the home lookup index. A disposable MongoDB test proves 60 indexes, indexed lookups and duplicate protection. Poll contract/client minimum is 1.0.1. — Codex (AI)

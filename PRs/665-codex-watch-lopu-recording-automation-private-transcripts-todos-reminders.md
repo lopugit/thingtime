@@ -3,6 +3,27 @@
 Updated 2026-09-07. [Pull request](https://github.com/lopugit/thingtime/pull/665).
 Branch: `codex/watch-lopu-recording-automation`.
 
+## 2026-09-09 subscription rates and resumed acceptance
+
+Live index cutover is complete: production47/develop48, all four final dry
+runs zero. The full index definitions match except for develop's preserved
+`lopu_recording_due`. See the [live receipt](https://github.com/lopugit/thingtime/pull/692#issuecomment-5593384914).
+
+Native Claude Code auth freshly verified the requested Thingtime account,
+and a synthetic text completion succeeded without sending audio or private
+user content. Existing AI/recording suites passed, including the seven local
+adapter regressions. Cloud job/personal-runtime bridging is still unfinished;
+recording automation remains off and no end-to-end Watch receipt is claimed.
+
+The requested product rate policy resolves the protected home subscription on
+every request: Free/custom retain configured limits/windows; Plus5x;
+Pro/PAYG bypass the shared-AI and recording-control request buckets entirely.
+Authentication, provider quota, upload/storage limits and worker safety remain.
+Existing account bucket identities survive changes of plan/device/session/IP;
+no new indexes, stored tier revisions or account migrations are required.
+Entitlement outages produce a private503 instead of quota429. Feature/client
+versions are ai-complete1.1.0 and lopu-recordings1.2.0; scheduler unchanged.
+
 ## 2026-09-09 index rollout compatibility
 
 Merged released main `60b4c4bd638728aed7126112a314a658e1bede93` into the

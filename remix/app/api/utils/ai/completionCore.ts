@@ -1,5 +1,5 @@
 import { parseAiConnectionIds } from './providerWaterfall';
-export const AI_COMPLETION_REQUIREMENTS = { 'api.ai-complete': '1.0.0' } as const;
+export const AI_COMPLETION_REQUIREMENTS = { 'api.ai-complete': '1.1.0' } as const;
 
 export type AiCompletionInput = { connectionIds: string[]; system: string; prompt: string };
 

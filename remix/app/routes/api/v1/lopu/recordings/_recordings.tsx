@@ -2,7 +2,8 @@ import { json, readJsonBody } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { isSameOriginAttachmentRequest } from '~/api/utils/attachments/attachmentResponses';
 import { runWithMongoEndpoint } from '~/api/utils/mongodb/endpoint';
-import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
+import { rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
+import { enforceSubscriptionRateLimit } from '~/api/utils/rateLimit/subscription';
 import {
 	listRecordingAutomation,
 	getRecordingSettings,
@@ -32,7 +33,8 @@ export const action = async ({ request }: { request: Request }) => {
 		return reply({ ok: false, error: 'Use application/json.' }, 415);
 	const user = await getCurrentUser(request);
 	if (!user || user.temporary || user.accountKind !== 'user') return reply({ ok: false, error: 'Sign in to manage your recordings.' }, 401);
-	const limit = await enforceRateLimit(request, 'things.write', `recordings:${user.id}`, { failClosed: true });
+	const limit = await enforceSubscriptionRateLimit(request, 'lopu.recordings', user.id);
+	if (limit.unavailable) return reply({ ok: false, error: 'Your account allowance is temporarily unavailable. Please retry.' }, 503);
 	if (!limit.allowed) {
 		const init = rateLimitedResponseInit(limit);
 		const limitedHeaders = new Headers(init.headers);

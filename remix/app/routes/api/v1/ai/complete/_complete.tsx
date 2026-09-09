@@ -2,7 +2,8 @@ import { json, readJsonBody } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { isSameOriginAttachmentRequest } from '~/api/utils/attachments/attachmentResponses';
 import { runWithMongoEndpoint } from '~/api/utils/mongodb/endpoint';
-import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
+import { rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
+import { enforceSubscriptionRateLimit } from '~/api/utils/rateLimit/subscription';
 import { completeWithAiConnections } from '~/api/utils/ai/completion';
 import { parseAiCompletionInput } from '~/api/utils/ai/completionCore';
 import { AiWaterfallFailure } from '~/api/utils/ai/providerWaterfall';
@@ -12,7 +13,7 @@ const reply = (body: unknown, status = 200) => json(body, { status, headers });
 
 export const createAiCompletionHandlers = (dependencies: {
 	getUser: typeof getCurrentUser;
-	limit: typeof enforceRateLimit;
+	limit: typeof enforceSubscriptionRateLimit;
 	complete: typeof completeWithAiConnections;
 }) => ({
 	action: async ({ request }: { request: Request }) => {
@@ -24,7 +25,8 @@ export const createAiCompletionHandlers = (dependencies: {
 		const user = await dependencies.getUser(request);
 		if (!user || user.temporary || user.accountKind !== 'user')
 			return reply({ ok: false, error: 'Sign in with a full account to use your AI connections.' }, 401);
-		const limit = await dependencies.limit(request, 'ai.complete', `ai-complete:${user.id}`, { failClosed: true });
+		const limit = await dependencies.limit(request, 'ai.complete', user.id);
+		if (limit.unavailable) return reply({ ok: false, error: 'Your account allowance is temporarily unavailable. Please retry.' }, 503);
 		if (!limit.allowed) {
 			const init = rateLimitedResponseInit(limit);
 			const limitedHeaders = new Headers(init.headers);
@@ -45,4 +47,4 @@ export const createAiCompletionHandlers = (dependencies: {
 	}
 });
 
-export const action = createAiCompletionHandlers({ getUser: getCurrentUser, limit: enforceRateLimit, complete: completeWithAiConnections }).action;
+export const action = createAiCompletionHandlers({ getUser: getCurrentUser, limit: enforceSubscriptionRateLimit, complete: completeWithAiConnections }).action;

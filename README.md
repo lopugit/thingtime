@@ -1761,13 +1761,24 @@ Run `npm --prefix remix run test:ai-models` for its regression coverage.
 
 ### Shared AI endpoint waterfall
 
+AI completions and recording-automation mutations follow the protected account
+subscription, resolved on the home server for each request. Free and custom
+tiers retain the admin-configured `ai.complete`/`things.write` limits and
+windows; Plus receives five times the request allowance; Pro and Pay as you go
+have no Thingtime request-rate cap for these two product endpoints. The
+existing account bucket is preserved across tier, token, device and IP changes.
+No subscription migration or new credential is required for existing accounts.
+Entitlement/limiter outages return 503, not a misleading exhausted-quota 429.
+Provider quotas, attachment size/upload limits, storage allowances, bounded
+workers and authentication/credential-protection limits remain independent.
+
 `POST /api/v1/ai/complete` is the shared, non-streaming text completion entry
 point. A full signed-in user sends `{ connectionIds, prompt, system? }`.
 `connectionIds` is an explicit ordered list of one to four **owned Secure
 Vault connection IDs**, not tokens. Each connection keeps its own endpoint,
 credential and model. Choose that order per request; no provider is opted in
 implicitly. The `useApi().v1.ai.complete()` client negotiates the origin's
-`api.ai-complete` feature at version 1.0.0 before sending text.
+`api.ai-complete` feature at version 1.1.0 before sending text.
 
 Fork setup: configure the existing Secure Vault encryption key in the host's
 secret store, add connections in Settings → Secure Vault, and admit custom

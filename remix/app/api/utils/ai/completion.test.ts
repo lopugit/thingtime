@@ -74,7 +74,7 @@ test('completion route requires a full account, same origin, bounded JSON and fa
 	let allowed = true;
 	let count = 0;
 	const handlers = createAiCompletionHandlers({ getUser: async () => user,
-		limit: async (_request: Request, bucket: string, id: string, options: any) => { assert.equal(bucket, 'ai.complete'); assert.equal(id, 'ai-complete:owner'); assert.equal(options.failClosed, true); return { allowed, limit: 20, remaining: 0, resetAt: new Date().toISOString() }; },
+		limit: async (_request: Request, bucket: string, id: string) => { assert.equal(bucket, 'ai.complete'); assert.equal(id, 'owner'); return { allowed, limit: 20, remaining: 0, resetAt: new Date().toISOString() }; },
 		complete: async (id: string, body: unknown) => { assert.equal(id, 'owner'); assert.deepEqual(body, input); count++; return { text: 'ok', connectionId: 'first', attempts: [] }; }
 	} as any);
 	assert.equal((await handlers.action({ request: makeRequest(input, { Origin: 'https://evil.test' }) })).status, 403);
@@ -97,7 +97,16 @@ test('central completion advertises and requires its independent compatible feat
 	const manifest = thingtimeCapabilityManifest('https://thingtime.test');
 	assert.equal(manifest.features['api.ai-complete'].version, AI_COMPLETION_REQUIREMENTS['api.ai-complete']);
 	assert.ok(manifest.operations.some((op) => op.path === '/api/v1/ai/complete' && op.methods.includes('POST')));
-	assert.equal(capabilitySatisfies('1.1.0', '1.0.0'), true);
-	assert.equal(capabilitySatisfies('2.0.0', '1.0.0'), false);
-	assert.equal(capabilitySatisfies('', '1.0.0'), false);
+	assert.equal(capabilitySatisfies('1.1.0', AI_COMPLETION_REQUIREMENTS['api.ai-complete']), true);
+	assert.equal(capabilitySatisfies('1.2.0', AI_COMPLETION_REQUIREMENTS['api.ai-complete']), true);
+	for (const version of ['1.0.0', '2.0.0', '']) assert.equal(capabilitySatisfies(version, AI_COMPLETION_REQUIREMENTS['api.ai-complete']), false);
+});
+
+test('unavailable subscription accounting returns private 503 rather than a misleading quota 429', async () => {
+	const handlers = createAiCompletionHandlers({ getUser: async () => ({ id: 'owner', accountKind: 'user' }) as any,
+		limit: async () => ({ allowed: false, unavailable: true, limit: 0, remaining: 0, resetAt: new Date().toISOString() }),
+		complete: async () => { throw Error('No provider call allowed'); } });
+	const response = await handlers.action({ request: makeRequest() });
+	assert.equal(response.status, 503); assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
+	assert.equal(response.headers.has('Retry-After'), false);
 });
