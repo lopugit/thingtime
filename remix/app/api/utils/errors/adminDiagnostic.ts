@@ -528,6 +528,11 @@ const sanitizeStoredSnapshot = (value: unknown, state: CaptureState, depth = 0):
 // confirmation by placing a raw identifier beside an otherwise valid
 // descriptor placeholder. Parsed snapshots retain only the same closed fields
 // as fresh captures; non-JSON legacy detail is scrubbed as bounded plain text.
+// Reuse credential redaction for durable user-facing text without imposing the
+// diagnostic JSON schema (ordinary messages may themselves contain JSON).
+export const redactNotificationText = (value: string): string =>
+  redactText(value, createCaptureState({}, false), MAX_ADMIN_DIAGNOSTIC_CHARS);
+
 export const sanitizeStoredAdminDiagnosticDetail = (value: unknown): AdminErrorDiagnostic => {
 	const state = createCaptureState({}, true);
 	const source = typeof value === 'string' ? value : '';
