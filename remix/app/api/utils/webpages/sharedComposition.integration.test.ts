@@ -222,8 +222,8 @@ test('shared page audience includes its author components, never a foreign priva
 					await tab.getByTestId('fork-shared-thing').click();
 					await tab.waitForURL('**/login');
 					await tab.goto(new URL(`/thing/${standalone.id}?key=${encodeURIComponent(standalone.linkKey)}`, base).href);
-					await tab.getByTestId('fork-shared-thing').waitFor();
 					try {
+						await tab.getByTestId('fork-shared-thing').waitFor();
 						await tab.getByText('Shared value: Copy my content', { exact: true }).waitFor({ timeout: 30000 });
 					} catch (error) {
 						if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-data-render-failure.png` });

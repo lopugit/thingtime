@@ -18,6 +18,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Prepare the focused main promotion of shared Data/schema controls after
+  exact-head CI and logged-out Safari verification on PR #714. Preserve the
+  separate unresolved initial-load and protected-media-copy limitations in the
+  [delivery note](../PRs/714-codex-shared-schema-action-inheritance.md).
+  — Codex (AI), 2026-09-09
+
 - Include schema-template actions in shared-root dependency resolution and
   private copies. Data Thing detail controls use root-authorized read-only
   execution unless both the data and its schema are owned by the viewer;
