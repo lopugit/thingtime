@@ -5,12 +5,12 @@ import { ArrowUp, AudioLines, Loader2, Mic, Settings2, Square } from 'lucide-rea
 import { Link as RouterLink } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
-import { getNativeBridge, nativeBridgeMessageEvent } from '~/utils/nativeBridge';
+import { getNativeBridge, nativeBridgeMessageEvent, nativeBridgeReadyEvent, supportsNativeLopuVoice } from '~/utils/nativeBridge';
 import { LopuRingAvatar } from './LopuActivityBadge';
 import { LopuAssistantRow, LopuChatView, LopuUserRow } from './LopuChatView';
 import { LopuProviderSelect, type LopuProviderSelectChange } from './LopuModelPicker';
 import { readNdjson } from './lopuChatStream';
-import { abortLopuTurn, getLopuStoreSnapshot } from './lopuChatStore';
+import { abortLopuTurn, getLopuStoreSnapshot, loadLopuChats, loadLopuMessages, selectLopuChat } from './lopuChatStore';
 import { directVoiceUnavailableReason, findLopuVaultProvider, resolveDirectVoiceModel, type LopuVaultProvider } from './lopuProviderCore';
 import { LOPU_UI } from './lopuTheme';
 import { browserSupportsLopuRealtime, LOPU_REALTIME_UNSUPPORTED_MESSAGE, LopuVoiceRealtime } from './lopuVoiceRealtime';
@@ -69,10 +69,14 @@ type LopuVoiceEvent =
 	| { type: 'meta'; mode?: string; provider?: string; sessionId?: string }
 	| { type: 'quote'; text: string; page?: { id?: string; title?: string } }
 	| { type: 'delta'; text: string }
-	| { type: 'error'; error: string }
+	| { type: 'error'; error?: string; message?: string }
 	| { type: 'done' };
 
 export type UseLopuVoiceOptions = {
+	chatId?: string | null;
+	model?: string | null;
+	effort?: string | null;
+	speed?: string | null;
 	// resolve one final utterance to Lopu's reply text (read aloud when
 	// `speak` is on); null/undefined = nothing to speak
 	onFinalTranscript: (text: string) => Promise<string | null | undefined | void> | string | null | undefined | void;
@@ -147,6 +151,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 	const sessionIdRef = React.useRef(newId('voice'));
 	const activeRef = React.useRef(false);
 	const nativeSessionRef = React.useRef(false);
+	const nativeOwnerRef = React.useRef<string | null>(null);
 	// the web realtime session (direct voice) — null on the standard path
 	const realtimeRef = React.useRef<LopuVoiceRealtime | null>(null);
 	const directSessionRef = React.useRef(false);
@@ -162,7 +167,10 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 	// paint agree
 	React.useEffect(() => {
 		setWebSupported(!!webRecognitionCtor());
-		setNativeReady(!!getNativeBridge()?.isNativeWebView);
+		const ready = () => setNativeReady(supportsNativeLopuVoice());
+		ready();
+		window.addEventListener(nativeBridgeReadyEvent, ready);
+		return () => window.removeEventListener(nativeBridgeReadyEvent, ready);
 	}, []);
 
 	const pushItem = React.useCallback((item: Omit<LopuVoiceItem, 'id' | 'at'> & { id?: string }) => {
@@ -189,7 +197,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 				const quote = event;
 				patchItem(assistantId, (item) => ({ ...item, text: quote.text, quote: true, pageId: quote.page?.id ?? null, pageTitle: quote.page?.title ?? null }));
 			} else if (event.type === 'error') {
-				const message = typeof event.error === 'string' && event.error ? event.error : 'Lopu could not complete this turn.';
+				const message = event.error || event.message || 'Lopu could not complete this turn.';
 				patchItem(assistantId, (item) => ({ ...item, text: message, error: true }));
 			}
 		},
@@ -364,11 +372,13 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 	React.useEffect(() => {
 		const onMessage = (message: any) => {
 			const type = message?.type;
+			if (typeof type === 'string' && type.startsWith('lopu-voice-') &&
+				(!nativeOwnerRef.current || nativeOwnerRef.current !== getLopuStoreSnapshot().userId)) return;
 			if (type === 'native-ready') {
-				setNativeReady(true);
+				setNativeReady(supportsNativeLopuVoice());
 			} else if (type === 'lopu-voice-transcript' && typeof message.payload?.text === 'string') {
 				const assistantId = typeof message.payload.assistantId === 'string' ? message.payload.assistantId : newId('lopu-native');
-				pushItem({ role: 'user', text: message.payload.text });
+				pushItem({ id: `${assistantId}-user`, role: 'user', text: message.payload.text });
 				pushItem({ id: assistantId, role: 'assistant', text: '' });
 				setInterim('');
 				setBusy('thinking');
@@ -387,6 +397,22 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 				ensureAssistantItem(message.payload.assistantId);
 			} else if (type === 'lopu-voice-interim') {
 				setInterim(typeof message.payload?.text === 'string' ? message.payload.text : '');
+			} else if (type === 'lopu-voice-saved' && typeof message.payload?.chatId === 'string') {
+				const { chatId, assistantId, messageIds } = message.payload;
+				// Reconcile with the canonical persisted chat after native work,
+				// including turns completed while WKWebView was backgrounded.
+				void loadLopuChats();
+				void loadLopuMessages(chatId).then(() => {
+					const saved = getLopuStoreSnapshot().messages[chatId] ?? [];
+					if (Array.isArray(messageIds) && messageIds.length && messageIds.every((id: string) => saved.some((item) => item.id === id))) {
+						setItems((current) => current.filter((item) => item.id !== assistantId && item.id !== `${assistantId}-user`));
+					}
+				});
+				if (!getLopuStoreSnapshot().activeChatId) selectLopuChat(chatId);
+			} else if (type === 'lopu-voice-warning') {
+				lopu({ title: 'Lopu voice', description: message.payload?.message || 'Check your voice settings.', status: 'info' });
+			} else if (type === 'lopu-voice-recording' && typeof message.payload?.filename === 'string') {
+				pushItem({ role: 'assistant', text: `Recording saved on this iPhone: ${message.payload.filename}\nFiles → On My iPhone → Thingtime → Lopu Recordings` });
 			} else if (type === 'lopu-voice-error') {
 				pushItem({ role: 'assistant', text: typeof message.payload?.error === 'string' ? message.payload.error : 'Lopu voice stopped unexpectedly.', error: true });
 				activeRef.current = false;
@@ -396,8 +422,8 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 			} else if (type === 'lopu-voice-state') {
 				const on = message.payload?.active === true;
 				activeRef.current = on;
+				nativeSessionRef.current = on;
 				if (!on) {
-					nativeSessionRef.current = false;
 					directSessionRef.current = false;
 					setDirect(false);
 				}
@@ -408,7 +434,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 		const listener = ((event: CustomEvent) => onMessage(event.detail)) as EventListener;
 		window.addEventListener(nativeBridgeMessageEvent, listener);
 		return () => window.removeEventListener(nativeBridgeMessageEvent, listener);
-	}, [applyVoiceEvent, ensureAssistantItem, pushItem]);
+	}, [applyVoiceEvent, ensureAssistantItem, lopu, pushItem]);
 
 	// ——— direct voice (web) ————————————————————————————————————————————————
 
@@ -529,14 +555,19 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 		const current = optionsRef.current;
 		const wantsDirect = current.directVoice === true && !current.transcribe;
 		const bridge = getNativeBridge();
-		if (nativeReady && bridge) {
+		if (bridge?.isNativeWebView) {
+			if (!supportsNativeLopuVoice(bridge)) {
+				lopu({ title: 'Update Thingtime for voice', description: 'This iOS build does not include Lopu recording or Live Activities. Update Thingtime in TestFlight, then try again.', status: 'info' });
+				return;
+			}
 			// the iOS controller runs either path; provider-audio only when the
 			// chat's provider supports it (else it is told, and transcribes)
 			const directReason = wantsDirect ? directVoiceUnavailableReason(current.provider ?? null, current.transcribe) : null;
 			if (wantsDirect && directReason) lopu({ title: 'Direct voice is off', description: `${directReason} — using device transcription.`, status: 'info', duration: 6000 });
 			const nativeDirect = wantsDirect && !directReason;
-			const model = nativeDirect ? (resolveDirectVoiceModel(current.provider ?? null, current.directVoiceModel ?? null)?.id ?? '') : '';
+			const model = nativeDirect ? (resolveDirectVoiceModel(current.provider ?? null, current.directVoiceModel ?? null)?.id ?? '') : (current.model ?? '');
 			nativeSessionRef.current = true;
+			nativeOwnerRef.current = getLopuStoreSnapshot().userId;
 			directSessionRef.current = nativeDirect;
 			activeRef.current = true;
 			setDirect(nativeDirect);
@@ -548,10 +579,11 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 					transcribeMode: current.transcribe,
 					providerId: current.providerId ?? '',
 					sessionId: sessionIdRef.current,
+					chatId: current.chatId ?? null,
 					inputMode: nativeDirect ? 'provider-audio' : 'native-transcript',
 					model,
-					effort: '',
-					speed: 'normal'
+					effort: current.effort ?? '',
+					speed: current.speed ?? 'normal'
 				}
 			});
 			return;
@@ -563,7 +595,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 			return;
 		}
 		startStandard();
-	}, [lopu, nativeReady, startDirectVoice, startStandard]);
+	}, [lopu, startDirectVoice, startStandard]);
 
 	const stop = React.useCallback(() => {
 		activeRef.current = false;
@@ -1103,6 +1135,10 @@ export const LopuVoiceSurface = ({ chatId, onChatChange, compact = false, onOpen
 	const provider = React.useMemo(() => findLopuVaultProvider(chat.vaultProviders, chat.settings.providerId), [chat.vaultProviders, chat.settings.providerId]);
 
 	const voice = useLopuVoice({
+		chatId: chat.chatId,
+		model: chat.settings.model,
+		effort: chat.settings.effort,
+		speed: chat.settings.speed,
 		onFinalTranscript,
 		speak: settings.spokenReplies,
 		transcribe: settings.transcribe,

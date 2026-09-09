@@ -79,6 +79,14 @@ def watch_provisioning_profile_name
   )
 end
 
+def lopu_widget_bundle_identifier
+  ENV.fetch("LOPU_WIDGET_BUNDLE_IDENTIFIER", "#{ENV.fetch('PRODUCT_BUNDLE_IDENTIFIER')}.lopu-widget")
+end
+
+def lopu_widget_profile_name
+  ENV.fetch("LOPU_WIDGET_PROVISIONING_PROFILE_SPECIFIER", "Thingtime Lopu Widget App Store #{lopu_widget_bundle_identifier}#{distribution_profile_suffix}")
+end
+
 def xcodebuild_xcargs
   args = []
   if manual_profile_signing?
@@ -86,6 +94,7 @@ def xcodebuild_xcargs
     args << "CODE_SIGN_IDENTITY=#{Shellwords.escape('Apple Distribution')}"
     args << "THINGTIME_IOS_PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(ios_provisioning_profile_name)}"
     args << "THINGTIME_WATCH_PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(watch_provisioning_profile_name)}"
+    args << "THINGTIME_LOPU_WIDGET_PROVISIONING_PROFILE_SPECIFIER=#{Shellwords.escape(lopu_widget_profile_name)}"
   else
     args << api_key_xcargs
   end
@@ -111,7 +120,8 @@ def export_options(destination: "export")
     teamID: ENV.fetch("DEVELOPMENT_TEAM"),
     provisioningProfiles: {
       ENV.fetch("PRODUCT_BUNDLE_IDENTIFIER") => ios_provisioning_profile_name,
-      ENV.fetch("WATCH_BUNDLE_IDENTIFIER") => watch_provisioning_profile_name
+      ENV.fetch("WATCH_BUNDLE_IDENTIFIER") => watch_provisioning_profile_name,
+      lopu_widget_bundle_identifier => lopu_widget_profile_name
     }
   )
 end
@@ -125,6 +135,7 @@ platform :ios do
 
   desc "Build a signed Release archive (.ipa)"
   lane :build do
+    ENV["WATCH_BUNDLE_IDENTIFIER"] ||= "#{ENV.fetch('PRODUCT_BUNDLE_IDENTIFIER')}.watchkitapp"
     generate
     setup_ci if ENV["CI"]
     keychain_path = if lane_context[SharedValues::KEYCHAIN_PATH]
@@ -183,6 +194,17 @@ platform :ios do
         output_path: OUTPUT_DIRECTORY
       )
       ENV["WATCH_PROVISIONING_PROFILE_SPECIFIER"] = lane_context[SharedValues::SIGH_NAME]
+
+      get_provisioning_profile(
+        api_key: app_store_api_key,
+        team_id: ENV.fetch("DEVELOPMENT_TEAM"),
+        app_identifier: lopu_widget_bundle_identifier,
+        provisioning_name: lopu_widget_profile_name,
+        cert_id: lane_context[SharedValues::CERT_CERTIFICATE_ID],
+        force: false,
+        output_path: OUTPUT_DIRECTORY
+      )
+      ENV["LOPU_WIDGET_PROVISIONING_PROFILE_SPECIFIER"] = lane_context[SharedValues::SIGH_NAME]
     end
 
     archive_path = File.expand_path(File.join(OUTPUT_DIRECTORY, "Thingtime.xcarchive"))
