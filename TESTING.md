@@ -2165,6 +2165,10 @@ email whose link points at the attacker.
 
 ## Drawer navigation & settings (`remix/app/components/Nav/Drawer/`)
 
+- [ ] Settings popup and `/settings/:tab` show the same controls in every category; Profile is the default, Admin is restricted to admins, and direct links/reload/back preserve the selected tab. Check legacy `#secure-vault` and `#lopu-credits` links, modal close/Escape, and Open settings page at desktop and 390px. Scroll long categories to the bottom.
+- [ ] On a paired healthy Mac, dismiss the Things connection panel, reload, and confirm it stays hidden. Settings → Things must still show the panel and restore switch. Stop/disconnect the node or fail a permission check: the panel returns automatically. Switching accounts must not inherit another account’s dismissal.
+
+
 - [ ] Clicking a NAVIGATING drawer item (top-level or sub-item) closes the
       drawer after navigating on BOTH desktop and mobile; items without a
       destination only select their submenu and keep it open. Search keeps

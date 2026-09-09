@@ -18,6 +18,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Share tabbed settings between the popup and dedicated page, with Profile as the default and category deep links. Keep Mac node recovery in Things settings and let healthy nodes hide the Things-page panel until a problem occurs. — Codex (AI), 2026-09-09
+
 - Route both permission-settings actions through the shared Open App Locations flow, so Finder always shows the combined app shortcuts. — Codex (AI), 2026-09-09
 
 - Keep App Locations working when a neighbouring app in Applications cannot be read, stop the bundle scan once every known app is found, and report a failed Node restart only when one was actually attempted. — Lopu, 2026-09-09

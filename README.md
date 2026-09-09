@@ -2517,3 +2517,11 @@ explain counts. It refuses any other URI. Stop the disposable server afterward;
 it is not a persistent development service.
 
 Desktop permission recovery includes **Open App Locations** in Things and Desktop settings. It opens a private folder of symlinks to the current Desktop and bundled Node, plus installed Thingtime Recovery, Commander, ThingDisk, and ThingDock apps from the standard Applications folders. Duplicate older installations are omitted. You may need to remove the affected app from a macOS permission list and re-add it using these shortcuts. Grant only the permissions you intend. macOS decides whether to display Quit & Reopen; Thingtime offers Later / Restart Node Now when you return from the recovery flow. Restart other affected apps separately. No permission is changed automatically.
+
+### Settings navigation and Mac connection panel
+
+Settings uses one shared component in the drawer popup and full page. Direct links are `/settings/profile` (the default), `/settings/things`, `/settings/appearance`, `/settings/notifications`, `/settings/security`, `/settings/connections`, `/settings/lopu`, and `/settings/admin` (administrators only). Existing Secure Vault and Lopu hash bookmarks remain supported. A popup category is bookmarkable with `?settings=<category>` on the current page; Open settings page carries that category to its dedicated URL.
+
+A healthy Mac connection panel can be hidden from Things using “Don’t show again unless there’s a problem”. This preference is local to the browser and account, persists across reloads, and does not change node operation or privacy access. Live service, pairing, connection, and permission failures reveal the panel again. Settings → Things always retains the panel and a switch to restore it.
+
+Shared-settings validation worktree: `http://localhost:13040` (HMR 13041, Nitro 13042), managed by the repository PM2 lifecycle. Funnel was unavailable during validation because the installed Tailscale CLI points to a missing application executable; no public Funnel URL was verified. No new environment variables or external setup are required for these settings changes.
