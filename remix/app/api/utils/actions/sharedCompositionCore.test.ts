@@ -26,3 +26,10 @@ test('shared execution has no saved-data mutation operations and defaults unknow
 test('Chakra rawChildren controls are part of the same composition graph', () => {
 	assert.deepEqual(compositionReferences(['component'], { render: { chakra: 'Box', rawChildren: [{ chakra: 'Button', ttAction: 'draw' }] } }), [{ kind: 'action', ref: 'draw' }]);
 });
+
+test('schema templates include stored actions but not field values or action inputs', () => {
+	assert.deepEqual(compositionReferences(['schema'], {
+		render: { children: [{ ttAction: 'schema-button', ttActionInputs: { ttAction: 'not-a-grant' } }] },
+		fields: [{ name: 'ttAction', default: 'not-a-grant' }]
+	}), [{ kind: 'action', ref: 'schema-button' }]);
+});
