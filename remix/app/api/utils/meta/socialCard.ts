@@ -168,6 +168,11 @@ const cardInitial = (preview: SocialPreview): string => {
 // strips to nothing at all.
 const badgeRenders = (badge: string): boolean => cardText(badge).replace(/^#/, '').length > 0;
 
+// The narrowest advance `glyphEm` can return. A prefix of k code points is
+// therefore always at least k*NARROWEST_GLYPH_EM*fontSize wide, which is what
+// lets the clamp below discard a tail it has not measured.
+const NARROWEST_GLYPH_EM = 0.35;
+
 // `letterSpacing` is the SVG attribute of the same name: resvg adds it after
 // every glyph but the last, so a label the width estimate calls safe is really
 // that much wider on the eyebrow line.
@@ -175,7 +180,23 @@ const clampToWidth = (input: string, maxWidth: number, fontSize: number, letterS
 	const width = (text: string): number => socialTextWidth(text, fontSize) + Math.max(0, Array.from(text).length - 1) * letterSpacing;
 	const value = cardText(input);
 	if (width(value) <= maxWidth) return value;
-	const codePoints = Array.from(value);
+	// Pop-and-remeasure is quadratic — each iteration re-joins and re-measures
+	// the WHOLE remaining string — and not every clamped value is bounded before
+	// it gets here. Title and description are (TITLE_MAX/DESCRIPTION_MAX), but a
+	// badge and a poll row are not: both come from `crystal.thing`, which is
+	// deliberately open user JSON with no per-field cap, so `thing.status` or a
+	// poll option on an ordinary public post can be arbitrarily long. That made
+	// /social-card?path=/post/:id a self-service hang — measured on this
+	// estimator, 6.4k code points cost 1.9s and 12.8k cost 7.4s, four times the
+	// work for twice the input, on a public and unauthenticated endpoint.
+	//
+	// Nothing past the widest possible fit can survive the loop anyway: at
+	// NARROWEST_GLYPH_EM per glyph (plus letter spacing) no prefix longer than
+	// this can measure under `maxWidth`. Dropping that tail up front is not an
+	// approximation of the old answer — the loop would have popped every one of
+	// those code points — it just stops paying a full re-measure per pop.
+	const perGlyph = NARROWEST_GLYPH_EM * fontSize + Math.max(0, letterSpacing);
+	const codePoints = perGlyph > 0 ? Array.from(value).slice(0, Math.ceil(maxWidth / perGlyph) + 1) : [];
 	while (codePoints.length && width(`${codePoints.join('')}…`) > maxWidth) codePoints.pop();
 	return `${codePoints.join('').trimEnd()}…`;
 };

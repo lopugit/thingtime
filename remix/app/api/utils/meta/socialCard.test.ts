@@ -182,6 +182,42 @@ test('badge and poll labels are clamped to their pill, not to a character count'
 	);
 });
 
+// The clamp above is measured by popping one code point and re-measuring the
+// whole remaining string, which is quadratic in its input — and a badge and a
+// poll row are the two clamped values with no upstream cap. Both are read from
+// `crystal.thing`, deliberately open user JSON, so an ordinary public post can
+// carry a megabyte-long `thing.status` or poll option and every /social-card
+// hit for it burns the endpoint's whole budget on the estimator. On this
+// estimator the old clamp cost 1.9s at 6.4k code points and 7.4s at 12.8k, so
+// the input below would not have finished at all; the bound makes it constant.
+// Kept generous so a loaded CI runner cannot flake it — it is three orders of
+// magnitude under the regression it guards.
+test('an uncapped badge or poll option cannot make a card cost more than a bounded one', () => {
+	const enormous = 'a'.repeat(200_000);
+	const started = process.hrtime.bigint();
+	const svg = buildSocialCardSvg({
+		...gallery,
+		kind: 'poll',
+		variant: 'poll',
+		images: [],
+		imageCount: 0,
+		options: [enormous],
+		badges: [enormous],
+		eyebrow: enormous,
+		author: enormous
+	});
+	const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
+	assert.ok(elapsedMs < 5_000, `an uncapped label took ${elapsedMs.toFixed(0)}ms to clamp`);
+	const badge = svg.match(/<text x="\d+" y="\d+" fill="#5D5275"[^>]*>([^<]*)<\/text>/);
+	const poll = svg.match(/<text x="98" y="\d+" fill="#FFFFFF"[^>]*>([^<]*)<\/text>/);
+	assert.ok(badge && poll, 'expected the badge pill and poll row to still render');
+	// Same guarantee as the clamp test above: bounded to the pill, and visibly
+	// truncated rather than silently cut.
+	assert.ok(socialTextWidth(badge[1], 13) <= 134, `badge "${badge[1]}" overflows its 150px pill`);
+	assert.ok(socialTextWidth(poll[1], 14) <= 506, `poll label "${poll[1]}" overflows its row`);
+	assert.ok(badge[1].endsWith('…') && poll[1].endsWith('…'), 'an over-long label should be visibly truncated');
+});
+
 // The same defect class on the two single-line labels above the headline, which
 // wrap() never sees. A display name is allowed 80 characters
 // (MAX_DISPLAY_NAME_CHARS) and its line starts at x=136, so anything past ~41
