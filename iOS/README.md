@@ -148,3 +148,30 @@ App Store provisioning profiles with the App Store Connect API key before
 building. Set
 `SKIP_CERT_SYNC=1` or `SKIP_PROFILE_SYNC=1` only when the correct signing asset
 is already installed and you intentionally want to skip that step.
+
+## Lopu voice recovery
+
+Build 25's release source (`9a6f04d4e`) did not include the native voice
+controller or Live Activity extension. Build 26 advertises `lopuVoiceVersion`
+so the web controls can distinguish a capable app from the older general
+native bridge. Older apps receive an update instruction instead of a false
+listening indicator.
+
+Start voice while Thingtime is in the foreground. Device transcription needs
+both Microphone and Speech Recognition permission; Live Activities have a
+separate iOS setting. A pause submits speech, and Stop preserves the current
+partial utterance. Ordinary voice uses the saved chat endpoint and its model,
+provider, reasoning and speed settings. Transcribe mode creates private pages.
+
+Captured audio segments are saved as CAF files on the iPhone, with TXT sidecars
+when recognition produced text. Find them in Files → On My iPhone → Thingtime →
+Lopu Recordings. They remain available when the network or recognition fails;
+they are local recovery files, not uploaded chat attachments. The Files app can
+play/share/delete them. Direct voice also retains captured audio; provider
+transcript/reply rows on that path retain their existing session-only behavior.
+
+Validate with `xcodegen generate` then `DEST='platform=iOS Simulator,id=<id>'
+./scripts/test.sh`. `LopuVoiceRecoveryTests` covers permission cancellation,
+separate denial messages, origin-scoped feature negotiation and readable local
+audio/text. Physical-device recognition and lock-screen acceptance remain
+required; a simulator build does not prove them.

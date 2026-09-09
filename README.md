@@ -2301,6 +2301,19 @@ API tokens unprefixed and server-only.
 
 ## Native iOS TestFlight web URL
 
+Lopu voice requires build 26 or later; build 25's general native bridge did not
+include its recorder or Live Activity widget. Voice support is negotiated with
+`lopuVoiceVersion`, separately from the shell version. For a fork's signed build,
+register the app, its `.watchkitapp` companion, and its `.lopu-widget` extension
+under your own bundle prefix. The Fastlane build syncs a distribution profile
+for each target and includes all three in manual export. Override
+`LOPU_WIDGET_BUNDLE_IDENTIFIER` and `LOPU_WIDGET_PROVISIONING_PROFILE_SPECIFIER`
+only when your fork's Xcode bundle settings match those values; keep signing
+credentials in the ignored iOS env/Keychain. Audio recovery files stay on-device
+in Files → On My iPhone → Thingtime → Lopu Recordings; they are not automatically
+uploaded attachments. See [voice recovery](iOS/README.md#lopu-voice-recovery).
+
+
 The native iOS app lives in `iOS/` and defaults its embedded `WKWebView` to
 `https://thingtime.com`. TestFlight builds can target a Vercel branch or preview
 deployment by setting a non-secret build-time URL:
