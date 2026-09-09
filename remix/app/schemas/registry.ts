@@ -2697,7 +2697,7 @@ const notificationThingSchema: ThingtimeSchema = {
     { name: 'postId', type: 'id', required: false, description: 'Related post for click-through.' },
     { name: 'preview', type: 'string', required: false, max: 140, description: 'Short content preview, or the detail line of a system note.' },
     { name: 'title', type: 'string', required: false, max: 400, description: 'System notes only: the headline shown instead of "<actor> <verb>".' },
-    { name: 'detail', type: 'string', required: false, max: 49152, description: 'Bounded, credential-redacted message detail retained beyond the short preview.' },
+    { name: 'detail', type: 'string', required: false, description: 'Credential-redacted message detail beyond the preview. Its protected record endpoint enforces the 48,000-character input and 64 KiB request limits; generic schema-editor string limits do not apply.' },
     { name: 'href', type: 'string', required: false, max: 300, description: 'System notes only: internal click-through path (e.g. /actions/<key>).' },
     { name: 'outcome', type: 'enum', required: false, values: ['ok', 'error'], description: 'System notes only: whether the thing being reported succeeded.' }
   ],
