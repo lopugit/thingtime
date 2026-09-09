@@ -71,6 +71,7 @@ targets:
       path: Thingtime/Resources/Thingtime.entitlements
       properties:
         aps-environment: $(APS_ENVIRONMENT)
+        com.apple.developer.usernotifications.time-sensitive: true
         com.apple.developer.associated-domains:
           - webcredentials:thingtime.com
     dependencies:
@@ -105,6 +106,7 @@ targets:
       path: ThingtimeWatch/Resources/ThingtimeWatch.entitlements
       properties:
         aps-environment: $(APS_ENVIRONMENT)
+        com.apple.developer.usernotifications.time-sensitive: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(THINGTIME_WATCH_BUNDLE_IDENTIFIER)

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { NotificationDelivery } from '../lopu/remindersCore';
 import { ObjectId } from 'mongodb';
 
 // Notifications are identity-adjacent (they belong to the RECIPIENT, not to
@@ -50,6 +51,9 @@ export type NotificationActor = {
 };
 
 export type EmitNotificationInput = {
+  richText?: string;
+  image?: string;
+  delivery?: NotificationDelivery;
   recipientId: string;
   type: NotificationType;
   actor: NotificationActor;
@@ -65,6 +69,9 @@ export type EmitNotificationInput = {
 };
 
 export type PublicNotification = {
+  richText?: string | null;
+  image?: string | null;
+  delivery?: NotificationDelivery;
   id: string;
   type: NotificationType;
   category: NotificationCategory;
@@ -106,6 +113,9 @@ const notificationDoc = (input: EmitNotificationInput, now: Date) => ({
   schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
   thingtime: ['notification'],
   crystal: {
+    ...(input.richText ? { richText: input.richText.slice(0, 2000) } : {}),
+    ...(input.image === '/notification-test.svg' ? { image: input.image } : {}),
+    ...(input.delivery ? { delivery: input.delivery } : {}),
     type: input.type,
     actorId: input.actor.id,
     actorName: input.actor.displayName || input.actor.username || null,
@@ -211,6 +221,10 @@ export const SYSTEM_NOTIFICATION_ACTOR: NotificationActor = {
 };
 
 export type EmitSystemNotificationInput = {
+  skipEmail?: boolean;
+  richText?: string;
+  image?: string;
+  delivery?: NotificationDelivery;
   recipientId: string;
   type: NotificationType;
   title: string;
@@ -222,6 +236,9 @@ export type EmitSystemNotificationInput = {
 
 export const emitSystemNotification = (input: EmitSystemNotificationInput): Promise<void> =>
   emitNotification({
+    richText: input.richText,
+    image: input.image,
+    delivery: input.delivery,
     recipientId: input.recipientId,
     type: input.type,
     actor: SYSTEM_NOTIFICATION_ACTOR,
@@ -257,7 +274,7 @@ export const emitSystemNotificationOnce = async (
 	// Fan out only after the deduplicated bell/checkpoint transaction commits.
 	// Push is best-effort; a delivery failure must not duplicate the daily row.
 	await sendNotificationPush({ ...fullInput, notificationId: uniqueId }).catch(() => {});
-	await maybeEmailNotification(fullInput).catch(() => {});
+	if (!input.skipEmail) await maybeEmailNotification(fullInput).catch(() => {});
 	return true;
 };
 
@@ -425,6 +442,9 @@ const publicNotification = (
   const outcome = doc.crystal?.outcome;
   return {
     id: String(doc.shareId),
+    delivery: ['quiet', 'normal', 'urgent'].includes(doc.crystal?.delivery) ? doc.crystal.delivery : 'normal',
+    richText: typeof doc.crystal?.richText === 'string' ? doc.crystal.richText.slice(0, 2000) : null,
+    image: doc.crystal?.image === '/notification-test.svg' ? doc.crystal.image : null,
     type: doc.crystal?.type,
     category: notificationCategoryOf(doc.crystal?.type),
     actorId,

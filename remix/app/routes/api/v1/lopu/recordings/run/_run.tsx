@@ -5,6 +5,8 @@ import { isSameOriginAttachmentRequest } from '~/api/utils/attachments/attachmen
 import { runWithMongoEndpoint } from '~/api/utils/mongodb/endpoint';
 import { runRecordingAutomation } from '~/api/utils/lopu/recordingsWorker';
 import { sendRecordingReminders } from '~/api/utils/lopu/recordingsReminders';
+import { runLopuReminders } from '~/api/utils/lopu/reminders';
+import { runRecordingHandoffs } from '~/api/utils/lopu/recordingHandoff';
 
 const headers = { 'Cache-Control': 'private, no-store' };
 const cronAuthorized = (request: Request) => {
@@ -19,8 +21,10 @@ const run = async () =>
 	runWithMongoEndpoint(null, async () => {
 		// Send due reminders first so a provider outage cannot starve existing todos.
 		const reminders = await sendRecordingReminders();
+		const scheduledReminders = await runLopuReminders();
 		const recordings = await runRecordingAutomation();
-		return json({ ok: true, reminders, recordings }, { headers });
+		const handoffs = await runRecordingHandoffs();
+		return json({ ok: true, reminders, scheduledReminders, recordings, handoffs }, { headers });
 	});
 
 export const loader = async ({ request }: { request: Request }) => {

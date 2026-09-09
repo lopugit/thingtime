@@ -8,6 +8,41 @@ With Thingtime, you can create and share any abstract data structure you want, o
 
 At Thingtime, we believe that data and knowledge should be open, accessible, and empowering. We are building Thingtime to make this vision a reality. Join us and start exploring the limitless possibilities of data!
 
+## Lopu reminders and notification tests
+
+Lopu chat and the standard voice page share `create_thing`, `send_notification`,
+`create_reminder`, `list_reminders`, and `set_reminder_enabled`. Only the signed-in
+owner can receive or manage these reminders. Notes/todos and reminder content
+are ordinary private Things; linked protected schedules are control-plane data.
+Settings → Notifications provides pause/resume, refresh, delivery samples
+(Quiet, Normal, Urgent/time-sensitive), rich-text/image examples, and each
+registered notification type. Samples never email another account or bypass
+notification preferences. Native banners use plain text; the richer examples
+render in Thingtime history. Critical Apple alerts are not implemented.
+
+Fork setup: deploy the registered `/api/v1/lopu/recordings/run` scheduler with a
+distinct server-only `CRON_SECRET` and an authenticated five-minute schedule
+(the Vercel cron in this branch). No browser timer runs these reminders. Missed
+intervals advance without replaying a backlog. Keep the existing storage
+accounting migration healthy; content writes still use account quotas. Configure
+APNs as documented below, enable the Time Sensitive Notifications capability on
+both native bundle identifiers, and regenerate matching provisioning profiles.
+Provider configuration alone does not prove either push delivery or AI quota.
+
+“Send to Lopu” is a separate explicit recording action, available from the
+recordings activity menu and by holding/swiping a Watch recording. It requires
+the owner's recording-AI opt-in and a speech-capable transcription connection.
+Once its private transcript is ready, a saved chat receives it through normal
+Lopu billing/tools/confirmation gates. Retries do not silently repeat an
+ambiguous tool execution; inspect the linked conversation for results/questions.
+Automatic transcription/notes alone do not grant this execution consent.
+
+Local verification for this worktree: `http://localhost:16340/settings` and
+`http://localhost:16340/lopu/recordings` (API 16342, HMR 16341). PM2 uses
+`npm run web-pms` with automatic restart disabled. Tailscale/Funnel is currently
+unavailable: the installed CLI shim refers to a missing Tailscale app binary.
+These are worktree-local URLs, not a production deployment receipt.
+
 ## Account speed-test allowances
 
 Commander speed tests use the signed-in account's protected subscription and

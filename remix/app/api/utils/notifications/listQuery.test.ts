@@ -43,7 +43,7 @@ test('types accept csv or arrays, dedupe, and drop unknown names', () => {
 });
 
 test('category expands to its types and intersects with an explicit type list', () => {
-  assert.deepEqual(resolveNotificationListQuery({ category: 'system' }).types, ['action-run', 'recording-reminder']);
+  assert.deepEqual(resolveNotificationListQuery({ category: 'system' }).types, ['action-run', 'recording-reminder', 'lopu-reminder']);
   assert.deepEqual(resolveNotificationListQuery({ category: 'feed' }).types, ['post-from-followed', 'post-from-friend']);
   assert.deepEqual(resolveNotificationListQuery({ category: 'engagement', types: 'comment,new-follower' }).types, ['comment']);
   assert.deepEqual(resolveNotificationListQuery({ category: 'nope' }).types, []);
@@ -83,8 +83,8 @@ test('disabled types are excluded, explicit types are intersected with the enabl
   assert.deepEqual(explicit?.base['crystal.type'], { $in: ['comment'] });
 
   // everything asked for is switched off → empty page, never a leak
-  assert.deepEqual(buildNotificationListFilters('u1', prefs, resolveNotificationListQuery({ category: 'system' }))?.base['crystal.type'], { $in: ['recording-reminder'] });
-  const allSystemOff = normalizeNotificationPrefs({ 'action-run': false, 'recording-reminder': false });
+  assert.deepEqual(buildNotificationListFilters('u1', prefs, resolveNotificationListQuery({ category: 'system' }))?.base['crystal.type'], { $in: ['recording-reminder', 'lopu-reminder'] });
+  const allSystemOff = normalizeNotificationPrefs({ 'action-run': false, 'recording-reminder': false, 'lopu-reminder': false });
   assert.equal(buildNotificationListFilters('u1', allSystemOff, resolveNotificationListQuery({ category: 'system' })), null);
   assert.equal(buildNotificationListFilters('u1', prefsOn, resolveNotificationListQuery({ types: 'bogus' })), null);
 });

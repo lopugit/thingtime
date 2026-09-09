@@ -17,6 +17,9 @@ import {
 
 // One row of GET /api/v1/notifications (PublicNotification on the server).
 export type NotificationItem = {
+  richText?: string | null;
+  image?: string | null;
+  delivery?: 'quiet' | 'normal' | 'urgent';
   id: string;
   type: string;
   category?: string | null;
@@ -56,6 +59,7 @@ export const NOTIFICATION_TYPE_META: Record<NotificationType, { emoji: string; l
     hint: 'Lopu reports each action you run yourself, plus any run that fails — email is opt-in'
   },
   'recording-reminder': { emoji: '🦄', label: 'Recording reminders', hint: 'Daily reminders for unfinished todos from Watch recordings — email is opt-in' },
+  'lopu-reminder': { emoji: '⏰', label: 'Lopu reminders', hint: 'One-time and recurring reminders you ask Lopu to schedule' },
   // subspaces 🪐 — the member-facing four, then the two mod-queue types
   // (those default to email OFF: a busy subspace is a firehose)
   'subspace-role': { emoji: '🎩', label: 'Subspace roles', hint: 'You are made a moderator or owner, demoted, or a subspace you moderate is deleted' },

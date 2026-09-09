@@ -18,6 +18,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-09: Recover expired Watch upload drafts without dropping local audio or falsely disconnecting the account; add explicit Send to Lopu handoffs, owner-private Thing/notification/reminder tools, and notification Settings test/pause controls. Compatible capability updates, isolated safety tests and iPhone/Watch + Vercel builds pass; hosted/browser/physical delivery gates remain separate. See [PR #665 notes](../PRs/665-codex-watch-lopu-recording-automation-private-transcripts-todos-reminders.md). — Codex (AI)
+
 - 2026-09-09: Provision a distinct sensitive admin-vault key for the hosted develop custom environment in Vercel and document activation and credential-store boundaries. Production External integrations contains no saved policies; server OpenAI/Anthropic credentials already include develop. Saved Claude Code CI credentials still require an authenticated transfer or secure re-entry; no token values were exposed or rotated. — Codex (AI)
 
 - 2026-09-09: Tie shared AI completions and recording-automation mutations to the protected account subscription: Free/current configured limits, Plus 5x, Pro/PAYG unlimited product request rates. Preserve account windows across tier/device changes and fail closed on entitlement outages. Live index cutover separately completed: production 47, develop 48 including Watch scheduler. Personal Claude Code synthetic text completion passed; cloud recording bridge remains pending. — Codex (AI)

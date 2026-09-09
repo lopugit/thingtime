@@ -236,6 +236,8 @@ export const listRecordingAutomation = async (ownerId: string) => {
 			postId: job.targetId,
 			filename: job.crystal.filename,
 			status: job.crystal.status,
+			handoffStatus: job.crystal.handoffStatus || null,
+			handoffChatId: job.crystal.handoffChatId || null,
 			attempts: job.crystal.attempts,
 			error: job.crystal.error || null,
 			createdAt: job.createdAt,

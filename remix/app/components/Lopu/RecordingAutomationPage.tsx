@@ -1,5 +1,5 @@
 import React from 'react';
-import { Badge, Box, Button, Checkbox, Flex, FormControl, FormLabel, Input, Select, Switch, Text } from '@chakra-ui/react';
+import { Badge, Box, Button, Checkbox, Flex, FormControl, FormLabel, Input, Menu, MenuButton, MenuList, MenuItem, Select, Switch, Text } from '@chakra-ui/react';
 import { Link } from 'react-router';
 import { PageHeader, PageShell } from '~/components/Layout/PageShell';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -17,6 +17,8 @@ type RecordingData = {
 		postId: string;
 		filename: string;
 		status: string;
+		handoffStatus: string | null;
+		handoffChatId: string | null;
 		error: string | null;
 		attempts: number;
 		commentIds: string[];
@@ -401,7 +403,16 @@ export function RecordingAutomationPage() {
 												<Text overflowWrap="anywhere">{job.filename}</Text>
 											</Link>
 											<Badge>{job.status}</Badge>
+											<Menu>
+												<MenuButton as={Button} size="xs" variant="outline" aria-label={`Actions for ${job.filename}`}>•••</MenuButton>
+												<MenuList>
+													<MenuItem isDisabled={busy || !settings.enabled || !!job.handoffStatus} onClick={() => {
+														if (window.confirm('Send this transcript to Lopu to act on its instructions? Lopu may create Things and reminders. Other sensitive actions still require confirmation in the conversation.')) void change({ op: 'send-to-lopu', postId: job.postId });
+													}}>🦄 Send to Lopu</MenuItem>
+												</MenuList>
+											</Menu>
 										</Flex>
+										{job.handoffStatus && <Text fontSize="sm" mt={2}>Lopu: {job.handoffStatus}. {job.handoffChatId && <Link to={`/lopu/${encodeURIComponent(job.handoffChatId)}`}>Open conversation →</Link>}</Text>}
 										{job.error ? (
 											<Text fontSize="sm" mt={1}>
 												{job.error}

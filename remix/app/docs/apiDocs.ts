@@ -134,7 +134,7 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'watch-sync',
-		featureVersion: '1.0.0',
+		featureVersion: '1.1.0', contractVersion: '1.1.0',
 		group: 'devices',
 		title: 'Sync Apple Watch directly',
 		endpoint: '/api/v1/watch/sync',
@@ -149,13 +149,13 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'watch-things',
-		featureVersion: '1.0.0',
+		featureVersion: '1.1.0', contractVersion: '1.1.0',
 		group: 'devices',
 		title: 'Create a private Thing from Apple Watch',
 		endpoint: '/api/v1/watch/things',
 		summary: 'Binds completed Watch uploads into a private Thing with server-owned device provenance.',
 		detail:
-			'Accepts one to ten completed post-purpose attachment ids belonging to the paired account, or stable upload request ids that the server resolves for retry recovery. Thingtime creates a private top-level post, atomically binds the attachments, and stamps sourceDeviceId from the authenticated Watch session; clients cannot forge another device id.',
+			'Accepts one to ten completed post-purpose attachment ids belonging to the paired account, or stable upload request ids that the server resolves for retry recovery. Thingtime creates a private top-level post, atomically binds the attachments, and stamps sourceDeviceId from the authenticated Watch session; clients cannot forge another device id. HTTP 409 with code watch_upload_restart_required proves the owned unbound drafts are expired, deleted or being cleaned up; a Watch retaining the original bytes may persist a new upload request id and retry once. Other conflicts must not rotate ids or clear authentication.',
 		auth: { mode: 'session-or-bearer', description: 'Requires the paired Watch ttnode_ Bearer credential and watch.things.create capability.' },
 		methods: ['POST'],
 		steps: ['Complete direct multipart uploads with the same Watch credential.', 'POST their attachmentIds with a stable shareId.', 'After an ambiguous completion, retry with requestIds so Thingtime resolves the completed upload without duplicating it.'],
@@ -643,24 +643,54 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [{ status: 200, description: 'Completion and safe routing trace.', body: { ok: true, text: 'Notes', connectionId: 'your-fallback-id', attempts: [{ connectionId: 'your-primary-id', outcome: 'unavailable', status: 429 }, { connectionId: 'your-fallback-id', outcome: 'succeeded' }] } }, { status: 503, description: 'All selected connections unavailable.', body: { ok: false, error: 'The selected AI connections are unavailable. Check their status and allowance.', attempts: [] } }]
 	}),
 	endpoint({
-		id: 'lopu-recordings', contractVersion: '1.2.0', featureVersion: '1.2.0', group: 'lopu', title: 'Watch recording automation',
+		id: 'lopu-recordings', contractVersion: '1.3.0', featureVersion: '1.3.0', group: 'lopu', title: 'Watch recording automation',
 		endpoint: '/api/v1/lopu/recordings', methods: ['GET', 'POST'],
 		summary: 'Opt in to private Watch audio transcription, generated notes/todos and daily reminders; inspect and retry your own jobs.',
-		detail: 'Home-origin account feature. GET returns ownerId, settings, provider configuration availability, redacted provider choices, the newest 50 processing jobs and newest 100 recording todos. POST accepts op=settings with a partial settings object (enabled, createTodos, createNotes, dailyReminders booleans; IANA timeZone; reminderHour 0–23; transcriptionProviders and analysisProviders ordered lists of 1–4 unique connection ids), op=queue with an owned private Watch postId, op=retry with a failed/retry/paused job id, or op=todo with an owned generated todo id and completed/reminders booleans. Connection ids must be owned Secure Vault API connections or configured/configured-anthropic platform connections, and support their stage. Defaults remain configured for both stages. OpenAI connections support transcription and analysis; Anthropic API keys support analysis only, not audio or Claude Code setup tokens. Availability/authentication/quota failures fall through the selected list once per connection, with consent checked before each attempt; malformed requests and security failures stop. GET provider choices expose id, name, provider, transcription/analysis compatibility and configured status, never tokens or endpoints. Configured is not a live quota check. Opt-in defaults off; new uploads are discovered after first setup. Queued jobs and scheduled reminders are durable and idempotent. Audio/transcript go only to selected providers; audio is limited to 24 MiB. Full transcripts become private relational comments, and generated notes/todos are quota-billed private data Things. Model output cannot invoke tools, buy anything or contact users. Completion, deletion and pausing stop reminders; local calendar dates deduplicate them across DST. Existing recordings require an explicit queue request. Retries resume saved checkpoints.',
+		detail: 'Version 1.3 adds op=send-to-lopu with postId, and handoffStatus/handoffChatId on jobs. Explicit handoff lets Lopu act on the transcript in a private conversation with normal billing and tool confirmation rules; automatic notes/todos alone still cannot execute arbitrary tools. Home-origin account feature. GET returns ownerId, settings, provider configuration availability, redacted provider choices, the newest 50 processing jobs and newest 100 recording todos. POST accepts op=settings with a partial settings object (enabled, createTodos, createNotes, dailyReminders booleans; IANA timeZone; reminderHour 0–23; transcriptionProviders and analysisProviders ordered lists of 1–4 unique connection ids), op=queue with an owned private Watch postId, op=retry with a failed/retry/paused job id, or op=todo with an owned generated todo id and completed/reminders booleans. Connection ids must be owned Secure Vault API connections or configured/configured-anthropic platform connections, and support their stage. Defaults remain configured for both stages. OpenAI connections support transcription and analysis; Anthropic API keys support analysis only, not audio or Claude Code setup tokens. Availability/authentication/quota failures fall through the selected list once per connection, with consent checked before each attempt; malformed requests and security failures stop. GET provider choices expose id, name, provider, transcription/analysis compatibility and configured status, never tokens or endpoints. Configured is not a live quota check. Opt-in defaults off; new uploads are discovered after first setup. Queued jobs and scheduled reminders are durable and idempotent. Audio/transcript go only to selected providers; audio is limited to 24 MiB. Full transcripts become private relational comments, and generated notes/todos are quota-billed private data Things. Model output cannot invoke tools, buy anything or contact users. Completion, deletion and pausing stop reminders; local calendar dates deduplicate them across DST. Existing recordings require an explicit queue request. Retries resume saved checkpoints.',
 		auth: { mode: 'session-or-bearer', description: 'Full, live first-party account session only; app, Watch and personal scoped tokens are not account sessions. Mutation requires a non-temporary user account and same-origin JSON. Protected subscription tier controls the account mutation rate: Free/custom tiers use the configured things.write rule, Plus 5x, Pro/PAYG unlimited. The existing recordings account bucket survives tier/session/IP changes. Subscription or limiter outages fail closed with 503; finite exhaustion returns 429 with Retry-After. Provider quotas, attachment limits, privacy checks and bounded job processing remain unchanged.' },
 		steps: ['Sign in on the same domain as your Watch.', 'Open /lopu/recordings, review provider disclosure and enable automation.', 'Upload a recording and inspect its private comments, generated Things and reminder todos.', 'On retry, job.error identifies source/format, storage download, provider authentication/quota, transcription, analysis or saving failures using fixed safe text; raw provider errors and signed URLs are never returned.'],
 		requestExamples: [{ name: 'Enable recordings', description: 'Opt in and select the reminder time zone.', method: 'POST', body: { op: 'settings', settings: { enabled: true, timeZone: 'Australia/Melbourne', reminderHour: 9 } } }, { name: 'Complete a todo', description: 'Stop daily reminders for this task.', method: 'POST', body: { op: 'todo', id: 'your-todo-id', completed: true } }],
 		responseExamples: [{ status: 200, description: 'Private account-scoped automation state.', body: { ok: true, ownerId: 'your-user-id', settings: { enabled: true, timeZone: 'Australia/Melbourne', reminderHour: 9 }, jobs: [], todos: [], provider: { configured: true, name: 'Configured AI provider', maxAudioBytes: 25165824 } } }, { status: 401, description: 'A full signed-in account is required.', body: { ok: false, error: 'Sign in to manage your recordings.' } }]
 	}),
 	endpoint({
-		id: 'lopu-recordings-run', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'lopu', title: 'Run recording automation',
+		id: 'lopu-recordings-run', contractVersion: '1.2.0', featureVersion: '1.2.0', group: 'lopu', title: 'Run recording automation',
 		endpoint: '/api/v1/lopu/recordings/run', methods: ['GET', 'POST'],
 		summary: 'Protected scheduler/admin entry point for durable Watch recording jobs and due daily reminders.',
-		detail: 'GET requires the exact CRON_SECRET bearer credential; POST requires a current administrator and same-origin request. Home data plane only. Bounded discovery, leased processing, private comment/Thing creation and once-per-local-day reminder delivery. Each job uses only its owner’s selected credential waterfalls, with at most four 20-second attempts per stage. The run request accepts no provider hosts, credentials, owner ids, prompts or execution commands. Retries resume checkpoints instead of duplicating content. Response contains counts and status labels only, never recordings, transcripts, credentials or account ids. providerConfigured describes the claimed job’s selected connection configuration, or the default audio connection if no job is claimed; it does not prove provider health or quota.',
+		detail: 'Version 1.2 also runs leased one-time/repeating Lopu reminders and at-most-once recording handoffs through normal Lopu chat. Response adds scheduledReminders and handoffs counts. GET requires the exact CRON_SECRET bearer credential; POST requires a current administrator and same-origin request. Home data plane only. Bounded discovery, leased processing, private comment/Thing creation and once-per-local-day reminder delivery. Each job uses only its owner’s selected credential waterfalls, with at most four 20-second attempts per stage. The run request accepts no provider hosts, credentials, owner ids, prompts or execution commands. Retries resume checkpoints instead of duplicating content. Response contains counts and status labels only, never recordings, transcripts, credentials or account ids. providerConfigured describes the claimed job’s selected connection configuration, or the default audio connection if no job is claimed; it does not prove provider health or quota.',
 		auth: { mode: 'session-or-bearer', description: 'GET: scheduler secret only. POST: current administrator only.' },
 		steps: ['Configure CRON_SECRET and platform API keys or owner-selected Secure Vault API connections.', 'Vercel invokes the registered cron automatically; an administrator can POST for a bounded manual run.'],
 		requestExamples: [{ name: 'Run scheduler', description: 'Administrator-only manual run.', method: 'POST', body: {} }],
 		responseExamples: [{ status: 200, description: 'Bounded processing counts.', body: { ok: true, reminders: { sent: 0 }, recordings: { queued: 1, processed: 1, outcomes: ['done'], providerConfigured: true } } }]
+	}),
+	endpoint({
+		id: 'lopu-reminders', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'lopu', title: 'Lopu reminders',
+		endpoint: '/api/v1/lopu/reminders', methods: ['GET', 'POST'],
+		summary: 'Create, list, pause and resume your own durable one-time or repeating notifications.',
+		detail: 'GET returns ownerId and up to 100 reminders. POST op=create accepts title (140), description (2000), at (ISO with UTC offset, now to one year), timeZone (IANA), optional everyMinutes (integer 5–525600) and delivery (quiet, normal, urgent). Creates a quota-billed private data Thing and protected linked schedule transactionally. POST op=set-enabled accepts id and enabled. Completed one-time schedules cannot resume. Owner-only home-plane control; deleting/completing the underlying Thing or pausing stops future sends. The existing recording scheduler checks every five minutes, leases due work and deduplicates notification inserts; missed occurrences skip forward, not a backlog. Preferences apply. Device push is best-effort. No arbitrary code or provider call runs from a reminder.',
+		auth: { mode: 'session-or-bearer', description: 'Full live first-party user session; same-origin JSON mutations. Subscription-tier account limits; Pro/PAYG unlimited, service/security limits remain.' },
+		steps: ['Negotiate api.lopu-reminders 1.0.0 on this origin.', 'Ask Lopu to create a reminder or POST a schedule.', 'Use the returned ID and nextRunAt receipt; manage it in Settings → Notifications.'],
+		requestExamples: [{ name: 'Pause', description: 'Pause your own reminder.', method: 'POST', body: { op: 'set-enabled', id: 'your-reminder-id', enabled: false } }],
+		responseExamples: [{ status: 200, description: 'Your schedules.', body: { ok: true, ownerId: 'user-id', reminders: [] } }]
+	}),
+	endpoint({
+		id: 'notifications-test', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'notifications', title: 'Send a test notification',
+		endpoint: '/api/v1/notifications/test', methods: ['POST'],
+		summary: 'Send a fixed notification example to the signed-in account only.',
+		detail: 'POST preset quiet, normal, urgent, rich or image, with optional registered notification type (default lopu-reminder). Fixed safe title/body/rich text/image; no caller-provided content, recipient or external URL. Quiet maps to passive without sound; normal to active; urgent to time-sensitive, not Critical. Rich text and a local illustration render in Thingtime; native banners use plain text. Notification preferences are honoured. saved means durable history insertion, not proof a physical device displayed it. Response includes id or null and a status message. No email is sent.',
+		auth: { mode: 'session-or-bearer', description: 'Full live first-party user only, same-origin JSON, subscription-tier mutation limit. Scoped app/Watch credentials cannot send tests.' },
+		steps: ['Negotiate api.notifications-test 1.0.0.', 'Select a test in Settings → Notifications.', 'Check history and your physical device.'],
+		requestExamples: [{ name: 'Urgent test', description: 'Time-sensitive sample to yourself.', method: 'POST', body: { preset: 'urgent' } }],
+		responseExamples: [{ status: 200, description: 'Muted by user settings.', body: { ok: true, saved: false, id: null, message: 'This notification is muted by your notification preferences.' } }]
+	}),
+	endpoint({
+		id: 'watch-recordings', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'devices', title: 'Send a Watch recording to Lopu',
+		endpoint: '/api/v1/watch/recordings', methods: ['POST'],
+		summary: 'Explicitly queue an owned private recording transcript for Lopu to act on.',
+		detail: 'POST op=send-to-lopu and postId after an explicit user confirmation. Requires enabled recording AI settings and ready owned private audio. Stable jobs deduplicate repeated requests. After transcription, the scheduler dispatches once into a private Lopu conversation through normal account billing, tool permissions and destructive-action confirmation checks. Ambiguous interruptions are not automatically repeated. Follow handoffStatus and handoffChatId in the recordings page. Audio is never sent to a text-only model. Does not approve sensitive actions on the user’s behalf.',
+		auth: { mode: 'session-or-bearer', description: 'Paired Watch ttnode_ credential with watch.things.create; current owner and private source checks. Subscription-tier account limit.' },
+		steps: ['Negotiate api.watch-recordings 1.0.0.', 'Long-press a saved recording and choose Send to Lopu.', 'Read the resulting conversation for receipts or confirmation requests.'],
+		requestExamples: [{ name: 'Send recording', description: 'Queue an explicit handoff.', method: 'POST', body: { op: 'send-to-lopu', postId: 'watch-upload-your-id' } }],
+		responseExamples: [{ status: 202, description: 'Accepted; processing is asynchronous.', body: { ok: true, message: 'Queued for Lopu.' } }]
 	}),
 	endpoint({
 		id: 'capabilities',
@@ -4493,11 +4523,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // each spend the same last credit — past the cap the request is refused 429
     // LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted (additive). contractVersion
     // feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.4.0',
-    featureVersion: '1.4.0',
+    contractVersion: '1.5.0',
+    featureVersion: '1.5.0',
     summary: 'Sends one message to Lopu and streams its reply — text, tool calls and live builder patches — as newline-delimited JSON.',
     detail:
-      'POST { chatId?, text, requestId, model?, effort?, speed?, providerId?, context?, confirmations? }. The user turn is persisted first (omit chatId to start a ' +
+      'Version 1.5 adds create_thing, send_notification, create_reminder, list_reminders and set_reminder_enabled tools for the current user. Reminder schedules and direct notifications return server receipts, obey notification preferences, and require no open browser. POST { chatId?, text, requestId, model?, effort?, speed?, providerId?, context?, confirmations? }. The user turn is persisted first (omit chatId to start a ' +
       'conversation titled from the message), then the reply streams as application/x-ndjson, one JSON event per line: meta (chat, ' +
       'request and the resolved model/provider), delta (assistant text), thinking, tool_use_start / tool_input_delta / tool_use ' +
       '(a tool call and its streamed input), patch (builder ops applied to the active page — persisted: true when the page was ' +
@@ -11284,9 +11314,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // actorName "s/<slug> mods", actorUsername / actorAvatarUrl null)
     // 1.3.0: both lines merged — this endpoint ships history filters AND the
     // subspace family together; additive
-    // 1.4.0: adds private recording-reminder notifications alongside subspaces.
-    featureVersion: '1.4.0',
-    contractVersion: '1.4.0',
+    // 1.5.0: adds Lopu reminders and optional delivery/richText/image presentation.
+    featureVersion: '1.5.0',
+    contractVersion: '1.5.0',
     group: 'notifications',
     title: 'List notifications',
     endpoint: '/api/v1/notifications',
@@ -11504,9 +11534,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'notifications-settings',
     // 1.1.0: six subspace-* switches joined the matrix — additive; 1.2.0:
     // merged with develop's 1.1.0 (action-run switch) — additive
-    // 1.3.0: adds recording-reminder while retaining all subspace switches.
-    featureVersion: '1.3.0',
-    contractVersion: '1.3.0',
+    // 1.4.0: adds lopu-reminder while retaining all existing switches.
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
     group: 'notifications',
     title: 'Notification settings',
     endpoint: '/api/v1/notifications/settings',

@@ -3,6 +3,45 @@
 Updated 2026-09-07. [Pull request](https://github.com/lopugit/thingtime/pull/665).
 Branch: `codex/watch-lopu-recording-automation`.
 
+## 2026-09-09 Watch recovery and actionable Lopu reminders
+
+Build 25 reports an unavailable attachment and then offline. Read-only production
+inspection found an unbound `deleting` Watch draft ahead of already-bound copies;
+the client treated every upload failure as offline and stopped the entire queue.
+New recovery classifies only owned missing/expired/deleting unbound drafts,
+rotates their persisted request identity once, and retains local audio. Valid
+bindings and ambiguous successful replies keep stable idempotency. File rejection
+does not disconnect the account, and later files can proceed. Local content
+receipts/queue dedupe prevent repeat taps from creating another upload.
+
+Lopu's shared standard voice/chat tool set now creates private notes/todos,
+immediate notifications and durable one-off/repeating reminders. Protected
+owner-only linked schedules support pause/resume, leased execution, transactional
+notification/checkpoint dedupe and skip-ahead after downtime. Existing platform
+indexes are retained; no destructive index migration is part of this change.
+The scheduler still needs a verified five-minute hosted cron before live release.
+
+Settings adds Quiet/Normal/Urgent, rich-text/image and per-type test buttons.
+Samples address only the current account, never email, respect mute preferences,
+and distinguish a history receipt from physical push delivery. Rich content is
+rendered in Thingtime history; native banners use text. Time Sensitive capability
+is declared in the native spec; signed profiles must be refreshed at release.
+
+Recordings gain Send to Lopu with explicit confirmation, durable handoff status
+and a private conversation. The standard reply path retains billing, ownership
+and destructive-action confirmation checks. Ambiguous execution is not retried
+automatically. The original automatic transcription opt-in cannot execute tools.
+
+Verification so far: targeted core/auth/lease/handoff/presentation tests, existing
+Lopu and notification suites, capability registry and chat streaming suites,
+and Vite/Nitro Vercel output verification pass. Integrated iPhone/Watch simulator
+build passes. Full TypeScript still has the pre-existing baseline; no new errors
+were found in the changed feature files. Local Chrome is signed out, so actual
+account controls await login; physical Watch upload/push, hosted scheduler and
+provider-backed handoff remain unverified. No main merge or TestFlight upload is
+claimed. Current worktree local web/API/HMR ports: 16340/16342/16341; Funnel CLI
+points to a missing app binary.
+
 ## 2026-09-09 subscription rates and resumed acceptance
 
 Live index cutover is complete: production47/develop48, all four final dry

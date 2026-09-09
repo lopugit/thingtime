@@ -3,6 +3,7 @@ import { Box, Button, Divider, Flex, Switch, Text } from '@chakra-ui/react';
 import { useNavigate } from 'react-router';
 
 import { SettingsSection } from './SettingsSection';
+import { NotificationTools } from './NotificationTools';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { NOTIFICATION_TYPE_META } from '~/components/Notifications/notificationCore';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
@@ -220,6 +221,7 @@ export const NotificationSettingsSection = (props: { user: NonNullable<CurrentUs
             />
           </RowShell>
         ))}
+        <NotificationTools key={user.id} ownerId={user.id} />
       </Flex>
     </SettingsSection>
   );

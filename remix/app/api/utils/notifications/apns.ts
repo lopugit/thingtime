@@ -58,6 +58,7 @@ const providerToken = (config: ApnsConfig): string => {
 };
 
 export const notificationURL = (notification: Pick<EmitNotificationInput, 'postId' | 'actor'> & Partial<Pick<EmitNotificationInput, 'type' | 'href'>>): string => {
+  if (notification.type === 'lopu-reminder') return safeInternalHref(notification.href) || '/settings';
   if (notification.type === 'recording-reminder') return safeInternalHref(notification.href) || '/lopu/recordings';
   if (notification.postId) return `/post/${encodeURIComponent(notification.postId)}`;
   if (notification.actor.username) return `/profile/${encodeURIComponent(notification.actor.username)}`;
@@ -78,12 +79,13 @@ export const buildApnsPayload = (notification: PushEnvelope) => {
   return {
     aps: {
       alert: {
-        title: notification.type === 'recording-reminder'
+        title: (notification.title || notification.type === 'recording-reminder')
           ? clampPreview(notification.title) || 'A little reminder from Lopu'
           : `${actor} ${action}`,
         ...(preview ? { body: preview } : {})
       },
-      sound: 'default',
+      ...(notification.delivery === 'quiet' ? {} : { sound: 'default' }),
+      'interruption-level': notification.delivery === 'urgent' ? 'time-sensitive' : notification.delivery === 'quiet' ? 'passive' : 'active',
       'thread-id': notification.postId || notification.targetId || notification.type
     },
     notificationId: notification.notificationId,

@@ -50,7 +50,7 @@ test('merged recording and subspace families retain their independent preference
 
 test('action-run is the system family: bell on by default, email opt-in', () => {
   assert.equal(NOTIFICATION_TYPE_CATEGORY['action-run'], 'system');
-  assert.deepEqual(notificationTypesInCategory('system'), ['action-run', 'recording-reminder']);
+  assert.deepEqual(notificationTypesInCategory('system'), ['action-run', 'recording-reminder', 'lopu-reminder']);
   assert.equal(normalizeNotificationPrefs(null).push['recording-reminder'], true);
   assert.equal(normalizeNotificationPrefs(null).email['recording-reminder'], false);
   assert.ok(EMAIL_DEFAULT_OFF_TYPES.includes('action-run'));
