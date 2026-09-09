@@ -1178,11 +1178,8 @@ async function nodeOpenPermissionSettings(event, request) {
 	if (!permission) {
 		throw new ThingtimeNodeBridgeError('invalid_request', 'Choose a supported Thingtime Node permission.');
 	}
-	const paths = thingtimeNode.paths();
-	await thingtimeNode.verify(paths);
+	await openAppLocations(event);
 	const permissions = normalizePermissions(await thingtimeNode.request('permissions.request', { kind }, `permission-${crypto.randomUUID()}`));
-	shell.showItemInFolder(paths.helperApp);
-	armPermissionRecovery();
 	try { await shell.openExternal(permission.url); } catch (error) { permissionRecoveryPending = false; throw error; }
 	return { kind, opened: true, permissions: permissions.permissions };
 }
