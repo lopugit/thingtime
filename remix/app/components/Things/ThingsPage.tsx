@@ -8,6 +8,8 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { useIsMobileViewport } from '~/components/Nav/Drawer/useDrawer';
 import { Rainbow } from '~/components/Rainbow/Rainbow';
 import { DeviceDetailsDrawer } from '~/components/Devices/DeviceDetailsDrawer';
+import { shouldHideLocalNodePanel } from '~/components/Devices/localNodePanel';
+import { useNodePanelPreference } from '~/components/Devices/useNodePanelPreference';
 import { LocalNodeSetupCard } from '~/components/Devices/LocalNodeSetupCard';
 import type { DeviceActionIntent, DeviceControlResolver } from '~/components/Devices/DeviceStateGrid';
 import type { DeviceActionKind, DeviceRuntimeState } from '~/components/Devices/deviceTypes';
@@ -146,6 +148,7 @@ export const ThingsPage = () => {
 	const serverDeviceControlFor = deviceStore.controlFor;
 	const executeServerDeviceAction = deviceStore.executeAction;
 	const setDevicePermissionMode = deviceStore.setPermissionMode;
+	const [nodePanelDismissed, setNodePanelDismissed] = useNodePanelPreference(user?.id);
 	const localDeviceControlFor = localNode.controlFor;
 	const executeLocalDeviceAction = localNode.executeAction;
 
@@ -1267,8 +1270,8 @@ export const ThingsPage = () => {
         <Flex alignItems="baseline" gap={3} wrap="wrap">
           <Text {...monoLabel}>Thingtime · Things</Text>
         </Flex>
-				{devicesEnabled && !folderId && !searchMode ? (
-					<LocalNodeSetupCard onRefresh={localNode.refresh} controlFor={localDeviceControlFor} onAction={executeLocalDeviceAction} state={localNode} />
+				{devicesEnabled && !folderId && !searchMode && !shouldHideLocalNodePanel(localNode, nodePanelDismissed) ? (
+					<LocalNodeSetupCard onDismiss={() => setNodePanelDismissed(true)} onRefresh={localNode.refresh} controlFor={localDeviceControlFor} onAction={executeLocalDeviceAction} state={localNode} />
 				) : null}
         <Flex alignItems="center" gap={3} wrap="wrap">
           <Text

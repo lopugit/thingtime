@@ -92,9 +92,9 @@ export const NotificationRow = (props: {
             </Text>
           )}
         </Text>
-        {item.richText && !dense ? <Box fontSize="xs" overflowWrap="anywhere"><LopuMarkdown text={item.richText} /></Box> : item.preview && item.type !== 'reaction' && (
-          <Text fontSize="xs" color={item.outcome === 'error' ? 'var(--tt-danger, #d6455a)' : MUTED} noOfLines={dense ? 2 : 3} overflowWrap="anywhere">
-            {item.preview}
+        {item.richText && !dense ? <Box fontSize="xs" overflowWrap="anywhere"><LopuMarkdown text={item.richText} /></Box> : (item.detail || item.preview) && item.type !== 'reaction' && (
+          <Text fontSize="xs" color={item.outcome === 'error' ? 'var(--tt-danger, #d6455a)' : MUTED} noOfLines={dense ? 2 : undefined} whiteSpace="pre-wrap" overflowWrap="anywhere">
+            {dense ? item.preview : item.detail || item.preview}
           </Text>
         )}
         {item.image === '/notification-test.svg' && <Box as="img" src={item.image} alt="Thingtime notification illustration" width="100%" maxWidth="300px" mt={2} borderRadius="8px" />}

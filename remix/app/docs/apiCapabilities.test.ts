@@ -6,6 +6,28 @@ import { routeModules } from '../../server/routes/api/[...]';
 import { thingtimeCapabilityManifest } from '../api/utils/capabilities/thingtimeCapabilities';
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 
+test('shared dependency reads negotiate the additive Things contract on both manifests', () => {
+	assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.5.2');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things'].version, '1.6.2');
+	assert.equal(capabilitySatisfies('1.6.0', '1.5.1'), true);
+	for (const unsupported of ['', '1.5.1', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.6.0'), false);
+});
+
+test('standalone Thing copying negotiates the additive copy contract on both manifests', () => {
+	const version = createApiCapabilitiesManifest().features['api.things-fork'];
+	assert.equal(version, '1.1.1');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-fork'].version, version);
+	assert.equal(capabilitySatisfies(version, '1.0.0'), true);
+	for (const unsupported of ['', '1.0.0', '1.1.0', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.1.1'), false);
+});
+
+test('Data Thing controls negotiate the shared-content action contract', () => {
+	assert.equal(createApiCapabilitiesManifest().features['api.actions-run'], '1.2.1');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.actions-run'].version, '1.2.1');
+	for (const unsupported of ['', '1.1.0', '1.2.0', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.2.1'), false);
+	assert.equal(capabilitySatisfies('1.2.2', '1.2.1'), true);
+});
+
 test('poll votes publish the shared-identity correction', () => {
 	const route = createApiCapabilitiesManifest().features;
 	const manifest = thingtimeCapabilityManifest('https://thingtime.test');
@@ -16,6 +38,16 @@ test('poll votes publish the shared-identity correction', () => {
 	assert.equal(capabilitySatisfies('2.0.0', '1.0.1'), false);
 	assert.equal(capabilitySatisfies('', '1.0.1'), false);
 	assert.ok(manifest.operations.some(operation => operation.feature === 'api.things-vote' && operation.path === '/api/v1/things/vote' && operation.methods.includes('POST')));
+});
+
+test('verified vault reveal is explicit on both manifests with compatible client requirements', () => {
+	assert.equal(createApiCapabilitiesManifest().features['api.vault-reveal'], '1.0.0');
+	const manifest = thingtimeCapabilityManifest('https://thingtime.test');
+	assert.equal(manifest.features['api.vault-reveal'].version, '1.0.0');
+	assert.ok(manifest.operations.some(operation => operation.feature === 'api.vault-reveal' && operation.path === '/api/v1/vault/reveal' && operation.methods.includes('POST')));
+	assert.equal(capabilitySatisfies('1.1.0', '1.0.0'), true);
+	assert.equal(capabilitySatisfies('2.0.0', '1.0.0'), false);
+	assert.equal(capabilitySatisfies('', '1.0.0'), false);
 });
 
 test('relationship consolidation publishes compatible additive migrations on both manifests', () => {
@@ -77,7 +109,7 @@ test('capabilities publish the native Apple notification device contract', () =>
 	const manifest = createApiCapabilitiesManifest();
 
 	assert.equal(manifest.features['api.notifications-devices'], '1.1.0');
-	assert.equal(manifest.features['api.notifications-list'], '1.5.0');
+	assert.equal(manifest.features['api.notifications-list'], '1.6.0');
 	assert.equal(manifest.features['api.watch-pairing'], '1.2.0');
 	assert.equal(manifest.features['api.watch-sync'], '1.1.0');
 	assert.equal(manifest.features['api.watch-things'], '1.1.0');
@@ -91,8 +123,8 @@ test('notification contracts publish the history filters and the system family a
 	const manifest = createApiCapabilitiesManifest();
 
 	// Preserve both subspace notifications and private recording reminders.
-	assert.equal(manifest.features['api.notifications-list'], '1.5.0');
-	assert.equal(manifest.features['api.notifications-settings'], '1.4.0');
+	assert.equal(manifest.features['api.notifications-list'], '1.6.0');
+	assert.equal(manifest.features['api.notifications-settings'], '1.5.0');
 	assert.equal(manifest.features['api.things-vote'], '1.0.1');
 });
 
@@ -164,7 +196,10 @@ test('the Lopu verified-access and credits family publishes its contracts', () =
 });
 
 test('persistent attachment content and resized previews advertise their additive contract', () => {
-	assert.equal(createApiCapabilitiesManifest().features['api.attachment-content'], '1.1.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.attachment-content'], '1.2.1');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.attachment-content'].version, '1.2.1');
+	assert.equal(capabilitySatisfies('1.1.1', '1.2.0'), false);
+	assert.equal(capabilitySatisfies('1.2.0', '1.2.0'), true);
 });
 
 test('admin preview dispatch publishes its protected-controller contract version', () => {
@@ -189,8 +224,8 @@ test('subspace lifecycle + notification type additions publish their contract ve
 	assert.equal(manifest.features['api.subspaces-delete'], '1.1.0');
 	// S4 review: subspace-post-removed / subspace-ban rows carry the subspace's
 	// mod team as their actor (1.2.0, additive)
-	assert.equal(manifest.features['api.notifications-list'], '1.5.0');
-	assert.equal(manifest.features['api.notifications-settings'], '1.4.0');
+	assert.equal(manifest.features['api.notifications-list'], '1.6.0');
+	assert.equal(manifest.features['api.notifications-settings'], '1.5.0');
 });
 
 test('subspace join requests + posting-approval requests publish their contract versions', () => {
@@ -242,7 +277,7 @@ test('subspace user flairs publish their contract versions', () => {
 	}
 	// (S7 moved the single read on to 1.4.0 — commentSort=top|new|old; the
 	// shared projection's other three ids are untouched)
-	assert.equal(manifest.features['api.things'], '1.4.0');
+	assert.equal(manifest.features['api.things'], '1.5.2');
 	assert.equal(manifest.features['api.things-feed'], '1.4.0');
 });
 
@@ -291,7 +326,7 @@ test('subspace reports publish their contract versions', () => {
 	}
 	// (S7 moved the single read on to 1.4.0 — commentSort=top|new|old; the
 	// shared projection's other three ids are untouched)
-	assert.equal(manifest.features['api.things'], '1.4.0');
+	assert.equal(manifest.features['api.things'], '1.5.2');
 	assert.equal(manifest.features['api.things-feed'], '1.4.0'); // S6: scope
 });
 
@@ -315,7 +350,7 @@ test('subspace discovery publishes its contract versions', () => {
 	}
 	// (S7 moved the single read on to 1.4.0 — commentSort=top|new|old; the
 	// shared projection's other three ids are untouched)
-	assert.equal(manifest.features['api.things'], '1.4.0');
+	assert.equal(manifest.features['api.things'], '1.5.2');
 	assert.equal(manifest.features['api.subspaces-feed'], '1.3.0');
 	assert.equal(manifest.features['api.subspaces-get'], '1.4.0');
 });

@@ -254,6 +254,7 @@ export const router = createBrowserRouter([
         loader: vercelDeploymentsLoader
       },
       { path: 'settings', lazy: lazyRoute(() => import('./routes/settings')) },
+      { path: 'settings/:tab', lazy: lazyRoute(() => import('./routes/settings')) },
       { path: 'tests', lazy: lazyRoute(() => import('./routes/tests')) },
       { path: 'themes', lazy: lazyRoute(() => import('./routes/themes')) },
       { path: 'themes/gallery', lazy: lazyRoute(() => import('./routes/themes.gallery')) },

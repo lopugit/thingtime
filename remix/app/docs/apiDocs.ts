@@ -2062,6 +2062,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-sso-session',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'auth',
     title: 'Redeem a sign-in code',
     endpoint: '/api/v1/auth/sso-session',
@@ -2072,7 +2074,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'revokes the session — theft signal), then runs the exact password-login tail: httpOnly auth cookie, ' +
       'switcher roster merge, cross-deployment hint pointer. Redemption only succeeds where this deployment ' +
       'shares the minting environment\'s database (an immutable preview and its alias twin do) — anything ' +
-      'else fails closed with a generic error.',
+      'else fails closed with a generic error. Successful redemption records a login-success notification, independent of delivery preferences.',
     auth: { mode: 'none', description: 'The code is the credential.' },
     methods: ['POST'],
     steps: [
@@ -2358,9 +2360,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-passkeys-login',
-    contractVersion: '1.1.0',
+    contractVersion: '1.2.0',
     group: 'auth',
-    featureVersion: '1.1.0',
+    featureVersion: '1.2.0',
     title: 'Finish passkey login',
     endpoint: '/api/v1/auth/passkeys/login',
     summary: 'Verify a passkey assertion and sign in — cookies, switcher roster, and hints included.',
@@ -2371,7 +2373,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'exactly like password login: httpOnly auth cookie, account merged into the switcher roster, ' +
       'cross-deployment hint updated. Passkeys bypass email-OTP 2FA by design (possession + on-device ' +
       'verification IS multi-factor). The optional clientId records which registered app the login served ' +
-      'on the passkey\'s linkedApps. Sessions carry meta.method:"passkey" for auditability.',
+      'on the passkey\'s linkedApps. Sessions carry meta.method:"passkey" for auditability. Successful login records a login-success notification, independent of delivery preferences.',
     auth: { mode: 'none', description: 'Anonymous — the assertion is the credential.' },
     methods: ['POST'],
     steps: [
@@ -3394,12 +3396,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-logout',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'auth',
     title: 'Logout',
     endpoint: '/api/v1/auth/logout',
     summary: 'Signs the active account out; other switcher accounts stay signed in unless all: true.',
     detail:
-      'Use this endpoint to end browser sessions or revoke a bearer token session server-side. The active account session is revoked and removed from the switcher roster; the next roster account becomes active and is returned as user. Pass all: true to revoke every roster session and clear both cookies. The route is idempotent and returns ok even without a token.',
+      'Use this endpoint to end browser sessions or revoke a bearer token session server-side. The active account session is revoked and removed from the switcher roster; the next roster account becomes active and is returned as user. Pass all: true to revoke every roster session and clear both cookies. The route is idempotent and returns ok even without a token. Revoking a live active session records a quiet sign-out notification for that account; expired or repeated calls do not.',
     auth: {
       mode: 'optional',
       description: 'Uses the auth cookie or Authorization: Bearer token when one exists.'
@@ -3633,11 +3637,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'auth-register',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'auth',
     title: 'Register user',
     endpoint: '/api/v1/auth/register',
     summary: 'Creates a user account, starts email verification, logs the browser in, and sets the auth cookie.',
-    detail: 'This is the live user signup path. Tests and seed flows should call this endpoint instead of writing directly to MongoDB.',
+    detail: 'This is the live user signup path. Successful signup records a quiet account-created notification. Tests and seed flows should call this endpoint instead of writing directly to MongoDB.',
     auth: {
       mode: 'none',
       description: 'Public signup endpoint.'
@@ -4230,11 +4236,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'login',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'auth',
     title: 'Login',
     endpoint: '/api/v1/login',
     summary: 'Validates username/password credentials and sets the auth cookie.',
-    detail: 'Use this for browser login. API clients that need service integration should prefer the service-account endpoint and bearer token.',
+    detail: 'Use this for browser login. A completed login (after OTP when required) stores a private login-success notification without credentials. API clients that need service integration should prefer the service-account endpoint and bearer token.',
     auth: {
       mode: 'none',
       description: 'Public credential exchange endpoint.'
@@ -5738,19 +5746,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-content',
-		contractVersion: '1.1.0',
-		featureVersion: '1.1.0',
+		contractVersion: '1.2.1',
+		featureVersion: '1.2.1',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
 		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
 		detail:
 			'Owners may read live unattached drafts. Bound content is purpose-authorized against the exact target: post/comment ACL inheritance, active or pending chat membership, the current public profile slot, or the current personal/community emoji reference. The bucket never becomes public. ' +
-			'Only magic-byte-verified inline-safe types may render inline: AVIF/GIF/JPEG/PNG/WebP images and MP4/WebM/QuickTime/M4V/Ogg/3GPP/3GPP2/Matroska video. Add download=1 to force attachment/octet-stream for every type.',
+			'Optional sharedRoot authorizes post-purpose media attached to the root or explicitly embedded by a stored component/schema/native media block. Same-author references inherit the freshly checked root audience; foreign media still needs independent access. Unrelated ids, drafts, message/profile/emoji objects, retired keys and revoked groups do not gain access through this mode. Ready state, moderation, exact object version and home-storage guards remain enforced before every redirect, byte read or cache receipt. ' +
+			'Hidden post/page audiences accept the root key query parameter and custom audiences use current group/friend membership. Every content or cache-validation request rechecks the root. Only magic-byte-verified inline-safe types may render inline: AVIF/GIF/JPEG/PNG/WebP images and MP4/WebM/QuickTime/M4V/Ogg/3GPP/3GPP2/Matroska video. Add download=1 to force attachment/octet-stream for every type.',
 		auth: {
 			mode: 'optional',
 			description:
-				'Anonymous access works only for a publicly viewable post/comment or public profile slot. Messages and custom emojis require an authenticated eligible viewer.'
+				'Anonymous access works for public post/page/comment targets, a valid hidden root key, or a public profile slot. Custom group/friend audiences require a current eligible session. Messages and custom emojis require an authenticated eligible viewer.'
 		},
 		methods: ['GET'],
 		steps: [
@@ -8778,13 +8787,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // then older first) and the response echoes commentSort; an unknown value
     // is a 400. Only this read grew — the shared projection is unchanged, so
     // things-comment / -feed / -user stay put (S7, additive)
-    featureVersion: '1.5.0',
-    contractVersion: '1.4.0',
+    featureVersion: '1.6.2',
+    contractVersion: '1.5.2',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares.',
     detail:
+			'Shared webpage writers may add component references only when they can independently read the referenced component; only the owner may delegate an unrelated private component through the page. ' +
+			'Shared writers also need independent access before inserting new first-party private media references in page, component or schema render positions. ' +
+			'GET id with sharedRoot and optional key reads an included component/action/schema/data dependency through the freshly authorized stored root. This first-party contextual mode preserves standalone ACLs and owner-only keys, refuses unrelated ids and app-token namespace escapes, and returns private no-store responses. It does not authorize mutations or shared-context list queries. ' +
       'Everything is a thing: one root Thing schema per doc, sub-schemas applied via the thingtime array of schema ids (see /schemas), the payload under crystal, and the audience under acl — tt: grants plus "-"-prefixed exclusions where the most specific matching entry wins (["tt:all"] public, ["-tt:all","tt:userFriends","tt:user"] friends-only, ["tt:all","-tt:user/somebody"] public except one user; owners always see their own things). POST creates (unified shape or the legacy post body — same path), GET reads one thing / lists a target’s attached things / lists your own, PUT upserts by id (create-or-replace), PATCH merges a partial update, DELETE removes an owned thing and its attached comments/reactions. The legacy visibility names still work as input and are derived on the wire — including "hidden" (acl ["tt:hidden","tt:user"]): an unlisted thing that never appears in feeds, listings, profiles, or search for anyone but its owner, yet is viewable by ANYONE presenting its randomly generated linkKey — GET /api/v1/things?id=<id>&key=<linkKey>, or the /post/<id>?key=<linkKey> page. The server mints a fresh linkKey whenever a thing enters hidden (re-hiding rotates it, so previously shared links die), projects it to the owner only, and honors it on the engagement routes too (body.key on comment/react/save/share admits key-holders). Changing the audience away from hidden retires the link instantly. "custom" audiences go further: an acl carrying the tt:custom marker names exactly who can do what — a baseline (tt:all = everyone may read, tt:hidden = link-key holders may read, neither = only the people below), plus per-user grants tt:user/<username> (read), tt:user/<username>/comment, tt:user/<username>/write and per-group grants tt:group/<group id>[/comment|/write] (groups: /api/v1/groups-docs; write ⊃ comment ⊃ read). On custom things, general viewers READ ONLY — commenting, reacting, and sharing need the comment capability, and users with write may PATCH the thing’s crystal/extended/tags (never its audience, folder, or token grants; storage stays billed to the owner). Saves are exempt (a save is a private bookmark). The composer’s Custom option builds these acls visually. Crystals are optionally schema-less: omit thingtime and it defaults to ["data"], the bounded free-form crystal. Beside the crystal, every thing also carries a schema-free extended property — any JSON up to 512KB, stored and returned exactly as given, never validated or interpreted, and not structured-searchable (/search field conditions can’t target it, though its string content is indexed by the wildcard text index). extended replaces as a whole value on write (deep-merging arbitrary JSON is ambiguous) and null clears it — the open sidecar external apps park their data in. Things also carry a tokenAcl grant list (tt:token/<token id> entries, see /api/v1/tokens-docs): sandboxed personal-access-tokens may only mutate things carrying their entry; creators are auto-granted, the list replaces whole via tokenAcl on POST/PUT/PATCH (null clears, max 32 entries), it never affects visibility, and it projects to the owner only.',
     auth: {
       mode: 'session-or-bearer',
@@ -11314,37 +11326,38 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // actorName "s/<slug> mods", actorUsername / actorAvatarUrl null)
     // 1.3.0: both lines merged — this endpoint ships history filters AND the
     // subspace family together; additive
-    // 1.5.0: adds Lopu reminders and optional delivery/richText/image presentation.
-    featureVersion: '1.5.0',
-    contractVersion: '1.5.0',
+    // 1.6.0: adds Lopu reminders and optional delivery/richText/image presentation.
+    featureVersion: '1.6.0',
+    contractVersion: '1.6.0',
     group: 'notifications',
     title: 'List notifications',
     endpoint: '/api/v1/notifications',
-    summary: 'Your notifications, newest first, filtered by your notification prefs — searchable by category, type, unread, text and date — plus the unread count.',
+    summary: 'Your searchable notification history. Add history=1 to include all records regardless of delivery settings; the default bell view still applies preferences.',
     detail:
       'Notifications are server-minted things (new followers, friend requests/accepts, comments, ' +
       'replies, reactions, shares, @mentions, capped posts-from-followed/friends fan-out, and subspace ' +
       'moderation: subspace-join-request, subspace-join-accepted, subspace-post-removed, ' +
       'subspace-report, subspace-role, subspace-ban) plus SYSTEM ' +
-      'notes from Lopu (category system — action-run: an action you ran finished or failed; recording-reminder: a daily reminder for an unfinished Watch recording todo; ' +
+      'notes from Lopu (category system — action-run, recording-reminder, lopu-reminder, login-success, and client-recorded system-message; ' +
       'actorId "thingtime", the headline in title, an in-app href, outcome ok|error). Every row ' +
       'carries its category: social (friend-request, friend-accepted, new-follower, groups, ' +
       'subspace-join-request, subspace-join-accepted, subspace-role, subspace-ban), ' +
       'engagement (comment, reply, reaction, share, mention, subspace-post-removed, subspace-report), ' +
       'feed (post-from-followed, ' +
-      'post-from-friend), system (action-run, recording-reminder). The list is ALWAYS filtered by your current ' +
-      'notification settings, so disabling a type hides even already-written notifications of that ' +
-      'type. Optional filters back the /notifications history page: category=<one>, ' +
+      'post-from-friend), system (action-run, recording-reminder, lopu-reminder, login-success, system-message). history=1 includes all saved ' +
+      'notifications independently of push and email preferences; without it the bell applies push settings. ' +
+      'System messages may include detail with the bounded, credential-redacted full text. ' +
+      'Optional filters back the /notifications history page: category=<one>, ' +
       'types=<csv> (intersected with category when both are given; unknown names match nothing), ' +
       'unread=1, q=<text ≤100 chars, literal case-insensitive match over preview / actor name / ' +
       'actor username / system title>, since=<ISO> and until=<ISO> (inclusive createdAt bounds), ' +
       'and withTotal=1 to also return total — the count of everything matching the filters, cursor ' +
-      'ignored. unreadCount is always the badge count (every enabled type, filters ignored). Cursor ' +
+      'ignored. unreadCount is always the badge count (enabled, non-quiet rows, filters ignored); history=1 also returns historyUnreadCount across all stored unread rows. Client popup records are already read because they were displayed. Cursor ' +
       'pagination uses the opaque cursor=<nextCursor> so notifications sharing the same timestamp ' +
       'are never skipped; legacy before=<nextBefore> remains supported. Optional from (inclusive) ' +
       'and to (exclusive) ISO timestamps bound historical pages and exports, alongside since/until. ' +
       'The viewer object identifies the authenticated account by username so native companions can ' +
-      'visibly confirm which account is connected. A recipient keeps their newest 10,000 notifications. ' +
+      'visibly confirm which account is connected. Records are no longer automatically pruned by count. ' +
       'Subspace-scoped rows (role, ban, join…) carry the subspace shareId in targetId and lead their preview ' +
       'with "s/<slug> · …" so clients can link to /s/<slug>; post-scoped ones (post-removed, report) set postId ' +
       'like every other post notification. The punitive pair (subspace-post-removed, subspace-ban) is sent by the ' +
@@ -11359,7 +11372,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     steps: [
       'GET ?limit=&cursor=&from=&to= — newest first. Use cursor for stable 10-at-a-time history; from is inclusive and to is exclusive.',
       'Show unreadCount on the bell; refetch on window focus.',
-      'History page: add category / types / unread / q / since / until and withTotal=1; keep the filter set in the URL.',
+      'History page: add history=1, category / types / unread / q / since / until and withTotal=1; keep the filter set in the URL.',
       'Click-through: href (system notes) → that path, else postId → /post/<id>, else a subspace-* row → /s/<slug> (slug from the preview), else actor → /profile/<username>.',
       'Handle 401 unauthenticated and 429 rate-limited.'
     ],
@@ -11433,6 +11446,21 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         }
       }
     ]
+  }),
+  endpoint({
+    id: 'notifications-record',
+    featureVersion: '1.0.0',
+    contractVersion: '1.0.0',
+    group: 'notifications',
+    title: 'Save an in-app notification',
+    endpoint: '/api/v1/notifications/record',
+    summary: 'Save a private system-message for the authenticated account, without another popup, push or email.',
+    detail: 'Body: userId (must equal the current account), eventId (UUID v4 reused only for transport retries), title (1–400 characters), description (optional, up to 48000 characters), status (success/error/info/warning), href (optional internal path). Unknown fields are rejected. The server fixes actor, type, owner and creation time; clients cannot forge login-success or action-run records. Credential-like content is redacted and URL queries/fragments are dropped. Retries are idempotent and never overwrite a record or reset read state. Anonymous requests are refused, and rate limits bound ingestion. A successful response confirms the database write.',
+    auth: { mode: 'session', description: 'Requires the authenticated first-party account; app/PAT credentials remain default-denied.' },
+    methods: ['POST'],
+    steps: ['Negotiate api.notifications-record 1.0.0 at this origin.', 'POST the message and a new UUID for each event; reuse that UUID on retries.', 'Read it with GET /api/v1/notifications?history=1&category=system.'],
+    requestExamples: [{ name: 'Save a message', description: 'The owner is the current authenticated account.', method: 'POST', body: { userId: 'current-user-id', eventId: 'bb617572-ff32-4c98-b3e4-d668ac000fac', title: 'Saved successfully', status: 'success' } }],
+    responseExamples: [{ status: 200, description: 'Saved (or already recorded).', body: { ok: true, id: 'notification-message-…' } }, { status: 400, description: 'Invalid message or account changed.', body: { ok: false, error: 'Invalid notification message or account changed' } }]
   }),
   endpoint({
     id: 'notifications-read',
@@ -11534,9 +11562,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'notifications-settings',
     // 1.1.0: six subspace-* switches joined the matrix — additive; 1.2.0:
     // merged with develop's 1.1.0 (action-run switch) — additive
-    // 1.4.0: adds lopu-reminder while retaining all existing switches.
-    featureVersion: '1.4.0',
-    contractVersion: '1.4.0',
+    // 1.5.0: adds lopu-reminder while retaining all existing switches.
+    featureVersion: '1.5.0',
+    contractVersion: '1.5.0',
     group: 'notifications',
     title: 'Notification settings',
     endpoint: '/api/v1/notifications/settings',
@@ -11545,7 +11573,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Includes recording-reminder for opted-in daily Watch recording todos (push on, email opt-in). Two channels: push (the bell/in-app channel) and email (SES-backed notification emails), each ' +
       'with a master switch and per-type switches. Types: friend-request, friend-accepted, ' +
       'new-follower, post-from-followed, post-from-friend, comment, reply, reaction, share, mention, groups ' +
-      '(reserved), action-run (system notes from Lopu about actions you run), the subspace family ' +
+      '(reserved), action-run, login-success, system-message (system notes; email defaults off), the subspace family ' +
       'subspace-join-request, subspace-join-accepted, subspace-post-removed, subspace-report, subspace-role, ' +
       'subspace-ban, plus the email-only weekly-summary digest. Defaults ON, except email for the high-volume ' +
       'types (post-from-followed / post-from-friend / action-run and the mod-queue pair subspace-join-request / ' +
@@ -11553,7 +11581,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'returns the full matrix. POST merges only the keys you send — the new channel shape ' +
       '{ prefs: { push?, email?, masters? } } or the original flat { prefs: { <type>: boolean } } ' +
       '(which patches the push channel); unknown keys 400. A disabled push type is hidden from your ' +
-      'list and unread count immediately; a disabled email type stops future emails. Emails only go ' +
+      'bell and unread badge immediately, but never from history=1 and never prevents storage; a disabled email type stops future emails. Emails only go ' +
       'to verified addresses and are capped per recipient per hour; every one carries a manage link ' +
       'and a one-click unsubscribe link.',
     auth: {
@@ -12122,7 +12150,24 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'things-fork',
+    featureVersion: '1.1.1',
+    contractVersion: '1.1.1',
+    group: 'things',
+    title: 'Copy a shared composition',
+    endpoint: '/api/v1/things/fork',
+    summary: 'Create an independent private copy of readable standalone content, including pages, components, actions, schema controls and data with extended content.',
+    detail: 'Revalidates the root audience and traverses stored component, action, schema and data references. Creates fresh caller-owned private Things through normal quota and schema gates. Rewrites executable references and capability scopes to copied ids; never edits the original or overwrites a prior fork. Missing dependencies fail before writes. Failed writes trigger best-effort cleanup of exact newly created ids; a cleanup failure is reported explicitly. Repeated successful calls create separate copies.',
+    auth: { mode: 'session', description: 'Requires a signed-in user and read access to id, including its key or group membership when needed.' },
+    methods: ['POST'],
+    steps: ['POST { id, key? }. Supported roots are post, data, schema, component, webpage and action content; organizational folders, managed records and target-attached relationship rows retain their dedicated lifecycle.', 'Open the returned id in Builder for a webpage or /thing/:id for other content.'],
+    requestExamples: [{ name: 'Copy a shared page', description: 'Save an editable private copy.', method: 'POST', body: { id: 'page-id', key: 'owner-issued-link-key' } }],
+    responseExamples: [{ status: 200, description: 'Independent private copy created.', body: { ok: true, id: 'new-page-id', copied: 3, ids: ['new-action-id', 'new-component-id', 'new-page-id'] } }]
+  }),
+  endpoint({
     id: 'actions-run',
+    featureVersion: '1.2.1',
+    contractVersion: '1.2.1',
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',
@@ -12136,10 +12181,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'depth, child actions, result bytes) is shared across the whole invocation including child actions.invoke ' +
       'calls, so recursive chains terminate by construction. Every run lands a protected action-run thing ' +
       '(targetId = the action) with a per-step trace; the response carries the same runId, status, result, ' +
-      'budget usage and trace.',
+      'budget usage and trace. Shared mode accepts sharedRoot (a stored content Thing, including a webpage, component, action, data or schema id) and an optional key. Schema template controls participate in the same stored dependency graph. ' +
+      'It rechecks the root audience on every call, resolves only stored reachable actions in their author namespace, and permits ' +
+      'read-only execution without signing in. It never borrows the author or viewer private-account authority, never mutates saved data, ' +
+      'and creates no persistent run record or notification; its shared-run id is ephemeral. Explicit stored same-author data dependencies ' +
+      'inherit the root audience; dynamic ids retain ordinary anonymous read access. Search schema definitions resolve through the current action’s stored composition edge, while the search itself retains ordinary anonymous/public/system data boundaries. Every ordinary completed run also stores an action-run ' +
+      'notification, including successful component runs (quiet delivery).',
     auth: {
-      mode: 'session',
-      description: 'Session cookie required. PATs and app tokens are default-denied in v1.'
+      mode: 'optional',
+      description: 'A session is required for ordinary runs. Shared read-only runs require access to sharedRoot, with its key or group membership when applicable. PATs and app tokens do not grant execution authority.'
     },
     methods: ['POST'],
     steps: [
@@ -12310,8 +12360,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'webpages-resolve',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    contractVersion: '1.2.0',
+    featureVersion: '1.2.0',
     group: 'webpages',
     title: 'Resolve a webpage',
     endpoint: '/api/v1/webpages/resolve',
@@ -12323,8 +12373,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'ONE page — by id (a standalone /p/ page), by path (the site page bound to an app route, where a ' +
       'viewer-owned personalised doc outranks the seeded system default), or global=1 (the site-global block ' +
       'doc) — together with every referenced component in one batched query. Component refs resolve exact ' +
-      'visible shareIds first, then the seeded platform doc (component-<ref>), then the caller’s own latest ' +
-      'componentKey match; the refs map records each resolution. Pages are created and edited through the ' +
+      'shareIds first, then the seeded platform doc (component-<ref>), then the page author’s latest ' +
+      'componentKey match; the refs map records each resolution. Author-owned embedded components inherit ' +
+      'the resolved page audience for this response, including anonymous hidden-link readers and custom groups. ' +
+      'Standalone component ACLs are not rewritten; foreign components still require their own read access. ' +
+      'Pages are created and edited through the ' +
       'ordinary /api/v1/things write path (the webpage crystal sanitizer is the write gate) — this endpoint ' +
       'only reads. A standalone hidden page also accepts its owner-issued key query parameter, matching the ' +
       'ordinary Things hidden-link contract; the bearer key is never returned to non-owners.',
@@ -12857,6 +12910,22 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			},
 			{ status: 404, description: 'Expired, missing, or inaccessible.', body: { ok: false, error: 'Diagnostic not found' } }
 		]
+	}),
+	endpoint({
+		id: 'vault-reveal',
+		contractVersion: '1.0.0',
+		featureVersion: '1.0.0',
+		group: 'auth',
+		title: 'Verify and reveal one vault credential',
+		endpoint: '/api/v1/vault/reveal',
+		summary: 'Fresh password or user-verified passkey confirmation for one saved credential.',
+		detail: 'Supports ci and admin vaults for current admins, and personal Secure Vault entries for their owner only. Lists remain value-free. Same-origin JSON POST, a live full account session, and fresh verification are required. Passkey options issue a two-minute single-use challenge bound to the current session, origin and selected item. Login assertions cannot be reused. Five reveal attempts per fifteen minutes, including successful requests, apply independently of subscription tier. No arbitrary secure fields, bulk export, cached reveal grants or server secrets are supported.',
+		auth: { mode: 'session-or-bearer', description: 'Live full account plus current password or a fresh user-verified passkey assertion; admin role for shared admin/CI vaults.' },
+		methods: ['POST'],
+		steps: ['Choose vault and id.', 'POST action options for passkey options and ticket, or use your current password.', 'POST action reveal with password OR ticket and response.', 'Keep the returned value transient and hide it after use.'],
+		requestExamples: [{ name: 'Verify selected entry', description: 'Current-password confirmation for one personal credential.', method: 'POST', body: { vault: 'personal', id: 'example-secret', action: 'reveal', password: '<current password>' } }],
+		responseExamples: [{ status: 200, description: 'One verified value; never stored in client caches.', body: { ok: true, vault: 'personal', id: 'example-secret', value: '<selected secret>' } }, { status: 401, description: 'Verification required or failed.', body: { ok: false, error: 'Verification failed' } }],
+		notes: ['All responses, including errors and unsupported methods, are private and no-store. Clients must negotiate api.vault-reveal >=1.0.0 with matching major at the current origin.', 'Options are limited to ten per fifteen minutes. Password/passkey attempts never bypass security limits for paid subscriptions.']
 	}),
 	endpoint({
 		id: 'things-sensitive-reveal',

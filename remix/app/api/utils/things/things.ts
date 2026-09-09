@@ -4745,8 +4745,18 @@ export const updateThing = async (
 	// the sanitizer would reject every edit of it with "Say something first".
 	const postAttachments =
 		thingtime.includes('post') && !isCustomMongoEndpointActive() ? await boundAttachmentPresence(doc.ownerId, doc.shareId) : undefined;
-	const validated = validateThingtimeCrystal(thingtime, nextCrystal, { postAttachments });
+  const validated = validateThingtimeCrystal(thingtime, nextCrystal, { postAttachments });
   if (isFail(validated)) return validated;
+	if (doc.ownerId !== viewer.id && validated.thingtime.includes('webpage')) {
+		const { validateSharedComponentAdditions } = await import('../webpages/webpages');
+		const denied = await validateSharedComponentAdditions(viewer, doc, validated.crystal);
+		if (denied) return denied;
+	}
+	if (doc.ownerId !== viewer.id && validated.thingtime.some((kind) => ['webpage', 'component', 'action', 'schema'].includes(kind))) {
+		const { validateSharedReferenceAdditions } = await import('../actions/sharedComposition');
+		const denied = await validateSharedReferenceAdditions(await withFriendIds(viewer), doc, validated.crystal);
+		if (denied) return denied;
+	}
 
   // Re-run the createThing provenance check ONLY when this write changes the
   // schema attribution. Re-validating an unchanged (already-validated)
