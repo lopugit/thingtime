@@ -2517,10 +2517,13 @@ The script creates fixture accounts/content through the real API utilities,
 runs the leased migration, checks behavior and emits identity-free native
 explain counts. It refuses any other URI. Stop the disposable server afterward;
 it is not a persistent development service.
-# Verified vault viewing
+
+## Verified vault viewing
 
 Saved CI credentials, admin integration secrets and personal Secure Vault values remain encrypted and masked by default. Their **Show** control requires the current account password or a fresh user-verified passkey for each selected entry. Admin/CI credentials require a current admin role; personal entries remain owner-only. Displayed values are transient and hide after 30 seconds, closing the dialog or leaving the tab.
 
 Local validation worktree `thingtime-vault-verified-reveal` uses Vite 17340, HMR 17341 and Nitro 17342 through the canonical PM2 ecosystem. Local URL: http://localhost:17340/admin/ci-control. Public Tailscale/Funnel URL is unavailable: the installed launcher points to a missing `/Applications/Tailscale.app` executable; no public mapping was changed.
 
 Fork setup: configure a unique 32-byte base64url `THINGTIME_ADMIN_VAULT_KEY` as a server-only secret for each deployment environment. Personal vaults use `THINGTIME_USER_VAULT_KEY` when configured, otherwise the admin key. Preserve existing keys to retain decryptability; never copy ciphertext between environments with different keys. Password verification needs the account's current password hash; passkeys must be registered in the selected environment and require HTTPS (or localhost). Normal authentication signing keys and the existing auth challenge TTL collection support two-minute, single-use, session/origin/item-bound passkey verification. No additional database index or migration is required. The same-origin `api.vault-reveal` 1.0.0 capability is negotiated before use, and fixed security attempt limits apply to every subscription tier.
+
+Desktop permission recovery includes **Open App Locations** in Things and Desktop settings. It opens a private folder of symlinks to the current Desktop and bundled Node, plus installed Thingtime Recovery, Commander, ThingDisk, and ThingDock apps from the standard Applications folders. Duplicate older installations are omitted. You may need to remove the affected app from a macOS permission list and re-add it using these shortcuts. Grant only the permissions you intend. macOS decides whether to display Quit & Reopen; Thingtime offers Later / Restart Node Now when you return from the recovery flow. Restart other affected apps separately. No permission is changed automatically.
