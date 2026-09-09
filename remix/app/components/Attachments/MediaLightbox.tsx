@@ -1,5 +1,6 @@
 import { ProgressiveImage } from './ProgressiveImage';
 import React from 'react';
+import { useSharedMediaUrl } from '../Sharing/SharedMedia';
 import { Box, Flex, IconButton, Modal, ModalContent, ModalOverlay, Text } from '@chakra-ui/react';
 import { Link } from 'react-router';
 import { ChevronLeft, ChevronRight, Download, ExternalLink, X } from 'lucide-react';
@@ -30,6 +31,7 @@ export type MediaLightboxProps = {
 };
 
 export const MediaLightbox = ({ attachments, index, isOpen, onClose }: MediaLightboxProps) => {
+	const mediaUrl = useSharedMediaUrl();
 	const [current, setCurrent] = React.useState(index);
 	React.useEffect(() => {
 		if (isOpen) setCurrent(index);
@@ -104,7 +106,7 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose }: MediaLigh
 						/>
 						<IconButton
 							as="a"
-							href={attachment.url || attachmentContentUrl(attachment.id, true)}
+							href={mediaUrl(attachment.url || attachmentContentUrl(attachment.id, true))}
 							// cross-origin ignores the download attribute — linked media opens
 							// the original URL in a new tab instead
 							{...(attachment.url ? { target: '_blank', rel: 'noopener noreferrer' } : { download: attachment.name })}
@@ -155,7 +157,7 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose }: MediaLigh
 							loading="eager"
 							sizes="100vw"
 							key={attachment.id}
-							src={attachmentMediaSrc(attachment)}
+							src={mediaUrl(attachmentMediaSrc(attachment))}
 							alt={attachment.title || attachmentDisplayName(attachment)}
 							maxWidth="100%"
 							maxHeight="100%"

@@ -1,4 +1,5 @@
 import React from 'react';
+import { SharedMediaProvider } from '../Sharing/SharedMedia';
 import { useLocation } from 'react-router';
 
 import { MAX_WEBPAGE_BLOCKS } from '~/schemas/registry';
@@ -231,7 +232,7 @@ export const WebpageRuntimeProvider = ({
 		[pageId, pageKey, suiteKey, source, viewer, query, version, last, installing, refresh, report, install, onInstall, load, shared, sharedRun]
 	);
 
-	return <WebpageRuntimeContext.Provider value={value}>{children}</WebpageRuntimeContext.Provider>;
+	return <WebpageRuntimeContext.Provider value={value}><SharedMediaProvider linkKey={linkKey}>{children}</SharedMediaProvider></WebpageRuntimeContext.Provider>;
 };
 
 // The localStorage tier for source results — optimistic paint on the next

@@ -164,7 +164,7 @@ test('the Lopu verified-access and credits family publishes its contracts', () =
 });
 
 test('persistent attachment content and resized previews advertise their additive contract', () => {
-	assert.equal(createApiCapabilitiesManifest().features['api.attachment-content'], '1.1.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.attachment-content'], '1.1.1');
 });
 
 test('admin preview dispatch publishes its protected-controller contract version', () => {

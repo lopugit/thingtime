@@ -1,4 +1,5 @@
 import React from 'react';
+import { SharedMediaProvider } from '~/components/Sharing/SharedMedia';
 import { Badge, Box, Button, Center, Flex, Heading, Spinner, Stack, Switch, Text } from '@chakra-ui/react';
 import { ArrowLeft, Copy, ExternalLink } from 'lucide-react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
@@ -793,7 +794,7 @@ export default function ThingPage() {
 			paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))"
 			paddingBottom={16}
 		>
-			<Stack spacing={5} width="100%" maxW="920px" px={{ base: 4, md: 6 }} pt={{ base: 4, md: 7 }} minW={0}>
+			<SharedMediaProvider linkKey={linkKey}><Stack spacing={5} width="100%" maxW="920px" px={{ base: 4, md: 6 }} pt={{ base: 4, md: 7 }} minW={0}>
 				<Flex align="center" justify="space-between" gap={3} wrap="wrap">
 					<Box minW={0}>
 						<Text color={MUTED} fontFamily="mono" fontSize="10px" fontWeight="700" letterSpacing="0.12em" textTransform="uppercase">
@@ -1008,7 +1009,7 @@ export default function ThingPage() {
 					</>
 				) : null}
 			</Stack>
-			{dialog}
+			{dialog}</SharedMediaProvider>
 		</Flex>
 	);
 }

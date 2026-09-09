@@ -88,7 +88,11 @@ test('shared page audience includes its author components, never a foreign priva
 		}
 		assert.equal((await request(`/api/v1/things?id=${sourceData.id}`, 'GET', undefined, owner)).data.thing.crystal.value, 'unchanged');
 		assert.equal((await request('/api/v1/things', 'PATCH', { id: component.id, crystal: { render: { tag: 'div', children: [
-			{ tag: 'button', ttAction: sharedAction.id, children: ['Draw'] }, { tag: 'p', children: ['{last.result}'] }
+			{ tag: 'button', ttAction: sharedAction.id, children: ['Draw'] }, { tag: 'p', children: ['{last.result}'] },
+			...(process.env.TT_SHARED_PLAYWRIGHT_PATH ? [
+				{ tag: 'img', props: { src: '/api/v1/attachments/content?id=sharing-browser-transport', alt: 'Shared media transport' } },
+				{ tag: 'img', props: { src: 'https://example.invalid/sharing-browser-transport.png', alt: 'External media transport' } }
+			] : [])
 		] } } }, owner)).response.status, 200);
 		const run = (action: string, linkKey = page.linkKey, cookie = '') => request('/api/v1/actions/run', 'POST', { action, sharedRoot: page.id, key: linkKey }, cookie);
 		assert.ok([403, 404].includes((await request('/api/v1/things', 'PATCH', { id: page.id, crystal: { name: 'Not allowed' } }, stranger)).response.status));
@@ -108,6 +112,21 @@ test('shared page audience includes its author components, never a foreign priva
 				for (const width of [1440, 390]) {
 					const context = await browser.newContext({ viewport: { width, height: 900 } });
 					const tab = await context.newPage();
+					// Only the bytes transport is stubbed here; root/component resolution
+					// uses the real API. Attachment ACLs have separate service/route tests.
+					const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l1kAAAAASUVORK5CYII=', 'base64');
+					let mediaReads = 0;
+					await tab.route('**/api/v1/attachments/content?*', async (route: any) => {
+						const url = new URL(route.request().url());
+						if (url.searchParams.get('id') !== 'sharing-browser-transport') return route.continue();
+						assert.equal(url.searchParams.get('key'), page.linkKey);
+						mediaReads++;
+						await route.fulfill({ contentType: 'image/png', body: pixel });
+					});
+					await tab.route('https://example.invalid/sharing-browser-transport.png*', async (route: any) => {
+						assert.equal(new URL(route.request().url()).searchParams.has('key'), false);
+						await route.fulfill({ contentType: 'image/png', body: pixel });
+					});
 					await tab.goto(new URL(`/p/${page.id}?key=${encodeURIComponent(page.linkKey)}`, base).href);
 					await tab.getByRole('button', { name: 'Draw', exact: true }).waitFor({ timeout: 60000 });
 					assert.equal(await tab.getByTestId('p-edit-in-builder').count(), 0);
@@ -115,6 +134,11 @@ test('shared page audience includes its author components, never a foreign priva
 					assert.ok(copyBounds && copyBounds.x >= 0 && copyBounds.x + copyBounds.width <= width, 'The copy control must fit inside the mobile/desktop viewport');
 					await tab.getByRole('button', { name: 'Draw', exact: true }).click();
 					await tab.getByText('The Star', { exact: true }).waitFor({ timeout: 15000 });
+					await tab.waitForFunction(() => {
+						const img = document.querySelector('img[alt="Shared media transport"]') as HTMLImageElement | null;
+						return !!img?.naturalWidth;
+					});
+					assert.ok(mediaReads > 0);
 					assert.ok(await tab.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
 					if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-${width}-top.png` });
 					await tab.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));

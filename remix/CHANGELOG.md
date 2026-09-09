@@ -24,7 +24,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   dependencies. Shared sources/controls now use a root-authorized read-only
   action mode, including child actions and explicit data dependencies. Added
   private independent composition copies with rewritten component/action
-  references. Live target deployment and broader inheritance remain under
+  references. Restore canonical hidden-key/group authorization for page/post
+  media and forward shared keys only to first-party attachment content URLs.
+  Live target deployment and broader inheritance remain under
   active validation; see [PR #707](../PRs/707-shared-root-inheritance-read-only-app-use.md). — **Codex (AI)**
 
 - Notification-history validation and rollout boundaries: [PR #705 notes](../PRs/705-codex-system-notification-history-save-system-events-and-retain-user-history.md).

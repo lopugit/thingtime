@@ -5417,6 +5417,16 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       reuse generated test sessions across runs instead of exhausting the
       signup budget; that file contains test credentials and must never be
       published. The fixture writes it with owner-only file permissions.
+- [ ] Hidden-link media: page/post-bound attachments accept the current root
+      key and group audience; missing/wrong/revoked keys and removed group
+      membership fail closed, including cache validation. Shared HTML, Chakra,
+      native media blocks, attachment details, audio and lightboxes forward the
+      key only to the exact relative first-party attachment content endpoint.
+      External URLs never receive it; independently keyed URLs keep their own
+      key. Negotiate `api.attachment-content >= 1.1.1` before attaching a key.
+      The shared browser fixture stubs image bytes to verify key transport;
+      attachment service/route tests cover authorization separately. Do not
+      treat that fixture as proof of real S3 bytes or independent media copies.
 - [ ] Canvas: hovering a block draws its dashed boundary + label chip; nested
       sub-blocks highlight innermost-wins; clicking selects (solid outline)
       and opens the inspector in the right drawer.
@@ -5432,7 +5442,8 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       refused.
 - [ ] Save on a fresh page creates the thing (private by default); the Public
       toggle publishes (acl tt:all) and /p/<id> renders it; anonymous viewers
-      see public pages read-only (ttActions inert — owner-only interactivity).
+      see public pages read-only while included controls can run in the
+      root-authorized read-only action mode (no saved-data mutations).
 - [ ] Site edit mode: ✏️ pill (signed-in only, hidden on /builder, /p/*,
       /authorize) enters in-place editing of the current route; the live app
       screen renders as the locked 🔒 native block; Save my version forks a

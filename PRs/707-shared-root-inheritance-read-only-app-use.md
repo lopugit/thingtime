@@ -37,6 +37,26 @@ not add references to unrelated private author dependencies they cannot read.
   Clicking Draw changed Temperance to Judgement. Copy to my Builder is present
   and original Edit is absent. The original develop URL still uses old code.
 
+## Media authorization follow-up, 2026-09-09
+
+- Page/post attachment reads now use the canonical ACL evaluator with the
+  supplied link key and current friend/group audience. Owner token fences,
+  moderation, exact target shape and home-storage boundaries remain enforced.
+- Shared renderers forward the key only to the exact relative attachment
+  content endpoint, after negotiating `api.attachment-content` 1.1.1.
+  External URLs and independently keyed links are not rewritten.
+- Attachment suites: 6 worker/cache tests and 157 service/route tests passed.
+  Webpage suite: 69 passed, 1 opt-in fixture skipped; capability suite: 22 passed.
+  The separately enabled real-API/Chrome fixture passed at 1440px and 390px,
+  including local image-key transport and external URL non-disclosure. Image
+  bytes are stubbed in this browser test; it does not prove S3 storage or
+  attachment copying. Changed-file lint and whitespace checks passed.
+- Whole-project TypeScript still fails in unrelated existing files. On pushed
+  commit `4d48b5bcb915565d83a44aecd576a47014bcb080`, CodeQL passed; Web CI
+  failed the inherited notification schema projection test (`Field fields
+  maxLength caps at 5000`, introduced by the notification-history base change).
+  This is not a green-CI or rollout receipt for the media follow-up.
+
 ## Remaining verification
 
 The latest merged-head and develop/main rollout verification,

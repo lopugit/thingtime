@@ -4,17 +4,20 @@ import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { getAttachmentDownload } from '~/api/utils/attachments/attachments';
 import { withAttachmentPrivateResponse } from '~/api/utils/attachments/attachmentResponses';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
+import { viewerOf, withFriendIds, withLinkKeys } from '~/api/utils/things/things';
 
 type ContentDependencies = {
 	getUser: typeof getCurrentUser;
 	enforceLimit: typeof enforceRateLimit;
 	download: typeof getAttachmentDownload;
+	enrichViewer: typeof withFriendIds;
 };
 
 const defaultDependencies: ContentDependencies = {
 	getUser: getCurrentUser,
 	enforceLimit: enforceRateLimit,
-	download: getAttachmentDownload
+	download: getAttachmentDownload,
+	enrichViewer: withFriendIds
 };
 
 export const createAttachmentContentLoader = (overrides: Partial<ContentDependencies> = {}) => {
@@ -38,10 +41,11 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 				return json({ ok: false, error: 'Too many attachment requests' }, rateLimitedResponseInit(limit));
 			}
 
+			const audience = await dependencies.enrichViewer(withLinkKeys(viewerOf(user), [url.searchParams.get('key') || '']));
 			const result = await dependencies.download(
 				// isAdmin rides along so admins can fetch quarantined (blocked)
 				// evidence for moderation review; everyone else 404s on blocked docs.
-				user ? { id: user.id, username: user.username, isAdmin: user.isAdmin } : null,
+				audience ? { ...audience, ...(user?.isAdmin ? { isAdmin: true } : {}) } : null,
 				url.searchParams.get('id'),
 				url.searchParams.get('download') === '1'
 			);
