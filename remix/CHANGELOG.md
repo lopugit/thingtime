@@ -18,6 +18,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Route both permission-settings actions through the shared Open App Locations flow, so Finder always shows the combined app shortcuts. — Codex (AI), 2026-09-09
+
+- Keep App Locations working when a neighbouring app in Applications cannot be read, stop the bundle scan once every known app is found, and report a failed Node restart only when one was actually attempted. — Lopu, 2026-09-09
+
+- Add Desktop permission recovery guidance, App Locations shortcuts to current installed apps, and a one-shot Node restart choice after returning from recovery. — Codex (AI), 2026-09-09
+
 - Refresh the clipboard-attachment preview with released main's shared-index readers and poll writer, preserving its bounded paste queue and attachment permissions. Database migration activation remains separate. — Codex (AI), 2026-09-09
 
 - Refresh the Commander intent-ranking preview with released main's shared-index readers and poll writer before database index retirement; retain its ranking changes without promoting them to production. — Codex (AI), 2026-09-09
