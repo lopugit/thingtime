@@ -10,7 +10,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.origin, 'https://preview.example.test');
   assert.equal(manifest.schemaVersion, 1);
 	assert.equal(manifest.features['api.webpages-resolve']?.version, '1.2.0');
-	assert.equal(manifest.features['api.actions-run']?.version, '1.2.0');
+	assert.equal(manifest.features['api.actions-run']?.version, '1.2.1');
 	assert.equal(manifest.features['api.things-fork']?.version, '1.1.1');
   assert.equal(manifest.features['api.admin-migrations-run']?.version, '1.3.0');
   assert.equal(manifest.features['api.admin-subscriptions']?.version, '1.1.1');
