@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
+import { AI_COMPLETION_REQUIREMENTS, type AiCompletionInput } from '~/api/utils/ai/completionCore';
 
 import { buildActionRunBody } from '~/components/Actions/actionRunRequest';
 import { flushAttachmentDraftCleanups } from '~/components/Attachments/attachmentDraftCleanup';
@@ -282,7 +283,11 @@ export function useApi() {
     // + for a signed-in viewer their Secure Vault providers as metadata only:
     // vaultProviders: [{ id, name, kind, model, endpointHost, available, reason? }], vault: { configured })
     ai: {
-      models: useCallback(async () => getJson('/api/v1/ai/models'), [])
+      models: useCallback(async () => getJson('/api/v1/ai/models'), []),
+      complete: useCallback(async (input: AiCompletionInput) => {
+        for (const [feature, minimum] of Object.entries(AI_COMPLETION_REQUIREMENTS)) await requireThingtimeCapability(feature, minimum);
+        return asyncFetcher.submit(input, { action: '/api/v1/ai/complete', errorContext: 'complete text with your selected AI connections' });
+      }, [asyncFetcher])
     },
     admin: {
       // { id, enabled } toggles one catalog model; { seed: true } re-runs the catalog upsert;
@@ -884,10 +889,11 @@ export function useApi() {
 			// commentSort: 'top' | 'new' | 'old' re-orders the shipped comment page
 			// of the post projection (PostCard's Top / New / Old menu); omit for
 			// the default page. key: a hidden thing's secret link key (?key= on
-			// /post pages) — lets anyone holding the link view the unlisted thing
+			// /post pages) — lets anyone holding the link view the unlisted thing.
+			// sharedRoot scopes a dependency read to an authorized composition.
 			get: useCallback(
 				async (args, options?: { signal?: AbortSignal }) =>
-					getJson(`/api/v1/things${toQuery({ id: args?.id, commentSort: args?.commentSort, key: args?.key })}`, options),
+					getJson(`/api/v1/things${toQuery({ id: args?.id, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, options),
 				[]
 			),
       list: useCallback(
@@ -984,8 +990,10 @@ export function useApi() {
       saved: useCallback(async (args?: { cursor?: string; limit?: number }) => getJson(`/api/v1/things/saved${toQuery(args)}`), []),
       // cast/move/remove the caller's vote on a visible poll thing
       vote: useCallback(
-        async (args: { id: string; optionIndex: number }) =>
-          asyncFetcher.submit({ id: args?.id, optionIndex: args?.optionIndex }, { action: '/api/v1/things/vote', errorContext: 'save your vote' }),
+        async (args: { id: string; optionIndex: number }) => {
+          await requireThingtimeCapability('api.things-vote', '1.0.1');
+          return asyncFetcher.submit({ id: args?.id, optionIndex: args?.optionIndex }, { action: '/api/v1/things/vote', errorContext: 'save your vote' });
+        },
         [asyncFetcher]
       ),
       // up/down vote (the separate focused reaction kind): 'up' | 'down' casts

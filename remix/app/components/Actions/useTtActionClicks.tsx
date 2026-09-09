@@ -125,7 +125,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 				runtimeRef.current.refresh();
 				return;
 			}
-			if (!signedIn) {
+			if (!signedIn && (!runtimeRef.current.sharedRun || action === INSTALL_ACTION)) {
 				lopuRef.current({ title: 'Sign in to use this 🗝️', description: 'Controls run as you, on your own things.', status: 'info', duration: 6000 });
 				navigate('/login');
 				return;
@@ -157,7 +157,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 			busyRef.current = true;
 			(async () => {
 				try {
-					if (confirmRef.current) {
+					if (confirmRef.current && !runtimeRef.current.sharedRun) {
 						const approved = await confirmRef.current({ action, inputs });
 						if (!approved) return;
 					}
@@ -168,7 +168,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 					const outcome = await runDelegatedAction({
 						action,
 						inputs,
-						run: () => apiRef.current.v1.actions.run({ action, inputs, source: 'component' }),
+						run: () => runtimeRef.current.sharedRun ? runtimeRef.current.sharedRun(action, inputs) : apiRef.current.v1.actions.run({ action, inputs, source: 'component' }),
 						onUnowned: onUnownedRef.current
 					});
 					const response = outcome.response;
@@ -184,7 +184,7 @@ export const useTtActionClicks = (options?: { onUnowned?: TtActionUnownedHandler
 							lopuRef.current({
 								...toast,
 								duration: 6000,
-								link: { label: 'Inspect the run', href: `/actions/${encodeURIComponent(response.actionId || action)}` }
+								...(!runtimeRef.current.sharedRun ? { link: { label: 'Inspect the run', href: `/actions/${encodeURIComponent(response.actionId || action)}` } } : {})
 							});
 						}
 						runtimeRef.current.report({ action, ok: true, result: response.result ?? null, error: null });

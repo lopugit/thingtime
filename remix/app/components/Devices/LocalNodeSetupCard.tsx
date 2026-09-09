@@ -1,4 +1,5 @@
 import React from 'react';
+import { localNodeIsHealthy } from './localNodePanel';
 
 import { Badge, Box, Button, Flex, Spinner, Text } from '@chakra-ui/react';
 import { FolderPlus, Laptop, Settings, ShieldCheck } from 'lucide-react';
@@ -13,12 +14,14 @@ export const LocalNodeSetupCard = ({
 	state,
 	controlFor,
 	onAction,
-	onRefresh
+	onRefresh,
+	onDismiss
 }: {
 	state: LocalThingtimeNodeState;
 	controlFor: DeviceControlResolver;
 	onAction: DeviceActionHandler;
 	onRefresh: () => unknown;
+	onDismiss?: () => void;
 }) => {
 	if (!state.available) return null;
 	const registered = state.status?.loginItem?.registered === true;
@@ -41,8 +44,7 @@ export const LocalNodeSetupCard = ({
 		}
 	];
 	const missingPermissions = permissions.filter((permission) => permission.status !== 'authorized');
-	const ready =
-		registered && pairedToCurrentAccount && missingPermissions.length === 0 && !state.permissionCheckError && Boolean(state.permissionsCheckedAt);
+	const ready = localNodeIsHealthy(state);
 	const badge = localNodeBadgePresentation({
 		checking: state.checking,
 		paired,
@@ -72,7 +74,9 @@ export const LocalNodeSetupCard = ({
 							{ready
 								? 'This Mac is connected to your account'
 								: registered && pairedToCurrentAccount
-								? state.permissionCheckError || !state.permissionsCheckedAt
+								? missingPermissions.length === 0 && state.permissionsCheckedAt && !state.permissionCheckError
+									? 'This Mac needs connection attention'
+									: state.permissionCheckError || !state.permissionsCheckedAt
 									? 'Check privacy access for this Mac'
 									: 'Finish privacy access for this Mac'
 								: registered && paired
@@ -96,7 +100,9 @@ export const LocalNodeSetupCard = ({
 						{ready
 							? 'The persistent node is paired to this account. Add local Codex folders here whenever you want to create chats in a new project.'
 							: registered && pairedToCurrentAccount
-							? 'macOS privacy grants stay local and must be enabled explicitly for the signed Thingtime Node helper.'
+							? missingPermissions.length === 0 && !state.permissionCheckError
+								? 'Check the node’s connection and service status in Settings → Things.'
+								: 'macOS privacy grants stay local and must be enabled explicitly for the signed Thingtime Node helper.'
 							: registered && paired
 							? 'This Mac already serves another Thingtime account and can safely add this account as a separate connection.'
 							: 'The signed local node keeps approved device state and desktop AI connectors available when the Thingtime window is closed.'}
@@ -206,6 +212,20 @@ export const LocalNodeSetupCard = ({
 					) : null}
 				</Box>
 			) : null}
+			{ready && onDismiss && (
+				<Button
+					mt={3}
+					size="sm"
+					variant="link"
+					color="var(--tt-accent, #805ad5)"
+					whiteSpace="normal"
+					height="auto"
+					textAlign="left"
+					onClick={onDismiss}
+				>
+					Don’t show again unless there’s a problem
+				</Button>
+			)}
 		</Box>
 	);
 };

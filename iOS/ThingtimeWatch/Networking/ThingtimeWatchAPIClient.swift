@@ -216,6 +216,11 @@ struct ThingtimeWatchAPIClient: Sendable {
         return try await createPrivateThing(metadata: metadata, attachmentIDs: [completedAttachmentID])
     }
 
+    func sendRecordingToLopu(postID: String) async throws {
+        try await verifyCapabilities(requirements: ["api.watch-recordings": "1.0.0"])
+        _ = try await requestJSON(path: "/api/v1/watch/recordings", method: "POST", body: ["op": "send-to-lopu", "postId": postID])
+    }
+
     private func createPrivateThing(
         metadata: ThingtimeWatchAttachmentMetadata,
         attachmentIDs: [String]? = nil,
@@ -242,6 +247,9 @@ struct ThingtimeWatchAPIClient: Sendable {
 
     private func verifyCapabilities(requirements: [String: String] = Self.minimumFeatures) async throws {
         let json = try await requestJSON(path: "/.well-known/thingtime-capabilities.json", method: "GET", body: nil, authenticated: false)
+        guard let manifestOrigin = json["origin"] as? String, manifestOrigin == Self.normalizedOrigin(origin) else {
+            throw ThingtimeWatchAPIError.incompatible("The capability manifest does not match this Thingtime domain.")
+        }
         guard let features = json["features"] as? [String: Any] else {
             throw ThingtimeWatchAPIError.incompatible("Thingtime’s capability manifest is unavailable.")
         }
@@ -303,7 +311,7 @@ struct ThingtimeWatchAPIClient: Sendable {
         "api.attachment-uploads": "1.1.0",
         "api.attachment-upload-parts": "1.1.0",
         "api.attachment-upload-complete": "1.1.0",
-        "api.watch-things": "1.0.0"
+        "api.watch-things": "1.1.0"
     ]
 
     private static var pushEnvironment: String {
@@ -391,6 +399,11 @@ enum ThingtimeWatchAPIError: LocalizedError {
 
     var isCompletedUploadRetry: Bool {
         if case let .server(status, code, _) = self { return status == 409 && code == "upload_unavailable" }
+        return false
+    }
+
+    var needsFreshUpload: Bool {
+        if case let .server(status, code, _) = self { return status == 409 && code == "watch_upload_restart_required" }
         return false
     }
 
