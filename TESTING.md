@@ -6076,3 +6076,4 @@ approval; `access.test.ts` — the reservation matrix) and
 - Permission recovery follow-up: click Open System Settings for both Accessibility and Screen Recording. Confirm Finder opens the combined App Locations folder, not Contents/Helpers, alongside the correct privacy pane.
 
 - Shared settings / Desktop persistence: dismiss a healthy Things node panel, quit and reopen Desktop (which changes the local port), and verify it remains hidden. Settings → Things must still show the card and its restore switch. Restore the switch, then confirm the Things page shows the panel again.
+- Shared settings / observed status: after the Mac reports connected with access allowed, switch between Things, the popup Things tab, and Open settings page. Keep the last observed status visible during the background check; do not briefly show Not running or a new permission denial. Pairing challenges and pending actions must not carry between views.
