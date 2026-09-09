@@ -85,3 +85,21 @@ test('media key transport is restricted to the exact first-party content path', 
 	assert.equal(sharedAttachmentUrl(`${source}&sharedRoot=independent`, 'read-key', 'page'), `${source}&sharedRoot=independent`);
 	assert.equal(sharedAttachmentUrl('https://external.test/image.png', 'read-key', 'page'), 'https://external.test/image.png');
 });
+
+test('unresolved template media is left for the runtime, in props and in CSS alike', () => {
+	// Discovery refuses `[{}$]` values, so transport must refuse them too:
+	// the key would ride a placeholder that never names a grantable id, and
+	// percent-encoded braces would stop the runtime from filling it in.
+	for (const template of ['/api/v1/attachments/content?id={input.id}', '/api/v1/attachments/content?id=${id}', '/api/v1/attachments/content?id=a&width={w}']) {
+		assert.equal(literalAttachmentId(template), null, template);
+		assert.equal(sharedAttachmentUrl(template, 'read-key', 'page'), template, template);
+		assert.equal(sharedAttachmentUrl(template, 'read-key'), template, template);
+		assert.equal(mapCssMediaUrls(`url("${template}")`, withContext), `url("${template}")`, template);
+	}
+	// Every candidate the parser surfaces is granted iff it is transported.
+	for (const value of [`url(${fixtureUrl})`, `url("/api/v1/attachments/content?id={input.id}")`, `image-set("${fixtureUrl}" 1x, url('https://external.test/a.png') 2x)`, `url('//external.test${fixtureUrl}')`]) {
+		const ids: string[] = [];
+		mapCssMediaUrls(value, (url) => { const id = literalAttachmentId(url); if (id) ids.push(id); return url; });
+		assert.equal(ids.length > 0, mapCssMediaUrls(value, withContext) !== value, value);
+	}
+});
