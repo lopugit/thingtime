@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 import UserNotifications
 import WatchKit
 import WatchConnectivity
@@ -475,25 +476,39 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
         else { fetchHistory(from: window.from, to: window.to) }
     }
 
-    func queueAttachment(fileURL: URL, filename: String, contentType: String) async {
+    func queueAttachment(fileURL: URL, filename: String, contentType: String, sendToLopu: Bool = false) async {
         do {
             let data = try await Task.detached { try Data(contentsOf: fileURL, options: .mappedIfSafe) }.value
-            await queueAttachment(data: data, filename: filename, contentType: contentType)
+            await queueAttachment(data: data, filename: filename, contentType: contentType, sendToLopu: sendToLopu)
         } catch { attachmentStatusMessage = "The recording is saved, but Thingtime couldn’t prepare it: \(error.localizedDescription)" }
     }
 
-    func queueAttachment(data: Data, filename: String, contentType: String) async {
+    func queueAttachment(data: Data, filename: String, contentType: String, sendToLopu: Bool = false) async {
         guard let account = selectedAccount else {
             attachmentStatusMessage = "Connect a Thingtime account before uploading."
             return
         }
         do {
+            let contentKey = "watch.upload.receipt.\(account.id).\(SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined())"
+            if let existing = UserDefaults.standard.string(forKey: contentKey) {
+                if sendToLopu, let client = currentClient() {
+                    try await client.sendRecordingToLopu(postID: existing)
+                    attachmentStatusMessage = "Sent to Lopu. Open Thingtime → Lopu for results or questions."
+                } else { attachmentStatusMessage = "This recording is already saved privately in Thingtime." }
+                return
+            }
+            if let index = pendingUploads.firstIndex(where: { $0.accountID == account.id && ($0.contentKey == contentKey || ($0.metadata.filename == filename && $0.metadata.sizeBytes == Int64(data.count))) }) {
+                if sendToLopu { pendingUploads[index].sendToLopu = true; persistPendingUploads() }
+                attachmentStatusMessage = "This recording is already queued. Retrying the saved upload…"
+                retryAttachmentTransfers()
+                return
+            }
             let metadata = try ThingtimeWatchAttachmentTransfer.makeMetadata(filename: filename, contentType: contentType, sizeBytes: Int64(data.count))
             let directory = try Self.outboxDirectory()
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             let file = directory.appendingPathComponent(metadata.requestId).appendingPathExtension(URL(fileURLWithPath: filename).pathExtension)
             try data.write(to: file, options: .atomic)
-            pendingUploads.append(PendingUpload(accountID: account.id, metadata: metadata, filename: file.lastPathComponent))
+            pendingUploads.append(PendingUpload(accountID: account.id, metadata: metadata, filename: file.lastPathComponent, sendToLopu: sendToLopu, contentKey: contentKey))
             persistPendingUploads()
             attachmentStatusMessage = "Uploading \(filename) directly to \(account.domain)…"
             retryAttachmentTransfers()
@@ -509,21 +524,69 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
         Task { [weak self] in
             guard let self else { return }
             defer { attachmentIsBusy = false }
-            for item in items {
+            var failures = 0
+            for original in items {
+                guard selectedAccountID == account.id else { break }
+                var item = original
                 do {
                     let file = try Self.outboxDirectory().appendingPathComponent(item.filename)
                     let data = try Data(contentsOf: file, options: .mappedIfSafe)
-                    _ = try await client.upload(data: data, metadata: item.metadata)
+                    var postID = item.postID
+                    do {
+                        if postID == nil { postID = try await client.upload(data: data, metadata: item.metadata).thingID }
+                    } catch let error as ThingtimeWatchAPIError where error.needsFreshUpload {
+                        // Rotate only after the server proves that the old draft
+                        // cannot bind. Persist BEFORE sending bytes so a lost
+                        // response resumes this same request instead of duplicating it.
+                        let metadata = try ThingtimeWatchAttachmentTransfer.makeMetadata(
+                            filename: item.metadata.filename, contentType: item.metadata.contentType,
+                            sizeBytes: item.metadata.sizeBytes
+                        )
+                        let replacement = PendingUpload(accountID: item.accountID, metadata: metadata, filename: item.filename, sendToLopu: item.sendToLopu, contentKey: item.contentKey)
+                        if let index = pendingUploads.firstIndex(where: { $0.id == item.id }) {
+                            pendingUploads[index] = replacement
+                            persistPendingUploads()
+                        }
+                        item = replacement
+                        postID = try await client.upload(data: data, metadata: item.metadata).thingID
+                    }
+                    if let postID {
+                        if let key = item.contentKey { UserDefaults.standard.set(postID, forKey: key) }
+                        if let index = pendingUploads.firstIndex(where: { $0.id == item.id }) {
+                            pendingUploads[index].postID = postID
+                            item = pendingUploads[index]
+                            persistPendingUploads()
+                        }
+                        if item.sendToLopu == true { try await client.sendRecordingToLopu(postID: postID) }
+                    }
                     try? FileManager.default.removeItem(at: file)
                     pendingUploads.removeAll(where: { $0.id == item.id })
                     persistPendingUploads()
-                    attachmentStatusMessage = "Saved \(item.metadata.filename) as a private Thing."
-                    lastServerContactAt = Date()
-                    connectionState = .connected
+                    if selectedAccountID == account.id {
+                        attachmentStatusMessage = failures == 0 ? "Saved \(item.metadata.filename) as a private Thing." : "Recording saved. \(failures) earlier upload(s) still need a retry."
+                        lastServerContactAt = Date()
+                        connectionState = .connected
+                        if item.sendToLopu == true { attachmentStatusMessage = "Saved privately and sent to Lopu. Open Thingtime → Lopu for results or questions." }
+                    }
                 } catch {
-                    attachmentStatusMessage = error.localizedDescription
-                    connectionState = .offline
-                    break
+                    failures += 1
+                    guard selectedAccountID == account.id else { break }
+                    attachmentStatusMessage = "\(item.metadata.filename): \(error.localizedDescription) Your recording is saved on this Watch."
+                    if (error as? ThingtimeWatchAPIError)?.isUnauthorized == true {
+                        connectionState = .failed
+                        connectionMessage = "This Watch account needs to be connected again."
+                        break
+                    }
+                    if error is URLError {
+                        connectionState = .offline
+                        connectionMessage = "Thingtime could not be reached. Your uploads are saved for retry."
+                        break
+                    }
+                    // A rejected file is not a disconnected account and must
+                    // not prevent unrelated saved recordings from uploading.
+                    if let apiError = error as? ThingtimeWatchAPIError, case .server = apiError {
+                        lastServerContactAt = Date()
+                    }
                 }
             }
         }
@@ -709,6 +772,9 @@ final class ThingtimeWatchStore: NSObject, ObservableObject {
         let accountID: String
         let metadata: ThingtimeWatchAttachmentMetadata
         let filename: String
+        var sendToLopu: Bool? = nil
+        var contentKey: String? = nil
+        var postID: String? = nil
         var id: String { metadata.requestId }
     }
 
@@ -749,7 +815,9 @@ private extension ThingtimeWatchNotification {
             postId: postId,
             preview: preview,
             readAt: date,
-            createdAt: createdAt
+            createdAt: createdAt,
+            title: title,
+            delivery: delivery
         )
     }
 }

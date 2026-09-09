@@ -16,6 +16,10 @@
 	"fluid": true,
 	"crons": [
 		{
+			"path": "/api/v1/lopu/recordings/run",
+			"schedule": "*/5 * * * *"
+		},
+		{
 			"path": "/api/v1/attachments/cleanup",
 			"schedule": "17 * * * *"
 		},
