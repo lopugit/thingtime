@@ -27,18 +27,12 @@ import { effectiveProfileMediaUrl } from '~/utils/profileMediaUrl';
 // Notifications are PROTECTED things minted only here (see registry.ts
 // PROTECTED_THINGTIME): ownerId = recipient, targetId = the subject thing
 // (post/comment/user), crystal carries the type + actor snapshot, root readAt
-// flips when read. Write-side pref checks are an optimization for
-// single-recipient emits; the read side ALWAYS filters by the recipient's
-// current prefs, so capped fan-out writes never need N pref reads and a pref
-// flip retroactively hides already-written notifications of that type.
+// flips when read. History is durable and independent of delivery preferences.
+// The bell still applies push preferences; history=1 explicitly reads all rows.
 
 const MAX_PREVIEW_CHARS = 140;
 const MAX_HREF_CHARS = 300;
 const MAX_CURSOR_CHARS = 512;
-// The /notifications history page promises "everything you've received", so
-// the per-recipient tail is generous; it is still bounded so an account that
-// scripts an action sixty times a minute cannot accumulate forever.
-export const MAX_NOTIFICATIONS_PER_USER = 10_000;
 // The page-size bounds live in listQuery.ts — normalizeNotificationListOptions
 // delegates the limit to resolveNotificationListQuery so both entry points
 // clamp identically.
@@ -62,9 +56,13 @@ export type EmitNotificationInput = {
   title?: string | null;
   href?: string | null;
   outcome?: 'ok' | 'error' | null;
+  detail?: string | null;
+  // Already displayed in-app, or a quiet component refresh: store without sending.
+  historyOnly?: boolean;
 };
 
 export type PublicNotification = {
+  detail: string | null;
   id: string;
   type: NotificationType;
   category: NotificationCategory;
@@ -97,11 +95,11 @@ export const safeInternalHref = (value: unknown): string | null => {
   const href = value.trim();
   if (!href.startsWith('/') || href.startsWith('//') || href.length > MAX_HREF_CHARS) return null;
   // eslint-disable-next-line no-control-regex
-  if (/[\s\u0000-\u001f\u007f]/.test(href)) return null;
+  if (/[\\\s\u0000-\u001f\u007f]/.test(href)) return null;
   return href;
 };
 
-const notificationDoc = (input: EmitNotificationInput, now: Date) => ({
+export const notificationDoc = (input: EmitNotificationInput, now: Date) => ({
   shareId: randomUUID(),
   schemaVersion: COLLECTION_SCHEMA_VERSIONS.things,
   thingtime: ['notification'],
@@ -113,10 +111,12 @@ const notificationDoc = (input: EmitNotificationInput, now: Date) => ({
     ...(input.postId ? { postId: input.postId } : {}),
     ...(clampPreview(input.preview) ? { preview: clampPreview(input.preview) } : {}),
     ...(clampPreview(input.title) ? { title: clampPreview(input.title) } : {}),
+    ...(input.detail ? { detail: input.detail } : {}),
     ...(safeInternalHref(input.href) ? { href: safeInternalHref(input.href) } : {}),
     ...(input.outcome === 'ok' || input.outcome === 'error' ? { outcome: input.outcome } : {})
   },
   ownerId: input.recipientId,
+  ...(input.historyOnly ? { historyOnly: true } : {}),
   acl: [ACL_OWNER],
   targetId: input.targetId || null,
   tags: [],
@@ -125,37 +125,19 @@ const notificationDoc = (input: EmitNotificationInput, now: Date) => ({
   updatedAt: now
 });
 
-// Keep a recipient's notification tail bounded — without this, an active
-// account accumulates forever. Fire-and-forget from single-recipient emits
-// (low volume); bulk fan-out skips it (one extra doc per recipient per post).
-const trimRecipient = async (recipientId: string) => {
-  const things = await getThingsCollection();
-  const total = await things.countDocuments({ thingtime: 'notification', ownerId: recipientId } as any);
-  if (total <= MAX_NOTIFICATIONS_PER_USER) return;
-  const overflow = await things
-    .find({ thingtime: 'notification', ownerId: recipientId } as any)
-    .sort({ createdAt: -1, shareId: 1 })
-    .skip(MAX_NOTIFICATIONS_PER_USER)
-    .project({ _id: 1 })
-    .toArray();
-  if (overflow.length) {
-    await things.deleteMany({ _id: { $in: overflow.map((doc: any) => doc._id) } } as any);
-  }
-};
-
 // Emit one notification to one recipient. NEVER throws — a failed notification
 // must not fail the social action that triggered it (the action is the
 // product; the notification is a side effect).
 export const emitNotification = async (input: EmitNotificationInput): Promise<void> => {
   try {
     if (!input.recipientId || input.recipientId === input.actor.id) return;
+    const things = await getThingsCollection();
+    const doc = notificationDoc(input, new Date());
+    await things.insertOne(doc as any);
+    if (input.historyOnly) return;
     const prefs = normalizeNotificationPrefs(await getUserNotificationPrefs(input.recipientId));
     const pushOn = prefs.masters.push && prefs.push[input.type] !== false;
     if (pushOn) {
-      const things = await getThingsCollection();
-      const doc = notificationDoc(input, new Date());
-      await things.insertOne(doc as any);
-      void trimRecipient(input.recipientId).catch(() => {});
       void sendNotificationPush({ ...input, notificationId: doc.shareId }).catch((err: any) => {
         console.error('[notifications] APNs delivery failed:', err?.message || err);
       });
@@ -198,8 +180,8 @@ const withoutUnreadDuplicates = async (recipients: BulkRecipient[], base: Omit<E
   return recipients.filter(({ recipientId, type }) => !heldKeys.has(`${recipientId} ${type}`));
 };
 // System notes: the platform speaking through Lopu — an action you ran
-// finished, and whatever comes next. Same protected doc, same prefs gate
-// (the recipient's 'action-run' switch), same bounded tail; the synthetic
+// finished, and whatever comes next. Same protected doc; preferences gate
+// delivery only, never the durable history. The synthetic
 // actor id never collides with a user, so the "never notify yourself" guard
 // in emitNotification stays intact for people while letting Lopu address you.
 // The headline replaces "<actor> <verb>" in every row; href is the in-app
@@ -211,6 +193,7 @@ export const SYSTEM_NOTIFICATION_ACTOR: NotificationActor = {
 };
 
 export type EmitSystemNotificationInput = {
+  historyOnly?: boolean;
   recipientId: string;
   type: NotificationType;
   title: string;
@@ -220,8 +203,14 @@ export type EmitSystemNotificationInput = {
   outcome?: 'ok' | 'error' | null;
 };
 
+export const emitLoginNotification = (recipientId: string) => emitSystemNotification({
+  recipientId, type: 'login-success', title: 'Signed in successfully 🗝️',
+  href: '/settings', outcome: 'ok'
+});
+
 export const emitSystemNotification = (input: EmitSystemNotificationInput): Promise<void> =>
   emitNotification({
+    historyOnly: input.historyOnly,
     recipientId: input.recipientId,
     type: input.type,
     actor: SYSTEM_NOTIFICATION_ACTOR,
@@ -232,7 +221,7 @@ export const emitSystemNotification = (input: EmitSystemNotificationInput): Prom
     outcome: input.outcome ?? null
   });
 // Capped fan-out (posts from followed/friends): one insertMany, pref-agnostic
-// at write (reads filter). recipients map lets followers and friends of the
+// at write (only bell reads filter). recipients map lets followers and friends of the
 // same author get differently-typed notifications in one call. Never throws.
 export const emitNotificationsBulk = async (
   recipients: BulkRecipient[],
@@ -247,12 +236,14 @@ export const emitNotificationsBulk = async (
       seen.add(recipientId);
       return true;
     });
-    if (options.dedupeUnread && wanted.length) wanted = await withoutUnreadDuplicates(wanted, base);
-    const docs = wanted.map(({ recipientId, type }) => notificationDoc({ ...base, recipientId, type }, now));
+    const deliverable = options.dedupeUnread && wanted.length ? await withoutUnreadDuplicates(wanted, base) : wanted;
+    const deliveryIds = new Set(deliverable.map(row => row.recipientId));
+    const docs = wanted.map(({ recipientId, type }) => notificationDoc({ ...base, recipientId, type,
+      historyOnly: base.historyOnly || !deliveryIds.has(recipientId) }, now));
     if (!docs.length) return;
     const things = await getThingsCollection();
     await things.insertMany(docs as any, { ordered: false });
-    const deduped = docs.map((doc) => ({
+    const deduped = docs.filter(doc => !doc.historyOnly).map((doc) => ({
       recipientId: String(doc.ownerId),
       type: doc.crystal.type as NotificationType
     }));
@@ -305,6 +296,7 @@ const loadActors = async (
 };
 
 export type ListNotificationsResult = {
+  historyUnreadCount?: number;
   ok: true;
   notifications: PublicNotification[];
   // unread across ALL enabled types — the bell badge, regardless of filters
@@ -394,6 +386,7 @@ const publicNotification = (
   const live = actors.get(actorId);
   const outcome = doc.crystal?.outcome;
   return {
+    detail: typeof doc.crystal?.detail === 'string' ? doc.crystal.detail : null,
     id: String(doc.shareId),
     type: doc.crystal?.type,
     category: notificationCategoryOf(doc.crystal?.type),
@@ -426,7 +419,7 @@ export const listNotifications = async (
   // filter that asks only for disabled or unknown types.
   const filters = buildNotificationListFilters(userId, prefs, query);
   if (!filters) {
-    return { ok: true, notifications: [], unreadCount: 0, total: withTotal ? 0 : null, nextBefore: null, nextCursor: null };
+    return { ok: true, notifications: [], unreadCount: 0, ...(query.history ? { historyUnreadCount: 0 } : {}), total: withTotal ? 0 : null, nextBefore: null, nextCursor: null };
   }
 
   // The badge count is filter-agnostic: everything enabled and unread.
@@ -452,14 +445,15 @@ export const listNotifications = async (
   const pageFilter = pageClauses.length === 1 ? filters.page : { $and: pageClauses };
 
   const things = await getThingsCollection();
-  const [docs, unreadCount, total] = await Promise.all([
+  const [docs, unreadCount, total, historyUnreadCount] = await Promise.all([
     things
       .find(pageFilter as any)
       .sort({ createdAt: -1, shareId: 1 })
       .limit(query.limit)
       .toArray(),
     unreadFilter ? things.countDocuments(unreadFilter.base as any) : Promise.resolve(0),
-    withTotal ? things.countDocuments(baseFilter as any) : Promise.resolve(null)
+    withTotal ? things.countDocuments(baseFilter as any) : Promise.resolve(null),
+    query.history ? things.countDocuments({ thingtime: 'notification', ownerId: userId, readAt: null } as any) : Promise.resolve(undefined)
   ]);
 
   const actors = await loadActors(docs.map((doc: any) => String(doc.crystal?.actorId || '')));
@@ -469,7 +463,7 @@ export const listNotifications = async (
   const nextCursor = docs.length === query.limit
     ? notificationCursorFor(new Date((docs as any[])[docs.length - 1].createdAt), String((docs as any[])[docs.length - 1].shareId))
     : null;
-  return { ok: true, notifications, unreadCount, total, nextBefore, nextCursor };
+  return { ok: true, notifications, unreadCount, ...(historyUnreadCount === undefined ? {} : { historyUnreadCount }), total, nextBefore, nextCursor };
 };
 
 export const markNotificationsRead = async (

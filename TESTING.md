@@ -1,5 +1,13 @@
 # TESTING.md — per-area manual test checklists
 
+## Verified vault reveal
+
+- [ ] At desktop and 390px widths, CI, external integrations and personal Secure Vault offer Show without changing ordinary value-free list responses.
+- [ ] Open Show, cancel, reopen; wrong password and cancelled passkey reveal nothing. A current password or same-account user-verified passkey reveals only the selected item.
+- [ ] A revealed synthetic credential clears on Hide, close, account change, navigation, blur, tab hiding and 30-second timeout. Closing during a pending request prevents late values appearing. Opening another Show closes the first.
+- [ ] Inspect the full page and open modal top-to-bottom: long labels/credentials wrap, all buttons stay reachable, no horizontal overflow on mobile.
+- [ ] Cross-origin, anonymous, non-admin admin-vault access, other-owner personal entries, replayed/expired/wrong-session passkeys and fixed-limit exhaustion fail without decryption. Every response is private/no-store; no plaintext enters list caches or request logs.
+
 - Thing detail back links accept only `things`, `actions`, or `feed` as `from`.
   Unknown values and prototype keys such as `toString` must display a working
   Back to feed link on desktop and mobile.
@@ -1090,6 +1098,12 @@ email whose link points at the attacker.
       file. Safe image/video previews appear immediately; each row reports
       progress; Post stays disabled until every selected file is Ready; and a
       26th unique file is rejected with the fixed 25-attachment limit message.
+- [ ] With the post/comment text editor focused, paste (⌘/Ctrl+V) a screenshot,
+      copied image, video, and generic file. File-bearing pastes turn Photos on
+      when needed and queue into the one Media & files panel; pasting again
+      anywhere inside that open panel does the same. Plain/rich text paste stays
+      in the focused field, and pasting inside the separate Thing editor modal
+      never attaches the file to the post.
 - [ ] Upload and publish a small MP3, M4A (including an Apple Watch recording),
       FLAC, WAV, Ogg/Opus, and WebM audio attachment. Each final card and its
       `/thing/<attachment-id>` detail view shows native controls instead of a
@@ -4369,7 +4383,7 @@ default` unsets it, and runtime usage reports the effective cap. A custom
 ## Notification history (`/notifications`, `remix/app/components/Notifications/`, `api/utils/notifications/listQuery.ts`)
 
 - [ ] `/notifications` (auth) lists every notification the viewer has received
-      newest first (server keeps the newest 10,000 per recipient), with the
+      newest first (no automatic count-based deletion), with the
       unfiltered first page painting instantly from `tt-notif-history-<id>`
       and reconciling in the background; a cold start shows one spinner only.
       Signed out, the page renders the quiet "Log in" state and never 401s.
@@ -4383,8 +4397,8 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       category; picking a chip that cannot hold the type drops the type.
 - [ ] The summary line shows `N notifications match · M unread` (server
       `total` with `withTotal=1`); changing filters dims the current rows
-      instead of flashing empty; "Load older" appends via the `before` cursor
-      with no duplicates.
+      instead of flashing empty; "Load older" appends via the stable `cursor`
+      with no duplicates or skipped rows sharing a timestamp.
 - [ ] Clicking a row marks it read optimistically (row tint clears, unread
       count drops, bell badge cache updates) and follows its click-through:
       system notes → their `href` (`/actions/<key>`), else `/post/<id>`, else
@@ -4394,17 +4408,29 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       lands an `action-run` row — 🦄 Lopu avatar in a rainbow ring, headline
       `Action “<name>” finished ✅` / `failed 🌧️`, detail `<ms> · <ops>` or
       the error, System tag, click-through to `/actions/<key>`. A delegated
-      component click (`source: 'component'`) only notifies when it FAILS.
+      component click (`source: 'component'`) is saved on success too, with quiet delivery.
       Own social actions still never notify yourself.
 - [ ] Settings → Notifications gains the "Action runs ⚡" row (push ON, email
       opt-in by default) and a "History 📜 → Open" row; switching a type off
-      hides it on `/notifications` too; the bell popover's "See all →" opens
+      mutes delivery but never hides it on `/notifications`; the bell popover's "See all →" opens
       the page and the drawer's Account group lists Notifications 🔔.
 - [ ] `GET /api/v1/notifications` rejects nothing new: unknown `types` /
       `category` values match nothing (empty page, `total: 0`), `q` is capped
       at 100 chars, `since`/`until` are inclusive, `unreadCount` ignores the
       filters, and the capabilities manifest advertises
-      `api.notifications-list` and `api.notifications-settings` at 1.1.0.
+      `api.notifications-list` 1.4.0, `api.notifications-settings` 1.3.0,
+      and `api.notifications-record` 1.0.0.
+- [ ] Password/OTP, passkey and redeemed SSO sign-ins record login-success;
+      invalid credentials and unfinished OTP ceremonies never record success.
+- [ ] All one-shot Lopu messages and completed/cancelled/failed streams are
+      saved as system-message for the signed-in viewer. Full bounded text is
+      readable after reload. Credential-like text and link query keys are redacted.
+- [ ] Disable both delivery masters and action-run; generate a message and a
+      component run. Both remain in history=1, while the muted bell stays empty.
+- [ ] Retry the same eventId, mark it read, then retry again: exactly one row,
+      with unchanged readAt. A new eventId with equal text is a separate row.
+      Another account cannot submit or read the first account's messages;
+      client-supplied actor/type/owner/timestamps are rejected.
 - [ ] 375px: chips, inputs and the date row wrap without horizontal scroll;
       rows never clip the category tag; the Lopu avatar ring stays round.
 
@@ -5609,6 +5635,11 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 - [ ] Confirm partial/large files use native streaming and cached range reads
       cannot bypass authorization. Verify storage failure degrades to HTTP.
 
+
+## Commander emoji paste recovery
+
+- [ ] Follow `Commander/docs/TESTING.md` for denied emoji paste: preserve the selected emoji, recents, learning and clipboard; keep the error, grid and recovery controls inside the native window at standard/minimum/compact widths and large text size. Verify the installed signing requirement stays stable and complete an approved Accessibility grant migration before claiming successful paste.
+
 ## App suites — Pokeworld + StarsAlign (`remix/app/schemas/appSuites/`, `/p/pokeworld`, `/p/starsalign`)
 
 - Seed as an admin (`POST /api/v1/admin/webpages/seed-demos` or the 🌱 button
@@ -6066,3 +6097,11 @@ approval; `access.test.ts` — the reservation matrix) and
 - Run `cd remix && node --import tsx scripts/audit-things-indexes.mts`; source-plan replay must work without database credentials, include Mongo's `_id_`, and preserve exact key order, unique/partial/sparse/TTL options.
 - Run `pnpm --dir remix run test:collections`. The unused emoji lookup must not be recreated; protected `uniqueKeys_1` must stay unique and the legacy unique ancestor must not be blindly retired.
 - Before any live index retirement, compare exact production/develop index definitions with the source inventory, preserve unknown indexes, and prove the actual query and concurrent-write paths. A low count alone is not acceptance. See `docs/architecture/thing-index-consolidation.md` for the full rollout gates.
+
+### Desktop permission recovery
+
+- In Things and Desktop settings, use Open App Locations. Check that Finder contains symlinks to the running Desktop, its bundled Node, and installed Recovery/Commander/ThingDisk/ThingDock apps; an older standalone Node must not replace the bundled shortcut. Repeat after an update and verify targets refresh.
+- Return from the folder or Privacy settings: Thingtime offers Later / Restart Node Now once per explicit recovery flow. Later must not prompt again on routine focus or polling. Restart must preserve pairing and leave one Node process; handle failure visibly.
+- Re-add the affected app manually only with the owner’s consent. Apple controls its own Quit & Reopen prompt; if absent, use Thingtime’s restart control. Verify live permission checks and a protected operation after restarting.
+
+- Permission recovery follow-up: click Open System Settings for both Accessibility and Screen Recording. Confirm Finder opens the combined App Locations folder, not Contents/Helpers, alongside the correct privacy pane.

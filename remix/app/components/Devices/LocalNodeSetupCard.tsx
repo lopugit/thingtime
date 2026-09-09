@@ -4,6 +4,7 @@ import { Badge, Box, Button, Flex, Spinner, Text } from '@chakra-ui/react';
 import { FolderPlus, Laptop, Settings, ShieldCheck } from 'lucide-react';
 
 import { DevicePolicyButton, type DeviceActionHandler, type DeviceControlResolver } from './DeviceStateGrid';
+import { PermissionRecoveryControls } from './PermissionRecoveryControls';
 import { permissionStatusLabel } from './localNodePermissions';
 import { localNodeBadgePresentation, PASTEL_PAIRED_ACCOUNT_BADGE_STYLE } from './localNodePresentation';
 import type { LocalThingtimeNodeState } from './useLocalThingtimeNode';
@@ -195,6 +196,7 @@ export const LocalNodeSetupCard = ({
 							) : null}
 						</Flex>
 					))}
+					<PermissionRecoveryControls />
 					{missingPermissions.length ? (
 						<Text color="var(--tt-muted, #71717a)" fontSize="12px" lineHeight="1.5" marginTop={2} whiteSpace="normal">
 							Already enabled in System Settings? macOS may still be using a grant from an older signed Node. Turn Thingtime Node off and on once for

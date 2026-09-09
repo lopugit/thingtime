@@ -57,6 +57,12 @@ const vaultKey = (): Buffer | null => {
 
 export const lopuCredentialVaultConfigured = () => vaultKey() !== null;
 
+// Caller must enforce fresh verification and current admin authorization.
+export const revealLopuCredential = async (id: string): Promise<string | null> => {
+  const record = await (await getLopuCredentialsCollection()).findOne({ id });
+  return record ? decrypt(record as StoredLopuCredential) : null;
+};
+
 const encrypt = (id: string, value: string) => {
   const key = vaultKey();
   if (!key) throw new Error('Lopu credential vault is unavailable. Configure THINGTIME_ADMIN_VAULT_KEY.');
