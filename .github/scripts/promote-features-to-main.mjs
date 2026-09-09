@@ -3793,6 +3793,43 @@ async function selfTest() {
   );
   assert.match(structuredPlanFailure.error, /cannot inspect merge commit/);
 
+  // Redundancy is measured on promoted source only. PR #695 promoted #692,
+  // whose merge was already an ancestor of `main`; its whole remaining diff
+  // was `graphify-out/**` refresh commits, so the pre-fix bare `out !== ""`
+  // test kept a zero-content promotion open indefinitely.
+  const okDiff = (out) => ({ ok: true, status: 0, out, err: "" });
+  assert.deepEqual(
+    redundantPromotionDecision(okDiff("")),
+    { close: true, reason: "empty", generated: [] },
+  );
+  const graphifyOnly = redundantPromotionDecision(okDiff(
+    "graphify-out/snapshots/v1/aaa/bbb/graph.json\n" +
+    "graphify-out/snapshots/v1/aaa/bbb/snapshot.json\n" +
+    "remix/CHANGELOG.md",
+  ));
+  assert.equal(graphifyOnly.close, true);
+  assert.equal(graphifyOnly.reason, "generated-only");
+  assert.equal(graphifyOnly.generated.length, 3);
+  // One real promoted file still holds the PR open, even beside generated churn.
+  const withContent = redundantPromotionDecision(okDiff(
+    "graphify-out/snapshots/v1/aaa/bbb/graph.json\nremix/app/api/utils/mongodb/indexAudit.ts",
+  ));
+  assert.equal(withContent.close, false);
+  assert.equal(withContent.reason, "content");
+  assert.deepEqual(withContent.promoted, ["remix/app/api/utils/mongodb/indexAudit.ts"]);
+  // A path that merely starts with the prefix is not inside the directory.
+  assert.equal(redundantPromotionDecision(okDiff("graphify-outside/thing.ts")).close, false);
+  // Fail closed: never close a promotion we could not read.
+  assert.deepEqual(
+    redundantPromotionDecision({ ok: false, status: 1, out: "", err: "gh: rate limited" }),
+    { close: false, reason: "diff-unavailable" },
+  );
+  assert.equal(redundantPromotionDecision(undefined).close, false);
+  assert.equal(
+    redundantPromotionDecision(okDiff("graphify-out/snap\u0007shots/v1/graph.json")).reason,
+    "unreadable-path",
+  );
+
   pathspecAuthorityIntegrationTest(assert);
   orphanedMergeHydrationIntegrationTest(assert);
 
@@ -4328,27 +4365,71 @@ function retargetPass(promotionPrs, results) {
 
 // ---------------------------------------------------------------------------
 // Maintenance: close promotion PRs made redundant by an omnibus (or direct)
-// merge — their diff against the base is empty, so there is nothing to review.
+// merge — no promoted source file still differs from the base, so there is
+// nothing left to review.
 // ---------------------------------------------------------------------------
 
-function closeRedundantPass(promotionPrs, results) {
+// Graphify snapshots and the release changelog are generated follow-ups, not
+// promotion content: `plannedPatch` excludes them from every promotion patch
+// and rejects an otherwise-empty patch, so a promotion is never *created* to
+// deliver only these paths. Every other content decision in this file applies
+// the same exclusion; redundancy detection has to agree with them.
+function isGeneratedFollowupPath(path) {
+  return path.startsWith("graphify-out/") || path === "remix/CHANGELOG.md";
+}
+
+// Decide whether an open promotion PR still promotes anything. Pure so the
+// self-test can drive it without a live `gh`.
+//
+// Fails closed in both unreadable directions: an errored `gh pr diff` and a
+// path we cannot trust to compare (control characters) both keep the PR open,
+// because wrongly closing a promotion silently drops a release.
+export function redundantPromotionDecision(diff) {
+  if (!diff?.ok) return { close: false, reason: "diff-unavailable" };
+  const paths = diff.out === "" ? [] : diff.out.split("\n").filter(Boolean);
+  if (paths.some((path) => !validPromotionPath(path))) {
+    return { close: false, reason: "unreadable-path" };
+  }
+  const promoted = paths.filter((path) => !isGeneratedFollowupPath(path));
+  if (promoted.length > 0) return { close: false, reason: "content", promoted };
+  return {
+    close: true,
+    reason: paths.length === 0 ? "empty" : "generated-only",
+    generated: paths,
+  };
+}
+
+function closeRedundantPass(promotionPrs, results, ghRunner = tryGh) {
   const closed = [];
   for (const pr of promotionPrs) {
     if (pr.state !== "OPEN") continue;
-    const diff = tryGh(["pr", "diff", String(pr.number), ...repoFlag(), "--name-only"]);
-    if (!diff.ok || diff.out !== "") continue;
+    const diff = ghRunner(["pr", "diff", String(pr.number), ...repoFlag(), "--name-only"]);
+    const decision = redundantPromotionDecision(diff);
+    if (!decision.close) continue;
+    // Say what is actually true of this head. A "generated-only" promotion
+    // still has a non-empty diff, and claiming otherwise would misreport the
+    // release just as a false "will land" claim would.
+    const state = decision.reason === "empty"
+      ? `empty diff vs \`${pr.baseRefName}\``
+      : `no promoted source change vs \`${pr.baseRefName}\` ` +
+        `(${decision.generated.length} generated path(s) remain)`;
     if (CFG.dryRun) {
-      results.closed.push(`(dry-run) would close #${pr.number} (\`${pr.headRefName}\`) — empty diff vs \`${pr.baseRefName}\``);
+      results.closed.push(`(dry-run) would close #${pr.number} (\`${pr.headRefName}\`) — ${state}`);
       continue;
     }
-    const res = tryGh(["pr", "close", String(pr.number), ...repoFlag(), "--comment",
+    const rationale = decision.reason === "empty"
+      ? "so this PR's diff is empty. "
+      : "so this PR no longer changes any promoted source file. Its remaining diff is generated " +
+        "Graphify/changelog output, which is branch-local build state rather than release content — " +
+        `merging it would replace \`${pr.baseRefName}\`'s current snapshot with this branch's. `;
+    const res = ghRunner(["pr", "close", String(pr.number), ...repoFlag(), "--comment",
       `🧹 Closing as redundant: these changes have already reached \`${pr.baseRefName}\` ` +
-      `(for example via an omnibus ${CFG.source} → ${CFG.target} merge), so this PR's diff is empty. ` +
+      `(for example via an omnibus ${CFG.source} → ${CFG.target} merge), ` + rationale +
       "Reopen if that looks wrong."]);
     if (res.ok) {
       pr.state = "CLOSED";
       closed.push(pr);
-      results.closed.push(`closed #${pr.number} (\`${pr.headRefName}\`) — empty diff vs \`${pr.baseRefName}\``);
+      results.closed.push(`closed #${pr.number} (\`${pr.headRefName}\`) — ${state}`);
     } else {
       results.warnings.push(`failed to close redundant #${pr.number}: ${res.err}`);
     }
