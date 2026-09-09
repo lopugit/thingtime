@@ -76,6 +76,47 @@ const noopS3 = (overrides: Partial<AttachmentS3> = {}): AttachmentS3 => ({
 	...overrides
 });
 
+test('shared media downloads reauthorize without bypassing readiness, moderation or home-storage fences', async () => {
+	let doc = attachmentDoc({ attachmentState: 'ready', attachmentPurpose: 'post', targetId: 'private-post', objectVersionId: 'version-1' });
+	let rootAllowed = true;
+	let customMongo = false;
+	let rootChecks = 0;
+	let signs = 0;
+	const viewer = { id: '', sharedRoot: 'shared-page', linkKeys: new Set(['fixture-key']) };
+	const service = createAttachmentService({
+		store: { getById: async () => doc } as any,
+		now: () => now,
+		customMongoActive: () => customMongo,
+		canViewTarget: async () => { throw Error('shared requests must authorize their root'); },
+		canViewSharedTarget: async (actual, attachment, root) => {
+			rootChecks += 1;
+			assert.equal(actual, viewer);
+			assert.equal(root, 'shared-page');
+			assert.equal(attachment.ownerId, 'user-1');
+			return rootAllowed;
+		},
+		getS3: () => noopS3({ signDownload: async () => { signs += 1; return { url: 'https://s3.example/download', expiresAt: now.toISOString() }; } })
+	});
+	assert.equal((await service.download(viewer, doc.shareId, false)).ok, true);
+	assert.equal((await service.download(viewer, doc.shareId, false)).ok, true);
+	assert.equal(rootChecks, 2);
+	rootAllowed = false;
+	assert.equal((await service.download(viewer, doc.shareId, false)).ok, false);
+	assert.equal(signs, 2, 'Revocation must prevent signing another URL');
+	rootAllowed = true;
+	for (const status of ['blocked', 'pending'] as const) {
+		doc = { ...doc, moderation: { status } };
+		assert.equal((await service.download(viewer, doc.shareId, false)).ok, false);
+	}
+	doc = { ...doc, moderation: undefined, attachmentState: 'pending' };
+	assert.equal((await service.download(viewer, doc.shareId, false)).ok, false);
+	doc = { ...doc, attachmentState: 'ready' };
+	customMongo = true;
+	assert.equal((await service.download(viewer, doc.shareId, false)).ok, false);
+	assert.equal(rootChecks, 3, 'Storage and moderation failures do not reach the root grant');
+	assert.equal(signs, 2);
+});
+
 test('start reserves billed pending metadata before creating the S3 MPU', async () => {
 	const events: string[] = [];
 	let reserved: any;

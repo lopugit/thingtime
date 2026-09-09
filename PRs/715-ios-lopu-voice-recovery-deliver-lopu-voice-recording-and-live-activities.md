@@ -9,12 +9,13 @@ current internal TestFlight build. The web voice hook mistook that general
 bridge for a working voice implementation and could show a false listening
 state without a recorder.
 
-Build 26 includes the native controller and Live Activity widget. Its bridge
+Build 27 includes the native controller and Live Activity widget. Its bridge
 advertises the separately versioned `lopuVoiceVersion`; older apps get an
 update instruction. Standard voice sends turns through the existing persisted
 chat endpoint with the selected chat/model/provider settings, while transcribe
 mode retains private transcript pages. Each HTTP operation first checks its
-semantic capability against the selected origin.
+semantic capability against the selected origin using the canonical well-known
+manifest, not the legacy flat `/api/v1/capabilities` response.
 
 The controller also retains partial utterances on Stop, uses a bounded silence
 window to submit without waiting indefinitely for Speech's final flag, fences
@@ -30,15 +31,18 @@ signing credentials.
 
 ## Evidence
 
-- 35 iOS tests passed on iPhone 17 Pro / iOS 26.5 with release Xcode 26.6;
-  the four new native recovery tests also passed in isolation.
+- 36 iOS tests passed on iPhone 17 Pro / iOS 26.5 with release Xcode 26.6;
+  the four lifecycle/file recovery tests also passed in isolation before the
+  final manifest-path regression brought the full suite to 36 tests.
 - 39 focused web tests passed, including rejecting build 25's non-voice bridge;
   targeted ESLint and Ruby syntax checks passed.
 - The signed Release archive and IPA export succeeded. Deep/strict signature
   verification passed. The IPA contains the app, Watch companion and Lopu widget
-  at build 26, and the app's web destination is `https://thingtime.com`.
-- App Store Connect upload succeeded on 2026-09-09. Processing/tester availability
-  must be checked separately; upload success alone does not establish availability.
+  at build 27, and the app's web destination is `https://thingtime.com`.
+- App Store Connect upload succeeded on 2026-09-09. Build 26 reached internal testing, but the live release smoke caught a
+  manifest path mismatch. Build 27 uses the canonical origin-scoped
+  `/.well-known/thingtime-capabilities.json`; its processing status is checked
+  separately before delivery.
 - Actual recording/error/transcript components rendered at 390px and 1280px with
   synthetic rows, including long filenames and page links. Content was visible
   through the end of the fixture. The authenticated local page required sign-in,
@@ -52,7 +56,7 @@ signing credentials.
 
 ## Acceptance still requiring an iPhone
 
-Install build 26 after the paired web release. In an existing Lopu chat, grant
+Install build 27 after the paired web release. In an existing Lopu chat, grant
 Microphone and Speech Recognition, start voice, speak and pause, then stop
 mid-utterance. Reopen the chat and verify persisted text. Open Files → On My
 iPhone → Thingtime → Lopu Recordings and play the CAF segment/read its TXT file.

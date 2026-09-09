@@ -31,6 +31,7 @@ import {
   withLinkKeys
 } from '~/api/utils/things/things';
 import { parseCommentSort } from '~/api/utils/things/updownCore';
+import { sharedThingRead } from './sharedThingRead';
 
 // Route a unified mutation to the rate-limit key its dedicated sub-route would
 // use, so the generic endpoint can't be used to bypass the per-op limits.
@@ -101,6 +102,8 @@ export const loader = async ({ request }: { request: Request }) => {
   const viewer = withLinkKeys(viewerOf(user, actorPat(actor)), [(params.get('key') || '').trim()]);
   const app = actor.kind === 'app' ? actor.scope : null;
   const cors = actorCors(actor);
+
+  if (params.has('sharedRoot')) return sharedThingRead(request, { viewer, app: actor.kind === 'app', cors });
 
   if (actor.kind === 'app') {
     // per-(user, app) buckets — an app never rides the user's own windows

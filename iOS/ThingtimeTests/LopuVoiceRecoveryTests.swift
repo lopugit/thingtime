@@ -20,6 +20,10 @@ final class LopuVoiceRecoveryTests: XCTestCase {
         XCTAssertFalse(LopuVoiceContract.accepts(manifest("1.4.0"), baseURL: baseURL, feature: "api.missing", minimum: [1, 0, 0]))
     }
 
+    func testManifestPathMatchesOriginScopedServerContract() {
+        XCTAssertEqual(LopuVoiceContract.manifestPath, "/.well-known/thingtime-capabilities.json")
+    }
+
     @MainActor
     func testStartDoesNotEmitStoppedAndStopInvalidatesPendingPermission() async {
         var permission: CheckedContinuation<Bool, Never>?

@@ -19,12 +19,30 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ## [Unreleased]
 
 - 2026-09-09: Deliver native Lopu voice and its signed Live Activity extension
-  in iOS build 26; older general bridges now show an update instruction.
+  in iOS build 27; older general bridges now show an update instruction.
   Repair iOS Lopu voice startup/stop races, preserve partial speech
   and local audio/transcript files, save ordinary voice turns in the selected
   chat, and surface separate Speech Recognition and Live Activity failures.
   Native voice now checks the selected origin's semantic API capabilities.
   [Release evidence and device checklist](../PRs/715-ios-lopu-voice-recovery-deliver-lopu-voice-recording-and-live-activities.md).
+
+- 2026-09-09: Shared pages resolve author-owned embedded components through the
+  root audience, including anonymous link readers and custom groups; preserve
+  standalone privacy and prevent shared editors adding unrelated private
+  dependencies. Shared sources/controls now use a root-authorized read-only
+  action mode, including child actions and explicit data dependencies. Added
+  private independent composition copies with rewritten component/action
+  references. Restore canonical hidden-key/group authorization for page/post
+  media and forward shared keys only to first-party attachment content URLs.
+  Extend private copying to ordinary standalone content, preserving extended
+  content and independently copied schema definitions. Restore shared Data
+  Thing rendering through root-authorized private schema reads, preserving
+  standalone ACLs and refusing app-token namespace escapes.
+  Carry the root context through explicitly embedded private media, persistent
+  cache validation and audio downloads; retain independent foreign/profile
+  access and prevent shared writers injecting private media references.
+  Live target deployment and broader inheritance remain under
+  active validation; see [PR #707](../PRs/707-shared-root-inheritance-read-only-app-use.md). — **Codex (AI)**
 
 - Add fresh-password or user-verified passkey Show controls for CI, admin integration and personal Secure Vault credentials. Keep normal reads redacted, bind passkey challenges to a single session/item/origin, and clear displayed values after 30 seconds or leaving the tab. [PR #710 security and verification notes](../PRs/710-vault-verified-reveal-verified-vault-credentials.md). — Codex (AI), 2026-09-09
 

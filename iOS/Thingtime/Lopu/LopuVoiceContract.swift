@@ -3,6 +3,7 @@ import Foundation
 /// The native client negotiates only the semantic operation it will call.
 /// Deployment hashes and route existence are not compatibility evidence.
 enum LopuVoiceContract {
+    static let manifestPath = "/.well-known/thingtime-capabilities.json"
     static func accepts(_ manifest: [String: Any], baseURL: URL, feature: String, minimum: [Int]) -> Bool {
         guard manifest["schemaVersion"] as? Int == 1,
               let origin = manifest["origin"] as? String,
@@ -26,7 +27,7 @@ enum LopuVoiceContract {
     }
 
     static func negotiate(baseURL: URL, feature: String, minimum: [Int]) async throws {
-        guard let url = URL(string: "/api/v1/capabilities", relativeTo: baseURL)?.absoluteURL else { throw incompatible }
+        guard let url = URL(string: manifestPath, relativeTo: baseURL)?.absoluteURL else { throw incompatible }
         var request = URLRequest(url: url)
         request.timeoutInterval = 15
         let (data, response) = try await URLSession.shared.data(for: request)

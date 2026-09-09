@@ -884,10 +884,11 @@ export function useApi() {
 			// commentSort: 'top' | 'new' | 'old' re-orders the shipped comment page
 			// of the post projection (PostCard's Top / New / Old menu); omit for
 			// the default page. key: a hidden thing's secret link key (?key= on
-			// /post pages) — lets anyone holding the link view the unlisted thing
+			// /post pages) — lets anyone holding the link view the unlisted thing.
+			// sharedRoot scopes a dependency read to an authorized composition.
 			get: useCallback(
 				async (args, options?: { signal?: AbortSignal }) =>
-					getJson(`/api/v1/things${toQuery({ id: args?.id, commentSort: args?.commentSort, key: args?.key })}`, options),
+					getJson(`/api/v1/things${toQuery({ id: args?.id, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, options),
 				[]
 			),
       list: useCallback(

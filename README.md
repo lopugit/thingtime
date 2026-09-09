@@ -2301,7 +2301,7 @@ API tokens unprefixed and server-only.
 
 ## Native iOS TestFlight web URL
 
-Lopu voice requires build 26 or later; build 25's general native bridge did not
+Lopu voice requires build 27 or later; build 25's general native bridge did not
 include its recorder or Live Activity widget. Voice support is negotiated with
 `lopuVoiceVersion`, separately from the shell version. For a fork's signed build,
 register the app, its `.watchkitapp` companion, and its `.lopu-widget` extension

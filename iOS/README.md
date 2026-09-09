@@ -152,7 +152,7 @@ is already installed and you intentionally want to skip that step.
 ## Lopu voice recovery
 
 Build 25's release source (`9a6f04d4e`) did not include the native voice
-controller or Live Activity extension. Build 26 advertises `lopuVoiceVersion`
+controller or Live Activity extension. Build 27 advertises `lopuVoiceVersion`
 so the web controls can distinguish a capable app from the older general
 native bridge. Older apps receive an update instruction instead of a false
 listening indicator.
