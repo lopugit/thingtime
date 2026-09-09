@@ -77,7 +77,12 @@ test('shared page audience includes its author components, never a foreign priva
 			steps: [{ op: 'actions.invoke', action: childAction.id }, { op: 'return', value: '$step.1' }] });
 		const unrelatedAction = await create(owner, ['action'], { name: 'Not included', actionKey: `${key}-secret`, version: 1, capabilities: [], steps: [{ op: 'return', value: 'Private' }] });
 		const sourceData = await create(owner, ['data'], { schema: 'sharing-regression', value: 'unchanged' });
-		const dataSchema = await create(owner, ['schema'], { name: `${key}-schema`, title: 'Shared schema', fields: [{ name: 'value', type: 'string', required: true, description: 'Fixture value' }], render: { tag: 'p', children: ['Shared value: {value}'] } });
+		const schemaTemplate = { tag: 'div', children: [
+			{ tag: 'p', children: ['Shared value: {value}'] },
+			{ tag: 'button', ttAction: childAction.id, children: ['Schema draw'] },
+			{ tag: 'p', children: ['{last.result}'] }
+		] };
+		const dataSchema = await create(owner, ['schema'], { name: `${key}-schema`, title: 'Shared schema', fields: [{ name: 'value', type: 'string', required: true, description: 'Fixture value' }], render: schemaTemplate });
 		const standalone = await create(owner, ['data'], { schemaId: dataSchema.id, value: 'Copy my content' }, ['tt:hidden', 'tt:user']);
 		const sharedSchemaUrl = `/api/v1/things?id=${dataSchema.id}&sharedRoot=${standalone.id}`;
 		assert.equal((await request(`/api/v1/things?id=${dataSchema.id}`)).response.status, 404);
@@ -85,17 +90,35 @@ test('shared page audience includes its author components, never a foreign priva
 		const sharedSchema = await request(`${sharedSchemaUrl}&key=${encodeURIComponent(standalone.linkKey)}`);
 		assert.equal(sharedSchema.response.status, 200, sharedSchema.data.error);
 		assert.equal(sharedSchema.data.thing.id, dataSchema.id);
-		assert.deepEqual(sharedSchema.data.thing.crystal.render, { tag: 'p', children: ['Shared value: {value}'] });
+		assert.deepEqual(sharedSchema.data.thing.crystal.render, schemaTemplate);
 		assert.equal(sharedSchema.response.headers.get('Cache-Control'), 'private, no-store');
 		assert.equal(sharedSchema.data.thing.linkKey, undefined);
 		assert.equal((await request(`/api/v1/things?id=${sourceData.id}&sharedRoot=${standalone.id}&key=${encodeURIComponent(standalone.linkKey)}`)).response.status, 404);
+		const schemaRun = (action = childAction.id, key = standalone.linkKey, cookie = '') => request('/api/v1/actions/run', 'POST', { action, sharedRoot: standalone.id, key }, cookie);
+		assert.equal((await schemaRun()).data.result, 'The Star');
+		assert.equal((await schemaRun(childAction.id, 'wrong')).response.status, 404);
+		assert.equal((await schemaRun(unrelatedAction.id)).response.status, 404);
+		const publicSchemaData = await create(owner, ['data'], { schemaId: dataSchema.id, value: 'Public search result' }, ['tt:all']);
+		for (const [index, { scope, schema }] of [
+			{ scope: 'public', schema: dataSchema.id }, { scope: 'public', schema: dataSchema.crystal.name }, { scope: 'own', schema: dataSchema.id }
+		].entries()) {
+			const searchAction = await create(owner, ['action'], { name: `Shared schema search ${scope}`, actionKey: `${key}-search-${index}`, version: 1,
+				capabilities: [{ capability: 'things.read', schemas: [schema] }],
+				steps: [{ op: 'things.search', schema, scope }, { op: 'return', value: '$step.1' }] }, ['tt:hidden', 'tt:user']);
+			for (const cookie of ['', stranger, owner]) {
+				const search = await request('/api/v1/actions/run', 'POST', { action: searchAction.id, sharedRoot: searchAction.id, key: searchAction.linkKey }, cookie);
+				assert.equal(search.data.status, 'ok', search.data.error);
+				assert.deepEqual(search.data.result.map((row: any) => row.id), scope === 'public' ? [publicSchemaData.id] : [], 'Shared schema resolution must not borrow either account inventory');
+			}
+			assert.equal((await request('/api/v1/actions/run', 'POST', { action: searchAction.id, sharedRoot: searchAction.id, key: 'wrong' })).response.status, 404);
+		}
 		const extended = { notes: ['Keep this content'], nested: { value: 7 } };
 		assert.equal((await request('/api/v1/things', 'PATCH', { id: standalone.id, extended }, owner)).response.status, 200);
 		assert.equal((await request('/api/v1/things/fork', 'POST', { id: standalone.id, key: 'wrong' }, stranger)).response.status, 404);
 		const dataCopy = await request('/api/v1/things/fork', 'POST', { id: standalone.id, key: standalone.linkKey }, stranger);
 		assert.equal(dataCopy.response.status, 200, dataCopy.data.error);
 		for (const id of dataCopy.data.ids) created.push({ id, cookie: stranger });
-		assert.equal(dataCopy.data.copied, 2, 'The included private schema inherits the shared data root audience');
+		assert.equal(dataCopy.data.copied, 3, 'The included private schema and its action inherit the shared data root audience');
 		const copiedData = (await request(`/api/v1/things?id=${dataCopy.data.id}`, 'GET', undefined, stranger)).data.thing;
 		assert.deepEqual(copiedData.extended, extended);
 		assert.deepEqual(copiedData.acl, ['tt:user']);
@@ -103,6 +126,11 @@ test('shared page audience includes its author components, never a foreign priva
 		assert.equal(copiedData.linkKey, undefined);
 		const copiedSchema = (await request(`/api/v1/things?id=${copiedData.crystal.schemaId}`, 'GET', undefined, stranger)).data.thing;
 		assert.equal(copiedData.crystal.schema, copiedSchema.crystal.name);
+		const copiedSchemaAction = copiedSchema.crystal.render.children[1].ttAction;
+		assert.notEqual(copiedSchemaAction, childAction.id);
+		assert.ok(dataCopy.data.ids.includes(copiedSchemaAction));
+		const copiedSchemaRun = await request('/api/v1/actions/run', 'POST', { action: copiedSchemaAction, source: 'component' }, stranger);
+		assert.equal(copiedSchemaRun.data.result, 'The Star', copiedSchemaRun.data.error);
 		assert.equal((await request(`/api/v1/things?id=${dataCopy.data.id}`)).response.status, 404);
 		assert.equal((await request('/api/v1/things', 'PATCH', { id: dataCopy.data.id, crystal: { value: 'My changed copy' } }, stranger)).response.status, 200);
 		assert.equal((await request(`/api/v1/things?id=${standalone.id}`, 'GET', undefined, owner)).data.thing.crystal.value, 'Copy my content');
@@ -137,10 +165,22 @@ test('shared page audience includes its author components, never a foreign priva
 		if (process.env.TT_SHARED_PLAYWRIGHT_PATH) {
 			const { chromium } = await import(process.env.TT_SHARED_PLAYWRIGHT_PATH);
 			const browser = await chromium.launch({ headless: true, executablePath: process.env.TT_SHARED_CHROME_PATH });
+			const watchFailures = (tab: any) => {
+				const events: unknown[] = [];
+				const record = (event: unknown) => { if (events.length < 40) events.push(event); };
+				tab.on('pageerror', (error: Error) => record({ error: error.message.replace(/\?[^\s]*/g, '?[redacted]').slice(0, 400) }));
+				tab.on('requestfailed', (request: any) => record({ path: new URL(request.url()).pathname, failure: request.failure()?.errorText }));
+				tab.on('response', (response: any) => {
+					const path = new URL(response.url()).pathname;
+					if (response.status() >= 400 || ['/api/root-data', '/api/v1/webpages/resolve'].includes(path)) record({ path, status: response.status() });
+				});
+				return events;
+			};
 			try {
 				for (const width of [1440, 390]) {
 					const context = await browser.newContext({ viewport: { width, height: 900 } });
 					const tab = await context.newPage();
+					const browserEvents = watchFailures(tab);
 					// Only the bytes transport is stubbed here; root/component resolution
 					// uses the real API. Attachment ACLs have separate service/route tests.
 					const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l1kAAAAASUVORK5CYII=', 'base64');
@@ -158,7 +198,13 @@ test('shared page audience includes its author components, never a foreign priva
 						await route.fulfill({ contentType: 'image/png', body: pixel });
 					});
 					await tab.goto(new URL(`/p/${page.id}?key=${encodeURIComponent(page.linkKey)}`, base).href);
-					await tab.getByRole('button', { name: 'Draw', exact: true }).waitFor({ timeout: 60000 });
+					try {
+						await tab.getByRole('button', { name: 'Draw', exact: true }).waitFor({ timeout: 60000 });
+					} catch (error) {
+						if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-page-render-failure.png` });
+						console.error('Shared fixture render diagnostic:', { path: new URL(tab.url()).pathname, browserEvents, text: (await tab.locator('body').innerText()).slice(0, 1600) });
+						throw error;
+					}
 					assert.equal(await tab.getByTestId('p-edit-in-builder').count(), 0);
 					const copyBounds = await tab.getByTestId('fork-shared-thing').boundingBox();
 					assert.ok(copyBounds && copyBounds.x >= 0 && copyBounds.x + copyBounds.width <= width, 'The copy control must fit inside the mobile/desktop viewport');
@@ -176,14 +222,20 @@ test('shared page audience includes its author components, never a foreign priva
 					await tab.getByTestId('fork-shared-thing').click();
 					await tab.waitForURL('**/login');
 					await tab.goto(new URL(`/thing/${standalone.id}?key=${encodeURIComponent(standalone.linkKey)}`, base).href);
-					await tab.getByTestId('fork-shared-thing').waitFor();
 					try {
+						await tab.getByTestId('fork-shared-thing').waitFor();
 						await tab.getByText('Shared value: Copy my content', { exact: true }).waitFor({ timeout: 30000 });
 					} catch (error) {
 						if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-data-render-failure.png` });
+						console.error('Shared Data fixture render diagnostic:', { width, path: new URL(tab.url()).pathname, browserEvents, text: (await tab.locator('body').innerText()).slice(0, 1600) });
 						throw error;
 					}
 					const dataCopyBounds = await tab.getByTestId('fork-shared-thing').boundingBox();
+					await tab.getByRole('button', { name: 'Schema draw', exact: true }).click();
+					await tab.getByText('The Star', { exact: true }).waitFor();
+					await tab.getByRole('button', { name: 'Close', exact: true }).click();
+					await tab.getByTestId('thing-data-template').scrollIntoViewIfNeeded();
+					if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-data-${width}-control.png` });
 					assert.ok(dataCopyBounds && dataCopyBounds.x >= 0 && dataCopyBounds.x + dataCopyBounds.width <= width);
 					if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-data-${width}-top.png` });
 					await tab.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
@@ -200,6 +252,7 @@ test('shared page audience includes its author components, never a foreign priva
 					return { name: entry.slice(0, index), value: entry.slice(index + 1), url: base! };
 				}));
 				const tab = await context.newPage();
+				const browserEvents = watchFailures(tab);
 				// These are transport fixtures, not real stored attachments. Keep the
 				// authenticated copy check independent of DNS/failed image downloads.
 				await tab.route('**/api/v1/attachments/content?*', (route: any) => new URL(route.request().url()).searchParams.get('id') === 'sharing-browser-transport' ? route.fulfill({ status: 204 }) : route.continue());
@@ -215,10 +268,10 @@ test('shared page audience includes its author components, never a foreign priva
 						if (result.ok) for (const id of result.ids) created.push({ id, cookie: stranger });
 					}));
 				});
-				await tab.goto(new URL(`/p/${forkPage.id}?key=${encodeURIComponent(forkPage.linkKey)}`, base).href);
-				await tab.getByTestId('fork-shared-thing').waitFor({ timeout: 60000 });
 				let copyResult: any;
 				try {
+					await tab.goto(new URL(`/p/${forkPage.id}?key=${encodeURIComponent(forkPage.linkKey)}`, base).href);
+					await tab.getByTestId('fork-shared-thing').waitFor({ timeout: 60000 });
 					const [copiedResponse] = await Promise.all([
 						tab.waitForResponse((response: any) => new URL(response.url()).pathname === '/api/v1/things/fork' && response.request().method() === 'POST', { timeout: 60000 }),
 						tab.getByTestId('fork-shared-thing').click()
@@ -227,12 +280,28 @@ test('shared page audience includes its author components, never a foreign priva
 				} catch (error) {
 					if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-copy-failure.png` });
 					await Promise.all(copyResponses);
-					console.error('Copy UI diagnostic:', { path: new URL(tab.url()).pathname, requestObserved: copyRequestSeen, responseObserved: !!observedCopy, alerts: await tab.getByRole('alert').allTextContents() });
+					console.error('Copy UI diagnostic:', { path: new URL(tab.url()).pathname, browserEvents, requestObserved: copyRequestSeen, responseObserved: !!observedCopy, text: (await tab.locator('body').innerText()).slice(0, 1600), alerts: await tab.getByRole('alert').allTextContents() });
 					throw error;
 				}
 				assert.equal(copyResult.ok, true, copyResult.error);
 				await Promise.all(copyResponses);
 				await tab.waitForURL(`**/builder?page=${copyResult.id}`);
+				await tab.goto(new URL(`/thing/${dataCopy.data.id}`, base).href);
+				const [ownedControl] = await Promise.all([
+					tab.waitForResponse((response: any) => new URL(response.url()).pathname === '/api/v1/actions/run'),
+					tab.getByRole('button', { name: 'Schema draw', exact: true }).click()
+				]);
+				assert.equal(ownedControl.request().postDataJSON().sharedRoot, undefined, 'Owned data with an owned schema retains ordinary owner execution');
+				assert.equal((await ownedControl.json()).result, 'The Star');
+				const foreignSchema = await create(owner, ['schema'], { name: `foreign-schema-${randomUUID()}`, title: 'Foreign schema', fields: [{ name: 'value', type: 'string' }], render: schemaTemplate }, ['tt:all']);
+				const ownedForeignData = await create(stranger, ['data'], { schemaId: foreignSchema.id, value: 'Foreign template' });
+				await tab.goto(new URL(`/thing/${ownedForeignData.id}`, base).href);
+				const [foreignControl] = await Promise.all([
+					tab.waitForResponse((response: any) => new URL(response.url()).pathname === '/api/v1/actions/run'),
+					tab.getByRole('button', { name: 'Schema draw', exact: true }).click()
+				]);
+				assert.equal(foreignControl.request().postDataJSON().sharedRoot, ownedForeignData.id, 'A foreign schema never borrows the data owner account authority');
+				assert.equal(foreignControl.status(), 404, 'A public foreign schema cannot publish its author private action');
 				await context.close();
 			} finally { await browser.close(); }
 		}
@@ -278,6 +347,9 @@ test('shared page audience includes its author components, never a foreign priva
 		assert.equal(unchanged.response.status, 200, unchanged.data.error);
 		const injectedAction = await request('/api/v1/things', 'PATCH', { id: page.id, crystal: { blocks: [{ id: 'card', type: 'component', component: key, source: { action: unrelatedAction.id } }] } }, stranger);
 		assert.equal(injectedAction.response.status, 403, 'A shared writer cannot publish an unrelated private action');
+		assert.equal((await request('/api/v1/things', 'PATCH', { id: dataSchema.id, acl: ['tt:custom', `tt:group/${groupId}/write`] }, owner)).response.status, 200);
+		const injectedSchemaAction = await request('/api/v1/things', 'PATCH', { id: dataSchema.id, crystal: { render: { tag: 'button', ttAction: unrelatedAction.id, children: ['Not allowed'] } } }, stranger);
+		assert.equal(injectedSchemaAction.response.status, 403, 'A schema writer cannot publish an unrelated private action through a shared Data Thing');
 		const injectedMedia = await request('/api/v1/things', 'PATCH', { id: page.id, crystal: { blocks: [{ id: 'private-media', type: 'media', media: 'image', src: '/api/v1/attachments/content?id=guessed-private-attachment' }] } }, stranger);
 		assert.equal(injectedMedia.response.status, 403, 'A shared writer cannot add a media reference they cannot independently read');
 		for (const ref of [untouched.id, `${key}-unrelated`]) {
@@ -287,6 +359,7 @@ test('shared page audience includes its author components, never a foreign priva
 		assert.equal((await request('/api/v1/groups', 'PATCH', { id: groupId, memberIds: [] }, owner)).response.status, 200);
 		assert.equal((await request(url, 'GET', undefined, stranger)).response.status, 404);
 		assert.equal((await request(sharedSchemaUrl, 'GET', undefined, stranger)).response.status, 404);
+		assert.equal((await schemaRun(childAction.id, '', stranger)).response.status, 404, 'Group removal also revokes template controls');
 	} finally {
 		if (groupId) assert.equal((await request('/api/v1/groups', 'DELETE', { id: groupId }, owner)).response.status, 200);
 		for (const { id, cookie } of created.reverse()) {
