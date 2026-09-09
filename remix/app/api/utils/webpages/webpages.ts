@@ -1,10 +1,13 @@
 import { getThingsCollection } from '../mongodb/collections';
 import {
 	fail,
+	canViewInherited,
+	batchedThingLookup,
 	findViewableThing,
 	toPublicThings,
 	visibilityQueryFor,
 	withMatch,
+	withFriendIds,
 	type Fail,
 	type PublicThing,
 	type ThingDoc,
@@ -16,6 +19,7 @@ import {
 	MAX_WEBPAGE_ROUTE_CHARS,
 	WEBPAGE_ROUTE_PATTERN
 } from '~/schemas/registry';
+import { selectComponent } from './componentResolutionCore';
 
 // Read model for the block-based site builder: resolve ONE webpage thing
 // (a standalone /p/ page by shareId, the site page bound to an app route, or
@@ -60,7 +64,8 @@ const collectComponentRefs = (blocks: unknown, refs: Set<string>): void => {
 // the viewer's own latest componentKey match.
 const resolveComponents = async (
 	viewer: Viewer,
-	page: ThingDoc | null
+	page: ThingDoc | null,
+	inheritAudience = true
 ): Promise<{ components: PublicThing[]; refs: Record<string, string | null> }> => {
 	const wanted = new Set<string>();
 	collectComponentRefs(page?.crystal?.blocks, wanted);
@@ -70,46 +75,78 @@ const resolveComponents = async (
 	const slugRefs = refs.filter((ref) => COMPONENT_KEY_PATTERN.test(ref));
 	const collection = await getThingsCollection();
 	const visibility = visibilityQueryFor(viewer, []);
+	// Only a stored, authorised composition delegates its audience. The demo
+	// block-list helper has no root authority and retains viewer-local lookup.
+	const root = page?.shareId && page.ownerId && await canViewInherited(page, viewer) ? page : null;
+	const compositionOwnerId = root?.ownerId || viewer?.id || null;
 
 	const arms: Record<string, unknown>[] = [];
 	// exact shareId hits ride the ordinary visibility fence
 	if (visibility) arms.push(withMatch({ shareId: { $in: refs } }, visibility));
 	else arms.push({ shareId: { $in: refs }, acl: 'tt:all' });
+	if (root) arms.push({ shareId: { $in: refs }, ownerId: root.ownerId });
 	// seeded platform docs are system-owned tt:all — match them directly so a
 	// logged-out viewer still resolves the catalog
 	if (slugRefs.length) {
 		arms.push({ shareId: { $in: slugRefs.map((ref) => `component-${ref}`) }, ownerId: 'system' });
-		if (viewer?.id) arms.push({ ownerId: viewer.id, 'crystal.componentKey': { $in: slugRefs } });
+		if (compositionOwnerId) arms.push({ ownerId: compositionOwnerId, 'crystal.componentKey': { $in: slugRefs } });
 	}
 
-	const docs = (await collection
-		.find({ $and: [{ thingtime: 'component' }, { $or: arms }] } as any)
-		.sort({ updatedAt: -1 })
-		.limit(refs.length * 8)
-		.toArray()) as any as ThingDoc[];
+	// Bound per identity, not by arbitrary total revisions: many versions of
+	// one component must never crowd a different required component out.
+	const exactIds = [...refs, ...slugRefs.map((ref) => `component-${ref}`)];
+	const docs = (await collection.aggregate([
+		{ $match: { $and: [{ thingtime: 'component' }, { $or: arms }] } },
+		{ $sort: { 'crystal.version': -1, updatedAt: -1, shareId: 1 } },
+		{ $group: { _id: { $cond: [
+			{ $in: ['$shareId', exactIds] }, { exact: '$shareId' },
+			{ owner: '$ownerId', key: { $ifNull: ['$crystal.componentKey', '$shareId'] } }
+		] }, doc: { $first: '$$ROOT' } } },
+		{ $replaceRoot: { newRoot: '$doc' } },
+		{ $limit: refs.length * 3 }
+	]).toArray()) as unknown as ThingDoc[];
 
-	const byShareId = new Map<string, ThingDoc>();
-	const ownLatestByKey = new Map<string, ThingDoc>();
-	for (const doc of docs) {
-		if (doc.shareId && !byShareId.has(doc.shareId)) byShareId.set(doc.shareId, doc);
-		const key = typeof doc.crystal?.componentKey === 'string' ? doc.crystal.componentKey : null;
-		if (key && viewer?.id && doc.ownerId === viewer.id) {
-			const current = ownLatestByKey.get(key);
-			const versionOf = (candidate: ThingDoc): number => Number(candidate.crystal?.version) || 0;
-			if (!current || versionOf(doc) > versionOf(current)) ownLatestByKey.set(key, doc);
-		}
-	}
+	const lookup = batchedThingLookup();
+	const permitted = (await Promise.all(docs.map(async (doc) => {
+		// A root can include its own components regardless of their standalone
+		// audience. Never borrow the author's identity: that would expose keys,
+		// token grants, or foreign private components. Preserve the child's
+		// moderation checks and judge its audience through the authorised root.
+		const inherited = inheritAudience && root && doc.ownerId === root.ownerId;
+		const candidate = inherited ? { ...doc, acl: ['tt:inherit'], targetId: root.shareId } : doc;
+		const allowed = await canViewInherited(candidate, viewer, (id) => id === root?.shareId ? Promise.resolve(root) : lookup(id));
+		return allowed ? doc : null;
+	}))).filter((doc): doc is ThingDoc => !!doc);
 
 	const resolved: Record<string, string | null> = {};
 	const picked = new Map<string, ThingDoc>();
 	for (const ref of refs) {
-		const doc = byShareId.get(ref) || byShareId.get(`component-${ref}`) || ownLatestByKey.get(ref) || null;
+		const doc = selectComponent(ref, permitted, compositionOwnerId);
 		resolved[ref] = doc?.shareId || null;
 		if (doc?.shareId) picked.set(doc.shareId, doc);
 	}
 
 	const components = await toPublicThings([...picked.values()], viewer);
 	return { components, refs: resolved };
+};
+
+// Shared writers can edit the included content, but cannot use a new guessed
+// author-local ref to publish an unrelated private component. Only the owner
+// can delegate their private component audience by adding it to a page.
+export const validateSharedComponentAdditions = async (
+	viewer: Viewer,
+	page: ThingDoc,
+	crystal: Record<string, unknown>
+): Promise<Fail | null> => {
+	const previous = new Set<string>();
+	const next = new Set<string>();
+	collectComponentRefs(page.crystal?.blocks, previous);
+	collectComponentRefs(crystal.blocks, next);
+	const additions = [...next].filter((ref) => !previous.has(ref));
+	if (!additions.length) return null;
+	const blocks = additions.map((component) => ({ type: 'component', component }));
+	const resolved = await resolveComponents(await withFriendIds(viewer), { ...page, crystal: { blocks } }, false);
+	return additions.every((ref) => !!resolved.refs[ref]) ? null : fail(403, 'Only the owner can include a private component you cannot already read');
 };
 
 // Same batched resolution for a block list that is not a stored page — the
@@ -125,7 +162,8 @@ const resultFor = async (
 	viewer: Viewer,
 	doc: ThingDoc | null,
 	source: 'user' | 'system' | null
-): Promise<ResolveWebpageResult> => {
+): Promise<ResolveWebpageResult | Fail> => {
+	if (doc && !(await canViewInherited(doc, viewer))) return fail(404, 'Webpage not found');
 	const { components, refs } = await resolveComponents(viewer, doc);
 	const page = doc ? (await toPublicThings([doc], viewer))[0] || null : null;
 	return { ok: true, page, source: page ? source : null, components, refs };
@@ -154,6 +192,7 @@ export const resolveWebpage = async (
 	viewer: Viewer,
 	query: { id?: unknown; path?: unknown; global?: unknown }
 ): Promise<ResolveWebpageResult | Fail> => {
+	viewer = await withFriendIds(viewer);
 	if (query.global === '1' || query.global === 'true' || query.global === true) {
 		const { doc, source } = await findSitePage(viewer, { 'crystal.pageKey': SITE_GLOBAL_PAGE_KEY });
 		return resultFor(viewer, doc, source);

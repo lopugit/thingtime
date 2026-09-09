@@ -242,7 +242,7 @@ test('subspace user flairs publish their contract versions', () => {
 	}
 	// (S7 moved the single read on to 1.4.0 — commentSort=top|new|old; the
 	// shared projection's other three ids are untouched)
-	assert.equal(manifest.features['api.things'], '1.4.0');
+	assert.equal(manifest.features['api.things'], '1.4.1');
 	assert.equal(manifest.features['api.things-feed'], '1.4.0');
 });
 
@@ -291,7 +291,7 @@ test('subspace reports publish their contract versions', () => {
 	}
 	// (S7 moved the single read on to 1.4.0 — commentSort=top|new|old; the
 	// shared projection's other three ids are untouched)
-	assert.equal(manifest.features['api.things'], '1.4.0');
+	assert.equal(manifest.features['api.things'], '1.4.1');
 	assert.equal(manifest.features['api.things-feed'], '1.4.0'); // S6: scope
 });
 
@@ -315,7 +315,7 @@ test('subspace discovery publishes its contract versions', () => {
 	}
 	// (S7 moved the single read on to 1.4.0 — commentSort=top|new|old; the
 	// shared projection's other three ids are untouched)
-	assert.equal(manifest.features['api.things'], '1.4.0');
+	assert.equal(manifest.features['api.things'], '1.4.1');
 	assert.equal(manifest.features['api.subspaces-feed'], '1.3.0');
 	assert.equal(manifest.features['api.subspaces-get'], '1.4.0');
 });

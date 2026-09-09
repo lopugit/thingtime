@@ -18,6 +18,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-09: Shared pages resolve author-owned embedded components through the
+  root audience, including anonymous link readers and custom groups; preserve
+  standalone privacy and prevent shared editors adding unrelated private
+  dependencies. Shared sources/controls now use a root-authorized read-only
+  action mode, including child actions and explicit data dependencies. Added
+  private independent composition copies with rewritten component/action
+  references. Live target deployment and broader inheritance remain under
+  active validation. — **Codex (AI)**
+
 - Refresh the clipboard-attachment preview with released main's shared-index readers and poll writer, preserving its bounded paste queue and attachment permissions. Database migration activation remains separate. — Codex (AI), 2026-09-09
 
 - Repair a poll writer found during the index audit: stamp the shared protected vote identity (no new index), preserve legacy lookup compatibility and unbilled engagement policy. Native regression reproduces 16 duplicate rows before the fix and checks concurrent votes, toggles, private access and cascade cleanup. — Codex (AI), 2026-09-08

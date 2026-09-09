@@ -11,6 +11,7 @@ import { useWebpageDraft } from '~/components/Builder/useWebpage';
 import type { WebpageBlock } from '~/components/Builder/webpageBlocks';
 import { WebpageBlocksRenderer } from '~/components/Builder/WebpageBlocksRenderer';
 import { WebpageRuntimeProvider } from '~/components/Builder/webpageRuntime';
+import { ForkSharedThingButton } from '~/components/Sharing/ForkSharedThingButton';
 import { PostCard } from '~/components/Feed/PostCard';
 import { mergeReactionOverlay } from '~/components/Feed/reactionOverlay';
 import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
@@ -410,7 +411,8 @@ export default function ThingPage() {
 		!thing.author?.id &&
 		RESERVED_ID.test(thing.id) &&
 		(isWebpage ? suiteResolves && webpage.resolved?.source !== 'user' : !SUITE_PART_ID.test(thing.id) || suiteResolves);
-	const interactive = isThingOwner || seeded;
+	const shared = !isThingOwner && (isComponent || isWebpage) && (!seeded || !currentUser?.id);
+	const interactive = isThingOwner || seeded || shared;
 
 	// The catalog-side confirm: a seeded thing's controls name what will run
 	// before anything executes. The viewer's own thing skips it — except for
@@ -800,6 +802,7 @@ export default function ThingPage() {
 						<Heading as="h1" mt={1} fontSize={{ base: '2xl', md: '3xl' }} overflowWrap="anywhere">
 							{diagnostic ? `Migration error · ${diagnostic.migrationId}` : diagnosticRoute ? 'Migration error' : displayName || 'Thing'}
 						</Heading>
+						{thing && !isThingOwner && (isComponent || isWebpage) ? <ForkSharedThingButton id={thing.id} linkKey={linkKey} webpage={isWebpage} /> : null}
 					</Box>
 					<Button
 						as={Link}
@@ -939,7 +942,10 @@ export default function ThingPage() {
 							// Its source is the viewer's ownership; its installer exists only
 							// for a seeded suite thing.
 							<WebpageRuntimeProvider
+								key={`${thing.id}:${currentUser?.id || ''}:${linkKey}`}
 								pageId={thing.id}
+								shared={shared}
+								linkKey={linkKey}
 								pageKey={isWebpage && typeof thing.crystal?.pageKey === 'string' ? thing.crystal.pageKey : null}
 								suiteKey={suiteKey ?? null}
 								source={isThingOwner ? 'user' : 'system'}

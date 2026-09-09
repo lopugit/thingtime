@@ -5376,6 +5376,30 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       eyebrow + rainbow/ink header — no raw Chakra Container/Badge dashboards.
 - [ ] /builder lists the signed-in user's webpage things; New page ✨ creates a
       private page and opens the canvas; signed-out users get the quiet card.
+- [ ] Shared composition inheritance: an anonymous valid-key reader sees the
+      author's component inside nested containers, not a visitor's same-key
+      component. Wrong/revoked links and removed group memberships fail closed.
+      Public roots include private author components without disclosing their
+      standalone link keys. Foreign private components remain inaccessible;
+      shared writers cannot add guessed private author refs (by id or key).
+      Run the real-API fixture with `TT_SHARED_TEST_URL=http://127.0.0.1:<port>
+      pnpm --dir remix run test:webpages`; it creates test accounts through the
+      API and deletes its exact test Things/groups. Existing test sessions may
+      be supplied through `TT_SHARED_OWNER_COOKIE`/`TT_SHARED_VISITOR_COOKIE`.
+- [ ] A signed-out shared control runs its included action and child action;
+      invalid/revoked root keys and unrelated action IDs are refused. Shared
+      runs can read explicitly included data but cannot create/update/delete
+      saved data, including when the caller also happens to be the owner.
+      Copy to my Builder/Things creates private independently editable parts,
+      rewrites nested action/component references, and leaves the original
+      unchanged. Repeat the control/copy checks at desktop and mobile widths.
+      The opt-in API fixture also accepts `TT_SHARED_PLAYWRIGHT_PATH` (an
+      installed Playwright module), `TT_SHARED_CHROME_PATH`, and
+      `TT_SHARED_SCREENSHOT_DIR` for 1440px/390px anonymous browser proof.
+      Set `TT_SHARED_SESSION_CACHE` to an ignored local temporary file to
+      reuse generated test sessions across runs instead of exhausting the
+      signup budget; that file contains test credentials and must never be
+      published. The fixture writes it with owner-only file permissions.
 - [ ] Canvas: hovering a block draws its dashed boundary + label chip; nested
       sub-blocks highlight innermost-wins; clicking selects (solid outline)
       and opens the inspector in the right drawer.
