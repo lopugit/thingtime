@@ -263,7 +263,7 @@ struct NotificationRow: View {
                 .padding(.top, 5)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(notification.displayActor)
+                Text(notification.title ?? notification.displayActor)
                     .font(.caption.bold())
                     .lineLimit(1)
                 Text(notification.actionText)
@@ -285,7 +285,7 @@ struct NotificationRow: View {
         }
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(notification.displayActor) \(notification.actionText)")
+        .accessibilityLabel("\(notification.title ?? notification.displayActor) \(notification.actionText) \(notification.preview ?? "")")
         .accessibilityHint(notification.isUnread ? "Marks this notification as read" : "Already read")
     }
 }

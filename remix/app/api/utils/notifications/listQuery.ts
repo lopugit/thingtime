@@ -18,6 +18,8 @@ export const MAX_SEARCH_CHARS = 100;
 export const MAX_TYPE_FILTERS = 32;
 
 export type NotificationListOptions = {
+  // History is independent of delivery preferences; default keeps bell compatibility.
+  history?: unknown;
   limit?: unknown;
   before?: unknown;
   // comma-separated or array of NotificationType; unknown names are dropped
@@ -34,6 +36,7 @@ export type NotificationListOptions = {
 };
 
 export type ResolvedNotificationListQuery = {
+  history: boolean;
   limit: number;
   before: Date | null;
   since: Date | null;
@@ -77,6 +80,7 @@ export const resolveNotificationListQuery = (options: NotificationListOptions = 
   const q = typeof options.q === 'string' ? options.q.replace(/\s+/g, ' ').trim().slice(0, MAX_SEARCH_CHARS) : '';
 
   return {
+    history: parseBoolean(options.history),
     limit,
     before: parseDate(options.before),
     since: parseDate(options.since),
@@ -92,7 +96,7 @@ export const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/
 // The crystal fields free-text search reads. actorName/actorUsername are the
 // write-time snapshots (live names come from actor enrichment at read time);
 // title is the system-note headline.
-export const NOTIFICATION_SEARCH_FIELDS = ['crystal.preview', 'crystal.actorName', 'crystal.actorUsername', 'crystal.title'] as const;
+export const NOTIFICATION_SEARCH_FIELDS = ['crystal.preview', 'crystal.actorName', 'crystal.actorUsername', 'crystal.title', 'crystal.detail'] as const;
 
 export type NotificationListFilters = {
   base: Record<string, any>;
@@ -106,12 +110,13 @@ export const buildNotificationListFilters = (
   prefs: NormalizedNotificationPrefs,
   query: ResolvedNotificationListQuery
 ): NotificationListFilters | null => {
-  if (!prefs.masters.push) return null;
-  const disabled = Object.entries(prefs.push)
+  if (!query.history && !prefs.masters.push) return null;
+  const disabled = Object.entries(query.history ? {} : prefs.push)
     .filter(([, enabled]) => enabled === false)
     .map(([type]) => type);
 
   const base: Record<string, any> = { thingtime: 'notification', ownerId: userId };
+  if (!query.history) base.historyOnly = { $ne: true };
 
   if (query.types !== null) {
     const allowed = query.types.filter((type) => !disabled.includes(type));

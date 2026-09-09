@@ -45,7 +45,7 @@ export const SettingsSection = (props: {
 );
 
 export const SettingRow = (props: { label: React.ReactNode; hint?: string; children: React.ReactNode }) => (
-  <Flex alignItems="center" columnGap={4} paddingY={2} whiteSpace="normal">
+  <Flex alignItems="center" columnGap={4} rowGap={2} flexWrap="wrap" paddingY={2} whiteSpace="normal">
     <Box minWidth={0}>
       <Text fontSize="sm" color="var(--tt-ink, #16161a)">
         {props.label}
@@ -56,7 +56,7 @@ export const SettingRow = (props: { label: React.ReactNode; hint?: string; child
         </Text>
       )}
     </Box>
-    <Box marginLeft="auto" flexShrink={0}>
+    <Box marginLeft="auto" minWidth={0} maxWidth="100%">
       {props.children}
     </Box>
   </Flex>

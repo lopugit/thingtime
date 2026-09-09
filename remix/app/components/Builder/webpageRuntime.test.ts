@@ -57,6 +57,10 @@ test('the query scope keeps plain names and drops the rest', () => {
 	assert.equal('has space' in scope, false);
 });
 
+test('a sharing bearer key never enters the template or action input query scope', () => {
+	assert.deepEqual(queryScopeOf('?key=private-link-key&question=hello'), { question: 'hello' });
+});
+
 test('the query scope caps value length and key count', () => {
 	const long = 'x'.repeat(500);
 	assert.equal(queryScopeOf(`?note=${long}`).note?.length, 200);

@@ -11,6 +11,9 @@ type RouteModule = {
 };
 
 export const routeModules: Record<string, () => Promise<RouteModule>> = {
+  'v1/watch/recordings': () => import('../../../app/routes/api/v1/watch/recordings/_recordings'),
+  'v1/notifications/test': () => import('../../../app/routes/api/v1/notifications/test/_test'),
+  'v1/lopu/reminders': () => import('../../../app/routes/api/v1/lopu/reminders/_reminders'),
   'v1/admin/ai/models': () => import('../../../app/routes/api/v1/admin/ai/models/_models'),
   'v1/admin/apps': () => import('../../../app/routes/api/v1/admin/apps/_apps'),
   'v1/admin/apps/revoke': () => import('../../../app/routes/api/v1/admin/apps/revoke/_revoke'),
@@ -61,6 +64,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/algorithms/update': () => import('../../../app/routes/api/v1/algorithms/update/_update'),
   'v1/ai/connections': () => import('../../../app/routes/api/v1/ai/connections/_connections'),
   'v1/ai/models': () => import('../../../app/routes/api/v1/ai/models/_models'),
+  'v1/ai/complete': () => import('../../../app/routes/api/v1/ai/complete/_complete'),
   'v1/app-data': () => import('../../../app/routes/api/v1/app-data/_app-data'),
   'v1/app-data/delete': () => import('../../../app/routes/api/v1/app-data/delete/_delete'),
   'v1/app-data/shared': () => import('../../../app/routes/api/v1/app-data/shared/_shared'),
@@ -167,6 +171,8 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/health/vercel': () => import('../../../app/routes/api/v1/health/vercel/_vercel'),
   'v1/login': () => import('../../../app/routes/api/v1/login/_login'),
   'v1/lopu/musing': () => import('../../../app/routes/api/v1/lopu/musing/_musing'),
+  'v1/lopu/recordings': () => import('../../../app/routes/api/v1/lopu/recordings/_recordings'),
+  'v1/lopu/recordings/run': () => import('../../../app/routes/api/v1/lopu/recordings/run/_run'),
   'v1/lopu/chats': () => import('../../../app/routes/api/v1/lopu/chats/_chats'),
   'v1/lopu/chats/update': () => import('../../../app/routes/api/v1/lopu/chats/update/_update'),
   'v1/lopu/chats/delete': () => import('../../../app/routes/api/v1/lopu/chats/delete/_delete'),
@@ -189,6 +195,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
 	'v1/notifications/email/unsubscribe': () => import('../../../app/routes/api/v1/notifications/email/unsubscribe/_unsubscribe'),
 	'v1/notifications/email/weekly-summary': () => import('../../../app/routes/api/v1/notifications/email/weekly-summary/_weekly-summary'),
   'v1/notifications/read': () => import('../../../app/routes/api/v1/notifications/read/_read'),
+  'v1/notifications/record': () => import('../../../app/routes/api/v1/notifications/record/_record'),
   'v1/notifications/settings': () => import('../../../app/routes/api/v1/notifications/settings/_settings'),
   'v1/oauth/authorize': () => import('../../../app/routes/api/v1/oauth/authorize/_authorize'),
   'v1/oauth/desktop/authorize': () => import('../../../app/routes/api/v1/oauth/desktop/authorize/_authorize'),
@@ -203,6 +210,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/actions/runs': () => import('../../../app/routes/api/v1/actions/runs/_runs'),
   'v1/components/browse': () => import('../../../app/routes/api/v1/components/browse/_browse'),
   'v1/webpages/resolve': () => import('../../../app/routes/api/v1/webpages/resolve/_resolve'),
+  'v1/things/fork': () => import('../../../app/routes/api/v1/things/fork/_fork'),
   'v1/webpages/demos': () => import('../../../app/routes/api/v1/webpages/demos/_demos'),
   'v1/webpages/suites/install': () => import('../../../app/routes/api/v1/webpages/suites/install/_install'),
   'v1/network-probe/ping': () => import('../../../app/routes/api/v1/network-probe/ping/_ping'),
@@ -250,6 +258,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/things/quota': () => import('../../../app/routes/api/v1/things/quota/_quota'),
   'v1/things/rss': () => import('../../../app/routes/api/v1/things/rss/_rss'),
 	'v1/things/reveal': () => import('../../../app/routes/api/v1/things/reveal/_reveal'),
+	'v1/vault/reveal': () => import('../../../app/routes/api/v1/vault/reveal/_reveal'),
   'v1/things/save': () => import('../../../app/routes/api/v1/things/save/_save'),
   'v1/things/saved': () => import('../../../app/routes/api/v1/things/saved/_saved'),
   'v1/things/search': () => import('../../../app/routes/api/v1/things/search/_search'),
@@ -358,6 +367,14 @@ export default defineHandler(async (event) => {
   }
 
   if (shouldProxyApiToFallback(event.req)) {
+    // Fresh vault verification must stay on the selected deployment. Never
+    // forward passwords/assertions to a fallback origin or reveal its keys.
+    if (path === 'v1/vault/reveal') {
+      return jsonResponse({ ok: false, error: 'Vault verification requires a configured local account environment' }, {
+        status: 503,
+        headers: { 'Cache-Control': 'private, no-store, max-age=0', Pragma: 'no-cache' }
+      });
+    }
     return proxyApiRequestToFallback(event.req);
   }
 

@@ -24,6 +24,15 @@ import {
 
 const viewer = { id: 'user-1', username: 'lopu' };
 
+test('personal tools strip recipient, owner and visibility overrides', () => {
+  assert.deepEqual(validateLopuToolInput('create_thing', { title: ' Note ', ownerId: 'other', acl: ['public'] }),
+    { ok: true, input: { title: 'Note', description: '', type: 'note' } });
+  assert.deepEqual(validateLopuToolInput('send_notification', { title: 'Ping', recipientId: 'other', everyMinutes: 1 }),
+    { ok: true, input: { title: 'Ping', description: '', delivery: 'normal' } });
+  assert.deepEqual(validateLopuToolInput('list_reminders', { ownerId: 'other' }), { ok: true, input: {} });
+  assert.equal(validateLopuToolInput('create_reminder', { title: 'Later', at: new Date(Date.now() + 300_000).toISOString(), everyMinutes: 1 }).ok, false);
+});
+
 test('every tool has a definition with an object schema, and the builder tools stream their input', () => {
   assert.equal(LOPU_TOOL_DEFINITIONS.length, LOPU_TOOL_NAMES.length);
   for (const definition of LOPU_TOOL_DEFINITIONS) {

@@ -10,6 +10,8 @@ struct ThingtimeWatchNotification: Codable, Hashable, Identifiable, Sendable {
     let preview: String?
     let readAt: String?
     let createdAt: String
+    var title: String? = nil
+    var delivery: String? = nil
 
     var isUnread: Bool { readAt == nil }
 
@@ -19,6 +21,7 @@ struct ThingtimeWatchNotification: Codable, Hashable, Identifiable, Sendable {
 
     var actionText: String {
         switch type {
+        case "lopu-reminder", "recording-reminder": "A reminder from Lopu"
         case "friend-request": "sent you a friend request"
         case "friend-accepted": "accepted your friend request"
         case "new-follower": "followed you"

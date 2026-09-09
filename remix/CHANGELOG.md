@@ -20,6 +20,106 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - Refresh the custom-audience promotion preview with released main's shared-index readers. Resolve equivalent ACL merge blocks and duplicate viewer fields, composer state, and modal rendering; retain main's unified audience controls and drawer layering. Database migration activation remains separate. — Codex (AI), 2026-09-09
 
+- Save new iOS Lopu voice recordings as owner-private playable audio Things,
+  retaining on-device recovery files and an account-bound retry outbox.
+  Completed recordings survive draft cleanup; upload/complete contracts are
+  1.2.0 and native delivery is build 29.
+  [Release and validation notes](../PRs/722-ios-voice-recording-things-save-ios-lopu-recordings-to-private-things.md).
+  — Codex (AI), 2026-09-09
+
+- 2026-09-09: Reconcile Watch/Lopu automation with current develop and main: preserve durable notification history, verified vault controls, shared Settings tabs and iPhone voice recovery. Combine notification contracts as list 1.6.0/settings 1.5.0 and remove the obsolete history-trimming call from the reminder transaction. — Codex (AI)
+
+- 2026-09-09: Recover expired Watch upload drafts without dropping local audio or falsely disconnecting the account; add explicit Send to Lopu handoffs, owner-private Thing/notification/reminder tools, and notification Settings test/pause controls. Compatible capability updates, isolated safety tests and iPhone/Watch + Vercel builds pass; hosted/browser/physical delivery gates remain separate. See [PR #665 notes](../PRs/665-codex-watch-lopu-recording-automation-private-transcripts-todos-reminders.md). — Codex (AI)
+
+- 2026-09-09: Provision a distinct sensitive admin-vault key for the hosted develop custom environment in Vercel and document activation and credential-store boundaries. Production External integrations contains no saved policies; server OpenAI/Anthropic credentials already include develop. Saved Claude Code CI credentials still require an authenticated transfer or secure re-entry; no token values were exposed or rotated. — Codex (AI)
+
+- 2026-09-09: Tie shared AI completions and recording-automation mutations to the protected account subscription: Free/current configured limits, Plus 5x, Pro/PAYG unlimited product request rates. Preserve account windows across tier/device changes and fail closed on entitlement outages. Live index cutover separately completed: production 47, develop 48 including Watch scheduler. Personal Claude Code synthetic text completion passed; cloud recording bridge remains pending. — Codex (AI)
+
+- 2026-09-09: Bring the Watch preview onto the released staged index migrations and poll writer. Remove its competing startup-only poll-index retirement while preserving the recording scheduler index. Retire obsolete deployment URLs only after exact project, live alias and active-head checks; production/develop migration activation remains pending. — Codex (AI)
+
+- 2026-09-08: Restore four-slot MongoDB index headroom by moving poll point reads/writes to protected Binary unique keys; validate/backfill legacy votes before retiring the home lookup index. A disposable MongoDB test proves 60 indexes, indexed lookups and duplicate protection. Poll contract/client minimum is 1.0.1. — Codex (AI)
+
+- 2026-09-08: Reconcile PR #665 with released Desktop Node ownership and subspace notifications. Preserve both notification families, opt-in email defaults, and relational delete cascades; publish compatible notification list/settings contracts 1.4.0/1.3.0. — Codex (AI)
+
+- 2026-09-08 — **Codex (AI):** Add a bounded local speech-to-text and personal Claude Code adapter; synthetic audio produced validated grounded todos without sending audio to Claude. Cloud job pairing remains pending. See [PR #665 notes](../PRs/665-codex-watch-lopu-recording-automation-private-transcripts-todos-reminders.md).
+
+- 2026-09-08: Add the shared owner-scoped text AI endpoint and origin-negotiated client with explicit multi-endpoint credential waterfall, redacted routing traces and shared recording retry policy. Personal Claude Code runtime and local transcription integration remain release gates. See [PR #665](../PRs/665-codex-watch-lopu-recording-automation-private-transcripts-todos-reminders.md). — Codex (AI)
+
+- 2026-09-07: Add explicit account-owned AI credential waterfalls for Watch recording transcription and analysis, including Claude API analysis, bounded failover, renewed consent checks, redacted connection choices and capability 1.1.0. Existing accounts keep their original provider selection. See [PR #665](../PRs/665-codex-watch-lopu-recording-automation-private-transcripts-todos-reminders.md). — Codex (AI)
+
+- 2026-09-07: Use provider-neutral recording consent and status wording. Report safe, actionable recording failure categories for source/format, storage download, provider credentials/quota, transcription, analysis and saving. Live preview acceptance surfaced an immediate retry previously hidden behind one generic message. — Codex (AI)
+- 2026-09-07: Bring recording automation up to date with the released Lopu/Builder/rich-text work and the verified production storage-ledger repair. See the [PR #665 verification note](../PRs/665-codex-watch-lopu-recording-automation-private-transcripts-todos-reminders.md). — Codex (AI)
+
+- 2026-09-06: Integrate recording automation with the merged Watch foundation;
+  send daily reminders through its native push channel after durable commit,
+  preserving a bounded title and safe recordings link. — Codex (AI)
+
+- 2026-09-06: Add opt-in private Watch recording transcription, relational
+  transcript comments, grounded notes/todos, durable retry checkpoints and
+  daily local-time reminders. Add account settings/activity at
+  `/lopu/recordings`, explicit capability contracts and fork-safe scheduler /
+  provider setup. Browser checks cover persisted settings and mobile layout;
+  live audio and native push acceptance remain release gates. See the
+  [PR #665 verification note](../PRs/665-codex-watch-lopu-recording-automation-private-transcripts-todos-reminders.md). — Codex (AI)
+- Keep Commander's display-name prefix tier reachable for queries that span a space ("the lopu"), which previously matched no single split word and let a matching Thing title outrank the person. — Lopu (AI), 2026-09-09
+- Prepare the focused main promotion of shared Data/schema controls after
+  exact-head CI and logged-out Safari verification on PR #714. Preserve the
+  separate unresolved initial-load and protected-media-copy limitations in the
+  [delivery note](../PRs/714-codex-shared-schema-action-inheritance.md).
+  — Codex (AI), 2026-09-09
+
+- Include schema-template actions in shared-root dependency resolution and
+  private copies. Data Thing detail controls use root-authorized read-only
+  execution unless both the data and its schema are owned by the viewer;
+  list/grid previews remain inert. Add API, copy, revocation and responsive
+  browser regressions. Shared searches resolve included schema definitions
+  without borrowing the author or visitor's private inventory (action contract
+  1.2.1). Validation and remaining scope:
+  [PR #714](../PRs/714-codex-shared-schema-action-inheritance.md).
+  — Codex (AI), 2026-09-09
+
+- 2026-09-09: Deliver native Lopu voice and its signed Live Activity extension
+  in iOS build 27; older general bridges now show an update instruction.
+  Repair iOS Lopu voice startup/stop races, preserve partial speech
+  and local audio/transcript files, save ordinary voice turns in the selected
+  chat, and surface separate Speech Recognition and Live Activity failures.
+  Native voice now checks the selected origin's semantic API capabilities.
+  [Release evidence and device checklist](../PRs/715-ios-lopu-voice-recovery-deliver-lopu-voice-recording-and-live-activities.md).
+
+- 2026-09-09: Shared pages resolve author-owned embedded components through the
+  root audience, including anonymous link readers and custom groups; preserve
+  standalone privacy and prevent shared editors adding unrelated private
+  dependencies. Shared sources/controls now use a root-authorized read-only
+  action mode, including child actions and explicit data dependencies. Added
+  private independent composition copies with rewritten component/action
+  references. Restore canonical hidden-key/group authorization for page/post
+  media and forward shared keys only to first-party attachment content URLs.
+  Extend private copying to ordinary standalone content, preserving extended
+  content and independently copied schema definitions. Restore shared Data
+  Thing rendering through root-authorized private schema reads, preserving
+  standalone ACLs and refusing app-token namespace escapes.
+  Carry the root context through explicitly embedded private media, persistent
+  cache validation and audio downloads; retain independent foreign/profile
+  access and prevent shared writers injecting private media references.
+  Live target deployment and broader inheritance remain under
+  active validation; see [PR #707](../PRs/707-shared-root-inheritance-read-only-app-use.md). — **Codex (AI)**
+
+- Add fresh-password or user-verified passkey Show controls for CI, admin integration and personal Secure Vault credentials. Keep normal reads redacted, bind passkey challenges to a single session/item/origin, and clear displayed values after 30 seconds or leaving the tab. [PR #710 security and verification notes](../PRs/710-vault-verified-reveal-verified-vault-credentials.md). — Codex (AI), 2026-09-09
+
+- Notification-history validation and rollout boundaries: [PR #705 notes](../PRs/705-codex-system-notification-history-save-system-events-and-retain-user-history.md).
+
+- Save notification history independently of delivery preferences, retain records without the former 10,000-item trim, log all action runs and successful sign-ins, and persist shared Lopu messages with account-fenced retry deduplication and credential redaction. History uses stable pagination and preserves bounded full message text. — Codex (AI), 2026-09-09
+- Share tabbed settings between the popup and dedicated page, with Profile as the default and category deep links. Keep Mac node recovery in Things settings and let healthy nodes hide the Things-page panel until a problem occurs. [PR 709 details](../PRs/709-codex-shared-settings-tabs-unify-settings-views.md). — Codex (AI), 2026-09-09
+
+- Route both permission-settings actions through the shared Open App Locations flow, so Finder always shows the combined app shortcuts. — Codex (AI), 2026-09-09
+
+- Keep App Locations working when a neighbouring app in Applications cannot be read, stop the bundle scan once every known app is found, and report a failed Node restart only when one was actually attempted. — Lopu, 2026-09-09
+
+- Add Desktop permission recovery guidance, App Locations shortcuts to current installed apps, and a one-shot Node restart choice after returning from recovery. — Codex (AI), 2026-09-09
+
+- Refresh the clipboard-attachment preview with released main's shared-index readers and poll writer, preserving its bounded paste queue and attachment permissions. Database migration activation remains separate. — Codex (AI), 2026-09-09
+
+- Refresh the Commander intent-ranking preview with released main's shared-index readers and poll writer before database index retirement; retain its ranking changes without promoting them to production. — Codex (AI), 2026-09-09
 - Repair a poll writer found during the index audit: stamp the shared protected vote identity (no new index), preserve legacy lookup compatibility and unbilled engagement policy. Native regression reproduces 16 duplicate rows before the fix and checks concurrent votes, toggles, private access and cascade cleanup. — Codex (AI), 2026-09-08
 
 - Extend [Thing index consolidation](../PRs/692-thing-index-consolidation-shared-plan-audit.md) to a 47-index candidate: canonical legacy/feed/search/embed readers, eight exact retirements, one shared updated-order index, and two-stage cache-drained migrations. Native MongoDB verifies 60 → 47 with bounded sampled plans and preserved ACL/CAS behavior. Production/develop rollout remains pending. — Codex (AI), 2026-09-08
@@ -29,7 +129,6 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - Fix index-usage statistics in the admin workbench by keeping MongoDB's metadata-only `$indexStats` stage first, while retaining protected-field and join safeguards. See [PR #692](../PRs/692-thing-index-consolidation-shared-plan-audit.md). — Codex (AI), 2026-09-08
 
 - Begin [Thing index consolidation](../PRs/692-thing-index-consolidation-shared-plan-audit.md): inventory the executable plan, retire the unused emoji lookup while retaining protected uniqueness, and repair relationship-key backfills to preserve partial keys and terminate on duplicate batches. Production/develop migrations and the broader reduction remain in progress. — Codex (AI), 2026-09-08
-
 - 2026-09-07: Desktop privacy status now refreshes while visible and on return from System Settings, exposes Check access, distinguishes unknown/stale results from macOS denial, and explains recovery for grants tied to an older signing identity.
 
 - Add Desktop Node start/stop/restart controls with serialized lifecycle operations and a native Node About panel showing installed build metadata. — Codex (AI), 2026-09-07
@@ -242,6 +341,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `api.notifications-devices` capability contract, token-based APNs delivery,
   invalid-token cleanup, configuration docs, and focused contract tests.
 - 2026-09-05: Reconcile PR #592 with current develop, preserving Lopu widget support and passkey entitlements, both capability suites, all private logout caches, and both unit-test lists. Verify its exact-SHA preview and make preview delivery visible above collapsed PR comments. — Codex (AI)
+
+- 2026-09-05: Fix Commander's emoji permission feedback widening the picker beyond its window, stop failed pastes changing ranking or the clipboard, and provide explicit Accessibility recovery for stale signing grants. [Investigation](../PRs/662-codex-commander-emoji-paste-recovery-picker-overflow.md). — Codex (AI)
 
 - 2026-09-05: Add bounded persistent media caching with access revalidation,
   responsive low-resolution image previews, and cache controls in Settings.

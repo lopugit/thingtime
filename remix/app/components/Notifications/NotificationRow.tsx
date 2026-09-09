@@ -1,4 +1,5 @@
 import React from 'react';
+import { LopuMarkdown } from '~/components/Lopu/LopuMarkdown';
 import { Box, Center, Flex, Text } from '@chakra-ui/react';
 
 import { timeAgo } from '~/components/Feed/feedTypes';
@@ -91,11 +92,12 @@ export const NotificationRow = (props: {
             </Text>
           )}
         </Text>
-        {item.preview && item.type !== 'reaction' && (
-          <Text fontSize="xs" color={item.outcome === 'error' ? 'var(--tt-danger, #d6455a)' : MUTED} noOfLines={dense ? 2 : 3} overflowWrap="anywhere">
-            {item.preview}
+        {item.richText && !dense ? <Box fontSize="xs" overflowWrap="anywhere"><LopuMarkdown text={item.richText} /></Box> : (item.detail || item.preview) && item.type !== 'reaction' && (
+          <Text fontSize="xs" color={item.outcome === 'error' ? 'var(--tt-danger, #d6455a)' : MUTED} noOfLines={dense ? 2 : undefined} whiteSpace="pre-wrap" overflowWrap="anywhere">
+            {dense ? item.preview : item.detail || item.preview}
           </Text>
         )}
+        {item.image === '/notification-test.svg' && <Box as="img" src={item.image} alt="Thingtime notification illustration" width="100%" maxWidth="300px" mt={2} borderRadius="8px" />}
         <Flex alignItems="center" columnGap={1.5} rowGap={0.5} flexWrap="wrap" marginTop={0.5}>
           <Text as="time" dateTime={item.createdAt} title={absoluteTime(item.createdAt)} fontSize="10px" color={MUTED}>
             {timeAgo(item.createdAt)}
