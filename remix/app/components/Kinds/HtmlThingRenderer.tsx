@@ -1,4 +1,5 @@
 import React from 'react';
+import { useSharedMediaUrl } from '../Sharing/SharedMedia';
 
 import { applyNoOpener, isEventHandlerProp, isSafeCssText, isSafeUrl } from './safeUrl';
 
@@ -266,7 +267,7 @@ export type HtmlThingNode =
 			children?: HtmlThingNode[] | HtmlThingNode;
 	  };
 
-type RenderState = { count: number };
+type RenderState = { count: number; mediaUrl: (url: string) => string };
 
 const renderNode = (node: HtmlThingNode, key: number, depth: number, state: RenderState): React.ReactNode => {
 	if (state.count >= MAX_NODES || depth > MAX_DEPTH) return null;
@@ -287,6 +288,7 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 	}
 
 	const props = fieldProps(tag, sanitizeProps(node.props));
+	for (const field of ['src', 'poster', 'href']) if (typeof props[field] === 'string') props[field] = state.mediaUrl(props[field]);
 
 	if (VOID_TAGS.has(tag)) {
 		return React.createElement(tag, { ...props, key });
@@ -302,6 +304,6 @@ const renderChildren = (children: HtmlThingNode[] | HtmlThingNode | undefined, d
 };
 
 export const HtmlThingRenderer = ({ node }: { node: HtmlThingNode }) => {
-	const state: RenderState = { count: 0 };
+	const state: RenderState = { count: 0, mediaUrl: useSharedMediaUrl() };
 	return <>{renderNode(node, 0, 0, state)}</>;
 };

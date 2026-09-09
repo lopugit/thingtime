@@ -74,6 +74,11 @@ export type LocalThingtimeNodeState = {
 
 type LocalThingtimeNodeRuntimeState = Omit<LocalThingtimeNodeState, 'pairedDeviceIds' | 'pairedAccountCount' | 'pairedToCurrentAccount'>;
 
+// Keep observations across settings/page mounts, scoped to this Desktop bridge.
+// Pairing challenges and pending actions remain private to their originating view.
+type NodeObservation = Pick<LocalThingtimeNodeRuntimeState, 'status' | 'permissions' | 'permissionsCheckedAt' | 'permissionCheckError'>;
+const nodeObservations = new WeakMap<object, NodeObservation>();
+
 const localActionErrorMessage = (error: unknown, fallback: string): string => {
 	if (error instanceof Error) {
 		const message = error.message.trim();
@@ -94,7 +99,7 @@ export const useLocalThingtimeNode = (
 	const refreshInFlightRef = useRef<Promise<ThingtimeNodeStatus | null> | null>(null);
 	lopuRef.current = lopu;
 	const bridge = typeof window === 'undefined' ? undefined : getElectronBridge();
-	const [state, setState] = useState<LocalThingtimeNodeRuntimeState>({
+	const [state, setState] = useState<LocalThingtimeNodeRuntimeState>(() => ({
 		available: Boolean(bridge?.nodeGetStatus),
 		checking: false,
 		pendingActionKeys: [],
@@ -102,8 +107,19 @@ export const useLocalThingtimeNode = (
 		permissions: [],
 		permissionsCheckedAt: null,
 		permissionCheckError: null,
-		pairingChallenge: null
-	});
+		pairingChallenge: null,
+		...(bridge ? nodeObservations.get(bridge) : undefined)
+	}));
+
+	useEffect(() => {
+		if (bridge && state.status)
+			nodeObservations.set(bridge, {
+				status: state.status,
+				permissions: state.permissions,
+				permissionsCheckedAt: state.permissionsCheckedAt,
+				permissionCheckError: state.permissionCheckError
+			});
+	}, [bridge, state.status, state.permissions, state.permissionsCheckedAt, state.permissionCheckError]);
 
 	const refresh = useCallback(() => {
 		if (refreshInFlightRef.current) return refreshInFlightRef.current;
