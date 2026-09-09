@@ -18,6 +18,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-09: Reconcile Watch/Lopu automation with current develop and main: preserve durable notification history, verified vault controls, shared Settings tabs and iPhone voice recovery. Combine notification contracts as list 1.6.0/settings 1.5.0 and remove the obsolete history-trimming call from the reminder transaction. — Codex (AI)
+
 - 2026-09-09: Recover expired Watch upload drafts without dropping local audio or falsely disconnecting the account; add explicit Send to Lopu handoffs, owner-private Thing/notification/reminder tools, and notification Settings test/pause controls. Compatible capability updates, isolated safety tests and iPhone/Watch + Vercel builds pass; hosted/browser/physical delivery gates remain separate. See [PR #665 notes](../PRs/665-codex-watch-lopu-recording-automation-private-transcripts-todos-reminders.md). — Codex (AI)
 
 - 2026-09-09: Provision a distinct sensitive admin-vault key for the hosted develop custom environment in Vercel and document activation and credential-store boundaries. Production External integrations contains no saved policies; server OpenAI/Anthropic credentials already include develop. Saved Claude Code CI credentials still require an authenticated transfer or secure re-entry; no token values were exposed or rotated. — Codex (AI)
@@ -61,6 +63,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   1.2.1). Validation and remaining scope:
   [PR #714](../PRs/714-codex-shared-schema-action-inheritance.md).
   — Codex (AI), 2026-09-09
+- 2026-09-09: Deliver native Lopu voice and its signed Live Activity extension
+  in iOS build 27; older general bridges now show an update instruction.
+  Repair iOS Lopu voice startup/stop races, preserve partial speech
+  and local audio/transcript files, save ordinary voice turns in the selected
+  chat, and surface separate Speech Recognition and Live Activity failures.
+  Native voice now checks the selected origin's semantic API capabilities.
+  [Release evidence and device checklist](../PRs/715-ios-lopu-voice-recovery-deliver-lopu-voice-recording-and-live-activities.md).
 
 - 2026-09-09: Shared pages resolve author-owned embedded components through the
   root audience, including anonymous link readers and custom groups; preserve
