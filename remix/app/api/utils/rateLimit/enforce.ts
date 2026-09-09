@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { getRateLimitsCollection } from '../mongodb/collections';
-import { getRateLimitConfig } from './config';
+import { getRateLimitConfig, type RateLimitRule } from './config';
 
 // General per-endpoint rate limiter, config-driven (config.ts). Atomic
 // sliding-window over the shared `rateLimits` collection — the same technique as
@@ -84,14 +84,20 @@ const consume = async (key: string, limit: number, windowMs: number): Promise<Ra
 // `user:<id>`; falls back to the request IP). Returns allowed=true when the
 // endpoint's rule is disabled or the limiter is unavailable, unless the caller
 // explicitly asks to fail closed.
+export const rateLimitRuleWithMultiplier = (rule: RateLimitRule | undefined, multiplier?: number): RateLimitRule | undefined =>
+  rule ? { ...rule, limit: rule.limit * (multiplier === 5 ? 5 : 1) } : undefined;
+
 export const enforceRateLimit = async (
   request: Request,
   name: string,
   identity: string | null,
-  options: { failClosed?: boolean } = {}
+  options: { failClosed?: boolean; limitMultiplier?: number } = {}
 ): Promise<RateLimitOutcome> => {
   const config = await getRateLimitConfig();
-  const rule = config[name];
+  const configured = config[name];
+  // Trusted server-side product entitlement only; never read from a request.
+  // Bound multiplication so the shared sliding-window record remains bounded.
+  const rule = rateLimitRuleWithMultiplier(configured, options.limitMultiplier);
   const now = new Date().toISOString();
   if (!rule || !rule.enabled) {
     return { allowed: true, limit: rule?.limit ?? 0, remaining: rule?.limit ?? 0, resetAt: now };

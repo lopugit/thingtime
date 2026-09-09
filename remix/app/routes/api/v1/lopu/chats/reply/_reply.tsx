@@ -185,8 +185,13 @@ const interruptedNote = (outcome: LopuChatTurnOutcome | null): string => {
 };
 
 export const action = async ({ request }: { request: Request }) => {
+  return replyAsUser(request, await getCurrentUser(request));
+};
+
+// Internal entry point for an explicitly requested recording handoff. The
+// public action always authenticates above; no caller-supplied user is accepted.
+export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typeof getCurrentUser>>) => {
   if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed' }, { status: 405 });
-  const user = await getCurrentUser(request);
   if (!user) return json({ ok: false, error: 'Sign in to talk to Lopu' }, { status: 401 });
   if (user.temporary) return json({ ok: false, error: 'Create an account to chat with Lopu — conversations are saved to your account' }, { status: 403 });
   const unsupported = requireJsonContentType(request);

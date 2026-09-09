@@ -41,6 +41,8 @@ struct WebView: UIViewRepresentable {
     func updateUIView(_ webView: WKWebView, context: Context) {
         guard context.coordinator.loadedRootURL != url else { return }
 
+        context.coordinator.cancelVoice()
+        context.coordinator.suspendRecordingUploads()
         context.coordinator.loadedRootURL = url
         webView.load(URLRequest(url: url))
     }
@@ -76,7 +78,8 @@ struct WebView: UIViewRepresentable {
           };
 
           window.thingtimeNativeBridge = {
-            version: '1.0.0',
+            version: '1.2.0',
+            lopuVoiceVersion: '1.1.0',
             platform: 'ios',
             isNativeWebView: true,
             postMessage(message) {
@@ -107,6 +110,16 @@ struct WebView: UIViewRepresentable {
         weak var webView: WKWebView?
         var loadedRootURL: URL?
         private let lopuVoice = LopuVoiceSessionController()
+        private var pendingVoiceStart = UUID()
+        private var pendingRecordingSync = UUID()
+        private var recordingOwnerId: String?
+
+        func suspendRecordingUploads() { lopuVoice.suspendRecordingUploads() }
+
+        func cancelVoice() {
+            pendingVoiceStart = UUID()
+            lopuVoice.stop()
+        }
 
         override init() {
             super.init()
@@ -122,7 +135,8 @@ struct WebView: UIViewRepresentable {
 
             sendToWeb(type: "native-ready", payload: [
                 "platform": "ios",
-                "version": "1.1.0",
+                "version": "1.2.0",
+                "lopuVoiceVersion": "1.1.0",
                 "watchNotifications": true
             ])
         }
@@ -134,9 +148,19 @@ struct WebView: UIViewRepresentable {
                 return
             }
             switch type {
-            case "lopu-voice-start":
-                guard let webView, let rootURL = loadedRootURL else { return }
+            case "lopu-voice-start", "lopu-voice-recordings-sync":
+                guard message.frameInfo.isMainFrame, let webView, let rootURL = loadedRootURL,
+                      let currentURL = webView.url, LopuVoiceContract.sameOrigin(currentURL, rootURL) else { return }
                 let payload = body["payload"] as? [String: Any] ?? [:]
+                let ownerId = payload["ownerId"] as? String
+                if recordingOwnerId != ownerId {
+                    pendingVoiceStart = UUID()
+                    pendingRecordingSync = UUID()
+                    recordingOwnerId = ownerId
+                }
+                let startID = UUID()
+                if type == "lopu-voice-recordings-sync" { pendingRecordingSync = startID }
+                else { pendingVoiceStart = startID }
                 let settings = LopuVoiceSessionController.Settings(
                     textResponse: payload["textResponse"] as? Bool ?? false,
                     transcribeMode: payload["transcribeMode"] as? Bool ?? false,
@@ -145,18 +169,27 @@ struct WebView: UIViewRepresentable {
                     inputMode: payload["inputMode"] as? String ?? "native-transcript",
                     model: payload["model"] as? String == "__custom__" ? (payload["customModel"] as? String ?? "") : (payload["model"] as? String ?? ""),
                     effort: payload["effort"] as? String ?? "",
-                    speed: payload["speed"] as? String ?? "normal"
+                    speed: payload["speed"] as? String ?? "normal",
+                    chatId: payload["chatId"] as? String,
+                    ownerId: payload["ownerId"] as? String
                 )
                 webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] cookies in
                     let replyURL = URL(string: "/api/v1/lopu/voice/reply", relativeTo: rootURL)?.absoluteURL ?? rootURL
                     let scopedCookies = self?.cookies(cookies, matching: replyURL) ?? []
                     let header = HTTPCookie.requestHeaderFields(with: scopedCookies)["Cookie"] ?? ""
                     Task { @MainActor in
-                        self?.lopuVoice.start(settings: settings, baseURL: rootURL, cookieHeader: header)
+                        guard let self, self.loadedRootURL == rootURL,
+                              let currentURL = self.webView?.url, LopuVoiceContract.sameOrigin(currentURL, rootURL),
+                              (type == "lopu-voice-recordings-sync" ? self.pendingRecordingSync : self.pendingVoiceStart) == startID else { return }
+                        if type == "lopu-voice-recordings-sync" {
+                            self.lopuVoice.syncRecordings(ownerId: settings.ownerId, baseURL: rootURL, cookieHeader: header)
+                        } else {
+                            self.lopuVoice.start(settings: settings, baseURL: rootURL, cookieHeader: header)
+                        }
                     }
                 }
             case "lopu-voice-stop":
-                lopuVoice.stop()
+                cancelVoice()
             default:
                 sendToWeb(type: "native-ack", payload: ["received": jsonCompatibleValue(message.body)])
             }
