@@ -512,7 +512,16 @@ export const SettingsContent = ({
 	};
 
 	return (
-		<Flex direction="column" gap={4} width="100%" minW={0} whiteSpace="normal" data-settings-content ref={contentRef}>
+		<Flex
+			direction="column"
+			gap={4}
+			width="100%"
+			minW={0}
+			whiteSpace="normal"
+			data-settings-content
+			ref={contentRef}
+			sx={{ '&, & *': { boxSizing: 'border-box' } }}
+		>
 			<Flex as="nav" aria-label="Settings categories" gap={2} wrap="wrap">
 				{SETTINGS_TABS.filter((item) => item.id !== 'admin' || user?.isAdmin).map((item) => (
 					<Button

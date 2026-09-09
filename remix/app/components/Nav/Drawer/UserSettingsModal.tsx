@@ -50,8 +50,10 @@ export const UserSettingsModal = () => {
 				mx={[0, 6]}
 				my={[0, '5vh']}
 				borderRadius={['16px 16px 0 0', '16px']}
-				maxH="90dvh"
+				maxH="90vh"
+				minH={0}
 				minW={0}
+				boxSizing="border-box"
 				background="var(--tt-surface, #fafafb)"
 			>
 				<ModalHeader pr={12}>
@@ -70,7 +72,7 @@ export const UserSettingsModal = () => {
 					</Flex>
 				</ModalHeader>
 				<ModalCloseButton aria-label="Close settings" />
-				<ModalBody ref={bodyRef} px={[3, 6]} pb={6} overflowX="hidden">
+				<ModalBody minH={0} overflowY="auto" boxSizing="border-box" ref={bodyRef} px={[3, 6]} pb={6} overflowX="hidden">
 					<SettingsContent tab={tab} onTabChange={selectTab} onNavigate={close} />
 				</ModalBody>
 			</ModalContent>
