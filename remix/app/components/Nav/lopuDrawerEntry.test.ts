@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 
 import { DRAWER_KEEP_OPEN_DEFAULT_IDS, drawerMenuItems, filterDrawerItemsByAuth } from './Drawer/drawerMenu';
+import { resolveSettingsTab } from '~/components/Settings/settingsTabs';
 
 // 🦄 Lopu's chrome wiring: the drawer entry, the z rungs the floating host
 // layers on, the root mount, and the tab-local open state. Source-level
@@ -33,10 +34,15 @@ test('the drawer lists Lopu right after Messages with chat, conversations and se
 			['lopu-settings', '/settings#lopu']
 		]
 	);
-	// the settings deep links land on real anchors
-	const settingsPage = read('components/Settings/SettingsPage.tsx');
-	assert.match(settingsPage, /id="secure-vault"/);
-	assert.match(settingsPage, /id="lopu"/);
+	// the settings deep links land on real anchors. Both settings surfaces now
+	// render the shared SettingsContent, so the anchors live there — and because
+	// only the selected tab's panel mounts, each fragment must also resolve to
+	// the tab that owns it or the link lands on nothing.
+	const settingsContent = read('components/Settings/SettingsContent.tsx');
+	assert.match(settingsContent, /id="secure-vault"/);
+	assert.match(settingsContent, /id="lopu"/);
+	assert.equal(resolveSettingsTab(null, '#secure-vault'), 'security');
+	assert.equal(resolveSettingsTab(null, '#lopu'), 'lopu');
 
 	// the chat page has a signed-out state; voice (microphone + vault providers),
 	// the Messenger-backed conversation list and the Secure Vault are gated behind login
@@ -148,8 +154,12 @@ test('logging out sweeps every tt-lopu-* cache line', () => {
 });
 
 test('both settings surfaces and the admin panel mount the Lopu sections', () => {
-	assert.match(read('components/Nav/Drawer/UserSettingsModal.tsx'), /<LopuSettingsRows renderRow=\{settingRow\} \/>/);
-	assert.match(read('components/Settings/SettingsPage.tsx'), /<SettingsSection\s+eyebrow="Lopu 🦄"/);
-	assert.match(read('components/Settings/SettingsPage.tsx'), /<LopuSettingsRows/);
+	// One shared body, so the modal and the page cannot drift apart: assert the
+	// Lopu sections once where they live, and that both surfaces mount it.
+	const settingsContent = read('components/Settings/SettingsContent.tsx');
+	assert.match(settingsContent, /<SettingsSection\s+eyebrow="Lopu 🦄"/);
+	assert.match(settingsContent, /<LopuSettingsRows/);
+	assert.match(read('components/Nav/Drawer/UserSettingsModal.tsx'), /<SettingsContent\s/);
+	assert.match(read('components/Settings/SettingsPage.tsx'), /<SettingsContent\s/);
 	assert.match(read('components/Admin/AdminPanel.tsx'), /<LopuModelsEditor \/>/);
 });

@@ -32,11 +32,10 @@ import { readSourceCache, useWebpageRuntime, writeSourceCache } from './webpageR
 //   false renders the exact same markup with no handler — never
 //   pointer-events, which would kill legitimate preview interaction.
 //
-// Every caller decides `interactive` from OWNERSHIP or platform curation
-// (own thing → live; seeded platform/demo/app component → live with
-// run-or-install; a stranger's thing → inert), the same ladder p.tsx and the
-// /things PreviewModal use. This module never widens that: it has no idea
-// who the author is.
+// A shared runtime also makes controls live without sign-in: its separate
+// sharedRun path is server-authorized through the stored root, read-only and
+// uncached. It never delegates the author's or visitor's account authority.
+// Outside that runtime the existing ownership/curation ladder still applies.
 
 export type ThingSourceBinding = {
 	action: string;
@@ -77,12 +76,13 @@ export const useThingSource = ({
 	apiRef.current = api;
 	const sourceKey = JSON.stringify(source || null);
 	const active = !!source && interactive;
+	const canRun = runtime.viewer.signedIn || !!runtime.sharedRun;
 	const [state, setState] = React.useState<{ status: ThingSourceState; result: unknown; error: string | null }>(() => ({
-		status: !source ? 'inert' : !runtime.viewer.signedIn ? 'signed-out' : !interactive ? 'inert' : 'loading',
+		status: !source ? 'inert' : !canRun ? 'signed-out' : !interactive ? 'inert' : 'loading',
 		// keyed by the viewer too, so this optimistic seed can only ever be the
 		// CURRENT viewer's own last result — never the previous account's, and
 		// nothing at all when signed out (see writeSourceCache)
-		result: source ? readSourceCache(runtime.viewer.id, runtime.pageId, cacheId) : undefined,
+		result: source && !runtime.sharedRun ? readSourceCache(runtime.viewer.id, runtime.pageId, cacheId) : undefined,
 		error: null
 	}));
 	// inputs interpolate {arg} tokens against the args and {query.x} against
@@ -104,10 +104,10 @@ export const useThingSource = ({
 			: 0;
 	const [tick, setTick] = React.useState(0);
 	React.useEffect(() => {
-		if (!intervalMs || !interactive || !runtime.viewer.signedIn) return;
+		if (!intervalMs || !interactive || !canRun) return;
 		const handle = window.setInterval(() => setTick((current) => current + 1), intervalMs);
 		return () => window.clearInterval(handle);
-	}, [intervalMs, interactive, runtime.viewer.signedIn]);
+	}, [intervalMs, interactive, canRun]);
 	const [local, setLocal] = React.useState(0);
 	const runVersion = manual ? local : runtime.version + tick * 1_000_003 + local * 1_000_000_007;
 	const signedIn = runtime.viewer.signedIn;
@@ -118,7 +118,7 @@ export const useThingSource = ({
 		if (!source) return;
 		// signed-out wins over inert: the template offers the sign-in even on
 		// a seeded page that is not (yet) interactive for this viewer
-		if (!signedIn) {
+		if (!canRun) {
 			setState((current) => (current.status === 'signed-out' ? current : { ...current, status: 'signed-out' }));
 			return;
 		}
@@ -131,10 +131,12 @@ export const useThingSource = ({
 		(async () => {
 			try {
 				const shareKey = JSON.stringify({ a: source.action, i: inputs, t: tick, l: local });
-				const response: any = await runtime.load(shareKey, () => apiRef.current.v1.actions.run({ action: source.action, inputs, source: 'component' }));
+				const response: any = await runtime.load(shareKey, () => runtime.sharedRun
+					? runtime.sharedRun(source.action, inputs)
+					: apiRef.current.v1.actions.run({ action: source.action, inputs, source: 'component' }));
 				if (cancelled) return;
 				if (response?.status === 'ok') {
-					writeSourceCache(viewerId, pageId, cacheId, response.result ?? null);
+					if (!runtime.sharedRun) writeSourceCache(viewerId, pageId, cacheId, response.result ?? null);
 					setState({ status: 'ok', result: response.result ?? null, error: null });
 				} else {
 					setState((current) => ({ ...current, status: 'error', error: response?.error || 'The source action failed' }));
@@ -150,7 +152,7 @@ export const useThingSource = ({
 			cancelled = true;
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- sourceKey/inputsKey are the serialised forms; runVersion folds the runtime's refetch signal, the interval tick and manual refetches; runtime.load is version-keyed
-	}, [active, signedIn, viewerId, sourceKey, inputsKey, runVersion, pageId, cacheId]);
+	}, [active, signedIn, canRun, runtime.sharedRun, viewerId, sourceKey, inputsKey, runVersion, pageId, cacheId]);
 
 	const scope = React.useMemo<ThingSourceScope>(
 		() => ({

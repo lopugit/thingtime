@@ -91,9 +91,9 @@ export const NotificationRow = (props: {
             </Text>
           )}
         </Text>
-        {item.preview && item.type !== 'reaction' && (
-          <Text fontSize="xs" color={item.outcome === 'error' ? 'var(--tt-danger, #d6455a)' : MUTED} noOfLines={dense ? 2 : 3} overflowWrap="anywhere">
-            {item.preview}
+        {(item.detail || item.preview) && item.type !== 'reaction' && (
+          <Text fontSize="xs" color={item.outcome === 'error' ? 'var(--tt-danger, #d6455a)' : MUTED} noOfLines={dense ? 2 : undefined} whiteSpace="pre-wrap" overflowWrap="anywhere">
+            {dense ? item.preview : item.detail || item.preview}
           </Text>
         )}
         <Flex alignItems="center" columnGap={1.5} rowGap={0.5} flexWrap="wrap" marginTop={0.5}>

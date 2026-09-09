@@ -884,10 +884,11 @@ export function useApi() {
 			// commentSort: 'top' | 'new' | 'old' re-orders the shipped comment page
 			// of the post projection (PostCard's Top / New / Old menu); omit for
 			// the default page. key: a hidden thing's secret link key (?key= on
-			// /post pages) — lets anyone holding the link view the unlisted thing
+			// /post pages) — lets anyone holding the link view the unlisted thing.
+			// sharedRoot scopes a dependency read to an authorized composition.
 			get: useCallback(
 				async (args, options?: { signal?: AbortSignal }) =>
-					getJson(`/api/v1/things${toQuery({ id: args?.id, commentSort: args?.commentSort, key: args?.key })}`, options),
+					getJson(`/api/v1/things${toQuery({ id: args?.id, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, options),
 				[]
 			),
       list: useCallback(
@@ -1179,7 +1180,10 @@ export function useApi() {
       )
     },
     notifications: {
-      list: useCallback(async (args?: Record<string, unknown>) => getJson(`/api/v1/notifications${toQuery(args)}`), []),
+      list: useCallback(async (args?: Record<string, unknown>) => {
+        if (args?.history) await requireThingtimeCapability('api.notifications-list', '1.4.0');
+        return getJson(`/api/v1/notifications${toQuery(args)}`);
+      }, []),
       markRead: useCallback(
 				async (args) => asyncFetcher.submit(args?.all ? { all: true } : { ids: args?.ids }, { action: '/api/v1/notifications/read' }),
         [asyncFetcher]

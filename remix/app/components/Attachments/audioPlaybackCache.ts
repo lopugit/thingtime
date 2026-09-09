@@ -60,11 +60,13 @@ export const removeOfflineAudio = async (attachmentId: string, viewerId: string 
 	await store.removeItem(audioOfflineCacheKey(attachmentId, viewerId));
 };
 
-export const saveOfflineAudio = async (attachment: PublicAttachment, viewerId: string | null | undefined): Promise<Blob> => {
+export const saveOfflineAudio = async (attachment: PublicAttachment, viewerId: string | null | undefined, mediaUrl: (url: string) => string = (url) => url): Promise<Blob> => {
 	if (typeof window === 'undefined') throw new Error('Offline audio is available in a browser only.');
 	if (attachment.url) throw new Error('Only Thingtime-hosted audio can be saved for offline playback.');
 
-	const response = await fetch(attachmentMediaSrc(attachment), { credentials: 'same-origin', cache: 'no-store' });
+	const source = mediaUrl(attachmentMediaSrc(attachment));
+	if (!source) throw new Error('Shared media is not ready. Please try again after it loads.');
+	const response = await fetch(source, { credentials: 'same-origin', cache: 'no-store' });
 	if (!response.ok) throw new Error('Thingtime could not download this audio file.');
 	const downloaded = await response.blob();
 	if (!downloaded.size || (attachment.size > 0 && downloaded.size !== attachment.size)) {
