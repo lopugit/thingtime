@@ -1,5 +1,13 @@
 # TESTING.md — per-area manual test checklists
 
+## Verified vault reveal
+
+- [ ] At desktop and 390px widths, CI, external integrations and personal Secure Vault offer Show without changing ordinary value-free list responses.
+- [ ] Open Show, cancel, reopen; wrong password and cancelled passkey reveal nothing. A current password or same-account user-verified passkey reveals only the selected item.
+- [ ] A revealed synthetic credential clears on Hide, close, account change, navigation, blur, tab hiding and 30-second timeout. Closing during a pending request prevents late values appearing. Opening another Show closes the first.
+- [ ] Inspect the full page and open modal top-to-bottom: long labels/credentials wrap, all buttons stay reachable, no horizontal overflow on mobile.
+- [ ] Cross-origin, anonymous, non-admin admin-vault access, other-owner personal entries, replayed/expired/wrong-session passkeys and fixed-limit exhaustion fail without decryption. Every response is private/no-store; no plaintext enters list caches or request logs.
+
 - Thing detail back links accept only `things`, `actions`, or `feed` as `from`.
   Unknown values and prototype keys such as `toString` must display a working
   Back to feed link on desktop and mobile.
@@ -5604,6 +5612,11 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       remains usable. Unsupported image formats fall back without retry loops.
 - [ ] Confirm partial/large files use native streaming and cached range reads
       cannot bypass authorization. Verify storage failure degrades to HTTP.
+
+
+## Commander emoji paste recovery
+
+- [ ] Follow `Commander/docs/TESTING.md` for denied emoji paste: preserve the selected emoji, recents, learning and clipboard; keep the error, grid and recovery controls inside the native window at standard/minimum/compact widths and large text size. Verify the installed signing requirement stays stable and complete an approved Accessibility grant migration before claiming successful paste.
 
 ## App suites — Pokeworld + StarsAlign (`remix/app/schemas/appSuites/`, `/p/pokeworld`, `/p/starsalign`)
 
