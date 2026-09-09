@@ -57,6 +57,30 @@ not add references to unrelated private author dependencies they cannot read.
   maxLength caps at 5000`, introduced by the notification-history base change).
   This is not a green-CI or rollout receipt for the media follow-up.
 
+## Standalone content follow-up, 2026-09-09
+
+- Copy now supports ordinary standalone post/data/schema content as well as
+  page/component/action roots. It preserves extended content and copies an
+  included private schema through the same root-audience context. Account,
+  credential, subspace machinery, app-storage, relationship and organizational
+  folder lifecycles are not cloned through the generic content endpoint.
+- `api.things-fork` is 1.1.0 on both manifests; the copy button requires this
+  version before the write. Eligibility stays a small browser-safe predicate,
+  checked against the canonical registry in tests.
+- Real API assertions prove extended content, independent schema identity,
+  private default, wrong-key refusal, editable copy and unchanged original.
+  The enabled Chrome fixture passed at 1440px/390px, including signed-in copy
+  into Builder and the ordinary Thing copy control/sign-in boundary. Fixture
+  image bytes remain stubbed. The observer now registers cleanup from successful
+  copy responses and waits for the control before its response timer. Earlier
+  observation failures left four test copies; exact identities/references were
+  verified and removed through the local API.
+- Whole-project TypeScript reported 108 existing errors and none in sharing
+  implementation files. Capability tests: 23 passed.
+- Deployed `a056202d97837febbd65152b1810a6881658ca48` passed build/unit, API
+  suite and CodeQL. Real logged-out Safari displayed that exact SHA and Draw
+  changed The Emperor to Death. This receipt predates the standalone follow-up.
+
 ## Remaining verification
 
 The latest merged-head and develop/main rollout verification,

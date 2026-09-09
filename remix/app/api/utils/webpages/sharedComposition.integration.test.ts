@@ -77,6 +77,25 @@ test('shared page audience includes its author components, never a foreign priva
 			steps: [{ op: 'actions.invoke', action: childAction.id }, { op: 'return', value: '$step.1' }] });
 		const unrelatedAction = await create(owner, ['action'], { name: 'Not included', actionKey: `${key}-secret`, version: 1, capabilities: [], steps: [{ op: 'return', value: 'Private' }] });
 		const sourceData = await create(owner, ['data'], { schema: 'sharing-regression', value: 'unchanged' });
+		const dataSchema = await create(owner, ['schema'], { name: `${key}-schema`, title: 'Shared schema', fields: [{ name: 'value', type: 'string', required: true, description: 'Fixture value' }] });
+		const standalone = await create(owner, ['data'], { schemaId: dataSchema.id, value: 'Copy my content' }, ['tt:hidden', 'tt:user']);
+		const extended = { notes: ['Keep this content'], nested: { value: 7 } };
+		assert.equal((await request('/api/v1/things', 'PATCH', { id: standalone.id, extended }, owner)).response.status, 200);
+		assert.equal((await request('/api/v1/things/fork', 'POST', { id: standalone.id, key: 'wrong' }, stranger)).response.status, 404);
+		const dataCopy = await request('/api/v1/things/fork', 'POST', { id: standalone.id, key: standalone.linkKey }, stranger);
+		assert.equal(dataCopy.response.status, 200, dataCopy.data.error);
+		for (const id of dataCopy.data.ids) created.push({ id, cookie: stranger });
+		assert.equal(dataCopy.data.copied, 2, 'The included private schema inherits the shared data root audience');
+		const copiedData = (await request(`/api/v1/things?id=${dataCopy.data.id}`, 'GET', undefined, stranger)).data.thing;
+		assert.deepEqual(copiedData.extended, extended);
+		assert.deepEqual(copiedData.acl, ['tt:user']);
+		assert.notEqual(copiedData.crystal.schemaId, dataSchema.id);
+		assert.equal(copiedData.linkKey, undefined);
+		const copiedSchema = (await request(`/api/v1/things?id=${copiedData.crystal.schemaId}`, 'GET', undefined, stranger)).data.thing;
+		assert.equal(copiedData.crystal.schema, copiedSchema.crystal.name);
+		assert.equal((await request(`/api/v1/things?id=${dataCopy.data.id}`)).response.status, 404);
+		assert.equal((await request('/api/v1/things', 'PATCH', { id: dataCopy.data.id, crystal: { value: 'My changed copy' } }, stranger)).response.status, 200);
+		assert.equal((await request(`/api/v1/things?id=${standalone.id}`, 'GET', undefined, owner)).data.thing.crystal.value, 'Copy my content');
 		const readData = await create(owner, ['action'], { name: 'Read included data', actionKey: `${key}-read`, version: 1, capabilities: [{ capability: 'things.read' }], steps: [{ op: 'things.get', id: sourceData.id }, { op: 'return', value: '$step.1.crystal.value' }] }, ['tt:hidden', 'tt:user']);
 		const deleteData = await create(owner, ['action'], { name: 'Must not mutate shared data', actionKey: `${key}-delete`, version: 1, capabilities: [{ capability: 'things.delete' }], steps: [{ op: 'things.delete', id: sourceData.id }] }, ['tt:hidden', 'tt:user']);
 		const sharedRead = await request('/api/v1/actions/run', 'POST', { action: readData.id, sharedRoot: readData.id, key: readData.linkKey });
@@ -145,6 +164,16 @@ test('shared page audience includes its author components, never a foreign priva
 					if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-${width}-bottom.png` });
 					await tab.getByTestId('fork-shared-thing').click();
 					await tab.waitForURL('**/login');
+					await tab.goto(new URL(`/thing/${standalone.id}?key=${encodeURIComponent(standalone.linkKey)}`, base).href);
+					await tab.getByTestId('fork-shared-thing').waitFor();
+					const dataCopyBounds = await tab.getByTestId('fork-shared-thing').boundingBox();
+					assert.ok(dataCopyBounds && dataCopyBounds.x >= 0 && dataCopyBounds.x + dataCopyBounds.width <= width);
+					if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-data-${width}-top.png` });
+					await tab.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+					assert.ok(await tab.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+					if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-data-${width}.png` });
+					await tab.getByTestId('fork-shared-thing').click();
+					await tab.waitForURL('**/login');
 					await context.close();
 				}
 				const forkPage = await create(owner, ['webpage'], { name: 'Copy this app', blocks: [{ id: 'card', type: 'component', component: component.id }] }, ['tt:hidden', 'tt:user']);
@@ -154,12 +183,38 @@ test('shared page audience includes its author components, never a foreign priva
 					return { name: entry.slice(0, index), value: entry.slice(index + 1), url: base! };
 				}));
 				const tab = await context.newPage();
+				// These are transport fixtures, not real stored attachments. Keep the
+				// authenticated copy check independent of DNS/failed image downloads.
+				await tab.route('**/api/v1/attachments/content?*', (route: any) => new URL(route.request().url()).searchParams.get('id') === 'sharing-browser-transport' ? route.fulfill({ status: 204 }) : route.continue());
+				await tab.route('https://example.invalid/sharing-browser-transport.png*', (route: any) => route.fulfill({ status: 204 }));
+				let observedCopy: any;
+				let copyRequestSeen = false;
+				tab.on('request', (request: any) => { if (new URL(request.url()).pathname === '/api/v1/things/fork') copyRequestSeen = true; });
+				const copyResponses: Promise<void>[] = [];
+				tab.on('response', (response: any) => {
+					if (new URL(response.url()).pathname !== '/api/v1/things/fork' || response.request().method() !== 'POST') return;
+					copyResponses.push(response.json().then((result: any) => {
+						observedCopy = result;
+						if (result.ok) for (const id of result.ids) created.push({ id, cookie: stranger });
+					}));
+				});
 				await tab.goto(new URL(`/p/${forkPage.id}?key=${encodeURIComponent(forkPage.linkKey)}`, base).href);
-				const copiedResponse = tab.waitForResponse((response: any) => response.url().endsWith('/api/v1/things/fork') && response.request().method() === 'POST');
-				await tab.getByTestId('fork-shared-thing').click();
-				const copyResult = await (await copiedResponse).json();
+				await tab.getByTestId('fork-shared-thing').waitFor({ timeout: 60000 });
+				let copyResult: any;
+				try {
+					const [copiedResponse] = await Promise.all([
+						tab.waitForResponse((response: any) => new URL(response.url()).pathname === '/api/v1/things/fork' && response.request().method() === 'POST', { timeout: 60000 }),
+						tab.getByTestId('fork-shared-thing').click()
+					]);
+					copyResult = await copiedResponse.json();
+				} catch (error) {
+					if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-copy-failure.png` });
+					await Promise.all(copyResponses);
+					console.error('Copy UI diagnostic:', { path: new URL(tab.url()).pathname, requestObserved: copyRequestSeen, responseObserved: !!observedCopy, alerts: await tab.getByRole('alert').allTextContents() });
+					throw error;
+				}
 				assert.equal(copyResult.ok, true, copyResult.error);
-				for (const id of copyResult.ids) created.push({ id, cookie: stranger });
+				await Promise.all(copyResponses);
 				await tab.waitForURL(`**/builder?page=${copyResult.id}`);
 				await context.close();
 			} finally { await browser.close(); }

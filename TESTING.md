@@ -5427,6 +5427,15 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       The shared browser fixture stubs image bytes to verify key transport;
       attachment service/route tests cover authorization separately. Do not
       treat that fixture as proof of real S3 bytes or independent media copies.
+- [ ] Copy a shared standalone Data Thing with extended content and a private
+      schema definition. The copy keeps its extended content, gets its own
+      private schema/id/name pair, exposes no original link key, and is editable
+      only by its new owner. The original stays unchanged. Wrong root keys fail.
+      Account/credential, subspace machinery, relationship and app-storage rows
+      have no copy control. At 1440px/390px, Copy to my Things fits the viewport
+      and signed-out users reach sign-in. Wait for the copy control to mount
+      before starting the response timer; byte-transport fixtures must not make
+      real requests to deliberately invalid image URLs in the signed-in test.
 - [ ] Canvas: hovering a block draws its dashed boundary + label chip; nested
       sub-blocks highlight innermost-wins; clicking selects (solid outline)
       and opens the inspector in the right drawer.

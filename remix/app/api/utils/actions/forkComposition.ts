@@ -33,7 +33,7 @@ export const forkComposition = async (viewer: Viewer, composition: SharedComposi
 				delete crystal.siteRoute;
 				crystal.forkOf = doc.shareId;
 			}
-			const result = await createThing(viewer.id, { shareId: ids.get(doc.shareId), thingtime: doc.thingtime, crystal, acl: ['tt:user'], tags: doc.tags }, viewer);
+			const result = await createThing(viewer.id, { shareId: ids.get(doc.shareId), thingtime: doc.thingtime, crystal, extended: doc.extended, acl: ['tt:user'], tags: doc.tags }, viewer);
 			if (isFail(result)) throw new Error(result.error);
 			created.push(result.doc.shareId);
 		}

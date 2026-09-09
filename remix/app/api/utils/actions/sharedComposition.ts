@@ -1,6 +1,7 @@
 import { getThingsCollection } from '../mongodb/collections';
 import { batchedThingLookup, canViewInherited, fail, type Fail, type ThingDoc, type Viewer } from '../things/things';
 import { compositionReferences } from './sharedCompositionCore';
+import { canForkThing } from '~/components/Sharing/forkThingCore';
 
 export const validateSharedReferenceAdditions = async (viewer: Viewer, doc: ThingDoc, crystal: Record<string, unknown>): Promise<Fail | null> => {
 	const before = new Set(compositionReferences(doc.thingtime || [], doc.crystal || {}).map(({ kind, ref }) => `${kind}:${ref}`));
@@ -27,10 +28,10 @@ export type SharedComposition = {
 // Rebuilt per invocation: a revoked link/group grant cannot keep using an
 // earlier resolver response as a capability. The root's owner is a lookup
 // namespace, NEVER an execution identity.
-export const resolveSharedComposition = async (viewer: Viewer, id: string): Promise<SharedComposition | Fail> => {
+export const resolveSharedComposition = async (viewer: Viewer, id: string, options: { forCopy?: boolean } = {}): Promise<SharedComposition | Fail> => {
 	const collection = await getThingsCollection();
 	const root = await collection.findOne({ shareId: id } as any) as unknown as ThingDoc | null;
-	if (!root || !(await canViewInherited(root, viewer)) || !root.thingtime?.some((kind) => ['webpage', 'component', 'action'].includes(kind))) {
+	if (!root || !(await canViewInherited(root, viewer)) || !(options.forCopy ? canForkThing(root) : root.thingtime?.some((kind) => ['webpage', 'component', 'action'].includes(kind)))) {
 		return fail(404, 'Shared app not found');
 	}
 	const result: SharedComposition = { root, actions: new Map(), children: new Map(), data: new Map(), docs: new Map([[root.shareId, root]]), references: new Map() };

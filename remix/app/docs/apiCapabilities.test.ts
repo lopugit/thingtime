@@ -6,6 +6,14 @@ import { routeModules } from '../../server/routes/api/[...]';
 import { thingtimeCapabilityManifest } from '../api/utils/capabilities/thingtimeCapabilities';
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 
+test('standalone Thing copying negotiates the additive copy contract on both manifests', () => {
+	const version = createApiCapabilitiesManifest().features['api.things-fork'];
+	assert.equal(version, '1.1.0');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-fork'].version, version);
+	assert.equal(capabilitySatisfies(version, '1.0.0'), true);
+	for (const unsupported of ['', '1.0.0', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.1.0'), false);
+});
+
 test('poll votes publish the shared-identity correction', () => {
 	const route = createApiCapabilitiesManifest().features;
 	const manifest = thingtimeCapabilityManifest('https://thingtime.test');

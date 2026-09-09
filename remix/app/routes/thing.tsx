@@ -13,6 +13,7 @@ import type { WebpageBlock } from '~/components/Builder/webpageBlocks';
 import { WebpageBlocksRenderer } from '~/components/Builder/WebpageBlocksRenderer';
 import { WebpageRuntimeProvider } from '~/components/Builder/webpageRuntime';
 import { ForkSharedThingButton } from '~/components/Sharing/ForkSharedThingButton';
+import { canForkThing } from '~/components/Sharing/forkThingCore';
 import { PostCard } from '~/components/Feed/PostCard';
 import { mergeReactionOverlay } from '~/components/Feed/reactionOverlay';
 import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
@@ -803,7 +804,7 @@ export default function ThingPage() {
 						<Heading as="h1" mt={1} fontSize={{ base: '2xl', md: '3xl' }} overflowWrap="anywhere">
 							{diagnostic ? `Migration error · ${diagnostic.migrationId}` : diagnosticRoute ? 'Migration error' : displayName || 'Thing'}
 						</Heading>
-						{thing && !isThingOwner && (isComponent || isWebpage) ? <ForkSharedThingButton id={thing.id} linkKey={linkKey} webpage={isWebpage} /> : null}
+						{thing && !isThingOwner && canForkThing(thing) ? <ForkSharedThingButton id={thing.id} linkKey={linkKey} webpage={isWebpage} /> : null}
 					</Box>
 					<Button
 						as={Link}

@@ -26,6 +26,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   private independent composition copies with rewritten component/action
   references. Restore canonical hidden-key/group authorization for page/post
   media and forward shared keys only to first-party attachment content URLs.
+  Extend private copying to ordinary standalone content, preserving extended
+  content and independently copied schema definitions.
   Live target deployment and broader inheritance remain under
   active validation; see [PR #707](../PRs/707-shared-root-inheritance-read-only-app-use.md). — **Codex (AI)**
 
