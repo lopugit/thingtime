@@ -98,6 +98,20 @@ test('shared page audience includes its author components, never a foreign priva
 		assert.equal((await schemaRun()).data.result, 'The Star');
 		assert.equal((await schemaRun(childAction.id, 'wrong')).response.status, 404);
 		assert.equal((await schemaRun(unrelatedAction.id)).response.status, 404);
+		const publicSchemaData = await create(owner, ['data'], { schemaId: dataSchema.id, value: 'Public search result' }, ['tt:all']);
+		for (const [index, { scope, schema }] of [
+			{ scope: 'public', schema: dataSchema.id }, { scope: 'public', schema: dataSchema.crystal.name }, { scope: 'own', schema: dataSchema.id }
+		].entries()) {
+			const searchAction = await create(owner, ['action'], { name: `Shared schema search ${scope}`, actionKey: `${key}-search-${index}`, version: 1,
+				capabilities: [{ capability: 'things.read', schemas: [schema] }],
+				steps: [{ op: 'things.search', schema, scope }, { op: 'return', value: '$step.1' }] }, ['tt:hidden', 'tt:user']);
+			for (const cookie of ['', stranger, owner]) {
+				const search = await request('/api/v1/actions/run', 'POST', { action: searchAction.id, sharedRoot: searchAction.id, key: searchAction.linkKey }, cookie);
+				assert.equal(search.data.status, 'ok', search.data.error);
+				assert.deepEqual(search.data.result.map((row: any) => row.id), scope === 'public' ? [publicSchemaData.id] : [], 'Shared schema resolution must not borrow either account inventory');
+			}
+			assert.equal((await request('/api/v1/actions/run', 'POST', { action: searchAction.id, sharedRoot: searchAction.id, key: 'wrong' })).response.status, 404);
+		}
 		const extended = { notes: ['Keep this content'], nested: { value: 7 } };
 		assert.equal((await request('/api/v1/things', 'PATCH', { id: standalone.id, extended }, owner)).response.status, 200);
 		assert.equal((await request('/api/v1/things/fork', 'POST', { id: standalone.id, key: 'wrong' }, stranger)).response.status, 404);
@@ -151,10 +165,22 @@ test('shared page audience includes its author components, never a foreign priva
 		if (process.env.TT_SHARED_PLAYWRIGHT_PATH) {
 			const { chromium } = await import(process.env.TT_SHARED_PLAYWRIGHT_PATH);
 			const browser = await chromium.launch({ headless: true, executablePath: process.env.TT_SHARED_CHROME_PATH });
+			const watchFailures = (tab: any) => {
+				const events: unknown[] = [];
+				const record = (event: unknown) => { if (events.length < 40) events.push(event); };
+				tab.on('pageerror', (error: Error) => record({ error: error.message.replace(/\?[^\s]*/g, '?[redacted]').slice(0, 400) }));
+				tab.on('requestfailed', (request: any) => record({ path: new URL(request.url()).pathname, failure: request.failure()?.errorText }));
+				tab.on('response', (response: any) => {
+					const path = new URL(response.url()).pathname;
+					if (response.status() >= 400 || ['/api/root-data', '/api/v1/webpages/resolve'].includes(path)) record({ path, status: response.status() });
+				});
+				return events;
+			};
 			try {
 				for (const width of [1440, 390]) {
 					const context = await browser.newContext({ viewport: { width, height: 900 } });
 					const tab = await context.newPage();
+					const browserEvents = watchFailures(tab);
 					// Only the bytes transport is stubbed here; root/component resolution
 					// uses the real API. Attachment ACLs have separate service/route tests.
 					const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l1kAAAAASUVORK5CYII=', 'base64');
@@ -176,7 +202,7 @@ test('shared page audience includes its author components, never a foreign priva
 						await tab.getByRole('button', { name: 'Draw', exact: true }).waitFor({ timeout: 60000 });
 					} catch (error) {
 						if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-page-render-failure.png` });
-						console.error('Shared fixture render diagnostic:', { path: new URL(tab.url()).pathname, text: (await tab.locator('body').innerText()).slice(0, 1600) });
+						console.error('Shared fixture render diagnostic:', { path: new URL(tab.url()).pathname, browserEvents, text: (await tab.locator('body').innerText()).slice(0, 1600) });
 						throw error;
 					}
 					assert.equal(await tab.getByTestId('p-edit-in-builder').count(), 0);
@@ -201,7 +227,7 @@ test('shared page audience includes its author components, never a foreign priva
 						await tab.getByText('Shared value: Copy my content', { exact: true }).waitFor({ timeout: 30000 });
 					} catch (error) {
 						if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-data-render-failure.png` });
-						console.error('Shared Data fixture render diagnostic:', { width, path: new URL(tab.url()).pathname, text: (await tab.locator('body').innerText()).slice(0, 1600) });
+						console.error('Shared Data fixture render diagnostic:', { width, path: new URL(tab.url()).pathname, browserEvents, text: (await tab.locator('body').innerText()).slice(0, 1600) });
 						throw error;
 					}
 					const dataCopyBounds = await tab.getByTestId('fork-shared-thing').boundingBox();
@@ -226,6 +252,7 @@ test('shared page audience includes its author components, never a foreign priva
 					return { name: entry.slice(0, index), value: entry.slice(index + 1), url: base! };
 				}));
 				const tab = await context.newPage();
+				const browserEvents = watchFailures(tab);
 				// These are transport fixtures, not real stored attachments. Keep the
 				// authenticated copy check independent of DNS/failed image downloads.
 				await tab.route('**/api/v1/attachments/content?*', (route: any) => new URL(route.request().url()).searchParams.get('id') === 'sharing-browser-transport' ? route.fulfill({ status: 204 }) : route.continue());
@@ -241,10 +268,10 @@ test('shared page audience includes its author components, never a foreign priva
 						if (result.ok) for (const id of result.ids) created.push({ id, cookie: stranger });
 					}));
 				});
-				await tab.goto(new URL(`/p/${forkPage.id}?key=${encodeURIComponent(forkPage.linkKey)}`, base).href);
-				await tab.getByTestId('fork-shared-thing').waitFor({ timeout: 60000 });
 				let copyResult: any;
 				try {
+					await tab.goto(new URL(`/p/${forkPage.id}?key=${encodeURIComponent(forkPage.linkKey)}`, base).href);
+					await tab.getByTestId('fork-shared-thing').waitFor({ timeout: 60000 });
 					const [copiedResponse] = await Promise.all([
 						tab.waitForResponse((response: any) => new URL(response.url()).pathname === '/api/v1/things/fork' && response.request().method() === 'POST', { timeout: 60000 }),
 						tab.getByTestId('fork-shared-thing').click()
@@ -253,7 +280,7 @@ test('shared page audience includes its author components, never a foreign priva
 				} catch (error) {
 					if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-copy-failure.png` });
 					await Promise.all(copyResponses);
-					console.error('Copy UI diagnostic:', { path: new URL(tab.url()).pathname, requestObserved: copyRequestSeen, responseObserved: !!observedCopy, alerts: await tab.getByRole('alert').allTextContents() });
+					console.error('Copy UI diagnostic:', { path: new URL(tab.url()).pathname, browserEvents, requestObserved: copyRequestSeen, responseObserved: !!observedCopy, text: (await tab.locator('body').innerText()).slice(0, 1600), alerts: await tab.getByRole('alert').allTextContents() });
 					throw error;
 				}
 				assert.equal(copyResult.ok, true, copyResult.error);

@@ -6155,6 +6155,10 @@ approval; `access.test.ts` — the reservation matrix) and
 
 ## Shared Data Thing template controls
 
+- Share an action that searches public Data Things using its included private
+  schema. Verify it resolves the schema and returns public results when logged
+  out; an own-scope search must not borrow either the author's or a logged-in
+  visitor's private inventory. Wrong or revoked root keys must still fail.
 - Open a keyed Data Thing whose private same-author schema contains a button
   invoking a private action. Logged out, the button must run read-only through
   the Data Thing root, show its result, and refuse unrelated actions and revoked

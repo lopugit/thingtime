@@ -12104,8 +12104,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'actions-run',
-    featureVersion: '1.2.0',
-    contractVersion: '1.2.0',
+    featureVersion: '1.2.1',
+    contractVersion: '1.2.1',
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',
@@ -12123,7 +12123,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'It rechecks the root audience on every call, resolves only stored reachable actions in their author namespace, and permits ' +
       'read-only execution without signing in. It never borrows the author or viewer private-account authority, never mutates saved data, ' +
       'and creates no persistent run record or notification; its shared-run id is ephemeral. Explicit stored same-author data dependencies ' +
-      'inherit the root audience; dynamic ids retain ordinary anonymous read access. Every ordinary completed run also stores an action-run ' +
+      'inherit the root audience; dynamic ids retain ordinary anonymous read access. Search schema definitions resolve through the current action’s stored composition edge, while the search itself retains ordinary anonymous/public/system data boundaries. Every ordinary completed run also stores an action-run ' +
       'notification, including successful component runs (quiet delivery).',
     auth: {
       mode: 'optional',

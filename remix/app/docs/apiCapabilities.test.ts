@@ -22,10 +22,10 @@ test('standalone Thing copying negotiates the additive copy contract on both man
 });
 
 test('Data Thing controls negotiate the shared-content action contract', () => {
-	assert.equal(createApiCapabilitiesManifest().features['api.actions-run'], '1.2.0');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.actions-run'].version, '1.2.0');
-	for (const unsupported of ['', '1.1.0', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.2.0'), false);
-	assert.equal(capabilitySatisfies('1.2.1', '1.2.0'), true);
+	assert.equal(createApiCapabilitiesManifest().features['api.actions-run'], '1.2.1');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.actions-run'].version, '1.2.1');
+	for (const unsupported of ['', '1.1.0', '1.2.0', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.2.1'), false);
+	assert.equal(capabilitySatisfies('1.2.2', '1.2.1'), true);
 });
 
 test('poll votes publish the shared-identity correction', () => {
