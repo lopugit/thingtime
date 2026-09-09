@@ -117,6 +117,38 @@ const cleanList = (values: unknown, limit: number): string[] =>
 
 const initialOf = (value: string): string => Array.from(value.trim())[0]?.toUpperCase() || 'T';
 
+// `revision` is the card URL's cache key, and it is load-bearing rather than
+// cosmetic: unfurlers (Slack, Twitter, Discord, iMessage) cache og:image by URL
+// and do not revalidate, so a card whose URL never changes is frozen in their
+// caches indefinitely — long past the CDN's own s-maxage/stale-while-revalidate
+// window. Every other preview hangs it on the record's updatedAt, but the
+// public profile projection deliberately carries no updatedAt (toPublicProfile
+// returns id/username/displayName/bio/avatarUrl/bannerUrl/createdAt/temporary),
+// so `profile.updatedAt` read as undefined and profile cards shipped with no
+// `?v=` at all — a renamed profile kept its old name in every unfurl forever.
+// createdAt is present but immutable, so it cannot stand in either.
+//
+// Fingerprint what the card actually draws instead. It changes exactly when the
+// rendered card would, and — unlike concatenating the values into the query —
+// puts none of the profile's own text in a URL that gets logged and shared.
+// FNV-1a over code points: this is a cache key, never a security boundary.
+export const socialPreviewRevision = (...parts: readonly string[]): string => {
+	let hash = 0x811c9dc5;
+	const mix = (code: number): void => {
+		hash ^= code;
+		hash = Math.imul(hash, 0x01000193) >>> 0;
+	};
+	// Length-prefixed rather than delimited: every printable character survives
+	// `cleanSocialText`, so no separator could be reserved out of a display name
+	// or a bio, and a delimited key would let the parts "ab" + "c" and "a" + "bc"
+	// collide onto a single card URL.
+	for (const part of parts) {
+		mix(part.length);
+		for (const character of part) mix(character.codePointAt(0) ?? 0);
+	}
+	return hash.toString(36);
+};
+
 export const normaliseSocialPreviewPath = (value: unknown): string => {
 	if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || value.includes('\\') || value.length > 2048) {
 		return '/';
@@ -597,7 +629,9 @@ const profilePreview = async (path: string, username: string): Promise<SocialPre
 		options: [],
 		images: [],
 		imageCount: 0,
-		revision: cleanSocialText(profile.updatedAt)
+		// Exactly the fields this card and its Open Graph tags render. The handle
+		// is already the path, so it is not part of the key.
+		revision: socialPreviewRevision(displayName, cleanSocialText(profile.bio))
 	};
 };
 

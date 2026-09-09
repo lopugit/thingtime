@@ -8,6 +8,7 @@ import {
 	socialMediaVariant,
 	socialPreviewCardUrl,
 	socialPreviewFromPublicPost,
+	socialPreviewRevision,
 	staticSocialPreview
 } from './socialPreview';
 
@@ -23,6 +24,31 @@ test('social-card URLs carry only a normalized local path and a safe revision', 
 		socialPreviewCardUrl('https://thingtime.example', '/post/hello?source=chat', '2026-09-04T12:00:00.000Z'),
 		'https://thingtime.example/social-card?path=%2Fpost%2Fhello&v=2026-09-04T12%3A00%3A00.000Z'
 	);
+});
+
+// A card URL that never changes is not merely stale for the CDN's
+// stale-while-revalidate window: unfurlers cache og:image by URL and do not
+// revalidate, so the old card survives in Slack/Twitter/Discord indefinitely.
+// Profiles have no updatedAt in their public projection (toPublicProfile), so
+// the revision has to come from what the card draws.
+test('a profile card URL changes whenever the card it names would', () => {
+	const base = socialPreviewRevision('Nyik', 'DEVELOPER');
+	assert.equal(base, socialPreviewRevision('Nyik', 'DEVELOPER'), 'the same profile must keep one stable cache key');
+	assert.notEqual(base, socialPreviewRevision('Nyik Renamed', 'DEVELOPER'), 'a renamed profile must get a new card URL');
+	assert.notEqual(base, socialPreviewRevision('Nyik', 'DESIGNER'), 'an edited bio must get a new card URL');
+	// The key is a fingerprint, not the profile text: nothing readable leaks into
+	// a URL that ends up in referer logs and chat transcripts.
+	assert.match(base, /^[0-9a-z]{1,7}$/);
+	assert.doesNotMatch(socialPreviewRevision('Nyik', 'DEVELOPER'), /Nyik|DEVELOPER/);
+	// Length-prefixed, not delimited: no separator exists that cleanSocialText
+	// keeps out of a display name, so a delimited key would fuse these two.
+	assert.notEqual(socialPreviewRevision('ab', 'c'), socialPreviewRevision('a', 'bc'));
+	assert.notEqual(socialPreviewRevision('Nyik Renamed', ''), socialPreviewRevision('Nyik', 'Renamed'));
+	// It must survive the same values a preview would really hand it.
+	assert.equal(typeof socialPreviewRevision('', ''), 'string');
+	assert.notEqual(socialPreviewRevision('🌸 Rosie', ''), socialPreviewRevision('', ''));
+	// And it must reach the card URL as a real ?v= cache buster.
+	assert.match(socialPreviewCardUrl('https://thingtime.example', '/profile/lopu', base), new RegExp(`[?&]v=${base}$`));
 });
 
 test('static public routes get route-specific social context', () => {
