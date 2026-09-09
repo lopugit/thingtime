@@ -278,6 +278,8 @@ export type ThingtimeDesktopBridge = {
 	// Narrow local-node setup and macOS privacy surface. Ordinary device
 	// commands deliberately do not travel through a loaded renderer page; they
 	// are authenticated server commands claimed by the local node.
+	openAppLocations?: () => Promise<{ opened: boolean; count: number }>;
+	restartAfterPermissions?: () => Promise<void>;
 	nodeControl?: (request: { action: 'start' | 'stop' | 'restart' }) => Promise<ThingtimeNodeStatus>;
 	nodeGetStatus?: () => Promise<ThingtimeNodeStatus>;
 	nodeRegisterService?: () => Promise<ThingtimeNodeStatus>;
