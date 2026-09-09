@@ -243,6 +243,17 @@ export default defineConfig({
       port: devPorts.hmr
     },
     proxy: {
+      '/api/v1/vault/reveal': {
+        // Never send fresh verification material to the production fallback.
+        target: localApiTarget,
+        changeOrigin: true,
+        configure(proxy) {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            if (!proxyReq.getHeader('x-forwarded-host') && req.headers.host) proxyReq.setHeader('x-forwarded-host', req.headers.host);
+            if (!proxyReq.getHeader('x-forwarded-proto')) proxyReq.setHeader('x-forwarded-proto', 'http');
+          });
+        }
+      },
       [APPLE_APP_ASSOCIATION_PATH]: { target: localApiTarget, changeOrigin: true },
       [THINGTIME_CAPABILITY_MANIFEST_PATH]: {
         target: localApiTarget,

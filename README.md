@@ -87,7 +87,7 @@ the phone is locked.
 
 Each account has a personal Secure Vault in **Settings → Secure Vault** for
 password/key-value records and Lopu provider connections. Values are
-write-only in the browser and AES-256-GCM encrypted at rest with record- and
+masked by default in the browser and AES-256-GCM encrypted at rest with record- and
 owner-bound authenticated data. Configure a 32-byte base64url key as
 `THINGTIME_USER_VAULT_KEY`; when omitted, Thingtime derives a purpose-separated
 user-vault key from `THINGTIME_ADMIN_VAULT_KEY` so an existing deployment can
@@ -107,13 +107,14 @@ pick one from the kind's catalog or type a custom id, or leave it blank to run
 on the kind's first catalog model; a custom OpenAI-compatible host must name
 its model. Reasoning effort and speed are chosen per Lopu chat in the ordinary
 `/lopu` composer and travel to the provider's own request fields. Store
-provider tokens only through the write-only Secure Vault form — never in
+provider tokens only through the encrypted Secure Vault form — never in
 source or a public environment file. Custom OpenAI-compatible endpoint
 hostnames must be public HTTPS destinations and must also appear in the
 comma-separated `THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS` runtime setting;
 built-in provider hosts are already allowed. DNS is checked again immediately
 before each server-side provider request, redirects are rejected, and
-credentials never reach the browser after storage.
+ordinary responses never include stored credentials. The explicit Show action
+requires fresh password or passkey verification for one owner-authorized entry.
 
 ## Conflict-free Graphify snapshots
 
@@ -1284,9 +1285,10 @@ comparison. Login attempts are rate-limited per IP (`auth.login`).
 
 ### Admin integration vault and policy proxy
 
-The **/admin → External integrations** tab stores a write-only external
-credential and binds it to a saved endpoint policy. The browser never receives
-the credential again—not masked, decrypted, or through an audit record.
+The **/admin → External integrations** tab stores an encrypted external
+credential and binds it to a saved endpoint policy. Lists and audit records
+never contain credential values. The explicit Show action requires fresh
+password or passkey verification by a current admin for one selected entry.
 Provision this distinct server-only value before creating any secret:
 
 ```sh
@@ -2515,3 +2517,21 @@ The script creates fixture accounts/content through the real API utilities,
 runs the leased migration, checks behavior and emits identity-free native
 explain counts. It refuses any other URI. Stop the disposable server afterward;
 it is not a persistent development service.
+
+## Verified vault viewing
+
+Saved CI credentials, admin integration secrets and personal Secure Vault values remain encrypted and masked by default. Their **Show** control requires the current account password or a fresh user-verified passkey for each selected entry. Admin/CI credentials require a current admin role; personal entries remain owner-only. Displayed values are transient and hide after 30 seconds, closing the dialog or leaving the tab.
+
+Local validation worktree `thingtime-vault-verified-reveal` uses Vite 17340, HMR 17341 and Nitro 17342 through the canonical PM2 ecosystem. Local URL: http://localhost:17340/admin/ci-control. Public Tailscale/Funnel URL is unavailable: the installed launcher points to a missing `/Applications/Tailscale.app` executable; no public mapping was changed.
+
+Fork setup: configure a unique 32-byte base64url `THINGTIME_ADMIN_VAULT_KEY` as a server-only secret for each deployment environment. Personal vaults use `THINGTIME_USER_VAULT_KEY` when configured, otherwise the admin key. Preserve existing keys to retain decryptability; never copy ciphertext between environments with different keys. Password verification needs the account's current password hash; passkeys must be registered in the selected environment and require HTTPS (or localhost). Normal authentication signing keys and the existing auth challenge TTL collection support two-minute, single-use, session/origin/item-bound passkey verification. No additional database index or migration is required. The same-origin `api.vault-reveal` 1.0.0 capability is negotiated before use, and fixed security attempt limits apply to every subscription tier.
+
+Desktop permission recovery includes **Open App Locations** in Things and Desktop settings. It opens a private folder of symlinks to the current Desktop and bundled Node, plus installed Thingtime Recovery, Commander, ThingDisk, and ThingDock apps from the standard Applications folders. Duplicate older installations are omitted. You may need to remove the affected app from a macOS permission list and re-add it using these shortcuts. Grant only the permissions you intend. macOS decides whether to display Quit & Reopen; Thingtime offers Later / Restart Node Now when you return from the recovery flow. Restart other affected apps separately. No permission is changed automatically.
+
+### Settings navigation and Mac connection panel
+
+Settings uses one shared component in the drawer popup and full page. Direct links are `/settings/profile` (the default), `/settings/things`, `/settings/appearance`, `/settings/notifications`, `/settings/security`, `/settings/connections`, `/settings/lopu`, and `/settings/admin` (administrators only). Existing Secure Vault and Lopu hash bookmarks remain supported. A popup category is bookmarkable with `?settings=<category>` on the current page; Open settings page carries that category to its dedicated URL.
+
+A healthy Mac connection panel can be hidden from Things using “Don’t show again unless there’s a problem”. This preference is local to the browser and account; Desktop saves it per account and API endpoint so it survives app restarts and changing loopback ports. It persists across reloads, and does not change node operation or privacy access. Live service, pairing, connection, and permission failures reveal the panel again. Settings → Things always retains the panel and a switch to restore it.
+
+Shared-settings validation worktree: `http://localhost:13040` (HMR 13041, Nitro 13042), managed by the repository PM2 lifecycle. Funnel was unavailable during validation because the installed Tailscale CLI points to a missing application executable; no public Funnel URL was verified. No new environment variables or external setup are required for these settings changes.

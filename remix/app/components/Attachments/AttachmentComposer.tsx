@@ -19,6 +19,7 @@ import { AttachmentAnnotatePopover } from './AttachmentAnnotatePopover';
 import { AttachmentReorderGallery } from './AttachmentReorderGallery';
 import { nudgeTargetId, useMediaReorder, type MediaReorderNudge, type MediaReorderTileProps } from '~/components/Media/useMediaReorder';
 import {
+	attachmentFilesFromClipboard,
 	attachmentUploadScopeForPurpose,
 	attachmentDisplayName,
 	formatAttachmentBytes,
@@ -65,6 +66,7 @@ export type AttachmentComposerProps = {
 
 export type AttachmentComposerHandle = {
 	markCommitted: (attachmentIds: string[]) => void;
+	addFiles: (files: readonly File[]) => boolean;
 };
 
 const statusLabel = (upload: ComposerAttachmentUpload) => {
@@ -466,7 +468,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 			}),
 		[lopu]
 	);
-	const { uploads, addFiles, addLinkedUrl, retry, remove, reorder, markCommitted, updateAttachment, snapshot } = useAttachmentUploads(
+	const { uploads, addFiles: enqueueFiles, addLinkedUrl, retry, remove, reorder, markCommitted, updateAttachment, snapshot } = useAttachmentUploads(
 		ownerId,
 		onCleanupError,
 		onSelectionError,
@@ -519,8 +521,6 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 		onNudge: handleReorderNudge
 	});
 
-	React.useImperativeHandle(ref, () => ({ markCommitted }), [markCommitted]);
-
 	React.useEffect(() => {
 		const previous = emittedSnapshotRef.current;
 		if (previous && sameAttachmentSnapshot(previous, snapshot)) return;
@@ -529,11 +529,25 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 	}, [onChange, snapshot]);
 
 	const choose = React.useCallback(
-		(files: FileList | null) => {
-			if (files?.length) addFiles(Array.from(files));
+		(files: ArrayLike<File> | readonly File[] | null): boolean => {
+			const selected = Array.from(files || []);
+			if (!selected.length || disabled || uploadsNotGranted) return false;
+			const availableSlots = Math.max(0, boundedMaxFiles - totalCount);
+			if (!availableSlots) {
+				onSelectionError(boundedMaxFiles === 1 ? 'Choose one image for this profile field.' : `Posts can include up to ${boundedMaxFiles} attachments.`);
+				return false;
+			}
+			const accepted = selected.slice(0, availableSlots);
+			if (accepted.length < selected.length) {
+				onSelectionError(boundedMaxFiles === 1 ? 'Choose one image for this profile field.' : `Posts can include up to ${boundedMaxFiles} attachments.`);
+			}
+			enqueueFiles(accepted);
+			return true;
 		},
-		[addFiles]
+		[boundedMaxFiles, disabled, enqueueFiles, onSelectionError, totalCount, uploadsNotGranted]
 	);
+
+	React.useImperativeHandle(ref, () => ({ markCommitted, addFiles: choose }), [choose, markCommitted]);
 
 	// With the URL adder available, the panel stays useful before upload
 	// approval — file picking is disabled with the note, linked media works.
@@ -603,6 +617,13 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 					setDragging(false);
 					if (!pickerDisabled) choose(event.dataTransfer.files);
 				}}
+				onPaste={(event) => {
+					if (event.defaultPrevented) return;
+					const files = attachmentFilesFromClipboard(event.clipboardData);
+					if (!files.length) return;
+					event.preventDefault();
+					choose(files);
+				}}
 			>
 				<input
 					ref={inputRef}
@@ -620,10 +641,10 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 					{helperText ||
 						`${
 							imageOnly
-								? `${boundedMaxFiles === 1 ? 'One image' : `Up to ${boundedMaxFiles} images`} · drop ${
+								? `${boundedMaxFiles === 1 ? 'One image' : `Up to ${boundedMaxFiles} images`} · drop or paste (⌘/Ctrl+V) ${
 										boundedMaxFiles === 1 ? 'it' : 'them'
 								  } anywhere in this panel`
-								: `Photos, videos, or any file · up to ${boundedMaxFiles} · drop files anywhere in this panel`
+								: `Photos, videos, or any file · up to ${boundedMaxFiles} · drop or paste (⌘/Ctrl+V) anywhere in this panel`
 						}${totalCount > 1 ? ' · drag the ⠿ handle to set the order' : ''}`}
 				</Text>
 

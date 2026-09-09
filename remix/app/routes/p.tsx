@@ -14,6 +14,7 @@ import { WebpageBlocksRenderer } from '../components/Builder/WebpageBlocksRender
 import { installSuite, installSuiteOnServer, suiteKeyFromActionKey, suiteKeyOfPage } from '../components/Builder/installSuite';
 import { useWebpageDraft } from '../components/Builder/useWebpage';
 import { WebpageRuntimeProvider } from '../components/Builder/webpageRuntime';
+import { ForkSharedThingButton } from '../components/Sharing/ForkSharedThingButton';
 import type { WebpageBlock } from '../components/Builder/webpageBlocks';
 
 // /p/:id — a published block-based webpage, rendered exactly as the builder
@@ -194,11 +195,15 @@ export default function PublicWebpage() {
 		);
 	}
 
-	const interactive = isOwner || isSeeded;
+	const shared = !isOwner && (!isSeeded || !user?.id);
+	const interactive = isOwner || isSeeded || shared;
 
 	return (
 		<WebpageRuntimeProvider
+			key={`${page?.id || ''}:${user?.id || ''}:${linkKey}`}
 			pageId={page?.id || null}
+			shared={shared}
+			linkKey={linkKey}
 			pageKey={typeof page?.crystal?.pageKey === 'string' ? page.crystal.pageKey : null}
 			suiteKey={suiteKey}
 			source={draft.resolved?.source || null}
@@ -207,20 +212,22 @@ export default function PublicWebpage() {
 			<Flex
 				flexDirection="column"
 				width="100%"
+				minWidth={0}
+				boxSizing="border-box"
 				minHeight="100vh"
 				background={previewBg}
 				paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))"
 				paddingBottom={12}
 				whiteSpace="normal"
 			>
-				<Box width="100%" maxWidth="960px" marginX="auto" paddingX={4} paddingTop={6}>
+				<Box width="100%" maxWidth="960px" minWidth={0} boxSizing="border-box" marginX="auto" paddingX={4} paddingTop={6}>
 					{isOwner ? (
 						<Flex justifyContent="flex-end" marginBottom={2}>
 							<Button as={Link} to={`/builder?page=${encodeURIComponent(page!.id)}`} size="xs" variant="outline" data-testid="p-edit-in-builder">
 								✏️ Edit in builder
 							</Button>
 						</Flex>
-					) : null}
+					) : page ? <Flex justifyContent="flex-end" marginBottom={2}><ForkSharedThingButton id={page.id} linkKey={linkKey} webpage /></Flex> : null}
 					<WebpageBlocksRenderer
 						blocks={(page?.crystal?.blocks as WebpageBlock[]) || []}
 						componentsByRef={draft.componentsByRef}

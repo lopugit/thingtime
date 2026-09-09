@@ -1,5 +1,13 @@
 # TESTING.md — per-area manual test checklists
 
+## Verified vault reveal
+
+- [ ] At desktop and 390px widths, CI, external integrations and personal Secure Vault offer Show without changing ordinary value-free list responses.
+- [ ] Open Show, cancel, reopen; wrong password and cancelled passkey reveal nothing. A current password or same-account user-verified passkey reveals only the selected item.
+- [ ] A revealed synthetic credential clears on Hide, close, account change, navigation, blur, tab hiding and 30-second timeout. Closing during a pending request prevents late values appearing. Opening another Show closes the first.
+- [ ] Inspect the full page and open modal top-to-bottom: long labels/credentials wrap, all buttons stay reachable, no horizontal overflow on mobile.
+- [ ] Cross-origin, anonymous, non-admin admin-vault access, other-owner personal entries, replayed/expired/wrong-session passkeys and fixed-limit exhaustion fail without decryption. Every response is private/no-store; no plaintext enters list caches or request logs.
+
 - Thing detail back links accept only `things`, `actions`, or `feed` as `from`.
   Unknown values and prototype keys such as `toString` must display a working
   Back to feed link on desktop and mobile.
@@ -1063,6 +1071,12 @@ email whose link points at the attacker.
       file. Safe image/video previews appear immediately; each row reports
       progress; Post stays disabled until every selected file is Ready; and a
       26th unique file is rejected with the fixed 25-attachment limit message.
+- [ ] With the post/comment text editor focused, paste (⌘/Ctrl+V) a screenshot,
+      copied image, video, and generic file. File-bearing pastes turn Photos on
+      when needed and queue into the one Media & files panel; pasting again
+      anywhere inside that open panel does the same. Plain/rich text paste stays
+      in the focused field, and pasting inside the separate Thing editor modal
+      never attaches the file to the post.
 - [ ] Upload and publish a small MP3, M4A (including an Apple Watch recording),
       FLAC, WAV, Ogg/Opus, and WebM audio attachment. Each final card and its
       `/thing/<attachment-id>` detail view shows native controls instead of a
@@ -2158,6 +2172,10 @@ email whose link points at the attacker.
       there while typing (Chakra cannot move an open toast).
 
 ## Drawer navigation & settings (`remix/app/components/Nav/Drawer/`)
+
+- [ ] Settings popup and `/settings/:tab` show the same controls in every category; Profile is the default, Admin is restricted to admins, and direct links/reload/back preserve the selected tab. Check legacy `#secure-vault` and `#lopu-credits` links, modal close/Escape, and Open settings page at desktop and 390px. Scroll long categories to the bottom.
+- [ ] On a paired healthy Mac, dismiss the Things connection panel, reload, and confirm it stays hidden. Settings → Things must still show the panel and restore switch. Stop/disconnect the node or fail a permission check: the panel returns automatically. Switching accounts must not inherit another account’s dismissal. The real Desktop adapter’s unknown transport status must still allow dismissal of a healthy local node; an explicit offline result must reveal it.
+
 
 - [ ] Clicking a NAVIGATING drawer item (top-level or sub-item) closes the
       drawer after navigating on BOTH desktop and mobile; items without a
@@ -4342,7 +4360,7 @@ default` unsets it, and runtime usage reports the effective cap. A custom
 ## Notification history (`/notifications`, `remix/app/components/Notifications/`, `api/utils/notifications/listQuery.ts`)
 
 - [ ] `/notifications` (auth) lists every notification the viewer has received
-      newest first (server keeps the newest 10,000 per recipient), with the
+      newest first (no automatic count-based deletion), with the
       unfiltered first page painting instantly from `tt-notif-history-<id>`
       and reconciling in the background; a cold start shows one spinner only.
       Signed out, the page renders the quiet "Log in" state and never 401s.
@@ -4356,8 +4374,8 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       category; picking a chip that cannot hold the type drops the type.
 - [ ] The summary line shows `N notifications match · M unread` (server
       `total` with `withTotal=1`); changing filters dims the current rows
-      instead of flashing empty; "Load older" appends via the `before` cursor
-      with no duplicates.
+      instead of flashing empty; "Load older" appends via the stable `cursor`
+      with no duplicates or skipped rows sharing a timestamp.
 - [ ] Clicking a row marks it read optimistically (row tint clears, unread
       count drops, bell badge cache updates) and follows its click-through:
       system notes → their `href` (`/actions/<key>`), else `/post/<id>`, else
@@ -4367,17 +4385,29 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       lands an `action-run` row — 🦄 Lopu avatar in a rainbow ring, headline
       `Action “<name>” finished ✅` / `failed 🌧️`, detail `<ms> · <ops>` or
       the error, System tag, click-through to `/actions/<key>`. A delegated
-      component click (`source: 'component'`) only notifies when it FAILS.
+      component click (`source: 'component'`) is saved on success too, with quiet delivery.
       Own social actions still never notify yourself.
 - [ ] Settings → Notifications gains the "Action runs ⚡" row (push ON, email
       opt-in by default) and a "History 📜 → Open" row; switching a type off
-      hides it on `/notifications` too; the bell popover's "See all →" opens
+      mutes delivery but never hides it on `/notifications`; the bell popover's "See all →" opens
       the page and the drawer's Account group lists Notifications 🔔.
 - [ ] `GET /api/v1/notifications` rejects nothing new: unknown `types` /
       `category` values match nothing (empty page, `total: 0`), `q` is capped
       at 100 chars, `since`/`until` are inclusive, `unreadCount` ignores the
       filters, and the capabilities manifest advertises
-      `api.notifications-list` and `api.notifications-settings` at 1.1.0.
+      `api.notifications-list` 1.4.0, `api.notifications-settings` 1.3.0,
+      and `api.notifications-record` 1.0.0.
+- [ ] Password/OTP, passkey and redeemed SSO sign-ins record login-success;
+      invalid credentials and unfinished OTP ceremonies never record success.
+- [ ] All one-shot Lopu messages and completed/cancelled/failed streams are
+      saved as system-message for the signed-in viewer. Full bounded text is
+      readable after reload. Credential-like text and link query keys are redacted.
+- [ ] Disable both delivery masters and action-run; generate a message and a
+      component run. Both remain in history=1, while the muted bell stays empty.
+- [ ] Retry the same eventId, mark it read, then retry again: exactly one row,
+      with unchanged readAt. A new eventId with equal text is a separate row.
+      Another account cannot submit or read the first account's messages;
+      client-supplied actor/type/owner/timestamps are rejected.
 - [ ] 375px: chips, inputs and the date row wrap without horizontal scroll;
       rows never clip the category tag; the Lopu avatar ring stays round.
 
@@ -5370,6 +5400,67 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       eyebrow + rainbow/ink header — no raw Chakra Container/Badge dashboards.
 - [ ] /builder lists the signed-in user's webpage things; New page ✨ creates a
       private page and opens the canvas; signed-out users get the quiet card.
+- [ ] Shared composition inheritance: an anonymous valid-key reader sees the
+      author's component inside nested containers, not a visitor's same-key
+      component. Wrong/revoked links and removed group memberships fail closed.
+      Public roots include private author components without disclosing their
+      standalone link keys. Foreign private components remain inaccessible;
+      shared writers cannot add guessed private author refs (by id or key).
+      Run the real-API fixture with `TT_SHARED_TEST_URL=http://127.0.0.1:<port>
+      pnpm --dir remix run test:webpages`; it creates test accounts through the
+      API and deletes its exact test Things/groups. Existing test sessions may
+      be supplied through `TT_SHARED_OWNER_COOKIE`/`TT_SHARED_VISITOR_COOKIE`.
+- [ ] A signed-out shared control runs its included action and child action;
+      invalid/revoked root keys and unrelated action IDs are refused. Shared
+      runs can read explicitly included data but cannot create/update/delete
+      saved data, including when the caller also happens to be the owner.
+      Copy to my Builder/Things creates private independently editable parts,
+      rewrites nested action/component references, and leaves the original
+      unchanged. Repeat the control/copy checks at desktop and mobile widths.
+      The opt-in API fixture also accepts `TT_SHARED_PLAYWRIGHT_PATH` (an
+      installed Playwright module), `TT_SHARED_CHROME_PATH`, and
+      `TT_SHARED_SCREENSHOT_DIR` for 1440px/390px anonymous browser proof.
+      Set `TT_SHARED_SESSION_CACHE` to an ignored local temporary file to
+      reuse generated test sessions across runs instead of exhausting the
+      signup budget; that file contains test credentials and must never be
+      published. The fixture writes it with owner-only file permissions.
+- [ ] Hidden-link media: page/post-bound attachments accept the current root
+      key and group audience; missing/wrong/revoked keys and removed group
+      membership fail closed, including cache validation. Shared HTML, Chakra,
+      native media blocks, attachment details, audio and lightboxes forward the
+      key only to the exact relative first-party attachment content endpoint.
+      External URLs never receive it; independently keyed URLs keep their own
+      key. Negotiate `api.attachment-content >= 1.1.1` before attaching a key.
+      The shared browser fixture stubs image bytes to verify key transport;
+      attachment service/route tests cover authorization separately. Do not
+      treat that fixture as proof of real S3 bytes or independent media copies.
+- [ ] Copy a shared standalone Data Thing with extended content and a private
+      schema definition. The copy keeps its extended content, gets its own
+      private schema/id/name pair, exposes no original link key, and is editable
+      only by its new owner. The original stays unchanged. Wrong root keys fail.
+      Account/credential, subspace machinery, relationship and app-storage rows
+      have no copy control. At 1440px/390px, Copy to my Things fits the viewport
+      and signed-out users reach sign-in. Wait for the copy control to mount
+      before starting the response timer; byte-transport fixtures must not make
+      real requests to deliberately invalid image URLs in the signed-in test.
+- [ ] Open a shared Data Thing whose rendering schema is private: the schema
+      template renders at desktop/mobile widths through `id` + `sharedRoot`
+      after negotiating `api.things >= 1.6.0`. Reading the schema independently
+      or an unrelated id through the root still fails. Wrong/retired keys and
+      removed group memberships fail on contextual reads. App tokens cannot
+      use this first-party mode to escape their namespace. Every response is
+      private/no-store; shared templates never enter a schema-only local cache.
+- [ ] Nested media inheritance: a literal first-party attachment URL in an
+      included author component/schema or native media block can use the root
+      audience even when its bound post is private. Unrelated private media,
+      foreign private media and author media referenced only by a foreign
+      component gain no access. Public profile/comment media retains its
+      independent access. Ready state, moderation, object versions and home
+      storage remain enforced. Revoked keys/group access fail on every read,
+      including cached-byte validation. Shared editors cannot inject new
+      private media refs. Negotiate `api.attachment-content >= 1.2.0`; forward
+      `sharedRoot` plus the key only to the exact first-party content endpoint.
+      Explicit audio downloads use the same context without persisting its URL.
 - [ ] Canvas: hovering a block draws its dashed boundary + label chip; nested
       sub-blocks highlight innermost-wins; clicking selects (solid outline)
       and opens the inspector in the right drawer.
@@ -5385,7 +5476,8 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       refused.
 - [ ] Save on a fresh page creates the thing (private by default); the Public
       toggle publishes (acl tt:all) and /p/<id> renders it; anonymous viewers
-      see public pages read-only (ttActions inert — owner-only interactivity).
+      see public pages read-only while included controls can run in the
+      root-authorized read-only action mode (no saved-data mutations).
 - [ ] Site edit mode: ✏️ pill (signed-in only, hidden on /builder, /p/*,
       /authorize) enters in-place editing of the current route; the live app
       screen renders as the locked 🔒 native block; Save my version forks a
@@ -5581,6 +5673,11 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       remains usable. Unsupported image formats fall back without retry loops.
 - [ ] Confirm partial/large files use native streaming and cached range reads
       cannot bypass authorization. Verify storage failure degrades to HTTP.
+
+
+## Commander emoji paste recovery
+
+- [ ] Follow `Commander/docs/TESTING.md` for denied emoji paste: preserve the selected emoji, recents, learning and clipboard; keep the error, grid and recovery controls inside the native window at standard/minimum/compact widths and large text size. Verify the installed signing requirement stays stable and complete an approved Accessibility grant migration before claiming successful paste.
 
 ## App suites — Pokeworld + StarsAlign (`remix/app/schemas/appSuites/`, `/p/pokeworld`, `/p/starsalign`)
 
@@ -6039,3 +6136,14 @@ approval; `access.test.ts` — the reservation matrix) and
 - Run `cd remix && node --import tsx scripts/audit-things-indexes.mts`; source-plan replay must work without database credentials, include Mongo's `_id_`, and preserve exact key order, unique/partial/sparse/TTL options.
 - Run `pnpm --dir remix run test:collections`. The unused emoji lookup must not be recreated; protected `uniqueKeys_1` must stay unique and the legacy unique ancestor must not be blindly retired.
 - Before any live index retirement, compare exact production/develop index definitions with the source inventory, preserve unknown indexes, and prove the actual query and concurrent-write paths. A low count alone is not acceptance. See `docs/architecture/thing-index-consolidation.md` for the full rollout gates.
+
+### Desktop permission recovery
+
+- In Things and Desktop settings, use Open App Locations. Check that Finder contains symlinks to the running Desktop, its bundled Node, and installed Recovery/Commander/ThingDisk/ThingDock apps; an older standalone Node must not replace the bundled shortcut. Repeat after an update and verify targets refresh.
+- Return from the folder or Privacy settings: Thingtime offers Later / Restart Node Now once per explicit recovery flow. Later must not prompt again on routine focus or polling. Restart must preserve pairing and leave one Node process; handle failure visibly.
+- Re-add the affected app manually only with the owner’s consent. Apple controls its own Quit & Reopen prompt; if absent, use Thingtime’s restart control. Verify live permission checks and a protected operation after restarting.
+
+- Permission recovery follow-up: click Open System Settings for both Accessibility and Screen Recording. Confirm Finder opens the combined App Locations folder, not Contents/Helpers, alongside the correct privacy pane.
+
+- Shared settings / Desktop persistence: dismiss a healthy Things node panel, quit and reopen Desktop (which changes the local port), and verify it remains hidden. Settings → Things must still show the card and its restore switch. Restore the switch, then confirm the Things page shows the panel again.
+- Shared settings / observed status: after the Mac reports connected with access allowed, switch between Things, the popup Things tab, and Open settings page. Keep the last observed status visible during the background check; do not briefly show Not running or a new permission denial. Pairing challenges and pending actions must not carry between views.

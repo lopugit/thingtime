@@ -1,8 +1,10 @@
 import React from 'react';
+import { SharedMediaProvider } from '../Sharing/SharedMedia';
 import { useLocation } from 'react-router';
 
 import { MAX_WEBPAGE_BLOCKS } from '~/schemas/registry';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 
 // The PAGE RUNTIME — what turns a composed page of component things into a
 // running app. It is deliberately tiny: a version counter every source-bound
@@ -14,9 +16,9 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 // (deep links into an app page), and the install hook for a seeded app page
 // the viewer has not installed yet.
 //
-// No block gets any authority from this: sources and controls both run
-// through the ordinary delegated run path (owner-only resolution), and the
-// runtime only remembers what came back.
+// Owned/installed surfaces retain delegated owner-only execution. Shared
+// surfaces send the root id and bearer key separately from template scope;
+// the server reauthorizes the stored dependency graph and runs read-only.
 
 export type WebpageRuntimeLastRun = {
 	action: string;
@@ -56,6 +58,7 @@ export type WebpageRuntime = {
 	// same version share one request (a page with three cards bound to
 	// `today` runs the action once, not three times)
 	load: (key: string, fetcher: () => Promise<unknown>) => Promise<unknown>;
+	sharedRun?: (action: string, inputs: Record<string, unknown>) => Promise<any>;
 };
 
 const INERT_VIEWER: WebpageRuntimeViewer = { signedIn: false, id: null, username: null, displayName: null };
@@ -120,7 +123,7 @@ export const queryScopeOf = (search: string): Record<string, string> => {
 	}
 	let count = 0;
 	params.forEach((value, key) => {
-		if (count >= MAX_QUERY_KEYS || !QUERY_KEY_PATTERN.test(key)) return;
+		if (key === 'key' || count >= MAX_QUERY_KEYS || !QUERY_KEY_PATTERN.test(key)) return;
 		out[key] = value.slice(0, MAX_QUERY_VALUE_CHARS);
 		count += 1;
 	});
@@ -133,6 +136,8 @@ export const WebpageRuntimeProvider = ({
 	suiteKey,
 	source,
 	onInstall,
+	shared = false,
+	linkKey,
 	children
 }: {
 	pageId: string | null;
@@ -140,6 +145,8 @@ export const WebpageRuntimeProvider = ({
 	suiteKey: string | null;
 	source: 'user' | 'system' | null;
 	onInstall?: () => Promise<boolean>;
+	shared?: boolean;
+	linkKey?: string;
 	children: React.ReactNode;
 }) => {
 	const user = useCurrentUser();
@@ -160,6 +167,16 @@ export const WebpageRuntimeProvider = ({
 		[user]
 	);
 	const query = React.useMemo(() => queryScopeOf(location.search), [location.search]);
+	const sharedRun = React.useCallback(async (action: string, inputs: Record<string, unknown>) => {
+		await requireThingtimeCapability('api.actions-run', '1.1.0');
+		const response = await fetch('/api/v1/actions/run', {
+			method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ action, inputs, sharedRoot: pageId, ...(linkKey ? { key: linkKey } : {}) })
+		});
+		const data = await response.json();
+		if (!response.ok || !data?.ok) throw new Error(typeof data?.error === 'string' ? data.error : 'Shared control failed');
+		return data;
+	}, [pageId, linkKey]);
 
 	const refresh = React.useCallback(() => setVersion((current) => current + 1), []);
 	const report = React.useCallback((run: Omit<WebpageRuntimeLastRun, 'at'>) => {
@@ -209,12 +226,13 @@ export const WebpageRuntimeProvider = ({
 			refresh,
 			report,
 			install: onInstall ? install : null,
-			load
+			load,
+			sharedRun: shared && pageId ? sharedRun : undefined
 		}),
-		[pageId, pageKey, suiteKey, source, viewer, query, version, last, installing, refresh, report, install, onInstall, load]
+		[pageId, pageKey, suiteKey, source, viewer, query, version, last, installing, refresh, report, install, onInstall, load, shared, sharedRun]
 	);
 
-	return <WebpageRuntimeContext.Provider value={value}>{children}</WebpageRuntimeContext.Provider>;
+	return <WebpageRuntimeContext.Provider value={value}>{shared ? <SharedMediaProvider linkKey={linkKey} sharedRoot={pageId || undefined}>{children}</SharedMediaProvider> : children}</WebpageRuntimeContext.Provider>;
 };
 
 // The localStorage tier for source results — optimistic paint on the next
