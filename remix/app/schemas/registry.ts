@@ -741,7 +741,7 @@ const rootThingSchema: ThingtimeSchema = {
 			required: false,
 			values: [...ATTACHMENT_PURPOSES],
 			system: true,
-			description: 'Server-owned immutable binding domain: post, comment, message, profile, or custom-emoji media.'
+			description: 'Server-owned immutable binding domain: post, comment, message, profile, or custom-emoji media, or a standalone owner-private recording that never binds to a target.'
 		},
 		{
 			name: 'attachmentProfileSlot',
