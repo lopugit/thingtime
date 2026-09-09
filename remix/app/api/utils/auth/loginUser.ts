@@ -3,6 +3,7 @@ import { sendEmailOtp } from './email';
 import { signJwt } from './jwt';
 import { verifyPassword } from './passwords';
 import { createSession } from './sessions';
+import { emitLoginNotification } from '../notifications/notifications';
 import { findUserById, findUserByUsername, PublicUser, toPublicUserWithStorage } from './users';
 
 // Machine-readable failure reason for the 2FA (OTP) step, so the client decides
@@ -19,6 +20,7 @@ export type LoginResult =
 const issueSession = async (user: any): Promise<LoginResult> => {
   const session = await createSession(String(user._id));
   const jwt = await signJwt({ sub: String(user._id), jti: session.jti });
+  await emitLoginNotification(String(user._id));
 	return { ok: true, user: await toPublicUserWithStorage(user), jwt, jti: session.jti };
 };
 
