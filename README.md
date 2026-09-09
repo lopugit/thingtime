@@ -2310,8 +2310,13 @@ for each target and includes all three in manual export. Override
 `LOPU_WIDGET_BUNDLE_IDENTIFIER` and `LOPU_WIDGET_PROVISIONING_PROFILE_SPECIFIER`
 only when your fork's Xcode bundle settings match those values; keep signing
 credentials in the ignored iOS env/Keychain. Audio recovery files stay on-device
-in Files → On My iPhone → Thingtime → Lopu Recordings; they are not automatically
-uploaded attachments. See [voice recovery](iOS/README.md#lopu-voice-recovery).
+in Files → On My iPhone → Thingtime → Lopu Recordings. Build 28 also uploads
+new recordings as owner-private audio Things under `/things`. This requires
+private-upload approval, available account storage, and the selected origin
+advertising `api.attachment-uploads` and `api.attachment-upload-complete` 1.2.0
+in `/.well-known/thingtime-capabilities.json`. Forks use the existing private
+S3 attachment setup; no new credential is needed. Failed uploads remain local
+and retry when Lopu reopens or regains connectivity in the same account. See [voice recovery](iOS/README.md#lopu-voice-recovery).
 
 
 The native iOS app lives in `iOS/` and defaults its embedded `WKWebView` to

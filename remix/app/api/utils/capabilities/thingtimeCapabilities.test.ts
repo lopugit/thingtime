@@ -190,3 +190,14 @@ test('both manifests publish notification history and system notification contra
     assert.equal(apiManifest.features[feature], version);
   }
 });
+
+
+test('native recording uploads negotiate durable private Things before sending bytes', () => {
+  const manifest = thingtimeCapabilityManifest('https://thingtime.com');
+  for (const feature of ['api.attachment-uploads', 'api.attachment-upload-complete']) {
+    assert.equal(manifest.features[feature]?.version, '1.2.0');
+    assert.equal(capabilitySatisfies(manifest.features[feature].version, '1.2.0'), true);
+    assert.equal(capabilitySatisfies('1.1.0', '1.2.0'), false);
+    assert.equal(capabilitySatisfies('2.0.0', '1.2.0'), false);
+  }
+});

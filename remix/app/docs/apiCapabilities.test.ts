@@ -107,9 +107,9 @@ test('capabilities publish the native Apple notification device contract', () =>
 	assert.equal(manifest.features['api.watch-sync'], '1.0.0');
 	assert.equal(manifest.features['api.watch-things'], '1.0.0');
 	assert.equal(manifest.features['api.devices'], '1.9.0');
-	assert.equal(manifest.features['api.attachment-uploads'], '1.1.0');
+	assert.equal(manifest.features['api.attachment-uploads'], '1.2.0');
 	assert.equal(manifest.features['api.attachment-upload-parts'], '1.1.0');
-	assert.equal(manifest.features['api.attachment-upload-complete'], '1.1.0');
+	assert.equal(manifest.features['api.attachment-upload-complete'], '1.2.0');
 });
 
 test('notification contracts publish the history filters and the system family as compatible minors', () => {
