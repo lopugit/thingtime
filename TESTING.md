@@ -6145,3 +6145,15 @@ approval; `access.test.ts` — the reservation matrix) and
 - Re-add the affected app manually only with the owner’s consent. Apple controls its own Quit & Reopen prompt; if absent, use Thingtime’s restart control. Verify live permission checks and a protected operation after restarting.
 
 - Permission recovery follow-up: click Open System Settings for both Accessibility and Screen Recording. Confirm Finder opens the combined App Locations folder, not Contents/Helpers, alongside the correct privacy pane.
+
+## Shared Data Thing template controls
+
+- Open a keyed Data Thing whose private same-author schema contains a button
+  invoking a private action. Logged out, the button must run read-only through
+  the Data Thing root, show its result, and refuse unrelated actions and revoked
+  keys/groups. A shared schema writer cannot insert an unreadable private action.
+- Copy that Data Thing: its schema and control action must receive fresh private
+  identities, and the copied button must reference the copied action. Owning data
+  with someone else's schema must never delegate the viewer's account authority.
+- Verify the detail page at desktop and mobile widths, including the visible
+  control/result and top-to-bottom scrolling. List/grid previews remain inert.

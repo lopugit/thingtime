@@ -41,6 +41,7 @@ export const compositionReferences = (kinds: string[], crystal: Record<string, a
 	};
 	if (kinds.includes('webpage')) blocks(crystal.blocks);
 	if (kinds.includes('component')) { source(crystal.source); render(crystal.render); }
+	if (kinds.includes('schema')) render(crystal.render);
 	if (kinds.includes('action') && Array.isArray(crystal.steps)) {
 		for (const step of crystal.steps) {
 			if (step?.op === 'actions.invoke' || step?.op === 'each') add('action', step.action);

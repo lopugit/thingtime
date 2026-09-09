@@ -30,6 +30,7 @@ export const rewriteComposition = (
 	};
 	if (kinds.includes('webpage')) blocks(crystal.blocks);
 	if (kinds.includes('component')) { render(crystal.render); field(crystal.source, 'action', 'action'); }
+	if (kinds.includes('schema')) render(crystal.render);
 	if (kinds.includes('action')) {
 		for (const step of crystal.steps || []) {
 			if (step.op === 'actions.invoke' || step.op === 'each') field(step, 'action', 'action');
