@@ -1641,6 +1641,15 @@ function createWindow() {
 }
 
 ipcMain.handle('thingtime-desktop:get-info', () => getDesktopInfo());
+ipcMain.handle('thingtime-desktop:get-node-panel-preference', (event, request) => {
+	requireTrustedAiBridgeEvent(event);
+	const store = requireDesktopSettings();
+	return store.enqueue(() => store.nodePanelPreference(request?.accountId));
+});
+ipcMain.handle('thingtime-desktop:set-node-panel-preference', (event, request) => {
+	requireTrustedAiBridgeEvent(event);
+	return requireDesktopSettings().setNodePanelPreference(request);
+});
 ipcMain.handle('thingtime-desktop:get-settings', (event) => {
 	requireTrustedAiBridgeEvent(event);
 	return requireDesktopSettings().snapshot();

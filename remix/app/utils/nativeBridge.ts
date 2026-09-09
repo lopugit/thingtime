@@ -7,6 +7,7 @@ export type ThingtimeBridgeMessage = {
 
 export type ThingtimeNativeBridge = {
   version: string;
+  lopuVoiceVersion?: string;
   platform: 'ios';
   isNativeWebView: true;
   postMessage: (message: ThingtimeBridgeMessage) => void;
@@ -49,4 +50,10 @@ export function postNativeBridgeMessage(message: ThingtimeBridgeMessage) {
   });
 
   return true;
+}
+
+// The general bridge shipped before the native voice controller. Its presence
+// alone must never make the UI claim that an iPhone is recording.
+export function supportsNativeLopuVoice(bridge = getNativeBridge()): boolean {
+  return Boolean(bridge?.isNativeWebView && /^1\.\d+\.\d+$/.test(bridge.lopuVoiceVersion ?? ''));
 }

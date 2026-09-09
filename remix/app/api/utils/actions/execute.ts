@@ -25,6 +25,7 @@ import { newThingDoc } from '../messenger/shared';
 import {
 	ACTION_RESERVED_ID_PREFIX,
 	createThing,
+	canViewInherited,
 	deleteThing,
 	fail,
 	getThing,
@@ -35,6 +36,8 @@ import {
 } from '../things/things';
 import { emitSystemNotification } from '../notifications/notifications';
 import { bindPacks } from './packs/index';
+import type { SharedComposition } from './sharedComposition';
+import { sharedOperationAllowed } from './sharedCompositionCore';
 
 // The Action Thing executor — the run-time half of the bounded-execution
 // contract (save-time lives in registry.ts sanitizeActionCrystal).
@@ -96,6 +99,7 @@ type ActionBudget = {
 	// delegated run (a ttAction click): every action resolved anywhere in this
 	// invocation tree must be one the invoker owns
 	ownedOnly: boolean;
+	shared?: SharedComposition;
 	// expression evaluations left for the whole run (shared like the rest)
 	expressionNodes: { nodes: number };
 };
@@ -162,14 +166,20 @@ const capabilityOf = (capabilities: ActionCapabilityEntry[], capability: string)
 const resolveActionProgram = async (
 	viewer: Viewer,
 	reference: string,
-	options?: { ownedOnly?: boolean }
+	options?: { ownedOnly?: boolean; shared?: SharedComposition; parentId?: string }
 ): Promise<Fail | ActionProgram> => {
 	if (!viewer) return fail(401, 'Running actions requires signing in');
 	const trimmed = typeof reference === 'string' ? reference.trim() : '';
 	if (!trimmed) return fail(400, 'Which action? Pass its id or actionKey');
 
 	let doc: { id: string; crystal: Record<string, unknown> } | null = null;
-	if (options?.ownedOnly) {
+	if (options?.shared) {
+		const included = options.parentId
+			? options.shared.children.get(`${options.parentId}:${trimmed}`)
+			: options.shared.actions.get(trimmed);
+		if (!included) return fail(404, 'This action is not included in the shared app');
+		doc = { id: included.shareId, crystal: included.crystal || {} };
+	} else if (options?.ownedOnly) {
 		const things = await getThingsCollection();
 		const own = await things.findOne({ shareId: trimmed, ownerId: viewer.id, thingtime: 'action' } as any);
 		if (own) doc = { id: own.shareId, crystal: (own.crystal || {}) as Record<string, unknown> };
@@ -502,7 +512,7 @@ const executeProgram = async (
 			// composition, so it resolves the same way the parent did.
 			let child = childProgram;
 			if (!child) {
-				const resolved = await resolveActionProgram(viewer, actionRef, { ownedOnly: budget.ownedOnly });
+				const resolved = await resolveActionProgram(viewer, actionRef, { ownedOnly: budget.ownedOnly, shared: budget.shared, parentId: program.id });
 				if (isFail(resolved)) runError(`Step ${label} invoke failed: ${resolved.error}`);
 				child = resolved as ActionProgram;
 			}
@@ -525,6 +535,9 @@ const executeProgram = async (
 				scope.steps[index] = null;
 				pushTrace(budget, { step: label, op: step.op, ms: Date.now() - startedAt, note: 'skipped' });
 				continue;
+			}
+			if (budget.shared && !sharedOperationAllowed(step.op)) {
+				runError('This control changes saved data. Fork the app to make your own editable copy.');
 			}
 
 			if (step.op === 'return') {
@@ -579,7 +592,10 @@ const executeProgram = async (
 			} else if (step.op === 'things.get') {
 				const id = resolveValue(step.id, scope);
 				if (typeof id !== 'string' || !id.trim()) runError(`Step ${label} id resolved to a non-string`);
-				const got = await getThing(viewer, String(id));
+				const included = budget.shared?.data.get(String(id));
+				const got = included
+					? { ok: true as const, thing: { id: included.shareId, thingtime: included.thingtime, crystal: included.crystal } }
+					: await getThing(viewer, String(id));
 				if (got.ok === false) runError(`Step ${label} get failed: ${got.error}`);
 				const thing = (got as { ok: true; thing: { id: string; thingtime: string[]; crystal: unknown } }).thing;
 				if (!isDataThing(thing.thingtime)) {
@@ -612,7 +628,12 @@ const executeProgram = async (
 				const scopeKind = step.scope === 'public' || step.scope === 'system' ? step.scope : 'own';
 				const clauses: Record<string, unknown>[] = [];
 				if (typeof step.schema === 'string') {
-					const schema = await resolveSchemaRef(viewer, step.schema);
+					// Resolve the schema through this program's freshly authorized
+					// stored edge, without changing the search's account/ACL scope.
+					const included = budget.shared?.references.get(`${program.id}:schema:${step.schema}`);
+					const schema = included
+						? { id: included.shareId, name: typeof included.crystal?.name === 'string' ? included.crystal.name : step.schema }
+						: await resolveSchemaRef(viewer, step.schema);
 					clauses.push({ $or: [{ 'crystal.schemaId': schema.id }, { 'crystal.schema': schema.name }] });
 				}
 				// A scoped things.read capability constrains the QUERY too — a bare
@@ -651,7 +672,7 @@ const executeProgram = async (
 				const sortField = sortSpec ? (sortSpec.field === 'createdAt' || sortSpec.field === 'updatedAt' ? sortSpec.field : `crystal.${sortSpec.field}`) : 'createdAt';
 				const sortDir = sortSpec?.dir === 'asc' ? 1 : -1;
 				const things = await getThingsCollection();
-				const docs = (
+				let docs = (
 					await things
 						.find(filter as any)
 						.sort({ [sortField]: sortDir, shareId: 1 })
@@ -659,6 +680,10 @@ const executeProgram = async (
 						.limit(limit)
 						.toArray()
 				).filter((doc: any) => schemaScopeAllows(readScope, schemaIdentityOf(doc.crystal)));
+				if (budget.shared) {
+					const permissions = await Promise.all(docs.map((doc: any) => canViewInherited(doc, null)));
+					docs = docs.filter((_doc: any, index: number) => permissions[index]);
+				}
 				note = `${docs.length} match${docs.length === 1 ? '' : 'es'}${scopeKind === 'own' ? '' : ` (${scopeKind})`}`;
 				scope.steps[index] = docs.map((doc: any) => ({ id: doc.shareId, crystal: doc.crystal || {}, createdAt: doc.createdAt, ownerId: doc.ownerId }));
 			} else if (step.op === 'things.update') {
@@ -737,7 +762,7 @@ const executeProgram = async (
 				const items = (list as unknown[]).slice(0, max);
 				// resolve the child ONCE; every element still consumes a child
 				// budget slot and runs on the shared envelope
-				const resolved = await resolveActionProgram(viewer, String(step.action), { ownedOnly: budget.ownedOnly });
+				const resolved = await resolveActionProgram(viewer, String(step.action), { ownedOnly: budget.ownedOnly, shared: budget.shared, parentId: program.id });
 				if (isFail(resolved)) runError(`Step ${label} invoke failed: ${resolved.error}`);
 				const child = resolved as ActionProgram;
 				const results: unknown[] = [];
@@ -874,15 +899,19 @@ export const inspectActionProgram = async (viewer: Viewer, reference: string): P
 
 export const runAction = async (
 	viewer: Viewer,
-	request: { action?: unknown; inputs?: unknown; source?: unknown }
+	request: { action?: unknown; inputs?: unknown; source?: unknown },
+	shared?: SharedComposition
 ): Promise<RunActionResult> => {
+	// Shared programs receive neither the author's nor the visitor's private
+	// account authority. Only stored composition reads are added below.
+	if (shared) viewer = { id: '' };
 	if (!viewer) return fail(401, 'Running actions requires signing in');
 	// 'component' = the delegated path (a click inside rendered markup). The
 	// flag only ever NARROWS resolution, so honouring a client-supplied value
 	// is safe: the viewer's own client always sends it, and a caller who omits
 	// it is acting as themselves on their own behalf.
 	const ownedOnly = request.source === 'component';
-	const program = await resolveActionProgram(viewer, typeof request.action === 'string' ? request.action : '', { ownedOnly });
+	const program = await resolveActionProgram(viewer, typeof request.action === 'string' ? request.action : '', { ownedOnly, shared });
 	if (isFail(program)) return program;
 
 	const declaredLimits = (program.crystal.limits || {}) as Record<string, number>;
@@ -918,6 +947,7 @@ export const runAction = async (
 		trace: [],
 		stack: [],
 		ownedOnly,
+		shared,
 		expressionNodes: { nodes: MAX_EXPRESSION_NODES_PER_RUN }
 	};
 
@@ -938,7 +968,7 @@ export const runAction = async (
 	}
 	const durationMs = Date.now() - startedAt.getTime();
 
-	const runId = await writeRunRecord(viewer, program.id, {
+	const runId = shared ? `shared-run-${randomUUID()}` : await writeRunRecord(viewer, program.id, {
 		status,
 		startedAt: startedAt.toISOString(),
 		durationMs,
@@ -951,10 +981,11 @@ export const runAction = async (
 		trace: budget.trace
 	});
 
-	// Save EVERY run, including successful automatic component refreshes.
+	// Save every ordinary run, including successful component refreshes.
 	// Quiet delivery never means missing history. Await the non-throwing writer
-	// so a serverless response cannot cut off the history write.
-	{
+	// so a serverless response cannot cut off the history write. Shared runs
+	// are anonymous, ephemeral interactions and never write account history.
+	if (!shared) {
 		const actionKey =
 			typeof program.crystal.actionKey === 'string' && program.crystal.actionKey.trim() ? program.crystal.actionKey.trim() : program.id;
 		const opsLabel = `${budget.opsUsed} op${budget.opsUsed === 1 ? '' : 's'}`;

@@ -15,6 +15,34 @@ const allowed = async () => ({
 });
 const user = { id: 'user-1', accountKind: 'user' } as any;
 
+test('content authorization preserves the request link key and enriched audience without inventing an owner', async () => {
+	for (const currentUser of [null, user]) {
+		let observed: any;
+		const route = createAttachmentContentLoader({
+			getUser: async () => currentUser,
+			enforceLimit: allowed as any,
+			enrichViewer: async (viewer) => viewer?.id ? { ...viewer, groupIds: new Set(['group-1']) } : viewer,
+			download: async (viewer) => { observed = viewer; return { ok: false, status: 404, error: 'Attachment not found' }; }
+		});
+		const response = await route({ request: new Request('https://thingtime.example/api/v1/attachments/content?id=fixture&key=read-key&sharedRoot=page') });
+		assert.equal(response.status, 404);
+		assert.equal(observed.id, currentUser?.id || '');
+		assert.deepEqual([...observed.linkKeys], ['read-key']);
+		assert.equal(observed.sharedRoot, 'page');
+		assert.equal(observed.groupIds?.has('group-1') || false, !!currentUser);
+		assert.match(response.headers.get('Cache-Control')!, /no-store/);
+	}
+});
+
+test('malformed shared media roots are refused before authentication or storage access', async () => {
+	const route = createAttachmentContentLoader({ getUser: async () => { throw Error('must not authenticate'); } });
+	for (const root of ['', 'a'.repeat(129), '../other']) {
+		const response = await route({ request: new Request(`https://thingtime.example/api/v1/attachments/content?id=fixture&sharedRoot=${encodeURIComponent(root)}`) });
+		assert.equal(response.status, 400);
+		assert.match(response.headers.get('Cache-Control')!, /no-store/);
+	}
+});
+
 const post = (body: unknown, headers: Record<string, string> = {}) =>
 	new Request(endpoint, {
 		method: 'POST',
@@ -93,7 +121,7 @@ test('upload starts require the upload-permission scope matching the purpose', a
 		assert.equal(res.status, 403, `public purpose ${purpose} not gated`);
 		assert.equal((await res.json()).code, 'public_uploads_not_approved');
 	}
-	for (const purpose of ['message', 'profile-avatar', 'profile-banner']) {
+	for (const purpose of ['message', 'profile-avatar', 'profile-banner', 'recording']) {
 		const res = await gated(pending)({ request: post({ purpose }) });
 		assert.equal(res.status, 403, `private purpose ${purpose} not gated`);
 		assert.equal((await res.json()).code, 'private_uploads_not_approved');
@@ -106,15 +134,16 @@ test('upload starts require the upload-permission scope matching the purpose', a
 	assert.equal((await gated(publicOnly)({ request: post({ purpose: 'message' }) })).status, 403);
 	const privateOnly = { id: 'user-priv', accountKind: 'user', publicUploadsEnabled: false, privateUploadsEnabled: true } as any;
 	assert.equal((await gated(privateOnly)({ request: post({ purpose: 'profile-avatar' }) })).status, 200);
+	assert.equal((await gated(privateOnly)({ request: post({ purpose: 'recording' }) })).status, 200);
 	assert.equal((await gated(privateOnly)({ request: post({ purpose: 'comment' }) })).status, 403);
 	const approvedAll = { id: 'user-ok', accountKind: 'user', publicUploadsEnabled: true, privateUploadsEnabled: true } as any;
 	assert.equal((await gated(approvedAll)({ request: post({}) })).status, 200);
 	assert.equal((await gated(approvedAll)({ request: post({ purpose: 'message' }) })).status, 200);
-	assert.equal(serviceCalls, 4);
+	assert.equal(serviceCalls, 5);
 
 	// an unknown purpose reaches the service's own validation (no scope gates it)
 	assert.equal((await gated(pending)({ request: post({ purpose: 'nonsense' }) })).status, 200);
-	assert.equal(serviceCalls, 5);
+	assert.equal(serviceCalls, 6);
 
 	// Lifecycle routes (parts/complete/abort/delete) never opt in, so a
 	// permission flipped off mid-upload can't strand a reserved MPU.
@@ -218,6 +247,7 @@ test('attachment mutation responses preserve bounded authored retry metadata', a
 test('content loader treats service credentials as anonymous and keeps signed redirects private', async () => {
 	let viewer: any = 'unset';
 	const loader = createAttachmentContentLoader({
+		enrichViewer: async (viewer) => viewer,
 		getUser: async () => ({ id: 'service-1', accountKind: 'service' } as any),
 		enforceLimit: allowed as any,
 		download: async (inputViewer) => {
@@ -400,6 +430,7 @@ test('cleanup route fails closed when CRON_SECRET is unavailable', async () => {
 test('cache receipts authorize every request without exposing signed URLs, and reject unsupported previews', async () => {
 	let allowedNow = true;
 	const route = createAttachmentContentLoader({
+		enrichViewer: async (viewer) => viewer,
 		getUser: async () => user,
 		enforceLimit: allowed as any,
 		download: async () =>
@@ -429,6 +460,7 @@ test('conditional byte reuse authorizes before returning a cacheable 304', async
 	let authorized = true;
 	let checks = 0;
 	const route = createAttachmentContentLoader({
+		enrichViewer: async (viewer) => viewer,
 		getUser: async () => user,
 		enforceLimit: allowed as any,
 		download: async () => {
