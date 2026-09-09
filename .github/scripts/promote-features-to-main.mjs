@@ -3830,6 +3830,35 @@ async function selfTest() {
     "unreadable-path",
   );
 
+  // Pin the real premise behind `generated-only`. Excluding generated paths is
+  // a preference in `readPlannedPatch`, not an invariant: a source PR carrying
+  // nothing else still yields a valid promotion patch built from those paths.
+  // If this ever starts failing, the exclusion became an invariant and the
+  // close comment may drop its "intentionally not promoted" wording.
+  const generatedOnlyPlan = readPlannedPatch([{ sha: "c".repeat(40) }], "/nonexistent", {
+    gitRunner: (args) => args.includes("--name-only")
+      ? { ok: true, status: 0, out: "graphify-out/snapshots/v1/aa/graph.json\0remix/CHANGELOG.md\0", err: "" }
+      : { ok: true, status: 0, out: "a".repeat(40), err: "" },
+    commandRunner: (_cmd, args) => args[0] === "patch-id"
+      ? { ok: true, status: 0, out: `${"b".repeat(40)} ${"c".repeat(40)}`, err: "" }
+      : { ok: true, status: 0, out: "diff --git a/graphify-out/x b/graphify-out/x\n", err: "" },
+  });
+  assert.equal(
+    generatedOnlyPlan.ok,
+    true,
+    "a generated-only source PR still yields a promotion patch, so such a promotion is constructible",
+  );
+  assert.deepEqual(generatedOnlyPlan.paths, [
+    "graphify-out/snapshots/v1/aa/graph.json",
+    "remix/CHANGELOG.md",
+  ]);
+  // That promotion is exactly what `generated-only` closes, so the creation
+  // path and the redundancy rule must stay consistent with each other.
+  assert.equal(
+    redundantPromotionDecision(okDiff(generatedOnlyPlan.paths.join("\n"))).reason,
+    "generated-only",
+  );
+
   pathspecAuthorityIntegrationTest(assert);
   orphanedMergeHydrationIntegrationTest(assert);
 
@@ -4370,10 +4399,20 @@ function retargetPass(promotionPrs, results) {
 // ---------------------------------------------------------------------------
 
 // Graphify snapshots and the release changelog are generated follow-ups, not
-// promotion content: `plannedPatch` excludes them from every promotion patch
-// and rejects an otherwise-empty patch, so a promotion is never *created* to
-// deliver only these paths. Every other content decision in this file applies
-// the same exclusion; redundancy detection has to agree with them.
+// promotion content: `readPlannedPatch` drops them from the promotion patch
+// whenever the source PR also carries real files, and every other content
+// decision in this file applies the same exclusion, so redundancy detection
+// has to agree with them.
+//
+// That exclusion is a *preference*, not an invariant. When a source PR carries
+// nothing else, `readPlannedPatch` falls back to promoting the generated paths
+// (`selectedPaths = meaningfulPaths.length > 0 ? meaningfulPaths : paths`), so
+// a promotion carrying only generated paths is constructible — the self-test
+// pins that. Closing one is still correct, because
+// `docs/graphify-content-addressed-snapshots.md` keeps snapshot retention
+// branch-local and a promotion merge rewrites the base's snapshot. But the
+// close comment must not tell that PR its remaining content already reached
+// the base, because it has not: that content is being dropped deliberately.
 function isGeneratedFollowupPath(path) {
   return path.startsWith("graphify-out/") || path === "remix/CHANGELOG.md";
 }
@@ -4417,14 +4456,21 @@ function closeRedundantPass(promotionPrs, results, ghRunner = tryGh) {
       results.closed.push(`(dry-run) would close #${pr.number} (\`${pr.headRefName}\`) — ${state}`);
       continue;
     }
+    // Scope the "already reached" claim to what actually reached the base. In
+    // the generated-only case the remaining paths have *not* landed there and
+    // are being dropped on purpose; saying otherwise would misreport the
+    // release exactly the way a false "will land" claim would.
     const rationale = decision.reason === "empty"
-      ? "so this PR's diff is empty. "
-      : "so this PR no longer changes any promoted source file. Its remaining diff is generated " +
-        "Graphify/changelog output, which is branch-local build state rather than release content — " +
-        `merging it would replace \`${pr.baseRefName}\`'s current snapshot with this branch's. `;
+      ? `these changes have already reached \`${pr.baseRefName}\` ` +
+        `(for example via an omnibus ${CFG.source} → ${CFG.target} merge), ` +
+        "so this PR's diff is empty. "
+      : `every promoted source file here has already reached \`${pr.baseRefName}\` ` +
+        `(for example via an omnibus ${CFG.source} → ${CFG.target} merge). ` +
+        "Its remaining diff is generated Graphify/changelog output, which is branch-local build " +
+        "state rather than release content, so it is intentionally not promoted — merging it " +
+        `would replace \`${pr.baseRefName}\`'s current snapshot with this branch's. `;
     const res = ghRunner(["pr", "close", String(pr.number), ...repoFlag(), "--comment",
-      `🧹 Closing as redundant: these changes have already reached \`${pr.baseRefName}\` ` +
-      `(for example via an omnibus ${CFG.source} → ${CFG.target} merge), ` + rationale +
+      "🧹 Closing as redundant: " + rationale +
       "Reopen if that looks wrong."]);
     if (res.ok) {
       pr.state = "CLOSED";
