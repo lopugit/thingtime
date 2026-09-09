@@ -6156,6 +6156,13 @@ approval; `access.test.ts` — the reservation matrix) and
 
 ## Shared Data Thing template controls
 
+- Shared CSS media: at desktop and mobile widths, verify page/block backgrounds,
+  HTML style URLs, Chakra responsive backgrounds and hover styles render through
+  the keyed root. Inspect linked-text downloads for the same context. External
+  URLs, quoted CSS text and existing independent keys must remain untouched.
+  Revoke the root/group and verify access stops; a shared writer must not be able
+  to insert unreadable private media through CSS or the page background.
+
 - Share an action that searches public Data Things using its included private
   schema. Verify it resolves the schema and returns public results when logged
   out; an own-scope search must not borrow either the author's or a logged-in

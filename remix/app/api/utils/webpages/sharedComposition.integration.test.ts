@@ -43,6 +43,7 @@ test('shared page audience includes its author components, never a foreign priva
 	const owner = await session('owner', process.env.TT_SHARED_OWNER_COOKIE);
 	const stranger = await session('visitor', process.env.TT_SHARED_VISITOR_COOKIE);
 	const created: { id: string; cookie: string }[] = [];
+	const mediaSource = (name: string) => `/api/v1/attachments/content?id=sharing-browser-${name}`;
 	let groupId: string | null = null;
 	const create = async (cookie: string, thingtime: string[], crystal: unknown, acl = ['tt:user']) => {
 		const { response, data } = await request('/api/v1/things', 'POST', { thingtime, crystal, acl }, cookie);
@@ -148,6 +149,7 @@ test('shared page audience includes its author components, never a foreign priva
 			{ tag: 'button', ttAction: sharedAction.id, children: ['Draw'] }, { tag: 'p', children: ['{last.result}'] },
 			...(process.env.TT_SHARED_PLAYWRIGHT_PATH ? [
 				{ tag: 'img', props: { src: '/api/v1/attachments/content?id=sharing-browser-transport', alt: 'Shared media transport' } },
+				{ tag: 'div', props: { style: { backgroundImage: `url(${mediaSource('html-css')})`, height: 20 } }, children: ['HTML background'] },
 				{ tag: 'img', props: { src: 'https://example.invalid/sharing-browser-transport.png', alt: 'External media transport' } }
 			] : [])
 		] } } }, owner)).response.status, 200);
@@ -163,6 +165,18 @@ test('shared page audience includes its author components, never a foreign priva
 			assert.match(response.data.runId, /^shared-run-/);
 		}
 		if (process.env.TT_SHARED_PLAYWRIGHT_PATH) {
+			const chakraMedia = await create(owner, ['component'], { name: 'Shared CSS card', componentKey: `${key}-css`, version: 1, render: {
+				type: 'chakra', chakra: 'Box', props: { 'data-testid': 'shared-chakra-css', backgroundImage: { base: `url(${mediaSource('chakra-css')})` }, _hover: { backgroundImage: `url(${mediaSource('hover-css')})` }, minHeight: 20 }, children: ['Chakra background']
+			} });
+			const cssPage = await request('/api/v1/things', 'PATCH', { id: page.id, crystal: {
+				previewBg: `url(${mediaSource('page-css')})`,
+				blocks: [...page.crystal.blocks,
+					{ id: 'css-block', type: 'text', text: 'Block background', css: { 'background-image': `url(${mediaSource('block-css')})` } },
+					{ id: 'css-chakra', type: 'component', component: chakraMedia.id },
+					{ id: 'media-link', type: 'text', text: 'Shared media download', href: mediaSource('download') }
+				]
+			} }, owner);
+			assert.equal(cssPage.response.status, 200, cssPage.data.error);
 			const { chromium } = await import(process.env.TT_SHARED_PLAYWRIGHT_PATH);
 			const browser = await chromium.launch({ headless: true, executablePath: process.env.TT_SHARED_CHROME_PATH });
 			const watchFailures = (tab: any) => {
@@ -185,12 +199,15 @@ test('shared page audience includes its author components, never a foreign priva
 					// uses the real API. Attachment ACLs have separate service/route tests.
 					const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l1kAAAAASUVORK5CYII=', 'base64');
 					let mediaReads = 0;
+					const cssReads = new Set<string>();
 					await tab.route('**/api/v1/attachments/content?*', async (route: any) => {
 						const url = new URL(route.request().url());
-						if (url.searchParams.get('id') !== 'sharing-browser-transport') return route.continue();
+						const id = url.searchParams.get('id') || '';
+						if (!id.startsWith('sharing-browser-')) return route.continue();
 						assert.equal(url.searchParams.get('key'), page.linkKey);
 						assert.equal(url.searchParams.get('sharedRoot'), page.id);
 						mediaReads++;
+						cssReads.add(id);
 						await route.fulfill({ contentType: 'image/png', body: pixel });
 					});
 					await tab.route('https://example.invalid/sharing-browser-transport.png*', async (route: any) => {
@@ -215,6 +232,14 @@ test('shared page audience includes its author components, never a foreign priva
 						return !!img?.naturalWidth;
 					});
 					assert.ok(mediaReads > 0);
+					await tab.getByTestId('shared-chakra-css').hover();
+					for (const name of ['html-css', 'chakra-css', 'page-css', 'block-css', 'hover-css']) {
+						if (!cssReads.has(`sharing-browser-${name}`)) await tab.waitForResponse((response: any) => new URL(response.url()).searchParams.get('id') === `sharing-browser-${name}`, { timeout: 15000 });
+						assert.ok(cssReads.has(`sharing-browser-${name}`), name);
+					}
+					const download = new URL(await tab.getByRole('link', { name: 'Shared media download' }).getAttribute('href'), base);
+					assert.equal(download.searchParams.get('key'), page.linkKey);
+					assert.equal(download.searchParams.get('sharedRoot'), page.id);
 					assert.ok(await tab.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
 					if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-${width}-top.png` });
 					await tab.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
@@ -255,7 +280,7 @@ test('shared page audience includes its author components, never a foreign priva
 				const browserEvents = watchFailures(tab);
 				// These are transport fixtures, not real stored attachments. Keep the
 				// authenticated copy check independent of DNS/failed image downloads.
-				await tab.route('**/api/v1/attachments/content?*', (route: any) => new URL(route.request().url()).searchParams.get('id') === 'sharing-browser-transport' ? route.fulfill({ status: 204 }) : route.continue());
+				await tab.route('**/api/v1/attachments/content?*', (route: any) => new URL(route.request().url()).searchParams.get('id')?.startsWith('sharing-browser-') ? route.fulfill({ status: 204 }) : route.continue());
 				await tab.route('https://example.invalid/sharing-browser-transport.png*', (route: any) => route.fulfill({ status: 204 }));
 				let observedCopy: any;
 				let copyRequestSeen = false;
@@ -352,6 +377,13 @@ test('shared page audience includes its author components, never a foreign priva
 		assert.equal(injectedSchemaAction.response.status, 403, 'A schema writer cannot publish an unrelated private action through a shared Data Thing');
 		const injectedMedia = await request('/api/v1/things', 'PATCH', { id: page.id, crystal: { blocks: [{ id: 'private-media', type: 'media', media: 'image', src: '/api/v1/attachments/content?id=guessed-private-attachment' }] } }, stranger);
 		assert.equal(injectedMedia.response.status, 403, 'A shared writer cannot add a media reference they cannot independently read');
+		for (const crystal of [
+			{ previewBg: 'url(/api/v1/attachments/content?id=guessed-private-css)' },
+			{ blocks: [{ id: 'private-css', type: 'text', text: 'No access', css: { background: 'url(/api/v1/attachments/content?id=guessed-private-css)' } }] }
+		]) {
+			const injectedCss = await request('/api/v1/things', 'PATCH', { id: page.id, crystal }, stranger);
+			assert.equal(injectedCss.response.status, 403, 'Shared writers cannot publish private media through CSS');
+		}
 		for (const ref of [untouched.id, `${key}-unrelated`]) {
 			const refused = await request('/api/v1/things', 'PATCH', { id: page.id, crystal: { blocks: [{ id: 'stolen', type: 'component', component: ref }] } }, stranger);
 			assert.equal(refused.response.status, 403, 'A shared writer must not publish an unrelated private dependency');

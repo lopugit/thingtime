@@ -18,6 +18,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Shared CSS media now carries the root audience through page/block backgrounds,
+  HTML styles and Chakra responsive/pseudo styles. A shared parser recognizes
+  literal URL/image-set references without granting quoted text or external
+  URLs; shared writers cannot insert unreadable private CSS media. Linked text
+  downloads use the same context. Publish attachment-content 1.3.0 and require it
+  before shared media renders. Rich HTML/argument dependency discovery and
+  independent protected-upload copying remain separate follow-ups.
+  — Codex (AI), 2026-09-09
+
 - Keep Commander's display-name prefix tier reachable for queries that span a space ("the lopu"), which previously matched no single split word and let a matching Thing title outrank the person. — Lopu (AI), 2026-09-09
 
 - Include schema-template actions in shared-root dependency resolution and
