@@ -1121,6 +1121,7 @@ async function offerPermissionRestart() {
 	permissionRecoveryPending = false;
 	permissionRecoveryAway = false;
 	permissionRestartPrompt = true;
+	let restarting = false;
 	try {
 		const { response } = await dialog.showMessageBox(mainWindow || undefined, {
 			type: 'info', title: 'Thingtime permission recovery',
@@ -1128,14 +1129,18 @@ async function offerPermissionRestart() {
 			detail: 'If you removed and re-added Thingtime Node in System Settings, restart it to apply the change. macOS controls its own restart prompts and may not show one. Pairing and settings are kept. For other Thingtime apps, quit and reopen the app you changed.',
 			buttons: ['Later', 'Restart Node Now'], defaultId: 0, cancelId: 0
 		});
-		if (response === 1) {
-			await controlConfiguredNode('restart');
-		}
+		if (response !== 1) return;
+		restarting = true;
+		await controlConfiguredNode('restart');
 	} catch (error) {
+		// Only a failed restart is worth reporting, and only the restart may claim
+		// it failed. A prompt that never appeared changed nothing, and this runs
+		// from the focus listener, so the report itself must not reject.
+		if (!restarting) return;
 		await dialog.showMessageBox(mainWindow || undefined, {
 			type: 'error', title: 'Thingtime Node', message: 'The node could not restart.',
 			detail: error instanceof Error ? error.message : 'Try Restart node in Desktop settings.'
-		});
+		}).catch(() => {});
 	} finally { permissionRestartPrompt = false; }
 }
 

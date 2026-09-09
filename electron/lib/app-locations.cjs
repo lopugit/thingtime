@@ -21,23 +21,34 @@ async function bundleIdentifier(bundle) {
 
 // Current Desktop and its bundled Node win over older standalone installations.
 async function prepareAppLocations({ root, outerApp, helperApp, applicationDirs, identify = bundleIdentifier }) {
+	const wanted = Object.keys(APPLICATIONS).length;
 	const selected = new Map();
-	const consider = async (candidate) => {
+	// `neighbour` marks a bundle we merely stumbled across while scanning a
+	// shared Applications folder: one unreadable or looping third-party app there
+	// must not fail the recovery flow the user opened because something is broken.
+	const consider = async (candidate, neighbour = false) => {
 		try {
 			const resolved = await fs.realpath(candidate);
 			if (!(await fs.stat(resolved)).isDirectory()) return;
 			const id = await identify(resolved);
 			if (Object.hasOwn(APPLICATIONS, id) && !selected.has(id)) selected.set(id, resolved);
-		} catch (error) { if (error.code !== 'ENOENT') throw error; }
+		} catch (error) { if (!neighbour && error.code !== 'ENOENT') throw error; }
 	};
 	for (const candidate of [outerApp, helperApp].filter(Boolean)) await consider(candidate);
 	for (const directory of applicationDirs) {
+		if (selected.size === wanted) break;
 		let entries;
 		try { entries = await fs.readdir(directory); } catch (error) { if (error.code === 'ENOENT') continue; throw error; }
 		const canonicalNames = new Set(Object.values(APPLICATIONS));
 		const candidates = entries.filter((name) => !name.startsWith('.') && name.endsWith('.app'));
 		candidates.sort((a, b) => Number(canonicalNames.has(b)) - Number(canonicalNames.has(a)) || a.localeCompare(b));
-		for (const name of candidates) await consider(path.join(directory, name));
+		// Reading one Info.plist costs a plutil process, so stop once every known
+		// bundle is found; canonical names sort first, which keeps the ordinary
+		// install at a handful of reads instead of one per installed app.
+		for (const name of candidates) {
+			if (selected.size === wanted) break;
+			await consider(path.join(directory, name), true);
+		}
 	}
 	if (!selected.size) throw new Error('No installed Thingtime apps were found.');
 	await fs.mkdir(root, { recursive: true, mode: 0o700 });
