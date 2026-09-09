@@ -2173,6 +2173,10 @@ email whose link points at the attacker.
 
 ## Drawer navigation & settings (`remix/app/components/Nav/Drawer/`)
 
+- [ ] Settings popup and `/settings/:tab` show the same controls in every category; Profile is the default, Admin is restricted to admins, and direct links/reload/back preserve the selected tab. Check legacy `#secure-vault` and `#lopu-credits` links, modal close/Escape, and Open settings page at desktop and 390px. Scroll long categories to the bottom.
+- [ ] On a paired healthy Mac, dismiss the Things connection panel, reload, and confirm it stays hidden. Settings → Things must still show the panel and restore switch. Stop/disconnect the node or fail a permission check: the panel returns automatically. Switching accounts must not inherit another account’s dismissal. The real Desktop adapter’s unknown transport status must still allow dismissal of a healthy local node; an explicit offline result must reveal it.
+
+
 - [ ] Clicking a NAVIGATING drawer item (top-level or sub-item) closes the
       drawer after navigating on BOTH desktop and mobile; items without a
       destination only select their submenu and keep it open. Search keeps
@@ -6140,3 +6144,6 @@ approval; `access.test.ts` — the reservation matrix) and
 - Re-add the affected app manually only with the owner’s consent. Apple controls its own Quit & Reopen prompt; if absent, use Thingtime’s restart control. Verify live permission checks and a protected operation after restarting.
 
 - Permission recovery follow-up: click Open System Settings for both Accessibility and Screen Recording. Confirm Finder opens the combined App Locations folder, not Contents/Helpers, alongside the correct privacy pane.
+
+- Shared settings / Desktop persistence: dismiss a healthy Things node panel, quit and reopen Desktop (which changes the local port), and verify it remains hidden. Settings → Things must still show the card and its restore switch. Restore the switch, then confirm the Things page shows the panel again.
+- Shared settings / observed status: after the Mac reports connected with access allowed, switch between Things, the popup Things tab, and Open settings page. Keep the last observed status visible during the background check; do not briefly show Not running or a new permission denial. Pairing challenges and pending actions must not carry between views.
