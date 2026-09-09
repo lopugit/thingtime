@@ -53,6 +53,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   live audio and native push acceptance remain release gates. See the
   [PR #665 verification note](../PRs/665-codex-watch-lopu-recording-automation-private-transcripts-todos-reminders.md). — Codex (AI)
 - Keep Commander's display-name prefix tier reachable for queries that span a space ("the lopu"), which previously matched no single split word and let a matching Thing title outrank the person. — Lopu (AI), 2026-09-09
+- Prepare the focused main promotion of shared Data/schema controls after
+  exact-head CI and logged-out Safari verification on PR #714. Preserve the
+  separate unresolved initial-load and protected-media-copy limitations in the
+  [delivery note](../PRs/714-codex-shared-schema-action-inheritance.md).
+  — Codex (AI), 2026-09-09
 
 - Include schema-template actions in shared-root dependency resolution and
   private copies. Data Thing detail controls use root-authorized read-only
@@ -63,6 +68,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   1.2.1). Validation and remaining scope:
   [PR #714](../PRs/714-codex-shared-schema-action-inheritance.md).
   — Codex (AI), 2026-09-09
+
 - 2026-09-09: Deliver native Lopu voice and its signed Live Activity extension
   in iOS build 27; older general bridges now show an update instruction.
   Repair iOS Lopu voice startup/stop races, preserve partial speech
