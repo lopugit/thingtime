@@ -259,12 +259,18 @@ export type ThingtimeDesktopBridge = {
 	checkForUpdates?: () => Promise<ThingtimeDesktopUpdateInfo>;
 	downloadUpdateBundle?: () => Promise<ThingtimeDesktopUpdateInfo>;
 	listUpdateCatalog?: () => Promise<ThingtimeDesktopReleaseCatalog>;
-	cacheReleaseBundle?: (request: { releaseId: string }) => Promise<{ cachedBundle: ThingtimeDesktopCachedBundle; catalog: ThingtimeDesktopReleaseCatalog }>;
-	installCachedRelease?: (request: { key: string }) => Promise<{ cachedBundle: ThingtimeDesktopCachedBundle; message: string; status: 'relaunching' }>;
+	cacheReleaseBundle?: (request: {
+		releaseId: string;
+	}) => Promise<{ cachedBundle: ThingtimeDesktopCachedBundle; catalog: ThingtimeDesktopReleaseCatalog }>;
+	installCachedRelease?: (request: {
+		key: string;
+	}) => Promise<{ cachedBundle: ThingtimeDesktopCachedBundle; message: string; status: 'relaunching' }>;
 	launchCachedRelease?: (request: { key: string }) => Promise<{ cachedBundle: ThingtimeDesktopCachedBundle; message: string; status: 'relaunching' }>;
 	removeCachedRelease?: (request: { key: string }) => Promise<ThingtimeDesktopReleaseCatalog>;
 	revealUpdateCache?: () => Promise<{ cachePath: string }>;
 	getInfo?: () => Promise<ThingtimeDesktopInfo>;
+	getNodePanelPreference?: (request: { accountId: string }) => Promise<{ scope: string; dismissed: boolean }>;
+	setNodePanelPreference?: (request: { accountId: string; scope: string; dismissed: boolean }) => Promise<{ scope: string; dismissed: boolean }>;
 	getDesktopSettings?: () => Promise<ThingtimeDesktopSettings>;
 	addEndpoint?: (request: { label: string; url: string }) => Promise<ThingtimeDesktopSettings>;
 	removeEndpoint?: (request: { endpointId: string }) => Promise<ThingtimeDesktopSettings>;
