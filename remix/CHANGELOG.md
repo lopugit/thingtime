@@ -18,6 +18,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Keep Commander's display-name prefix tier reachable for queries that span a space ("the lopu"), which previously matched no single split word and let a matching Thing title outrank the person. — Lopu (AI), 2026-09-09
+
 - 2026-09-09: Shared pages resolve author-owned embedded components through the
   root audience, including anonymous link readers and custom groups; preserve
   standalone privacy and prevent shared editors adding unrelated private

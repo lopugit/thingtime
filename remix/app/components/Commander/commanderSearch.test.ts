@@ -148,6 +148,31 @@ test('Commander ranks person intent tiers ahead of an exact Thing title', () => 
 	assert.deepEqual(rows.map((row) => row.id), ['prefix-user', 'display-prefix-user', 'exact-title', 'generic-text']);
 });
 
+test('Commander keeps multi-word display-name prefixes above matching Thing titles', () => {
+	const rows = commanderSearchResults({
+		query: 'the lopu',
+		things: [
+			{
+				id: 'title-prefix',
+				thingtime: ['data'],
+				author,
+				visibility: 'public',
+				acl: ['tt:all'],
+				targetId: null,
+				crystal: { name: 'The Lopu Group Notes' },
+				tags: [],
+				createdAt: '2026-09-01T00:00:00.000Z',
+				updatedAt: '2026-09-01T00:00:00.000Z'
+			}
+		],
+		people: [{ id: 'display-prefix-user', username: 'nik', displayName: 'The Lopu group', bio: null, avatarUrl: null }]
+	});
+
+	// A query spanning a space matches no single split word, so the display-name
+	// tier has to fall back to the whole-string prefix or the Thing title wins.
+	assert.deepEqual(rows.map((row) => row.id), ['display-prefix-user', 'title-prefix']);
+});
+
 test('Thing detail paths are canonical and URL-safe', () => {
 	assert.equal(thingDetailPath('hello/world ?'), '/thing/hello%2Fworld%20%3F');
 });
