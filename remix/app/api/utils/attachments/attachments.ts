@@ -15,6 +15,7 @@ import {
 	type AttachmentPublicMetadata
 } from './attachmentCore';
 import { canViewHomeAttachmentTarget, type AttachmentAccessViewer } from './attachmentAccess';
+import { canViewSharedCompositionAttachment } from '../actions/sharedComposition';
 import {
 	AttachmentStoreConflictError,
 	ATTACHMENT_DELETING_RETRY_DELAY_MS,
@@ -85,6 +86,7 @@ type AttachmentServiceDependencies = {
 	uuid: () => string;
 	customMongoActive: () => boolean;
 	canViewTarget: (viewer: AttachmentViewer, attachment: AttachmentDoc) => Promise<boolean>;
+	canViewSharedTarget: typeof canViewSharedCompositionAttachment;
 	clock: () => number;
 	// Fire-and-forget NSFW/TOS analysis kickoff after markReady; optional so
 	// unit tests that stub the store never trigger network analysis.
@@ -259,6 +261,7 @@ const defaultDependencies: AttachmentServiceDependencies = {
 	uuid: randomUUID,
 	customMongoActive: isCustomMongoEndpointActive,
 	canViewTarget: canViewHomeAttachmentTarget,
+	canViewSharedTarget: (viewer, attachment, rootId) => canViewSharedCompositionAttachment(viewer, attachment, rootId),
 	clock: Date.now,
 	queueModeration: queueAttachmentModeration
 };
@@ -1242,8 +1245,9 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			// exact user-slot reference are protected home identity data, so the lean
 			// home-pinned helper remains authoritative under a custom post data plane.
 			if (dependencies.customMongoActive() && doc.attachmentPurpose !== 'profile') return fail(404, 'Attachment not found');
-			const allowed =
-				doc.attachmentPurpose === 'profile' && doc.targetId
+			const allowed = viewer?.sharedRoot
+				? await dependencies.canViewSharedTarget(viewer, doc, viewer.sharedRoot)
+				: doc.attachmentPurpose === 'profile' && doc.targetId
 					? await dependencies.canViewTarget(viewer, doc)
 					: viewer?.id === doc.ownerId || (!!doc.targetId && (await dependencies.canViewTarget(viewer, doc)));
 			if (!allowed) return fail(404, 'Attachment not found');

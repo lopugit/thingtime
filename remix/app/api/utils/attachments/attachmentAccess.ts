@@ -2,10 +2,11 @@ import { ObjectId } from 'mongodb';
 
 import { getHomeThingsCollection, getUsersCollection } from '../mongodb/collections';
 import { relationshipLookupFilter } from '../mongodb/relationshipLookup';
-import { ACL_ALL, ACL_INHERIT, ACL_OWNER, aclAllows, aclFromVisibility, type ThingVisibility } from '../../../schemas/registry';
+import { ACL_ALL, ACL_INHERIT, ACL_OWNER, aclFromVisibility, type ThingVisibility } from '../../../schemas/registry';
+import { canView, type ThingDoc, type Viewer } from '../things/things';
 import type { AttachmentPurpose, ProfileAttachmentSlot } from './attachmentCore';
 
-export type AttachmentAccessViewer = { id: string; username?: string | null; isAdmin?: boolean } | null;
+export type AttachmentAccessViewer = (NonNullable<Viewer> & { isAdmin?: boolean; sharedRoot?: string }) | null;
 
 type AttachmentTargetAclDoc = {
 	shareId: string;
@@ -14,6 +15,7 @@ type AttachmentTargetAclDoc = {
 	targetId?: unknown;
 	acl?: unknown;
 	visibility?: ThingVisibility;
+	linkKey?: string | null;
 };
 
 export type AttachmentAccessDocument = {
@@ -47,13 +49,12 @@ export const attachmentTargetAclAllows = (doc: AttachmentTargetAclDoc | null, vi
 	) {
 		return false;
 	}
-	if (viewer?.id === doc.ownerId) return true;
 	const acl =
 		Array.isArray(doc.acl) && doc.acl.length && doc.acl.every((entry) => typeof entry === 'string')
 			? (doc.acl as string[])
 			: aclFromVisibility(doc.visibility) || [ACL_OWNER];
 	if (acl.includes(ACL_INHERIT)) return false;
-	return aclAllows(acl, viewer, doc.ownerId);
+	return canView({ ...doc, acl } as ThingDoc, viewer);
 };
 
 export const profileAttachmentTargetAllows = (attachment: AttachmentAccessDocument, target: ProfileAttachmentTargetDoc | null): boolean => {
@@ -99,13 +100,12 @@ const exactThingtime = (value: unknown, expected: readonly string[]): boolean =>
 const attachmentRootAclAllows = (doc: AttachmentTargetAclDoc | null, viewer: AttachmentAccessViewer): boolean => {
 	if (!doc || !doc.shareId || !doc.ownerId || !Array.isArray(doc.thingtime) || !doc.thingtime.length) return false;
 	if (doc.targetId !== undefined && doc.targetId !== null) return false;
-	if (viewer?.id === doc.ownerId) return true;
 	const acl =
 		Array.isArray(doc.acl) && doc.acl.length && doc.acl.every((entry) => typeof entry === 'string')
 			? (doc.acl as string[])
 			: aclFromVisibility(doc.visibility) || [ACL_OWNER];
 	if (acl.includes(ACL_INHERIT)) return false;
-	return aclAllows(acl, viewer, doc.ownerId);
+	return canView({ ...doc, acl } as ThingDoc, viewer);
 };
 
 const canViewCommentAttachment = async (
@@ -120,7 +120,7 @@ const canViewCommentAttachment = async (
 		if (visited.has(targetId)) return false;
 		visited.add(targetId);
 		const target = (await things.findOne({ shareId: targetId } as any, {
-			projection: { shareId: 1, ownerId: 1, thingtime: 1, targetId: 1, acl: 1, visibility: 1 }
+			projection: { shareId: 1, ownerId: 1, thingtime: 1, targetId: 1, acl: 1, visibility: 1, linkKey: 1, moderation: 1, subspacePrivate: 1, 'crystal.subspaceId': 1 }
 		})) as AttachmentTargetAclDoc | null;
 		if (!target) return false;
 		const isComment = exactThingtime(target.thingtime, ['comment']) || exactThingtime(target.thingtime, ['post', 'comment']);
@@ -263,7 +263,7 @@ export const createCanViewHomeAttachmentTarget = (overrides: Partial<AttachmentT
 		const target = (await things.findOne(
 			{ shareId: targetId, thingtime: { $in: ['post', 'webpage'] }, targetId: null } as any,
 			{
-				projection: { shareId: 1, ownerId: 1, thingtime: 1, targetId: 1, acl: 1, visibility: 1 }
+				projection: { shareId: 1, ownerId: 1, thingtime: 1, targetId: 1, acl: 1, visibility: 1, linkKey: 1, moderation: 1, subspacePrivate: 1, 'crystal.subspaceId': 1 }
 			}
 		)) as AttachmentTargetAclDoc | null;
 		return attachmentTargetAclAllows(target, viewer);

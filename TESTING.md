@@ -5400,6 +5400,67 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       eyebrow + rainbow/ink header — no raw Chakra Container/Badge dashboards.
 - [ ] /builder lists the signed-in user's webpage things; New page ✨ creates a
       private page and opens the canvas; signed-out users get the quiet card.
+- [ ] Shared composition inheritance: an anonymous valid-key reader sees the
+      author's component inside nested containers, not a visitor's same-key
+      component. Wrong/revoked links and removed group memberships fail closed.
+      Public roots include private author components without disclosing their
+      standalone link keys. Foreign private components remain inaccessible;
+      shared writers cannot add guessed private author refs (by id or key).
+      Run the real-API fixture with `TT_SHARED_TEST_URL=http://127.0.0.1:<port>
+      pnpm --dir remix run test:webpages`; it creates test accounts through the
+      API and deletes its exact test Things/groups. Existing test sessions may
+      be supplied through `TT_SHARED_OWNER_COOKIE`/`TT_SHARED_VISITOR_COOKIE`.
+- [ ] A signed-out shared control runs its included action and child action;
+      invalid/revoked root keys and unrelated action IDs are refused. Shared
+      runs can read explicitly included data but cannot create/update/delete
+      saved data, including when the caller also happens to be the owner.
+      Copy to my Builder/Things creates private independently editable parts,
+      rewrites nested action/component references, and leaves the original
+      unchanged. Repeat the control/copy checks at desktop and mobile widths.
+      The opt-in API fixture also accepts `TT_SHARED_PLAYWRIGHT_PATH` (an
+      installed Playwright module), `TT_SHARED_CHROME_PATH`, and
+      `TT_SHARED_SCREENSHOT_DIR` for 1440px/390px anonymous browser proof.
+      Set `TT_SHARED_SESSION_CACHE` to an ignored local temporary file to
+      reuse generated test sessions across runs instead of exhausting the
+      signup budget; that file contains test credentials and must never be
+      published. The fixture writes it with owner-only file permissions.
+- [ ] Hidden-link media: page/post-bound attachments accept the current root
+      key and group audience; missing/wrong/revoked keys and removed group
+      membership fail closed, including cache validation. Shared HTML, Chakra,
+      native media blocks, attachment details, audio and lightboxes forward the
+      key only to the exact relative first-party attachment content endpoint.
+      External URLs never receive it; independently keyed URLs keep their own
+      key. Negotiate `api.attachment-content >= 1.1.1` before attaching a key.
+      The shared browser fixture stubs image bytes to verify key transport;
+      attachment service/route tests cover authorization separately. Do not
+      treat that fixture as proof of real S3 bytes or independent media copies.
+- [ ] Copy a shared standalone Data Thing with extended content and a private
+      schema definition. The copy keeps its extended content, gets its own
+      private schema/id/name pair, exposes no original link key, and is editable
+      only by its new owner. The original stays unchanged. Wrong root keys fail.
+      Account/credential, subspace machinery, relationship and app-storage rows
+      have no copy control. At 1440px/390px, Copy to my Things fits the viewport
+      and signed-out users reach sign-in. Wait for the copy control to mount
+      before starting the response timer; byte-transport fixtures must not make
+      real requests to deliberately invalid image URLs in the signed-in test.
+- [ ] Open a shared Data Thing whose rendering schema is private: the schema
+      template renders at desktop/mobile widths through `id` + `sharedRoot`
+      after negotiating `api.things >= 1.6.0`. Reading the schema independently
+      or an unrelated id through the root still fails. Wrong/retired keys and
+      removed group memberships fail on contextual reads. App tokens cannot
+      use this first-party mode to escape their namespace. Every response is
+      private/no-store; shared templates never enter a schema-only local cache.
+- [ ] Nested media inheritance: a literal first-party attachment URL in an
+      included author component/schema or native media block can use the root
+      audience even when its bound post is private. Unrelated private media,
+      foreign private media and author media referenced only by a foreign
+      component gain no access. Public profile/comment media retains its
+      independent access. Ready state, moderation, object versions and home
+      storage remain enforced. Revoked keys/group access fail on every read,
+      including cached-byte validation. Shared editors cannot inject new
+      private media refs. Negotiate `api.attachment-content >= 1.2.0`; forward
+      `sharedRoot` plus the key only to the exact first-party content endpoint.
+      Explicit audio downloads use the same context without persisting its URL.
 - [ ] Canvas: hovering a block draws its dashed boundary + label chip; nested
       sub-blocks highlight innermost-wins; clicking selects (solid outline)
       and opens the inspector in the right drawer.
@@ -5415,7 +5476,8 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       refused.
 - [ ] Save on a fresh page creates the thing (private by default); the Public
       toggle publishes (acl tt:all) and /p/<id> renders it; anonymous viewers
-      see public pages read-only (ttActions inert — owner-only interactivity).
+      see public pages read-only while included controls can run in the
+      root-authorized read-only action mode (no saved-data mutations).
 - [ ] Site edit mode: ✏️ pill (signed-in only, hidden on /builder, /p/*,
       /authorize) enters in-place editing of the current route; the live app
       screen renders as the locked 🔒 native block; Save my version forks a

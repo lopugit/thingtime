@@ -1,4 +1,5 @@
 import React from 'react';
+import { useSharedMediaUrl } from '../Sharing/SharedMedia';
 import {
 	Alert,
 	AlertDescription,
@@ -231,7 +232,7 @@ export const isChakraThingNode = (value: unknown): value is ChakraThingNode =>
 	!Array.isArray(value) &&
 	(typeof (value as { chakra?: unknown }).chakra === 'string' || (value as { type?: unknown }).type === 'chakra');
 
-type RenderState = { count: number };
+type RenderState = { count: number; mediaUrl: (url: string) => string };
 
 const renderNode = (node: ChakraThingNode, key: number, depth: number, state: RenderState): React.ReactNode => {
 	if (state.count >= MAX_NODES || depth > MAX_DEPTH) return null;
@@ -256,6 +257,7 @@ const renderNode = (node: ChakraThingNode, key: number, depth: number, state: Re
 	}
 
 	const props = sanitizeProps(node.props);
+	for (const field of URL_PROPS) if (typeof props[field] === 'string') props[field] = state.mediaUrl(props[field]);
 
 	if (CHILDLESS_COMPONENTS.has(name)) {
 		return <Component {...props} key={key} />;
@@ -280,6 +282,6 @@ const renderChildren = (
 };
 
 export const ChakraThingRenderer = ({ node }: { node: ChakraThingNode }) => {
-	const state: RenderState = { count: 0 };
+	const state: RenderState = { count: 0, mediaUrl: useSharedMediaUrl() };
 	return <>{renderNode(node, 0, 0, state)}</>;
 };
