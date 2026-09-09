@@ -27,6 +27,38 @@ const primaryKind = (thing: SearchThing): string => thing.thingtime.find((kind) 
 
 export const thingDetailPath = (id: string): string => `/thing/${encodeURIComponent(id)}`;
 
+const normalizedQuery = (value: string | undefined): string => (value || '').trim().replace(/^@+/, '').toLowerCase();
+
+const normalizedText = (value: unknown): string => (typeof value === 'string' ? value.trim().toLowerCase() : '');
+
+const startsWithWord = (value: string, query: string): boolean =>
+	value.split(/[^\p{L}\p{N}_-]+/u).some((word) => word.startsWith(query));
+
+// Commander mixes two different search backends: Mongo text-ranked Things and
+// regex-ranked public profiles. Their raw scores are not comparable, so fuse
+// them through product intent tiers instead. Within a tier, the stable source
+// order is retained (Thing text relevance or profile API ordering).
+const personIntentScore = (person: SearchPerson, query: string): number => {
+	if (!query) return 0;
+	const username = normalizedText(person.username);
+	const displayName = normalizedText(person.displayName);
+	if (username === query) return 10_000;
+	if (displayName === query) return 9_500;
+	if (username.startsWith(query)) return 9_000;
+	if (startsWithWord(displayName, query)) return 8_500;
+	return 6_000;
+};
+
+const thingIntentScore = (thing: SearchThing, query: string): number => {
+	if (!query) return 0;
+	const title = normalizedText(firstReadable(thing.crystal?.name, thing.crystal?.title));
+	if (title === query) return 8_000;
+	if (title.startsWith(query) || startsWithWord(title, query)) return 7_000;
+	// Mongo's textScore remains useful only within the Things backend; never
+	// compare it directly to a profile match. Its API ordering is the tie-break.
+	return 1_000;
+};
+
 // Enter keeps explicit setter commands ("path = value") on the command path,
 // but ordinary text defaults to the pinned full-search row when no suggestion
 // has been arrowed/hovered. Keeping this pure makes the keyboard contract easy
@@ -43,6 +75,7 @@ export const commanderEnterSuggestionIndex = (input: {
 };
 
 export const commanderSearchResults = (input: {
+	query?: string;
 	things?: SearchThing[];
 	posts?: Record<string, SearchPost>;
 	people?: SearchPerson[];
@@ -54,7 +87,9 @@ export const commanderSearchResults = (input: {
 	const people = input.people || [];
 	const thingLimit = input.thingLimit ?? 8;
 	const peopleLimit = input.peopleLimit ?? 4;
-	const rows: CommanderSearchResult[] = [];
+	const query = normalizedQuery(input.query);
+	const ranked: Array<{ row: CommanderSearchResult; score: number; sourceOrder: number }> = [];
+	let sourceOrder = 0;
 
 	for (const thing of things.slice(0, thingLimit)) {
 		const post = posts[thing.id];
@@ -65,29 +100,37 @@ export const commanderSearchResults = (input: {
 			.slice(0, 2)
 			.map((tag) => `#${tag}`)
 			.join(' ');
-		rows.push({
-			id: thing.id,
-			resultType: 'thing',
-			icon: thingIcon(thing),
-			avatarUrl: null,
-			title: title.slice(0, 120),
-			context: [kind, author, tags].filter(Boolean).join(' · '),
-			href: post ? `/post/${encodeURIComponent(thing.id)}` : thingDetailPath(thing.id)
+		ranked.push({
+			row: {
+				id: thing.id,
+				resultType: 'thing',
+				icon: thingIcon(thing),
+				avatarUrl: null,
+				title: title.slice(0, 120),
+				context: [kind, author, tags].filter(Boolean).join(' · '),
+				href: post ? `/post/${encodeURIComponent(thing.id)}` : thingDetailPath(thing.id)
+			},
+			score: thingIntentScore(thing, query),
+			sourceOrder: sourceOrder++
 		});
 	}
 
 	for (const person of people.slice(0, peopleLimit)) {
 		const displayName = firstReadable(person.displayName, person.username) || 'Thingtime person';
-		rows.push({
-			id: person.id,
-			resultType: 'person',
-			icon: thingIcon({ thingtime: ['user'] }),
-			avatarUrl: person.avatarUrl,
-			title: displayName,
-			context: [`@${person.username}`, person.bio ? person.bio.replace(/\s+/g, ' ').trim().slice(0, 90) : 'person'].filter(Boolean).join(' · '),
-			href: `/profile/${encodeURIComponent(person.username)}`
+		ranked.push({
+			row: {
+				id: person.id,
+				resultType: 'person',
+				icon: thingIcon({ thingtime: ['user'] }),
+				avatarUrl: person.avatarUrl,
+				title: displayName,
+				context: [`@${person.username}`, person.bio ? person.bio.replace(/\s+/g, ' ').trim().slice(0, 90) : 'person'].filter(Boolean).join(' · '),
+				href: `/profile/${encodeURIComponent(person.username)}`
+			},
+			score: personIntentScore(person, query),
+			sourceOrder: sourceOrder++
 		});
 	}
 
-	return rows;
+	return ranked.sort((left, right) => right.score - left.score || left.sourceOrder - right.sourceOrder).map(({ row }) => row);
 };
