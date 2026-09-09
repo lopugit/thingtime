@@ -741,7 +741,7 @@ const rootThingSchema: ThingtimeSchema = {
 			required: false,
 			values: [...ATTACHMENT_PURPOSES],
 			system: true,
-			description: 'Server-owned immutable binding domain: post, comment, message, profile, or custom-emoji media.'
+			description: 'Server-owned immutable binding domain: post, comment, message, profile, or custom-emoji media, or a standalone owner-private recording that never binds to a target.'
 		},
 		{
 			name: 'attachmentProfileSlot',
@@ -2523,7 +2523,11 @@ export const NOTIFICATION_TYPES = [
   'subspace-report',
   'subspace-role',
   'subspace-ban',
-  'action-run'
+  'action-run',
+  'recording-reminder',
+  'lopu-reminder',
+  'login-success',
+  'system-message'
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -2587,6 +2591,8 @@ export const NOTIFICATION_TYPE_CATEGORY: Record<NotificationType, NotificationCa
   mention: 'engagement',
   'post-from-followed': 'feed',
   'post-from-friend': 'feed',
+  'recording-reminder': 'system',
+  'lopu-reminder': 'system',
   // subspaces: membership/role events are social, moderation of your content
   // and the mod queue are engagement
   'subspace-join-request': 'social',
@@ -2595,7 +2601,9 @@ export const NOTIFICATION_TYPE_CATEGORY: Record<NotificationType, NotificationCa
   'subspace-ban': 'social',
   'subspace-post-removed': 'engagement',
   'subspace-report': 'engagement',
-  'action-run': 'system'
+  'action-run': 'system',
+  'login-success': 'system',
+  'system-message': 'system'
 };
 
 export const isNotificationType = (value: unknown): value is NotificationType =>
@@ -2625,7 +2633,7 @@ export type EmailNotificationType = (typeof EMAIL_NOTIFICATION_TYPES)[number];
 // action can run sixty times a minute, and the mod-queue traffic of a big
 // subspace (join requests, reports) is the same class of firehose —
 // moderators opt in per type.
-export const EMAIL_DEFAULT_OFF_TYPES: readonly string[] = ['post-from-followed', 'post-from-friend', 'action-run', 'subspace-join-request', 'subspace-report'];
+export const EMAIL_DEFAULT_OFF_TYPES: readonly string[] = ['post-from-followed', 'post-from-friend', 'action-run', 'recording-reminder', 'lopu-reminder', 'login-success', 'system-message', 'subspace-join-request', 'subspace-report'];
 
 export type NotificationChannelMasters = { push: boolean; email: boolean };
 export type NormalizedNotificationPrefs = {
@@ -2678,10 +2686,12 @@ const notificationThingSchema: ThingtimeSchema = {
     '"thingtime", actor name Lopu) such as action-run, written when an action you ran ' +
     'finishes. ownerId is the recipient, targetId the subject thing (post/comment/user/subspace, ' +
     'or the action-run record), root readAt flips when read. Listed via ' +
-    "GET /api/v1/notifications (filtered by the recipient's meta.notificationPrefs, " +
+    'GET /api/v1/notifications?history=1 (independent of delivery preferences, ' +
     'searchable and filterable by category/type/unread/date for the /notifications history ' +
     'page), marked via POST /api/v1/notifications/read. Always acl ["tt:user"]; the generic ' +
-    'things CRUD refuses this kind. A recipient keeps their newest 10,000.',
+    'things CRUD refuses this kind. History has no count-based pruning. Root historyOnly ' +
+    'marks quiet events excluded from the bell, not from history. Authenticated client ' +
+    'messages use the validated, idempotent /api/v1/notifications/record endpoint.',
   createdVia: 'server-side emission (social/engagement events + system notes)',
   fields: [
     { name: 'type', type: 'enum', required: true, values: [...NOTIFICATION_TYPES], description: 'Notification type (drives prefs, category + copy).' },
@@ -2690,7 +2700,11 @@ const notificationThingSchema: ThingtimeSchema = {
     { name: 'actorUsername', type: 'string', required: false, description: 'Actor username snapshot — searchable in history.' },
     { name: 'postId', type: 'id', required: false, description: 'Related post for click-through.' },
     { name: 'preview', type: 'string', required: false, max: 140, description: 'Short content preview, or the detail line of a system note.' },
-    { name: 'title', type: 'string', required: false, max: 140, description: 'System notes only: the headline shown instead of "<actor> <verb>".' },
+    { name: 'title', type: 'string', required: false, max: 400, description: 'System notes only: the headline shown instead of "<actor> <verb>".' },
+    { name: 'delivery', type: 'enum', required: false, values: ['quiet', 'normal', 'urgent'], description: 'Optional passive, active or time-sensitive delivery. User device settings apply; never Apple Critical.' },
+    { name: 'richText', type: 'string', required: false, max: 2000, description: 'Optional safe Markdown for the Thingtime history view; native banners use preview.' },
+    { name: 'image', type: 'string', required: false, description: 'Server-approved same-origin illustration path; arbitrary remote images are not accepted.' },
+    { name: 'detail', type: 'string', required: false, description: 'Credential-redacted message detail beyond the preview. Its protected record endpoint enforces the 48,000-character input and 64 KiB request limits; generic schema-editor string limits do not apply.' },
     { name: 'href', type: 'string', required: false, max: 300, description: 'System notes only: internal click-through path (e.g. /actions/<key>).' },
     { name: 'outcome', type: 'enum', required: false, values: ['ok', 'error'], description: 'System notes only: whether the thing being reported succeeded.' }
   ],
@@ -4025,6 +4039,10 @@ export const DEVICE_THINGTIME = [
 export const DEVICE_CONTROL_THINGTIME = ['device-command', 'device-command-event', 'device-ai-live-state', 'device-approval'] as const;
 
 export const PROTECTED_THINGTIME = [
+	'lopu-recording-settings',
+	'lopu-recording-job',
+	'lopu-recording-reminder',
+	'lopu-reminder',
 	ATTACHMENT_THINGTIME,
   'user',
   'theme',
@@ -4087,7 +4105,7 @@ export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) =>
 // unreachable, unaccounted, and never pruned again — so create/run/delete
 // cycles would re-open exactly the unbounded accumulation the retention cap
 // closes. Cascading is also the only way an owner can ever remove them.
-export const CASCADE_CHILD_THINGTIME = [ATTACHMENT_THINGTIME, 'comment', 'reaction', 'save', 'action-run', UPDOWN_THINGTIME] as const;
+export const CASCADE_CHILD_THINGTIME = [ATTACHMENT_THINGTIME, 'comment', 'reaction', 'save', 'action-run', UPDOWN_THINGTIME, 'lopu-recording-job', 'lopu-recording-reminder', 'lopu-reminder'] as const;
 
 // Messenger kinds are owned by /api/v1/chats* end to end. Create/update are
 // already refused by the missing crystal sanitizers, and DELETE must be too:
@@ -4212,6 +4230,12 @@ const waitlistThingSchema: ThingtimeSchema = {
 };
 
 export const thingtimeSchemas: ThingtimeSchema[] = [
+	...(['lopu-recording-settings', 'lopu-recording-job', 'lopu-recording-reminder', 'lopu-reminder'] as const).map((id): ThingtimeSchema => ({
+		id, version: 1, kind: 'crystal', collection: null, title: id,
+		summary: 'Protected owner-private recording or reminder automation state.',
+		detail: 'Managed by the Lopu recording API. Bounded operational state; private processing scratch is in secure BinData, never indexed or projected. Transcript comments and generated Things use ordinary quota-billed content writes.',
+		createdVia: id === 'lopu-reminder' ? 'POST /api/v1/lopu/reminders' : 'POST /api/v1/lopu/recordings', fields: [], example: {}
+	})),
   rootThingSchema,
   postSchema,
 	attachmentSchema,
