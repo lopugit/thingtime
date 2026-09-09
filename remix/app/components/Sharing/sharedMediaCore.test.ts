@@ -96,8 +96,15 @@ test('unresolved template media is left for the runtime, in props and in CSS ali
 		assert.equal(sharedAttachmentUrl(template, 'read-key'), template, template);
 		assert.equal(mapCssMediaUrls(`url("${template}")`, withContext), `url("${template}")`, template);
 	}
+	// An id outside the attachment grammar is equally ungrantable, so it keeps
+	// the key too — and is never re-encoded (`id=a/b` must not become `a%2Fb`).
+	for (const ungrantable of ['/api/v1/attachments/content?id=a/b', '/api/v1/attachments/content?id=-leading', `/api/v1/attachments/content?id=${'x'.repeat(129)}`, '/api/v1/attachments/content?id=a%20b']) {
+		assert.equal(literalAttachmentId(ungrantable), null, ungrantable);
+		assert.equal(sharedAttachmentUrl(ungrantable, 'read-key', 'page'), ungrantable, ungrantable);
+		assert.equal(mapCssMediaUrls(`url("${ungrantable}")`, withContext), `url("${ungrantable}")`, ungrantable);
+	}
 	// Every candidate the parser surfaces is granted iff it is transported.
-	for (const value of [`url(${fixtureUrl})`, `url("/api/v1/attachments/content?id={input.id}")`, `image-set("${fixtureUrl}" 1x, url('https://external.test/a.png') 2x)`, `url('//external.test${fixtureUrl}')`]) {
+	for (const value of [`url(${fixtureUrl})`, `url("/api/v1/attachments/content?id={input.id}")`, `image-set("${fixtureUrl}" 1x, url('https://external.test/a.png') 2x)`, `url('//external.test${fixtureUrl}')`, `url("/api/v1/attachments/content?id=a/b")`, `url("/api/v1/attachments/content?id=${'x'.repeat(129)}")`]) {
 		const ids: string[] = [];
 		mapCssMediaUrls(value, (url) => { const id = literalAttachmentId(url); if (id) ids.push(id); return url; });
 		assert.equal(ids.length > 0, mapCssMediaUrls(value, withContext) !== value, value);

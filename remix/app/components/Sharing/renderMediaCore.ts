@@ -2,15 +2,10 @@ import valueParser from 'postcss-value-parser';
 
 type MediaUrl = (url: string) => string;
 
-// Only literal, unkeyed first-party attachment references can delegate access.
-export const literalAttachmentId = (value: unknown): string | null => {
-	if (typeof value !== 'string' || !value.startsWith('/api/v1/attachments/content?') || /[{}$]/.test(value)) return null;
-	try {
-		const parsed = new URL(value, 'https://local.invalid');
-		const id = parsed.searchParams.get('id');
-		return parsed.pathname === '/api/v1/attachments/content' && id && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(id) && !parsed.searchParams.has('key') && !parsed.searchParams.has('sharedRoot') ? id : null;
-	} catch { return null; }
-};
+// Discovery re-exports the transport module's grant predicate rather than
+// restating it: the parser below decides WHERE a URL sits, sharedMediaCore
+// decides WHETHER that URL is a grantable first-party attachment reference.
+export { literalAttachmentId } from './sharedMediaCore';
 
 // CSS escapes are decoded before checking origin/path, never by substring.
 const cssUnescape = (value: string): string => value.replace(/\\([\da-f]{1,6})(?:\r\n|[\t\n\f\r ])?|\\(\r\n|[\n\f\r])|\\(.)/gis, (_match, hex: string | undefined, newline: string | undefined, char: string | undefined) => {
