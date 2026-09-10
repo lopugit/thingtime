@@ -3825,6 +3825,12 @@ async function selfTest() {
     { close: false, reason: "diff-unavailable" },
   );
   assert.equal(redundantPromotionDecision(undefined).close, false);
+  // A runner reporting success with no readable stdout must fail closed too,
+  // not throw and abort the batch mid-pass.
+  assert.deepEqual(
+    redundantPromotionDecision({ ok: true, status: 0, err: "" }),
+    { close: false, reason: "diff-unavailable" },
+  );
   assert.equal(
     redundantPromotionDecision(okDiff("graphify-out/snap\u0007shots/v1/graph.json")).reason,
     "unreadable-path",
@@ -4422,11 +4428,17 @@ function isGeneratedFollowupPath(path) {
 // Decide whether an open promotion PR still promotes anything. Pure so the
 // self-test can drive it without a live `gh`.
 //
-// Fails closed in both unreadable directions: an errored `gh pr diff` and a
-// path we cannot trust to compare (control characters) both keep the PR open,
-// because wrongly closing a promotion silently drops a release.
+// Fails closed in every unreadable direction: an errored `gh pr diff`, a
+// result carrying no readable stdout, and a path we cannot trust to compare
+// (control characters) all keep the PR open, because wrongly closing a
+// promotion silently drops a release. `tryGh` always reports `out` as a
+// string, but this function takes its input from `closeRedundantPass`'s
+// injectable `ghRunner`, so a runner that reports success without stdout must
+// fail closed rather than throw and abort the whole promotion batch.
 export function redundantPromotionDecision(diff) {
-  if (!diff?.ok) return { close: false, reason: "diff-unavailable" };
+  if (!diff?.ok || typeof diff.out !== "string") {
+    return { close: false, reason: "diff-unavailable" };
+  }
   const paths = diff.out === "" ? [] : diff.out.split("\n").filter(Boolean);
   if (paths.some((path) => !validPromotionPath(path))) {
     return { close: false, reason: "unreadable-path" };
