@@ -7,7 +7,20 @@ import { createTemplateResolver, defaultsFromArgs, sanitizeArgSpecs } from '../.
 export type CompositionMediaOptions = {
 	args?: Record<string, unknown>;
 	component?: (ref: string) => Record<string, any> | undefined;
+	// Internal, set only by the recursive expansion below: every contained
+	// component walk draws from ONE page-wide budget. Each expansion re-resolves
+	// the whole template against that block's args, so a per-call budget would
+	// let a page multiply a full component walk by its block count on every
+	// shared attachment read (measured: 1600 blocks x a 600-node component =
+	// ~1.4s of blocking CPU per request, against 1ms before component media).
+	budget?: { visited: number };
 };
+
+// One walk stays capped at MAX_NODE_VISITS; the shared budget caps the whole
+// page + contained-component expansion. Exhausting it stops discovering media,
+// which fails closed (unresolved media is simply not granted).
+const MAX_NODE_VISITS = 1600;
+const MAX_COMPOSITION_VISITS = 100_000;
 
 export const compositionAttachmentIds = (kinds: string[], crystal: Record<string, any>, options: CompositionMediaOptions = {}): Set<string> => {
 	const ids = new Set<string>();
@@ -20,8 +33,10 @@ export const compositionAttachmentIds = (kinds: string[], crystal: Record<string
 	const storedScope = { ...defaultsFromArgs(sanitizeArgSpecs(crystal.args)),
 		...(crystal.savedArgs && typeof crystal.savedArgs === 'object' && !Array.isArray(crystal.savedArgs) ? crystal.savedArgs : {}), ...options.args };
 	let visited = 0;
+	const budget = options.budget ?? { visited: 0 };
+	const spent = () => ++visited > MAX_NODE_VISITS || ++budget.visited > MAX_COMPOSITION_VISITS;
 	const render = (node: any, depth = 0, resolveProps = false): void => {
-		if (!node || typeof node !== 'object' || depth > 64 || ++visited > 1600) return;
+		if (!node || typeof node !== 'object' || depth > 64 || spent()) return;
 		if (Array.isArray(node)) { node.forEach((child) => render(child, depth + 1, resolveProps)); return; }
 		const props = resolveProps ? resolveStored(node.props, storedScope) as Record<string, unknown> | undefined : node.props;
 		for (const name of ['src', 'poster', 'href']) url(props?.[name]);
@@ -33,7 +48,7 @@ export const compositionAttachmentIds = (kinds: string[], crystal: Record<string
 		if (!Array.isArray(nodes) || depth > 16) return;
 		for (const block of nodes) {
 			if (!block || typeof block !== 'object') continue;
-			if (++visited > 1600) return;
+			if (spent()) return;
 			mapStyleMediaUrls(block.css, cssUrl);
 			if (block.type === 'media') url(block.src);
 			if (block.type === 'text') url(block.href);
@@ -42,7 +57,7 @@ export const compositionAttachmentIds = (kinds: string[], crystal: Record<string
 				const component = options.component?.(block.component);
 				if (component) {
 					const args = block.args && typeof block.args === 'object' && !Array.isArray(block.args) ? block.args : {};
-					for (const id of compositionAttachmentIds(['component'], component, { args })) ids.add(id);
+					for (const id of compositionAttachmentIds(['component'], component, { args, budget })) ids.add(id);
 				}
 			}
 			if (block.type === 'container') blocks(block.children, depth + 1);

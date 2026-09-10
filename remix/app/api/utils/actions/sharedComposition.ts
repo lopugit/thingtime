@@ -19,7 +19,7 @@ export const validateSharedReferenceAdditions = async (viewer: Viewer, doc: Thin
 	// contained render contexts on both sides, not raw argument URL strings.
 	const lookupCache = new Map<string, Promise<ThingDoc | null>>();
 	const media = async (root: ThingDoc) => {
-		if (!root.thingtime.includes('webpage')) return compositionAttachmentIds(root.thingtime || [], root.crystal || {});
+		if (!root.thingtime?.includes('webpage')) return compositionAttachmentIds(root.thingtime || [], root.crystal || {});
 		const composition = await resolveCompositionFromRoot(viewer, root, collection, lookupCache);
 		return isFail(composition) ? composition : compositionMediaIds(composition);
 	};
