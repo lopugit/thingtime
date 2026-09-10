@@ -4408,9 +4408,11 @@ function retargetPass(promotionPrs, results) {
 // nothing else, `readPlannedPatch` falls back to promoting the generated paths
 // (`selectedPaths = meaningfulPaths.length > 0 ? meaningfulPaths : paths`), so
 // a promotion carrying only generated paths is constructible — the self-test
-// pins that. Closing one is still correct, because
-// `docs/graphify-content-addressed-snapshots.md` keeps snapshot retention
-// branch-local and a promotion merge rewrites the base's snapshot. But the
+// pins that. Closing one is still correct, because the Graphify snapshot rules
+// in `AI_ALL.md` (mirrored in this branch's `README.md`) keep retention
+// per-checkout — the router retains one active portable snapshot and prunes
+// superseded trees only after activating a valid replacement — so a promotion
+// merge rewrites the base's active snapshot rather than adding to it. But the
 // close comment must not tell that PR its remaining content already reached
 // the base, because it has not: that content is being dropped deliberately.
 function isGeneratedFollowupPath(path) {
