@@ -10,6 +10,33 @@ At Thingtime, we believe that data and knowledge should be open, accessible, and
 
 ## Lopu reminders and notification tests
 
+The Lopu page keeps one conversation while switching between Chat and Voice.
+Device-transcription mode saves its text and transcript Thing into that chat.
+The composer offers device attachments and an owned-Thing search picker. Files
+are private chat attachments; model context currently includes file metadata,
+not decoded audio/video/image content. Selected Things contribute readable text.
+Direct provider WebSocket voice persistence is not implemented yet; its live turns currently remain local to the voice surface.
+
+Scheduled tasks support notification-only, saved chat-message, and fresh
+read-only AI-update modes, an existing conversation or a new chat each run,
+and five-field cron expressions with an IANA time zone. They are searchable
+Things; run notes are separate quota-billed `scheduled-task-run` Things linked
+by `targetId`. The protected schedule remains canonical: editing the displayed
+Thing does not reprogram execution. A paused task stops future starts, not an
+already-running response. Ambiguous failures require owner review rather than
+automatic replay. AI updates use normal account access and billing, and cannot
+run mutating tools. Each message may produce a `lopu-message` notification.
+
+Thing detail pages and `/things` previews fetch their discussion by target ID.
+Comments are separate Things inheriting the target audience; they are never
+embedded in the target crystal. Lopu can list comments and propose a comment
+with an explicit confirmation. No new database migration or index is required.
+
+Local validation for this worktree uses `http://localhost:11270` (Nitro 11272).
+No Tailscale/Funnel mapping has been configured or verified for these ports.
+The shared PM2 daemon was unresponsive during validation; the temporary
+foreground test stack is not a durable service configuration.
+
 Lopu chat and the standard voice page share `create_thing`, `send_notification`,
 `create_reminder`, `list_reminders`, and `set_reminder_enabled`. Only the signed-in
 owner can receive or manage these reminders. Notes/todos and reminder content

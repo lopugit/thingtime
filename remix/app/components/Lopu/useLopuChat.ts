@@ -125,7 +125,7 @@ export type UseLopuChat = {
 	timeline: LopuTimelineItem[];
 	streaming: LopuTurnState | null;
 	sending: boolean;
-	send: (text: string, overrides?: Partial<LopuChatSettings>) => Promise<SendLopuResult>;
+	send: (text: string, overrides?: Partial<LopuChatSettings>, attachments?: { attachmentIds?: string[]; thingIds?: string[] }) => Promise<SendLopuResult>;
 	abort: () => void;
 	selectChat: (chatId: string | null) => void;
 	createChat: (args?: { title?: string }) => ReturnType<typeof createLopuChat>;
@@ -242,8 +242,9 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 
 	const applyPatches = options.applyPatches ?? prefs.applyPatches;
 	const send = React.useCallback(
-		(text: string, overrides?: Partial<LopuChatSettings>) =>
+		(text: string, overrides?: Partial<LopuChatSettings>, attachments?: { attachmentIds?: string[]; thingIds?: string[] }) =>
 			sendLopuMessage(text, {
+				...attachments,
 				...(overrides ? { settings: overrides } : {}),
 				context: contextProvider(),
 				applyPatches

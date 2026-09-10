@@ -59,6 +59,7 @@ const providerToken = (config: ApnsConfig): string => {
 
 export const notificationURL = (notification: Pick<EmitNotificationInput, 'postId' | 'actor'> & Partial<Pick<EmitNotificationInput, 'type' | 'href'>>): string => {
   if (notification.type === 'lopu-reminder') return safeInternalHref(notification.href) || '/settings';
+  if (notification.type === 'lopu-message') return safeInternalHref(notification.href) || '/lopu';
   if (notification.type === 'recording-reminder') return safeInternalHref(notification.href) || '/lopu/recordings';
   if (notification.postId) return `/post/${encodeURIComponent(notification.postId)}`;
   if (notification.actor.username) return `/profile/${encodeURIComponent(notification.actor.username)}`;

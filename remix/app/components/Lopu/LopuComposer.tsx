@@ -21,6 +21,7 @@ export const LOPU_MAX_MESSAGE_CHARS = 8000;
 export type LopuComposerPreferences = { enterSends: boolean; applyPatches: boolean; confirmDeletes: boolean };
 
 export type LopuComposerProps = {
+	attachments?: React.ReactNode;
 	value: string;
 	onChange: (next: string) => void;
 	onSend: (text: string) => void;
@@ -129,6 +130,7 @@ const IconButton = ({ label, size, onClick, children, pressed }: { label: string
 );
 
 export const LopuComposer = ({
+	attachments,
 	value,
 	onChange,
 	onSend,
@@ -208,6 +210,7 @@ export const LopuComposer = ({
 
 	return (
 		<Box className="lopuComposerWrap" minW={0} maxW="100%" sx={{ '&, & *': { boxSizing: 'border-box' } }}>
+			{attachments}
 			<Box
 				className="lopuComposer"
 				data-compact={compact ? 'true' : 'false'}

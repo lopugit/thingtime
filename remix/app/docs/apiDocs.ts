@@ -653,32 +653,32 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [{ status: 200, description: 'Private account-scoped automation state.', body: { ok: true, ownerId: 'your-user-id', settings: { enabled: true, timeZone: 'Australia/Melbourne', reminderHour: 9 }, jobs: [], todos: [], provider: { configured: true, name: 'Configured AI provider', maxAudioBytes: 25165824 } } }, { status: 401, description: 'A full signed-in account is required.', body: { ok: false, error: 'Sign in to manage your recordings.' } }]
 	}),
 	endpoint({
-		id: 'lopu-recordings-run', contractVersion: '1.2.0', featureVersion: '1.2.0', group: 'lopu', title: 'Run recording automation',
+		id: 'lopu-recordings-run', contractVersion: '1.3.0', featureVersion: '1.3.0', group: 'lopu', title: 'Run recording automation',
 		endpoint: '/api/v1/lopu/recordings/run', methods: ['GET', 'POST'],
 		summary: 'Protected scheduler/admin entry point for durable Watch recording jobs and due daily reminders.',
-		detail: 'Version 1.2 also runs leased one-time/repeating Lopu reminders and at-most-once recording handoffs through normal Lopu chat. Response adds scheduledReminders and handoffs counts. GET requires the exact CRON_SECRET bearer credential; POST requires a current administrator and same-origin request. Home data plane only. Bounded discovery, leased processing, private comment/Thing creation and once-per-local-day reminder delivery. Each job uses only its owner’s selected credential waterfalls, with at most four 20-second attempts per stage. The run request accepts no provider hosts, credentials, owner ids, prompts or execution commands. Retries resume checkpoints instead of duplicating content. Response contains counts and status labels only, never recordings, transcripts, credentials or account ids. providerConfigured describes the claimed job’s selected connection configuration, or the default audio connection if no job is claimed; it does not prove provider health or quota.',
+		detail: 'Version 1.3 adds scheduled chat messages and read-only AI updates, with separate run Things and ambiguous-run stop protection. It also runs leased one-time/repeating Lopu reminders and at-most-once recording handoffs through normal Lopu chat. Response adds scheduledReminders and handoffs counts. GET requires the exact CRON_SECRET bearer credential; POST requires a current administrator and same-origin request. Home data plane only. Bounded discovery, leased processing, private comment/Thing creation and once-per-local-day reminder delivery. Each job uses only its owner’s selected credential waterfalls, with at most four 20-second attempts per stage. The run request accepts no provider hosts, credentials, owner ids, prompts or execution commands. Retries resume checkpoints instead of duplicating content. Response contains counts and status labels only, never recordings, transcripts, credentials or account ids. providerConfigured describes the claimed job’s selected connection configuration, or the default audio connection if no job is claimed; it does not prove provider health or quota.',
 		auth: { mode: 'session-or-bearer', description: 'GET: scheduler secret only. POST: current administrator only.' },
 		steps: ['Configure CRON_SECRET and platform API keys or owner-selected Secure Vault API connections.', 'Vercel invokes the registered cron automatically; an administrator can POST for a bounded manual run.'],
 		requestExamples: [{ name: 'Run scheduler', description: 'Administrator-only manual run.', method: 'POST', body: {} }],
 		responseExamples: [{ status: 200, description: 'Bounded processing counts.', body: { ok: true, reminders: { sent: 0 }, recordings: { queued: 1, processed: 1, outcomes: ['done'], providerConfigured: true } } }]
 	}),
 	endpoint({
-		id: 'lopu-reminders', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'lopu', title: 'Lopu reminders',
+		id: 'lopu-reminders', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'lopu', title: 'Lopu scheduled tasks',
 		endpoint: '/api/v1/lopu/reminders', methods: ['GET', 'POST'],
 		summary: 'Create, list, pause and resume your own durable one-time or repeating notifications.',
-		detail: 'GET returns ownerId and up to 100 reminders. POST op=create accepts title (140), description (2000), at (ISO with UTC offset, now to one year), timeZone (IANA), optional everyMinutes (integer 5–525600) and delivery (quiet, normal, urgent). Creates a quota-billed private data Thing and protected linked schedule transactionally. POST op=set-enabled accepts id and enabled. Completed one-time schedules cannot resume. Owner-only home-plane control; deleting/completing the underlying Thing or pausing stops future sends. The existing recording scheduler checks every five minutes, leases due work and deduplicates notification inserts; missed occurrences skip forward, not a backlog. Preferences apply. Device push is best-effort. No arbitrary code or provider call runs from a reminder.',
+		detail: 'GET returns ownerId and up to 100 reminders; optional thingId returns that owned scheduled-task Thing’s control receipt, up to 30 recent runs, and readable relatedThings. POST op=create accepts title (140), description (2000), at (ISO with UTC offset, now to one year), timeZone (IANA), optional everyMinutes (integer 5–525600), or five-field cron instead of at/everyMinutes. mode notification preserves the old behavior; message posts saved text; assistant produces a fresh read-only AI update using normal provider/account billing. Optional chatId selects an owned Lopu conversation; newChatEachRun starts a separate chat each occurrence; otherwise a stable destination is reused. relatedThingIds holds up to ten readable references, checked again at execution. Creates a quota-billed private data Thing and linked protected schedule transactionally; run history is separate quota-billed scheduled-task-run Things linked through targetId. POST op=set-enabled accepts id and enabled. Completed one-time schedules cannot resume. Pausing/deleting/completing stops future starts, not a run already started. The home scheduler checks every five minutes and skips missed backlogs. Ambiguous interrupted AI runs stop for owner attention rather than replay. New chat messages persist independently of notification preferences, with best-effort lopu-message alerts. Protected control state is canonical; editing the displayed Thing does not reprogram its schedule. No arbitrary executable payload is accepted.',
 		auth: { mode: 'session-or-bearer', description: 'Full live first-party user session; same-origin JSON mutations. Subscription-tier account limits; Pro/PAYG unlimited, service/security limits remain.' },
-		steps: ['Negotiate api.lopu-reminders 1.0.0 on this origin.', 'Ask Lopu to create a reminder or POST a schedule.', 'Use the returned ID and nextRunAt receipt; manage it in Settings → Notifications.'],
+		steps: ['Negotiate api.lopu-reminders 1.1.0 on this origin.', 'Ask Lopu to create a reminder or POST a schedule.', 'Use the returned ID and nextRunAt receipt; manage it in Settings → Notifications.'],
 		requestExamples: [{ name: 'Pause', description: 'Pause your own reminder.', method: 'POST', body: { op: 'set-enabled', id: 'your-reminder-id', enabled: false } }],
 		responseExamples: [{ status: 200, description: 'Your schedules.', body: { ok: true, ownerId: 'user-id', reminders: [] } }]
 	}),
 	endpoint({
-		id: 'notifications-test', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'notifications', title: 'Send a test notification',
+		id: 'notifications-test', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'notifications', title: 'Send a test notification',
 		endpoint: '/api/v1/notifications/test', methods: ['POST'],
 		summary: 'Send a fixed notification example to the signed-in account only.',
 		detail: 'POST preset quiet, normal, urgent, rich or image, with optional registered notification type (default lopu-reminder). Fixed safe title/body/rich text/image; no caller-provided content, recipient or external URL. Quiet maps to passive without sound; normal to active; urgent to time-sensitive, not Critical. Rich text and a local illustration render in Thingtime; native banners use plain text. Notification preferences are honoured. saved means durable history insertion, not proof a physical device displayed it. Response includes id or null and a status message. No email is sent.',
 		auth: { mode: 'session-or-bearer', description: 'Full live first-party user only, same-origin JSON, subscription-tier mutation limit. Scoped app/Watch credentials cannot send tests.' },
-		steps: ['Negotiate api.notifications-test 1.0.0.', 'Select a test in Settings → Notifications.', 'Check history and your physical device.'],
+		steps: ['Negotiate api.notifications-test 1.1.0.', 'Select a test in Settings → Notifications.', 'Check history and your physical device.'],
 		requestExamples: [{ name: 'Urgent test', description: 'Time-sensitive sample to yourself.', method: 'POST', body: { preset: 'urgent' } }],
 		responseExamples: [{ status: 200, description: 'Muted by user settings.', body: { ok: true, saved: false, id: null, message: 'This notification is muted by your notification preferences.' } }]
 	}),
@@ -4531,10 +4531,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // each spend the same last credit — past the cap the request is refused 429
     // LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted (additive). contractVersion
     // feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.5.0',
-    featureVersion: '1.5.0',
+    contractVersion: '1.6.0',
+    featureVersion: '1.6.0',
     summary: 'Sends one message to Lopu and streams its reply — text, tool calls and live builder patches — as newline-delimited JSON.',
     detail:
+      'Version 1.6 adds attachmentIds and thingIds (up to ten each), and relational comment_on_thing/list_thing_comments tools. Device media is bound to the persisted user message; the model receives metadata only, plus readable selected Thing content. Comments are standalone Things linked by targetId; all Lopu comments require a server-verified confirmation and never edit parent content. ' +
       'Version 1.5 adds create_thing, send_notification, create_reminder, list_reminders and set_reminder_enabled tools for the current user. Reminder schedules and direct notifications return server receipts, obey notification preferences, and require no open browser. POST { chatId?, text, requestId, model?, effort?, speed?, providerId?, context?, confirmations? }. The user turn is persisted first (omit chatId to start a ' +
       'conversation titled from the message), then the reply streams as application/x-ndjson, one JSON event per line: meta (chat, ' +
       'request and the resolved model/provider), delta (assistant text), thinking, tool_use_start / tool_input_delta / tool_use ' +
@@ -4721,14 +4722,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		// unless Thingtime.LopuAccess.allowByoUnverified; transcribe mode is not gated) and are
 		// recorded as lopu-usage rows — meta carries billing "byo", done carries the provider's
 		// usage, billing and the list-price costMicros (never debited) — compatible additions.
-		contractVersion: '1.2.0',
-		featureVersion: '1.2.0',
+		contractVersion: '1.3.0',
+		featureVersion: '1.3.0',
 		group: 'lopu',
 		title: 'Lopu voice turn',
 		endpoint: '/api/v1/lopu/voice/reply',
 		summary: 'Streams one Lopu conversation turn or persists one private transcription page.',
 		detail:
-			'Conversation mode decrypts only the selected owner-scoped provider token in server memory, calls the fixed provider endpoint through the shared SSRF fence, and streams NDJSON text deltas. The model is the connection’s own, else the kind’s first catalog model, else the optional `model` in the body; optional `effort` and `speed` map onto the vendor’s own request fields and must be ones the catalog lists for that model. Transcribe mode makes no provider call: it stores the final speech transcript as a timestamped, numbered, owner-private data Thing and returns it as a quote event.',
+			'Conversation mode decrypts only the selected owner-scoped provider token in server memory, calls the fixed provider endpoint through the shared SSRF fence, and streams NDJSON text deltas. The model is the connection’s own, else the kind’s first catalog model, else the optional `model` in the body; optional `effort` and `speed` must be supported by that model. Version 1.3 transcribe mode accepts chatId and requestId, persists the transcript in the same Lopu conversation and as a linked owner-private data Thing, and returns meta.chatId, quote.page and done.messages. Stable request IDs deduplicate chat/page/turn writes. Transcription makes no provider call and is limited to 12000 characters per utterance.',
 		auth: { mode: 'session', description: 'Requires the current full Thingtime user session (a temporary guest session is a 403). Bodies must be application/json (415 otherwise).' },
 		methods: ['POST'],
 		steps: [
@@ -8789,13 +8790,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // then older first) and the response echoes commentSort; an unknown value
     // is a 400. Only this read grew — the shared projection is unchanged, so
     // things-comment / -feed / -user stay put (S7, additive)
-    featureVersion: '1.7.0',
-    contractVersion: '1.6.0',
+    featureVersion: '1.8.0',
+    contractVersion: '1.7.0',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares.',
     detail:
+			'Version 1.8 adds scheduled-task-run child notes: targetId is required, the default audience is owner-only, the typed crystal is bounded, and deleting the task cascades its run notes. Run notes are editable user content, not trusted security audit records. ' +
 			'Own-things lists include completed standalone recording attachments; pending uploads and all other protected kinds remain excluded. Attachment creation, metadata mutation and deletion still use their dedicated endpoints. ' +
 			'Shared webpage writers may add component references only when they can independently read the referenced component; only the owner may delegate an unrelated private component through the page. ' +
 			'Shared writers also need independent access before inserting new first-party private media references in page, component or schema render positions. ' +
@@ -11329,9 +11331,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // actorName "s/<slug> mods", actorUsername / actorAvatarUrl null)
     // 1.3.0: both lines merged — this endpoint ships history filters AND the
     // subspace family together; additive
-    // 1.6.0: adds Lopu reminders and optional delivery/richText/image presentation.
-    featureVersion: '1.6.0',
-    contractVersion: '1.6.0',
+    // 1.7.0 adds lopu-message for scheduled conversation updates.
+    featureVersion: '1.7.0',
+    contractVersion: '1.7.0',
     group: 'notifications',
     title: 'List notifications',
     endpoint: '/api/v1/notifications',
@@ -11565,9 +11567,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     id: 'notifications-settings',
     // 1.1.0: six subspace-* switches joined the matrix — additive; 1.2.0:
     // merged with develop's 1.1.0 (action-run switch) — additive
-    // 1.5.0: adds lopu-reminder while retaining all existing switches.
-    featureVersion: '1.5.0',
-    contractVersion: '1.5.0',
+    // 1.6.0 adds lopu-message, with email opt-in.
+    featureVersion: '1.6.0',
+    contractVersion: '1.6.0',
     group: 'notifications',
     title: 'Notification settings',
     endpoint: '/api/v1/notifications/settings',

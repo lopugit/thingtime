@@ -15,8 +15,9 @@ test('notification controls require compatible origin-scoped semantic capabiliti
 });
 test('new operations are deliberately registered in both manifests', () => {
   for (const id of ['notifications-test', 'lopu-reminders', 'watch-recordings']) {
-    assert.equal(createApiCapabilitiesManifest().features[`api.${id}`], '1.0.0');
-    assert.equal(thingtimeCapabilityManifest(origin).features[`api.${id}`].version, '1.0.0');
+    const version = id === 'watch-recordings' ? '1.0.0' : '1.1.0';
+    assert.equal(createApiCapabilitiesManifest().features[`api.${id}`], version);
+    assert.equal(thingtimeCapabilityManifest(origin).features[`api.${id}`].version, version);
     assert.ok(apiEndpointDocs.find((doc) => doc.id === id)?.methods.includes('POST'));
   }
 });

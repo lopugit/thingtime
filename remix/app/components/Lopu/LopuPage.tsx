@@ -8,7 +8,6 @@ import { LOPU_WINDOW_Z, useIsMobileViewport } from '~/components/Nav/Drawer/useD
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { LopuRingAvatar } from './LopuActivityBadge';
-import { LopuChatView } from './LopuChatView';
 import { describeModelChoice } from './LopuModelPicker';
 import { LopuVoiceSurface, lopuVoicePhaseLabel, type LopuVoicePhase } from './LopuVoiceControls';
 import type { LopuChatSummary } from './lopuChatStore';
@@ -261,7 +260,7 @@ const ConversationList = ({ chat, onPicked, bottomInset }: { chat: UseLopuChat; 
 const ModeSwitch = ({ mode, chatHref, compact }: { mode: LopuPageMode; chatHref: string; compact?: boolean }) => {
 	const entries: { id: LopuPageMode; label: string; to: string }[] = [
 		{ id: 'chat', label: 'Chat', to: chatHref },
-		{ id: 'voice', label: 'Voice', to: LOPU_VOICE_PATH }
+		{ id: 'voice', label: 'Voice', to: chatHref === LOPU_PAGE_PATH ? LOPU_VOICE_PATH : `${LOPU_VOICE_PATH}?chat=${encodeURIComponent(decodeURIComponent(chatHref.slice(LOPU_PAGE_PATH.length + 1)))}` }
 	];
 	return (
 		<Flex className="lopuModeSwitch" role="group" aria-label="Lopu mode" p="2px" border={LOPU_UI.border} borderRadius="999px" bg={LOPU_UI.surfaceAlt} flexShrink={0}>
@@ -417,14 +416,14 @@ const ConversationsSheet = ({ chat, open, onClose }: { chat: UseLopuChat; open: 
 
 export const LopuPage = (props: { mode?: LopuPageMode }) => {
 	const { chatId: routeChatId } = useParams();
-	const { pathname } = useLocation();
+	const { pathname, search } = useLocation();
 	const navigate = useNavigate();
 	const user = useCurrentUser();
 	const isMobile = useIsMobileViewport();
 	const mode: LopuPageMode = props.mode ?? (isLopuVoicePath(pathname) ? 'voice' : 'chat');
 	const signedIn = !!user && !user.temporary;
 	// voice follows the store's current conversation (no chat id in its URL)
-	const chatId = mode === 'voice' ? undefined : (routeChatId ?? undefined);
+	const chatId = mode === 'voice' ? (new URLSearchParams(search).get('chat') || undefined) : (routeChatId ?? undefined);
 	const chat = useLopuChat({ chatId });
 
 	const [sidebarOpen, setSidebarOpen] = React.useState(readSidebarOpen);
@@ -443,8 +442,10 @@ export const LopuPage = (props: { mode?: LopuPageMode }) => {
 	// the chat mode mirrors the conversation into the URL; voice keeps its own
 	const onChatChange = React.useCallback(
 		(nextChatId: string | null) => {
-			if (mode !== 'chat') return;
-			navigate(nextChatId ? `${LOPU_PAGE_PATH}/${encodeURIComponent(nextChatId)}` : LOPU_PAGE_PATH, { replace: true });
+			const next = mode === 'voice'
+				? `${LOPU_VOICE_PATH}${nextChatId ? `?chat=${encodeURIComponent(nextChatId)}` : ''}`
+				: nextChatId ? `${LOPU_PAGE_PATH}/${encodeURIComponent(nextChatId)}` : LOPU_PAGE_PATH;
+			navigate(next, { replace: true });
 		},
 		[mode, navigate]
 	);
@@ -505,11 +506,7 @@ export const LopuPage = (props: { mode?: LopuPageMode }) => {
 			px={isMobile ? 0 : 4}
 			py={isMobile ? 0 : 3}
 		>
-			{mode === 'voice' ? (
-				<LopuVoiceSurface chatId={chatId} onChatChange={onChatChange} onPhaseChange={setVoicePhase} />
-			) : (
-				<LopuChatView chatId={chatId} onChatChange={onChatChange} autoFocus={!isMobile} />
-			)}
+			<LopuVoiceSurface voiceMode={mode === 'voice'} chatId={chatId} onChatChange={onChatChange} onPhaseChange={setVoicePhase} />
 		</Box>
 	);
 

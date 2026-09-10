@@ -18,6 +18,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Add relational discussions to Thing details/previews and confirmation-bound
+  Lopu comment tools; unify the text/voice page composer, add chat attachment
+  selection, and introduce searchable scheduled tasks with separate run Things
+  and Lopu-message notifications. Browser and end-to-end release checks remain
+  separate from focused tests; see the [feature validation notes](../PRs/pending-lopu-unified-scheduled-chats.md) before deployment.
+  — Codex (AI), 2026-09-10
+
 - Save new iOS Lopu voice recordings as owner-private playable audio Things,
   retaining on-device recovery files and an account-bound retry outbox.
   Completed recordings survive draft cleanup; upload/complete contracts are

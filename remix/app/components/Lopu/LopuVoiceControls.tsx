@@ -66,11 +66,11 @@ export type LopuVoiceItem = {
 };
 
 type LopuVoiceEvent =
-	| { type: 'meta'; mode?: string; provider?: string; sessionId?: string }
+	| { type: 'meta'; mode?: string; provider?: string; sessionId?: string; chatId?: string }
 	| { type: 'quote'; text: string; page?: { id?: string; title?: string } }
 	| { type: 'delta'; text: string }
 	| { type: 'error'; error?: string; message?: string }
-	| { type: 'done' };
+	| { type: 'done'; messages?: { id: string }[] };
 
 export type UseLopuVoiceOptions = {
 	chatId?: string | null;
@@ -187,9 +187,29 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 		setItems((current) => (current.some((item) => item.id === id) ? current : [...current, { id, role: 'assistant' as const, text: '', at: Date.now() }].slice(-MAX_LOCAL_ITEMS)));
 	}, []);
 
+	const savedVoiceChats = React.useRef(new Map<string, { chatId: string; ownerId: string | null }>());
 	const applyVoiceEvent = React.useCallback(
 		(assistantId: string, event: LopuVoiceEvent | null | undefined) => {
 			if (!event || typeof event !== 'object') return;
+			if (event.type === 'meta' && event.chatId) {
+				const ownerId = getLopuStoreSnapshot().userId;
+				savedVoiceChats.current.set(assistantId, { chatId: event.chatId, ownerId });
+				if (!getLopuStoreSnapshot().activeChatId) selectLopuChat(event.chatId);
+			}
+			if (event.type === 'done' && event.messages?.length) {
+				const saved = savedVoiceChats.current.get(assistantId);
+				savedVoiceChats.current.delete(assistantId);
+				if (saved && saved.ownerId === getLopuStoreSnapshot().userId) {
+					void loadLopuChats();
+					void loadLopuMessages(saved.chatId).then(() => {
+						if (saved.ownerId !== getLopuStoreSnapshot().userId) return;
+						const rows = getLopuStoreSnapshot().messages[saved.chatId] ?? [];
+						if (event.messages!.every(message => rows.some(row => row.id === message.id))) {
+							setItems(items => items.filter(item => item.id !== assistantId && item.id !== `${assistantId}-user`));
+						}
+					});
+				}
+			}
 			if (event.type === 'delta' && typeof event.text === 'string') {
 				const delta = event.text;
 				patchItem(assistantId, (item) => ({ ...item, text: item.text + delta }));
@@ -313,17 +333,22 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 	const transcribeUtterance = React.useCallback(
 		async (text: string) => {
 			const assistantId = newId('lopu');
-			pushItem({ role: 'user', text });
+			const requestOwner = getLopuStoreSnapshot().userId;
+			pushItem({ id: `${assistantId}-user`, role: 'user', text });
 			pushItem({ id: assistantId, role: 'assistant', text: '' });
 			try {
+				const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
+				await requireThingtimeCapability('api.lopu-voice-reply', '1.3.0');
+				if (requestOwner !== getLopuStoreSnapshot().userId) return;
 				const response = await fetch(VOICE_REPLY_ENDPOINT, {
 					method: 'POST',
 					credentials: 'include',
 					headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' },
-					body: JSON.stringify({ transcript: text, sessionId: sessionIdRef.current, transcribeMode: true })
+					body: JSON.stringify({ transcript: text, requestId: assistantId, chatId: getLopuStoreSnapshot().activeChatId, sessionId: sessionIdRef.current, transcribeMode: true })
 				});
-				await readNdjson(response, (event) => applyVoiceEvent(assistantId, event as unknown as LopuVoiceEvent));
+				await readNdjson(response, (event) => { if (requestOwner === getLopuStoreSnapshot().userId) applyVoiceEvent(assistantId, event as unknown as LopuVoiceEvent); });
 			} catch (error) {
+				if (requestOwner !== getLopuStoreSnapshot().userId) return;
 				const message = error instanceof Error && error.message ? error.message : 'Lopu could not save that transcript.';
 				patchItem(assistantId, (item) => ({ ...item, text: message, error: true }));
 			}
@@ -1026,6 +1051,7 @@ export const LopuVoiceTranscript = (props: { items: LopuVoiceItem[]; compact?: b
 // The bottom deck: interim transcript line, gear · mic · stop, and the typed
 // path (a single rounded field, Enter sends, the send button on the rainbow).
 export const LopuVoiceDeck = (props: {
+	hideTypedInput?: boolean;
 	voice: UseLopuVoice;
 	compact?: boolean;
 	disabled?: boolean;
@@ -1069,6 +1095,7 @@ export const LopuVoiceDeck = (props: {
 				)}
 			</Flex>
 			<Flex
+				display={props.hideTypedInput ? 'none' : 'flex'}
 				align="center"
 				gap={2}
 				border={LOPU_UI.border}
@@ -1125,6 +1152,7 @@ export const LopuVoiceDeck = (props: {
 // ——— the surface ————————————————————————————————————————————————————————————
 
 export type LopuVoiceSurfaceProps = {
+	voiceMode?: boolean;
 	chatId?: string | null;
 	onChatChange?: (chatId: string | null) => void;
 	compact?: boolean;
@@ -1136,18 +1164,17 @@ export type LopuVoiceSurfaceProps = {
 // composer dock folded away — the deck carries the typed path) with the
 // local transcript rows slotted into its list, and the deck. Each final utterance is a normal chat turn
 // with the chat's own model/provider settings.
-export const LopuVoiceSurface = ({ chatId, onChatChange, compact = false, onOpenFull, onPhaseChange }: LopuVoiceSurfaceProps) => {
+export const LopuVoiceSurface = ({ chatId, onChatChange, compact = false, onOpenFull, onPhaseChange, voiceMode = true }: LopuVoiceSurfaceProps) => {
 	const chat = useLopuChat({ chatId });
 	const { settings, setProviderId } = useLopuSettings();
-	const sendRef = React.useRef(chat.send);
-	sendRef.current = chat.send;
+	const sendRef = React.useRef<((text: string) => Promise<import('./lopuChatStore').SendLopuResult | undefined>) | null>(null);
 	const setChatSettingsRef = React.useRef(chat.setSettings);
 	setChatSettingsRef.current = chat.setSettings;
 
 	const onFinalTranscript = React.useCallback(async (text: string) => {
-		const result = await sendRef.current(text);
+		const result = await sendRef.current?.(text);
 		// a turn that never left (sign-in, still replying) already toasted
-		if (!result.ok) return null;
+		if (!result?.ok) return null;
 		const turn = getLopuStoreSnapshot().turns[result.requestId];
 		// an aborted or failed turn is never read aloud
 		return turn && turn.status === 'done' ? turn.text : null;
@@ -1194,12 +1221,13 @@ export const LopuVoiceSurface = ({ chatId, onChatChange, compact = false, onOpen
 	const stopRef = React.useRef(voice.stop);
 	stopRef.current = voice.stop;
 	React.useEffect(() => {
-		if (locked) stopRef.current();
-	}, [locked]);
+		if (locked || !voiceMode) stopRef.current();
+	}, [locked, voiceMode]);
 
 	return (
-		<Flex className="lopuVoiceSurface" data-locked={locked ? 'true' : 'false'} direction="column" flex={1} minH={0} minW={0} width="100%" sx={{ '& .lopuComposerDock, & .lopuComposer': { display: 'none' } }}>
+		<Flex className="lopuVoiceSurface" data-locked={locked ? 'true' : 'false'} direction="column" flex={1} minH={0} minW={0} width="100%">
 			<LopuChatView
+				externalSendRef={sendRef}
 				chatId={chatId}
 				onChatChange={onChatChange}
 				compact={compact}
@@ -1208,7 +1236,7 @@ export const LopuVoiceSurface = ({ chatId, onChatChange, compact = false, onOpen
 				autoFocus={false}
 				trailing={voice.items.length ? <LopuVoiceTranscript items={voice.items} compact={compact} /> : null}
 			/>
-			<LopuVoiceDeck voice={voice} compact={compact} disabled={!chat.viewer.id || locked} providerValue={providerValue} onProviderChange={onProviderChange} provider={provider} />
+			{voiceMode ? <LopuVoiceDeck hideTypedInput voice={voice} compact={compact} disabled={!chat.viewer.id || locked} providerValue={providerValue} onProviderChange={onProviderChange} provider={provider} /> : null}
 		</Flex>
 	);
 };

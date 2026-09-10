@@ -1,5 +1,24 @@
 # TESTING.md — per-area manual test checklists
 
+## Unified Lopu conversations, scheduled Things and discussions
+
+- [ ] Desktop and 390px: switch Chat → Voice → Chat repeatedly; keep the same
+  chat ID, history, draft and attachment selection. Reload a saved transcript.
+  Check device transcription and direct-provider voice separately.
+- [ ] Attach a device file and select an owned Thing. Send once, refresh and
+  verify the file still opens privately. Retry failures and switch accounts
+  during upload; never bind, display or delete another account's attachments.
+- [ ] Open a note, todo, recording and post from `/things`. Open their preview
+  dialogs and detail pages, scroll top to bottom, and post/load older comments.
+  Verify each comment is its own Thing with targetId; original crystal stays
+  unchanged. Test hidden links, read-only audiences, deleted parents and logout.
+- [ ] Ask Lopu to comment; the full proposed comment and target are shown before
+  Confirm. Cancel must write nothing; changing text or target invalidates approval.
+- [ ] Create interval and time-zone cron tasks in all three delivery modes.
+  Inspect their searchable Things and separate run notes; test existing/new
+  chats, notification mute, pause, completed todos, quota failure and lost leases.
+  A retry must not duplicate a message; ambiguous AI runs stop for review.
+
 - After merging notification families, verify recording reminders and subspace
   moderation retain separate categories and all preference switches. Recording
   reminders and mod-queue email stay opt-in. Confirm both capability manifests

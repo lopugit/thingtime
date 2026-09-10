@@ -886,6 +886,8 @@ const appendMessages = (chatId: string, rows: ChatMessage[]) => {
 };
 
 export type SendLopuOptions = {
+	attachmentIds?: string[];
+	thingIds?: string[];
 	settings?: Partial<LopuChatSettings>;
 	context?: LopuReplyContext;
 	// apply Lopu's builder patches to the mounted draft live (settings.lopu.applyPatches)
@@ -1028,6 +1030,8 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 		...(settings.speed ? { speed: settings.speed } : {}),
 		...(statesProvider ? { providerId: settings.providerId ?? null } : {}),
 		...(options.context ? { context: options.context } : {}),
+		...(options.attachmentIds?.length ? { attachmentIds: options.attachmentIds } : {}),
+		...(options.thingIds?.length ? { thingIds: options.thingIds } : {}),
 		...(options.confirmations?.length ? { confirmations: options.confirmations } : {})
 	};
 
