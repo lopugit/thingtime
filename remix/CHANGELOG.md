@@ -27,6 +27,28 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   [Release and validation notes](../PRs/722-ios-voice-recording-things-save-ios-lopu-recordings-to-private-things.md).
   — Codex (AI), 2026-09-09
 
+- Recover initial static-module download failures before the application entry
+  can install its listeners. Preserve the shared URL, retry automatically at
+  most once and provide an accessible manual fallback when recovery fails or
+  session storage is unavailable. Keep existing rendered content untouched.
+  Add desktop/mobile native-browser regressions and diagnostic bundled-client
+  sharing coverage. [Validation and rollout](../PRs/719-codex-shared-render-media-context.md).
+  — Codex (AI), 2026-09-09
+
+- Shared CSS media now carries the root audience through page/block backgrounds,
+  HTML styles and Chakra responsive/pseudo styles. A shared parser recognizes
+  literal URL/image-set references without granting quoted text or external
+  URLs; shared writers cannot insert unreadable private CSS media. Linked text
+  downloads use the same context. Publish attachment-content 1.3.0 and require it
+  before shared media renders. Rich HTML/argument dependency discovery and
+  independent protected-upload copying remain separate follow-ups.
+  Cover escaped CSS function identifiers (including hex-terminating whitespace)
+  with a bounded argument scanner shared by discovery and rendering.
+  Preserve recording-Thing support when integrating develop; publish the
+  combined Things feature 1.7.1 / contract 1.6.1 without a version downgrade.
+  [PR #719 validation and remaining browser gate](../PRs/719-codex-shared-render-media-context.md).
+  — Codex (AI), 2026-09-09
+
 - 2026-09-09: Reconcile Watch/Lopu automation with current develop and main: preserve durable notification history, verified vault controls, shared Settings tabs and iPhone voice recovery. Combine notification contracts as list 1.6.0/settings 1.5.0 and remove the obsolete history-trimming call from the reminder transaction. — Codex (AI)
 
 - 2026-09-09: Recover expired Watch upload drafts without dropping local audio or falsely disconnecting the account; add explicit Send to Lopu handoffs, owner-private Thing/notification/reminder tools, and notification Settings test/pause controls. Compatible capability updates, isolated safety tests and iPhone/Watch + Vercel builds pass; hosted/browser/physical delivery gates remain separate. See [PR #665 notes](../PRs/665-codex-watch-lopu-recording-automation-private-transcripts-todos-reminders.md). — Codex (AI)
