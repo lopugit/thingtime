@@ -16,6 +16,13 @@ import { after, beforeEach, mock, test } from 'node:test';
 //      retries it for real and the page converges instead of degrading
 //      permanently to the keyword heuristic.
 //
+// and the third property that makes the cache CORRECT rather than merely
+// cheap:
+//
+//   3. a verdict is bound to the text it was reached on. External posts are
+//      current-state upserts, so one post id carries different text over time;
+//      a verdict cached under the id alone would outlive the content it judged.
+//
 // Module mocks (the test:lopu-streaming precedent) stand in for the provider
 // and both collections, so this runs with no network and no Mongo.
 
@@ -151,4 +158,41 @@ test('a page that fits the budget is classified in one read', async () => {
 
   assert.equal(aiCalls, 2, 'two filters × one batch — well under the cap, so nothing is deferred');
   assert.equal(result.matchesByPostId.size, posts.length, 'the ordinary case is unchanged by the budget');
+});
+
+// A synced external post is a CURRENT-STATE upsert: connections.ts $sets
+// `crystal.text` on every sync, so the same post id carries the provider's
+// latest text. A verdict keyed on the id alone would be minted once from
+// whatever the first sync happened to fetch and then served forever, because
+// the verdict doc is written $setOnInsert. Two consequences, one of them
+// adversarial: an edited post keeps a stale verdict (a `hide` rule silently
+// stops applying), and a hostile feed can serve benign text on the sync that
+// gets classified and its real content afterwards — evading the viewer's own
+// filter without touching the classifier prompt at all.
+test('an edited post is re-classified rather than served its stale verdict', async () => {
+  world(1);
+  const original = [{ id: 'ext-post-0', text: 'widget update number 0' }] as any[];
+
+  await applyFeedFilters('user-1', original);
+  assert.equal(aiCalls, 1, 'the first read classifies the post for real');
+
+  // Same id, same text: this is the ordinary re-read the cache exists for, and
+  // it must still cost nothing. (If the verdict key were content-derived in a
+  // way that shifted per sync — a timestamp or a like count in the hash — the
+  // cache would be silently dead and only this assertion would notice.)
+  await applyFeedFilters('user-1', original);
+  assert.equal(aiCalls, 1, 'unchanged content stays fully cached — the fix must not disable the cache');
+
+  // Same id, the provider now serves different text.
+  const edited = [{ id: 'ext-post-0', text: 'this is the content the viewer asked to hide' }] as any[];
+  const result = await applyFeedFilters('user-1', edited);
+
+  assert.equal(aiCalls, 2, 'new content is judged on its own merits, not on the verdict for text it replaced');
+  assert.equal(result.matchesByPostId.get('ext-post-0')?.length, 1, 'and the fresh verdict is what the viewer is served');
+
+  // Both verdicts coexist: the edit mints a new cache entry rather than
+  // mutating the old one, so reverting to the original text is free too.
+  assert.equal(things.docs.length, 2, 'each classified revision keeps its own verdict doc');
+  await applyFeedFilters('user-1', original);
+  assert.equal(aiCalls, 2, 'a revert re-uses the verdict already reached for that exact text');
 });

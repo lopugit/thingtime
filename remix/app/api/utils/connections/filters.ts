@@ -12,9 +12,12 @@ import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 //     HOME-pinned operational preference (storageClass 'control', owner-acl),
 //     managed only through /api/v1/connections/filters.
 //   • `feed-filter-verdict` — one cached classification per (filter revision,
-//     post): deterministic `ext-verdict-…` shareId, so each post is classified
-//     once per filter revision, not once per viewer per page load. The filter
-//     revision key hashes the prompt, so editing a filter re-classifies.
+//     post revision): deterministic `ext-verdict-…` shareId, so each post is
+//     classified once per revision pair, not once per viewer per page load.
+//     BOTH sides of that pair are content-derived — the key hashes the filter's
+//     prompt and the post's text — so editing a filter re-classifies its posts,
+//     and a post whose provider re-syncs it with new text is re-judged instead
+//     of inheriting the verdict for the text it replaced.
 //
 // Classification prefers the shared LLM plumbing (musing.ts — the only module
 // allowed to construct AI clients, provider waterfall + graceful no-key
@@ -85,7 +88,31 @@ const feedFilterShareId = (): string => `ext-filter-${sha48([String(Date.now()),
 // verdicts key on the filter REVISION (id + prompt hash) so prompt edits
 // invalidate the cache naturally
 const filterRevisionKey = (filter: { id: string; prompt: string }): string => sha48([filter.id, filter.prompt]);
-export const verdictShareId = (revisionKey: string, postId: string): string => `ext-verdict-${sha48([revisionKey, postId])}`;
+
+// The text a verdict was reached on, normalized identically wherever the
+// verdict id is derived and wherever the classifier is handed its input — the
+// two must never drift, or a post caches under one key and is looked up under
+// another.
+const classifiedText = (post: { text?: unknown }): string => `${post.text || ''}`;
+
+// Verdicts key on the CONTENT that was classified, not just the post id.
+// External posts are current-state upserts: `crystal.text` is rewritten by
+// every sync ("latest fetch wins by design", connections.ts), so the same post
+// id legitimately carries different text later — an edited Mastodon status or
+// Reddit post, an RSS item re-served under the same guid. Keyed on the id
+// alone, the FIRST verdict is served forever (the cache doc is $setOnInsert,
+// so a re-sync never refreshes it either): a `hide` rule silently stops
+// applying to the edit, and a hostile feed can serve benign text on the sync
+// that gets classified and the real content afterwards — filter evasion that
+// needs no prompt injection at all.
+//
+// This does not weaken the cache. composePostText is a pure function of the
+// item's title/body/url, and the volatile fields (stats, timestamps) live in
+// extended.external rather than crystal.text — so unchanged content hashes to
+// the same key and repeat reads stay free. Only a genuine edit costs one
+// re-classification, which is exactly the work the edit created.
+export const verdictShareId = (revisionKey: string, postId: string, text: string): string =>
+  `ext-verdict-${sha48([revisionKey, postId, text])}`;
 
 const toPublicFilter = (doc: any): PublicFeedFilter => ({
   id: String(doc?.shareId || ''),
@@ -288,7 +315,7 @@ export const applyFeedFilters = async (
     return {
       filter,
       revisionKey,
-      verdictIds: new Map(posts.map((post) => [verdictShareId(revisionKey, post.id), post] as const))
+      verdictIds: new Map(posts.map((post) => [verdictShareId(revisionKey, post.id, classifiedText(post)), post] as const))
     };
   });
   const allVerdictIds = perFilter.flatMap((entry) => [...entry.verdictIds.keys()]);
@@ -310,7 +337,7 @@ export const applyFeedFilters = async (
           });
         }
       } else {
-        pending.push({ id: post.id, text: `${post.text || ''}`, verdictId });
+        pending.push({ id: post.id, text: classifiedText(post), verdictId });
       }
     }
 
