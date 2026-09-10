@@ -180,9 +180,11 @@ regaining connectivity retries pending work for the same signed-in account.
 Changing account or destination stops that account's worker. An interrupted
 completion retries the same attachment instead of uploading a second copy.
 The selected server must advertise attachment upload/complete features 1.2.0
-in its canonical capability manifest before receiving audio. Build 27 and
-earlier recovery files are not automatically imported because they lack an
-authenticated account association. Completed recording Things have no draft
+in its canonical capability manifest before receiving audio. Starting with build 30,
+older recovery files automatically import when Lopu opens with a signed-in
+account (Voice settings → Import older recordings, enabled by default). Local
+receipts bind each file to that account and origin, and completed build 29
+uploads are reconciled against existing Things before any new upload. Completed recording Things have no draft
 expiry and remain owner-private. Direct voice also retains captured audio; provider
 transcript/reply rows on that path retain their existing session-only behavior.
 

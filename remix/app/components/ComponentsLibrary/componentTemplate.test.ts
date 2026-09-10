@@ -1,6 +1,20 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+// @ts-ignore Node 24 executes this TypeScript test directly and requires the .ts extension.
+import {
+	MAX_RESOLVED_CHARS,
+	MAX_RESOLVED_NODES,
+	EACH_HARD_CAP,
+	MAX_RESOLVED_VALUES,
+	REPEAT_HARD_CAP,
+	coerceArgValue,
+	createTemplateResolver,
+	defaultsFromArgs,
+	resolveTemplate,
+	sanitizeArgSpecs
+} from './componentTemplate.ts';
+
 test('Builder nested scope values preserve structure without executing template-shaped data', () => {
 	const data = { label: 'Buy tubes', nested: { ttArg: 'secret' } };
 	assert.deepEqual(resolveTemplate({ ttArg: 'result.item' }, { result: { item: data }, secret: 'not data' }), data);
@@ -18,18 +32,20 @@ test('Builder nested ttArg and ttFormat share the existing text expansion ceilin
 	assert.deepEqual(resolveTemplate({ ttArg: 'result' }, { result: cyclic }), { label: 'bounded' });
 });
 
-// @ts-ignore Node 24 executes this TypeScript test directly and requires the .ts extension.
-import {
-	MAX_RESOLVED_CHARS,
-	MAX_RESOLVED_NODES,
-	EACH_HARD_CAP,
-	MAX_RESOLVED_VALUES,
-	REPEAT_HARD_CAP,
-	coerceArgValue,
-	defaultsFromArgs,
-	resolveTemplate,
-	sanitizeArgSpecs
-} from './componentTemplate.ts';
+test('stored media resolution preserves unknown and over-budget values without changing UI resolution', () => {
+	const resolve = createTemplateResolver({ preserveUnboundTokens: true });
+	assert.equal(resolve('/api/v1/attachments/content?id=prefix{query.id}'), '/api/v1/attachments/content?id=prefix{query.id}');
+	assert.equal(resolveTemplate('prefix{query.id}'), 'prefix');
+	const exhausted = createTemplateResolver({ preserveUnboundTokens: true });
+	exhausted('x'.repeat(MAX_RESOLVED_CHARS - 2));
+	assert.equal(exhausted('{prefix}{suffix}', { prefix: 'ab', suffix: 'cd' }), 'ab{suffix}', 'A later token must not disappear when an earlier token consumes the remaining budget');
+	for (const template of ['{image}', { ttArg: 'image' }]) {
+		const bounded = createTemplateResolver({ preserveUnboundTokens: true });
+		bounded('x'.repeat(MAX_RESOLVED_CHARS - 30));
+		assert.ok(['{image}', undefined].includes(bounded(template, { image: '/api/v1/attachments/content?id=must-not-truncate' }) as any));
+		assert.equal(bounded('after'), undefined, 'Sibling resolutions share the exhausted budget');
+	}
+});
 
 // Count every value in a resolved tree the way the server's render gate counts
 // the raw template (countServerRenderNodes / checkSchemaRenderTree): one per
