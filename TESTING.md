@@ -2,6 +2,15 @@
 
 ## Unified Lopu conversations, scheduled Things and discussions
 
+- [ ] Native bridge 1.3: start direct audio in a populated chat and confirm
+  context recall; switch back to text and reload both speakers' saved turns.
+  Disconnect during saving, quit/reopen, retry and verify no duplicate turns.
+  Switch account/domain while a save is in flight: no transcript crosses the
+  boundary, no old save navigates a new conversation, and credentials are not
+  stored in the on-device outbox. Test queue-full/disk-failure recovery, native
+  transcription-only chat reconciliation, old-build upgrade messaging, and
+  stopping during microphone permission or WebSocket startup.
+
 - [ ] Direct web voice: start in an existing text chat, speak, switch back and
   reload; both speakers remain in that chat. A new voice chat gets one ID.
   Go offline during saving, reload and retry; no duplicated turns or new AI

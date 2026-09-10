@@ -24,8 +24,17 @@ provider. History seeding may incur the provider's normal text-input charges.
 Failed transcript saves remain in an origin/account-scoped local outbox (up to
 50 events / 240000 characters), with a visible retry button and an online retry.
 No provider credentials are stored in that outbox. If browser storage is
-unavailable, keep the tab open until saving succeeds. Native direct-voice
-persistence and real-provider/device acceptance remain separate release gates.
+unavailable, keep the tab open until saving succeeds.
+Native bridge 1.3.0 also saves completed direct-voice text through this endpoint.
+Its protected Application Support outbox survives app relaunch, never stores
+cookies/tokens, and verifies both the origin contract and current account before
+delivery. It holds at most 50 events / 240000 characters per account/origin
+(200 total), stops recording if a new event cannot be saved safely, and retries
+when Lopu reconnects or **Retry saving voice** is tapped. Only the active voice
+session may select a newly created chat; older background saves update history
+without navigating away. Existing native builds must update before direct voice
+can promise shared history. Normal native transcription also reconciles its
+saved chat. Real-provider and physical-device acceptance remain release gates.
 
 Scheduled tasks support notification-only, saved chat-message, and fresh
 read-only AI-update modes, an existing conversation or a new chat each run,

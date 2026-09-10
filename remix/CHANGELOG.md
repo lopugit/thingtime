@@ -18,6 +18,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Add native direct-voice transcript recovery and bounded shared-chat context
+  behind bridge 1.3.0; reconcile transcription-only chat saves and expose native
+  retry state without storing credentials. Simulator/provider/device gates are
+  tracked in [PR 731](../PRs/731-lopu-unified-scheduled-chats.md).
+  — Codex (AI), 2026-09-10
+
 - Reconcile PR 731 with develop's authored/nested media inheritance without
   downgrading Lopu discussions or notification-test capabilities; retain both
   Things read and write compatibility coverage. — Codex (AI), 2026-09-10
