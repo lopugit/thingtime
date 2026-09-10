@@ -1841,6 +1841,14 @@ approval, storage quotas, selected-provider/local-device setup and separate Lopu
 tool confirmations remain required. Transcript comments are linked children;
 processing never converts the audio into a post or rewrites its crystal/binding.
 
+In `/things`, an owned private audio recording also offers **Send to Lopu** in
+both the right-click and three-dot menus. The action checks this domain's
+capabilities and your enabled processor, then asks for confirmation. It sends
+only the selected recording, not other selected Things; it never enables a
+processor automatically. Recording activity shows the eventual transcript and
+conversation. The server remains authoritative for attachment readiness and
+privacy, even when a cached tile still shows the menu.
+
 The opt-in HTTP delivery smoke (`pnpm --dir remix run test:recording-delivery`)
 skips by default. To run it, use an isolated loopback Thingtime server backed by
 a disposable Mongo replica set and a configured private test S3 bucket. Register

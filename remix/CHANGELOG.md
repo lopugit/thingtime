@@ -18,6 +18,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Add confirmed Send to Lopu to private recording Things in desktop and phone menus, with capability, account-switch and processor-consent guards and a link to recording activity. Keep phone content inset. Details: [PR 761](../PRs/761-lopu-saved-recording-handoff.md). — Codex (AI), 2026-09-10
+
 - Allow explicitly selected private saved audio Things through the recording queue and confirmed Send to Lopu flow, with source-state revalidation and transactional attachment fences. Keep automatic discovery Watch-only, preserve relational transcripts and negotiate the new 1.5 recording controls. — Codex (AI), 2026-09-10
 
 - Add an explicitly opted-in, loopback-only recording-delivery smoke with synthetic audio, real HTTP upload/pairing/completion paths, duplicate/privacy checks, and disposable-account cleanup. Document its upload-approval prerequisites and separate synthetic broker proof from real provider/Watch acceptance. — Codex (AI), 2026-09-10
