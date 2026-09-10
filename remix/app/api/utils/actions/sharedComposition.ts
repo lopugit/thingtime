@@ -104,15 +104,21 @@ export const getSharedCompositionThing = async (viewer: Viewer, id: string, root
 
 // The attachment service still owns ready-state, moderation, object-version,
 // expiry and home-storage checks. This only substitutes the composition's read
-// audience for a same-author, explicitly embedded, bound post-purpose object.
+// audience for a same-author post-purpose object attached to a contained Thing
+// or explicitly embedded by one. Neither path changes the stored upload ACL.
 export const createCanViewSharedCompositionAttachment = (resolve = resolveSharedComposition, independentlyVisible = canViewHomeAttachmentTarget) => async (viewer: Viewer, attachment: AttachmentAccessDocument, rootId: string): Promise<boolean> => {
 	if (!attachment.targetId) return false;
 	const composition = await resolve(viewer, rootId, { contentRoot: true });
 	if (isFail(composition)) return false;
-	const referencing = [...composition.docs.values()].filter((doc) => compositionAttachmentIds(doc.thingtime, doc.crystal || {}).has(attachment.shareId));
-	const rootBound = attachment.targetId === composition.root.shareId;
+	const boundTarget = composition.docs.get(attachment.targetId);
+	const compositionBound = attachment.targetId === composition.root.shareId || (!!boundTarget && boundTarget.ownerId === composition.root.ownerId);
 	const inheritablePurpose = !attachment.attachmentPurpose || attachment.attachmentPurpose === 'post';
-	if (inheritablePurpose && attachment.ownerId === composition.root.ownerId && (rootBound || referencing.some((doc) => doc.ownerId === composition.root.ownerId))) {
+	const sameAuthor = !!composition.root.ownerId && attachment.ownerId === composition.root.ownerId;
+	// Bound children need no markup scan; foreign/managed uploads never gain
+	// authority from the root and need no discovery work at all.
+	const embedded = inheritablePurpose && sameAuthor && !compositionBound && [...composition.docs.values()].some((doc) =>
+		doc.ownerId === composition.root.ownerId && compositionAttachmentIds(doc.thingtime || [], doc.crystal || {}).has(attachment.shareId));
+	if (inheritablePurpose && sameAuthor && (compositionBound || embedded)) {
 		return canViewInherited({ ...attachment, acl: ['tt:inherit'], targetId: composition.root.shareId } as ThingDoc, viewer, (id) => Promise.resolve(id === composition.root.shareId ? composition.root : null));
 	}
 	// Public profile media, comment chains and independently accessible foreign

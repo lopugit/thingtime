@@ -174,6 +174,8 @@ test('shared page audience includes its author components, never a foreign priva
 				previewBg: `url(${mediaSource('page-css')})`,
 				blocks: [...page.crystal.blocks,
 					{ id: 'css-block', type: 'text', text: 'Block background', css: { 'background-image': `url(${mediaSource('block-css')})` } },
+					{ id: 'raw-html-media', type: 'html', html: `<div style='background-image: url("${mediaSource('raw-html-css')}"); min-height: 20px'><img src='${mediaSource('raw-html-image')}' alt='Raw HTML media'></div>` },
+					{ id: 'rich-html-media', type: 'text', html: `<p><img src='${mediaSource('rich-html-image')}' alt='Rich HTML media'></p>` },
 					{ id: 'css-chakra', type: 'component', component: chakraMedia.id },
 					{ id: 'media-link', type: 'text', text: 'Shared media download', href: mediaSource('download') }
 				]
@@ -272,7 +274,7 @@ test('shared page audience includes its author components, never a foreign priva
 					});
 					assert.ok(mediaReads > 0);
 					await tab.getByTestId('shared-chakra-css').hover();
-					for (const name of ['html-css', 'chakra-css', 'page-css', 'block-css', 'hover-css']) {
+					for (const name of ['html-css', 'chakra-css', 'page-css', 'block-css', 'hover-css', 'raw-html-css', 'raw-html-image', 'rich-html-image']) {
 						if (!cssReads.has(`sharing-browser-${name}`)) await tab.waitForResponse((response: any) => new URL(response.url()).searchParams.get('id') === `sharing-browser-${name}`, { timeout: 15000 });
 						assert.ok(cssReads.has(`sharing-browser-${name}`), name);
 					}
@@ -423,6 +425,12 @@ test('shared page audience includes its author components, never a foreign priva
 		]) {
 			const injectedCss = await request('/api/v1/things', 'PATCH', { id: page.id, crystal }, stranger);
 			assert.equal(injectedCss.response.status, 403, 'Shared writers cannot publish private media through CSS');
+		}
+		for (const type of ['text', 'html']) {
+			const injectedHtml = await request('/api/v1/things', 'PATCH', { id: page.id, crystal: { blocks: [{ id: 'private-html', type,
+				html: '<img src="/api/v1/attachments/content?id=guessed-private-html">'
+			}] } }, stranger);
+			assert.equal(injectedHtml.response.status, 403, 'Shared writers cannot publish private media through authored markup');
 		}
 		for (const ref of [untouched.id, `${key}-unrelated`]) {
 			const refused = await request('/api/v1/things', 'PATCH', { id: page.id, crystal: { blocks: [{ id: 'stolen', type: 'component', component: ref }] } }, stranger);

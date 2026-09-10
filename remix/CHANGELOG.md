@@ -18,6 +18,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Extend shared-root media inheritance to authored rich/raw HTML rendering
+  positions and uploads bound directly to contained same-author Things.
+  Share the browser tag/depth/node policy with bounded server discovery;
+  retain foreign-owner, managed-purpose, revocation and non-owner writer
+  guards. Advertise attachment-content 1.4.0 and patch the Things write
+  contracts. Stored component arguments and independent protected-upload
+  copies remain separate follow-up work. — Codex (AI), 2026-09-10
+
 - Save new iOS Lopu voice recordings as owner-private playable audio Things,
   retaining on-device recovery files and an account-bound retry outbox.
   Completed recordings survive draft cleanup; upload/complete contracts are
