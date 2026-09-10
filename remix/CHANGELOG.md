@@ -18,6 +18,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Add an interactive Mac recording worker with hidden pairing input,
+  origin-bound Keychain storage, interrupted-claim recovery and bounded
+  foreground polling. Real local lost-receipt recovery passes; pairing UI,
+  native Keychain and audio acceptance remain pending.
+  Details: [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
 - Register personal recording HTTP operations and owned-device settings,
   origin-scoped capability negotiation, account-tier limits, private errors and
   processor-change fences. Real local signup/pairing/selection smoke passes;

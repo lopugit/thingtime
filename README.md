@@ -1832,7 +1832,8 @@ does not accept production or develop database URIs.
 `remix/scripts/personal-recording-runtime.mjs` provides local `transcribe` and
 `complete` operations for the forthcoming personally paired recording worker.
 The paired-device broker is registered at `/api/v1/lopu/recordings/personal`;
-the automatic launcher and end-to-end Watch acceptance are still pending.
+the interactive Mac launcher is available; pairing-screen integration and
+end-to-end Watch acceptance are still pending.
 No server, public listener, background service or automatic recording processing
 is started by importing this module.
 
@@ -1870,8 +1871,8 @@ and source privacy. Accepted transcripts and server-selected output IDs survive
 a worker crash; exact completion retries do not run inference or create content
 again. Jobs assigned to a personal device cannot fall back to cloud credentials.
 
-**Integration status:** this transport is not a launchable background service
-yet. The settings UI and API accept `runtimeDeviceId` only for an owned paired
+**Integration status:** the Mac CLI runs in the foreground, not as an installed
+background service. The settings UI and API accept `runtimeDeviceId` only for an owned paired
 device with an active `recordings.personal.v1` session. New jobs snapshot that
 selection; retry explicitly assigns the selected processor while preserving
 completed checkpoints. Offline personal jobs wait without a cloud fallback.
@@ -1879,7 +1880,7 @@ Clients require `api.lopu-recordings` 1.4.0 and
 `api.lopu-recordings-personal` 1.0.0 on the selected origin. Older deployments
 fail closed. Do not copy an API key, CI credential or Claude OAuth
 token into its `credential` option: it accepts only an existing Thingtime paired
-device credential. Keep future machine-local worker setup untracked; importing
+device credential. Keep machine-local worker setup untracked; importing
 this module does not pair a device or enable recording processing.
 Do not set internal job or settings fields directly in a database to bypass
 that gate. Broker/authority mock tests in `test:lopu` are unit coverage, not real
@@ -1890,6 +1891,38 @@ selection, empty-queue and opt-out smoke. It creates one synthetic local account
 and device, leaves processing disabled, prints no credentials, and invokes no
 audio or AI provider. It refuses non-loopback origins. Remaining acceptance:
 real audio/results, revocation races, deployed worker and physical Watch.
+
+Mac launcher (run from `remix/`):
+
+```sh
+npm run recordings:worker -- --help
+npm run recordings:worker -- configure --origin https://your-thingtime.example --claude /absolute/path/claude --whisper /absolute/path/whisper-cli --ffmpeg /absolute/path/ffmpeg --model /absolute/path/ggml-model.bin
+npm run recordings:worker -- pair --origin https://your-thingtime.example
+npm run recordings:worker -- status --origin https://your-thingtime.example
+npm run recordings:worker -- run --origin https://your-thingtime.example --once
+```
+
+Pairing requires a fresh one-time challenge from the signed-in account's
+`POST /api/v1/devices/pairing` operation. Its recording-settings button is still
+pending; this is not yet the finished user setup flow. Paste **only that
+Thingtime pairing secret** into the hidden interactive prompt, never a Claude
+token, password or API key. No secret belongs in command arguments or files.
+The launcher stores its origin-bound credential and interrupted claim in macOS
+Keychain, using stdin rather than process arguments. `resume --origin ...`
+recovers a lost response using the exact saved proof and credential; it does
+not create a second device. Keychain read-back must succeed before pairing
+continues. Expired/invalid pending challenges currently require manual recovery
+of this launcher's exact Keychain item; automatic reset is intentionally absent.
+
+Runtime paths are stored in a private per-origin config under
+`~/Library/Application Support/Thingtime/recording-worker/`; it contains no
+credentials. A per-origin lock prevents overlapping setup/workers. Stale locks
+fail closed and must be inspected manually, not blindly deleted. Pairing never
+enables recording processing: select the computer and explicitly opt in at
+`/lopu/recordings`. Run without `--once` for foreground polling; it stops after
+three consecutive failures, with no automatic restart. `status` is local setup
+status only, not an assertion of provider or transcription health. Real
+Keychain/native-runner acceptance remains separate from mocked tests.
 
 This worktree's local QA URL is `http://127.0.0.1:18000/lopu/recordings` (HMR
 18001, Nitro 18002), managed by `npm run web-pms`. Tailscale/Funnel was not

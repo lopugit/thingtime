@@ -33,11 +33,25 @@ empty queue polling, cookie rejection and opt-out revocation. Synthetic account
 were made. New tests cover device projections, malformed requests, authority
 failures and changing processors during a content transaction.
 
-Still pending: launchable paired worker, real audio/results and transaction-race
+Still pending: finished pairing UI, real audio/results and transaction-race
 acceptance, deployed and physical Watch proof. Browser automation returned
 `Debugger unattached`, so desktop/mobile selector validation is not yet proven.
 Do not bypass consent by seeding internal database fields. This PR is not a
 claim of physical-device acceptance.
+
+## Interactive Mac launcher — 2026-09-10
+
+Added configure/pair/resume/status/run commands, private per-origin path config
+and process locks. Signed pairing persists the credential and server proof in
+Keychain before transmission, so a lost completion receipt resumes the exact
+claim. Keychain writes use stdin, never argv, and require read-back verification.
+Native Claude sign-in remains separate; pairing does not enable processing.
+Eight pairing tests and three mocked Keychain tests pass. Real local HTTP smoke
+now drops a successful pairing response and proves recovery before selection,
+queue polling and opt-out. Synthetic account `recqamtva5kc3` remains local with
+processing disabled. No real Keychain write, audio processing or AI invocation
+was performed in this acceptance slice. Expired-challenge reset and the visual
+pairing button remain unfinished; this is not yet a turnkey installed service.
 
 ## Verification
 

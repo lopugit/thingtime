@@ -6050,6 +6050,15 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
 
 Personal recording worker transport and HTTP integration:
 
+- [ ] Mac launcher pairing: `test:ai-models` covers signed claims persisted
+      before network sends, manifest/origin gates before vault access, identical
+      retries after lost prepare/complete receipts, and secret-safe failures.
+      Keychain subprocess tests use mocks: writes must use stdin (never argv),
+      verify read-back, and distinguish denied/corrupt items from absent items.
+- [ ] Exercise the Mac launcher on a real paired account: hidden paste,
+      interrupted `resume`, explicit selection/consent, private config, duplicate
+      process lock, SIGINT/SIGTERM cleanup and bounded retry shutdown. Help must
+      not access credentials. Local `status` must not imply provider health.
 - [ ] `npm --prefix remix run test:lopu` also exercises the personal broker:
       exact session/device/consent filters and transaction fences, lease-bound
       audio, revocation during download, completion receipt retries, heartbeat
@@ -6061,7 +6070,8 @@ Personal recording worker transport and HTTP integration:
       never treated as online, malformed/oversized requests with no-cache
       headers, subscription gates, and processor changes before sends or commits.
 - [ ] Run `node --import tsx scripts/personal-recording-api-smoke.mts <loopback-origin>`
-      from `remix/`: real signup, signed pairing, owner-selected processor,
+      from `remix/`: real signup, launcher signed pairing and recovery after a
+      deliberately lost completion response, owner-selected processor,
       cookie rejection, queue polling and opt-out. The fixture account remains
       local with processing disabled; no provider is invoked. This is not an
       audio/result or concurrency-race test.

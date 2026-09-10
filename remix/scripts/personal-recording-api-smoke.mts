@@ -1,8 +1,8 @@
 // Local-only HTTP integration: no Mongo access, production credentials or provider calls.
 // Creates one synthetic account and device through the real signup/pairing APIs.
 import assert from 'node:assert/strict';
-import { generateKeyPairSync, randomBytes, sign } from 'node:crypto';
-import { canonicalDevicePairingClaimBytes } from '../app/api/utils/devices/deviceAuth';
+import { randomBytes } from 'node:crypto';
+import { pairPersonalRecordingDevice, type PersonalPairingState } from './personal-recording-pair';
 import { supportsPersonalRecordingSettings } from '../app/components/Lopu/recordingsCapabilities';
 
 const origin = process.argv[2] || 'http://127.0.0.1:18000';
@@ -42,25 +42,27 @@ try {
 	await request('/api/v1/lopu/recordings', { op: 'settings', settings: { runtimeDeviceId: 'foreign-worker' } }, undefined, 400);
 	phase = 'pairing challenge';
 	const { pairing } = await request('/api/v1/devices/pairing', {});
-	const keys = generateKeyPairSync('ed25519');
-	const publicKey = keys.publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('base64url');
-	const nonce = randomBytes(32).toString('base64url');
-	const credential = `ttnode_${randomBytes(32).toString('base64url')}`;
-	phase = 'prepare signed native claim';
-	const { proof } = await request('/api/v1/devices/pairing/claim', { op: 'prepare', pairingSecret: pairing.pairingSecret, publicKey, nonce });
-	const device = { name: 'Synthetic recording worker', platform: 'macos' as const };
-	const capabilities = ['recordings.personal.v1'];
-	const signature = sign(null, canonicalDevicePairingClaimBytes({ pairingId: proof.pairingId, pairingSecret: pairing.pairingSecret,
-		credential, publicKey, nonce, serverNonce: proof.serverNonce, device, capabilities }), keys.privateKey).toString('base64url');
-	phase = 'complete signed native claim';
-	const paired = await request('/api/v1/devices/pairing/claim', { op: 'complete', pairingSecret: pairing.pairingSecret, credential, device,
-		capabilities, proof: { pairingId: proof.pairingId, publicKey, nonce, serverNonce: proof.serverNonce, signature } });
-	assert.ok(paired.device.id);
+	phase = 'launcher signed claim and lost receipt recovery';
+	let saved: PersonalPairingState | null = null;
+	const store = { read: async () => structuredClone(saved), write: async (state: PersonalPairingState) => { saved = structuredClone(state); } };
+	let dropped = false;
+	const lossyFetch: typeof fetch = async (url, init) => {
+		const response = await fetch(url, init);
+		if (!dropped && init?.body && JSON.parse(String(init.body)).op === 'complete' && response.ok) {
+			dropped = true; await response.body?.cancel(); throw new Error('Synthetic lost completion receipt');
+		}
+		return response;
+	};
+	await assert.rejects(pairPersonalRecordingDevice({ origin, pairingSecret: pairing.pairingSecret, store, fetch: lossyFetch }));
+	assert.equal(dropped, true);
+	const paired = await pairPersonalRecordingDevice({ origin, store });
+	const credential = (await store.read())!.credential;
+	assert.ok(paired.deviceId);
 	phase = 'missing recording consent';
 	await request('/api/v1/lopu/recordings/personal', { op: 'claim' }, credential, 409, false);
 	phase = 'select paired personal processor';
-	const selected = await request('/api/v1/lopu/recordings', { op: 'settings', settings: { enabled: true, runtimeDeviceId: paired.device.id } });
-	assert.equal(selected.settings.runtimeDeviceId, paired.device.id);
+	const selected = await request('/api/v1/lopu/recordings', { op: 'settings', settings: { enabled: true, runtimeDeviceId: paired.deviceId } });
+	assert.equal(selected.settings.runtimeDeviceId, paired.deviceId);
 	assert.equal(selected.provider.mode, 'personal'); assert.equal(selected.provider.configured, true);
 	phase = 'authenticated empty queue';
 	assert.deepEqual(await request('/api/v1/lopu/recordings/personal', { op: 'claim' }, credential, 200, false), { ok: true, job: null });
@@ -68,7 +70,7 @@ try {
 	await request('/api/v1/lopu/recordings', { op: 'settings', settings: { enabled: false } });
 	await request('/api/v1/lopu/recordings/personal', { op: 'claim' }, credential, 409, false);
 	console.log(JSON.stringify({ ok: true, syntheticAccount: username, checks: 11, automationEnabled: false,
-		proof: 'real HTTP signup, signed pairing, selection, queue and opt-out; no audio/provider invocation' }));
+		proof: 'real HTTP signup, launcher pairing with lost receipt recovery, selection, queue and opt-out; no audio/provider invocation' }));
 } catch {
 	// Never render assertion operands, cookies, pairing material or raw responses.
 	console.error(`Personal recording API smoke failed at: ${phase}. No credentials were printed.`);
