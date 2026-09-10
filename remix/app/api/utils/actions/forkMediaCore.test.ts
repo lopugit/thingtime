@@ -3,10 +3,43 @@ import test from 'node:test';
 import { rewriteCopiedAttachmentReferences } from './forkMediaCore';
 import { compositionAttachmentIds } from './compositionMediaCore';
 import { mapAuthoredHtmlMedia, visitAuthoredHtmlMedia } from './authoredHtmlMedia';
+import { resolveTemplate } from '../../../components/ComponentsLibrary/componentTemplate';
 
 const old = '/api/v1/attachments/content?id=att_source';
 const copied = '/api/v1/attachments/content?id=att_copy';
 const copies = new Map([['att_source', 'att_copy']]);
+
+test('fork maps exact attachment IDs in persisted arguments, defaults, nested lists and explicit instance contexts', () => {
+	const render = { ttEach: { arg: 'images', node: { tag: 'img', props: { src: '/api/v1/attachments/content?id={item.id}' } } } };
+	const source = { title: 'att_source', args: [{ name: 'image', label: 'att_source', default: 'att_source' }],
+		savedArgs: { image: 'att_source', images: [{ id: 'att_source', caption: 'Look at att_source' }] }, render,
+		blocks: [{ type: 'component', component: 'component', args: { image: 'att_source' } }] };
+	const output = rewriteCopiedAttachmentReferences(source, copies);
+	assert.equal(output.title, 'att_source');
+	assert.equal(output.args[0].label, 'att_source');
+	assert.equal(output.args[0].default, 'att_copy');
+	assert.equal(output.savedArgs.image, 'att_copy');
+	assert.equal(output.savedArgs.images[0].caption, 'Look at att_source');
+	assert.equal(output.blocks[0].args.image, 'att_copy');
+	assert.deepEqual(output.render, render);
+	assert.deepEqual(resolveTemplate(output.render, output.savedArgs), [{ tag: 'img', props: { src: copied } }]);
+	assert.deepEqual([...compositionAttachmentIds(['component'], output)], ['att_copy']);
+	assert.deepEqual(rewriteCopiedAttachmentReferences({ image: 'att_source' }, copies, { attachmentIds: true }), { image: 'att_copy' });
+	assert.equal(source.savedArgs.images[0].id, 'att_source');
+});
+
+test('copied attachment-ID arguments still select their authored map and equality branches', () => {
+	const source = { savedArgs: { image: 'att_source' }, render: { tag: 'div', children: [
+		{ ttMap: { arg: 'image', values: { att_source: { tag: 'img', props: { src: '/api/v1/attachments/content?id={image}' } } }, default: { tag: 'p', children: ['wrong map branch'] } } },
+		{ ttIf: { arg: 'image', equals: 'att_source', then: { tag: 'p', children: ['selected image'] }, else: { tag: 'p', children: ['wrong equality branch'] } } },
+		{ ttIf: { arg: 'image', op: 'in', value: ['att_source'], then: { tag: 'p', children: ['in image list'] } } }
+	] } };
+	const output = rewriteCopiedAttachmentReferences(source, copies);
+	assert.deepEqual(resolveTemplate(output.render, output.savedArgs), { tag: 'div', children: [
+		{ tag: 'img', props: { src: copied } }, { tag: 'p', children: ['selected image'] }, { tag: 'p', children: ['in image list'] }
+	] });
+	assert.equal(source.render.children[0].ttMap?.values.att_source.props.src, '/api/v1/attachments/content?id={image}');
+});
 
 test('fork media rewrites exact URL scalars, saved arguments, CSS and parsed HTML without mutating the source', () => {
 	const source = { savedArgs: { image: old }, args: [{ name: 'image', default: old }], blocks: [

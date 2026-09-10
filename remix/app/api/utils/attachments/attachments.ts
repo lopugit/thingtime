@@ -48,6 +48,7 @@ import { PrivateS3ConfigError } from './config';
 import { getPrivateS3, type AttachmentObjectHead, type AttachmentS3, type AttachmentUploadedPart } from './privateS3';
 import { queueAttachmentModeration } from '../moderation/analyzeAttachment';
 import { copyStoredAttachment } from './copyStoredAttachment';
+import { findUserById, userPublicUploadsEnabled } from '../auth/users';
 
 export const ATTACHMENT_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
 export const ATTACHMENT_READY_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
@@ -88,6 +89,7 @@ type AttachmentServiceDependencies = {
 	customMongoActive: () => boolean;
 	canViewTarget: (viewer: AttachmentViewer, attachment: AttachmentDoc) => Promise<boolean>;
 	canViewSharedTarget: typeof canViewSharedCompositionAttachment;
+	canCopyFiles: (ownerId: string) => Promise<boolean>;
 	clock: () => number;
 	// Fire-and-forget NSFW/TOS analysis kickoff after markReady; optional so
 	// unit tests that stub the store never trigger network analysis.
@@ -264,6 +266,10 @@ const defaultDependencies: AttachmentServiceDependencies = {
 	customMongoActive: isCustomMongoEndpointActive,
 	canViewTarget: canViewHomeAttachmentTarget,
 	canViewSharedTarget: (viewer, attachment, rootId) => canViewSharedCompositionAttachment(viewer, attachment, rootId),
+	canCopyFiles: async (ownerId) => {
+		const user = await findUserById(ownerId);
+		return !!user && user.accountKind !== 'service' && userPublicUploadsEnabled(user);
+	},
 	clock: Date.now,
 	queueModeration: queueAttachmentModeration
 };
@@ -1311,6 +1317,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 	};
 
 	const copy = (viewer: AttachmentViewer, id: unknown, signal?: AbortSignal) => copyStoredAttachment({
+		canCopy: dependencies.canCopyFiles,
 		read: readableStoredAttachment, start, complete, remove,
 		store: dependencies.store, getS3: dependencies.getS3,
 		plan: attachmentPartPlan, uuid: dependencies.uuid, now: dependencies.now

@@ -71,9 +71,22 @@ test('fork cleans copied Things and files after a write failure, including defer
 	assert.ok(f.removedFiles.every((call) => call.input.id.startsWith('copy-')));
 });
 
-test('fork fails before writes for an unresolved media template or excessive per-Thing files', async () => {
+test('fork retargets stored attachment-ID templates without changing template behavior', async () => {
 	const f = fixture(); const doc = f.composition.docs.get('component')!;
 	doc.crystal = { savedArgs: { image: 'att_source' }, render: { tag: 'img', props: { src: '/api/v1/attachments/content?id={image}' } } };
+	f.composition.contexts.set('component', [{ image: 'att_source' }]);
+	f.composition.root.crystal.blocks[0].args = { image: 'att_source' };
+	const result = await forkComposition(viewer, f.composition, f.deps);
+	assert.equal(result.ok, true);
+	assert.equal(f.created[0].crystal.blocks[0].args.image, 'copy-att_source');
+	assert.equal(f.created[1].crystal.savedArgs.image, 'copy-att_source');
+	assert.equal(f.created[1].crystal.render.props.src, '/api/v1/attachments/content?id={image}');
+	assert.equal(doc.crystal.savedArgs.image, 'att_source');
+});
+
+test('fork fails before writes for split media fragments or excessive per-Thing files', async () => {
+	const f = fixture(); const doc = f.composition.docs.get('component')!;
+	doc.crystal = { savedArgs: { prefix: 'att_', image: 'source' }, render: { tag: 'img', props: { src: '/api/v1/attachments/content?id={prefix}{image}' } } };
 	const unsupported = await forkComposition(viewer, f.composition, f.deps);
 	assert.equal(unsupported.ok, false); if (unsupported.ok) return;
 	assert.match(unsupported.error, /templated file reference/);

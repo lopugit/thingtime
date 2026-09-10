@@ -1166,6 +1166,9 @@ email whose link points at the attacker.
 ## Post and comment attachments (`remix/app/components/Attachments/`)
 
 - [ ] Internal shared-file copies: run `npm --prefix remix run test:attachments`.
+      With post-purpose upload approval denied (or its lookup unavailable),
+      copying must reserve no quota or S3 upload. Revoke approval between parts:
+      no next part/finalization may run and only the new upload is cleaned.
       Confirm source authorization precedes quota reservation; revocation,
       moderation, purpose or exact-version changes stop copying; only the new
       owner's partial upload is cleaned, with deferred cleanup still billed.
@@ -1174,7 +1177,12 @@ email whose link points at the attacker.
       alone do not prove that live-S3 acceptance or the Copy button works.
       Run the action suite for URL/HTML/CSS retargeting, transactional binding,
       failed-copy cleanup, late root revocation and no-write template failures.
-      Confirm the button requires `api.things-fork` 1.3.0 before sending a copy.
+      Cover exact attachment IDs in saved args, argument defaults, nested lists
+      and page overrides: generated URLs must use copied IDs, while labels,
+      prose and URL template strings stay unchanged. Matching `ttMap` keys and
+      `ttIf` comparisons must still select the same branch after ID retargeting. Split partial IDs
+      must fail before file writes, never silently retain a source dependency.
+      Confirm the button requires `api.things-fork` 1.3.1 before sending a copy.
 
 - [ ] With `THINGTIME_MODERATION_PROVIDER=test`, upload an image named
       `tt-test-nsfw.png` to a post: after analysis it renders heavily blurred

@@ -18,6 +18,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Correct shared-app file copies whose templates interpolate stored attachment
+  IDs, including defaults, nested lists, branch selectors and page-instance overrides. Preserve
+  template behavior and non-argument text; enforce recipient upload approval
+  inside the copy service and negotiate fork 1.3.1. Split partial
+  IDs and real-storage acceptance remain tracked in [PR #755](../PRs/755-shared-composition-file-copies.md).
+  — Codex (AI), 2026-09-10
+
 - Connect shared app forks to exact-version file copying, retarget authored
   media and bind newly owned files transactionally. Add revocation/cleanup
   coverage and negotiate the additive fork 1.3.0 contract. Live storage and

@@ -4,6 +4,7 @@ import type { AttachmentDoc, AttachmentStore } from './attachmentStore';
 import type { AttachmentS3 } from './privateS3';
 
 type CopyDependencies = {
+	canCopy: (ownerId: string) => Promise<boolean>;
 	read: (viewer: AttachmentAccessViewer, id: unknown) => Promise<AttachmentResult<{ doc: AttachmentDoc }>>;
 	start: (ownerId: string, input: unknown) => Promise<AttachmentResult<{ upload: Record<string, unknown> }>>;
 	complete: (ownerId: string, input: unknown) => Promise<AttachmentResult<{ attachment: Record<string, unknown> }>>;
@@ -32,6 +33,9 @@ export const copyStoredAttachment = async (
 	const missing = (): AttachmentResult<never> => ({ ok: false, status: 404, error: 'Attachment not found' });
 	try {
 		if (abort.signal.aborted) throw new Error('Copy timed out');
+		// Internal service calls do not pass through the upload HTTP adapter.
+		// Preserve its post-purpose approval boundary before reserving anything.
+		if (!await deps.canCopy(viewer.id)) return { ok: false, status: 403, error: 'File copying requires a user account approved for public uploads' };
 		const initial = await deps.read(viewer, id);
 		if (initial.ok === false) return initial;
 		const source = initial.doc;
@@ -41,6 +45,7 @@ export const copyStoredAttachment = async (
 			(source.attachmentPurpose && source.attachmentPurpose !== 'post') || source.moderation?.status === 'blocked' || source.moderation?.status === 'pending') return missing();
 		const stillReadable = async () => {
 			if (abort.signal.aborted) throw new Error('Copy timed out');
+			if (!await deps.canCopy(viewer.id)) throw new Error('Copy permission changed');
 			const fresh = await deps.read(viewer, source.shareId);
 			if (!fresh.ok || fresh.doc.ownerId !== source.ownerId || fresh.doc.objectKey !== source.objectKey ||
 				fresh.doc.objectVersionId !== source.objectVersionId || fresh.doc.objectSizeBytes !== source.objectSizeBytes ||

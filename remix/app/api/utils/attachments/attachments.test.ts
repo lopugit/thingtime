@@ -126,6 +126,7 @@ test('file copies use the download authorization fences before reserving or copy
 	let reservations = 0;
 	let copies = 0;
 	const service = createAttachmentService({
+		canCopyFiles: async () => true,
 		store: { getById: async () => doc, reservePending: async () => { reservations++; throw Error('must not reserve'); } } as any,
 		now: () => now, customMongoActive: () => customMongo,
 		canViewSharedTarget: async () => allowed,

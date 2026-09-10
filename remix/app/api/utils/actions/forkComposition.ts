@@ -53,7 +53,7 @@ export const forkComposition = async (viewer: Viewer, composition: SharedComposi
 			const found = new Set<string>();
 			for (const context of composition.contexts.get(doc.shareId) || [undefined]) {
 				for (const id of compositionAttachmentIds(doc.thingtime, crystal, {
-					args: context && rewriteCopiedAttachmentReferences(context, replacements),
+					args: context && rewriteCopiedAttachmentReferences(context, replacements, { attachmentIds: true }),
 					component: (ref) => {
 						const source = composition.references.get(`${doc.shareId}:component:${ref}`)
 							|| docs.find((candidate) => ids.get(candidate.shareId) === ref || candidate.shareId === ref);

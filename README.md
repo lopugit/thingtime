@@ -1486,10 +1486,13 @@ credentials are needed. It accepts an authorized attachment ID, never an
 external URL, reserves the recipient's quota before copying, and sends copied
 bytes through normal type detection and moderation. A timed-out/failed copy
 remains billed until normal cleanup confirms the object is gone. `/things/fork`
-uses this path with capability `api.things-fork` 1.3.0, retargets authored
-HTML/CSS and saved URL arguments, and binds new files to copied Things. It
+uses this path with capability `api.things-fork` 1.3.1, retargets authored
+HTML/CSS and stored URL or exact attachment-ID arguments (including defaults,
+lists, matching template branch selectors and page overrides), and binds new files to copied Things. It
 rechecks source sharing before and after writes and reports deferred cleanup.
-Non-URL template fragments that assemble a file URL fail before copying;
+File copies require the recipient's normal post-purpose upload approval and
+recheck it during copying; the internal service does not bypass that gate.
+File IDs assembled from multiple partial strings fail before copying;
 external media URLs remain external. Live storage and browser acceptance are
 tracked in [PR #755](PRs/755-shared-composition-file-copies.md), separately
 from unit-test proof.

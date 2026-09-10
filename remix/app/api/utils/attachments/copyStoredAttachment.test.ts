@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { copyStoredAttachment } from './copyStoredAttachment';
-import { attachmentPartPlan } from './attachments';
+import { attachmentPartPlan, createAttachmentService } from './attachments';
 import type { AttachmentDoc } from './attachmentStore';
 
 const fixture = () => {
@@ -16,6 +16,7 @@ const fixture = () => {
 	let destination = { ...source, shareId: 'copy', ownerId: 'visitor', objectKey: 'objects/copy', uploadId: 'destination-mpu', attachmentState: 'pending', attachmentExpiresAt: new Date(now.getTime() + 60_000) } as AttachmentDoc;
 	let readable = true;
 	const deps: Parameters<typeof copyStoredAttachment>[0] = {
+		canCopy: async () => true,
 		read: async () => { events.push('read'); return readable ? { ok: true, doc: structuredClone(source) } : { ok: false, status: 404, error: 'Attachment not found' }; },
 		start: async (owner, input: any) => {
 			events.push('reserve');
@@ -46,6 +47,36 @@ test('a stored copy reserves visitor bytes, pins source version, and uses normal
 		assert.equal(part.sourceObjectKey, 'objects/source'); assert.equal(part.sourceVersionId, 'source-version');
 		assert.equal(part.objectKey, 'objects/copy'); assert.equal(part.uploadId, 'destination-mpu');
 	}
+});
+
+test('copy approval fails closed before reservation and revocation stops later parts', async () => {
+	const denied = fixture();
+	denied.deps.canCopy = async (owner) => { assert.equal(owner, 'visitor'); return false; };
+	const result = await copyStoredAttachment(denied.deps, { id: 'visitor' }, 'source');
+	assert.equal(result.ok, false); if (result.ok) return;
+	assert.equal(result.status, 403);
+	assert.deepEqual(denied.events, []);
+	const unavailable = fixture(); unavailable.deps.canCopy = async () => { throw new Error('Database unavailable'); };
+	assert.equal((await copyStoredAttachment(unavailable.deps, { id: 'visitor' }, 'source')).ok, false);
+	assert.deepEqual(unavailable.events, []);
+	const revoked = fixture(); let checks = 0;
+	revoked.deps.canCopy = async () => ++checks < 3;
+	assert.equal((await copyStoredAttachment(revoked.deps, { id: 'visitor' }, 'source')).ok, false);
+	assert.equal(revoked.parts.length, 1);
+	assert.equal(revoked.events.at(-1), 'cleanup');
+	assert.equal(revoked.events.includes('complete'), false);
+});
+
+test('the attachment service wires its recipient approval gate into shared copies', async () => {
+	let checked = false;
+	const service = createAttachmentService({
+		canCopyFiles: async (owner) => { checked = true; assert.equal(owner, 'visitor'); return false; },
+		getS3: () => { throw new Error('A denied copy must not reach storage'); }
+	});
+	const result = await service.copy({ id: 'visitor', sharedRoot: 'page' }, 'source');
+	assert.equal(checked, true);
+	assert.equal(result.ok, false); if (result.ok) return;
+	assert.equal(result.status, 403);
 });
 
 test('single-part copies omit ranges, including files smaller than the S3 range threshold', async () => {
