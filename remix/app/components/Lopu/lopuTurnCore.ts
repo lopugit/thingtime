@@ -979,6 +979,17 @@ export const isLopuAssistantMessage = (message: Pick<ChatMessage, 'externalSourc
 // defensively — older rows and user rows carry nothing.
 export type LopuMessageToolCall = { name: string; ok: boolean; summary: string; thingId: string | null };
 
+/**
+ * Old receipts store only ok + the server's bounded summary, not a live grant.
+ * Recognise that exact refusal prefix for display only. It proves neither that
+ * approval is still pending nor that a later confirmed call succeeded.
+ */
+export const historicalToolStatus = (call: Pick<LopuMessageToolCall, 'ok' | 'summary'>): LopuToolStatus => {
+	if (call.ok) return 'ok';
+	if (call.summary.startsWith('Waiting for the user’s confirmation: ')) return 'confirm';
+	return 'error';
+};
+
 export type LopuMessageMeta = {
 	role: 'user' | 'assistant' | null;
 	model: string | null;
