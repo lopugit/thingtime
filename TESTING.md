@@ -5596,6 +5596,13 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       not grant private root-author media. Shared writers may preserve existing
       args but cannot insert inaccessible media through an override. Negotiate
       attachment-content 1.6.0; verify both desktop and mobile rendering.
+- [ ] Conditional media properties: signed-out Draw/toggle controls may switch
+      between stored image/poster/link/CSS alternatives under the same root
+      audience. Include wrappers around the props/style record, nested maps,
+      and stored argument outputs. Condition operands, map keys, action inputs
+      and title metadata grant nothing. Revocation removes inactive grants too;
+      both PATCH /things and POST /things/update reject an unreadable upload
+      inserted into an inactive property branch. Negotiate content 1.6.1.
 - [ ] Canvas: hovering a block draws its dashed boundary + label chip; nested
       sub-blocks highlight innermost-wins; clicking selects (solid outline)
       and opens the inspector in the right drawer.
