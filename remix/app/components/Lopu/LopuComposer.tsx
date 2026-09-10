@@ -251,7 +251,7 @@ export const LopuComposer = ({
 					_placeholder={{ color: LOPU_UI.faint }}
 					sx={{ '&:focus, &:focus-visible': { boxShadow: 'none', outline: 'none' } }}
 				/>
-				<Flex align="center" gap={1.5} px={compact ? 1.5 : 2} pb={compact ? 1.5 : 2} pt={0.5} minW={0}>
+				<Flex align="center" flexWrap="wrap" gap={1.5} px={compact ? 1.5 : 2} pb={compact ? 1.5 : 2} pt={0.5} minW={0}>
 					<LopuModelPicker models={models} vaultProviders={vaultProviders} vault={vault} value={settings} defaults={defaults} onChange={onSettingsChange} compact={compact} disabled={disabled} mobile={isMobile} />
 					{accountChip ? (
 						<Box display="inline-flex" alignItems="center" flexShrink={0} minW={0} data-lopu-control>
@@ -279,7 +279,7 @@ export const LopuComposer = ({
 							</Text>
 						</Box>
 					) : null}
-					<Box flex={1} minW={0} />
+					<Flex align="center" gap={1.5} flexShrink={0} ml="auto">
 					{showSettings ? (
 						<Popover placement="top-end" isLazy strategy="fixed" gutter={8}>
 							<PopoverTrigger>
@@ -323,6 +323,7 @@ export const LopuComposer = ({
 						</Popover>
 					) : null}
 					{streaming ? <ActionButton kind="stop" size={controlSize} onClick={onStop} label="Stop Lopu's reply" /> : <ActionButton kind="send" size={controlSize} disabled={!canSend} onClick={submit} label={isMobile || !enterSends ? 'Send' : 'Send (Enter)'} />}
+					</Flex>
 				</Flex>
 			</Box>
 			{hint && !compact ? (

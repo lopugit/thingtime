@@ -23,6 +23,10 @@
 - [ ] Desktop and 390px: switch Chat → Voice → Chat repeatedly; keep the same
   chat ID, history, draft and attachment selection. Reload a saved transcript.
   Check device transcription and direct-provider voice separately.
+  Route exports must share the exact component identity, not separate wrapper
+  functions: wrappers remount the composer even when they render the same page.
+  Search for a long unbroken Thing ID: labels wrap within the picker, its Done
+  button remains reachable, and the composer Send button stays fully in view.
 - [ ] Attach a device file and select an owned Thing. Send once, refresh and
   verify the file still opens privately. Retry failures and switch accounts
   during upload; never bind, display or delete another account's attachments.
