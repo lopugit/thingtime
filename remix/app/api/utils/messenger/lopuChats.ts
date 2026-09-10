@@ -21,14 +21,14 @@
 // models; the id is validated for shape here and for ownership on write.
 // `turns` counts persisted assistant replies and `lastModel` remembers the
 // provider-native id that answered last.
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { MAX_CHAT_NAME_CHARS, MAX_MESSAGE_CHARS } from '~/schemas/registry';
-import { prepareAttachmentCascadeForThing } from '../attachments/attachments';
+import { prepareAttachmentCascadeForThing, createReadyAttachmentMessageInsertHook } from '../attachments/attachments';
 import { splitLiveMessageText } from '../devices/deviceLiveAiCore';
 import { hasUserVaultProvider } from '../lopu/userVault';
 import { safeVaultId } from '../lopu/userVaultCore';
-import { getThingsCollection } from '../mongodb/collections';
+import { getThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import {
 	AI_MODEL_EFFORT_LABELS,
 	AI_WORKFLOW_BASE_MODELS,
@@ -63,7 +63,8 @@ export const MAX_LISTED_LOPU_CHATS = 300;
 export const DEFAULT_LISTED_LOPU_CHATS = 100;
 // The reply request accepts up to 8000 chars; rows cap at MAX_MESSAGE_CHARS
 // (4000), so a long prompt lands as two plain segments.
-export const LOPU_USER_TURN_MAX_CHARS = 8000;
+// Voice accepts 12k; the public typed-reply route retains its 8k input cap.
+export const LOPU_USER_TURN_MAX_CHARS = 12000;
 // One assistant reply is at most 15 segment rows; anything longer is cut.
 export const LOPU_ASSISTANT_TURN_MAX_CHARS = 60_000;
 export const LOPU_HISTORY_MAX_CHARS = 60_000;
@@ -405,8 +406,11 @@ const turnRows = async (things: any, chatId: string, requestId: string, role: 'u
 
 export const createLopuChat = async (
 	viewerId: string,
-	input: { title?: unknown; model?: unknown; effort?: unknown; speed?: unknown; providerId?: unknown } = {}
+	input: { title?: unknown; model?: unknown; effort?: unknown; speed?: unknown; providerId?: unknown } = {},
+	identity?: { creationKey: string }
 ): Promise<LopuChatResult> => {
+	const stableId = identity ? `${LOPU_CHAT_SHARE_ID_PREFIX}${createHash('sha256').update(`${viewerId}:${identity.creationKey}`).digest('hex')}` : null;
+	if (stableId) { const existing = await getLopuChat(viewerId, stableId); if (existing.ok) return existing; }
 	const wantsTitle = input.title !== undefined && input.title !== null && input.title !== '';
 	const title = wantsTitle ? boundedTrimmed(input.title, MAX_CHAT_NAME_CHARS) : null;
 	if (wantsTitle && !title) return fail(400, 'That title did not survive validation');
@@ -420,7 +424,7 @@ export const createLopuChat = async (
 	if (count >= MAX_LOPU_CHATS_PER_USER) return fail(400, 'Tidy up some older Lopu conversations first');
 
 	const chat = newThingDoc('chat', {
-		shareId: lopuChatShareId(),
+		shareId: stableId || lopuChatShareId(),
 		ownerId: viewerId,
 		targetId: null,
 		crystal: {
@@ -435,10 +439,15 @@ export const createLopuChat = async (
 			lopu: { ...normalized.settings, turns: 0, lastModel: null }
 		}
 	});
-	await withMessengerStorageTransaction(async (session) => {
-		await insertMessengerThing(things, chat as any, { session });
-		await insertChatMember(chat.shareId, viewerId, { role: 'owner', state: 'active' }, session);
-	});
+	try {
+		await withMessengerStorageTransaction(async (session) => {
+			await insertMessengerThing(things, chat as any, { session });
+			await insertChatMember(chat.shareId, viewerId, { role: 'owner', state: 'active' }, session);
+		});
+	} catch (error) {
+		if (stableId && isDuplicateWrite(error)) return getLopuChat(viewerId, stableId);
+		throw error;
+	}
 	const entry = await chatListEntryFor(viewerId, chat.shareId);
 	if (entry.ok === false) return entry;
 	return { ok: true, chat: withLopuState(entry.chat, chat.crystal.lopu) };
@@ -561,7 +570,7 @@ export const deleteLopuChat = async (viewerId: string, chatId: unknown): Promise
 // under the same id is a 409 — the sendMessage rule.
 export const persistLopuUserTurn = async (
 	viewerId: string,
-	input: { chatId?: unknown; requestId?: unknown; text?: unknown }
+	input: { chatId?: unknown; requestId?: unknown; text?: unknown; attachmentIds?: string[]; unread?: boolean }
 ): Promise<LopuUserTurnResult> => {
 	const access = await resolveLopuChat(viewerId, input.chatId);
 	if ('ok' in access && access.ok === false) return access;
@@ -569,6 +578,8 @@ export const persistLopuUserTurn = async (
 	const requestId = normalizedMessengerRequestId(input.requestId);
 	if (!requestId) return fail(400, 'Invalid message request id');
 	const text = typeof input.text === 'string' ? input.text.trim() : '';
+	const attachmentIds = input.attachmentIds ?? [];
+	if (!Array.isArray(attachmentIds) || attachmentIds.length > 10 || attachmentIds.some(id => typeof id !== 'string' || !/^[\w-]{1,128}$/.test(id))) return fail(400, 'Attach up to ten files.');
 	if (!text) return fail(400, 'Say something first');
 	if (Array.from(text).length > LOPU_USER_TURN_MAX_CHARS) return fail(400, `Messages to Lopu cap at ${LOPU_USER_TURN_MAX_CHARS} characters`);
 
@@ -582,10 +593,12 @@ export const persistLopuUserTurn = async (
 	const things = await getThingsCollection();
 	const last = rows[rows.length - 1]!;
 	try {
-		await withMessengerStorageTransaction(async (session) => {
+		const transact = attachmentIds.length ? withHomeMongoTransaction : withMessengerStorageTransaction;
+		await transact(async (session) => {
 			await assertLopuChatLive(things, chat, member, viewerId, session);
 			for (const row of rows) await insertMessengerThing(things, row as any, { session });
-			await updateMessengerThing(
+			if (attachmentIds.length) await createReadyAttachmentMessageInsertHook(attachmentIds)(rows[0] as any, session);
+			if (!input.unread) await updateMessengerThing(
 				things,
 				{ shareId: member.shareId, thingtime: 'chat-member', ownerId: viewerId } as any,
 				{ $set: { 'crystal.lastReadMessageId': last.shareId, 'crystal.lastReadAt': last.createdAt.toISOString(), updatedAt: new Date() } },
@@ -609,6 +622,8 @@ export const persistLopuUserTurn = async (
 				existing.map((doc: any) => String(doc.crystal?.text || '')).join('') === text;
 			if (!exact) return fail(409, 'That message request id is already in use');
 			const projected = await projectMessages(viewerId, chat.shareId, existing, { withThreadCounts: false });
+			const existingIds = (projected.messages[0]?.attachments ?? []).map(item => item.id).sort();
+			if (JSON.stringify(existingIds) !== JSON.stringify([...attachmentIds].sort())) return fail(409, 'That message request has different attachments');
 			return { ok: true, message: projected.messages[0]!, messages: projected.messages, existing: true };
 		}
 		if (error?.message === 'lopu_membership_changed') return fail(409, 'This Lopu conversation changed — try again');
@@ -626,7 +641,7 @@ export const persistLopuUserTurn = async (
 // chat's lastMessage preview and bumps crystal.lopu.turns / lastModel.
 export const persistLopuAssistantTurn = async (
 	viewerId: string,
-	input: { chatId?: unknown; requestId?: unknown; text?: unknown; lopu?: LopuAssistantTurnMeta | null }
+	input: { chatId?: unknown; requestId?: unknown; text?: unknown; lopu?: LopuAssistantTurnMeta | null; unread?: boolean; requireExactReplay?: boolean }
 ): Promise<LopuAssistantTurnResult> => {
 	const access = await resolveLopuChat(viewerId, input.chatId);
 	if ('ok' in access && access.ok === false) return access;
@@ -660,7 +675,7 @@ export const persistLopuAssistantTurn = async (
 		await withMessengerStorageTransaction(async (session) => {
 			await assertLopuChatLive(things, chat, member, viewerId, session);
 			for (const row of rows) await insertMessengerThing(things, row as any, { session });
-			await updateMessengerThing(
+			if (!input.unread) await updateMessengerThing(
 				things,
 				{ shareId: member.shareId, thingtime: 'chat-member', ownerId: viewerId } as any,
 				{ $set: { 'crystal.lastReadMessageId': last.shareId, 'crystal.lastReadAt': last.createdAt.toISOString(), updatedAt: new Date() } },
@@ -680,6 +695,7 @@ export const persistLopuAssistantTurn = async (
 		if (isDuplicateWrite(error)) {
 			const existing = await turnRows(things, chat.shareId, requestId, 'assistant');
 			if (!existing.length || String(existing[0].ownerId) !== viewerId) return fail(409, 'That reply was already recorded under another request id');
+			if (input.requireExactReplay && (existing.length !== parts.length || existing.map((row: any) => String(row.crystal?.text || '')).join('') !== text)) return fail(409, 'That reply request id is already in use for different text');
 			const projected = await projectMessages(viewerId, chat.shareId, existing, { withThreadCounts: false });
 			return { ok: true, messages: projected.messages, existing: true };
 		}

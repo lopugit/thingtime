@@ -23,6 +23,53 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   before rendering under another viewer, target or link key. Keep optional site
   decoration resolves nullable. — Codex (AI), 2026-09-10
 
+- Publish native build 31 for unified Lopu conversation recovery. All 51 native
+  CI tests and signed iPhone/Watch verification pass; Apple confirms VALID and
+  internal TestFlight availability. Physical-device acceptance remains separate.
+  See [PR #731](../PRs/731-lopu-unified-scheduled-chats.md).
+  — Codex (AI), 2026-09-10
+
+- Add a loopback-only real HTTP acceptance smoke for linked Lopu chats,
+  scheduled Things and relational comments, including account boundaries,
+  pause/resume and owned-fixture cleanup. No provider or scheduler delivery is
+  claimed by this smoke. — Codex (AI), 2026-09-10
+
+- Pin the scheduled-task run schema projection in the builtin seeding
+  regression gate; retain all five owner-editable run fields.
+  See [PR #731](../PRs/731-lopu-unified-scheduled-chats.md).
+  — Codex (AI), 2026-09-10
+
+- Add native direct-voice transcript recovery and bounded shared-chat context
+  behind bridge 1.3.0; reconcile transcription-only chat saves and expose native
+  retry state without storing credentials. Simulator/provider/device gates are
+  tracked in [PR 731](../PRs/731-lopu-unified-scheduled-chats.md).
+  — Codex (AI), 2026-09-10
+
+- Reconcile PR 731 with develop's authored/nested media inheritance without
+  downgrading Lopu discussions or notification-test capabilities; retain both
+  Things read and write compatibility coverage. — Codex (AI), 2026-09-10
+
+- Persist direct web voice transcripts into their Lopu conversation with
+  account-fenced recovery/retry; seed recent chat context when starting voice,
+  isolate message caches by account, and discard late account-switch fetches.
+  Live local API retries pass; native and real-provider acceptance remain
+  pending. See [PR 731](../PRs/731-lopu-unified-scheduled-chats.md).
+  — Codex (AI), 2026-09-10
+
+- Add relational discussions to Thing details/previews and confirmation-bound
+  Lopu comment tools; unify the text/voice page composer, add chat attachment
+  selection, and introduce searchable scheduled tasks with separate run Things
+  and Lopu-message notifications. Browser and end-to-end release checks remain
+  separate from focused tests; see the [feature validation notes](../PRs/731-lopu-unified-scheduled-chats.md) before deployment.
+  — Codex (AI), 2026-09-10
+
+- Use cryptographic UUIDs for voice-session and transcript request identities,
+  with regression coverage that refuses an insecure fallback. Reconcile the
+  conditional-media write fix without downgrading Lopu capabilities; the
+  combined Things contract is 1.8.2 (legacy 1.7.2).
+  See [PR #731](../PRs/731-lopu-unified-scheduled-chats.md).
+  — Codex (AI), 2026-09-10
+
 - Follow stored conditional media-property alternatives through shared root
   inheritance, including argument-backed src/poster/href and style records.
   Exclude condition metadata and bound discovery across all property visits;
