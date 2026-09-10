@@ -2,6 +2,12 @@
 
 ## Unified Lopu conversations, scheduled Things and discussions
 
+- [ ] Keep a tab open across a deployment that adds a required capability.
+  If a task reports an incompatible contract, Refresh task must negotiate a
+  current manifest without reloading the tab or changing the account. Repeat
+  after offline, HTTP failure and timeout. Wrong-origin, missing or breaking
+  contracts must still prevent the dependent operation.
+
 - [ ] After Lopu creates a reminder or reports a failed action, ask what
   happened in a later turn and after reload. Its server-loaded history retains
   bounded public success/failure receipts, never raw results or approval tokens.
