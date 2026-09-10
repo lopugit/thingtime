@@ -901,6 +901,7 @@ export function useApi() {
           getJson(
             `/api/v1/things${toQuery({
               target: args?.target,
+              key: args?.key,
               thingtime: args?.thingtime,
               folder: args?.folder,
               cursor: args?.cursor,

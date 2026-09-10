@@ -5,6 +5,7 @@ import { ArrowUpDown, Columns3, Eye, LayoutGrid, Layers, Plus, Rows3, Search as 
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router';
 
 import { useLopu } from '~/components/Lopu/useLopu';
+import { sendRecordingThingToLopu } from '~/components/Lopu/recordingThingHandoff';
 import { useIsMobileViewport } from '~/components/Nav/Drawer/useDrawer';
 import { Rainbow } from '~/components/Rainbow/Rainbow';
 import { DeviceDetailsDrawer } from '~/components/Devices/DeviceDetailsDrawer';
@@ -128,6 +129,9 @@ export const ThingsPage = () => {
   apiRef.current = api;
   const lopuRef = useRef(lopu);
   lopuRef.current = lopu;
+  const recordingOwner = useRef(user?.id);
+  recordingOwner.current = user?.id;
+  const recordingHandoffBusy = useRef(false);
 
   const folderId = searchParams.get('folder') || null;
   const previewParam = searchParams.get('preview') || null;
@@ -902,10 +906,30 @@ export const ThingsPage = () => {
     }
   }, []);
 
+  const sendRecording = useCallback(async (thing: ThingsThing) => {
+    const ownerId = recordingOwner.current;
+    if (!ownerId || recordingHandoffBusy.current) return;
+    recordingHandoffBusy.current = true;
+    try {
+      const sent = await sendRecordingThingToLopu(thing, ownerId, {
+        origin: window.location.origin, activeOwner: () => recordingOwner.current,
+        confirm: (message) => window.confirm(message), fetch: window.fetch.bind(window)
+      });
+      if (sent && recordingOwner.current === ownerId) lopuRef.current({ title: 'Recording sent to Lopu 🦄',
+        description: 'Follow transcription and the linked conversation in Recording activity.', status: 'success', link: { label: 'Recording activity', href: '/lopu/recordings' } });
+    } catch (error) {
+      if (recordingOwner.current === ownerId) lopuRef.current({ title: 'Recording needs attention',
+        description: error instanceof Error ? error.message : 'Check Recording activity before retrying.', status: 'error', link: { label: 'Recording settings', href: '/lopu/recordings' } });
+    } finally { recordingHandoffBusy.current = false; }
+  }, []);
+
   const onItemAction = useCallback(
     (thing: ThingsThing, action: ThingsItemAction) => {
       const group = selection.has(thing.id) && selection.size > 1 ? selectedThings : [thing];
       switch (action) {
+        case 'send-to-lopu':
+          void sendRecording(thing);
+          break;
         case 'open':
           openThing(thing);
           break;
@@ -947,7 +971,7 @@ export const ThingsPage = () => {
           break;
       }
     },
-    [copyLink, copyToClipboard, duplicateThings, openThing, selectedThings, selection]
+    [copyLink, copyToClipboard, duplicateThings, openThing, selectedThings, selection, sendRecording]
   );
 
   // ------------------------------------------------------------------ drag & drop
@@ -1036,14 +1060,17 @@ export const ThingsPage = () => {
 
   const itemMenuModel = useMemo(
     () =>
-			menuThing ? buildThingsItemMenu({ thing: menuThing, actCount: menuActCount, clipboardCount: clipboard?.ids.length || 0 }) : { sections: [] },
-    [menuThing, menuActCount, clipboard?.ids.length]
+			menuThing ? buildThingsItemMenu({ thing: menuThing, actCount: menuActCount, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id }) : { sections: [] },
+    [menuThing, menuActCount, clipboard?.ids.length, user?.id]
   );
 
   const onItemMenuAction = useCallback(
     ({ action }: ThingContextMenuAction) => {
       if (!menuThing) return;
       switch (action.command) {
+        case 'send-to-lopu':
+          onItemAction(menuThing, 'send-to-lopu');
+          break;
         case 'open':
           // thingsMenuModel labels this "Preview" for every kind without a
           // folder/post entry, so it stays the quick-look here; the tile's
@@ -1209,6 +1236,7 @@ export const ThingsPage = () => {
   }
 
   const itemHandlers: ThingsItemHandlers = {
+    ownerId: user?.id,
     selected: selection,
     cutIds,
     isMobile,
@@ -1266,7 +1294,8 @@ export const ThingsPage = () => {
       paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))"
       width="100%"
     >
-      <Flex direction="column" gap={4} maxWidth="100%" paddingTop={[4, 6]} paddingX={4} width={['100%', '100%', '1100px']}>
+      <Flex direction="column" gap={4} maxWidth="100%" paddingTop={[4, 6]} paddingX={4} width={['100%', '100%', '1100px']}
+        style={{ boxSizing: 'border-box', minWidth: 0, paddingInline: 16 }}>
         <Flex alignItems="baseline" gap={3} wrap="wrap">
           <Text {...monoLabel}>Thingtime · Things</Text>
         </Flex>

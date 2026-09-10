@@ -2562,6 +2562,7 @@ export const NOTIFICATION_TYPES = [
   'action-run',
   'recording-reminder',
   'lopu-reminder',
+  'lopu-message',
   'login-success',
   'system-message'
 ] as const;
@@ -2629,6 +2630,7 @@ export const NOTIFICATION_TYPE_CATEGORY: Record<NotificationType, NotificationCa
   'post-from-friend': 'feed',
   'recording-reminder': 'system',
   'lopu-reminder': 'system',
+  'lopu-message': 'system',
   // subspaces: membership/role events are social, moderation of your content
   // and the mod queue are engagement
   'subspace-join-request': 'social',
@@ -2669,7 +2671,7 @@ export type EmailNotificationType = (typeof EMAIL_NOTIFICATION_TYPES)[number];
 // action can run sixty times a minute, and the mod-queue traffic of a big
 // subspace (join requests, reports) is the same class of firehose —
 // moderators opt in per type.
-export const EMAIL_DEFAULT_OFF_TYPES: readonly string[] = ['post-from-followed', 'post-from-friend', 'action-run', 'recording-reminder', 'lopu-reminder', 'login-success', 'system-message', 'subspace-join-request', 'subspace-report'];
+export const EMAIL_DEFAULT_OFF_TYPES: readonly string[] = ['post-from-followed', 'post-from-friend', 'action-run', 'recording-reminder', 'lopu-reminder', 'lopu-message', 'login-success', 'system-message', 'subspace-join-request', 'subspace-report'];
 
 export type NotificationChannelMasters = { push: boolean; email: boolean };
 export type NormalizedNotificationPrefs = {
@@ -4166,7 +4168,7 @@ export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) =>
 // unreachable, unaccounted, and never pruned again — so create/run/delete
 // cycles would re-open exactly the unbounded accumulation the retention cap
 // closes. Cascading is also the only way an owner can ever remove them.
-export const CASCADE_CHILD_THINGTIME = [ATTACHMENT_THINGTIME, 'comment', 'reaction', 'save', 'action-run', UPDOWN_THINGTIME, 'lopu-recording-job', 'lopu-recording-reminder', 'lopu-reminder'] as const;
+export const CASCADE_CHILD_THINGTIME = [ATTACHMENT_THINGTIME, 'comment', 'reaction', 'save', 'action-run', 'scheduled-task-run', UPDOWN_THINGTIME, 'lopu-recording-job', 'lopu-recording-reminder', 'lopu-reminder'] as const;
 
 // Messenger kinds are owned by /api/v1/chats* end to end. Create/update are
 // already refused by the missing crystal sanitizers, and DELETE must be too:
@@ -4304,6 +4306,19 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   reactionSchema,
   shareSchema,
   dataSchema,
+  {
+    id: 'scheduled-task-run', version: 1, kind: 'crystal', collection: null,
+    title: 'Scheduled task run', summary: 'An owner-private, editable run note linked to its task by targetId.',
+    requiresTarget: true,
+    detail: 'A quota-billed child Thing, not an embedded task history. These owner-editable notes are not security audit records. Deleting the task cascades its run notes; destination conversations remain separate.',
+    fields: [
+      { name: 'title', type: 'string', required: true, max: 240, description: 'Run title.' },
+      { name: 'chatId', type: 'id', required: true, description: 'Destination Lopu conversation.' },
+      { name: 'scheduledAt', type: 'date', required: true, description: 'Scheduled occurrence.' },
+      { name: 'status', type: 'enum', required: true, values: ['running', 'done', 'needs-attention'], description: 'Last saved run status.' },
+      { name: 'notificationStatus', type: 'string', required: false, description: 'Optional notification delivery diagnostic.' }
+    ], example: { title: 'Daily update', chatId: 'chat-id', scheduledAt: '2026-09-10T09:00:00.000Z', status: 'done' }
+  },
   schemaThingSchema,
   componentSchema,
   webpageSchema,
@@ -6631,6 +6646,14 @@ const crystalSanitizers: Record<
   // minted only, and the missing entry makes the generic write path 403.
   action: sanitizeActionCrystal,
   data: sanitizeDataCrystal,
+  'scheduled-task-run': (input, ids) => {
+    if (ids.length !== 1) return fail(400, 'Scheduled run notes cannot combine with other schemas');
+    if (typeof input.title !== 'string' || !input.title.trim() || input.title.length > 240) return fail(400, 'A run title is required (up to 240 characters)');
+    if (typeof input.chatId !== 'string' || !/^[\w-]{1,128}$/.test(input.chatId)) return fail(400, 'A valid destination chat is required');
+    if (typeof input.scheduledAt !== 'string' || !Number.isFinite(Date.parse(input.scheduledAt))) return fail(400, 'A valid occurrence is required');
+    if (!['running', 'done', 'needs-attention'].includes(String(input.status))) return fail(400, 'Invalid run status');
+    return { ok: true, crystal: { title: input.title, chatId: input.chatId, scheduledAt: input.scheduledAt, status: input.status, ...(input.notificationStatus === 'unavailable' ? { notificationStatus: 'unavailable' } : {}) } };
+  },
   user: sanitizeUserCrystal,
   theme: sanitizeThemeCrystal,
   'feed-algorithm': sanitizeFeedAlgorithmCrystal,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Center, Flex, Popover, PopoverAnchor, PopoverContent, Spinner, Text } from '@chakra-ui/react';
+import { Box, Center, Flex, Popover, PopoverTrigger, PopoverContent, Spinner, Text } from '@chakra-ui/react';
 import { Bell } from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
 
@@ -11,13 +11,13 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 
 // The nav bell 🔔: unread badge + a popover of recent notifications. The
 // badge count seeds from the per-user localCache (no flash), reconciles on
-// mount / window focus / a slow poll, and zeroes optimistically when the
+// mount / window focus / notification events / a visible-tab poll, and zeroes optimistically when the
 // popover opens (which also marks everything read server-side — X-style).
 // The full, searchable history lives at /notifications ("See all").
 
 const MUTED = 'var(--tt-muted, #9a9aa6)';
 const BORDER = '1px solid var(--tt-border, #ececef)';
-const POLL_MS = 90_000;
+const POLL_MS = 15_000;
 
 
 export const NotificationsBell = () => {
@@ -30,6 +30,10 @@ export const NotificationsBell = () => {
     cacheKey ? readLocalCache<number>(cacheKey) || 0 : 0
   );
   const [open, setOpen] = React.useState(false);
+  const badgeGeneration = React.useRef(0);
+  const markingRead = React.useRef(false);
+  const ownerRef = React.useRef(user?.id);
+  ownerRef.current = user?.id;
   const [items, setItems] = React.useState<NotificationItem[] | null>(null);
 
   const listRef = React.useRef(api.v1.notifications.list);
@@ -45,16 +49,22 @@ export const NotificationsBell = () => {
     [cacheKey]
   );
 
-  // badge reconcile: mount + focus + slow poll (cheap indexed count read)
+  // badge reconcile: mount + focus + events + visible-tab poll (cheap indexed count read)
   React.useEffect(() => {
-    if (!user) return;
+    setOpen(false); setItems(null);
+    if (!user) { setUnread(0); return; }
+    let inFlight = false, again = false;
     let cancelled = false;
     const refresh = () => {
+      if (inFlight) { again = true; return; }
+      inFlight = true;
+      const generation = badgeGeneration.current;
       listRef.current({ limit: 1 })
         .then((resp: any) => {
-          if (!cancelled && typeof resp?.unreadCount === 'number') setUnreadPersisted(resp.unreadCount);
+          if (!cancelled && !markingRead.current && generation === badgeGeneration.current && typeof resp?.unreadCount === 'number') setUnreadPersisted(resp.unreadCount);
         })
-        .catch(() => {});
+        .catch(() => {})
+        .finally(() => { inFlight = false; if (again && !cancelled) { again = false; refresh(); } });
     };
     setUnread(cacheKey ? readLocalCache<number>(cacheKey) || 0 : 0);
     refresh();
@@ -70,11 +80,21 @@ export const NotificationsBell = () => {
     const onVisible = () => {
       if (document.visibilityState === 'visible') refresh();
     };
+    const onRecorded = (event: Event) => {
+      if ((event as CustomEvent).detail?.userId === user.id) refresh();
+    };
+    const onNative = (event: Event) => {
+      if ((event as CustomEvent).detail?.type === 'notifications-changed') refresh();
+    };
+    window.addEventListener('thingtime:notification-recorded', onRecorded);
+    window.addEventListener('thingtime:native-message', onNative);
     window.addEventListener('focus', onFocus);
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
+      window.removeEventListener('thingtime:notification-recorded', onRecorded);
+      window.removeEventListener('thingtime:native-message', onNative);
       window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisible);
     };
@@ -83,20 +103,25 @@ export const NotificationsBell = () => {
   }, [user?.id]);
 
   const handleOpen = () => {
-    setOpen((prev) => !prev);
-    if (open) return;
-    setItems(null);
+    setOpen(true);
+    badgeGeneration.current += 1;
+    const ownerId = user?.id;
     listRef.current({ limit: 20 })
       .then((resp: any) => {
+        if (ownerRef.current !== ownerId) return;
         setItems(Array.isArray(resp?.notifications) ? resp.notifications : []);
         // opening the bell reads everything (X-style) — badge zeroes now,
         // server flips readAt in the background
         if ((resp?.unreadCount || 0) > 0) {
-          markReadRef.current({ all: true }).catch(() => {});
+          markingRead.current = true;
+          void markReadRef.current({ all: true }).catch(() => {}).finally(() => {
+            markingRead.current = false; badgeGeneration.current += 1;
+            if (ownerRef.current === ownerId) window.dispatchEvent(new CustomEvent('thingtime:notification-recorded', { detail: { userId: ownerId } }));
+          });
         }
         setUnreadPersisted(0);
       })
-      .catch(() => setItems([]));
+      .catch(() => { if (ownerRef.current === ownerId) setItems((previous) => previous ?? []); });
   };
 
   const handleItemClick = (item: NotificationItem) => {
@@ -108,8 +133,8 @@ export const NotificationsBell = () => {
   if (!user) return null;
 
   return (
-    <Popover isOpen={open} onClose={() => setOpen(false)} placement="bottom-end" isLazy>
-      <PopoverAnchor>
+    <Popover isOpen={open} onOpen={handleOpen} onClose={() => setOpen(false)} placement="bottom-end" isLazy>
+      <PopoverTrigger>
         <Center
           as="button"
           type="button"
@@ -117,7 +142,6 @@ export const NotificationsBell = () => {
           cursor="pointer"
           aria-label={unread > 0 ? `Notifications — ${unread} unread` : 'Notifications'}
           title="Notifications 🔔"
-          onClick={handleOpen}
           sx={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
         >
           <Bell size={16} strokeWidth={1.9} />
@@ -141,7 +165,7 @@ export const NotificationsBell = () => {
             </Center>
           )}
         </Center>
-      </PopoverAnchor>
+      </PopoverTrigger>
       <PopoverContent
         width={['calc(100vw - 24px)', '360px']}
         maxWidth="calc(100vw - 24px)"

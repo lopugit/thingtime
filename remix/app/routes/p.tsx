@@ -185,6 +185,18 @@ export default function PublicWebpage() {
 		}
 	}, [installForViewer, lopu, navigate, suiteKey]);
 
+	if (draft.error && !page) {
+		return (
+			<PageShell width={680}>
+				<Flex role="alert" flexDirection="column" rowGap={3} paddingTop={12} alignItems="center" textAlign="center">
+					<Text fontFamily="heading" fontSize="xl" fontWeight={800}>This page couldn’t load</Text>
+					<Text fontSize="sm">There was a connection or server problem. Please try again.</Text>
+					<Button size="sm" onClick={draft.refresh} isDisabled={draft.loading}>{draft.loading ? 'Retrying…' : 'Retry loading page'}</Button>
+				</Flex>
+			</PageShell>
+		);
+	}
+
 	if (!draft.loading && !page) {
 		return (
 			<PageShell width={680}>
@@ -230,6 +242,12 @@ export default function PublicWebpage() {
 				whiteSpace="normal"
 			>
 				<Box width="100%" maxWidth="960px" minWidth={0} boxSizing="border-box" marginX="auto" paddingX={4} paddingTop={6}>
+					{draft.error && (
+						<Flex role="alert" gap={3} alignItems="center" flexWrap="wrap" marginBottom={4} padding={3} background="var(--tt-surface, #fafafb)" color="var(--tt-ink, #16161a)" borderRadius="md">
+							<Text fontSize="sm">Couldn’t refresh this page. Showing the last loaded version.</Text>
+							<Button size="sm" onClick={draft.refresh} isDisabled={draft.loading}>{draft.loading ? 'Retrying…' : 'Retry loading page'}</Button>
+						</Flex>
+					)}
 					{isOwner ? (
 						<Flex justifyContent="flex-end" marginBottom={2}>
 							<Button as={Link} to={`/builder?page=${encodeURIComponent(page!.id)}`} size="xs" variant="outline" data-testid="p-edit-in-builder">
