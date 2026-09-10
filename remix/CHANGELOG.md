@@ -18,10 +18,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- Resolve shared controls from saved component arguments and every persisted
-  page instance; preserve argument templates when copying and rebind only the
-  executable actions. Guard argument-only collaborator edits against private
-  dependency injection. — Codex (AI), 2026-09-10
+- Preserve bounded, sanitized action receipts in Lopu conversation history so
+  subsequent replies can distinguish past successes from failures. Publish
+  reply capability 1.6.1; historical results grant no new action permissions.
+  See [PR #731 follow-ups](../PRs/731-lopu-unified-scheduled-chats.md).
+  — Codex (AI), 2026-09-10
 
 - Keep uploaded file cards in Lopu's live user-message rows instead of hiding
   them until reload; snapshot selected public metadata locally while sending
@@ -29,6 +30,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - Layer Lopu's Thing picker above the fixed navigation using the shared modal
   stack, keeping its title and Close button accessible on phones.
+  — Codex (AI), 2026-09-10
+
+- Resolve shared controls from saved component arguments and every persisted
+  page instance; preserve argument templates when copying and rebind only the
+  executable actions. Guard argument-only collaborator edits against private
+  dependency injection. See [PR #747](../PRs/747-codex-shared-saved-action-contexts.md).
   — Codex (AI), 2026-09-10
 
 - Preserve Lopu's mounted composer across text/voice route changes. Signed-in
