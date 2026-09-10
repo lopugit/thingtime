@@ -6398,6 +6398,9 @@ approval; `access.test.ts` — the reservation matrix) and
   then with push off. History remains; muted/history-only events produce no push.
 ## Lopu linked-Things live HTTP smoke
 
+- Open Lopu's Your Things picker at desktop and 390px phone widths. Its overlay and fixed modal container must sit above the navigation and floating windows; the title, Close and Done controls remain visible and clickable while scrolling the results from top to bottom. Check both Voice and Chat entry points.
+- Upload a synthetic file and send it in Lopu. Its attachment card must remain visible while streaming and after the reply, without reloading; reload to verify the server-backed attachment persists. The optimistic metadata must never add unselected files or be sent as authoritative server metadata.
+
 - Voice session and transcript request IDs must come from cryptographic UUIDs,
   never timestamps plus `Math.random()`. Run the voice identity regression tests
   alongside the Lopu UI suite; secure-random failures must not produce weak IDs.

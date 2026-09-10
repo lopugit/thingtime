@@ -18,6 +18,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Keep uploaded file cards in Lopu's live user-message rows instead of hiding
+  them until reload; snapshot selected public metadata locally while sending
+  only attachment IDs to the server. — Codex (AI), 2026-09-10
+
+- Layer Lopu's Thing picker above the fixed navigation using the shared modal
+  stack, keeping its title and Close button accessible on phones.
+  — Codex (AI), 2026-09-10
+
 - Preserve Lopu's mounted composer across text/voice route changes. Signed-in
   development testing found that separate route wrappers discarded unsent
   drafts; both modes now export the same component identity, guarded by a
