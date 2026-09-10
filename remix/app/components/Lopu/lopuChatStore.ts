@@ -901,6 +901,8 @@ const appendMessages = (chatId: string, rows: ChatMessage[]) => {
 
 export type SendLopuOptions = {
 	attachmentIds?: string[];
+	// Display-only public metadata; only the IDs go to the reply endpoint.
+	attachments?: ChatMessage['attachments'];
 	thingIds?: string[];
 	settings?: Partial<LopuChatSettings>;
 	context?: LopuReplyContext;
@@ -947,7 +949,9 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 	}
 	const applyPatches = options.applyPatches !== false;
 
-	let turn = initialLopuTurn({ requestId, chatId, userText: trimmed });
+	const attachmentIds = new Set(options.attachmentIds ?? []);
+	let turn = initialLopuTurn({ requestId, chatId, userText: trimmed,
+		userAttachments: (options.attachments ?? []).filter(attachment => attachmentIds.has(attachment.id)) });
 	const abort = new AbortController();
 	controller = abort;
 	rememberTurn(turn);

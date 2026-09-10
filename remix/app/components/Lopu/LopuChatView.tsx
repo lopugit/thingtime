@@ -557,7 +557,7 @@ export const LopuChatView = ({
 			setDraft('');
 			stickRef.current = true;
 			focusInput();
-			const result = await chat.send(text, undefined, { attachmentIds: uploads.attachmentIds, thingIds: selectedThings.map(thing => thing.id) });
+			const result = await chat.send(text, undefined, { attachmentIds: uploads.attachmentIds, attachments: uploads.attachments, thingIds: selectedThings.map(thing => thing.id) });
 			if (ownerRef.current !== ownerId) return result;
 			if (result.ok === true || (result.ok === false && result.chatIdKnown)) {
 				uploadsRef.current?.markCommitted(uploads.attachmentIds);
