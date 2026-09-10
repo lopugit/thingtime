@@ -260,7 +260,19 @@ test('shared page audience includes its author components, never a foreign priva
 						await route.fulfill({ contentType: 'image/png', body: pixel });
 					});
 					const navigationStartedAt = Date.now();
+					let refuseFirstResolve = true;
+					await tab.route('**/api/v1/webpages/resolve?*', async (route: any) => {
+						if (refuseFirstResolve && new URL(route.request().url()).searchParams.get('id') === page.id) {
+							refuseFirstResolve = false;
+							return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ ok: false }) });
+						}
+						return route.continue();
+					});
 					await tab.goto(new URL(`/p/${page.id}?key=${encodeURIComponent(page.linkKey)}`, base).href);
+					await tab.getByRole('button', { name: 'Retry loading page', exact: true }).waitFor({ timeout: 60000 });
+					assert.equal(await tab.getByText('This page isn’t here', { exact: true }).count(), 0);
+					if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-${width}-retry.png` });
+					await tab.getByRole('button', { name: 'Retry loading page', exact: true }).click();
 					try {
 						await tab.getByRole('button', { name: 'Draw', exact: true }).waitFor({ timeout: 60000 });
 					} catch (error) {

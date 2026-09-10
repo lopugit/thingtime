@@ -82,6 +82,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   See [PR #731](../PRs/731-lopu-unified-scheduled-chats.md).
   — Codex (AI), 2026-09-10
 
+- Promote shared-page recovery from PR 740 without unrelated develop changes.
+  Temporary resolver failures offer Retry and retain same-viewer content;
+  viewer, target and link-key changes isolate drafts and stale responses.
+  See [validation and scope](../PRs/740-codex-shared-page-load-recovery.md).
+  — Codex (AI), 2026-09-10
+
 - Follow stored conditional media-property alternatives through shared root
   inheritance, including argument-backed src/poster/href and style records.
   Exclude condition metadata and bound discovery across all property visits;
