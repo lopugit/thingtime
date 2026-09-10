@@ -6,7 +6,7 @@ import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapa
 type DeviceStatus = { configured: boolean; devices: { ios: number; watchos: number } };
 export function NativePushSettings({ ownerId }: { ownerId: string }) {
   const [server, setServer] = React.useState<DeviceStatus | null>(null);
-  const [native, setNative] = React.useState<{ message?: string; authorization?: string; registration?: string } | null>(null);
+  const [native, setNative] = React.useState<{ message?: string; authorization?: string; registration?: string; hasToken?: boolean } | null>(null);
   const [available, setAvailable] = React.useState(false);
   const [error, setError] = React.useState('');
   const bridge = getNativeBridge;
@@ -47,7 +47,7 @@ export function NativePushSettings({ ownerId }: { ownerId: string }) {
   return <Box mt={5}>
     <Text as="h3" fontWeight="semibold">iPhone and Watch push</Text>
     <Text fontSize="sm" mt={1}>{server ? !server.configured ? 'Native push needs server setup.' : `${server.devices.ios} iPhone and ${server.devices.watchos} Watch registration(s) connected to this account.` : error ? 'Connected devices could not be checked.' : 'Checking connected devices…'}</Text>
-    {native && <Text fontSize="sm" mt={1} role="status">{native.message || `This iPhone: notifications ${native.authorization || 'unknown'}; ${native.registration === 'registered' ? 'connected to Thingtime' : native.registration === 'failed' ? 'connection failed — retry below' : 'waiting for Apple registration'}.`}</Text>}
+    {native && <Text fontSize="sm" mt={1} role="status">{native.message || `This iPhone: notifications ${native.authorization || 'unknown'}; ${native.registration === 'failed' ? 'connection failed — retry below' : native.registration === 'registered' && native.hasToken ? 'connected to Thingtime' : 'waiting for Apple iPhone registration'}.`}</Text>}
     <Flex wrap="wrap" gap={2} mt={3}>
       {available ? <><Button size="sm" variant="outline" onClick={() => send('enable')}>Enable / reconnect iPhone push</Button><Button size="sm" variant="outline" onClick={() => send('open-settings')}>iPhone notification settings</Button></> : <Text fontSize="sm">Open the latest Thingtime iPhone app to enable or reconnect push notifications.</Text>}
     </Flex>
