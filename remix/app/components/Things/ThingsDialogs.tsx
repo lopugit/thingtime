@@ -23,6 +23,7 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { RenderThing } from '~/components/Kinds';
 import { ThingAudienceControl } from '~/components/Sharing/ThingAudienceControl';
 import { ThingView } from '~/components/Thingtime/ThingView';
+import { ThingComments } from './ThingComments';
 
 import { FolderTree } from './FolderTree';
 import type { FolderTreeProps } from './FolderTree';
@@ -445,7 +446,7 @@ export const PreviewModal = ({
   // caller cannot forget it.
   const untrusted = !!thing && (!viewer?.id || thing.author?.id !== viewer.id);
   return (
-  <Modal isOpen={!!thing} onClose={onClose} size="lg">
+  <Modal isOpen={!!thing} onClose={onClose} size="lg" scrollBehavior="inside">
     <ModalOverlay />
     {thing && (
       <ModalContent {...modalCard}>
@@ -480,6 +481,7 @@ export const PreviewModal = ({
                 <ThingView compact thing={thing.crystal} />
               )}
             </Box>
+            <ThingComments thingId={thing.id} />
           </Flex>
         </ModalBody>
         <ModalFooter flexWrap="wrap" gap={2}>
