@@ -18,6 +18,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Preserve Lopu's mounted composer across text/voice route changes. Signed-in
+  development testing found that separate route wrappers discarded unsent
+  drafts; both modes now export the same component identity, guarded by a
+  route-module regression test. — Codex (AI), 2026-09-10
+
+- Keep long Thing-picker labels within the dialog and wrap the composer
+  toolbar so its settings and Send controls remain reachable on narrow phones.
+  — Codex (AI), 2026-09-10
+
 - Publish native build 31 for unified Lopu conversation recovery. All 51 native
   CI tests and signed iPhone/Watch verification pass; Apple confirms VALID and
   internal TestFlight availability. Physical-device acceptance remains separate.
