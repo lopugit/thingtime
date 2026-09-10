@@ -18,6 +18,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Preserve bounded, sanitized action receipts in Lopu conversation history so
+  subsequent replies can distinguish past successes from failures. Publish
+  reply capability 1.6.1; historical results grant no new action permissions.
+  See [PR #731 follow-ups](../PRs/731-lopu-unified-scheduled-chats.md).
+  — Codex (AI), 2026-09-10
+
 - Keep uploaded file cards in Lopu's live user-message rows instead of hiding
   them until reload; snapshot selected public metadata locally while sending
   only attachment IDs to the server. — Codex (AI), 2026-09-10

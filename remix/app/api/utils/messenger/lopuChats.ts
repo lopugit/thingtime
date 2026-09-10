@@ -36,7 +36,7 @@ import {
 	type AiModelEffort,
 	type AiModelSpeed
 } from '../settings/prConflictResolverModelWaterfallCore';
-import { publicLopuMessageMeta, type PublicLopuMessageMeta } from './externalAi';
+import { LOPU_MAX_TOOL_CALLS, publicLopuMessageMeta, type PublicLopuMessageMeta, type PublicLopuToolCall } from './externalAi';
 import {
 	chatListEntryFor,
 	chatPreviewOf,
@@ -289,8 +289,8 @@ export type LopuHistoryRow = {
 		text?: unknown;
 		deletedAt?: unknown;
 		systemType?: unknown;
-		externalSource?: { role?: unknown; messageId?: unknown } | null;
-		lopu?: { role?: unknown; requestId?: unknown } | null;
+		externalSource?: { role?: unknown; messageId?: unknown; access?: unknown; provider?: unknown } | null;
+		lopu?: { role?: unknown; requestId?: unknown; segmentIndex?: unknown; toolCalls?: unknown } | null;
 	} | null;
 };
 
@@ -301,6 +301,21 @@ const historyTurnKey = (row: LopuHistoryRow): string | null => {
 	const key = row.crystal?.lopu?.requestId ?? row.crystal?.externalSource?.messageId;
 	return typeof key === 'string' && key ? key : null;
 };
+
+// Only server-written first-party assistant rows carry receipts. Reuse the
+// public projection: never pass raw tool inputs, result objects or grants to a
+// future model turn. A receipt describes a past outcome, not current state or
+// permission to repeat an action.
+const historyToolReceipts = (row: LopuHistoryRow): PublicLopuToolCall[] => {
+	const source = row.crystal?.externalSource;
+	if (source?.access !== 'lopu' || source.provider !== 'lopu' || source.role !== 'assistant') return [];
+	const meta = publicLopuMessageMeta(row.crystal?.lopu);
+	return meta?.role === 'assistant' && meta.segmentIndex === 0 ? meta.toolCalls ?? [] : [];
+};
+
+const historicalReceiptText = (receipts: PublicLopuToolCall[]): string => receipts.length
+	? `\n\nRecorded tool receipts from this earlier turn (historical outcomes, not current state or authorization; verify current state before acting):\n${JSON.stringify(receipts)}`
+	: '';
 
 // Folds persisted rows (oldest first) into model turns: segments of one
 // persisted turn (same requestId) concatenate exactly (splitLiveMessageText
@@ -314,19 +329,21 @@ export const buildLopuHistory = (
 ): { history: LopuHistoryTurn[]; chars: number; truncated: boolean } => {
 	const limit = clampInt(opts.limit, DEFAULT_LOPU_HISTORY_TURNS, 1, MAX_LOPU_HISTORY_TURNS);
 	const maxChars = clampInt(opts.maxChars, LOPU_HISTORY_MAX_CHARS, 1, LOPU_HISTORY_MAX_CHARS);
-	const turns: Array<{ role: 'user' | 'assistant'; text: string; key: string | null }> = [];
+	const turns: Array<{ role: 'user' | 'assistant'; text: string; key: string | null; receipts: PublicLopuToolCall[] }> = [];
 	for (const row of rowsOldestFirst) {
 		if (!row?.crystal || row.crystal.deletedAt || row.crystal.systemType) continue;
 		const text = typeof row.crystal.text === 'string' ? row.crystal.text : '';
-		if (!text.trim()) continue;
+		const receipts = historyToolReceipts(row);
+		if (!text.trim() && !receipts.length) continue;
 		const role = historyRole(row);
 		const key = historyTurnKey(row);
 		const last = turns[turns.length - 1];
 		if (last && last.role === role) {
 			last.text += last.key && last.key === key ? text : `\n\n${text}`;
+			last.receipts.push(...receipts.slice(0, LOPU_MAX_TOOL_CALLS - last.receipts.length));
 			continue;
 		}
-		turns.push({ role, text, key });
+		turns.push({ role, text, key, receipts });
 	}
 	const kept = turns.slice(-limit);
 	let truncated = kept.length < turns.length;
@@ -334,17 +351,22 @@ export const buildLopuHistory = (
 	const history: LopuHistoryTurn[] = [];
 	for (let index = kept.length - 1; index >= 0; index -= 1) {
 		const turn = kept[index]!;
-		if (chars + turn.text.length > maxChars) {
+		const receiptText = historicalReceiptText(turn.receipts);
+		// Never emit a partial receipt if a caller chooses a tiny context budget.
+		const text = turn.text + (receiptText.length <= maxChars ? receiptText : '');
+		if (receiptText.length > maxChars) truncated = true;
+		if (!text.trim()) continue;
+		if (chars + text.length > maxChars) {
 			if (!history.length) {
-				const tail = turn.text.slice(-maxChars);
+				const tail = text.slice(-maxChars);
 				history.unshift({ role: turn.role, text: tail });
 				chars += tail.length;
 			}
 			truncated = true;
 			break;
 		}
-		history.unshift({ role: turn.role, text: turn.text });
-		chars += turn.text.length;
+		history.unshift({ role: turn.role, text });
+		chars += text.length;
 	}
 	return { history, chars, truncated };
 };
