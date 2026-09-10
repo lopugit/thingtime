@@ -46,6 +46,7 @@ export type RecordingSettings = {
 	reminderHour: number;
 	transcriptionProviders: string[];
 	analysisProviders: string[];
+	runtimeDeviceId: string | null;
 };
 
 export const DEFAULT_RECORDING_SETTINGS: RecordingSettings = {
@@ -57,7 +58,8 @@ export const DEFAULT_RECORDING_SETTINGS: RecordingSettings = {
 	timeZone: 'UTC',
 	reminderHour: 9,
 	transcriptionProviders: ['configured'],
-	analysisProviders: ['configured']
+	analysisProviders: ['configured'],
+	runtimeDeviceId: null
 };
 
 export const isRecordingTimeZone = (value: unknown): value is string => {
@@ -84,6 +86,10 @@ export const parseRecordingSettingsPatch = (input: unknown): Partial<RecordingSe
 			if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 23)
 				throw new Error('Reminder hour must be between 0 and 23.');
 			patch.reminderHour = value;
+		} else if (key === 'runtimeDeviceId') {
+			if (value !== null && (typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(value)))
+				throw new Error('Choose a paired recording device or the provider waterfall.');
+			patch.runtimeDeviceId = value as string | null;
 		} else if (key === 'transcriptionProviders' || key === 'analysisProviders') {
 			if (!Array.isArray(value) || value.length < 1 || value.length > 4 ||
 				value.some((id) => typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(id)) || new Set(value).size !== value.length)
