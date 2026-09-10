@@ -24,12 +24,15 @@ final class LopuRecordingUploads {
         let context: Context
         var uploadId: String?
         var partsSent = false
+        var completedAttachmentId: String?
     }
     typealias Transport = (URLRequest) async throws -> (Data, HTTPURLResponse)
     var notify: ((String, [String: Any]) -> Void)?
     private let directory: URL
     private let outbox: URL
     private let transport: Transport
+    private let legacySources: [URL]
+    private var importOlder = true
     private var context: Context?
     private var cookie = ""
     private var worker: Task<Void, Never>?
@@ -39,6 +42,10 @@ final class LopuRecordingUploads {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         self.directory = directory ?? documents.appendingPathComponent("Lopu Recordings", isDirectory: true)
         self.outbox = self.directory.appendingPathComponent(".uploads", isDirectory: true)
+        self.legacySources = ((try? FileManager.default.contentsOfDirectory(at: self.directory, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey])) ?? []).filter {
+            let values = try? $0.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+            return $0.lastPathComponent.hasPrefix("Lopu-") && $0.pathExtension == "caf" && values?.isRegularFile == true && values?.isSymbolicLink != true
+        }
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpShouldSetCookies = false
         configuration.httpCookieStorage = nil
@@ -61,11 +68,12 @@ final class LopuRecordingUploads {
         return Context(ownerId: ownerId, origin: origin)
     }
 
-    func activate(_ context: Context?, cookie: String) {
-        if self.context != context || self.cookie != cookie {
+    func activate(_ context: Context?, cookie: String, importOlder: Bool = true) {
+        if self.context != context || self.cookie != cookie || self.importOlder != importOlder {
             workerID = UUID()
             worker?.cancel()
         }
+        self.importOlder = importOlder
         self.context = context
         self.cookie = cookie
         pump()
@@ -73,6 +81,7 @@ final class LopuRecordingUploads {
 
     func enqueue(source: URL, context: Context) throws {
         guard source.deletingLastPathComponent().standardizedFileURL == directory.standardizedFileURL else { throw UploadError.failed }
+        guard !inventory().contains(where: { $0.sourceName == source.lastPathComponent }) else { return }
         let entry = Entry(id: UUID().uuidString, sourceName: source.lastPathComponent, context: context)
         try save(entry)
         pump()
@@ -83,7 +92,9 @@ final class LopuRecordingUploads {
         try JSONEncoder().encode(entry).write(to: outbox.appendingPathComponent(entry.id + ".json"), options: .atomic)
     }
 
-    func pending() -> [Entry] {
+    func pending() -> [Entry] { inventory().filter { $0.completedAttachmentId == nil } }
+
+    func inventory() -> [Entry] {
         let urls = (try? FileManager.default.contentsOfDirectory(at: outbox, includingPropertiesForKeys: nil)) ?? []
         return urls.sorted { $0.lastPathComponent < $1.lastPathComponent }.compactMap { url in
             guard url.pathExtension == "json", let data = try? Data(contentsOf: url),
@@ -98,6 +109,7 @@ final class LopuRecordingUploads {
         guard worker == nil, let context, !cookie.isEmpty else { return }
         let id = UUID(); workerID = id
         let cookie = self.cookie
+        let importOlder = self.importOlder
         worker = Task {
             let background = UIApplication.shared.beginBackgroundTask(withName: "Save Lopu recordings") { [weak self] in
                 Task { @MainActor in if self?.workerID == id { self?.worker?.cancel() } }
@@ -105,7 +117,13 @@ final class LopuRecordingUploads {
             defer {
                 if background != .invalid { UIApplication.shared.endBackgroundTask(background) }
                 worker = nil
-                if self.context != context || self.cookie != cookie { pump() }
+                if self.context != context || self.cookie != cookie || self.importOlder != importOlder { pump() }
+            }
+            if importOlder {
+                do { try await importLegacy(context: context, cookie: cookie) }
+                catch {
+                    if !Task.isCancelled { notify?("lopu-voice-recording-upload", ["ownerId": context.ownerId, "state": "pending", "message": "Older recordings remain on this iPhone. Automatic import will retry when Lopu reconnects."]) }
+                }
             }
             var attempted = Set<String>()
             while !Task.isCancelled, workerID == id,
@@ -114,7 +132,8 @@ final class LopuRecordingUploads {
                 do {
                     let attachmentId = try await upload(&entry, cookie: cookie)
                     // Persist success before notification; a lost response is recovered by the same requestId.
-                    try FileManager.default.removeItem(at: outbox.appendingPathComponent(entry.id + ".json"))
+                    entry.completedAttachmentId = attachmentId
+                    try save(entry)
                     guard workerID == id, !Task.isCancelled else { return }
                     notify?("lopu-voice-recording-upload", ["ownerId": context.ownerId, "recordingId": entry.id,
                         "filename": entry.sourceName, "attachmentId": attachmentId, "state": "saved"])
@@ -125,6 +144,54 @@ final class LopuRecordingUploads {
                         "message": "Saved on this iPhone. Upload to Things is pending; reopen Lopu when connected and signed into the recording's account. Check private-upload permission and available storage if it persists."])
                 }
             }
+        }
+    }
+
+    /// Snapshot only files that existed before this controller could start recording.
+    /// Receipts also retain their first account binding after a successful upload.
+    func importLegacy(context: Context, cookie: String) async throws {
+        let claimed = Set(inventory().map(\.sourceName))
+        let candidates = legacySources.filter { !claimed.contains($0.lastPathComponent) }
+        guard !candidates.isEmpty else { return }
+        let manifest = try await request(LopuVoiceContract.manifestPath, context: context, cookie: "")
+        for (feature, minimum) in [("api.auth-me", [1, 0, 0]), ("api.things", [1, 7, 0])] {
+            guard LopuVoiceContract.accepts(manifest, baseURL: context.origin, feature: feature, minimum: minimum) else { throw UploadError.incompatible }
+        }
+        let identity = try await request("/api/v1/auth/me", context: context, cookie: cookie)
+        guard (identity["user"] as? [String: Any])?["id"] as? String == context.ownerId else { throw UploadError.wrongAccount }
+        // Build 29 removed successful queue entries. Reconcile those files with the
+        // account's existing attachment metadata before reserving any new uploads.
+        var remote: [String: String] = [:]
+        var cursor: String?
+        var seen = Set<String>()
+        repeat {
+            var url = URLComponents(string: "/api/v1/things")!
+            url.queryItems = [URLQueryItem(name: "thingtime", value: "attachment"), URLQueryItem(name: "limit", value: "100")]
+            if let cursor { url.queryItems?.append(URLQueryItem(name: "cursor", value: cursor)) }
+            let page = try await request(url.string!, context: context, cookie: cookie)
+            guard let things = page["things"] as? [[String: Any]] else { throw UploadError.failed }
+            for thing in things {
+                guard let crystal = thing["crystal"] as? [String: Any], let name = crystal["name"] as? String,
+                      let size = crystal["size"] as? Int, let id = thing["id"] as? String else { continue }
+                remote["\(name):\(size)"] = id
+            }
+            cursor = page["nextCursor"] as? String
+            if let cursor, !seen.insert(cursor).inserted { throw UploadError.failed }
+        } while cursor != nil
+        for source in candidates {
+            try Task.checkCancellation()
+            guard !inventory().contains(where: { $0.sourceName == source.lastPathComponent }) else { continue }
+            guard let audio = try? AVAudioFile(forReading: source), audio.length > 0 else { continue }
+            // Build 29 retained its encoded file. New imports can enqueue without
+            // exporting the entire library before the first upload gets a turn.
+            let encoded = source.deletingPathExtension().appendingPathExtension("m4a")
+            let size = (try? encoded.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+            let hash = SHA256.hash(data: Data(source.lastPathComponent.utf8)).prefix(16)
+            let bytes = Array(hash)
+            let id = UUID(uuid: (bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15])).uuidString
+            try Task.checkCancellation()
+            try save(Entry(id: id, sourceName: source.lastPathComponent, context: context,
+                           completedAttachmentId: remote["\(encoded.lastPathComponent):\(size)"]))
         }
     }
 

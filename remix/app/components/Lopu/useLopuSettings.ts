@@ -44,6 +44,7 @@ export interface LopuSettings {
 	// voice: transcribe mode — every final utterance becomes a private
 	// transcript page + a quote instead of an AI turn
 	transcribe: boolean;
+	autoImportRecordings: boolean;
 	// the brain a voice/chat turn thinks with: a Secure Vault provider id (or
 	// a catalog model id); null = whatever the model picker says
 	providerId: string | null;
@@ -73,6 +74,7 @@ export const LOPU_SETTINGS_DEFAULTS: LopuSettings = {
 	speed: null,
 	spokenReplies: false,
 	transcribe: false,
+	autoImportRecordings: true,
 	providerId: null,
 	directVoice: false,
 	directVoiceModel: null,
@@ -120,6 +122,7 @@ export const normalizeLopuSettings = (raw: unknown): LopuSettings => {
 		speed: normalizeLopuSpeed(source.speed),
 		spokenReplies: boolOr(source.spokenReplies, LOPU_SETTINGS_DEFAULTS.spokenReplies),
 		transcribe: boolOr(source.transcribe, LOPU_SETTINGS_DEFAULTS.transcribe),
+		autoImportRecordings: boolOr(source.autoImportRecordings, true),
 		providerId: idOrNull(source.providerId),
 		directVoice: boolOr(source.directVoice, LOPU_SETTINGS_DEFAULTS.directVoice),
 		directVoiceModel: idOrNull(source.directVoiceModel),
@@ -481,6 +484,7 @@ export const useLopuSettings = () => {
 		setEffort,
 		setSpeed,
 		setSpokenReplies,
+		setAutoImportRecordings: (value: boolean) => setLopuSetting('autoImportRecordings', value),
 		setTranscribe,
 		setProviderId,
 		setDirectVoice,

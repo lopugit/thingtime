@@ -1,5 +1,7 @@
 import React from 'react';
+import { mapStyleMediaUrls } from '../Sharing/renderMediaCore';
 import { useSharedMediaUrl } from '../Sharing/SharedMedia';
+import { HTML_ALLOWED_TAGS as ALLOWED_TAGS, HTML_VOID_TAGS as VOID_TAGS, HTML_MAX_NODES as MAX_NODES, HTML_MAX_DEPTH as MAX_DEPTH } from './htmlRenderPolicy';
 
 import { applyNoOpener, isEventHandlerProp, isSafeCssText, isSafeUrl } from './safeUrl';
 
@@ -11,81 +13,6 @@ import { applyNoOpener, isEventHandlerProp, isSafeCssText, isSafeUrl } from './s
 // Because the page is *data*, the same sanitisation gate that protects pasted
 // JSON protects rendered pages: only whitelisted tags/props render, styles are
 // object-form only, URLs are checked, and event handlers never pass through.
-
-const ALLOWED_TAGS = new Set([
-	'div',
-	'span',
-	'p',
-	'h1',
-	'h2',
-	'h3',
-	'h4',
-	'h5',
-	'h6',
-	'a',
-	'img',
-	'button',
-	'ul',
-	'ol',
-	'li',
-	'section',
-	'article',
-	'header',
-	'footer',
-	'nav',
-	'aside',
-	'main',
-	'strong',
-	'em',
-	'small',
-	// inline formatting produced by WYSIWYG editing / rich paste — pure
-	// text-level semantics, no URL or script surface
-	'b',
-	'i',
-	'u',
-	's',
-	'mark',
-	'sub',
-	'sup',
-	'code',
-	'pre',
-	'blockquote',
-	'hr',
-	'br',
-	'table',
-	'thead',
-	'tbody',
-	'tr',
-	'th',
-	'td',
-	'figure',
-	'figcaption',
-	'label',
-	// a FORM GROUP: the ttAction click wrapper reads named fields from the
-	// control's closest fieldset (else the whole component), so one component
-	// can hold several independent forms
-	'fieldset',
-	'legend',
-	'input',
-	'textarea',
-	'select',
-	'option',
-	'video',
-	'audio',
-	'svg',
-	'path',
-	'circle',
-	'ellipse',
-	'rect',
-	'line',
-	'polyline',
-	'polygon',
-	// svg text + grouping: pure drawing primitives with no URL or script
-	// surface (a chart wheel, a badge, a stat ring)
-	'text',
-	'tspan',
-	'g'
-]);
 
 // Exported so the allowlist itself carries a regression test: every entry is a
 // decision about what untrusted markup may hand the browser, and a prop added
@@ -185,11 +112,6 @@ export const ALLOWED_PROPS = new Set([
 	'data-tt-action-inputs'
 ]);
 
-const VOID_TAGS = new Set(['img', 'input', 'br', 'hr']);
-
-const MAX_NODES = 600;
-const MAX_DEPTH = 24;
-
 const sanitizeStyle = (style: unknown): React.CSSProperties | undefined => {
 	if (!style || typeof style !== 'object' || Array.isArray(style)) return undefined;
 
@@ -288,6 +210,7 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 	}
 
 	const props = fieldProps(tag, sanitizeProps(node.props));
+	if (props.style) props.style = mapStyleMediaUrls(props.style, state.mediaUrl);
 	for (const field of ['src', 'poster', 'href']) if (typeof props[field] === 'string') props[field] = state.mediaUrl(props[field]);
 
 	if (VOID_TAGS.has(tag)) {
