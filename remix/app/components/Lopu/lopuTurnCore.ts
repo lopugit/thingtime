@@ -196,6 +196,7 @@ export type LopuTurnState = {
 	chatId: string | null;
 	userMessageId: string;
 	userText: string;
+	userAttachments: ChatMessage['attachments'];
 	startedAt: number;
 	meta: LopuTurnMeta | null;
 	text: string;
@@ -231,12 +232,14 @@ export const initialLopuTurn = (input: {
 	requestId: string;
 	chatId?: string | null;
 	userText: string;
+	userAttachments?: ChatMessage['attachments'];
 	startedAt?: number;
 }): LopuTurnState => ({
 	requestId: input.requestId,
 	chatId: input.chatId ?? null,
 	userMessageId: pendingUserMessageId(input.requestId),
 	userText: input.userText,
+	userAttachments: (input.userAttachments ?? []).map(attachment => ({ ...attachment })),
 	startedAt: input.startedAt ?? Date.now(),
 	meta: null,
 	text: '',
@@ -870,14 +873,16 @@ const baseMessage = (input: { id: string; chatId: string; authorId: string; text
 });
 
 /** The viewer's row for a turn — id re-keys to the persisted one after `meta`. */
-export const buildUserMessage = (turn: LopuTurnState, viewerId: string, chatId: string = turn.chatId || ''): ChatMessage =>
-	baseMessage({
+export const buildUserMessage = (turn: LopuTurnState, viewerId: string, chatId: string = turn.chatId || ''): ChatMessage => ({
+	...baseMessage({
 		id: turn.userMessageId,
 		chatId,
 		authorId: viewerId,
 		text: turn.userText,
 		createdAt: new Date(turn.startedAt).toISOString()
-	});
+	}),
+	attachments: turn.userAttachments ?? []
+});
 
 /**
  * Lopu's rows for a finished turn: the server's persisted segments when
