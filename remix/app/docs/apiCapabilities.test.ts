@@ -112,8 +112,8 @@ test('account-hint privacy contracts publish their patch-level capability update
 test('capabilities publish the native Apple notification device contract', () => {
 	const manifest = createApiCapabilitiesManifest();
 
-	assert.equal(manifest.features['api.notifications-devices'], '1.1.0');
-	assert.equal(manifest.features['api.notifications-list'], '1.6.0');
+	assert.equal(manifest.features['api.notifications-devices'], '1.2.0');
+	assert.equal(manifest.features['api.notifications-list'], '1.6.1');
 	assert.equal(manifest.features['api.watch-pairing'], '1.2.0');
 	assert.equal(manifest.features['api.watch-sync'], '1.1.0');
 	assert.equal(manifest.features['api.watch-things'], '1.1.0');
@@ -127,7 +127,7 @@ test('notification contracts publish the history filters and the system family a
 	const manifest = createApiCapabilitiesManifest();
 
 	// Preserve both subspace notifications and private recording reminders.
-	assert.equal(manifest.features['api.notifications-list'], '1.6.0');
+	assert.equal(manifest.features['api.notifications-list'], '1.6.1');
 	assert.equal(manifest.features['api.notifications-settings'], '1.5.0');
 	assert.equal(manifest.features['api.things-vote'], '1.0.1');
 });
@@ -229,7 +229,7 @@ test('subspace lifecycle + notification type additions publish their contract ve
 	assert.equal(manifest.features['api.subspaces-delete'], '1.1.0');
 	// S4 review: subspace-post-removed / subspace-ban rows carry the subspace's
 	// mod team as their actor (1.2.0, additive)
-	assert.equal(manifest.features['api.notifications-list'], '1.6.0');
+	assert.equal(manifest.features['api.notifications-list'], '1.6.1');
 	assert.equal(manifest.features['api.notifications-settings'], '1.5.0');
 });
 

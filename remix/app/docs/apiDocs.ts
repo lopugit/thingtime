@@ -673,12 +673,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [{ status: 200, description: 'Your schedules.', body: { ok: true, ownerId: 'user-id', reminders: [] } }]
 	}),
 	endpoint({
-		id: 'notifications-test', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'notifications', title: 'Send a test notification',
+		id: 'notifications-test', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'notifications', title: 'Send a test notification',
 		endpoint: '/api/v1/notifications/test', methods: ['POST'],
 		summary: 'Send a fixed notification example to the signed-in account only.',
 		detail: 'POST preset quiet, normal, urgent, rich or image, with optional registered notification type (default lopu-reminder). Fixed safe title/body/rich text/image; no caller-provided content, recipient or external URL. Quiet maps to passive without sound; normal to active; urgent to time-sensitive, not Critical. Rich text and a local illustration render in Thingtime; native banners use plain text. Notification preferences are honoured. saved means durable history insertion, not proof a physical device displayed it. Response includes id or null and a status message. No email is sent.',
 		auth: { mode: 'session-or-bearer', description: 'Full live first-party user only, same-origin JSON, subscription-tier mutation limit. Scoped app/Watch credentials cannot send tests.' },
-		steps: ['Negotiate api.notifications-test 1.0.0.', 'Select a test in Settings → Notifications.', 'Check history and your physical device.'],
+		steps: ['Negotiate api.notifications-test 1.1.0.', 'Select a test in Settings → Notifications.', 'Inspect the optional push report (status, attempted, accepted, rejected, platform counts and sanitized reasons), then check your physical device. Apple acceptance does not prove a displayed banner.'],
 		requestExamples: [{ name: 'Urgent test', description: 'Time-sensitive sample to yourself.', method: 'POST', body: { preset: 'urgent' } }],
 		responseExamples: [{ status: 200, description: 'Muted by user settings.', body: { ok: true, saved: false, id: null, message: 'This notification is muted by your notification preferences.' } }]
 	}),
@@ -11331,8 +11331,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.3.0: both lines merged — this endpoint ships history filters AND the
     // subspace family together; additive
     // 1.6.0: adds Lopu reminders and optional delivery/richText/image presentation.
-    featureVersion: '1.6.0',
-    contractVersion: '1.6.0',
+    featureVersion: '1.6.1',
+    contractVersion: '1.6.1',
     group: 'notifications',
     title: 'List notifications',
     endpoint: '/api/v1/notifications',
@@ -11503,14 +11503,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'notifications-devices',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    contractVersion: '1.2.0',
+    featureVersion: '1.2.0',
     group: 'notifications',
     title: 'Register notification devices',
     endpoint: '/api/v1/notifications/devices',
     summary: 'Register iPhone and Apple Watch APNs targets for the signed-in Thingtime account.',
     detail:
-      'POST accepts one to four variable-length hexadecimal APNs tokens. The server selects the bundle topic, ' +
+      'GET requires a full session and returns ownerId, server configured status, and eligible iOS/watchOS device counts without tokens. POST optionally accepts ownerId to reject stale account registration with HTTP 409. POST accepts one to four variable-length hexadecimal APNs tokens. The server selects the bundle topic, ' +
       'stores each token in a protected binary secure field, keeps at most twelve recent devices per account, ' +
       'and returns only non-secret registration metadata. DELETE removes one registration by id. Thingtime sends ' +
       'the same notification payload to paired iPhone and watchOS targets so Apple can suppress duplicate alerts.',
@@ -11518,13 +11518,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie, full-session Bearer token, or a paired Watch credential with watch.push capability.'
     },
-    methods: ['POST', 'DELETE'],
+    methods: ['GET', 'POST', 'DELETE'],
     steps: [
       'Register for remote notifications on every app launch and preserve the APNs token as variable-length data.',
       'POST the current iOS and/or watchOS token after the Thingtime session is authenticated.',
       'DELETE a stale device id when the user explicitly disconnects that device.'
     ],
     requestExamples: [
+      { name: 'Check native push connection', description: 'Read only this signed-in account’s eligible device counts and server readiness.', method: 'GET' },
       {
         name: 'Register paired Apple devices',
         description: 'Register current sandbox tokens from an iPhone and its paired watch.',
@@ -11544,6 +11545,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       }
     ],
     responseExamples: [
+      { status: 200, description: 'Authenticated GET connection status, never device tokens.', body: { ok: true, ownerId: 'your-user-id', configured: true, devices: { ios: 1, watchos: 0 } } },
       {
         status: 200,
         description: 'Registered; tokens are intentionally omitted.',
