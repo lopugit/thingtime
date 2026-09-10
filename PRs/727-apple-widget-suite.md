@@ -1,0 +1,23 @@
+# PR #727 — Apple widget suite
+
+Branch: `codex/apple-widget-suite`  
+PR: https://github.com/lopugit/thingtime/pull/727
+
+Adds shared WidgetKit Quick Action, Dashboard, Render a Thing, and Recent Things widgets to iOS and a native Mac companion. Includes iPhone accessory families, iPad/Mac extra-large widgets, and four iOS 18 Control Centre actions. New Thing opens the existing schema chooser; transcription and voice launch foreground Lopu in their distinct modes. The native gallery previews the actual widget views.
+
+Content sharing is off by default, requires per-widget opt-in, and uses an expiring bounded display projection in an App Group. The host negotiates api.things 1.7 compatibility before syncing; credentials and full Thing records are never shared with the extension. Mac voice reuses the existing recorder/outbox with platform-specific permission and lifecycle handling.
+
+## Validation — 2026-09-10
+
+- iOS simulator build and all 15 selected widget route, voice recovery, and recording upload tests passed after the final drawer change.
+- macOS build passed; staged and installed Apple Development signatures passed deep/strict verification with a stable designated requirement. Widget extension registered successfully.
+- Live Mac gallery: small, medium, large, recent Things, long titles; Search opens the correct main window and New Thing reopens a closed main window. Live iPhone simulator gallery inspected at phone width. Native settings default to sharing disabled.
+- Browser checks at desktop and mobile sizes confirmed the signed-out gate. No test account credentials were entered. Local storage reports a migration requirement; no shared database migration was performed.
+- Exact source commit `a777c964` passed GitHub Web CI build/typecheck ratchet/unit tests, API suite, and CodeQL. Its [Vercel preview](https://pr-727.previews.dev.thingtime.com) rendered with the exact SHA and returned HTTP 200 from the Nitro health endpoint.
+- Focused web lint passed with existing ThingsPage warnings. Full TypeScript checking was stopped after more than 11 minutes without a result under machine contention; it is not claimed green.
+- Local preview: http://localhost:11240 (API 11242, HMR 11241). Tailscale launcher points to a missing application binary; Funnel unavailable. Shared PM2 inspection hung, so the repository-approved foreground validation stack was used without modifying shared PM2 state.
+- Microphone/Speech permission grants, authenticated auto-recording, private content synchronization/account switching, system widget/control placement and resizing, and device cold-launch behavior remain device acceptance work. No TestFlight upload or production deployment was performed. App Group provisioning must be enabled for signed iOS distribution.
+
+The installed Mac review build targets the Vercel PR preview so it does not depend on the local server.
+
+See [setup and feature behavior](../apple/README.md) and the Apple widget checklist in [TESTING.md](../TESTING.md).
