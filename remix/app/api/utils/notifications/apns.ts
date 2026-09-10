@@ -98,6 +98,11 @@ export const buildApnsPayload = (notification: PushEnvelope) => {
   };
 };
 
+// APNs collapse identifiers are limited to 64 bytes; reminder/test Thing IDs
+// can exceed that. A stable digest preserves coalescing without truncation collisions.
+export const apnsCollapseId = (notificationId: string): string =>
+  createHash('sha256').update(notificationId).digest('hex');
+
 const sendDevice = async (
   authToken: string,
   device: PushDevice,
@@ -125,7 +130,7 @@ const sendDevice = async (
         'apns-topic': device.topic,
         'apns-push-type': 'alert',
         'apns-priority': '10',
-        'apns-collapse-id': collapseId
+        'apns-collapse-id': apnsCollapseId(collapseId)
       });
       let status = 0;
       let body = '';
@@ -161,7 +166,7 @@ const pushDependencies = {
   remove: removePushDeviceById
 };
 
-const APNS_REASONS = new Set(['BadDeviceToken', 'Unregistered', 'DeviceTokenNotForTopic', 'InvalidProviderToken', 'ExpiredProviderToken', 'MissingProviderToken', 'TopicDisallowed', 'BadTopic', 'MissingTopic', 'TooManyProviderTokenUpdates', 'TooManyRequests', 'PayloadTooLarge', 'Forbidden', 'BadCertificate', 'BadCertificateEnvironment', 'InternalServerError', 'ServiceUnavailable', 'Shutdown']);
+const APNS_REASONS = new Set(['BadCollapseId', 'BadDeviceToken', 'Unregistered', 'DeviceTokenNotForTopic', 'InvalidProviderToken', 'ExpiredProviderToken', 'MissingProviderToken', 'TopicDisallowed', 'BadTopic', 'MissingTopic', 'TooManyProviderTokenUpdates', 'TooManyRequests', 'PayloadTooLarge', 'Forbidden', 'BadCertificate', 'BadCertificateEnvironment', 'InternalServerError', 'ServiceUnavailable', 'Shutdown']);
 
 // Counts and bounded reason codes only: never expose tokens, signing material,
 // provider responses, or another account's registrations to the settings UI.
