@@ -18,6 +18,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Distinguish temporary shared-page resolve failures from unavailable pages.
+  Offer Retry, retain same-viewer content on a failed refresh, and reset drafts
+  before rendering under another viewer, target or link key. Keep optional site
+  decoration resolves nullable. — Codex (AI), 2026-09-10
+
 - Follow stored conditional media-property alternatives through shared root
   inheritance, including argument-backed src/poster/href and style records.
   Exclude condition metadata and bound discovery across all property visits;

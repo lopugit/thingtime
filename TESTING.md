@@ -1,5 +1,13 @@
 # TESTING.md — per-area manual test checklists
 
+- Shared page resolve recovery: return a 503, 429, network failure or invalid
+  JSON from the page resolver. Show an explicit Retry rather than "not here";
+  Retry must load the complete shared composition without signing in. A failed
+  same-viewer refresh keeps its last loaded page; a 401/403/404 clears it.
+  Switching viewer, target or hidden-link key must clear the old page and
+  pending component results before the replacement response arrives. Check
+  cold failure and recovery at desktop and 390px widths.
+
 - Signed-out boot recovery: abort an initial static JavaScript dependency at
   desktop and 390px widths. Recover once with the full share query/fragment
   preserved; persistent failure shows a reachable manual retry, not a blank
