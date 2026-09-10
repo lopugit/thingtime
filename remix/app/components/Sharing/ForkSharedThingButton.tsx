@@ -21,7 +21,7 @@ export const ForkSharedThingButton = ({ id, linkKey, webpage = false }: { id: st
 		inFlight.current = true;
 		setBusy(true);
 		try {
-			await requireThingtimeCapability('api.things-fork', '1.2.1');
+			await requireThingtimeCapability('api.things-fork', '1.3.0');
 			const response = await fetch('/api/v1/things/fork', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, ...(linkKey ? { key: linkKey } : {}) }) });
 			const data = await response.json();
 			if (!response.ok || !data?.ok) throw new Error(data?.error || 'Could not copy this app');

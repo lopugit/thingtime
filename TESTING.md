@@ -1169,9 +1169,12 @@ email whose link points at the attacker.
       Confirm source authorization precedes quota reservation; revocation,
       moderation, purpose or exact-version changes stop copying; only the new
       owner's partial upload is cleaned, with deferred cleanup still billed.
-      Once fork integration is enabled, repeat using real private storage and
+      Repeat through `/things/fork` using real private storage and
       verify the copied image after revoking/deleting the original. Unit mocks
       alone do not prove that live-S3 acceptance or the Copy button works.
+      Run the action suite for URL/HTML/CSS retargeting, transactional binding,
+      failed-copy cleanup, late root revocation and no-write template failures.
+      Confirm the button requires `api.things-fork` 1.3.0 before sending a copy.
 
 - [ ] With `THINGTIME_MODERATION_PROVIDER=test`, upload an image named
       `tt-test-nsfw.png` to a post: after analysis it renders heavily blurred

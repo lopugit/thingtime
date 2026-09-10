@@ -22,10 +22,11 @@ test('shared dependency reads negotiate the additive Things contract on both man
 
 test('standalone Thing copying negotiates the additive copy contract on both manifests', () => {
 	const version = createApiCapabilitiesManifest().features['api.things-fork'];
-	assert.equal(version, '1.2.1');
+	assert.equal(version, '1.3.0');
 	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-fork'].version, version);
 	assert.equal(capabilitySatisfies(version, '1.0.0'), true);
 	for (const unsupported of ['', '1.0.0', '1.1.0', '1.1.1', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.2.0'), false);
+	for (const unsupported of ['', '1.2.1', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.3.0'), false);
 });
 
 test('Data Thing controls negotiate the shared-content action contract', () => {
@@ -217,7 +218,7 @@ test('shared audience-boundary corrections reject pre-fix and incompatible origi
 	const manifest = thingtimeCapabilityManifest('https://thingtime.test');
 	for (const [name, required, previous] of [
 		['things', '1.9.1', '1.9.0'], ['things-update', '1.2.6', '1.2.5'],
-		['actions-run', '1.3.1', '1.3.0'], ['things-fork', '1.2.1', '1.2.0'], ['attachment-content', '1.6.2', '1.6.1']
+		['actions-run', '1.3.1', '1.3.0'], ['things-fork', '1.3.0', '1.2.1'], ['attachment-content', '1.6.2', '1.6.1']
 	]) {
 		assert.equal(manifest.features[`api.${name}`].version, required);
 		assert.equal(capabilitySatisfies(required, required), true);

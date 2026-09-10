@@ -1,0 +1,102 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { forkComposition } from './forkComposition';
+import type { SharedComposition } from './sharedComposition';
+
+const url = (id: string) => `/api/v1/attachments/content?id=${id}`;
+const fixture = () => {
+	const component: any = { shareId: 'component', ownerId: 'author', thingtime: ['component'], acl: ['tt:user'], crystal: {
+		savedArgs: { image: url('att_source') }, render: { tag: 'img', props: { src: '{image}' } }
+	} };
+	const root: any = { shareId: 'page', ownerId: 'author', thingtime: ['webpage'], acl: ['tt:hidden'], crystal: {
+		blocks: [{ type: 'component', component: 'component' }, { type: 'media', src: url('att_other') }]
+	} };
+	const composition: SharedComposition = { root, docs: new Map([['page', root], ['component', component]]),
+		actions: new Map(), children: new Map(), data: new Map(), references: new Map([['page:component:component', component]]),
+		requiredReferences: new Set(['page:component:component']), contexts: new Map(), boundaries: new Map() };
+	const created: any[] = [], bound: any[] = [], removed: string[] = [], copied: any[] = [], removedFiles: any[] = [];
+	let serial = 0;
+	const deps: Parameters<typeof forkComposition>[2] = {
+		uuid: () => `new-${++serial}`, revalidate: async () => composition,
+		copyFile: async (viewer, id, signal) => { copied.push({ viewer, id, signal }); return { ok: true, id: `copy-${id}`, attachment: {} }; },
+		removeFile: async (owner, input) => { removedFiles.push({ owner, input }); return { ok: true, deferred: false }; },
+		bind: (ids) => async (doc, session) => { bound.push({ ids, doc, session }); },
+		create: async (owner, input, viewer, app, hooks) => {
+			const doc: any = { ...input, ownerId: owner };
+			await hooks?.afterInsert?.(doc, 'transaction'); created.push(doc);
+			return { ok: true, doc } as any;
+		},
+		remove: async (_viewer, id) => { removed.push(id as string); return { ok: true } as any; }
+	};
+	return { composition, deps, created, bound, removed, copied, removedFiles };
+};
+const viewer = { id: 'copier', linkKeys: new Set(['shared-key']) };
+
+test('fork creates independently owned media once, binds it transactionally and retargets every instance', async () => {
+	const f = fixture(); const before = JSON.stringify([...f.composition.docs]);
+	const result = await forkComposition(viewer, f.composition, f.deps);
+	assert.equal(result.ok, true); if (!result.ok) return;
+	assert.equal(result.filesCopied, 2);
+	assert.equal(f.copied.length, 2);
+	assert.equal(f.copied[0].viewer.id, viewer.id);
+	assert.equal(f.copied[0].viewer.sharedRoot, 'page');
+	assert.equal(f.copied[0].viewer.linkKeys, viewer.linkKeys);
+	assert.ok(f.copied.every((call) => call.signal instanceof AbortSignal));
+	assert.deepEqual(f.bound[0].ids, ['copy-att_source', 'copy-att_other']);
+	assert.equal(f.bound[0].session, 'transaction');
+	assert.equal(f.bound[0].doc.ownerId, viewer.id);
+	assert.ok(f.created.every((doc) => doc.acl.join() === 'tt:user'));
+	assert.equal(f.created[0].crystal.blocks[0].component, f.created[1].shareId);
+	assert.equal(f.created[1].crystal.savedArgs.image, url('copy-att_source'));
+	assert.equal(JSON.stringify([...f.composition.docs]), before);
+});
+
+test('fork refuses unavailable files and cleans only its new partial uploads', async () => {
+	const f = fixture(); const copy = f.deps.copyFile;
+	f.deps.copyFile = async (...args) => args[1] === 'att_other' ? { ok: false, status: 404, error: 'Attachment not found' } : copy(...args);
+	assert.equal((await forkComposition(viewer, f.composition, f.deps)).ok, false);
+	assert.equal(f.created.length, 0);
+	assert.deepEqual(f.removedFiles, [{ owner: 'copier', input: { id: 'copy-att_source', targetId: 'new-1' } }]);
+});
+
+test('fork cleans copied Things and files after a write failure, including deferred cleanup', async () => {
+	const f = fixture(); const create = f.deps.create;
+	f.deps.create = async (...args) => f.created.length ? { ok: false, status: 422, error: 'Write failed' } : create(...args);
+	f.deps.removeFile = async (owner, input) => { f.removedFiles.push({ owner, input }); return { ok: true, deferred: true }; };
+	const result = await forkComposition(viewer, f.composition, f.deps);
+	assert.equal(result.ok, false); if (result.ok) return;
+	assert.match(result.error, /cleanup is pending/);
+	assert.deepEqual(f.removed, ['new-1']);
+	assert.equal(f.removedFiles.length, 2);
+	assert.ok(f.removedFiles.every((call) => call.input.id.startsWith('copy-')));
+});
+
+test('fork fails before writes for an unresolved media template or excessive per-Thing files', async () => {
+	const f = fixture(); const doc = f.composition.docs.get('component')!;
+	doc.crystal = { savedArgs: { image: 'att_source' }, render: { tag: 'img', props: { src: '/api/v1/attachments/content?id={image}' } } };
+	const unsupported = await forkComposition(viewer, f.composition, f.deps);
+	assert.equal(unsupported.ok, false); if (unsupported.ok) return;
+	assert.match(unsupported.error, /templated file reference/);
+	assert.equal(f.copied.length, 0);
+	f.composition.root.crystal = { blocks: Array.from({ length: 26 }, (_, index) => ({ type: 'media', src: url(`att_${index}`) })) };
+	assert.equal((await forkComposition(viewer, f.composition, f.deps)).ok, false);
+	assert.equal(f.copied.length, 0);
+});
+
+test('fork checks root revocation before writes and after creation, with cleanup on late revocation', async () => {
+	for (const failAt of [1, 3]) {
+		const f = fixture(); let checks = 0;
+		f.deps.revalidate = async () => ++checks === failAt ? { ok: false, status: 404, error: 'Not found' } : f.composition;
+		assert.equal((await forkComposition(viewer, f.composition, f.deps)).ok, false);
+		assert.equal(f.copied.length, failAt === 1 ? 0 : 2);
+		assert.equal(f.removed.length, failAt === 1 ? 0 : 2);
+	}
+});
+
+test('anonymous copying and missing executable dependencies never start file copies', async () => {
+	const f = fixture();
+	assert.equal((await forkComposition(null, f.composition, f.deps)).ok, false);
+	f.composition.requiredReferences.add('page:component:missing');
+	assert.equal((await forkComposition(viewer, f.composition, f.deps)).ok, false);
+	assert.equal(f.copied.length, 0);
+});

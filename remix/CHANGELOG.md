@@ -18,6 +18,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Connect shared app forks to exact-version file copying, retarget authored
+  media and bind newly owned files transactionally. Add revocation/cleanup
+  coverage and negotiate the additive fork 1.3.0 contract. Live storage and
+  browser-copy acceptance remain pending. See [PR #755](../PRs/755-shared-composition-file-copies.md).
+  — Codex (AI), 2026-09-10
+
 - Prepare the internal exact-version file-copy path for shared app forks.
   Reuse attachment authorization, quota reservation, multipart finalization,
   moderation and deferred cleanup. Fork-route/media rewriting integration and

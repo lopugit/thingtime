@@ -19,15 +19,19 @@ type CopyDependencies = {
 // object key, upload id or owner identity. The normal upload lifecycle owns
 // quota, finalization, moderation, version verification and deletion refunds.
 export const copyStoredAttachment = async (
-	deps: CopyDependencies, viewer: AttachmentAccessViewer, id: unknown
+	deps: CopyDependencies, viewer: AttachmentAccessViewer, id: unknown, signal?: AbortSignal
 ): Promise<AttachmentResult<{ id: string; attachment: Record<string, unknown> }>> => {
 	if (!viewer?.id) return { ok: false, status: 401, error: 'Sign in to copy files' };
 	let cleanupId: string | undefined;
 	const abort = new AbortController();
+	const cancel = () => abort.abort();
+	if (signal?.aborted) cancel();
+	signal?.addEventListener('abort', cancel, { once: true });
 	const timeout = setTimeout(() => abort.abort(), 120_000);
 	timeout.unref?.();
 	const missing = (): AttachmentResult<never> => ({ ok: false, status: 404, error: 'Attachment not found' });
 	try {
+		if (abort.signal.aborted) throw new Error('Copy timed out');
 		const initial = await deps.read(viewer, id);
 		if (initial.ok === false) return initial;
 		const source = initial.doc;
@@ -83,5 +87,5 @@ export const copyStoredAttachment = async (
 		}
 		// Do not surface S3 errors, keys, versions or arbitrary upstream prose.
 		return { ok: false, status: 422, error: `Could not copy the file. The original is unchanged.${cleanupPending ? ' Private partial-upload cleanup is pending.' : ''}` };
-	} finally { clearTimeout(timeout); }
+	} finally { clearTimeout(timeout); signal?.removeEventListener('abort', cancel); }
 };

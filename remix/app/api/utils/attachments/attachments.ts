@@ -1310,11 +1310,11 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		}
 	};
 
-	const copy = (viewer: AttachmentViewer, id: unknown) => copyStoredAttachment({
+	const copy = (viewer: AttachmentViewer, id: unknown, signal?: AbortSignal) => copyStoredAttachment({
 		read: readableStoredAttachment, start, complete, remove,
 		store: dependencies.store, getS3: dependencies.getS3,
 		plan: attachmentPartPlan, uuid: dependencies.uuid, now: dependencies.now
-	}, viewer, id);
+	}, viewer, id, signal);
 
 	type ContentAttachmentPurpose = Extract<AttachmentPurpose, 'post' | 'comment' | 'message' | 'emoji'>;
 	type InspectedAttachments = {

@@ -54,6 +54,20 @@ test('single-part copies omit ranges, including files smaller than the S3 range 
 	assert.equal(f.parts.length, 1); assert.equal(f.parts[0].range, undefined);
 });
 
+test('the shared fork cancellation signal stops new work and aborts an in-flight part with cleanup', async () => {
+	const cancelled = new AbortController(); cancelled.abort();
+	const before = fixture();
+	assert.equal((await copyStoredAttachment(before.deps, { id: 'visitor' }, 'source', cancelled.signal)).ok, false);
+	assert.deepEqual(before.events, []);
+	const f = fixture(); const abort = new AbortController();
+	f.deps.getS3 = () => ({ copyUploadPart: async ({ signal }: any) => {
+		f.events.push('part'); abort.abort(); assert.equal(signal.aborted, true); throw new Error('Aborted');
+	} } as any);
+	assert.equal((await copyStoredAttachment(f.deps, { id: 'visitor' }, 'source', abort.signal)).ok, false);
+	assert.equal(f.events.at(-1), 'cleanup');
+	assert.equal(f.events.includes('complete'), false);
+});
+
 test('anonymous, unavailable, purpose-isolated and moderation-hidden sources never reserve storage', async () => {
 	const anonymous = fixture();
 	assert.equal((await copyStoredAttachment(anonymous.deps, null, 'source')).ok, false);

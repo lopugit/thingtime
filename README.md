@@ -1485,9 +1485,14 @@ list/abort/finalize operations); no public bucket access or browser AWS
 credentials are needed. It accepts an authorized attachment ID, never an
 external URL, reserves the recipient's quota before copying, and sends copied
 bytes through normal type detection and moderation. A timed-out/failed copy
-remains billed until normal cleanup confirms the object is gone. This helper
-is not yet connected to `/things/fork`; app-media rewriting and live storage
-acceptance are required before that route can advertise independent file copies.
+remains billed until normal cleanup confirms the object is gone. `/things/fork`
+uses this path with capability `api.things-fork` 1.3.0, retargets authored
+HTML/CSS and saved URL arguments, and binds new files to copied Things. It
+rechecks source sharing before and after writes and reports deferred cleanup.
+Non-URL template fragments that assemble a file URL fail before copying;
+external media URLs remain external. Live storage and browser acceptance are
+tracked in [PR #755](PRs/755-shared-composition-file-copies.md), separately
+from unit-test proof.
 The byte-copy protocol follows [S3 UploadPartCopy](https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPartCopy.html).
 
 Uploaded images are moderated asynchronously after upload: attachment
