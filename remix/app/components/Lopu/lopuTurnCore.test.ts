@@ -12,6 +12,7 @@ import {
 	describeLopuStatusLine,
 	describeLopuTurnMeta,
 	initialLopuTurn,
+	historicalToolStatus,
 	isLopuAssistantMessage,
 	isLopuChatEvent,
 	isOptimisticLopuMessage,
@@ -44,6 +45,15 @@ import {
 const fold = (events: LopuChatEvent[], start?: LopuTurnState): LopuTurnState =>
 	events.reduce((state, event) => reduceLopuTurn(state, event), start ?? initialLopuTurn({ requestId: 'req-1', userText: 'hello', startedAt: 1000 }));
 
+test('historical approval receipts are not failures and never imply later success', () => {
+	const summary = 'Waiting for the user’s confirmation: Post a comment';
+	assert.equal(historicalToolStatus({ ok: false, summary }), 'confirm');
+	assert.equal(historicalToolStatus({ ok: true, summary }), 'ok');
+	assert.equal(historicalToolStatus({ ok: false, summary: 'Permission denied' }), 'error');
+	assert.equal(historicalToolStatus({ ok: false, summary: '' }), 'error');
+	assert.equal(historicalToolStatus({ ok: false, summary: 'Provider said: ' + summary }), 'error');
+});
+
 const META: LopuChatEvent = {
 	type: 'meta',
 	chatId: 'chat-1',
@@ -72,6 +82,17 @@ test('meta adopts the chat id and the persisted user message id', () => {
 	assert.equal(turn.meta?.provider, 'claude');
 	assert.equal(turn.meta?.model, 'claude-opus-5');
 	assert.equal(turn.sequence, 1);
+});
+
+test('live and settled user rows retain a snapshot of uploaded attachment metadata', () => {
+	const attachment = { id: 'att-qa', name: 'qa.txt', size: 150, contentType: 'text/plain', mediaKind: 'file' as const };
+	const turn = initialLopuTurn({ requestId: 'req-1', userText: 'File attached', userAttachments: [attachment] });
+	attachment.name = 'changed-after-send.txt';
+	assert.equal(buildUserMessage(turn, 'owner').attachments[0].name, 'qa.txt');
+	const settled = fold([META, { type: 'done', assistantMessageId: 'assistant', messages: [], stopReason: 'end_turn' }], turn);
+	const timeline = buildLopuTimeline([], [settled], 'owner');
+	assert.equal(timeline[0].kind, 'message');
+	if (timeline[0].kind === 'message') assert.equal(timeline[0].message.attachments[0].id, 'att-qa');
 });
 
 test('deltas accumulate text and stay in one text segment', () => {

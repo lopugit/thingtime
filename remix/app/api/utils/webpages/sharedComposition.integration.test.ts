@@ -4,6 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveTemplate } from '../../../components/ComponentsLibrary/componentTemplate';
+import { storedComponentScope } from '../actions/sharedCompositionCore';
 
 // Opt-in real API regression: creates only disposable test Things and removes
 // those exact Things in finally. Never point a fixture writer at production.
@@ -11,11 +13,18 @@ const base = process.env.TT_SHARED_TEST_URL;
 test('shared page audience includes its author components, never a foreign private component', { skip: !base }, async () => {
 	assert.ok(['localhost', '127.0.0.1'].includes(new URL(base!).hostname));
 	const request = async (path: string, method = 'GET', body?: unknown, cookie = '') => {
-		const response = await fetch(new URL(path, base), {
-			method, headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}) },
-			...(body === undefined ? {} : { body: JSON.stringify(body) })
-		});
-		return { response, data: await response.json() };
+		for (let attempt = 0; ; attempt += 1) {
+			const response = await fetch(new URL(path, base), {
+				method, headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}) },
+				...(body === undefined ? {} : { body: JSON.stringify(body) })
+			});
+			const data = await response.json();
+			if (response.status !== 429 || attempt >= 3) return { response, data };
+			// Fixture volume must respect the real limiter, including cleanup.
+			// Retry only an explicit rejection, never an uncertain mutation result.
+			const seconds = Math.min(60, Math.max(1, Number(response.headers.get('Retry-After')) || 60));
+			await new Promise((resolve) => setTimeout(resolve, seconds * 1000));
+		}
 	};
 	const sessionCachePath = process.env.TT_SHARED_SESSION_CACHE;
 	const savedSessions: Record<string, string> = sessionCachePath ? JSON.parse(await readFile(sessionCachePath, 'utf8').catch(() => '{}')) : {};
@@ -44,6 +53,7 @@ test('shared page audience includes its author components, never a foreign priva
 	};
 	const owner = await session('owner', process.env.TT_SHARED_OWNER_COOKIE);
 	const stranger = await session('visitor', process.env.TT_SHARED_VISITOR_COOKIE);
+	const boundaryWriter = await session('boundaryWriter');
 	const created: { id: string; cookie: string }[] = [];
 	const mediaSource = (name: string) => `/api/v1/attachments/content?id=sharing-browser-${name}`;
 	let groupId: string | null = null;
@@ -59,7 +69,7 @@ test('shared page audience includes its author components, never a foreign priva
 		const component = await create(owner, ['component'], crystal, ['tt:hidden', 'tt:user']);
 		const foreign = await create(stranger, ['component'], crystal);
 		const page = await create(owner, ['webpage'], { name: 'Shared test root', blocks: [
-			{ id: 'nested', type: 'container', children: [{ id: 'card', type: 'component', component: key }] },
+			{ id: 'nested', type: 'container', children: [{ id: 'card', type: 'component', component: key, args: { picture: mediaSource('arg-page') } }] },
 			{ id: 'foreign', type: 'component', component: foreign.id }
 		] }, ['tt:hidden', 'tt:user']);
 		assert.ok(page.linkKey);
@@ -79,6 +89,68 @@ test('shared page audience includes its author components, never a foreign priva
 			capabilities: [{ capability: 'actions.invoke', actions: [childAction.id] }],
 			steps: [{ op: 'actions.invoke', action: childAction.id }, { op: 'return', value: '$step.1' }] });
 		const unrelatedAction = await create(owner, ['action'], { name: 'Not included', actionKey: `${key}-secret`, version: 1, capabilities: [], steps: [{ op: 'return', value: 'Private' }] });
+		const foreignAction = await create(stranger, ['action'], { name: 'Published through foreign component', actionKey: `${key}-foreign-action`, version: 1, capabilities: [], steps: [{ op: 'return', value: 'Foreign authored action' }] });
+		const foreignSecret = await create(stranger, ['action'], { name: 'Foreign unrelated private action', actionKey: `${key}-foreign-secret`, version: 1, capabilities: [], steps: [{ op: 'return', value: 'Private' }] });
+		const publicForeign = await create(stranger, ['component'], { name: 'Reusable public foreign component', componentKey: `${key}-foreign-public`, version: 1,
+			savedArgs: { action: foreignAction.id }, render: { tag: 'div', children: [{ tag: 'button', ttAction: '{action}', children: ['Foreign draw'] }, { tag: 'p', children: ['{last.result}'] }] }
+		}, ['tt:all']);
+		const foreignPage = await create(owner, ['webpage'], { name: 'Shared foreign composition', blocks: [{ id: 'foreign-public', type: 'component', component: publicForeign.id }] }, ['tt:hidden', 'tt:user']);
+		const foreignRun = (action = foreignAction.id, linkKey = foreignPage.linkKey) => request('/api/v1/actions/run', 'POST', { action, sharedRoot: foreignPage.id, key: linkKey });
+		assert.equal((await request('/api/v1/actions/run', 'POST', { action: foreignAction.id, sharedRoot: publicForeign.id })).data.result, 'Foreign authored action');
+		assert.equal((await foreignRun()).data.result, 'Foreign authored action', 'An embedded public component retains its authored private children');
+		assert.equal((await foreignRun(foreignAction.id, 'wrong')).response.status, 404);
+		assert.equal((await foreignRun(foreignSecret.id)).response.status, 404);
+		assert.equal((await request(`/api/v1/things?id=${foreignAction.id}`)).response.status, 404);
+		assert.equal((await request(`/api/v1/things?id=${foreignAction.id}&sharedRoot=${foreignPage.id}&key=${encodeURIComponent(foreignPage.linkKey)}`)).response.status, 200);
+		const foreignCopy = await request('/api/v1/things/fork', 'POST', { id: foreignPage.id, key: foreignPage.linkKey }, owner);
+		assert.equal(foreignCopy.response.status, 200, foreignCopy.data.error);
+		for (const id of foreignCopy.data.ids) created.push({ id, cookie: owner });
+		assert.equal(foreignCopy.data.copied, 3);
+		const copiedForeignPage = (await request(`/api/v1/things?id=${foreignCopy.data.id}`, 'GET', undefined, owner)).data.thing;
+		const copiedForeignComponent = (await request(`/api/v1/things?id=${copiedForeignPage.crystal.blocks[0].component}`, 'GET', undefined, owner)).data.thing;
+		const copiedForeignRender: any = resolveTemplate(copiedForeignComponent.crystal.render, storedComponentScope(copiedForeignComponent.crystal));
+		const copiedForeignAction = copiedForeignRender.children[0].props['data-tt-action'];
+		assert.notEqual(copiedForeignAction, foreignAction.id);
+		assert.equal((await request('/api/v1/actions/run', 'POST', { action: copiedForeignAction, source: 'component' }, owner)).data.result, 'Foreign authored action');
+		for (const guessed of [foreignSecret.id, unrelatedAction.id]) {
+			assert.equal((await request('/api/v1/things', 'PATCH', { id: foreignPage.id, crystal: { blocks: [{ id: 'foreign-public', type: 'component', component: publicForeign.id, args: { action: guessed } }] } }, owner)).response.status, 200);
+			assert.equal((await foreignRun(guessed)).response.status, 404, 'A page override cannot borrow either author private authority through a foreign template');
+			assert.equal((await foreignRun()).data.result, 'Foreign authored action', 'The component-authored default remains available');
+		}
+		assert.equal((await request('/api/v1/things', 'PATCH', { id: foreignPage.id, crystal: { blocks: [{ id: 'foreign-public', type: 'component', component: publicForeign.id }] } }, owner)).response.status, 200);
+		assert.equal((await request('/api/v1/things', 'PATCH', { id: publicForeign.id, acl: ['tt:user'] }, stranger)).response.status, 200);
+		assert.equal((await foreignRun()).response.status, 404, 'Revoking the foreign public boundary revokes its descendants');
+		assert.equal((await request('/api/v1/actions/run', 'POST', { action: copiedForeignAction, source: 'component' }, owner)).data.result, 'Foreign authored action', 'Independent copy survives source revocation');
+		assert.equal((await request('/api/v1/things', 'PATCH', { id: publicForeign.id, acl: ['tt:all'] }, stranger)).response.status, 200);
+		const moonAction = await create(owner, ['action'], { name: 'Saved argument Moon', actionKey: `${key}-moon`, version: 1, capabilities: [], steps: [{ op: 'return', value: 'The Moon' }] });
+		const sunAction = await create(owner, ['action'], { name: 'Saved argument Sun', actionKey: `${key}-sun`, version: 1, capabilities: [], steps: [{ op: 'return', value: 'The Sun' }] });
+		const argumentComponent = await create(owner, ['component'], { name: 'Saved argument button', componentKey: `${key}-args`, version: 1,
+			savedArgs: { action: childAction.id, label: 'Default draw' },
+			render: { tag: 'div', children: [{ tag: 'button', ttAction: '{action}', children: ['{label}'] }, { tag: 'p', children: ['{last.result}'] }] }
+		});
+		const argumentPage = await create(owner, ['webpage'], { name: 'Two saved action instances', blocks: [
+			{ id: 'moon', type: 'component', component: argumentComponent.id, args: { action: moonAction.id, label: 'Draw Moon' } },
+			{ id: 'sun', type: 'component', component: argumentComponent.id, args: { action: sunAction.id, label: 'Draw Sun' } }
+		] }, ['tt:hidden', 'tt:user']);
+		const argumentRun = (action: string, linkKey = argumentPage.linkKey) => request('/api/v1/actions/run', 'POST', { action, sharedRoot: argumentPage.id, key: linkKey });
+		for (const [action, expected] of [[childAction.id, 'The Star'], [moonAction.id, 'The Moon'], [sunAction.id, 'The Sun']]) {
+			assert.equal((await argumentRun(action)).data.result, expected, 'Every persisted instance and the saved component default participates');
+			assert.equal((await argumentRun(action, 'wrong')).response.status, 404);
+		}
+		assert.equal((await argumentRun(unrelatedAction.id)).response.status, 404);
+		const argumentCopy = await request('/api/v1/things/fork', 'POST', { id: argumentPage.id, key: argumentPage.linkKey }, stranger);
+		assert.equal(argumentCopy.response.status, 200, argumentCopy.data.error);
+		for (const id of argumentCopy.data.ids) created.push({ id, cookie: stranger });
+		const copiedArgumentPage = (await request(`/api/v1/things?id=${argumentCopy.data.id}`, 'GET', undefined, stranger)).data.thing;
+		const copiedArgumentComponent = (await request(`/api/v1/things?id=${copiedArgumentPage.crystal.blocks[0].component}`, 'GET', undefined, stranger)).data.thing;
+		assert.equal(copiedArgumentPage.crystal.blocks[1].component, copiedArgumentComponent.id);
+		assert.deepEqual(copiedArgumentComponent.crystal.savedArgs, argumentComponent.crystal.savedArgs);
+		for (const [index, expected] of ['The Moon', 'The Sun'].entries()) {
+			const rendered: any = resolveTemplate(copiedArgumentComponent.crystal.render, storedComponentScope(copiedArgumentComponent.crystal, copiedArgumentPage.crystal.blocks[index].args));
+			const copiedAction = rendered.children[0].props['data-tt-action'];
+			assert.ok(argumentCopy.data.ids.includes(copiedAction));
+			assert.equal((await request('/api/v1/actions/run', 'POST', { action: copiedAction, source: 'component' }, stranger)).data.result, expected);
+		}
 		const sourceData = await create(owner, ['data'], { schema: 'sharing-regression', value: 'unchanged' });
 		const schemaTemplate = { tag: 'div', children: [
 			{ tag: 'p', children: ['Shared value: {value}'] },
@@ -147,10 +219,16 @@ test('shared page audience includes its author components, never a foreign priva
 			assert.match(denied.data.error, /Fork the app/);
 		}
 		assert.equal((await request(`/api/v1/things?id=${sourceData.id}`, 'GET', undefined, owner)).data.thing.crystal.value, 'unchanged');
-		assert.equal((await request('/api/v1/things', 'PATCH', { id: component.id, crystal: { render: { tag: 'div', children: [
+		assert.equal((await request('/api/v1/things', 'PATCH', { id: component.id, crystal: {
+			args: [{ name: 'picture', type: 'string', default: mediaSource('arg-default') }, { name: 'background', type: 'string', default: mediaSource('arg-background') }],
+			savedArgs: { picture: mediaSource('arg-saved') },
+			render: { tag: 'div', children: [
 			{ tag: 'button', ttAction: sharedAction.id, children: ['Draw'] }, { tag: 'p', children: ['{last.result}'] },
+			{ tag: 'img', props: { src: '{picture}', alt: 'Stored argument media' } },
+			{ tag: 'img', props: { src: { ttIf: { arg: 'last.result', then: '{picture}', else: mediaSource('conditional-start') } }, alt: 'Conditional argument media' } },
 			...(process.env.TT_SHARED_PLAYWRIGHT_PATH ? [
 				{ tag: 'img', props: { src: '/api/v1/attachments/content?id=sharing-browser-transport', alt: 'Shared media transport' } },
+				{ tag: 'div', props: { style: { backgroundImage: 'url("{background}")', height: 20 } }, children: ['Argument background'] },
 				{ tag: 'div', props: { style: { backgroundImage: `u\\72 l(${mediaSource('html-css')})`, height: 20 } }, children: ['HTML background'] },
 				{ tag: 'img', props: { src: 'https://example.invalid/sharing-browser-transport.png', alt: 'External media transport' } }
 			] : [])
@@ -174,6 +252,8 @@ test('shared page audience includes its author components, never a foreign priva
 				previewBg: `url(${mediaSource('page-css')})`,
 				blocks: [...page.crystal.blocks,
 					{ id: 'css-block', type: 'text', text: 'Block background', css: { 'background-image': `url(${mediaSource('block-css')})` } },
+					{ id: 'raw-html-media', type: 'html', html: `<div style='background-image: url("${mediaSource('raw-html-css')}"); min-height: 20px'><img src='${mediaSource('raw-html-image')}' alt='Raw HTML media'></div>` },
+					{ id: 'rich-html-media', type: 'text', html: `<p><img src='${mediaSource('rich-html-image')}' alt='Rich HTML media'></p>` },
 					{ id: 'css-chakra', type: 'component', component: chakraMedia.id },
 					{ id: 'media-link', type: 'text', text: 'Shared media download', href: mediaSource('download') }
 				]
@@ -252,7 +332,19 @@ test('shared page audience includes its author components, never a foreign priva
 						await route.fulfill({ contentType: 'image/png', body: pixel });
 					});
 					const navigationStartedAt = Date.now();
+					let refuseFirstResolve = true;
+					await tab.route('**/api/v1/webpages/resolve?*', async (route: any) => {
+						if (refuseFirstResolve && new URL(route.request().url()).searchParams.get('id') === page.id) {
+							refuseFirstResolve = false;
+							return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ ok: false }) });
+						}
+						return route.continue();
+					});
 					await tab.goto(new URL(`/p/${page.id}?key=${encodeURIComponent(page.linkKey)}`, base).href);
+					await tab.getByRole('button', { name: 'Retry loading page', exact: true }).waitFor({ timeout: 60000 });
+					assert.equal(await tab.getByText('This page isn’t here', { exact: true }).count(), 0);
+					if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-${width}-retry.png` });
+					await tab.getByRole('button', { name: 'Retry loading page', exact: true }).click();
 					try {
 						await tab.getByRole('button', { name: 'Draw', exact: true }).waitFor({ timeout: 60000 });
 					} catch (error) {
@@ -264,15 +356,18 @@ test('shared page audience includes its author components, never a foreign priva
 					assert.equal(await tab.getByTestId('p-edit-in-builder').count(), 0);
 					const copyBounds = await tab.getByTestId('fork-shared-thing').boundingBox();
 					assert.ok(copyBounds && copyBounds.x >= 0 && copyBounds.x + copyBounds.width <= width, 'The copy control must fit inside the mobile/desktop viewport');
+					await tab.waitForFunction(() => (document.querySelector('img[alt="Conditional argument media"]') as HTMLImageElement)?.naturalWidth);
+					assert.match(await tab.getByAltText('Conditional argument media').getAttribute('src'), /id=sharing-browser-conditional-start/);
 					await tab.getByRole('button', { name: 'Draw', exact: true }).click();
 					await tab.getByText('The Star', { exact: true }).waitFor({ timeout: 15000 });
+					assert.match(await tab.getByAltText('Conditional argument media').getAttribute('src'), /id=sharing-browser-arg-page/);
 					await tab.waitForFunction(() => {
 						const img = document.querySelector('img[alt="Shared media transport"]') as HTMLImageElement | null;
 						return !!img?.naturalWidth;
 					});
 					assert.ok(mediaReads > 0);
 					await tab.getByTestId('shared-chakra-css').hover();
-					for (const name of ['html-css', 'chakra-css', 'page-css', 'block-css', 'hover-css']) {
+					for (const name of ['arg-page', 'arg-background', 'html-css', 'chakra-css', 'page-css', 'block-css', 'hover-css', 'raw-html-css', 'raw-html-image', 'rich-html-image']) {
 						if (!cssReads.has(`sharing-browser-${name}`)) await tab.waitForResponse((response: any) => new URL(response.url()).searchParams.get('id') === `sharing-browser-${name}`, { timeout: 15000 });
 						assert.ok(cssReads.has(`sharing-browser-${name}`), name);
 					}
@@ -285,6 +380,22 @@ test('shared page audience includes its author components, never a foreign priva
 					if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-${width}-bottom.png` });
 					await tab.getByTestId('fork-shared-thing').click();
 					await tab.waitForURL('**/login');
+					await tab.goto(new URL(`/p/${argumentPage.id}?key=${encodeURIComponent(argumentPage.linkKey)}`, base).href);
+					for (const label of ['Moon', 'Sun']) {
+						await tab.getByRole('button', { name: `Draw ${label}`, exact: true }).click();
+						await tab.getByText(`The ${label}`, { exact: true }).first().waitFor();
+					}
+					assert.equal(await tab.getByTestId('p-edit-in-builder').count(), 0);
+					assert.ok(await tab.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+					await tab.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+					if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-arguments-${width}.png` });
+					await tab.goto(new URL(`/p/${foreignPage.id}?key=${encodeURIComponent(foreignPage.linkKey)}`, base).href);
+					await tab.getByRole('button', { name: 'Foreign draw', exact: true }).click();
+					await tab.getByText('Foreign authored action', { exact: true }).waitFor();
+					assert.equal(await tab.getByTestId('p-edit-in-builder').count(), 0);
+					assert.ok(await tab.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+					await tab.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+					if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-foreign-${width}.png` });
 					await tab.goto(new URL(`/thing/${standalone.id}?key=${encodeURIComponent(standalone.linkKey)}`, base).href);
 					try {
 						await tab.getByTestId('fork-shared-thing').waitFor();
@@ -366,7 +477,8 @@ test('shared page audience includes its author components, never a foreign priva
 					tab.getByRole('button', { name: 'Schema draw', exact: true }).click()
 				]);
 				assert.equal(foreignControl.request().postDataJSON().sharedRoot, ownedForeignData.id, 'A foreign schema never borrows the data owner account authority');
-				assert.equal(foreignControl.status(), 404, 'A public foreign schema cannot publish its author private action');
+				assert.equal(foreignControl.status(), 200, 'A public foreign schema includes its authored same-author private action');
+				assert.equal((await foreignControl.json()).result, 'The Star');
 				await context.close();
 			} finally { await browser.close(); }
 		}
@@ -397,9 +509,24 @@ test('shared page audience includes its author components, never a foreign priva
 		assert.equal((await request('/api/v1/things', 'PATCH', { id: copied.data.id, crystal: { name: 'My independent card' } }, stranger)).response.status, 200);
 		assert.equal((await request(`/api/v1/things?id=${component.id}`, 'GET', undefined, owner)).data.thing.crystal.name, crystal.name);
 		const member = await request('/api/root-data', 'GET', undefined, stranger);
-		const group = await request('/api/v1/groups', 'POST', { name: 'Shared composition regression', memberIds: [member.data.user.id] }, owner);
+		const writerMember = await request('/api/root-data', 'GET', undefined, boundaryWriter);
+		const group = await request('/api/v1/groups', 'POST', { name: 'Shared composition regression', memberIds: [member.data.user.id, writerMember.data.user.id] }, owner);
 		assert.equal(group.response.status, 201, group.data.error);
 		groupId = group.data.group.id;
+		const writableForeignPage = await create(owner, ['webpage'], { name: 'Writer adds reusable public component', blocks: [] }, ['tt:custom', `tt:group/${groupId}/write`]);
+		const foreignImageTemplate = await create(stranger, ['component'], { name: 'Foreign image argument template', componentKey: `${key}-foreign-image`, version: 1,
+			render: { tag: 'img', props: { src: '{picture}' } }
+		}, ['tt:all']);
+		for (const endpoint of ['/api/v1/things', '/api/v1/things/update']) {
+			assert.equal((await request('/api/v1/things', 'PATCH', { id: writableForeignPage.id, crystal: { blocks: [] } }, owner)).response.status, 200);
+			const add = await request(endpoint, endpoint.endsWith('/update') ? 'POST' : 'PATCH', { id: writableForeignPage.id, crystal: { blocks: [{ id: 'public', type: 'component', component: publicForeign.id }] } }, boundaryWriter);
+			assert.equal(add.response.status, 200, `A third-party writer can include an independently public composition: ${add.data.error}`);
+			assert.equal((await request('/api/v1/actions/run', 'POST', { action: foreignAction.id, sharedRoot: writableForeignPage.id }, boundaryWriter)).data.result, 'Foreign authored action');
+			const inject = await request(endpoint, endpoint.endsWith('/update') ? 'POST' : 'PATCH', { id: writableForeignPage.id, crystal: { blocks: [{ id: 'public', type: 'component', component: publicForeign.id, args: { action: foreignSecret.id } }] } }, boundaryWriter);
+			assert.equal(inject.response.status, 403, 'An unresolved private dependency introduced by a foreign override fails before writing');
+			const injectMedia = await request(endpoint, endpoint.endsWith('/update') ? 'POST' : 'PATCH', { id: writableForeignPage.id, crystal: { blocks: [{ id: 'image', type: 'component', component: foreignImageTemplate.id, args: { picture: mediaSource('foreign-guessed') } }] } }, boundaryWriter);
+			assert.equal(injectMedia.response.status, 403, 'Foreign argument media is inspected without receiving inherited authority');
+		}
 		assert.equal((await request('/api/v1/things', 'PATCH', { id: standalone.id, acl: ['tt:custom', `tt:group/${groupId}`] }, owner)).response.status, 200);
 		assert.equal((await request(`${sharedSchemaUrl}&key=${encodeURIComponent(standalone.linkKey)}`)).response.status, 404, 'Retired root keys cannot read an included schema');
 		assert.equal((await request(sharedSchemaUrl, 'GET', undefined, stranger)).response.status, 200);
@@ -407,9 +534,21 @@ test('shared page audience includes its author components, never a foreign priva
 		assert.equal((await request(url)).response.status, 404);
 		assert.equal((await request(url, 'GET', undefined, stranger)).data.refs[key], component.id);
 		assert.equal((await request('/api/v1/things', 'PATCH', { id: page.id, acl: ['tt:custom', `tt:group/${groupId}/write`] }, owner)).response.status, 200);
+		assert.equal((await request('/api/v1/things', 'PATCH', { id: argumentPage.id, acl: ['tt:custom', `tt:group/${groupId}/write`] }, owner)).response.status, 200);
+		assert.equal((await argumentRun(moonAction.id)).response.status, 404, 'Retiring a link revokes saved-argument action access');
+		for (const endpoint of ['/api/v1/things', '/api/v1/things/update']) {
+			const injected = await request(endpoint, endpoint.endsWith('/update') ? 'POST' : 'PATCH', { id: argumentPage.id, crystal: { blocks: [
+				...argumentPage.crystal.blocks, { id: 'injected', type: 'component', component: argumentComponent.id, args: { action: unrelatedAction.id } }
+			] } }, stranger);
+			assert.equal(injected.response.status, 403, 'A writer cannot add an unreadable private action through a new instance of an existing component');
+		}
 		const untouched = await create(owner, ['component'], { ...crystal, componentKey: `${key}-unrelated` });
 		const unchanged = await request('/api/v1/things', 'PATCH', { id: page.id, crystal: { name: 'Edited shared root' } }, stranger);
 		assert.equal(unchanged.response.status, 200, unchanged.data.error);
+		const injectedArgument = await request('/api/v1/things', 'PATCH', { id: page.id, crystal: { blocks: [{ id: 'card', type: 'component', component: key,
+			args: { picture: mediaSource('guessed-page-argument') }
+		}] } }, stranger);
+		assert.equal(injectedArgument.response.status, 403, 'A page writer cannot expose private media through an existing component argument');
 		const injectedAction = await request('/api/v1/things', 'PATCH', { id: page.id, crystal: { blocks: [{ id: 'card', type: 'component', component: key, source: { action: unrelatedAction.id } }] } }, stranger);
 		assert.equal(injectedAction.response.status, 403, 'A shared writer cannot publish an unrelated private action');
 		assert.equal((await request('/api/v1/things', 'PATCH', { id: dataSchema.id, acl: ['tt:custom', `tt:group/${groupId}/write`] }, owner)).response.status, 200);
@@ -424,9 +563,30 @@ test('shared page audience includes its author components, never a foreign priva
 			const injectedCss = await request('/api/v1/things', 'PATCH', { id: page.id, crystal }, stranger);
 			assert.equal(injectedCss.response.status, 403, 'Shared writers cannot publish private media through CSS');
 		}
+		for (const type of ['text', 'html']) {
+			const injectedHtml = await request('/api/v1/things', 'PATCH', { id: page.id, crystal: { blocks: [{ id: 'private-html', type,
+				html: '<img src="/api/v1/attachments/content?id=guessed-private-html">'
+			}] } }, stranger);
+			assert.equal(injectedHtml.response.status, 403, 'Shared writers cannot publish private media through authored markup');
+		}
 		for (const ref of [untouched.id, `${key}-unrelated`]) {
 			const refused = await request('/api/v1/things', 'PATCH', { id: page.id, crystal: { blocks: [{ id: 'stolen', type: 'component', component: ref }] } }, stranger);
 			assert.equal(refused.response.status, 403, 'A shared writer must not publish an unrelated private dependency');
+		}
+		assert.equal((await request('/api/v1/things', 'PATCH', { id: component.id, acl: ['tt:custom', `tt:group/${groupId}/write`] }, owner)).response.status, 200);
+		assert.equal((await request('/api/v1/things', 'PATCH', { id: component.id, crystal: { name: 'Keep the authored media' } }, stranger)).response.status, 200);
+		for (const endpoint of ['/api/v1/things', '/api/v1/things/update']) {
+			const refused = await request(endpoint, endpoint.endsWith('/update') ? 'POST' : 'PATCH', { id: component.id, crystal: {
+				render: { tag: 'img', props: { src: { ttIf: { arg: 'last.result', then: mediaSource('guessed-conditional') } } } }
+			} }, stranger);
+			assert.equal(refused.response.status, 403, 'Shared writers cannot hide private-media additions in inactive property branches');
+		}
+		for (const crystal of [
+			{ savedArgs: { picture: mediaSource('guessed-saved') } },
+			{ args: [{ name: 'picture', type: 'string', default: mediaSource('guessed-default') }], savedArgs: {} }
+		]) {
+			const refused = await request('/api/v1/things', 'PATCH', { id: component.id, crystal }, stranger);
+			assert.equal(refused.response.status, 403, 'A non-owner cannot add private media through stored component arguments');
 		}
 		assert.equal((await request('/api/v1/groups', 'PATCH', { id: groupId, memberIds: [] }, owner)).response.status, 200);
 		assert.equal((await request(url, 'GET', undefined, stranger)).response.status, 404);

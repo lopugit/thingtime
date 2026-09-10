@@ -19,6 +19,240 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ## [Unreleased]
 
 - 2026-09-10: Add shared iOS/Mac WidgetKit actions, dashboards, Thing rendering, recent Things, and iOS Control Centre buttons. Add opt-in bounded content sync, native launch routes, Mac companion signing/install runbook, and widget acceptance checks. See [PR #727 notes](../PRs/727-apple-widget-suite.md) and [Apple widget setup](../apple/README.md). — Codex (AI), 2026-09-10
+
+- Add confirmed Send to Lopu to private recording Things in desktop and phone menus, with capability, account-switch and processor-consent guards and a link to recording activity. Keep phone content inset. Details: [PR 761](../PRs/761-lopu-saved-recording-handoff.md). — Codex (AI), 2026-09-10
+
+- Allow explicitly selected private saved audio Things through the recording queue and confirmed Send to Lopu flow, with source-state revalidation and transactional attachment fences. Keep automatic discovery Watch-only, preserve relational transcripts and negotiate the new 1.5 recording controls. — Codex (AI), 2026-09-10
+
+- Add an explicitly opted-in, loopback-only recording-delivery smoke with synthetic audio, real HTTP upload/pairing/completion paths, duplicate/privacy checks, and disposable-account cleanup. Document its upload-approval prerequisites and separate synthetic broker proof from real provider/Watch acceptance. — Codex (AI), 2026-09-10
+
+- Give historical Lopu tool summaries their own full-width row on phones,
+  preserving compact desktop rows and non-interactive approval history.
+  — Codex (AI), 2026-09-10
+
+- Show earlier Lopu confirmation requests as "Approval requested" after reload,
+  not failed executions. Historical receipts never restore approval grants or
+  claim that later actions succeeded. — Codex (AI), 2026-09-10
+
+- Verify real macOS Keychain recording state storage and add explicit,
+  confirmed recovery cleanup for expired unfinished pairing; completed local
+  pairings remain protected and server revocation stays separate. See
+  [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Make identical in-flight recording completion retries recoverable without
+  repeating inference or reporting a lease conflict; publish personal broker
+  1.0.1 and reconcile the latest develop sync. See
+  [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Verify synthetic WAV/M4A local transcription and native Claude OAuth
+  note/todo extraction with an opt-in runtime smoke. Real paired-account and
+  Watch delivery remain pending; details in
+  [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Add recording-settings Mac pairing with expiring masked secrets, explicit
+  copy/reveal and account-switch guards; publish pairing 1.1.0. Reconcile
+  develop's sharing boundaries and both manifest suites. Build and API smoke
+  pass; signed-in visual and real audio acceptance remain outstanding.
+  Details: [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Add an interactive Mac recording worker with hidden pairing input,
+  origin-bound Keychain storage, interrupted-claim recovery and bounded
+  foreground polling. Real local lost-receipt recovery passes; pairing UI,
+  native Keychain and audio acceptance remain pending.
+  Details: [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Register personal recording HTTP operations and owned-device settings,
+  origin-scoped capability negotiation, account-tier limits, private errors and
+  processor-change fences. Real local signup/pairing/selection smoke passes;
+  audio, deployed worker and visual acceptance remain pending.
+  Details: [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Add the unexposed personal recording broker, transactional device/consent
+  fences and crash-safe completion receipts; personal jobs cannot enter the
+  cloud-provider queue. HTTP/selection integration and live acceptance remain
+  pending. Details: [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Add the personal recording worker's outbound transport and bounded result
+  contract: origin-scoped negotiation, credential-safe audio retrieval,
+  heartbeat cancellation, grounded text results and idempotent submission
+  retries. Server pairing/queue integration is still pending; no new endpoint
+  or automatic processing is enabled by this foundation. — Codex (AI), 2026-09-10
+
+- Include the origin-scoped capability-manifest suite in the standard API
+  capability CI command and reconcile its assertions after combining saved
+  action sharing and Lopu reply updates. — Codex (AI), 2026-09-10
+
+- Promote shared component audience boundaries to main and reconcile the
+  newly enabled origin-manifest assertions with the sharing patch versions.
+  See [PR #756](../PRs/756-promote-public-component-boundaries-main.md).
+  — Codex (AI), 2026-09-10
+
+- Preserve an independently readable foreign component's authored dependency
+  audience when embedded in a shared page. Revalidate each boundary, keep
+  cross-author page arguments from borrowing private authority, and preserve
+  independent copies and read-only execution. See [PR #753](../PRs/753-codex-shared-public-component-boundaries.md).
+  — Codex (AI), 2026-09-10
+
+- Include the origin-scoped capability-manifest suite in the standard API
+  capability CI command and reconcile its assertions after combining saved
+  action sharing and Lopu reply updates. — Codex (AI), 2026-09-10
+
+- Clarify Lopu's two-step comment tool: an unapproved call opens the real
+  approval card without posting; a verified follow-up posts the exact comment.
+  Publish reply capability 1.6.2 without weakening the write guard.
+  — Codex (AI), 2026-09-10
+
+- Bypass the browser HTTP cache when negotiating capabilities, bound checks
+  to 20 seconds and let failures retry without a page reload. Successful
+  concurrent checks still share a request; incompatible contracts fail closed.
+  — Codex (AI), 2026-09-10
+
+- Preserve bounded, sanitized action receipts in Lopu conversation history so
+  subsequent replies can distinguish past successes from failures. Publish
+  reply capability 1.6.1; historical results grant no new action permissions.
+  See [PR #731 follow-ups](../PRs/731-lopu-unified-scheduled-chats.md).
+  — Codex (AI), 2026-09-10
+
+- Keep uploaded file cards in Lopu's live user-message rows instead of hiding
+  them until reload; snapshot selected public metadata locally while sending
+  only attachment IDs to the server. — Codex (AI), 2026-09-10
+
+- Layer Lopu's Thing picker above the fixed navigation using the shared modal
+  stack, keeping its title and Close button accessible on phones.
+  — Codex (AI), 2026-09-10
+
+- Resolve shared controls from saved component arguments and every persisted
+  page instance; preserve argument templates when copying and rebind only the
+  executable actions. Guard argument-only collaborator edits against private
+  dependency injection. See [PR #747](../PRs/747-codex-shared-saved-action-contexts.md).
+  — Codex (AI), 2026-09-10
+
+- Preserve Lopu's mounted composer across text/voice route changes. Signed-in
+  development testing found that separate route wrappers discarded unsent
+  drafts; both modes now export the same component identity, guarded by a
+  route-module regression test. — Codex (AI), 2026-09-10
+
+- Keep long Thing-picker labels within the dialog and wrap the composer
+  toolbar so its settings and Send controls remain reachable on narrow phones.
+  — Codex (AI), 2026-09-10
+
+- Publish native build 31 for unified Lopu conversation recovery. All 51 native
+  CI tests and signed iPhone/Watch verification pass; Apple confirms VALID and
+  internal TestFlight availability. Physical-device acceptance remains separate.
+  See [PR #731](../PRs/731-lopu-unified-scheduled-chats.md).
+  — Codex (AI), 2026-09-10
+
+- Add a loopback-only real HTTP acceptance smoke for linked Lopu chats,
+  scheduled Things and relational comments, including account boundaries,
+  pause/resume and owned-fixture cleanup. No provider or scheduler delivery is
+  claimed by this smoke. — Codex (AI), 2026-09-10
+
+- Pin the scheduled-task run schema projection in the builtin seeding
+  regression gate; retain all five owner-editable run fields.
+  See [PR #731](../PRs/731-lopu-unified-scheduled-chats.md).
+  — Codex (AI), 2026-09-10
+
+- Add native direct-voice transcript recovery and bounded shared-chat context
+  behind bridge 1.3.0; reconcile transcription-only chat saves and expose native
+  retry state without storing credentials. Simulator/provider/device gates are
+  tracked in [PR 731](../PRs/731-lopu-unified-scheduled-chats.md).
+  — Codex (AI), 2026-09-10
+
+- Reconcile PR 731 with develop's authored/nested media inheritance without
+  downgrading Lopu discussions or notification-test capabilities; retain both
+  Things read and write compatibility coverage. — Codex (AI), 2026-09-10
+
+- Persist direct web voice transcripts into their Lopu conversation with
+  account-fenced recovery/retry; seed recent chat context when starting voice,
+  isolate message caches by account, and discard late account-switch fetches.
+  Live local API retries pass; native and real-provider acceptance remain
+  pending. See [PR 731](../PRs/731-lopu-unified-scheduled-chats.md).
+  — Codex (AI), 2026-09-10
+
+- Add relational discussions to Thing details/previews and confirmation-bound
+  Lopu comment tools; unify the text/voice page composer, add chat attachment
+  selection, and introduce searchable scheduled tasks with separate run Things
+  and Lopu-message notifications. Browser and end-to-end release checks remain
+  separate from focused tests; see the [feature validation notes](../PRs/731-lopu-unified-scheduled-chats.md) before deployment.
+  — Codex (AI), 2026-09-10
+
+- Use cryptographic UUIDs for voice-session and transcript request identities,
+  with regression coverage that refuses an insecure fallback. Reconcile the
+  conditional-media write fix without downgrading Lopu capabilities; the
+  combined Things contract is 1.8.2 (legacy 1.7.2).
+  See [PR #731](../PRs/731-lopu-unified-scheduled-chats.md).
+  — Codex (AI), 2026-09-10
+
+- Promote shared-page recovery from PR 740 without unrelated develop changes.
+  Temporary resolver failures offer Retry and retain same-viewer content;
+  viewer, target and link-key changes isolate drafts and stale responses.
+  See [validation and scope](../PRs/740-codex-shared-page-load-recovery.md).
+  — Codex (AI), 2026-09-10
+
+- Distinguish temporary shared-page resolve failures from unavailable pages.
+  Offer Retry, retain same-viewer content on a failed refresh, and reset drafts
+  before rendering under another viewer, target or link key. Keep optional site
+  decoration resolves nullable. See [PR 740 validation and scope](../PRs/740-codex-shared-page-load-recovery.md).
+  — Codex (AI), 2026-09-10
+
+- Follow stored conditional media-property alternatives through shared root
+  inheritance, including argument-backed src/poster/href and style records.
+  Exclude condition metadata and bound discovery across all property visits;
+  shared writers cannot smuggle unreadable uploads into inactive branches.
+  Advance content capability to 1.6.1 and patch both Things write contracts.
+  — Codex (AI), 2026-09-10
+
+- Prepare the focused main promotion of shared HTML/contained media, stored
+  component arguments and page-block overrides from PRs #730, #733 and #734.
+  Preserve main's prior sharing/startup release and APNs/recording fixes;
+  the application source matches #734, with separate main CI and preview
+  validation required before release.
+  [Main promotion #735](../PRs/735-codex-promote-shared-argument-media-main-promote-shared-html-and-component-argument-media-inheritance-to-main.md).
+  — Codex (AI), 2026-09-10
+
+- Include containing page-block argument overrides in same-author shared media
+  inheritance, matching defaults → savedArgs → block args render precedence.
+  Compare the same resolved dependencies before/after shared edits, reusing
+  query results within validation; guessed private media remains forbidden.
+  Advertise attachment-content 1.6.0 with patched Things write contracts.
+  Foreign templates retain independent authority; full conditional coverage
+  and independent protected-upload fork copies remain follow-ups.
+  — Codex (AI), 2026-09-10
+
+- Resolve stored component defaults and saved arguments in shared media
+  positions with the canonical template resolver and one expansion budget.
+  Preserve unknown runtime tokens and reject truncated candidate values;
+  apply identical discovery to non-owner write validation. Publish
+  attachment-content 1.5.0 and patch Things write contracts. Page-block
+  argument overrides, full conditional-state coverage and independent
+  protected-upload copies remain follow-ups. — Codex (AI), 2026-09-10
+
+- Extend shared-root media inheritance to authored rich/raw HTML rendering
+  positions and uploads bound directly to contained same-author Things.
+  Share the browser tag/depth/node policy with bounded server discovery;
+  retain foreign-owner, managed-purpose, revocation and non-owner writer
+  guards. Advertise attachment-content 1.4.0 and patch the Things write
+  contracts. Stored component arguments and independent protected-upload
+  copies remain separate follow-up work.
+  [PR 730 validation and scope](../PRs/730-codex-shared-nested-media-inheritance-inherit-shared-root-access-for-authored-html-and-contained-media.md).
+  — Codex (AI), 2026-09-10
+
+- Promote the shared CSS-media and early-startup recovery increment from
+  develop PR #719, including the reviewed single media-grant predicate and
+  unresolved-template preservation. Develop merge `5839533` is verified in
+  signed-out Safari; the main promotion requires its own CI and deployment
+  receipts. [Main promotion](../PRs/728-codex-promote-shared-media-boot-main-promote-shared-media-context-and-startup-recovery-to-main.md).
+  — Codex (AI), 2026-09-10
+
+- Fix APNs rejection of notification tests and long reminder IDs by hashing the collapse header to Apple’s 64-byte limit; expose the safe BadCollapseId diagnostic. — Codex (AI), 2026-09-10
+
 - 2026-09-10: Recover older iPhone Lopu recordings into private Things with durable import receipts; fix notification bell toggling and refresh, reconnect native push from Settings, report APNs outcomes, and keep single/bulk push delivery alive through Vercel responses. Details: [PR 726](../PRs/726-ios-push-recording-import.md).
 
 - Save new iOS Lopu voice recordings as owner-private playable audio Things,

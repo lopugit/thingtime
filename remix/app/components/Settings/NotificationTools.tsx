@@ -4,8 +4,9 @@ import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { NOTIFICATION_TYPES } from '~/schemas/registry';
 import { NOTIFICATION_TYPE_META } from '../Notifications/notificationCore';
 import { NOTIFICATION_TESTS } from '~/api/utils/notifications/testNotificationsCore';
+import { Link } from 'react-router';
 
-export const NOTIFICATION_TOOLS_REQUIREMENTS = { 'api.notifications-test': '1.1.0', 'api.lopu-reminders': '1.0.0' } as const;
+export const NOTIFICATION_TOOLS_REQUIREMENTS = { 'api.notifications-test': '1.2.0', 'api.lopu-reminders': '1.0.0' } as const;
 export function supportsNotificationTools(manifest: any, origin: string) {
   return manifest?.origin === origin && Object.entries(NOTIFICATION_TOOLS_REQUIREMENTS).every(([id, minimum]) => {
     const version = manifest.features?.[id]?.version ?? manifest.features?.[id];
@@ -14,7 +15,7 @@ export function supportsNotificationTools(manifest: any, origin: string) {
     return major === a && (minor > b || (minor === b && patch >= c));
   });
 }
-type Reminder = { id: string; title: string; enabled: boolean; everyMinutes: number | null; nextRunAt: string | null };
+type Reminder = { id: string; thingId?: string; title: string; enabled: boolean; everyMinutes: number | null; nextRunAt: string | null; cron?: string; timeZone?: string; runStatus?: string };
 const request = async (path: string, body?: unknown) => {
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 20_000);
   try {
@@ -81,8 +82,8 @@ export function NotificationTools({ ownerId }: { ownerId: string }) {
     <Text fontSize="sm" color="var(--tt-muted)" mt={1}>Ask Lopu to remind you once or at a repeating interval. The server checks every five minutes, even while this page is closed. Late runs do not send a backlog.</Text>
     {ready && !reminders.length && <Text fontSize="sm" mt={3}>No saved reminders yet.</Text>}
     {reminders.map((row) => <Flex key={row.id} gap={3} align="center" mt={4}>
-      <Box flex="1" minWidth={0}><Text overflowWrap="anywhere">{row.title}</Text><Text fontSize="xs" color="var(--tt-muted)">{!row.nextRunAt ? 'Completed' : !row.enabled ? 'Paused' : `Next: ${new Date(row.nextRunAt).toLocaleString()}`}{row.everyMinutes ? ` · Every ${row.everyMinutes} min` : ' · Once'}</Text></Box>
-      <Button size="sm" variant="outline" isDisabled={busy || !row.nextRunAt} onClick={() => void mutate('/api/v1/lopu/reminders', { op: 'set-enabled', id: row.id, enabled: !row.enabled })}>{row.enabled ? 'Pause' : 'Resume'}</Button>
+      <Box flex="1" minWidth={0}><Text overflowWrap="anywhere">{row.thingId ? <Link to={`/thing/${encodeURIComponent(row.thingId)}`}>{row.title} ↗</Link> : row.title}</Text><Text fontSize="xs" color="var(--tt-muted)">{row.runStatus === 'needs-attention' ? 'Needs attention' : !row.nextRunAt ? 'Completed' : !row.enabled ? 'Paused' : `Next: ${new Date(row.nextRunAt).toLocaleString()}`}{row.cron ? ` · ${row.cron} (${row.timeZone})` : row.everyMinutes ? ` · Every ${row.everyMinutes} min` : ' · Once'}</Text></Box>
+      <Button size="sm" variant="outline" isDisabled={busy || !row.nextRunAt || row.runStatus === 'needs-attention'} onClick={() => void mutate('/api/v1/lopu/reminders', { op: 'set-enabled', id: row.id, enabled: !row.enabled })}>{row.enabled ? 'Pause' : 'Resume'}</Button>
     </Flex>)}
     <Text role="status" aria-live="polite" fontSize="sm" mt={3}>{status}</Text>
   </Box>;
