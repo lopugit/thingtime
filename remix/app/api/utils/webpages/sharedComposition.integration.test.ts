@@ -4,6 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveTemplate } from '../../../components/ComponentsLibrary/componentTemplate';
+import { storedComponentScope } from '../actions/sharedCompositionCore';
 
 // Opt-in real API regression: creates only disposable test Things and removes
 // those exact Things in finally. Never point a fixture writer at production.
@@ -79,6 +81,35 @@ test('shared page audience includes its author components, never a foreign priva
 			capabilities: [{ capability: 'actions.invoke', actions: [childAction.id] }],
 			steps: [{ op: 'actions.invoke', action: childAction.id }, { op: 'return', value: '$step.1' }] });
 		const unrelatedAction = await create(owner, ['action'], { name: 'Not included', actionKey: `${key}-secret`, version: 1, capabilities: [], steps: [{ op: 'return', value: 'Private' }] });
+		const moonAction = await create(owner, ['action'], { name: 'Saved argument Moon', actionKey: `${key}-moon`, version: 1, capabilities: [], steps: [{ op: 'return', value: 'The Moon' }] });
+		const sunAction = await create(owner, ['action'], { name: 'Saved argument Sun', actionKey: `${key}-sun`, version: 1, capabilities: [], steps: [{ op: 'return', value: 'The Sun' }] });
+		const argumentComponent = await create(owner, ['component'], { name: 'Saved argument button', componentKey: `${key}-args`, version: 1,
+			savedArgs: { action: childAction.id, label: 'Default draw' },
+			render: { tag: 'div', children: [{ tag: 'button', ttAction: '{action}', children: ['{label}'] }, { tag: 'p', children: ['{last.result}'] }] }
+		});
+		const argumentPage = await create(owner, ['webpage'], { name: 'Two saved action instances', blocks: [
+			{ id: 'moon', type: 'component', component: argumentComponent.id, args: { action: moonAction.id, label: 'Draw Moon' } },
+			{ id: 'sun', type: 'component', component: argumentComponent.id, args: { action: sunAction.id, label: 'Draw Sun' } }
+		] }, ['tt:hidden', 'tt:user']);
+		const argumentRun = (action: string, linkKey = argumentPage.linkKey) => request('/api/v1/actions/run', 'POST', { action, sharedRoot: argumentPage.id, key: linkKey });
+		for (const [action, expected] of [[childAction.id, 'The Star'], [moonAction.id, 'The Moon'], [sunAction.id, 'The Sun']]) {
+			assert.equal((await argumentRun(action)).data.result, expected, 'Every persisted instance and the saved component default participates');
+			assert.equal((await argumentRun(action, 'wrong')).response.status, 404);
+		}
+		assert.equal((await argumentRun(unrelatedAction.id)).response.status, 404);
+		const argumentCopy = await request('/api/v1/things/fork', 'POST', { id: argumentPage.id, key: argumentPage.linkKey }, stranger);
+		assert.equal(argumentCopy.response.status, 200, argumentCopy.data.error);
+		for (const id of argumentCopy.data.ids) created.push({ id, cookie: stranger });
+		const copiedArgumentPage = (await request(`/api/v1/things?id=${argumentCopy.data.id}`, 'GET', undefined, stranger)).data.thing;
+		const copiedArgumentComponent = (await request(`/api/v1/things?id=${copiedArgumentPage.crystal.blocks[0].component}`, 'GET', undefined, stranger)).data.thing;
+		assert.equal(copiedArgumentPage.crystal.blocks[1].component, copiedArgumentComponent.id);
+		assert.deepEqual(copiedArgumentComponent.crystal.savedArgs, argumentComponent.crystal.savedArgs);
+		for (const [index, expected] of ['The Moon', 'The Sun'].entries()) {
+			const rendered: any = resolveTemplate(copiedArgumentComponent.crystal.render, storedComponentScope(copiedArgumentComponent.crystal, copiedArgumentPage.crystal.blocks[index].args));
+			const copiedAction = rendered.children[0].props['data-tt-action'];
+			assert.ok(argumentCopy.data.ids.includes(copiedAction));
+			assert.equal((await request('/api/v1/actions/run', 'POST', { action: copiedAction, source: 'component' }, stranger)).data.result, expected);
+		}
 		const sourceData = await create(owner, ['data'], { schema: 'sharing-regression', value: 'unchanged' });
 		const schemaTemplate = { tag: 'div', children: [
 			{ tag: 'p', children: ['Shared value: {value}'] },
@@ -308,6 +339,15 @@ test('shared page audience includes its author components, never a foreign priva
 					if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-${width}-bottom.png` });
 					await tab.getByTestId('fork-shared-thing').click();
 					await tab.waitForURL('**/login');
+					await tab.goto(new URL(`/p/${argumentPage.id}?key=${encodeURIComponent(argumentPage.linkKey)}`, base).href);
+					for (const label of ['Moon', 'Sun']) {
+						await tab.getByRole('button', { name: `Draw ${label}`, exact: true }).click();
+						await tab.getByText(`The ${label}`, { exact: true }).first().waitFor();
+					}
+					assert.equal(await tab.getByTestId('p-edit-in-builder').count(), 0);
+					assert.ok(await tab.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+					await tab.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+					if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-arguments-${width}.png` });
 					await tab.goto(new URL(`/thing/${standalone.id}?key=${encodeURIComponent(standalone.linkKey)}`, base).href);
 					try {
 						await tab.getByTestId('fork-shared-thing').waitFor();
@@ -430,6 +470,14 @@ test('shared page audience includes its author components, never a foreign priva
 		assert.equal((await request(url)).response.status, 404);
 		assert.equal((await request(url, 'GET', undefined, stranger)).data.refs[key], component.id);
 		assert.equal((await request('/api/v1/things', 'PATCH', { id: page.id, acl: ['tt:custom', `tt:group/${groupId}/write`] }, owner)).response.status, 200);
+		assert.equal((await request('/api/v1/things', 'PATCH', { id: argumentPage.id, acl: ['tt:custom', `tt:group/${groupId}/write`] }, owner)).response.status, 200);
+		assert.equal((await argumentRun(moonAction.id)).response.status, 404, 'Retiring a link revokes saved-argument action access');
+		for (const endpoint of ['/api/v1/things', '/api/v1/things/update']) {
+			const injected = await request(endpoint, endpoint.endsWith('/update') ? 'POST' : 'PATCH', { id: argumentPage.id, crystal: { blocks: [
+				...argumentPage.crystal.blocks, { id: 'injected', type: 'component', component: argumentComponent.id, args: { action: unrelatedAction.id } }
+			] } }, stranger);
+			assert.equal(injected.response.status, 403, 'A writer cannot add an unreadable private action through a new instance of an existing component');
+		}
 		const untouched = await create(owner, ['component'], { ...crystal, componentKey: `${key}-unrelated` });
 		const unchanged = await request('/api/v1/things', 'PATCH', { id: page.id, crystal: { name: 'Edited shared root' } }, stranger);
 		assert.equal(unchanged.response.status, 200, unchanged.data.error);

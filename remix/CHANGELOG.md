@@ -18,6 +18,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Resolve shared controls from saved component arguments and every persisted
+  page instance; preserve argument templates when copying and rebind only the
+  executable actions. Guard argument-only collaborator edits against private
+  dependency injection. — Codex (AI), 2026-09-10
+
 - Keep uploaded file cards in Lopu's live user-message rows instead of hiding
   them until reload; snapshot selected public metadata locally while sending
   only attachment IDs to the server. — Codex (AI), 2026-09-10

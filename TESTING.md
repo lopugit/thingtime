@@ -6341,6 +6341,15 @@ approval; `access.test.ts` — the reservation matrix) and
 
 ## Shared Data Thing template controls
 
+- Share one component used twice with different saved action arguments. Signed
+  out, both controls must run read-only and show their distinct results at
+  desktop/mobile widths. Wrong or retired links must fail. Copy the page and
+  verify both controls run the copied actions while labels, inputs and editable
+  templates stay unchanged. Repeat on a fork of a fork. A shared writer must
+  not introduce an unreadable private action through argument-only edits or a
+  new instance of an existing component. Unused bindings and runtime query,
+  result, viewer or template-shaped argument data must never grant access.
+
 - Shared nested media: open rich/raw HTML blocks with image, poster, link and
   inline CSS media signed out at desktop/mobile widths. Same-author uploads
   attached directly to contained components must inherit the root audience.

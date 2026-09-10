@@ -18,10 +18,17 @@ export const validateSharedReferenceAdditions = async (viewer: Viewer, doc: Thin
 	// A page's args are interpreted by its stored components. Compare the same
 	// contained render contexts on both sides, not raw argument URL strings.
 	const lookupCache = new Map<string, Promise<ThingDoc | null>>();
+	const previous = await resolveCompositionFromRoot(viewer, doc, collection, lookupCache);
+	if (isFail(previous)) return previous;
+	const next = await resolveCompositionFromRoot(viewer, { ...doc, crystal }, collection, lookupCache);
+	if (isFail(next)) return next;
+	for (const child of next.docs.values()) {
+		if (previous.docs.has(child.shareId)) continue;
+		if (!(await canViewInherited(child, viewer))) return fail(403, 'Only the owner can include a private dependency you cannot already read');
+	}
 	const media = async (root: ThingDoc) => {
 		if (!root.thingtime.includes('webpage')) return compositionAttachmentIds(root.thingtime || [], root.crystal || {});
-		const composition = await resolveCompositionFromRoot(viewer, root, collection, lookupCache);
-		return isFail(composition) ? composition : compositionMediaIds(composition);
+		return compositionMediaIds(root === doc ? previous : next);
 	};
 	const previousMedia = await media(doc);
 	if (isFail(previousMedia)) return previousMedia;
@@ -42,6 +49,8 @@ export type SharedComposition = {
 	data: Map<string, ThingDoc>;
 	docs: Map<string, ThingDoc>;
 	references: Map<string, ThingDoc>;
+	requiredReferences: Set<string>;
+	contexts: Map<string, (Record<string, unknown> | undefined)[]>;
 };
 
 // Rebuilt per invocation: a revoked link/group grant cannot keep using an
@@ -63,23 +72,28 @@ const resolveCompositionFromRoot = async (
 	viewer: Viewer, root: ThingDoc, collection: Awaited<ReturnType<typeof getThingsCollection>>,
 	cache = new Map<string, Promise<ThingDoc | null>>()
 ): Promise<SharedComposition | Fail> => {
-	const result: SharedComposition = { root, actions: new Map(), children: new Map(), data: new Map(), docs: new Map([[root.shareId, root]]), references: new Map() };
+	const result: SharedComposition = { root, actions: new Map(), children: new Map(), data: new Map(), docs: new Map([[root.shareId, root]]), references: new Map(), requiredReferences: new Set(), contexts: new Map() };
 	if (root.thingtime.includes('action')) {
 		result.actions.set(root.shareId, root);
 		if (typeof root.crystal?.actionKey === 'string') result.actions.set(root.crystal.actionKey, root);
 	}
-	const queue = [root];
+	const queue: { doc: ThingDoc; args?: Record<string, unknown> }[] = [{ doc: root }];
 	const seen = new Set<string>();
 	const lookup = batchedThingLookup();
 	let edges = 0;
 	for (let index = 0; index < queue.length; index += 1) {
-		const parent = queue[index];
-		if (seen.has(parent.shareId)) continue;
-		seen.add(parent.shareId);
-		if (seen.size > 128) return fail(422, 'Shared app has too many dependencies');
-		for (const reference of compositionReferences(parent.thingtime || [], parent.crystal || {})) {
+		const { doc: parent, args } = queue[index];
+		const contextKey = JSON.stringify([parent.shareId, args]);
+		if (seen.has(contextKey)) continue;
+		seen.add(contextKey);
+		if (seen.size > 512 || result.docs.size > 128) return fail(422, 'Shared app has too many dependencies');
+		const contexts = result.contexts.get(parent.shareId) || [];
+		contexts.push(args);
+		result.contexts.set(parent.shareId, contexts);
+		for (const reference of compositionReferences(parent.thingtime || [], parent.crystal || {}, args)) {
 			if (++edges > 512) return fail(422, 'Shared app has too many references');
 			const { kind, ref } = reference;
+			if (!reference.optional) result.requiredReferences.add(`${parent.shareId}:${kind}:${ref}`);
 			const queries: Record<string, unknown>[] = [{ shareId: ref, thingtime: kind }];
 			if (kind === 'component') queries.push({ shareId: `component-${ref}`, ownerId: 'system', thingtime: kind });
 			if (kind !== 'data') queries.push({ ownerId: parent.ownerId, thingtime: kind, [`crystal.${kind === 'schema' ? 'name' : `${kind}Key`}`]: ref });
@@ -109,7 +123,10 @@ const resolveCompositionFromRoot = async (
 				}
 			}
 			if (kind === 'data') result.data.set(child.shareId, child);
-			queue.push(child);
+			// The saved component remains independently usable as well as at each
+			// persisted page instance. Defaults are not replaced by the first block.
+			if (kind === 'component' && reference.args) queue.push({ doc: child });
+			queue.push({ doc: child, ...(kind === 'component' ? { args: reference.args } : {}) });
 		}
 	}
 	return result;
