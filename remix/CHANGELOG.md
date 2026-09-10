@@ -32,6 +32,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   stack, keeping its title and Close button accessible on phones.
   — Codex (AI), 2026-09-10
 
+- Resolve shared controls from saved component arguments and every persisted
+  page instance; preserve argument templates when copying and rebind only the
+  executable actions. Guard argument-only collaborator edits against private
+  dependency injection. See [PR #747](../PRs/747-codex-shared-saved-action-contexts.md).
+  — Codex (AI), 2026-09-10
+
 - Preserve Lopu's mounted composer across text/voice route changes. Signed-in
   development testing found that separate route wrappers discarded unsent
   drafts; both modes now export the same component identity, guarded by a
