@@ -20,7 +20,7 @@ test('push diagnostics distinguish missing configuration, no devices and Apple a
 test('partial rejection retires stale tokens and sanitizes provider failures', async () => {
   const deps = dependencies(); let calls = 0; const removed: string[] = [];
   deps.devices = async () => [device('stale'), device('good'), device('bad')];
-  deps.send = async () => ++calls === 1 ? { status: 410, reason: 'Unregistered' } : calls === 2 ? { status: 200, reason: null } : { status: 403, reason: 'private provider response!'};
+  deps.send = async () => ++calls === 1 ? { status: 410, reason: 'Unregistered' } : calls === 2 ? { status: 200, reason: null } : { status: 403, reason: 'PrivateProviderResponse'};
   deps.remove = async id => { removed.push(id); };
   const report = await createPushSender(deps)(notification);
   assert.equal(report.status, 'partial'); assert.equal(report.rejected, 2); assert.deepEqual(removed, ['stale']);

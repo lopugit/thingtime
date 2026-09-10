@@ -161,6 +161,8 @@ const pushDependencies = {
   remove: removePushDeviceById
 };
 
+const APNS_REASONS = new Set(['BadDeviceToken', 'Unregistered', 'DeviceTokenNotForTopic', 'InvalidProviderToken', 'ExpiredProviderToken', 'MissingProviderToken', 'TopicDisallowed', 'BadTopic', 'MissingTopic', 'TooManyProviderTokenUpdates', 'TooManyRequests', 'PayloadTooLarge', 'Forbidden', 'BadCertificate', 'BadCertificateEnvironment', 'InternalServerError', 'ServiceUnavailable', 'Shutdown']);
+
 // Counts and bounded reason codes only: never expose tokens, signing material,
 // provider responses, or another account's registrations to the settings UI.
 export const createPushSender = (deps = pushDependencies) => async (notification: PushEnvelope): Promise<PushDeliveryReport> => {
@@ -178,7 +180,7 @@ export const createPushSender = (deps = pushDependencies) => async (notification
         const response = await deps.send(authToken!, device, payload, notification.notificationId);
         if (response.status === 200) { report.accepted++; report[device.platform]++; return; }
         report.rejected++;
-        const reason = response.reason && /^[A-Za-z]{1,64}$/.test(response.reason) ? response.reason : 'ProviderRejected';
+        const reason = response.reason && APNS_REASONS.has(response.reason) ? response.reason : 'ProviderRejected';
         report.reasons.push(reason);
         if (response.status === 410 || ['BadDeviceToken', 'Unregistered'].includes(reason)) await deps.remove(device.id).catch(() => {});
       } catch { report.rejected++; report.reasons.push('TransportError'); }
