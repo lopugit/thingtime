@@ -49,6 +49,10 @@ employment, eligibility, crisis, or safety decisions.
   devices/networks and honest resource evidence.
 - [TODO 32](../TODO/claude-todo/32-learning-agency-and-knowledge-stewardship.md)
   owns learning-specific evidence and keeps AI tutoring separately gated.
+- [TODO 39](../TODO/claude-todo/39-recording-agency-and-intimate-data-stewardship.md)
+  owns whether audio/transcript may enter assistant context, represented-person
+  boundaries, correction propagation, and recording-family deletion. This plan
+  still owns model/tool authority after an exact handoff.
 - Product, AI safety, privacy/security, accessibility, legal, operations,
   support, and relevant domain owners must be named for the approved scope.
 

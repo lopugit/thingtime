@@ -44,6 +44,9 @@
 **Search-and-discovery dependency:**
 [Search and discovery agency](./search-and-discovery-agency-roadmap.md)
 
+**Recording-agency dependency:**
+[Recording agency and intimate-data stewardship](./recording-agency-and-intimate-data-stewardship-roadmap.md)
+
 ## Outcome
 
 Make Thingtime easier to discover, understand, trust, use repeatedly, share by

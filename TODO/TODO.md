@@ -581,3 +581,22 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     stop authority. Public people/content discovery, personalization,
     semantic/vector retrieval, AI answers, sponsorship, minors, institutions,
     and sensitive or high-impact uses remain separately gated.
+
+39. **🎙️ Make recording agency and intimate-data stewardship a product contract.**
+
+    Preserve Thingtime's disabled-by-default automation, owner-private source
+    checks, bounded processing, explicit personal-device/cloud routes,
+    transcript-as-untrusted-content rule, and confirmed Lopu handoff while
+    making every represented person, copy, derivative, correction, and remedy
+    legible. Start only with one consenting adult's purpose-made,
+    non-sensitive monologue on the personal-device route; prove exact route
+    binding, a scripted transcript correction, derivative review, family
+    inventory/export, and truthful deletion. Execute
+    `claude-todo/39-recording-agency-and-intimate-data-stewardship.md` only
+    after qualified owners approve the recording charter, lifecycle/retention
+    table, correction and deletion semantics, no-cloud receipt, measures,
+    accessibility profiles, incident path, and stop authority. Other people's
+    voices, automatic discovery, cloud processing, reminders, Lopu actions,
+    sharing, minors, institutions, sensitive domains, voice biometrics, emotion
+    or credibility inference, training, and surveillance remain separately
+    gated.

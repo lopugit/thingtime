@@ -56,6 +56,10 @@ participants.
       network behavior plus honest resource evidence.
 - [ ] [TODO 32](./32-learning-agency-and-knowledge-stewardship.md) keeps
       learning evidence and AI tutoring separately gated.
+- [ ] [TODO 39](./39-recording-agency-and-intimate-data-stewardship.md) owns
+      whether audio/transcript may enter assistant context, represented-person
+      boundaries, correction propagation, and recording-family deletion. This
+      epic owns model/tool authority after an exact handoff.
 - [ ] Name product, AI safety, privacy/security, accessibility, legal,
       operations, support, and relevant domain owners for the approved scope.
 

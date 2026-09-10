@@ -115,6 +115,11 @@ experiment by itself.
   retrieval and ranking explanations, multi-rail semantics, and fair influence
   boundaries. Adoption reporting cannot use raw queries, clicks, dwell,
   personalization, promotion, or a rank score as proof of usefulness or trust.
+- [TODO 39](./39-recording-agency-and-intimate-data-stewardship.md) owns
+  recording-person boundaries, audio/transcript/derivative lifecycle, route
+  truth, correction propagation, and family deletion. Adoption reporting cannot
+  use recording volume, transcript count, generated todos, or assistant handoff
+  as proof of consent, accuracy, usefulness, or a completed outcome.
 - Open PRs are evidence of active work, not dependencies that may be assumed
   merged. Recheck their head, base, review, CI, preview, and shipped behavior
   immediately before implementation.

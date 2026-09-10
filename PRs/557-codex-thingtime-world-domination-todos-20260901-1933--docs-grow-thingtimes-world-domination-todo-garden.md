@@ -18,6 +18,45 @@ required sequence:
 The branch is intentionally cumulative. It does not merge itself, implement
 the product work, or treat a plausible idea as an approved decision.
 
+## 2026-09-11 — recording agency and intimate-data stewardship
+
+This run grounds the garden in Thingtime's merged owner-private Watch and saved
+recording paths while refusing to treat source ownership, private ACLs,
+transcription, or model-derived output as every represented person's consent,
+truth, or action authority. It adds:
+
+- `NOTES/recording-agency-and-intimate-data-stewardship-baseline.md`, a dated
+  evidence ledger and vocabulary for capture, source audio, represented people,
+  transcripts, derivatives, route, correction, deletion, and receipts;
+- `PLAN/recording-agency-and-intimate-data-stewardship-roadmap.md`, a gated
+  route from an approved recording charter and lifecycle map through synthetic
+  proof, one single-person pilot, change evaluation, and separately reviewed
+  expansion; and
+- `TODO/claude-todo/39-recording-agency-and-intimate-data-stewardship.md`, an
+  execution epic with owner decisions, API/capability obligations, correction
+  and deletion requirements, acceptance criteria, stop conditions, and a
+  concrete first decision packet.
+
+The recommended first experiment is intentionally small: one consenting adult
+uses one purpose-made, non-sensitive monologue on the personal-device route,
+reviews a per-recording intent receipt, corrects one scripted transcript error,
+reviews stale derivatives, exports the family map, and deletes the test family.
+It excludes every other person's voice, automatic discovery, cloud processing,
+reminders, Lopu actions, sharing, sensitive domains, inferences, training, and
+surveillance.
+
+Merged PRs #665 and #761 establish important repository foundations, but the
+remaining real-media, device/provider, correction, deletion, accessibility, and
+human-comprehension evidence stays explicit. The prior AI-agency baseline is
+updated from stale open-PR language and now delegates recording-person and
+artifact-lifecycle authority to TODO 39 while retaining model/tool authority.
+
+The new theme is linked from the NOTES, PLAN, main TODO, and Claude TODO
+indexes, plus the ethical-adoption baseline, trustworthy-adoption roadmap, TODO
+22, AI-agency baseline/roadmap, and TODO 33. No runtime, API, schema, worker,
+processor, provider, transcript, reminder, Lopu, analytics, or production
+behavior changed.
+
 ## 2026-09-10 — search and discovery agency
 
 This run grounds the garden in Thingtime's ACL-aware ranked and structured
