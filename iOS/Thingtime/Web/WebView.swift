@@ -40,20 +40,21 @@ struct WebView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
-        if let path = widgetPath, let target = URL(string: path, relativeTo: url)?.absoluteURL {
-            context.coordinator.cancelVoice()
-            context.coordinator.loadedRootURL = url
-            webView.load(URLRequest(url: target))
-            DispatchQueue.main.async { widgetPath = nil }
-            return
-        }
-        guard context.coordinator.loadedRootURL != url else { return }
-        WidgetStore.clear()
+        let rootChanged = context.coordinator.loadedRootURL != url
+        // Consume a pending widget request even when it cannot resolve, so a stale
+        // value cannot suppress the teardown for a later destination change.
+        let widgetTarget = widgetPath.flatMap { URL(string: $0, relativeTo: url)?.absoluteURL }
+        if widgetPath != nil { DispatchQueue.main.async { widgetPath = nil } }
+        guard rootChanged || widgetTarget != nil else { return }
 
+        // A destination switch always drops the previous origin's widget content
+        // and detaches its queued uploads, even when a widget tap is delivered in
+        // the same update. Widget navigation alone stays within the same origin.
+        if rootChanged { WidgetStore.clear() }
         context.coordinator.cancelVoice()
-        context.coordinator.suspendRecordingUploads()
+        if rootChanged { context.coordinator.suspendRecordingUploads() }
         context.coordinator.loadedRootURL = url
-        webView.load(URLRequest(url: url))
+        webView.load(URLRequest(url: widgetTarget ?? url))
     }
 
     static let bridgeUserScript = ThingtimeBridgeScript.script
