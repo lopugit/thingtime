@@ -5,8 +5,7 @@ import { Link as RouterLink, useParams } from 'react-router';
 import { Crumbs, MarketingShell, useMarketingSeo } from '~/components/Marketing/MarketingShell';
 import { MK } from '~/components/Marketing/marketingTheme';
 import { MarketingSections, MkButton, SectionEyebrow } from '~/components/Marketing/Sections';
-import { CATEGORY_BY_KEY, MARKETING_BASE, PAGE_BY_SLUG, buildPageBySlug, pageHref, searchPages } from '~/marketing/catalog';
-import { TRENDS } from '~/marketing/trends';
+import { CATEGORY_BY_KEY, MARKETING_BASE, PAGE_BY_SLUG, buildPageBySlug, pageHref, searchPages, styleSiblingsFor } from '~/marketing/catalog';
 
 // /marketing/* — one generated page. The splat is the catalog slug
 // ("landing/feed", "for/developers/open-api", "styles/y2k-chrome/polls").
@@ -68,7 +67,10 @@ export default function MarketingPageRoute() {
 	if (!page || !category) return <NotFound slug={slug} />;
 
 	const related = page.related.map((relatedSlug) => PAGE_BY_SLUG[relatedSlug]).filter(Boolean);
-	const styleSiblings = page.kind === 'trend-landing' || page.kind === 'landing' ? TRENDS.filter((trend) => trend.key !== page.trend) : [];
+	// Only the trends this feature actually has an edition in: 43 of the 89
+	// features are outside STYLE_FEATURE_KEYS, and offering all eleven anyway
+	// pointed every chip back at this page.
+	const styleSiblings = page.kind === 'trend-landing' || page.kind === 'landing' ? styleSiblingsFor(page.refs.feature, page.trend) : [];
 
 	return (
 		<MarketingShell trend={page.trend} active={page.category}>
@@ -77,22 +79,18 @@ export default function MarketingPageRoute() {
 				<MarketingSections page={page} />
 			</Box>
 
-			{styleSiblings.length && page.refs.feature ? (
+			{styleSiblings.length ? (
 				<Box as="section" paddingY={[8, 12]} borderTop={`1px solid ${MK.hairline}`} data-testid="marketing-style-siblings">
 					<SectionEyebrow>Same page, other looks</SectionEyebrow>
 					<Text as="h2" fontSize="clamp(24px, 3.4vw, 36px)" fontWeight={900} letterSpacing="-0.02em" lineHeight={1.05} margin={0}>
-						Re-cut in eleven other styles
+						Re-cut in {styleSiblings.length} other {styleSiblings.length === 1 ? 'style' : 'styles'}
 					</Text>
 					<Flex gap={2} flexWrap="wrap" marginTop={4}>
-						{styleSiblings.map((trend) => {
-							const target = `styles/${trend.key}/${page.refs.feature}`;
-							const to = PAGE_BY_SLUG[target] ? pageHref(target) : pageHref(`landing/${page.refs.feature}`);
-							return (
-								<Box key={trend.key} as={RouterLink} to={to} px={3} py={1.5} fontSize="13px" fontWeight={700} border={MK.border} borderRadius={MK.radiusSm} background={MK.cardSolid} color={MK.ink} _hover={{ background: MK.tint }}>
-									<span aria-hidden="true">{trend.emoji}</span> {trend.name}
-								</Box>
-							);
-						})}
+						{styleSiblings.map(({ trend, href }) => (
+							<Box key={trend.key} as={RouterLink} to={href} px={3} py={1.5} fontSize="13px" fontWeight={700} border={MK.border} borderRadius={MK.radiusSm} background={MK.cardSolid} color={MK.ink} _hover={{ background: MK.tint }}>
+								<span aria-hidden="true">{trend.emoji}</span> {trend.name}
+							</Box>
+						))}
 					</Flex>
 				</Box>
 			) : null}

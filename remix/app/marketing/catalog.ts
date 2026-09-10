@@ -24,7 +24,7 @@ import { byKey } from './lookup';
 import { PERSONAS, getPersona } from './personas';
 import { SOCIAL_ASSET_COUNT } from './social';
 import { TRENDS, getTrend } from './trends';
-import type { BuiltPage, CatalogCategory, Feature, MarketingPage, PageKind, PersonaKey, SectionBlock, TrendKey } from './types';
+import type { BuiltPage, CatalogCategory, Feature, MarketingPage, PageKind, PersonaKey, SectionBlock, Trend, TrendKey } from './types';
 import { getUseCase, USE_CASES } from './useCases';
 import { SCREEN_TARGETS, WALKTHROUGHS, getWalkthrough } from './walkthroughs';
 
@@ -329,6 +329,23 @@ export const categoryCounts = (): Record<string, number> => {
 };
 
 export const pageHref = (slug: string) => `${MARKETING_BASE}/${slug}`;
+
+// The style editions a feature actually has, minus the one being viewed.
+//
+// Only STYLE_FEATURE_KEYS (the union of every persona's lead features) gets
+// the twelve-style treatment; the other features have no `styles/*` page at
+// all. A landing page that offered every trend and fell back to
+// `landing/<feature>` for the missing ones therefore rendered eleven chips
+// that all navigated to the page the reader was already on. Offer only the
+// editions that exist, and let the caller drop the section when there are
+// none.
+export const styleSiblingsFor = (featureKey: string | undefined, currentTrend: TrendKey): { trend: Trend; href: string }[] => {
+	if (!featureKey) return [];
+	return TRENDS.filter((trend) => trend.key !== currentTrend)
+		.map((trend) => ({ trend, slug: `styles/${trend.key}/${featureKey}` }))
+		.filter((entry) => Boolean(PAGE_BY_SLUG[entry.slug]))
+		.map((entry) => ({ trend: entry.trend, href: pageHref(entry.slug) }));
+};
 
 // --------------------------------------------------------- builders
 const ctaFor = (feature: Feature) => ({ label: `Open ${feature.name}`, to: feature.route });
