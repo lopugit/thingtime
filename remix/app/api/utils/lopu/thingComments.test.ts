@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { confirmationFor, createLopuToolContext, runLopuTool, validateLopuToolInput } from './chatTools';
+import { confirmationFor, createLopuToolContext, LOPU_TOOL_DEFINITIONS, runLopuTool, validateLopuToolInput } from './chatTools';
+
+test('the comment tool explains proposal versus approved execution to every provider', () => {
+	const description = LOPU_TOOL_DEFINITIONS.find(tool => tool.name === 'comment_on_thing')!.description;
+	assert.match(description, /first call does not post/);
+	assert.match(description, /returns needsConfirmation/);
+	assert.match(description, /call this tool once to open that card/);
+	assert.match(description, /same id and text to post/);
+});
 
 test('comment tools accept a target relationship, never parent data or audience overrides', () => {
 	assert.deepEqual(validateLopuToolInput('comment_on_thing', { id: 'target', text: ' Context ', ownerId: 'other', crystal: { overwritten: true }, acl: ['tt:all'] }), { ok: true, input: { id: 'target', text: 'Context' } });
@@ -18,7 +26,9 @@ test('shared-comment confirmations bind both target and exact comment text', () 
 test('Lopu comments always stop for confirmation before any database access', async () => {
 	const events: any[] = [];
 	const context = createLopuToolContext({ id: 'owner', username: 'owner' }, null, event => events.push(event));
-	await runLopuTool({ id: 'comment', name: 'comment_on_thing', input: { id: 'target', text: 'Useful context', confirmed: true } }, context);
+	const result = await runLopuTool({ id: 'comment', name: 'comment_on_thing', input: { id: 'target', text: 'Useful context', confirmed: true } }, context);
+	assert.equal(result.ok, false);
+	assert.equal(result.needsConfirmation, true);
 	assert.equal(events.length, 1);
 	assert.equal(events[0].type, 'confirm');
 	assert.equal(events[0].key, confirmationFor('comment_on_thing', { id: 'target', text: 'Useful context' })!.key);
