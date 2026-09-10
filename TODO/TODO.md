@@ -17,7 +17,7 @@
    (closed 2026-07-21).**
 
    This item targeted the old Remix SSR architecture: `61c234a` (`Fix Remix
-   Emotion hydration styling`, merged to main) kept Emotion SSR styles in the
+Emotion hydration styling`, merged to main) kept Emotion SSR styles in the
    React document tree, and the remaining work was to eliminate dev-mode
    `hydrateRoot(document, ...)` mismatch warnings. The app has since migrated
    to the Vite + React Router non-framework shell: `remix/index.html` is a
@@ -91,7 +91,7 @@
    `thingtimeSerialization.ts` codec, so tagged Dates and cycles survive while
    persisted/runtime function source never crosses tabs. Other tabs apply the
    write through the existing mutation queue with `{ ignoreUndoRedo: true,
-   fromRemote: true }`, preventing echo loops and keeping undo per-tab. The
+fromRemote: true }`, preventing echo loops and keeping undo per-tab. The
    internal root `timemachine` path is excluded from channel traffic, while
    ordinary paths restored by undo/redo still converge across tabs. The
    debounced latest-revision autosave in `ThingtimeProvider` remains the one
@@ -111,6 +111,7 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
    > are closed. A3 is throttled but not yet bounded. Do not re-claim A1/A2 or
    > A3's throttle. Full spec and original finding:
    > `claude-todo/09-security-hardening.md` §A.
+
    - ✅ **A1 — `POST /api/v1/mongodb/raw-results`**
      (`remix/app/routes/api/v1/mongodb/raw-results/_raw-results.tsx`): loader and
      action both gate on `requireAdmin`, then a fail-closed `mongodb.query`
@@ -563,3 +564,20 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     owners, and stop authority. External channels, sender-visible read receipts,
     marketing, safety, money, elections, minors, institutions, and high-impact
     uses remain separately gated.
+
+38. **🔎 Make search and discovery agency a product contract.**
+
+    Preserve Thingtime's ACL-aware retrieval, app-namespace fencing, bounded
+    structured grammar, account-scoped optimistic cache, and honest approximate
+    totals while separating query, corpus, candidate, match, rank,
+    presentation, recommendation, promotion, trust, and truth. Start only with
+    one fixed synthetic schema and private adult test account using POST,
+    deterministic relevance/newest order, server-derived request and “why
+    matched” evidence, bounded clearable local state, no server query history,
+    no analytics/training, and no public or commercial discovery. Execute
+    `claude-todo/38-search-and-discovery-agency.md` only after the owner and
+    qualified reviewers approve query exposure/retention, ordering and
+    explanation policy, complete-journey profiles, accountable owners, and
+    stop authority. Public people/content discovery, personalization,
+    semantic/vector retrieval, AI answers, sponsorship, minors, institutions,
+    and sensitive or high-impact uses remain separately gated.

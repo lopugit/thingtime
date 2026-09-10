@@ -43,6 +43,10 @@ default change, new signal, or telemetry collection by itself.
 - [TODO 37](./37-notification-agency-and-accountable-delivery.md) owns truthful
   event, history, channel receipt, presentation, read, canonical outcome, and
   remedy semantics. This TODO owns whether, when, and where to interrupt.
+- [TODO 38](./38-search-and-discovery-agency.md) owns explicit-query corpus,
+  match, ordering, explanation, retention, and promotion boundaries. This TODO
+  owns feed recommendation and learning; neither may silently borrow the
+  other's query or behavior signals.
 - Ranking, training, reporting, blocking, moderation, and account-security
   notifications remain distinct capabilities and user intents.
 - Calm controls and chronological/no-training mode apply to every account tier.

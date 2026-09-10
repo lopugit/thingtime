@@ -18,6 +18,35 @@ required sequence:
 The branch is intentionally cumulative. It does not merge itself, implement
 the product work, or treat a plausible idea as an approved decision.
 
+## 2026-09-10 — search and discovery agency
+
+This run grounds the garden in Thingtime's ACL-aware ranked and structured
+search, schema-guided filters, people/subspace rails, and Commander/quick
+switcher surfaces while refusing to treat a match or score as truth, trust,
+quality, or universal relevance. It adds:
+
+- `NOTES/search-and-discovery-agency-baseline.md`, a dated evidence ledger and
+  vocabulary for query, corpus, candidate, match, rank, presentation,
+  recommendation, promotion, trust evidence, and answer;
+- `PLAN/search-and-discovery-agency-roadmap.md`, a gated path from a discovery
+  charter through request/privacy truth, deterministic explanations, one
+  private synthetic pilot, and separately reviewed expansion; and
+- `TODO/claude-todo/38-search-and-discovery-agency.md`, an execution epic with
+  owners, dependencies, phases, safeguards, acceptance criteria, stop
+  conditions, and a concrete owner packet.
+
+The first pilot uses a fixed synthetic schema in one private adult test
+account, POST requests, deterministic relevance/newest ordering, no server
+query history, no analytics or training, and bounded clearable local state.
+Public people/content discovery, personalization, semantic/vector retrieval,
+AI answers, sponsorship, minors, institutions, and sensitive or high-impact
+uses remain separately gated.
+
+The theme is linked from the NOTES, PLAN, main TODO, and Claude TODO indexes;
+the ethical-adoption baseline, trustworthy-adoption roadmap, TODO 22, and TODO
+24 now name its boundary. No runtime, API, schema, index, cache, query, ranking,
+analytics, or production behavior changed.
+
 ## 2026-09-09 — notification agency and accountable delivery
 
 This run grounds the garden in the newly merged owner-private notification

@@ -111,6 +111,10 @@ experiment by itself.
   event/history/delivery/presentation/read/outcome/remedy evidence vocabulary.
   Adoption reporting cannot count persistence or transport as attention,
   consent, or a useful completed outcome.
+- [TODO 38](./38-search-and-discovery-agency.md) owns query/corpus privacy,
+  retrieval and ranking explanations, multi-rail semantics, and fair influence
+  boundaries. Adoption reporting cannot use raw queries, clicks, dwell,
+  personalization, promotion, or a rank score as proof of usefulness or trust.
 - Open PRs are evidence of active work, not dependencies that may be assumed
   merged. Recheck their head, base, review, CI, preview, and shipped behavior
   immediately before implementation.
