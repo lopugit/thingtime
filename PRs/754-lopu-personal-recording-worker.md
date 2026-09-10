@@ -33,7 +33,7 @@ empty queue polling, cookie rejection and opt-out revocation. Synthetic account
 were made. New tests cover device projections, malformed requests, authority
 failures and changing processors during a content transaction.
 
-Still pending: finished pairing UI, real audio/results and transaction-race
+Still pending: signed-in pairing UI acceptance, real audio/results and transaction-race
 acceptance, deployed and physical Watch proof. Browser automation returned
 `Debugger unattached`, so desktop/mobile selector validation is not yet proven.
 Do not bypass consent by seeding internal database fields. This PR is not a
@@ -51,7 +51,33 @@ now drops a successful pairing response and proves recovery before selection,
 queue polling and opt-out. Synthetic account `recqamtva5kc3` remains local with
 processing disabled. No real Keychain write, audio processing or AI invocation
 was performed in this acceptance slice. Expired-challenge reset and the visual
-pairing button remain unfinished; this is not yet a turnkey installed service.
+pairing button were still unfinished at this checkpoint; this is not yet a turnkey installed service.
+
+## Setup panel and develop reconciliation — 2026-09-10
+
+Added the expandable recording-settings setup panel with masked one-time
+secrets, explicit copy/reveal controls, expiry/account-switch cleanup, CLI
+instructions and separate recording consent. Device-pairing contract 1.1.0 adds
+the authenticated owner ID and private/no-store response headers; the setup
+client negotiates that exact minimum before creating a challenge. Five client
+tests and three route tests cover mismatched owners, expiration, manifest gates,
+aborts, unauthorized callers and rate-limit headers. The real HTTP smoke now
+uses this same setup client before proving lost-receipt launcher recovery.
+Synthetic account `recqamtvai7z7` remains local with processing disabled.
+
+Merged develop source `77ee7f337` locally, retaining its shared-component
+audience-boundary fixes. Resolved changelog and generated-snapshot conflicts;
+reconciled the newly bumped sharing capabilities in the second manifest suite.
+Capability tests: 38 pass; Lopu UI tests: 137 pass; Lopu broker suites: 137 + 78
+pass; sharing slice: 13 pass and one opt-in integration test skipped. Full
+production build, Vercel output verification and compiled-handler manifest /
+anonymous-private-401 smoke pass. Typecheck remains at the 108-error baseline;
+targeted lint has no errors and one existing effect-cleanup warning.
+
+Fresh Chrome tab control recovered. The signed-out recording page renders on
+desktop and at a 487-CSS-pixel narrow viewport with no horizontal overflow.
+The tab is left at local sign-in for user-owned test registration; signed-in
+setup interactions and true phone-width visual acceptance remain unproven.
 
 ## Verification
 

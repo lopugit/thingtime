@@ -18,6 +18,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Add recording-settings Mac pairing with expiring masked secrets, explicit
+  copy/reveal and account-switch guards; publish pairing 1.1.0. Reconcile
+  develop's sharing boundaries and both manifest suites. Build and API smoke
+  pass; signed-in visual and real audio acceptance remain outstanding.
+  Details: [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
 - Add an interactive Mac recording worker with hidden pairing input,
   origin-bound Keychain storage, interrupted-claim recovery and bounded
   foreground polling. Real local lost-receipt recovery passes; pairing UI,
@@ -47,6 +54,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - Include the origin-scoped capability-manifest suite in the standard API
   capability CI command and reconcile its assertions after combining saved
   action sharing and Lopu reply updates. — Codex (AI), 2026-09-10
+
+- Preserve an independently readable foreign component's authored dependency
+  audience when embedded in a shared page. Revalidate each boundary, keep
+  cross-author page arguments from borrowing private authority, and preserve
+  independent copies and read-only execution. See [PR #753](../PRs/753-codex-shared-public-component-boundaries.md).
+  — Codex (AI), 2026-09-10
 
 - Clarify Lopu's two-step comment tool: an unapproved call opens the real
   approval card without posting; a verified follow-up posts the exact comment.

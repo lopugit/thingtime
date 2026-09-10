@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { pairPersonalRecordingDevice, type PersonalPairingState } from './personal-recording-pair';
 import { supportsPersonalRecordingSettings } from '../app/components/Lopu/recordingsCapabilities';
+import { requestRecordingPairing } from '../app/components/Lopu/recordingPairing';
 
 const origin = process.argv[2] || 'http://127.0.0.1:18000';
 const target = new URL(origin);
@@ -41,7 +42,13 @@ try {
 	phase = 'foreign device selection';
 	await request('/api/v1/lopu/recordings', { op: 'settings', settings: { runtimeDeviceId: 'foreign-worker' } }, undefined, 400);
 	phase = 'pairing challenge';
-	const { pairing } = await request('/api/v1/devices/pairing', {});
+	const pairing = await requestRecordingPairing({ origin, ownerId: initial.ownerId, signal: AbortSignal.timeout(30000),
+		fetcher: async (url, init) => {
+			const headers = new Headers(init?.headers); headers.set('Cookie', cookie);
+			const response = await fetch(url, { ...init, headers });
+			if (new URL(String(url)).pathname === '/api/v1/devices/pairing') assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
+			return response;
+		} });
 	phase = 'launcher signed claim and lost receipt recovery';
 	let saved: PersonalPairingState | null = null;
 	const store = { read: async () => structuredClone(saved), write: async (state: PersonalPairingState) => { saved = structuredClone(state); } };
@@ -53,7 +60,7 @@ try {
 		}
 		return response;
 	};
-	await assert.rejects(pairPersonalRecordingDevice({ origin, pairingSecret: pairing.pairingSecret, store, fetch: lossyFetch }));
+	await assert.rejects(pairPersonalRecordingDevice({ origin, pairingSecret: pairing.secret, store, fetch: lossyFetch }));
 	assert.equal(dropped, true);
 	const paired = await pairPersonalRecordingDevice({ origin, store });
 	const credential = (await store.read())!.credential;

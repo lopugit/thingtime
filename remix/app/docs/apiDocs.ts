@@ -185,12 +185,14 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'devices-pairing',
+		featureVersion: '1.1.0',
+		contractVersion: '1.1.0',
 		group: 'devices',
 		title: 'Create device pairing challenge',
 		endpoint: '/api/v1/devices/pairing',
 		summary: 'Creates one strong, short-lived, single-use pairing challenge.',
 		detail:
-			'Returns the only copy of a 256-bit pairing secret. Thingtime stores only its domain-separated SHA-256 hash in a TTL-reaped scoped session.',
+			'Returns the only copy of a 256-bit pairing secret. Thingtime stores only its domain-separated SHA-256 hash in a TTL-reaped scoped session. Version 1.1.0 adds ownerId so clients discard a challenge if the signed-in account changed while creating it. Responses are private and no-store. Transfer secrets only to your intended computer; never persist them in browser storage, URLs or logs.',
 		auth: { mode: 'session-or-bearer', description: 'Full Thingtime user session; fail-closed rate limited.' },
 		methods: ['POST'],
 		steps: ['Create a challenge.', 'Transfer the secret to the local node over the QR/deep-link pairing channel.'],
@@ -199,7 +201,7 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 			{
 				status: 200,
 				description: 'Challenge created.',
-				body: { ok: true, pairing: { pairingId: 'pair-id', pairingSecret: 'ttpair_…', expiresAt: '2026-08-18T01:00:00.000Z' } }
+				body: { ok: true, ownerId: 'user-id', pairing: { pairingId: 'pair-id', pairingSecret: 'ttpair_…', expiresAt: '2026-08-18T01:00:00.000Z' } }
 			}
 		]
 	}),
@@ -5772,13 +5774,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-content',
-		contractVersion: '1.6.1',
-		featureVersion: '1.6.1',
+		contractVersion: '1.6.2',
+		featureVersion: '1.6.2',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
 		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
 		detail:
+			'An independently readable foreign component establishes its own freshly checked audience for its same-author authored media and bound children. The outer root remains required. Cross-author page argument overrides never inherit either author private media authority. ' +
 			'Owners may read live unattached drafts. Bound content is purpose-authorized against the exact target: post/comment ACL inheritance, active or pending chat membership, the current public profile slot, or the current personal/community emoji reference. The bucket never becomes public. ' +
 			'Conditional media properties and conditional props/style records include their stored output alternatives. Condition operands, lookup keys, action inputs and non-rendering metadata are not media grants. ' +
 			'Stored component defaults, savedArgs and containing page-block argument overrides are resolved in media rendering positions using the canonical bounded template resolver, in that precedence order. Block references use the freshly authorized composition lookup; only same-author templates inherit root media authority. Unused argument metadata, unresolved runtime tokens and truncated values are not media grants. ' +
@@ -8816,13 +8819,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // is a 400. Only this read grew — the shared projection is unchanged, so
     // things-comment / -feed / -user stay put (S7, additive)
     // Includes additive discussions and the 1.7.5 conditional-media write correction.
-    featureVersion: '1.9.0',
-    contractVersion: '1.8.0',
+    featureVersion: '1.9.1',
+    contractVersion: '1.8.1',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares.',
     detail:
+			'Contextual reads preserve independently readable foreign composition boundaries and their same-author descendants. Non-owner writers may include such public/group-readable compositions, but newly unresolved private references and cross-author overrides cannot acquire inherited authority. Every audience is revalidated per invocation. ' +
 			'Stored action references include component argument defaults, savedArgs and each persisted page-block override, in that precedence order. New dependencies introduced through argument-only edits require independent read access for non-owner writers. Runtime query, viewer, result and loop values cannot mint grants. ' +
 			'Version 1.8 adds scheduled-task-run child notes: targetId is required, the default audience is owner-only, the typed crystal is bounded, and deleting the task cascades its run notes. Run notes are editable user content, not trusted security audit records. ' +
 			'Own-things lists include completed standalone recording attachments; pending uploads and all other protected kinds remain excluded. Attachment creation, metadata mutation and deletion still use their dedicated endpoints. ' +
@@ -10663,13 +10667,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'things-update',
     // Stored component and page-block arguments use the same media-addition guard as render edits.
-    featureVersion: '1.2.5',
-    contractVersion: '1.0.5',
+    featureVersion: '1.2.6',
+    contractVersion: '1.0.6',
     group: 'things',
     title: 'Update thing',
     endpoint: '/api/v1/things/update',
     summary: 'Updates one of the current user things — crystal payload, acl audience, or tags.',
     detail:
+      'Independently readable foreign components may be included with their authored private dependencies. Cross-author page overrides cannot borrow private authority, and newly unresolved required references are rejected before saving. ' +
       'New action dependencies selected by saved component arguments or page-block overrides require independent read access for non-owner writers, including a new instance of an already included component. ' +
       'Shared page-block argument and conditional media-property edits use the same resolved media-addition guard as PATCH /things; only the owner may introduce private media that the writer cannot independently read. ' +
       'Sugar over PATCH /api/v1/things: crystal patches merge over the existing crystal and are re-validated against the thing schemas in its thingtime array; replaceCrystal=true takes the supplied crystal whole. expectedUpdatedAt provides an atomic optimistic-concurrency precondition for signed MCP previews and other safe clients. acl (or a legacy visibility name) retargets the audience. Updating a pre-unification post upgrades it to the v2 doc shape in place. Attached things keep their inherited audience. Saving a webpage thing (create or update) additionally binds the owner\'s own ready builder uploads referenced by its media blocks to the page — clearing their draft expiry and inheriting the page\'s audience; foreign or external references are left untouched.',
@@ -12190,12 +12195,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-fork',
-    featureVersion: '1.2.0',
-    contractVersion: '1.2.0',
+    featureVersion: '1.2.1',
+    contractVersion: '1.2.1',
     group: 'things',
     title: 'Copy a shared composition',
     endpoint: '/api/v1/things/fork',
-    summary: 'Create an independent private copy of readable standalone content, including pages, components, actions, schema controls and data with extended content.',
+    summary: 'Create an independent private copy of readable standalone content, including pages, components, actions, schema controls and data with extended content; independently readable foreign components include their authored same-author children.',
     detail: 'Revalidates the root audience and traverses stored component, action, schema and data references, including saved component arguments and every persisted page instance. Creates fresh caller-owned private Things through normal quota and schema gates. Rewrites executable references and capability scopes to copied ids; never edits the original or overwrites a prior fork. Templated controls retain their editable arguments and receive a bounded ttActionRefs array of [original resolved reference, copied id] pairs on the authored control node. The renderer applies the first matching pair once after ttAction interpolation, never to labels or inputs, and strips the marker from rendered output. Unused pairs are not access grants. Forks of forks rebind to their own actions. Missing dependencies fail before writes. Failed writes trigger best-effort cleanup of exact newly created ids; a cleanup failure is reported explicitly. Repeated successful calls create separate copies.',
     auth: { mode: 'session', description: 'Requires a signed-in user and read access to id, including its key or group membership when needed.' },
     methods: ['POST'],
@@ -12205,13 +12210,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'actions-run',
-    featureVersion: '1.3.0',
-    contractVersion: '1.3.0',
+    featureVersion: '1.3.1',
+    contractVersion: '1.3.1',
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',
     summary: 'Execute one action thing inside its declared capability + budget envelope.',
     detail:
+      'An independently readable foreign component starts its own audience boundary for its authored same-author descendants. The outer root is still required, and revoking either audience removes shared access. Page-authored cross-author arguments may select only independently readable actions, never guessed private actions belonging to either author. Execution remains read-only and never uses an author identity. ' +
       'Shared controls can select actions through persisted component argument defaults, savedArgs and each page-block override. Discovery follows authored render branches and bounded stored repeats; runtime query/result/viewer input and arbitrary metadata grant no access. Copied ttActionRefs bindings resolve to the copied actions without changing input data. ' +
       'The Action Thing executor: action things (thingtime ["action"]) are small declarative programs over a ' +
       'closed operation vocabulary (things.create/get/search/update, actions.invoke, return) with typed inputs, ' +

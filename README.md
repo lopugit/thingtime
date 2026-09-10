@@ -1832,8 +1832,8 @@ does not accept production or develop database URIs.
 `remix/scripts/personal-recording-runtime.mjs` provides local `transcribe` and
 `complete` operations for the forthcoming personally paired recording worker.
 The paired-device broker is registered at `/api/v1/lopu/recordings/personal`;
-the interactive Mac launcher is available; pairing-screen integration and
-end-to-end Watch acceptance are still pending.
+the interactive Mac launcher and recording-settings setup panel are available.
+Real Keychain/audio and end-to-end Watch acceptance are still pending.
 No server, public listener, background service or automatic recording processing
 is started by importing this module.
 
@@ -1903,8 +1903,14 @@ npm run recordings:worker -- run --origin https://your-thingtime.example --once
 ```
 
 Pairing requires a fresh one-time challenge from the signed-in account's
-`POST /api/v1/devices/pairing` operation. Its recording-settings button is still
-pending; this is not yet the finished user setup flow. Paste **only that
+`POST /api/v1/devices/pairing` operation. In `/lopu/recordings`, open **Pair a Mac
+for recordings**, review the instructions, then create the one-time secret.
+The panel requires `api.devices-pairing` 1.1.0 and discards responses whose
+`ownerId` differs from the displayed account. Secrets are masked initially,
+copied/revealed only by an explicit click, kept only in component memory and
+cleared on expiry, account change, unmount or hiding the panel. Hiding is not
+server-side revocation; the challenge remains usable until consumed or expired.
+Paste **only that
 Thingtime pairing secret** into the hidden interactive prompt, never a Claude
 token, password or API key. No secret belongs in command arguments or files.
 The launcher stores its origin-bound credential and interrupted claim in macOS

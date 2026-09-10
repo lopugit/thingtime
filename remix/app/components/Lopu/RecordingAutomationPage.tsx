@@ -8,6 +8,7 @@ import { DEFAULT_RECORDING_SETTINGS, type RecordingSettings } from '~/api/utils/
 import { supportsRecordingAutomation, supportsPersonalRecordingSettings } from './recordingsCapabilities';
 import type { RecordingConnectionChoice } from '~/api/utils/lopu/recordingsConnections';
 import type { PersonalRecordingDevice } from '~/api/utils/lopu/personalRecordingDevices';
+import { PersonalRecordingSetup } from './PersonalRecordingSetup';
 
 type RecordingData = {
 	ownerId: string;
@@ -237,6 +238,7 @@ export function RecordingAutomationPage() {
 									: 'The selected worker is unavailable or revoked. Choose another worker, or explicitly switch to the provider waterfall.'}
 							</Text> : null}
 						</FormControl>
+						<PersonalRecordingSetup key={user.id} ownerId={user.id} username={user.username} disabled={busy || !current || !personalSupported} />
 						{!settings.runtimeDeviceId ? <Box mt={5}>
 							<Text as="h3" fontWeight="bold">
 								AI credential waterfall
