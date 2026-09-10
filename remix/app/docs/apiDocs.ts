@@ -5748,15 +5748,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-content',
-		contractVersion: '1.3.0',
-		featureVersion: '1.3.0',
+		contractVersion: '1.4.0',
+		featureVersion: '1.4.0',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
 		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
 		detail:
 			'Owners may read live unattached drafts. Bound content is purpose-authorized against the exact target: post/comment ACL inheritance, active or pending chat membership, the current public profile slot, or the current personal/community emoji reference. The bucket never becomes public. ' +
-			'Optional sharedRoot authorizes post-purpose media attached to the root or explicitly embedded by a stored component/schema/native media block. Literal CSS url/image-set references (including escaped function identifiers) in render styles, responsive/pseudo styles, block CSS and page backgrounds are included; quoted text, metadata and external URLs are not grants. Same-author references inherit the freshly checked root audience; foreign media still needs independent access. Unrelated ids, drafts, message/profile/emoji objects, retired keys and revoked groups do not gain access through this mode. Ready state, moderation, exact object version and home-storage guards remain enforced before every redirect, byte read or cache receipt. ' +
+			'Optional sharedRoot authorizes post-purpose media attached to the root or a contained same-author Thing, or explicitly embedded by a stored component/schema/native media block. Authored rich/raw HTML media attributes and inline styles are discovered with the renderer tag, depth and node policy; dropped containers, text and metadata are not grants. Literal CSS url/image-set references (including escaped function identifiers) in render styles, responsive/pseudo styles, block CSS and page backgrounds are included. Same-author references inherit the freshly checked root audience; foreign media still needs independent access. Unrelated ids, external URLs, drafts, message/profile/emoji objects, retired keys and revoked groups do not gain access through this mode. Ready state, moderation, exact object version and home-storage guards remain enforced before every redirect, byte read or cache receipt. ' +
 			'Hidden post/page audiences accept the root key query parameter and custom audiences use current group/friend membership. Every content or cache-validation request rechecks the root. Only magic-byte-verified inline-safe types may render inline: AVIF/GIF/JPEG/PNG/WebP images and MP4/WebM/QuickTime/M4V/Ogg/3GPP/3GPP2/Matroska video. Add download=1 to force attachment/octet-stream for every type.',
 		auth: {
 			mode: 'optional',
@@ -8789,8 +8789,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // then older first) and the response echoes commentSort; an unknown value
     // is a 400. Only this read grew — the shared projection is unchanged, so
     // things-comment / -feed / -user stay put (S7, additive)
-    featureVersion: '1.7.1',
-    contractVersion: '1.6.1',
+    featureVersion: '1.7.2',
+    contractVersion: '1.6.2',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
@@ -10633,7 +10633,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-update',
-    featureVersion: '1.2.0',
+    featureVersion: '1.2.1',
+    contractVersion: '1.0.1',
     group: 'things',
     title: 'Update thing',
     endpoint: '/api/v1/things/update',
@@ -10651,7 +10652,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Crystal fields you omit keep their current values; included fields are validated by the thing schemas. For posts, a text patch from an older/plain client that omits richText intentionally clears the previous rich-text document.',
       'For a previewed update, send expectedUpdatedAt; a stale value returns 409 without writing. Set replaceCrystal only when whole-crystal replacement is intended.',
       'extended replaces as a whole value when provided (null clears it) — it is never deep-merged.',
-      'The current user must own the thing.',
+      'The current user must own the thing or hold an explicit write grant. Non-owner writers cannot introduce unreadable private dependencies, including media in rich/raw HTML rendering positions. Link-only read access never grants writes.',
       'Handle 401 unauthenticated, 404 missing or unowned things, and 400 invalid patches.'
     ],
     requestExamples: [

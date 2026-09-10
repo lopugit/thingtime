@@ -1,4 +1,5 @@
 import type { HtmlThingNode } from '../Kinds/HtmlThingRenderer';
+import { HTML_MARKUP_DROP_TAGS as DROP_TAGS } from '../Kinds/htmlRenderPolicy';
 
 // Browser-side HTML → HtmlThingNode parser for builder blocks that carry
 // authored markup (rich WYSIWYG text, raw html blocks). This is a STRUCTURE
@@ -6,8 +7,6 @@ import type { HtmlThingNode } from '../Kinds/HtmlThingRenderer';
 // exclusively through HtmlThingRenderer, whose allowlist (tags, props, urls,
 // object-form styles, no event handlers) is the authority. The parser only
 // pre-drops the containers that could never render anything useful.
-
-const DROP_TAGS = new Set(['script', 'style', 'iframe', 'object', 'embed', 'link', 'meta', 'base', 'form', 'noscript', 'template']);
 
 const styleTextToObject = (el: HTMLElement): Record<string, string> | undefined => {
 	const style = el.style;

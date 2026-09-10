@@ -18,6 +18,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Extend shared-root media inheritance to authored rich/raw HTML rendering
+  positions and uploads bound directly to contained same-author Things.
+  Share the browser tag/depth/node policy with bounded server discovery;
+  retain foreign-owner, managed-purpose, revocation and non-owner writer
+  guards. Advertise attachment-content 1.4.0 and patch the Things write
+  contracts. Stored component arguments and independent protected-upload
+  copies remain separate follow-up work.
+  [PR 730 validation and scope](../PRs/730-codex-shared-nested-media-inheritance-inherit-shared-root-access-for-authored-html-and-contained-media.md).
+  — Codex (AI), 2026-09-10
+
 - Fix APNs rejection of notification tests and long reminder IDs by hashing the collapse header to Apple’s 64-byte limit; expose the safe BadCollapseId diagnostic. — Codex (AI), 2026-09-10
 
 - 2026-09-10: Recover older iPhone Lopu recordings into private Things with durable import receipts; fix notification bell toggling and refresh, reconnect native push from Settings, report APNs outcomes, and keep single/bulk push delivery alive through Vercel responses. Details: [PR 726](../PRs/726-ios-push-recording-import.md).

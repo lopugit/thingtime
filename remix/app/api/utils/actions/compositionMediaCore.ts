@@ -1,4 +1,5 @@
 import { literalAttachmentId, mapCssMediaUrls, mapRenderMediaProps, mapStyleMediaUrls } from '../../../components/Sharing/renderMediaCore';
+import { visitAuthoredHtmlMedia } from './authoredHtmlMedia';
 
 // Media capabilities come only from literal first-party URLs in stored render
 // positions. Input values, arbitrary metadata and external links are not grants.
@@ -25,6 +26,7 @@ export const compositionAttachmentIds = (kinds: string[], crystal: Record<string
 			mapStyleMediaUrls(block.css, cssUrl);
 			if (block.type === 'media') url(block.src);
 			if (block.type === 'text') url(block.href);
+			if (block.type === 'text' || block.type === 'html') visitAuthoredHtmlMedia(block.html, url);
 			if (block.type === 'container') blocks(block.children, depth + 1);
 		}
 	};
