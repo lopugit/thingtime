@@ -2,6 +2,12 @@
 
 ## Unified Lopu conversations, scheduled Things and discussions
 
+- [ ] Keep a tab open across a deployment that adds a required capability.
+  If a task reports an incompatible contract, Refresh task must negotiate a
+  current manifest without reloading the tab or changing the account. Repeat
+  after offline, HTTP failure and timeout. Wrong-origin, missing or breaking
+  contracts must still prevent the dependent operation.
+
 - [ ] After Lopu creates a reminder or reports a failed action, ask what
   happened in a later turn and after reload. Its server-loaded history retains
   bounded public success/failure receipts, never raw results or approval tokens.
@@ -42,6 +48,8 @@
   unchanged. Test hidden links, read-only audiences, deleted parents and logout.
 - [ ] Ask Lopu to comment; the full proposed comment and target are shown before
   Confirm. Cancel must write nothing; changing text or target invalidates approval.
+  Use an ordinary request without explaining tool internals: Lopu must call the
+  proposal tool and open the actual card, not merely ask for a typed yes/no.
 - [ ] Create interval and time-zone cron tasks in all three delivery modes.
   Inspect their searchable Things and separate run notes; test existing/new
   chats, notification mute, pause, completed todos, quota failure and lost leases.
@@ -6034,6 +6042,11 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
       git, grep and ripgrep treat the whole file as binary and silently skip
       it, which costs a reviewer real time.
 ## Lopu AI assistant (`/lopu`, floating launcher, `remix/app/components/Lopu/`, `/api/v1/lopu/chats*`, `/api/v1/ai/models`)
+
+- [ ] `test:api-capabilities` must run both the API-docs and origin-scoped
+      manifest suites; when merging independently versioned features, verify
+      every asserted version against the combined registry rather than leaving
+      one manifest test outside CI with stale expectations.
 
 Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Automated coverage:
 `npm run test:lopu`, `test:lopu-chat-streaming` (fake SSE tool loop),

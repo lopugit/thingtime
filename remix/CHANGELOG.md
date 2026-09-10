@@ -18,6 +18,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Include the origin-scoped capability-manifest suite in the standard API
+  capability CI command and reconcile its assertions after combining saved
+  action sharing and Lopu reply updates. — Codex (AI), 2026-09-10
+
+- Clarify Lopu's two-step comment tool: an unapproved call opens the real
+  approval card without posting; a verified follow-up posts the exact comment.
+  Publish reply capability 1.6.2 without weakening the write guard.
+  — Codex (AI), 2026-09-10
+
+- Bypass the browser HTTP cache when negotiating capabilities, bound checks
+  to 20 seconds and let failures retry without a page reload. Successful
+  concurrent checks still share a request; incompatible contracts fail closed.
+  — Codex (AI), 2026-09-10
+
 - Preserve bounded, sanitized action receipts in Lopu conversation history so
   subsequent replies can distinguish past successes from failures. Publish
   reply capability 1.6.1; historical results grant no new action permissions.
