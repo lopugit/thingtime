@@ -8,6 +8,35 @@ import { MAX_WEBPAGE_HTML_CHARS } from '../../../schemas/registry';
 
 const url = (id: string) => `/api/v1/attachments/content?id=${id}`;
 
+test('foreign public component media keeps its own audience without trusting page overrides', async () => {
+	const root = { shareId: 'root', ownerId: 'page-author', createdAt: new Date(0), updatedAt: new Date(0), thingtime: ['webpage'], acl: ['tt:hidden', 'tt:user'], linkKey: 'fixture-key', crystal: {
+		blocks: [{ type: 'component', component: 'foreign', args: { image: url('guessed-foreign-private') } }]
+	} } as ThingDoc;
+	const component = { shareId: 'foreign', ownerId: 'component-author', createdAt: new Date(0), updatedAt: new Date(0), thingtime: ['component'], acl: ['tt:all'], crystal: {
+		savedArgs: { image: url('authored-image') }, render: { tag: 'img', props: { src: '{image}' } }
+	} } as ThingDoc;
+	const nested = { shareId: 'nested', ownerId: component.ownerId, thingtime: ['data'], crystal: {} } as ThingDoc;
+	const composition = { root, docs: new Map([[root.shareId, root], [component.shareId, component], [nested.shareId, nested]]),
+		references: new Map([['root:component:foreign', component]]), boundaries: new Map([
+			[root.shareId, new Set([root])], [component.shareId, new Set([component])], [nested.shareId, new Set([component])]
+		]) } as SharedComposition;
+	const read = createCanViewSharedCompositionAttachment(async (viewer) => canView(root, viewer) ? composition : fail(404, 'Not found'), async () => false);
+	const viewer = { id: '', linkKeys: new Set(['fixture-key']) };
+	const media = { shareId: 'authored-image', ownerId: component.ownerId, targetId: 'other-post', thingtime: ['attachment'], attachmentPurpose: 'post' as const };
+	assert.deepEqual([...compositionMediaIds(composition)], ['authored-image']);
+	assert.equal(await read(viewer, media, root.shareId), true);
+	assert.equal(await read(viewer, { ...media, shareId: 'bound', targetId: nested.shareId }, root.shareId), true);
+	assert.equal(await read(viewer, { ...media, shareId: 'guessed-foreign-private' }, root.shareId), false);
+	assert.equal(await read(viewer, { ...media, ownerId: root.ownerId }, root.shareId), false);
+	assert.equal(await read(viewer, { ...media, attachmentPurpose: 'message' }, root.shareId), false);
+	assert.equal(await read(null, media, root.shareId), false);
+	component.acl = ['tt:user'];
+	assert.equal(await read(viewer, media, root.shareId), false, 'The outer key cannot outlive revocation of the foreign audience');
+	component.acl = ['tt:custom', 'tt:group/readers'];
+	assert.equal(await read({ ...viewer, id: 'reader', groupIds: new Set(['readers']) }, media, root.shareId), true);
+	assert.equal(await read({ ...viewer, id: 'reader', groupIds: new Set() }, media, root.shareId), false);
+});
+
 test('conditional media properties include stored alternatives, not condition metadata', () => {
 	const crystal = {
 		savedArgs: { image: url('stored') },
@@ -34,7 +63,7 @@ test('page-block media overrides follow resolved same-author components and refr
 		blocks: [{ type: 'container', children: [block, { ...block, args: { image: url('second') } }] }]
 	} };
 	const composition = { root, docs: new Map([[root.shareId, root], [component.shareId, component]]),
-		references: new Map([['root:component:alias', component]]) } as SharedComposition;
+		references: new Map([['root:component:alias', component]]), boundaries: new Map([[root.shareId, new Set([root])], [component.shareId, new Set([root])]]) } as SharedComposition;
 	assert.deepEqual([...compositionMediaIds(composition)].sort(), ['page-image', 'saved', 'second']);
 	const read = createCanViewSharedCompositionAttachment(async (viewer) => canView(root, viewer) ? composition : fail(404, 'Not found'), async () => false);
 	const viewer = { id: '', linkKeys: new Set(['fixture-key']) };
@@ -122,7 +151,7 @@ test('rich and raw HTML discover only authored media that survives the markup re
 test('attachments bound to nested same-author children inherit the root, without opening foreign or managed media', async () => {
 	const root = { shareId: 'root', ownerId: 'author', thingtime: ['webpage'], acl: ['tt:hidden', 'tt:user'], linkKey: 'fixture-key' } as ThingDoc;
 	const child = { shareId: 'child', ownerId: 'author', thingtime: ['component'], acl: ['tt:user'], crystal: {} } as ThingDoc;
-	const composition = { root, docs: new Map([[root.shareId, root], [child.shareId, child]]), references: new Map() } as SharedComposition;
+	const composition = { root, docs: new Map([[root.shareId, root], [child.shareId, child]]), references: new Map(), boundaries: new Map([[root.shareId, new Set([root])], [child.shareId, new Set([root])]]) } as SharedComposition;
 	const read = createCanViewSharedCompositionAttachment(async (viewer) => canView(root, viewer) ? composition : fail(404, 'Not found'), async () => false);
 	const viewer = { id: '', linkKeys: new Set(['fixture-key']) };
 	const attachment = { shareId: 'nested-media', ownerId: 'author', targetId: child.shareId, thingtime: ['attachment'], attachmentPurpose: 'post' as const };
@@ -181,7 +210,7 @@ test('composition media grants only literal first-party URLs in stored rendering
 test('shared media reauthorizes the root, inherits only same-author references and preserves independent foreign ACLs', async () => {
 	const root = { shareId: 'root', ownerId: 'author', thingtime: ['webpage'], acl: ['tt:hidden', 'tt:user'], linkKey: 'fixture-key', crystal: {} } as ThingDoc;
 	const component: ThingDoc = { ...root, shareId: 'component', acl: ['tt:user'], thingtime: ['component'], crystal: { render: { tag: 'img', props: { src: url('media') } } } };
-	const composition = { root, docs: new Map([[root.shareId, root], [component.shareId, component]]), actions: new Map(), children: new Map(), data: new Map(), references: new Map() } as SharedComposition;
+	const composition = { root, docs: new Map([[root.shareId, root], [component.shareId, component]]), actions: new Map(), children: new Map(), data: new Map(), references: new Map(), boundaries: new Map([[root.shareId, new Set([root])], [component.shareId, new Set([root])]]) } as SharedComposition;
 	let independentlyAllowed = false;
 	const read = createCanViewSharedCompositionAttachment(async (viewer) => canView(root, viewer) ? composition : fail(404, 'Not found'), async () => independentlyAllowed);
 	const viewer = { id: '', linkKeys: new Set(['fixture-key']) };

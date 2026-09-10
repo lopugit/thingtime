@@ -5644,6 +5644,15 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       grant nothing. Non-owner editors cannot inject unreadable uploads through
       either argument source. Expansion limits never truncate one attachment
       identifier into another; negotiate attachment-content 1.5.0.
+- [ ] Embed another author's public component in a hidden-key page: its
+      authored private action/data/media children work signed out, just as
+      they do when the component is opened directly. Revoking the outer key
+      or the foreign component audience denies access. A third-party shared
+      writer may add that public composition, but cannot use page arguments
+      to select guessed private actions/media belonging to either author.
+      Check PATCH /things and POST /things/update, independent copying after
+      source revocation, and desktop/mobile Draw controls without Edit Original.
+      Negotiate actions-run 1.3.1, things-fork 1.2.1, attachment-content 1.6.2.
 - [ ] A nested page block overrides a same-author component's saved media args.
       Two blocks using the same component may render different media. Resolve
       aliases with the same composition lookup used for child reads; removing
