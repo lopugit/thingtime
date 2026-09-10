@@ -15,6 +15,8 @@ import { installSuite, installSuiteOnServer, suiteKeyFromActionKey, suiteKeyOfPa
 import { useWebpageDraft } from '../components/Builder/useWebpage';
 import { WebpageRuntimeProvider } from '../components/Builder/webpageRuntime';
 import { ForkSharedThingButton } from '../components/Sharing/ForkSharedThingButton';
+import { useSharedMediaUrl } from '../components/Sharing/SharedMedia';
+import { mapCssMediaUrls } from '../components/Sharing/renderMediaCore';
 import type { WebpageBlock } from '../components/Builder/webpageBlocks';
 
 // /p/:id — a published block-based webpage, rendered exactly as the builder
@@ -32,6 +34,13 @@ import type { WebpageBlock } from '../components/Builder/webpageBlocks';
 // links (/p/pokeworld, /p/pokeworld-pokedex) serve everyone the right page.
 // The page runtime (WebpageRuntimeProvider) is what makes source-bound
 // blocks fetch and refetch after every control run.
+
+// Consume the page runtime's media context inside its provider, including the
+// outer page background rather than only media inside individual blocks.
+const SharedPageSurface = ({ background, ...props }: React.ComponentProps<typeof Flex>) => {
+	const mediaUrl = useSharedMediaUrl();
+	return <Flex {...props} background={typeof background === 'string' ? mapCssMediaUrls(background, mediaUrl) : background} />;
+};
 
 export default function PublicWebpage() {
 	const { id } = useParams();
@@ -209,7 +218,7 @@ export default function PublicWebpage() {
 			source={draft.resolved?.source || null}
 			onInstall={isSeeded ? onInstall : undefined}
 		>
-			<Flex
+			<SharedPageSurface
 				flexDirection="column"
 				width="100%"
 				minWidth={0}
@@ -235,7 +244,7 @@ export default function PublicWebpage() {
 						onTtActionUnowned={isSeeded ? onUnowned : undefined}
 					/>
 				</Box>
-			</Flex>
+			</SharedPageSurface>
 		</WebpageRuntimeProvider>
 	);
 }
