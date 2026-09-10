@@ -55,7 +55,7 @@ mock.module(new URL('./recordingsStore.ts', import.meta.url).href, {
 		discoverRecordingUploads: async () => 0,
 		getRecordingSettings: async () => settings,
 		isPrivateRecordingPost: () => privateSource,
-		recordingSource: async () => (privateSource ? { post } : null),
+		recordingSource: async () => (privateSource ? { post, attachment: post } : null),
 		recordingControlDoc: (kind: string, id: string, ownerId: string, crystal: unknown, targetId: string) => ({
 			kind,
 			id,
