@@ -18,6 +18,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Prepare the internal exact-version file-copy path for shared app forks.
+  Reuse attachment authorization, quota reservation, multipart finalization,
+  moderation and deferred cleanup. Fork-route/media rewriting integration and
+  live object-store acceptance remain pending; no new HTTP capability is exposed.
+  — Codex (AI), 2026-09-10
+
 - Preserve an independently readable foreign component's authored dependency
   audience when embedded in a shared page. Revalidate each boundary, keep
   cross-author page arguments from borrowing private authority, and preserve

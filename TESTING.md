@@ -1165,6 +1165,14 @@ email whose link points at the attacker.
 
 ## Post and comment attachments (`remix/app/components/Attachments/`)
 
+- [ ] Internal shared-file copies: run `npm --prefix remix run test:attachments`.
+      Confirm source authorization precedes quota reservation; revocation,
+      moderation, purpose or exact-version changes stop copying; only the new
+      owner's partial upload is cleaned, with deferred cleanup still billed.
+      Once fork integration is enabled, repeat using real private storage and
+      verify the copied image after revoking/deleting the original. Unit mocks
+      alone do not prove that live-S3 acceptance or the Copy button works.
+
 - [ ] With `THINGTIME_MODERATION_PROVIDER=test`, upload an image named
       `tt-test-nsfw.png` to a post: after analysis it renders heavily blurred
       with a red border, light red wash, centered NSFW badge, and a
