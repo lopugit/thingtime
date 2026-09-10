@@ -28,6 +28,8 @@ export type LopuReplyContext = {
 export type LopuReplyConfirmation = { key: string; token: string };
 
 export type LopuReplyBody = {
+	attachmentIds?: string[];
+	thingIds?: string[];
 	chatId?: string;
 	text: string;
 	requestId: string;
@@ -73,6 +75,10 @@ export class LopuStreamError extends Error {
  * consumes it. Recorded in the DevKit request log like every useApi call.
  */
 export const postLopuReply = async (body: LopuReplyBody, options?: { signal?: AbortSignal }): Promise<Response> => {
+	if (body.attachmentIds?.length || body.thingIds?.length) {
+		const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
+		await requireThingtimeCapability('api.lopu-chats-reply', '1.6.0');
+	}
 	const started = performance.now();
 	let response: Response;
 	try {
