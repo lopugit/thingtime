@@ -36,6 +36,8 @@ import type * as InstallSuite from '~/components/Builder/installSuite';
 import type { BehaviourSuite } from '~/schemas/behaviourSuites';
 import { CARD_STYLES } from '~/theme/card';
 import { ThingAttachmentDetail } from '~/components/Things/ThingAttachmentDetail';
+import { ThingComments } from '~/components/Things/ThingComments';
+import { ScheduledTaskPanel } from '~/components/Lopu/ScheduledTaskPanel';
 import { attachmentFromThing, directAttachmentReferences } from '~/components/Things/thingAttachmentDetailCore';
 import { thingDetailSections } from '~/components/Things/thingDetailSectionsCore';
 
@@ -944,7 +946,7 @@ export default function ThingPage() {
 									</Button>
 								</Flex>
 								<Box ref={(element: HTMLDivElement | null) => observeView(element, post.id)}>
-									<PostCard post={post} onChanged={handlePostChanged} />
+									<PostCard post={post} onChanged={handlePostChanged} defaultCommentsOpen />
 								</Box>
 							</Stack>
 						) : null}
@@ -1009,6 +1011,9 @@ export default function ThingPage() {
 								</Box>
 							</Box>
 						) : null}
+
+						{thing && isThingOwner && ['scheduled-task', 'reminder'].includes(thing.crystal?.type) ? <ScheduledTaskPanel key={`${currentUser?.id}:${thing.id}`} thingId={thing.id} /> : null}
+						{thing && (!post || !sections.preview) ? <ThingComments thingId={thing.id} linkKey={linkKey} /> : null}
 
 						{diagnostic?.revealables.length ? (
 							<SensitiveThingReveal

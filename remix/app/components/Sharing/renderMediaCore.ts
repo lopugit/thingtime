@@ -110,6 +110,9 @@ export const mapStyleMediaUrls = <T>(style: T, mediaUrl: MediaUrl): T => {
 const CSS_MEDIA_PROPS = new Set(['background', 'backgroundImage', 'bg', 'bgImage', 'bgImg', 'borderImage', 'borderImageSource', 'mask', 'maskImage', 'WebkitMask', 'WebkitMaskImage', 'listStyle', 'listStyleImage', 'cursor', 'content', 'shapeOutside', 'filter', 'clipPath', 'fill', 'stroke']);
 const STYLE_RECORD_PROPS = new Set(['style', 'css', 'sx']);
 
+export const isRenderMediaStyleProp = (key: string): boolean =>
+	CSS_MEDIA_PROPS.has(key) || STYLE_RECORD_PROPS.has(key) || key.startsWith('--');
+
 // Chakra's responsive/pseudo-selector records are styles; title, data-* and
 // other component metadata are not. HTML callers supply only their style prop.
 export const mapRenderMediaProps = <T extends Record<string, unknown>>(props: T, mediaUrl: MediaUrl): T => {
@@ -117,7 +120,7 @@ export const mapRenderMediaProps = <T extends Record<string, unknown>>(props: T,
 	const walk = (record: Record<string, unknown>, depth: number): Record<string, unknown> => {
 		if (depth > 16 || ++visited > 1600) return record;
 		return Object.fromEntries(Object.entries(record).map(([key, value]) => {
-			if (CSS_MEDIA_PROPS.has(key) || STYLE_RECORD_PROPS.has(key) || key.startsWith('--')) return [key, mapStyleMediaUrls(value, mediaUrl)];
+			if (isRenderMediaStyleProp(key)) return [key, mapStyleMediaUrls(value, mediaUrl)];
 			if (key.startsWith('_') && value && typeof value === 'object' && !Array.isArray(value)) return [key, walk(value as Record<string, unknown>, depth + 1)];
 			return [key, value];
 		}));
