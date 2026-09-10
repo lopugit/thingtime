@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createPushSender } from './apns';
+import { createPushSender, apnsCollapseId } from './apns';
 import { pushDeliveryMessage } from './pushDeliveryCore';
 import type { PushDevice } from './pushDevices';
 const notification = { recipientId: 'owner', type: 'comment' as const, actor: { id: 'actor' }, notificationId: 'notice' };
@@ -32,4 +32,21 @@ test('transport failures settle as failures and concurrency is capped at four', 
   deps.send = async () => { active++; peak = Math.max(peak, active); await new Promise(resolve => setTimeout(resolve, 1)); active--; throw new Error('private endpoint'); };
   const report = await createPushSender(deps)(notification);
   assert.equal(peak, 4); assert.equal(report.status, 'failed'); assert.equal(report.rejected, 12); assert.deepEqual(report.reasons, ['TransportError']);
+});
+
+test('APNs collapse headers fit the 64-byte limit for test and Unicode reminder IDs', () => {
+  const id = 'lopu-recording-notification-test-00000000-0000-4000-8000-000000000000';
+  assert.ok(Buffer.byteLength(id) > 64);
+  for (const value of [id, '🦄'.repeat(80), 'ordinary-notification']) {
+    const encoded = apnsCollapseId(value);
+    assert.match(encoded, /^[a-f0-9]{64}$/);
+    assert.equal(Buffer.byteLength(encoded), 64);
+    assert.equal(encoded, apnsCollapseId(value));
+    assert.notEqual(encoded, apnsCollapseId(value + 'next'));
+  }
+});
+test('the safe APNs BadCollapseId reason remains visible for diagnosis', async () => {
+  const deps = dependencies();
+  deps.send = async () => ({ status: 400, reason: 'BadCollapseId' });
+  assert.deepEqual((await createPushSender(deps)(notification)).reasons, ['BadCollapseId']);
 });
