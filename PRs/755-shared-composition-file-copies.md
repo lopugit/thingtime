@@ -3,7 +3,7 @@
 ## Contract and implementation — 2026-09-10
 
 The internal exact-version copy primitive is now called by `/things/fork`.
-The route advertises `api.things-fork` 1.3.2 on both manifests; the Copy button
+The route advertises `api.things-fork` 1.3.3 on both manifests; the Copy button
 requires that version. `filesCopied` is additive and counts new attachments,
 not executable Things. Original Things, ACLs and files are never changed.
 
@@ -36,6 +36,15 @@ galleries intact and ordered while still deduplicating shared files. Discovery
 does not grant access; every file uses the same freshly authorized copy path.
 Other attachment purposes are excluded. Unsupported or unavailable gallery
 files fail the operation rather than silently disappearing.
+
+The 1.3.3 correction copies linked gallery entries through the same quota-
+accounted linked-record lifecycle as ordinary linked attachments. Validated URL
+and annotations are preserved; external bytes are not fetched or stored, and
+downloads still reject linked records rather than redirecting. Source access,
+URL/metadata and upload approval are rechecked around creation; late changes
+clean only the new private record. Pending, blocked or NSFW linked sources
+cannot become unflagged copies. Real-browser linked-gallery acceptance remains
+part of the pending storage/copy acceptance check.
 
 Missing dependencies, unsupported split-ID media and excessive target
 file counts fail before quota reservation. Write failures clean only preallocated

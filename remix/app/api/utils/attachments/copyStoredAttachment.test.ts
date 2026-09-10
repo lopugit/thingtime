@@ -17,6 +17,7 @@ const fixture = () => {
 	let readable = true;
 	const deps: Parameters<typeof copyStoredAttachment>[0] = {
 		canCopy: async () => true,
+		readyDraftTtlMs: 60_000,
 		read: async () => { events.push('read'); return readable ? { ok: true, doc: structuredClone(source) } : { ok: false, status: 404, error: 'Attachment not found' }; },
 		start: async (owner, input: any) => {
 			events.push('reserve');
@@ -25,6 +26,7 @@ const fixture = () => {
 			return { ok: true, upload: { id: 'copy' } };
 		},
 		store: {
+			insertLinkedReady: async (input) => { events.push('link'); return { ...source, ...input, shareId: input.id, attachmentLinked: true, attachmentState: 'ready' } as AttachmentDoc; },
 			getOwned: async (owner, id) => { assert.equal(owner, 'visitor'); assert.equal(id, 'copy'); return destination; },
 			markPartsIssued: async () => { events.push('mark-parts'); return destination; }
 		},
@@ -46,6 +48,70 @@ test('a stored copy reserves visitor bytes, pins source version, and uses normal
 	for (const part of f.parts) {
 		assert.equal(part.sourceObjectKey, 'objects/source'); assert.equal(part.sourceVersionId, 'source-version');
 		assert.equal(part.objectKey, 'objects/copy'); assert.equal(part.uploadId, 'destination-mpu');
+	}
+});
+
+test('linked copies preserve canonical external metadata without S3 or upload writes', async () => {
+	const f = fixture();
+	const crystal = { name: 'photo.png', contentType: 'image/png', mediaKind: 'image' as const, size: 0,
+		url: 'https://example.com/photo.png', title: 'A title', description: 'A caption' };
+	f.setSource({ attachmentLinked: true, objectSizeBytes: 0, objectVersionId: undefined, crystal });
+	f.deps.getS3 = () => { throw new Error('External URLs must never be fetched'); };
+	const result = await copyStoredAttachment(f.deps, { id: 'visitor', sharedRoot: 'page' }, 'source');
+	assert.deepEqual(result, { ok: true, id: 'copy-request', attachment: { ...crystal, id: 'copy-request' } });
+	assert.deepEqual(f.events, ['read', 'read', 'link', 'read']);
+});
+
+test('linked-copy revocation or URL changes clean only the newly minted record', async () => {
+	for (const changed of ['access', 'url', 'moderation'] as const) {
+		const f = fixture(); const crystal = { name: 'photo.png', contentType: 'image/png', mediaKind: 'image' as const, size: 0, url: 'https://example.com/photo.png' };
+		f.setSource({ attachmentLinked: true, objectSizeBytes: 0, objectVersionId: undefined, crystal });
+		const insert = f.deps.store.insertLinkedReady;
+		f.deps.store.insertLinkedReady = async (input) => {
+			const doc = await insert(input);
+			if (changed === 'access') f.revoke();
+			if (changed === 'url') f.setSource({ crystal: { ...crystal, url: 'https://example.com/other.png' } });
+			if (changed === 'moderation') f.setSource({ moderation: { status: 'nsfw' } });
+			return doc;
+		};
+		assert.equal((await copyStoredAttachment(f.deps, { id: 'visitor' }, 'source')).ok, false);
+		assert.equal(f.events.at(-1), 'cleanup');
+		assert.equal(f.parts.length, 0);
+	}
+});
+
+test('linked copies preserve shared authorization without enabling download redirects', async () => {
+	const source = { shareId: 'source', ownerId: 'author', targetId: 'page', attachmentState: 'ready', attachmentPurpose: 'post',
+		attachmentLinked: true, objectSizeBytes: 0, objectKey: 'linked/source', crystal: {
+			name: 'photo.png', contentType: 'image/png', mediaKind: 'image', size: 0, url: 'https://example.com/photo.png'
+		} } as AttachmentDoc;
+	let allowed = true, inserts = 0;
+	const service = createAttachmentService({
+		customMongoActive: () => false, canCopyFiles: async () => true, uuid: () => 'copied-link',
+		canViewSharedTarget: async (viewer, doc, root) => { assert.equal(viewer?.id, 'visitor'); assert.equal(doc.shareId, 'source'); assert.equal(root, 'page'); return allowed; },
+		store: { getById: async () => source, insertLinkedReady: async (input: any) => {
+			inserts++; assert.equal(input.ownerId, 'visitor'); assert.equal(input.purpose, 'post'); assert.ok(input.expiresAt > new Date());
+			return { ...source, ...input, shareId: input.id, targetId: undefined };
+		} } as any,
+		getS3: () => { throw new Error('Linked copies and downloads must not reach S3'); }
+	});
+	const viewer = { id: 'visitor', sharedRoot: 'page' };
+	assert.equal((await service.copy(viewer, 'source')).ok, true);
+	assert.equal((await service.download(viewer, 'source', false)).ok, false);
+	allowed = false;
+	assert.equal((await service.copy(viewer, 'source')).ok, false);
+	assert.equal(inserts, 1);
+});
+
+test('invalid or flagged linked sources cannot mint an unmoderated copy', async () => {
+	for (const flagged of [false, true]) {
+		const f = fixture();
+		f.setSource({ attachmentLinked: true, objectSizeBytes: 0, objectVersionId: undefined,
+			moderation: flagged ? { status: 'nsfw' } : undefined,
+			crystal: { name: 'photo.png', contentType: 'image/png', mediaKind: 'image', size: 0,
+				url: flagged ? 'https://example.com/photo.png' : 'javascript:alert(1)' } });
+		assert.equal((await copyStoredAttachment(f.deps, { id: 'visitor', isAdmin: true }, 'source')).ok, false);
+		assert.deepEqual(f.events, ['read']);
 	}
 });
 

@@ -18,6 +18,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Preserve linked gallery records and annotations in shared-content copies
+  without fetching external bytes or changing download redirect protections.
+  Negotiate fork 1.3.3 and check late revocation/metadata changes; live acceptance
+  remains tracked in [PR #755](../PRs/755-shared-composition-file-copies.md).
+  — Codex (AI), 2026-09-10
+
 - Include relational post-purpose galleries when copying shared content,
   preserving copied home targets and order with one bounded discovery query.
   Negotiate fork 1.3.2; live storage acceptance remains pending in

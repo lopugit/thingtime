@@ -1187,7 +1187,12 @@ email whose link points at the attacker.
       A file also embedded elsewhere must be copied once. Oversized galleries
       and discovery failures must perform no upload writes; recording/message/
       profile-purpose files must not enter this copy plan.
-      Confirm the button requires `api.things-fork` 1.3.2 before sending a copy.
+      Linked gallery copies must mint new private records with the same URL
+      and annotations, never fetch external bytes or permit content redirects.
+      Invalid/flagged sources fail before minting; late URL changes or revoked
+      access clean only the new record. Confirm ordinary downloads still reject
+      linked attachments, while authorized shared copies can include them.
+      Confirm the button requires `api.things-fork` 1.3.3 before sending a copy.
 
 - [ ] With `THINGTIME_MODERATION_PROVIDER=test`, upload an image named
       `tt-test-nsfw.png` to a post: after analysis it renders heavily blurred

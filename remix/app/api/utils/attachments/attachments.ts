@@ -1231,7 +1231,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 
 	const readableStoredAttachment = async (
 		viewer: AttachmentViewer,
-		idInput: unknown
+		idInput: unknown,
+		allowLinkedCopy = false
 	): Promise<AttachmentResult<{ doc: AttachmentDoc }>> => {
 		try {
 			const id = normalizeId(idInput);
@@ -1268,7 +1269,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			// redirected through this endpoint: a 302 to crystal.url would turn the
 			// first-party content URL into an open redirect to an attacker-chosen
 			// origin (CWE-601). Renderers always use crystal.url directly.
-			if (doc.attachmentLinked === true) return fail(404, 'Attachment not found');
+			if (doc.attachmentLinked === true) return allowLinkedCopy ? { ok: true, doc } : fail(404, 'Attachment not found');
 
 			const s3 = dependencies.getS3();
 			if (!doc.objectVersionId) {
@@ -1318,7 +1319,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 
 	const copy = (viewer: AttachmentViewer, id: unknown, signal?: AbortSignal) => copyStoredAttachment({
 		canCopy: dependencies.canCopyFiles,
-		read: readableStoredAttachment, start, complete, remove,
+		read: (viewer, id) => readableStoredAttachment(viewer, id, true), start, complete, remove,
+		readyDraftTtlMs: ATTACHMENT_READY_DRAFT_TTL_MS,
 		store: dependencies.store, getS3: dependencies.getS3,
 		plan: attachmentPartPlan, uuid: dependencies.uuid, now: dependencies.now
 	}, viewer, id, signal);

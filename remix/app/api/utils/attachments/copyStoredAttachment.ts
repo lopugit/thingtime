@@ -2,6 +2,8 @@ import type { AttachmentResult } from './attachments';
 import type { AttachmentAccessViewer } from './attachmentAccess';
 import type { AttachmentDoc, AttachmentStore } from './attachmentStore';
 import type { AttachmentS3 } from './privateS3';
+import { isDeepStrictEqual } from 'node:util';
+import { toAttachmentPublicMetadata } from './attachmentCore';
 
 type CopyDependencies = {
 	canCopy: (ownerId: string) => Promise<boolean>;
@@ -9,7 +11,8 @@ type CopyDependencies = {
 	start: (ownerId: string, input: unknown) => Promise<AttachmentResult<{ upload: Record<string, unknown> }>>;
 	complete: (ownerId: string, input: unknown) => Promise<AttachmentResult<{ attachment: Record<string, unknown> }>>;
 	remove: (ownerId: string, input: unknown) => Promise<AttachmentResult<{ deferred: boolean; retryAt?: string }>>;
-	store: Pick<AttachmentStore, 'getOwned' | 'markPartsIssued'>;
+	store: Pick<AttachmentStore, 'getOwned' | 'markPartsIssued' | 'insertLinkedReady'>;
+	readyDraftTtlMs: number;
 	getS3: () => AttachmentS3;
 	plan: (bytes: number) => { partCount: number; partSizeBytes: number };
 	uuid: () => string;
@@ -41,17 +44,35 @@ export const copyStoredAttachment = async (
 		const source = initial.doc;
 		// Purpose-specific attachments cannot be replayed onto a general app.
 		// An admin review permission also must not republish blocked bytes.
-		if (!source.objectVersionId || source.objectVersionId === 'null' ||
-			(source.attachmentPurpose && source.attachmentPurpose !== 'post') || source.moderation?.status === 'blocked' || source.moderation?.status === 'pending') return missing();
+		if ((source.attachmentPurpose && source.attachmentPurpose !== 'post') || source.moderation?.status === 'blocked' || source.moderation?.status === 'pending') return missing();
+		const linked = source.attachmentLinked === true;
+		if (!linked && (!source.objectVersionId || source.objectVersionId === 'null')) return missing();
+		// A linked copy preserves a URL, not its bytes. It cannot re-moderate a
+		// flagged external object, so never turn that flag into a skipped verdict.
+		if (linked && (source.objectSizeBytes !== 0 || source.moderation?.status === 'nsfw')) return missing();
 		const stillReadable = async () => {
 			if (abort.signal.aborted) throw new Error('Copy timed out');
 			if (!await deps.canCopy(viewer.id)) throw new Error('Copy permission changed');
 			const fresh = await deps.read(viewer, source.shareId);
 			if (!fresh.ok || fresh.doc.ownerId !== source.ownerId || fresh.doc.objectKey !== source.objectKey ||
 				fresh.doc.objectVersionId !== source.objectVersionId || fresh.doc.objectSizeBytes !== source.objectSizeBytes ||
+				(fresh.doc.attachmentLinked === true) !== linked ||
+				(linked && (!isDeepStrictEqual(fresh.doc.crystal, source.crystal) || fresh.doc.moderation?.status === 'nsfw')) ||
 				(fresh.doc.attachmentPurpose && fresh.doc.attachmentPurpose !== 'post') ||
 				fresh.doc.moderation?.status === 'blocked' || fresh.doc.moderation?.status === 'pending') throw new Error('Copy source changed');
 		};
+		if (linked) {
+			const metadata = toAttachmentPublicMetadata(source.shareId, source.crystal);
+			if (!metadata?.url) return missing();
+			const { id: _id, nsfw: _nsfw, pending: _pending, ...crystal } = metadata;
+			await stillReadable();
+			cleanupId = deps.uuid();
+			const copy = await deps.store.insertLinkedReady({ id: cleanupId, ownerId: viewer.id, crystal,
+				purpose: 'post', expiresAt: new Date(deps.now().getTime() + deps.readyDraftTtlMs) });
+			if (copy.shareId !== cleanupId || copy.ownerId !== viewer.id || copy.targetId || copy.attachmentLinked !== true) throw new Error('Copy is unavailable');
+			await stillReadable();
+			return { ok: true, id: cleanupId, attachment: { ...crystal, id: cleanupId } };
+		}
 		cleanupId = deps.uuid();
 		const started = await deps.start(viewer.id, { requestId: cleanupId, filename: source.crystal.name, contentType: source.crystal.contentType, sizeBytes: source.objectSizeBytes, purpose: 'post' });
 		if (!started.ok) throw started;

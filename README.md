@@ -1486,7 +1486,7 @@ credentials are needed. It accepts an authorized attachment ID, never an
 external URL, reserves the recipient's quota before copying, and sends copied
 bytes through normal type detection and moderation. A timed-out/failed copy
 remains billed until normal cleanup confirms the object is gone. `/things/fork`
-uses this path with capability `api.things-fork` 1.3.2, retargets authored
+uses this path with capability `api.things-fork` 1.3.3, retargets authored
 HTML/CSS and stored URL or exact attachment-ID arguments (including defaults,
 lists, matching template branch selectors and page overrides), and binds new files to copied Things. It
 rechecks source sharing before and after writes and reports deferred cleanup.
@@ -1494,6 +1494,10 @@ Bound post-purpose file galleries are discovered in one bounded query and keep
 their copied home target and order, including on post/data Things. A file also
 embedded in a page is copied once. Unsupported gallery files fail the copy;
 recording, message and profile-purpose files are not included by this path.
+Linked galleries receive new private quota-accounted link records, preserving
+validated URLs and annotations without fetching external bytes. Source changes
+or revocation trigger cleanup; flagged links cannot be copied into an unflagged
+record. The content endpoint still never redirects to an external URL.
 File copies require the recipient's normal post-purpose upload approval and
 recheck it during copying; the internal service does not bypass that gate.
 File IDs assembled from multiple partial strings fail before copying;
