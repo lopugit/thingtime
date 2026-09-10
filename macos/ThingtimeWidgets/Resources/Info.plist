@@ -15,16 +15,26 @@
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundlePackageType</key>
-	<string>XPC!</string>
+	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>$(MARKETING_VERSION)</string>
+	<string>1.0</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>thingtime-widgets</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
-	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>NSExtension</key>
-	<dict>
-		<key>NSExtensionPointIdentifier</key>
-		<string>com.apple.widgetkit-extension</string>
-	</dict>
+	<string>1</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Thingtime uses the microphone for Lopu voice and transcription.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Thingtime transcribes your speech for Lopu.</string>
+	<key>ThingtimeWebURL</key>
+	<string>$(THINGTIME_WEB_URL)</string>
 	<key>ThingtimeWidgetGroup</key>
 	<string>$(THINGTIME_WIDGET_GROUP)</string>
 </dict>

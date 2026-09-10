@@ -1,8 +1,12 @@
+#if os(iOS)
 import ActivityKit
+#endif
 import AVFoundation
 import Foundation
 import Speech
+#if os(iOS)
 import UIKit
+#endif
 
 @MainActor
 final class LopuVoiceSessionController: NSObject, AVSpeechSynthesizerDelegate {
@@ -31,7 +35,9 @@ final class LopuVoiceSessionController: NSObject, AVSpeechSynthesizerDelegate {
     private var baseURL: URL?
     private var cookieHeader = ""
     private var history: [[String: String]] = []
+#if os(iOS)
     private var liveActivity: Activity<LopuVoiceActivityAttributes>?
+#endif
     private var restartingRecognition = false
     private var active = false
     private var realtimeSocket: URLSessionWebSocketTask?
@@ -81,7 +87,11 @@ final class LopuVoiceSessionController: NSObject, AVSpeechSynthesizerDelegate {
             let microphoneAllowed = await requestMicrophoneAuthorization()
             guard active, generation == token, !Task.isCancelled else { return }
             guard microphoneAllowed else {
+#if os(iOS)
                 fail("Microphone access is off. Enable it in Settings → Apps → Thingtime → Microphone.")
+#else
+                fail("Microphone access is off. Enable Thingtime Widgets in System Settings → Privacy & Security → Microphone.")
+#endif
                 return
             }
             let needsSpeechRecognition = settings.inputMode != "provider-audio" || settings.transcribeMode
@@ -101,11 +111,13 @@ final class LopuVoiceSessionController: NSObject, AVSpeechSynthesizerDelegate {
                 guard active, generation == token, !Task.isCancelled else { return }
                 sendState()
                 // Permission sheets can leave the scene briefly inactive.
+#if os(iOS)
                 for _ in 0..<20 where UIApplication.shared.applicationState != .active {
                     try await Task.sleep(for: .milliseconds(100))
                 }
                 guard active, generation == token, !Task.isCancelled else { return }
                 await startLiveActivityIfNeeded()
+#endif
             } catch {
                 guard generation == token, !Task.isCancelled else { return }
                 fail("Lopu could not start voice. Check that Speech Recognition is available for your device language, then try again.")
@@ -130,6 +142,7 @@ final class LopuVoiceSessionController: NSObject, AVSpeechSynthesizerDelegate {
         realtimeResponseId = ""
         realtimePlayer.stop()
         speechSynthesizer.stopSpeaking(at: .immediate)
+#if os(iOS)
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         // Detach the exact activity before awaiting, so stopping an old session
         // cannot end a newly started activity.
@@ -141,6 +154,7 @@ final class LopuVoiceSessionController: NSObject, AVSpeechSynthesizerDelegate {
                 await endedActivity.end(ActivityContent(state: final, staleDate: nil), dismissalPolicy: .after(.now.addingTimeInterval(30)))
             }
         }
+#endif
         if notify { sendState() }
         // Cancel recognition only after retaining the last partial result.
         // Stopping sends it once, without restarting the mic or speaking.
@@ -211,15 +225,21 @@ final class LopuVoiceSessionController: NSObject, AVSpeechSynthesizerDelegate {
     private func requestMicrophoneAuthorization() async -> Bool {
         if let microphoneAuthorization { return await microphoneAuthorization() }
         return await withCheckedContinuation { continuation in
+#if os(iOS)
             AVAudioApplication.requestRecordPermission { continuation.resume(returning: $0) }
+#else
+            AVCaptureDevice.requestAccess(for: .audio) { continuation.resume(returning: $0) }
+#endif
         }
     }
 
     private func configureAudioSession() throws {
+#if os(iOS)
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetoothHFP, .mixWithOthers])
         try? session.setPreferredSampleRate(48_000)
         try session.setActive(true, options: .notifyOthersOnDeactivation)
+#endif
     }
 
     private func startRealtimeAudio(settings: Settings) async throws {
@@ -498,10 +518,12 @@ final class LopuVoiceSessionController: NSObject, AVSpeechSynthesizerDelegate {
     }
 
     private func deliverTranscript(_ transcript: String, settings: Settings, baseURL: URL, cookie: String, token: UUID?) async {
+#if os(iOS)
         let backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Save Lopu voice turn")
         defer {
             if backgroundTask != .invalid { UIApplication.shared.endBackgroundTask(backgroundTask) }
         }
+#endif
         let assistantId = "lopu-native-\(UUID().uuidString)"
         sendToWeb?("lopu-voice-transcript", ["text": transcript, "assistantId": assistantId])
         if token != nil { await updateLiveActivity(phase: settings.transcribeMode ? "transcribing" : "thinking", text: transcript) }
@@ -572,7 +594,7 @@ final class LopuVoiceSessionController: NSObject, AVSpeechSynthesizerDelegate {
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            throw NSError(domain: "LopuVoice", code: status, userInfo: [NSLocalizedDescriptionKey: "Lopu could not save this turn (HTTP \(status)). Your audio and transcript remain in Files → On My iPhone → Thingtime → Lopu Recordings."])
+            throw NSError(domain: "LopuVoice", code: status, userInfo: [NSLocalizedDescriptionKey: "Lopu could not save this turn (HTTP \(status)). Your audio and transcript remain in Thingtime’s local Lopu Recordings folder."])
         }
         return String(decoding: data, as: UTF8.self)
             .split(separator: "\n")
@@ -589,6 +611,7 @@ final class LopuVoiceSessionController: NSObject, AVSpeechSynthesizerDelegate {
     }
 
     private func startLiveActivityIfNeeded() async {
+#if os(iOS)
         guard liveActivity == nil, let settings else { return }
         guard ActivityAuthorizationInfo().areActivitiesEnabled else {
             sendToWeb?("lopu-voice-warning", ["message": "Voice is running, but Live Activities are off. Enable them in Settings → Apps → Thingtime → Live Activities."])
@@ -601,13 +624,16 @@ final class LopuVoiceSessionController: NSObject, AVSpeechSynthesizerDelegate {
         } catch {
             sendToWeb?("lopu-voice-warning", ["message": "Voice is running, but iOS could not show its Live Activity. Keep Thingtime open when starting voice and check Settings → Apps → Thingtime → Live Activities."])
         }
+#endif
     }
 
     private func updateLiveActivity(phase: String, text: String) async {
+#if os(iOS)
         guard let liveActivity, let settings else { return }
         let clipped = String(text.prefix(180))
         let state = LopuVoiceActivityAttributes.ContentState(phase: phase, text: clipped, transcribeMode: settings.transcribeMode)
         await liveActivity.update(ActivityContent(state: state, staleDate: Date().addingTimeInterval(120)))
+#endif
     }
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {

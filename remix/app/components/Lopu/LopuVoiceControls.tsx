@@ -2,7 +2,7 @@ import React from 'react';
 import { Box, Center, Flex, Input, Popover, PopoverBody, PopoverContent, PopoverTrigger, Select, Switch, Text } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
 import { ArrowUp, AudioLines, Loader2, Mic, Settings2, Square } from 'lucide-react';
-import { Link as RouterLink } from 'react-router';
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router';
 
 import { useApi } from '~/hooks/useApi';
 import { getNativeBridge, nativeBridgeMessageEvent, nativeBridgeReadyEvent, supportsNativeLopuVoice } from '~/utils/nativeBridge';
@@ -1137,8 +1137,13 @@ export type LopuVoiceSurfaceProps = {
 // local transcript rows slotted into its list, and the deck. Each final utterance is a normal chat turn
 // with the chat's own model/provider settings.
 export const LopuVoiceSurface = ({ chatId, onChatChange, compact = false, onOpenFull, onPhaseChange }: LopuVoiceSurfaceProps) => {
+    const widgetLocation = useLocation();
+    const widgetNavigate = useNavigate();
+    const widgetRequest = new URLSearchParams(widgetLocation.search).get('widget');
+    const widgetStarted = React.useRef<string | null>(null);
+
 	const chat = useLopuChat({ chatId });
-	const { settings, setProviderId } = useLopuSettings();
+	const { settings, setProviderId, setTranscribe } = useLopuSettings();
 	const sendRef = React.useRef(chat.send);
 	sendRef.current = chat.send;
 	const setChatSettingsRef = React.useRef(chat.setSettings);
@@ -1191,6 +1196,18 @@ export const LopuVoiceSurface = ({ chatId, onChatChange, compact = false, onOpen
 	// the mic / typed path stay disabled; a session that was running when the
 	// lock landed ends
 	const locked = !!chat.viewer.id && chat.account.access.locked;
+
+    const startWidgetVoice = voice.start;
+    React.useEffect(() => {
+        if (compact || !chat.viewer.id || locked || !['transcribe', 'voice'].includes(widgetRequest ?? '')) return;
+        if (settings.transcribe !== (widgetRequest === 'transcribe')) { setTranscribe(widgetRequest === 'transcribe'); return; }
+        if (widgetStarted.current === widgetLocation.key) return;
+        widgetStarted.current = widgetLocation.key;
+        const params = new URLSearchParams(widgetLocation.search);
+        params.delete('widget');
+        widgetNavigate({ pathname: widgetLocation.pathname, search: params.toString() }, { replace: true });
+        startWidgetVoice();
+    }, [compact, chat.viewer.id, locked, widgetRequest, settings.transcribe, setTranscribe, widgetLocation, widgetNavigate, startWidgetVoice]);
 	const stopRef = React.useRef(voice.stop);
 	stopRef.current = voice.stop;
 	React.useEffect(() => {

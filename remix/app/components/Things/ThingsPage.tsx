@@ -192,6 +192,16 @@ export const ThingsPage = () => {
   const [menuThing, setMenuThing] = useState<ThingsThing | null>(null);
 
   const [newFolderOpen, setNewFolderOpen] = useState(false);
+  useEffect(() => {
+    const action = searchParams.get('widget');
+    if (!user || (action !== 'search' && action !== 'newFolder')) return;
+    if (action === 'newFolder') setNewFolderOpen(true);
+    else requestAnimationFrame(() => document.getElementById('thingtime-things-search')?.focus());
+    const next = new URLSearchParams(searchParams);
+    next.delete('widget');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, user]);
+
   const [renameThing, setRenameThing] = useState<ThingsThing | null>(null);
   const [moveOpen, setMoveOpen] = useState(false);
   const [shareThings, setShareThings] = useState<ThingsThing[]>([]);
@@ -1329,7 +1339,8 @@ export const ThingsPage = () => {
               height="100%"
               onChange={(event) => setQ(event.target.value)}
               padding={0}
-							placeholder="Search all your things and computers…"
+							id="thingtime-things-search"
+                            placeholder="Search all your things and computers…"
               value={q}
               variant="unstyled"
             />

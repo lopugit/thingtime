@@ -6,6 +6,7 @@ struct WebView: UIViewRepresentable {
     private static let nativeMessageHandlerName = "thingtimeNative"
 
     let url: URL
+    @Binding var widgetPath: String?
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -39,7 +40,15 @@ struct WebView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
+        if let path = widgetPath, let target = URL(string: path, relativeTo: url)?.absoluteURL {
+            context.coordinator.cancelVoice()
+            context.coordinator.loadedRootURL = url
+            webView.load(URLRequest(url: target))
+            DispatchQueue.main.async { widgetPath = nil }
+            return
+        }
         guard context.coordinator.loadedRootURL != url else { return }
+        WidgetStore.clear()
 
         context.coordinator.cancelVoice()
         context.coordinator.suspendRecordingUploads()
@@ -47,64 +56,7 @@ struct WebView: UIViewRepresentable {
         webView.load(URLRequest(url: url))
     }
 
-    static let bridgeUserScript = WKUserScript(
-        source: """
-        (() => {
-          if (window.thingtimeNativeBridge) {
-            return;
-          }
-
-          document.documentElement?.classList.add('thingtime-native-webview');
-          const markNativeBody = () => {
-            document.body?.classList.add('thingtime-native-webview-body');
-          };
-          if (document.body) {
-            markNativeBody();
-          } else {
-            document.addEventListener('DOMContentLoaded', markNativeBody, { once: true });
-          }
-
-          const listeners = new Set();
-          const dispatchNativeMessage = (message) => {
-            const event = new CustomEvent('thingtime:native-message', { detail: message });
-            window.dispatchEvent(event);
-            listeners.forEach((listener) => {
-              try {
-                listener(message);
-              } catch (error) {
-                console.error('[ThingtimeNativeBridge] listener failed', error);
-              }
-            });
-          };
-
-          window.thingtimeNativeBridge = {
-            version: '1.2.0',
-            lopuVoiceVersion: '1.1.0',
-            platform: 'ios',
-            isNativeWebView: true,
-            postMessage(message) {
-              window.webkit.messageHandlers.thingtimeNative.postMessage(message);
-            },
-            receiveMessageFromNative(message) {
-              dispatchNativeMessage(message);
-            },
-            onMessage(listener) {
-              listeners.add(listener);
-              return () => listeners.delete(listener);
-            },
-            offMessage(listener) {
-              listeners.delete(listener);
-            }
-          };
-
-          window.dispatchEvent(new CustomEvent('thingtime:native-bridge-ready', {
-            detail: { platform: 'ios', version: '1.0.0' }
-          }));
-        })();
-        """,
-        injectionTime: .atDocumentStart,
-        forMainFrameOnly: true
-    )
+    static let bridgeUserScript = ThingtimeBridgeScript.script
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         weak var webView: WKWebView?
@@ -145,6 +97,17 @@ struct WebView: UIViewRepresentable {
             guard message.name == WebView.nativeMessageHandlerName else { return }
             guard let body = message.body as? [String: Any], let type = body["type"] as? String else {
                 sendToWeb(type: "native-ack", payload: ["received": jsonCompatibleValue(message.body)])
+                return
+            }
+            if type.hasPrefix("widget-") {
+                guard message.frameInfo.isMainFrame, let current = webView?.url, let root = loadedRootURL,
+                      LopuVoiceContract.sameOrigin(current, root) else { return }
+                if type == "widget-state-request" {
+                    sendToWeb(type: "widget-state", payload: ["enabled": WidgetStore.enabled])
+                } else if type == "widget-clear" { WidgetStore.clear() }
+                else if type == "widget-snapshot", let payload = body["payload"] as? [String: Any] {
+                    WidgetStore.save(payload, origin: root.absoluteString)
+                }
                 return
             }
             switch type {

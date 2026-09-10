@@ -1,7 +1,9 @@
 import AVFoundation
 import CryptoKit
 import Foundation
+#if os(iOS)
 import UIKit
+#endif
 
 private final class LopuUploadRedirectPolicy: NSObject, URLSessionTaskDelegate {
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
@@ -99,11 +101,15 @@ final class LopuRecordingUploads {
         let id = UUID(); workerID = id
         let cookie = self.cookie
         worker = Task {
+#if os(iOS)
             let background = UIApplication.shared.beginBackgroundTask(withName: "Save Lopu recordings") { [weak self] in
                 Task { @MainActor in if self?.workerID == id { self?.worker?.cancel() } }
             }
+#endif
             defer {
+#if os(iOS)
                 if background != .invalid { UIApplication.shared.endBackgroundTask(background) }
+#endif
                 worker = nil
                 if self.context != context || self.cookie != cookie { pump() }
             }
