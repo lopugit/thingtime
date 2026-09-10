@@ -55,6 +55,14 @@
   Combining media sharing with recording Things must retain the newer contract
   on both manifests and keep standalone recordings owner-private by default.
 
+- Shared page resolve recovery: return a 503, 429, network failure or invalid
+  JSON from the page resolver. Show an explicit Retry rather than "not here";
+  Retry must load the complete shared composition without signing in. A failed
+  same-viewer refresh keeps its last loaded page; a 401/403/404 clears it.
+  Switching viewer, target or hidden-link key must clear the old page and
+  pending component results before the replacement response arrives. Check
+  cold failure and recovery at desktop and 390px widths.
+
 - After merging notification families, verify recording reminders and subspace
   moderation retain separate categories and all preference switches. Recording
   reminders and mod-queue email stay opt-in. Confirm both capability manifests
