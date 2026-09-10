@@ -5748,14 +5748,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-content',
-		contractVersion: '1.4.0',
-		featureVersion: '1.4.0',
+		contractVersion: '1.5.0',
+		featureVersion: '1.5.0',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
 		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
 		detail:
 			'Owners may read live unattached drafts. Bound content is purpose-authorized against the exact target: post/comment ACL inheritance, active or pending chat membership, the current public profile slot, or the current personal/community emoji reference. The bucket never becomes public. ' +
+			'Stored component defaults and savedArgs are resolved in media rendering positions using the canonical bounded template resolver. Unused argument metadata, unresolved runtime tokens and truncated values are not media grants. Per-page block argument overrides are not yet part of this discovery contract. ' +
 			'Optional sharedRoot authorizes post-purpose media attached to the root or a contained same-author Thing, or explicitly embedded by a stored component/schema/native media block. Authored rich/raw HTML media attributes and inline styles are discovered with the renderer tag, depth and node policy; dropped containers, text and metadata are not grants. Literal CSS url/image-set references (including escaped function identifiers) in render styles, responsive/pseudo styles, block CSS and page backgrounds are included. Same-author references inherit the freshly checked root audience; foreign media still needs independent access. Unrelated ids, external URLs, drafts, message/profile/emoji objects, retired keys and revoked groups do not gain access through this mode. Ready state, moderation, exact object version and home-storage guards remain enforced before every redirect, byte read or cache receipt. ' +
 			'Hidden post/page audiences accept the root key query parameter and custom audiences use current group/friend membership. Every content or cache-validation request rechecks the root. Only magic-byte-verified inline-safe types may render inline: AVIF/GIF/JPEG/PNG/WebP images and MP4/WebM/QuickTime/M4V/Ogg/3GPP/3GPP2/Matroska video. Add download=1 to force attachment/octet-stream for every type.',
 		auth: {
@@ -8789,8 +8790,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // then older first) and the response echoes commentSort; an unknown value
     // is a 400. Only this read grew — the shared projection is unchanged, so
     // things-comment / -feed / -user stay put (S7, additive)
-    featureVersion: '1.7.2',
-    contractVersion: '1.6.2',
+    featureVersion: '1.7.3',
+    contractVersion: '1.6.3',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
@@ -10633,8 +10634,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-update',
-    featureVersion: '1.2.1',
-    contractVersion: '1.0.1',
+    // Stored component argument changes use the same media-addition guard as render edits.
+    featureVersion: '1.2.2',
+    contractVersion: '1.0.2',
     group: 'things',
     title: 'Update thing',
     endpoint: '/api/v1/things/update',

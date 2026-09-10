@@ -147,10 +147,15 @@ test('shared page audience includes its author components, never a foreign priva
 			assert.match(denied.data.error, /Fork the app/);
 		}
 		assert.equal((await request(`/api/v1/things?id=${sourceData.id}`, 'GET', undefined, owner)).data.thing.crystal.value, 'unchanged');
-		assert.equal((await request('/api/v1/things', 'PATCH', { id: component.id, crystal: { render: { tag: 'div', children: [
+		assert.equal((await request('/api/v1/things', 'PATCH', { id: component.id, crystal: {
+			args: [{ name: 'picture', type: 'string', default: mediaSource('arg-default') }, { name: 'background', type: 'string', default: mediaSource('arg-background') }],
+			savedArgs: { picture: mediaSource('arg-saved') },
+			render: { tag: 'div', children: [
 			{ tag: 'button', ttAction: sharedAction.id, children: ['Draw'] }, { tag: 'p', children: ['{last.result}'] },
 			...(process.env.TT_SHARED_PLAYWRIGHT_PATH ? [
 				{ tag: 'img', props: { src: '/api/v1/attachments/content?id=sharing-browser-transport', alt: 'Shared media transport' } },
+				{ tag: 'img', props: { src: '{picture}', alt: 'Stored argument media' } },
+				{ tag: 'div', props: { style: { backgroundImage: 'url("{background}")', height: 20 } }, children: ['Argument background'] },
 				{ tag: 'div', props: { style: { backgroundImage: `u\\72 l(${mediaSource('html-css')})`, height: 20 } }, children: ['HTML background'] },
 				{ tag: 'img', props: { src: 'https://example.invalid/sharing-browser-transport.png', alt: 'External media transport' } }
 			] : [])
@@ -274,7 +279,7 @@ test('shared page audience includes its author components, never a foreign priva
 					});
 					assert.ok(mediaReads > 0);
 					await tab.getByTestId('shared-chakra-css').hover();
-					for (const name of ['html-css', 'chakra-css', 'page-css', 'block-css', 'hover-css', 'raw-html-css', 'raw-html-image', 'rich-html-image']) {
+					for (const name of ['arg-saved', 'arg-background', 'html-css', 'chakra-css', 'page-css', 'block-css', 'hover-css', 'raw-html-css', 'raw-html-image', 'rich-html-image']) {
 						if (!cssReads.has(`sharing-browser-${name}`)) await tab.waitForResponse((response: any) => new URL(response.url()).searchParams.get('id') === `sharing-browser-${name}`, { timeout: 15000 });
 						assert.ok(cssReads.has(`sharing-browser-${name}`), name);
 					}
@@ -435,6 +440,15 @@ test('shared page audience includes its author components, never a foreign priva
 		for (const ref of [untouched.id, `${key}-unrelated`]) {
 			const refused = await request('/api/v1/things', 'PATCH', { id: page.id, crystal: { blocks: [{ id: 'stolen', type: 'component', component: ref }] } }, stranger);
 			assert.equal(refused.response.status, 403, 'A shared writer must not publish an unrelated private dependency');
+		}
+		assert.equal((await request('/api/v1/things', 'PATCH', { id: component.id, acl: ['tt:custom', `tt:group/${groupId}/write`] }, owner)).response.status, 200);
+		assert.equal((await request('/api/v1/things', 'PATCH', { id: component.id, crystal: { name: 'Keep the authored media' } }, stranger)).response.status, 200);
+		for (const crystal of [
+			{ savedArgs: { picture: mediaSource('guessed-saved') } },
+			{ args: [{ name: 'picture', type: 'string', default: mediaSource('guessed-default') }], savedArgs: {} }
+		]) {
+			const refused = await request('/api/v1/things', 'PATCH', { id: component.id, crystal }, stranger);
+			assert.equal(refused.response.status, 403, 'A non-owner cannot add private media through stored component arguments');
 		}
 		assert.equal((await request('/api/v1/groups', 'PATCH', { id: groupId, memberIds: [] }, owner)).response.status, 200);
 		assert.equal((await request(url, 'GET', undefined, stranger)).response.status, 404);
