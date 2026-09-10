@@ -18,6 +18,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Follow stored conditional media-property alternatives through shared root
+  inheritance, including argument-backed src/poster/href and style records.
+  Exclude condition metadata and bound discovery across all property visits;
+  shared writers cannot smuggle unreadable uploads into inactive branches.
+  Advance content capability to 1.6.1 and patch both Things write contracts.
+  — Codex (AI), 2026-09-10
+
 - Prepare the focused main promotion of shared HTML/contained media, stored
   component arguments and page-block overrides from PRs #730, #733 and #734.
   Preserve main's prior sharing/startup release and APNs/recording fixes;
