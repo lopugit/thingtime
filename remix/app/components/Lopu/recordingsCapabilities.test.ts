@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { supportsRecordingAutomation } from './recordingsCapabilities';
+import { supportsRecordingAutomation, supportsPersonalRecordingSettings } from './recordingsCapabilities';
 import { apiEndpointDocs, createApiCapabilitiesManifest } from '~/docs/apiDocs';
 import { thingtimeCapabilityManifest } from '~/api/utils/capabilities/thingtimeCapabilities';
 
@@ -16,11 +16,10 @@ test('recording clients negotiate only with their selected origin and compatible
 	assert.equal(supportsRecordingAutomation({ origin, features: { 'api.lopu-recordings': '1.0.0' } }, 'https://another.test'), false);
 });
 
-test('both registered recording endpoints are explicitly versioned in both manifests', () => {
+test('all registered recording endpoints are explicitly versioned in both manifests', () => {
 	const manifest = thingtimeCapabilityManifest(origin);
 	assert.equal(supportsRecordingAutomation(manifest, origin), true);
-	for (const id of ['lopu-recordings', 'lopu-recordings-run']) {
-		const version = '1.3.0';
+	for (const [id, version] of [['lopu-recordings', '1.5.0'], ['lopu-recordings-run', '1.5.0'], ['lopu-recordings-personal', '1.1.0']]) {
 		const doc = apiEndpointDocs.find((entry) => entry.id === id);
 		assert.equal(doc?.contractVersion, version);
 		assert.equal(doc?.featureVersion, version);
@@ -28,4 +27,13 @@ test('both registered recording endpoints are explicitly versioned in both manif
 		assert.equal(manifest.features[`api.${id}`].version, version);
 		assert.ok(manifest.operations.some((entry) => entry.feature === `api.${id}` && entry.methods.includes('POST') && entry.methods.includes('GET')));
 	}
+});
+
+test('personal selection requires both the settings and worker contracts on this origin', () => {
+	const manifest = thingtimeCapabilityManifest(origin);
+	assert.equal(supportsPersonalRecordingSettings(manifest, origin), true);
+	assert.equal(supportsPersonalRecordingSettings(manifest, 'https://elsewhere.test'), false);
+	for (const [id, version] of [['api.lopu-recordings', '1.3.0'], ['api.lopu-recordings', '2.0.0'], ['api.lopu-recordings-personal', '0.9.0'], ['api.lopu-recordings-personal', '2.0.0']])
+		assert.equal(supportsPersonalRecordingSettings({ ...manifest, features: { ...manifest.features, [id]: { version } } }, origin), false);
+	assert.equal(supportsPersonalRecordingSettings({ origin, features: { 'api.lopu-recordings': '1.4.0' } }, origin), false);
 });
