@@ -18,6 +18,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Verify real macOS Keychain recording state storage and add explicit,
+  confirmed recovery cleanup for expired unfinished pairing; completed local
+  pairings remain protected and server revocation stays separate. See
+  [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
 - Make identical in-flight recording completion retries recoverable without
   repeating inference or reporting a lease conflict; publish personal broker
   1.0.1 and reconcile the latest develop sync. See

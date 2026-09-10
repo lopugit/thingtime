@@ -26,7 +26,9 @@ const security = (args: string[], input?: string): Promise<{ code: number; stdou
   child.stdin.end(input);
 });
 
-export const createPersonalRecordingKeychain = (origin: string): PersonalPairingStore => {
+export const createPersonalRecordingKeychain = (origin: string): PersonalPairingStore & {
+  discardPending(expected: PersonalPairingState): Promise<void>;
+} => {
   if (process.platform !== 'darwin') throw new Error('This launcher currently requires macOS Keychain.');
   const account = createHash('sha256').update(origin).digest('hex');
   const read = async () => {
@@ -47,5 +49,16 @@ export const createPersonalRecordingKeychain = (origin: string): PersonalPairing
     const result = await security(['-i'], `add-generic-password -U -s ${service} -a ${account} -w ${encoded}\n`);
     if (result.code !== 0 || JSON.stringify(await read()) !== JSON.stringify(value))
       throw new Error('Could not verify the recording worker Keychain write.');
+  }, async discardPending(expected) {
+    // The CLI holds its per-origin lock. Never erase a completed pairing or
+    // replace a changed item; this operation abandons local recovery only.
+    if (expected.origin !== origin || expected.deviceId || !expected.pending)
+      throw new Error('Only an unfinished local pairing can be discarded.');
+    const current = await read();
+    if (!current || JSON.stringify(current) !== JSON.stringify(expected))
+      throw new Error('The local pairing changed; it was not removed.');
+    const result = await security(['delete-generic-password', '-s', service, '-a', account]);
+    if (result.code !== 0 || await read() !== null)
+      throw new Error('Could not verify removal of the unfinished local pairing.');
   } };
 };

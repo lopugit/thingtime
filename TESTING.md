@@ -6059,6 +6059,12 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
 
 Personal recording worker transport and HTTP integration:
 
+- [ ] Expired unfinished pairing: `resume` first; do not erase recovery after
+      an ambiguous network error. `forget-pending` without its explicit
+      confirmation must stop before accessing Keychain. With confirmation it
+      refuses completed/changed state, checks deletion, and explains that no
+      server device was revoked. A fresh challenge can then be paired.
+
 - [ ] Hold an accepted completion open, then retry its exact body: receive
       private HTTP 503/Retry-After rather than an authentication/lease conflict.
       Let the first save finish and retry again: same receipt, one set of

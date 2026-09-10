@@ -1843,7 +1843,8 @@ these variables. It does not pair a device or enable account processing.
 `complete` operations for the forthcoming personally paired recording worker.
 The paired-device broker is registered at `/api/v1/lopu/recordings/personal`;
 the interactive Mac launcher and recording-settings setup panel are available.
-Real Keychain/audio and end-to-end Watch acceptance are still pending.
+Synthetic audio and real Keychain storage have been verified. Real paired-account
+audio delivery and end-to-end Watch acceptance are still pending.
 No server, public listener, background service or automatic recording processing
 is started by importing this module.
 
@@ -1911,6 +1912,15 @@ npm run recordings:worker -- pair --origin https://your-thingtime.example
 npm run recordings:worker -- status --origin https://your-thingtime.example
 npm run recordings:worker -- run --origin https://your-thingtime.example --once
 ```
+
+If pairing was interrupted, try `resume` first. If an unfinished challenge has
+expired and cannot be resumed, inspect `/devices` and revoke any computer it
+already created before abandoning local recovery. The explicit command
+`npm run recordings:worker -- forget-pending --origin https://your-thingtime.example --confirm-abandon-recovery`
+permanently removes only the unfinished local Keychain entry, checks the exact
+stored state, and refuses a completed pairing. It does **not** revoke a server
+device. Create a fresh one-time secret and run `pair` afterward. No automatic
+cleanup occurs after an ambiguous network failure.
 
 Pairing requires a fresh one-time challenge from the signed-in account's
 `POST /api/v1/devices/pairing` operation. In `/lopu/recordings`, open **Pair a Mac

@@ -81,6 +81,20 @@ setup interactions and true phone-width visual acceptance remain unproven.
 
 ## Verification
 
+### Real Keychain and unfinished-pairing recovery — 2026-09-10
+
+The real macOS Keychain adapter passed write/read verification with a randomly
+named synthetic origin and non-authorizing test state. The test-created item
+was removed and absence verified; existing account items were not touched.
+The new `forget-pending --confirm-abandon-recovery` command holds the per-origin
+lock, checks exact stored state and refuses completed pairings. It explicitly
+warns that local recovery is permanently discarded without revoking any server
+device, and directs users to resume first or revoke an already-created device.
+Five Keychain tests cover missing/denied/corrupt state, verified writes and
+pending removal, changed origins/state, completed-state protection and failed
+deletion. The pending write/read/discard path also passed on the real Keychain
+with a separate synthetic item that was removed afterward.
+
 ### Completion retry correction and develop sync — 2026-09-10
 
 Reconciled develop `f6ac8ecda` (main synchronization), preserving both sets of

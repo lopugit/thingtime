@@ -13,9 +13,14 @@ const help = `Thingtime personal recording worker (macOS)
   configure --origin https://thingtime.com --claude /absolute/claude --whisper /absolute/whisper-cli --ffmpeg /absolute/ffmpeg --model /absolute/ggml-model.bin
   pair      --origin https://thingtime.com   (paste the one-time secret into the hidden prompt)
   resume    --origin https://thingtime.com   (recover an interrupted pairing)
+  forget-pending --origin https://thingtime.com --confirm-abandon-recovery
   status    --origin https://thingtime.com   (local pairing/config only, not provider health)
   run       --origin https://thingtime.com [--once]
 Pairing does not opt in. Select this computer and enable processing in /lopu/recordings.
+Try resume first. Forget-pending permanently removes only unfinished local pairing
+recovery, never a completed local pairing. It does not revoke any server device.
+If an earlier claim created a computer in /devices, revoke that computer there
+before abandoning recovery. Then create a fresh one-time secret and pair again.
 Claude Code uses its own native sign-in. Do not paste Claude/API credentials here.`;
 
 const hiddenSecret = async () => {
@@ -51,16 +56,21 @@ const hiddenSecret = async () => {
 const main = async () => {
   const [command, ...args] = process.argv.slice(2);
   if (!command || command === '--help' || command === 'help') { console.log(help); return; }
-  if (!['configure', 'pair', 'resume', 'status', 'run'].includes(command)) throw new Error('Unknown command. Use --help.');
+  if (!['configure', 'pair', 'resume', 'forget-pending', 'status', 'run'].includes(command)) throw new Error('Unknown command. Use --help.');
   const flags: Record<string, string> = {};
   for (let index = 0; index < args.length; index++) {
     const key = args[index];
+    if (key === '--confirm-abandon-recovery' && command === 'forget-pending' && !flags.confirm) { flags.confirm = 'true'; continue; }
     if (key === '--once' && command === 'run') { flags.once = 'true'; continue; }
     if (!['--origin', ...(command === 'configure' ? ['--claude', '--whisper', '--ffmpeg', '--model'] : [])].includes(key) ||
         !args[index + 1] || args[index + 1].startsWith('--') || flags[key.slice(2)]) throw new Error('Invalid options. Use --help.');
     flags[key.slice(2)] = args[++index];
   }
   const origin = personalRecordingOrigin(flags.origin || '');
+  if (command === 'forget-pending' && flags.confirm !== 'true') {
+    console.error('Try resume first. Read --help before using --confirm-abandon-recovery; this permanently removes unfinished local recovery and does not revoke a server device.');
+    process.exitCode = 1; return;
+  }
   const account = createHash('sha256').update(origin).digest('hex');
   const directory = join(homedir(), 'Library', 'Application Support', 'Thingtime', 'recording-worker');
   await mkdir(directory, { recursive: true, mode: 0o700 });
@@ -84,6 +94,15 @@ const main = async () => {
       try { await file.writeFile(JSON.stringify(config)); } finally { await file.close(); }
       await rename(temporary, configPath);
       console.log('Runtime paths saved locally. No credentials were saved in the config.');
+    } else if (command === 'forget-pending') {
+      const existing = await store.read();
+      if (!existing) { console.log('No unfinished local pairing exists.'); return; }
+      if (existing.deviceId || !existing.pending) {
+        console.error('This is a completed pairing. It was not removed. Manage or revoke the computer in Thingtime Devices.');
+        process.exitCode = 1; return;
+      }
+      await store.discardPending(existing);
+      console.log('Removed unfinished local pairing recovery. No server device was revoked. Create a fresh one-time secret before pairing again.');
     } else if (command === 'pair' || command === 'resume') {
       const existing = await store.read();
       const pairingSecret = command === 'pair' && !existing ? await hiddenSecret() : undefined;
