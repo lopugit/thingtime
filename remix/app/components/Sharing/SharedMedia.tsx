@@ -12,7 +12,7 @@ export const SharedMediaProvider = ({ linkKey, sharedRoot, children }: { linkKey
 		if (!linkKey && !sharedRoot) return;
 		let cancelled = false;
 		setFailure(undefined);
-		void requireThingtimeCapability('api.attachment-content', sharedRoot ? '1.2.0' : '1.1.1').then(() => {
+		void requireThingtimeCapability('api.attachment-content', sharedRoot ? '1.6.2' : '1.1.1').then(() => {
 			if (!cancelled) setReadyKey(contextKey);
 		}).catch(() => { if (!cancelled) setFailure(contextKey); });
 		return () => { cancelled = true; };

@@ -57,7 +57,7 @@ export const action = async ({ request }: { request: Request }) => {
 				await validateRecordingConnections(user.id, patch);
 				const next = { ...await getRecordingSettings(user.id), ...patch };
 				if (next.enabled && !(await recordingConnectionStatus(user.id, next)).configured)
-					return reply({ ok: false, error: 'Select available API connections for transcription and notes/todos first.' }, 503);
+					return reply({ ok: false, error: 'Select an available paired recording device or compatible API connections first.' }, 503);
 				await setRecordingSettings(user.id, body.settings);
 			} else if (body?.op === 'retry') {
 				if (!(await getRecordingSettings(user.id)).enabled) return reply({ ok: false, error: 'Enable recording automation first.' }, 409);
