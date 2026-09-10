@@ -989,6 +989,9 @@ email whose link points at the attacker.
 - [ ] Exercise signed-out, empty, unread/read, denied-alert, long actor name, and
       two-line preview states on the smallest supported watch. Scroll top to
       bottom; no row, badge, toolbar item, or permission message clips or overlaps.
+- [ ] Regression class (2026-09-10): send a notification test and a reminder with
+      a long ID; the APNs collapse header must fit 64 bytes, preserve stable
+      coalescing, and produce an accepted provider result on registered devices.
 - [ ] Regression class (2026-09): APNs device tokens are variable-length binary
       values. Register a token longer than 32 bytes and confirm it is accepted,
       deduplicated by hash, retained only in protected secure storage, and removed
