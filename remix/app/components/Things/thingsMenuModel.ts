@@ -13,6 +13,7 @@ import type {
   ThingContextSection,
   ThingContextSubmenu
 } from '~/components/Thingtime/ContextMenu/contextMenuModel';
+import { canOfferRecordingHandoff } from '../Lopu/recordingThingHandoff';
 
 import {
   THINGS_GROUP_OPTIONS,
@@ -41,11 +42,16 @@ export type ThingsItemMenuArgs = {
   // bigger selection)
   actCount: number;
   clipboardCount: number;
+  ownerId?: string;
 };
 
-export const buildThingsItemMenu = ({ thing, actCount, clipboardCount }: ThingsItemMenuArgs): ThingContextMenuModel => {
+export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId }: ThingsItemMenuArgs): ThingContextMenuModel => {
   const folder = isFolder(thing);
   const sections: ThingContextSection[] = [];
+
+  if (actCount === 1 && canOfferRecordingHandoff(thing, ownerId)) sections.push({
+    id: 'recording', actions: [{ id: 'send-to-lopu', command: 'send-to-lopu', label: 'Send to Lopu', icon: '🦄', lucide: 'send' }]
+  });
 
   sections.push({
     id: 'open',
