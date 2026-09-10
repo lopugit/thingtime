@@ -2,6 +2,11 @@
 
 ## Unified Lopu conversations, scheduled Things and discussions
 
+- [ ] Reload a chat containing a tool that requested confirmation, then a later
+      successful confirmed call. The historical request says "Approval requested"
+      without a failure icon or renewed Confirm button; the later success stays
+      successful. Actual permission/provider failures still render as failures.
+
 - [ ] Keep a tab open across a deployment that adds a required capability.
   If a task reports an incompatible contract, Refresh task must negotiate a
   current manifest without reloading the tab or changing the account. Repeat

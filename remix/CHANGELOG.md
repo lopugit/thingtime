@@ -18,6 +18,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Show earlier Lopu confirmation requests as "Approval requested" after reload,
+  not failed executions. Historical receipts never restore approval grants or
+  claim that later actions succeeded. — Codex (AI), 2026-09-10
+
 - Verify real macOS Keychain recording state storage and add explicit,
   confirmed recovery cleanup for expired unfinished pairing; completed local
   pairings remain protected and server revocation stays separate. See
