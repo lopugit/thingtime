@@ -5,18 +5,22 @@ import { PageHeader, PageShell } from '~/components/Layout/PageShell';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from './useLopu';
 import { DEFAULT_RECORDING_SETTINGS, type RecordingSettings } from '~/api/utils/lopu/recordingsCore';
-import { supportsRecordingAutomation } from './recordingsCapabilities';
+import { supportsRecordingAutomation, supportsPersonalRecordingSettings } from './recordingsCapabilities';
 import type { RecordingConnectionChoice } from '~/api/utils/lopu/recordingsConnections';
+import type { PersonalRecordingDevice } from '~/api/utils/lopu/personalRecordingDevices';
+import { PersonalRecordingSetup } from './PersonalRecordingSetup';
 
 type RecordingData = {
 	ownerId: string;
 	settings: RecordingSettings;
-	provider: { configured: boolean; name: string; transcription: boolean; analysis: boolean; choices: RecordingConnectionChoice[] };
+	provider: { configured: boolean; name: string; transcription: boolean; analysis: boolean; choices: RecordingConnectionChoice[];
+		devices?: PersonalRecordingDevice[]; device?: PersonalRecordingDevice | null };
 	jobs: Array<{
 		id: string;
 		postId: string;
 		filename: string;
 		status: string;
+		runtimeDeviceId?: string | null;
 		handoffStatus: string | null;
 		handoffChatId: string | null;
 		error: string | null;
@@ -54,6 +58,7 @@ export function RecordingAutomationPage() {
 	const lopu = useLopu();
 	const [data, setData] = React.useState<RecordingData | null>(null);
 	const [busy, setBusy] = React.useState(false);
+	const [personalSupported, setPersonalSupported] = React.useState(false);
 	const [error, setError] = React.useState<string | null>(null);
 	const [checkedAt, setCheckedAt] = React.useState<Date | null>(null);
 	const [postId, setPostId] = React.useState('');
@@ -77,6 +82,7 @@ export function RecordingAutomationPage() {
 			const next = await jsonRequest('/api/v1/lopu/recordings');
 			if (seq !== generation.current || next.ownerId !== userId) return;
 			setData(next);
+			setPersonalSupported(supportsPersonalRecordingSettings(manifest, window.location.origin));
 			setError(null);
 			setCheckedAt(new Date());
 			if (zoneOwner.current !== userId) {
@@ -99,6 +105,7 @@ export function RecordingAutomationPage() {
 		setError(null);
 		setCheckedAt(null);
 		setBusy(false);
+		setPersonalSupported(false);
 		void load();
 		const timer = setInterval(() => {
 			if (!document.hidden) void load();
@@ -119,6 +126,8 @@ export function RecordingAutomationPage() {
 		try {
 			const manifest = await jsonRequest('/.well-known/thingtime-capabilities.json');
 			if (!supportsRecordingAutomation(manifest, window.location.origin)) throw new Error('Recording automation is not supported on this domain.');
+			if ((body as any)?.settings?.runtimeDeviceId !== undefined && !supportsPersonalRecordingSettings(manifest, window.location.origin))
+				throw new Error('Personal recording devices are not supported on this domain yet.');
 			const next = await jsonRequest('/api/v1/lopu/recordings', body);
 			if (generation.current !== seq || next.ownerId !== userId) return;
 			setData(next);
@@ -195,18 +204,42 @@ export function RecordingAutomationPage() {
 							/>
 						</Flex>
 						<Text mt={4} fontSize="sm">
-							When enabled, your recording audio and transcript are sent to your selected AI providers. If a selected connection is unavailable, the
-							next connection in that stage’s list is tried. Transcripts are posted as private comments. Generated notes and todos stay private. This
-							does not buy anything, contact anyone, or carry out the tasks.
+							{settings.runtimeDeviceId
+								? 'When enabled, recordings download to your selected personal device for local transcription. Only transcript text is sent to native Claude Code on that device. There is no automatic fallback to cloud API credentials. '
+								: 'When enabled, your recording audio and transcript are sent to your selected AI providers. If a selected connection is unavailable, the next connection in that stage’s list is tried. '}
+							Transcripts are posted as private comments. Generated notes and todos stay private. This does not buy anything, contact anyone, or carry out the tasks.
 						</Text>
 						<Text mt={2} fontSize="sm" role="status">
 							{current
 								? current.provider.configured
-									? 'Provider configured · M4A, MP3, WAV or WebM · up to 24 MiB per recording'
-									: 'Select configured connections for the enabled recording stages below.'
+									? `${settings.runtimeDeviceId ? 'Personal device paired' : 'Provider configured'} · M4A, MP3, WAV or WebM · up to 24 MiB per recording`
+									: 'Select a paired recording device or configured connections for the enabled stages.'
 								: 'Checking connection…'}
 						</Text>
-						<Box mt={5}>
+						<FormControl mt={5}>
+							<FormLabel htmlFor="recording-processor">Recording processor</FormLabel>
+							<Select id="recording-processor" value={settings.runtimeDeviceId || ''} isDisabled={busy || !current || !personalSupported}
+								onChange={(event) => void patch({ runtimeDeviceId: event.target.value || null })}>
+								<option value="">AI provider waterfall</option>
+								{settings.runtimeDeviceId && !current?.provider.devices?.some((device) => device.id === settings.runtimeDeviceId)
+									? <option value={settings.runtimeDeviceId}>Selected device unavailable — choose another</option> : null}
+								{current?.provider.devices?.map((device) => <option key={device.id} value={device.id}>{device.name} — {device.online ? 'seen recently' : 'offline'}</option>)}
+							</Select>
+							<Text fontSize="sm" mt={2}>
+								{!personalSupported ? 'This domain needs the personal recording update before a device can be selected.'
+									: 'Choose a paired personal worker for local audio transcription and text-only Claude Code. Existing jobs keep their processor until you explicitly retry them with the new selection.'}
+							</Text>
+							{personalSupported && !current?.provider.devices?.length ? <Text fontSize="sm" mt={2}>
+								No personal recording worker is paired yet. <Link to="/devices">Manage your devices</Link>. Ordinary Watch or phone connections are not recording workers.
+							</Text> : null}
+							{settings.runtimeDeviceId ? <Text fontSize="sm" mt={2} role="status">
+								{current?.provider.device
+									? `${current.provider.device.name}: ${current.provider.device.online ? 'contacted Thingtime recently' : 'offline — recordings will wait'}.${current.provider.device.lastSeenAt ? ` Last seen ${new Date(current.provider.device.lastSeenAt).toLocaleString()}.` : ''} Pairing does not confirm AI usage allowance.`
+									: 'The selected worker is unavailable or revoked. Choose another worker, or explicitly switch to the provider waterfall.'}
+							</Text> : null}
+						</FormControl>
+						<PersonalRecordingSetup key={user.id} ownerId={user.id} username={user.username} disabled={busy || !current || !personalSupported} />
+						{!settings.runtimeDeviceId ? <Box mt={5}>
 							<Text as="h3" fontWeight="bold">
 								AI credential waterfall
 							</Text>
@@ -291,7 +324,7 @@ export function RecordingAutomationPage() {
 									</Box>
 								);
 							})}
-						</Box>
+						</Box> : null}
 						<Flex direction="column" gap={4} mt={5}>
 							{(
 								[
@@ -403,6 +436,7 @@ export function RecordingAutomationPage() {
 												<Text overflowWrap="anywhere">{job.filename}</Text>
 											</Link>
 											<Badge>{job.status}</Badge>
+											<Badge>{job.runtimeDeviceId ? 'Personal device' : 'AI providers'}</Badge>
 											<Menu>
 												<MenuButton as={Button} size="xs" variant="outline" aria-label={`Actions for ${job.filename}`}>•••</MenuButton>
 												<MenuList>
@@ -425,7 +459,7 @@ export function RecordingAutomationPage() {
 										) : null}
 										{['failed', 'retry', 'paused'].includes(job.status) ? (
 											<Button size="sm" mt={2} isDisabled={busy || !settings.enabled} onClick={() => void change({ op: 'retry', id: job.id })}>
-												Retry recording
+												Retry with selected processor
 											</Button>
 										) : null}
 									</Box>

@@ -18,6 +18,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Reconcile the shared-copy follow-up with develop's personal-recording
+  contracts, preserving fork 1.3.3 and device-pairing 1.1.0 assertions.
+  Acceptance boundaries remain listed in [PR #755](../PRs/755-shared-composition-file-copies.md).
+  — Codex (AI), 2026-09-10
+
 - Preserve linked gallery records and annotations in shared-content copies
   without fetching external bytes or changing download redirect protections.
   Negotiate fork 1.3.3 and check late revocation/metadata changes; live acceptance
@@ -48,6 +53,61 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   moderation and deferred cleanup. Fork-route/media rewriting integration and
   live object-store acceptance remain pending; no new HTTP capability is exposed.
   — Codex (AI), 2026-09-10
+
+- Verify real macOS Keychain recording state storage and add explicit,
+  confirmed recovery cleanup for expired unfinished pairing; completed local
+  pairings remain protected and server revocation stays separate. See
+  [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Make identical in-flight recording completion retries recoverable without
+  repeating inference or reporting a lease conflict; publish personal broker
+  1.0.1 and reconcile the latest develop sync. See
+  [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Verify synthetic WAV/M4A local transcription and native Claude OAuth
+  note/todo extraction with an opt-in runtime smoke. Real paired-account and
+  Watch delivery remain pending; details in
+  [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Add recording-settings Mac pairing with expiring masked secrets, explicit
+  copy/reveal and account-switch guards; publish pairing 1.1.0. Reconcile
+  develop's sharing boundaries and both manifest suites. Build and API smoke
+  pass; signed-in visual and real audio acceptance remain outstanding.
+  Details: [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Add an interactive Mac recording worker with hidden pairing input,
+  origin-bound Keychain storage, interrupted-claim recovery and bounded
+  foreground polling. Real local lost-receipt recovery passes; pairing UI,
+  native Keychain and audio acceptance remain pending.
+  Details: [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Register personal recording HTTP operations and owned-device settings,
+  origin-scoped capability negotiation, account-tier limits, private errors and
+  processor-change fences. Real local signup/pairing/selection smoke passes;
+  audio, deployed worker and visual acceptance remain pending.
+  Details: [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Add the unexposed personal recording broker, transactional device/consent
+  fences and crash-safe completion receipts; personal jobs cannot enter the
+  cloud-provider queue. HTTP/selection integration and live acceptance remain
+  pending. Details: [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Add the personal recording worker's outbound transport and bounded result
+  contract: origin-scoped negotiation, credential-safe audio retrieval,
+  heartbeat cancellation, grounded text results and idempotent submission
+  retries. Server pairing/queue integration is still pending; no new endpoint
+  or automatic processing is enabled by this foundation. — Codex (AI), 2026-09-10
+
+- Include the origin-scoped capability-manifest suite in the standard API
+  capability CI command and reconcile its assertions after combining saved
+  action sharing and Lopu reply updates. — Codex (AI), 2026-09-10
 
 - Promote shared component audience boundaries to main and reconcile the
   newly enabled origin-manifest assertions with the sharing patch versions.

@@ -53,6 +53,12 @@ has finished. A revoked source composition also triggers that cleanup.
 
 ## Evidence and remaining acceptance
 
+The f3ecf0fbd follow-up passed Web CI run 34461266645 and received the
+exact-head preview deployment dpl_2GRHArvYgCTA88Twpi3FHjRPutoV. The subsequent
+develop reconciliation preserves both fork 1.3.3 and device-pairing 1.1.0
+contracts; it does not change the copy implementation or remove the acceptance
+requirements below.
+
 Unit coverage includes saved URLs, nested CSS, entity-encoded HTML, unrelated
 URLs/text, source immutability, shared-file deduplication, exact caller/root
 propagation, transactional binding, copy/write failure cleanup and late source
