@@ -16,15 +16,28 @@ Branch: `codex/lopu-personal-recording-worker`, base: `develop`.
   Done receipts bind owner, device, session, lease and exact submitted content.
 - Personal jobs never enter the cloud-provider worker, including after expiry.
 
-## Not enabled yet
+## HTTP and settings integration — 2026-09-10
 
-The broker is intentionally not registered as an executable HTTP route. No
-capability manifest claims it is available. There is no selection UI or worker
-pairing launcher yet. Do not bypass consent by seeding internal database fields.
-Before enabling, add the route/docs/manifest together, validate a selected owned
-device through the settings API, snapshot its identity into new jobs, and add
-real-API transaction/race coverage. Then verify a real Watch upload end to end.
-The native runtime and protocol unit tests do not establish physical acceptance.
+Registered the broker, docs and manifest together. Recording settings 1.4.0
+adds an owned eligible device selector and explicit processor reassignment on
+retry; personal protocol 1.0.0 accepts only paired device credentials. Default
+settings preserve provider processing. Device metadata is bounded and contains
+no credentials; an offline worker can queue without claiming inference health.
+Cloud jobs recheck processor selection before provider sends and transactional
+content writes. All broker errors, including oversized bodies, are private and
+uncacheable. Product rate limits follow the account subscription.
+
+Real local HTTP smoke passed signup, signed Ed25519 pairing, owned selection,
+empty queue polling, cookie rejection and opt-out revocation. Synthetic account
+`recqamtv9n4hr` remains local with processing disabled. No audio/provider calls
+were made. New tests cover device projections, malformed requests, authority
+failures and changing processors during a content transaction.
+
+Still pending: launchable paired worker, real audio/results and transaction-race
+acceptance, deployed and physical Watch proof. Browser automation returned
+`Debugger unattached`, so desktop/mobile selector validation is not yet proven.
+Do not bypass consent by seeding internal database fields. This PR is not a
+claim of physical-device acceptance.
 
 ## Verification
 

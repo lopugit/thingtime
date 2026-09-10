@@ -18,6 +18,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Register personal recording HTTP operations and owned-device settings,
+  origin-scoped capability negotiation, account-tier limits, private errors and
+  processor-change fences. Real local signup/pairing/selection smoke passes;
+  audio, deployed worker and visual acceptance remain pending.
+  Details: [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
 - Add the unexposed personal recording broker, transactional device/consent
   fences and crash-safe completion receipts; personal jobs cannot enter the
   cloud-provider queue. HTTP/selection integration and live acceptance remain

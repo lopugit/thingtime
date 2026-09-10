@@ -10,6 +10,7 @@ let created: any[];
 let reminders: any[];
 let afterCommitCrash: boolean;
 let revokeAtCommit: boolean;
+let switchProcessorAtCommit: boolean;
 const post = { _id: 'source', shareId: 'watch-upload-test', ownerId: 'owner' };
 const emptyState = () => ({ commentIds: [], commentIndex: 0, insightIndex: 0, resultIds: [] });
 const assign = (row: any, path: string, value: any) => {
@@ -22,7 +23,9 @@ const collection = {
 		return privateSource ? post : null;
 	},
 	async updateOne(filter: any, patch: any) {
-		if (filter.thingtime === RECORDING_SETTINGS_KIND) return { matchedCount: settings.enabled ? 1 : 0 };
+		if (filter.thingtime === RECORDING_SETTINGS_KIND) return {
+			matchedCount: settings.enabled && filter['crystal.runtimeDeviceId'] === settings.runtimeDeviceId ? 1 : 0
+		};
 		if (filter.thingtime === RECORDING_REMINDER_KIND) {
 			reminders.push(patch.$setOnInsert);
 			return { matchedCount: 1 };
@@ -83,6 +86,7 @@ mock.module(new URL('../things/things.ts', import.meta.url).href, {
 	namedExports: {
 		createThing: async (ownerId: string, doc: any, _actor: unknown, _app: unknown, hooks: any) => {
 			if (revokeAtCommit) privateSource = false;
+			if (switchProcessorAtCommit) settings.runtimeDeviceId = 'personal-worker';
 			await hooks.afterInsert(doc, { transaction: true });
 			created.push({ ownerId, ...doc });
 			if (afterCommitCrash) {
@@ -104,6 +108,7 @@ beforeEach(() => {
 	reminders = [];
 	afterCommitCrash = false;
 	revokeAtCommit = false;
+	switchProcessorAtCommit = false;
 	persisted = {
 		shareId: 'job',
 		ownerId: 'owner',
@@ -186,6 +191,19 @@ test('opt-out prevents any provider or content operation', async () => {
 	settings.enabled = false;
 	assert.equal(await processRecordingJob(structuredClone(persisted)), 'paused');
 	assert.equal(created.length, 0);
+});
+
+test('switching to personal processing stops an old provider job before sending audio', async () => {
+	settings.runtimeDeviceId = 'personal-worker';
+	assert.equal(await processRecordingJob(structuredClone(persisted)), 'paused');
+	assert.equal(created.length, 0);
+});
+
+test('switching processors at the content transaction prevents stale-mode writes', async () => {
+	switchProcessorAtCommit = true;
+	assert.equal(await attempt(), 'paused');
+	assert.equal(created.length, 0);
+	assert.equal(reminders.length, 0);
 });
 test('long emoji transcripts split into valid, bounded comments and can disable derived Things', async () => {
 	settings.createNotes = false;

@@ -31,7 +31,9 @@ class RecordingPaused extends Error {}
 
 const assertActive = async (job: any) => {
 	await assertPersonalRecordingJob(job);
-	if (!(await getRecordingSettings(job.ownerId)).enabled) throw new RecordingPaused('Recording automation is switched off.');
+	const settings = await getRecordingSettings(job.ownerId);
+	if (!settings.enabled) throw new RecordingPaused('Recording automation is switched off.');
+	if ((job.runtimeDeviceId || null) !== settings.runtimeDeviceId) throw new RecordingPaused('The selected recording processor changed.');
 	if (!(await recordingSource(job))) throw new RecordingPaused('The recording is unavailable or no longer private.');
 };
 
@@ -47,7 +49,8 @@ const checkpointHook = (job: any, state: RecordingJobState, reminder?: { id: str
 			shareId: recordingId('settings', job.ownerId),
 			ownerId: job.ownerId,
 			thingtime: RECORDING_SETTINGS_KIND,
-			'crystal.enabled': true
+			'crystal.enabled': true,
+			'crystal.runtimeDeviceId': job.runtimeDeviceId || null
 		},
 		{ $inc: { recordingWriteFence: 1 } },
 		{ session }

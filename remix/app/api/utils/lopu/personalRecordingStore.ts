@@ -10,7 +10,7 @@ import {
 	parsePersonalRecordingRequest, personalRecordingAudioIsSupported, personalRecordingReceiptHash
 } from './personalRecordingCore';
 import { parseRecordingInsights, RECORDING_JOB_KIND, RECORDING_MAX_ATTEMPTS, recordingRetryAt } from './recordingsCore';
-import { getRecordingSettings, recordingJobState, recordingSource, recordingStateBlob } from './recordingsStore';
+import { discoverRecordingUploads, getRecordingSettings, recordingJobState, recordingSource, recordingStateBlob } from './recordingsStore';
 import { readRecordingBytes } from './recordingsProvider';
 import { processRecordingJob, recordingTranscriptState } from './recordingsWorker';
 
@@ -23,6 +23,10 @@ const lifetime = (now: Date, started: Date) => new Date(Math.min(
 ));
 
 export const claimPersonalRecording = async (actor: DeviceActor) => {
+	await assertPersonalRecordingAuthority(actor);
+	// Also works on origins without a hosted cron. A paired device may discover
+	// only its own account's explicitly opted-in new uploads, never other users'.
+	await discoverRecordingUploads(actor.userId);
 	const things = await getHomeThingsCollection();
 	const job = await withHomeMongoTransaction(async (session) => {
 		await assertPersonalRecordingAuthority(actor, session);

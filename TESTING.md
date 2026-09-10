@@ -6048,14 +6048,26 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
       every asserted version against the combined registry rather than leaving
       one manifest test outside CI with stale expectations.
 
-Personal recording worker transport (server integration remains pending):
+Personal recording worker transport and HTTP integration:
 
 - [ ] `npm --prefix remix run test:lopu` also exercises the personal broker:
       exact session/device/consent filters and transaction fences, lease-bound
       audio, revocation during download, completion receipt retries, heartbeat
       races, competing failure rejection and crash-safe transcript checkpoints.
       These collaborators are in memory; verify the same races through the
-      real API and transaction layer before exposing or enabling the endpoint.
+      real API and transaction layer before enabling a deployed worker.
+- [ ] `test:lopu` covers the personal device menu and HTTP boundary: no private
+      device fields, active owner/capability sessions only, missing timestamps
+      never treated as online, malformed/oversized requests with no-cache
+      headers, subscription gates, and processor changes before sends or commits.
+- [ ] Run `node --import tsx scripts/personal-recording-api-smoke.mts <loopback-origin>`
+      from `remix/`: real signup, signed pairing, owner-selected processor,
+      cookie rejection, queue polling and opt-out. The fixture account remains
+      local with processing disabled; no provider is invoked. This is not an
+      audio/result or concurrency-race test.
+- [ ] On desktop and mobile, scroll `/lopu/recordings` fully and exercise the
+      processor selector: provider mode, eligible/offline/missing personal
+      worker, capability mismatch, settings error rollback and retry label.
 - [ ] `npm --prefix remix run test:ai-models` verifies origin-bound capability
       negotiation before credentials, redirect rejection, bounded audio,
       text-only native completion, heartbeat cancellation and identical result

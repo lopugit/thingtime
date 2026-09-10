@@ -58,6 +58,7 @@ mock.module(new URL('./personalRecordingAuth.ts', import.meta.url).href, { named
 	}
 } });
 mock.module(new URL('./recordingsStore.ts', import.meta.url).href, { namedExports: {
+	discoverRecordingUploads: async (ownerId: string) => { assert.equal(ownerId, actor.userId); return 0; },
 	getRecordingSettings: async () => ({ enabled: true, createNotes: true, createTodos: true }),
 	recordingJobState: (job: any) => structuredClone(job.secure), recordingStateBlob: (state: any) => structuredClone(state),
 	recordingSource: async () => privateSource ? { attachment: { crystal: { contentType: 'audio/wav' }, objectSizeBytes: 4 } } : null

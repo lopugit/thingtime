@@ -45,7 +45,8 @@ export const parsePersonalRecordingRequest = (input: unknown): PersonalRecording
 			throw new TypeError('Recording results exceed their limits.');
 		// Validate against the exact transcript before accepting a result. The
 		// same canonical parser is applied again before server-side persistence.
-		parseRecordingInsights(value.analysis, value.transcript);
+		try { parseRecordingInsights(value.analysis, value.transcript); }
+		catch { throw new TypeError('Recording analysis must contain bounded, transcript-grounded notes or todos.'); }
 		return { op: 'complete', ...lease, transcript: value.transcript, analysis: value.analysis };
 	}
 	throw new TypeError('Choose a recording operation.');

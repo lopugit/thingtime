@@ -1831,7 +1831,8 @@ does not accept production or develop database URIs.
 
 `remix/scripts/personal-recording-runtime.mjs` provides local `transcribe` and
 `complete` operations for the forthcoming personally paired recording worker.
-It is **not yet connected to cloud recording jobs or the shared HTTP endpoint**.
+The paired-device broker is registered at `/api/v1/lopu/recordings/personal`;
+the automatic launcher and end-to-end Watch acceptance are still pending.
 No server, public listener, background service or automatic recording processing
 is started by importing this module.
 
@@ -1870,17 +1871,30 @@ a worker crash; exact completion retries do not run inference or create content
 again. Jobs assigned to a personal device cannot fall back to cloud credentials.
 
 **Integration status:** this transport is not a launchable background service
-yet. The broker is not exposed by an HTTP route. Its endpoint, explicit device-selection
-settings, pairing launcher and live Watch-to-worker acceptance are still to be
-connected. Current deployments do not advertise this capability, so the worker
-refuses to start there. Do not copy an API key, CI credential or Claude OAuth
+yet. The settings UI and API accept `runtimeDeviceId` only for an owned paired
+device with an active `recordings.personal.v1` session. New jobs snapshot that
+selection; retry explicitly assigns the selected processor while preserving
+completed checkpoints. Offline personal jobs wait without a cloud fallback.
+Clients require `api.lopu-recordings` 1.4.0 and
+`api.lopu-recordings-personal` 1.0.0 on the selected origin. Older deployments
+fail closed. Do not copy an API key, CI credential or Claude OAuth
 token into its `credential` option: it accepts only an existing Thingtime paired
 device credential. Keep future machine-local worker setup untracked; importing
 this module does not pair a device or enable recording processing.
 Do not set internal job or settings fields directly in a database to bypass
-that gate. The future authenticated selection API must validate device ownership
-and capabilities, and new jobs must snapshot that selection. Broker/authority
-mock tests in `test:lopu` are unit coverage, not real database race or Watch proof.
+that gate. Broker/authority mock tests in `test:lopu` are unit coverage, not real
+database race or Watch proof. Run
+`node --import tsx remix/scripts/personal-recording-api-smoke.mts <loopback-origin>`
+from a dependency-equipped checkout for the real HTTP signup, signed pairing,
+selection, empty-queue and opt-out smoke. It creates one synthetic local account
+and device, leaves processing disabled, prints no credentials, and invokes no
+audio or AI provider. It refuses non-loopback origins. Remaining acceptance:
+real audio/results, revocation races, deployed worker and physical Watch.
+
+This worktree's local QA URL is `http://127.0.0.1:18000/lopu/recordings` (HMR
+18001, Nitro 18002), managed by `npm run web-pms`. Tailscale/Funnel was not
+available during validation: the installed shim points to a missing
+`/Applications/Tailscale.app` binary. No public local-server URL is configured.
 
 ### Shared AI endpoint waterfall
 
