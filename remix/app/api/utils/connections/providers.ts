@@ -2072,7 +2072,25 @@ const redditAccountProvider: ConnectionProvider = {
   }
 };
 
-const mastodonInstance = (): string => envValue('MASTODON_INSTANCE').replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+// Normalized exactly like sanitizeHost above — lowercase FIRST, then strip the
+// scheme and any path. The ordering is load-bearing twice over, and this helper
+// is the one place in the file that used to skip it:
+//   • the scheme strip is case-SENSITIVE, so `HTTPS://mastodon.social` kept its
+//     prefix, `/\/.*$/` then cut at the first slash, and the instance became the
+//     literal `HTTPS:` — every authorize/token/timeline URL built from it
+//     (`https://HTTPS:/oauth/authorize`) is unreachable;
+//   • a merely mis-cased `Mastodon.Social` resolves fine over DNS but breaks the
+//     invariant `postNamespace: 'mastodon'` exists to hold: mapMastodonStatus
+//     keys externalIds on `${instance}-${status.id}`, so the same status reached
+//     through the public provider (whose instance came from sanitizeHost, i.e.
+//     lowercase) and through this one would mint TWO external-posts with split
+//     comments — the exact drift the shared namespace is there to prevent. It
+//     would also re-mint providerAccountId (`${instance}:id:…`), so one identity
+//     could hold two external-account things.
+// Both are deployment-config sensitivity rather than user input, which is why
+// the sibling that DOES take user input already normalizes this way.
+const mastodonInstance = (): string =>
+  envValue('MASTODON_INSTANCE').toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
 
 const mastodonAccountProvider: ConnectionProvider = {
   id: 'mastodon-account',
