@@ -25,14 +25,14 @@ test('conditional media properties include stored alternatives, not condition me
 });
 
 test('page-block media overrides follow resolved same-author components and refresh with the root', async () => {
-	const component = { shareId: 'component', ownerId: 'author', thingtime: ['component'], crystal: {
+	const component: ThingDoc = { shareId: 'component', ownerId: 'author', createdAt: new Date(0), updatedAt: new Date(0), thingtime: ['component'], crystal: {
 		args: [{ name: 'image', type: 'string', default: url('default') }], savedArgs: { image: url('saved') },
 		render: { tag: 'img', props: { src: { ttIf: { arg: 'last.result', then: '{image}' } } } }
-	} } as ThingDoc;
+	} };
 	const block = { type: 'component', component: 'alias', args: { image: url('page-image'), unused: url('unused') } };
-	const root = { shareId: 'root', ownerId: 'author', thingtime: ['webpage'], acl: ['tt:hidden', 'tt:user'], linkKey: 'fixture-key', crystal: {
+	const root: ThingDoc = { shareId: 'root', ownerId: 'author', createdAt: new Date(0), updatedAt: new Date(0), thingtime: ['webpage'], acl: ['tt:hidden', 'tt:user'], linkKey: 'fixture-key', crystal: {
 		blocks: [{ type: 'container', children: [block, { ...block, args: { image: url('second') } }] }]
-	} } as ThingDoc;
+	} };
 	const composition = { root, docs: new Map([[root.shareId, root], [component.shareId, component]]),
 		references: new Map([['root:component:alias', component]]) } as SharedComposition;
 	assert.deepEqual([...compositionMediaIds(composition)].sort(), ['page-image', 'saved', 'second']);

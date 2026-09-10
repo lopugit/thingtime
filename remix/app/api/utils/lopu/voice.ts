@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { getThingsCollection } from '../mongodb/collections';
 import { createThing, isFail } from '../things/things';
 import { ACL_OWNER } from '~/schemas/registry';
@@ -37,6 +38,8 @@ const VOICE_MAX_OUTPUT_TOKENS = 4096;
 
 export type LopuVoiceHistoryMessage = LopuVaultHistoryMessage;
 export type LopuVoiceInput = {
+	chatId?: unknown;
+	requestId?: unknown;
 	transcript?: unknown;
 	sessionId?: unknown;
 	providerId?: unknown;
@@ -51,13 +54,13 @@ export type LopuVoiceInput = {
 };
 
 export type LopuVoiceEvent =
-	| { type: 'meta'; mode: 'conversation' | 'transcribe'; provider?: string; sessionId: string; billing?: LopuBilling }
+	| { type: 'meta'; mode: 'conversation' | 'transcribe'; provider?: string; sessionId: string; chatId?: string; billing?: LopuBilling }
 	| { type: 'quote'; text: string; page: { id: string; title: string; pageNumber: number; createdAt: string } }
 	| { type: 'delta'; text: string }
 	| { type: 'error'; error: string }
 	// a conversation turn's done carries what the provider reported and the
 	// list price of the turn (byo: recorded, never debited — design note §2)
-	| { type: 'done'; usage?: LopuChatUsage; billing?: LopuBilling; costMicros?: number };
+	| { type: 'done'; usage?: LopuChatUsage; billing?: LopuBilling; costMicros?: number; messages?: unknown[] };
 
 export type LopuVoiceReplyDependencies = {
 	// the accounting writer (never throws); injectable for tests
@@ -106,8 +109,18 @@ const timestampTitle = (createdAt: Date, pageNumber: number) => {
 
 // One owner-private, timestamped, numbered transcript page per final
 // utterance (transcribe mode). Exported for reuse by other capture surfaces.
-export const createTranscriptPage = async (ownerId: string, sessionId: string, transcript: string) => {
+export const createTranscriptPage = async (ownerId: string, sessionId: string, transcript: string, conversation?: { chatId: string; requestId: string }) => {
 	const things = await getThingsCollection();
+	const shareId = conversation ? `transcript-${createHash('sha256').update(`${ownerId}:${conversation.chatId}:${conversation.requestId}`).digest('hex')}` : undefined;
+	const existingPage = async () => {
+		if (!shareId) return null;
+		const doc = await things.findOne({ shareId, ownerId, thingtime: 'data', 'crystal.systemType': LOPU_TRANSCRIPT_SYSTEM_TYPE } as any);
+		if (!doc) return null;
+		if (doc.crystal?.quote !== transcript || doc.crystal?.chatId !== conversation?.chatId) throw new Error('That transcript request was already used.');
+		return { id: doc.shareId, title: String(doc.crystal.title), pageNumber: Number(doc.crystal.pageNumber), createdAt: new Date(doc.createdAt).toISOString() };
+	};
+	const existing = await existingPage();
+	if (existing) return existing;
 	const pageNumber =
 		(await things.countDocuments({ ownerId, thingtime: 'data', 'crystal.systemType': LOPU_TRANSCRIPT_SYSTEM_TYPE, 'crystal.sessionId': sessionId } as any, {
 			limit: 10_000
@@ -117,6 +130,7 @@ export const createTranscriptPage = async (ownerId: string, sessionId: string, t
 	const result = await createThing(
 		ownerId,
 		{
+			...(shareId ? { shareId } : {}),
 			thingtime: ['data'],
 			acl: [ACL_OWNER],
 			crystal: {
@@ -126,6 +140,7 @@ export const createTranscriptPage = async (ownerId: string, sessionId: string, t
 				name: title,
 				title,
 				sessionId,
+				...(conversation ? { chatId: conversation.chatId, requestId: conversation.requestId } : {}),
 				pageNumber,
 				quote: transcript,
 				source: 'voice',
@@ -134,7 +149,10 @@ export const createTranscriptPage = async (ownerId: string, sessionId: string, t
 		},
 		{ id: ownerId }
 	);
-	if (isFail(result)) throw new Error(result.error);
+	if (isFail(result)) {
+		if (result.status === 409) { const committed = await existingPage(); if (committed) return committed; }
+		throw new Error(result.error);
+	}
 	return {
 		id: (result as { doc: { shareId: string } }).doc.shareId,
 		title,
@@ -150,10 +168,12 @@ export async function* streamLopuVoiceReply(ownerId: string, input: LopuVoiceInp
 	if (!transcript) throw new Error('A non-empty transcript is required.');
 	const sessionId = normalizeSessionId(input.sessionId);
 	if (input.transcribeMode === true) {
-		const page = await createTranscriptPage(ownerId, sessionId, transcript);
-		yield { type: 'meta', mode: 'transcribe', sessionId };
+		const { saveLopuTranscript } = await import('./transcripts');
+		const saved = await saveLopuTranscript(ownerId, { chatId: input.chatId, requestId: input.requestId, transcript, sessionId });
+		const page = saved.page;
+		yield { type: 'meta', mode: 'transcribe', sessionId, chatId: saved.chatId };
 		yield { type: 'quote', text: transcript, page };
-		yield { type: 'done' };
+		yield { type: 'done', messages: saved.messages };
 		return;
 	}
 	const startedAt = Date.now();

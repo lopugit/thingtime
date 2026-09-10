@@ -9,6 +9,8 @@ import {
 	getLopuStoreSnapshot,
 	hydrateLopuStore,
 	loadLopuChats,
+	loadLopuMessages,
+	lopuMessagesCacheKey,
 	loadLopuModels,
 	reconcileLopuSettings,
 	resetLopuStoreForTests,
@@ -92,6 +94,21 @@ const fakeClient = (options?: { reply?: (body: any) => Response; chats?: unknown
 };
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+test('a late message fetch cannot repopulate another account after switching away and back', async () => {
+	resetLopuStoreForTests(); hydrateLopuStore('owner');
+	const { client } = fakeClient();
+	let finish!: (value: any) => void;
+	client.messages = () => new Promise(resolve => { finish = resolve; });
+	bindLopuApi(client);
+	const pending = loadLopuMessages('old-chat');
+	hydrateLopuStore('other'); hydrateLopuStore('owner');
+	finish({ ok: true, messages: [{ id: 'old-private-message' }] }); await pending;
+	assert.equal(getLopuStoreSnapshot().messages['old-chat'], undefined);
+});
+test('message caches are account scoped rather than inherited from another signed-in account', () => {
+	assert.notEqual(lopuMessagesCacheKey('chat', 'owner'), lopuMessagesCacheKey('chat', 'other'));
+});
 
 // the account slice the chat store feeds (verified-credits design note §4) —
 // a stateful fake server, since the slice refetches after every gate / done
