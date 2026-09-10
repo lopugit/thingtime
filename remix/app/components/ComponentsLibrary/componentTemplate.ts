@@ -249,6 +249,17 @@ const formatValue = (spec: Record<string, unknown>, value: unknown): string => {
 
 type ResolveBudget = { left: number; chars: number; preserveUnboundTokens?: boolean };
 
+// Forks retain the original argument/template program. Only executable action
+// references are rebound, after interpolation; labels and input data are not.
+const actionReference = (node: Record<string, unknown>, raw: string): string => {
+	const refs = node.ttActionRefs;
+	if (!Array.isArray(refs)) return raw;
+	// Array pairs also support dotted action keys without introducing Mongo
+	// object keys that the render sanitizer correctly rejects.
+	const mapped = refs.slice(0, 512).find((entry) => Array.isArray(entry) && entry[0] === raw)?.[1];
+	return typeof mapped === 'string' && mapped.length <= 128 && !/[{}$\s]/.test(mapped) && mapped ? mapped : raw;
+};
+
 // Bound nested action-result data without interpreting it as template syntax.
 // In particular, ttArg and ttFormat must not reopen the expansion bypass that
 // was fixed for scalar arguments in the component library.
@@ -421,7 +432,7 @@ const resolveNode = (template: unknown, scope: ComponentScope, budget: ResolveBu
 		if (budget.left <= 0) break;
 		// ttAction/ttActionInputs are interactive-intent markers, folded into
 		// allowlisted data-* props below — never copied through as node keys
-		if (key === 'ttAction' || key === 'ttActionInputs') continue;
+		if (key === 'ttAction' || key === 'ttActionInputs' || key === 'ttActionRefs') continue;
 		const resolved = resolveNode(value, scope, budget);
 		if (resolved === undefined) continue;
 		// A node KEY is tree text exactly like a string value, and nothing else
@@ -450,7 +461,9 @@ const resolveNode = (template: unknown, scope: ComponentScope, budget: ResolveBu
 	// multiply the whole-tree caps by the node count — see MAX_RESOLVED_NODES
 	// and MAX_RESOLVED_CHARS.
 	if (typeof template.ttAction === 'string' && template.ttAction.trim()) {
-		const action = substitute(template.ttAction, scope, budget).trim();
+		const rawAction = substitute(template.ttAction, scope, budget).trim();
+		const action = actionReference(template, rawAction);
+		if (action !== rawAction) budget.chars -= action.length;
 		if (action) {
 			const props = isPlainObject(out.props) ? (out.props as Record<string, unknown>) : {};
 			props['data-tt-action'] = action;
@@ -482,6 +495,61 @@ export const createTemplateResolver = (options: { preserveUnboundTokens?: boolea
 
 export const resolveTemplate = (template: unknown, scope: ComponentScope = {}): unknown =>
 	createTemplateResolver()(template, scope);
+
+// Visit executable positions in every authored branch, using the same token,
+// repeat and own-property semantics as rendering. Arguments are data, never
+// new template syntax. The caller supplies persisted scope only. Unknown loop
+// values get one unbound visit so literal controls remain discoverable without
+// inventing item/index values from visitor input. Work shares one finite budget.
+export const visitStoredTemplateActions = (
+	template: unknown, scope: ComponentScope,
+	visit: (action: string, node: Record<string, unknown>, raw: string) => void
+): void => {
+	const budget: ResolveBudget = { left: MAX_RESOLVED_NODES, chars: MAX_RESOLVED_CHARS, preserveUnboundTokens: true };
+	const walk = (value: unknown, current: ComponentScope, depth = 0): void => {
+		if (budget.left-- <= 0 || budget.chars <= 0 || depth > 48 || !value || typeof value !== 'object') return;
+		if (Array.isArray(value)) { for (const child of value) { if (budget.left <= 0) break; walk(child, current, depth + 1); } return; }
+		const node = value as Record<string, unknown>;
+		const child = (next: unknown, nextScope = current) => walk(next, nextScope, depth + 1);
+		if ('ttArg' in node) return;
+		if ('ttMap' in node) {
+			const spec = isPlainObject(node.ttMap) ? node.ttMap : {};
+			child(spec.default);
+			if (isPlainObject(spec.values)) for (const branch of Object.values(spec.values)) { if (budget.left <= 0) break; child(branch); }
+			return;
+		}
+		if ('ttIf' in node) { const spec = isPlainObject(node.ttIf) ? node.ttIf : {}; child(spec.then); child(spec.else); return; }
+		if ('ttFormat' in node) return;
+		if ('ttMerge' in node) { child(node.ttMerge); return; }
+		if ('ttRepeat' in node) {
+			const spec = isPlainObject(node.ttRepeat) ? node.ttRepeat : {};
+			const raw = spec.arg !== undefined ? argValue(current, String(spec.arg)) : spec.count;
+			const max = Math.min(Number(spec.max) || 0, REPEAT_HARD_CAP) || REPEAT_HARD_CAP;
+			const count = Math.max(0, Math.min(Math.round(Number(raw) || 0), max));
+			if (!count) child(spec.node, { ...current, index: undefined, n: undefined });
+			for (let index = 0; index < count && budget.left > 0; index++) child(spec.node, { ...current, index, n: index + 1 });
+			return;
+		}
+		if ('ttEach' in node) {
+			const spec = isPlainObject(node.ttEach) ? node.ttEach : {};
+			const raw = argValue(current, String(spec.arg));
+			const requested = Math.trunc(Number(spec.max) || 0);
+			const cap = requested > 0 ? Math.min(requested, EACH_HARD_CAP) : EACH_HARD_CAP;
+			const items = Array.isArray(raw) ? raw.slice(0, cap) : isPlainObject(raw) ? Object.keys(raw).slice(0, cap).map((key) => ({ key, value: raw[key] })) : [];
+			child(spec.empty);
+			if (!items.length) child(spec.node, { ...current, item: undefined, index: undefined, n: undefined, count: undefined, first: undefined, last: undefined });
+			for (let index = 0; index < items.length && budget.left > 0; index++) child(spec.node, { ...current, item: items[index], index, n: index + 1, count: items.length, first: index === 0, last: index === items.length - 1 });
+			return;
+		}
+		if (typeof node.ttAction === 'string') {
+			const raw = substitute(node.ttAction, current, budget).trim();
+			if (raw && raw.length <= 128 && !/[{}$\s]/.test(raw)) visit(actionReference(node, raw), node, raw);
+		}
+		child(node.children);
+		child(node.rawChildren);
+	};
+	walk(template, scope);
+};
 
 // ---------------------------------------------------------------------------
 

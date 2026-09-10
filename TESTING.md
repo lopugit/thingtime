@@ -1,5 +1,69 @@
 # TESTING.md — per-area manual test checklists
 
+## Unified Lopu conversations, scheduled Things and discussions
+
+- [ ] At 390px width, historical tool rows put long summaries below their label
+      and status icon, not in a narrow side column. Check approval, success and
+      failure states through the full chat scroll; desktop retains compact rows.
+
+- [ ] Reload a chat containing a tool that requested confirmation, then a later
+      successful confirmed call. The historical request says "Approval requested"
+      without a failure icon or renewed Confirm button; the later success stays
+      successful. Actual permission/provider failures still render as failures.
+
+- [ ] Keep a tab open across a deployment that adds a required capability.
+  If a task reports an incompatible contract, Refresh task must negotiate a
+  current manifest without reloading the tab or changing the account. Repeat
+  after offline, HTTP failure and timeout. Wrong-origin, missing or breaking
+  contracts must still prevent the dependent operation.
+
+- [ ] After Lopu creates a reminder or reports a failed action, ask what
+  happened in a later turn and after reload. Its server-loaded history retains
+  bounded public success/failure receipts, never raw results or approval tokens.
+  Verify current state before changing or repeating an earlier action; history
+  is not fresh authorization. Test split assistant replies and tiny context caps.
+
+- [ ] Native bridge 1.3: start direct audio in a populated chat and confirm
+  context recall; switch back to text and reload both speakers' saved turns.
+  Disconnect during saving, quit/reopen, retry and verify no duplicate turns.
+  Switch account/domain while a save is in flight: no transcript crosses the
+  boundary, no old save navigates a new conversation, and credentials are not
+  stored in the on-device outbox. Test queue-full/disk-failure recovery, native
+  transcription-only chat reconciliation, old-build upgrade messaging, and
+  stopping during microphone permission or WebSocket startup.
+
+- [ ] Direct web voice: start in an existing text chat, speak, switch back and
+  reload; both speakers remain in that chat. A new voice chat gets one ID.
+  Go offline during saving, reload and retry; no duplicated turns or new AI
+  requests. Stop while granting microphone permission; no late stream starts.
+  Switch accounts during a fetch/save and verify private history never crosses
+  accounts. Test the pending-save/retry panel at desktop and 390px widths.
+  On a deployed build, confirm the CSP permits only the supported voice host
+  and the microphone session connects without a CSP violation.
+
+- [ ] Desktop and 390px: switch Chat → Voice → Chat repeatedly; keep the same
+  chat ID, history, draft and attachment selection. Reload a saved transcript.
+  Check device transcription and direct-provider voice separately.
+  Route exports must share the exact component identity, not separate wrapper
+  functions: wrappers remount the composer even when they render the same page.
+  Search for a long unbroken Thing ID: labels wrap within the picker, its Done
+  button remains reachable, and the composer Send button stays fully in view.
+- [ ] Attach a device file and select an owned Thing. Send once, refresh and
+  verify the file still opens privately. Retry failures and switch accounts
+  during upload; never bind, display or delete another account's attachments.
+- [ ] Open a note, todo, recording and post from `/things`. Open their preview
+  dialogs and detail pages, scroll top to bottom, and post/load older comments.
+  Verify each comment is its own Thing with targetId; original crystal stays
+  unchanged. Test hidden links, read-only audiences, deleted parents and logout.
+- [ ] Ask Lopu to comment; the full proposed comment and target are shown before
+  Confirm. Cancel must write nothing; changing text or target invalidates approval.
+  Use an ordinary request without explaining tool internals: Lopu must call the
+  proposal tool and open the actual card, not merely ask for a typed yes/no.
+- [ ] Create interval and time-zone cron tasks in all three delivery modes.
+  Inspect their searchable Things and separate run notes; test existing/new
+  chats, notification mute, pause, completed todos, quota failure and lost leases.
+  A retry must not duplicate a message; ambiguous AI runs stop for review.
+
 - Signed-out boot recovery: abort an initial static JavaScript dependency at
   desktop and 390px widths. Recover once with the full share query/fragment
   preserved; persistent failure shows a reachable manual retry, not a blank
@@ -13,6 +77,14 @@
   API requests remain real while the browser consumes the built client bytes.
   Combining media sharing with recording Things must retain the newer contract
   on both manifests and keep standalone recordings owner-private by default.
+
+- Shared page resolve recovery: return a 503, 429, network failure or invalid
+  JSON from the page resolver. Show an explicit Retry rather than "not here";
+  Retry must load the complete shared composition without signing in. A failed
+  same-viewer refresh keeps its last loaded page; a 401/403/404 clears it.
+  Switching viewer, target or hidden-link key must clear the old page and
+  pending component results before the replacement response arrives. Check
+  cold failure and recovery at desktop and 390px widths.
 
 - After merging notification families, verify recording reminders and subspace
   moderation retain separate categories and all preference switches. Recording
@@ -5589,6 +5661,15 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       grant nothing. Non-owner editors cannot inject unreadable uploads through
       either argument source. Expansion limits never truncate one attachment
       identifier into another; negotiate attachment-content 1.5.0.
+- [ ] Embed another author's public component in a hidden-key page: its
+      authored private action/data/media children work signed out, just as
+      they do when the component is opened directly. Revoking the outer key
+      or the foreign component audience denies access. A third-party shared
+      writer may add that public composition, but cannot use page arguments
+      to select guessed private actions/media belonging to either author.
+      Check PATCH /things and POST /things/update, independent copying after
+      source revocation, and desktop/mobile Draw controls without Edit Original.
+      Negotiate actions-run 1.3.1, things-fork 1.2.1, attachment-content 1.6.2.
 - [ ] A nested page block overrides a same-author component's saved media args.
       Two blocks using the same component may render different media. Resolve
       aliases with the same composition lookup used for child reads; removing
@@ -5980,6 +6061,94 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
       it, which costs a reviewer real time.
 ## Lopu AI assistant (`/lopu`, floating launcher, `remix/app/components/Lopu/`, `/api/v1/lopu/chats*`, `/api/v1/ai/models`)
 
+- [ ] `test:api-capabilities` must run both the API-docs and origin-scoped
+      manifest suites; when merging independently versioned features, verify
+      every asserted version against the combined registry rather than leaving
+      one manifest test outside CI with stale expectations.
+
+Personal recording worker transport and HTTP integration:
+
+- [ ] Explicit saved-recording handoff: with recordings 1.5.0, queue an owned
+      ready standalone private audio Thing, then Send to Lopu after confirmation.
+      Verify one transcript child, private notes/todos and the linked conversation;
+      source crystal/purpose/binding must be unchanged. Repeat requests must not
+      duplicate outputs. Deny public/foreign/app/bound/linked/deleted/draft audio,
+      including changes during processing. Automatic discovery remains Watch-only.
+      Verify same-domain Thing/post links and raw IDs, reject foreign/malformed
+      links, and check both manual buttons at desktop and 390px phone widths.
+      Check the recording tile's desktop right-click and phone three-dot menus:
+      Send to Lopu is owner/private-only, multi-selection never bulk-sends,
+      cancellation makes no mutation, disabled settings do not auto-enable,
+      and account changes during preflight/confirmation stop the request.
+
+- [ ] Run `test:recording-delivery` with the explicit disposable-QA opt-in in
+      README, against loopback with an upload-approved unused test account.
+      Check one private Watch source, one relational transcript, one note and
+      one todo after concurrent claims, duplicate completions and a lost receipt;
+      anonymous reads and conflicting receipts must fail. Confirm processing is
+      disabled, this run's source/results removed and its login revoked afterward.
+      Default invocation must skip; remote origins and normal accounts must be
+      rejected before login. Synthetic inference is not real STT/Claude or
+      physical-device acceptance; report those checks separately.
+
+- [ ] Expired unfinished pairing: `resume` first; do not erase recovery after
+      an ambiguous network error. `forget-pending` without its explicit
+      confirmation must stop before accessing Keychain. With confirmation it
+      refuses completed/changed state, checks deletion, and explains that no
+      server device was revoked. A fresh challenge can then be paired.
+
+- [ ] Hold an accepted completion open, then retry its exact body: receive
+      private HTTP 503/Retry-After rather than an authentication/lease conflict.
+      Let the first save finish and retry again: same receipt, one set of
+      content, one inference. Changed payload/session, revoked consent and
+      competing failure writes must still be rejected. Test this with real
+      transactions as well as the controlled broker/transport fixtures.
+
+- [ ] Recording setup panel: verify desktop and phone layout, open/close,
+      masked/revealed secret, full-secret copy, expiry, request timeout and
+      account changes during challenge creation. Hiding clears local state,
+      never claims server revocation or automatically enables recordings.
+- [ ] `test:lopu-ui` tests recording setup's origin/version/owner/expiry gates;
+      `test:devices` includes the owner-bound no-store pairing response tests.
+      Built manifests must publish device pairing 1.1.0 before setup is offered.
+- [ ] Mac launcher pairing: `test:ai-models` covers signed claims persisted
+      before network sends, manifest/origin gates before vault access, identical
+      retries after lost prepare/complete receipts, and secret-safe failures.
+      Keychain subprocess tests use mocks: writes must use stdin (never argv),
+      verify read-back, and distinguish denied/corrupt items from absent items.
+- [ ] Exercise the Mac launcher on a real paired account: hidden paste,
+      interrupted `resume`, explicit selection/consent, private config, duplicate
+      process lock, SIGINT/SIGTERM cleanup and bounded retry shutdown. Help must
+      not access credentials. Local `status` must not imply provider health.
+- [ ] `npm --prefix remix run test:lopu` also exercises the personal broker:
+      exact session/device/consent filters and transaction fences, lease-bound
+      audio, revocation during download, completion receipt retries, heartbeat
+      races, competing failure rejection and crash-safe transcript checkpoints.
+      These collaborators are in memory; verify the same races through the
+      real API and transaction layer before enabling a deployed worker.
+- [ ] `test:lopu` covers the personal device menu and HTTP boundary: no private
+      device fields, active owner/capability sessions only, missing timestamps
+      never treated as online, malformed/oversized requests with no-cache
+      headers, subscription gates, and processor changes before sends or commits.
+- [ ] Run `node --import tsx scripts/personal-recording-api-smoke.mts <loopback-origin>`
+      from `remix/`: real signup, launcher signed pairing and recovery after a
+      deliberately lost completion response, owner-selected processor,
+      cookie rejection, queue polling and opt-out. The fixture account remains
+      local with processing disabled; no provider is invoked. This is not an
+      audio/result or concurrency-race test.
+- [ ] On desktop and mobile, scroll `/lopu/recordings` fully and exercise the
+      processor selector: provider mode, eligible/offline/missing personal
+      worker, capability mismatch, settings error rollback and retry label.
+- [ ] `npm --prefix remix run test:ai-models` verifies origin-bound capability
+      negotiation before credentials, redirect rejection, bounded audio,
+      text-only native completion, heartbeat cancellation and identical result
+      retries without repeating inference. Unknown completion outcomes must not
+      send a failure update that could overwrite an already committed result.
+- [ ] Before enabling a paired worker, additionally prove owner/device/session
+      isolation, revocation and consent races, durable completion receipts,
+      private relational output and a real Watch upload on the deployed server.
+      Transport mocks do not satisfy this live integration gate.
+
 Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Automated coverage:
 `npm run test:lopu`, `test:lopu-chat-streaming` (fake SSE tool loop),
 `test:partial-json`, `test:ai-models`, `test:lopu-ui`, `test:messenger`,
@@ -6292,6 +6461,15 @@ approval; `access.test.ts` — the reservation matrix) and
 
 ## Shared Data Thing template controls
 
+- Share one component used twice with different saved action arguments. Signed
+  out, both controls must run read-only and show their distinct results at
+  desktop/mobile widths. Wrong or retired links must fail. Copy the page and
+  verify both controls run the copied actions while labels, inputs and editable
+  templates stay unchanged. Repeat on a fork of a fork. A shared writer must
+  not introduce an unreadable private action through argument-only edits or a
+  new instance of an existing component. Unused bindings and runtime query,
+  result, viewer or template-shaped argument data must never grant access.
+
 - Shared nested media: open rich/raw HTML blocks with image, poster, link and
   inline CSS media signed out at desktop/mobile widths. Same-author uploads
   attached directly to contained components must inherit the root audience.
@@ -6347,3 +6525,25 @@ approval; `access.test.ts` — the reservation matrix) and
   A successful server response alone is not a native banner acceptance test.
 - Trigger a followed/friend post and a single-recipient notification with push on,
   then with push off. History remains; muted/history-only events produce no push.
+## Lopu linked-Things live HTTP smoke
+
+- Open Lopu's Your Things picker at desktop and 390px phone widths. Its overlay and fixed modal container must sit above the navigation and floating windows; the title, Close and Done controls remain visible and clickable while scrolling the results from top to bottom. Check both Voice and Chat entry points.
+- Upload a synthetic file and send it in Lopu. Its attachment card must remain visible while streaming and after the reply, without reloading; reload to verify the server-backed attachment persists. The optimistic metadata must never add unselected files or be sent as authoritative server metadata.
+
+- Voice session and transcript request IDs must come from cryptographic UUIDs,
+  never timestamps plus `Math.random()`. Run the voice identity regression tests
+  alongside the Lopu UI suite; secure-random failures must not produce weak IDs.
+
+- When adding a scheduled-task/run schema, run `npm --prefix remix run test:schemas` and review its pinned builtin projection; every registered crystal schema must survive the schema-Thing write gate without lost fields.
+- Run `node remix/scripts/verify-lopu-linked-things.mjs` against the running worktree stack (or pass its loopback HTTP origin). It registers disposable local accounts and exercises real API comments, unchanged parent crystals, shared voice/Messenger history, retry deduplication, searchable scheduled-task Things, linked context, account isolation, protected writes, and pause/resume. It removes its created content and pauses schedules in `finally`; empty test accounts remain, with credentials never persisted. Production origins are rejected. This does not replace browser/device, provider inference, or scheduled-delivery acceptance.
+# Synthetic personal recording runtime smoke
+
+- Run `node --import tsx scripts/personal-recording-runtime-smoke.mts` from
+  `remix/`: without opt-in it must skip and make no provider call.
+- On macOS, set `TT_PERSONAL_RUNTIME_SMOKE=1` plus absolute executable/model
+  paths in `TT_SMOKE_CLAUDE`, `TT_SMOKE_WHISPER`, `TT_SMOKE_FFMPEG`, and
+  `TT_SMOKE_MODEL`. Confirm synthetic WAV and M4A both transcribe expected words.
+- Separately opt in with `TT_PERSONAL_CLAUDE_SMOKE=1` to consume native Claude
+  allowance and verify note/todo output with exact transcript evidence. Do not
+  pass real recordings or tokens. Fixture files must be cleaned up on failure
+  as well as success. This is not a substitute for paired-account/Watch tests.

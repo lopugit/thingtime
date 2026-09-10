@@ -79,7 +79,7 @@ struct WebView: UIViewRepresentable {
 
           window.thingtimeNativeBridge = {
             version: '1.2.0',
-            lopuVoiceVersion: '1.2.0',
+            lopuVoiceVersion: '1.3.0',
             notificationsVersion: '1.0.0',
             platform: 'ios',
             isNativeWebView: true,
@@ -137,7 +137,7 @@ struct WebView: UIViewRepresentable {
             sendToWeb(type: "native-ready", payload: [
                 "platform": "ios",
                 "version": "1.2.0",
-                "lopuVoiceVersion": "1.2.0",
+                "lopuVoiceVersion": "1.3.0",
                 "notificationsVersion": "1.0.0",
                 "watchNotifications": true
             ])
@@ -180,7 +180,8 @@ struct WebView: UIViewRepresentable {
                     effort: payload["effort"] as? String ?? "",
                     speed: payload["speed"] as? String ?? "normal",
                     chatId: payload["chatId"] as? String,
-                    ownerId: payload["ownerId"] as? String
+                    ownerId: payload["ownerId"] as? String,
+                    history: LopuVoiceHistory.bounded(payload["history"] as? [[String: String]] ?? [])
                 )
                 webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] cookies in
                     let replyURL = URL(string: "/api/v1/lopu/voice/reply", relativeTo: rootURL)?.absoluteURL ?? rootURL
