@@ -18,6 +18,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Add an explicitly opted-in, loopback-only recording-delivery smoke with synthetic audio, real HTTP upload/pairing/completion paths, duplicate/privacy checks, and disposable-account cleanup. Document its upload-approval prerequisites and separate synthetic broker proof from real provider/Watch acceptance. — Codex (AI), 2026-09-10
+
 - Give historical Lopu tool summaries their own full-width row on phones,
   preserving compact desktop rows and non-interactive approval history.
   — Codex (AI), 2026-09-10
