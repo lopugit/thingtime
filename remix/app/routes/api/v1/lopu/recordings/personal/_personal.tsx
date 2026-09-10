@@ -5,7 +5,7 @@ import { enforceSubscriptionRateLimit } from '~/api/utils/rateLimit/subscription
 import { rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { runWithMongoEndpoint } from '~/api/utils/mongodb/endpoint';
 import { assertPersonalRecordingAuthority, PersonalRecordingUnavailable } from '~/api/utils/lopu/personalRecordingAuth';
-import { parsePersonalRecordingRequest, PERSONAL_RECORDING_CAPABILITY } from '~/api/utils/lopu/personalRecordingCore';
+import { parsePersonalRecordingRequest, PERSONAL_RECORDING_CAPABILITY, PersonalRecordingCompletionPending } from '~/api/utils/lopu/personalRecordingCore';
 import {
 	claimPersonalRecording, completePersonalRecording, failPersonalRecording,
 	heartbeatPersonalRecording, readPersonalRecordingAudio
@@ -54,6 +54,9 @@ const handle = async (request: Request) => runWithMongoEndpoint(null, async () =
 			return new Response(error.body, { status: error.status, statusText: error.statusText, headers });
 		}
 		if (error instanceof TypeError) return reply({ ok: false, error: 'Choose a valid bounded recording operation and result.' }, 400);
+		if (error instanceof PersonalRecordingCompletionPending)
+			return json({ ok: false, error: 'This recording result is still being saved. Retry the same result.' },
+				{ status: 503, headers: { ...privateHeaders, 'Retry-After': '1' } });
 		if (error instanceof PersonalRecordingUnavailable)
 			return reply({ ok: false, error: 'Check your selected device, recording consent and current lease.' }, 409);
 		return reply({ ok: false, error: 'The personal recording service is temporarily unavailable. Please retry.' }, 503);

@@ -6059,6 +6059,13 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
 
 Personal recording worker transport and HTTP integration:
 
+- [ ] Hold an accepted completion open, then retry its exact body: receive
+      private HTTP 503/Retry-After rather than an authentication/lease conflict.
+      Let the first save finish and retry again: same receipt, one set of
+      content, one inference. Changed payload/session, revoked consent and
+      competing failure writes must still be rejected. Test this with real
+      transactions as well as the controlled broker/transport fixtures.
+
 - [ ] Recording setup panel: verify desktop and phone layout, open/close,
       masked/revealed secret, full-secret copy, expiry, request timeout and
       account changes during challenge creation. Hiding clears local state,

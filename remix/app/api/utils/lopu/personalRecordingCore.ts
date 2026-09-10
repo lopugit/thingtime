@@ -7,7 +7,11 @@ export const PERSONAL_RECORDING_CAPABILITY = 'recordings.personal.v1';
 export const PERSONAL_RECORDING_HEARTBEAT_MS = 30_000;
 export const PERSONAL_RECORDING_MAX_RUN_MS = 10 * 60_000;
 export const PERSONAL_RECORDING_PATH = '/api/v1/lopu/recordings/personal';
-export const PERSONAL_RECORDING_REQUIREMENTS = { 'api.lopu-recordings-personal': '1.0.0' } as const;
+export const PERSONAL_RECORDING_REQUIREMENTS = { 'api.lopu-recordings-personal': '1.0.1' } as const;
+
+export class PersonalRecordingCompletionPending extends Error {
+	constructor() { super('This exact recording result is still being saved.'); }
+}
 
 const AUDIO_TYPES = new Set(['audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp4', 'audio/m4a', 'audio/x-m4a', 'video/mp4', 'audio/webm']);
 export const personalRecordingAudioIsSupported = (type: unknown, bytes: unknown): boolean =>

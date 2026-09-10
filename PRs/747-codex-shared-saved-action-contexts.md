@@ -1,5 +1,6 @@
 # PR 747 — shared saved action contexts
 
+Implementation: <https://github.com/lopugit/thingtime/pull/747>.
 Branch: `codex/shared-saved-action-contexts` → `develop`.
 
 ## Behavior and security
@@ -12,7 +13,8 @@ Branch: `codex/shared-saved-action-contexts` → `develop`.
   Template-shaped argument data, control inputs and metadata are not edges.
 - Same-author containment and fresh root authorization remain mandatory.
   Shared execution remains read-only; originals and standalone ACLs are unchanged.
-- Non-owner writers need independent access to new argument-selected dependencies.
+- Non-owner writers need independent access to new argument-selected dependencies,
+  including new instances of already included components.
 - Copies preserve argument programs, labels and inputs. A bounded `ttActionRefs`
   array on each affected control maps its resolved reference to the copied
   action once, after interpolation. Unused bindings grant nothing. Copies of
@@ -47,6 +49,14 @@ needed manual resolution. Fresh-head checks are required before merging.
 Local API/browser verification: <http://localhost:12280>. Tailscale/Funnel was
 unavailable because the Tailscale application binary was unavailable on this host.
 Preview discovery and exact-head CI receipts remain in the PR checks/comments.
+
+## Focused main promotion
+
+`codex/promote-saved-action-sharing-main` carries only this sharing
+implementation and its tests, API contracts, client requirements and
+documentation. It does not import develop's unrelated changes, and Graphify is
+refreshed for the actual promotion tree. Exact-head build, CI, security and
+deployment receipts are recorded in the PR checks and comments.
 
 ## Remaining broader goal
 

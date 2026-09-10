@@ -81,6 +81,24 @@ setup interactions and true phone-width visual acceptance remain unproven.
 
 ## Verification
 
+### Completion retry correction and develop sync — 2026-09-10
+
+Reconciled develop `f6ac8ecda` (main synchronization), preserving both sets of
+testing/changelog notes and the pairing capability assertion. Generated graph
+conflicts are resolved from one consistent snapshot and refreshed, not merged
+by hand.
+
+Personal recording contract 1.0.1 distinguishes an identical completion that
+is still being saved (private HTTP 503 with Retry-After: 1) from a conflicting
+payload or unavailable authority (409). The native worker requires this patch
+before sending its device credential. Its existing bounded retries resend the
+exact result without running inference again or marking an uncertain commit
+failed. New tests hold the first completion open, retry an identical payload,
+reject a changed payload/session and competing failure, then verify the single
+durable receipt. Broker/route tests: 17 pass; transport/capability slice: 17
+pass; full capability suites: 38 pass. These use controlled collaborators, not
+a real Mongo transaction race or physical Watch proof.
+
 ### Real local runtime acceptance — 2026-09-10
 
 The opt-in `remix/scripts/personal-recording-runtime-smoke.mts` synthesizes a

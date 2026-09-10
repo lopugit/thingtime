@@ -7,7 +7,7 @@ const origin = 'https://thingtime.example';
 const credential = `ttnode_${'x'.repeat(43)}`;
 const identity = { jobId: `lopu-recording-job-${'a'.repeat(64)}`, leaseId: '52a5a4a2-060c-44bf-a208-6aac88913e75' };
 const job = { ...identity, bytes: 3, type: 'audio/mp4', organize: true };
-const manifest = { schemaVersion: 1, origin, features: { 'api.lopu-recordings-personal': { version: '1.0.0' } },
+const manifest = { schemaVersion: 1, origin, features: { 'api.lopu-recordings-personal': { version: '1.0.1' } },
   operations: [{ feature: 'api.lopu-recordings-personal', path: PERSONAL_RECORDING_PATH, methods: ['GET', 'POST'] }] };
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const transcript = 'Water the fern.';
@@ -46,6 +46,7 @@ test('claims project bounded audio metadata, never remote prompts, URLs or comma
 test('credentials are never sent before compatible, origin-bound capability negotiation', async () => {
   for (const bad of [{ ...manifest, origin: 'https://other.example' }, { ...manifest, schemaVersion: 2 },
     { ...manifest, features: {} }, { ...manifest, features: { 'api.lopu-recordings-personal': { version: '2.0.0' } } },
+    { ...manifest, features: { 'api.lopu-recordings-personal': { version: '1.0.0' } } },
     { ...manifest, operations: [] }, { ...manifest, operations: [{ ...manifest.operations[0], methods: 'GETPOST' }] }]) {
     const h = harness({ manifest: bad });
     await assert.rejects(h.worker.runOnce());
@@ -96,6 +97,20 @@ test('an interrupted completion retries identical results without another infere
   assert.equal((await h.worker.runOnce()).status, 'done');
   assert.equal(attempts.length, 3);
   assert.deepEqual(attempts[0], attempts[2]);
+  assert.deepEqual(h.counts(), { transcriptions: 1, completions: 1 });
+  assert.equal(h.calls.some(c => c.body?.op === 'failed'), false);
+});
+
+test('an accepted result still being saved retries without inference or failure writes', async () => {
+  const attempts: any[] = [];
+  const h = harness({ complete(body) {
+    attempts.push(body);
+    if (attempts.length === 1) return response({ ok: false, error: 'Still saving' }, 503);
+    return response({ ok: true, ...identity, status: 'done' });
+  } });
+  assert.equal((await h.worker.runOnce()).status, 'done');
+  assert.equal(attempts.length, 2);
+  assert.deepEqual(attempts[0], attempts[1]);
   assert.deepEqual(h.counts(), { transcriptions: 1, completions: 1 });
   assert.equal(h.calls.some(c => c.body?.op === 'failed'), false);
 });

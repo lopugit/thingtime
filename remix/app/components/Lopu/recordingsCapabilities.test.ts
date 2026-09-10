@@ -19,7 +19,7 @@ test('recording clients negotiate only with their selected origin and compatible
 test('all registered recording endpoints are explicitly versioned in both manifests', () => {
 	const manifest = thingtimeCapabilityManifest(origin);
 	assert.equal(supportsRecordingAutomation(manifest, origin), true);
-	for (const [id, version] of [['lopu-recordings', '1.4.0'], ['lopu-recordings-run', '1.4.0'], ['lopu-recordings-personal', '1.0.0']]) {
+	for (const [id, version] of [['lopu-recordings', '1.4.0'], ['lopu-recordings-run', '1.4.0'], ['lopu-recordings-personal', '1.0.1']]) {
 		const doc = apiEndpointDocs.find((entry) => entry.id === id);
 		assert.equal(doc?.contractVersion, version);
 		assert.equal(doc?.featureVersion, version);

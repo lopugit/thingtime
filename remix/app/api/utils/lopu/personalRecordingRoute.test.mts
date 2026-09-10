@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { beforeEach, mock, test } from 'node:test';
-import { PERSONAL_RECORDING_CAPABILITY } from './personalRecordingCore';
+import { PERSONAL_RECORDING_CAPABILITY, PersonalRecordingCompletionPending } from './personalRecordingCore';
 
-let actor: any, limit: any, failure: unknown;
+let actor: any, limit: any, failure: unknown, brokerFailure: unknown;
 const calls: any[] = [];
 class Unavailable extends Error {}
 mock.module(new URL('../devices/deviceAuth.ts', import.meta.url).href, { namedExports: {
@@ -21,6 +21,7 @@ mock.module(new URL('./personalRecordingAuth.ts', import.meta.url).href, { named
 	assertPersonalRecordingAuthority: async (value: any) => { assert.equal(value, actor); if (failure) throw failure; }
 } });
 const record = async (name: string, value: any, input?: any) => {
+	if (brokerFailure) throw brokerFailure;
 	assert.equal(value, actor); calls.push({ name, input }); return { ok: true, job: null };
 };
 mock.module(new URL('./personalRecordingStore.ts', import.meta.url).href, { namedExports: {
@@ -46,7 +47,7 @@ const isPrivate = (response: Response) => {
 };
 beforeEach(() => {
 	actor = { userId: 'owner', deviceId: 'worker', sessionId: 'paired-session', capabilities: [PERSONAL_RECORDING_CAPABILITY] };
-	limit = { allowed: true }; failure = undefined; calls.length = 0;
+	limit = { allowed: true }; failure = brokerFailure = undefined; calls.length = 0;
 });
 
 test('missing device actor, capabilities, cross-origin and non-JSON requests cannot reach the broker', async () => {
@@ -103,4 +104,12 @@ test('revoked authority and backend exceptions never leak private details', asyn
 		isPrivate(response); assert.doesNotMatch(await response.text(), /private credential detail/);
 	}
 	assert.equal(calls.length, 0);
+});
+
+test('an exact pending completion is a private retryable response, not an auth conflict', async () => {
+	brokerFailure = new PersonalRecordingCompletionPending();
+	const response = await post({ op: 'complete', jobId, leaseId, transcript: 'Water the fern.', analysis: '{"items":[]}' });
+	assert.equal(response.status, 503); isPrivate(response);
+	assert.equal(response.headers.get('retry-after'), '1');
+	assert.match((await response.json()).error, /Retry the same result/);
 });

@@ -7,6 +7,7 @@ import { runWithMongoEndpoint } from '../mongodb/endpoint';
 import { assertPersonalRecordingAuthority, assertPersonalRecordingJob, PersonalRecordingUnavailable } from './personalRecordingAuth';
 import {
 	PERSONAL_RECORDING_HEARTBEAT_MS, PERSONAL_RECORDING_MAX_RUN_MS,
+	PersonalRecordingCompletionPending,
 	parsePersonalRecordingRequest, personalRecordingAudioIsSupported, personalRecordingReceiptHash
 } from './personalRecordingCore';
 import { parseRecordingInsights, RECORDING_JOB_KIND, RECORDING_MAX_ATTEMPTS, recordingRetryAt } from './recordingsCore';
@@ -124,7 +125,11 @@ export const completePersonalRecording = async (actor: DeviceActor, input: unkno
 		if (prior?.crystal.status === 'done' && prior.runtimeReceiptHash === hash && prior.runtimeReceiptLease === request.leaseId)
 			return { done: true as const };
 		const job = await leasedJob(actor, request, session);
-		if (job.runtimeCompleting) throw new PersonalRecordingUnavailable();
+		if (job.runtimeCompleting) {
+			if (job.runtimeReceiptHash === hash && job.runtimeReceiptLease === request.leaseId)
+				throw new PersonalRecordingCompletionPending();
+			throw new PersonalRecordingUnavailable();
+		}
 		const state = recordingTranscriptState(recordingJobState(job), request.transcript);
 		// Preserve checkpoint ids on retry. The shared content writer, not the
 		// device, chooses every output id, ACL, parent and quota charge.

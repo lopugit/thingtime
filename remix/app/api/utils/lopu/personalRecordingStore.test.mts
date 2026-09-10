@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { beforeEach, mock, test } from 'node:test';
-import { personalRecordingLeaseIsLive, PERSONAL_RECORDING_CAPABILITY } from './personalRecordingCore';
+import { personalRecordingLeaseIsLive, PERSONAL_RECORDING_CAPABILITY, PersonalRecordingCompletionPending } from './personalRecordingCore';
 
 // In-memory collaborators, never direct database reads or fixtures.
 const actor = { userId: 'owner', deviceId: 'device', sessionId: 'session', capabilities: [PERSONAL_RECORDING_CAPABILITY] };
@@ -163,6 +163,30 @@ test('pending completions reject competing failures and submissions', async () =
 	await assert.rejects(broker.completePersonalRecording(actor, result), Unavailable);
 	assert.equal(processCount, 0);
 	assert.equal(row.crystal.status, 'processing');
+});
+
+test('exact in-flight completion is retryable and later returns one durable receipt', async () => {
+	let release!: () => void;
+	let entered!: () => void;
+	const started = new Promise<void>(resolve => { entered = resolve; });
+	const gate = new Promise<void>(resolve => { release = resolve; });
+	processing = async () => {
+		entered(); await gate;
+		row.crystal.status = 'done'; delete row.lease; delete row.leaseUntil;
+		return 'done';
+	};
+	const first = broker.completePersonalRecording(actor, result);
+	await started;
+	try {
+		await assert.rejects(broker.completePersonalRecording(actor, result), PersonalRecordingCompletionPending);
+		await assert.rejects(broker.completePersonalRecording(actor, { ...result, analysis: '{"items":[]} ' }), Unavailable);
+		await assert.rejects(broker.completePersonalRecording({ ...actor, sessionId: 'other' }, result), Unavailable);
+		await assert.rejects(broker.failPersonalRecording(actor, { op: 'failed', jobId, leaseId, stage: 'runtime' }), Unavailable);
+		assert.equal(processCount, 1);
+	} finally { release(); }
+	const receipt = await first;
+	assert.deepEqual(await broker.completePersonalRecording(actor, result), receipt);
+	assert.equal(processCount, 1);
 });
 
 test('after a worker crash the next claim reuses the accepted transcript and analysis', async () => {
