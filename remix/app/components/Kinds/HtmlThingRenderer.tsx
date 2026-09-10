@@ -1,4 +1,5 @@
 import React from 'react';
+import { mapStyleMediaUrls } from '../Sharing/renderMediaCore';
 import { useSharedMediaUrl } from '../Sharing/SharedMedia';
 
 import { applyNoOpener, isEventHandlerProp, isSafeCssText, isSafeUrl } from './safeUrl';
@@ -288,6 +289,7 @@ const renderNode = (node: HtmlThingNode, key: number, depth: number, state: Rend
 	}
 
 	const props = fieldProps(tag, sanitizeProps(node.props));
+	if (props.style) props.style = mapStyleMediaUrls(props.style, state.mediaUrl);
 	for (const field of ['src', 'poster', 'href']) if (typeof props[field] === 'string') props[field] = state.mediaUrl(props[field]);
 
 	if (VOID_TAGS.has(tag)) {
