@@ -22,7 +22,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   component arguments and page-block overrides from PRs #730, #733 and #734.
   Preserve main's prior sharing/startup release and APNs/recording fixes;
   the application source matches #734, with separate main CI and preview
-  validation required before release. — Codex (AI), 2026-09-10
+  validation required before release.
+  [Main promotion #735](../PRs/735-codex-promote-shared-argument-media-main-promote-shared-html-and-component-argument-media-inheritance-to-main.md).
+  — Codex (AI), 2026-09-10
 
 - Include containing page-block argument overrides in same-author shared media
   inheritance, matching defaults → savedArgs → block args render precedence.
