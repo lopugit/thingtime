@@ -47,12 +47,12 @@ export function LopuAttachments({ uploadsRef, onUploads, selected, onSelect, dis
 			<AttachmentComposer ref={uploadsRef} ownerId={user.id} purpose="message" maxFiles={10} disabled={disabled} onChange={onUploads} helperText="Private files attach to this chat. Lopu currently receives file metadata and the text of selected Things—not raw image, video or audio contents." />
 		</Box>
 		<Modal isOpen={open} onClose={() => setOpen(false)} size="lg" scrollBehavior="inside">
-			<ModalOverlay /><ModalContent mx={3}><ModalHeader>Attach your Things</ModalHeader><ModalCloseButton />
-				<ModalBody><Input autoFocus aria-label="Search your Things" placeholder="Search notes, todos, transcripts…" value={query} onChange={event => setQuery(event.target.value)} />
+			<ModalOverlay /><ModalContent mx={3} my={4} maxW="min(32rem, calc(100vw - 24px))" maxH="calc(100dvh - 32px)"><ModalHeader>Attach your Things</ModalHeader><ModalCloseButton />
+				<ModalBody minW={0} overflowX="hidden"><Input autoFocus aria-label="Search your Things" placeholder="Search notes, todos, transcripts…" value={query} onChange={event => setQuery(event.target.value)} />
 					<Text role="status" fontSize="sm" py={2}>{error || (busy ? 'Searching…' : `${results.length} results · ${selected.length}/10 selected`)}</Text>
-					<Flex direction="column" gap={1}>{results.map(thing => {
+					<Flex direction="column" gap={1} minW={0}>{results.map(thing => {
 						const checked = selected.some(item => item.id === thing.id);
-						return <Button key={thing.id} variant={checked ? 'solid' : 'ghost'} aria-pressed={checked} textAlign="left" justifyContent="flex-start" whiteSpace="normal" h="auto" minH="44px" py={2} isDisabled={!checked && selected.length >= 10} onClick={() => onSelect(checked ? selected.filter(item => item.id !== thing.id) : [...selected, thing])}>{thing.name}</Button>;
+						return <Button key={thing.id} variant={checked ? 'solid' : 'ghost'} aria-pressed={checked} textAlign="left" justifyContent="flex-start" whiteSpace="normal" minW={0} maxW="100%" h="auto" minH="44px" flexShrink={0} py={2} isDisabled={!checked && selected.length >= 10} onClick={() => onSelect(checked ? selected.filter(item => item.id !== thing.id) : [...selected, thing])}><Text minW={0} overflowWrap="anywhere">{thing.name}</Text></Button>;
 					})}</Flex>
 				</ModalBody><ModalFooter><Button onClick={() => setOpen(false)}>Done</Button></ModalFooter>
 			</ModalContent>
