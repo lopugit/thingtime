@@ -54,8 +54,11 @@ export const ConnectionsFeedPage = () => {
   const [revealed, setRevealed] = React.useState<Set<string>>(() => new Set());
   const [signedOut, setSignedOut] = React.useState(false);
   const requestSeq = React.useRef(0);
-  // one provider-deepening pass per exhausted scroll — reset when the tab
-  // changes or fresh pages arrive
+  // At most ONE automatic provider-deepening pass per tab visit: reset only by
+  // the [activeConnection] effect below, never on page arrival. Scrolling past
+  // the end of a deepened feed therefore stops fanning out to providers instead
+  // of deepening again — the "Fetch older from your apps" button stays the
+  // explicit way to ask for more, and it bypasses this latch entirely.
   const deepenedRef = React.useRef(false);
 
   const load = React.useCallback(
