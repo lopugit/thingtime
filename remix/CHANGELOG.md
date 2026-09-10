@@ -18,6 +18,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Bypass the browser HTTP cache when negotiating capabilities, bound checks
+  to 20 seconds and let failures retry without a page reload. Successful
+  concurrent checks still share a request; incompatible contracts fail closed.
+  — Codex (AI), 2026-09-10
+
 - Preserve bounded, sanitized action receipts in Lopu conversation history so
   subsequent replies can distinguish past successes from failures. Publish
   reply capability 1.6.1; historical results grant no new action permissions.
