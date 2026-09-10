@@ -1829,6 +1829,16 @@ does not accept production or develop database URIs.
 
 ### Personal recording runtime (local adapter)
 
+For an opt-in macOS smoke test, run
+`node --import tsx scripts/personal-recording-runtime-smoke.mts` from `remix/`.
+It skips unless `TT_PERSONAL_RUNTIME_SMOKE=1` is set with absolute local paths
+in `TT_SMOKE_CLAUDE`, `TT_SMOKE_WHISPER`, `TT_SMOKE_FFMPEG`, and `TT_SMOKE_MODEL`.
+It generates synthetic speech, checks WAV/M4A transcription, and cleans up its
+temporary audio. Set `TT_PERSONAL_CLAUDE_SMOKE=1` separately to send only that
+synthetic transcript to your native Claude Code sign-in and verify notes/todos.
+This consumes your account allowance; no tokens or real recordings belong in
+these variables. It does not pair a device or enable account processing.
+
 `remix/scripts/personal-recording-runtime.mjs` provides local `transcribe` and
 `complete` operations for the forthcoming personally paired recording worker.
 The paired-device broker is registered at `/api/v1/lopu/recordings/personal`;

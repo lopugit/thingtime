@@ -81,6 +81,22 @@ setup interactions and true phone-width visual acceptance remain unproven.
 
 ## Verification
 
+### Real local runtime acceptance — 2026-09-10
+
+The opt-in `remix/scripts/personal-recording-runtime-smoke.mts` synthesizes a
+short macOS speech fixture, converts it into WAV and AAC/M4A, and exercises the
+actual runtime rather than mocked subprocesses. Both formats passed local
+Whisper transcription with `base.en`; native first-party Claude Code OAuth
+then produced a garden todo and notebook note that passed the production
+exact-transcript-evidence parser. Only synthetic text was sent to Claude;
+there was no API-key fallback, real recording, account mutation or reminder.
+The fixture files were removed after the run. Seven runtime unit tests pass.
+
+This proves the local audio/text provider path, not real Keychain pairing,
+account delivery, scheduled reminders or physical Watch acceptance. Those
+remain required. The script skips by default and separates local speech
+testing from the explicit native-Claude allowance-consuming opt-in.
+
 `test:ai-models` covers local runtime and transport. `test:lopu` covers the
 bounded request/receipt contract, authority filters, broker lifecycle and shared
 recording content writer. Broker fixtures are in-memory collaborators; they do

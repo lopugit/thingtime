@@ -18,6 +18,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Verify synthetic WAV/M4A local transcription and native Claude OAuth
+  note/todo extraction with an opt-in runtime smoke. Real paired-account and
+  Watch delivery remain pending; details in
+  [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
 - Add recording-settings Mac pairing with expiring masked secrets, explicit
   copy/reveal and account-switch guards; publish pairing 1.1.0. Reconcile
   develop's sharing boundaries and both manifest suites. Build and API smoke
