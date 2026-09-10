@@ -18,6 +18,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Prepare native build 31 for unified Lopu conversation recovery after Apple
+  confirmed build 30 is already in internal TestFlight testing. Release Xcode
+  compilation passes; signed upload and device acceptance remain separate.
+  See [PR #731](../PRs/731-lopu-unified-scheduled-chats.md).
+  — Codex (AI), 2026-09-10
+
 - Add a loopback-only real HTTP acceptance smoke for linked Lopu chats,
   scheduled Things and relational comments, including account boundaries,
   pause/resume and owned-fixture cleanup. No provider or scheduler delivery is
