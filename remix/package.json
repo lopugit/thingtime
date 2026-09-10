@@ -160,6 +160,8 @@
     "mongodb": "^6.5.0",
     "nitro": "^3.0.260610-beta",
     "openai": "^6.44.0",
+    "parse5": "8.0.1",
+    "postcss": "8.5.17",
     "postcss-value-parser": "4.2.0",
     "prismjs": "^1.29.0",
     "react": "^19.2.7",
