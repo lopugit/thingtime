@@ -18,6 +18,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Persist direct web voice transcripts into their Lopu conversation with
+  account-fenced recovery/retry; seed recent chat context when starting voice,
+  isolate message caches by account, and discard late account-switch fetches.
+  Live local API retries pass; native and real-provider acceptance remain
+  pending. See [PR 731](../PRs/731-lopu-unified-scheduled-chats.md).
+  — Codex (AI), 2026-09-10
+
 - Add relational discussions to Thing details/previews and confirmation-bound
   Lopu comment tools; unify the text/voice page composer, add chat attachment
   selection, and introduce searchable scheduled tasks with separate run Things

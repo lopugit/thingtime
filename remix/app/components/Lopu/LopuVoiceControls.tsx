@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Center, Flex, Input, Popover, PopoverBody, PopoverContent, PopoverTrigger, Select, Switch, Text } from '@chakra-ui/react';
+import { Box, Button, Center, Flex, Input, Popover, PopoverBody, PopoverContent, PopoverTrigger, Select, Switch, Text } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
 import { ArrowUp, AudioLines, Loader2, Mic, Settings2, Square } from 'lucide-react';
 import { Link as RouterLink } from 'react-router';
@@ -17,6 +17,8 @@ import { browserSupportsLopuRealtime, LOPU_REALTIME_UNSUPPORTED_MESSAGE, LopuVoi
 import { useLopu } from './useLopu';
 import { useLopuChat } from './useLopuChat';
 import { useLopuSettings } from './useLopuSettings';
+import { VoiceCaptureQueue, type PendingVoiceCapture } from './voiceCaptureQueue';
+import { voiceConversationHistory, type VoiceHistoryItem } from './voiceConversation';
 
 // 🎙️ Lopu's voice engine + the compact controls every voice surface shares
 // (the /lopu/voice page and the floating window's voice mode).
@@ -114,6 +116,9 @@ export type UseLopuVoice = {
 	interrupt: () => void;
 	speakText: (text: string) => Promise<void>;
 	clearItems: () => void;
+	capturePending: number;
+	captureError: string;
+	retryCapture: () => void;
 };
 
 const VOICE_REPLY_ENDPOINT = '/api/v1/lopu/voice/reply';
@@ -148,6 +153,10 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 	const [items, setItems] = React.useState<LopuVoiceItem[]>([]);
 	const [nativeReady, setNativeReady] = React.useState(false);
 	const [webSupported, setWebSupported] = React.useState(false);
+	const captureOwner = React.useSyncExternalStore(subscribeLopuStore, () => getLopuStoreSnapshot().userId, () => null);
+	const captureQueue = React.useMemo(() => captureOwner ? new VoiceCaptureQueue(captureOwner) : null, [captureOwner]);
+	const [capturePending, setCapturePending] = React.useState(0);
+	const [captureError, setCaptureError] = React.useState('');
 
 	const sessionIdRef = React.useRef(newId('voice'));
 	const activeRef = React.useRef(false);
@@ -155,6 +164,8 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 	const nativeOwnerRef = React.useRef<string | null>(null);
 	// the web realtime session (direct voice) — null on the standard path
 	const realtimeRef = React.useRef<LopuVoiceRealtime | null>(null);
+	const voiceStartGenerationRef = React.useRef(0);
+	const directChatRef = React.useRef<{ sessionId: string; chatId: string | null } | null>(null);
 	const directSessionRef = React.useRef(false);
 	// recognition is paused for a turn / Lopu's speech (the feedback-loop guard)
 	const pausedRef = React.useRef(false);
@@ -175,7 +186,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 	}, []);
 
 	const pushItem = React.useCallback((item: Omit<LopuVoiceItem, 'id' | 'at'> & { id?: string }) => {
-		setItems((current) => [...current, { ...item, id: item.id ?? newId(item.role), at: Date.now() }].slice(-MAX_LOCAL_ITEMS));
+		setItems((current) => item.id && current.some(row => row.id === item.id) ? current : [...current, { ...item, id: item.id ?? newId(item.role), at: Date.now() }].slice(-MAX_LOCAL_ITEMS));
 	}, []);
 
 	const patchItem = React.useCallback((id: string, patch: (item: LopuVoiceItem) => LopuVoiceItem) => {
@@ -187,6 +198,33 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 	const ensureAssistantItem = React.useCallback((id: string) => {
 		setItems((current) => (current.some((item) => item.id === id) ? current : [...current, { id, role: 'assistant' as const, text: '', at: Date.now() }].slice(-MAX_LOCAL_ITEMS)));
 	}, []);
+	const retryCapture = React.useCallback(() => {
+		if (!captureQueue || getLopuStoreSnapshot().userId !== captureQueue.ownerId) return;
+		setCapturePending(captureQueue.list().length);
+		if (!captureQueue.list().length) return;
+		setCaptureError('');
+		void (async () => {
+			const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
+			await requireThingtimeCapability('api.lopu-voice-capture', '1.0.0');
+			await captureQueue.flush(() => getLopuStoreSnapshot().userId, async item => {
+				const response = await fetch('/api/v1/lopu/voice/capture', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(item), signal: AbortSignal.timeout(30000) });
+				return response.json();
+			}, async (item, result) => {
+				if (directChatRef.current?.sessionId === item.sessionId) directChatRef.current.chatId = result.chatId;
+				await loadLopuChats(); await loadLopuMessages(result.chatId);
+				if (captureQueue.ownerId !== getLopuStoreSnapshot().userId) return;
+				const rows = getLopuStoreSnapshot().messages[result.chatId] ?? [];
+				if (result.messages.every(message => rows.some(row => row.id === message.id))) setItems(previous => previous.filter(row => row.id !== item.localId));
+				if (getLopuStoreSnapshot().activeChatId === item.chatId) selectLopuChat(result.chatId);
+			});
+		})().catch(error => { if (captureQueue.ownerId === getLopuStoreSnapshot().userId) setCaptureError(error instanceof Error ? error.message : 'Voice saving needs a retry.'); })
+			.finally(() => { if (captureQueue.ownerId === getLopuStoreSnapshot().userId) setCapturePending(captureQueue.list().length); });
+	}, [captureQueue]);
+	React.useEffect(() => {
+		setCaptureError(''); setCapturePending(captureQueue?.list().length ?? 0); retryCapture();
+		window.addEventListener('online', retryCapture);
+		return () => window.removeEventListener('online', retryCapture);
+	}, [captureQueue, retryCapture]);
 
 	const savedVoiceChats = React.useRef(new Map<string, { chatId: string; ownerId: string | null }>());
 	const applyVoiceEvent = React.useCallback(
@@ -498,6 +536,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 	// ——— direct voice (web) ————————————————————————————————————————————————
 
 	const stopRealtime = React.useCallback(() => {
+		voiceStartGenerationRef.current++;
 		const realtime = realtimeRef.current;
 		realtimeRef.current = null;
 		directSessionRef.current = false;
@@ -511,7 +550,24 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 	// pre-flight refusal (unsupported provider, browser, or the server's 400)
 	// explains itself in one line first.
 	const startDirectVoice = React.useCallback(async (): Promise<boolean> => {
+		const generation = ++voiceStartGenerationRef.current;
 		const current = optionsRef.current;
+		const ownerId = getLopuStoreSnapshot().userId;
+		if (!ownerId || !captureQueue || captureQueue.ownerId !== ownerId) return false;
+		const captureSession = crypto.randomUUID();
+		const captureChat = current.chatId ?? null;
+		const responseText = new Map<string, string>();
+		const localId = (id: string) => `${captureSession}:${id}`;
+		const capture = (role: 'user' | 'assistant', eventId: string, text: string) => {
+			if (getLopuStoreSnapshot().userId !== ownerId || !text.trim()) return;
+			try {
+				const item: PendingVoiceCapture = { ownerId, sessionId: captureSession, eventId, chatId: captureChat, role, text: text.trim(), localId: localId(eventId), capturedAt: Date.now() };
+				const durable = captureQueue.add(item);
+				setCapturePending(captureQueue.list().length);
+				if (!durable) lopu({ title: 'Keep this tab open', description: 'Local storage is unavailable. Voice transcripts are held in memory until their save succeeds.', status: 'info', duration: 10000 });
+				retryCapture();
+			} catch (error) { setCaptureError((error as Error).message); stopRealtime(); activeRef.current = false; setActive(false); }
+		};
 		const provider = current.provider ?? null;
 		const reason = directVoiceUnavailableReason(provider, current.transcribe);
 		if (reason || !provider) {
@@ -525,16 +581,27 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 		const model = resolveDirectVoiceModel(provider, current.directVoiceModel ?? null);
 		setBusy('thinking');
 		let session: { token?: unknown; webSocketUrl?: unknown; effort?: unknown; textResponse?: unknown } | null = null;
+		let history: VoiceHistoryItem[] = [];
 		try {
+			const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
+			await requireThingtimeCapability('api.lopu-voice-capture', '1.0.0');
+			if (generation !== voiceStartGenerationRef.current || getLopuStoreSnapshot().userId !== ownerId) return true;
+			if (captureChat) {
+				if (!await loadLopuMessages(captureChat)) throw new Error('The selected conversation could not be loaded. Retry when its connection is restored.');
+				if (generation !== voiceStartGenerationRef.current || getLopuStoreSnapshot().userId !== ownerId || getLopuStoreSnapshot().activeChatId !== captureChat) { setBusy(null); return true; }
+				history = voiceConversationHistory(getLopuStoreSnapshot().messages[captureChat] ?? [], captureChat, ownerId);
+			}
 			const payload = await apiRef.current.v1.lopu.voiceSession({ providerId: provider.id, model: model?.id ?? null, textResponse: !current.speak });
 			session = payload && typeof payload === 'object' ? ((payload as { session?: typeof session }).session ?? null) : null;
 			if (typeof session?.token !== 'string' || !session.token || typeof session.webSocketUrl !== 'string') throw new Error('Lopu could not start direct voice.');
 		} catch (error) {
+			if (generation !== voiceStartGenerationRef.current || getLopuStoreSnapshot().userId !== ownerId) return true;
 			setBusy(null);
 			const message = error instanceof Error && error.message ? error.message : 'Lopu could not start direct voice.';
 			lopu({ title: 'Direct voice is off', description: `${message} — using device transcription.`, status: 'info', duration: 8000 });
 			return false;
 		}
+		if (generation !== voiceStartGenerationRef.current || getLopuStoreSnapshot().userId !== ownerId || getLopuStoreSnapshot().activeChatId !== captureChat) { setBusy(null); return true; }
 		const realtime = new LopuVoiceRealtime({
 			onActive: (on) => {
 				if (on || realtimeRef.current !== realtime) return;
@@ -548,26 +615,34 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 				setBusy(null);
 				setInterim('');
 			},
-			onUserTranscript: (text, final) => {
+			onUserTranscript: (text, final, providerEventId) => {
+				if (getLopuStoreSnapshot().userId !== ownerId) return;
 				if (!final) {
 					setInterim(text);
 					return;
 				}
 				setInterim('');
-				if (text.trim()) pushItem({ role: 'user', text: text.trim() });
+				if (text.trim()) {
+					const id = providerEventId && /^[A-Za-z0-9_.:-]{1,128}$/.test(providerEventId) ? providerEventId : crypto.randomUUID();
+					pushItem({ id: localId(id), role: 'user', text: text.trim() }); capture('user', id, text);
+				}
 			},
 			onAssistantStart: (id) => {
-				ensureAssistantItem(id);
+				if (getLopuStoreSnapshot().userId !== ownerId) return;
+				responseText.set(id, ''); ensureAssistantItem(localId(id));
 				setBusy('speaking');
 			},
 			onAssistantDelta: (id, text) => {
-				ensureAssistantItem(id);
-				patchItem(id, (item) => ({ ...item, text: item.text + text }));
+				if (getLopuStoreSnapshot().userId !== ownerId) return;
+				responseText.set(id, (responseText.get(id) || '') + text);
+				ensureAssistantItem(localId(id));
+				patchItem(localId(id), (item) => ({ ...item, text: item.text + text }));
 			},
-			onAssistantDone: () => setBusy(null),
-			onError: (message) => pushItem({ role: 'assistant', text: message, error: true })
+			onAssistantDone: id => { if (getLopuStoreSnapshot().userId !== ownerId) return; setBusy(null); capture('assistant', id, responseText.get(id) || ''); responseText.delete(id); },
+			onError: (message) => { if (realtimeRef.current === realtime && getLopuStoreSnapshot().userId === ownerId) pushItem({ role: 'assistant', text: message, error: true }); }
 		});
 		realtimeRef.current = realtime;
+		directChatRef.current = { sessionId: captureSession, chatId: captureChat };
 		directSessionRef.current = true;
 		activeRef.current = true;
 		setDirect(true);
@@ -577,18 +652,21 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 				token: session.token as string,
 				webSocketUrl: session.webSocketUrl as string,
 				effort: typeof session.effort === 'string' ? session.effort : 'none',
-				textResponse: session.textResponse === true
+				textResponse: session.textResponse === true,
+				history
 			});
 		} catch (error) {
+			if (realtimeRef.current !== realtime || getLopuStoreSnapshot().userId !== ownerId) return true;
 			stopRealtime();
 			activeRef.current = false;
 			setActive(false);
+			setBusy(null);
 			pushItem({ role: 'assistant', text: error instanceof Error && error.message ? error.message : 'Lopu could not start direct voice.', error: true });
 		} finally {
-			setBusy(null);
+			if (generation === voiceStartGenerationRef.current) setBusy(null);
 		}
 		return true;
-	}, [ensureAssistantItem, lopu, patchItem, pushItem, stopRealtime]);
+	}, [captureQueue, ensureAssistantItem, lopu, patchItem, pushItem, retryCapture, stopRealtime]);
 
 	// ——— session ————————————————————————————————————————————————————————————
 
@@ -682,6 +760,20 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 	}, [cancelSpeech]);
 
 	const clearItems = React.useCallback(() => setItems([]), []);
+	const previousConversation = React.useRef({ ownerId: captureOwner, chatId: options.chatId ?? null });
+	React.useEffect(() => {
+		const previous = previousConversation.current;
+		const chatId = options.chatId ?? null;
+		previousConversation.current = { ownerId: captureOwner, chatId };
+		const ownerChanged = previous.ownerId !== captureOwner;
+		const chatChanged = previous.chatId !== chatId;
+		// The first successful capture assigns a canonical ID to the current
+		// new chat. That is not a user switching to another conversation.
+		const assignedCurrentVoiceChat = previous.chatId === null && chatId !== null && (!directChatRef.current || directChatRef.current.chatId === chatId);
+		if (ownerChanged || (chatChanged && !assignedCurrentVoiceChat)) {
+			stop(); setItems([]); directChatRef.current = null;
+		}
+	}, [captureOwner, options.chatId, stop]);
 
 	// leaving the surface ends the session: microphone, speech, native audio,
 	// the realtime socket
@@ -713,7 +805,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 		submit: runTurn,
 		interrupt,
 		speakText,
-		clearItems
+		clearItems, capturePending, captureError, retryCapture
 	};
 };
 
@@ -1238,7 +1330,10 @@ export const LopuVoiceSurface = ({ chatId, onChatChange, compact = false, onOpen
 				showConversations={false}
 				onOpenFull={onOpenFull}
 				autoFocus={false}
-				trailing={voice.items.length ? <LopuVoiceTranscript items={voice.items} compact={compact} /> : null}
+				trailing={<>
+					{voice.items.length ? <LopuVoiceTranscript items={voice.items} compact={compact} /> : null}
+					{voice.capturePending > 0 || voice.captureError ? <Box p={3} role="status"><Text fontSize="sm">{voice.captureError || `Saving ${voice.capturePending} voice transcript(s)…`}</Text><Button size="sm" mt={2} onClick={voice.retryCapture}>Retry saving voice</Button></Box> : null}
+				</>}
 			/>
 			{voiceMode ? <LopuVoiceDeck hideTypedInput voice={voice} compact={compact} disabled={!chat.viewer.id || locked} providerValue={providerValue} onProviderChange={onProviderChange} provider={provider} /> : null}
 		</Flex>

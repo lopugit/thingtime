@@ -3,6 +3,7 @@
 ## Scope
 
 - One mounted chat composer across standard voice and text, with transcript turns persisted into the selected conversation.
+- Direct web voice capture saves final user/assistant transcripts without a second inference call. A bounded account-scoped outbox retries failed saves; recent selected-chat text seeds the provider session before microphone frames.
 - Device-file attachments and searchable owned-Thing references. Binary media currently contributes metadata only; selected readable Things contribute bounded text.
 - Searchable scheduled-task Things, protected execution controls, separate target-linked run Things, interval/time-zone cron schedules, saved messages or read-only AI updates, existing or fresh chats, and Lopu-message notifications.
 - Discussion sections on Thing details and previews; comments are separate target-linked Things. Lopu comment proposals require confirmation bound to the exact target and full text.
@@ -20,11 +21,18 @@
 
 ## Remaining acceptance work; not release-complete
 
-- Direct provider WebSocket voice turns are still local-only. Persist them and reconcile the native voice paths before claiming every voice mode shares durable history.
+- Direct web voice capture: real local HTTP checks with a fresh API-registered test account prove one chat, exact user/assistant retry IDs, changed assistant-text rejection (409), wrong-owner rejection (409), and discoverability in the chat list. The live origin manifest advertises capture 1.0.0. No production credentials or provider calls were used.
+- Unit coverage includes recovery after reload/offline, chronological retries, bounded queues, account changes, collision-safe identities, stale message fetches, account-scoped caches, history filtering/bounds, WebSocket history-before-audio ordering, and cancellation while microphone permission is pending.
+- Corrected the production CSP to permit the supported `wss://api.x.ai` voice host; it previously worked only with the development socket allowances. Arbitrary production WebSocket origins remain blocked. Hosted acceptance requires the new deployment headers, not just a hot-reloaded client.
+- Reconcile native direct-voice persistence, test actual provider acceptance/history recall and finish authenticated mode-switch/retry UI checks before claiming every voice mode shares durable history.
 - Test authenticated attachment selection/upload, mode-switch continuity, preview discussions, pagination, account changes and denied-target behavior in the browser.
 - Exercise real scheduled delivery and read-only AI updates with live provider access; mock-worker tests do not prove hosted scheduler/provider health.
 - Review mobile floating-control overlap around the comment composer, and finish nested UI checks.
 - Hosted preview, CI, deployment and physical Watch/iPhone acceptance are separate, pending gates. No new TestFlight build or production migration was performed for this branch.
+
+Protocol reference: [xAI Voice API](https://docs.x.ai/developers/rest-api-reference/inference/voice)
+supports `conversation.item.create` for history seeding. Only ordinary user and
+assistant text is replayed; no `response.create` is issued by history loading.
 
 ## Local URLs
 

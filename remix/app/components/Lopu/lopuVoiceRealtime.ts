@@ -7,6 +7,8 @@
 // and lands transcripts in the conversation list; the iOS app implements the
 // same protocol natively (LopuVoiceSessionController.swift).
 
+import { voiceHistoryEvents, type VoiceHistoryItem } from './voiceConversation';
+
 const SAMPLE_RATE = 24_000;
 
 export type LopuVoiceRealtimeSessionDescriptor = {
@@ -14,11 +16,12 @@ export type LopuVoiceRealtimeSessionDescriptor = {
 	webSocketUrl: string;
 	effort: string;
 	textResponse: boolean;
+	history?: VoiceHistoryItem[];
 };
 
 export type LopuVoiceRealtimeCallbacks = {
 	onActive(active: boolean): void;
-	onUserTranscript(text: string, final: boolean): void;
+	onUserTranscript(text: string, final: boolean, eventId?: string): void;
 	onAssistantStart(id: string): void;
 	onAssistantDelta(id: string, text: string): void;
 	// the provider finished one reply (response.done)
@@ -62,6 +65,8 @@ export class LopuVoiceRealtime {
 	private playbackCursor = 0;
 	private responseId = '';
 	private stopped = false;
+	private configured = false;
+	private cancelOpening: (() => void) | null = null;
 
 	constructor(callbacks: LopuVoiceRealtimeCallbacks) {
 		this.callbacks = callbacks;
@@ -70,14 +75,17 @@ export class LopuVoiceRealtime {
 	async start(session: LopuVoiceRealtimeSessionDescriptor) {
 		if (!browserSupportsLopuRealtime()) throw new Error(LOPU_REALTIME_UNSUPPORTED_MESSAGE);
 		this.stopped = false;
-		this.stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }, video: false });
+		const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }, video: false });
+		if (this.stopped) { stream.getTracks().forEach(track => track.stop()); return; }
+		this.stream = stream;
 		const Context = window.AudioContext || (window as any).webkitAudioContext;
 		this.context = new Context({ sampleRate: SAMPLE_RATE }) as AudioContext;
 		await this.context.resume();
+		if (this.stopped) return;
 		this.source = this.context.createMediaStreamSource(this.stream);
 		this.processor = this.context.createScriptProcessor(2048, 1, 1);
 		this.processor.onaudioprocess = (event) => {
-			if (this.socket?.readyState !== WebSocket.OPEN) return;
+			if (!this.configured || this.stopped || this.socket?.readyState !== WebSocket.OPEN) return;
 			this.socket.send(pcm16(event.inputBuffer.getChannelData(0)).buffer);
 		};
 		this.source.connect(this.processor);
@@ -87,9 +95,14 @@ export class LopuVoiceRealtime {
 		socket.binaryType = 'arraybuffer';
 		this.socket = socket;
 		await new Promise<void>((resolve, reject) => {
-			const fail = () => reject(new Error('The realtime audio connection could not be opened.'));
-			socket.addEventListener('open', () => resolve(), { once: true });
+			const cleanup = () => { clearTimeout(timeout); socket.removeEventListener('open', opened); socket.removeEventListener('error', fail); socket.removeEventListener('close', fail); this.cancelOpening = null; };
+			const fail = () => { cleanup(); reject(new Error('The realtime audio connection could not be opened.')); };
+			const opened = () => { cleanup(); resolve(); };
+			const timeout = setTimeout(fail, 15000);
+			this.cancelOpening = () => { cleanup(); resolve(); };
+			socket.addEventListener('open', opened, { once: true });
 			socket.addEventListener('error', fail, { once: true });
+			socket.addEventListener('close', fail, { once: true });
 		});
 		if (this.stopped) return;
 		socket.send(JSON.stringify({
@@ -105,6 +118,8 @@ export class LopuVoiceRealtime {
 				}
 			}
 		}));
+		for (const event of voiceHistoryEvents(session.history ?? [])) socket.send(JSON.stringify(event));
+		this.configured = true;
 		socket.onmessage = (event) => this.handleMessage(event.data, session.textResponse);
 		socket.onerror = () => this.callbacks.onError('The realtime audio connection encountered an error.');
 		socket.onclose = () => {
@@ -115,6 +130,7 @@ export class LopuVoiceRealtime {
 	}
 
 	private handleMessage(data: unknown, textResponse: boolean) {
+		if (this.stopped) return;
 		if (data instanceof ArrayBuffer) {
 			if (!textResponse) this.play(data);
 			return;
@@ -128,7 +144,7 @@ export class LopuVoiceRealtime {
 		} else if (event.type === 'conversation.item.input_audio_transcription.updated' && typeof event.transcript === 'string') {
 			this.callbacks.onUserTranscript(event.transcript, false);
 		} else if (event.type === 'conversation.item.input_audio_transcription.completed' && typeof event.transcript === 'string') {
-			this.callbacks.onUserTranscript(event.transcript, true);
+			this.callbacks.onUserTranscript(event.transcript, true, typeof event.item_id === 'string' ? event.item_id : typeof event.event_id === 'string' ? event.event_id : undefined);
 		} else if ((event.type === 'response.output_audio_transcript.delta' || event.type === 'response.text.delta' || event.type === 'response.output_text.delta') && typeof event.delta === 'string') {
 			if (!this.responseId) {
 				this.responseId = `realtime-${Date.now()}`;
@@ -160,6 +176,8 @@ export class LopuVoiceRealtime {
 
 	async stop() {
 		this.stopped = true;
+		this.configured = false;
+		this.cancelOpening?.();
 		this.processor?.disconnect();
 		this.source?.disconnect();
 		this.stream?.getTracks().forEach((track) => track.stop());

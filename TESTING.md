@@ -2,6 +2,15 @@
 
 ## Unified Lopu conversations, scheduled Things and discussions
 
+- [ ] Direct web voice: start in an existing text chat, speak, switch back and
+  reload; both speakers remain in that chat. A new voice chat gets one ID.
+  Go offline during saving, reload and retry; no duplicated turns or new AI
+  requests. Stop while granting microphone permission; no late stream starts.
+  Switch accounts during a fetch/save and verify private history never crosses
+  accounts. Test the pending-save/retry panel at desktop and 390px widths.
+  On a deployed build, confirm the CSP permits only the supported voice host
+  and the microphone session connects without a CSP violation.
+
 - [ ] Desktop and 390px: switch Chat → Voice → Chat repeatedly; keep the same
   chat ID, history, draft and attachment selection. Reload a saved transcript.
   Check device transcription and direct-provider voice separately.

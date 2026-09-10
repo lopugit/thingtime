@@ -641,7 +641,7 @@ export const persistLopuUserTurn = async (
 // chat's lastMessage preview and bumps crystal.lopu.turns / lastModel.
 export const persistLopuAssistantTurn = async (
 	viewerId: string,
-	input: { chatId?: unknown; requestId?: unknown; text?: unknown; lopu?: LopuAssistantTurnMeta | null; unread?: boolean }
+	input: { chatId?: unknown; requestId?: unknown; text?: unknown; lopu?: LopuAssistantTurnMeta | null; unread?: boolean; requireExactReplay?: boolean }
 ): Promise<LopuAssistantTurnResult> => {
 	const access = await resolveLopuChat(viewerId, input.chatId);
 	if ('ok' in access && access.ok === false) return access;
@@ -695,6 +695,7 @@ export const persistLopuAssistantTurn = async (
 		if (isDuplicateWrite(error)) {
 			const existing = await turnRows(things, chat.shareId, requestId, 'assistant');
 			if (!existing.length || String(existing[0].ownerId) !== viewerId) return fail(409, 'That reply was already recorded under another request id');
+			if (input.requireExactReplay && (existing.length !== parts.length || existing.map((row: any) => String(row.crystal?.text || '')).join('') !== text)) return fail(409, 'That reply request id is already in use for different text');
 			const projected = await projectMessages(viewerId, chat.shareId, existing, { withThreadCounts: false });
 			return { ok: true, messages: projected.messages, existing: true };
 		}

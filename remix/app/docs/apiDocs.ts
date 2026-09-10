@@ -4748,6 +4748,17 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		]
 	}),
   endpoint({
+		id: 'lopu-voice-capture', contractVersion: '1.0.0', featureVersion: '1.0.0',
+		group: 'lopu', title: 'Save a completed direct-voice transcript',
+		endpoint: '/api/v1/lopu/voice/capture', methods: ['POST'],
+		summary: 'Save a device-reported user or assistant transcript into the same owned Lopu chat without another AI call.',
+		detail: 'Requires ownerId matching the authenticated user to reject queued captures after an account switch. Accepts sessionId and eventId (1–128 letters/digits/underscore/dash/dot/colon), optional chatId, role user or assistant, and text (1–12000 characters). A new chat is deterministic within the owner/session. Stable event IDs deduplicate exact retries; changed text under the same ID is rejected. Assistant captures are explicitly labelled device-reported transcripts, not verified provider output or tool execution. No supplied billing, recipient, credentials or tool metadata is accepted. Writes are pinned to the home account database and use normal transactional storage accounting.',
+		auth: { mode: 'session', description: 'Full first-party user; same-origin JSON; subscription-tier recording mutation limit, with fail-closed entitlement lookup.' },
+		steps: ['Negotiate api.lopu-voice-capture 1.0.0 on the selected origin before starting direct voice.', 'Save each final transcript with stable session/event IDs; retain failed saves for retry.', 'Reconcile using returned chatId and canonical messages; never replay inference to retry storage.'],
+		requestExamples: [{ name: 'Save spoken text', description: 'First final transcript in a new voice session.', method: 'POST', body: { ownerId: 'your-user-id', sessionId: 'voice-session-1', eventId: 'utterance-1', role: 'user', text: 'Remember the meeting.' } }],
+		responseExamples: [{ status: 200, description: 'Saved or exact replay, with canonical Messenger message projections.', body: { ok: true, ownerId: 'your-user-id', chatId: 'lopu-chat-id', messages: [{ id: 'message-id', text: 'Remember the meeting.' }], existing: false } }, { status: 409, description: 'An event ID cannot be reused for changed text, or the signed-in account changed.', body: { ok: false, error: 'That message request id is already in use' } }]
+	}),
+  endpoint({
 		id: 'lopu-voice-session',
 		// 1.1.0: the verified-access gate (a byo turn: 403 LOPU_UNVERIFIED unless
 		// allowByoUnverified) and one lopu-usage row per minted session — compatible additions.

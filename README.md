@@ -15,7 +15,17 @@ Device-transcription mode saves its text and transcript Thing into that chat.
 The composer offers device attachments and an owned-Thing search picker. Files
 are private chat attachments; model context currently includes file metadata,
 not decoded audio/video/image content. Selected Things contribute readable text.
-Direct provider WebSocket voice persistence is not implemented yet; its live turns currently remain local to the voice surface.
+Direct web voice saves completed user and assistant transcripts into the same
+chat through `api.lopu-voice-capture` 1.0.0, without repeating inference. The
+selected chat's newest 20 persisted text messages (up to 24000 characters) seed
+the direct provider session; binary attachments and tool payloads are not
+replayed. Direct voice stays opt-in and requires a supported owner-configured
+provider. History seeding may incur the provider's normal text-input charges.
+Failed transcript saves remain in an origin/account-scoped local outbox (up to
+50 events / 240000 characters), with a visible retry button and an online retry.
+No provider credentials are stored in that outbox. If browser storage is
+unavailable, keep the tab open until saving succeeds. Native direct-voice
+persistence and real-provider/device acceptance remain separate release gates.
 
 Scheduled tasks support notification-only, saved chat-message, and fresh
 read-only AI-update modes, an existing conversation or a new chat each run,

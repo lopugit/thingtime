@@ -149,7 +149,7 @@ export type LopuStoreState = {
 
 export const LOPU_CACHE_PREFIX = 'tt-lopu-';
 export const lopuChatsCacheKey = (userId: string) => `tt-lopu-chats-${userId}`;
-export const lopuMessagesCacheKey = (chatId: string) => `tt-lopu-messages-${chatId}`;
+export const lopuMessagesCacheKey = (chatId: string, ownerId: string | null = state.userId) => `tt-lopu-messages-v2-${encodeURIComponent(ownerId ?? 'guest')}-${encodeURIComponent(chatId)}`;
 export const lopuSettingsCacheKey = (userId: string) => `tt-lopu-settings-${userId}`;
 export const LOPU_MODELS_CACHE_KEY = 'tt-lopu-models';
 export const LOPU_MESSAGES_CACHE_CAP = 50;
@@ -399,8 +399,10 @@ export const setLopuSettings = (patch: Partial<LopuChatSettings>) => {
  * call during render (no synchronous emit). A viewer change drops the
  * previous account's conversations and any in-flight turn.
  */
+let accountGeneration = 0;
 export const hydrateLopuStore = (userId: string | null): LopuStoreState => {
 	if (state.hydrated && state.userId === userId) return state;
+	accountGeneration++;
 	if (state.streamingId && controller) {
 		controller.abort();
 		controller = null;
@@ -486,13 +488,19 @@ export const loadLopuChats = async (): Promise<void> => {
 	}
 };
 
-const messagesLoading = new Set<string>();
+const messagesLoading = new Map<string, Promise<boolean>>();
 
-export const loadLopuMessages = async (chatId: string): Promise<void> => {
-	if (!client || !chatId || messagesLoading.has(chatId)) return;
-	messagesLoading.add(chatId);
+export const loadLopuMessages = (chatId: string): Promise<boolean> => {
+	if (!client || !chatId) return Promise.resolve(false);
+	const generation = accountGeneration;
+	const loadingKey = `${generation}:${chatId}`;
+	const existing = messagesLoading.get(loadingKey);
+	if (existing) return existing;
+	const boundClient = client;
+	const pending = (async () => {
 	try {
-		const response = await client.messages({ chatId, limit: LOPU_MESSAGES_CACHE_CAP });
+		const response = await boundClient.messages({ chatId, limit: LOPU_MESSAGES_CACHE_CAP });
+		if (generation !== accountGeneration || response?.ok === false) return false;
 		const rows: ChatMessage[] = Array.isArray(response?.messages) ? response.messages : [];
 		// the API pages newest-first; the timeline reads oldest-first. The
 		// server's rows replace any optimistic Lopu rows (their ids differ).
@@ -503,7 +511,9 @@ export const loadLopuMessages = async (chatId: string): Promise<void> => {
 			messages: { ...current.messages, [chatId]: merged },
 			messagesLoaded: { ...current.messagesLoaded, [chatId]: true }
 		}));
+		return true;
 	} catch (error) {
+		if (generation !== accountGeneration) return false;
 		const status = errorStatus(error);
 		if ((status === 403 || status === 404) && state.activeChatId === chatId) {
 			setState((current) => ({
@@ -515,9 +525,13 @@ export const loadLopuMessages = async (chatId: string): Promise<void> => {
 		} else {
 			setState((current) => ({ messagesLoaded: { ...current.messagesLoaded, [chatId]: true } }));
 		}
+		return false;
 	} finally {
-		messagesLoading.delete(chatId);
+		messagesLoading.delete(loadingKey);
 	}
+	})();
+	messagesLoading.set(loadingKey, pending);
+	return pending;
 };
 
 // ——— selection ————————————————————————————————————————————————————————————

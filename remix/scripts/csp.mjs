@@ -57,6 +57,10 @@ const directives = ({ dev = false } = {}) => ({
 		// env carries the bucket config; regional wildcard fallback otherwise
 		// (local/preview builds without the sensitive env).
 		privateS3Origin(),
+		// Opt-in direct voice uses a provider-minted short-lived credential.
+		// Keep production scoped to the one supported realtime host; never
+		// allow arbitrary wss: origins or user-supplied provider URLs here.
+		'wss://api.x.ai',
 		// Dev only: Vite HMR websocket (separate port) + analytics debug beacons.
 		...(dev ? ['ws:', 'wss:', 'https://va.vercel-scripts.com'] : [])
 	],
