@@ -1,4 +1,5 @@
 import React from 'react';
+import { mapRenderMediaProps } from '../Sharing/renderMediaCore';
 import { useSharedMediaUrl } from '../Sharing/SharedMedia';
 import {
 	Alert,
@@ -256,7 +257,7 @@ const renderNode = (node: ChakraThingNode, key: number, depth: number, state: Re
 		);
 	}
 
-	const props = sanitizeProps(node.props);
+	const props = mapRenderMediaProps(sanitizeProps(node.props), state.mediaUrl);
 	for (const field of URL_PROPS) if (typeof props[field] === 'string') props[field] = state.mediaUrl(props[field]);
 
 	if (CHILDLESS_COMPONENTS.has(name)) {

@@ -16,6 +16,13 @@ test('downtime skips missed intervals without a notification backlog', () => {
   assert.equal(nextReminderTime(now, 5, new Date('2026-09-09T10:17:00Z'))?.toISOString(), '2026-09-09T10:20:00.000Z');
   assert.equal(nextReminderTime(now, 5, now)?.toISOString(), '2026-09-09T10:05:00.000Z');
 });
+test('calendar schedules preserve local time and skip missed runs', () => {
+  const calendar = parseReminderInput({ title: 'Daily update', cron: '0 9 * * *', timeZone: 'Australia/Melbourne', mode: 'assistant', chatId: 'lopu-chat-example', relatedThingIds: ['todo', 'todo'] }, now);
+  assert.equal(calendar.at, '2026-09-09T23:00:00.000Z');
+  assert.deepEqual(calendar.relatedThingIds, ['todo']);
+  assert.equal(nextReminderTime(new Date(calendar.at), null, new Date('2026-10-05T00:00:00Z'), calendar)?.toISOString(), '2026-10-05T22:00:00.000Z');
+  for (const patch of [{ cron: 'bad' }, { everyMinutes: 5 }, { newChatEachRun: true }, { mode: 'shell' }, { relatedThingIds: ['bad/id'] }]) assert.throws(() => parseReminderInput({ ...calendar, ...patch }, now), TypeError);
+});
 test('Lopu advertises actual Thing and notification tools with closed owner-free inputs', () => {
   for (const name of ['create_thing', 'create_reminder', 'send_notification', 'list_reminders', 'set_reminder_enabled']) assert.ok(LOPU_TOOL_NAMES.includes(name as any));
   const note = validateLopuToolInput('create_thing', { title: 'Private note', ownerId: 'other', acl: ['tt:all'] });

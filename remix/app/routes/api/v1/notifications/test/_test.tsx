@@ -1,3 +1,4 @@
+import { pushDeliveryMessage, type PushDeliveryReport } from '~/api/utils/notifications/pushDeliveryCore';
 import { randomUUID } from 'node:crypto';
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
@@ -19,8 +20,9 @@ export const action = async ({ request }: { request: Request }) => {
 	try {
 		const input = notificationTestInput(await readJsonBody(request, 2048));
 		const id = `lopu-recording-notification-test-${randomUUID()}`;
-		const saved = await runWithMongoEndpoint(null, () => emitSystemNotificationOnce({ ...input, skipEmail: true, recipientId: user.id, href: '/notifications' }, id, async () => true));
-		return json({ ok: true, saved, id: saved ? id : null, message: saved ? 'Test saved in your notification history. Device push delivery is best-effort; check your Watch.' : 'This notification is muted by your notification preferences.' }, { headers });
+		let push: PushDeliveryReport | undefined;
+		const saved = await runWithMongoEndpoint(null, () => emitSystemNotificationOnce({ ...input, skipEmail: true, recipientId: user.id, href: '/notifications' }, id, async () => true, report => { push = report; }));
+		return json({ ok: true, saved, id: saved ? id : null, push, message: saved ? pushDeliveryMessage(push) : 'This notification is muted by your notification preferences.' }, { headers });
 	} catch (error) { return json({ ok: false, error: error instanceof TypeError ? error.message : 'The notification could not be saved.' }, { status: error instanceof TypeError ? 400 : 503, headers }); }
 };
 export const loader = async () => json({ ok: false }, { status: 405, headers });

@@ -10,6 +10,52 @@ At Thingtime, we believe that data and knowledge should be open, accessible, and
 
 ## Lopu reminders and notification tests
 
+The Lopu page keeps one conversation while switching between Chat and Voice.
+Device-transcription mode saves its text and transcript Thing into that chat.
+The composer offers device attachments and an owned-Thing search picker. Files
+are private chat attachments; model context currently includes file metadata,
+not decoded audio/video/image content. Selected Things contribute readable text.
+Direct web voice saves completed user and assistant transcripts into the same
+chat through `api.lopu-voice-capture` 1.0.0, without repeating inference. The
+selected chat's newest 20 persisted text messages (up to 24000 characters) seed
+the direct provider session; binary attachments and tool payloads are not
+replayed. Direct voice stays opt-in and requires a supported owner-configured
+provider. History seeding may incur the provider's normal text-input charges.
+Failed transcript saves remain in an origin/account-scoped local outbox (up to
+50 events / 240000 characters), with a visible retry button and an online retry.
+No provider credentials are stored in that outbox. If browser storage is
+unavailable, keep the tab open until saving succeeds.
+Native bridge 1.3.0 also saves completed direct-voice text through this endpoint.
+Its protected Application Support outbox survives app relaunch, never stores
+cookies/tokens, and verifies both the origin contract and current account before
+delivery. It holds at most 50 events / 240000 characters per account/origin
+(200 total), stops recording if a new event cannot be saved safely, and retries
+when Lopu reconnects or **Retry saving voice** is tapped. Only the active voice
+session may select a newly created chat; older background saves update history
+without navigating away. Existing native builds must update before direct voice
+can promise shared history. Normal native transcription also reconciles its
+saved chat. Real-provider and physical-device acceptance remain release gates.
+
+Scheduled tasks support notification-only, saved chat-message, and fresh
+read-only AI-update modes, an existing conversation or a new chat each run,
+and five-field cron expressions with an IANA time zone. They are searchable
+Things; run notes are separate quota-billed `scheduled-task-run` Things linked
+by `targetId`. The protected schedule remains canonical: editing the displayed
+Thing does not reprogram execution. A paused task stops future starts, not an
+already-running response. Ambiguous failures require owner review rather than
+automatic replay. AI updates use normal account access and billing, and cannot
+run mutating tools. Each message may produce a `lopu-message` notification.
+
+Thing detail pages and `/things` previews fetch their discussion by target ID.
+Comments are separate Things inheriting the target audience; they are never
+embedded in the target crystal. Lopu can list comments and propose a comment
+with an explicit confirmation. No new database migration or index is required.
+
+Local validation for this worktree uses `http://localhost:11270` (Nitro 11272).
+No Tailscale/Funnel mapping has been configured or verified for these ports.
+The shared PM2 daemon was unresponsive during validation; the temporary
+foreground test stack is not a durable service configuration.
+
 Lopu chat and the standard voice page share `create_thing`, `send_notification`,
 `create_reminder`, `list_reminders`, and `set_reminder_enabled`. Only the signed-in
 owner can receive or manage these reminders. Notes/todos and reminder content
@@ -1783,9 +1829,70 @@ does not accept production or develop database URIs.
 
 ### Personal recording runtime (local adapter)
 
+Saved iPhone audio Things can be explicitly processed in `/lopu/recordings`:
+paste the recording's `/thing/<id>` link or ID, then choose **Queue recording**
+for transcription/notes or **Send to Lopu** for a confirmed transcript handoff.
+This requires `api.lopu-recordings` 1.5.0, an enabled recording processor, and a
+ready standalone owner-private audio attachment with purpose `recording`.
+The existing `postId` request field accepts either that recording Thing ID or
+a private Watch post ID. Automatic discovery still covers only new Watch posts;
+saved phone recordings are never processed merely because they exist. Upload
+approval, storage quotas, selected-provider/local-device setup and separate Lopu
+tool confirmations remain required. Transcript comments are linked children;
+processing never converts the audio into a post or rewrites its crystal/binding.
+
+In `/things`, an owned private audio recording also offers **Send to Lopu** in
+both the right-click and three-dot menus. The action checks this domain's
+capabilities and your enabled processor, then asks for confirmation. It sends
+only the selected recording, not other selected Things; it never enables a
+processor automatically. Recording activity shows the eventual transcript and
+conversation. The server remains authoritative for attachment readiness and
+privacy, even when a cached tile still shows the menu.
+
+The opt-in HTTP delivery smoke (`pnpm --dir remix run test:recording-delivery`)
+skips by default. To run it, use an isolated loopback Thingtime server backed by
+a disposable Mongo replica set and a configured private test S3 bucket. Register
+an unused `recqa`-prefixed account through the normal signup API, and have an
+administrator approve its **public upload** scope: Watch attachments use the
+post upload purpose even though their resulting Things are private. Do not
+bypass upload approval or seed the database directly.
+
+Inject `THINGTIME_RECORDING_QA_USERNAME` and `THINGTIME_RECORDING_QA_PASSWORD`
+through your local secret manager/environment (never chat, command arguments,
+or tracked files), then run:
+
+```sh
+pnpm --dir remix run test:recording-delivery http://127.0.0.1:18000 --confirm-disposable-qa
+```
+
+Substitute your configured local port. The script rejects remote origins and
+non-QA usernames, and requires disabled, unused recording settings. It uploads
+one second of synthetic silence, pairs disposable test devices, exercises real
+HTTP claims/completions with deterministic synthetic inference, and checks
+duplicate-safe private transcript/note/todo writes and opt-out enforcement.
+Cleanup disables processing, removes this run's source/output Things, and signs
+out its own API session. The disposable account, device records and job metadata
+remain for diagnosis; upload cleanup may be deferred by the storage lifecycle.
+Any cleanup failure makes the test fail. No real recordings, browser sessions,
+Keychain entries or AI providers are used. A pass proves broker delivery, not
+real speech recognition, Claude output quality, or physical Watch acceptance.
+
+For an opt-in macOS smoke test, run
+`node --import tsx scripts/personal-recording-runtime-smoke.mts` from `remix/`.
+It skips unless `TT_PERSONAL_RUNTIME_SMOKE=1` is set with absolute local paths
+in `TT_SMOKE_CLAUDE`, `TT_SMOKE_WHISPER`, `TT_SMOKE_FFMPEG`, and `TT_SMOKE_MODEL`.
+It generates synthetic speech, checks WAV/M4A transcription, and cleans up its
+temporary audio. Set `TT_PERSONAL_CLAUDE_SMOKE=1` separately to send only that
+synthetic transcript to your native Claude Code sign-in and verify notes/todos.
+This consumes your account allowance; no tokens or real recordings belong in
+these variables. It does not pair a device or enable account processing.
+
 `remix/scripts/personal-recording-runtime.mjs` provides local `transcribe` and
 `complete` operations for the forthcoming personally paired recording worker.
-It is **not yet connected to cloud recording jobs or the shared HTTP endpoint**.
+The paired-device broker is registered at `/api/v1/lopu/recordings/personal`;
+the interactive Mac launcher and recording-settings setup panel are available.
+Synthetic audio and real Keychain storage have been verified. Real paired-account
+audio delivery and end-to-end Watch acceptance are still pending.
 No server, public listener, background service or automatic recording processing
 is started by importing this module.
 
@@ -1806,6 +1913,95 @@ execution and output, and a temporary directory removed after success or failure
 Inherited API keys and endpoint overrides are excluded from its environment.
 Transcription can mishear names; inspect the transcript before relying on tasks.
 Run `npm --prefix remix run test:ai-models` for its regression coverage.
+
+The outbound transport in `remix/scripts/personal-recording-worker.ts` now
+provides one bounded `runOnce()` cycle around that runtime. It requires a
+personally paired Thingtime device credential and negotiates
+`api.lopu-recordings-personal` version `1.0.0` on the exact selected origin
+before sending the credential. HTTPS is required except for loopback testing;
+redirects are rejected. Audio stays local; only transcript text reaches Claude
+Code. Heartbeat loss stops local processing, and interrupted result submissions
+retry the identical lease/result rather than running inference again.
+
+The API-layer broker now implements device-bound claims, private audio reads,
+bounded heartbeats and completion receipts. It uses the shared recording content
+writer with transactional checks of current consent, device/session revocation
+and source privacy. Accepted transcripts and server-selected output IDs survive
+a worker crash; exact completion retries do not run inference or create content
+again. Jobs assigned to a personal device cannot fall back to cloud credentials.
+
+**Integration status:** the Mac CLI runs in the foreground, not as an installed
+background service. The settings UI and API accept `runtimeDeviceId` only for an owned paired
+device with an active `recordings.personal.v1` session. New jobs snapshot that
+selection; retry explicitly assigns the selected processor while preserving
+completed checkpoints. Offline personal jobs wait without a cloud fallback.
+Clients require `api.lopu-recordings` 1.4.0 and
+`api.lopu-recordings-personal` 1.0.0 on the selected origin. Older deployments
+fail closed. Do not copy an API key, CI credential or Claude OAuth
+token into its `credential` option: it accepts only an existing Thingtime paired
+device credential. Keep machine-local worker setup untracked; importing
+this module does not pair a device or enable recording processing.
+Do not set internal job or settings fields directly in a database to bypass
+that gate. Broker/authority mock tests in `test:lopu` are unit coverage, not real
+database race or Watch proof. Run
+`node --import tsx remix/scripts/personal-recording-api-smoke.mts <loopback-origin>`
+from a dependency-equipped checkout for the real HTTP signup, signed pairing,
+selection, empty-queue and opt-out smoke. It creates one synthetic local account
+and device, leaves processing disabled, prints no credentials, and invokes no
+audio or AI provider. It refuses non-loopback origins. Remaining acceptance:
+real audio/results, revocation races, deployed worker and physical Watch.
+
+Mac launcher (run from `remix/`):
+
+```sh
+npm run recordings:worker -- --help
+npm run recordings:worker -- configure --origin https://your-thingtime.example --claude /absolute/path/claude --whisper /absolute/path/whisper-cli --ffmpeg /absolute/path/ffmpeg --model /absolute/path/ggml-model.bin
+npm run recordings:worker -- pair --origin https://your-thingtime.example
+npm run recordings:worker -- status --origin https://your-thingtime.example
+npm run recordings:worker -- run --origin https://your-thingtime.example --once
+```
+
+If pairing was interrupted, try `resume` first. If an unfinished challenge has
+expired and cannot be resumed, inspect `/devices` and revoke any computer it
+already created before abandoning local recovery. The explicit command
+`npm run recordings:worker -- forget-pending --origin https://your-thingtime.example --confirm-abandon-recovery`
+permanently removes only the unfinished local Keychain entry, checks the exact
+stored state, and refuses a completed pairing. It does **not** revoke a server
+device. Create a fresh one-time secret and run `pair` afterward. No automatic
+cleanup occurs after an ambiguous network failure.
+
+Pairing requires a fresh one-time challenge from the signed-in account's
+`POST /api/v1/devices/pairing` operation. In `/lopu/recordings`, open **Pair a Mac
+for recordings**, review the instructions, then create the one-time secret.
+The panel requires `api.devices-pairing` 1.1.0 and discards responses whose
+`ownerId` differs from the displayed account. Secrets are masked initially,
+copied/revealed only by an explicit click, kept only in component memory and
+cleared on expiry, account change, unmount or hiding the panel. Hiding is not
+server-side revocation; the challenge remains usable until consumed or expired.
+Paste **only that
+Thingtime pairing secret** into the hidden interactive prompt, never a Claude
+token, password or API key. No secret belongs in command arguments or files.
+The launcher stores its origin-bound credential and interrupted claim in macOS
+Keychain, using stdin rather than process arguments. `resume --origin ...`
+recovers a lost response using the exact saved proof and credential; it does
+not create a second device. Keychain read-back must succeed before pairing
+continues. Expired/invalid pending challenges currently require manual recovery
+of this launcher's exact Keychain item; automatic reset is intentionally absent.
+
+Runtime paths are stored in a private per-origin config under
+`~/Library/Application Support/Thingtime/recording-worker/`; it contains no
+credentials. A per-origin lock prevents overlapping setup/workers. Stale locks
+fail closed and must be inspected manually, not blindly deleted. Pairing never
+enables recording processing: select the computer and explicitly opt in at
+`/lopu/recordings`. Run without `--once` for foreground polling; it stops after
+three consecutive failures, with no automatic restart. `status` is local setup
+status only, not an assertion of provider or transcription health. Real
+Keychain/native-runner acceptance remains separate from mocked tests.
+
+This worktree's local QA URL is `http://127.0.0.1:18000/lopu/recordings` (HMR
+18001, Nitro 18002), managed by `npm run web-pms`. Tailscale/Funnel was not
+available during validation: the installed shim points to a missing
+`/Applications/Tailscale.app` binary. No public local-server URL is configured.
 
 ### Shared AI endpoint waterfall
 
@@ -2774,3 +2970,34 @@ Settings uses one shared component in the drawer popup and full page. Direct lin
 A healthy Mac connection panel can be hidden from Things using “Don’t show again unless there’s a problem”. This preference is local to the browser and account; Desktop saves it per account and API endpoint so it survives app restarts and changing loopback ports. It persists across reloads, and does not change node operation or privacy access. Live service, pairing, connection, and permission failures reveal the panel again. Settings → Things always retains the panel and a switch to restore it.
 
 Shared-settings validation worktree: `http://localhost:13040` (HMR 13041, Nitro 13042), managed by the repository PM2 lifecycle. Funnel was unavailable during validation because the installed Tailscale CLI points to a missing application executable; no public Funnel URL was verified. No new environment variables or external setup are required for these settings changes.
+
+
+### Automatic import and native push recovery (10 September 2026)
+
+The iPhone app automatically imports older `Lopu-*.caf` recordings from its
+`Documents/Lopu Recordings` folder when Lopu opens with a signed-in account.
+Voice settings → **Import older recordings** is enabled by default and can be
+turned off. Import uses the canonical `api.things` 1.7.0 and private attachment
+contracts. Local originals stay on the iPhone. A local account/origin-bound
+receipt prevents repeated imports; files already uploaded by build 29 are
+reconciled against the account's existing audio Things before uploading.
+Files created during the current app session use the normal recording outbox.
+Offline or failed imports retry when Lopu reconnects.
+
+For native alerts, open **Settings → Notifications → iPhone and Watch push**
+in the iPhone app and tap **Enable / reconnect iPhone push**. If iOS permission
+was denied, the adjacent button opens the iPhone notification settings. The
+page reports eligible account registrations; notification tests report whether
+Apple accepted the push, rejected it, or no device is connected. Apple acceptance
+is transport confirmation; verify a banner on a physical iPhone (including its
+Focus and notification presentation settings).
+
+Forks need an APNs-enabled Apple App ID, signed iOS entitlements, and the APNs
+variables documented above on each intended server deployment. Use a P-256 APNs
+`.p8` signing key; App Store Connect API keys are a different credential. The
+server selects sandbox versus production from the device registration. TestFlight
+uses production APNs. Never expose keys or device tokens in public diagnostics.
+`api.notifications-devices` 1.2.0 adds authenticated, non-cacheable GET status and
+an optional owner guard on registration. `api.notifications-test` 1.1.0 adds the
+sanitized delivery report. Single and bulk native delivery remain attached to
+the Vercel request lifetime through `waitUntil`.

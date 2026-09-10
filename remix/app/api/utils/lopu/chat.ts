@@ -147,6 +147,7 @@ export type LopuChatDependencies = {
 };
 
 export type LopuChatTurnInput = {
+  readOnly?: boolean;
   viewer: LopuToolViewer;
   chatId: string;
   userMessageId: string;
@@ -1140,6 +1141,8 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
   const makeContext = (): LopuToolContext =>
     createLopuToolContext(input.viewer, input.context, () => {}, {
       requestScope: `${input.chatId}:${input.requestId}`,
+      readOnly: input.readOnly,
+      chatId: input.chatId,
       approved,
       mint: (action) => deps.mintConfirmation({ userId: input.viewer.id, chatId: input.chatId, action })
     });
