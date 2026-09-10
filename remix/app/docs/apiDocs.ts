@@ -673,12 +673,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [{ status: 200, description: 'Your schedules.', body: { ok: true, ownerId: 'user-id', reminders: [] } }]
 	}),
 	endpoint({
-		id: 'notifications-test', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'notifications', title: 'Send a test notification',
+		id: 'notifications-test', contractVersion: '1.1.1', featureVersion: '1.1.1', group: 'notifications', title: 'Send a test notification',
 		endpoint: '/api/v1/notifications/test', methods: ['POST'],
 		summary: 'Send a fixed notification example to the signed-in account only.',
 		detail: 'POST preset quiet, normal, urgent, rich or image, with optional registered notification type (default lopu-reminder). Fixed safe title/body/rich text/image; no caller-provided content, recipient or external URL. Quiet maps to passive without sound; normal to active; urgent to time-sensitive, not Critical. Rich text and a local illustration render in Thingtime; native banners use plain text. Notification preferences are honoured. saved means durable history insertion, not proof a physical device displayed it. Response includes id or null and a status message. No email is sent.',
 		auth: { mode: 'session-or-bearer', description: 'Full live first-party user only, same-origin JSON, subscription-tier mutation limit. Scoped app/Watch credentials cannot send tests.' },
-		steps: ['Negotiate api.notifications-test 1.1.0.', 'Select a test in Settings → Notifications.', 'Inspect the optional push report (status, attempted, accepted, rejected, platform counts and sanitized reasons), then check your physical device. Apple acceptance does not prove a displayed banner.'],
+		steps: ['Negotiate api.notifications-test 1.1.1.', 'Select a test in Settings → Notifications.', 'Inspect the optional push report (status, attempted, accepted, rejected, platform counts and sanitized reasons), then check your physical device. Apple acceptance does not prove a displayed banner.'],
 		requestExamples: [{ name: 'Urgent test', description: 'Time-sensitive sample to yourself.', method: 'POST', body: { preset: 'urgent' } }],
 		responseExamples: [{ status: 200, description: 'Muted by user settings.', body: { ok: true, saved: false, id: null, message: 'This notification is muted by your notification preferences.' } }]
 	}),
@@ -11331,8 +11331,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.3.0: both lines merged — this endpoint ships history filters AND the
     // subspace family together; additive
     // 1.6.0: adds Lopu reminders and optional delivery/richText/image presentation.
-    featureVersion: '1.6.1',
-    contractVersion: '1.6.1',
+    // 1.6.2: hash push collapse identifiers to fit APNs limits, including long reminder IDs.
+    featureVersion: '1.6.2',
+    contractVersion: '1.6.2',
     group: 'notifications',
     title: 'List notifications',
     endpoint: '/api/v1/notifications',

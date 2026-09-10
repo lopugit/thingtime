@@ -27,6 +27,14 @@ the root, and a non-owner writer cannot insert unreadable private media.
 - Graphify refresh uses the code-only fallback after the local semantic
   proxy health timeout. New Markdown is not semantically indexed; available
   structural snapshots and portable reports are retained.
+- Integration `72dd13410` was pushed after the focused tests and build
+  passed. Develop then advanced to `d0a4344d9` with the APNs follow-up;
+  preserve that change and both changelog entries in the next integration.
+- The first post-merge browser retry encountered an empty local 502 before
+  fixture creation. The Nitro worker had stopped after a missing
+  `@vercel/functions` import during the dependency transition. The installed
+  dependency now resolves; restarting only this worktree restored the API.
+  This local failure is not evidence of a deployed sharing regression.
 
 ## Still unfinished
 

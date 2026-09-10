@@ -118,7 +118,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.subspaces-transfer']?.version, '1.2.0');
   assert.equal(manifest.features['api.subspaces-delete']?.version, '1.1.0');
   // S4 review: post-removed / ban rows carry the subspace's mod team as actor (1.2.0, additive)
-  assert.equal(manifest.features['api.notifications-list']?.version, '1.6.1');
+  assert.equal(manifest.features['api.notifications-list']?.version, '1.6.2');
   assert.equal(manifest.features['api.notifications-settings']?.version, '1.5.0');
   assert.equal(manifest.features['api.notifications-record']?.version, '1.0.0');
   assert.equal(manifest.features['api.things-update']?.version, '1.2.1');
@@ -181,7 +181,7 @@ test('both manifests publish notification history and system notification contra
   const apiManifest = createApiCapabilitiesManifest();
   // Both subspace moderation and private recording reminders are preserved.
   const expected: Record<string, string> = {
-    'api.notifications-list': '1.6.1',
+    'api.notifications-list': '1.6.2',
     'api.notifications-settings': '1.5.0'
   };
   for (const [feature, version] of Object.entries(expected)) {
