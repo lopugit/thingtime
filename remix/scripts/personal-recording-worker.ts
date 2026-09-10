@@ -5,7 +5,7 @@ import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from '../app/
 import {
   PERSONAL_RECORDING_PATH, PERSONAL_RECORDING_REQUIREMENTS,
   PERSONAL_RECORDING_HEARTBEAT_MS, PERSONAL_RECORDING_MAX_RUN_MS,
-  parsePersonalRecordingRequest
+  parsePersonalRecordingRequest, personalRecordingAudioIsSupported
 } from '../app/api/utils/lopu/personalRecordingCore';
 import { RECORDING_INSIGHTS_PROMPT, RECORDING_MAX_AUDIO_BYTES, RECORDING_MAX_TRANSCRIPT_CHARS } from '../app/api/utils/lopu/recordingsCore';
 
@@ -28,16 +28,13 @@ class TransportFailure extends Error {
   constructor(readonly retryable = false) { super('The paired recording connection is unavailable.'); }
 }
 
-const FORMATS = new Set(['audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp4', 'audio/m4a', 'audio/x-m4a', 'video/mp4', 'audio/webm']);
-
 export const parsePersonalRecordingClaim = (input: unknown): Claim | null => {
   if (!input || typeof input !== 'object' || Array.isArray(input) || (input as any).ok !== true) throw new TransportFailure();
   const job = (input as any).job;
   if (job === null) return null;
   if (!job || typeof job !== 'object' || Array.isArray(job)) throw new TransportFailure();
   const lease = parsePersonalRecordingRequest({ op: 'heartbeat', jobId: job.jobId, leaseId: job.leaseId });
-  if (!('jobId' in lease) || !FORMATS.has(job.type) || !Number.isSafeInteger(job.bytes) || job.bytes < 1 ||
-      job.bytes > RECORDING_MAX_AUDIO_BYTES || typeof job.organize !== 'boolean' ||
+  if (!('jobId' in lease) || !personalRecordingAudioIsSupported(job.type, job.bytes) || typeof job.organize !== 'boolean' ||
       (job.transcript !== undefined && (typeof job.transcript !== 'string' || !job.transcript.trim() || job.transcript.length > RECORDING_MAX_TRANSCRIPT_CHARS)))
     throw new TransportFailure();
   // Do not accept endpoint URLs, prompts, commands or account IDs from a job.

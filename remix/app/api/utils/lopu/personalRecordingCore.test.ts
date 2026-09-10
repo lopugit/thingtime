@@ -1,11 +1,19 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parsePersonalRecordingRequest, personalRecordingLeaseIsLive, personalRecordingReceiptHash } from './personalRecordingCore';
+import { parsePersonalRecordingRequest, personalRecordingAudioIsSupported, personalRecordingLeaseIsLive, personalRecordingReceiptHash } from './personalRecordingCore';
 
 const lease = { jobId: `lopu-recording-job-${'a'.repeat(64)}`, leaseId: '52a5a4a2-060c-44bf-a208-6aac88913e75' };
 const complete = { op: 'complete' as const, ...lease, transcript: 'Remember to water the fern.', analysis: JSON.stringify({ items: [
 	{ kind: 'todo', title: 'Water the fern', description: 'Water the fern.', evidence: 'water the fern' }
 ] }) };
+
+test('broker and local worker share one bounded audio admission rule', () => {
+	for (const type of ['audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp4', 'audio/m4a', 'audio/x-m4a', 'video/mp4', 'audio/webm'])
+		assert.equal(personalRecordingAudioIsSupported(type, 24 * 1024 * 1024), true);
+	for (const [type, bytes] of [['audio/wav', 0], ['audio/wav', 1.5], ['audio/wav', '4'], ['audio/wav', 24 * 1024 * 1024 + 1],
+		['audio/wav', NaN], ['application/octet-stream', 4], [null, 4]])
+		assert.equal(personalRecordingAudioIsSupported(type, bytes), false);
+});
 
 test('personal recording requests project only the bounded operation payload', () => {
 	assert.deepEqual(parsePersonalRecordingRequest({ op: 'claim', ownerId: 'other', deviceId: 'other', command: 'execute' }), { op: 'claim' });

@@ -6050,6 +6050,12 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
 
 Personal recording worker transport (server integration remains pending):
 
+- [ ] `npm --prefix remix run test:lopu` also exercises the personal broker:
+      exact session/device/consent filters and transaction fences, lease-bound
+      audio, revocation during download, completion receipt retries, heartbeat
+      races, competing failure rejection and crash-safe transcript checkpoints.
+      These collaborators are in memory; verify the same races through the
+      real API and transaction layer before exposing or enabling the endpoint.
 - [ ] `npm --prefix remix run test:ai-models` verifies origin-bound capability
       negotiation before credentials, redirect rejection, bounded audio,
       text-only native completion, heartbeat cancellation and identical result

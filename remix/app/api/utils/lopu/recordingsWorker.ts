@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { getHomeThingsCollection } from '../mongodb/collections';
+import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import { runWithMongoEndpoint } from '../mongodb/endpoint';
 import { createThing } from '../things/things';
 import { MAX_COMMENT_CHARS } from '~/schemas/registry';
@@ -25,10 +25,12 @@ import {
 } from './recordingsStore';
 import { analyzeRecording, recordingProviderStatus, transcribeRecording } from './recordingsProvider';
 import { recordingConnectionStatus } from './recordingsConnections';
+import { assertPersonalRecordingJob, PersonalRecordingUnavailable } from './personalRecordingAuth';
 
 class RecordingPaused extends Error {}
 
 const assertActive = async (job: any) => {
+	await assertPersonalRecordingJob(job);
 	if (!(await getRecordingSettings(job.ownerId)).enabled) throw new RecordingPaused('Recording automation is switched off.');
 	if (!(await recordingSource(job))) throw new RecordingPaused('The recording is unavailable or no longer private.');
 };
@@ -36,6 +38,7 @@ const assertActive = async (job: any) => {
 // This hook commits the content, quota charge, and job checkpoint together.
 // A process dying after commit cannot recreate a comment/todo on its next run.
 const checkpointHook = (job: any, state: RecordingJobState, reminder?: { id: string; title: string }) => async (_doc: unknown, session: any) => {
+	await assertPersonalRecordingJob(job, session);
 	const things = await getHomeThingsCollection();
 	const post = await things.findOne({ shareId: job.targetId, ownerId: job.ownerId }, { session });
 	if (!isPrivateRecordingPost(post, job.ownerId)) throw new RecordingPaused('The source recording is no longer private.');
@@ -77,6 +80,7 @@ const checkpointHook = (job: any, state: RecordingJobState, reminder?: { id: str
 };
 
 const saveState = async (job: any, state: RecordingJobState, stage: string) => {
+	await assertPersonalRecordingJob(job);
 	const result = await (
 		await getHomeThingsCollection()
 	).updateOne(
@@ -105,6 +109,14 @@ const transcriptParts = (text: string) => {
 	return chunks;
 };
 
+export const recordingTranscriptState = (state: RecordingJobState, transcript: string): RecordingJobState => {
+	if (state.transcript) {
+		if (state.transcript !== transcript) throw new TypeError('The saved transcript cannot be replaced.');
+		return state;
+	}
+	return { ...state, transcript, commentIds: transcriptParts(transcript).map(() => randomUUID()) };
+};
+
 export type RecordingWorkerDependencies = { transcribe: typeof transcribeRecording; analyze: typeof analyzeRecording };
 
 export const processRecordingJob = async (
@@ -118,9 +130,8 @@ export const processRecordingJob = async (
 		if (Number(job.crystal.attempts) > RECORDING_MAX_ATTEMPTS) throw new Error('Retry limit reached.');
 		await assertActive(job);
 		if (!state.transcript) {
-			state.transcript = await deps.transcribe(job.ownerId, job.crystal.attachmentId, () => assertActive(job));
+			state = recordingTranscriptState(state, await deps.transcribe(job.ownerId, job.crystal.attachmentId, () => assertActive(job)));
 			failureStage = 'save';
-			state.commentIds = transcriptParts(state.transcript).map(() => randomUUID());
 			await assertActive(job);
 			await saveState(job, state, 'transcribed');
 		}
@@ -202,17 +213,22 @@ export const processRecordingJob = async (
 		// The durable, quota-billed comments/Things are the long-term content.
 		// Drop private scratch text from operational state once no retry needs it.
 		const receipt = { commentIds: state.commentIds, commentIndex: state.commentIndex, insightIndex: state.insightIndex, resultIds: state.resultIds };
-		const completed = await things.updateOne(
-			{ shareId: job.shareId, lease: job.lease },
-			{
-				$set: { 'crystal.status': 'done', 'crystal.stage': 'done', secure: recordingStateBlob(receipt), updatedAt: new Date() },
-				$unset: { lease: '', leaseUntil: '', nextRunAt: '', 'crystal.error': '' }
-			}
-		);
+		const finish = async (session?: any) => {
+			await assertPersonalRecordingJob(job, session);
+			return things.updateOne(
+				{ shareId: job.shareId, lease: job.lease },
+				{
+					$set: { 'crystal.status': 'done', 'crystal.stage': 'done', secure: recordingStateBlob(receipt), updatedAt: new Date() },
+					$unset: { lease: '', leaseUntil: '', nextRunAt: '', 'crystal.error': '' }
+				},
+				{ session }
+			);
+		};
+		const completed = job.runtimeDeviceId ? await withHomeMongoTransaction(finish) : await finish();
 		if (!completed.matchedCount) throw new RecordingPaused('Another worker owns this recording.');
 		return 'done';
 	} catch (error) {
-		const paused = error instanceof RecordingPaused;
+		const paused = error instanceof RecordingPaused || error instanceof PersonalRecordingUnavailable;
 		const failed = Number(job.crystal.attempts) >= RECORDING_MAX_ATTEMPTS;
 		const status = paused ? 'paused' : failed ? 'failed' : 'retry';
 		// Provider/S3 exceptions can include signed URLs. Only our own fixed,
@@ -250,6 +266,9 @@ export const runRecordingAutomation = async () =>
 			const job = await things.findOneAndUpdate(
 				{
 					thingtime: RECORDING_JOB_KIND,
+					// Personal jobs must never fall through to a cloud credential,
+					// even when their device is offline or its lease has expired.
+					runtimeDeviceId: { $exists: false },
 					nextRunAt: { $lte: now },
 					'crystal.status': { $in: ['queued', 'retry', 'processing'] },
 					$or: [{ leaseUntil: { $exists: false } }, { leaseUntil: { $lte: now } }]

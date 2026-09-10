@@ -103,18 +103,19 @@ export const isPrivateRecordingPost = (post: any, ownerId: string) =>
 	post.tags.includes('apple-watch') &&
 	/^watch-upload-/.test(post.shareId);
 
-export const recordingSource = async (job: any) => {
+export const recordingSource = async (job: any, session?: any) => {
 	const things = await getHomeThingsCollection();
-	const [post, attachment] = await Promise.all([
-		things.findOne({ shareId: job.targetId, ownerId: job.ownerId }),
-		things.findOne({
+	const readPost = () => things.findOne({ shareId: job.targetId, ownerId: job.ownerId }, { session });
+	const readAttachment = () => things.findOne({
 			shareId: job.crystal.attachmentId,
 			ownerId: job.ownerId,
 			thingtime: 'attachment',
 			targetId: job.targetId,
 			attachmentState: 'ready'
-		})
-	]);
+		}, { session });
+	// A transaction's driver operations must be sequential; ordinary reads keep
+	// the existing parallel lookup to avoid another database round-trip's wait.
+	const [post, attachment] = session ? [await readPost(), await readAttachment()] : await Promise.all([readPost(), readAttachment()]);
 	if (
 		!isPrivateRecordingPost(post, job.ownerId) ||
 		!attachment ||

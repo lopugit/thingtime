@@ -39,7 +39,11 @@ const collection = {
 		return { matchedCount: 1 };
 	}
 };
-mock.module(new URL('../mongodb/collections.ts', import.meta.url).href, { namedExports: { getHomeThingsCollection: async () => collection } });
+mock.module(new URL('../mongodb/collections.ts', import.meta.url).href, { namedExports: {
+	getHomeThingsCollection: async () => collection,
+	getSessionsCollection: async () => { throw new Error('Cloud jobs must not query personal device sessions'); },
+	withHomeMongoTransaction: async (work: (session: any) => unknown) => work({ transaction: true })
+} });
 mock.module(new URL('../mongodb/endpoint.ts', import.meta.url).href, {
 	namedExports: { runWithMongoEndpoint: async (_: unknown, fn: () => unknown) => fn() }
 });

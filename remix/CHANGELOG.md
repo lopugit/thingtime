@@ -18,6 +18,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Add the unexposed personal recording broker, transactional device/consent
+  fences and crash-safe completion receipts; personal jobs cannot enter the
+  cloud-provider queue. HTTP/selection integration and live acceptance remain
+  pending. Details: [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
 - Add the personal recording worker's outbound transport and bounded result
   contract: origin-scoped negotiation, credential-safe audio retrieval,
   heartbeat cancellation, grounded text results and idempotent submission

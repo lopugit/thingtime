@@ -1862,14 +1862,25 @@ redirects are rejected. Audio stays local; only transcript text reaches Claude
 Code. Heartbeat loss stops local processing, and interrupted result submissions
 retry the identical lease/result rather than running inference again.
 
+The API-layer broker now implements device-bound claims, private audio reads,
+bounded heartbeats and completion receipts. It uses the shared recording content
+writer with transactional checks of current consent, device/session revocation
+and source privacy. Accepted transcripts and server-selected output IDs survive
+a worker crash; exact completion retries do not run inference or create content
+again. Jobs assigned to a personal device cannot fall back to cloud credentials.
+
 **Integration status:** this transport is not a launchable background service
-yet. The server-side claim/audio/result endpoint, explicit device-selection
+yet. The broker is not exposed by an HTTP route. Its endpoint, explicit device-selection
 settings, pairing launcher and live Watch-to-worker acceptance are still to be
 connected. Current deployments do not advertise this capability, so the worker
 refuses to start there. Do not copy an API key, CI credential or Claude OAuth
 token into its `credential` option: it accepts only an existing Thingtime paired
 device credential. Keep future machine-local worker setup untracked; importing
 this module does not pair a device or enable recording processing.
+Do not set internal job or settings fields directly in a database to bypass
+that gate. The future authenticated selection API must validate device ownership
+and capabilities, and new jobs must snapshot that selection. Broker/authority
+mock tests in `test:lopu` are unit coverage, not real database race or Watch proof.
 
 ### Shared AI endpoint waterfall
 

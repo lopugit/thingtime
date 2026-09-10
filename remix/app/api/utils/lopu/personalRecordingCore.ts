@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { parseRecordingInsights, RECORDING_MAX_TRANSCRIPT_CHARS } from './recordingsCore';
+import { parseRecordingInsights, RECORDING_MAX_AUDIO_BYTES, RECORDING_MAX_TRANSCRIPT_CHARS } from './recordingsCore';
 
 // An already paired device still needs explicit selection in recording settings.
 // This capability never grants access to another account or arbitrary tasks.
@@ -8,6 +8,11 @@ export const PERSONAL_RECORDING_HEARTBEAT_MS = 30_000;
 export const PERSONAL_RECORDING_MAX_RUN_MS = 10 * 60_000;
 export const PERSONAL_RECORDING_PATH = '/api/v1/lopu/recordings/personal';
 export const PERSONAL_RECORDING_REQUIREMENTS = { 'api.lopu-recordings-personal': '1.0.0' } as const;
+
+const AUDIO_TYPES = new Set(['audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp4', 'audio/m4a', 'audio/x-m4a', 'video/mp4', 'audio/webm']);
+export const personalRecordingAudioIsSupported = (type: unknown, bytes: unknown): boolean =>
+	typeof type === 'string' && AUDIO_TYPES.has(type) && typeof bytes === 'number' && Number.isSafeInteger(bytes) &&
+	bytes > 0 && bytes <= RECORDING_MAX_AUDIO_BYTES;
 
 type LeaseIdentity = { jobId: string; leaseId: string };
 export type PersonalRecordingRequest =
