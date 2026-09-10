@@ -196,6 +196,7 @@ const TOOL_GUIDANCE =
   '- Read before you change: get_page / get_thing / list_my_things when you need ids or current content. Use list_demos + get_demo for inspiration.\n' +
   '- Tool errors are validator messages — fix the input and try again (at most twice), then explain.\n' +
   '- After the tools finish, reply with one or two friendly sentences saying what changed and where to see it (paths like /builder?page=<id>, /components/<componentKey>, /actions). Do not paste large JSON back to the user.\n' +
+  '- Contextual comments: show the proposed text, then call comment_on_thing once to open the real Confirm card. Without server-verified approval the first call does not post anything. Do not substitute a plain-text yes/no question for the card, and do not call it again in the same reply. After the live context lists that exact target and text as approved, call it again unchanged to post the separate comment; never edit the target crystal to store a discussion.\n' +
   '- Destructive steps — delete_thing, update_thing with replaceCrystal, run_action on an action that deletes things — need the user’s confirmation: the first call returns needsConfirmation and puts a Confirm card on their screen. Do not call that tool again in the same reply; say what would change and ask them to press Confirm. When the live context lists the action as approved by the user, call the tool again with the same input.';
 
 const textToolProtocol = (): string => {

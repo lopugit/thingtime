@@ -48,6 +48,8 @@
   unchanged. Test hidden links, read-only audiences, deleted parents and logout.
 - [ ] Ask Lopu to comment; the full proposed comment and target are shown before
   Confirm. Cancel must write nothing; changing text or target invalidates approval.
+  Use an ordinary request without explaining tool internals: Lopu must call the
+  proposal tool and open the actual card, not merely ask for a typed yes/no.
 - [ ] Create interval and time-zone cron tasks in all three delivery modes.
   Inspect their searchable Things and separate run notes; test existing/new
   chats, notification mute, pause, completed todos, quota failure and lost leases.

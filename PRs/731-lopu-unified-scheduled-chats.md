@@ -1,5 +1,16 @@
 # PR #731: Lopu unified conversations, scheduled Things, attachments and discussions
 
+## Comment approval card guidance — 2026-09-10
+
+Hosted testing found Lopu incorrectly describing `comment_on_thing` as an
+immediate write and offering only a text confirmation, even when asked for its
+Confirm card. No comment was posted. The tool definition and both model tool
+protocol prompts now explicitly explain the first unapproved call: it opens
+the exact-target/full-text approval card and writes nothing. An approved later
+call remains required; model-asserted or plain-text approval grants nothing.
+The reply feature is patched to 1.6.2. Executor, prompt and manifest regressions
+cover this contract; hosted natural-language/card acceptance remains separate.
+
 ## Production scheduling and connection refresh — 2026-09-10
 
 Production at `3ac01b1eafa2ffc5a514dbb38d9d850a9510c0cf` delivered the bounded
