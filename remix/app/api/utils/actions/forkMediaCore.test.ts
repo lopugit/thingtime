@@ -1,13 +1,64 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { rewriteCopiedAttachmentReferences } from './forkMediaCore';
+import { rewriteCopiedAttachmentReferences, bindCopiedTemplateMedia } from './forkMediaCore';
 import { compositionAttachmentIds } from './compositionMediaCore';
 import { mapAuthoredHtmlMedia, visitAuthoredHtmlMedia } from './authoredHtmlMedia';
 import { resolveTemplate } from '../../../components/ComponentsLibrary/componentTemplate';
+import { copiedMediaRefs, mapResolvedCopiedMedia } from '../../../components/Sharing/copiedMediaRefs';
 
 const old = '/api/v1/attachments/content?id=att_source';
 const copied = '/api/v1/attachments/content?id=att_copy';
 const copies = new Map([['att_source', 'att_copy']]);
+
+test('media bindings reject malformed IDs, bound work and charge generated text', () => {
+	assert.equal(copiedMediaRefs([['att_source', '//outside.test'], ['att_source', '{runtime}'], ['att_source', 'att_copy']]).get('att_source'), 'att_copy');
+	assert.equal(copiedMediaRefs(Array.from({ length: 600 }, (_, index) => [`a${index}`, `b${index}`])).size, 512);
+	const refs = new Map([['a', 'longer-copy-id']]);
+	const input = { tag: 'img', props: { src: '/api/v1/attachments/content?id=a' } };
+	assert.equal((mapResolvedCopiedMedia(input, refs, { chars: 0 }) as any).props.src, undefined);
+	const budget = { chars: 100 };
+	assert.equal((mapResolvedCopiedMedia(input, refs, budget) as any).props.src, '/api/v1/attachments/content?id=longer-copy-id');
+	assert.equal(budget.chars, 87);
+	let nested: any = input;
+	for (let index = 0; index < 60; index++) nested = { tag: 'div', children: [nested] };
+	assert.ok(JSON.stringify(mapResolvedCopiedMedia(nested, refs, { chars: 100 })).length < JSON.stringify(nested).length);
+});
+
+test('late media bindings preserve split-fragment loops, inactive branches and unrelated input data', () => {
+	const source = { savedArgs: { prefix: 'att_', images: ['source'], show: false }, render: { tag: 'div', children: [
+		{ ttEach: { arg: 'images', node: { tag: 'img', props: { src: '/api/v1/attachments/content?id={prefix}{item}', title: '{prefix}{item}',
+			_hover: { backgroundImage: 'url(/api/v1/attachments/content?id={prefix}{item})' } } } } },
+		{ ttIf: { arg: 'show', then: { tag: 'img', props: { src: old } } } },
+		{ tag: 'input', props: { value: old }, ttAction: 'unchanged', ttActionInputs: { url: old } }
+	] } };
+	const result = bindCopiedTemplateMedia(source, copies, ['att_source']);
+	const resolved: any = resolveTemplate(result.render, result.savedArgs);
+	assert.equal(resolved.children[0].props.src, copied);
+	assert.equal(resolved.children[0].props.title, 'att_source');
+	assert.ok(resolved.children[0].props._hover.backgroundImage.includes('att_copy'));
+	assert.equal(resolved.children[1].props.value, old);
+	assert.equal(JSON.parse(resolved.children[1].props['data-tt-action-inputs']).url, old);
+	assert.equal(resolved.ttMediaRefs, undefined);
+	assert.deepEqual([...compositionAttachmentIds(['component'], result)], ['att_copy']);
+	assert.equal((resolveTemplate(result.render, { ...result.savedArgs, show: true }) as any).children[1].props.src, copied);
+	assert.equal((source.render as any).ttMediaRefs, undefined);
+	const again = bindCopiedTemplateMedia(result, new Map([['att_copy', 'att_again']]), ['att_copy']);
+	assert.equal((resolveTemplate(again.render, again.savedArgs) as any).children[0].props.src, '/api/v1/attachments/content?id=att_again');
+	assert.deepEqual([...compositionAttachmentIds(['component'], again)], ['att_again']);
+});
+
+test('late bindings only map rendered first-party URLs, one hop, not unused references or external/keyed URLs', () => {
+	const source = { render: { tag: 'div', ttMediaRefs: [['att_source', 'att_copy'], ['att_copy', 'att_next'], ['unused', 'private']], children: [
+		{ tag: 'img', props: { src: old } }, { tag: 'img', props: { src: `https://outside.test${old}` } },
+		{ tag: 'img', props: { src: `${old}&key=secret` } }, { tag: 'img', props: { src: '/api/v1/attachments/content?id={runtime}' } }
+	] } };
+	assert.deepEqual([...compositionAttachmentIds(['component'], source)], ['att_copy']);
+	const resolved: any = resolveTemplate(source.render, { runtime: 'unknown' });
+	assert.equal(resolved.children[0].props.src, copied);
+	assert.equal(resolved.children[1].props.src, `https://outside.test${old}`);
+	assert.equal(resolved.children[2].props.src, `${old}&key=secret`);
+	assert.equal(resolved.children[3].props.src, '/api/v1/attachments/content?id=unknown');
+});
 
 test('fork maps exact attachment IDs in persisted arguments, defaults, nested lists and explicit instance contexts', () => {
 	const render = { ttEach: { arg: 'images', node: { tag: 'img', props: { src: '/api/v1/attachments/content?id={item.id}' } } } };

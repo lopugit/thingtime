@@ -3,7 +3,7 @@
 ## Contract and implementation — 2026-09-10
 
 The internal exact-version copy primitive is now called by `/things/fork`.
-The route advertises `api.things-fork` 1.3.3 on both manifests; the Copy button
+The route advertises `api.things-fork` 1.4.0 on both manifests; the Copy button
 requires that version. `filesCopied` is additive and counts new attachments,
 not executable Things. Original Things, ACLs and files are never changed.
 
@@ -46,7 +46,7 @@ clean only the new private record. Pending, blocked or NSFW linked sources
 cannot become unflagged copies. Real-browser linked-gallery acceptance remains
 part of the pending storage/copy acceptance check.
 
-Missing dependencies, unsupported split-ID media and excessive target
+Missing dependencies, unretargetable media and excessive target
 file counts fail before quota reservation. Write failures clean only preallocated
 new Things and files, reporting delayed cleanup rather than claiming rollback
 has finished. A revoked source composition also triggers that cleanup.
@@ -63,8 +63,12 @@ Unit coverage includes saved URLs, nested CSS, entity-encoded HTML, unrelated
 URLs/text, source immutability, shared-file deduplication, exact caller/root
 propagation, transactional binding, copy/write failure cleanup and late source
 revocation. Exact ID arguments interpolated into content URLs are covered. A
-component that assembles one file ID from multiple partial strings is still
-explicitly rejected before writes; supporting that case remains unfinished.
+component that assembles a file ID from partial strings now uses bounded root
+render `ttMediaRefs` bindings. They apply after interpolation only to media
+props and parsed CSS, preserve inputs and labels, and compose on re-fork.
+Attachment-content 1.6.3 uses the same mapping during dependency discovery.
+Unused pairs grant nothing. Real browser and storage acceptance remains
+separate from these focused tests.
 
 Real private-object-store copying and the browser Copy button after source
 revocation still require acceptance. Mocked storage and a healthy preview shell

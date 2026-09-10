@@ -1181,7 +1181,9 @@ email whose link points at the attacker.
       and page overrides: generated URLs must use copied IDs, while labels,
       prose and URL template strings stay unchanged. Matching `ttMap` keys and
       `ttIf` comparisons must still select the same branch after ID retargeting. Split partial IDs
-      must fail before file writes, never silently retain a source dependency.
+      must resolve to copied files in loops and inactive branches without changing
+      input data. Re-fork and check the new file IDs again; unused root media
+      bindings must grant nothing. Oversized bindings must fail before writes.
       Copy a post/data Thing with a relational file gallery but no inline media
       URL: all eligible files must retain their copied home target and order.
       A file also embedded elsewhere must be copied once. Oversized galleries
@@ -1192,7 +1194,7 @@ email whose link points at the attacker.
       Invalid/flagged sources fail before minting; late URL changes or revoked
       access clean only the new record. Confirm ordinary downloads still reject
       linked attachments, while authorized shared copies can include them.
-      Confirm the button requires `api.things-fork` 1.3.3 before sending a copy.
+      Confirm the button requires `api.things-fork` 1.4.0 before sending a copy.
 
 - [ ] With `THINGTIME_MODERATION_PROVIDER=test`, upload an image named
       `tt-test-nsfw.png` to a post: after analysis it renders heavily blurred

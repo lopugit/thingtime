@@ -18,6 +18,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Preserve split-fragment media templates in private copies using bounded
+  root-render bindings after interpolation. Keep labels and action inputs
+  unchanged, compose bindings on re-fork, and align shared media discovery.
+  Negotiate fork 1.4.0 and attachment-content 1.6.3. Real storage acceptance
+  remains tracked in [PR #755](../PRs/755-shared-composition-file-copies.md).
+  — Codex (AI), 2026-09-10
+
 - Reconcile the shared-copy follow-up with develop's personal-recording
   contracts, preserving fork 1.3.3 and device-pairing 1.1.0 assertions.
   Acceptance boundaries remain listed in [PR #755](../PRs/755-shared-composition-file-copies.md).

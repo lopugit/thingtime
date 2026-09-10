@@ -1,5 +1,18 @@
 import { literalAttachmentId, mapCssMediaUrls, isRenderMediaStyleProp } from '../../../components/Sharing/renderMediaCore';
 import { mapAuthoredHtmlMedia } from './authoredHtmlMedia';
+import { copiedMediaRefs } from '../../../components/Sharing/copiedMediaRefs';
+
+// Preserve the editable template and its argument semantics. Only unresolved
+// rendered media gets late-bound; a re-fork composes targets instead of chains.
+export const bindCopiedTemplateMedia = (crystal: Record<string, any>, copies: ReadonlyMap<string, string>, unresolved: Iterable<string>): Record<string, any> => {
+	if (!crystal.render || typeof crystal.render !== 'object' || Array.isArray(crystal.render)) return crystal;
+	const refs = copiedMediaRefs(crystal.render.ttMediaRefs);
+	for (const [source, target] of refs) refs.set(source, copies.get(target) || target);
+	for (const id of unresolved) if (copies.has(id) && !refs.has(id)) refs.set(id, copies.get(id)!);
+	if (!refs.size) return crystal;
+	if (refs.size > 512) throw new Error('The app has too many templated file references to copy safely');
+	return { ...crystal, render: { ...crystal.render, ttMediaRefs: [...refs] } };
+};
 
 // This map contains only newly copied, independently authorized attachments.
 // Rewriting is not discovery and cannot grant access to another object. Exact

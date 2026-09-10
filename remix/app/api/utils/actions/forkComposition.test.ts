@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { forkComposition } from './forkComposition';
 import type { SharedComposition } from './sharedComposition';
+import { resolveTemplate } from '../../../components/ComponentsLibrary/componentTemplate';
+import { compositionAttachmentIds } from './compositionMediaCore';
 
 const url = (id: string) => `/api/v1/attachments/content?id=${id}`;
 const fixture = () => {
@@ -115,13 +117,19 @@ test('fork retargets stored attachment-ID templates without changing template be
 	assert.equal(doc.crystal.savedArgs.image, 'att_source');
 });
 
-test('fork fails before writes for split media fragments or excessive per-Thing files', async () => {
+test('fork binds split media fragments after interpolation without changing stored inputs', async () => {
 	const f = fixture(); const doc = f.composition.docs.get('component')!;
 	doc.crystal = { savedArgs: { prefix: 'att_', image: 'source' }, render: { tag: 'img', props: { src: '/api/v1/attachments/content?id={prefix}{image}' } } };
-	const unsupported = await forkComposition(viewer, f.composition, f.deps);
-	assert.equal(unsupported.ok, false); if (unsupported.ok) return;
-	assert.match(unsupported.error, /templated file reference/);
-	assert.equal(f.copied.length, 0);
+	assert.equal((await forkComposition(viewer, f.composition, f.deps)).ok, true);
+	const copied = f.created.find((value) => value.thingtime.includes('component')).crystal;
+	assert.deepEqual(copied.savedArgs, doc.crystal.savedArgs);
+	assert.equal((resolveTemplate(copied.render, copied.savedArgs) as any).props.src, url('copy-att_source'));
+	assert.deepEqual([...compositionAttachmentIds(['component'], copied)], ['copy-att_source']);
+	assert.equal(doc.crystal.render.ttMediaRefs, undefined);
+});
+
+test('fork fails before writes for excessive per-Thing files', async () => {
+	const f = fixture();
 	f.composition.root.crystal = { blocks: Array.from({ length: 26 }, (_, index) => ({ type: 'media', src: url(`att_${index}`) })) };
 	assert.equal((await forkComposition(viewer, f.composition, f.deps)).ok, false);
 	assert.equal(f.copied.length, 0);

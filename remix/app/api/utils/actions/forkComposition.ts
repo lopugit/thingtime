@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createThing, deleteThing, fail, isFail, type Viewer, type Fail } from '../things/things';
 import { resolveSharedComposition, type SharedComposition } from './sharedComposition';
 import { rewriteComposition } from './forkCompositionCore';
-import { rewriteCopiedAttachmentReferences } from './forkMediaCore';
+import { rewriteCopiedAttachmentReferences, bindCopiedTemplateMedia } from './forkMediaCore';
 import { compositionAttachmentIds } from './compositionMediaCore';
 import { copySharedAttachment, deleteAttachment, createReadyAttachmentPostInsertHook } from '../attachments/attachments';
 import { MAX_ATTACHMENTS_PER_TARGET } from '../attachments/attachmentStore';
@@ -75,7 +75,14 @@ export const forkComposition = async (viewer: Viewer, composition: SharedComposi
 		const perTarget = new Map<string, number>();
 		for (const target of targets.values()) perTarget.set(target, (perTarget.get(target) || 0) + 1);
 		if ([...perTarget.values()].some((count) => count > MAX_ATTACHMENTS_PER_TARGET)) return fail(422, 'A copied Thing has too many files');
-		const rewriteMedia = (replacements: Map<string, string>) => new Map(docs.map((doc) => [doc.shareId, rewriteCopiedAttachmentReferences(doc.crystal || {}, replacements)]));
+		const rewriteMedia = (replacements: Map<string, string>) => {
+			const rewritten = new Map(docs.map((doc) => [doc.shareId, rewriteCopiedAttachmentReferences(doc.crystal || {}, replacements)]));
+			for (const doc of docs) if (doc.thingtime.includes('component')) {
+				const crystal = rewritten.get(doc.shareId)!;
+				rewritten.set(doc.shareId, bindCopiedTemplateMedia(crystal, replacements, mediaFor(doc, crystal, rewritten, replacements)));
+			}
+			return rewritten;
+		};
 		// Prove retargetability before reserving quota. Runtime-assembled URLs that
 		// cannot be rewritten must not produce a copy still tied to the source.
 		const plannedIds = new Map([...targets.keys()].map((id, index) => [id, `fork-file-${index}-${suffix}`]));
