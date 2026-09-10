@@ -18,6 +18,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Give historical Lopu tool summaries their own full-width row on phones,
+  preserving compact desktop rows and non-interactive approval history.
+  — Codex (AI), 2026-09-10
+
 - Show earlier Lopu confirmation requests as "Approval requested" after reload,
   not failed executions. Historical receipts never restore approval grants or
   claim that later actions succeeded. — Codex (AI), 2026-09-10

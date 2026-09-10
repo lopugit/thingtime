@@ -2,6 +2,10 @@
 
 ## Unified Lopu conversations, scheduled Things and discussions
 
+- [ ] At 390px width, historical tool rows put long summaries below their label
+      and status icon, not in a narrow side column. Check approval, success and
+      failure states through the full chat scroll; desktop retains compact rows.
+
 - [ ] Reload a chat containing a tool that requested confirmation, then a later
       successful confirmed call. The historical request says "Approval requested"
       without a failure icon or renewed Confirm button; the later success stays

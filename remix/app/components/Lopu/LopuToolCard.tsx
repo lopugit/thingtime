@@ -332,22 +332,24 @@ export const LopuToolCallRow = ({ call, compact = false }: { call: LopuMessageTo
 	const summary = toolRowSummary({ name: call.name, status, result: { ok: call.ok, summary: call.summary } });
 	return (
 		<Box {...rowFrame} role="group" aria-label={label} data-tool={call.name} data-status={status}>
-			<Flex align="center" gap={2} minH={compact ? '28px' : '32px'} px={2.5} minW={0}>
+			<Box display="grid" gridTemplateColumns={{ base: 'auto minmax(0, 1fr) auto', md: 'auto auto minmax(0, 1fr) auto' }}
+				alignItems="center" gap={2} minH={compact ? '28px' : '32px'} px={2.5} py={{ base: 2, md: 0 }} minW={0}>
 				<Box as="span" fontSize="13px" lineHeight={1} flexShrink={0} aria-hidden="true">
 					{toolGlyph(call.name)}
 				</Box>
-				<Text as="span" fontSize={LOPU_UI.fontSmall} fontWeight={600} color={status === 'error' ? LOPU_UI.danger : LOPU_UI.ink} whiteSpace="nowrap" flexShrink={0}>
+				<Text as="span" fontSize={LOPU_UI.fontSmall} fontWeight={600} color={status === 'error' ? LOPU_UI.danger : LOPU_UI.ink}
+					whiteSpace={{ base: 'normal', md: 'nowrap' }} overflowWrap="anywhere" minW={0}>
 					{label}
 				</Text>
 				{summary ? (
-					<Text as="span" fontSize={LOPU_UI.fontSmall} color={LOPU_UI.muted} isTruncated flex={1} minW={0} title={summary}>
+					<Text as="span" fontSize={LOPU_UI.fontSmall} color={LOPU_UI.muted} minW={0} title={summary}
+						gridColumn={{ base: '1 / -1', md: '3' }} gridRow={{ base: 2, md: 1 }}
+						whiteSpace={{ base: 'normal', md: 'nowrap' }} overflowWrap="anywhere" overflow="hidden" textOverflow="ellipsis">
 						{summary}
 					</Text>
-				) : (
-					<Box flex={1} />
-				)}
-				<StatusGlyph status={status} historical />
-			</Flex>
+				) : null}
+				<Box gridColumn={{ base: 3, md: 4 }} gridRow={1} display="inline-flex"><StatusGlyph status={status} historical /></Box>
+			</Box>
 			{call.thingId ? (
 				<Flex px={2.5} pb={1.5} mt="-2px">
 					<RowLink to={`/thing/${encodeURIComponent(call.thingId)}`}>Open →</RowLink>
