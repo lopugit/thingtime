@@ -61,6 +61,7 @@ export const NOTIFICATION_TYPE_META: Record<NotificationType, { emoji: string; l
   },
   'recording-reminder': { emoji: '🦄', label: 'Recording reminders', hint: 'Daily reminders for unfinished todos from Watch recordings — email is opt-in' },
   'lopu-reminder': { emoji: '⏰', label: 'Lopu reminders', hint: 'One-time and recurring reminders you ask Lopu to schedule' },
+  'lopu-message': { emoji: '🦄', label: 'New Lopu messages', hint: 'Scheduled updates and reminders delivered into your Lopu conversations' },
   'login-success': { emoji: '🗝️', label: 'Successful sign-ins', hint: 'A successful password, passkey, or SSO sign-in' },
   'system-message': { emoji: '🦄', label: 'Lopu messages', hint: 'In-app messages saved for later, without a second push or email' },
   // subspaces 🪐 — the member-facing four, then the two mod-queue types
@@ -112,6 +113,8 @@ export const notificationVerb = (item: Pick<NotificationItem, 'type' | 'preview'
       return 'ran an action';
     case 'recording-reminder':
       return 'has a reminder for you';
+    case 'lopu-message':
+      return 'sent a new Lopu message';
     case 'login-success':
       return 'welcomed you back';
     case 'system-message':

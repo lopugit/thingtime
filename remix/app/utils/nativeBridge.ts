@@ -58,3 +58,9 @@ export function postNativeBridgeMessage(message: ThingtimeBridgeMessage) {
 export function supportsNativeLopuVoice(bridge = getNativeBridge()): boolean {
   return Boolean(bridge?.isNativeWebView && /^1\.\d+\.\d+$/.test(bridge.lopuVoiceVersion ?? ''));
 }
+
+export function supportsNativeVoiceHistory(bridge = getNativeBridge()): boolean {
+  if (!supportsNativeLopuVoice(bridge)) return false;
+  const [, minor] = bridge!.lopuVoiceVersion!.split('.').map(Number);
+  return minor >= 3;
+}
