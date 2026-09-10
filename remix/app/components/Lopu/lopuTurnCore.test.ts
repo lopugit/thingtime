@@ -74,6 +74,17 @@ test('meta adopts the chat id and the persisted user message id', () => {
 	assert.equal(turn.sequence, 1);
 });
 
+test('live and settled user rows retain a snapshot of uploaded attachment metadata', () => {
+	const attachment = { id: 'att-qa', name: 'qa.txt', size: 150, contentType: 'text/plain', mediaKind: 'file' as const };
+	const turn = initialLopuTurn({ requestId: 'req-1', userText: 'File attached', userAttachments: [attachment] });
+	attachment.name = 'changed-after-send.txt';
+	assert.equal(buildUserMessage(turn, 'owner').attachments[0].name, 'qa.txt');
+	const settled = fold([META, { type: 'done', assistantMessageId: 'assistant', messages: [], stopReason: 'end_turn' }], turn);
+	const timeline = buildLopuTimeline([], [settled], 'owner');
+	assert.equal(timeline[0].kind, 'message');
+	if (timeline[0].kind === 'message') assert.equal(timeline[0].message.attachments[0].id, 'att-qa');
+});
+
 test('deltas accumulate text and stay in one text segment', () => {
 	const turn = fold([META, { type: 'delta', text: 'Hello ' }, { type: 'delta', text: 'there' }]);
 	assert.equal(turn.text, 'Hello there');

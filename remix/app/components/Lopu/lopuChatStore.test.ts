@@ -95,6 +95,18 @@ const fakeClient = (options?: { reply?: (body: any) => Response; chats?: unknown
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
+test('sent attachment metadata stays visible locally while only selected IDs go to the server', async () => {
+	resetLopuStoreForTests(); hydrateLopuStore('owner');
+	const { client, calls } = fakeClient(); bindLopuApi(client);
+	const attachment = { id: 'att-qa', name: 'qa.txt', size: 150, contentType: 'text/plain', mediaKind: 'file' as const };
+	const result = await sendLopuMessage('File attached', { attachmentIds: ['att-qa'], attachments: [attachment, { ...attachment, id: 'not-selected' }] });
+	assert.equal(result.ok, true);
+	assert.deepEqual(getLopuStoreSnapshot().messages['chat-1'].find(row => row.id === 'u-1')?.attachments, [attachment]);
+	const sent = calls.find(call => call.name === 'reply')?.args as Record<string, unknown>;
+	assert.deepEqual(sent.attachmentIds, ['att-qa']);
+	assert.equal(Object.prototype.hasOwnProperty.call(sent, 'attachments'), false, 'client metadata does not change the wire contract');
+});
+
 test('a late message fetch cannot repopulate another account after switching away and back', async () => {
 	resetLopuStoreForTests(); hydrateLopuStore('owner');
 	const { client } = fakeClient();

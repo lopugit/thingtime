@@ -3,6 +3,7 @@ import { Box, Button, Flex, Input, Modal, ModalOverlay, ModalContent, ModalHeade
 import { Paperclip, Search, X } from 'lucide-react';
 import { AttachmentComposer, type AttachmentComposerHandle } from '~/components/Attachments/AttachmentComposer';
 import type { AttachmentComposerSnapshot } from '~/components/Attachments/attachmentTypes';
+import { DRAWER_MODAL_OVERLAY_Z, DRAWER_MODAL_Z } from '~/components/Nav/Drawer/useDrawer';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useApi } from '~/hooks/useApi';
 
@@ -47,7 +48,7 @@ export function LopuAttachments({ uploadsRef, onUploads, selected, onSelect, dis
 			<AttachmentComposer ref={uploadsRef} ownerId={user.id} purpose="message" maxFiles={10} disabled={disabled} onChange={onUploads} helperText="Private files attach to this chat. Lopu currently receives file metadata and the text of selected Things—not raw image, video or audio contents." />
 		</Box>
 		<Modal isOpen={open} onClose={() => setOpen(false)} size="lg" scrollBehavior="inside">
-			<ModalOverlay /><ModalContent mx={3} my={4} maxW="min(32rem, calc(100vw - 24px))" maxH="calc(100dvh - 32px)"><ModalHeader>Attach your Things</ModalHeader><ModalCloseButton />
+			<ModalOverlay zIndex={DRAWER_MODAL_OVERLAY_Z} /><ModalContent containerProps={{ zIndex: DRAWER_MODAL_Z }} mx={3} my={4} maxW="min(32rem, calc(100vw - 24px))" maxH="calc(100dvh - 32px)"><ModalHeader>Attach your Things</ModalHeader><ModalCloseButton />
 				<ModalBody minW={0} overflowX="hidden"><Input autoFocus aria-label="Search your Things" placeholder="Search notes, todos, transcripts…" value={query} onChange={event => setQuery(event.target.value)} />
 					<Text role="status" fontSize="sm" py={2}>{error || (busy ? 'Searching…' : `${results.length} results · ${selected.length}/10 selected`)}</Text>
 					<Flex direction="column" gap={1} minW={0}>{results.map(thing => {
