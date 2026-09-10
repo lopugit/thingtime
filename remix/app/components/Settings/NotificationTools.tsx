@@ -5,7 +5,7 @@ import { NOTIFICATION_TYPES } from '~/schemas/registry';
 import { NOTIFICATION_TYPE_META } from '../Notifications/notificationCore';
 import { NOTIFICATION_TESTS } from '~/api/utils/notifications/testNotificationsCore';
 
-export const NOTIFICATION_TOOLS_REQUIREMENTS = { 'api.notifications-test': '1.1.0', 'api.lopu-reminders': '1.0.0' } as const;
+export const NOTIFICATION_TOOLS_REQUIREMENTS = { 'api.notifications-test': '1.1.1', 'api.lopu-reminders': '1.0.0' } as const;
 export function supportsNotificationTools(manifest: any, origin: string) {
   return manifest?.origin === origin && Object.entries(NOTIFICATION_TOOLS_REQUIREMENTS).every(([id, minimum]) => {
     const version = manifest.features?.[id]?.version ?? manifest.features?.[id];

@@ -23,6 +23,11 @@ entire inheritance and independent-copy goal is finished.
 - The updated merge head requires fresh checks, exact deployed preview
   validation and a production receipt before delivery. No pending check is
   recorded as successful and no full typecheck pass is claimed.
+- Integration `c02d1f9` passed both actual Web CI build and API jobs. Main
+  subsequently advanced through PR 729 to `2ec5267f0`; the next integration
+  preserves its bounded APNs collapse identifiers and both changelog entries.
+  Exact-head checks and deployment verification must be repeated after that
+  integration; earlier green checks do not substitute for them.
 - Graphify uses the code-only fallback because the local semantic proxy
   health request times out. New release-note Markdown is not semantically
   indexed; the available structural snapshot and portable reports are kept.
