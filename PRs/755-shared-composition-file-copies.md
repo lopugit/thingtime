@@ -3,7 +3,7 @@
 ## Contract and implementation — 2026-09-10
 
 The internal exact-version copy primitive is now called by `/things/fork`.
-The route advertises `api.things-fork` 1.3.1 on both manifests; the Copy button
+The route advertises `api.things-fork` 1.3.2 on both manifests; the Copy button
 requires that version. `filesCopied` is additive and counts new attachments,
 not executable Things. Original Things, ACLs and files are never changed.
 
@@ -28,6 +28,14 @@ patches preserve unrelated text, comments and raw-text containers. No blanket
 ID/string replacement or arbitrary external fetch is performed. Each new file
 is bound in the target Thing's insertion transaction. Shared references reuse
 one copied file, with the existing 25-file limit per binding target.
+
+The 1.3.2 correction also discovers relational ready post-purpose galleries
+across contained Things in one bounded home-store query. File bindings prefer
+the original contained target over the first page embedding, keeping post/data
+galleries intact and ordered while still deduplicating shared files. Discovery
+does not grant access; every file uses the same freshly authorized copy path.
+Other attachment purposes are excluded. Unsupported or unavailable gallery
+files fail the operation rather than silently disappearing.
 
 Missing dependencies, unsupported split-ID media and excessive target
 file counts fail before quota reservation. Write failures clean only preallocated

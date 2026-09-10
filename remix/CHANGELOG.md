@@ -18,6 +18,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Include relational post-purpose galleries when copying shared content,
+  preserving copied home targets and order with one bounded discovery query.
+  Negotiate fork 1.3.2; live storage acceptance remains pending in
+  [PR #755](../PRs/755-shared-composition-file-copies.md).
+  — Codex (AI), 2026-09-10
+
 - Correct shared-app file copies whose templates interpolate stored attachment
   IDs, including defaults, nested lists, branch selectors and page-instance overrides. Preserve
   template behavior and non-argument text; enforce recipient upload approval

@@ -18,6 +18,7 @@ const fixture = () => {
 	let serial = 0;
 	const deps: Parameters<typeof forkComposition>[2] = {
 		uuid: () => `new-${++serial}`, revalidate: async () => composition,
+		listBoundFiles: async () => [],
 		copyFile: async (viewer, id, signal) => { copied.push({ viewer, id, signal }); return { ok: true, id: `copy-${id}`, attachment: {} }; },
 		removeFile: async (owner, input) => { removedFiles.push({ owner, input }); return { ok: true, deferred: false }; },
 		bind: (ids) => async (doc, session) => { bound.push({ ids, doc, session }); },
@@ -57,6 +58,36 @@ test('fork refuses unavailable files and cleans only its new partial uploads', a
 	assert.equal((await forkComposition(viewer, f.composition, f.deps)).ok, false);
 	assert.equal(f.created.length, 0);
 	assert.deepEqual(f.removedFiles, [{ owner: 'copier', input: { id: 'copy-att_source', targetId: 'new-1' } }]);
+});
+
+test('fork copies relational galleries and preserves their binding when also embedded in a page', async () => {
+	const f = fixture();
+	const data: any = { shareId: 'data', ownerId: 'author', thingtime: ['data'], crystal: { title: 'Gallery' } };
+	f.composition.docs.set('data', data);
+	f.deps.listBoundFiles = async (docs) => {
+		assert.ok(docs.some((doc) => doc.shareId === 'data'));
+		return [{ id: 'att_source', targetId: 'component' }, { id: 'att_gallery', targetId: 'data' }];
+	};
+	const result = await forkComposition(viewer, f.composition, f.deps);
+	assert.equal(result.ok, true); if (!result.ok) return;
+	assert.equal(result.filesCopied, 3);
+	assert.equal(f.copied.filter((call) => call.id === 'att_source').length, 1);
+	assert.deepEqual(f.bound.map(({ ids, doc }) => [doc.shareId, ids]), [
+		['new-1', ['copy-att_other']], ['new-2', ['copy-att_source']], ['new-3', ['copy-att_gallery']]
+	]);
+});
+
+test('bound-file discovery errors and excessive galleries fail before upload writes', async () => {
+	for (const oversized of [false, true]) {
+		const f = fixture();
+		f.deps.listBoundFiles = async () => {
+			if (!oversized) throw new Error('Gallery unavailable');
+			return Array.from({ length: 26 }, (_, index) => ({ id: `gallery-${index}`, targetId: 'page' }));
+		};
+		assert.equal((await forkComposition(viewer, f.composition, f.deps)).ok, false);
+		assert.equal(f.copied.length, 0);
+		assert.equal(f.created.length, 0);
+	}
 });
 
 test('fork cleans copied Things and files after a write failure, including deferred cleanup', async () => {

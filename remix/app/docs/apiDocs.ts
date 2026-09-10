@@ -12183,13 +12183,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-fork',
-    // 1.3.1: retarget exact attachment-ID arguments and enforce upload approval internally.
-    featureVersion: '1.3.1',
-    contractVersion: '1.3.1',
+    // 1.3.2: include relational post-purpose galleries, preserving their copied targets.
+    featureVersion: '1.3.2',
+    contractVersion: '1.3.2',
     group: 'things',
     title: 'Copy a shared composition',
     endpoint: '/api/v1/things/fork',
-    summary: 'Create an independent private copy of readable standalone content, including pages, components, actions, schema controls and data with extended content; independently readable foreign components include their authored same-author children.',
+    summary: 'Create an independent private copy of readable standalone content, including pages, components, actions, schema controls and data with extended content and bound post-purpose file galleries; independently readable foreign components include their authored same-author children. Bound files keep their copied home target and gallery order, even when also embedded elsewhere. Non-post purposes are excluded and unavailable or unsupported files fail the copy instead of silently dropping a gallery.',
     detail: 'Revalidates the root audience and traverses stored component, action, schema and data references, including saved component arguments and every persisted page instance. Creates fresh caller-owned private Things through normal quota and schema gates. Rewrites executable references and capability scopes to copied ids; never edits the original or overwrites a prior fork. Templated controls retain their editable arguments and receive a bounded ttActionRefs array of [original resolved reference, copied id] pairs on the authored control node. The renderer applies the first matching pair once after ttAction interpolation, never to labels or inputs, and strips the marker from rendered output. Unused pairs are not access grants. Forks of forks rebind to their own actions. Missing dependencies fail before writes. Failed writes trigger best-effort cleanup of exact newly created ids; a cleanup failure is reported explicitly. Repeated successful calls create separate copies.',
     auth: { mode: 'session', description: 'Requires a signed-in user and read access to id, including its key or group membership when needed. File-bearing copies additionally require the recipient to be a user account with normal post-purpose upload approval; that permission is checked before reservation and throughout copying.' },
     methods: ['POST'],

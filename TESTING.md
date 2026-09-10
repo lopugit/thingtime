@@ -1182,7 +1182,12 @@ email whose link points at the attacker.
       prose and URL template strings stay unchanged. Matching `ttMap` keys and
       `ttIf` comparisons must still select the same branch after ID retargeting. Split partial IDs
       must fail before file writes, never silently retain a source dependency.
-      Confirm the button requires `api.things-fork` 1.3.1 before sending a copy.
+      Copy a post/data Thing with a relational file gallery but no inline media
+      URL: all eligible files must retain their copied home target and order.
+      A file also embedded elsewhere must be copied once. Oversized galleries
+      and discovery failures must perform no upload writes; recording/message/
+      profile-purpose files must not enter this copy plan.
+      Confirm the button requires `api.things-fork` 1.3.2 before sending a copy.
 
 - [ ] With `THINGTIME_MODERATION_PROVIDER=test`, upload an image named
       `tt-test-nsfw.png` to a post: after analysis it renders heavily blurred

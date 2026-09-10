@@ -6,6 +6,7 @@ import { rewriteCopiedAttachmentReferences } from './forkMediaCore';
 import { compositionAttachmentIds } from './compositionMediaCore';
 import { copySharedAttachment, deleteAttachment, createReadyAttachmentPostInsertHook } from '../attachments/attachments';
 import { MAX_ATTACHMENTS_PER_TARGET } from '../attachments/attachmentStore';
+import { listForkBoundMedia } from './forkBoundMedia';
 
 type ForkDependencies = {
 	create: typeof createThing;
@@ -13,11 +14,12 @@ type ForkDependencies = {
 	copyFile: typeof copySharedAttachment;
 	removeFile: typeof deleteAttachment;
 	bind: typeof createReadyAttachmentPostInsertHook;
+	listBoundFiles: typeof listForkBoundMedia;
 	revalidate: (viewer: Viewer, id: string) => Promise<SharedComposition | Fail>;
 	uuid: () => string;
 };
 const production: ForkDependencies = { create: createThing, remove: deleteThing, copyFile: copySharedAttachment,
-	removeFile: deleteAttachment, bind: createReadyAttachmentPostInsertHook, uuid: randomUUID,
+	removeFile: deleteAttachment, bind: createReadyAttachmentPostInsertHook, listBoundFiles: listForkBoundMedia, uuid: randomUUID,
 	revalidate: (viewer, id) => resolveSharedComposition(viewer, id, { contentRoot: true }) };
 
 export const forkComposition = async (viewer: Viewer, composition: SharedComposition, deps: ForkDependencies = production): Promise<Fail | { ok: true; id: string; copied: number; ids: string[]; filesCopied: number }> => {
@@ -63,6 +65,12 @@ export const forkComposition = async (viewer: Viewer, composition: SharedComposi
 			}
 			return found;
 		};
+		// Preserve each contained Thing's gallery before assigning unbound render
+		// dependencies. A file also embedded elsewhere still gets copied once.
+		for (const file of await deps.listBoundFiles(docs)) {
+			if (!ids.has(file.targetId)) throw new Error('An attached file has an unavailable target');
+			targets.set(file.id, file.targetId);
+		}
 		for (const doc of docs) for (const id of mediaFor(doc)) if (!targets.has(id)) targets.set(id, doc.shareId);
 		const perTarget = new Map<string, number>();
 		for (const target of targets.values()) perTarget.set(target, (perTarget.get(target) || 0) + 1);
