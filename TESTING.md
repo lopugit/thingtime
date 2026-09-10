@@ -6068,6 +6068,15 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
 
 Personal recording worker transport and HTTP integration:
 
+- [ ] Explicit saved-recording handoff: with recordings 1.5.0, queue an owned
+      ready standalone private audio Thing, then Send to Lopu after confirmation.
+      Verify one transcript child, private notes/todos and the linked conversation;
+      source crystal/purpose/binding must be unchanged. Repeat requests must not
+      duplicate outputs. Deny public/foreign/app/bound/linked/deleted/draft audio,
+      including changes during processing. Automatic discovery remains Watch-only.
+      Verify same-domain Thing/post links and raw IDs, reject foreign/malformed
+      links, and check both manual buttons at desktop and 390px phone widths.
+
 - [ ] Expired unfinished pairing: `resume` first; do not erase recovery after
       an ambiguous network error. `forget-pending` without its explicit
       confirmation must stop before accessing Keychain. With confirmation it

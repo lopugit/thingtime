@@ -1829,6 +1829,18 @@ does not accept production or develop database URIs.
 
 ### Personal recording runtime (local adapter)
 
+Saved iPhone audio Things can be explicitly processed in `/lopu/recordings`:
+paste the recording's `/thing/<id>` link or ID, then choose **Queue recording**
+for transcription/notes or **Send to Lopu** for a confirmed transcript handoff.
+This requires `api.lopu-recordings` 1.5.0, an enabled recording processor, and a
+ready standalone owner-private audio attachment with purpose `recording`.
+The existing `postId` request field accepts either that recording Thing ID or
+a private Watch post ID. Automatic discovery still covers only new Watch posts;
+saved phone recordings are never processed merely because they exist. Upload
+approval, storage quotas, selected-provider/local-device setup and separate Lopu
+tool confirmations remain required. Transcript comments are linked children;
+processing never converts the audio into a post or rewrites its crystal/binding.
+
 For an opt-in macOS smoke test, run
 `node --import tsx scripts/personal-recording-runtime-smoke.mts` from `remix/`.
 It skips unless `TT_PERSONAL_RUNTIME_SMOKE=1` is set with absolute local paths
