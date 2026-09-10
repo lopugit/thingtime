@@ -28,7 +28,11 @@ const rss: any = connectionProviderById('rss');
 const originalLookup = dns.lookup;
 const originalFetch = globalThis.fetch;
 test.before(() => {
-  dns.lookup = (async () => [{ address: '1.1.1.1', family: 4 }]) as typeof dns.lookup;
+  // via `unknown`: dns.lookup is an overload set whose one-argument member
+  // resolves to a single LookupAddress, so a bare cast from the all:true array
+  // shape this stub returns is a TS2352 "neither type sufficiently overlaps"
+  // — the guard only ever calls it as lookup(host, { all: true }).
+  dns.lookup = (async () => [{ address: '1.1.1.1', family: 4 }]) as unknown as typeof dns.lookup;
   syncBuiltinESMExports();
 });
 test.after(() => {
