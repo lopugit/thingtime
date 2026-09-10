@@ -649,7 +649,14 @@ const mediaPreview = async (path: string, id: string): Promise<SocialPreview> =>
 		kind: 'media',
 		variant,
 		path,
-		title: `${label} on ${SITE_NAME}`,
+		// TITLE_MAX like every sibling preview. `label` is the one variable title
+		// part in this file that was interpolated raw, and it is owner-authored
+		// rather than short: the annotate route caps `title` at 200 code points
+		// and `filenamePreview` at 255 (attachmentCore.ts), so a /media/:id
+		// og:title ran to ~268 where /post, /thing, /p and the static routes all
+		// stop at 70. The card itself was never at risk (wrap + clampToWidth
+		// measure it), but the tag is served raw into every shell head.
+		title: `${truncateSocialText(label, TITLE_MAX)} on ${SITE_NAME}`,
 		description:
 			truncateSocialText(cleanSocialText(media.description), DESCRIPTION_MAX) ||
 			`${mediaKind[0]?.toUpperCase() || 'M'}${mediaKind.slice(1)} shared on Thingtime.`,
