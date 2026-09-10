@@ -6,6 +6,31 @@ import { canView, fail, type ThingDoc } from '../things/things';
 
 const url = (id: string) => `/api/v1/attachments/content?id=${id}`;
 
+test('shared CSS media follows literal render styles, including nested Chakra styles and page backgrounds', () => {
+	const render = { tag: 'div', props: {
+		style: { backgroundImage: `url("${url('inline')}")` },
+		bg: { base: `url(${url('responsive')})` },
+		_hover: { background: `image-set("${url('hover')}" 1x)` },
+		title: `url(${url('metadata')})`
+	} };
+	assert.deepEqual([...compositionAttachmentIds(['component'], { render })].sort(), ['hover', 'inline', 'responsive']);
+	assert.deepEqual([...compositionAttachmentIds(['webpage'], { previewBg: `url(${url('page')})`, blocks: [
+		{ type: 'container', css: { background: `url(${url('container')})` }, children: [
+			{ type: 'text', css: { 'background-image': `url(${url('text')})` } }
+		] }
+	] })].sort(), ['container', 'page', 'text']);
+});
+
+test('CSS strings and external URLs cannot smuggle media dependency grants', () => {
+	const style = {
+		background: `url('https://external.test/?text=url("${url('external')}")')`,
+		content: `'url("${url('quoted')}")'`,
+		borderImageSource: `url('${url('independent')}&key=other')`,
+		maskImage: `url('${url('dynamic-{input}')}' )`
+	};
+	assert.deepEqual([...compositionAttachmentIds(['schema'], { render: { tag: 'div', props: { style } } })], []);
+});
+
 test('composition media grants only literal first-party URLs in stored rendering positions', () => {
 	const render = { tag: 'div', props: { 'data-note': url('metadata') }, children: [
 		{ tag: 'img', props: { src: url('image') } },
@@ -34,6 +59,8 @@ test('shared media reauthorizes the root, inherits only same-author references a
 	const viewer = { id: '', linkKeys: new Set(['fixture-key']) };
 	const media = { shareId: 'media', ownerId: 'author', thingtime: ['attachment'], acl: ['tt:inherit'], targetId: 'private-post', attachmentPurpose: 'post' as const };
 	assert.equal(await read(viewer, media, root.shareId), true);
+	component.crystal = { render: { tag: 'div', props: { style: { backgroundImage: `url(${url('media')})` } } } };
+	assert.equal(await read(viewer, media, root.shareId), true, 'Stored CSS media inherits the same root audience as image elements');
 	assert.equal(await read(null, media, root.shareId), false);
 	assert.equal(await read({ id: '', linkKeys: new Set(['wrong']) }, media, root.shareId), false);
 	assert.equal(await read(viewer, { ...media, shareId: 'unrelated' }, root.shareId), false);

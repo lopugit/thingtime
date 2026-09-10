@@ -1,5 +1,6 @@
 import React from 'react';
 import { useSharedMediaUrl } from '../Sharing/SharedMedia';
+import { mapCssMediaUrls } from '../Sharing/renderMediaCore';
 import { Box, Flex, Grid, Text } from '@chakra-ui/react';
 
 import { ChakraThingRenderer, isChakraThingNode } from '../Kinds/ChakraThingRenderer';
@@ -71,12 +72,12 @@ export type BuilderChrome = {
 
 // Figma-style custom css record → React inline style (kebab → camel, custom
 // properties pass through). Values were bounded by the server gate.
-export const cssRecordToStyle = (css?: Record<string, string>): React.CSSProperties | undefined => {
+export const cssRecordToStyle = (css?: Record<string, string>, mediaUrl?: (url: string) => string): React.CSSProperties | undefined => {
 	if (!css) return undefined;
 	const out: Record<string, string> = {};
 	for (const [key, value] of Object.entries(css)) {
 		if (!value || typeof value !== 'string') continue;
-		out[key.startsWith('--') ? key : key.replace(/-([a-z])/g, (_, char: string) => char.toUpperCase())] = value;
+		out[key.startsWith('--') ? key : key.replace(/-([a-z])/g, (_, char: string) => char.toUpperCase())] = mediaUrl ? mapCssMediaUrls(value, mediaUrl) : value;
 	}
 	return Object.keys(out).length ? (out as React.CSSProperties) : undefined;
 };
@@ -387,6 +388,7 @@ const BlockFrame = ({
 	children: React.ReactNode;
 }) => {
 	const hovered = chrome.hoverId === block.id;
+	const mediaUrl = useSharedMediaUrl();
 	const selected = chrome.selectedId === block.id;
 	const [dropTarget, setDropTarget] = React.useState(false);
 	const tone = locked ? 'var(--tt-muted, #9a9aa6)' : 'var(--tt-accent, hotpink)';
@@ -442,7 +444,7 @@ const BlockFrame = ({
 			data-block-id={block.id}
 			position="relative"
 			{...selfPlacement(block, parentDirection)}
-			style={cssRecordToStyle(block.css)}
+			style={cssRecordToStyle(block.css, mediaUrl)}
 			onContextMenu={
 				chrome.onContextMenu && !locked
 					? (event: React.MouseEvent) => {
@@ -976,7 +978,7 @@ const BlockView = (
 		// a linked text block is an anchor around the styled text: same
 		// protocol screen as every other untrusted URL, external targets drop
 		// the opener, and the edit canvas never navigates on click
-		const href = typeof block.href === 'string' && isSafeUrl(block.href) ? block.href : null;
+		const href = typeof block.href === 'string' && isSafeUrl(block.href) ? mediaUrl(block.href) : null;
 		if (href && !(chrome && chrome.selectedId === block.id)) {
 			// external = leaves this origin, decided on the RESOLVED url rather
 			// than a scheme prefix: a stored `/\host` href (written before the
@@ -1123,7 +1125,7 @@ const BlockView = (
 		// defeat page-owned shells that center their children (e.g. /welcome)
 		if (block.type === 'native') return <>{body}</>;
 		return (
-			<Box {...selfPlacement(block, parentDirection)} style={cssRecordToStyle(block.css)}>
+			<Box {...selfPlacement(block, parentDirection)} style={cssRecordToStyle(block.css, mediaUrl)}>
 				{body}
 			</Box>
 		);
