@@ -11,6 +11,7 @@ import React from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { useMessengerApi } from '~/components/Messenger/useMessengerApi';
+import type { ChatMessage } from '~/components/Messenger/messengerTypes';
 import { useIsMobileViewport } from '~/components/Nav/Drawer/useDrawer';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -125,7 +126,7 @@ export type UseLopuChat = {
 	timeline: LopuTimelineItem[];
 	streaming: LopuTurnState | null;
 	sending: boolean;
-	send: (text: string, overrides?: Partial<LopuChatSettings>) => Promise<SendLopuResult>;
+	send: (text: string, overrides?: Partial<LopuChatSettings>, attachments?: { attachmentIds?: string[]; attachments?: ChatMessage['attachments']; thingIds?: string[] }) => Promise<SendLopuResult>;
 	abort: () => void;
 	selectChat: (chatId: string | null) => void;
 	createChat: (args?: { title?: string }) => ReturnType<typeof createLopuChat>;
@@ -242,8 +243,9 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 
 	const applyPatches = options.applyPatches ?? prefs.applyPatches;
 	const send = React.useCallback(
-		(text: string, overrides?: Partial<LopuChatSettings>) =>
+		(text: string, overrides?: Partial<LopuChatSettings>, attachments?: { attachmentIds?: string[]; attachments?: ChatMessage['attachments']; thingIds?: string[] }) =>
 			sendLopuMessage(text, {
+				...attachments,
 				...(overrides ? { settings: overrides } : {}),
 				context: contextProvider(),
 				applyPatches

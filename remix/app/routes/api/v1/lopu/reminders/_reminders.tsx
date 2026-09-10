@@ -1,7 +1,7 @@
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { isSameOriginAttachmentRequest } from '~/api/utils/attachments/attachmentResponses';
-import { createLopuReminder, listLopuReminders, setLopuReminderEnabled } from '~/api/utils/lopu/reminders';
+import { createLopuReminder, listLopuReminders, setLopuReminderEnabled, getLopuScheduledTask } from '~/api/utils/lopu/reminders';
 import { enforceSubscriptionRateLimit } from '~/api/utils/rateLimit/subscription';
 import { runWithMongoEndpoint } from '~/api/utils/mongodb/endpoint';
 
@@ -10,6 +10,12 @@ const reply = (body: unknown, status = 200) => json(body, { status, headers });
 export const loader = async ({ request }: { request: Request }) => {
 	const user = await getCurrentUser(request);
 	if (!user || user.temporary || user.accountKind !== 'user') return reply({ ok: false, error: 'Sign in to manage reminders.' }, 401);
+	const thingId = new URL(request.url).searchParams.get('thingId');
+	if (thingId) return runWithMongoEndpoint(null, async () => {
+		if (!/^[\w-]{1,128}$/.test(thingId)) return reply({ ok: false, error: 'Invalid Thing ID.' }, 400);
+		const result = await getLopuScheduledTask(user.id, thingId);
+		return reply({ ...result, ownerId: user.id }, result.ok ? 200 : result.status);
+	});
 	return runWithMongoEndpoint(null, async () => reply({ ok: true, ownerId: user.id, reminders: await listLopuReminders(user.id) }));
 };
 export const action = async ({ request }: { request: Request }) => {

@@ -196,6 +196,7 @@ export type LopuTurnState = {
 	chatId: string | null;
 	userMessageId: string;
 	userText: string;
+	userAttachments: ChatMessage['attachments'];
 	startedAt: number;
 	meta: LopuTurnMeta | null;
 	text: string;
@@ -231,12 +232,14 @@ export const initialLopuTurn = (input: {
 	requestId: string;
 	chatId?: string | null;
 	userText: string;
+	userAttachments?: ChatMessage['attachments'];
 	startedAt?: number;
 }): LopuTurnState => ({
 	requestId: input.requestId,
 	chatId: input.chatId ?? null,
 	userMessageId: pendingUserMessageId(input.requestId),
 	userText: input.userText,
+	userAttachments: (input.userAttachments ?? []).map(attachment => ({ ...attachment })),
 	startedAt: input.startedAt ?? Date.now(),
 	meta: null,
 	text: '',
@@ -870,14 +873,16 @@ const baseMessage = (input: { id: string; chatId: string; authorId: string; text
 });
 
 /** The viewer's row for a turn — id re-keys to the persisted one after `meta`. */
-export const buildUserMessage = (turn: LopuTurnState, viewerId: string, chatId: string = turn.chatId || ''): ChatMessage =>
-	baseMessage({
+export const buildUserMessage = (turn: LopuTurnState, viewerId: string, chatId: string = turn.chatId || ''): ChatMessage => ({
+	...baseMessage({
 		id: turn.userMessageId,
 		chatId,
 		authorId: viewerId,
 		text: turn.userText,
 		createdAt: new Date(turn.startedAt).toISOString()
-	});
+	}),
+	attachments: turn.userAttachments ?? []
+});
 
 /**
  * Lopu's rows for a finished turn: the server's persisted segments when
@@ -973,6 +978,17 @@ export const isLopuAssistantMessage = (message: Pick<ChatMessage, 'externalSourc
 // note §1.2: crystal.lopu projects onto the public message as `lopu`). Read
 // defensively — older rows and user rows carry nothing.
 export type LopuMessageToolCall = { name: string; ok: boolean; summary: string; thingId: string | null };
+
+/**
+ * Old receipts store only ok + the server's bounded summary, not a live grant.
+ * Recognise that exact refusal prefix for display only. It proves neither that
+ * approval is still pending nor that a later confirmed call succeeded.
+ */
+export const historicalToolStatus = (call: Pick<LopuMessageToolCall, 'ok' | 'summary'>): LopuToolStatus => {
+	if (call.ok) return 'ok';
+	if (call.summary.startsWith('Waiting for the user’s confirmation: ')) return 'confirm';
+	return 'error';
+};
 
 export type LopuMessageMeta = {
 	role: 'user' | 'assistant' | null;

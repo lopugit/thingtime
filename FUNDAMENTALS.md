@@ -96,6 +96,11 @@ System-kind rules (never bypass):
   `ci-event` Thing attached by `parentId`, idempotent by provider delivery id.
   History is never an embedded array, and all CI Things carry
   `storageClass: "control"` so operational telemetry is not customer content.
+  `scheduled-task-run` is quota-billed content, linked to its task by `targetId`
+  and owner-private at creation. It is an editable run note, not a protected
+  audit record. Task deletion cascades these notes, without deleting their
+  destination conversations. Discussion uses the existing `comment` child kind:
+  fetching by target ID never embeds comments in the target crystal.
   The `schema` kind is NOT protected: anyone may publish a schema thing. Builtin
   schemas are reserved system-owned seeds with root `storageClass: "control"`;
   community/user schemas remain ordinary billable content. The `component` kind

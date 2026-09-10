@@ -1,20 +1,31 @@
-import type { CompositionReference } from './sharedCompositionCore';
+import { storedComponentScope, type CompositionReference } from './sharedCompositionCore';
+import { visitStoredTemplateActions } from '../../../components/ComponentsLibrary/componentTemplate';
 
 // Rewrite executable references, not arbitrary text containing an id. All
 // copied ids are allocated before writing, so cycles and forward references
 // can be rewritten without ever pointing the fork at the original program.
 export const rewriteComposition = (
 	kinds: string[], original: Record<string, any>,
-	map: (kind: CompositionReference['kind'], ref: string) => string
+	map: (kind: CompositionReference['kind'], ref: string) => string,
+	contexts: (Record<string, unknown> | undefined)[] = [undefined]
 ): Record<string, any> => {
 	const crystal = JSON.parse(JSON.stringify(original));
+	if (kinds.includes('component') || kinds.includes('schema')) {
+		for (const args of contexts) visitStoredTemplateActions(crystal.render, kinds.includes('component') ? storedComponentScope(crystal, args) : {}, (action, node, raw) => {
+			if (action === raw && typeof node.ttAction === 'string' && !node.ttAction.includes('{')) return;
+			const copied = map('action', action);
+			if (copied === action) return;
+			const refs = Array.isArray(node.ttActionRefs) ? node.ttActionRefs : [];
+			node.ttActionRefs = [[raw, copied], ...refs.filter((entry) => Array.isArray(entry) && entry[0] !== raw)];
+		});
+	}
 	const field = (object: any, name: string, kind: CompositionReference['kind']) => {
 		if (object && typeof object[name] === 'string') object[name] = map(kind, object[name]);
 	};
 	const render = (node: any, depth = 0): void => {
 		if (!node || typeof node !== 'object' || depth > 64) return;
 		if (Array.isArray(node)) { node.forEach((child) => render(child, depth + 1)); return; }
-		field(node, 'ttAction', 'action');
+		if (typeof node.ttAction === 'string' && !/[{}$]/.test(node.ttAction)) field(node, 'ttAction', 'action');
 		render(node.children, depth + 1);
 		render(node.rawChildren, depth + 1);
 		render(node.ttMerge, depth + 1);

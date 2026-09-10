@@ -3,6 +3,7 @@ import { assertSafeProviderEndpoint, type LopuVaultProviderRecord } from './vaul
 import { getRecordingSettings } from './recordingsStore';
 import { RecordingFailure, RECORDING_MAX_AUDIO_BYTES, type RecordingSettings } from './recordingsCore';
 import { recordingProviderSupports, recordingStageSetting, type RecordingStage } from './recordingsWaterfall';
+import { listPersonalRecordingDevices, validatePersonalRecordingDevice } from './personalRecordingDevices';
 
 export type RecordingConnectionChoice = {
 	id: string;
@@ -46,6 +47,7 @@ export const listRecordingConnections = async (ownerId: string): Promise<Recordi
 };
 
 export const validateRecordingConnections = async (ownerId: string, patch: Partial<RecordingSettings>) => {
+	await validatePersonalRecordingDevice(ownerId, patch.runtimeDeviceId);
 	const choices = await listRecordingConnections(ownerId);
 	for (const stage of ['transcription', 'analysis'] as const) {
 		const ids = patch[recordingStageSetting(stage)];
@@ -55,17 +57,21 @@ export const validateRecordingConnections = async (ownerId: string, patch: Parti
 };
 
 export const recordingConnectionStatus = async (ownerId: string, settings?: RecordingSettings) => {
-	const choices = await listRecordingConnections(ownerId);
+	const [choices, devices] = await Promise.all([listRecordingConnections(ownerId), listPersonalRecordingDevices(ownerId)]);
 	const current = settings || (await getRecordingSettings(ownerId));
+	const device = current.runtimeDeviceId ? devices.find((entry) => entry.id === current.runtimeDeviceId) : null;
 	const transcription = current.transcriptionProviders.some((id) =>
 		choices.some((choice) => choice.id === id && choice.transcription && choice.configured)
 	);
 	const analysis = current.analysisProviders.some((id) => choices.some((choice) => choice.id === id && choice.analysis && choice.configured));
 	return {
-		configured: transcription && (!(current.createNotes || current.createTodos) || analysis),
+		configured: current.runtimeDeviceId ? Boolean(device) : transcription && (!(current.createNotes || current.createTodos) || analysis),
 		transcription,
 		analysis,
-		name: 'Selected AI provider waterfall',
+		name: current.runtimeDeviceId ? 'Personal recording device' : 'Selected AI provider waterfall',
+		mode: current.runtimeDeviceId ? 'personal' as const : 'providers' as const,
+		device: device || null,
+		devices,
 		maxAudioBytes: RECORDING_MAX_AUDIO_BYTES,
 		choices
 	};
