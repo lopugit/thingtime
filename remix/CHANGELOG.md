@@ -24,6 +24,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   independent copies and read-only execution. See [PR #753](../PRs/753-codex-shared-public-component-boundaries.md).
   — Codex (AI), 2026-09-10
 
+- Clarify Lopu's two-step comment tool: an unapproved call opens the real
+  approval card without posting; a verified follow-up posts the exact comment.
+  Publish reply capability 1.6.2 without weakening the write guard.
+  — Codex (AI), 2026-09-10
+
+- Bypass the browser HTTP cache when negotiating capabilities, bound checks
+  to 20 seconds and let failures retry without a page reload. Successful
+  concurrent checks still share a request; incompatible contracts fail closed.
+  — Codex (AI), 2026-09-10
+
 - Preserve bounded, sanitized action receipts in Lopu conversation history so
   subsequent replies can distinguish past successes from failures. Publish
   reply capability 1.6.1; historical results grant no new action permissions.
