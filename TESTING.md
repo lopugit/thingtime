@@ -5582,6 +5582,20 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       private media refs. Negotiate `api.attachment-content >= 1.2.0`; forward
       `sharedRoot` plus the key only to the exact first-party content endpoint.
       Explicit audio downloads use the same context without persisting its URL.
+- [ ] Shared component media supplied through argument defaults or savedArgs
+      renders signed out with the root context at desktop/mobile widths.
+      Saved values override defaults; replacing one removes the old grant.
+      Unused args, unknown runtime tokens, external URLs and independent keys
+      grant nothing. Non-owner editors cannot inject unreadable uploads through
+      either argument source. Expansion limits never truncate one attachment
+      identifier into another; negotiate attachment-content 1.5.0.
+- [ ] A nested page block overrides a same-author component's saved media args.
+      Two blocks using the same component may render different media. Resolve
+      aliases with the same composition lookup used for child reads; removing
+      an override revokes its old media. Unused args and foreign templates do
+      not grant private root-author media. Shared writers may preserve existing
+      args but cannot insert inaccessible media through an override. Negotiate
+      attachment-content 1.6.0; verify both desktop and mobile rendering.
 - [ ] Canvas: hovering a block draws its dashed boundary + label chip; nested
       sub-blocks highlight innermost-wins; clicking selects (solid outline)
       and opens the inspector in the right drawer.
@@ -6270,6 +6284,14 @@ approval; `access.test.ts` — the reservation matrix) and
 - Shared settings / observed status: after the Mac reports connected with access allowed, switch between Things, the popup Things tab, and Open settings page. Keep the last observed status visible during the background check; do not briefly show Not running or a new permission denial. Pairing challenges and pending actions must not carry between views.
 
 ## Shared Data Thing template controls
+
+- Shared nested media: open rich/raw HTML blocks with image, poster, link and
+  inline CSS media signed out at desktop/mobile widths. Same-author uploads
+  attached directly to contained components must inherit the root audience.
+  Revoke the key/group and verify denial. Foreign or unrelated uploads and
+  message/profile/emoji purposes must not gain access. Script/template/comment
+  text, unknown-tag attributes and over-budget markup must not mint grants.
+  A non-owner writer must not insert unreadable private media through HTML.
 
 - Shared CSS media: at desktop and mobile widths, verify page/block backgrounds,
   HTML style URLs, Chakra responsive backgrounds and hover styles render through
