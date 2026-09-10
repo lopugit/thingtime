@@ -18,6 +18,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Include containing page-block argument overrides in same-author shared media
+  inheritance, matching defaults → savedArgs → block args render precedence.
+  Compare the same resolved dependencies before/after shared edits, reusing
+  query results within validation; guessed private media remains forbidden.
+  Advertise attachment-content 1.6.0 with patched Things write contracts.
+  Foreign templates retain independent authority; full conditional coverage
+  and independent protected-upload fork copies remain follow-ups.
+  — Codex (AI), 2026-09-10
+
 - Resolve stored component defaults and saved arguments in shared media
   positions with the canonical template resolver and one expansion budget.
   Preserve unknown runtime tokens and reject truncated candidate values;

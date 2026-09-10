@@ -4,7 +4,12 @@ import { createTemplateResolver, defaultsFromArgs, sanitizeArgSpecs } from '../.
 
 // Media capabilities come only from literal first-party URLs in stored render
 // positions. Input values, arbitrary metadata and external links are not grants.
-export const compositionAttachmentIds = (kinds: string[], crystal: Record<string, any>): Set<string> => {
+export type CompositionMediaOptions = {
+	args?: Record<string, unknown>;
+	component?: (ref: string) => Record<string, any> | undefined;
+};
+
+export const compositionAttachmentIds = (kinds: string[], crystal: Record<string, any>, options: CompositionMediaOptions = {}): Set<string> => {
 	const ids = new Set<string>();
 	const url = (value: unknown) => {
 		const id = literalAttachmentId(value);
@@ -13,7 +18,7 @@ export const compositionAttachmentIds = (kinds: string[], crystal: Record<string
 	const cssUrl = (value: string) => { url(value); return value; };
 	const resolveStored = createTemplateResolver({ preserveUnboundTokens: true });
 	const storedScope = { ...defaultsFromArgs(sanitizeArgSpecs(crystal.args)),
-		...(crystal.savedArgs && typeof crystal.savedArgs === 'object' && !Array.isArray(crystal.savedArgs) ? crystal.savedArgs : {}) };
+		...(crystal.savedArgs && typeof crystal.savedArgs === 'object' && !Array.isArray(crystal.savedArgs) ? crystal.savedArgs : {}), ...options.args };
 	let visited = 0;
 	const render = (node: any, depth = 0, resolveProps = false): void => {
 		if (!node || typeof node !== 'object' || depth > 64 || ++visited > 1600) return;
@@ -28,10 +33,18 @@ export const compositionAttachmentIds = (kinds: string[], crystal: Record<string
 		if (!Array.isArray(nodes) || depth > 16) return;
 		for (const block of nodes) {
 			if (!block || typeof block !== 'object') continue;
+			if (++visited > 1600) return;
 			mapStyleMediaUrls(block.css, cssUrl);
 			if (block.type === 'media') url(block.src);
 			if (block.type === 'text') url(block.href);
 			if (block.type === 'text' || block.type === 'html') visitAuthoredHtmlMedia(block.html, url);
+			if (block.type === 'component' && typeof block.component === 'string') {
+				const component = options.component?.(block.component);
+				if (component) {
+					const args = block.args && typeof block.args === 'object' && !Array.isArray(block.args) ? block.args : {};
+					for (const id of compositionAttachmentIds(['component'], component, { args })) ids.add(id);
+				}
+			}
 			if (block.type === 'container') blocks(block.children, depth + 1);
 		}
 	};
