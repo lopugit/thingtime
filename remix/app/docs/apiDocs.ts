@@ -673,12 +673,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [{ status: 200, description: 'Your schedules.', body: { ok: true, ownerId: 'user-id', reminders: [] } }]
 	}),
 	endpoint({
-		id: 'notifications-test', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'notifications', title: 'Send a test notification',
+		id: 'notifications-test', contractVersion: '1.2.0', featureVersion: '1.2.0', group: 'notifications', title: 'Send a test notification',
 		endpoint: '/api/v1/notifications/test', methods: ['POST'],
 		summary: 'Send a fixed notification example to the signed-in account only.',
 		detail: 'POST preset quiet, normal, urgent, rich or image, with optional registered notification type (default lopu-reminder). Fixed safe title/body/rich text/image; no caller-provided content, recipient or external URL. Quiet maps to passive without sound; normal to active; urgent to time-sensitive, not Critical. Rich text and a local illustration render in Thingtime; native banners use plain text. Notification preferences are honoured. saved means durable history insertion, not proof a physical device displayed it. Response includes id or null and a status message. No email is sent.',
 		auth: { mode: 'session-or-bearer', description: 'Full live first-party user only, same-origin JSON, subscription-tier mutation limit. Scoped app/Watch credentials cannot send tests.' },
-		steps: ['Negotiate api.notifications-test 1.1.0.', 'Select a test in Settings → Notifications.', 'Check history and your physical device.'],
+		steps: ['Negotiate api.notifications-test 1.2.0.', 'Select a test in Settings → Notifications.', 'Inspect the optional push report (status, attempted, accepted, rejected, platform counts and sanitized reasons), then check your physical device. Apple acceptance does not prove a displayed banner.'],
 		requestExamples: [{ name: 'Urgent test', description: 'Time-sensitive sample to yourself.', method: 'POST', body: { preset: 'urgent' } }],
 		responseExamples: [{ status: 200, description: 'Muted by user settings.', body: { ok: true, saved: false, id: null, message: 'This notification is muted by your notification preferences.' } }]
 	}),
@@ -5749,15 +5749,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-content',
-		contractVersion: '1.2.1',
-		featureVersion: '1.2.1',
+		contractVersion: '1.3.0',
+		featureVersion: '1.3.0',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
 		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
 		detail:
 			'Owners may read live unattached drafts. Bound content is purpose-authorized against the exact target: post/comment ACL inheritance, active or pending chat membership, the current public profile slot, or the current personal/community emoji reference. The bucket never becomes public. ' +
-			'Optional sharedRoot authorizes post-purpose media attached to the root or explicitly embedded by a stored component/schema/native media block. Same-author references inherit the freshly checked root audience; foreign media still needs independent access. Unrelated ids, drafts, message/profile/emoji objects, retired keys and revoked groups do not gain access through this mode. Ready state, moderation, exact object version and home-storage guards remain enforced before every redirect, byte read or cache receipt. ' +
+			'Optional sharedRoot authorizes post-purpose media attached to the root or explicitly embedded by a stored component/schema/native media block. Literal CSS url/image-set references (including escaped function identifiers) in render styles, responsive/pseudo styles, block CSS and page backgrounds are included; quoted text, metadata and external URLs are not grants. Same-author references inherit the freshly checked root audience; foreign media still needs independent access. Unrelated ids, drafts, message/profile/emoji objects, retired keys and revoked groups do not gain access through this mode. Ready state, moderation, exact object version and home-storage guards remain enforced before every redirect, byte read or cache receipt. ' +
 			'Hidden post/page audiences accept the root key query parameter and custom audiences use current group/friend membership. Every content or cache-validation request rechecks the root. Only magic-byte-verified inline-safe types may render inline: AVIF/GIF/JPEG/PNG/WebP images and MP4/WebM/QuickTime/M4V/Ogg/3GPP/3GPP2/Matroska video. Add download=1 to force attachment/octet-stream for every type.',
 		auth: {
 			mode: 'optional',
@@ -8800,7 +8800,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			'Version 1.8 adds scheduled-task-run child notes: targetId is required, the default audience is owner-only, the typed crystal is bounded, and deleting the task cascades its run notes. Run notes are editable user content, not trusted security audit records. ' +
 			'Own-things lists include completed standalone recording attachments; pending uploads and all other protected kinds remain excluded. Attachment creation, metadata mutation and deletion still use their dedicated endpoints. ' +
 			'Shared webpage writers may add component references only when they can independently read the referenced component; only the owner may delegate an unrelated private component through the page. ' +
-			'Shared writers also need independent access before inserting new first-party private media references in page, component or schema render positions. ' +
+			'Shared writers also need independent access before inserting new first-party private media references in page, component or schema render positions, including literal CSS url/image-set values in stored render styles and page backgrounds. ' +
 			'GET id with sharedRoot and optional key reads an included component/action/schema/data dependency through the freshly authorized stored root. This first-party contextual mode preserves standalone ACLs and owner-only keys, refuses unrelated ids and app-token namespace escapes, and returns private no-store responses. It does not authorize mutations or shared-context list queries. ' +
       'Everything is a thing: one root Thing schema per doc, sub-schemas applied via the thingtime array of schema ids (see /schemas), the payload under crystal, and the audience under acl — tt: grants plus "-"-prefixed exclusions where the most specific matching entry wins (["tt:all"] public, ["-tt:all","tt:userFriends","tt:user"] friends-only, ["tt:all","-tt:user/somebody"] public except one user; owners always see their own things). POST creates (unified shape or the legacy post body — same path), GET reads one thing / lists a target’s attached things / lists your own, PUT upserts by id (create-or-replace), PATCH merges a partial update, DELETE removes an owned thing and its attached comments/reactions. The legacy visibility names still work as input and are derived on the wire — including "hidden" (acl ["tt:hidden","tt:user"]): an unlisted thing that never appears in feeds, listings, profiles, or search for anyone but its owner, yet is viewable by ANYONE presenting its randomly generated linkKey — GET /api/v1/things?id=<id>&key=<linkKey>, or the /post/<id>?key=<linkKey> page. The server mints a fresh linkKey whenever a thing enters hidden (re-hiding rotates it, so previously shared links die), projects it to the owner only, and honors it on the engagement routes too (body.key on comment/react/save/share admits key-holders). Changing the audience away from hidden retires the link instantly. "custom" audiences go further: an acl carrying the tt:custom marker names exactly who can do what — a baseline (tt:all = everyone may read, tt:hidden = link-key holders may read, neither = only the people below), plus per-user grants tt:user/<username> (read), tt:user/<username>/comment, tt:user/<username>/write and per-group grants tt:group/<group id>[/comment|/write] (groups: /api/v1/groups-docs; write ⊃ comment ⊃ read). On custom things, general viewers READ ONLY — commenting, reacting, and sharing need the comment capability, and users with write may PATCH the thing’s crystal/extended/tags (never its audience, folder, or token grants; storage stays billed to the owner). Saves are exempt (a save is a private bookmark). The composer’s Custom option builds these acls visually. Crystals are optionally schema-less: omit thingtime and it defaults to ["data"], the bounded free-form crystal. Beside the crystal, every thing also carries a schema-free extended property — any JSON up to 512KB, stored and returned exactly as given, never validated or interpreted, and not structured-searchable (/search field conditions can’t target it, though its string content is indexed by the wildcard text index). extended replaces as a whole value on write (deep-merging arbitrary JSON is ambiguous) and null clears it — the open sidecar external apps park their data in. Things also carry a tokenAcl grant list (tt:token/<token id> entries, see /api/v1/tokens-docs): sandboxed personal-access-tokens may only mutate things carrying their entry; creators are auto-granted, the list replaces whole via tokenAcl on POST/PUT/PATCH (null clears, max 32 entries), it never affects visibility, and it projects to the owner only.',
     auth: {
@@ -11331,6 +11331,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // actorName "s/<slug> mods", actorUsername / actorAvatarUrl null)
     // 1.3.0: both lines merged — this endpoint ships history filters AND the
     // subspace family together; additive
+    // Includes the 1.6.2 APNs collapse-identifier fix.
     // 1.7.0 adds lopu-message for scheduled conversation updates.
     featureVersion: '1.7.0',
     contractVersion: '1.7.0',
@@ -11504,14 +11505,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'notifications-devices',
-    contractVersion: '1.1.0',
-    featureVersion: '1.1.0',
+    contractVersion: '1.2.0',
+    featureVersion: '1.2.0',
     group: 'notifications',
     title: 'Register notification devices',
     endpoint: '/api/v1/notifications/devices',
     summary: 'Register iPhone and Apple Watch APNs targets for the signed-in Thingtime account.',
     detail:
-      'POST accepts one to four variable-length hexadecimal APNs tokens. The server selects the bundle topic, ' +
+      'GET requires a full session and returns ownerId, server configured status, and eligible iOS/watchOS device counts without tokens. POST optionally accepts ownerId to reject stale account registration with HTTP 409. POST accepts one to four variable-length hexadecimal APNs tokens. The server selects the bundle topic, ' +
       'stores each token in a protected binary secure field, keeps at most twelve recent devices per account, ' +
       'and returns only non-secret registration metadata. DELETE removes one registration by id. Thingtime sends ' +
       'the same notification payload to paired iPhone and watchOS targets so Apple can suppress duplicate alerts.',
@@ -11519,13 +11520,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie, full-session Bearer token, or a paired Watch credential with watch.push capability.'
     },
-    methods: ['POST', 'DELETE'],
+    methods: ['GET', 'POST', 'DELETE'],
     steps: [
       'Register for remote notifications on every app launch and preserve the APNs token as variable-length data.',
       'POST the current iOS and/or watchOS token after the Thingtime session is authenticated.',
       'DELETE a stale device id when the user explicitly disconnects that device.'
     ],
     requestExamples: [
+      { name: 'Check native push connection', description: 'Read only this signed-in account’s eligible device counts and server readiness.', method: 'GET' },
       {
         name: 'Register paired Apple devices',
         description: 'Register current sandbox tokens from an iPhone and its paired watch.',
@@ -11545,6 +11547,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       }
     ],
     responseExamples: [
+      { status: 200, description: 'Authenticated GET connection status, never device tokens.', body: { ok: true, ownerId: 'your-user-id', configured: true, devices: { ios: 1, watchos: 0 } } },
       {
         status: 200,
         description: 'Registered; tokens are intentionally omitted.',

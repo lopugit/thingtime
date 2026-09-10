@@ -1,3 +1,4 @@
+import { waitUntil } from '@vercel/functions';
 import { randomUUID } from 'node:crypto';
 import type { NotificationDelivery } from '../lopu/remindersCore';
 import { ObjectId } from 'mongodb';
@@ -16,7 +17,7 @@ import {
 } from '~/schemas/registry';
 import type { NotificationCategory, NotificationType } from '~/schemas/registry';
 import { emailNotificationsBulk, maybeEmailNotification } from './emails';
-import { sendNotificationPush } from './apns';
+import { sendNotificationPush, type PushDeliveryReport } from './apns';
 import {
   buildNotificationListFilters,
   resolveNotificationListQuery,
@@ -138,7 +139,12 @@ export const notificationDoc = (input: EmitNotificationInput, now: Date) => ({
 // Emit one notification to one recipient. NEVER throws — a failed notification
 // must not fail the social action that triggered it (the action is the
 // product; the notification is a side effect).
-export const emitNotification = async (input: EmitNotificationInput): Promise<void> => {
+export const emitNotification = (input: EmitNotificationInput): Promise<void> => {
+  const task = emitNotificationNow(input);
+  waitUntil(task);
+  return task;
+};
+const emitNotificationNow = async (input: EmitNotificationInput): Promise<void> => {
   try {
     if (!input.recipientId || input.recipientId === input.actor.id) return;
     const things = await getThingsCollection();
@@ -148,7 +154,7 @@ export const emitNotification = async (input: EmitNotificationInput): Promise<vo
     const prefs = normalizeNotificationPrefs(await getUserNotificationPrefs(input.recipientId));
     const pushOn = prefs.masters.push && prefs.push[input.type] !== false;
     if (pushOn) {
-      void sendNotificationPush({ ...input, notificationId: doc.shareId }).catch((err: any) => {
+      await sendNotificationPush({ ...input, notificationId: doc.shareId }).catch((err: any) => {
         console.error('[notifications] APNs delivery failed:', err?.message || err);
       });
     }
@@ -245,7 +251,8 @@ export const emitSystemNotification = (input: EmitSystemNotificationInput): Prom
 export const emitSystemNotificationOnce = async (
 	input: EmitSystemNotificationInput,
 	uniqueId: string,
-	checkpoint: (session: any) => Promise<boolean>
+	checkpoint: (session: any) => Promise<boolean>,
+	onPush?: (report: PushDeliveryReport) => void
 ): Promise<boolean> => {
 	const prefs = normalizeNotificationPrefs(await getUserNotificationPrefs(input.recipientId));
 	if (!prefs.masters.push || prefs.push[input.type] === false) return false;
@@ -261,7 +268,8 @@ export const emitSystemNotificationOnce = async (
 	if (!inserted) return false;
 	// Fan out only after the deduplicated bell/checkpoint transaction commits.
 	// Push is best-effort; a delivery failure must not duplicate the daily row.
-	await sendNotificationPush({ ...fullInput, notificationId: uniqueId }).catch(() => {});
+	const report = await sendNotificationPush({ ...fullInput, notificationId: uniqueId }).catch(() => ({ status: 'failed' as const, attempted: 0, accepted: 0, rejected: 0, ios: 0, watchos: 0, reasons: ['TransportError'] }));
+	if (report) onPush?.(report);
 	if (!input.skipEmail) await maybeEmailNotification(fullInput).catch(() => {});
 	return true;
 };
@@ -269,10 +277,17 @@ export const emitSystemNotificationOnce = async (
 // Capped fan-out (posts from followed/friends): one insertMany, pref-agnostic
 // at write (only bell reads filter). recipients map lets followers and friends of the
 // same author get differently-typed notifications in one call. Never throws.
-export const emitNotificationsBulk = async (
-  recipients: BulkRecipient[],
-  base: Omit<EmitNotificationInput, 'recipientId' | 'type'>,
+export const emitNotificationsBulk = (
+  recipients: BulkRecipient[], base: Omit<EmitNotificationInput, 'recipientId' | 'type'>,
   options: EmitNotificationsBulkOptions = {}
+): Promise<void> => {
+  const task = emitNotificationsBulkNow(recipients, base, options);
+  waitUntil(task);
+  return task;
+};
+const emitNotificationsBulkNow = async (
+  recipients: BulkRecipient[], base: Omit<EmitNotificationInput, 'recipientId' | 'type'>,
+  options: EmitNotificationsBulkOptions
 ): Promise<void> => {
   try {
     const seen = new Set<string>([base.actor.id]);
@@ -293,7 +308,18 @@ export const emitNotificationsBulk = async (
       recipientId: String(doc.ownerId),
       type: doc.crystal.type as NotificationType
     }));
-    // email pass is fire-and-forget for the same reason as single emits
+    // Bulk social notifications need the native channel too. Bound concurrency
+    // and keep the enclosing request alive until the complete delivery finishes.
+    const eligible = docs.filter(doc => !doc.historyOnly);
+    for (let offset = 0; offset < eligible.length; offset += 4) {
+      await Promise.allSettled(eligible.slice(offset, offset + 4).map(async doc => {
+        const prefs = normalizeNotificationPrefs(await getUserNotificationPrefs(String(doc.ownerId)));
+        if (prefs.masters.push && prefs.push[doc.crystal.type] !== false) {
+          await sendNotificationPush({ ...base, recipientId: String(doc.ownerId), type: doc.crystal.type as NotificationType, notificationId: doc.shareId });
+        }
+      }));
+    }
+    // Email retains its existing delivery boundary.
     void emailNotificationsBulk(deduped, base).catch(() => {});
   } catch (err: any) {
     console.error('[notifications] bulk emit failed:', err?.message || err);

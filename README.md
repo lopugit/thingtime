@@ -2801,3 +2801,34 @@ Settings uses one shared component in the drawer popup and full page. Direct lin
 A healthy Mac connection panel can be hidden from Things using “Don’t show again unless there’s a problem”. This preference is local to the browser and account; Desktop saves it per account and API endpoint so it survives app restarts and changing loopback ports. It persists across reloads, and does not change node operation or privacy access. Live service, pairing, connection, and permission failures reveal the panel again. Settings → Things always retains the panel and a switch to restore it.
 
 Shared-settings validation worktree: `http://localhost:13040` (HMR 13041, Nitro 13042), managed by the repository PM2 lifecycle. Funnel was unavailable during validation because the installed Tailscale CLI points to a missing application executable; no public Funnel URL was verified. No new environment variables or external setup are required for these settings changes.
+
+
+### Automatic import and native push recovery (10 September 2026)
+
+The iPhone app automatically imports older `Lopu-*.caf` recordings from its
+`Documents/Lopu Recordings` folder when Lopu opens with a signed-in account.
+Voice settings → **Import older recordings** is enabled by default and can be
+turned off. Import uses the canonical `api.things` 1.7.0 and private attachment
+contracts. Local originals stay on the iPhone. A local account/origin-bound
+receipt prevents repeated imports; files already uploaded by build 29 are
+reconciled against the account's existing audio Things before uploading.
+Files created during the current app session use the normal recording outbox.
+Offline or failed imports retry when Lopu reconnects.
+
+For native alerts, open **Settings → Notifications → iPhone and Watch push**
+in the iPhone app and tap **Enable / reconnect iPhone push**. If iOS permission
+was denied, the adjacent button opens the iPhone notification settings. The
+page reports eligible account registrations; notification tests report whether
+Apple accepted the push, rejected it, or no device is connected. Apple acceptance
+is transport confirmation; verify a banner on a physical iPhone (including its
+Focus and notification presentation settings).
+
+Forks need an APNs-enabled Apple App ID, signed iOS entitlements, and the APNs
+variables documented above on each intended server deployment. Use a P-256 APNs
+`.p8` signing key; App Store Connect API keys are a different credential. The
+server selects sandbox versus production from the device registration. TestFlight
+uses production APNs. Never expose keys or device tokens in public diagnostics.
+`api.notifications-devices` 1.2.0 adds authenticated, non-cacheable GET status and
+an optional owner guard on registration. `api.notifications-test` 1.1.0 adds the
+sanitized delivery report. Single and bulk native delivery remain attached to
+the Vercel request lifetime through `waitUntil`.

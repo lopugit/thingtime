@@ -9,6 +9,8 @@ import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContrac
 test('shared dependency reads negotiate the additive Things contract on both manifests', () => {
 	assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.7.0');
 	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things'].version, '1.8.0');
+	assert.equal(capabilitySatisfies('1.8.0', '1.7.1'), true);
+	assert.equal(capabilitySatisfies('1.7.0', '1.7.1'), false);
 	assert.equal(capabilitySatisfies('1.6.0', '1.5.1'), true);
 	for (const unsupported of ['', '1.5.1', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.6.0'), false);
 });
@@ -108,7 +110,7 @@ test('account-hint privacy contracts publish their patch-level capability update
 test('capabilities publish the native Apple notification device contract', () => {
 	const manifest = createApiCapabilitiesManifest();
 
-	assert.equal(manifest.features['api.notifications-devices'], '1.1.0');
+	assert.equal(manifest.features['api.notifications-devices'], '1.2.0');
 	assert.equal(manifest.features['api.notifications-list'], '1.7.0');
 	assert.equal(manifest.features['api.watch-pairing'], '1.2.0');
 	assert.equal(manifest.features['api.watch-sync'], '1.1.0');
@@ -196,10 +198,10 @@ test('the Lopu verified-access and credits family publishes its contracts', () =
 });
 
 test('persistent attachment content and resized previews advertise their additive contract', () => {
-	assert.equal(createApiCapabilitiesManifest().features['api.attachment-content'], '1.2.1');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.attachment-content'].version, '1.2.1');
-	assert.equal(capabilitySatisfies('1.1.1', '1.2.0'), false);
-	assert.equal(capabilitySatisfies('1.2.0', '1.2.0'), true);
+	assert.equal(createApiCapabilitiesManifest().features['api.attachment-content'], '1.3.0');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.attachment-content'].version, '1.3.0');
+	for (const unsupported of ['', '1.1.1', '1.2.1', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.3.0'), false);
+	assert.equal(capabilitySatisfies('1.3.0', '1.3.0'), true);
 });
 
 test('admin preview dispatch publishes its protected-controller contract version', () => {

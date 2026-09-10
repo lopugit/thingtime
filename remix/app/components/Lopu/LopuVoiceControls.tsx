@@ -134,6 +134,7 @@ const speakable = (reply: unknown): string | null => (typeof reply === 'string' 
 
 export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 	const lopu = useLopu();
+	const { settings: voicePreferences } = useLopuSettings();
 	const api = useApi();
 	const apiRef = React.useRef(api);
 	apiRef.current = api;
@@ -403,7 +404,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 			const ownerId = getLopuStoreSnapshot().userId;
 			if (!force && ownerId === previous) return;
 			previous = ownerId;
-			bridge.postMessage({ type: 'lopu-voice-recordings-sync', payload: { ownerId } });
+			bridge.postMessage({ type: 'lopu-voice-recordings-sync', payload: { ownerId, autoImportRecordings: voicePreferences.autoImportRecordings } });
 		};
 		const retry = () => { if (document.visibilityState === 'visible') sync(true); };
 		sync();
@@ -417,7 +418,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 			window.removeEventListener('online', retry);
 			document.removeEventListener('visibilitychange', retry);
 		};
-	}, []);
+	}, [voicePreferences.autoImportRecordings]);
 
 	React.useEffect(() => {
 		const onMessage = (message: any) => {
@@ -876,7 +877,7 @@ export const LopuVoiceSettingsPopover = (props: {
 	// the chat's pinned Secure Vault provider (catalog row), if any
 	provider?: LopuVaultProvider | null;
 }) => {
-	const { settings, setSpokenReplies, setTranscribe, setDirectVoice, setDirectVoiceModel } = useLopuSettings();
+	const { settings, setSpokenReplies, setTranscribe, setAutoImportRecordings, setDirectVoice, setDirectVoiceModel } = useLopuSettings();
 	const provider = props.provider ?? null;
 	const directReason = directVoiceUnavailableReason(provider, settings.transcribe);
 	const directOn = settings.directVoice && !directReason;
@@ -923,6 +924,9 @@ export const LopuVoiceSettingsPopover = (props: {
 					</Text>
 					<PopoverRow label="Spoken replies" hint="Read Lopu's replies aloud">
 						<Switch size="sm" isChecked={settings.spokenReplies} onChange={(event) => setSpokenReplies(event.target.checked)} aria-label="Spoken replies" />
+					</PopoverRow>
+					<PopoverRow label="Import older recordings" hint="Automatically save older recordings on this iPhone to your private Things when Lopu opens">
+						<Switch size="sm" isChecked={settings.autoImportRecordings} onChange={(event) => setAutoImportRecordings(event.target.checked)} aria-label="Import older recordings" />
 					</PopoverRow>
 					<PopoverRow label="Transcribe mode" hint="Save each utterance as a private page instead of asking Lopu">
 						<Switch size="sm" isChecked={settings.transcribe} onChange={(event) => setTranscribe(event.target.checked)} aria-label="Transcribe mode" />
