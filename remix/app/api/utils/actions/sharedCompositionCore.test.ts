@@ -2,6 +2,32 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { compositionReferences, sharedOperationAllowed } from './sharedCompositionCore';
 
+test('saved action references use defaults, saved args and every persisted page instance', () => {
+	const crystal = { args: [{ name: 'action', type: 'string', default: 'default-action' }], savedArgs: { action: 'saved-action' }, render: { ttAction: '{action}' } };
+	assert.deepEqual(compositionReferences(['component'], crystal).map(({ ref }) => ref), ['saved-action']);
+	assert.deepEqual(compositionReferences(['component'], crystal, { action: 'page-action' }).map(({ ref }) => ref), ['page-action']);
+	assert.deepEqual(compositionReferences(['component'], { ...crystal, savedArgs: {} }).map(({ ref }) => ref), ['default-action']);
+	assert.equal(compositionReferences(['webpage'], { blocks: [
+		{ type: 'component', component: 'button', args: { action: 'one' } },
+		{ type: 'component', component: 'button', args: { action: 'two' } }
+	] }).length, 2);
+});
+
+test('saved action discovery covers inactive branches and repeat scopes without executing argument data', () => {
+	const crystal = { savedArgs: { prefix: 'draw', query: 'private', index: 'private', payload: { ttAction: 'private' } }, render: { children: [
+		{ ttIf: { arg: 'query.show', then: { ttAction: '{prefix}-one' }, else: { ttRepeat: { count: 2, node: { ttAction: '{prefix}-{index}' } } } } },
+		{ ttAction: '{query}' }, { ttAction: '{index}' }, { ttArg: 'payload' },
+		{ ttArg: 'missing', ttAction: 'ignored-by-renderer' },
+		{ props: { ttAction: 'metadata' }, ttActionInputs: { ttAction: 'input' } }
+	] } };
+	assert.deepEqual(compositionReferences(['component'], crystal).map(({ ref }) => ref), ['draw-one', 'draw-0', 'draw-1']);
+});
+
+test('unused action binding entries and unbound token fragments grant no authority', () => {
+	assert.deepEqual(compositionReferences(['component'], { render: { ttAction: 'draw-{query.id}', ttActionRefs: [['draw-', 'secret'], ['unused', 'secret']] } }), []);
+	assert.deepEqual(compositionReferences(['component'], { savedArgs: { action: 'draw' }, render: { ttAction: '{action}', ttActionRefs: [['draw', 'copy-draw'], ['unused', 'secret']] } }), [{ kind: 'action', ref: 'copy-draw' }]);
+});
+
 test('composition edges follow nested stored controls but never input or metadata references', () => {
 	const refs = compositionReferences(['component'], {
 		source: { action: 'initial' },

@@ -21,6 +21,7 @@ export const LOPU_MAX_MESSAGE_CHARS = 8000;
 export type LopuComposerPreferences = { enterSends: boolean; applyPatches: boolean; confirmDeletes: boolean };
 
 export type LopuComposerProps = {
+	attachments?: React.ReactNode;
 	value: string;
 	onChange: (next: string) => void;
 	onSend: (text: string) => void;
@@ -129,6 +130,7 @@ const IconButton = ({ label, size, onClick, children, pressed }: { label: string
 );
 
 export const LopuComposer = ({
+	attachments,
 	value,
 	onChange,
 	onSend,
@@ -208,6 +210,7 @@ export const LopuComposer = ({
 
 	return (
 		<Box className="lopuComposerWrap" minW={0} maxW="100%" sx={{ '&, & *': { boxSizing: 'border-box' } }}>
+			{attachments}
 			<Box
 				className="lopuComposer"
 				data-compact={compact ? 'true' : 'false'}
@@ -248,7 +251,7 @@ export const LopuComposer = ({
 					_placeholder={{ color: LOPU_UI.faint }}
 					sx={{ '&:focus, &:focus-visible': { boxShadow: 'none', outline: 'none' } }}
 				/>
-				<Flex align="center" gap={1.5} px={compact ? 1.5 : 2} pb={compact ? 1.5 : 2} pt={0.5} minW={0}>
+				<Flex align="center" flexWrap="wrap" gap={1.5} px={compact ? 1.5 : 2} pb={compact ? 1.5 : 2} pt={0.5} minW={0}>
 					<LopuModelPicker models={models} vaultProviders={vaultProviders} vault={vault} value={settings} defaults={defaults} onChange={onSettingsChange} compact={compact} disabled={disabled} mobile={isMobile} />
 					{accountChip ? (
 						<Box display="inline-flex" alignItems="center" flexShrink={0} minW={0} data-lopu-control>
@@ -276,7 +279,7 @@ export const LopuComposer = ({
 							</Text>
 						</Box>
 					) : null}
-					<Box flex={1} minW={0} />
+					<Flex align="center" gap={1.5} flexShrink={0} ml="auto">
 					{showSettings ? (
 						<Popover placement="top-end" isLazy strategy="fixed" gutter={8}>
 							<PopoverTrigger>
@@ -320,6 +323,7 @@ export const LopuComposer = ({
 						</Popover>
 					) : null}
 					{streaming ? <ActionButton kind="stop" size={controlSize} onClick={onStop} label="Stop Lopu's reply" /> : <ActionButton kind="send" size={controlSize} disabled={!canSend} onClick={submit} label={isMobile || !enterSends ? 'Send' : 'Send (Enter)'} />}
+					</Flex>
 				</Flex>
 			</Box>
 			{hint && !compact ? (

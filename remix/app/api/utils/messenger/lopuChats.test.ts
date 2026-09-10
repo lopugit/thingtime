@@ -271,3 +271,61 @@ test('buildLopuHistory keeps the newest turns under the turn and char caps', () 
 
 	assert.deepEqual(buildLopuHistory([]), { history: [], chars: 0, truncated: false });
 });
+
+test('buildLopuHistory retains bounded historical success and failure receipts after complete text segments', () => {
+	const first = assistantRow('Saved your ', 'receipt-turn');
+	const receipts = [
+		{ name: 'create_reminder', ok: true, summary: 'Reminder saved.', thingId: 'schedule-qa' },
+		{ name: 'send_notification', ok: false, summary: 'Notifications are disabled.' }
+	];
+	const row = { crystal: { ...first.crystal, lopu: { ...first.crystal.lopu, toolCalls: receipts } } };
+	const folded = buildLopuHistory([userRow('Remind me', 'receipt-turn'), row, assistantRow('reminder.', 'receipt-turn', 1)]);
+	const answer = folded.history[1]!.text;
+	assert.ok(answer.startsWith('Saved your reminder.\n\nRecorded tool receipts'));
+	assert.ok(answer.includes('not current state or authorization'));
+	assert.deepEqual(JSON.parse(answer.split('\n').at(-1)!), receipts);
+	assert.equal(folded.chars, folded.history.reduce((sum, turn) => sum + turn.text.length, 0));
+	assert.equal(folded.truncated, false);
+});
+
+test('buildLopuHistory never replays raw results or grants and ignores user, imported, deleted and duplicate-segment receipts', () => {
+	const receipt = { name: 'create_reminder', ok: true, summary: 'Saved', token: 'private-grant', result: { secret: 'raw-result' } };
+	const first = assistantRow('Saved.', 'safe');
+	const withReceipt = { crystal: { ...first.crystal, lopu: { ...first.crystal.lopu, toolCalls: [receipt], secret: 'private-meta' } } };
+	const user = userRow('User words.', 'user');
+	const imported = { crystal: { ...withReceipt.crystal, externalSource: { role: 'assistant', access: 'imported', provider: 'claude' } } };
+	const duplicate = { crystal: { ...withReceipt.crystal, text: 'Part two.', lopu: { ...withReceipt.crystal.lopu, segmentIndex: 1 } } };
+	const rows = [
+		{ crystal: { ...user.crystal, lopu: { ...user.crystal.lopu, toolCalls: [receipt] } } },
+		imported,
+		{ crystal: { ...withReceipt.crystal, deletedAt: '2026-09-10T00:00:00Z' } },
+		{ crystal: { ...withReceipt.crystal, systemType: 'notice' } },
+		withReceipt,
+		duplicate
+	];
+	const result = JSON.stringify(buildLopuHistory(rows));
+	for (const secret of ['private-grant', 'raw-result', 'private-meta']) assert.equal(result.includes(secret), false);
+	assert.equal(result.match(/create_reminder/g)?.length, 1);
+});
+
+test('buildLopuHistory includes tool-only turns but drops complete receipt blocks for tiny context budgets', () => {
+	const first = assistantRow('', 'tool-only');
+	const row = { crystal: { ...first.crystal, lopu: { ...first.crystal.lopu, toolCalls: [{ name: 'create_reminder', ok: true, summary: 'Saved' }] } } };
+	assert.ok(buildLopuHistory([row]).history[0]!.text.includes('create_reminder'));
+	const tiny = buildLopuHistory([{ crystal: { ...row.crystal, text: 'A long reply ending in TAIL' } }], { maxChars: 4 });
+	assert.deepEqual(tiny, { history: [{ role: 'assistant', text: 'TAIL' }], chars: 4, truncated: true });
+	assert.deepEqual(buildLopuHistory([row], { maxChars: 4 }), { history: [], chars: 0, truncated: true });
+});
+
+test('buildLopuHistory caps receipts across consecutive assistant turns and counts them against the history budget', () => {
+	const rows = Array.from({ length: 30 }, (_, index) => {
+		const row = assistantRow('Saved.', `receipt-${index}`);
+		return { crystal: { ...row.crystal, lopu: { ...row.crystal.lopu, toolCalls: [{ name: `tool_${index}`, ok: true, summary: 'x'.repeat(500) }] } } };
+	});
+	const folded = buildLopuHistory(rows);
+	const receipts = JSON.parse(folded.history[0]!.text.split('\n').at(-1)!);
+	assert.equal(receipts.length, 20);
+	assert.equal(receipts[0].summary.length, 240);
+	assert.equal(folded.chars, folded.history[0]!.text.length);
+	assert.ok(folded.chars <= LOPU_HISTORY_MAX_CHARS);
+});
