@@ -15,6 +15,42 @@ authority. They can copy the composition to fresh private Things. Physical
 protected-upload copies are still unfinished; never persist the original
 root bearer into a copy as a substitute.
 
+## 2026-09-10 develop delivery and main promotion
+
+- Review automation added commits `713f63fa8` and `907a07946`: discovery and
+  URL transport now share one literal-attachment predicate, and unresolved
+  templates remain unchanged. Both were inspected before delivery.
+- Source `907a07946874eb029e2210e05b46deac8b04c6f3` passed actual Web/API jobs
+  in run `34406974178`. Both CodeQL analyses succeeded on merge candidate
+  `7daa538b3864d70eeb5258348ea667d3f825ebee`, whose parents are that source
+  and develop `c06f8b4`. Preview deployment `6359707303` succeeded.
+- The latest source passed the local production client/embed build, webpage
+  and capability suites, and real-API/bundled-client Chrome 152 fixture
+  (129.755 seconds). The media bytes are still stubs, not S3-copy evidence.
+  Live exact-source preview rendered and drew cards signed out at desktop and
+  mobile widths, with Copy but no edit control; top/bottom layouts inspected.
+- PR #719 merged into develop as `58395331067c9346594f468e79d437341777f252`.
+  Develop deployment `6363173009` succeeded. A fresh Safari tab was signed out
+  and rendered the complete Tarot app on that exact commit, changed cards on
+  Draw, exposed Copy but no edit control, and reported frontend/API/Vercel/DB
+  ready. The in-app dev tab was signed in and is not anonymous-access proof.
+- An earlier `cc9a3dd` preview load displayed not-found with backend statuses
+  unavailable; a diagnostic reload succeeded. The request failure's cause is
+  unproven. Source inspection confirms resolveWebpageClient collapses network,
+  capability and HTTP errors to null, which the page treats as not-found.
+  Distinct retryable errors and preservation of already-rendered content
+  remain follow-up work; the failed load has not been relabeled as a pass.
+- Main promotion starts at `60f07ce4e`. Apply the owned `cc9a3dd` change
+  relative to its second parent, then the two reviewed commits, without
+  importing unrelated develop-only changes. Main validation, publication
+  and deployment receipts are still pending at this preparation stage.
+- The prepared promotion's entire Remix tree matches reviewed source `907a079`
+  except this release's changelog text. The local semantic proxy health check
+  timed out at both five and twenty seconds, so this promotion's Graphify
+  refresh uses the code-only fallback. New release-note Markdown is not
+  semantically indexed; the structural graph and portable reports remain
+  required. No shared proxy service was restarted to force this check.
+
 ## 2026-09-09 integration follow-up
 
 - Merge develop 94eda03d36dd624e2b5a43c9f7ffd1fb45668b53 into the CSS branch;

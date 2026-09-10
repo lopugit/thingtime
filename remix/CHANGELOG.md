@@ -52,6 +52,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   separate from focused tests; see the [feature validation notes](../PRs/731-lopu-unified-scheduled-chats.md) before deployment.
   — Codex (AI), 2026-09-10
 
+- Prepare the focused main promotion of shared HTML/contained media, stored
+  component arguments and page-block overrides from PRs #730, #733 and #734.
+  Preserve main's prior sharing/startup release and APNs/recording fixes;
+  the application source matches #734, with separate main CI and preview
+  validation required before release.
+  [Main promotion #735](../PRs/735-codex-promote-shared-argument-media-main-promote-shared-html-and-component-argument-media-inheritance-to-main.md).
+  — Codex (AI), 2026-09-10
+
 - Include containing page-block argument overrides in same-author shared media
   inheritance, matching defaults → savedArgs → block args render precedence.
   Compare the same resolved dependencies before/after shared edits, reusing
@@ -77,6 +85,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   contracts. Stored component arguments and independent protected-upload
   copies remain separate follow-up work.
   [PR 730 validation and scope](../PRs/730-codex-shared-nested-media-inheritance-inherit-shared-root-access-for-authored-html-and-contained-media.md).
+  — Codex (AI), 2026-09-10
+
+- Promote the shared CSS-media and early-startup recovery increment from
+  develop PR #719, including the reviewed single media-grant predicate and
+  unresolved-template preservation. Develop merge `5839533` is verified in
+  signed-out Safari; the main promotion requires its own CI and deployment
+  receipts. [Main promotion](../PRs/728-codex-promote-shared-media-boot-main-promote-shared-media-context-and-startup-recovery-to-main.md).
   — Codex (AI), 2026-09-10
 
 - Fix APNs rejection of notification tests and long reminder IDs by hashing the collapse header to Apple’s 64-byte limit; expose the safe BadCollapseId diagnostic. — Codex (AI), 2026-09-10
