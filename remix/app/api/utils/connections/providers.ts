@@ -323,8 +323,14 @@ class BlockedTargetError extends Error {
   readonly blocked = true;
 }
 
+// Every blockedTargetReason is a full clause ("that host is not a public
+// internet address", "only https:// feed sources are supported"), so it has to
+// be joined as one — concatenating it straight after "will not fetch" read as
+// "Thingtime will not fetch only https:// feed sources are supported". This is
+// the error a user actually meets when they paste an http:// or intranet feed
+// URL into the connect form, so it is worth reading as a sentence.
 const blockedFail = (err: unknown): Fail | null =>
-  err instanceof BlockedTargetError ? fail(400, `Thingtime will not fetch ${err.message}`) : null;
+  err instanceof BlockedTargetError ? fail(400, `Thingtime will not fetch that feed — ${err.message}`) : null;
 
 const ipv4Blocked = (address: string): boolean => {
   const parts = address.split('.').map((part) => Number(part));
