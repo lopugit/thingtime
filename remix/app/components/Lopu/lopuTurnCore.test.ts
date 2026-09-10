@@ -12,6 +12,7 @@ import {
 	describeLopuStatusLine,
 	describeLopuTurnMeta,
 	initialLopuTurn,
+	historicalToolStatus,
 	isLopuAssistantMessage,
 	isLopuChatEvent,
 	isOptimisticLopuMessage,
@@ -43,6 +44,15 @@ import {
 
 const fold = (events: LopuChatEvent[], start?: LopuTurnState): LopuTurnState =>
 	events.reduce((state, event) => reduceLopuTurn(state, event), start ?? initialLopuTurn({ requestId: 'req-1', userText: 'hello', startedAt: 1000 }));
+
+test('historical approval receipts are not failures and never imply later success', () => {
+	const summary = 'Waiting for the user’s confirmation: Post a comment';
+	assert.equal(historicalToolStatus({ ok: false, summary }), 'confirm');
+	assert.equal(historicalToolStatus({ ok: true, summary }), 'ok');
+	assert.equal(historicalToolStatus({ ok: false, summary: 'Permission denied' }), 'error');
+	assert.equal(historicalToolStatus({ ok: false, summary: '' }), 'error');
+	assert.equal(historicalToolStatus({ ok: false, summary: 'Provider said: ' + summary }), 'error');
+});
 
 const META: LopuChatEvent = {
 	type: 'meta',

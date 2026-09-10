@@ -5,7 +5,7 @@ import { Check, ChevronDown, ShieldAlert, X } from 'lucide-react';
 
 import { useIsMobileViewport } from '../Nav/Drawer/useDrawer';
 import { LOPU_UI, lopuEyebrowSx, lopuFocusRingSx } from './lopuTheme';
-import { isLopuConfirmUsable, toolGlyph, toolLabel, toolLinks, toolRowDetails, toolRowSummary, type LopuMessageToolCall, type LopuToolActivity, type LopuToolStatus } from './lopuTurnCore';
+import { historicalToolStatus, isLopuConfirmUsable, toolGlyph, toolLabel, toolLinks, toolRowDetails, toolRowSummary, type LopuMessageToolCall, type LopuToolActivity, type LopuToolStatus } from './lopuTurnCore';
 
 // One tool activity inside Lopu's bubble, drawn as a compact row (design
 // brief): glyph · label · one-line summary · status · links · Undo, with a
@@ -16,7 +16,7 @@ import { isLopuConfirmUsable, toolGlyph, toolLabel, toolLinks, toolRowDetails, t
 // for a persisted turn (history rows remember only name / ok / summary /
 // thingId).
 
-const StatusGlyph = ({ status }: { status: LopuToolStatus }) => {
+const StatusGlyph = ({ status, historical = false }: { status: LopuToolStatus; historical?: boolean }) => {
 	if (status === 'streaming' || status === 'running') {
 		return <Spinner size="xs" speed="0.8s" color={LOPU_UI.muted} thickness="2px" label={status === 'streaming' ? 'streaming' : 'running'} flexShrink={0} />;
 	}
@@ -29,7 +29,7 @@ const StatusGlyph = ({ status }: { status: LopuToolStatus }) => {
 	}
 	if (status === 'confirm') {
 		return (
-			<Box as="span" display="inline-flex" color={LOPU_UI.ink} flexShrink={0} role="img" aria-label="needs your confirmation">
+			<Box as="span" display="inline-flex" color={LOPU_UI.ink} flexShrink={0} role="img" aria-label={historical ? 'approval requested in this earlier step' : 'needs your confirmation'}>
 				<ShieldAlert size={14} strokeWidth={2.2} aria-hidden />
 			</Box>
 		);
@@ -327,27 +327,29 @@ export const LopuToolCard = ({
 
 /** A persisted turn's tool call (history rows keep name · ok · summary · thingId only). */
 export const LopuToolCallRow = ({ call, compact = false }: { call: LopuMessageToolCall; compact?: boolean }) => {
-	const status: LopuToolStatus = call.ok ? 'ok' : 'error';
-	const label = toolLabel(call.name, status);
+	const status = historicalToolStatus(call);
+	const label = status === 'confirm' ? 'Approval requested' : toolLabel(call.name, status);
 	const summary = toolRowSummary({ name: call.name, status, result: { ok: call.ok, summary: call.summary } });
 	return (
 		<Box {...rowFrame} role="group" aria-label={label} data-tool={call.name} data-status={status}>
-			<Flex align="center" gap={2} minH={compact ? '28px' : '32px'} px={2.5} minW={0}>
+			<Box display="grid" gridTemplateColumns={{ base: 'auto minmax(0, 1fr) auto', md: 'auto auto minmax(0, 1fr) auto' }}
+				alignItems="center" gap={2} minH={compact ? '28px' : '32px'} px={2.5} py={{ base: 2, md: 0 }} minW={0}>
 				<Box as="span" fontSize="13px" lineHeight={1} flexShrink={0} aria-hidden="true">
 					{toolGlyph(call.name)}
 				</Box>
-				<Text as="span" fontSize={LOPU_UI.fontSmall} fontWeight={600} color={call.ok ? LOPU_UI.ink : LOPU_UI.danger} whiteSpace="nowrap" flexShrink={0}>
+				<Text as="span" fontSize={LOPU_UI.fontSmall} fontWeight={600} color={status === 'error' ? LOPU_UI.danger : LOPU_UI.ink}
+					whiteSpace={{ base: 'normal', md: 'nowrap' }} overflowWrap="anywhere" minW={0}>
 					{label}
 				</Text>
 				{summary ? (
-					<Text as="span" fontSize={LOPU_UI.fontSmall} color={LOPU_UI.muted} isTruncated flex={1} minW={0} title={summary}>
+					<Text as="span" fontSize={LOPU_UI.fontSmall} color={LOPU_UI.muted} minW={0} title={summary}
+						gridColumn={{ base: '1 / -1', md: '3' }} gridRow={{ base: 2, md: 1 }}
+						whiteSpace={{ base: 'normal', md: 'nowrap' }} overflowWrap="anywhere" overflow="hidden" textOverflow="ellipsis">
 						{summary}
 					</Text>
-				) : (
-					<Box flex={1} />
-				)}
-				<StatusGlyph status={status} />
-			</Flex>
+				) : null}
+				<Box gridColumn={{ base: 3, md: 4 }} gridRow={1} display="inline-flex"><StatusGlyph status={status} historical /></Box>
+			</Box>
 			{call.thingId ? (
 				<Flex px={2.5} pb={1.5} mt="-2px">
 					<RowLink to={`/thing/${encodeURIComponent(call.thingId)}`}>Open →</RowLink>
