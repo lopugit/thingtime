@@ -6071,6 +6071,11 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
       it, which costs a reviewer real time.
 ## Lopu AI assistant (`/lopu`, floating launcher, `remix/app/components/Lopu/`, `/api/v1/lopu/chats*`, `/api/v1/ai/models`)
 
+- [ ] `test:api-capabilities` must run both the API-docs and origin-scoped
+      manifest suites; when merging independently versioned features, verify
+      every asserted version against the combined registry rather than leaving
+      one manifest test outside CI with stale expectations.
+
 Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Automated coverage:
 `npm run test:lopu`, `test:lopu-chat-streaming` (fake SSE tool loop),
 `test:partial-json`, `test:ai-models`, `test:lopu-ui`, `test:messenger`,

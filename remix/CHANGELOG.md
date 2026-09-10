@@ -37,11 +37,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   live object-store acceptance remain pending; no new HTTP capability is exposed.
   — Codex (AI), 2026-09-10
 
+- Promote shared component audience boundaries to main and reconcile the
+  newly enabled origin-manifest assertions with the sharing patch versions.
+  See [PR #756](../PRs/756-promote-public-component-boundaries-main.md).
+  — Codex (AI), 2026-09-10
+
 - Preserve an independently readable foreign component's authored dependency
   audience when embedded in a shared page. Revalidate each boundary, keep
   cross-author page arguments from borrowing private authority, and preserve
   independent copies and read-only execution. See [PR #753](../PRs/753-codex-shared-public-component-boundaries.md).
   — Codex (AI), 2026-09-10
+
+- Include the origin-scoped capability-manifest suite in the standard API
+  capability CI command and reconcile its assertions after combining saved
+  action sharing and Lopu reply updates. — Codex (AI), 2026-09-10
 
 - Clarify Lopu's two-step comment tool: an unapproved call opens the real
   approval card without posting; a verified follow-up posts the exact comment.
@@ -127,6 +136,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   conditional-media write fix without downgrading Lopu capabilities; the
   combined Things contract is 1.8.2 (legacy 1.7.2).
   See [PR #731](../PRs/731-lopu-unified-scheduled-chats.md).
+  — Codex (AI), 2026-09-10
+
+- Promote shared-page recovery from PR 740 without unrelated develop changes.
+  Temporary resolver failures offer Retry and retain same-viewer content;
+  viewer, target and link-key changes isolate drafts and stale responses.
+  See [validation and scope](../PRs/740-codex-shared-page-load-recovery.md).
   — Codex (AI), 2026-09-10
 
 - Distinguish temporary shared-page resolve failures from unavailable pages.

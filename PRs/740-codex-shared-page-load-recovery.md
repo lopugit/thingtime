@@ -37,3 +37,11 @@ references still need composition discovery, editor authorization and fork
 rewriting; independent protected-upload fork copies remain separate work.
 Never-settling requests do not yet have a resolver timeout. The original
 historical blank browser session's exact cause has not been proven.
+
+## Focused main promotion
+
+`codex/promote-shared-page-recovery-main` starts at production commit
+`f87ab3f1c36b686224093ceef22db84ad8f2b5ba` and carries only the five recovery
+source/test files from PR 740 plus these regression notes and refreshed graph.
+It does not import develop's unrelated conversation/composer changes. The five
+source/test files are byte-identical to PR 740's reconciled head.
