@@ -21,7 +21,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - Preserve an independently readable foreign component's authored dependency
   audience when embedded in a shared page. Revalidate each boundary, keep
   cross-author page arguments from borrowing private authority, and preserve
-  independent copies and read-only execution. — Codex (AI), 2026-09-10
+  independent copies and read-only execution. See [PR #753](../PRs/753-codex-shared-public-component-boundaries.md).
+  — Codex (AI), 2026-09-10
 
 - Preserve bounded, sanitized action receipts in Lopu conversation history so
   subsequent replies can distinguish past successes from failures. Publish
