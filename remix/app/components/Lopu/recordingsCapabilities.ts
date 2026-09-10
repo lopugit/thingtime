@@ -1,5 +1,6 @@
 export const RECORDING_AUTOMATION_REQUIREMENTS = { 'api.lopu-recordings': '1.3.0' } as const;
 export const PERSONAL_RECORDING_SETTINGS_REQUIREMENTS = { 'api.lopu-recordings': '1.4.0', 'api.lopu-recordings-personal': '1.0.0' } as const;
+export const SAVED_RECORDING_REQUIREMENTS = { 'api.lopu-recordings': '1.5.0' } as const;
 
 const supports = (manifest: any, origin: string, requirements: Record<string, string>) => {
 	if (manifest?.origin !== origin) return false;
@@ -14,3 +15,4 @@ const supports = (manifest: any, origin: string, requirements: Record<string, st
 };
 export const supportsRecordingAutomation = (manifest: any, origin: string) => supports(manifest, origin, RECORDING_AUTOMATION_REQUIREMENTS);
 export const supportsPersonalRecordingSettings = (manifest: any, origin: string) => supports(manifest, origin, PERSONAL_RECORDING_SETTINGS_REQUIREMENTS);
+export const supportsSavedRecordings = (manifest: any, origin: string) => supports(manifest, origin, SAVED_RECORDING_REQUIREMENTS);

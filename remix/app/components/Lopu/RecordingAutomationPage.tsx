@@ -5,7 +5,8 @@ import { PageHeader, PageShell } from '~/components/Layout/PageShell';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useLopu } from './useLopu';
 import { DEFAULT_RECORDING_SETTINGS, type RecordingSettings } from '~/api/utils/lopu/recordingsCore';
-import { supportsRecordingAutomation, supportsPersonalRecordingSettings } from './recordingsCapabilities';
+import { supportsRecordingAutomation, supportsPersonalRecordingSettings, supportsSavedRecordings } from './recordingsCapabilities';
+import { parseRecordingReference } from './recordingReference';
 import type { RecordingConnectionChoice } from '~/api/utils/lopu/recordingsConnections';
 import type { PersonalRecordingDevice } from '~/api/utils/lopu/personalRecordingDevices';
 import { PersonalRecordingSetup } from './PersonalRecordingSetup';
@@ -59,6 +60,7 @@ export function RecordingAutomationPage() {
 	const [data, setData] = React.useState<RecordingData | null>(null);
 	const [busy, setBusy] = React.useState(false);
 	const [personalSupported, setPersonalSupported] = React.useState(false);
+	const [savedSupported, setSavedSupported] = React.useState(false);
 	const [error, setError] = React.useState<string | null>(null);
 	const [checkedAt, setCheckedAt] = React.useState<Date | null>(null);
 	const [postId, setPostId] = React.useState('');
@@ -83,6 +85,7 @@ export function RecordingAutomationPage() {
 			if (seq !== generation.current || next.ownerId !== userId) return;
 			setData(next);
 			setPersonalSupported(supportsPersonalRecordingSettings(manifest, window.location.origin));
+			setSavedSupported(supportsSavedRecordings(manifest, window.location.origin));
 			setError(null);
 			setCheckedAt(new Date());
 			if (zoneOwner.current !== userId) {
@@ -106,6 +109,7 @@ export function RecordingAutomationPage() {
 		setCheckedAt(null);
 		setBusy(false);
 		setPersonalSupported(false);
+		setSavedSupported(false);
 		void load();
 		const timer = setInterval(() => {
 			if (!document.hidden) void load();
@@ -432,7 +436,7 @@ export function RecordingAutomationPage() {
 								{current.jobs.map((job) => (
 									<Box key={job.id}>
 										<Flex gap={2} align="baseline" flexWrap="wrap">
-											<Link to={`/post/${encodeURIComponent(job.postId)}`}>
+											<Link to={`/thing/${encodeURIComponent(job.postId)}`}>
 												<Text overflowWrap="anywhere">{job.filename}</Text>
 											</Link>
 											<Badge>{job.status}</Badge>
@@ -478,13 +482,14 @@ export function RecordingAutomationPage() {
 					</Box>
 					<Box {...panel}>
 						<FormControl>
-							<FormLabel>Process an existing Watch recording</FormLabel>
+							<FormLabel>{savedSupported ? 'Process an existing recording' : 'Process an existing Watch recording'}</FormLabel>
 							<Text fontSize="sm" mb={3}>
-								Paste the post ID or its Thingtime post link. Re-queuing an already processed recording will not duplicate its Things.
+								{savedSupported ? 'Paste a private saved audio Thing or Watch post link from this domain, or its Thing ID. Saved recordings are processed only when you select them here.' : 'Paste the post ID or its Thingtime post link.'} Re-queuing an already processed recording will not duplicate its Things.
 							</Text>
 							<Input
-								aria-label="Existing recording post"
-								placeholder="watch-upload-… or a post link"
+								aria-label="Existing recording Thing"
+								style={{ boxSizing: 'border-box', width: '100%', maxWidth: '100%', minWidth: 0 }}
+								placeholder={savedSupported ? 'Recording Thing ID or link' : 'watch-upload-… or a post link'}
 								value={postId}
 								onChange={(event) => setPostId(event.target.value)}
 							/>
@@ -492,19 +497,23 @@ export function RecordingAutomationPage() {
 								mt={3}
 								isDisabled={busy || !settings.enabled || !postId.trim()}
 								onClick={() => {
-									let id = postId.trim();
 									try {
-										const url = new URL(id);
-										if (url.origin !== window.location.origin) throw new Error();
-										id = decodeURIComponent(url.pathname.split('/').filter(Boolean).pop() || '');
+										void change({ op: 'queue', postId: parseRecordingReference(postId, window.location.origin) });
 									} catch {
-										/* raw ids are validated by the server */
+										setError('Paste a valid recording Thing ID or a recording link from this domain.');
 									}
-									void change({ op: 'queue', postId: id });
 								}}
 							>
 								Queue recording
 							</Button>
+							{savedSupported && <Button mt={3} ml={[0, 3]} width={['100%', 'auto']} whiteSpace="normal"
+								isDisabled={busy || !settings.enabled || !postId.trim()} onClick={() => {
+									try {
+										const id = parseRecordingReference(postId, window.location.origin);
+										if (window.confirm('Send this recording’s transcript to Lopu to act on its instructions? Lopu may create Things and reminders. Other sensitive actions still require confirmation in the conversation.'))
+											void change({ op: 'send-to-lopu', postId: id });
+									} catch { setError('Paste a valid recording Thing ID or a recording link from this domain.'); }
+								}}>🦄 Send to Lopu</Button>}
 						</FormControl>
 					</Box>
 				</>

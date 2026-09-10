@@ -6068,6 +6068,19 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
 
 Personal recording worker transport and HTTP integration:
 
+- [ ] Explicit saved-recording handoff: with recordings 1.5.0, queue an owned
+      ready standalone private audio Thing, then Send to Lopu after confirmation.
+      Verify one transcript child, private notes/todos and the linked conversation;
+      source crystal/purpose/binding must be unchanged. Repeat requests must not
+      duplicate outputs. Deny public/foreign/app/bound/linked/deleted/draft audio,
+      including changes during processing. Automatic discovery remains Watch-only.
+      Verify same-domain Thing/post links and raw IDs, reject foreign/malformed
+      links, and check both manual buttons at desktop and 390px phone widths.
+      Check the recording tile's desktop right-click and phone three-dot menus:
+      Send to Lopu is owner/private-only, multi-selection never bulk-sends,
+      cancellation makes no mutation, disabled settings do not auto-enable,
+      and account changes during preflight/confirmation stop the request.
+
 - [ ] Run `test:recording-delivery` with the explicit disposable-QA opt-in in
       README, against loopback with an upload-approved unused test account.
       Check one private Watch source, one relational transcript, one note and

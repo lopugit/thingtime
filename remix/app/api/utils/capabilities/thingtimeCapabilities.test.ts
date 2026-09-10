@@ -45,8 +45,8 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.things']?.version, '1.9.1');
   assert.equal(manifest.features['api.lopu-reminders']?.version, '1.1.0');
   assert.equal(manifest.features['api.lopu-voice-reply']?.version, '1.3.0');
-  assert.equal(manifest.features['api.lopu-recordings-run']?.version, '1.4.0');
-  assert.equal(manifest.features['api.lopu-recordings-personal']?.version, '1.0.1');
+  assert.equal(manifest.features['api.lopu-recordings-run']?.version, '1.5.0');
+  assert.equal(manifest.features['api.lopu-recordings-personal']?.version, '1.1.0');
   assert.equal(manifest.features['api.notifications-test']?.version, '1.2.0');
   assert.equal(manifest.features['api.attachment-content']?.version, '1.6.2');
   // round 2 S6 — discovery: the home feed takes scope=all|subspaces ("My
