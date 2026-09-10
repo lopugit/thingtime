@@ -6035,6 +6035,18 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
       it, which costs a reviewer real time.
 ## Lopu AI assistant (`/lopu`, floating launcher, `remix/app/components/Lopu/`, `/api/v1/lopu/chats*`, `/api/v1/ai/models`)
 
+Personal recording worker transport (server integration remains pending):
+
+- [ ] `npm --prefix remix run test:ai-models` verifies origin-bound capability
+      negotiation before credentials, redirect rejection, bounded audio,
+      text-only native completion, heartbeat cancellation and identical result
+      retries without repeating inference. Unknown completion outcomes must not
+      send a failure update that could overwrite an already committed result.
+- [ ] Before enabling a paired worker, additionally prove owner/device/session
+      isolation, revocation and consent races, durable completion receipts,
+      private relational output and a real Watch upload on the deployed server.
+      Transport mocks do not satisfy this live integration gate.
+
 Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Automated coverage:
 `npm run test:lopu`, `test:lopu-chat-streaming` (fake SSE tool loop),
 `test:partial-json`, `test:ai-models`, `test:lopu-ui`, `test:messenger`,

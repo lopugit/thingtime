@@ -18,6 +18,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Add the personal recording worker's outbound transport and bounded result
+  contract: origin-scoped negotiation, credential-safe audio retrieval,
+  heartbeat cancellation, grounded text results and idempotent submission
+  retries. Server pairing/queue integration is still pending; no new endpoint
+  or automatic processing is enabled by this foundation. — Codex (AI), 2026-09-10
+
 - Preserve bounded, sanitized action receipts in Lopu conversation history so
   subsequent replies can distinguish past successes from failures. Publish
   reply capability 1.6.1; historical results grant no new action permissions.

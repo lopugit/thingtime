@@ -1853,6 +1853,24 @@ Inherited API keys and endpoint overrides are excluded from its environment.
 Transcription can mishear names; inspect the transcript before relying on tasks.
 Run `npm --prefix remix run test:ai-models` for its regression coverage.
 
+The outbound transport in `remix/scripts/personal-recording-worker.ts` now
+provides one bounded `runOnce()` cycle around that runtime. It requires a
+personally paired Thingtime device credential and negotiates
+`api.lopu-recordings-personal` version `1.0.0` on the exact selected origin
+before sending the credential. HTTPS is required except for loopback testing;
+redirects are rejected. Audio stays local; only transcript text reaches Claude
+Code. Heartbeat loss stops local processing, and interrupted result submissions
+retry the identical lease/result rather than running inference again.
+
+**Integration status:** this transport is not a launchable background service
+yet. The server-side claim/audio/result endpoint, explicit device-selection
+settings, pairing launcher and live Watch-to-worker acceptance are still to be
+connected. Current deployments do not advertise this capability, so the worker
+refuses to start there. Do not copy an API key, CI credential or Claude OAuth
+token into its `credential` option: it accepts only an existing Thingtime paired
+device credential. Keep future machine-local worker setup untracked; importing
+this module does not pair a device or enable recording processing.
+
 ### Shared AI endpoint waterfall
 
 AI completions and recording-automation mutations follow the protected account
