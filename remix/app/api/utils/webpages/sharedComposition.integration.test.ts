@@ -59,7 +59,7 @@ test('shared page audience includes its author components, never a foreign priva
 		const component = await create(owner, ['component'], crystal, ['tt:hidden', 'tt:user']);
 		const foreign = await create(stranger, ['component'], crystal);
 		const page = await create(owner, ['webpage'], { name: 'Shared test root', blocks: [
-			{ id: 'nested', type: 'container', children: [{ id: 'card', type: 'component', component: key }] },
+			{ id: 'nested', type: 'container', children: [{ id: 'card', type: 'component', component: key, args: { picture: mediaSource('arg-page') } }] },
 			{ id: 'foreign', type: 'component', component: foreign.id }
 		] }, ['tt:hidden', 'tt:user']);
 		assert.ok(page.linkKey);
@@ -152,9 +152,9 @@ test('shared page audience includes its author components, never a foreign priva
 			savedArgs: { picture: mediaSource('arg-saved') },
 			render: { tag: 'div', children: [
 			{ tag: 'button', ttAction: sharedAction.id, children: ['Draw'] }, { tag: 'p', children: ['{last.result}'] },
+			{ tag: 'img', props: { src: '{picture}', alt: 'Stored argument media' } },
 			...(process.env.TT_SHARED_PLAYWRIGHT_PATH ? [
 				{ tag: 'img', props: { src: '/api/v1/attachments/content?id=sharing-browser-transport', alt: 'Shared media transport' } },
-				{ tag: 'img', props: { src: '{picture}', alt: 'Stored argument media' } },
 				{ tag: 'div', props: { style: { backgroundImage: 'url("{background}")', height: 20 } }, children: ['Argument background'] },
 				{ tag: 'div', props: { style: { backgroundImage: `u\\72 l(${mediaSource('html-css')})`, height: 20 } }, children: ['HTML background'] },
 				{ tag: 'img', props: { src: 'https://example.invalid/sharing-browser-transport.png', alt: 'External media transport' } }
@@ -279,7 +279,7 @@ test('shared page audience includes its author components, never a foreign priva
 					});
 					assert.ok(mediaReads > 0);
 					await tab.getByTestId('shared-chakra-css').hover();
-					for (const name of ['arg-saved', 'arg-background', 'html-css', 'chakra-css', 'page-css', 'block-css', 'hover-css', 'raw-html-css', 'raw-html-image', 'rich-html-image']) {
+					for (const name of ['arg-page', 'arg-background', 'html-css', 'chakra-css', 'page-css', 'block-css', 'hover-css', 'raw-html-css', 'raw-html-image', 'rich-html-image']) {
 						if (!cssReads.has(`sharing-browser-${name}`)) await tab.waitForResponse((response: any) => new URL(response.url()).searchParams.get('id') === `sharing-browser-${name}`, { timeout: 15000 });
 						assert.ok(cssReads.has(`sharing-browser-${name}`), name);
 					}
@@ -417,6 +417,10 @@ test('shared page audience includes its author components, never a foreign priva
 		const untouched = await create(owner, ['component'], { ...crystal, componentKey: `${key}-unrelated` });
 		const unchanged = await request('/api/v1/things', 'PATCH', { id: page.id, crystal: { name: 'Edited shared root' } }, stranger);
 		assert.equal(unchanged.response.status, 200, unchanged.data.error);
+		const injectedArgument = await request('/api/v1/things', 'PATCH', { id: page.id, crystal: { blocks: [{ id: 'card', type: 'component', component: key,
+			args: { picture: mediaSource('guessed-page-argument') }
+		}] } }, stranger);
+		assert.equal(injectedArgument.response.status, 403, 'A page writer cannot expose private media through an existing component argument');
 		const injectedAction = await request('/api/v1/things', 'PATCH', { id: page.id, crystal: { blocks: [{ id: 'card', type: 'component', component: key, source: { action: unrelatedAction.id } }] } }, stranger);
 		assert.equal(injectedAction.response.status, 403, 'A shared writer cannot publish an unrelated private action');
 		assert.equal((await request('/api/v1/things', 'PATCH', { id: dataSchema.id, acl: ['tt:custom', `tt:group/${groupId}/write`] }, owner)).response.status, 200);

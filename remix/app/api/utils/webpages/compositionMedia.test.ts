@@ -1,12 +1,39 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { compositionAttachmentIds } from '../actions/compositionMediaCore';
-import { createCanViewSharedCompositionAttachment, type SharedComposition } from '../actions/sharedComposition';
+import { compositionMediaIds, createCanViewSharedCompositionAttachment, type SharedComposition } from '../actions/sharedComposition';
 import { canView, fail, type ThingDoc } from '../things/things';
 import { HTML_MAX_DEPTH, HTML_MAX_NODES } from '../../../components/Kinds/htmlRenderPolicy';
 import { MAX_WEBPAGE_HTML_CHARS } from '../../../schemas/registry';
 
 const url = (id: string) => `/api/v1/attachments/content?id=${id}`;
+
+test('page-block media overrides follow resolved same-author components and refresh with the root', async () => {
+	const component = { shareId: 'component', ownerId: 'author', thingtime: ['component'], crystal: {
+		args: [{ name: 'image', type: 'string', default: url('default') }], savedArgs: { image: url('saved') },
+		render: { tag: 'img', props: { src: '{image}' } }
+	} } as ThingDoc;
+	const block = { type: 'component', component: 'alias', args: { image: url('page-image'), unused: url('unused') } };
+	const root = { shareId: 'root', ownerId: 'author', thingtime: ['webpage'], acl: ['tt:hidden', 'tt:user'], linkKey: 'fixture-key', crystal: {
+		blocks: [{ type: 'container', children: [block, { ...block, args: { image: url('second') } }] }]
+	} } as ThingDoc;
+	const composition = { root, docs: new Map([[root.shareId, root], [component.shareId, component]]),
+		references: new Map([['root:component:alias', component]]) } as SharedComposition;
+	assert.deepEqual([...compositionMediaIds(composition)].sort(), ['page-image', 'saved', 'second']);
+	const read = createCanViewSharedCompositionAttachment(async (viewer) => canView(root, viewer) ? composition : fail(404, 'Not found'), async () => false);
+	const viewer = { id: '', linkKeys: new Set(['fixture-key']) };
+	const attachment = { shareId: 'page-image', ownerId: 'author', targetId: 'unrelated-post', thingtime: ['attachment'], attachmentPurpose: 'post' as const };
+	assert.equal(await read(viewer, attachment, root.shareId), true);
+	assert.equal(await read(null, attachment, root.shareId), false);
+	block.args.image = url('replacement');
+	assert.equal(await read(viewer, attachment, root.shareId), false, 'Removing the page override revokes its old media');
+	block.args.image = url('page-image');
+	composition.references.clear();
+	assert.equal(await read(viewer, attachment, root.shareId), false, 'Unresolved aliases cannot introduce media');
+	composition.references.set('root:component:alias', component);
+	component.ownerId = 'foreign';
+	assert.equal(await read(viewer, attachment, root.shareId), false, 'Foreign templates keep independent media authority');
+});
 
 test('stored component defaults and saved arguments grant only resolved rendering media', () => {
 	const crystal = {
