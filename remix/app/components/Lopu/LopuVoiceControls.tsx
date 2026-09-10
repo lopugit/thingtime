@@ -19,6 +19,7 @@ import { useLopuChat } from './useLopuChat';
 import { useLopuSettings } from './useLopuSettings';
 import { VoiceCaptureQueue, type PendingVoiceCapture } from './voiceCaptureQueue';
 import { voiceConversationHistory, type VoiceHistoryItem } from './voiceConversation';
+import { newLopuVoiceId as newId } from './voiceIdentity';
 
 // 🎙️ Lopu's voice engine + the compact controls every voice surface shares
 // (the /lopu/voice page and the floating window's voice mode).
@@ -124,8 +125,6 @@ export type UseLopuVoice = {
 const VOICE_REPLY_ENDPOINT = '/api/v1/lopu/voice/reply';
 const MAX_LOCAL_ITEMS = 200;
 const RECOGNITION_RESTART_MS = 250;
-
-const newId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
 const speechLang = () => (typeof navigator !== 'undefined' && navigator.language) || 'en-US';
 

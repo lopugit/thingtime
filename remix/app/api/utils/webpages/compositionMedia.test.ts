@@ -8,10 +8,26 @@ import { MAX_WEBPAGE_HTML_CHARS } from '../../../schemas/registry';
 
 const url = (id: string) => `/api/v1/attachments/content?id=${id}`;
 
+test('conditional media properties include stored alternatives, not condition metadata', () => {
+	const crystal = {
+		savedArgs: { image: url('stored') },
+		render: { tag: 'div', children: [
+			{ tag: 'img', props: { src: { ttIf: { arg: 'last.result', value: url('condition-only'), then: '{image}', else: url('initial') } } } },
+			{ tag: 'video', props: { poster: { ttMap: { arg: 'state.mode', values: { first: url('first'), second: url('second') }, default: url('fallback') } } } },
+			{ tag: 'a', props: { ttIf: { arg: 'state.ready', then: { href: url('download') }, else: { title: url('metadata') } } } },
+			{ tag: 'div', props: { style: { backgroundImage: { ttIf: { arg: 'state.ready', equals: `url(${url('css-condition')})`, then: `url(${url('css-then')})`, else: `url(${url('css-else')})` } } } } },
+			{ tag: 'img', props: { src: { ttMap: { arg: 'state.mode', values: { one: `${url('unknown')}{query.suffix}`, two: `${url('separate')}&key=other` } } } } },
+			{ tag: 'div', props: { title: { ttIf: { then: url('title') } } }, ttActionInputs: { src: url('input') } }
+		] }
+	};
+	assert.deepEqual([...compositionAttachmentIds(['component'], crystal)].sort(),
+		['css-else', 'css-then', 'download', 'fallback', 'first', 'initial', 'second', 'stored']);
+});
+
 test('page-block media overrides follow resolved same-author components and refresh with the root', async () => {
 	const component: ThingDoc = { shareId: 'component', ownerId: 'author', createdAt: new Date(0), updatedAt: new Date(0), thingtime: ['component'], crystal: {
 		args: [{ name: 'image', type: 'string', default: url('default') }], savedArgs: { image: url('saved') },
-		render: { tag: 'img', props: { src: '{image}' } }
+		render: { tag: 'img', props: { src: { ttIf: { arg: 'last.result', then: '{image}' } } } }
 	} };
 	const block = { type: 'component', component: 'alias', args: { image: url('page-image'), unused: url('unused') } };
 	const root: ThingDoc = { shareId: 'root', ownerId: 'author', createdAt: new Date(0), updatedAt: new Date(0), thingtime: ['webpage'], acl: ['tt:hidden', 'tt:user'], linkKey: 'fixture-key', crystal: {
@@ -33,6 +49,21 @@ test('page-block media overrides follow resolved same-author components and refr
 	composition.references.set('root:component:alias', component);
 	component.ownerId = 'foreign';
 	assert.equal(await read(viewer, attachment, root.shareId), false, 'Foreign templates keep independent media authority');
+});
+
+test('property discovery respects wrapper precedence, output types and traversal limits', () => {
+	const ids = (props: unknown) => [...compositionAttachmentIds(['component'], { savedArgs: { image: url('arg') }, render: { tag: 'img', props } })];
+	assert.deepEqual(ids({ src: { ttArg: 'image', ttIf: { then: url('ignored') } } }), ['arg']);
+	assert.deepEqual(ids({ src: { ttMerge: [url('not-an-object')] } }), []);
+	assert.deepEqual(ids({ src: [url('not-a-url')] }), []);
+	assert.deepEqual(ids({ ttMerge: [{ src: { ttIf: { then: '{image}' } } }, { title: url('metadata') }] }), ['arg']);
+	const values = Object.fromEntries(Array.from({ length: 5000 }, (_, i) => [i, url(`image-${i}`)]));
+	const found = ids({ src: { ttMap: { arg: 'state.mode', values } } });
+	assert.ok(found.length > 0 && found.length < 4000);
+	assert.ok(!found.includes('image-4999'));
+	const cyclic: any = { ttIf: {} };
+	cyclic.ttIf.then = cyclic;
+	assert.deepEqual(ids({ src: cyclic }), []);
 });
 
 test('stored component defaults and saved arguments grant only resolved rendering media', () => {

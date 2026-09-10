@@ -18,9 +18,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- Prepare native build 31 for unified Lopu conversation recovery after Apple
-  confirmed build 30 is already in internal TestFlight testing. Release Xcode
-  compilation passes; signed upload and device acceptance remain separate.
+- Publish native build 31 for unified Lopu conversation recovery. All 51 native
+  CI tests and signed iPhone/Watch verification pass; Apple confirms VALID and
+  internal TestFlight availability. Physical-device acceptance remains separate.
   See [PR #731](../PRs/731-lopu-unified-scheduled-chats.md).
   — Codex (AI), 2026-09-10
 
@@ -56,6 +56,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   selection, and introduce searchable scheduled tasks with separate run Things
   and Lopu-message notifications. Browser and end-to-end release checks remain
   separate from focused tests; see the [feature validation notes](../PRs/731-lopu-unified-scheduled-chats.md) before deployment.
+  — Codex (AI), 2026-09-10
+
+- Use cryptographic UUIDs for voice-session and transcript request identities,
+  with regression coverage that refuses an insecure fallback. Reconcile the
+  conditional-media write fix without downgrading Lopu capabilities; the
+  combined Things contract is 1.8.2 (legacy 1.7.2).
+  See [PR #731](../PRs/731-lopu-unified-scheduled-chats.md).
+  — Codex (AI), 2026-09-10
+
+- Follow stored conditional media-property alternatives through shared root
+  inheritance, including argument-backed src/poster/href and style records.
+  Exclude condition metadata and bound discovery across all property visits;
+  shared writers cannot smuggle unreadable uploads into inactive branches.
+  Advance content capability to 1.6.1 and patch both Things write contracts.
   — Codex (AI), 2026-09-10
 
 - Prepare the focused main promotion of shared HTML/contained media, stored

@@ -153,6 +153,7 @@ test('shared page audience includes its author components, never a foreign priva
 			render: { tag: 'div', children: [
 			{ tag: 'button', ttAction: sharedAction.id, children: ['Draw'] }, { tag: 'p', children: ['{last.result}'] },
 			{ tag: 'img', props: { src: '{picture}', alt: 'Stored argument media' } },
+			{ tag: 'img', props: { src: { ttIf: { arg: 'last.result', then: '{picture}', else: mediaSource('conditional-start') } }, alt: 'Conditional argument media' } },
 			...(process.env.TT_SHARED_PLAYWRIGHT_PATH ? [
 				{ tag: 'img', props: { src: '/api/v1/attachments/content?id=sharing-browser-transport', alt: 'Shared media transport' } },
 				{ tag: 'div', props: { style: { backgroundImage: 'url("{background}")', height: 20 } }, children: ['Argument background'] },
@@ -271,8 +272,11 @@ test('shared page audience includes its author components, never a foreign priva
 					assert.equal(await tab.getByTestId('p-edit-in-builder').count(), 0);
 					const copyBounds = await tab.getByTestId('fork-shared-thing').boundingBox();
 					assert.ok(copyBounds && copyBounds.x >= 0 && copyBounds.x + copyBounds.width <= width, 'The copy control must fit inside the mobile/desktop viewport');
+					await tab.waitForFunction(() => (document.querySelector('img[alt="Conditional argument media"]') as HTMLImageElement)?.naturalWidth);
+					assert.match(await tab.getByAltText('Conditional argument media').getAttribute('src'), /id=sharing-browser-conditional-start/);
 					await tab.getByRole('button', { name: 'Draw', exact: true }).click();
 					await tab.getByText('The Star', { exact: true }).waitFor({ timeout: 15000 });
+					assert.match(await tab.getByAltText('Conditional argument media').getAttribute('src'), /id=sharing-browser-arg-page/);
 					await tab.waitForFunction(() => {
 						const img = document.querySelector('img[alt="Shared media transport"]') as HTMLImageElement | null;
 						return !!img?.naturalWidth;
@@ -447,6 +451,12 @@ test('shared page audience includes its author components, never a foreign priva
 		}
 		assert.equal((await request('/api/v1/things', 'PATCH', { id: component.id, acl: ['tt:custom', `tt:group/${groupId}/write`] }, owner)).response.status, 200);
 		assert.equal((await request('/api/v1/things', 'PATCH', { id: component.id, crystal: { name: 'Keep the authored media' } }, stranger)).response.status, 200);
+		for (const endpoint of ['/api/v1/things', '/api/v1/things/update']) {
+			const refused = await request(endpoint, endpoint.endsWith('/update') ? 'POST' : 'PATCH', { id: component.id, crystal: {
+				render: { tag: 'img', props: { src: { ttIf: { arg: 'last.result', then: mediaSource('guessed-conditional') } } } }
+			} }, stranger);
+			assert.equal(refused.response.status, 403, 'Shared writers cannot hide private-media additions in inactive property branches');
+		}
 		for (const crystal of [
 			{ savedArgs: { picture: mediaSource('guessed-saved') } },
 			{ args: [{ name: 'picture', type: 'string', default: mediaSource('guessed-default') }], savedArgs: {} }
