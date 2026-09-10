@@ -1172,6 +1172,11 @@ email whose link points at the attacker.
       mock screen, the social block shows three images with working PNG/SVG
       downloads, related links resolve. An unknown slug shows the not-found
       card with suggestions (no white screen).
+- [ ] "Same page, other looks": `landing/feed` (a lead feature) offers eleven
+      style editions and each chip lands on a different `styles/…` page.
+      `landing/everything-is-a-thing` (one of the 43 features outside
+      `STYLE_FEATURE_KEYS`) has no editions, so the whole section is absent —
+      never a row of chips that navigate back to the page you are on.
 - [ ] Dark trends (`styles/dark-neon/*`, `styles/gradient-glow/*`,
       `styles/kinetic-type/*`, `styles/listicle/*`) keep every text readable
       and the sub-nav chips legible; the browser tab title and meta

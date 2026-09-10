@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 // @ts-ignore Node executes this TypeScript test directly and requires the .ts extension.
-import { CATEGORIES, CATEGORY_BY_KEY, PAGES, PAGE_BY_SLUG, PAGE_COUNT, STYLE_FEATURE_KEYS, TOTAL_ASSET_COUNT, buildPage, buildPageBySlug, categoryCounts, searchPages, validateCatalog } from './catalog.ts';
+import { CATEGORIES, CATEGORY_BY_KEY, MARKETING_BASE, PAGES, PAGE_BY_SLUG, PAGE_COUNT, STYLE_FEATURE_KEYS, TOTAL_ASSET_COUNT, buildPage, buildPageBySlug, categoryCounts, searchPages, styleSiblingsFor, validateCatalog } from './catalog.ts';
 // @ts-ignore see above
 import { FEATURES, FEATURE_BY_KEY, getFeature } from './features.ts';
 // @ts-ignore see above
@@ -46,8 +46,7 @@ test('the counts spelled out in words still match the lists', () => {
 			wording: 'twelve',
 			sites: [
 				'catalog.ts CATEGORIES styles.blurb ("re-cut in twelve viral trends" — also the category meta description)',
-				'routes/marketing/_index.tsx ("twelve viral styles", "twelve viral styles and ten platform sizes", "Twelve viral looks")',
-				'routes/marketing/page.tsx ("Re-cut in eleven other styles" — TRENDS.length - 1)'
+				'routes/marketing/_index.tsx ("twelve viral styles", "twelve viral styles and ten platform sizes", "Twelve viral looks")'
 			]
 		},
 		{ count: SOCIAL_FORMATS.length, expected: 10, wording: 'ten', sites: ['routes/marketing/_index.tsx ("ten platform sizes")'] },
@@ -59,6 +58,36 @@ test('the counts spelled out in words still match the lists', () => {
 			entry.expected,
 			`This list now has ${entry.count} entries, but ${entry.sites.length} place(s) still say "${entry.wording}". Update the copy (or derive it, as social-media.tsx does with \${TRENDS.length}) and this expectation:\n  - ${entry.sites.join('\n  - ')}`
 		);
+	}
+});
+
+// "Same page, other looks" on a landing page offers the same feature in the
+// other trends. Only STYLE_FEATURE_KEYS features have `styles/*` pages, so for
+// the other 43 the offer has to be empty rather than eleven chips resolved
+// through a `landing/<feature>` fallback — which pointed every one of them at
+// the page the reader was already on.
+test('style siblings only offer editions that exist', () => {
+	const styled = STYLE_FEATURE_KEYS[0];
+	const unstyled = FEATURES.find((feature) => !STYLE_FEATURE_KEYS.includes(feature.key));
+	assert.ok(unstyled, 'expected at least one feature without style editions');
+
+	const siblings = styleSiblingsFor(styled, 'bold-brutal');
+	assert.equal(siblings.length, TRENDS.length - 1, `${styled} should offer every trend but the current one`);
+	assert.ok(!siblings.some((entry) => entry.trend.key === 'bold-brutal'), 'the current trend is never offered');
+
+	assert.deepEqual(styleSiblingsFor(unstyled.key, 'bold-brutal'), [], `${unstyled.key} has no style editions, so it must offer none`);
+	assert.deepEqual(styleSiblingsFor(undefined, 'bold-brutal'), [], 'a page with no feature ref offers none');
+
+	// Every href must resolve to a real page, never back to the current one.
+	for (const featureKey of [...STYLE_FEATURE_KEYS, unstyled.key]) {
+		for (const trend of TRENDS) {
+			for (const entry of styleSiblingsFor(featureKey, trend.key)) {
+				const slug = entry.href.slice(`${MARKETING_BASE}/`.length);
+				assert.ok(PAGE_BY_SLUG[slug], `dead style sibling ${entry.href}`);
+				assert.equal(slug, `styles/${entry.trend.key}/${featureKey}`);
+				assert.notEqual(entry.trend.key, trend.key);
+			}
+		}
 	}
 });
 
