@@ -1,5 +1,17 @@
 # PR #731: Lopu unified conversations, scheduled Things, attachments and discussions
 
+## Historical action receipt correction — 2026-09-10
+
+Hosted testing found that a later Lopu reply could deny a previously completed
+schedule action: server-loaded history omitted its saved tool receipt. The
+follow-up reuses the public first-party assistant metadata projection, folds
+split text before appending bounded receipts, and counts them against the
+existing history budget. Raw results, confirmation tokens and private metadata
+are not replayed. Receipts describe past outcomes, not current state or new
+authorization. Both capability manifests publish reply 1.6.1. Regression tests
+cover success/failure, imported/user/deleted rows, split replies, tool-only turns,
+receipt limits and tiny budgets. Hosted provider recall remains a release check.
+
 ## Scope
 
 - One mounted chat composer across standard voice and text, with transcript turns persisted into the selected conversation.

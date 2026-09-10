@@ -4531,10 +4531,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // each spend the same last credit — past the cap the request is refused 429
     // LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted (additive). contractVersion
     // feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.6.0',
-    featureVersion: '1.6.0',
+    contractVersion: '1.6.1',
+    featureVersion: '1.6.1',
     summary: 'Sends one message to Lopu and streams its reply — text, tool calls and live builder patches — as newline-delimited JSON.',
     detail:
+      'Version 1.6.1 retains bounded public tool receipts in server-loaded conversation history, so later turns can distinguish completed and failed actions. Receipts are historical outcomes, not current-state guarantees or authorization to repeat actions; raw tool results and confirmation tokens are never replayed. ' +
       'Version 1.6 adds attachmentIds and thingIds (up to ten each), and relational comment_on_thing/list_thing_comments tools. Device media is bound to the persisted user message; the model receives metadata only, plus readable selected Thing content. Comments are standalone Things linked by targetId; all Lopu comments require a server-verified confirmation and never edit parent content. ' +
       'Version 1.5 adds create_thing, send_notification, create_reminder, list_reminders and set_reminder_enabled tools for the current user. Reminder schedules and direct notifications return server receipts, obey notification preferences, and require no open browser. POST { chatId?, text, requestId, model?, effort?, speed?, providerId?, context?, confirmations? }. The user turn is persisted first (omit chatId to start a ' +
       'conversation titled from the message), then the reply streams as application/x-ndjson, one JSON event per line: meta (chat, ' +

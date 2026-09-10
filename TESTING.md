@@ -2,6 +2,12 @@
 
 ## Unified Lopu conversations, scheduled Things and discussions
 
+- [ ] After Lopu creates a reminder or reports a failed action, ask what
+  happened in a later turn and after reload. Its server-loaded history retains
+  bounded public success/failure receipts, never raw results or approval tokens.
+  Verify current state before changing or repeating an earlier action; history
+  is not fresh authorization. Test split assistant replies and tiny context caps.
+
 - [ ] Native bridge 1.3: start direct audio in a populated chat and confirm
   context recall; switch back to text and reload both speakers' saved turns.
   Disconnect during saving, quit/reopen, retry and verify no duplicate turns.
