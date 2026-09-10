@@ -1,5 +1,46 @@
 # TESTING.md — per-area manual test checklists
 
+## Unified Lopu conversations, scheduled Things and discussions
+
+- [ ] Native bridge 1.3: start direct audio in a populated chat and confirm
+  context recall; switch back to text and reload both speakers' saved turns.
+  Disconnect during saving, quit/reopen, retry and verify no duplicate turns.
+  Switch account/domain while a save is in flight: no transcript crosses the
+  boundary, no old save navigates a new conversation, and credentials are not
+  stored in the on-device outbox. Test queue-full/disk-failure recovery, native
+  transcription-only chat reconciliation, old-build upgrade messaging, and
+  stopping during microphone permission or WebSocket startup.
+
+- [ ] Direct web voice: start in an existing text chat, speak, switch back and
+  reload; both speakers remain in that chat. A new voice chat gets one ID.
+  Go offline during saving, reload and retry; no duplicated turns or new AI
+  requests. Stop while granting microphone permission; no late stream starts.
+  Switch accounts during a fetch/save and verify private history never crosses
+  accounts. Test the pending-save/retry panel at desktop and 390px widths.
+  On a deployed build, confirm the CSP permits only the supported voice host
+  and the microphone session connects without a CSP violation.
+
+- [ ] Desktop and 390px: switch Chat → Voice → Chat repeatedly; keep the same
+  chat ID, history, draft and attachment selection. Reload a saved transcript.
+  Check device transcription and direct-provider voice separately.
+  Route exports must share the exact component identity, not separate wrapper
+  functions: wrappers remount the composer even when they render the same page.
+  Search for a long unbroken Thing ID: labels wrap within the picker, its Done
+  button remains reachable, and the composer Send button stays fully in view.
+- [ ] Attach a device file and select an owned Thing. Send once, refresh and
+  verify the file still opens privately. Retry failures and switch accounts
+  during upload; never bind, display or delete another account's attachments.
+- [ ] Open a note, todo, recording and post from `/things`. Open their preview
+  dialogs and detail pages, scroll top to bottom, and post/load older comments.
+  Verify each comment is its own Thing with targetId; original crystal stays
+  unchanged. Test hidden links, read-only audiences, deleted parents and logout.
+- [ ] Ask Lopu to comment; the full proposed comment and target are shown before
+  Confirm. Cancel must write nothing; changing text or target invalidates approval.
+- [ ] Create interval and time-zone cron tasks in all three delivery modes.
+  Inspect their searchable Things and separate run notes; test existing/new
+  chats, notification mute, pause, completed todos, quota failure and lost leases.
+  A retry must not duplicate a message; ambiguous AI runs stop for review.
+
 - Signed-out boot recovery: abort an initial static JavaScript dependency at
   desktop and 390px widths. Recover once with the full share query/fragment
   preserved; persistent failure shows a reachable manual retry, not a blank
@@ -6355,3 +6396,14 @@ approval; `access.test.ts` — the reservation matrix) and
   A successful server response alone is not a native banner acceptance test.
 - Trigger a followed/friend post and a single-recipient notification with push on,
   then with push off. History remains; muted/history-only events produce no push.
+## Lopu linked-Things live HTTP smoke
+
+- Open Lopu's Your Things picker at desktop and 390px phone widths. Its overlay and fixed modal container must sit above the navigation and floating windows; the title, Close and Done controls remain visible and clickable while scrolling the results from top to bottom. Check both Voice and Chat entry points.
+- Upload a synthetic file and send it in Lopu. Its attachment card must remain visible while streaming and after the reply, without reloading; reload to verify the server-backed attachment persists. The optimistic metadata must never add unselected files or be sent as authoritative server metadata.
+
+- Voice session and transcript request IDs must come from cryptographic UUIDs,
+  never timestamps plus `Math.random()`. Run the voice identity regression tests
+  alongside the Lopu UI suite; secure-random failures must not produce weak IDs.
+
+- When adding a scheduled-task/run schema, run `npm --prefix remix run test:schemas` and review its pinned builtin projection; every registered crystal schema must survive the schema-Thing write gate without lost fields.
+- Run `node remix/scripts/verify-lopu-linked-things.mjs` against the running worktree stack (or pass its loopback HTTP origin). It registers disposable local accounts and exercises real API comments, unchanged parent crystals, shared voice/Messenger history, retry deduplication, searchable scheduled-task Things, linked context, account isolation, protected writes, and pause/resume. It removes its created content and pauses schedules in `finally`; empty test accounts remain, with credentials never persisted. Production origins are rejected. This does not replace browser/device, provider inference, or scheduled-delivery acceptance.

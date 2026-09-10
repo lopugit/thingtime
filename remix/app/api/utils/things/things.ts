@@ -1317,7 +1317,7 @@ export const createThing = async (
   // ["post","comment"] things — so a private thread can never leak through a
   // caller-supplied acl on the comment.
   let acl: string[];
-  if (validated.thingtime.includes('save')) {
+  if (validated.thingtime.includes('save') || validated.thingtime.includes('scheduled-task-run')) {
     acl = [ACL_OWNER];
   } else if (validated.thingtime.includes('comment')) {
     acl = [ACL_INHERIT];

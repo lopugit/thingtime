@@ -10,6 +10,52 @@ At Thingtime, we believe that data and knowledge should be open, accessible, and
 
 ## Lopu reminders and notification tests
 
+The Lopu page keeps one conversation while switching between Chat and Voice.
+Device-transcription mode saves its text and transcript Thing into that chat.
+The composer offers device attachments and an owned-Thing search picker. Files
+are private chat attachments; model context currently includes file metadata,
+not decoded audio/video/image content. Selected Things contribute readable text.
+Direct web voice saves completed user and assistant transcripts into the same
+chat through `api.lopu-voice-capture` 1.0.0, without repeating inference. The
+selected chat's newest 20 persisted text messages (up to 24000 characters) seed
+the direct provider session; binary attachments and tool payloads are not
+replayed. Direct voice stays opt-in and requires a supported owner-configured
+provider. History seeding may incur the provider's normal text-input charges.
+Failed transcript saves remain in an origin/account-scoped local outbox (up to
+50 events / 240000 characters), with a visible retry button and an online retry.
+No provider credentials are stored in that outbox. If browser storage is
+unavailable, keep the tab open until saving succeeds.
+Native bridge 1.3.0 also saves completed direct-voice text through this endpoint.
+Its protected Application Support outbox survives app relaunch, never stores
+cookies/tokens, and verifies both the origin contract and current account before
+delivery. It holds at most 50 events / 240000 characters per account/origin
+(200 total), stops recording if a new event cannot be saved safely, and retries
+when Lopu reconnects or **Retry saving voice** is tapped. Only the active voice
+session may select a newly created chat; older background saves update history
+without navigating away. Existing native builds must update before direct voice
+can promise shared history. Normal native transcription also reconciles its
+saved chat. Real-provider and physical-device acceptance remain release gates.
+
+Scheduled tasks support notification-only, saved chat-message, and fresh
+read-only AI-update modes, an existing conversation or a new chat each run,
+and five-field cron expressions with an IANA time zone. They are searchable
+Things; run notes are separate quota-billed `scheduled-task-run` Things linked
+by `targetId`. The protected schedule remains canonical: editing the displayed
+Thing does not reprogram execution. A paused task stops future starts, not an
+already-running response. Ambiguous failures require owner review rather than
+automatic replay. AI updates use normal account access and billing, and cannot
+run mutating tools. Each message may produce a `lopu-message` notification.
+
+Thing detail pages and `/things` previews fetch their discussion by target ID.
+Comments are separate Things inheriting the target audience; they are never
+embedded in the target crystal. Lopu can list comments and propose a comment
+with an explicit confirmation. No new database migration or index is required.
+
+Local validation for this worktree uses `http://localhost:11270` (Nitro 11272).
+No Tailscale/Funnel mapping has been configured or verified for these ports.
+The shared PM2 daemon was unresponsive during validation; the temporary
+foreground test stack is not a durable service configuration.
+
 Lopu chat and the standard voice page share `create_thing`, `send_notification`,
 `create_reminder`, `list_reminders`, and `set_reminder_enabled`. Only the signed-in
 owner can receive or manage these reminders. Notes/todos and reminder content
