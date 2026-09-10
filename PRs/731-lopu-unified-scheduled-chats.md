@@ -1,5 +1,35 @@
 # PR #731: Lopu unified conversations, scheduled Things, attachments and discussions
 
+## Comment approval card guidance — 2026-09-10
+
+Hosted testing found Lopu incorrectly describing `comment_on_thing` as an
+immediate write and offering only a text confirmation, even when asked for its
+Confirm card. No comment was posted. The tool definition and both model tool
+protocol prompts now explicitly explain the first unapproved call: it opens
+the exact-target/full-text approval card and writes nothing. An approved later
+call remains required; model-asserted or plain-text approval grants nothing.
+The reply feature is patched to 1.6.2. Executor, prompt and manifest regressions
+cover this contract; hosted natural-language/card acceptance remains separate.
+
+## Production scheduling and connection refresh — 2026-09-10
+
+Production at `3ac01b1eafa2ffc5a514dbb38d9d850a9510c0cf` delivered the bounded
+QA saved-message schedule into its existing conversation with a separate run
+Thing and in-app notification. That recurring fixture is paused. A one-time
+fresh-AI task also reached Completed and linked a new conversation and run
+Thing. The new chat contains the requested original unicorn sentence with the
+QA746 marker, a Claude Opus 5 receipt (0.0099 credits), and a matching in-app
+Lopu notification. These checks do not establish physical Watch push or
+microphone acceptance.
+
+A tab held across deployment initially reused an older capability manifest
+and still reported incompatibility after Refresh task. Client negotiation now
+uses `cache: no-store` and a 20-second timeout, while sharing successful checks
+in memory and clearing only the failed request on retry. Automated coverage
+checks origin/schema/version rejection, request coalescing and recovery after
+network, HTTP, invalid-JSON and timeout failures. No server contract, migration,
+permission or credential change is needed.
+
 ## Historical action receipt correction — 2026-09-10
 
 Hosted testing found that a later Lopu reply could deny a previously completed
