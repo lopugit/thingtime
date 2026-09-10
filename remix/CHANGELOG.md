@@ -18,6 +18,75 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Add confirmed Send to Lopu to private recording Things in desktop and phone menus, with capability, account-switch and processor-consent guards and a link to recording activity. Keep phone content inset. Details: [PR 761](../PRs/761-lopu-saved-recording-handoff.md). — Codex (AI), 2026-09-10
+
+- Allow explicitly selected private saved audio Things through the recording queue and confirmed Send to Lopu flow, with source-state revalidation and transactional attachment fences. Keep automatic discovery Watch-only, preserve relational transcripts and negotiate the new 1.5 recording controls. — Codex (AI), 2026-09-10
+
+- Add an explicitly opted-in, loopback-only recording-delivery smoke with synthetic audio, real HTTP upload/pairing/completion paths, duplicate/privacy checks, and disposable-account cleanup. Document its upload-approval prerequisites and separate synthetic broker proof from real provider/Watch acceptance. — Codex (AI), 2026-09-10
+
+- Give historical Lopu tool summaries their own full-width row on phones,
+  preserving compact desktop rows and non-interactive approval history.
+  — Codex (AI), 2026-09-10
+
+- Show earlier Lopu confirmation requests as "Approval requested" after reload,
+  not failed executions. Historical receipts never restore approval grants or
+  claim that later actions succeeded. — Codex (AI), 2026-09-10
+
+- Verify real macOS Keychain recording state storage and add explicit,
+  confirmed recovery cleanup for expired unfinished pairing; completed local
+  pairings remain protected and server revocation stays separate. See
+  [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Make identical in-flight recording completion retries recoverable without
+  repeating inference or reporting a lease conflict; publish personal broker
+  1.0.1 and reconcile the latest develop sync. See
+  [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Verify synthetic WAV/M4A local transcription and native Claude OAuth
+  note/todo extraction with an opt-in runtime smoke. Real paired-account and
+  Watch delivery remain pending; details in
+  [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Add recording-settings Mac pairing with expiring masked secrets, explicit
+  copy/reveal and account-switch guards; publish pairing 1.1.0. Reconcile
+  develop's sharing boundaries and both manifest suites. Build and API smoke
+  pass; signed-in visual and real audio acceptance remain outstanding.
+  Details: [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Add an interactive Mac recording worker with hidden pairing input,
+  origin-bound Keychain storage, interrupted-claim recovery and bounded
+  foreground polling. Real local lost-receipt recovery passes; pairing UI,
+  native Keychain and audio acceptance remain pending.
+  Details: [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Register personal recording HTTP operations and owned-device settings,
+  origin-scoped capability negotiation, account-tier limits, private errors and
+  processor-change fences. Real local signup/pairing/selection smoke passes;
+  audio, deployed worker and visual acceptance remain pending.
+  Details: [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Add the unexposed personal recording broker, transactional device/consent
+  fences and crash-safe completion receipts; personal jobs cannot enter the
+  cloud-provider queue. HTTP/selection integration and live acceptance remain
+  pending. Details: [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Add the personal recording worker's outbound transport and bounded result
+  contract: origin-scoped negotiation, credential-safe audio retrieval,
+  heartbeat cancellation, grounded text results and idempotent submission
+  retries. Server pairing/queue integration is still pending; no new endpoint
+  or automatic processing is enabled by this foundation. — Codex (AI), 2026-09-10
+
+- Include the origin-scoped capability-manifest suite in the standard API
+  capability CI command and reconcile its assertions after combining saved
+  action sharing and Lopu reply updates. — Codex (AI), 2026-09-10
+
 - Promote shared component audience boundaries to main and reconcile the
   newly enabled origin-manifest assertions with the sharing patch versions.
   See [PR #756](../PRs/756-promote-public-component-boundaries-main.md).
@@ -123,6 +192,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Temporary resolver failures offer Retry and retain same-viewer content;
   viewer, target and link-key changes isolate drafts and stale responses.
   See [validation and scope](../PRs/740-codex-shared-page-load-recovery.md).
+  — Codex (AI), 2026-09-10
+
+- Distinguish temporary shared-page resolve failures from unavailable pages.
+  Offer Retry, retain same-viewer content on a failed refresh, and reset drafts
+  before rendering under another viewer, target or link key. Keep optional site
+  decoration resolves nullable. See [PR 740 validation and scope](../PRs/740-codex-shared-page-load-recovery.md).
   — Codex (AI), 2026-09-10
 
 - Follow stored conditional media-property alternatives through shared root
