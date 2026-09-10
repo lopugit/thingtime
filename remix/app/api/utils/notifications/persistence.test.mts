@@ -6,6 +6,8 @@ let prefs: any = { masters: { push: false, email: false } };
 let prefsFailure = false;
 let pushes = 0;
 let emails = 0;
+const lifetimes: Promise<unknown>[] = [];
+mock.module('@vercel/functions', { namedExports: { waitUntil: (task: Promise<unknown>) => lifetimes.push(task) } });
 const collection = {
   insertOne: async (doc: any) => { stored.set(doc.shareId, doc); },
   insertMany: async (docs: any[]) => { docs.forEach(doc => stored.set(doc.shareId, doc)); },
@@ -23,7 +25,7 @@ mock.module('./apns.ts', { namedExports: { sendNotificationPush: async () => { p
 const { emitNotification, emitSystemNotification, emitNotificationsBulk } = await import('./notifications.ts');
 const { recordNotificationMessage } = await import('./recordMessage.ts');
 
-beforeEach(() => { stored.clear(); pushes = 0; emails = 0; prefsFailure = false; prefs = { masters: { push: false, email: false } }; });
+beforeEach(() => { lifetimes.length = 0; stored.clear(); pushes = 0; emails = 0; prefsFailure = false; prefs = { masters: { push: false, email: false } }; });
 
 test('single-recipient history is saved even with all delivery disabled or preferences unavailable', async () => {
   const event = { recipientId: 'recipient', type: 'comment' as const, actor: { id: 'actor' } };
@@ -62,4 +64,28 @@ test('record retries do not overwrite text, ownership or read state', async () =
   assert.equal(doc.readAt, readAt);
   assert.equal(doc.historyOnly, true);
   assert.equal((await recordNotificationMessage('different-user', event)).ok, false);
+});
+
+
+test('single and bulk push delivery is attached to the serverless request lifetime', async () => {
+  prefs = { masters: { push: true, email: false } };
+  const single = emitNotification({ recipientId: 'recipient', type: 'comment', actor: { id: 'actor' } });
+  assert.equal(lifetimes.length, 1);
+  assert.equal(lifetimes[0], single);
+  await single;
+  assert.equal(pushes, 1);
+  const bulk = emitNotificationsBulk([{ recipientId: 'recipient', type: 'post-from-followed' }, { recipientId: 'recipient-2', type: 'post-from-followed' }], { actor: { id: 'actor' } });
+  assert.equal(lifetimes.length, 2);
+  assert.equal(lifetimes[1], bulk);
+  await bulk;
+  assert.equal(pushes, 3);
+  assert.equal(stored.size, 3);
+});
+
+test('bulk push respects muted channel and unread deduplication', async () => {
+  await emitNotificationsBulk([{ recipientId: 'recipient', type: 'comment' }], { actor: { id: 'actor' } });
+  assert.equal(pushes, 0);
+  prefs = { masters: { push: true, email: false } };
+  await emitNotificationsBulk([{ recipientId: 'recipient', type: 'friend-request' }], { actor: { id: 'actor' } }, { dedupeUnread: true });
+  assert.equal(pushes, 0);
 });
