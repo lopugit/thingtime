@@ -11,6 +11,7 @@ import { DeviceCard } from '~/components/Devices/DeviceCard';
 import { DeviceListRow } from '~/components/Devices/DeviceListRow';
 import type { DeviceRuntimeState } from '~/components/Devices/deviceTypes';
 import { CARD_STYLES } from '~/theme/card';
+import { canOfferRecordingHandoff } from '../Lopu/recordingThingHandoff';
 
 import type {
   ThingsDisplayMode,
@@ -107,6 +108,7 @@ const ThingPreviewBox = ({
 // opens its own page — thingsCore.thingLink); 'preview' is the explicit
 // quick-look modal. Rename applies to kinds whose crystal carries a name.
 export type ThingsItemAction =
+  | 'send-to-lopu'
   | 'open'
   | 'preview'
   | 'rename'
@@ -119,6 +121,7 @@ export type ThingsItemAction =
   | 'delete';
 
 export type ThingsItemHandlers = {
+  ownerId?: string;
   selected: Set<string>;
   cutIds: Set<string>;
   isMobile: boolean;
@@ -254,6 +257,7 @@ const ItemMenu = ({ thing, handlers }: { thing: ThingsThing; handlers: ThingsIte
     />
     <Portal>
       <MenuList fontSize="13px" minWidth="180px" zIndex={10250}>
+        {canOfferRecordingHandoff(thing, handlers.ownerId) && <MenuItem onClick={() => handlers.onItemAction(thing, 'send-to-lopu')}>🦄 Send to Lopu</MenuItem>}
         <MenuItem onClick={() => handlers.onItemAction(thing, 'open')}>{openLabelOf(thing)}</MenuItem>
         {!isFolder(thing) && <MenuItem onClick={() => handlers.onItemAction(thing, 'preview')}>👀 Preview</MenuItem>}
         {canRename(thing) && <MenuItem onClick={() => handlers.onItemAction(thing, 'rename')}>✏️ Rename</MenuItem>}
