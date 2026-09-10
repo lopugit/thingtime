@@ -18,6 +18,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Include the origin-scoped capability-manifest suite in the standard API
+  capability CI command and reconcile its assertions after combining saved
+  action sharing and Lopu reply updates. — Codex (AI), 2026-09-10
+
 - Clarify Lopu's two-step comment tool: an unapproved call opens the real
   approval card without posting; a verified follow-up posts the exact comment.
   Publish reply capability 1.6.2 without weakening the write guard.
@@ -40,6 +44,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - Layer Lopu's Thing picker above the fixed navigation using the shared modal
   stack, keeping its title and Close button accessible on phones.
+  — Codex (AI), 2026-09-10
+
+- Resolve shared controls from saved component arguments and every persisted
+  page instance; preserve argument templates when copying and rebind only the
+  executable actions. Guard argument-only collaborator edits against private
+  dependency injection. See [PR #747](../PRs/747-codex-shared-saved-action-contexts.md).
   — Codex (AI), 2026-09-10
 
 - Preserve Lopu's mounted composer across text/voice route changes. Signed-in

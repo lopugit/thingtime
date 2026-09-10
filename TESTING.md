@@ -6043,6 +6043,11 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
       it, which costs a reviewer real time.
 ## Lopu AI assistant (`/lopu`, floating launcher, `remix/app/components/Lopu/`, `/api/v1/lopu/chats*`, `/api/v1/ai/models`)
 
+- [ ] `test:api-capabilities` must run both the API-docs and origin-scoped
+      manifest suites; when merging independently versioned features, verify
+      every asserted version against the combined registry rather than leaving
+      one manifest test outside CI with stale expectations.
+
 Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Automated coverage:
 `npm run test:lopu`, `test:lopu-chat-streaming` (fake SSE tool loop),
 `test:partial-json`, `test:ai-models`, `test:lopu-ui`, `test:messenger`,
@@ -6354,6 +6359,15 @@ approval; `access.test.ts` — the reservation matrix) and
 - Shared settings / observed status: after the Mac reports connected with access allowed, switch between Things, the popup Things tab, and Open settings page. Keep the last observed status visible during the background check; do not briefly show Not running or a new permission denial. Pairing challenges and pending actions must not carry between views.
 
 ## Shared Data Thing template controls
+
+- Share one component used twice with different saved action arguments. Signed
+  out, both controls must run read-only and show their distinct results at
+  desktop/mobile widths. Wrong or retired links must fail. Copy the page and
+  verify both controls run the copied actions while labels, inputs and editable
+  templates stay unchanged. Repeat on a fork of a fork. A shared writer must
+  not introduce an unreadable private action through argument-only edits or a
+  new instance of an existing component. Unused bindings and runtime query,
+  result, viewer or template-shaped argument data must never grant access.
 
 - Shared nested media: open rich/raw HTML blocks with image, poster, link and
   inline CSS media signed out at desktop/mobile widths. Same-author uploads

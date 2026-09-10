@@ -8806,13 +8806,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // is a 400. Only this read grew — the shared projection is unchanged, so
     // things-comment / -feed / -user stay put (S7, additive)
     // Includes additive discussions and the 1.7.5 conditional-media write correction.
-    featureVersion: '1.8.2',
-    contractVersion: '1.7.2',
+    featureVersion: '1.9.0',
+    contractVersion: '1.8.0',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares.',
     detail:
+			'Stored action references include component argument defaults, savedArgs and each persisted page-block override, in that precedence order. New dependencies introduced through argument-only edits require independent read access for non-owner writers. Runtime query, viewer, result and loop values cannot mint grants. ' +
 			'Version 1.8 adds scheduled-task-run child notes: targetId is required, the default audience is owner-only, the typed crystal is bounded, and deleting the task cascades its run notes. Run notes are editable user content, not trusted security audit records. ' +
 			'Own-things lists include completed standalone recording attachments; pending uploads and all other protected kinds remain excluded. Attachment creation, metadata mutation and deletion still use their dedicated endpoints. ' +
 			'Shared webpage writers may add component references only when they can independently read the referenced component; only the owner may delegate an unrelated private component through the page. Media introduced through page-block arguments is checked against the same resolved component contexts before and after the edit; new inaccessible media is forbidden. ' +
@@ -10652,13 +10653,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'things-update',
     // Stored component and page-block arguments use the same media-addition guard as render edits.
-    featureVersion: '1.2.4',
-    contractVersion: '1.0.4',
+    featureVersion: '1.2.5',
+    contractVersion: '1.0.5',
     group: 'things',
     title: 'Update thing',
     endpoint: '/api/v1/things/update',
     summary: 'Updates one of the current user things — crystal payload, acl audience, or tags.',
     detail:
+      'New action dependencies selected by saved component arguments or page-block overrides require independent read access for non-owner writers, including a new instance of an already included component. ' +
       'Shared page-block argument and conditional media-property edits use the same resolved media-addition guard as PATCH /things; only the owner may introduce private media that the writer cannot independently read. ' +
       'Sugar over PATCH /api/v1/things: crystal patches merge over the existing crystal and are re-validated against the thing schemas in its thingtime array; replaceCrystal=true takes the supplied crystal whole. expectedUpdatedAt provides an atomic optimistic-concurrency precondition for signed MCP previews and other safe clients. acl (or a legacy visibility name) retargets the audience. Updating a pre-unification post upgrades it to the v2 doc shape in place. Attached things keep their inherited audience. Saving a webpage thing (create or update) additionally binds the owner\'s own ready builder uploads referenced by its media blocks to the page — clearing their draft expiry and inheriting the page\'s audience; foreign or external references are left untouched.',
     auth: {
@@ -12178,13 +12180,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-fork',
-    featureVersion: '1.1.1',
-    contractVersion: '1.1.1',
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'things',
     title: 'Copy a shared composition',
     endpoint: '/api/v1/things/fork',
     summary: 'Create an independent private copy of readable standalone content, including pages, components, actions, schema controls and data with extended content.',
-    detail: 'Revalidates the root audience and traverses stored component, action, schema and data references. Creates fresh caller-owned private Things through normal quota and schema gates. Rewrites executable references and capability scopes to copied ids; never edits the original or overwrites a prior fork. Missing dependencies fail before writes. Failed writes trigger best-effort cleanup of exact newly created ids; a cleanup failure is reported explicitly. Repeated successful calls create separate copies.',
+    detail: 'Revalidates the root audience and traverses stored component, action, schema and data references, including saved component arguments and every persisted page instance. Creates fresh caller-owned private Things through normal quota and schema gates. Rewrites executable references and capability scopes to copied ids; never edits the original or overwrites a prior fork. Templated controls retain their editable arguments and receive a bounded ttActionRefs array of [original resolved reference, copied id] pairs on the authored control node. The renderer applies the first matching pair once after ttAction interpolation, never to labels or inputs, and strips the marker from rendered output. Unused pairs are not access grants. Forks of forks rebind to their own actions. Missing dependencies fail before writes. Failed writes trigger best-effort cleanup of exact newly created ids; a cleanup failure is reported explicitly. Repeated successful calls create separate copies.',
     auth: { mode: 'session', description: 'Requires a signed-in user and read access to id, including its key or group membership when needed.' },
     methods: ['POST'],
     steps: ['POST { id, key? }. Supported roots are post, data, schema, component, webpage and action content; organizational folders, managed records and target-attached relationship rows retain their dedicated lifecycle.', 'Open the returned id in Builder for a webpage or /thing/:id for other content.'],
@@ -12193,13 +12195,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'actions-run',
-    featureVersion: '1.2.1',
-    contractVersion: '1.2.1',
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',
     summary: 'Execute one action thing inside its declared capability + budget envelope.',
     detail:
+      'Shared controls can select actions through persisted component argument defaults, savedArgs and each page-block override. Discovery follows authored render branches and bounded stored repeats; runtime query/result/viewer input and arbitrary metadata grant no access. Copied ttActionRefs bindings resolve to the copied actions without changing input data. ' +
       'The Action Thing executor: action things (thingtime ["action"]) are small declarative programs over a ' +
       'closed operation vocabulary (things.create/get/search/update, actions.invoke, return) with typed inputs, ' +
       'author-declared capabilities, and a limits envelope. Capabilities only NARROW — every operation delegates ' +
