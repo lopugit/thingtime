@@ -18,6 +18,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Add a loopback-only real HTTP acceptance smoke for linked Lopu chats,
+  scheduled Things and relational comments, including account boundaries,
+  pause/resume and owned-fixture cleanup. No provider or scheduler delivery is
+  claimed by this smoke. — Codex (AI), 2026-09-10
+
+- Pin the scheduled-task run schema projection in the builtin seeding
+  regression gate; retain all five owner-editable run fields.
+  See [PR #731](../PRs/731-lopu-unified-scheduled-chats.md).
+  — Codex (AI), 2026-09-10
+
 - Add native direct-voice transcript recovery and bounded shared-chat context
   behind bridge 1.3.0; reconcile transcription-only chat saves and expose native
   retry state without storing credentials. Simulator/provider/device gates are
