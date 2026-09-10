@@ -18,10 +18,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- Distinguish temporary shared-page resolve failures from unavailable pages.
-  Offer Retry, retain same-viewer content on a failed refresh, and reset drafts
-  before rendering under another viewer, target or link key. Keep optional site
-  decoration resolves nullable. — Codex (AI), 2026-09-10
+- Preserve Lopu's mounted composer across text/voice route changes. Signed-in
+  development testing found that separate route wrappers discarded unsent
+  drafts; both modes now export the same component identity, guarded by a
+  route-module regression test. — Codex (AI), 2026-09-10
+
+- Keep long Thing-picker labels within the dialog and wrap the composer
+  toolbar so its settings and Send controls remain reachable on narrow phones.
+  — Codex (AI), 2026-09-10
 
 - Publish native build 31 for unified Lopu conversation recovery. All 51 native
   CI tests and signed iPhone/Watch verification pass; Apple confirms VALID and
@@ -68,6 +72,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   conditional-media write fix without downgrading Lopu capabilities; the
   combined Things contract is 1.8.2 (legacy 1.7.2).
   See [PR #731](../PRs/731-lopu-unified-scheduled-chats.md).
+  — Codex (AI), 2026-09-10
+
+- Distinguish temporary shared-page resolve failures from unavailable pages.
+  Offer Retry, retain same-viewer content on a failed refresh, and reset drafts
+  before rendering under another viewer, target or link key. Keep optional site
+  decoration resolves nullable. See [PR 740 validation and scope](../PRs/740-codex-shared-page-load-recovery.md).
   — Codex (AI), 2026-09-10
 
 - Follow stored conditional media-property alternatives through shared root

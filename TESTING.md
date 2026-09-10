@@ -1,13 +1,5 @@
 # TESTING.md — per-area manual test checklists
 
-- Shared page resolve recovery: return a 503, 429, network failure or invalid
-  JSON from the page resolver. Show an explicit Retry rather than "not here";
-  Retry must load the complete shared composition without signing in. A failed
-  same-viewer refresh keeps its last loaded page; a 401/403/404 clears it.
-  Switching viewer, target or hidden-link key must clear the old page and
-  pending component results before the replacement response arrives. Check
-  cold failure and recovery at desktop and 390px widths.
-
 ## Unified Lopu conversations, scheduled Things and discussions
 
 - [ ] Native bridge 1.3: start direct audio in a populated chat and confirm
@@ -31,6 +23,10 @@
 - [ ] Desktop and 390px: switch Chat → Voice → Chat repeatedly; keep the same
   chat ID, history, draft and attachment selection. Reload a saved transcript.
   Check device transcription and direct-provider voice separately.
+  Route exports must share the exact component identity, not separate wrapper
+  functions: wrappers remount the composer even when they render the same page.
+  Search for a long unbroken Thing ID: labels wrap within the picker, its Done
+  button remains reachable, and the composer Send button stays fully in view.
 - [ ] Attach a device file and select an owned Thing. Send once, refresh and
   verify the file still opens privately. Retry failures and switch accounts
   during upload; never bind, display or delete another account's attachments.
@@ -58,6 +54,14 @@
   API requests remain real while the browser consumes the built client bytes.
   Combining media sharing with recording Things must retain the newer contract
   on both manifests and keep standalone recordings owner-private by default.
+
+- Shared page resolve recovery: return a 503, 429, network failure or invalid
+  JSON from the page resolver. Show an explicit Retry rather than "not here";
+  Retry must load the complete shared composition without signing in. A failed
+  same-viewer refresh keeps its last loaded page; a 401/403/404 clears it.
+  Switching viewer, target or hidden-link key must clear the old page and
+  pending component results before the replacement response arrives. Check
+  cold failure and recovery at desktop and 390px widths.
 
 - After merging notification families, verify recording reminders and subspace
   moderation retain separate categories and all preference switches. Recording
