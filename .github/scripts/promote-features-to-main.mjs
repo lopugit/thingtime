@@ -3879,6 +3879,103 @@ async function selfTest() {
     { close: true, reason: "empty", generated: [] },
   );
 
+  // Drive the side-effecting pass itself, not just the decision. This pass now
+  // closes strictly more PRs than the bare `out !== ""` test did, and closing
+  // is the irreversible half: it posts a public comment and drops the PR. The
+  // decision being right does not prove the pass wires it to the right PR
+  // number, guards `--dry-run`, or describes the head honestly.
+  const runClosePass = (prs, { dryRun = false, closeOk = true } = {}) => {
+    const calls = [];
+    const previous = { dryRun: CFG.dryRun, repo: CFG.repo, source: CFG.source, target: CFG.target };
+    Object.assign(CFG, { dryRun, repo: "lopugit/thingtime", source: "develop", target: "main" });
+    const results = { closed: [], warnings: [] };
+    try {
+      closeRedundantPass(prs, results, (args) => {
+        calls.push(args);
+        if (args[1] === "diff") {
+          const pr = prs.find((candidate) => String(candidate.number) === args[2]);
+          return pr.diff ?? { ok: false, status: 1, out: "", err: "gh: not found" };
+        }
+        return closeOk
+          ? { ok: true, status: 0, out: "", err: "" }
+          : { ok: false, status: 1, out: "", err: "gh: pull request already closed" };
+      });
+    } finally {
+      Object.assign(CFG, previous);
+    }
+    return { calls, results };
+  };
+  const generatedOnlyPr = {
+    number: 695, state: "OPEN", headRefName: "promote/x--to-main", baseRefName: "main",
+    diff: okDiff("graphify-out/snapshots/v1/aa/graph.json\ngraphify-out/snapshots/v1/aa/snap.json"),
+  };
+  const contentPr = {
+    number: 696, state: "OPEN", headRefName: "promote/y--to-main", baseRefName: "main",
+    diff: okDiff("graphify-out/snapshots/v1/aa/graph.json\nremix/app/routes/thing.tsx"),
+  };
+  const alreadyClosedPr = {
+    number: 697, state: "CLOSED", headRefName: "promote/z--to-main", baseRefName: "main",
+    diff: okDiff(""),
+  };
+  const live = runClosePass([generatedOnlyPr, contentPr, alreadyClosedPr]);
+  // Only the generated-only PR is closed, and only it is even diffed beyond
+  // the content check: a CLOSED promotion must not be touched at all.
+  assert.deepEqual(
+    live.calls.filter((args) => args[1] === "close").map((args) => args[2]),
+    ["695"],
+  );
+  assert.equal(live.calls.some((args) => args[2] === "697"), false);
+  assert.equal(generatedOnlyPr.state, "CLOSED");
+  assert.equal(contentPr.state, "OPEN");
+  assert.equal(live.results.warnings.length, 0);
+  assert.equal(live.results.closed.length, 1);
+  assert.match(live.results.closed[0], /closed #695 .* no promoted source change vs `main`/);
+  // The close comment must not claim an empty diff for a head that still has
+  // one, and must say the remaining paths are dropped on purpose.
+  const closeComment = live.calls.find((args) => args[1] === "close").at(-1);
+  assert.equal(closeComment.includes("diff is empty"), false);
+  assert.match(closeComment, /every promoted source file here has already reached `main`/);
+  assert.match(closeComment, /intentionally not promoted/);
+  assert.equal(live.calls.find((args) => args[1] === "close").includes("--repo"), true);
+
+  // An empty-diff promotion keeps the original, accurate wording.
+  const emptyPr = {
+    number: 698, state: "OPEN", headRefName: "promote/w--to-main", baseRefName: "main",
+    diff: okDiff(""),
+  };
+  const emptyRun = runClosePass([emptyPr]);
+  assert.match(
+    emptyRun.calls.find((args) => args[1] === "close").at(-1),
+    /so this PR's diff is empty/,
+  );
+  assert.equal(emptyPr.state, "CLOSED");
+
+  // Dry run reports the same decision without touching the PR.
+  const dryPr = { ...generatedOnlyPr, state: "OPEN" };
+  const dry = runClosePass([dryPr], { dryRun: true });
+  assert.equal(dry.calls.some((args) => args[1] === "close"), false);
+  assert.equal(dryPr.state, "OPEN");
+  assert.match(dry.results.closed[0], /^\(dry-run\) would close #695 /);
+
+  // A failed close warns and leaves the PR open rather than recording a close
+  // that never happened.
+  const failingPr = { ...generatedOnlyPr, state: "OPEN" };
+  const failed = runClosePass([failingPr], { closeOk: false });
+  assert.equal(failingPr.state, "OPEN");
+  assert.deepEqual(failed.results.closed, []);
+  assert.match(failed.results.warnings[0], /failed to close redundant #695/);
+
+  // An unreadable diff never closes anything.
+  const unreadablePr = {
+    number: 699, state: "OPEN", headRefName: "promote/v--to-main", baseRefName: "main",
+    diff: { ok: false, status: 1, out: "", err: "gh: rate limited" },
+  };
+  const unreadable = runClosePass([unreadablePr]);
+  assert.equal(unreadable.calls.some((args) => args[1] === "close"), false);
+  assert.equal(unreadablePr.state, "OPEN");
+  assert.deepEqual(unreadable.results.closed, []);
+  assert.deepEqual(unreadable.results.warnings, []);
+
   pathspecAuthorityIntegrationTest(assert);
   orphanedMergeHydrationIntegrationTest(assert);
 
