@@ -1829,6 +1829,54 @@ does not accept production or develop database URIs.
 
 ### Personal recording runtime (local adapter)
 
+Saved iPhone audio Things can be explicitly processed in `/lopu/recordings`:
+paste the recording's `/thing/<id>` link or ID, then choose **Queue recording**
+for transcription/notes or **Send to Lopu** for a confirmed transcript handoff.
+This requires `api.lopu-recordings` 1.5.0, an enabled recording processor, and a
+ready standalone owner-private audio attachment with purpose `recording`.
+The existing `postId` request field accepts either that recording Thing ID or
+a private Watch post ID. Automatic discovery still covers only new Watch posts;
+saved phone recordings are never processed merely because they exist. Upload
+approval, storage quotas, selected-provider/local-device setup and separate Lopu
+tool confirmations remain required. Transcript comments are linked children;
+processing never converts the audio into a post or rewrites its crystal/binding.
+
+In `/things`, an owned private audio recording also offers **Send to Lopu** in
+both the right-click and three-dot menus. The action checks this domain's
+capabilities and your enabled processor, then asks for confirmation. It sends
+only the selected recording, not other selected Things; it never enables a
+processor automatically. Recording activity shows the eventual transcript and
+conversation. The server remains authoritative for attachment readiness and
+privacy, even when a cached tile still shows the menu.
+
+The opt-in HTTP delivery smoke (`pnpm --dir remix run test:recording-delivery`)
+skips by default. To run it, use an isolated loopback Thingtime server backed by
+a disposable Mongo replica set and a configured private test S3 bucket. Register
+an unused `recqa`-prefixed account through the normal signup API, and have an
+administrator approve its **public upload** scope: Watch attachments use the
+post upload purpose even though their resulting Things are private. Do not
+bypass upload approval or seed the database directly.
+
+Inject `THINGTIME_RECORDING_QA_USERNAME` and `THINGTIME_RECORDING_QA_PASSWORD`
+through your local secret manager/environment (never chat, command arguments,
+or tracked files), then run:
+
+```sh
+pnpm --dir remix run test:recording-delivery http://127.0.0.1:18000 --confirm-disposable-qa
+```
+
+Substitute your configured local port. The script rejects remote origins and
+non-QA usernames, and requires disabled, unused recording settings. It uploads
+one second of synthetic silence, pairs disposable test devices, exercises real
+HTTP claims/completions with deterministic synthetic inference, and checks
+duplicate-safe private transcript/note/todo writes and opt-out enforcement.
+Cleanup disables processing, removes this run's source/output Things, and signs
+out its own API session. The disposable account, device records and job metadata
+remain for diagnosis; upload cleanup may be deferred by the storage lifecycle.
+Any cleanup failure makes the test fail. No real recordings, browser sessions,
+Keychain entries or AI providers are used. A pass proves broker delivery, not
+real speech recognition, Claude output quality, or physical Watch acceptance.
+
 For an opt-in macOS smoke test, run
 `node --import tsx scripts/personal-recording-runtime-smoke.mts` from `remix/`.
 It skips unless `TT_PERSONAL_RUNTIME_SMOKE=1` is set with absolute local paths

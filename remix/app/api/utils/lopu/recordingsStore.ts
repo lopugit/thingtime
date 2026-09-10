@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { packSecure, unpackSecure } from '../auth/users';
 import { getHomeThingsCollection } from '../mongodb/collections';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
+import { isPrivateRecordingPost, isPrivateSavedRecording } from './recordingSources';
 import {
 	parseRecordingSettingsPatch,
 	recordingSettingsOf,
@@ -11,6 +12,8 @@ import {
 	RECORDING_LEASE_MS,
 	type RecordingInsight
 } from './recordingsCore';
+
+export { isPrivateRecordingPost } from './recordingSources';
 
 export const recordingId = (scope: string, ...parts: string[]) =>
 	`lopu-recording-${scope}-${createHash('sha256').update(JSON.stringify(parts)).digest('hex')}`;
@@ -88,24 +91,13 @@ export const recordingJobState = (job: any): RecordingJobState => {
 
 export const recordingStateBlob = (state: RecordingJobState) => packSecure({ meta: { recording: state } } as any);
 
-export const isPrivateRecordingPost = (post: any, ownerId: string) =>
-	post &&
-	post.ownerId === ownerId &&
-	!post.appId &&
-	!post.deletedAt &&
-	Array.isArray(post.thingtime) &&
-	post.thingtime.includes('post') &&
-	!post.thingtime.includes('comment') &&
-	Array.isArray(post.acl) &&
-	post.acl.length === 1 &&
-	post.acl[0] === ACL_OWNER &&
-	Array.isArray(post.tags) &&
-	post.tags.includes('apple-watch') &&
-	/^watch-upload-/.test(post.shareId);
-
 export const recordingSource = async (job: any, session?: any) => {
 	const things = await getHomeThingsCollection();
 	const readPost = () => things.findOne({ shareId: job.targetId, ownerId: job.ownerId }, { session });
+	if (job.targetId === job.crystal.attachmentId) {
+		const source = await readPost();
+		return isPrivateSavedRecording(source, job.ownerId) ? { post: source, attachment: source } : null;
+	}
 	const readAttachment = () => things.findOne({
 			shareId: job.crystal.attachmentId,
 			ownerId: job.ownerId,
@@ -131,8 +123,9 @@ export const queueRecordingPost = async (ownerId: string, postId: string) => {
 	const things = await getHomeThingsCollection();
 	const settings = await getRecordingSettings(ownerId);
 	const post = await things.findOne({ ownerId, shareId: postId });
-	if (!isPrivateRecordingPost(post, ownerId)) throw new TypeError('Choose one of your private Apple Watch recording posts.');
-	const attachments = await things
+	const standalone = isPrivateSavedRecording(post, ownerId);
+	if (!standalone && !isPrivateRecordingPost(post, ownerId)) throw new TypeError('Choose your own private saved recording or Apple Watch recording post.');
+	const attachments = standalone ? [post] : await things
 		.find({
 			ownerId,
 			thingtime: 'attachment',
@@ -156,7 +149,7 @@ export const queueRecordingPost = async (ownerId: string, postId: string) => {
 						{
 							status: 'queued',
 							attachmentId: attachment.shareId,
-							filename: String(attachment.crystal?.name || 'Watch recording').slice(0, 200),
+							filename: String(attachment.crystal?.name || 'Recording').slice(0, 200),
 							attempts: 0
 						},
 						postId

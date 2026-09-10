@@ -15,7 +15,6 @@ import {
 import {
 	discoverRecordingUploads,
 	getRecordingSettings,
-	isPrivateRecordingPost,
 	recordingControlDoc,
 	recordingId,
 	recordingJobState,
@@ -42,8 +41,8 @@ const assertActive = async (job: any) => {
 const checkpointHook = (job: any, state: RecordingJobState, reminder?: { id: string; title: string }) => async (_doc: unknown, session: any) => {
 	await assertPersonalRecordingJob(job, session);
 	const things = await getHomeThingsCollection();
-	const post = await things.findOne({ shareId: job.targetId, ownerId: job.ownerId }, { session });
-	if (!isPrivateRecordingPost(post, job.ownerId)) throw new RecordingPaused('The source recording is no longer private.');
+	const source = await recordingSource(job, session);
+	if (!source) throw new RecordingPaused('The source recording is no longer private.');
 	const active = await things.updateOne(
 		{
 			shareId: recordingId('settings', job.ownerId),
@@ -58,7 +57,8 @@ const checkpointHook = (job: any, state: RecordingJobState, reminder?: { id: str
 	if (!active.matchedCount) throw new RecordingPaused('Recording automation is switched off.');
 	// Touch the source inside the same transaction to serialize against deletion
 	// or ACL changes, rather than authorizing a private write from an old snapshot.
-	await things.updateOne({ _id: post._id }, { $inc: { recordingWriteFence: 1 } }, { session });
+	for (const doc of new Map([source.post, source.attachment].map((item) => [String(item._id), item])).values())
+		await things.updateOne({ _id: doc._id }, { $inc: { recordingWriteFence: 1 } }, { session });
 	const updated = await things.updateOne(
 		{ shareId: job.shareId, lease: job.lease },
 		{
@@ -190,7 +190,7 @@ export const processRecordingJob = async (
 						shareId: item.id,
 						thingtime: ['data'],
 						acl: ['tt:user'],
-						tags: ['apple-watch', 'lopu', item.kind],
+						tags: [job.targetId === job.crystal.attachmentId ? 'recording' : 'apple-watch', 'lopu', item.kind],
 						crystal: {
 							systemType: 'lopu-recording-insight',
 							type: item.kind,
