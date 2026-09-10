@@ -57,7 +57,7 @@ export const action = async ({ request }: { request: Request }) => {
 				await validateRecordingConnections(user.id, patch);
 				const next = { ...await getRecordingSettings(user.id), ...patch };
 				if (next.enabled && !(await recordingConnectionStatus(user.id, next)).configured)
-					return reply({ ok: false, error: 'Select available API connections for transcription and notes/todos first.' }, 503);
+					return reply({ ok: false, error: 'Select an available paired recording device or compatible API connections first.' }, 503);
 				await setRecordingSettings(user.id, body.settings);
 			} else if (body?.op === 'retry') {
 				if (!(await getRecordingSettings(user.id)).enabled) return reply({ ok: false, error: 'Enable recording automation first.' }, 409);
@@ -65,8 +65,8 @@ export const action = async ({ request }: { request: Request }) => {
 					return reply({ ok: false, error: 'No retryable recording was found.' }, 404);
 			} else if (body?.op === 'queue') {
 				if (!(await getRecordingSettings(user.id)).enabled) return reply({ ok: false, error: 'Enable recording automation first.' }, 409);
-				if (typeof body.postId !== 'string' || body.postId.length > 160) return reply({ ok: false, error: 'Choose a recording post.' }, 400);
-				if (!(await queueRecordingPost(user.id, body.postId))) return reply({ ok: false, error: 'This post has no ready audio recording.' }, 400);
+				if (typeof body.postId !== 'string' || body.postId.length > 160) return reply({ ok: false, error: 'Choose a recording Thing.' }, 400);
+				if (!(await queueRecordingPost(user.id, body.postId))) return reply({ ok: false, error: 'This Thing has no ready audio recording.' }, 400);
 			} else if (body?.op === 'send-to-lopu') {
 				if (typeof body.postId !== 'string' || body.postId.length > 160) return reply({ ok: false, error: 'Choose a recording.' }, 400);
 				const result = await requestRecordingHandoff(user.id, body.postId);
@@ -78,7 +78,7 @@ export const action = async ({ request }: { request: Request }) => {
 			} else return reply({ ok: false, error: 'Unknown recording operation.' }, 400);
 			return reply({ ok: true, ownerId: user.id, ...(await listRecordingAutomation(user.id)), provider: await recordingConnectionStatus(user.id) });
 		} catch (error) {
-			if (error instanceof TypeError) return reply({ ok: false, error: 'Choose your own compatible provider connections or a private Apple Watch recording post.' }, 400);
+			if (error instanceof TypeError) return reply({ ok: false, error: 'Choose your own compatible provider connections, private saved recording or Apple Watch recording post.' }, 400);
 			return reply({ ok: false, error: 'Recording service is temporarily unavailable. Please retry.' }, 503);
 		}
 	});

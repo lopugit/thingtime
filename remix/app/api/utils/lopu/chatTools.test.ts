@@ -21,6 +21,8 @@ import {
   validateLopuToolInput,
   type LopuToolEvent
 } from './chatTools.ts';
+// @ts-ignore Node executes TypeScript through the repo's tsx test loader.
+import { historicalToolStatus } from '../../../components/Lopu/lopuTurnCore.ts';
 
 const viewer = { id: 'user-1', username: 'lopu' };
 
@@ -171,6 +173,24 @@ test('delete_thing ignores the model-asserted confirmed flag: a call the user ha
     assert.equal(bare[0].token, '');
     assert.equal(bare[0].summary, 'Delete thing thing-2');
   }
+});
+
+// A persisted history row keeps only ok + this bounded summary, so the stored
+// refusal text is the sole signal that an old step asked for approval instead
+// of failing. Pin the two literals together: rewording the refusal without
+// updating the reader silently turns those rows back into red errors.
+test('a persisted confirmation refusal still reads as an approval request, not a failure', () => {
+  const action = confirmationFor('delete_thing', { id: 'thing-1', name: 'Landing' });
+  assert.ok(action);
+  const error = confirmationRefusal(action);
+  // chat.ts persists summarise(result.error) with a 240-character bound.
+  const summarise = (text: string, max = 240) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
+  const stored = summarise(error);
+  assert.ok(stored.length < error.length, 'the refusal should exercise the stored truncation');
+  for (const summary of [error, stored]) assert.equal(historicalToolStatus({ ok: false, summary }), 'confirm');
+  assert.equal(historicalToolStatus({ ok: false, summary: summarise(confirmationRefusal(actionConfirmation(
+    { action: 'run', inputs: { id: 'thing-1' } }, { id: 'program-1', name: 'Purge', actionKey: 'purge' }
+  ))) }), 'confirm');
 });
 
 test('update_thing needs a confirmation only for a whole-crystal replacement, and the key binds the exact crystal', async () => {
