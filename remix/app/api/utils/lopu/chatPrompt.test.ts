@@ -6,6 +6,17 @@ import { buildLopuStablePrompt, buildLopuSystemPrompt, buildLopuVolatilePrompt }
 
 const base = { viewer: { username: 'lopu' }, context: { route: '/builder' }, activePage: null, toolProtocol: 'native' as const, now: new Date('2026-09-04T00:00:00Z') };
 
+test('both tool protocols instruct Lopu to open a real comment approval card before posting', () => {
+  for (const protocol of ['native', 'text'] as const) {
+    const stable = buildLopuStablePrompt(protocol);
+    assert.match(stable, /call comment_on_thing once to open the real Confirm card/);
+    assert.match(stable, /first call does not post anything/);
+    assert.match(stable, /Do not substitute a plain-text yes\/no question/);
+    assert.match(stable, /exact target and text as approved/);
+    assert.match(stable, /never edit the target crystal to store a discussion/);
+  }
+});
+
 test('the stable prompt states the untrusted-content rule and the Confirm-card posture (no model-asserted confirmations)', () => {
   for (const protocol of ['native', 'text', 'none'] as const) {
     const stable = buildLopuStablePrompt(protocol);

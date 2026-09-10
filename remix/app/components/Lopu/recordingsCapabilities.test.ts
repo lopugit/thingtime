@@ -20,7 +20,7 @@ test('both registered recording endpoints are explicitly versioned in both manif
 	const manifest = thingtimeCapabilityManifest(origin);
 	assert.equal(supportsRecordingAutomation(manifest, origin), true);
 	for (const id of ['lopu-recordings', 'lopu-recordings-run']) {
-		const version = id === 'lopu-recordings' ? '1.3.0' : '1.2.0';
+		const version = '1.3.0';
 		const doc = apiEndpointDocs.find((entry) => entry.id === id);
 		assert.equal(doc?.contractVersion, version);
 		assert.equal(doc?.featureVersion, version);
