@@ -6291,3 +6291,27 @@ approval; `access.test.ts` — the reservation matrix) and
   with someone else's schema must never delegate the viewer's account authority.
 - Verify the detail page at desktop and mobile widths, including the visible
   control/result and top-to-bottom scrolling. List/grid previews remain inert.
+
+
+### Recording recovery and native push regression checks
+
+- Leave an older completed CAF in the iPhone Lopu Recordings folder. Open Lopu
+  while signed in: one owner-private audio Thing appears. Reopen/relaunch and
+  switch accounts: the same source does not duplicate or move accounts. A file
+  already uploaded by build 29 is reused. Local originals remain after success
+  and network failure; an active recording is not imported before it finishes.
+- Turn off Voice settings → Import older recordings: unclaimed older files stay
+  local. Turn it on and reconnect: import resumes. Normal new recordings still save.
+- In Settings → Notifications, send a normal test and verify the bell count
+  updates immediately after completion. Open the bell, click it again to close,
+  reopen with cached rows, then use Escape/outside click. Check desktop/mobile,
+  long notification text and scrolling to the popup's final row and page footer.
+- Check iPhone push status as signed out, signed in, and after switching accounts;
+  status must never reveal tokens or another account's registrations. Reconnect
+  after granting iOS permission in Settings; a stale registration must recover.
+- Test missing APNs configuration, no device, rejected/expired device and Apple
+  acceptance. Verify normal and time-sensitive banners on a physical iPhone,
+  foreground/background/locked; quiet tests may appear only in Notification Center.
+  A successful server response alone is not a native banner acceptance test.
+- Trigger a followed/friend post and a single-recipient notification with push on,
+  then with push off. History remains; muted/history-only events produce no push.
