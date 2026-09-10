@@ -139,6 +139,7 @@ const ConfirmBlock = ({
 	if (!confirm) return null;
 	const usable = isLopuConfirmUsable(confirm);
 	const subjectId = confirm.subject?.id;
+	const commentText = activity.name === 'comment_on_thing' && activity.input && typeof activity.input === 'object' && 'text' in activity.input && typeof activity.input.text === 'string' ? activity.input.text.slice(0, 3900) : null;
 	return (
 		<Flex direction="column" gap={2} px={2.5} pb={2.5} pt={0.5} minW={0}>
 			<Text fontSize={LOPU_UI.fontSmall} color={LOPU_UI.ink} lineHeight="1.5" overflowWrap="anywhere">
@@ -149,6 +150,7 @@ const ConfirmBlock = ({
 					</Text>
 				) : null}
 			</Text>
+			{commentText ? <Box as="blockquote" m={0} p={3} border={LOPU_UI.border} borderRadius={LOPU_UI.radiusXs} maxH="240px" overflowY="auto" whiteSpace="pre-wrap" overflowWrap="anywhere" aria-label="Comment to post">{commentText}</Box> : null}
 			{confirm.resolved === 'confirmed' ? (
 				<Text fontSize={LOPU_UI.fontSmall} color={LOPU_UI.muted}>
 					Confirmed — Lopu is on it.

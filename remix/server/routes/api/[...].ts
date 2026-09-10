@@ -180,6 +180,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
 	'v1/lopu/vault': () => import('../../../app/routes/api/v1/lopu/vault/_vault'),
 	'v1/lopu/voice/reply': () => import('../../../app/routes/api/v1/lopu/voice/reply/_reply'),
 	'v1/lopu/voice/session': () => import('../../../app/routes/api/v1/lopu/voice/session/_session'),
+	'v1/lopu/voice/capture': () => import('../../../app/routes/api/v1/lopu/voice/capture/_capture'),
   'v1/lopu/account': () => import('../../../app/routes/api/v1/lopu/account/_account'),
   'v1/lopu/account/history': () => import('../../../app/routes/api/v1/lopu/account/history/_history'),
   'v1/lopu/account/topup-request': () => import('../../../app/routes/api/v1/lopu/account/topup-request/_topup-request'),

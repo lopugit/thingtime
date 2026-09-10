@@ -1,5 +1,82 @@
 # TESTING.md — per-area manual test checklists
 
+## Unified Lopu conversations, scheduled Things and discussions
+
+- [ ] Keep a tab open across a deployment that adds a required capability.
+  If a task reports an incompatible contract, Refresh task must negotiate a
+  current manifest without reloading the tab or changing the account. Repeat
+  after offline, HTTP failure and timeout. Wrong-origin, missing or breaking
+  contracts must still prevent the dependent operation.
+
+- [ ] After Lopu creates a reminder or reports a failed action, ask what
+  happened in a later turn and after reload. Its server-loaded history retains
+  bounded public success/failure receipts, never raw results or approval tokens.
+  Verify current state before changing or repeating an earlier action; history
+  is not fresh authorization. Test split assistant replies and tiny context caps.
+
+- [ ] Native bridge 1.3: start direct audio in a populated chat and confirm
+  context recall; switch back to text and reload both speakers' saved turns.
+  Disconnect during saving, quit/reopen, retry and verify no duplicate turns.
+  Switch account/domain while a save is in flight: no transcript crosses the
+  boundary, no old save navigates a new conversation, and credentials are not
+  stored in the on-device outbox. Test queue-full/disk-failure recovery, native
+  transcription-only chat reconciliation, old-build upgrade messaging, and
+  stopping during microphone permission or WebSocket startup.
+
+- [ ] Direct web voice: start in an existing text chat, speak, switch back and
+  reload; both speakers remain in that chat. A new voice chat gets one ID.
+  Go offline during saving, reload and retry; no duplicated turns or new AI
+  requests. Stop while granting microphone permission; no late stream starts.
+  Switch accounts during a fetch/save and verify private history never crosses
+  accounts. Test the pending-save/retry panel at desktop and 390px widths.
+  On a deployed build, confirm the CSP permits only the supported voice host
+  and the microphone session connects without a CSP violation.
+
+- [ ] Desktop and 390px: switch Chat → Voice → Chat repeatedly; keep the same
+  chat ID, history, draft and attachment selection. Reload a saved transcript.
+  Check device transcription and direct-provider voice separately.
+  Route exports must share the exact component identity, not separate wrapper
+  functions: wrappers remount the composer even when they render the same page.
+  Search for a long unbroken Thing ID: labels wrap within the picker, its Done
+  button remains reachable, and the composer Send button stays fully in view.
+- [ ] Attach a device file and select an owned Thing. Send once, refresh and
+  verify the file still opens privately. Retry failures and switch accounts
+  during upload; never bind, display or delete another account's attachments.
+- [ ] Open a note, todo, recording and post from `/things`. Open their preview
+  dialogs and detail pages, scroll top to bottom, and post/load older comments.
+  Verify each comment is its own Thing with targetId; original crystal stays
+  unchanged. Test hidden links, read-only audiences, deleted parents and logout.
+- [ ] Ask Lopu to comment; the full proposed comment and target are shown before
+  Confirm. Cancel must write nothing; changing text or target invalidates approval.
+  Use an ordinary request without explaining tool internals: Lopu must call the
+  proposal tool and open the actual card, not merely ask for a typed yes/no.
+- [ ] Create interval and time-zone cron tasks in all three delivery modes.
+  Inspect their searchable Things and separate run notes; test existing/new
+  chats, notification mute, pause, completed todos, quota failure and lost leases.
+  A retry must not duplicate a message; ambiguous AI runs stop for review.
+
+- Signed-out boot recovery: abort an initial static JavaScript dependency at
+  desktop and 390px widths. Recover once with the full share query/fragment
+  preserved; persistent failure shows a reachable manual retry, not a blank
+  root or reload loop. Storage-denied sessions offer manual retry only.
+  Existing rendered content and unrelated resource errors remain untouched.
+  Run `test:preview-build`; opt into its real Chrome tests with
+  `TT_SHARED_PLAYWRIGHT_PATH` and `TT_SHARED_CHROME_PATH`.
+  Record the actual browser version, not just the application bundle name.
+  For production-client sharing coverage, build with `build:client` and set
+  `TT_SHARED_BUILT_CLIENT=1` in the local-only shared composition fixture;
+  API requests remain real while the browser consumes the built client bytes.
+  Combining media sharing with recording Things must retain the newer contract
+  on both manifests and keep standalone recordings owner-private by default.
+
+- Shared page resolve recovery: return a 503, 429, network failure or invalid
+  JSON from the page resolver. Show an explicit Retry rather than "not here";
+  Retry must load the complete shared composition without signing in. A failed
+  same-viewer refresh keeps its last loaded page; a 401/403/404 clears it.
+  Switching viewer, target or hidden-link key must clear the old page and
+  pending component results before the replacement response arrives. Check
+  cold failure and recovery at desktop and 390px widths.
+
 - After merging notification families, verify recording reminders and subspace
   moderation retain separate categories and all preference switches. Recording
   reminders and mod-queue email stay opt-in. Confirm both capability manifests
@@ -989,6 +1066,9 @@ email whose link points at the attacker.
 - [ ] Exercise signed-out, empty, unread/read, denied-alert, long actor name, and
       two-line preview states on the smallest supported watch. Scroll top to
       bottom; no row, badge, toolbar item, or permission message clips or overlaps.
+- [ ] Regression class (2026-09-10): send a notification test and a reminder with
+      a long ID; the APNs collapse header must fit 64 bytes, preserve stable
+      coalescing, and produce an accepted provider result on registered devices.
 - [ ] Regression class (2026-09): APNs device tokens are variable-length binary
       values. Register a token longer than 32 bytes and confirm it is accepted,
       deduplicated by hash, retained only in protected secure storage, and removed
@@ -5565,6 +5645,36 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       private media refs. Negotiate `api.attachment-content >= 1.2.0`; forward
       `sharedRoot` plus the key only to the exact first-party content endpoint.
       Explicit audio downloads use the same context without persisting its URL.
+- [ ] Shared component media supplied through argument defaults or savedArgs
+      renders signed out with the root context at desktop/mobile widths.
+      Saved values override defaults; replacing one removes the old grant.
+      Unused args, unknown runtime tokens, external URLs and independent keys
+      grant nothing. Non-owner editors cannot inject unreadable uploads through
+      either argument source. Expansion limits never truncate one attachment
+      identifier into another; negotiate attachment-content 1.5.0.
+- [ ] Embed another author's public component in a hidden-key page: its
+      authored private action/data/media children work signed out, just as
+      they do when the component is opened directly. Revoking the outer key
+      or the foreign component audience denies access. A third-party shared
+      writer may add that public composition, but cannot use page arguments
+      to select guessed private actions/media belonging to either author.
+      Check PATCH /things and POST /things/update, independent copying after
+      source revocation, and desktop/mobile Draw controls without Edit Original.
+      Negotiate actions-run 1.3.1, things-fork 1.2.1, attachment-content 1.6.2.
+- [ ] A nested page block overrides a same-author component's saved media args.
+      Two blocks using the same component may render different media. Resolve
+      aliases with the same composition lookup used for child reads; removing
+      an override revokes its old media. Unused args and foreign templates do
+      not grant private root-author media. Shared writers may preserve existing
+      args but cannot insert inaccessible media through an override. Negotiate
+      attachment-content 1.6.0; verify both desktop and mobile rendering.
+- [ ] Conditional media properties: signed-out Draw/toggle controls may switch
+      between stored image/poster/link/CSS alternatives under the same root
+      audience. Include wrappers around the props/style record, nested maps,
+      and stored argument outputs. Condition operands, map keys, action inputs
+      and title metadata grant nothing. Revocation removes inactive grants too;
+      both PATCH /things and POST /things/update reject an unreadable upload
+      inserted into an inactive property branch. Negotiate content 1.6.1.
 - [ ] Canvas: hovering a block draws its dashed boundary + label chip; nested
       sub-blocks highlight innermost-wins; clicking selects (solid outline)
       and opens the inspector in the right drawer.
@@ -5942,6 +6052,11 @@ a label. Browse cards and `/things` tiles are LINKS, never armed controls.
       it, which costs a reviewer real time.
 ## Lopu AI assistant (`/lopu`, floating launcher, `remix/app/components/Lopu/`, `/api/v1/lopu/chats*`, `/api/v1/ai/models`)
 
+- [ ] `test:api-capabilities` must run both the API-docs and origin-scoped
+      manifest suites; when merging independently versioned features, verify
+      every asserted version against the combined registry rather than leaving
+      one manifest test outside CI with stale expectations.
+
 Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Automated coverage:
 `npm run test:lopu`, `test:lopu-chat-streaming` (fake SSE tool loop),
 `test:partial-json`, `test:ai-models`, `test:lopu-ui`, `test:messenger`,
@@ -6254,6 +6369,33 @@ approval; `access.test.ts` — the reservation matrix) and
 
 ## Shared Data Thing template controls
 
+- Share one component used twice with different saved action arguments. Signed
+  out, both controls must run read-only and show their distinct results at
+  desktop/mobile widths. Wrong or retired links must fail. Copy the page and
+  verify both controls run the copied actions while labels, inputs and editable
+  templates stay unchanged. Repeat on a fork of a fork. A shared writer must
+  not introduce an unreadable private action through argument-only edits or a
+  new instance of an existing component. Unused bindings and runtime query,
+  result, viewer or template-shaped argument data must never grant access.
+
+- Shared nested media: open rich/raw HTML blocks with image, poster, link and
+  inline CSS media signed out at desktop/mobile widths. Same-author uploads
+  attached directly to contained components must inherit the root audience.
+  Revoke the key/group and verify denial. Foreign or unrelated uploads and
+  message/profile/emoji purposes must not gain access. Script/template/comment
+  text, unknown-tag attributes and over-budget markup must not mint grants.
+  A non-owner writer must not insert unreadable private media through HTML.
+
+- Shared CSS media: at desktop and mobile widths, verify page/block backgrounds,
+  HTML style URLs, Chakra responsive backgrounds and hover styles render through
+  the keyed root. Inspect linked-text downloads for the same context. External
+  URLs, quoted CSS text and existing independent keys must remain untouched.
+  Revoke the root/group and verify access stops; a shared writer must not be able
+  to insert unreadable private media through CSS or the page background.
+  Include escaped CSS function names with hex-terminating whitespace and both
+  quoted/unquoted URL arguments; malformed spacing and nested external text
+  must never receive the root key.
+
 - Share an action that searches public Data Things using its included private
   schema. Verify it resolves the schema and returns public results when logged
   out; an own-scope search must not borrow either the author's or a logged-in
@@ -6267,3 +6409,38 @@ approval; `access.test.ts` — the reservation matrix) and
   with someone else's schema must never delegate the viewer's account authority.
 - Verify the detail page at desktop and mobile widths, including the visible
   control/result and top-to-bottom scrolling. List/grid previews remain inert.
+
+
+### Recording recovery and native push regression checks
+
+- Leave an older completed CAF in the iPhone Lopu Recordings folder. Open Lopu
+  while signed in: one owner-private audio Thing appears. Reopen/relaunch and
+  switch accounts: the same source does not duplicate or move accounts. A file
+  already uploaded by build 29 is reused. Local originals remain after success
+  and network failure; an active recording is not imported before it finishes.
+- Turn off Voice settings → Import older recordings: unclaimed older files stay
+  local. Turn it on and reconnect: import resumes. Normal new recordings still save.
+- In Settings → Notifications, send a normal test and verify the bell count
+  updates immediately after completion. Open the bell, click it again to close,
+  reopen with cached rows, then use Escape/outside click. Check desktop/mobile,
+  long notification text and scrolling to the popup's final row and page footer.
+- Check iPhone push status as signed out, signed in, and after switching accounts;
+  status must never reveal tokens or another account's registrations. Reconnect
+  after granting iOS permission in Settings; a stale registration must recover.
+- Test missing APNs configuration, no device, rejected/expired device and Apple
+  acceptance. Verify normal and time-sensitive banners on a physical iPhone,
+  foreground/background/locked; quiet tests may appear only in Notification Center.
+  A successful server response alone is not a native banner acceptance test.
+- Trigger a followed/friend post and a single-recipient notification with push on,
+  then with push off. History remains; muted/history-only events produce no push.
+## Lopu linked-Things live HTTP smoke
+
+- Open Lopu's Your Things picker at desktop and 390px phone widths. Its overlay and fixed modal container must sit above the navigation and floating windows; the title, Close and Done controls remain visible and clickable while scrolling the results from top to bottom. Check both Voice and Chat entry points.
+- Upload a synthetic file and send it in Lopu. Its attachment card must remain visible while streaming and after the reply, without reloading; reload to verify the server-backed attachment persists. The optimistic metadata must never add unselected files or be sent as authoritative server metadata.
+
+- Voice session and transcript request IDs must come from cryptographic UUIDs,
+  never timestamps plus `Math.random()`. Run the voice identity regression tests
+  alongside the Lopu UI suite; secure-random failures must not produce weak IDs.
+
+- When adding a scheduled-task/run schema, run `npm --prefix remix run test:schemas` and review its pinned builtin projection; every registered crystal schema must survive the schema-Thing write gate without lost fields.
+- Run `node remix/scripts/verify-lopu-linked-things.mjs` against the running worktree stack (or pass its loopback HTTP origin). It registers disposable local accounts and exercises real API comments, unchanged parent crystals, shared voice/Messenger history, retry deduplication, searchable scheduled-task Things, linked context, account isolation, protected writes, and pause/resume. It removes its created content and pauses schedules in `finally`; empty test accounts remain, with credentials never persisted. Production origins are rejected. This does not replace browser/device, provider inference, or scheduled-delivery acceptance.
