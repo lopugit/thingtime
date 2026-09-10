@@ -45,7 +45,8 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.things']?.version, '1.9.1');
   assert.equal(manifest.features['api.lopu-reminders']?.version, '1.1.0');
   assert.equal(manifest.features['api.lopu-voice-reply']?.version, '1.3.0');
-  assert.equal(manifest.features['api.lopu-recordings-run']?.version, '1.3.0');
+  assert.equal(manifest.features['api.lopu-recordings-run']?.version, '1.4.0');
+  assert.equal(manifest.features['api.lopu-recordings-personal']?.version, '1.0.1');
   assert.equal(manifest.features['api.notifications-test']?.version, '1.2.0');
   assert.equal(manifest.features['api.attachment-content']?.version, '1.6.2');
   // round 2 S6 — discovery: the home feed takes scope=all|subspaces ("My
@@ -126,7 +127,8 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.notifications-list']?.version, '1.7.0');
   assert.equal(manifest.features['api.notifications-settings']?.version, '1.6.0');
   assert.equal(manifest.features['api.notifications-record']?.version, '1.0.0');
-		assert.equal(manifest.features['api.things-update']?.version, '1.2.6');
+  assert.equal(manifest.features['api.things-update']?.version, '1.2.6');
+  assert.equal(manifest.features['api.devices-pairing']?.version, '1.1.0');
   assert.ok(manifest.operations.some((operation) => operation.path === THINGTIME_CAPABILITY_MANIFEST_PATH));
   const operationPaths = new Set(manifest.operations.map((operation) => operation.path));
   for (const route of apiV1RouteKeys) assert.equal(operationPaths.has(`/api/${route}`), true, route);

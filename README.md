@@ -1829,9 +1829,22 @@ does not accept production or develop database URIs.
 
 ### Personal recording runtime (local adapter)
 
+For an opt-in macOS smoke test, run
+`node --import tsx scripts/personal-recording-runtime-smoke.mts` from `remix/`.
+It skips unless `TT_PERSONAL_RUNTIME_SMOKE=1` is set with absolute local paths
+in `TT_SMOKE_CLAUDE`, `TT_SMOKE_WHISPER`, `TT_SMOKE_FFMPEG`, and `TT_SMOKE_MODEL`.
+It generates synthetic speech, checks WAV/M4A transcription, and cleans up its
+temporary audio. Set `TT_PERSONAL_CLAUDE_SMOKE=1` separately to send only that
+synthetic transcript to your native Claude Code sign-in and verify notes/todos.
+This consumes your account allowance; no tokens or real recordings belong in
+these variables. It does not pair a device or enable account processing.
+
 `remix/scripts/personal-recording-runtime.mjs` provides local `transcribe` and
 `complete` operations for the forthcoming personally paired recording worker.
-It is **not yet connected to cloud recording jobs or the shared HTTP endpoint**.
+The paired-device broker is registered at `/api/v1/lopu/recordings/personal`;
+the interactive Mac launcher and recording-settings setup panel are available.
+Synthetic audio and real Keychain storage have been verified. Real paired-account
+audio delivery and end-to-end Watch acceptance are still pending.
 No server, public listener, background service or automatic recording processing
 is started by importing this module.
 
@@ -1852,6 +1865,95 @@ execution and output, and a temporary directory removed after success or failure
 Inherited API keys and endpoint overrides are excluded from its environment.
 Transcription can mishear names; inspect the transcript before relying on tasks.
 Run `npm --prefix remix run test:ai-models` for its regression coverage.
+
+The outbound transport in `remix/scripts/personal-recording-worker.ts` now
+provides one bounded `runOnce()` cycle around that runtime. It requires a
+personally paired Thingtime device credential and negotiates
+`api.lopu-recordings-personal` version `1.0.0` on the exact selected origin
+before sending the credential. HTTPS is required except for loopback testing;
+redirects are rejected. Audio stays local; only transcript text reaches Claude
+Code. Heartbeat loss stops local processing, and interrupted result submissions
+retry the identical lease/result rather than running inference again.
+
+The API-layer broker now implements device-bound claims, private audio reads,
+bounded heartbeats and completion receipts. It uses the shared recording content
+writer with transactional checks of current consent, device/session revocation
+and source privacy. Accepted transcripts and server-selected output IDs survive
+a worker crash; exact completion retries do not run inference or create content
+again. Jobs assigned to a personal device cannot fall back to cloud credentials.
+
+**Integration status:** the Mac CLI runs in the foreground, not as an installed
+background service. The settings UI and API accept `runtimeDeviceId` only for an owned paired
+device with an active `recordings.personal.v1` session. New jobs snapshot that
+selection; retry explicitly assigns the selected processor while preserving
+completed checkpoints. Offline personal jobs wait without a cloud fallback.
+Clients require `api.lopu-recordings` 1.4.0 and
+`api.lopu-recordings-personal` 1.0.0 on the selected origin. Older deployments
+fail closed. Do not copy an API key, CI credential or Claude OAuth
+token into its `credential` option: it accepts only an existing Thingtime paired
+device credential. Keep machine-local worker setup untracked; importing
+this module does not pair a device or enable recording processing.
+Do not set internal job or settings fields directly in a database to bypass
+that gate. Broker/authority mock tests in `test:lopu` are unit coverage, not real
+database race or Watch proof. Run
+`node --import tsx remix/scripts/personal-recording-api-smoke.mts <loopback-origin>`
+from a dependency-equipped checkout for the real HTTP signup, signed pairing,
+selection, empty-queue and opt-out smoke. It creates one synthetic local account
+and device, leaves processing disabled, prints no credentials, and invokes no
+audio or AI provider. It refuses non-loopback origins. Remaining acceptance:
+real audio/results, revocation races, deployed worker and physical Watch.
+
+Mac launcher (run from `remix/`):
+
+```sh
+npm run recordings:worker -- --help
+npm run recordings:worker -- configure --origin https://your-thingtime.example --claude /absolute/path/claude --whisper /absolute/path/whisper-cli --ffmpeg /absolute/path/ffmpeg --model /absolute/path/ggml-model.bin
+npm run recordings:worker -- pair --origin https://your-thingtime.example
+npm run recordings:worker -- status --origin https://your-thingtime.example
+npm run recordings:worker -- run --origin https://your-thingtime.example --once
+```
+
+If pairing was interrupted, try `resume` first. If an unfinished challenge has
+expired and cannot be resumed, inspect `/devices` and revoke any computer it
+already created before abandoning local recovery. The explicit command
+`npm run recordings:worker -- forget-pending --origin https://your-thingtime.example --confirm-abandon-recovery`
+permanently removes only the unfinished local Keychain entry, checks the exact
+stored state, and refuses a completed pairing. It does **not** revoke a server
+device. Create a fresh one-time secret and run `pair` afterward. No automatic
+cleanup occurs after an ambiguous network failure.
+
+Pairing requires a fresh one-time challenge from the signed-in account's
+`POST /api/v1/devices/pairing` operation. In `/lopu/recordings`, open **Pair a Mac
+for recordings**, review the instructions, then create the one-time secret.
+The panel requires `api.devices-pairing` 1.1.0 and discards responses whose
+`ownerId` differs from the displayed account. Secrets are masked initially,
+copied/revealed only by an explicit click, kept only in component memory and
+cleared on expiry, account change, unmount or hiding the panel. Hiding is not
+server-side revocation; the challenge remains usable until consumed or expired.
+Paste **only that
+Thingtime pairing secret** into the hidden interactive prompt, never a Claude
+token, password or API key. No secret belongs in command arguments or files.
+The launcher stores its origin-bound credential and interrupted claim in macOS
+Keychain, using stdin rather than process arguments. `resume --origin ...`
+recovers a lost response using the exact saved proof and credential; it does
+not create a second device. Keychain read-back must succeed before pairing
+continues. Expired/invalid pending challenges currently require manual recovery
+of this launcher's exact Keychain item; automatic reset is intentionally absent.
+
+Runtime paths are stored in a private per-origin config under
+`~/Library/Application Support/Thingtime/recording-worker/`; it contains no
+credentials. A per-origin lock prevents overlapping setup/workers. Stale locks
+fail closed and must be inspected manually, not blindly deleted. Pairing never
+enables recording processing: select the computer and explicitly opt in at
+`/lopu/recordings`. Run without `--once` for foreground polling; it stops after
+three consecutive failures, with no automatic restart. `status` is local setup
+status only, not an assertion of provider or transcription health. Real
+Keychain/native-runner acceptance remains separate from mocked tests.
+
+This worktree's local QA URL is `http://127.0.0.1:18000/lopu/recordings` (HMR
+18001, Nitro 18002), managed by `npm run web-pms`. Tailscale/Funnel was not
+available during validation: the installed shim points to a missing
+`/Applications/Tailscale.app` binary. No public local-server URL is configured.
 
 ### Shared AI endpoint waterfall
 
