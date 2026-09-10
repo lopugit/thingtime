@@ -1,5 +1,19 @@
 # TESTING.md — per-area manual test checklists
 
+- Signed-out boot recovery: abort an initial static JavaScript dependency at
+  desktop and 390px widths. Recover once with the full share query/fragment
+  preserved; persistent failure shows a reachable manual retry, not a blank
+  root or reload loop. Storage-denied sessions offer manual retry only.
+  Existing rendered content and unrelated resource errors remain untouched.
+  Run `test:preview-build`; opt into its real Chrome tests with
+  `TT_SHARED_PLAYWRIGHT_PATH` and `TT_SHARED_CHROME_PATH`.
+  Record the actual browser version, not just the application bundle name.
+  For production-client sharing coverage, build with `build:client` and set
+  `TT_SHARED_BUILT_CLIENT=1` in the local-only shared composition fixture;
+  API requests remain real while the browser consumes the built client bytes.
+  Combining media sharing with recording Things must retain the newer contract
+  on both manifests and keep standalone recordings owner-private by default.
+
 - After merging notification families, verify recording reminders and subspace
   moderation retain separate categories and all preference switches. Recording
   reminders and mod-queue email stay opt-in. Confirm both capability manifests
@@ -6254,6 +6268,16 @@ approval; `access.test.ts` — the reservation matrix) and
 
 ## Shared Data Thing template controls
 
+- Shared CSS media: at desktop and mobile widths, verify page/block backgrounds,
+  HTML style URLs, Chakra responsive backgrounds and hover styles render through
+  the keyed root. Inspect linked-text downloads for the same context. External
+  URLs, quoted CSS text and existing independent keys must remain untouched.
+  Revoke the root/group and verify access stops; a shared writer must not be able
+  to insert unreadable private media through CSS or the page background.
+  Include escaped CSS function names with hex-terminating whitespace and both
+  quoted/unquoted URL arguments; malformed spacing and nested external text
+  must never receive the root key.
+
 - Share an action that searches public Data Things using its included private
   schema. Verify it resolves the schema and returns public results when logged
   out; an own-scope search must not borrow either the author's or a logged-in
@@ -6275,3 +6299,26 @@ approval; `access.test.ts` — the reservation matrix) and
 - [ ] Transcribe launches Lopu in transcription mode; Talk launches voice mode. Sign-in/access gates and denied microphone/speech permissions remain effective. Stop, tap again, background/foreground, and verify transcript, local recording, private upload, and iOS Live Activity independently.
 - [ ] Open Widget settings from the iOS native destination drawer; its controls must be inaccessible when closed and must not overlay the web microphone/composer. Content starts disabled. Enable host sync and per-widget content; select a Thing and change card/note/value layout and title. Disable sharing, log out, change account/origin, delete a Thing, and verify stale content clears. Offline content expires after 30 minutes without another refresh.
 - [ ] Install and test the signed Mac companion itself. Verify both the host and extension signatures and the same designated requirement across rebuilds. Never equate simulator or layout-preview success with physical Control Centre/microphone acceptance.
+
+### Recording recovery and native push regression checks
+
+- Leave an older completed CAF in the iPhone Lopu Recordings folder. Open Lopu
+  while signed in: one owner-private audio Thing appears. Reopen/relaunch and
+  switch accounts: the same source does not duplicate or move accounts. A file
+  already uploaded by build 29 is reused. Local originals remain after success
+  and network failure; an active recording is not imported before it finishes.
+- Turn off Voice settings → Import older recordings: unclaimed older files stay
+  local. Turn it on and reconnect: import resumes. Normal new recordings still save.
+- In Settings → Notifications, send a normal test and verify the bell count
+  updates immediately after completion. Open the bell, click it again to close,
+  reopen with cached rows, then use Escape/outside click. Check desktop/mobile,
+  long notification text and scrolling to the popup's final row and page footer.
+- Check iPhone push status as signed out, signed in, and after switching accounts;
+  status must never reveal tokens or another account's registrations. Reconnect
+  after granting iOS permission in Settings; a stale registration must recover.
+- Test missing APNs configuration, no device, rejected/expired device and Apple
+  acceptance. Verify normal and time-sensitive banners on a physical iPhone,
+  foreground/background/locked; quiet tests may appear only in Notification Center.
+  A successful server response alone is not a native banner acceptance test.
+- Trigger a followed/friend post and a single-recipient notification with push on,
+  then with push off. History remains; muted/history-only events produce no push.

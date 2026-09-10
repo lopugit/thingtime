@@ -32,9 +32,10 @@ enum ThingtimeBridgeScript {
           };
 
           window.thingtimeNativeBridge = {
-            version: '1.2.0',
-            lopuVoiceVersion: '1.1.0',
+            version: '1.3.0',
+            lopuVoiceVersion: '1.2.0',
             widgetVersion: '1.0.0',
+            notificationsVersion: \(notificationsVersion),
             platform: '\(platform)',
             isNativeWebView: true,
             postMessage(message) {
@@ -60,6 +61,13 @@ enum ThingtimeBridgeScript {
         injectionTime: .atDocumentStart,
         forMainFrameOnly: true
     )
+    static var notificationsVersion: String {
+#if os(iOS)
+        return "'1.0.0'"
+#else
+        return "undefined"
+#endif
+    }
     static var platform: String {
 #if os(macOS)
         return "macos"

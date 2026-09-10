@@ -1,6 +1,6 @@
 # PR #727 — Apple widget suite
 
-Branch: `codex/apple-widget-suite`  
+Branch: `codex/apple-widget-suite`
 PR: https://github.com/lopugit/thingtime/pull/727
 
 Adds shared WidgetKit Quick Action, Dashboard, Render a Thing, and Recent Things widgets to iOS and a native Mac companion. Includes iPhone accessory families, iPad/Mac extra-large widgets, and four iOS 18 Control Centre actions. New Thing opens the existing schema chooser; transcription and voice launch foreground Lopu in their distinct modes. The native gallery previews the actual widget views.
@@ -21,3 +21,7 @@ Content sharing is off by default, requires per-widget opt-in, and uses an expir
 The installed Mac review build targets the Vercel PR preview so it does not depend on the local server.
 
 See [setup and feature behavior](../apple/README.md) and the Apple widget checklist in [TESTING.md](../TESTING.md).
+
+## Develop integration
+
+Preserved the newly merged recording-import and native-push recovery behavior when moving bridge script generation into the shared Apple module. Voice advertises contract 1.2; notification settings advertise support only on iOS. Mac recording synchronization now forwards the import preference. Combined native builds/tests are rechecked after this integration; physical device acceptance remains separate.

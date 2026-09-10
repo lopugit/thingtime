@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { randomUUID } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
+import { extname, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // Opt-in real API regression: creates only disposable test Things and removes
 // those exact Things in finally. Never point a fixture writer at production.
@@ -43,6 +45,7 @@ test('shared page audience includes its author components, never a foreign priva
 	const owner = await session('owner', process.env.TT_SHARED_OWNER_COOKIE);
 	const stranger = await session('visitor', process.env.TT_SHARED_VISITOR_COOKIE);
 	const created: { id: string; cookie: string }[] = [];
+	const mediaSource = (name: string) => `/api/v1/attachments/content?id=sharing-browser-${name}`;
 	let groupId: string | null = null;
 	const create = async (cookie: string, thingtime: string[], crystal: unknown, acl = ['tt:user']) => {
 		const { response, data } = await request('/api/v1/things', 'POST', { thingtime, crystal, acl }, cookie);
@@ -148,6 +151,7 @@ test('shared page audience includes its author components, never a foreign priva
 			{ tag: 'button', ttAction: sharedAction.id, children: ['Draw'] }, { tag: 'p', children: ['{last.result}'] },
 			...(process.env.TT_SHARED_PLAYWRIGHT_PATH ? [
 				{ tag: 'img', props: { src: '/api/v1/attachments/content?id=sharing-browser-transport', alt: 'Shared media transport' } },
+				{ tag: 'div', props: { style: { backgroundImage: `u\\72 l(${mediaSource('html-css')})`, height: 20 } }, children: ['HTML background'] },
 				{ tag: 'img', props: { src: 'https://example.invalid/sharing-browser-transport.png', alt: 'External media transport' } }
 			] : [])
 		] } } }, owner)).response.status, 200);
@@ -163,48 +167,100 @@ test('shared page audience includes its author components, never a foreign priva
 			assert.match(response.data.runId, /^shared-run-/);
 		}
 		if (process.env.TT_SHARED_PLAYWRIGHT_PATH) {
+			const chakraMedia = await create(owner, ['component'], { name: 'Shared CSS card', componentKey: `${key}-css`, version: 1, render: {
+				type: 'chakra', chakra: 'Box', props: { 'data-testid': 'shared-chakra-css', backgroundImage: { base: `url(${mediaSource('chakra-css')})` }, _hover: { backgroundImage: `\\75 \\72 \\6c ("${mediaSource('hover-css')}")` }, minHeight: 20 }, children: ['Chakra background']
+			} });
+			const cssPage = await request('/api/v1/things', 'PATCH', { id: page.id, crystal: {
+				previewBg: `url(${mediaSource('page-css')})`,
+				blocks: [...page.crystal.blocks,
+					{ id: 'css-block', type: 'text', text: 'Block background', css: { 'background-image': `url(${mediaSource('block-css')})` } },
+					{ id: 'css-chakra', type: 'component', component: chakraMedia.id },
+					{ id: 'media-link', type: 'text', text: 'Shared media download', href: mediaSource('download') }
+				]
+			} }, owner);
+			assert.equal(cssPage.response.status, 200, cssPage.data.error);
 			const { chromium } = await import(process.env.TT_SHARED_PLAYWRIGHT_PATH);
 			const browser = await chromium.launch({ headless: true, executablePath: process.env.TT_SHARED_CHROME_PATH });
+			console.info('Shared fixture browser:', browser.version());
+			// Optionally exercise the actual production client build against the
+			// same real local API, without Vite's unbundled module/HMR traffic.
+			// Only client bytes are fulfilled; API requests and origin stay real.
+			const serveBuiltClient = async (context: any) => {
+				if (process.env.TT_SHARED_BUILT_CLIENT !== '1') return;
+				const directory = fileURLToPath(new URL('../../../../dist/', import.meta.url));
+				const { prodCsp } = await import('../../../../scripts/csp.mjs');
+				const index = await readFile(resolve(directory, 'index.html'));
+				const mime: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
+				await context.route(`${new URL(base!).origin}/**`, async (route: any) => {
+					const request = route.request();
+					const path = new URL(request.url()).pathname;
+					if (path.startsWith('/api/') || path.startsWith('/.well-known/')) return route.continue();
+					if (request.resourceType() === 'document' || !extname(path)) return route.fulfill({ contentType: 'text/html', headers: { 'Content-Security-Policy': prodCsp }, body: index });
+					const file = resolve(directory, `.${decodeURIComponent(path)}`);
+					if (!file.startsWith(directory.endsWith(sep) ? directory : `${directory}${sep}`) || !mime[extname(file)]) return route.fulfill({ status: 404, body: '' });
+					try { return await route.fulfill({ contentType: mime[extname(file)], body: await readFile(file) }); }
+					catch { return route.fulfill({ status: 404, body: '' }); }
+				});
+			};
 			const watchFailures = (tab: any) => {
+				const startedAt = Date.now();
 				const events: unknown[] = [];
-				const record = (event: unknown) => { if (events.length < 40) events.push(event); };
+				const pending = new Map<any, { path: string; type: string; startedAt: number }>();
+				const record = (event: Record<string, unknown>) => { if (events.length < 40) events.push({ ms: Date.now() - startedAt, ...event }); };
+				tab.on('request', (request: any) => pending.set(request, { path: new URL(request.url()).pathname, type: request.resourceType(), startedAt: Date.now() }));
+				tab.on('requestfinished', (request: any) => pending.delete(request));
 				tab.on('pageerror', (error: Error) => record({ error: error.message.replace(/\?[^\s]*/g, '?[redacted]').slice(0, 400) }));
-				tab.on('requestfailed', (request: any) => record({ path: new URL(request.url()).pathname, failure: request.failure()?.errorText }));
+				tab.on('requestfailed', (request: any) => { pending.delete(request); record({ path: new URL(request.url()).pathname, failure: request.failure()?.errorText }); });
 				tab.on('response', (response: any) => {
 					const path = new URL(response.url()).pathname;
 					if (response.status() >= 400 || ['/api/root-data', '/api/v1/webpages/resolve'].includes(path)) record({ path, status: response.status() });
 				});
-				return events;
+				return { events, pending: () => [...pending.values()].slice(0, 15).map(({ path, type, startedAt: start }) => ({ path, type, ms: Date.now() - start })) };
 			};
+			const renderTiming = (tab: any) => tab.evaluate(() => {
+				const navigation = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+				return {
+					readyState: document.readyState,
+					domContentLoadedMs: Math.round(navigation?.domContentLoadedEventEnd || 0),
+					loadMs: Math.round(navigation?.loadEventEnd || 0),
+					slowResources: (performance.getEntriesByType('resource') as PerformanceResourceTiming[]).sort((a, b) => b.duration - a.duration).slice(0, 8).map((entry) => ({ path: new URL(entry.name).pathname, type: entry.initiatorType, startMs: Math.round(entry.startTime), durationMs: Math.round(entry.duration) }))
+				};
+			});
 			try {
 				for (const width of [1440, 390]) {
 					const context = await browser.newContext({ viewport: { width, height: 900 } });
+					await serveBuiltClient(context);
 					const tab = await context.newPage();
-					const browserEvents = watchFailures(tab);
+					const { events: browserEvents, pending } = watchFailures(tab);
 					// Only the bytes transport is stubbed here; root/component resolution
 					// uses the real API. Attachment ACLs have separate service/route tests.
 					const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l1kAAAAASUVORK5CYII=', 'base64');
 					let mediaReads = 0;
+					const cssReads = new Set<string>();
 					await tab.route('**/api/v1/attachments/content?*', async (route: any) => {
 						const url = new URL(route.request().url());
-						if (url.searchParams.get('id') !== 'sharing-browser-transport') return route.continue();
+						const id = url.searchParams.get('id') || '';
+						if (!id.startsWith('sharing-browser-')) return route.continue();
 						assert.equal(url.searchParams.get('key'), page.linkKey);
 						assert.equal(url.searchParams.get('sharedRoot'), page.id);
 						mediaReads++;
+						cssReads.add(id);
 						await route.fulfill({ contentType: 'image/png', body: pixel });
 					});
 					await tab.route('https://example.invalid/sharing-browser-transport.png*', async (route: any) => {
 						assert.equal(new URL(route.request().url()).searchParams.has('key'), false);
 						await route.fulfill({ contentType: 'image/png', body: pixel });
 					});
+					const navigationStartedAt = Date.now();
 					await tab.goto(new URL(`/p/${page.id}?key=${encodeURIComponent(page.linkKey)}`, base).href);
 					try {
 						await tab.getByRole('button', { name: 'Draw', exact: true }).waitFor({ timeout: 60000 });
 					} catch (error) {
 						if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-page-render-failure.png` });
-						console.error('Shared fixture render diagnostic:', { path: new URL(tab.url()).pathname, browserEvents, text: (await tab.locator('body').innerText()).slice(0, 1600) });
+						console.error('Shared fixture render diagnostic:', JSON.stringify({ width, path: new URL(tab.url()).pathname, browserEvents, pending: pending(), timing: await renderTiming(tab), text: (await tab.locator('body').innerText()).slice(0, 1600) }));
 						throw error;
 					}
+					console.info('Shared fixture first render:', JSON.stringify({ width, builtClient: process.env.TT_SHARED_BUILT_CLIENT === '1', elapsedMs: Date.now() - navigationStartedAt, browserEvents, timing: await renderTiming(tab) }));
 					assert.equal(await tab.getByTestId('p-edit-in-builder').count(), 0);
 					const copyBounds = await tab.getByTestId('fork-shared-thing').boundingBox();
 					assert.ok(copyBounds && copyBounds.x >= 0 && copyBounds.x + copyBounds.width <= width, 'The copy control must fit inside the mobile/desktop viewport');
@@ -215,6 +271,14 @@ test('shared page audience includes its author components, never a foreign priva
 						return !!img?.naturalWidth;
 					});
 					assert.ok(mediaReads > 0);
+					await tab.getByTestId('shared-chakra-css').hover();
+					for (const name of ['html-css', 'chakra-css', 'page-css', 'block-css', 'hover-css']) {
+						if (!cssReads.has(`sharing-browser-${name}`)) await tab.waitForResponse((response: any) => new URL(response.url()).searchParams.get('id') === `sharing-browser-${name}`, { timeout: 15000 });
+						assert.ok(cssReads.has(`sharing-browser-${name}`), name);
+					}
+					const download = new URL(await tab.getByRole('link', { name: 'Shared media download' }).getAttribute('href'), base);
+					assert.equal(download.searchParams.get('key'), page.linkKey);
+					assert.equal(download.searchParams.get('sharedRoot'), page.id);
 					assert.ok(await tab.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
 					if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-${width}-top.png` });
 					await tab.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
@@ -227,7 +291,7 @@ test('shared page audience includes its author components, never a foreign priva
 						await tab.getByText('Shared value: Copy my content', { exact: true }).waitFor({ timeout: 30000 });
 					} catch (error) {
 						if (process.env.TT_SHARED_SCREENSHOT_DIR) await tab.screenshot({ path: `${process.env.TT_SHARED_SCREENSHOT_DIR}/shared-data-render-failure.png` });
-						console.error('Shared Data fixture render diagnostic:', { width, path: new URL(tab.url()).pathname, browserEvents, text: (await tab.locator('body').innerText()).slice(0, 1600) });
+						console.error('Shared Data fixture render diagnostic:', JSON.stringify({ width, path: new URL(tab.url()).pathname, browserEvents, pending: pending(), timing: await renderTiming(tab), text: (await tab.locator('body').innerText()).slice(0, 1600) }));
 						throw error;
 					}
 					const dataCopyBounds = await tab.getByTestId('fork-shared-thing').boundingBox();
@@ -247,15 +311,16 @@ test('shared page audience includes its author components, never a foreign priva
 				}
 				const forkPage = await create(owner, ['webpage'], { name: 'Copy this app', blocks: [{ id: 'card', type: 'component', component: component.id }] }, ['tt:hidden', 'tt:user']);
 				const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+				await serveBuiltClient(context);
 				await context.addCookies(stranger.split('; ').map((entry) => {
 					const index = entry.indexOf('=');
 					return { name: entry.slice(0, index), value: entry.slice(index + 1), url: base! };
 				}));
 				const tab = await context.newPage();
-				const browserEvents = watchFailures(tab);
+				const { events: browserEvents } = watchFailures(tab);
 				// These are transport fixtures, not real stored attachments. Keep the
 				// authenticated copy check independent of DNS/failed image downloads.
-				await tab.route('**/api/v1/attachments/content?*', (route: any) => new URL(route.request().url()).searchParams.get('id') === 'sharing-browser-transport' ? route.fulfill({ status: 204 }) : route.continue());
+				await tab.route('**/api/v1/attachments/content?*', (route: any) => new URL(route.request().url()).searchParams.get('id')?.startsWith('sharing-browser-') ? route.fulfill({ status: 204 }) : route.continue());
 				await tab.route('https://example.invalid/sharing-browser-transport.png*', (route: any) => route.fulfill({ status: 204 }));
 				let observedCopy: any;
 				let copyRequestSeen = false;
@@ -352,6 +417,13 @@ test('shared page audience includes its author components, never a foreign priva
 		assert.equal(injectedSchemaAction.response.status, 403, 'A schema writer cannot publish an unrelated private action through a shared Data Thing');
 		const injectedMedia = await request('/api/v1/things', 'PATCH', { id: page.id, crystal: { blocks: [{ id: 'private-media', type: 'media', media: 'image', src: '/api/v1/attachments/content?id=guessed-private-attachment' }] } }, stranger);
 		assert.equal(injectedMedia.response.status, 403, 'A shared writer cannot add a media reference they cannot independently read');
+		for (const crystal of [
+			{ previewBg: 'url(/api/v1/attachments/content?id=guessed-private-css)' },
+			{ blocks: [{ id: 'private-css', type: 'text', text: 'No access', css: { background: 'url(/api/v1/attachments/content?id=guessed-private-css)' } }] }
+		]) {
+			const injectedCss = await request('/api/v1/things', 'PATCH', { id: page.id, crystal }, stranger);
+			assert.equal(injectedCss.response.status, 403, 'Shared writers cannot publish private media through CSS');
+		}
 		for (const ref of [untouched.id, `${key}-unrelated`]) {
 			const refused = await request('/api/v1/things', 'PATCH', { id: page.id, crystal: { blocks: [{ id: 'stolen', type: 'component', component: ref }] } }, stranger);
 			assert.equal(refused.response.status, 403, 'A shared writer must not publish an unrelated private dependency');

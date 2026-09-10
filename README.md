@@ -2782,3 +2782,33 @@ See [Apple widget setup](apple/README.md) for gallery choices, content privacy,
 App Group provisioning, local signing, and fork-safe build settings. App Group
 capabilities must be enabled on both the iOS app and its widget extension before
 installing a signed build; no credentials belong in project files.
+
+### Automatic import and native push recovery (10 September 2026)
+
+The iPhone app automatically imports older `Lopu-*.caf` recordings from its
+`Documents/Lopu Recordings` folder when Lopu opens with a signed-in account.
+Voice settings → **Import older recordings** is enabled by default and can be
+turned off. Import uses the canonical `api.things` 1.7.0 and private attachment
+contracts. Local originals stay on the iPhone. A local account/origin-bound
+receipt prevents repeated imports; files already uploaded by build 29 are
+reconciled against the account's existing audio Things before uploading.
+Files created during the current app session use the normal recording outbox.
+Offline or failed imports retry when Lopu reconnects.
+
+For native alerts, open **Settings → Notifications → iPhone and Watch push**
+in the iPhone app and tap **Enable / reconnect iPhone push**. If iOS permission
+was denied, the adjacent button opens the iPhone notification settings. The
+page reports eligible account registrations; notification tests report whether
+Apple accepted the push, rejected it, or no device is connected. Apple acceptance
+is transport confirmation; verify a banner on a physical iPhone (including its
+Focus and notification presentation settings).
+
+Forks need an APNs-enabled Apple App ID, signed iOS entitlements, and the APNs
+variables documented above on each intended server deployment. Use a P-256 APNs
+`.p8` signing key; App Store Connect API keys are a different credential. The
+server selects sandbox versus production from the device registration. TestFlight
+uses production APNs. Never expose keys or device tokens in public diagnostics.
+`api.notifications-devices` 1.2.0 adds authenticated, non-cacheable GET status and
+an optional owner guard on registration. `api.notifications-test` 1.1.0 adds the
+sanitized delivery report. Single and bulk native delivery remain attached to
+the Vercel request lifetime through `waitUntil`.

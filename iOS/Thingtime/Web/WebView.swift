@@ -83,12 +83,13 @@ struct WebView: UIViewRepresentable {
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             (webView as? ThingtimeWKWebView)?.applyThingtimeScrollInsets(forceSafeAreaUpdate: true)
 
-            ThingtimeNativeNotifications.shared.attach(webView: webView)
+            if let rootURL = loadedRootURL ?? webView.url { ThingtimeNativeNotifications.shared.attach(webView: webView, rootURL: rootURL) }
 
             sendToWeb(type: "native-ready", payload: [
                 "platform": "ios",
-                "version": "1.2.0",
-                "lopuVoiceVersion": "1.1.0",
+                "version": "1.3.0",
+                "lopuVoiceVersion": "1.2.0",
+                "notificationsVersion": "1.0.0",
                 "watchNotifications": true
             ])
         }
@@ -111,6 +112,13 @@ struct WebView: UIViewRepresentable {
                 return
             }
             switch type {
+            case "notification-settings":
+                guard message.frameInfo.isMainFrame, let webView, let rootURL = loadedRootURL,
+                      let currentURL = webView.url, LopuVoiceContract.sameOrigin(currentURL, rootURL),
+                      let payload = body["payload"] as? [String: Any], let ownerId = payload["ownerId"] as? String,
+                      let action = payload["action"] as? String, ["status", "enable", "open-settings"].contains(action) else { return }
+                Task { await ThingtimeNativeNotifications.shared.notificationSettings(action: action, ownerId: ownerId) }
+
             case "lopu-voice-start", "lopu-voice-recordings-sync":
                 guard message.frameInfo.isMainFrame, let webView, let rootURL = loadedRootURL,
                       let currentURL = webView.url, LopuVoiceContract.sameOrigin(currentURL, rootURL) else { return }
@@ -145,7 +153,7 @@ struct WebView: UIViewRepresentable {
                               let currentURL = self.webView?.url, LopuVoiceContract.sameOrigin(currentURL, rootURL),
                               (type == "lopu-voice-recordings-sync" ? self.pendingRecordingSync : self.pendingVoiceStart) == startID else { return }
                         if type == "lopu-voice-recordings-sync" {
-                            self.lopuVoice.syncRecordings(ownerId: settings.ownerId, baseURL: rootURL, cookieHeader: header)
+                            self.lopuVoice.syncRecordings(ownerId: settings.ownerId, baseURL: rootURL, cookieHeader: header, autoImport: payload["autoImportRecordings"] as? Bool ?? true)
                         } else {
                             self.lopuVoice.start(settings: settings, baseURL: rootURL, cookieHeader: header)
                         }

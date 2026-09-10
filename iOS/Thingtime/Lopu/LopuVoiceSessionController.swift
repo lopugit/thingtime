@@ -54,6 +54,7 @@ final class LopuVoiceSessionController: NSObject, AVSpeechSynthesizerDelegate {
     private var recordingFile: AVAudioFile?
     private var recordingContext: LopuRecordingUploads.Context?
     private let recordingUploads = LopuRecordingUploads()
+    private var autoImportRecordings = true
     private var recognitionFailures = 0
 
 
@@ -170,9 +171,10 @@ final class LopuVoiceSessionController: NSObject, AVSpeechSynthesizerDelegate {
         sendToWeb?("lopu-voice-error", ["error": message])
     }
 
-    func syncRecordings(ownerId: String?, baseURL: URL, cookieHeader: String) {
+    func syncRecordings(ownerId: String?, baseURL: URL, cookieHeader: String, autoImport: Bool? = nil) {
+        if let autoImport { autoImportRecordings = autoImport }
         if active, settings?.ownerId != ownerId { stop(flushTranscript: false) }
-        recordingUploads.activate(LopuRecordingUploads.context(ownerId: ownerId, baseURL: baseURL), cookie: cookieHeader)
+        recordingUploads.activate(LopuRecordingUploads.context(ownerId: ownerId, baseURL: baseURL), cookie: cookieHeader, importOlder: autoImportRecordings)
     }
 
     func suspendRecordingUploads() { recordingUploads.activate(nil, cookie: "") }

@@ -111,7 +111,7 @@ final class WidgetBrowserModel: NSObject, ObservableObject, WKScriptMessageHandl
                     }
                     let header = HTTPCookie.requestHeaderFields(with: scoped)["Cookie"] ?? ""
                     if type == "lopu-voice-start" { self.voice.start(settings: settings, baseURL: self.root, cookieHeader: header) }
-                    else { self.voice.syncRecordings(ownerId: settings.ownerId, baseURL: self.root, cookieHeader: header) }
+                    else { self.voice.syncRecordings(ownerId: settings.ownerId, baseURL: self.root, cookieHeader: header, autoImport: payload["autoImportRecordings"] as? Bool ?? true) }
                 }
             }
         default: break
