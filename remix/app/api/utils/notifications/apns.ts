@@ -1,3 +1,5 @@
+import type { PushDeliveryReport } from './pushDeliveryCore';
+export type { PushDeliveryReport } from './pushDeliveryCore';
 import { connect } from 'node:http2';
 import { createHash, createPrivateKey, sign } from 'node:crypto';
 
@@ -104,14 +106,18 @@ const sendDevice = async (
 ): Promise<{ status: number; reason: string | null }> => {
   const authority = device.environment === 'sandbox' ? 'https://api.sandbox.push.apple.com' : 'https://api.push.apple.com';
   const client = connect(authority);
-  client.setTimeout(8_000, () => client.destroy(new Error('APNs request timed out')));
+  let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     return await new Promise((resolve, reject) => {
+      let settled = false;
       const fail = (error: Error) => {
-        client.off('error', fail);
+        if (settled) return;
+        settled = true;
         reject(error);
       };
-      client.once('error', fail);
+      client.on('error', fail);
+      client.once('close', () => fail(new Error('APNs connection closed')));
+      timeout = setTimeout(() => { fail(new Error('APNs request timed out')); client.destroy(); }, 10_000);
       const request = client.request({
         ':method': 'POST',
         ':path': `/3/device/${device.token}`,
@@ -124,48 +130,63 @@ const sendDevice = async (
       let status = 0;
       let body = '';
       request.setEncoding('utf8');
-      request.on('response', (headers) => {
-        status = Number(headers[':status'] || 0);
-      });
-      request.on('data', (chunk) => {
-        if (body.length < 2048) body += chunk;
-      });
+      request.on('response', (headers) => { status = Number(headers[':status'] || 0); });
+      request.on('data', (chunk) => { if (body.length < 2048) body += chunk; });
       request.on('error', fail);
+      request.once('close', () => fail(new Error('APNs stream closed')));
       request.on('end', () => {
-        client.off('error', fail);
+        if (settled) return;
+        settled = true;
         let reason: string | null = null;
-        try {
-          reason = body ? JSON.parse(body).reason || null : null;
-        } catch {
-          // APNs may close a successful request with an empty response body.
-        }
+        try { reason = body ? JSON.parse(body).reason || null : null; } catch {}
         resolve({ status, reason });
       });
       request.end(JSON.stringify(payload));
     });
   } finally {
-    client.close();
+    clearTimeout(timeout);
+    client.destroy();
   }
 };
 
-export const sendNotificationPush = async (notification: PushEnvelope): Promise<void> => {
-  const config = apnsConfig();
-  if (!config) return;
-  const devices = await listPushDevicesForUser(notification.recipientId);
-  if (!devices.length) return;
-  const authToken = providerToken(config);
-  const payload = buildApnsPayload(notification);
-  const results = await Promise.allSettled(
-    devices.map(async (device) => ({ device, response: await sendDevice(authToken, device, payload, notification.notificationId) }))
-  );
-  await Promise.all(
-    results.flatMap((result) => {
-      if (result.status !== 'fulfilled') return [];
-      const { device, response } = result.value;
-      if (response.status === 410 || response.reason === 'BadDeviceToken' || response.reason === 'Unregistered') {
-        return [removePushDeviceById(device.id)];
-      }
-      return [];
-    })
-  );
+export const pushConfigured = (): boolean => {
+  try { const config = apnsConfig(); if (!config) return false; const key = createPrivateKey(config.privateKey); return key.asymmetricKeyType === 'ec' && key.asymmetricKeyDetails?.namedCurve === 'prime256v1'; }
+  catch { return false; }
 };
+
+const pushDependencies = {
+  token: () => { const config = apnsConfig(); return config ? providerToken(config) : null; },
+  devices: listPushDevicesForUser,
+  send: sendDevice,
+  remove: removePushDeviceById
+};
+
+// Counts and bounded reason codes only: never expose tokens, signing material,
+// provider responses, or another account's registrations to the settings UI.
+export const createPushSender = (deps = pushDependencies) => async (notification: PushEnvelope): Promise<PushDeliveryReport> => {
+  const report: PushDeliveryReport = { status: 'failed', attempted: 0, accepted: 0, rejected: 0, ios: 0, watchos: 0, reasons: [] };
+  let authToken: string | null;
+  try { authToken = deps.token(); } catch { return { ...report, status: 'unconfigured' }; }
+  if (!authToken) return { ...report, status: 'unconfigured' };
+  const devices = await deps.devices(notification.recipientId);
+  if (!devices.length) return { ...report, status: 'no-devices' };
+  const payload = buildApnsPayload(notification);
+  for (let offset = 0; offset < devices.length; offset += 4) {
+    await Promise.all(devices.slice(offset, offset + 4).map(async device => {
+      report.attempted++;
+      try {
+        const response = await deps.send(authToken!, device, payload, notification.notificationId);
+        if (response.status === 200) { report.accepted++; report[device.platform]++; return; }
+        report.rejected++;
+        const reason = response.reason && /^[A-Za-z]{1,64}$/.test(response.reason) ? response.reason : 'ProviderRejected';
+        report.reasons.push(reason);
+        if (response.status === 410 || ['BadDeviceToken', 'Unregistered'].includes(reason)) await deps.remove(device.id).catch(() => {});
+      } catch { report.rejected++; report.reasons.push('TransportError'); }
+    }));
+  }
+  report.status = report.accepted === report.attempted ? 'accepted' : report.accepted ? 'partial' : 'failed';
+  report.reasons = [...new Set(report.reasons)];
+  return report;
+};
+
+export const sendNotificationPush = createPushSender();

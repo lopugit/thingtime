@@ -8,6 +8,7 @@ export type ThingtimeBridgeMessage = {
 export type ThingtimeNativeBridge = {
   version: string;
   lopuVoiceVersion?: string;
+  notificationsVersion?: string;
   platform: 'ios';
   isNativeWebView: true;
   postMessage: (message: ThingtimeBridgeMessage) => void;
