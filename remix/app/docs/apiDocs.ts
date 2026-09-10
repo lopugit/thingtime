@@ -11524,6 +11524,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'DELETE a stale device id when the user explicitly disconnects that device.'
     ],
     requestExamples: [
+      { name: 'Check native push connection', description: 'Read only this signed-in account’s eligible device counts and server readiness.', method: 'GET' },
       {
         name: 'Register paired Apple devices',
         description: 'Register current sandbox tokens from an iPhone and its paired watch.',
@@ -11543,6 +11544,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       }
     ],
     responseExamples: [
+      { status: 200, description: 'Authenticated GET connection status, never device tokens.', body: { ok: true, ownerId: 'your-user-id', configured: true, devices: { ios: 1, watchos: 0 } } },
       {
         status: 200,
         description: 'Registered; tokens are intentionally omitted.',
