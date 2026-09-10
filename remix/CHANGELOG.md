@@ -18,6 +18,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Reconcile PR 731 with develop's authored/nested media inheritance without
+  downgrading Lopu discussions or notification-test capabilities; retain both
+  Things read and write compatibility coverage. — Codex (AI), 2026-09-10
+
 - Persist direct web voice transcripts into their Lopu conversation with
   account-fenced recovery/retry; seed recent chat context when starting voice,
   isolate message caches by account, and discard late account-switch fetches.
@@ -30,6 +34,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   selection, and introduce searchable scheduled tasks with separate run Things
   and Lopu-message notifications. Browser and end-to-end release checks remain
   separate from focused tests; see the [feature validation notes](../PRs/731-lopu-unified-scheduled-chats.md) before deployment.
+  — Codex (AI), 2026-09-10
+
+- Extend shared-root media inheritance to authored rich/raw HTML rendering
+  positions and uploads bound directly to contained same-author Things.
+  Share the browser tag/depth/node policy with bounded server discovery;
+  retain foreign-owner, managed-purpose, revocation and non-owner writer
+  guards. Advertise attachment-content 1.4.0 and patch the Things write
+  contracts. Stored component arguments and independent protected-upload
+  copies remain separate follow-up work.
+  [PR 730 validation and scope](../PRs/730-codex-shared-nested-media-inheritance-inherit-shared-root-access-for-authored-html-and-contained-media.md).
   — Codex (AI), 2026-09-10
 
 - Fix APNs rejection of notification tests and long reminder IDs by hashing the collapse header to Apple’s 64-byte limit; expose the safe BadCollapseId diagnostic. — Codex (AI), 2026-09-10

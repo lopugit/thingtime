@@ -6299,6 +6299,14 @@ approval; `access.test.ts` — the reservation matrix) and
 
 ## Shared Data Thing template controls
 
+- Shared nested media: open rich/raw HTML blocks with image, poster, link and
+  inline CSS media signed out at desktop/mobile widths. Same-author uploads
+  attached directly to contained components must inherit the root audience.
+  Revoke the key/group and verify denial. Foreign or unrelated uploads and
+  message/profile/emoji purposes must not gain access. Script/template/comment
+  text, unknown-tag attributes and over-budget markup must not mint grants.
+  A non-owner writer must not insert unreadable private media through HTML.
+
 - Shared CSS media: at desktop and mobile widths, verify page/block backgrounds,
   HTML style URLs, Chakra responsive backgrounds and hover styles render through
   the keyed root. Inspect linked-text downloads for the same context. External

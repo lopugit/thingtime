@@ -3,8 +3,56 @@ import test from 'node:test';
 import { compositionAttachmentIds } from '../actions/compositionMediaCore';
 import { createCanViewSharedCompositionAttachment, type SharedComposition } from '../actions/sharedComposition';
 import { canView, fail, type ThingDoc } from '../things/things';
+import { HTML_MAX_DEPTH, HTML_MAX_NODES } from '../../../components/Kinds/htmlRenderPolicy';
+import { MAX_WEBPAGE_HTML_CHARS } from '../../../schemas/registry';
 
 const url = (id: string) => `/api/v1/attachments/content?id=${id}`;
+
+test('authored HTML discovery uses renderer bounds and screens CSS values independently', () => {
+	const ids = (html: string) => [...compositionAttachmentIds(['webpage'], { blocks: [{ type: 'html', html }] })];
+	assert.deepEqual(ids(`<div style='color: expression(unsafe); background-image: url("${url('safe')}"); content: "url(${url('text')})"'></div>`), ['safe']);
+	assert.deepEqual(ids(`<div style='@media all { background: url("${url('nested-rule')}") }'></div>`), []);
+	assert.deepEqual(ids(`<div style='background: url("${url('unclosed')})'></div>`), []);
+	assert.deepEqual(ids('<span></span>'.repeat(HTML_MAX_NODES - 1) + `<img src='${url('over-node-limit')}'>`), []);
+	assert.deepEqual(ids('<div>'.repeat(HTML_MAX_DEPTH) + `<img src='${url('over-depth-limit')}'>` + '</div>'.repeat(HTML_MAX_DEPTH)), []);
+	assert.deepEqual(ids(' '.repeat(MAX_WEBPAGE_HTML_CHARS) + `<img src='${url('over-size-limit')}'>`), []);
+	assert.deepEqual(ids(`<textarea><img src='${url('raw-text')}'></textarea><noscript><img src='${url('noscript')}'></noscript>`), []);
+	assert.deepEqual(ids(`<head><noscript><img src='${url('repaired-body')}'></noscript></head>`), ['repaired-body'], 'Detached DOMParser repairs invalid head content with scripting disabled');
+});
+
+test('rich and raw HTML discover only authored media that survives the markup renderer', () => {
+	const html = `<section style='background-image: url("${url('background')}")'>
+		<img src='${url('image')}'><video poster='${url('poster')}'></video>
+		<a href='${url('download')}&amp;width=40'>download</a>
+		<unknown src='${url('unknown')}'><img src='${url('unknown-child')}'></unknown>
+		<script><img src='${url('script')}'></script>
+		<template><img src='${url('template')}'></template>
+		<!-- <img src='${url('comment')}'> -->
+		<span title='${url('metadata')}'>${url('text-only')}</span>
+		<img src='${url('independent')}&amp;key=separate'>
+		<img src='https://outside.test${url('external')}'>
+	</section>`;
+	for (const type of ['text', 'html']) {
+		assert.deepEqual([...compositionAttachmentIds(['webpage'], { blocks: [{ type, html }] })].sort(),
+			['background', 'download', 'image', 'poster', 'unknown-child']);
+	}
+	assert.equal(compositionAttachmentIds(['webpage'], { blocks: [{ type: 'component', html }] }).size, 0);
+});
+
+test('attachments bound to nested same-author children inherit the root, without opening foreign or managed media', async () => {
+	const root = { shareId: 'root', ownerId: 'author', thingtime: ['webpage'], acl: ['tt:hidden', 'tt:user'], linkKey: 'fixture-key' } as ThingDoc;
+	const child = { shareId: 'child', ownerId: 'author', thingtime: ['component'], acl: ['tt:user'], crystal: {} } as ThingDoc;
+	const composition = { root, docs: new Map([[root.shareId, root], [child.shareId, child]]), references: new Map() } as SharedComposition;
+	const read = createCanViewSharedCompositionAttachment(async (viewer) => canView(root, viewer) ? composition : fail(404, 'Not found'), async () => false);
+	const viewer = { id: '', linkKeys: new Set(['fixture-key']) };
+	const attachment = { shareId: 'nested-media', ownerId: 'author', targetId: child.shareId, thingtime: ['attachment'], attachmentPurpose: 'post' as const };
+	assert.equal(await read(viewer, attachment, root.shareId), true);
+	assert.equal(await read(null, attachment, root.shareId), false);
+	assert.equal(await read(viewer, { ...attachment, attachmentPurpose: 'message' }, root.shareId), false);
+	assert.equal(await read(viewer, { ...attachment, targetId: 'unrelated' }, root.shareId), false);
+	child.ownerId = 'foreign';
+	assert.equal(await read(viewer, attachment, root.shareId), false);
+});
 
 test('shared CSS media follows literal render styles, including nested Chakra styles and page backgrounds', () => {
 	const render = { tag: 'div', props: {

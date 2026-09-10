@@ -11,9 +11,9 @@
 
 ## Verified locally, 2026-09-10
 
-- Reconciled with develop `d0a4344d9`, preserving native recording import, APNs collapse-ID repair, push diagnostics and shared-media authorization. Combined notification-test capability is 1.2.0; lower versions cannot satisfy the new settings UI.
-- Client build passes; typecheck ratchet remains at the existing 108-error baseline (not a clean full typecheck).
-- Lopu UI: 111 tests pass. Focused scheduler/transcript persistence: 10 tests pass. Lopu, notifications and Messenger package suites pass.
+- Reconciled with develop `f184b4d59`, preserving native recording import, APNs collapse-ID repair, push diagnostics and authored/nested shared-media authorization. Combined notification-test capability is 1.2.0; lower versions cannot satisfy the new settings UI. The additive Things read contract also retains develop's 1.7.2 write correction and the separate Things-update patch assertions.
+- Full Vercel build and output/CSP verification passed before the latest develop merge; typecheck ratchet remains at the existing 108-error baseline (not a clean full typecheck).
+- Lopu UI: 124 tests pass. Focused scheduler/transcript persistence: 10 tests pass. Lopu, notifications and Messenger package suites pass. The 26 API-capability tests also pass after reconciling develop.
 - API capability suites pass, and the running development server exposes the updated semantic feature versions.
 - Public comments render at desktop 1440x1000 and mobile 390x844; refresh and top-to-bottom scrolling checked with no horizontal overflow.
 - A new local-only QA account successfully logged in, created a private Thing, posted a comment through the UI, and reloaded the persisted comment. Database inspection confirmed the original crystal was unchanged and the comment exists as a separate target-linked document.

@@ -125,7 +125,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.notifications-list']?.version, '1.7.0');
   assert.equal(manifest.features['api.notifications-settings']?.version, '1.6.0');
   assert.equal(manifest.features['api.notifications-record']?.version, '1.0.0');
-  assert.equal(manifest.features['api.things-update']?.version, '1.2.0');
+  assert.equal(manifest.features['api.things-update']?.version, '1.2.1');
   assert.ok(manifest.operations.some((operation) => operation.path === THINGTIME_CAPABILITY_MANIFEST_PATH));
   const operationPaths = new Set(manifest.operations.map((operation) => operation.path));
   for (const route of apiV1RouteKeys) assert.equal(operationPaths.has(`/api/${route}`), true, route);
