@@ -12,6 +12,7 @@
 
 ## Verified locally, 2026-09-10
 
+- Reconciled the later develop argument-media fixes through `497ddfda2`. Retained Lopu contracts plus attachment-content 1.6.0 and Things-update 1.2.3; patched the combined Things contract to 1.8.1 (legacy manifest 1.7.1) so clients can distinguish the corrected shared-media writes.
 - Native voice/capture/upload simulator suites: 20 tests pass on iPhone 17 Pro, iOS 27 / Xcode 27 beta. The first expanded run caught a premature active-state event before microphone permission; the production code was fixed and the unchanged lifecycle test now passes. This simulator build is not a supported TestFlight upload or physical-device proof.
 - Web voice and native-bridge suites: 127 tests pass; targeted lint has no errors and one pre-existing type-import warning. The new bridge requires 1.3.0 for durable direct voice. The local browser currently shows the signed-out gate, so authenticated retry-panel/old-build messaging and live provider checks remain open.
 - Reconciled with develop `f184b4d59`, preserving native recording import, APNs collapse-ID repair, push diagnostics and authored/nested shared-media authorization. Combined notification-test capability is 1.2.0; lower versions cannot satisfy the new settings UI. The additive Things read contract also retains develop's 1.7.2 write correction and the separate Things-update patch assertions.

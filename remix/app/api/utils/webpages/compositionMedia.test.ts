@@ -1,12 +1,61 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { compositionAttachmentIds } from '../actions/compositionMediaCore';
-import { createCanViewSharedCompositionAttachment, type SharedComposition } from '../actions/sharedComposition';
+import { compositionMediaIds, createCanViewSharedCompositionAttachment, type SharedComposition } from '../actions/sharedComposition';
 import { canView, fail, type ThingDoc } from '../things/things';
 import { HTML_MAX_DEPTH, HTML_MAX_NODES } from '../../../components/Kinds/htmlRenderPolicy';
 import { MAX_WEBPAGE_HTML_CHARS } from '../../../schemas/registry';
 
 const url = (id: string) => `/api/v1/attachments/content?id=${id}`;
+
+test('page-block media overrides follow resolved same-author components and refresh with the root', async () => {
+	const component: ThingDoc = { shareId: 'component', ownerId: 'author', createdAt: new Date(0), updatedAt: new Date(0), thingtime: ['component'], crystal: {
+		args: [{ name: 'image', type: 'string', default: url('default') }], savedArgs: { image: url('saved') },
+		render: { tag: 'img', props: { src: '{image}' } }
+	} };
+	const block = { type: 'component', component: 'alias', args: { image: url('page-image'), unused: url('unused') } };
+	const root: ThingDoc = { shareId: 'root', ownerId: 'author', createdAt: new Date(0), updatedAt: new Date(0), thingtime: ['webpage'], acl: ['tt:hidden', 'tt:user'], linkKey: 'fixture-key', crystal: {
+		blocks: [{ type: 'container', children: [block, { ...block, args: { image: url('second') } }] }]
+	} };
+	const composition = { root, docs: new Map([[root.shareId, root], [component.shareId, component]]),
+		references: new Map([['root:component:alias', component]]) } as SharedComposition;
+	assert.deepEqual([...compositionMediaIds(composition)].sort(), ['page-image', 'saved', 'second']);
+	const read = createCanViewSharedCompositionAttachment(async (viewer) => canView(root, viewer) ? composition : fail(404, 'Not found'), async () => false);
+	const viewer = { id: '', linkKeys: new Set(['fixture-key']) };
+	const attachment = { shareId: 'page-image', ownerId: 'author', targetId: 'unrelated-post', thingtime: ['attachment'], attachmentPurpose: 'post' as const };
+	assert.equal(await read(viewer, attachment, root.shareId), true);
+	assert.equal(await read(null, attachment, root.shareId), false);
+	block.args.image = url('replacement');
+	assert.equal(await read(viewer, attachment, root.shareId), false, 'Removing the page override revokes its old media');
+	block.args.image = url('page-image');
+	composition.references.clear();
+	assert.equal(await read(viewer, attachment, root.shareId), false, 'Unresolved aliases cannot introduce media');
+	composition.references.set('root:component:alias', component);
+	component.ownerId = 'foreign';
+	assert.equal(await read(viewer, attachment, root.shareId), false, 'Foreign templates keep independent media authority');
+});
+
+test('stored component defaults and saved arguments grant only resolved rendering media', () => {
+	const crystal = {
+		args: [{ name: 'image', type: 'string', default: url('default-image') }, { name: 'unused', type: 'string', default: url('unused') }],
+		savedArgs: { image: url('saved-image'), background: url('saved-background'), title: url('title-only') },
+		render: { tag: 'div', props: { title: '{title}', style: { backgroundImage: 'url("{background}")' } }, children: [
+			{ tag: 'img', props: { src: '{image}' } },
+			{ ttIf: { arg: 'last.result', then: { tag: 'img', props: { src: { ttArg: 'image' } } } } },
+			{ tag: 'img', props: { src: `${url('never')}{query.suffix}` } },
+			{ ttActionInputs: { src: '{unused}' } }
+		] }
+	};
+	assert.deepEqual([...compositionAttachmentIds(['component'], crystal)].sort(), ['saved-background', 'saved-image']);
+	assert.deepEqual([...compositionAttachmentIds(['component'], { ...crystal, savedArgs: {} })], ['default-image']);
+	assert.equal(compositionAttachmentIds(['component'], { ...crystal, savedArgs: { image: `${url('independent')}&key=other`, background: 'https://outside.test/private.png' } }).size, 0);
+});
+
+test('stored media resolution stays bounded across sibling properties and template expansion', () => {
+	const repeated = { ttRepeat: { count: 24, node: { ttRepeat: { count: 24, node: { tag: 'img', props: { src: '{image}' } } } } } };
+	const crystal = { args: [{ name: 'image', type: 'string', default: url('bounded') }], render: { tag: 'div', children: [repeated, repeated] } };
+	assert.deepEqual([...compositionAttachmentIds(['component'], crystal)], ['bounded']);
+});
 
 test('authored HTML discovery uses renderer bounds and screens CSS values independently', () => {
 	const ids = (html: string) => [...compositionAttachmentIds(['webpage'], { blocks: [{ type: 'html', html }] })];
@@ -109,6 +158,11 @@ test('shared media reauthorizes the root, inherits only same-author references a
 	assert.equal(await read(viewer, media, root.shareId), true);
 	component.crystal = { render: { tag: 'div', props: { style: { backgroundImage: `url(${url('media')})` } } } };
 	assert.equal(await read(viewer, media, root.shareId), true, 'Stored CSS media inherits the same root audience as image elements');
+	component.crystal = { args: [{ name: 'image', type: 'string', default: url('media') }], render: { tag: 'img', props: { src: '{image}' } } };
+	assert.equal(await read(viewer, media, root.shareId), true, 'A same-author stored argument used by a render node inherits the root');
+	component.crystal.savedArgs = { image: url('replacement') };
+	assert.equal(await read(viewer, media, root.shareId), false, 'Replacing the saved argument removes the earlier media grant');
+	component.crystal.savedArgs = { image: url('media') };
 	assert.equal(await read(null, media, root.shareId), false);
 	assert.equal(await read({ id: '', linkKeys: new Set(['wrong']) }, media, root.shareId), false);
 	assert.equal(await read(viewer, { ...media, shareId: 'unrelated' }, root.shareId), false);

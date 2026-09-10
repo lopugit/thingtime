@@ -42,6 +42,23 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   separate from focused tests; see the [feature validation notes](../PRs/731-lopu-unified-scheduled-chats.md) before deployment.
   — Codex (AI), 2026-09-10
 
+- Include containing page-block argument overrides in same-author shared media
+  inheritance, matching defaults → savedArgs → block args render precedence.
+  Compare the same resolved dependencies before/after shared edits, reusing
+  query results within validation; guessed private media remains forbidden.
+  Advertise attachment-content 1.6.0 with patched Things write contracts.
+  Foreign templates retain independent authority; full conditional coverage
+  and independent protected-upload fork copies remain follow-ups.
+  — Codex (AI), 2026-09-10
+
+- Resolve stored component defaults and saved arguments in shared media
+  positions with the canonical template resolver and one expansion budget.
+  Preserve unknown runtime tokens and reject truncated candidate values;
+  apply identical discovery to non-owner write validation. Publish
+  attachment-content 1.5.0 and patch Things write contracts. Page-block
+  argument overrides, full conditional-state coverage and independent
+  protected-upload copies remain follow-ups. — Codex (AI), 2026-09-10
+
 - Extend shared-root media inheritance to authored rich/raw HTML rendering
   positions and uploads bound directly to contained same-author Things.
   Share the browser tag/depth/node policy with bounded server discovery;

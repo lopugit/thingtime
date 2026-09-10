@@ -15,8 +15,19 @@ export const validateSharedReferenceAdditions = async (viewer: Viewer, doc: Thin
 		if (!child && optional) continue;
 		if (!child || !(await canViewInherited(child, viewer))) return fail(403, 'Only the owner can include a private dependency you cannot already read');
 	}
-	const previousMedia = compositionAttachmentIds(doc.thingtime || [], doc.crystal || {});
-	for (const id of compositionAttachmentIds(doc.thingtime || [], crystal)) {
+	// A page's args are interpreted by its stored components. Compare the same
+	// contained render contexts on both sides, not raw argument URL strings.
+	const lookupCache = new Map<string, Promise<ThingDoc | null>>();
+	const media = async (root: ThingDoc) => {
+		if (!root.thingtime.includes('webpage')) return compositionAttachmentIds(root.thingtime || [], root.crystal || {});
+		const composition = await resolveCompositionFromRoot(viewer, root, collection, lookupCache);
+		return isFail(composition) ? composition : compositionMediaIds(composition);
+	};
+	const previousMedia = await media(doc);
+	if (isFail(previousMedia)) return previousMedia;
+	const nextMedia = await media({ ...doc, crystal });
+	if (isFail(nextMedia)) return nextMedia;
+	for (const id of nextMedia) {
 		if (previousMedia.has(id)) continue;
 		const attachment = await collection.findOne({ shareId: id, thingtime: 'attachment' } as any) as unknown as ThingDoc | null;
 		if (!attachment || !(await canViewInherited(attachment, viewer))) return fail(403, 'Only the owner can include private media you cannot already read');
@@ -42,6 +53,16 @@ export const resolveSharedComposition = async (viewer: Viewer, id: string, optio
 	if (!root || !(await canViewInherited(root, viewer)) || !(options.contentRoot ? canForkThing(root) : root.thingtime?.some((kind) => ['webpage', 'component', 'action'].includes(kind)))) {
 		return fail(404, 'Shared app not found');
 	}
+	return resolveCompositionFromRoot(viewer, root, collection);
+};
+
+// Internal only: reads pass the freshly authorized stored root above. The
+// write validator passes its already-authorized before/after draft solely to
+// compare dependencies; no request can supply a replacement root to reads.
+const resolveCompositionFromRoot = async (
+	viewer: Viewer, root: ThingDoc, collection: Awaited<ReturnType<typeof getThingsCollection>>,
+	cache = new Map<string, Promise<ThingDoc | null>>()
+): Promise<SharedComposition | Fail> => {
 	const result: SharedComposition = { root, actions: new Map(), children: new Map(), data: new Map(), docs: new Map([[root.shareId, root]]), references: new Map() };
 	if (root.thingtime.includes('action')) {
 		result.actions.set(root.shareId, root);
@@ -65,7 +86,9 @@ export const resolveSharedComposition = async (viewer: Viewer, id: string, optio
 			if (kind === 'schema') queries.push({ ownerId: 'system', thingtime: 'schema', 'crystal.name': ref });
 			let child: ThingDoc | null = null;
 			for (const query of queries) {
-				const found = await collection.findOne(query as any, { sort: { 'crystal.version': -1, updatedAt: -1, shareId: 1 } }) as unknown as ThingDoc | null;
+				const cacheKey = JSON.stringify(query);
+				if (!cache.has(cacheKey)) cache.set(cacheKey, collection.findOne(query as any, { sort: { 'crystal.version': -1, updatedAt: -1, shareId: 1 } }) as unknown as Promise<ThingDoc | null>);
+				const found = await cache.get(cacheKey);
 				if (!found) continue;
 				// Only same-author containment inherits. A foreign node cannot
 				// publish unrelated private root-author data through its refs.
@@ -92,6 +115,23 @@ export const resolveSharedComposition = async (viewer: Viewer, id: string, optio
 	return result;
 };
 
+export const compositionMediaIds = (composition: SharedComposition): Set<string> => {
+	const ids = new Set<string>();
+	for (const doc of composition.docs.values()) {
+		if (doc.ownerId !== composition.root.ownerId) continue;
+		const media = compositionAttachmentIds(doc.thingtime || [], doc.crystal || {}, {
+			component: (ref) => {
+				const child = composition.references.get(`${doc.shareId}:component:${ref}`);
+				// A foreign template does not acquire authority to select unrelated
+				// private uploads belonging to the root's owner.
+				return child?.ownerId === composition.root.ownerId ? child.crystal : undefined;
+			}
+		});
+		for (const id of media) ids.add(id);
+	}
+	return ids;
+};
+
 // Contextual reads do not alter standalone ACLs. Only a stored dependency of
 // the freshly authorized root can be projected; arbitrary ids fail closed.
 export const getSharedCompositionThing = async (viewer: Viewer, id: string, rootId: string) => {
@@ -116,8 +156,7 @@ export const createCanViewSharedCompositionAttachment = (resolve = resolveShared
 	const sameAuthor = !!composition.root.ownerId && attachment.ownerId === composition.root.ownerId;
 	// Bound children need no markup scan; foreign/managed uploads never gain
 	// authority from the root and need no discovery work at all.
-	const embedded = inheritablePurpose && sameAuthor && !compositionBound && [...composition.docs.values()].some((doc) =>
-		doc.ownerId === composition.root.ownerId && compositionAttachmentIds(doc.thingtime || [], doc.crystal || {}).has(attachment.shareId));
+	const embedded = inheritablePurpose && sameAuthor && !compositionBound && compositionMediaIds(composition).has(attachment.shareId);
 	if (inheritablePurpose && sameAuthor && (compositionBound || embedded)) {
 		return canViewInherited({ ...attachment, acl: ['tt:inherit'], targetId: composition.root.shareId } as ThingDoc, viewer, (id) => Promise.resolve(id === composition.root.shareId ? composition.root : null));
 	}
