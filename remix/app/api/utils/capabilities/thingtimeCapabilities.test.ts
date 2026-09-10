@@ -42,7 +42,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // response echoes it; unknown → 400) — the single read only, the shared
   // projection is untouched (1.5.0, additive)
   // Included dependency reads add sharedRoot without widening standalone ACLs.
-  assert.equal(manifest.features['api.things']?.version, '1.7.2');
+  assert.equal(manifest.features['api.things']?.version, '1.7.3');
   // round 2 S6 — discovery: the home feed takes scope=all|subspaces ("My
   // subspaces" — only the viewer's ACTIVE subspaces, empty for guests) and
   // echoes it (1.5.0, additive)
@@ -121,7 +121,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.notifications-list']?.version, '1.6.2');
   assert.equal(manifest.features['api.notifications-settings']?.version, '1.5.0');
   assert.equal(manifest.features['api.notifications-record']?.version, '1.0.0');
-  assert.equal(manifest.features['api.things-update']?.version, '1.2.1');
+  assert.equal(manifest.features['api.things-update']?.version, '1.2.2');
   assert.ok(manifest.operations.some((operation) => operation.path === THINGTIME_CAPABILITY_MANIFEST_PATH));
   const operationPaths = new Set(manifest.operations.map((operation) => operation.path));
   for (const route of apiV1RouteKeys) assert.equal(operationPaths.has(`/api/${route}`), true, route);

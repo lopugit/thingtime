@@ -129,12 +129,16 @@ const substitute = (template: string, scope: ComponentScope, budget: ResolveBudg
 	let interpolated = 0;
 	const out = template.replace(TOKEN_PATTERN, (_match, name: string) => {
 		const value = argValue(scope, name);
-		if (value === undefined || value === null) return '';
+		if (value === undefined || value === null) return budget.preserveUnboundTokens ? _match : '';
 		// clamp to what the budget can still pay for, so an oversized string is
 		// never built in the first place
 		const room = budget.chars - interpolated;
-		if (room <= 0) return '';
+		if (room <= 0) return budget.preserveUnboundTokens ? _match : '';
 		const text = scalarText(value);
+		if (budget.preserveUnboundTokens && text.length > room) {
+			budget.left = 0;
+			return _match;
+		}
 		interpolated += Math.min(text.length, room);
 		return text.length > room ? text.slice(0, room) : text;
 	});
@@ -243,7 +247,7 @@ const formatValue = (spec: Record<string, unknown>, value: unknown): string => {
 	return scalarText(value);
 };
 
-type ResolveBudget = { left: number; chars: number };
+type ResolveBudget = { left: number; chars: number; preserveUnboundTokens?: boolean };
 
 // Bound nested action-result data without interpreting it as template syntax.
 // In particular, ttArg and ttFormat must not reopen the expansion bypass that
@@ -252,6 +256,10 @@ const resolveScopeValue = (value: unknown, budget: ResolveBudget, depth = 0, anc
 	if (budget.left <= 0 || budget.chars <= 0 || depth > 48) return undefined;
 	budget.left -= 1;
 	if (typeof value === 'string') {
+		if (budget.preserveUnboundTokens && value.length > budget.chars) {
+			budget.left = 0;
+			return undefined;
+		}
 		const text = value.slice(0, budget.chars);
 		budget.chars -= text.length;
 		if (budget.chars <= 0) budget.left = 0;
@@ -464,8 +472,16 @@ const resolveNode = (template: unknown, scope: ComponentScope, budget: ResolveBu
 // and sibling nodes all share it, so both total output COUNT and total
 // allocated TEXT are bounded no matter how the wrappers are nested or how many
 // tokens each string carries.
+// Server media discovery resolves several stored render positions on ONE
+// budget. Unknown runtime tokens must not collapse into another attachment id.
+// Ordinary UI resolution retains its existing empty-token behavior.
+export const createTemplateResolver = (options: { preserveUnboundTokens?: boolean } = {}) => {
+	const budget: ResolveBudget = { left: MAX_RESOLVED_NODES, chars: MAX_RESOLVED_CHARS, ...options };
+	return (template: unknown, scope: ComponentScope = {}): unknown => resolveNode(template, scope, budget);
+};
+
 export const resolveTemplate = (template: unknown, scope: ComponentScope = {}): unknown =>
-	resolveNode(template, scope, { left: MAX_RESOLVED_NODES, chars: MAX_RESOLVED_CHARS });
+	createTemplateResolver()(template, scope);
 
 // ---------------------------------------------------------------------------
 

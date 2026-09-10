@@ -8,6 +8,28 @@ import { MAX_WEBPAGE_HTML_CHARS } from '../../../schemas/registry';
 
 const url = (id: string) => `/api/v1/attachments/content?id=${id}`;
 
+test('stored component defaults and saved arguments grant only resolved rendering media', () => {
+	const crystal = {
+		args: [{ name: 'image', type: 'string', default: url('default-image') }, { name: 'unused', type: 'string', default: url('unused') }],
+		savedArgs: { image: url('saved-image'), background: url('saved-background'), title: url('title-only') },
+		render: { tag: 'div', props: { title: '{title}', style: { backgroundImage: 'url("{background}")' } }, children: [
+			{ tag: 'img', props: { src: '{image}' } },
+			{ ttIf: { arg: 'last.result', then: { tag: 'img', props: { src: { ttArg: 'image' } } } } },
+			{ tag: 'img', props: { src: `${url('never')}{query.suffix}` } },
+			{ ttActionInputs: { src: '{unused}' } }
+		] }
+	};
+	assert.deepEqual([...compositionAttachmentIds(['component'], crystal)].sort(), ['saved-background', 'saved-image']);
+	assert.deepEqual([...compositionAttachmentIds(['component'], { ...crystal, savedArgs: {} })], ['default-image']);
+	assert.equal(compositionAttachmentIds(['component'], { ...crystal, savedArgs: { image: `${url('independent')}&key=other`, background: 'https://outside.test/private.png' } }).size, 0);
+});
+
+test('stored media resolution stays bounded across sibling properties and template expansion', () => {
+	const repeated = { ttRepeat: { count: 24, node: { ttRepeat: { count: 24, node: { tag: 'img', props: { src: '{image}' } } } } } };
+	const crystal = { args: [{ name: 'image', type: 'string', default: url('bounded') }], render: { tag: 'div', children: [repeated, repeated] } };
+	assert.deepEqual([...compositionAttachmentIds(['component'], crystal)], ['bounded']);
+});
+
 test('authored HTML discovery uses renderer bounds and screens CSS values independently', () => {
 	const ids = (html: string) => [...compositionAttachmentIds(['webpage'], { blocks: [{ type: 'html', html }] })];
 	assert.deepEqual(ids(`<div style='color: expression(unsafe); background-image: url("${url('safe')}"); content: "url(${url('text')})"'></div>`), ['safe']);
@@ -109,6 +131,11 @@ test('shared media reauthorizes the root, inherits only same-author references a
 	assert.equal(await read(viewer, media, root.shareId), true);
 	component.crystal = { render: { tag: 'div', props: { style: { backgroundImage: `url(${url('media')})` } } } };
 	assert.equal(await read(viewer, media, root.shareId), true, 'Stored CSS media inherits the same root audience as image elements');
+	component.crystal = { args: [{ name: 'image', type: 'string', default: url('media') }], render: { tag: 'img', props: { src: '{image}' } } };
+	assert.equal(await read(viewer, media, root.shareId), true, 'A same-author stored argument used by a render node inherits the root');
+	component.crystal.savedArgs = { image: url('replacement') };
+	assert.equal(await read(viewer, media, root.shareId), false, 'Replacing the saved argument removes the earlier media grant');
+	component.crystal.savedArgs = { image: url('media') };
 	assert.equal(await read(null, media, root.shareId), false);
 	assert.equal(await read({ id: '', linkKeys: new Set(['wrong']) }, media, root.shareId), false);
 	assert.equal(await read(viewer, { ...media, shareId: 'unrelated' }, root.shareId), false);

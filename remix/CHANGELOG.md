@@ -18,6 +18,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Resolve stored component defaults and saved arguments in shared media
+  positions with the canonical template resolver and one expansion budget.
+  Preserve unknown runtime tokens and reject truncated candidate values;
+  apply identical discovery to non-owner write validation. Publish
+  attachment-content 1.5.0 and patch Things write contracts. Page-block
+  argument overrides, full conditional-state coverage and independent
+  protected-upload copies remain follow-ups. — Codex (AI), 2026-09-10
+
 - Extend shared-root media inheritance to authored rich/raw HTML rendering
   positions and uploads bound directly to contained same-author Things.
   Share the browser tag/depth/node policy with bounded server discovery;

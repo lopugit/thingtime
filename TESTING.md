@@ -5582,6 +5582,13 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       private media refs. Negotiate `api.attachment-content >= 1.2.0`; forward
       `sharedRoot` plus the key only to the exact first-party content endpoint.
       Explicit audio downloads use the same context without persisting its URL.
+- [ ] Shared component media supplied through argument defaults or savedArgs
+      renders signed out with the root context at desktop/mobile widths.
+      Saved values override defaults; replacing one removes the old grant.
+      Unused args, unknown runtime tokens, external URLs and independent keys
+      grant nothing. Non-owner editors cannot inject unreadable uploads through
+      either argument source. Expansion limits never truncate one attachment
+      identifier into another; negotiate attachment-content 1.5.0.
 - [ ] Canvas: hovering a block draws its dashed boundary + label chip; nested
       sub-blocks highlight innermost-wins; clicking selects (solid outline)
       and opens the inspector in the right drawer.
