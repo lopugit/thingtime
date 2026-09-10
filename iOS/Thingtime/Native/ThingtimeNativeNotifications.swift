@@ -7,8 +7,16 @@ import WebKit
 @MainActor
 final class ThingtimeNativeNotifications: NSObject {
     static let shared = ThingtimeNativeNotifications()
+    static let pushRequirements = ["api.auth-me": [1, 0, 0], "api.notifications-devices": [1, 2, 0]]
+    static func supportsPushManifest(_ manifest: [String: Any], origin: URL) -> Bool {
+        pushRequirements.allSatisfy { feature, minimum in
+            LopuVoiceContract.accepts(manifest, baseURL: origin, feature: feature, minimum: minimum)
+        }
+    }
 
     private weak var webView: WKWebView?
+    private var trustedOrigin: String?
+    private var registrationStatus = "pending"
     private var phoneDeviceToken: String?
     private var watchDeviceToken: String?
     private var refreshTimer: Timer?
@@ -30,9 +38,11 @@ final class ThingtimeNativeNotifications: NSObject {
     func activate() {
         session?.delegate = self
         session?.activate()
+        Task { await requestNotificationAuthorizationIfNeeded() }
     }
 
-    func attach(webView: WKWebView) {
+    func attach(webView: WKWebView, rootURL: URL) {
+        trustedOrigin = rootURL.origin
         self.webView = webView
         attachmentUploader.attach(webView: webView)
         refreshTimer?.invalidate()
@@ -44,16 +54,22 @@ final class ThingtimeNativeNotifications: NSObject {
 
     func setPhoneDeviceToken(_ token: String) {
         phoneDeviceToken = token
-        Task { await registerPendingDevices() }
+        registrationStatus = "pending"
+        Task {
+            await registerPendingDevices()
+            notifyWeb(type: "native-push-registration-changed", payload: [:])
+        }
     }
 
     func recordRegistrationFailure(_ error: Error) {
+        registrationStatus = "failed"
 #if DEBUG
         print("[ThingtimeNativeNotifications] APNs registration unavailable: \(error.localizedDescription)")
 #endif
     }
 
     func receivedRemoteNotification(_ userInfo: [AnyHashable: Any]) {
+        notifyWeb(type: "notifications-changed", payload: [:])
         Task { await refresh() }
     }
 
@@ -71,16 +87,55 @@ final class ThingtimeNativeNotifications: NSObject {
         webView.load(URLRequest(url: url))
     }
 
-    private func requestNotificationAuthorizationIfNeeded() async {
-        guard !requestedAuthorization else { return }
-        requestedAuthorization = true
+    private func requestNotificationAuthorizationIfNeeded(requestPermission: Bool = false) async {
+        let center = UNUserNotificationCenter.current()
+        var settings = await center.notificationSettings()
+        if requestPermission, settings.authorizationStatus == .notDetermined, !requestedAuthorization {
+            requestedAuthorization = true
+            do { _ = try await center.requestAuthorization(options: [.alert, .badge, .sound]) }
+            catch { recordRegistrationFailure(error) }
+            requestedAuthorization = false
+            settings = await center.notificationSettings()
+        }
+        if [.authorized, .provisional, .ephemeral].contains(settings.authorizationStatus),
+           phoneDeviceToken == nil || !UIApplication.shared.isRegisteredForRemoteNotifications {
+            UIApplication.shared.registerForRemoteNotifications()
+        }
+    }
+
+    private func notifyWeb(type: String, payload: [String: Any]) {
+        guard let webView, webView.url?.origin == trustedOrigin,
+              let data = try? JSONSerialization.data(withJSONObject: ["type": type, "payload": payload]),
+              let json = String(data: data, encoding: .utf8) else { return }
+        webView.evaluateJavaScript("window.thingtimeNativeBridge?.receiveMessageFromNative(\(json));")
+    }
+
+    func notificationSettings(action: String, ownerId: String) async {
+        guard let webView, let origin = trustedOrigin, webView.url?.origin == origin else { return }
         do {
-            let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound])
-            if granted {
-                UIApplication.shared.registerForRemoteNotifications()
+            let manifest = try await fetchJSON(path: LopuVoiceContract.manifestPath)
+            guard let base = URL(string: origin), Self.supportsPushManifest(manifest, origin: base) else { throw NativeBridgeError.invalidResponse }
+            let identity = try await fetchJSON(path: "/api/v1/auth/me")
+            guard (identity["user"] as? [String: Any])?["id"] as? String == ownerId else { return }
+            if action == "open-settings", let url = URL(string: UIApplication.openNotificationSettingsURLString) {
+                await UIApplication.shared.open(url)
             }
+            await requestNotificationAuthorizationIfNeeded(requestPermission: action == "enable")
+            await registerPendingDevices()
+            let settings = await UNUserNotificationCenter.current().notificationSettings()
+            guard webView.url?.origin == origin else { return }
+            let authorization: String
+            switch settings.authorizationStatus {
+            case .authorized: authorization = "allowed"
+            case .provisional, .ephemeral: authorization = "quiet"
+            case .denied: authorization = "denied"
+            default: authorization = "not-requested"
+            }
+            notifyWeb(type: "notification-status", payload: ["ownerId": ownerId, "authorization": authorization,
+                "registration": registrationStatus, "hasToken": phoneDeviceToken != nil])
         } catch {
-            recordRegistrationFailure(error)
+            notifyWeb(type: "notification-status", payload: ["ownerId": ownerId, "registration": "failed",
+                "message": "Could not check this iPhone. Sign in, reconnect, and retry."])
         }
     }
 
@@ -89,7 +144,7 @@ final class ThingtimeNativeNotifications: NSObject {
         if let context = session?.receivedApplicationContext, !context.isEmpty {
             _ = await offerWatchApproval(context)
         }
-        guard let webView else {
+        guard let webView, webView.url?.origin == trustedOrigin else {
             return .failure("Open Thingtime on your iPhone to reconnect this Watch.")
         }
         guard !isRefreshing else {
@@ -97,6 +152,9 @@ final class ThingtimeNativeNotifications: NSObject {
         }
         isRefreshing = true
         defer { isRefreshing = false }
+        // Registration must not depend on successfully decoding notification history.
+        await requestNotificationAuthorizationIfNeeded()
+        await registerPendingDevices()
 
         do {
             let result = try await webView.callAsyncJavaScript(
@@ -151,8 +209,6 @@ final class ThingtimeNativeNotifications: NSObject {
                 phoneBuild: Self.buildNumber
             )
             publish(snapshot)
-            await requestNotificationAuthorizationIfNeeded()
-            await registerPendingDevices()
             attachmentUploader.processPending()
             return .snapshot(snapshot)
         } catch {
@@ -164,7 +220,7 @@ final class ThingtimeNativeNotifications: NSObject {
     }
 
     private func registerPendingDevices() async {
-        guard let webView else { return }
+        guard let webView, let origin = trustedOrigin, webView.url?.origin == origin else { return }
         var devices: [[String: String]] = []
         let environment = Self.apnsEnvironment
         if let phoneDeviceToken {
@@ -178,21 +234,31 @@ final class ThingtimeNativeNotifications: NSObject {
               let json = String(data: data, encoding: .utf8) else { return }
 
         do {
-            _ = try await webView.callAsyncJavaScript(
+            let manifest = try await fetchJSON(path: LopuVoiceContract.manifestPath)
+            guard let base = URL(string: origin), Self.supportsPushManifest(manifest, origin: base) else { registrationStatus = "failed"; return }
+            let result = try await webView.callAsyncJavaScript(
                 """
+                if (location.origin !== expectedOrigin) return 409;
+                const identity = await fetch('/api/v1/auth/me', {credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(15000)}).then(r => r.json());
+                if (!identity.user?.id || location.origin !== expectedOrigin) return 401;
                 const response = await fetch('/api/v1/notifications/devices', {
                   method: 'POST',
+                  signal: AbortSignal.timeout(15000),
                   credentials: 'same-origin',
                   headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-                  body: devicesJSON
+                  body: JSON.stringify({...JSON.parse(devicesJSON), ownerId: identity.user.id})
                 });
                 return response.status;
                 """,
-                arguments: ["devicesJSON": json],
+                arguments: ["devicesJSON": json, "expectedOrigin": origin],
                 in: nil,
                 contentWorld: .page
             )
+            guard webView.url?.origin == origin, trustedOrigin == origin else { return }
+            registrationStatus = (result as? Int) == 200 ? "registered" : "failed"
         } catch {
+            guard webView.url?.origin == origin, trustedOrigin == origin else { return }
+            registrationStatus = "failed"
 #if DEBUG
             print("[ThingtimeNativeNotifications] device sync failed: \(error.localizedDescription)")
 #endif
@@ -366,6 +432,7 @@ final class ThingtimeNativeNotifications: NSObject {
         let result = try await webView.callAsyncJavaScript(
             """
             const response = await fetch(requestPath, {
+              signal: AbortSignal.timeout(15000),
               credentials: 'same-origin',
               headers: { Accept: 'application/json' }
             });
