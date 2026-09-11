@@ -6712,6 +6712,8 @@ approval; `access.test.ts` — the reservation matrix) and
   stored bytes must not block links-only export. Included bytes must still fail
   on unavailable storage; exclusions must not bypass owner/shared-root,
   moderation or expiry gates, and recording roots must still require bytes.
+- At 390px, select both Download formats: the selected label must fit, and the
+  helper must clearly state whether the archive can include stored file bytes.
 - Export/import saved themes and algorithms both inside an included folder and
   alone into a selected current folder. Confirm new private IDs, remapped
   placement, unchanged active selections and dedicated cleanup on placement

@@ -40,9 +40,10 @@ export const ThingExportDialog = ({ ids, linkKey, onClose }: { ids: string[]; li
       <ModalBody><Flex direction="column" gap={4}>
         <Text fontSize="sm">Downloads contain portable content, not account credentials or sharing permissions. Importing creates new private copies.</Text>
         <Select aria-label="Download format" value={format} isDisabled={busy} onChange={(event) => setFormat(event.target.value as 'zip' | 'json')}>
-          <option value="zip">ZIP — content and included files</option>
-          <option value="json">JSON — content and links, no stored file bytes</option>
+          <option value="zip">ZIP — content + files</option>
+          <option value="json">JSON — content + links</option>
         </Select>
+        <Text fontSize="sm">{format === 'zip' ? 'ZIP can include stored file bytes.' : 'JSON contains no stored file bytes.'}</Text>
         <Checkbox isChecked={children} isDisabled={busy} onChange={(event) => setChildren(event.target.checked)}>Include folder contents</Checkbox>
         <Checkbox isChecked={dependencies} isDisabled={busy} onChange={(event) => setDependencies(event.target.checked)}>Include app components, actions and schemas</Checkbox>
         <Checkbox isChecked={format === 'zip' && files} isDisabled={busy || format === 'json'} onChange={(event) => setFiles(event.target.checked)}>Include attached files</Checkbox>
