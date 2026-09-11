@@ -22,10 +22,12 @@ test('shared dependency reads negotiate the additive Things contract on both man
 
 test('standalone Thing copying negotiates the additive copy contract on both manifests', () => {
 	const version = createApiCapabilitiesManifest().features['api.things-fork'];
-	assert.equal(version, '1.2.1');
+	assert.equal(version, '1.4.0');
 	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-fork'].version, version);
 	assert.equal(capabilitySatisfies(version, '1.0.0'), true);
 	for (const unsupported of ['', '1.0.0', '1.1.0', '1.1.1', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.2.0'), false);
+	for (const unsupported of ['', '1.2.1', '1.3.0', '1.3.1', '1.3.2', '1.3.3', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.4.0'), false);
+	assert.equal(capabilitySatisfies('1.4.1', '1.4.0'), true);
 });
 
 test('Data Thing controls negotiate the shared-content action contract', () => {
@@ -206,8 +208,8 @@ test('the Lopu verified-access and credits family publishes its contracts', () =
 });
 
 test('persistent attachment content and resized previews advertise their additive contract', () => {
-	assert.equal(createApiCapabilitiesManifest().features['api.attachment-content'], '1.6.2');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.attachment-content'].version, '1.6.2');
+	assert.equal(createApiCapabilitiesManifest().features['api.attachment-content'], '1.6.3');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.attachment-content'].version, '1.6.3');
 	for (const unsupported of ['', '1.1.1', '1.2.1', '1.3.0', '1.4.0', '1.5.0', '1.6.0', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.6.1'), false);
 	assert.equal(capabilitySatisfies('1.6.1', '1.6.1'), true);
 	assert.equal(capabilitySatisfies('1.6.2', '1.6.1'), true);
@@ -217,7 +219,7 @@ test('shared audience-boundary corrections reject pre-fix and incompatible origi
 	const manifest = thingtimeCapabilityManifest('https://thingtime.test');
 	for (const [name, required, previous] of [
 		['things', '1.9.1', '1.9.0'], ['things-update', '1.2.6', '1.2.5'],
-		['actions-run', '1.3.1', '1.3.0'], ['things-fork', '1.2.1', '1.2.0'], ['attachment-content', '1.6.2', '1.6.1']
+		['actions-run', '1.3.1', '1.3.0'], ['things-fork', '1.4.0', '1.3.3'], ['attachment-content', '1.6.3', '1.6.2']
 	]) {
 		assert.equal(manifest.features[`api.${name}`].version, required);
 		assert.equal(capabilitySatisfies(required, required), true);
