@@ -1,3 +1,5 @@
+import { canonicalLinkedAttachmentUrl, linkedMediaTypeForUrl, MAX_ATTACHMENT_TITLE_CHARS, MAX_ATTACHMENT_DESCRIPTION_CHARS, MAX_ATTACHMENT_FILENAME_PREVIEW_CHARS, type LinkedAttachmentMediaKind } from '../../api/utils/attachments/attachmentCore';
+
 /** Portable content, not a database backup or an authorization envelope.
  * Importers must create new, private, caller-owned Things through normal APIs.
  * A clipboard's claimed source or cut intent never authorizes a move/delete.
@@ -31,6 +33,25 @@ export type ThingTransfer = {
   roots: string[];
   things: TransferThing[];
   files: TransferFile[];
+  links?: TransferLink[];
+  attachmentOrder?: string[];
+};
+
+/** External bytes stay external. No object keys, authority or moderation stamps. */
+export type TransferLink = {
+  id: string;
+  targetId: string;
+  url: string;
+  mediaKind: LinkedAttachmentMediaKind;
+  title?: string;
+  description?: string;
+  filenamePreview?: string;
+};
+
+export const orderedTransferAttachments = (manifest: Pick<ThingTransfer, 'files' | 'links' | 'attachmentOrder'>) => {
+  const attachments = [...manifest.files, ...(manifest.links || [])];
+  const byId = new Map(attachments.map((entry) => [entry.id, entry]));
+  return manifest.attachmentOrder ? manifest.attachmentOrder.map((id) => byId.get(id)!) : attachments;
 };
 
 export class TransferFormatError extends Error {
@@ -62,7 +83,7 @@ const json = (value: unknown, depth = 0): void => {
 
 export const validateTransfer = (value: unknown): ThingTransfer => {
   if (!object(value)) return invalid('This is not a Thingtime transfer');
-  keys(value, ['format', 'version', 'roots', 'things', 'files']);
+  keys(value, ['format', 'version', 'roots', 'things', 'files', 'links', 'attachmentOrder']);
   if (value.format !== TRANSFER_FORMAT || value.version !== TRANSFER_VERSION) return invalid('Unsupported Thingtime transfer version');
   if (!Array.isArray(value.things) || !value.things.length || value.things.length > TRANSFER_LIMITS.things) return invalid('Invalid number of Things');
   if (!strings(value.roots, TRANSFER_LIMITS.things) || !value.roots.length) return invalid('Invalid transfer roots');
@@ -110,6 +131,24 @@ export const validateTransfer = (value: unknown): ThingTransfer => {
     if (typeof file.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(file.sha256)) return invalid('Invalid file checksum');
     files.add(file.id);
   }
+  if (value.links !== undefined) {
+    if (!Array.isArray(value.links) || value.links.length + files.size > TRANSFER_LIMITS.files) return invalid('Invalid number of attachments');
+    for (const link of value.links) {
+      if (!object(link)) return invalid('Invalid linked attachment');
+      keys(link, ['id', 'targetId', 'url', 'mediaKind', 'title', 'description', 'filenamePreview']);
+      if (!id(link.id) || files.has(link.id) || docs.has(link.id)) return invalid('Invalid or duplicate attachment ID');
+      if (!id(link.targetId) || !docs.has(link.targetId)) return invalid('A linked attachment target is missing');
+      if (typeof link.url !== 'string' || canonicalLinkedAttachmentUrl(link.url) !== link.url) return invalid('Invalid linked attachment URL');
+      if (link.mediaKind !== 'file' && link.mediaKind !== linkedMediaTypeForUrl(link.url).mediaKind) return invalid('Invalid linked attachment kind');
+      for (const [field, max] of Object.entries({ title: MAX_ATTACHMENT_TITLE_CHARS, description: MAX_ATTACHMENT_DESCRIPTION_CHARS, filenamePreview: MAX_ATTACHMENT_FILENAME_PREVIEW_CHARS })) {
+        const text = link[field];
+        if (text !== undefined && (typeof text !== 'string' || text.trim() !== text || !text || text.length > max || /[\p{Cf}\p{Cs}]/u.test(text) || [...text].some((char) => /\p{Cc}/u.test(char) && !(field === 'description' && char === '\n')))) return invalid('Invalid linked attachment annotation');
+      }
+      files.add(link.id);
+    }
+    if (value.links.length && value.attachmentOrder === undefined) return invalid('Linked galleries require an attachment order');
+  }
+  if (value.attachmentOrder !== undefined && (!strings(value.attachmentOrder, TRANSFER_LIMITS.files) || value.attachmentOrder.length !== files.size || value.attachmentOrder.some((entry) => !files.has(entry)))) return invalid('Invalid attachment order');
   return value as ThingTransfer;
 };
 

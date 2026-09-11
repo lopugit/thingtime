@@ -77,6 +77,24 @@ const noopS3 = (overrides: Partial<AttachmentS3> = {}): AttachmentS3 => ({
 	...overrides
 });
 
+test('portable linked metadata refuses flagged sources even for administrators and never signs a redirect', async () => {
+	let doc = attachmentDoc({ attachmentLinked: true, attachmentState: 'ready', attachmentPurpose: 'post', targetId: 'page', objectSizeBytes: 0,
+		crystal: { name: 'a.png', size: 0, contentType: 'image/png', mediaKind: 'image', url: 'https://example.com/a.png' } });
+	let allowed = true;
+	const service = createAttachmentService({ store: { getById: async () => doc } as any, now: () => now,
+		customMongoActive: () => false, canViewSharedTarget: async () => allowed,
+		getS3: () => { throw new Error('Links must not access S3'); } });
+	const viewer = { id: 'user-1', isAdmin: true, sharedRoot: 'page' };
+	assert.equal((await service.describeTransfer(viewer, doc.shareId)).ok, true);
+	assert.equal((await service.download(viewer, doc.shareId, false)).ok, false);
+	for (const status of ['blocked', 'pending', 'nsfw'] as const) {
+		doc = { ...doc, moderation: { status } };
+		assert.equal((await service.describeTransfer(viewer, doc.shareId)).ok, false);
+	}
+	doc = { ...doc, moderation: undefined }; allowed = false;
+	assert.equal((await service.describeTransfer(viewer, doc.shareId)).ok, false);
+});
+
 test('shared media downloads reauthorize without bypassing readiness, moderation or home-storage fences', async () => {
 	let doc = attachmentDoc({ attachmentState: 'ready', attachmentPurpose: 'post', targetId: 'private-post', objectVersionId: 'version-1' });
 	let rootAllowed = true;

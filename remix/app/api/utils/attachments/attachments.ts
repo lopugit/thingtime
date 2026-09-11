@@ -1290,6 +1290,9 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 	const describeTransfer = async (viewer: AttachmentViewer, id: unknown) => {
 		const readable = await readableStoredAttachment(viewer, id, true);
 		if (readable.ok === false) return readable;
+		// Link import does not upload/re-moderate bytes. Never turn a flagged
+		// source into an unmoderated portable gallery, even for its owner/admin.
+		if (readable.doc.attachmentLinked && ['blocked', 'pending', 'nsfw'].includes(readable.doc.moderation?.status || '')) return fail(403, 'Flagged linked media cannot be exported');
 		const attachment = toAttachmentPublicMetadata(readable.doc.shareId, readable.doc.crystal);
 		if (!attachment) return fail(404, 'Attachment not found');
 		return { ok: true as const, attachment, linked: readable.doc.attachmentLinked === true };

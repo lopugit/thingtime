@@ -2,8 +2,18 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { bundleFromPlan, readTransferClipboard, transferClipboardText, writeTransferClipboard } from './browser';
 import type { TransferPlan } from './plan';
+import { encodeTransferArchive, decodeTransferArchive } from './archive';
 
 const plan = (): TransferPlan => ({ roots: ['note'], things: [{ id: 'note', thingtime: ['note'], crystal: { name: 'A note' }, extended: ['json', 42] }], files: [] });
+
+test('linked metadata round-trips clipboard and ZIP without fetching external URLs', async () => {
+  const original = plan();
+  original.links = [{ id: 'link', targetId: 'note', url: 'https://example.com/photo.png', mediaKind: 'image', title: 'Photo 🥰', description: 'First\nSecond' }];
+  original.attachmentOrder = ['link'];
+  const bundle = await bundleFromPlan(original, { fetch: async () => { throw new Error('Must not fetch links'); } });
+  assert.deepEqual(await readTransferClipboard(await transferClipboardText(bundle)), bundle);
+  assert.deepEqual(await decodeTransferArchive(await encodeTransferArchive(bundle)), bundle);
+});
 
 test('clipboard JSON preserves portable content and cannot carry destructive cut commands', async () => {
   const bundle = await bundleFromPlan(plan());

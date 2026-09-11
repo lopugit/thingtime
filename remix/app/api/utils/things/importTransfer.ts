@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { isProtectedThingtime } from '../../../schemas/registry';
-import { serializeTransfer, validateTransfer, type ThingTransfer, type TransferThing } from '../../../utils/thingTransfer/format';
+import { orderedTransferAttachments, serializeTransfer, validateTransfer, type ThingTransfer, type TransferThing } from '../../../utils/thingTransfer/format';
 import { rewriteComposition } from '../actions/forkCompositionCore';
 import { rewriteTransferMedia } from './transferMediaCore';
-import { createReadyAttachmentPostInsertHook, inspectReadyAttachmentsForPost, prepareAttachmentCascadeForThing } from '../attachments/attachments';
+import { annotateAttachment, linkAttachment, deleteAttachment, createReadyAttachmentPostInsertHook, inspectReadyAttachmentsForPost, prepareAttachmentCascadeForThing } from '../attachments/attachments';
 import { attachmentStore } from '../attachments/attachmentStore';
 import { createThing, deleteThing, fail, isFail, type Viewer } from './things';
 
@@ -14,8 +14,11 @@ type ImportDependencies = {
   getFile: typeof attachmentStore.getOwned;
   bindFiles: typeof createReadyAttachmentPostInsertHook;
   uuid: () => string;
+  link: typeof linkAttachment;
+  annotate: typeof annotateAttachment;
+  removeFile: typeof deleteAttachment;
 };
-const defaults: ImportDependencies = { create: createThing, remove: deleteThing, inspectFiles: inspectReadyAttachmentsForPost, getFile: attachmentStore.getOwned, bindFiles: createReadyAttachmentPostInsertHook, uuid: randomUUID };
+const defaults: ImportDependencies = { create: createThing, remove: deleteThing, inspectFiles: inspectReadyAttachmentsForPost, getFile: attachmentStore.getOwned, bindFiles: createReadyAttachmentPostInsertHook, uuid: randomUUID, link: linkAttachment, annotate: annotateAttachment, removeFile: deleteAttachment };
 
 /** Import ordering only constrains structural/provenance references. Action
  * cycles are legal: their fresh IDs are allocated before any create call.
@@ -57,6 +60,8 @@ export const importTransfer = async (
   const files = fileMap as Map<string, string>;
   const ids = new Map(manifest.things.map((thing) => [thing.id, deps.uuid()]));
   const created: string[] = [];
+  const createdLinks: string[] = [];
+  const attachments = orderedTransferAttachments(manifest);
   const suffix = deps.uuid().slice(0, 8);
   const expires = Date.now() + 120_000;
   const check = () => {
@@ -64,6 +69,20 @@ export const importTransfer = async (
     if (Date.now() > expires) throw new Error('The import timed out');
   };
   try {
+    for (const link of manifest.links || []) {
+      check();
+      // Same canonical writer/quota policy as pasting a URL into a gallery.
+      // It does not fetch remote bytes or grant stored-upload approval.
+      const result = await deps.link(viewer.id, { url: link.url, mediaKind: link.mediaKind, purpose: 'post' });
+      if (isFail(result)) throw result;
+      createdLinks.push(result.attachment.id);
+      files.set(link.id, result.attachment.id);
+      if (link.title || link.description || link.filenamePreview) {
+        check();
+        const annotated = await deps.annotate(viewer.id, { id: result.attachment.id, title: link.title, description: link.description, filenamePreview: link.filenamePreview });
+        if (isFail(annotated)) throw annotated;
+      }
+    }
     const crystals = rewriteTransferMedia(ordered, files);
     // All uploads must be fresh, ready and owned by the real caller. Validate
     // them before the first Thing write, then the bind hook checks again in
@@ -71,13 +90,13 @@ export const importTransfer = async (
     const inspections = new Map<string, Awaited<ReturnType<typeof deps.inspectFiles>>>();
     for (const thing of ordered) {
       check();
-      const bound = manifest.files.filter((file) => file.targetId === thing.id);
+      const bound = attachments.filter((file) => file.targetId === thing.id);
       if (!bound.length) continue;
       const inspected = await deps.inspectFiles(viewer.id, bound.map((file) => files.get(file.id)!));
       if (isFail(inspected)) throw inspected;
       for (const file of bound) {
         const uploaded = await deps.getFile(viewer.id, files.get(file.id)!);
-        if (!uploaded || uploaded.crystal.size !== file.bytes) throw new Error('Uploaded file does not match the transfer');
+        if (!uploaded || ('bytes' in file ? uploaded.attachmentLinked || uploaded.crystal.size !== file.bytes : !uploaded.attachmentLinked || uploaded.crystal.url !== file.url)) throw new Error('Uploaded file does not match the transfer');
       }
       inspections.set(thing.id, inspected);
     }
@@ -90,7 +109,7 @@ export const importTransfer = async (
       // into the original community just because the source carried a route.
       if (thing.thingtime.includes('webpage')) delete crystal.siteRoute;
       if (thing.thingtime.includes('post')) { delete crystal.subspaceId; delete crystal.flairId; }
-      const bound = manifest.files.filter((file) => file.targetId === thing.id).map((file) => files.get(file.id)!);
+      const bound = attachments.filter((file) => file.targetId === thing.id).map((file) => files.get(file.id)!);
       const inspected = inspections.get(thing.id);
       const result = await deps.create(viewer.id, {
         shareId: ids.get(thing.id), thingtime: thing.thingtime, crystal, extended: thing.extended, tags: thing.tags,
@@ -102,12 +121,23 @@ export const importTransfer = async (
       if (isFail(result)) throw result;
       created.push(result.doc.shareId);
     }
-    return { ok: true as const, roots: manifest.roots.map((id) => ids.get(id)!), ids: Object.fromEntries(ids), imported: created.length, filesImported: files.size };
+    return { ok: true as const, roots: manifest.roots.map((id) => ids.get(id)!), ids: Object.fromEntries(ids), imported: created.length, filesImported: manifest.files.length, linksImported: createdLinks.length };
   } catch (error) {
     const remaining: string[] = [];
     for (const id of [...created].reverse()) {
       try { if (isFail(await deps.remove(viewer, id, null, { beforeCascade: prepareAttachmentCascadeForThing }))) remaining.push(id); }
       catch { remaining.push(id); }
+    }
+    for (const id of createdLinks) {
+      try {
+        const doc = await deps.getFile(viewer.id, id);
+        // Bound links belong to the Thing cascade above. Never detach a link
+        // from a surviving copy whose cascade failed.
+        if (doc && !doc.targetId) {
+          const removed = await deps.removeFile(viewer.id, { id });
+          if (isFail(removed) || removed.deferred) remaining.push(id);
+        }
+      } catch { remaining.push(id); }
     }
     const failure = isFail(error) ? error : fail(400, error instanceof Error ? error.message : 'Import failed');
     return { ...failure,

@@ -21,11 +21,11 @@ const content = (thing: PublicThing): TransferThing => ({
 });
 
 export const exportTransferPlan = async (viewer: Viewer, input: {
-  ids?: unknown; includeChildren?: unknown; includeDependencies?: unknown; includeFiles?: unknown;
+  ids?: unknown; includeChildren?: unknown; includeDependencies?: unknown; includeFiles?: unknown; includeLinks?: unknown;
 }, signal?: AbortSignal, overrides: Partial<typeof defaults> = {}) => {
   const deps = { ...defaults, ...overrides };
   if (!Array.isArray(input.ids) || !input.ids.length || input.ids.length > TRANSFER_LIMITS.things || input.ids.some((id) => typeof id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(id))) return fail(400, 'Choose valid Thing IDs to export');
-  for (const key of ['includeChildren', 'includeDependencies', 'includeFiles'] as const) if (input[key] !== undefined && typeof input[key] !== 'boolean') return fail(400, 'Invalid export option');
+  for (const key of ['includeChildren', 'includeDependencies', 'includeFiles', 'includeLinks'] as const) if (input[key] !== undefined && typeof input[key] !== 'boolean') return fail(400, 'Invalid export option');
   const docs = new Map<string, TransferThing>();
   const stored = new Map<string, ThingDoc>();
   const compositions = new Map<string, SharedComposition>();
@@ -79,7 +79,7 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
       files: async function* () { yield* []; /* Bytes follow this authorized plan. */ }
     }, { includeChildren: input.includeChildren !== false, includeDependencies: input.includeDependencies !== false, includeFiles: false, signal });
     const plan: TransferPlan = { roots: bundle.manifest.roots, things: bundle.manifest.things, files: [] };
-    if (input.includeFiles !== false) {
+    if (input.includeFiles !== false || input.includeLinks !== false) {
       const includedIds = new Set(plan.things.map((thing) => thing.id));
       const targets = new Map<string, { targetId: string; sharedRoot?: string }>();
       for (const file of await deps.bound(plan.things.map((thing) => stored.get(thing.id)!))) {
@@ -103,7 +103,17 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
         if (!includedIds.has(target.targetId)) throw new Error('An attachment target is missing');
         const result = await deps.describe({ ...viewer, sharedRoot: target.sharedRoot }, id);
         if (isFail(result)) throw result;
-        if (result.linked) throw new Error('Linked galleries need the linked-file transfer adapter; this export was not truncated');
+        if (result.linked ? input.includeLinks === false : input.includeFiles === false) continue;
+        (plan.attachmentOrder ||= []).push(id);
+        if (result.linked) {
+          const attachment = result.attachment;
+          if (!attachment.url || attachment.nsfw || attachment.pending) throw new Error('Linked media cannot be exported');
+          (plan.links ||= []).push({ id, targetId: target.targetId, url: attachment.url, mediaKind: attachment.mediaKind,
+            ...(attachment.title ? { title: attachment.title } : {}),
+            ...(attachment.description ? { description: attachment.description } : {}),
+            ...(attachment.filenamePreview ? { filenamePreview: attachment.filenamePreview } : {}) });
+          continue;
+        }
         bytes += result.attachment.size;
         if (bytes > TRANSFER_LIMITS.fileBytes) throw new Error('This export exceeds the file byte limit');
         plan.files.push({ id, ...target, name: result.attachment.name, mime: result.attachment.contentType, bytes: result.attachment.size });

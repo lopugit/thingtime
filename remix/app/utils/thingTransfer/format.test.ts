@@ -13,6 +13,26 @@ test('portable JSON round-trips Unicode, arbitrary content, kinds, and folder st
   assert.deepEqual(parseTransfer(serializeTransfer(fixture())), fixture());
 });
 
+test('linked galleries reject unsafe URLs, forged metadata, missing targets and incomplete mixed ordering', () => {
+  const value = fixture();
+  value.links = [{ id: 'link', targetId: 'data', url: 'https://example.com/a.png', mediaKind: 'image', description: 'First line\nSecond 🥰' }];
+  value.attachmentOrder = ['link'];
+  assert.deepEqual(parseTransfer(serializeTransfer(value)), value);
+  for (const url of ['javascript:alert(1)', 'https://user:secret@example.com/a.png', '//example.com/a.png', 'https://example.com/ a.png']) {
+    assert.throws(() => validateTransfer({ ...value, links: [{ ...value.links[0], url }] }), /URL/);
+  }
+  for (const mutate of [
+    (v: any) => { delete v.attachmentOrder; },
+    (v: any) => { v.attachmentOrder = []; },
+    (v: any) => { v.attachmentOrder = ['link', 'link']; },
+    (v: any) => { v.links[0].targetId = 'absent'; },
+    (v: any) => { v.links[0].mediaKind = 'video'; },
+    (v: any) => { v.links[0].nsfw = false; },
+    (v: any) => { v.links[0].id = 'data'; },
+    (v: any) => { v.links[0].title = 'title\ncontrol'; }
+  ]) { const copy = structuredClone(value); mutate(copy); assert.throws(() => validateTransfer(copy)); }
+});
+
 test('rejects ownership, ACLs, tokens and raw database metadata at the record boundary', () => {
   for (const field of ['ownerId', 'author', 'acl', 'linkKey', 'secure', '_id', 'uniqueKeys', 'objectSizeBytes']) {
     const value = fixture();

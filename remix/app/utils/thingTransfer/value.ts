@@ -59,7 +59,7 @@ export const bundleFromValue = (value: unknown, name: string): TransferBundle =>
 
 export const valueFromBundle = (bundle: TransferBundle): JsonValue => {
   const manifest = validateTransfer(bundle.manifest);
-  if (manifest.files.length || bundle.files.size || manifest.things.length !== 1 || manifest.roots.length !== 1) return fail('Use Import in My Things for apps, folders or attached files');
+  if (manifest.files.length || manifest.links?.length || bundle.files.size || manifest.things.length !== 1 || manifest.roots.length !== 1) return fail('Use Import in My Things for apps, folders or attached files');
   const thing = manifest.things[0];
   if (thing.thingtime.length !== 1 || thing.thingtime[0] !== 'data' || thing.crystal.transferValue !== 1 || !Object.prototype.hasOwnProperty.call(thing.crystal, 'value')) return fail('This is a saved Thing, not a nested value. Use Import in My Things');
   return snapshotTransferValue(thing.crystal.value);

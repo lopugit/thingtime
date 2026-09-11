@@ -31,6 +31,30 @@ of that scope.
 
 ## Evidence
 
+- Linked-gallery extension (2026-09-11): import/export 1.1.0 adds optional
+  `links` and complete `attachmentOrder` to the version-1 portable envelope.
+  URLs and bounded owner annotations remain metadata, never fetched bytes.
+  Imports call the same link/annotation writers as ordinary gallery creation,
+  bind fresh records in source order and retain quota/private ownership checks.
+  That existing link path deliberately requires no stored-upload approval.
+  Stored files still use normal uploads; flagged linked exports fail closed.
+  Failure cleans only new unbound drafts (bound records use Thing cascade).
+  JSON can include links independently of stored files; the download dialog
+  exposes a separate link-inclusion choice. Actual Chrome desktop JSON and mobile
+  ZIP downloads were imported through the file picker: both copies retained two
+  links, multiline annotations, filename previews and order after source deletion.
+  Anonymous reads returned 404. Dialog bounds and button hit-tests passed; all
+  disposable fixture Things were removed through normal API cascade deletion.
+  This is linked-record proof, not offline external bytes or stored-upload proof.
+- Linked checkpoint validation: 96 Things tests and 39 capability tests pass;
+  attachment suite passes including admin/owner flagged-link export denial and
+  unchanged no-redirect content behavior. Full Vite/embed/Nitro build plus
+  Vercel output verification pass. The built server manifest returns import and
+  export 1.1.0; this isolated manifest smoke has no database configuration and
+  does not claim database health. Targeted lint has zero errors (one intentional
+  unsafe-URL test warning); full typecheck retains baseline diagnostics, with
+  none in the changed transfer or attachment implementation files.
+
 - Nested value menus now offer typed portable clipboard Copy/Cut, JSON/ZIP
   Download and reviewed Import file. Their one-data-Thing envelope can also
   enter the normal private Things importer; local import unwraps only explicit

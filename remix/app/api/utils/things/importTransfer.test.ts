@@ -23,6 +23,49 @@ const harness = () => {
   } };
 };
 
+test('imports fresh private linked galleries in mixed attachment order through normal link writers', async () => {
+  const { writes, deps } = harness();
+  const manifest = fixture();
+  manifest.links = [{ id: 'link', targetId: 'data', url: 'https://example.com/a.png', mediaKind: 'image', title: 'Title', description: 'Line\nTwo' }];
+  manifest.files = [{ id: 'file', targetId: 'data', path: 'files/000000', name: 'a.txt', mime: 'text/plain', bytes: 4, sha256: 'a'.repeat(64) }];
+  manifest.attachmentOrder = ['link', 'file'];
+  let annotations: unknown;
+  let bound: readonly string[] = [];
+  const result = await importTransfer({ id: 'recipient' }, { manifest, files: { file: 'upload' } }, undefined, {
+    ...deps,
+    link: async (owner, input) => { assert.equal(owner, 'recipient'); assert.deepEqual(input, { url: manifest.links![0].url, mediaKind: 'image', purpose: 'post' }); return { ok: true, attachment: { id: 'new-link' } } as any; },
+    annotate: async (_owner, input) => { annotations = input; return { ok: true } as any; },
+    inspectFiles: async (_owner, ids) => { assert.deepEqual(ids, ['new-link', 'upload']); return { ok: true, hasAny: true, hasVisual: true }; },
+    getFile: async (_owner, id) => id === 'new-link' ? { attachmentLinked: true, crystal: { url: manifest.links![0].url } } as any : { crystal: { size: 4 } } as any,
+    bindFiles: (ids) => { bound = ids; return (async () => {}) as any; }
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(bound, ['new-link', 'upload']);
+  assert.deepEqual(annotations, { id: 'new-link', title: 'Title', description: 'Line\nTwo', filenamePreview: undefined });
+  assert.ok(result.ok && result.linksImported === 1 && result.filesImported === 1);
+  assert.ok(writes.every((write) => JSON.stringify(write.input.acl) === '["tt:user"]'));
+});
+
+test('failed link annotation cleans only the new unbound draft and reports deferred cleanup', async () => {
+  for (const deferred of [false, true]) {
+    const { writes, deps } = harness();
+    const manifest = fixture();
+    manifest.links = [{ id: 'source-link', targetId: 'data', url: 'https://example.com/a.png', mediaKind: 'image', title: 'Title' }];
+    manifest.attachmentOrder = ['source-link'];
+    const removed: unknown[] = [];
+    const result = await importTransfer({ id: 'recipient' }, { manifest }, undefined, {
+      ...deps,
+      link: async () => ({ ok: true, attachment: { id: 'new-link' } }) as any,
+      annotate: async () => ({ ok: false, status: 403, error: 'quota' }),
+      getFile: async () => ({ targetId: null }) as any,
+      removeFile: async (_owner, input) => { removed.push(input); return { ok: true, deferred }; }
+    });
+    assert.equal(result.ok, false); assert.equal(writes.length, 0);
+    assert.deepEqual(removed, [{ id: 'new-link' }]);
+    assert.equal('remainingIds' in result, deferred);
+  }
+});
+
 test('imports folders and schemas before dependent data, with private fresh ownership and preserved extended content', async () => {
   const { writes, deps } = harness();
   const original = fixture();

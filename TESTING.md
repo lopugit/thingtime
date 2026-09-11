@@ -6569,6 +6569,16 @@ approval; `access.test.ts` — the reservation matrix) and
 - Run `node remix/scripts/verify-lopu-linked-things.mjs` against the running worktree stack (or pass its loopback HTTP origin). It registers disposable local accounts and exercises real API comments, unchanged parent crystals, shared voice/Messenger history, retry deduplication, searchable scheduled-task Things, linked context, account isolation, protected writes, and pause/resume. It removes its created content and pauses schedules in `finally`; empty test accounts remain, with credentials never persisted. Production origins are rejected. This does not replace browser/device, provider inference, or scheduled-delivery acceptance.
 # Portable Thing transfers
 
+- Export a linked gallery as JSON and ZIP, then import each via the file picker
+  on desktop/mobile. Verify URLs, multiline descriptions, filename previews,
+  titles and mixed stored-file/link ordering. New private copies must survive
+  source deletion; the import must not fetch external bytes or bypass stored
+  upload approval. Toggle linked-gallery inclusion separately from stored files.
+  Reject unsafe URLs, duplicate IDs, forged moderation stamps and incomplete
+  attachment ordering. Flagged links must not export even for an administrator.
+  A failed annotation/create must clean only new unbound link drafts and report
+  any deferred cleanup. Nested-value import must not silently discard galleries.
+
 - In the nested value editor, import ordinary JSON and exported value JSON/ZIP;
   review before replacement and round-trip strings such as `"42"`, arrays,
   null and objects without changing their types. Import the value ZIP through

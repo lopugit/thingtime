@@ -18,6 +18,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Preserve linked galleries and their mixed file/link order in portable JSON/ZIP
+  transfers. Recreate private URL records through normal link and annotation
+  writers, without fetching external bytes; reject flagged link exports and
+  clean new drafts on failure. Import/export negotiate contract 1.1.0.
+  [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-11
+
 - Add portable JSON/ZIP Download and reviewed file import to nested Thingtime
   value menus. Copy/Cut use typed envelopes, preserve numeric strings, and
   refuse lossy values; repair top-level and direct-path deletion for Cut.

@@ -32,6 +32,10 @@ test('ordinary JSON import validates values without invoking executable object h
 
 test('saved Things are not silently mistaken for nested values and cancellation is respected', async () => {
   const bundle = bundleFromValue(true, 'value');
+  bundle.manifest.links = [{ id: 'link', targetId: 'value', url: 'https://example.com/a.pdf', mediaKind: 'file' }];
+  bundle.manifest.attachmentOrder = ['link'];
+  assert.throws(() => valueFromBundle(bundle), /My Things/);
+  delete bundle.manifest.links; delete bundle.manifest.attachmentOrder;
   delete bundle.manifest.things[0].crystal.transferValue;
   assert.throws(() => valueFromBundle(bundle), /saved Thing/);
   const controller = new AbortController(); controller.abort();

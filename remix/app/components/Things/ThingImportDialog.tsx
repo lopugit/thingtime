@@ -90,7 +90,8 @@ export const ThingImportDialog = ({ ownerId, folderId, initialBundle, onClose, o
           <Input aria-label="Thingtime transfer file" type="file" accept=".json,.zip,application/json,application/zip" padding={1} isDisabled={uploadStarted || attempted} onChange={(event) => { void selectFile(event.target.files?.[0]); }} />
           {reading && <Text role="status">Checking transfer contents…</Text>}
           {bundle && <>
-            <Text>{bundle.manifest.things.length} Things · {bundle.manifest.files.length} files · {(bundle.manifest.files.reduce((total, file) => total + file.bytes, 0) / 1024 / 1024).toFixed(1)} MiB</Text>
+            <Text>{bundle.manifest.things.length} Things · {bundle.manifest.files.length} files · {bundle.manifest.links?.length || 0} links · {(bundle.manifest.files.reduce((total, file) => total + file.bytes, 0) / 1024 / 1024).toFixed(1)} MiB</Text>
+            {!!bundle.manifest.links?.length && <Text fontSize="sm">Linked media stays on its original site. Import creates private gallery records; it does not download those external files.</Text>}
             <Box>
               <Text as="label" htmlFor="thing-import-destination" fontSize="sm">Import destination</Text>
               <Select id="thing-import-destination" value={destination || ''} isDisabled={attempted} onChange={(event) => setDestination(event.target.value || null)}>
