@@ -1,5 +1,6 @@
 import { generateAiCompletion, hasLopuAiProviderConfigured } from '../lopu/musing';
 import { getHomeThingsCollection, getThingsCollection } from '../mongodb/collections';
+import { enforceQuotaRateLimit } from '../rateLimit/enforce';
 import type { PublicPost } from '../things/things';
 import { fail, sha48, type Fail } from './shared';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
@@ -63,6 +64,35 @@ const CLASSIFY_MAX_AI_CALLS = 12;
 // Overrunning is not an error — the batch degrades to the heuristic below and,
 // being uncached, is retried for real on the next read.
 const CLASSIFY_DEADLINE_MS = 20_000;
+// The third bound, and the only one that survives the caller making a NEW
+// request. CLASSIFY_MAX_AI_CALLS and CLASSIFY_DEADLINE_MS are both per-request,
+// so on their own they cap the fan-out of one read and nothing else: the feed
+// sits on `connections.read` (120/min), which multiplies out to 120 × 12 =
+// 1,440 provider completions a minute from one signed-in account, on the shared
+// ANTHROPIC_API_KEY/OPENAI_API_KEY.
+//
+// The verdict cache does not close that, because the caller controls it.
+// Re-reading the same page is free, but `saveFeedFilter` reaps a filter's
+// cached verdicts whenever its prompt changes (60 writes/min on
+// `connections.write`), so alternating edit → read misses the cache every time
+// and re-buys the whole page at full price.
+//
+// So this path gets what the codebase already gives its other AI caller: an
+// explicit ACCOUNT allowance on top of the endpoint bucket (the musing spends
+// one completion per request and still passes consumeLopuMusingQuota, 10/hour).
+// enforceQuotaRateLimit keys on the user id alone, so rotating sessions,
+// devices or IPs cannot reset it, and it fails closed when the limiter is down
+// — the safe direction here, since the whole point is to not spend money we
+// cannot account for.
+//
+// Sized for the documented caps rather than the median: a 50-post page against
+// 20 filters is ~100 completions of genuinely new work, and 600/hour buys ~40
+// such cold pages — far more feed than a person reads in an hour, while cutting
+// the adversarial ceiling by ~140×. Exhaustion is NOT an error, exactly like
+// overflowing the per-request cap: the batch degrades to the deterministic
+// heuristic below and stays uncached, so the real classification is retried on
+// the next read once the window rolls.
+const CLASSIFY_HOURLY_AI_CALLS = 600;
 
 export type FeedFilterAction = 'warn' | 'hide';
 
@@ -297,9 +327,21 @@ export const applyFeedFilters = async (
   // calls can't collectively overshoot the cap.
   const deadlineAt = Date.now() + CLASSIFY_DEADLINE_MS;
   let aiCallsLeft = CLASSIFY_MAX_AI_CALLS;
-  const reserveAiCall = (): boolean => {
-    if (!aiConfigured || aiCallsLeft <= 0 || Date.now() >= deadlineAt) return false;
+  // Sticky once the account allowance is gone: without it every remaining batch
+  // on this page would take another round-trip to the limiter collection just to
+  // be told the same thing.
+  let accountBudgetSpent = false;
+  const reserveAiCall = async (): Promise<boolean> => {
+    if (!aiConfigured || aiCallsLeft <= 0 || accountBudgetSpent || Date.now() >= deadlineAt) return false;
+    // Claim the per-request slot SYNCHRONOUSLY, before the await below — the
+    // CLASSIFY_CONCURRENCY filters run interleaved, and a check that yielded
+    // first would let them all read the same aiCallsLeft and overshoot the cap.
     aiCallsLeft -= 1;
+    const account = await enforceQuotaRateLimit('connections.classify', userId, CLASSIFY_HOURLY_AI_CALLS);
+    if (!account.allowed) {
+      accountBudgetSpent = true;
+      return false;
+    }
     return true;
   };
   const pushMatch = (postId: string, match: FeedFilterMatch) => {
@@ -345,7 +387,7 @@ export const applyFeedFilters = async (
       const batch = pending.slice(start, start + CLASSIFY_BATCH);
       let verdicts: Map<string, { matched: boolean; reason: string }> | null = null;
       let source: 'claude' | 'openai' | 'heuristic' = 'heuristic';
-      if (reserveAiCall()) {
+      if (await reserveAiCall()) {
         const ai = await aiVerdicts(filter.prompt, batch, deadlineAt);
         if (ai) {
           verdicts = ai.byId;

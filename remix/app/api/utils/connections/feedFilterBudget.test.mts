@@ -15,11 +15,15 @@ import { after, beforeEach, mock, test } from 'node:test';
 //   2. work the budget could not pay for is NOT cached, so the next read
 //      retries it for real and the page converges instead of degrading
 //      permanently to the keyword heuristic.
+//   3. the per-request budget is NOT the whole story — a per-request cap only
+//      bounds one read, and the caller chooses how many reads to make (and can
+//      reap the cache by editing a filter prompt), so every AI call also spends
+//      an account allowance that a new request does not reset.
 //
-// and the third property that makes the cache CORRECT rather than merely
+// and the last property, which makes the cache CORRECT rather than merely
 // cheap:
 //
-//   3. a verdict is bound to the text it was reached on. External posts are
+//   4. a verdict is bound to the text it was reached on. External posts are
 //      current-state upserts, so one post id carries different text over time;
 //      a verdict cached under the id alone would outlive the content it judged.
 //
@@ -28,6 +32,8 @@ import { after, beforeEach, mock, test } from 'node:test';
 
 const CLASSIFY_BATCH = 12; // mirrors filters.ts
 const CLASSIFY_MAX_AI_CALLS = 12; // mirrors filters.ts
+const CLASSIFY_HOURLY_AI_CALLS = 600; // mirrors filters.ts
+const CLASSIFY_CONCURRENCY = 4; // mirrors filters.ts
 
 type Doc = Record<string, any>;
 
@@ -65,6 +71,11 @@ const makeCollection = (docs: Doc[]) => ({
 let home = makeCollection([]);
 let things = makeCollection([]);
 let aiCalls = 0;
+// The account allowance, as seen by filters.ts. Left effectively unbounded for
+// the per-request tests so they keep measuring only the per-request budget; the
+// account tests lower it deliberately.
+let accountBudget = Number.MAX_SAFE_INTEGER;
+let accountQuotaCalls: Array<{ name: string; userId: string; limit: number }> = [];
 
 mock.module(new URL('../lopu/musing.ts', import.meta.url).href, {
   namedExports: {
@@ -82,6 +93,19 @@ mock.module(new URL('../mongodb/collections.ts', import.meta.url).href, {
   namedExports: {
     getThingsCollection: async () => things,
     getHomeThingsCollection: async () => home
+  }
+});
+// The real one is an atomic sliding window over the shared `rateLimits`
+// collection; here it is just a counter, so the tests can observe both what
+// filters.ts asks for and what it does when the answer is no.
+mock.module(new URL('../rateLimit/enforce.ts', import.meta.url).href, {
+  namedExports: {
+    enforceQuotaRateLimit: async (name: string, userId: string, limit: number) => {
+      accountQuotaCalls.push({ name, userId, limit });
+      const allowed = accountBudget > 0;
+      if (allowed) accountBudget -= 1;
+      return { allowed, limit, remaining: Math.max(0, accountBudget), resetAt: new Date(0).toISOString() };
+    }
   }
 });
 
@@ -108,6 +132,8 @@ const world = (filterCount: number) => {
   home = makeCollection(filterDocs(filterCount));
   things = makeCollection([]);
   aiCalls = 0;
+  accountBudget = Number.MAX_SAFE_INTEGER;
+  accountQuotaCalls = [];
 };
 
 beforeEach(() => world(0));
@@ -158,6 +184,68 @@ test('a page that fits the budget is classified in one read', async () => {
 
   assert.equal(aiCalls, 2, 'two filters × one batch — well under the cap, so nothing is deferred');
   assert.equal(result.matchesByPostId.size, posts.length, 'the ordinary case is unchanged by the budget');
+});
+
+// CLASSIFY_MAX_AI_CALLS bounds ONE read. The caller picks how many reads to
+// make — `connections.read` allows 120/min — and can force every one of them to
+// miss the cache by editing a filter prompt (saveFeedFilter reaps that filter's
+// verdicts). So the per-request cap alone multiplies out to 120 × 12 = 1,440
+// completions a minute per account on the shared provider key. The account
+// allowance is the bound that a new request does not reset.
+test('the account allowance bounds AI spend across requests, not just within one', async () => {
+  world(5);
+  const posts = postsFor(3 * CLASSIFY_BATCH); // 15 batches of work, 3× the per-request cap
+  accountBudget = 5;
+
+  await applyFeedFilters('user-1', posts);
+  assert.equal(aiCalls, 5, 'the account allowance cuts the read short well before the per-request cap');
+  assert.deepEqual(
+    accountQuotaCalls[0],
+    { name: 'connections.classify', userId: 'user-1', limit: CLASSIFY_HOURLY_AI_CALLS },
+    'every AI call spends the ACCOUNT allowance, keyed on the user id alone so a new session cannot reset it'
+  );
+  // A denial is sticky, so the 10 unaffordable batches do NOT each take their
+  // own round-trip to the limiter. It cannot be exactly one extra: up to
+  // CLASSIFY_CONCURRENCY filters are interleaved, so that many can already be
+  // past the check when the first denial lands. Bounded by the concurrency
+  // window is the honest invariant — and the one that matters at the
+  // documented caps, where a page is ~100 batches rather than 15.
+  const firstRead = accountQuotaCalls.length;
+  assert.ok(
+    firstRead <= 5 + CLASSIFY_CONCURRENCY,
+    `a denial must stop the rest of the page, not be re-asked per batch (${firstRead} round-trips for 15 batches)`
+  );
+
+  // The decisive one: a second request is a fresh per-request budget, and must
+  // still buy nothing. Without the account allowance this read alone would
+  // spend another 10 completions (15 batches of work, 5 of them now cached).
+  await applyFeedFilters('user-1', posts);
+  assert.equal(aiCalls, 5, 'a new request does not hand the caller a fresh provider budget');
+  assert.ok(
+    accountQuotaCalls.length - firstRead <= CLASSIFY_CONCURRENCY,
+    'and it re-asks once per in-flight filter before degrading again, not once per batch'
+  );
+});
+
+// Exhausting the allowance is not an error — it is the same degradation as
+// overflowing the per-request cap, and it must leave the page recoverable
+// rather than permanently heuristic.
+test('a spent allowance degrades to the heuristic without poisoning the cache', async () => {
+  world(1);
+  const posts = postsFor(CLASSIFY_BATCH);
+  accountBudget = 0;
+
+  const denied = await applyFeedFilters('user-1', posts);
+  assert.equal(aiCalls, 0, 'no provider call is made once the account allowance is gone');
+  assert.equal(denied.matchesByPostId.size, 0, 'the keyword heuristic finds nothing here, so the page simply reads unfiltered');
+  assert.equal(things.docs.length, 0, 'and nothing it could not pay for is cached');
+
+  // Window rolls: the work the previous read deferred is bought for real.
+  accountBudget = 10;
+  const paid = await applyFeedFilters('user-1', posts);
+  assert.equal(aiCalls, 1, 'the deferred classification is retried once the allowance is back');
+  assert.equal(paid.matchesByPostId.size, posts.length, 'and the viewer gets the real verdicts');
+  assert.equal(things.docs.length, CLASSIFY_BATCH, 'which are now cached, so the page stays converged');
 });
 
 // A synced external post is a CURRENT-STATE upsert: connections.ts $sets
