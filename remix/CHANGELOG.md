@@ -21,7 +21,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - Unify Thing, post, recording and message action-menu rendering and inherited
   base verbs. Dispatch recording handoffs through the versioned Things action
   API, retaining the legacy adapter and protected writers. Fix stale open
-  submenus and scrollbar-edge clipping. — Codex (AI), 2026-09-11
+  submenus and scrollbar-edge clipping. Details:
+  [PR 767](../PRs/767-unified-thing-menus-native-links-search-history.md).
+  — Codex (AI), 2026-09-11
 
 - Make drawer and Thing-menu destinations native anchors, preserving browser
   new-tab modifiers, and persist Things search/view/filter/sort/group rules in
