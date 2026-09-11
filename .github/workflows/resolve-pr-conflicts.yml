@@ -7,9 +7,6 @@
 # and user-paused PRs are rejected; git hooks and persisted checkout credentials
 # are disabled; model output is scope-checked before an exact-lease push.
 #
-# Operational invariants: one semantic detector waiter is retained, internal
-# batches use unique workflow concurrency, model jobs serialize through the
-# repository fleet, and every admitted worker revalidates its immutable snapshot.
 # Detailed behavior is enforced by resolve-pr-conflicts-routing-contract.mjs and
 # the comments beside each job and publication boundary below. Keep this file
 # below the guarded byte limit: GitHub leaves oversized revisions permanently
@@ -3286,6 +3283,7 @@ jobs:
       matrix: ${{ steps.validate.outputs.matrix }}
       plan_b64: ${{ steps.validate.outputs.plan_b64 }}
       stack_id: ${{ steps.validate.outputs.stack_id }}
+      custom_models: ${{ steps.validate.outputs.custom_models }}
       recovery: ${{ steps.validate.outputs.recovery }}
     steps:
       - name: Check out the trusted controller
@@ -3310,6 +3308,7 @@ jobs:
           plan="$RUNNER_TEMP/feature-stack-plan.json"
           node trusted/.github/scripts/feature-stack-plan.mjs decode "$PLAN_B64" >"$decoded"
           jq -c '.plan' "$decoded" >"$plan"
+          echo "custom_models=$(jq -r '.plan.version == 4' "$decoded")" >>"$GITHUB_OUTPUT"
           [[ "$(jq -r '.plan.runId' "$decoded")" == "$FEATURE_STACK_RUN_ID" ]] || {
             echo '::error::Feature Stack run identity does not match its immutable plan.'
             exit 1
@@ -3829,7 +3828,15 @@ jobs:
           done < <(jq -c '.sources[]' "$plan")
           git -C "$integration" remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
 
+      - name: Merge with the selected AI endpoint waterfall
+        if: needs.feature_stack_plan.outputs.custom_models == 'true'
+        working-directory: integration
+        env:
+          THINGTIME_CI_ROUTER_SECRET: ${{ secrets.THINGTIME_CI_ROUTER_SECRET }}
+        run: node ../trusted/.github/scripts/feature-stack-waterfall.mjs "$RUNNER_TEMP/feature-stack-plan.json" "$TARGET_BRANCH"
+
       - name: Require an AI credential
+        if: needs.feature_stack_plan.outputs.custom_models != 'true'
         env:
           AGENT_BACKEND: ${{ needs.model_config.outputs.agent_backend }}
           HAS_CLAUDE_CREDENTIAL: ${{ secrets.THINGTIME_CI_ROUTER_SECRET != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_THINGTIME != '' || secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' || secrets.ANTHROPIC_API_KEY_FALLBACK != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN_FALLBACK != '' }}
@@ -3843,6 +3850,7 @@ jobs:
           esac
 
       - name: Combine the Feature Stack with Lopu
+        if: needs.feature_stack_plan.outputs.custom_models != 'true'
         id: feature_stack_agent
         continue-on-error: true
         uses: ./trusted/.github/actions/lopu-agent
@@ -3896,7 +3904,7 @@ jobs:
             edits outside a conflict set.
 
       - name: Continue the exact Feature Stack session until it finishes
-        if: needs.model_config.outputs.agent_backend == 'claude' && steps.feature_stack_agent.outcome == 'failure'
+        if: needs.feature_stack_plan.outputs.custom_models != 'true' && needs.model_config.outputs.agent_backend == 'claude' && steps.feature_stack_agent.outcome == 'failure'
         shell: bash
         working-directory: integration
         env:

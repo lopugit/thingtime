@@ -90,6 +90,11 @@ jobs:
       - name: Validate all-branch event and doctor contracts
         run: node .github/scripts/build-all-branch.mjs --self-test
 
+      - name: Validate explicit stack AI waterfall
+        run: |
+          node --test .github/scripts/feature-stack-waterfall.test.mjs
+          node .github/scripts/feature-stack-plan.mjs --self-test
+
       - name: Validate Feature Stack publication and progress
         run: |
           node --test .github/scripts/feature-stack-publish-merge.test.mjs

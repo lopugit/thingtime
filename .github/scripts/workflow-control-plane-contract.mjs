@@ -1818,7 +1818,7 @@ export function assertControlPlaneContract() {
   );
   assert.equal(
     featureStackMerge.match(/working-directory: integration/gu)?.length,
-    4,
+    5,
     "the model, continuations, verifier, and publisher remain inside the isolated integration repository",
   );
   const featureStackProgress = resolver.slice(

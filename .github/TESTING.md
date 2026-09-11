@@ -88,6 +88,26 @@ do not merge it into the permanently separate product branches to test it.
   proof; a cancelled run is not proof of a code failure. Do not rerun or repair
   unrelated work just to turn historic checks green.
 
+## Explicit stack model and endpoint waterfall
+
+- Run `node --test .github/scripts/feature-stack-waterfall.test.mjs` and
+  `node .github/scripts/feature-stack-plan.mjs --self-test`. The real Git
+  fixture must preserve both-parent topology and the exact source trailers.
+- Run the routing and workflow-control-plane contract self-tests. Version 3
+  keeps the existing CLI path; version 4 runs the selected HTTP waterfall.
+- Verify mixed providers advance only after a signed gateway request receives
+  an explicit unavailable receipt. Lost responses, rejected authorization,
+  malformed resolution JSON, symlinks, binary and oversized conflicts stop.
+- Deploy the matching Thingtime `api.ci-stack-completion` 1.x gateway and
+  configure `THINGTIME_CI_ROUTER_SECRET` on both sides. Configure HTTP API keys
+  server-side or choose owned Secure Vault connections; subscription CLI
+  tokens continue to use the inherited version-3 path. Never put endpoint
+  credentials in a plan, runner response, artifact, or log.
+- After both PRs are deployed, accept a controlled stack using unavailable
+  preferred endpoint then a working fallback. Inspect the exact selected order,
+  independent verifier and required CI before publication. Local fixtures do
+  not constitute paid-provider or production merge acceptance.
+
 ## Feature Stack snapshot publication and merge gates
 
 - Run `node --test .github/scripts/feature-stack-publish-merge.test.mjs`,
