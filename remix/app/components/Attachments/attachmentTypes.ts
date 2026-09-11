@@ -1,6 +1,6 @@
 export type AttachmentMediaKind = 'image' | 'video' | 'audio' | 'file';
 
-export type AttachmentUploadPurpose = 'post' | 'comment' | 'message' | 'profile-avatar' | 'profile-banner' | 'custom-emoji';
+export type AttachmentUploadPurpose = 'post' | 'comment' | 'message' | 'profile-avatar' | 'profile-banner' | 'custom-emoji' | 'recording-import';
 
 export type AttachmentUploadOptions = {
 	// A transfer spans many Things; normal composers retain the per-Thing cap.

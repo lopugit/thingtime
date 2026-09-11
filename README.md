@@ -1448,7 +1448,7 @@ or **all** variation per user:
 | Scope | Covers | Flag |
 | --- | --- | --- |
 | `public` | post, comment, and custom-emoji attachments | `meta.publicUploads` |
-| `private` | message attachments + the user's own profile avatar/banner | `meta.privateUploads` |
+| `private` | message attachments, recordings (including recording-import drafts), and the user's own profile avatar/banner | `meta.privateUploads` |
 | `all` | both of the above in one write | both flags |
 
 The account carries `meta.publicUploads: false` and `meta.privateUploads:

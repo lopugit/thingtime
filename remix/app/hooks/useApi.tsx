@@ -639,6 +639,10 @@ export function useApi() {
 						},
 						options?: { signal?: AbortSignal }
 					) => {
+						if (args.purpose === 'recording-import') {
+							await requireThingtimeCapability('api.attachment-uploads', '1.3.0');
+							await requireThingtimeCapability('api.attachment-upload-complete', '1.3.0');
+						}
 						const ret = asyncFetcher.submit(
 							{
 								requestId: args?.requestId,

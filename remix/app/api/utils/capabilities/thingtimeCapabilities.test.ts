@@ -10,6 +10,15 @@ test('algorithm transfer clients reject old and breaking import/export contracts
   for (const version of ['1.0.1', '1.1.0', '1.2.0', '1.3.0', '2.0.0', '']) assert.equal(capabilitySatisfies(version, '1.4.0'), false);
 });
 
+test('recording import upload requirements cover start and completion lifecycle versions', () => {
+  const manifest = thingtimeCapabilityManifest('https://preview.example.test');
+  for (const feature of ['api.attachment-uploads', 'api.attachment-upload-complete']) {
+    assert.equal(manifest.features[feature]?.version, '1.3.0');
+    for (const version of ['1.3.0', '1.3.1', '1.4.0']) assert.equal(capabilitySatisfies(version, '1.3.0'), true);
+    for (const version of ['', '1.2.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.3.0'), false);
+  }
+});
+
 test('Thingtime capability manifest is origin scoped and covers the generated API route map', () => {
   const manifest = thingtimeCapabilityManifest('https://preview.example.test/path');
   assert.equal(manifest.origin, 'https://preview.example.test');
@@ -226,7 +235,7 @@ test('both manifests publish notification history and system notification contra
 test('native recording uploads negotiate durable private Things before sending bytes', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.com');
   for (const feature of ['api.attachment-uploads', 'api.attachment-upload-complete']) {
-    assert.equal(manifest.features[feature]?.version, '1.2.0');
+    assert.equal(manifest.features[feature]?.version, '1.3.0');
     assert.equal(capabilitySatisfies(manifest.features[feature].version, '1.2.0'), true);
     assert.equal(capabilitySatisfies('1.1.0', '1.2.0'), false);
     assert.equal(capabilitySatisfies('2.0.0', '1.2.0'), false);

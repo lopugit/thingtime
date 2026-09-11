@@ -11,9 +11,13 @@ expiry, absence of gallery/profile binding and expected bytes, applies canonical
 annotations, preserves object/moderation state, accounts the metadata delta and
 clears the draft marker/expiry under the home transaction and CAS fence. Reusing
 a durable recording is rejected. Drafts are excluded from My Things and enter
-normal expired-draft cleanup. No HTTP input currently sets this marker, so no
-new API capability is advertised yet. Next: wire the authorized upload-intent
-and portable recording adapters, then exercise approved-upload round trips and
+normal expired-draft cleanup. The next checkpoint adds the `recording-import`
+upload intent behind the normal private-upload permission. The server stamps the
+draft marker only on a new recording reservation, includes the distinct intent in
+the request fingerprint, and refuses expired or committed ready-upload replay.
+Upload start and completion advertise 1.3.0; the browser upload API negotiates both
+before requesting this intent. Ordinary recording callers remain compatible.
+Next: wire the portable recording adapters, then exercise approved-upload round trips and
 transaction/cleanup failure paths through real APIs.
 
 ## Scope and current checkpoint — 2026-09-11

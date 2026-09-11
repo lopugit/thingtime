@@ -2,6 +2,11 @@
 
 ## Recording transfer lifecycle (adapter not yet enabled)
 
+- [ ] `recording-import` upload starts require private-upload approval, including
+  when public uploads alone are approved. The same request ID cannot be reused
+  across recording-import and ordinary recording/post purposes. Completed drafts
+  retain expiry; expired or already committed draft replays return 409.
+
 - [ ] When the recording transfer adapter is enabled, verify normal approved
   uploads retain recording purpose throughout import; incomplete imports stay
   expiring drafts, do not appear in My Things, and are reclaimed normally.
