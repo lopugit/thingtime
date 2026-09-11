@@ -2979,6 +2979,12 @@ App Group provisioning, local signing, and fork-safe build settings. App Group
 capabilities must be enabled on both the iOS app and its widget extension before
 installing a signed build; no credentials belong in project files.
 
+The Mac companion now uses a native interface and browser OAuth. Open
+**Connection** to select production or your local server and approve widget
+permissions. No client secret or manual app registration is required; fork
+callback identifiers and capability requirements are documented in
+[Apple widget setup](apple/README.md#oauth-setup-for-forks-and-local-servers).
+
 ### Automatic import and native push recovery (10 September 2026)
 
 The iPhone app automatically imports older `Lopu-*.caf` recordings from its

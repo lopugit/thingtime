@@ -57,7 +57,7 @@
     "test:client-errors": "node --import tsx --test app/hooks/apiFailure.test.ts app/hooks/thingsRequestPayload.test.ts app/components/Lopu/lopuMessage.test.ts app/components/Lopu/lopuPosition.test.ts app/components/Feed/reactionFailure.test.ts app/components/Things/sensitiveRevealError.test.ts app/api/utils/errors/adminDiagnostic.test.ts app/api/utils/migrations/migrationFailure.test.ts app/api/utils/migrations/migrationDiagnostics.test.ts",
     "test:ci-control": "node --import tsx --test app/api/utils/ciControl/*.test.ts app/components/Admin/CIControl/*.test.ts",
     "test:dependencies": "node --test scripts/ensure-dependencies.test.js",
-    "test:desktop-oauth": "node --import tsx --test app/api/utils/apps/desktopOAuthCore.test.ts",
+    "test:desktop-oauth": "node --import tsx --test app/api/utils/apps/desktopOAuthCore.test.ts && node --import tsx --test app/api/utils/apps/accountScopes.test.ts app/api/utils/apps/widgetClient.test.ts && node --experimental-test-module-mocks --import tsx --test app/api/utils/auth/scopedUser.test.mjs app/api/utils/auth/resolveActor.oauth.test.mjs app/api/utils/auth/oauthTokenRoute.test.mjs",
     "test:deployments": "node --import tsx --test app/api/utils/deployments/*.test.ts",
     "test:hooks": "node --import tsx --test app/hooks/*.test.ts",
     "test:devices": "node --import tsx --test app/components/Devices/*.test.ts app/components/Watch/*.test.ts app/api/utils/devices/*.test.ts && node --experimental-test-module-mocks --import tsx --test app/api/utils/devices/pairingRoute.test.mts",

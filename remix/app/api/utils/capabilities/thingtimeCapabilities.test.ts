@@ -9,8 +9,13 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   const manifest = thingtimeCapabilityManifest('https://preview.example.test/path');
   assert.equal(manifest.origin, 'https://preview.example.test');
   assert.equal(manifest.schemaVersion, 1);
+  assert.equal(manifest.features['api.apps-public']?.version, '1.1.0');
+  assert.equal(manifest.features['api.oauth-scopes']?.version, '1.1.0');
+  for (const feature of ['api.oauth-desktop-authorize', 'api.oauth-token']) {
+    assert.equal(manifest.features[feature]?.version, '1.2.0');
+  }
 	assert.equal(manifest.features['api.webpages-resolve']?.version, '1.2.0');
-	assert.equal(manifest.features['api.actions-run']?.version, '1.3.1');
+	assert.equal(manifest.features['api.actions-run']?.version, '1.4.0');
 	assert.equal(manifest.features['api.things-fork']?.version, '1.2.1');
   assert.equal(manifest.features['api.admin-migrations-run']?.version, '1.3.0');
   assert.equal(manifest.features['api.admin-subscriptions']?.version, '1.1.1');
@@ -25,8 +30,8 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.health-nitro']?.version, '1.1.0');
   assert.equal(manifest.features['api.integration-ci-credentials']?.version, '1.1.0');
   assert.equal(manifest.features['api.integration-ci-progress']?.version, '1.0.0');
-  assert.equal(manifest.features['api.things-search']?.version, '1.1.1');
-  assert.equal(manifest.features['api.things-share']?.version, '1.1.0');
+  assert.equal(manifest.features['api.things-search']?.version, '1.2.0');
+  assert.equal(manifest.features['api.things-share']?.version, '1.2.0');
   assert.equal(manifest.features['api.users-profile']?.version, '1.1.0');
   // subspaces + up/down votes: posts/comments gained title/subspace/flair/
   // subspaceMod/votes and the feeds honour subspace fences (1.2.0, additive);
@@ -35,16 +40,16 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // round 2 S5 — reports: a subspace post's subspaceMod.reportCount for its
   // moderators (1.4.0, additive)
   for (const feature of ['api.things-comment', 'api.things-user']) {
-    assert.equal(manifest.features[feature]?.version, '1.4.0', feature);
+    assert.equal(manifest.features[feature]?.version, '1.5.0', feature);
   }
   // round 2 S7 — comment sort: GET /api/v1/things?id= takes commentSort=
   // top|new|old (the shipped comment page in Reddit's three orders; the
   // response echoes it; unknown → 400) — the single read only, the shared
   // projection is untouched (1.5.0, additive)
   // Included dependency reads add sharedRoot without widening standalone ACLs.
-  assert.equal(manifest.features['api.things']?.version, '1.9.1');
+  assert.equal(manifest.features['api.things']?.version, '1.10.0');
   assert.equal(manifest.features['api.lopu-reminders']?.version, '1.1.0');
-  assert.equal(manifest.features['api.lopu-voice-reply']?.version, '1.3.0');
+  assert.equal(manifest.features['api.lopu-voice-reply']?.version, '1.4.0');
   assert.equal(manifest.features['api.lopu-recordings-run']?.version, '1.5.0');
   assert.equal(manifest.features['api.lopu-recordings-personal']?.version, '1.1.0');
   assert.equal(manifest.features['api.notifications-test']?.version, '1.2.0');
@@ -52,10 +57,9 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // round 2 S6 — discovery: the home feed takes scope=all|subspaces ("My
   // subspaces" — only the viewer's ACTIVE subspaces, empty for guests) and
   // echoes it (1.5.0, additive)
-  assert.equal(manifest.features['api.things-feed']?.version, '1.5.0');
-  for (const feature of ['api.subspaces-modlog', 'api.things-updown']) {
-    assert.equal(manifest.features[feature]?.version, '1.0.0', feature);
-  }
+  assert.equal(manifest.features['api.things-feed']?.version, '1.6.0');
+  assert.equal(manifest.features['api.subspaces-modlog']?.version, '1.0.0');
+  assert.equal(manifest.features['api.things-updown']?.version, '1.1.0');
   // S5: the report endpoint + the mods' Reports queue are new contracts;
   // S5 review moved both to 1.0.1 — a removed post takes no report (409), a
   // repeat after a move re-files in the new subspace, a deleted comment
@@ -127,7 +131,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.notifications-list']?.version, '1.7.0');
   assert.equal(manifest.features['api.notifications-settings']?.version, '1.6.0');
   assert.equal(manifest.features['api.notifications-record']?.version, '1.0.0');
-  assert.equal(manifest.features['api.things-update']?.version, '1.2.6');
+  assert.equal(manifest.features['api.things-update']?.version, '1.3.0');
   assert.equal(manifest.features['api.devices-pairing']?.version, '1.1.0');
   assert.ok(manifest.operations.some((operation) => operation.path === THINGTIME_CAPABILITY_MANIFEST_PATH));
   const operationPaths = new Set(manifest.operations.map((operation) => operation.path));
@@ -160,9 +164,9 @@ test('the Lopu catalog family publishes its verified-provider-key minor updates'
   // 1.1.1 = the write buckets fail closed, 1.2.0 = server-verified confirmations;
   // then the verified-access gate + accounting fields (create 1.2.0, reply 1.3.0),
   // and reply 1.4.0 = the in-flight cap (429 LOPU_TURN_IN_FLIGHT past three billed turns at once)
-  assert.equal(manifest.features['api.lopu-chats']?.version, '1.2.0');
-  assert.equal(manifest.features['api.lopu-chats-update']?.version, '1.1.1');
-  assert.equal(manifest.features['api.lopu-chats-reply']?.version, '1.6.2');
+  assert.equal(manifest.features['api.lopu-chats']?.version, '1.3.0');
+  assert.equal(manifest.features['api.lopu-chats-update']?.version, '1.2.0');
+  assert.equal(manifest.features['api.lopu-chats-reply']?.version, '1.7.0');
   // verified access + credits (design note "Lopu verified access, usage accounting and credits")
   for (const feature of ['api.admin-users-lopu-access', 'api.settings-lopu-access', 'api.lopu-account', 'api.lopu-account-history', 'api.lopu-account-topup-request', 'api.admin-lopu-accounts', 'api.admin-lopu-credits']) {
     assert.equal(manifest.features[feature]?.version, '1.0.0', feature);
@@ -174,7 +178,7 @@ test('historical Lopu receipts advertise a compatible reply patch on both manife
     thingtimeCapabilityManifest('https://thingtime.test').features['api.lopu-chats-reply'].version,
     createApiCapabilitiesManifest().features['api.lopu-chats-reply']
   ]) {
-    assert.equal(version, '1.6.2');
+    assert.equal(version, '1.7.0');
     assert.equal(capabilitySatisfies(version, '1.6.0'), true);
     assert.equal(capabilitySatisfies(version, '1.6.1'), true);
     assert.equal(capabilitySatisfies('1.6.0', '1.6.1'), false);

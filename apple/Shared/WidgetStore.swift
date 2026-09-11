@@ -34,7 +34,7 @@ enum WidgetStore {
               snapshot.isFresh(at: now) else { return nil }
         return snapshot
     }
-    static func save(_ payload: [String: Any], origin: String) {
+    static func save(_ payload: [String: Any], origin: String, date: Date = Date()) {
         guard enabled, let owner = payload["owner"] as? String, !owner.isEmpty,
               let rows = payload["things"] as? [[String: Any]] else { clear(); return }
         let things = rows.prefix(50).compactMap { row -> WidgetThing? in
@@ -43,7 +43,7 @@ enum WidgetStore {
             func string(_ key: String, _ limit: Int) -> String { String((row[key] as? String ?? "").prefix(limit)) }
             return WidgetThing(id: id, title: string("title", 160), text: string("text", 1200), kind: string("kind", 40), value: string("value", 100))
         }
-        let snapshot = WidgetSnapshot(owner: String(owner.prefix(200)), origin: origin, date: Date(), things: things)
+        let snapshot = WidgetSnapshot(owner: String(owner.prefix(200)), origin: origin, date: date, things: things)
         guard let data = try? JSONEncoder().encode(snapshot) else { return }
         defaults?.set(data, forKey: "widget.snapshot")
         WidgetCenter.shared.reloadAllTimelines()
