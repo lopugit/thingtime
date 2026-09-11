@@ -34,12 +34,17 @@ test('composition aliases are canonicalized and gallery targets win over embedde
   const result = await exportTransferPlan({ id: 'viewer' }, { ids: ['page'] }, undefined, {
     read: async () => root, resolve: async () => graph, project,
     bound: async () => [{ id: 'photo', targetId: 'card-id' }],
-    describe: async (viewer, id) => { descriptions++; assert.equal(viewer?.sharedRoot, 'page'); assert.equal(id, 'photo'); return { ok: true, linked: false, attachment: { id: 'photo', name: 'pic.png', contentType: 'image/png', size: 42, mediaKind: 'image' } }; }
+    describe: async (viewer, id) => { descriptions++; assert.equal(viewer?.sharedRoot, 'page'); assert.equal(id, 'photo'); return { ok: true, linked: false, attachment: { id: 'photo', name: 'pic.png', contentType: 'image/png', size: 42, mediaKind: 'image', title: 'Title', description: 'One\nTwo', filenamePreview: 'Friendly name', detectedContentType: 'image/png', nsfw: true } }; }
   });
   assert.equal(result.ok, true);
   if (!result.ok) return;
   assert.equal((result.plan.things[0].crystal.blocks as any)[0].component, 'card-id');
   assert.equal(result.plan.files[0].targetId, 'card-id');
+  assert.equal(result.plan.files[0].title, 'Title');
+  assert.equal(result.plan.files[0].description, 'One\nTwo');
+  assert.equal(result.plan.files[0].filenamePreview, 'Friendly name');
+  assert.equal('nsfw' in result.plan.files[0], false);
+  assert.equal('detectedContentType' in result.plan.files[0], false);
   assert.equal(descriptions, 1);
 });
 

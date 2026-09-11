@@ -18,7 +18,13 @@ export type TransferThing = {
   folderId?: string;
   targetId?: string;
 };
-export type TransferFile = {
+export type TransferAnnotations = { title?: string; description?: string; filenamePreview?: string };
+export const transferAnnotations = (source: TransferAnnotations): TransferAnnotations => ({
+  ...(source.title ? { title: source.title } : {}),
+  ...(source.description ? { description: source.description } : {}),
+  ...(source.filenamePreview ? { filenamePreview: source.filenamePreview } : {})
+});
+export type TransferFile = TransferAnnotations & {
   id: string;
   targetId: string;
   path: string;
@@ -38,14 +44,11 @@ export type ThingTransfer = {
 };
 
 /** External bytes stay external. No object keys, authority or moderation stamps. */
-export type TransferLink = {
+export type TransferLink = TransferAnnotations & {
   id: string;
   targetId: string;
   url: string;
   mediaKind: LinkedAttachmentMediaKind;
-  title?: string;
-  description?: string;
-  filenamePreview?: string;
 };
 
 export const orderedTransferAttachments = (manifest: Pick<ThingTransfer, 'files' | 'links' | 'attachmentOrder'>) => {
@@ -67,6 +70,13 @@ const keys = (value: Record<string, unknown>, allowed: string[]) => {
 const id = (value: unknown): value is string => typeof value === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,199}$/.test(value);
 const strings = (value: unknown, max: number): value is string[] => Array.isArray(value) && value.length <= max &&
   value.every((item) => typeof item === 'string' && item.length <= 500) && new Set(value).size === value.length;
+
+const validateAnnotations = (entry: Record<string, unknown>) => {
+  for (const [field, max] of Object.entries({ title: MAX_ATTACHMENT_TITLE_CHARS, description: MAX_ATTACHMENT_DESCRIPTION_CHARS, filenamePreview: MAX_ATTACHMENT_FILENAME_PREVIEW_CHARS })) {
+    const text = entry[field];
+    if (text !== undefined && (typeof text !== 'string' || text.trim() !== text || !text || text.length > max || /[\p{Cf}\p{Cs}]/u.test(text) || [...text].some((char) => /\p{Cc}/u.test(char) && !(field === 'description' && char === '\n')))) return invalid('Invalid attachment annotation');
+  }
+};
 
 /** Validate before handing arbitrary JSON to schema merging/rendering code. */
 const json = (value: unknown, depth = 0): void => {
@@ -117,7 +127,8 @@ export const validateTransfer = (value: unknown): ThingTransfer => {
   let bytes = 0;
   for (const file of value.files) {
     if (!object(file)) return invalid('Invalid file');
-    keys(file, ['id', 'targetId', 'path', 'name', 'mime', 'bytes', 'sha256']);
+    keys(file, ['id', 'targetId', 'path', 'name', 'mime', 'bytes', 'sha256', 'title', 'description', 'filenamePreview']);
+    validateAnnotations(file);
     if (!id(file.id) || files.has(file.id) || docs.has(file.id)) return invalid('Invalid or duplicate file ID');
     // Never use display names as archive paths. This excludes traversal,
     // backslashes, absolute paths, URL fetching, and case-fold collisions.
@@ -140,10 +151,7 @@ export const validateTransfer = (value: unknown): ThingTransfer => {
       if (!id(link.targetId) || !docs.has(link.targetId)) return invalid('A linked attachment target is missing');
       if (typeof link.url !== 'string' || canonicalLinkedAttachmentUrl(link.url) !== link.url) return invalid('Invalid linked attachment URL');
       if (link.mediaKind !== 'file' && link.mediaKind !== linkedMediaTypeForUrl(link.url).mediaKind) return invalid('Invalid linked attachment kind');
-      for (const [field, max] of Object.entries({ title: MAX_ATTACHMENT_TITLE_CHARS, description: MAX_ATTACHMENT_DESCRIPTION_CHARS, filenamePreview: MAX_ATTACHMENT_FILENAME_PREVIEW_CHARS })) {
-        const text = link[field];
-        if (text !== undefined && (typeof text !== 'string' || text.trim() !== text || !text || text.length > max || /[\p{Cf}\p{Cs}]/u.test(text) || [...text].some((char) => /\p{Cc}/u.test(char) && !(field === 'description' && char === '\n')))) return invalid('Invalid linked attachment annotation');
-      }
+      validateAnnotations(link);
       files.add(link.id);
     }
     if (value.links.length && value.attachmentOrder === undefined) return invalid('Linked galleries require an attachment order');

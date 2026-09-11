@@ -893,7 +893,13 @@ const bindReadyAttachmentsForPurpose = async (
 // object, so annotating an in-flight upload would be silently clobbered.
 // Crystal bytes change, so the delta rides the same exact-accounting
 // transaction markReady uses.
-export const annotateOwnedAttachment = async (ownerId: string, id: string, patch: AttachmentAnnotationPatch): Promise<AttachmentDoc> =>
+export const assertUnboundPostAnnotation = (doc: AttachmentDoc, now = new Date()) => {
+  if (doc.targetId || (doc.attachmentPurpose && doc.attachmentPurpose !== 'post') || doc.attachmentProfileSlot || !(doc.attachmentExpiresAt instanceof Date) || !Number.isFinite(doc.attachmentExpiresAt.getTime()) || doc.attachmentExpiresAt <= now) {
+    throw new AttachmentBindingError(409, 'Import annotations require a fresh unbound post attachment');
+  }
+};
+
+export const annotateOwnedAttachment = async (ownerId: string, id: string, patch: AttachmentAnnotationPatch, options: { unboundPostOnly?: boolean } = {}): Promise<AttachmentDoc> =>
 	withHomeMongoTransaction(async (session) => {
 		const things = await getHomeThingsCollection();
 		const before = (await things.findOne({ ...attachmentMatch(id), ownerId } as any, { session })) as any as AttachmentDoc | null;
@@ -901,6 +907,9 @@ export const annotateOwnedAttachment = async (ownerId: string, id: string, patch
 		if (before.attachmentState !== 'ready') {
 			throw new AttachmentBindingError(409, 'This file is still uploading — try again once it is ready');
 		}
+		// Checked inside the same transaction as the metadata write. A concurrent
+		// bind retries against the new target and cannot alter an existing gallery.
+		if (options.unboundPostOnly) assertUnboundPostAnnotation(before);
 
 		const annotated = applyAttachmentAnnotationPatch(before.crystal, patch);
 		if (annotated.ok === false) throw new AttachmentBindingError(400, annotated.error);

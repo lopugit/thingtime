@@ -7,7 +7,7 @@ import { describeAttachmentTransfer } from '../attachments/attachments';
 import { canForkThing } from '../../../components/Sharing/forkThingCore';
 import { isProtectedThingtime } from '../../../schemas/registry';
 import { collectTransfer } from '../../../utils/thingTransfer/collect';
-import { TRANSFER_LIMITS, type TransferThing, type JsonValue } from '../../../utils/thingTransfer/format';
+import { transferAnnotations, TRANSFER_LIMITS, type TransferThing, type JsonValue } from '../../../utils/thingTransfer/format';
 import type { TransferPlan } from '../../../utils/thingTransfer/plan';
 
 const defaults = { read: findViewableThing, list: listThings, resolve: resolveSharedComposition, project: toPublicThings, bound: listForkBoundMedia, describe: describeAttachmentTransfer };
@@ -108,15 +108,12 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
         if (result.linked) {
           const attachment = result.attachment;
           if (!attachment.url || attachment.nsfw || attachment.pending) throw new Error('Linked media cannot be exported');
-          (plan.links ||= []).push({ id, targetId: target.targetId, url: attachment.url, mediaKind: attachment.mediaKind,
-            ...(attachment.title ? { title: attachment.title } : {}),
-            ...(attachment.description ? { description: attachment.description } : {}),
-            ...(attachment.filenamePreview ? { filenamePreview: attachment.filenamePreview } : {}) });
+          (plan.links ||= []).push({ id, targetId: target.targetId, url: attachment.url, mediaKind: attachment.mediaKind, ...transferAnnotations(attachment) });
           continue;
         }
         bytes += result.attachment.size;
         if (bytes > TRANSFER_LIMITS.fileBytes) throw new Error('This export exceeds the file byte limit');
-        plan.files.push({ id, ...target, name: result.attachment.name, mime: result.attachment.contentType, bytes: result.attachment.size });
+        plan.files.push({ id, ...target, name: result.attachment.name, mime: result.attachment.contentType, bytes: result.attachment.size, ...transferAnnotations(result.attachment) });
       }
     }
     check();

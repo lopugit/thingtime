@@ -1,5 +1,5 @@
 import { decodeTransferArchive, encodeTransferArchive, transferChecksum, type TransferBundle } from './archive';
-import { parseTransfer, serializeTransfer, TRANSFER_FORMAT, TRANSFER_LIMITS, TransferFormatError, validateTransfer } from './format';
+import { parseTransfer, serializeTransfer, transferAnnotations, TRANSFER_FORMAT, TRANSFER_LIMITS, TransferFormatError, validateTransfer } from './format';
 import type { TransferPlan } from './plan';
 
 const ZIP_TEXT_PREFIX = 'thingtime:zip:v1:';
@@ -9,7 +9,7 @@ const invalid = (message: string): never => { throw new TransferFormatError(mess
 export const bundleFromPlan = async (plan: TransferPlan, options: { key?: string; signal?: AbortSignal; fetch?: typeof fetch } = {}): Promise<TransferBundle> => {
   const manifest = validateTransfer({ format: TRANSFER_FORMAT, version: 1, roots: plan.roots, things: plan.things,
     ...(plan.links ? { links: plan.links } : {}), ...(plan.attachmentOrder ? { attachmentOrder: plan.attachmentOrder } : {}),
-    files: plan.files.map((file, index) => ({ id: file.id, targetId: file.targetId, name: file.name, mime: file.mime, bytes: file.bytes,
+    files: plan.files.map((file, index) => ({ id: file.id, targetId: file.targetId, name: file.name, mime: file.mime, bytes: file.bytes, ...transferAnnotations(file),
       path: `files/${index.toString().padStart(6, '0')}`, sha256: '0'.repeat(64) })) });
   serializeTransfer(manifest);
   const files = new Map<string, Uint8Array>();

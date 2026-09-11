@@ -1,7 +1,7 @@
 import { transferChecksum, type TransferBundle } from './archive';
-import { TRANSFER_FORMAT, TRANSFER_LIMITS, TransferFormatError, serializeTransfer, type TransferFile, type TransferThing } from './format';
+import { TRANSFER_FORMAT, TRANSFER_LIMITS, TransferFormatError, serializeTransfer, transferAnnotations, type TransferAnnotations, type TransferFile, type TransferThing } from './format';
 
-export type TransferSourceFile = { id: string; name: string; mime: string; data: Uint8Array };
+export type TransferSourceFile = TransferAnnotations & { id: string; name: string; mime: string; data: Uint8Array };
 /** Adapters MUST authorize each read using the current viewer and return a
  * content-only projection. Folder listing is never an authorization grant.
  * Composition adapters canonicalize aliases before returning dependencies.
@@ -75,7 +75,7 @@ export const collectTransfer = async (roots: string[], source: TransferSource, o
       }
       if (files.size >= TRANSFER_LIMITS.files || bytes + file.data.byteLength > TRANSFER_LIMITS.fileBytes) fail('This export exceeds the file limit');
       const data = Uint8Array.from(file.data);
-      metadata.push({ id: file.id, name: file.name, mime: file.mime, targetId: doc.id,
+      metadata.push({ id: file.id, name: file.name, mime: file.mime, targetId: doc.id, ...transferAnnotations(file),
         path: `files/${files.size.toString().padStart(6, '0')}`, bytes: data.byteLength, sha256: await transferChecksum(data) });
       files.set(file.id, data); bytes += data.byteLength;
     }

@@ -23,7 +23,7 @@ test('clipboard JSON preserves portable content and cannot carry destructive cut
 
 test('stored bytes survive clipboard ZIP and key-bearing download scope stays out of the archive', async () => {
   const original = plan(); const bytes = new TextEncoder().encode('Actual portable bytes 🥰');
-  original.files.push({ id: 'photo', targetId: 'note', name: 'file.txt', mime: 'text/plain', bytes: bytes.length, sharedRoot: 'note' });
+  original.files.push({ id: 'photo', targetId: 'note', name: 'file.txt', mime: 'text/plain', bytes: bytes.length, sharedRoot: 'note', title: 'Title 🥰', description: 'First\nSecond', filenamePreview: 'Display filename' });
   const bundle = await bundleFromPlan(original, { key: 'presented-key', fetch: async (url, init) => {
     assert.match(String(url), /^\/api\/v1\/attachments\/content\?/);
     assert.match(String(url), /key=presented-key/); assert.equal(init?.referrerPolicy, 'no-referrer');
@@ -31,6 +31,9 @@ test('stored bytes survive clipboard ZIP and key-bearing download scope stays ou
   } });
   assert.equal(JSON.stringify(bundle.manifest).includes('presented-key'), false);
   assert.equal(JSON.stringify(bundle.manifest).includes('sharedRoot'), false);
+  assert.equal(bundle.manifest.files[0].title, 'Title 🥰');
+  assert.equal(bundle.manifest.files[0].description, 'First\nSecond');
+  assert.equal(bundle.manifest.files[0].filenamePreview, 'Display filename');
   const text = await transferClipboardText(bundle);
   assert.match(text, /^thingtime:zip:v1:/);
   assert.deepEqual(await readTransferClipboard(text), bundle);

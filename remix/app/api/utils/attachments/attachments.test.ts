@@ -10,6 +10,7 @@ import {
 	validateCompletedAttachmentParts
 } from './attachments';
 import {
+	assertUnboundPostAnnotation,
 	attachmentDeleteClaimFence,
 	attachmentDeletingRetryAt,
 	attachmentDeletingRetryUpdate,
@@ -75,6 +76,14 @@ const noopS3 = (overrides: Partial<AttachmentS3> = {}): AttachmentS3 => ({
 	isNoSuchUpload: () => false,
 	isNotFound: () => false,
 	...overrides
+});
+
+test('import annotation fence refuses already-bound, expired and non-post drafts', () => {
+	const fresh = attachmentDoc({ attachmentState: 'ready', attachmentPurpose: 'post' });
+	assert.doesNotThrow(() => assertUnboundPostAnnotation(fresh, now));
+	for (const patch of [{ targetId: 'existing-gallery' }, { attachmentPurpose: 'message' }, { attachmentProfileSlot: 'avatar' }, { attachmentExpiresAt: new Date(0) }, { attachmentExpiresAt: new Date(NaN) }, { attachmentExpiresAt: undefined }]) {
+		assert.throws(() => assertUnboundPostAnnotation({ ...fresh, ...patch } as AttachmentDoc, now), /fresh unbound/);
+	}
 });
 
 test('portable linked metadata refuses flagged sources even for administrators and never signs a redirect', async () => {

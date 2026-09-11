@@ -5,9 +5,9 @@ import { apiEndpointDocs, apiV1DocsRouteKeys, apiV1RouteKeys, createApiCapabilit
 import { capabilitySatisfies } from './capabilityContract';
 import { THINGTIME_CAPABILITY_MANIFEST_PATH, thingtimeCapabilityManifest } from './thingtimeCapabilities';
 
-test('linked transfer clients reject old and breaking import/export contracts', () => {
-  for (const version of ['1.1.0', '1.1.1', '1.2.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), true);
-  for (const version of ['1.0.1', '2.0.0', '']) assert.equal(capabilitySatisfies(version, '1.1.0'), false);
+test('annotated transfer clients reject old and breaking import/export contracts', () => {
+  for (const version of ['1.2.0', '1.2.1', '1.3.0']) assert.equal(capabilitySatisfies(version, '1.2.0'), true);
+  for (const version of ['1.0.1', '1.1.0', '2.0.0', '']) assert.equal(capabilitySatisfies(version, '1.2.0'), false);
 });
 
 test('Thingtime capability manifest is origin scoped and covers the generated API route map', () => {
@@ -17,8 +17,8 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
 	assert.equal(manifest.features['api.webpages-resolve']?.version, '1.2.0');
 	assert.equal(manifest.features['api.actions-run']?.version, '1.3.1');
 	assert.equal(manifest.features['api.things-fork']?.version, '1.4.0');
-	assert.equal(manifest.features['api.things-import']?.version, '1.1.0');
-	assert.equal(manifest.features['api.things-export']?.version, '1.1.0');
+	assert.equal(manifest.features['api.things-import']?.version, '1.2.0');
+	assert.equal(manifest.features['api.things-export']?.version, '1.2.0');
   assert.equal(manifest.features['api.admin-migrations-run']?.version, '1.3.0');
   assert.equal(manifest.features['api.admin-subscriptions']?.version, '1.1.1');
 	assert.equal(manifest.features['api.admin-ci-dispatch']?.version, '2.1.0');

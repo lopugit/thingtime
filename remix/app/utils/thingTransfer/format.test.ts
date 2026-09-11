@@ -68,8 +68,11 @@ test('rejects prototype payloads and excessive JSON depth before import', () => 
 
 test('files use numbered paths and bounded checksummed manifests, never display names as paths', () => {
   const value = fixture();
-  value.files.push({ id: 'file', targetId: 'data', path: 'files/000000', name: 'photo.png', mime: 'image/png', bytes: 12, sha256: 'a'.repeat(64) });
+  value.files.push({ id: 'file', targetId: 'data', path: 'files/000000', name: 'photo.png', mime: 'image/png', bytes: 12, sha256: 'a'.repeat(64), title: 'Photo 🥰', description: 'First\nSecond', filenamePreview: 'Friendly filename' });
   assert.deepEqual(parseTransfer(serializeTransfer(value)), value);
+  for (const patch of [{ title: 'bad\nline' }, { description: 'bad\u0000control' }, { filenamePreview: 'x'.repeat(256) }, { nsfw: false }, { detectedContentType: 'image/png' }]) {
+    assert.throws(() => validateTransfer({ ...value, files: [{ ...value.files[0], ...patch }] }));
+  }
   for (const path of ['../photo', '/etc/file', 'files/../file', 'files\\photo', 'https://example.com/photo', 'files/000001']) {
     assert.throws(() => validateTransfer({ ...value, files: [{ ...value.files[0], path }] }), /archive file path/);
   }

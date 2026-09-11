@@ -18,6 +18,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Preserve stored-file titles, multiline descriptions and display filenames
+  in transfer plans, ZIP/clipboard bundles and imported copies. Fence import
+  annotation writes transactionally to fresh unbound post drafts; negotiate
+  import/export 1.2.0 without accepting server-derived moderation/type stamps.
+  [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-11
+
 - Preserve linked galleries and their mixed file/link order in portable JSON/ZIP
   transfers. Recreate private URL records through normal link and annotation
   writers, without fetching external bytes; reject flagged link exports and

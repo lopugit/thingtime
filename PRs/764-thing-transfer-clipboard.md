@@ -31,6 +31,22 @@ of that scope.
 
 ## Evidence
 
+- Stored-file annotation correction (2026-09-11): export plans and portable
+  bundles now retain optional title, multiline description and filenamePreview
+  for uploaded files as well as links. Import/export clients negotiate 1.2.0.
+  After ready-upload ownership checks, normal annotation accounting writes run
+  with a server-only fresh-unbound-post fence inside their transaction. A
+  concurrent bind therefore cannot annotate an existing gallery. Imported
+  content does not set detected types, moderation, file bytes or ownership.
+  Actual stored-file upload acceptance still needs an upload-approved account.
+  Validation: 97 Things tests, 178 attachment tests (plus six media-cache
+  tests) and 39 capability tests pass. Full build and Vercel output verification
+  pass; the built manifest advertises import/export 1.2.0 without requiring
+  database access. Targeted lint has no errors and one intentional unsafe-URL
+  test warning. Full typecheck retains baseline diagnostics, none in changed
+  transfer/attachment implementations. The real desktop JSON/mobile ZIP linked
+  gallery regression also passes through the stricter annotation transaction.
+
 - Linked-gallery extension (2026-09-11): import/export 1.1.0 adds optional
   `links` and complete `attachmentOrder` to the version-1 portable envelope.
   URLs and bounded owner annotations remain metadata, never fetched bytes.

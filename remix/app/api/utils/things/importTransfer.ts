@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { isProtectedThingtime } from '../../../schemas/registry';
-import { orderedTransferAttachments, serializeTransfer, validateTransfer, type ThingTransfer, type TransferThing } from '../../../utils/thingTransfer/format';
+import { orderedTransferAttachments, serializeTransfer, transferAnnotations, validateTransfer, type ThingTransfer, type TransferThing } from '../../../utils/thingTransfer/format';
 import { rewriteComposition } from '../actions/forkCompositionCore';
 import { rewriteTransferMedia } from './transferMediaCore';
 import { annotateAttachment, linkAttachment, deleteAttachment, createReadyAttachmentPostInsertHook, inspectReadyAttachmentsForPost, prepareAttachmentCascadeForThing } from '../attachments/attachments';
@@ -79,7 +79,7 @@ export const importTransfer = async (
       files.set(link.id, result.attachment.id);
       if (link.title || link.description || link.filenamePreview) {
         check();
-        const annotated = await deps.annotate(viewer.id, { id: result.attachment.id, title: link.title, description: link.description, filenamePreview: link.filenamePreview });
+        const annotated = await deps.annotate(viewer.id, { id: result.attachment.id, title: link.title, description: link.description, filenamePreview: link.filenamePreview }, { unboundPostOnly: true });
         if (isFail(annotated)) throw annotated;
       }
     }
@@ -99,6 +99,13 @@ export const importTransfer = async (
         if (!uploaded || ('bytes' in file ? uploaded.attachmentLinked || uploaded.crystal.size !== file.bytes : !uploaded.attachmentLinked || uploaded.crystal.url !== file.url)) throw new Error('Uploaded file does not match the transfer');
       }
       inspections.set(thing.id, inspected);
+    }
+    for (const file of manifest.files) {
+      const annotations = transferAnnotations(file);
+      if (!Object.keys(annotations).length) continue;
+      check();
+      const annotated = await deps.annotate(viewer.id, { id: files.get(file.id)!, ...annotations }, { unboundPostOnly: true });
+      if (isFail(annotated)) throw annotated;
     }
     for (const thing of ordered) {
       check();

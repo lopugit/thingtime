@@ -1,4 +1,4 @@
-import type { TransferThing, TransferLink } from './format';
+import type { TransferThing, TransferLink, TransferAnnotations } from './format';
 
 /** Short-lived authorized download plan, never the portable archive itself.
  * File bytes and checksums are obtained before creating a portable bundle.
@@ -6,7 +6,7 @@ import type { TransferThing, TransferLink } from './format';
 export type TransferPlan = {
   roots: string[];
   things: TransferThing[];
-  files: { id: string; targetId: string; name: string; mime: string; bytes: number; sharedRoot?: string }[];
+  files: (TransferAnnotations & { id: string; targetId: string; name: string; mime: string; bytes: number; sharedRoot?: string })[];
   links?: TransferLink[];
   attachmentOrder?: string[];
 };

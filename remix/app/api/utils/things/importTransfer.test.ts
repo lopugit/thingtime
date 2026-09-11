@@ -122,6 +122,31 @@ test('file imports require distinct authorized ready uploads before any Thing wr
   assert.equal(writes.length, 0);
 });
 
+test('stored-file annotations use a fresh-unbound fence after upload validation and before Thing writes', async () => {
+  for (const rejected of [false, true]) {
+    const { writes, deps } = harness();
+    const manifest = fixture();
+    manifest.files = [{ id: 'file', targetId: 'data', name: 'a.txt', mime: 'text/plain', path: 'files/000000', bytes: 4, sha256: 'a'.repeat(64), title: 'Title 🥰', description: 'One\nTwo', filenamePreview: 'Display name' }];
+    let inspected = false;
+    let annotated = false;
+    const result = await importTransfer({ id: 'recipient' }, { manifest, files: { file: 'fresh-upload' } }, undefined, {
+      ...deps,
+      inspectFiles: async () => { inspected = true; return { ok: true, hasAny: true, hasVisual: false }; },
+      getFile: async () => ({ crystal: { size: 4 } }) as any,
+      annotate: async (owner, input, options) => {
+        assert.ok(inspected); assert.equal(writes.length, 0); assert.equal(owner, 'recipient');
+        assert.deepEqual(options, { unboundPostOnly: true });
+        assert.deepEqual(input, { id: 'fresh-upload', title: 'Title 🥰', description: 'One\nTwo', filenamePreview: 'Display name' });
+        annotated = true;
+        return rejected ? { ok: false, status: 409, error: 'concurrent bind' } : { ok: true, attachment: {} } as any;
+      },
+      bindFiles: () => (async () => {}) as any
+    });
+    assert.ok(annotated); assert.equal(result.ok, !rejected);
+    if (rejected) assert.equal(writes.length, 0);
+  }
+});
+
 test('cancelled imports perform no writes and do not retry creation', async () => {
   const { writes, deps } = harness();
   const result = await importTransfer({ id: 'recipient' }, { manifest: fixture() }, AbortSignal.abort(new Error('cancelled')), deps);
