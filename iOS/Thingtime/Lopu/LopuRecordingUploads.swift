@@ -1,7 +1,9 @@
 import AVFoundation
 import CryptoKit
 import Foundation
+#if os(iOS)
 import UIKit
+#endif
 
 private final class LopuUploadRedirectPolicy: NSObject, URLSessionTaskDelegate {
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
@@ -111,18 +113,22 @@ final class LopuRecordingUploads {
         let cookie = self.cookie
         let importOlder = self.importOlder
         worker = Task {
+#if os(iOS)
             let background = UIApplication.shared.beginBackgroundTask(withName: "Save Lopu recordings") { [weak self] in
                 Task { @MainActor in if self?.workerID == id { self?.worker?.cancel() } }
             }
+#endif
             defer {
+#if os(iOS)
                 if background != .invalid { UIApplication.shared.endBackgroundTask(background) }
+#endif
                 worker = nil
                 if self.context != context || self.cookie != cookie || self.importOlder != importOlder { pump() }
             }
             if importOlder {
                 do { try await importLegacy(context: context, cookie: cookie) }
                 catch {
-                    if !Task.isCancelled { notify?("lopu-voice-recording-upload", ["ownerId": context.ownerId, "state": "pending", "message": "Older recordings remain on this iPhone. Automatic import will retry when Lopu reconnects."]) }
+                    if !Task.isCancelled { notify?("lopu-voice-recording-upload", ["ownerId": context.ownerId, "state": "pending", "message": "Older recordings remain on this device. Automatic import will retry when Lopu reconnects."]) }
                 }
             }
             var attempted = Set<String>()
