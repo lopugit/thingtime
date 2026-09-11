@@ -47,6 +47,8 @@ import {
 import { PrivateS3ConfigError } from './config';
 import { getPrivateS3, type AttachmentObjectHead, type AttachmentS3, type AttachmentUploadedPart } from './privateS3';
 import { queueAttachmentModeration } from '../moderation/analyzeAttachment';
+import { copyStoredAttachment } from './copyStoredAttachment';
+import { findUserById, userPublicUploadsEnabled } from '../auth/users';
 
 export const ATTACHMENT_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
 export const ATTACHMENT_READY_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
@@ -87,6 +89,7 @@ type AttachmentServiceDependencies = {
 	customMongoActive: () => boolean;
 	canViewTarget: (viewer: AttachmentViewer, attachment: AttachmentDoc) => Promise<boolean>;
 	canViewSharedTarget: typeof canViewSharedCompositionAttachment;
+	canCopyFiles: (ownerId: string) => Promise<boolean>;
 	clock: () => number;
 	// Fire-and-forget NSFW/TOS analysis kickoff after markReady; optional so
 	// unit tests that stub the store never trigger network analysis.
@@ -145,7 +148,7 @@ const attachmentUploadIntent = (
 export const attachmentIdForRequest = (ownerId: string, requestId: string): string =>
 	`att_${createHash('sha256').update('thingtime-attachment-request-v1\0').update(ownerId).update('\0').update(requestId).digest('hex')}`;
 
-const attachmentPartPlan = (sizeBytes: number) => {
+export const attachmentPartPlan = (sizeBytes: number) => {
 	const oneMiB = 1024 * 1024;
 	const minimumForTenThousand = Math.ceil(sizeBytes / 10_000);
 	const partSizeBytes = Math.ceil(Math.max(ATTACHMENT_MIN_PART_BYTES, minimumForTenThousand) / oneMiB) * oneMiB;
@@ -263,6 +266,10 @@ const defaultDependencies: AttachmentServiceDependencies = {
 	customMongoActive: isCustomMongoEndpointActive,
 	canViewTarget: canViewHomeAttachmentTarget,
 	canViewSharedTarget: (viewer, attachment, rootId) => canViewSharedCompositionAttachment(viewer, attachment, rootId),
+	canCopyFiles: async (ownerId) => {
+		const user = await findUserById(ownerId);
+		return !!user && user.accountKind !== 'service' && userPublicUploadsEnabled(user);
+	},
 	clock: Date.now,
 	queueModeration: queueAttachmentModeration
 };
@@ -1222,11 +1229,11 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		}
 	};
 
-	const download = async (
+	const readableStoredAttachment = async (
 		viewer: AttachmentViewer,
 		idInput: unknown,
-		forceDownload: boolean
-	): Promise<AttachmentResult<{ url: string; expiresAt: string; cacheKey: string; size: number; contentType: string; disposition: string; image: boolean }>> => {
+		allowLinkedCopy = false
+	): Promise<AttachmentResult<{ doc: AttachmentDoc }>> => {
 		try {
 			const id = normalizeId(idInput);
 			if (!id) return fail(404, 'Attachment not found');
@@ -1262,7 +1269,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			// redirected through this endpoint: a 302 to crystal.url would turn the
 			// first-party content URL into an open redirect to an attacker-chosen
 			// origin (CWE-601). Renderers always use crystal.url directly.
-			if (doc.attachmentLinked === true) return fail(404, 'Attachment not found');
+			if (doc.attachmentLinked === true) return allowLinkedCopy ? { ok: true, doc } : fail(404, 'Attachment not found');
 
 			const s3 = dependencies.getS3();
 			if (!doc.objectVersionId) {
@@ -1272,10 +1279,24 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (!isAttachmentObjectVersionId(doc.objectVersionId)) {
 				return fail(404, 'Attachment not found');
 			}
+			return { ok: true, doc };
+		} catch (error) {
+			return knownFailure(error) || unavailable('read', error);
+		}
+	};
+
+	const download = async (
+		viewer: AttachmentViewer, idInput: unknown, forceDownload: boolean
+	): Promise<AttachmentResult<{ url: string; expiresAt: string; cacheKey: string; size: number; contentType: string; disposition: string; image: boolean }>> => {
+		try {
+			const readable = await readableStoredAttachment(viewer, idInput);
+			if (readable.ok === false) return readable;
+			const { doc } = readable;
+			const s3 = dependencies.getS3();
 			const inline = !forceDownload && attachmentMayRenderInline(doc.crystal);
 			const signed = await s3.signDownload({
 				objectKey: doc.objectKey,
-				versionId: doc.objectVersionId,
+				versionId: doc.objectVersionId!,
 				contentDisposition: attachmentContentDisposition(doc.crystal.name, inline),
 				contentType: inline ? doc.crystal.contentType : 'application/octet-stream'
 			});
@@ -1295,6 +1316,14 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			return knownFailure(error) || unavailable('download', error);
 		}
 	};
+
+	const copy = (viewer: AttachmentViewer, id: unknown, signal?: AbortSignal) => copyStoredAttachment({
+		canCopy: dependencies.canCopyFiles,
+		read: (viewer, id) => readableStoredAttachment(viewer, id, true), start, complete, remove,
+		readyDraftTtlMs: ATTACHMENT_READY_DRAFT_TTL_MS,
+		store: dependencies.store, getS3: dependencies.getS3,
+		plan: attachmentPartPlan, uuid: dependencies.uuid, now: dependencies.now
+	}, viewer, id, signal);
 
 	type ContentAttachmentPurpose = Extract<AttachmentPurpose, 'post' | 'comment' | 'message' | 'emoji'>;
 	type InspectedAttachments = {
@@ -1429,6 +1458,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		cancel,
 		remove,
 		download,
+		copy,
 		inspectForPost,
 		inspectForComment,
 		inspectForMessage,
@@ -1448,6 +1478,7 @@ export const completeAttachmentUpload = service.complete;
 export const cancelAttachmentUpload = service.cancel;
 export const deleteAttachment = service.remove;
 export const getAttachmentDownload = service.download;
+export const copySharedAttachment = service.copy;
 export const inspectReadyAttachmentsForPost = service.inspectForPost;
 export const inspectReadyAttachmentsForComment = service.inspectForComment;
 export const inspectReadyAttachmentsForMessage = service.inspectForMessage;
