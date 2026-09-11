@@ -420,7 +420,12 @@ test('shared page audience includes its author components, never a foreign priva
 					await tab.waitForURL('**/login');
 					await context.close();
 				}
-				const forkPage = await create(owner, ['webpage'], { name: 'Copy this app', blocks: [{ id: 'card', type: 'component', component: component.id }] }, ['tt:hidden', 'tt:user']);
+				// Transport fixtures above intentionally reference nonexistent files.
+				// A real fork must now reject those, not pretend it copied their bytes.
+				const copyComponent = await create(owner, ['component'], { ...crystal, componentKey: `${key}-browser-copy`, render: { tag: 'div', children: [
+					{ tag: 'button', ttAction: sharedAction.id, children: ['Draw'] }, { tag: 'p', children: ['{last.result}'] }
+				] } });
+				const forkPage = await create(owner, ['webpage'], { name: 'Copy this app', blocks: [{ id: 'card', type: 'component', component: copyComponent.id }] }, ['tt:hidden', 'tt:user']);
 				const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 				await serveBuiltClient(context);
 				await context.addCookies(stranger.split('; ').map((entry) => {
@@ -493,10 +498,17 @@ test('shared page audience includes its author components, never a foreign priva
 		// Copy the component root (the page deliberately also has a foreign
 		// private component, which must not be silently copied or exposed).
 		assert.equal((await request('/api/v1/things/fork', 'POST', { id: component.id, key: component.linkKey })).response.status, 401);
-		const copied = await request('/api/v1/things/fork', 'POST', { id: component.id, key: component.linkKey }, stranger);
+		const missingFiles = await request('/api/v1/things/fork', 'POST', { id: component.id, key: component.linkKey }, stranger);
+		assert.equal(missingFiles.response.status, 422, 'Nonexistent transport-only attachments cannot produce a successful independent copy');
+		assert.equal(missingFiles.data.ok, false);
+		const copyComponent = await create(owner, ['component'], { ...crystal, componentKey: `${key}-api-copy`, render: { tag: 'div', children: [
+			{ tag: 'button', ttAction: sharedAction.id, children: ['Draw'] }, { tag: 'p', children: ['{last.result}'] }
+		] } }, ['tt:hidden', 'tt:user']);
+		const copied = await request('/api/v1/things/fork', 'POST', { id: copyComponent.id, key: copyComponent.linkKey }, stranger);
 		assert.equal(copied.response.status, 200, copied.data.error);
 		for (const id of copied.data.ids) created.push({ id, cookie: stranger });
 		assert.equal(copied.data.copied, 3);
+		assert.equal(copied.data.filesCopied, 0);
 		assert.notEqual(copied.data.id, component.id);
 		const copy = await request(`/api/v1/things?id=${copied.data.id}`, 'GET', undefined, stranger);
 		assert.deepEqual(copy.data.thing.acl, ['tt:user']);

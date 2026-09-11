@@ -10,11 +10,9 @@ import {
   Input,
   Menu,
   MenuButton,
-  MenuDivider,
   MenuItem,
   MenuItemOption,
   MenuList,
-  MenuGroup,
   MenuOptionGroup,
   Popover,
   PopoverAnchor,
@@ -28,7 +26,7 @@ import {
 } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
 import { Link } from 'react-router';
-import { ArrowLeft, Bookmark, Eye, Flag, Heart, Maximize2, MessageCircle, MoreHorizontal, Plus, Repeat2, Send, Share } from 'lucide-react';
+import { ArrowLeft, Bookmark, Eye, Flag, Heart, Maximize2, MessageCircle, Plus, Repeat2, Send, Share } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { useCommentDraft } from '~/hooks/useCommentDraft';
@@ -48,6 +46,7 @@ import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 import { RAINBOW } from '~/theme/rainbow';
 import { PostComposer } from './PostComposer';
+import { PostThingMenu } from './PostThingMenu';
 import { CustomAudienceModal } from './CustomAudienceModal';
 import { ReactionControl } from './ReactionControl';
 import { UpdownControl } from './UpdownControl';
@@ -1733,31 +1732,6 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
   // sheet). Hidden posts copy their SECRET link — permalink + ?key= — the
   // only door into an unlisted post.
   //
-  // Keyed on the KEY, not on the derived circle name. The server mints,
-  // projects and honours linkKey off `acl.includes(tt:hidden)` (createThing,
-  // toPublicPosts, canView), but visibilityFromAcl reports 'custom' whenever
-  // tt:custom rides along — and the audience picker's "🕵️ + secret link"
-  // baseline composes exactly that acl. Gating on the name therefore hid the
-  // link for every custom audience that opted into one: a real key existed,
-  // the owner held it in this very payload, and no UI would surface it.
-  // `post.linkKey` is already the exact condition — present only for the
-  // owner, and only while the acl still says hidden.
-  const hiddenLink = post.linkKey ? `${permalinkPath}?key=${encodeURIComponent(post.linkKey)}` : null;
-  const handleCopyLink = async () => {
-		const url = `${window.location.origin}${hiddenLink || permalinkPath}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      lopu({
-        title: hiddenLink ? 'Hidden link copied 🕵️' : 'Link copied 🔗',
-        description: hiddenLink ? 'Anyone holding this exact link can view the post — share it deliberately.' : undefined,
-        status: 'success',
-        duration: 4000
-      });
-    } catch {
-      // clipboard unavailable (http origin) — hand the link over anyway
-      lopu({ title: `Copy this link: ${url}`, status: 'info', duration: 10000 });
-    }
-  };
 
   // Toggle one reaction token (single emoji or a multi-emoji group). Optimistic:
   // we repaint the card immediately, then reconcile with the server's counts
@@ -2186,123 +2160,14 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
               </Tooltip>
             </Flex>
           </Box>
-          {(isOwner || canModerate || canReport || guestReport) && (
-            <Menu placement="bottom-end" autoSelect={false} onOpen={isOwner || canModerate ? loadFlairs : undefined}>
-              <MenuButton
-                as={IconButton}
-				aria-label={mediaThing ? 'Media options' : 'Post options'}
-                icon={<MoreHorizontal size={16} />}
-                size="xs"
-                variant="ghost"
-                color={MUTED}
-                borderRadius="8px"
-              />
-              <MenuList minWidth="190px" borderRadius={RADIUS_MD} zIndex={10}>
-                {isOwner && !mediaThing && (
-                  <MenuItem fontSize="sm" onClick={handleEditStart}>
-                    Edit ✏️
-                  </MenuItem>
-                )}
-                <MenuItem fontSize="sm" onClick={handleCopyLink}>
-                  {hiddenLink ? 'Copy hidden link 🕵️' : 'Copy link 🔗'}
-                </MenuItem>
-                {isOwner && !mediaThing && (
-                  <>
-                    <MenuDivider />
-                    <MenuOptionGroup
-                      title="Privacy"
-                      type="radio"
-                      value={post.visibility}
-                      onChange={(value) => handleVisibilityChange(value as PostVisibility)}
-                    >
-                      {(Object.keys(CIRCLE_META) as PostVisibility[]).map((key) => (
-                        <MenuItemOption key={key} value={key} fontSize="sm">
-                          {CIRCLE_META[key].emoji} {CIRCLE_META[key].label}
-                        </MenuItemOption>
-                      ))}
-                    </MenuOptionGroup>
-                    <MenuDivider />
-                    <MenuItem fontSize="sm" color="var(--tt-danger, #e5484d)" onClick={handleDelete}>
-                      Delete 🗑️
-                    </MenuItem>
-                  </>
-                )}
-                {canReport && post.subspace && (
-                  <>
-                    <MenuDivider />
-                    <MenuItem fontSize="sm" onClick={() => setReportOpen(true)} data-testid="post-report">
-                      Report to moderators 🚩
-                    </MenuItem>
-                  </>
-                )}
-                {guestReport && (
-                  <>
-                    <MenuDivider />
-                    <MenuItem fontSize="sm" onClick={() => lopu({ title: 'Log in to report 🚩', status: 'info', duration: 6000 })} data-testid="post-report-guest">
-                      Report to moderators 🚩
-                    </MenuItem>
-                  </>
-                )}
-                {!mediaThing && post.subspace && (isOwner || canModerate) && (
-                  <>
-                    <MenuDivider />
-                    {canModerate && (
-                      <MenuGroup title="Moderation 🎩" fontSize="xs">
-                        {post.subspaceMod?.removed ? (
-                          <MenuItem fontSize="sm" onClick={() => handleModerate('approve')}>
-                            Approve ✅
-                          </MenuItem>
-                        ) : (
-                          <MenuItem fontSize="sm" onClick={() => setRemoveOpen(true)} data-testid="post-mod-remove">
-                            Remove 🧹
-                          </MenuItem>
-                        )}
-                        <MenuItem fontSize="sm" onClick={() => handleModerate(post.subspaceMod?.pinned ? 'unpin' : 'pin')}>
-                          {post.subspaceMod?.pinned ? 'Unpin' : 'Pin'} 📌
-                        </MenuItem>
-                        <MenuItem fontSize="sm" onClick={() => handleModerate(post.subspaceMod?.locked ? 'unlock' : 'lock')}>
-                          {post.subspaceMod?.locked ? 'Unlock comments' : 'Lock comments'} 🔒
-                        </MenuItem>
-                        <MenuItem fontSize="sm" onClick={() => handleModerate('nsfw', { value: !post.subspaceMod?.nsfw })}>
-                          {post.subspaceMod?.nsfw ? 'Unmark 18+' : 'Mark 18+'} 🔞
-                        </MenuItem>
-                        <MenuItem fontSize="sm" onClick={() => handleModerate('spoiler', { value: !post.subspaceMod?.spoiler })}>
-                          {post.subspaceMod?.spoiler ? 'Unmark spoiler' : 'Mark spoiler'} ⚠️
-                        </MenuItem>
-                      </MenuGroup>
-                    )}
-                    <MenuOptionGroup
-                      title="Flair"
-                      type="radio"
-                      value={post.flair?.id || ''}
-                      onChange={(value) => {
-                        const flairId = (value as string) || null;
-                        if (canModerate) handleModerate('flair', { flairId });
-                        else handleOwnFlair(flairId);
-                      }}
-                    >
-                      <MenuItemOption value="" fontSize="sm">
-                        No flair
-                      </MenuItemOption>
-                      {(modFlairs || [])
-                        .filter((flair) => canModerate || !flair.modOnly)
-                        .map((flair) => (
-                          <MenuItemOption key={flair.id} value={flair.id} fontSize="sm">
-                            {flair.emoji ? `${flair.emoji} ` : ''}
-                            {flair.label}
-                          </MenuItemOption>
-                        ))}
-                      {modFlairs === null && (
-                        <MenuItemOption value="__loading" fontSize="sm" isDisabled>
-                          Loading flairs…
-                        </MenuItemOption>
-                      )}
-                    </MenuOptionGroup>
-                  </>
-                )}
-              </MenuList>
-            </Menu>
-          )}
+          <PostThingMenu post={post} mediaThing={mediaThing} isOwner={isOwner} canModerate={canModerate}
+            canReport={canReport} guestReport={guestReport} flairs={modFlairs} openHref={permalinkPath}
+            onOpen={() => { if (isOwner || canModerate) void loadFlairs(); }}
+            handlers={{
+              edit: handleEditStart, delete: handleDelete, privacy: handleVisibilityChange,
+              report: () => guestReport ? lopu({ title: 'Log in to report 🚩', status: 'info', duration: 6000 }) : setReportOpen(true),
+              remove: () => setRemoveOpen(true), moderate: handleModerate, flair: handleOwnFlair
+            }} />
           {canModerate && post.subspace && !mediaThing && (
             <RemoveModal
               isOpen={removeOpen}
