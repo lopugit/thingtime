@@ -31,6 +31,16 @@ of that scope.
 
 ## Evidence
 
+- Algorithm coverage (2026-09-11): owner-only full snapshots preserve exact
+  weights and training statistics, including legacy records. Public preview
+  access alone never exports weights. The dedicated algorithm writer validates
+  bounded plain data, creates fresh quota-accounted private/unshared records,
+  and does not activate or train them. Its import return avoids fallible author
+  label lookup after commit so mixed-import cleanup always receives the minted
+  ID. AlgorithmManager exposes the common transfer controls and privacy warning.
+  Transfer contracts are 1.4.0. Validator and transfer-service tests cover exact
+  data, private projection, rejected authority and dedicated rollback.
+
 - Theme coverage (2026-09-11): dedicated owned/public theme reads (including
   legacy records), content-only name/tokens export, fresh private imports via
   saveTheme, and dedicated rollback. Active theme selection is never changed.

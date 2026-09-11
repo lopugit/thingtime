@@ -58,6 +58,6 @@ const TransferControls = ({ id, linkKey, disabledReason, ownerId, onImported }: 
     </Menu>
     {exportOpen && id && <ThingExportDialog ids={[id]} linkKey={linkKey} onClose={() => setExportOpen(false)} />}
     {importOpen && ownerId && <ThingImportDialog ownerId={ownerId} folderId={null} onClose={() => setImportOpen(false)}
-      onImported={() => { onImported?.(); lopu({ title: 'Private copies imported', description: 'Themes appear in My themes; other content appears in My Things.', status: 'success' }); }} />}
+      onImported={() => { onImported?.(); lopu({ title: 'Private copies imported', description: 'Themes and algorithms appear in their own libraries; other content appears in My Things.', status: 'success' }); }} />}
   </>;
 };

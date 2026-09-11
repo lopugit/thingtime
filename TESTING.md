@@ -2,6 +2,15 @@
 
 ## Portable theme transfers
 
+- [ ] In Settings → Things → Feed algorithms, copy/download a trained profile,
+  then import JSON and ZIP at 1280px and 390px. Verify exact weight maps and
+  training statistics, fresh private/unshared copies, unchanged active selection,
+  anonymous/other-owner denial and no overflow through full-page scrolling.
+  The private-interest warning must be visible before export and on import.
+- [ ] Reject algorithm transfer fields that attempt to set sharing, active state,
+  lineage or training events. Reject invalid/out-of-range weights and statistics
+  before writes; a later mixed-import failure uses the dedicated delete writer.
+
 - [ ] On `/themes`, use Transfer to copy/download a saved theme at desktop and
   mobile widths. Scroll the full page, open the transfer dialogs, then import
   JSON and ZIP files. Verify fresh private copies in My themes, equal resolved

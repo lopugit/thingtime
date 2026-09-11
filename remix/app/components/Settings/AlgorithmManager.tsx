@@ -4,6 +4,7 @@ import { Box, Button, Flex, Input, Spinner, Text } from '@chakra-ui/react';
 import { growthStageFor } from '~/components/Feed/algorithmGrowth';
 import { POST_TYPE_META, PostType, PublicAlgorithm, timeAgo } from '~/components/Feed/feedTypes';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { ThingTransferControls } from '~/components/Things/ThingTransferControls';
 import { useApi } from '~/hooks/useApi';
 import { RAINBOW } from '~/theme/rainbow';
 
@@ -331,6 +332,8 @@ export const AlgorithmManager = () => {
 
   return (
     <Flex flexDirection="column" rowGap={2}>
+      <Box><ThingTransferControls onImported={refresh} /></Box>
+      <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">Downloaded or copied algorithms contain your private interest weights. Share these files only deliberately.</Text>
       {/* "Latest" pseudo-entry — chronological feed, no training */}
       <Flex {...rowShell(activeAlgorithmId === null)}>
         <Flex alignItems="center" columnGap={3} rowGap={2} flexWrap="wrap">
@@ -427,6 +430,7 @@ export const AlgorithmManager = () => {
                 >
                   Branch 🌿
                 </Button>
+                <ThingTransferControls id={algorithm.id} onImported={refresh} />
                 <Button
                   size="xs"
                   variant="ghost"

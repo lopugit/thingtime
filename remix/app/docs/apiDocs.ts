@@ -12196,12 +12196,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-export',
-    featureVersion: '1.3.0',
-    contractVersion: '1.3.0',
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
     group: 'things',
     title: 'Plan a portable Thing export',
     endpoint: '/api/v1/things/export',
-    summary: 'Read authorized content, folder descendants, app dependencies and file/link descriptors, including bounded annotations. Owned or public themes (including legacy saved themes) export through dedicated home-plane theme readers as name and sanitized tokens only.',
+    summary: 'Read authorized content, folder descendants, app dependencies and file/link descriptors, including bounded annotations. Owned/public themes use dedicated readers. Feed algorithms use owner-only home-plane reads, including legacy profiles: exports contain name, emoji, exact weights, eventCount and lastTrainedAt, never shared status, lineage or active selection. Algorithm files contain private interest weights; public preview links do not authorize full export.',
     detail: 'Read-only POST. Reuses live Thing and composition audience checks, canonicalizes executable aliases, and drains folder pagination. File metadata uses the same live moderation, audience and object-state gates as downloads. No ownership, ACL, tokens, object keys or signed URLs are exported. Clients download stored files through the normal content endpoint and compute checksums. Optional links contain validated external URLs, mediaKind and owner annotations; attachmentOrder preserves mixed gallery order. Linked bytes are never fetched. Flagged linked media, inaccessible dependencies, unsupported managed records and bounds violations fail explicitly rather than truncating.',
     auth: { mode: 'optional', description: 'Session or anonymous public/keyed content access. Folder enumeration requires ownership. App tokens and PATs are not supported.' },
     methods: ['POST'],
@@ -12211,13 +12211,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-import',
-    // 1.3.0: private theme copies through the dedicated home-plane writer.
-    featureVersion: '1.3.0',
-    contractVersion: '1.3.0',
+    // 1.4.0: owner-only algorithm snapshots and private validated restoration.
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
     group: 'things',
     title: 'Import portable Things',
     endpoint: '/api/v1/things/import',
-    summary: 'Import a version-1 manifest into private caller-owned Things, preserving templated media and file/link annotations. Themes use the dedicated home-plane writer with fresh IDs, private visibility, token sanitization and quota checks; they appear in My themes without changing the active theme. Theme entries accept only name and theme tokens, without folder placement, child Things, extended fields or gallery files. Stored-file annotations apply only to fresh unbound post-purpose drafts inside the normal quota transaction. Server-derived file types and moderation are not imported.',
+    summary: 'Import private caller-owned content, preserving templated media and file/link annotations. Themes and feed algorithms use dedicated home-plane writers with fresh IDs and quota checks, without changing active selections. Themes accept name and token data. Algorithms accept name, emoji, weights, eventCount and canonical ISO lastTrainedAt or null; each weight bucket allows at most 10000 keys of at most 512 characters and finite weights from -50 to 50. Malformed data fails without truncation. Imported algorithms start unshared with no branch lineage and never execute training events. Both kinds reject folders, child Things, extended fields and gallery files. Other account/control kinds remain protected.',
     detail: 'Allocates fresh IDs, remaps internal composition, folder, target and schema references, and uses normal schema validation, quota accounting and transactional attachment binding. Never restores ownership, ACL grants, link secrets, site routes or managed account records. Stored files first use the normal upload API; the files map binds manifest IDs to distinct ready caller-owned uploads, with byte-size checks. Optional links recreate private URL-backed gallery drafts through the normal link/annotation writers without external fetching or stored-upload approval; attachmentOrder must list every file/link ID exactly once when links exist. Returns linksImported separately from filesImported. Repeated successful requests create separate copies; never automatically retry an uncertain mutation. Failures clean only new Things and unbound link drafts; remainingIds reports cleanup failures.',
     auth: { mode: 'session', description: 'Requires a first-party user account. Cross-origin requests, app tokens, PATs and service accounts are not supported.' },
     methods: ['POST'],

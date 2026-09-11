@@ -63,7 +63,7 @@ export const ThingImportDialog = ({ ownerId, folderId, initialBundle, onClose, o
   };
   const filesReady = !!bundle && uploads.uploads.length === bundle.manifest.files.length &&
     uploads.uploads.every((upload) => upload.status === 'ready' && upload.attachment);
-  const hasThemes = !!bundle?.manifest.things.some(thing => thing.thingtime.includes('theme'));
+  const hasThemes = !!bundle?.manifest.things.some(thing => thing.thingtime.includes('theme') || thing.thingtime.includes('feed-algorithm'));
   const submit = async () => {
     if (!bundle || !filesReady || submission.current || lifetime.current?.signal.aborted) return;
     submission.current = true; setAttempted(true); setSubmitting(true); setError('');
@@ -93,7 +93,7 @@ export const ThingImportDialog = ({ ownerId, folderId, initialBundle, onClose, o
           {bundle && <>
             <Text>{bundle.manifest.things.length} Things · {bundle.manifest.files.length} files · {bundle.manifest.links?.length || 0} links · {(bundle.manifest.files.reduce((total, file) => total + file.bytes, 0) / 1024 / 1024).toFixed(1)} MiB</Text>
             {!!bundle.manifest.links?.length && <Text fontSize="sm">Linked media stays on its original site. Import creates private gallery records; it does not download those external files.</Text>}
-            {hasThemes ? <Text fontSize="sm">Themes are saved privately in My themes without changing your active theme. Other content goes to My Things (top level).</Text> : <Box>
+            {hasThemes ? <Text fontSize="sm">Themes and feed algorithms are saved privately in their own libraries without changing your active selections. Other content goes to My Things (top level). Algorithm files contain private interest weights; share them only deliberately.</Text> : <Box>
               <Text as="label" htmlFor="thing-import-destination" fontSize="sm">Import destination</Text>
               <Select id="thing-import-destination" value={destination || ''} isDisabled={attempted} onChange={(event) => setDestination(event.target.value || null)}>
                 <option value="">My Things (top level)</option>

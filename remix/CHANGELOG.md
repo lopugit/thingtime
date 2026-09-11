@@ -18,6 +18,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Feed-algorithm transfer preserves private weights and training statistics via
+  owner-only reads and dedicated quota-accounted imports, with fresh unshared
+  copies and no active-selection change. Settings exposes Copy/Download/Import
+  with a private-interest warning; transfer contracts advance to 1.4.0. See
+  [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md). — Codex (AI), 2026-09-11
+
 - Portable transfers now support saved themes through dedicated owner/public
   readers and private theme writers, including legacy reads and rollback.
   Theme Studio exposes Copy/Download/Import and identifies the My themes

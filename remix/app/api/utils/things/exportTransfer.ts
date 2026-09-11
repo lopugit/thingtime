@@ -10,8 +10,9 @@ import { collectTransfer } from '../../../utils/thingTransfer/collect';
 import { transferAnnotations, TRANSFER_LIMITS, type TransferThing, type JsonValue } from '../../../utils/thingTransfer/format';
 import type { TransferPlan } from '../../../utils/thingTransfer/plan';
 import { readTransferTheme } from './themeTransfer';
+import { readTransferAlgorithm } from './algorithmTransfer';
 
-const defaults = { read: findViewableThing, readTheme: readTransferTheme, list: listThings, resolve: resolveSharedComposition, project: toPublicThings, bound: listForkBoundMedia, describe: describeAttachmentTransfer };
+const defaults = { read: findViewableThing, readTheme: readTransferTheme, readAlgorithm: readTransferAlgorithm, list: listThings, resolve: resolveSharedComposition, project: toPublicThings, bound: listForkBoundMedia, describe: describeAttachmentTransfer };
 
 const content = (thing: PublicThing): TransferThing => ({
   id: thing.id, thingtime: thing.thingtime, crystal: thing.crystal,
@@ -39,9 +40,10 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
         check();
         if (docs.has(id)) return docs.get(id)!;
         const doc = await deps.read(id, viewer);
-        if (!doc || doc.thingtime.includes('theme')) {
-          const theme = await deps.readTheme(viewer?.id, id);
-          if (theme) { docs.set(id, theme); return theme; }
+        if (!doc || doc.thingtime.includes('theme') || doc.thingtime.includes('feed-algorithm')) {
+          const dedicated = (!doc || doc.thingtime.includes('theme') ? await deps.readTheme(viewer?.id, id) : null) ||
+            (!doc || doc.thingtime.includes('feed-algorithm') ? await deps.readAlgorithm(viewer?.id, id) : null);
+          if (dedicated) { docs.set(id, dedicated); return dedicated; }
           throw fail(404, 'Thing not found');
         }
         if (!doc) throw fail(404, 'Thing not found');
