@@ -116,6 +116,7 @@ export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId }
           ]
         : []),
       { id: 'cut', command: 'cut', label: countLabel('Cut', actCount), icon: '✂️', lucide: 'scissors', kbd: '⌘X' },
+      { id: 'download', command: 'download', label: `${countLabel('Download', actCount)}…`, icon: '📥', lucide: 'download' },
       ...(folder
         ? [
             {
@@ -124,8 +125,7 @@ export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId }
               label: `Paste ${clipboardCount || ''} into folder`.replace('  ', ' '),
               icon: '📥',
               lucide: 'clipboard-paste',
-              disabled: !clipboardCount,
-              hint: clipboardCount ? undefined : 'Nothing on the clipboard yet'
+              hint: 'Paste portable content from your clipboard'
             } as ThingContextAction
           ]
         : [])
@@ -233,6 +233,7 @@ export const buildThingsBackgroundMenu = ({
       id: 'create',
       actions: [
         { id: 'new-folder', command: 'new-folder', label: 'New folder…', icon: '📁', lucide: 'folder-plus' },
+        { id: 'import', command: 'import', label: 'Import…', icon: '📥', lucide: 'upload' },
         {
           id: 'paste',
           command: 'paste',
@@ -240,8 +241,7 @@ export const buildThingsBackgroundMenu = ({
           icon: '📥',
           lucide: 'clipboard-paste',
           kbd: '⌘V',
-          disabled: !clipboardCount,
-          ...(clipboardCount ? {} : { hint: 'Copy or cut things first' })
+          hint: 'Paste a Thingtime transfer from your clipboard'
         }
       ]
     },

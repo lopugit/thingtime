@@ -6569,6 +6569,16 @@ approval; `access.test.ts` — the reservation matrix) and
 - Run `node remix/scripts/verify-lopu-linked-things.mjs` against the running worktree stack (or pass its loopback HTTP origin). It registers disposable local accounts and exercises real API comments, unchanged parent crystals, shared voice/Messenger history, retry deduplication, searchable scheduled-task Things, linked context, account isolation, protected writes, and pause/resume. It removes its created content and pauses schedules in `finally`; empty test accounts remain, with credentials never persisted. Production origins are rejected. This does not replace browser/device, provider inference, or scheduled-delivery acceptance.
 # Portable Thing transfers
 
+- Copy a folder using its context menu, then paste into Things. Verify the OS
+  clipboard holds portable content and importing creates fresh private IDs.
+  Cut/Paste in the same account/session must move the original; after reload,
+  account switch or changed clipboard content it must not infer move authority.
+  Denied clipboard permissions and cancelled exports must show a handled error
+  or cancel cleanly without an unhandled rejection or false success message.
+- Download both JSON and ZIP, then import each downloaded file through the
+  real picker. Verify all selected folder pages and canonical app dependencies,
+  plus desktop/mobile dialog bounds and every inclusion option. Revoked file
+  access must fail the complete export rather than emit a partial ZIP.
 - In Things, open Import on desktop and mobile. Check invalid JSON, unsupported
   envelopes, a complete JSON transfer, and ZIPs with missing/tampered files.
   Validation must happen before uploads or creation; the dialog must fit and

@@ -28,6 +28,7 @@ test('real import preserves private folders, schema provenance, extended data an
     { id: 'page', thingtime: ['webpage'], folderId: 'folder', crystal: { name: label, blocks: [{ id: 'button', type: 'component', component: 'component' }] } }
   ] };
   let ids: Record<string, string> = {};
+  let roundTripIds: Record<string, string> = {};
   try {
     const imported = await request('/api/v1/things/import', 'POST', { manifest });
     if (imported.data.ids) ids = imported.data.ids;
@@ -52,10 +53,39 @@ test('real import preserves private folders, schema provenance, extended data an
     const run = await request('/api/v1/actions/run', 'POST', { action: ids.action, source: 'component' });
     assert.equal(run.status, 200, JSON.stringify(run.data));
     assert.equal(run.data.result, 'transfer-ok');
+    const exported = await request('/api/v1/things/export', 'POST', { ids: [ids.folder] });
+    assert.equal(exported.status, 200, JSON.stringify(exported.data));
+    assert.equal(exported.data.plan.things.length, 6);
+    assert.equal(exported.data.plan.files.length, 0);
+    for (const thing of exported.data.plan.things) {
+      for (const field of ['acl', 'author', 'linkKey', 'secure', 'userId']) assert.equal(field in thing, false, field);
+    }
+    const denied = await request('/api/v1/things/export', 'POST', { ids: [ids.folder] }, false);
+    assert.equal(denied.status, 404);
+    const roundTrip = await request('/api/v1/things/import', 'POST', { manifest: {
+      format: 'thingtime.transfer', version: 1, roots: exported.data.plan.roots, things: exported.data.plan.things, files: []
+    } });
+    roundTripIds = roundTrip.data.ids || {};
+    assert.equal(roundTrip.status, 200, JSON.stringify(roundTrip.data));
+    assert.equal(roundTrip.data.imported, 6);
+    const copiedPage = await request(`/api/v1/things?id=${roundTripIds[ids.page]}`);
+    assert.equal(copiedPage.data.thing.crystal.blocks[0].component, roundTripIds[ids.component]);
+    assert.deepEqual(copiedPage.data.thing.acl, ['tt:user']);
+    const copiedRun = await request('/api/v1/actions/run', 'POST', { action: roundTripIds[ids.action], source: 'component' });
+    assert.equal(copiedRun.status, 200, JSON.stringify(copiedRun.data));
+    assert.equal(copiedRun.data.result, 'transfer-ok');
   } finally {
     // Dependency order, then the enclosing folder. Only IDs returned for this
     // invocation are eligible; never delete source manifest IDs or other data.
     const failures: string[] = [];
+    for (const key of ['page', 'component', 'action', 'data', 'schema', 'folder']) {
+      const id = roundTripIds[ids[key]];
+      if (!id) continue;
+      try {
+        const removed = await request('/api/v1/things', 'DELETE', { id });
+        if (![200, 404].includes(removed.status) || (await request(`/api/v1/things?id=${id}`)).status !== 404) failures.push(`roundTrip:${key}`);
+      } catch { failures.push(`roundTrip:${key}`); }
+    }
     for (const key of ['page', 'component', 'action', 'data', 'schema', 'folder']) {
       if (!ids[key]) continue;
       try {

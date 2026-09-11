@@ -12195,6 +12195,21 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'things-export',
+    featureVersion: '1.0.0',
+    contractVersion: '1.0.0',
+    group: 'things',
+    title: 'Plan a portable Thing export',
+    endpoint: '/api/v1/things/export',
+    summary: 'Read authorized content, folder descendants, app dependencies and stored-file descriptors for a portable export.',
+    detail: 'Read-only POST. Reuses live Thing and composition audience checks, canonicalizes executable aliases, and drains folder pagination. File metadata uses the same live moderation, audience and object-state gates as downloads. No ownership, ACL, tokens, object keys or signed URLs are exported. Clients must download each file through the normal content endpoint and compute its checksum before building an archive. Required inaccessible dependencies, unsupported managed records, linked galleries and bounds violations fail explicitly rather than returning a truncated export.',
+    auth: { mode: 'optional', description: 'Session or anonymous public/keyed content access. Folder enumeration requires ownership. App tokens and PATs are not supported.' },
+    methods: ['POST'],
+    steps: ['POST JSON { ids, key?, includeChildren?, includeDependencies?, includeFiles? }. All inclusion flags default to true.', 'Bounds: 1000 Things, 2000 stored files, 512 MiB file bytes, 16 MiB plan JSON and 120 seconds. Existing composition bounds also apply.', 'Response plan contains roots, content-only things, and files with id, targetId, name, mime, bytes and optional sharedRoot. Keep the presented key only in memory for authorized downloads, never in the portable archive.'],
+    requestExamples: [{ name: 'Export a folder', description: 'Include its complete contents.', method: 'POST', body: { ids: ['folder-id'] } }],
+    responseExamples: [{ status: 200, description: 'Authorized content plan.', body: { ok: true, plan: { roots: ['note'], things: [{ id: 'note', thingtime: ['data'], crystal: { name: 'Note' } }], files: [] } } }]
+  }),
+  endpoint({
     id: 'things-import',
     featureVersion: '1.0.0',
     contractVersion: '1.0.0',

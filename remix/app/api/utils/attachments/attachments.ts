@@ -1285,6 +1285,16 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		}
 	};
 
+	// Content-only export metadata, behind the exact same live read gates as
+	// download/copy. Never expose object keys, versions or signed URLs.
+	const describeTransfer = async (viewer: AttachmentViewer, id: unknown) => {
+		const readable = await readableStoredAttachment(viewer, id, true);
+		if (readable.ok === false) return readable;
+		const attachment = toAttachmentPublicMetadata(readable.doc.shareId, readable.doc.crystal);
+		if (!attachment) return fail(404, 'Attachment not found');
+		return { ok: true as const, attachment, linked: readable.doc.attachmentLinked === true };
+	};
+
 	const download = async (
 		viewer: AttachmentViewer, idInput: unknown, forceDownload: boolean
 	): Promise<AttachmentResult<{ url: string; expiresAt: string; cacheKey: string; size: number; contentType: string; disposition: string; image: boolean }>> => {
@@ -1458,6 +1468,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		cancel,
 		remove,
 		download,
+		describeTransfer,
 		copy,
 		inspectForPost,
 		inspectForComment,
@@ -1478,6 +1489,7 @@ export const completeAttachmentUpload = service.complete;
 export const cancelAttachmentUpload = service.cancel;
 export const deleteAttachment = service.remove;
 export const getAttachmentDownload = service.download;
+export const describeAttachmentTransfer = service.describeTransfer;
 export const copySharedAttachment = service.copy;
 export const inspectReadyAttachmentsForPost = service.inspectForPost;
 export const inspectReadyAttachmentsForComment = service.inspectForComment;

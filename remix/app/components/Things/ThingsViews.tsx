@@ -115,6 +115,7 @@ export type ThingsItemAction =
   | 'move'
   | 'share'
   | 'copy'
+  | 'download'
   | 'cut'
   | 'duplicate'
   | 'copyLink'
@@ -265,6 +266,7 @@ const ItemMenu = ({ thing, handlers }: { thing: ThingsThing; handlers: ThingsIte
         <MenuItem onClick={() => handlers.onItemAction(thing, 'share')}>🌐 Share…</MenuItem>
         <MenuDivider />
         <MenuItem onClick={() => handlers.onItemAction(thing, 'copy')}>📋 Copy</MenuItem>
+        <MenuItem onClick={() => handlers.onItemAction(thing, 'download')}>📥 Download…</MenuItem>
         {/* the kebab menu is the ONLY path to these actions on touch devices
             (iOS never fires contextmenu), so it mirrors the right-click set */}
         {isDuplicable(thing) && (

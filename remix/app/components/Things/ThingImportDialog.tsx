@@ -8,14 +8,15 @@ import type { TransferBundle } from '~/utils/thingTransfer/archive';
 
 /** Mount only while open, keyed by account. Unmount cancels parsing/import
  * and delegates uncommitted file cleanup to the normal upload workflow. */
-export const ThingImportDialog = ({ ownerId, folderId, onClose, onImported }: {
+export const ThingImportDialog = ({ ownerId, folderId, initialBundle, onClose, onImported }: {
   ownerId: string;
+  initialBundle?: TransferBundle | null;
   folderId: string | null;
   onClose: () => void;
   onImported: (destination: string | null) => void;
 }) => {
   const api = useApi();
-  const [bundle, setBundle] = useState<TransferBundle | null>(null);
+  const [bundle, setBundle] = useState<TransferBundle | null>(initialBundle || null);
   const [destination, setDestination] = useState<string | null>(folderId);
   const [error, setError] = useState('');
   const [reading, setReading] = useState(false);

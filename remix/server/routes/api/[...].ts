@@ -214,6 +214,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/webpages/resolve': () => import('../../../app/routes/api/v1/webpages/resolve/_resolve'),
   'v1/things/fork': () => import('../../../app/routes/api/v1/things/fork/_fork'),
   'v1/things/import': () => import('../../../app/routes/api/v1/things/import/_import'),
+  'v1/things/export': () => import('../../../app/routes/api/v1/things/export/_export'),
   'v1/webpages/demos': () => import('../../../app/routes/api/v1/webpages/demos/_demos'),
   'v1/webpages/suites/install': () => import('../../../app/routes/api/v1/webpages/suites/install/_install'),
   'v1/network-probe/ping': () => import('../../../app/routes/api/v1/network-probe/ping/_ping'),

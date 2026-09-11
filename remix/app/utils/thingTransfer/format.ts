@@ -11,7 +11,7 @@ export type TransferThing = {
   id: string;
   thingtime: string[];
   crystal: { [key: string]: JsonValue };
-  extended?: { [key: string]: JsonValue };
+  extended?: JsonValue;
   tags?: string[];
   folderId?: string;
   targetId?: string;
@@ -73,7 +73,7 @@ export const validateTransfer = (value: unknown): ThingTransfer => {
     keys(thing, ['id', 'thingtime', 'crystal', 'extended', 'tags', 'folderId', 'targetId']);
     if (!id(thing.id) || docs.has(thing.id)) return invalid('Invalid or duplicate Thing ID');
     if (!strings(thing.thingtime, 32) || !thing.thingtime.length || !thing.thingtime.every(id)) return invalid('Invalid Thing kinds');
-    if (!object(thing.crystal) || (thing.extended !== undefined && !object(thing.extended))) return invalid('Invalid Thing content');
+    if (!object(thing.crystal)) return invalid('Invalid Thing content');
     json(thing.crystal);
     if (thing.extended !== undefined) json(thing.extended);
     if (thing.tags !== undefined && !strings(thing.tags, 500)) return invalid('Invalid tags');
