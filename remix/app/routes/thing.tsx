@@ -37,6 +37,7 @@ import type { BehaviourSuite } from '~/schemas/behaviourSuites';
 import { CARD_STYLES } from '~/theme/card';
 import { ThingAttachmentDetail } from '~/components/Things/ThingAttachmentDetail';
 import { ThingComments } from '~/components/Things/ThingComments';
+import { PersistedThingMenu } from '~/components/Thingtime/ContextMenu/PersistedThingMenu';
 import { ScheduledTaskPanel } from '~/components/Lopu/ScheduledTaskPanel';
 import { attachmentFromThing, directAttachmentReferences } from '~/components/Things/thingAttachmentDetailCore';
 import { thingDetailSections } from '~/components/Things/thingDetailSectionsCore';
@@ -819,6 +820,8 @@ export default function ThingPage() {
 						</Heading>
 						{thing && !isThingOwner && canForkThing(thing) ? <ForkSharedThingButton id={thing.id} linkKey={linkKey} webpage={isWebpage} /> : null}
 					</Box>
+					{thing && !diagnosticRoute ? <PersistedThingMenu id={thing.id} initialThing={{ id: thing.id, thingtime: kinds,
+						author: thing.author, acl: thing.acl, crystal: thing.crystal, tags: thing.tags, targetId: thing.targetId, linkKey: thing.linkKey }} openHref={ownPage || undefined} /> : null}
 					<Button
 						as={Link}
 						to={diagnosticRoute ? '/migrations' : back.to}
