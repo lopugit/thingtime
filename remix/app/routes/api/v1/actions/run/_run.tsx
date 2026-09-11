@@ -1,5 +1,5 @@
 import { json, readJsonBody } from '~/api/http';
-import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { getScopedUser } from '~/api/utils/auth/scopedUser';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { runAction } from '~/api/utils/actions/execute';
 import { isFail, viewerOf, withFriendIds, withLinkKeys } from '~/api/utils/things/things';
@@ -12,7 +12,7 @@ import { resolveSharedComposition } from '~/api/utils/actions/sharedComposition'
 const MAX_BODY_BYTES = 96 * 1024; // 64KB input ceiling + envelope headroom
 
 export const action = async ({ request }: { request: Request }) => {
-	const user = await getCurrentUser(request);
+	const user = await getScopedUser(request, 'actions.run');
 	const limit = await enforceRateLimit(request, 'actions.run', user ? `user:${user.id}` : null);
 	if (!limit.allowed) {
 		return json({ ok: false, error: 'Actions are running very fast — take a breather ⚡' }, rateLimitedResponseInit(limit));

@@ -11,6 +11,7 @@ type RouteModule = {
 };
 
 export const routeModules: Record<string, () => Promise<RouteModule>> = {
+  'v1/integrations/ci/stack-completion': () => import('../../../app/routes/api/v1/integrations/ci/stack-completion/_stack-completion'),
   'v1/watch/recordings': () => import('../../../app/routes/api/v1/watch/recordings/_recordings'),
   'v1/notifications/test': () => import('../../../app/routes/api/v1/notifications/test/_test'),
   'v1/lopu/reminders': () => import('../../../app/routes/api/v1/lopu/reminders/_reminders'),
@@ -64,6 +65,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/algorithms/update': () => import('../../../app/routes/api/v1/algorithms/update/_update'),
   'v1/ai/connections': () => import('../../../app/routes/api/v1/ai/connections/_connections'),
   'v1/ai/models': () => import('../../../app/routes/api/v1/ai/models/_models'),
+	'v1/ai/waterfalls': () => import('../../../app/routes/api/v1/ai/waterfalls/_waterfalls'),
   'v1/ai/complete': () => import('../../../app/routes/api/v1/ai/complete/_complete'),
   'v1/app-data': () => import('../../../app/routes/api/v1/app-data/_app-data'),
   'v1/app-data/delete': () => import('../../../app/routes/api/v1/app-data/delete/_delete'),
@@ -247,6 +249,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/groups': () => import('../../../app/routes/api/v1/groups/_groups'),
   'v1/groups/audience-sources': () => import('../../../app/routes/api/v1/groups/audience-sources/_audience-sources'),
   'v1/things': () => import('../../../app/routes/api/v1/things/_things'),
+  'v1/things/actions': () => import('../../../app/routes/api/v1/things/actions/_actions'),
   'v1/things/bulk': () => import('../../../app/routes/api/v1/things/bulk/_bulk'),
   'v1/tiers': () => import('../../../app/routes/api/v1/tiers/_tiers'),
   'v1/tokens': () => import('../../../app/routes/api/v1/tokens/_tokens'),

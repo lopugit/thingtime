@@ -1478,6 +1478,36 @@ test recipient (or a plus alias of it).
 
 ### Private S3 media and attachments
 
+The internal shared-file copy helper uses the same private bucket and upload
+lifecycle described below. Its server role needs the existing exact-version
+read and multipart-write permissions (`s3:GetObjectVersion`, `s3:PutObject`,
+list/abort/finalize operations); no public bucket access or browser AWS
+credentials are needed. It accepts an authorized attachment ID, never an
+external URL, reserves the recipient's quota before copying, and sends copied
+bytes through normal type detection and moderation. A timed-out/failed copy
+remains billed until normal cleanup confirms the object is gone. `/things/fork`
+uses this path with capability `api.things-fork` 1.4.0, retargets authored
+HTML/CSS and stored URL or exact attachment-ID arguments (including defaults,
+lists, matching template branch selectors and page overrides), and binds new files to copied Things. It
+rechecks source sharing before and after writes and reports deferred cleanup.
+Bound post-purpose file galleries are discovered in one bounded query and keep
+their copied home target and order, including on post/data Things. A file also
+embedded in a page is copied once. Unsupported gallery files fail the copy;
+recording, message and profile-purpose files are not included by this path.
+Linked galleries receive new private quota-accounted link records, preserving
+validated URLs and annotations without fetching external bytes. Source changes
+or revocation trigger cleanup; flagged links cannot be copied into an unflagged
+record. The content endpoint still never redirects to an external URL.
+File copies require the recipient's normal post-purpose upload approval and
+recheck it during copying; the internal service does not bypass that gate.
+Split-fragment file IDs use bounded root-render `ttMediaRefs` bindings after
+interpolation, preserving editable inputs. Attachment-content 1.6.3 applies the
+same binding when discovering shared media; unused bindings grant no access.
+external media URLs remain external. Live storage and browser acceptance are
+tracked in [PR #755](PRs/755-shared-composition-file-copies.md), separately
+from unit-test proof.
+The byte-copy protocol follows [S3 UploadPartCopy](https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPartCopy.html).
+
 Uploaded images are moderated asynchronously after upload: attachment
 completion atomically stamps protected `moderation.status: pending` before the
 upload can be projected or served publicly. Pending media stays available only
@@ -2971,6 +3001,19 @@ A healthy Mac connection panel can be hidden from Things using “Don’t show a
 
 Shared-settings validation worktree: `http://localhost:13040` (HMR 13041, Nitro 13042), managed by the repository PM2 lifecycle. Funnel was unavailable during validation because the installed Tailscale CLI points to a missing application executable; no public Funnel URL was verified. No new environment variables or external setup are required for these settings changes.
 
+### Apple widgets and Control Centre
+
+The iOS app and native Mac widget companion share a configurable WidgetKit suite.
+See [Apple widget setup](apple/README.md) for gallery choices, content privacy,
+App Group provisioning, local signing, and fork-safe build settings. App Group
+capabilities must be enabled on both the iOS app and its widget extension before
+installing a signed build; no credentials belong in project files.
+
+The Mac companion now uses a native interface and browser OAuth. Open
+**Connection** to select production or your local server and approve widget
+permissions. No client secret or manual app registration is required; fork
+callback identifiers and capability requirements are documented in
+[Apple widget setup](apple/README.md#oauth-setup-for-forks-and-local-servers).
 
 ### Automatic import and native push recovery (10 September 2026)
 
@@ -3001,3 +3044,61 @@ uses production APNs. Never expose keys or device tokens in public diagnostics.
 an optional owner guard on registration. `api.notifications-test` 1.1.0 adds the
 sanitized delivery report. Single and bulk native delivery remain attached to
 the Vercel request lifetime through `waitUntil`.
+
+### Stack AI endpoint selection
+
+Stack merges can save an ordered AI model/endpoint waterfall. Configure
+`ANTHROPIC_API_KEY` and/or `OPENAI_API_KEY` on the Thingtime deployment for
+built-in HTTP endpoints. For personal endpoints, use Settings → Secure Vault;
+custom hosts retain the existing `THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS`
+allowlist and public HTTPS restrictions. The controller and app must share
+`THINGTIME_CI_ROUTER_SECRET` (secret-store values only). API keys stay on the app;
+never put them into workflow inputs. Roll out the protected controller's v4 plan
+support before using custom orders. Inherited orders keep the existing CLI
+workflow. See [the reusable selector contract](docs/ai-waterfall-selector.md).
+
+This feature's local validation worktree uses `http://localhost:13310`
+(Vite), 13311 (HMR), and 13312 (Nitro), derived by `npm run web-ports`.
+Tailscale/Funnel is not available on the validation host: its configured CLI
+wrapper points at a missing Tailscale application. No public dev mapping was
+created or changed.
+
+## Inherited Thing actions
+
+Persisted entity menus use `ThingContextMenu` and `buildThingEntityMenu`;
+`schemas/thingActions.ts` owns the base verbs. Post privacy/moderation and
+Drive selection/clipboard operations extend this model. `PersistedThingMenu`
+resolves only an opened Thing through `/api/v1/things` and guards recording
+handoff against account changes. Do not add a new per-kind dropdown renderer.
+Navigation actions carry an explicit `href` and render real anchors; they never
+reuse mutation callbacks. Drawer navigation also preserves native modified and
+middle clicks. Actions without a destination remain buttons.
+
+The Things browser stores `q`, `kind`, `view`, `display`, `sort`, and `group` in
+the URL alongside folder/device/preview state. Preference defaults are written
+explicitly so Back and shared links do not depend on later local-cache changes.
+Search typing replaces the current history entry; filter changes create entries.
+
+CRUD remains `/api/v1/things`. Semantic operations use
+`POST /api/v1/things/actions` with `{ "id": "your-thing-id", "action": "send-to-lopu" }`.
+Negotiate origin-scoped `api.things-actions` 1.0.0 before dispatch. The first
+operation delegates to the protected recording writer; old recording clients
+retain their compatibility operation. Shared schema/UI does not mean arbitrary
+protected-state mutation: attachment lifecycle, chat membership, moderation,
+consent and quota checks remain enforced by their domain writers. A schema's
+menu hints never grant authority. No storage migration or new secret is required.
+Handoff requires the home data source; a custom source returns 409 so an ID
+from another database cannot accidentally select a home recording.
+
+For forks, configure normal account/storage setup and explicitly enable a
+recording processor before testing handoff. Personal processing uses a paired
+device; API processing uses the account's configured provider connections.
+Never embed credentials in a menu, action request, source fixture or public docs.
+
+Local menu QA uses this worktree's deterministic port (currently
+`http://localhost:16250`). Tailscale/Funnel was unavailable during verification:
+the local launcher points to a missing Tailscale app; no public mapping was changed.
+
+### Saved AI waterfalls
+
+Settings → AI waterfalls stores private named model/endpoint orders using the existing Things database and authenticated API. No extra collection, migration, or secret is required. Configure provider keys or personal Secure Vault connections as described in [the waterfall setup](docs/ai-waterfall-selector.md). Forks must deploy the registered `api.ai-waterfalls` 1.0.0 contract before clients can save a library.

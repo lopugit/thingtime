@@ -1,5 +1,37 @@
 # TESTING.md — per-area manual test checklists
 
+## Inherited Thing context menus
+
+- [ ] Type/paste a query, change kind/view/display/sort/group, open a Thing and
+  use browser Back/Forward and reload. The URL and controls retain the same
+  search and rules. Fast consecutive changes must not drop query characters;
+  folder navigation clears only the new entry's query, not the previous entry.
+- [ ] Drawer destinations and Thing-menu Open/View data are real anchors:
+  command/control-click, middle-click and the browser's open-in-new-tab menu
+  leave the current page unchanged. Alt/Shift keep browser-native behaviour.
+  Mutations remain buttons; disabled actions have no navigable href. Drawer
+  reorder ignores modified pointer presses, and profile/settings are sibling
+  links rather than nested interactive controls.
+- [ ] Open the same recording/post from Things (grid, list, columns, kebab and
+  right-click), its post card, the generic Thing page and recording activity.
+  Base labels/order come from the Thing menu; recording activity targets the
+  recording ID, never its processing-job ID. No per-card lookup on initial paint.
+- [ ] Test keyboard arrows, Escape/back, focus return, touch, pinned menus,
+  long labels and the full page/menu scroll at desktop and 390px. With a visible
+  scrollbar, the menu's right edge stays inside document.clientWidth minus 8px.
+  Options loaded while a submenu is open replace stale options immediately.
+- [ ] Post privacy opens beneath Share / permissions, preserves Custom and
+  hidden-link consent, and rolls back failed changes. Moderator-only flairs,
+  reports, approve/remove, pin, lock, NSFW and spoiler keep their existing guards.
+  Bound media and foreign Things never gain ordinary owner mutation rights.
+- [ ] Cancel Send to Lopu: no mutation. Try a foreign, public, bound or unavailable
+  recording and switch account/unmount during lookup or confirmation: no handoff.
+  Missing/wrong-origin/breaking api.things-actions blocks before any write.
+  Repeated confirmed handoffs still deduplicate through the protected writer.
+- [ ] Multi-select Things: bulk actions retain their exact target count; Send to
+  Lopu is absent. Test folder clipboard/paste and explicit Open versus Preview.
+  Message edit/delete still pass through chat-membership authorization.
+
 ## Unified Lopu conversations, scheduled Things and discussions
 
 - [ ] At 390px width, historical tool rows put long summaries below their label
@@ -1173,6 +1205,37 @@ email whose link points at the attacker.
       with no upper limit, and never below the small floor.
 
 ## Post and comment attachments (`remix/app/components/Attachments/`)
+
+- [ ] Internal shared-file copies: run `npm --prefix remix run test:attachments`.
+      With post-purpose upload approval denied (or its lookup unavailable),
+      copying must reserve no quota or S3 upload. Revoke approval between parts:
+      no next part/finalization may run and only the new upload is cleaned.
+      Confirm source authorization precedes quota reservation; revocation,
+      moderation, purpose or exact-version changes stop copying; only the new
+      owner's partial upload is cleaned, with deferred cleanup still billed.
+      Repeat through `/things/fork` using real private storage and
+      verify the copied image after revoking/deleting the original. Unit mocks
+      alone do not prove that live-S3 acceptance or the Copy button works.
+      Run the action suite for URL/HTML/CSS retargeting, transactional binding,
+      failed-copy cleanup, late root revocation and no-write template failures.
+      Cover exact attachment IDs in saved args, argument defaults, nested lists
+      and page overrides: generated URLs must use copied IDs, while labels,
+      prose and URL template strings stay unchanged. Matching `ttMap` keys and
+      `ttIf` comparisons must still select the same branch after ID retargeting. Split partial IDs
+      must resolve to copied files in loops and inactive branches without changing
+      input data. Re-fork and check the new file IDs again; unused root media
+      bindings must grant nothing. Oversized bindings must fail before writes.
+      Copy a post/data Thing with a relational file gallery but no inline media
+      URL: all eligible files must retain their copied home target and order.
+      A file also embedded elsewhere must be copied once. Oversized galleries
+      and discovery failures must perform no upload writes; recording/message/
+      profile-purpose files must not enter this copy plan.
+      Linked gallery copies must mint new private records with the same URL
+      and annotations, never fetch external bytes or permit content redirects.
+      Invalid/flagged sources fail before minting; late URL changes or revoked
+      access clean only the new record. Confirm ordinary downloads still reject
+      linked attachments, while authorized shared copies can include them.
+      Confirm the button requires `api.things-fork` 1.4.0 before sending a copy.
 
 - [ ] With `THINGTIME_MODERATION_PROVIDER=test`, upload an image named
       `tt-test-nsfw.png` to a post: after analysis it renders heavily blurred
@@ -6544,6 +6607,17 @@ approval; `access.test.ts` — the reservation matrix) and
 - Verify the detail page at desktop and mobile widths, including the visible
   control/result and top-to-bottom scrolling. List/grid previews remain inert.
 
+## Apple widgets and Control Centre
+
+- [ ] Native Mac companion: Overview, Things, Widget Gallery, and Connection render without a webview. Inspect every page and its full scroll range; test connection cancellation, wrong/expired/replayed callbacks, secure Keychain restoration, and disconnect/revocation on the installed signed copy.
+- [ ] OAuth: review all Things, individual read/create/update/delete permissions, Run actions, and each Lopu permission. Untick full Things and choose read-only in Share more. Confirm selected-only and legacy app-storage grants never gain account access; read-only cannot write, revoked/sandbox tokens fail, and action/voice endpoints require their own scopes. Verify real approved calls as well as denied calls; do not treat a catalog checkbox as enforcement proof.
+- [ ] Verify account/origin changes clear widgets, offline revocation reports its limitation, and toggling content cannot renew an old snapshot. Test browser return into the exact native app on local and preview origins.
+
+- [ ] Add Quick Action, Dashboard, Render a Thing, and Recent Things at every supported device size. Inspect long text, dark/light/tinted appearance, large Dynamic Type, and the full native layout gallery from top to bottom.
+- [ ] On iOS 18+, add all four Control Centre buttons at compact and expanded sizes; cold/warm taps must reach the correct screen once. New Folder opens its dialog, Search focuses its input, and New Thing opens the schema chooser.
+- [ ] Transcribe launches Lopu in transcription mode; Talk launches voice mode. Sign-in/access gates and denied microphone/speech permissions remain effective. Stop, tap again, background/foreground, and verify transcript, local recording, private upload, and iOS Live Activity independently.
+- [ ] Open Widget settings from the iOS native destination drawer; its controls must be inaccessible when closed and must not overlay the web microphone/composer. Content starts disabled. Enable host sync and per-widget content; select a Thing and change card/note/value layout and title. Disable sharing, log out, change account/origin, delete a Thing, and verify stale content clears. Offline content expires after 30 minutes without another refresh.
+- [ ] Install and test the signed Mac companion itself. Verify both the host and extension signatures and the same designated requirement across rebuilds. Never equate simulator or layout-preview success with physical Control Centre/microphone acceptance.
 
 ### Recording recovery and native push regression checks
 
@@ -6589,3 +6663,31 @@ approval; `access.test.ts` — the reservation matrix) and
   allowance and verify note/todo output with exact transcript evidence. Do not
   pass real recordings or tokens. Fixture files must be cleaned up on failure
   as well as success. This is not a substitute for paired-account/Watch tests.
+
+## Shared AI waterfall and stack overrides
+
+- Open the shared selector from CI stack selection and the Admin model-order
+  editor. Add OpenAI, custom endpoint and Claude entries; reorder/remove rows,
+  vary effort/speed, Apply, reopen, then Cancel an edit. Verify the returned
+  config and saved draft keep the intended order and no credentials/URLs.
+- Check desktop and mobile from top to bottom, including the scrolled modal
+  footer, long endpoint labels, focus restoration and duplicate validation.
+- Save/reload a custom stack; omit the field to preserve it, send null to inherit,
+  and restart it. Verify the immutable dispatch includes the saved selection,
+  foreign connections are rejected, and edits never change an active run.
+- Run `node --import tsx --test app/api/utils/ai/waterfallConfig.test.ts`
+  from Remix and the CI-control suite (including the signed gateway tests).
+  Verify missing-model/capacity failures advance, ownership/output errors stop,
+  and stopped/unrelated/replayed run requests cannot consume provider access.
+- On the controller branch run the feature-stack plan and routing self-tests,
+  plus `node --test .github/scripts/feature-stack-waterfall.test.mjs`.
+  Confirm a real text conflict preserves exact merge parents and touches only
+  conflict paths; binary/oversized conflicts fail without publication.
+
+### Saved AI waterfall library
+
+- In Settings → AI waterfalls, create a mixed-provider order, save, reload, edit and reorder; verify persistence.
+- In a feature selector, select an existing config, Save as new, then edit and Save & apply; verify the returned snapshot and both library records. Cancel must preserve the feature value. Later library edits must not change that value.
+- Open the same saved config in two editors. Save one, then save the stale one: show a conflict, retain the unsaved draft, and refresh the library for reopening.
+- Anonymous requests return 401; changed-account headers return 409; another owner cannot read or replace a record. Reject extra secret/URL fields and incompatible endpoint selections.
+- At desktop and mobile widths, scroll Settings and the open dialog top to bottom; verify nested controls, fixed footer, focus, and no horizontal overflow.

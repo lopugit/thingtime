@@ -1,4 +1,5 @@
 import React from 'react';
+import { WidgetBridgeHost } from './WidgetBridgeHost';
 
 import {
   nativeBridgeMessageEvent,
@@ -49,5 +50,5 @@ export function NativeBridgeHost() {
     };
   }, []);
 
-  return null;
+  return <WidgetBridgeHost />;
 }

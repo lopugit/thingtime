@@ -1,8 +1,8 @@
 import React from 'react';
 
-import { Box, Checkbox, Flex, Grid, IconButton, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Portal, Text } from '@chakra-ui/react';
+import { Box, Checkbox, Flex, Grid, Text } from '@chakra-ui/react';
 import type { TextProps } from '@chakra-ui/react';
-import { ChevronRight, MoreHorizontal } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { Link } from 'react-router';
 
 import { ChakraThingRenderer, HtmlThingRenderer, RenderThing, isChakraThingNode } from '~/components/Kinds';
@@ -11,7 +11,9 @@ import { DeviceCard } from '~/components/Devices/DeviceCard';
 import { DeviceListRow } from '~/components/Devices/DeviceListRow';
 import type { DeviceRuntimeState } from '~/components/Devices/deviceTypes';
 import { CARD_STYLES } from '~/theme/card';
-import { canOfferRecordingHandoff } from '../Lopu/recordingThingHandoff';
+import { ThingActionMenuButton } from '../Thingtime/ContextMenu/ThingActionMenuButton';
+import { buildThingsItemMenu } from './thingsMenuModel';
+import { thingBrowseHref } from './thingsLocation';
 
 import type {
   ThingsDisplayMode,
@@ -20,12 +22,10 @@ import {
   VISIBILITY_META,
   formatWhen,
   interpolateRenderTree,
-  isDuplicable,
   isFolder,
   primaryKindOf,
   thingDisplayName,
-  thingIcon,
-  thingOpenHref
+  thingIcon
 } from './thingsCore';
 
 // What a preview draws: an explicit serialized render template wins, then a
@@ -111,7 +111,10 @@ export type ThingsItemAction =
   | 'send-to-lopu'
   | 'open'
   | 'preview'
+  | 'inspect'
+  | 'paste-into'
   | 'rename'
+  | 'edit'
   | 'move'
   | 'share'
   | 'copy'
@@ -121,6 +124,8 @@ export type ThingsItemAction =
   | 'delete';
 
 export type ThingsItemHandlers = {
+  locationSearch?: string;
+  clipboardCount?: number;
   ownerId?: string;
   selected: Set<string>;
   cutIds: Set<string>;
@@ -157,10 +162,6 @@ const pendingApprovalCount = (state: DeviceRuntimeState): number => state.approv
 
 const noopDeviceSelect = () => {};
 
-const canRename = (thing: ThingsThing) => {
-  const kind = primaryKindOf(thing);
-  return kind === 'folder' || kind === 'data' || kind === 'schema';
-};
 
 // Prop bags every view spreads on its item rows/tiles: drag source on every
 // thing, drop target + highlight on folders. Desktop only — mobile keeps
@@ -193,14 +194,6 @@ const dropHighlight = (thing: ThingsThing, handlers: ThingsItemHandlers) =>
 
 // What "Open" opens, named per kind so the menu never promises a preview
 // where a page will appear.
-const openLabelOf = (thing: ThingsThing): string => {
-  if (isFolder(thing)) return '📂 Open folder';
-  if (thing.thingtime.includes('post')) return '📝 Open post';
-  if (thing.thingtime.includes('action')) return '⚡ Open action';
-  if (thing.thingtime.includes('webpage')) return '🧱 Open page';
-  if (thing.thingtime.includes('schema')) return '💎 Open schema';
-  return '🔎 Open';
-};
 
 // A plain left click, no modifier — the one case the tile handles itself;
 // ⌘/ctrl/shift/middle clicks stay with the browser (new tab, window).
@@ -237,7 +230,7 @@ const TitleLink = ({
       else handlers.onItemOpen(thing);
     }}
     onDoubleClick={(event: React.MouseEvent) => event.stopPropagation()}
-    to={thingOpenHref(thing, 'things')}
+    to={thingBrowseHref(thing, handlers.locationSearch)}
     {...textProps}
   >
     {thingDisplayName(thing)}
@@ -245,40 +238,11 @@ const TitleLink = ({
 );
 
 const ItemMenu = ({ thing, handlers }: { thing: ThingsThing; handlers: ThingsItemHandlers }) => (
-  <Menu isLazy placement="bottom-end">
-    <MenuButton
-      aria-label="Thing actions"
-      as={IconButton}
-      icon={<MoreHorizontal size={15} />}
-      onClick={(event) => event.stopPropagation()}
-      onDoubleClick={(event) => event.stopPropagation()}
-      size="xs"
-      variant="ghost"
-    />
-    <Portal>
-      <MenuList fontSize="13px" minWidth="180px" zIndex={10250}>
-        {canOfferRecordingHandoff(thing, handlers.ownerId) && <MenuItem onClick={() => handlers.onItemAction(thing, 'send-to-lopu')}>🦄 Send to Lopu</MenuItem>}
-        <MenuItem onClick={() => handlers.onItemAction(thing, 'open')}>{openLabelOf(thing)}</MenuItem>
-        {!isFolder(thing) && <MenuItem onClick={() => handlers.onItemAction(thing, 'preview')}>👀 Preview</MenuItem>}
-        {canRename(thing) && <MenuItem onClick={() => handlers.onItemAction(thing, 'rename')}>✏️ Rename</MenuItem>}
-        <MenuItem onClick={() => handlers.onItemAction(thing, 'move')}>📁 Move to…</MenuItem>
-        <MenuItem onClick={() => handlers.onItemAction(thing, 'share')}>🌐 Share…</MenuItem>
-        <MenuDivider />
-        <MenuItem onClick={() => handlers.onItemAction(thing, 'copy')}>📋 Copy</MenuItem>
-        {/* the kebab menu is the ONLY path to these actions on touch devices
-            (iOS never fires contextmenu), so it mirrors the right-click set */}
-        {isDuplicable(thing) && (
-          <MenuItem onClick={() => handlers.onItemAction(thing, 'duplicate')}>🐑 Duplicate</MenuItem>
-        )}
-        <MenuItem onClick={() => handlers.onItemAction(thing, 'cut')}>✂️ Cut</MenuItem>
-        <MenuItem onClick={() => handlers.onItemAction(thing, 'copyLink')}>🔗 Copy link</MenuItem>
-        <MenuDivider />
-        <MenuItem color="var(--tt-danger, #e5484d)" onClick={() => handlers.onItemAction(thing, 'delete')}>
-          🗑️ Delete
-        </MenuItem>
-      </MenuList>
-    </Portal>
-  </Menu>
+  <ThingActionMenuButton identity={`${handlers.ownerId}:${thing.id}`}
+    model={buildThingsItemMenu({ thing, ownerId: handlers.ownerId, locationSearch: handlers.locationSearch,
+      actCount: handlers.selected.has(thing.id) ? Math.max(1, handlers.selected.size) : 1,
+      clipboardCount: handlers.clipboardCount || 0 })}
+    onAction={({ action }) => handlers.onItemAction(thing, (action.command === 'copy-link' ? 'copyLink' : action.command) as ThingsItemAction)} />
 );
 
 const selectionStyles = (selected: boolean) =>

@@ -1,3 +1,4 @@
+import { SavedAiWaterfallsSettings } from './SavedAiWaterfallsSettings';
 import { MediaCacheSettings } from './MediaCacheSettings';
 import { TierFeatureComparison } from '~/components/Subscriptions/TierFeatureComparison';
 import React from 'react';
@@ -747,9 +748,14 @@ export const SettingsContent = ({
 					<Flex direction="column" gap={4} minW={0}>
 						{/* notifications (auth only) — per-type switches for the bell */}
 						{user && <NotificationSettingsSection user={user} />}
-						{user && <SettingsSection eyebrow="Watch recordings 🦄" description="Turn private Watch recordings into transcripts, notes and todos, with daily reminders you can pause or complete.">
-							<Button onClick={() => navigate('/lopu/recordings')}>Manage recording automation</Button>
-						</SettingsSection>}
+						{user && (
+							<SettingsSection
+								eyebrow="Watch recordings 🦄"
+								description="Turn private Watch recordings into transcripts, notes and todos, with daily reminders you can pause or complete."
+							>
+								<Button onClick={() => navigate('/lopu/recordings')}>Manage recording automation</Button>
+							</SettingsSection>
+						)}
 					</Flex>
 				)}
 				{tab === 'security' && (
@@ -866,6 +872,15 @@ export const SettingsContent = ({
 							</Box>
 						)}
 					</Flex>
+				)}
+				{tab === 'ai-waterfalls' && (
+					<SettingsSection eyebrow="Saved AI waterfalls" description="Private, reusable AI model and endpoint configurations.">
+						{user && !user.temporary ? (
+							<SavedAiWaterfallsSettings key={user.id} userId={user.id} />
+						) : (
+							<Text>Sign in to save and manage AI waterfalls.</Text>
+						)}
+					</SettingsSection>
 				)}
 				{tab === 'admin' && (
 					<Flex direction="column" gap={4} minW={0}>
