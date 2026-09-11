@@ -7,6 +7,7 @@ import { readTransferFile } from '~/utils/thingTransfer/readFile';
 import { TRANSFER_LIMITS } from '~/utils/thingTransfer/format';
 import type { TransferBundle } from '~/utils/thingTransfer/archive';
 import { isTransferRecording, recordingTransferFile } from '~/utils/thingTransfer/recording';
+import { isTransferEmoji, emojiTransferFile } from '~/utils/thingTransfer/emoji';
 
 /** Mount only while open, keyed by account. Unmount cancels parsing/import
  * and delegates uncommitted file cleanup to the normal upload workflow. */
@@ -32,6 +33,7 @@ export const ThingImportDialog = ({ ownerId, folderId, initialBundle, onClose, o
   const uploads = useAttachmentUploads(ownerId, setError, setError, false, undefined,
     { maxFiles: TRANSFER_LIMITS.files, purpose: 'post', selectionScope: 'transfer', purposeForFile: file => {
       const entry = bundle?.manifest.files.find(entry => entry.id === fileIds.current.get(file));
+      if (bundle?.manifest.things.some(thing => thing.id === entry?.targetId && isTransferEmoji(thing))) return 'custom-emoji';
       return bundle?.manifest.things.some(thing => thing.id === entry?.targetId && isTransferRecording(thing)) ? 'recording-import' : 'post';
     } });
   useEffect(() => {
@@ -55,7 +57,10 @@ export const ThingImportDialog = ({ ownerId, folderId, initialBundle, onClose, o
   };
   const beginUploads = () => {
     if (!bundle || uploadStarted) return;
-    try { for (const thing of bundle.manifest.things.filter(isTransferRecording)) recordingTransferFile(thing, bundle.manifest); }
+    try {
+      for (const thing of bundle.manifest.things.filter(isTransferRecording)) recordingTransferFile(thing, bundle.manifest);
+      for (const thing of bundle.manifest.things.filter(isTransferEmoji)) emojiTransferFile(thing, bundle.manifest);
+    }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'Invalid recording transfer'); return; }
     setUploadStarted(true);
     const files = bundle.manifest.files.map((entry, index) => {
@@ -104,6 +109,7 @@ export const ThingImportDialog = ({ ownerId, folderId, initialBundle, onClose, o
             <Text>{bundle.manifest.things.length} Things · {bundle.manifest.files.length} files · {bundle.manifest.links?.length || 0} links · {(bundle.manifest.files.reduce((total, file) => total + file.bytes, 0) / 1024 / 1024).toFixed(1)} MiB</Text>
             {!!bundle.manifest.links?.length && <Text fontSize="sm">Linked media stays on its original site. Import creates private gallery records; it does not download those external files.</Text>}
             {hasThemes && <Text fontSize="sm">Themes and algorithms retain included folders and also appear in their own libraries, without changing active selections. Algorithm files can contain private interest weights; share them only deliberately.</Text>}
+            {bundle.manifest.things.some(isTransferEmoji) && <Text fontSize="sm">Custom emojis become personal-library copies with new names. Included folders are retained; community membership and existing emojis are never changed.</Text>}
             <Box>
               <Text as="label" htmlFor="thing-import-destination" fontSize="sm">Import destination</Text>
               <Select id="thing-import-destination" value={destination || ''} isDisabled={attempted} onChange={(event) => setDestination(event.target.value || null)}>

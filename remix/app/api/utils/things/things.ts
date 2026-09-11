@@ -5262,7 +5262,7 @@ export const bulkThings = async (
     }
     if (op === 'move') {
       const owned = await things.findOne({ shareId: id, ownerId: viewer.id } as any) as unknown as ThingDoc | null;
-      if (owned?.thingtime?.length === 1 && ['attachment', 'theme', 'feed-algorithm'].includes(owned.thingtime[0])) {
+      if (owned?.thingtime?.length === 1 && ['attachment', 'theme', 'feed-algorithm', 'custom-emoji'].includes(owned.thingtime[0])) {
         if (patSandboxBlocks(viewer, owned) || await patVisibilityBlocksDoc(viewer, owned)) {
           results.push({ id, ok: false, error: 'This token cannot move that managed content' });
           continue;

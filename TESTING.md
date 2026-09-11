@@ -6721,8 +6721,14 @@ approval; `access.test.ts` — the reservation matrix) and
   shared viewers must never receive Cut authority. Exercise the import
   destination selector at desktop/mobile widths with both kinds in one file.
 - A partially failed move retains only failed IDs; an older request completing must not consume newer Cut intent.
-- Before enabling emoji transfers, verify two simultaneous imports cannot claim
+- Before releasing emoji transfers, verify two simultaneous imports cannot claim
   one upload; stale/bound/foreign uploads must fail without deleting an existing
   emoji. An uncertain commit may recover only the same server import attempt.
-  The internal writer groundwork is unit-tested; live transaction acceptance
-  remains required when the endpoint and upload UI are connected.
+  The connected writer is unit-tested; live transaction acceptance remains
+  required with an upload-enabled account.
+- Export a personal stored emoji and a legacy inline emoji to ZIP, then import
+  each into a folder. Confirm identical image bytes, new personal names/IDs,
+  preserved image title/description/filename preview, and no community scope.
+  A failed fresh-upload claim must not annotate any existing image; annotation
+  or placement failure must clean up only the new emoji. Verify the file picker,
+  destination selector and final controls at desktop and mobile sizes.

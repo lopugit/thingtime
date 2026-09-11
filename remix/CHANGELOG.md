@@ -18,6 +18,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Connected custom emoji export/import, including legacy inline images, fresh
+  personal copies, image annotations, dedicated rollback and folder placement.
+  Desktop/mobile import-dialog checks passed with simulated uploads; real storage
+  acceptance remains pending. See [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-12
+
 - Added internal custom-emoji import writer groundwork: fresh-upload checks in
   the binding transaction, server-owned attempt identity and a personal-library
   adapter. Transfer endpoints are not enabled for emojis yet; see

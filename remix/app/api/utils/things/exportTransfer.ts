@@ -13,8 +13,10 @@ import { readTransferTheme } from './themeTransfer';
 import { readTransferAlgorithm } from './algorithmTransfer';
 import { readTransferRecording } from './recordingTransfer';
 import { isTransferRecording } from '../../../utils/thingTransfer/recording';
+import { isTransferEmoji } from '../../../utils/thingTransfer/emoji';
+import { readTransferEmoji, type TransferEmojiSource } from './emojiTransfer';
 
-const defaults = { read: findViewableThing, readTheme: readTransferTheme, readAlgorithm: readTransferAlgorithm, readRecording: readTransferRecording, list: listThings, resolve: resolveSharedComposition, project: toPublicThings, bound: listForkBoundMedia, describe: describeAttachmentTransfer };
+const defaults = { read: findViewableThing, readTheme: readTransferTheme, readAlgorithm: readTransferAlgorithm, readRecording: readTransferRecording, readEmoji: readTransferEmoji, list: listThings, resolve: resolveSharedComposition, project: toPublicThings, bound: listForkBoundMedia, describe: describeAttachmentTransfer };
 
 const content = (thing: PublicThing): TransferThing => ({
   id: thing.id, thingtime: thing.thingtime, crystal: thing.crystal,
@@ -34,6 +36,7 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
   const stored = new Map<string, ThingDoc>();
   const compositions = new Map<string, SharedComposition>();
   const authorizedRoots = new Map<string, string>();
+  const emojiSources = new Map<string, TransferEmojiSource>();
   const deadline = Date.now() + 120_000;
   const check = () => { signal?.throwIfAborted(); if (Date.now() > deadline) throw new Error('Export timed out'); };
   try {
@@ -42,11 +45,20 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
         check();
         if (docs.has(id)) return docs.get(id)!;
         const doc = await deps.read(id, viewer);
+        if (doc?.thingtime.includes('custom-emoji')) {
+          const emoji = await deps.readEmoji(viewer?.id, id);
+          if (emoji) { emojiSources.set(id, emoji); docs.set(id, emoji.thing); return emoji.thing; }
+          if (doc?.thingtime.includes('custom-emoji')) throw fail(404, 'Thing not found');
+        }
         if (!doc || doc.thingtime.includes('theme') || doc.thingtime.includes('feed-algorithm') || doc.thingtime.includes('attachment')) {
           const dedicated = (!doc || doc.thingtime.includes('theme') ? await deps.readTheme(viewer?.id, id) : null) ||
             (!doc || doc.thingtime.includes('feed-algorithm') ? await deps.readAlgorithm(viewer?.id, id) : null) ||
             (!doc || doc.thingtime.includes('attachment') ? await deps.readRecording(viewer?.id, id) : null);
           if (dedicated) { docs.set(id, dedicated); return dedicated; }
+          if (!doc) {
+            const emoji = await deps.readEmoji(viewer?.id, id);
+            if (emoji) { emojiSources.set(id, emoji); docs.set(id, emoji.thing); return emoji.thing; }
+          }
           throw fail(404, 'Thing not found');
         }
         if (!doc) throw fail(404, 'Thing not found');
@@ -91,7 +103,9 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
     }, { includeChildren: input.includeChildren !== false, includeDependencies: input.includeDependencies !== false, includeFiles: false, signal });
     const plan: TransferPlan = { roots: bundle.manifest.roots, things: bundle.manifest.things, files: [] };
     const recordings = plan.things.filter(isTransferRecording);
+    const emojis = plan.things.filter(isTransferEmoji);
     if (recordings.length && input.includeFiles === false) throw new Error('Recordings require their file bytes; download a ZIP with files included');
+    if (emojis.length && input.includeFiles === false) throw new Error('Custom emojis require their image bytes; download a ZIP with files included');
     if (input.includeFiles !== false || input.includeLinks !== false) {
       const includedIds = new Set(plan.things.map((thing) => thing.id));
       const targets = new Map<string, { targetId: string; sharedRoot?: string }>();
@@ -114,6 +128,13 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
       // A recording can also be embedded in another included Thing. Its own
       // root owns the one byte entry; import remaps both forms of reference.
       for (const recording of recordings) targets.set(recording.id, { targetId: recording.id });
+      for (const emoji of emojis) {
+        const source = emojiSources.get(emoji.id)!;
+        if (source.attachmentId) {
+          targets.set(source.attachmentId, { targetId: emoji.id });
+          emoji.crystal.emojiFileId = source.attachmentId;
+        }
+      }
       if (targets.size > TRANSFER_LIMITS.files) throw new Error('This export has too many files');
       const reservedIds = new Set([...includedIds, ...targets.keys()]);
       const recordingIds = new Set(recordings.map(thing => thing.id));
@@ -126,6 +147,10 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
         });
         if (isFail(result)) throw result;
         if ('excluded' in result && result.excluded) continue;
+        if (emojiSources.has(target.targetId) && (result.linked || result.attachment.size <= 0 ||
+          result.attachment.size > 512 * 1024 || !['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(result.attachment.contentType))) {
+          throw new Error('Custom emojis require a stored image up to 512 KiB');
+        }
         if (result.linked ? input.includeLinks === false : input.includeFiles === false) continue;
         let portableId = id;
         if (recordingIds.has(id)) {
@@ -145,6 +170,17 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
         bytes += result.attachment.size;
         if (bytes > TRANSFER_LIMITS.fileBytes) throw new Error('This export exceeds the file byte limit');
         plan.files.push({ id: portableId, ...(portableId !== id ? { sourceId: id } : {}), ...target, name: result.attachment.name, mime: result.attachment.contentType, bytes: result.attachment.size, ...transferAnnotations(result.attachment) });
+      }
+      for (const emoji of emojis) {
+        const image = emojiSources.get(emoji.id)!.inlineImage;
+        if (!image) continue;
+        if (plan.files.length + (plan.links?.length || 0) >= TRANSFER_LIMITS.files || bytes + image.bytes > TRANSFER_LIMITS.fileBytes) throw new Error('This export exceeds the file limit');
+        let index = 0, id: string;
+        do { id = `emoji-file:${index++}`; } while (reservedIds.has(id));
+        reservedIds.add(id); bytes += image.bytes;
+        emoji.crystal.emojiFileId = id;
+        plan.files.push({ id, targetId: emoji.id, name: image.name, mime: image.mime, bytes: image.bytes, inlineBase64: image.base64 });
+        (plan.attachmentOrder ||= []).push(id);
       }
     }
     check();

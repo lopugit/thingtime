@@ -6,7 +6,7 @@ import type { TransferThing, TransferLink, TransferAnnotations } from './format'
 export type TransferPlan = {
   roots: string[];
   things: TransferThing[];
-  files: (TransferAnnotations & { id: string; sourceId?: string; targetId: string; name: string; mime: string; bytes: number; sharedRoot?: string })[];
+  files: (TransferAnnotations & { id: string; sourceId?: string; inlineBase64?: string; targetId: string; name: string; mime: string; bytes: number; sharedRoot?: string })[];
   links?: TransferLink[];
   attachmentOrder?: string[];
 };

@@ -24,7 +24,7 @@ export const prepareManagedPlacement = (
   now = new Date()
 ): { folderId: string | null; updatedAt: Date } => {
   if (!ownerId || source.ownerId !== ownerId || source.thingtime.length !== 1 ||
-    !['attachment', 'theme', 'feed-algorithm'].includes(source.thingtime[0]) ||
+    !['attachment', 'theme', 'feed-algorithm', 'custom-emoji'].includes(source.thingtime[0]) ||
     source.appId != null || source.sandbox != null || source.sandboxSpace != null || source.targetId != null ||
     !(source.updatedAt instanceof Date) || !Number.isFinite(source.updatedAt.getTime()) ||
     !Number.isFinite(now.getTime())) {

@@ -11,6 +11,8 @@ import { isTransferRecording, recordingTransferFile } from '../../../utils/thing
 import { createThing, deleteThing, fail, isFail, type Viewer } from './things';
 import { createTransferTheme, isTransferTheme, removeTransferTheme, validateTransferTheme } from './themeTransfer';
 import { createTransferAlgorithm, isTransferAlgorithm, removeTransferAlgorithm, validateTransferAlgorithm } from './algorithmTransfer';
+import { isTransferEmoji, emojiTransferFile } from '../../../utils/thingTransfer/emoji';
+import { createTransferEmoji, removeTransferEmoji } from './emojiTransfer';
 
 type ImportDependencies = {
   create: typeof createThing;
@@ -29,9 +31,11 @@ type ImportDependencies = {
   createRecording: typeof commitRecordingImport;
   moveRecording: typeof moveManagedContent;
   moveContent?: typeof moveManagedContent;
+  createEmoji: typeof createTransferEmoji;
+  removeEmoji: typeof removeTransferEmoji;
 };
-const defaults: ImportDependencies = { create: createThing, remove: deleteThing, inspectFiles: inspectReadyAttachmentsForPost, getFile: attachmentStore.getOwned, bindFiles: createReadyAttachmentPostInsertHook, uuid: randomUUID, link: linkAttachment, annotate: annotateAttachment, removeFile: deleteAttachment, createTheme: createTransferTheme, removeTheme: removeTransferTheme, createAlgorithm: createTransferAlgorithm, removeAlgorithm: removeTransferAlgorithm, createRecording: commitRecordingImport, moveRecording: moveManagedContent };
-const dedicatedTransfer = (thing: TransferThing) => isTransferTheme(thing) || isTransferAlgorithm(thing) || isTransferRecording(thing);
+const defaults: ImportDependencies = { create: createThing, remove: deleteThing, inspectFiles: inspectReadyAttachmentsForPost, getFile: attachmentStore.getOwned, bindFiles: createReadyAttachmentPostInsertHook, uuid: randomUUID, link: linkAttachment, annotate: annotateAttachment, removeFile: deleteAttachment, createTheme: createTransferTheme, removeTheme: removeTransferTheme, createAlgorithm: createTransferAlgorithm, removeAlgorithm: removeTransferAlgorithm, createRecording: commitRecordingImport, moveRecording: moveManagedContent, createEmoji: createTransferEmoji, removeEmoji: removeTransferEmoji };
+const dedicatedTransfer = (thing: TransferThing) => isTransferTheme(thing) || isTransferAlgorithm(thing) || isTransferRecording(thing) || isTransferEmoji(thing);
 
 /** Import ordering only constrains structural/provenance references. Action
  * cycles are legal: their fresh IDs are allocated before any create call.
@@ -72,6 +76,7 @@ export const importTransfer = async (
     for (const recording of ordered.filter(isTransferRecording)) {
       recordingTransferFile(recording, manifest);
     }
+    for (const emoji of ordered.filter(isTransferEmoji)) emojiTransferFile(emoji, manifest);
   } catch (error) { return fail(400, error instanceof Error ? error.message : 'Invalid transfer'); }
   if (manifest.things.some((thing) => isProtectedThingtime(thing.thingtime) && !dedicatedTransfer(thing))) return fail(403, 'Managed account records must use their dedicated import workflow');
   if (input.folderId !== undefined && input.folderId !== null && (typeof input.folderId !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(input.folderId))) return fail(400, 'Invalid import destination');
@@ -87,6 +92,7 @@ export const importTransfer = async (
   const createdThemes = new Set<string>();
   const createdAlgorithms = new Set<string>();
   const createdRecordings = new Set<string>();
+  const createdEmojis = new Set<string>();
   const createdLinks: string[] = [];
   const attachments = orderedTransferAttachments(manifest);
   const suffix = deps.uuid().slice(0, 8);
@@ -129,7 +135,7 @@ export const importTransfer = async (
     const inspections = new Map<string, Awaited<ReturnType<typeof deps.inspectFiles>>>();
     for (const thing of ordered) {
       check();
-      if (isTransferRecording(thing)) continue;
+      if (isTransferRecording(thing) || isTransferEmoji(thing)) continue;
       const bound = attachments.filter((file) => file.targetId === thing.id);
       if (!bound.length) continue;
       const inspected = await deps.inspectFiles(viewer.id, bound.map((file) => files.get(file.id)!));
@@ -141,7 +147,7 @@ export const importTransfer = async (
       inspections.set(thing.id, inspected);
     }
     for (const file of manifest.files) {
-      if (ordered.some(thing => thing.id === file.targetId && isTransferRecording(thing))) continue;
+      if (ordered.some(thing => thing.id === file.targetId && (isTransferRecording(thing) || isTransferEmoji(thing)))) continue;
       const annotations = transferAnnotations(file);
       if (!Object.keys(annotations).length) continue;
       check();
@@ -175,6 +181,22 @@ export const importTransfer = async (
       created.push(doc.shareId);
       createdRecordings.add(doc.shareId);
     }
+    for (const emoji of ordered.filter(isTransferEmoji)) {
+      check();
+      const file = emojiTransferFile(emoji, manifest);
+      const result = await deps.createEmoji(viewer.id, emoji, manifest, files.get(file.id)!);
+      if (isFail(result)) throw result;
+      ids.set(emoji.id, result.emoji.id);
+      created.push(result.emoji.id);
+      createdEmojis.add(result.emoji.id);
+      // Only annotate after the dedicated writer has transactionally claimed
+      // this fresh upload. Never modify a caller-supplied existing image.
+      const annotations = transferAnnotations(file);
+      if (Object.keys(annotations).length) {
+        const annotated = await deps.annotate(viewer.id, { id: files.get(file.id)!, ...annotations });
+        if (isFail(annotated)) throw annotated;
+      }
+    }
     for (const thing of ordered) {
       check();
       if (dedicatedTransfer(thing)) continue;
@@ -204,7 +226,7 @@ export const importTransfer = async (
       const destination = recording.folderId ? ids.get(recording.folderId)! : input.folderId;
       if (typeof destination === 'string' && destination) await deps.moveRecording(viewer.id, ids.get(recording.id)!, destination);
     }
-    for (const thing of ordered.filter(thing => isTransferTheme(thing) || isTransferAlgorithm(thing))) {
+    for (const thing of ordered.filter(thing => isTransferTheme(thing) || isTransferAlgorithm(thing) || isTransferEmoji(thing))) {
       check();
       const destination = thing.folderId ? ids.get(thing.folderId)! : input.folderId;
       if (typeof destination === 'string' && destination) await (deps.moveContent || moveManagedContent)(viewer.id, ids.get(thing.id)!, destination);
@@ -219,7 +241,7 @@ export const importTransfer = async (
           if (isFail(removed) || removed.deferred) remaining.push(id);
           continue;
         }
-        const removed = createdThemes.has(id) ? await deps.removeTheme(viewer.id, id) : createdAlgorithms.has(id)
+        const removed = createdEmojis.has(id) ? await deps.removeEmoji(viewer.id, id) : createdThemes.has(id) ? await deps.removeTheme(viewer.id, id) : createdAlgorithms.has(id)
           ? await deps.removeAlgorithm(viewer.id, id) : await deps.remove(viewer, id, null, { beforeCascade: prepareAttachmentCascadeForThing });
         if (isFail(removed)) remaining.push(id);
       }

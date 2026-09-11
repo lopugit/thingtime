@@ -15,6 +15,20 @@ export const bundleFromPlan = async (plan: TransferPlan, options: { key?: string
   const files = new Map<string, Uint8Array>();
   for (const [index, entry] of plan.files.entries()) {
     options.signal?.throwIfAborted();
+    if (entry.inlineBase64 !== undefined) {
+      if (typeof entry.inlineBase64 !== 'string' || entry.inlineBase64.length > 700 * 1024 ||
+        entry.sourceId !== undefined || entry.sharedRoot !== undefined || entry.bytes > 512 * 1024 ||
+        !['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(entry.mime) ||
+        !plan.things.some(thing => thing.id === entry.targetId && thing.thingtime.length === 1 &&
+          thing.thingtime[0] === 'custom-emoji' && thing.crystal.emojiFileId === entry.id)) invalid('Invalid inline emoji image');
+      let binary: string;
+      try { binary = atob(entry.inlineBase64); } catch { return invalid('Invalid inline emoji encoding'); }
+      if (binary.length !== entry.bytes || !binary.length || btoa(binary) !== entry.inlineBase64) invalid('Inline emoji image changed size or encoding');
+      const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+      manifest.files[index].sha256 = await transferChecksum(bytes);
+      files.set(entry.id, bytes);
+      continue;
+    }
     if (entry.sharedRoot !== undefined && !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(entry.sharedRoot)) invalid('Invalid file audience');
     const sourceId = entry.sourceId ?? entry.id;
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(sourceId)) invalid('Invalid file source');

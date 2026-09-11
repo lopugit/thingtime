@@ -10,6 +10,7 @@ const matches = (doc: Record<string, any>, query: Record<string, any>): boolean 
   if (key === '$or') return value.some((part: any) => matches(doc, part));
   if (key === '$and') return value.every((part: any) => matches(doc, part));
   const actual = doc[key];
+  if (value === null) return actual == null;
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     return Object.entries(value).every(([op, operand]) => {
       if (op === '$exists') return (actual !== undefined) === operand;
@@ -23,6 +24,16 @@ const matches = (doc: Record<string, any>, query: Record<string, any>): boolean 
 });
 
 const recording = { ownerId: 'alice', thingtime: ['attachment'], attachmentPurpose: 'recording', attachmentState: 'ready' };
+
+test('personal emoji library inclusion never exposes a community emoji or another owner', () => {
+  const query = ownerLibraryMatch('alice', [...PROTECTED_THINGTIME, 'custom-emoji']);
+  const own = { ownerId: 'alice', thingtime: ['custom-emoji'], targetId: null };
+  assert.equal(matches(own, query), true);
+  assert.equal(matches({ ...own, folderId: 'folder' }, query), true);
+  assert.equal(matches({ ...own, targetId: 'community' }, query), false);
+  assert.equal(matches({ ...own, ownerId: 'bob' }, query), false);
+  assert.equal(matches({ ...own, thingtime: ['custom-emoji', 'data'] }, query), false);
+});
 
 test('owner library exposes exact managed content kinds without weakening mixed-kind or owner fences', () => {
   const query = ownerLibraryMatch('alice', PROTECTED_THINGTIME);

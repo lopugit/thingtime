@@ -12,7 +12,7 @@ const source = (kind = 'theme'): PlacementRecord => ({
 const folder = (): PlacementRecord => ({ ...source('folder'), shareId: 'destination' });
 
 test('managed placement produces only folder and timestamp patches, including root moves', () => {
-  for (const kind of ['theme', 'feed-algorithm', 'attachment']) {
+  for (const kind of ['theme', 'feed-algorithm', 'attachment', 'custom-emoji']) {
     const before = source(kind); const snapshot = structuredClone(before);
     const patch = prepareManagedPlacement(before, 'owner', folder(), now);
     assert.deepEqual(patch, { folderId: 'destination', updatedAt: now });

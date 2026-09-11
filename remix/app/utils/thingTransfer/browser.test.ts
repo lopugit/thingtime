@@ -6,6 +6,22 @@ import { encodeTransferArchive, decodeTransferArchive } from './archive';
 
 const plan = (): TransferPlan => ({ roots: ['note'], things: [{ id: 'note', thingtime: ['note'], crystal: { name: 'A note' }, extended: ['json', 42] }], files: [] });
 
+test('inline emoji plan bytes reject unrelated targets, excess bytes and ambiguous download sources', async () => {
+  const base: TransferPlan = { roots: ['emoji'], things: [{ id: 'emoji', thingtime: ['custom-emoji'], crystal: { name: 'party', emojiFileId: 'file' } }],
+    files: [{ id: 'file', targetId: 'emoji', name: 'party.png', mime: 'image/png', bytes: 3, inlineBase64: 'AQID' }] };
+  for (const change of [
+    (p: TransferPlan) => { p.files[0].sourceId = 'existing-file'; },
+    (p: TransferPlan) => { p.files[0].bytes = 4; },
+    (p: TransferPlan) => { p.files[0].inlineBase64 = 'AQID\n'; },
+    (p: TransferPlan) => { p.files[0].inlineBase64 = 'A'.repeat(700 * 1024 + 1); },
+    (p: TransferPlan) => { p.files[0].mime = 'text/html'; },
+    (p: TransferPlan) => { p.things[0].thingtime = ['data']; }
+  ]) {
+    const value = structuredClone(base); change(value);
+    await assert.rejects(bundleFromPlan(value, { fetch: async () => { throw new Error('Must not fetch inline sources'); } }));
+  }
+});
+
 test('recording download source IDs authorize bytes without entering the portable archive', async () => {
   const p = plan(); p.files = [{ id: 'portable-file', sourceId: 'original-recording', targetId: 'note', name: 'a.wav', mime: 'audio/wav', bytes: 4 }];
   const bundle = await bundleFromPlan(p, { fetch: async (url) => {

@@ -26,15 +26,15 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
 	assert.equal(manifest.features['api.webpages-resolve']?.version, '1.2.0');
 	assert.equal(manifest.features['api.actions-run']?.version, '1.3.1');
 	assert.equal(manifest.features['api.things-fork']?.version, '1.4.0');
-	assert.equal(manifest.features['api.things-import']?.version, '1.7.0');
-	assert.equal(manifest.features['api.things-export']?.version, '1.7.1');
-  for (const [feature, required, previous] of [['api.things-export', '1.7.1', '1.7.0'], ['api.attachment-content', '1.6.4', '1.6.3']]) {
+	assert.equal(manifest.features['api.things-import']?.version, '1.8.0');
+	assert.equal(manifest.features['api.things-export']?.version, '1.8.0');
+  for (const [feature, required, previous] of [['api.things-export', '1.8.0', '1.7.1'], ['api.attachment-content', '1.6.4', '1.6.3']]) {
     assert.equal(manifest.features[feature]?.version, required);
     assert.equal(capabilitySatisfies(required, required), true);
     assert.equal(capabilitySatisfies(previous, required), false);
     assert.equal(capabilitySatisfies('2.0.0', required), false);
   }
-  assert.equal(manifest.features['api.things-bulk']?.version, '1.2.0');
+  assert.equal(manifest.features['api.things-bulk']?.version, '1.3.0');
   for (const version of ['1.2.0', '1.2.1', '1.3.0']) assert.equal(capabilitySatisfies(version, '1.2.0'), true);
   for (const version of ['1.0.0', '1.1.0', '1.1.1', '2.0.0', '']) assert.equal(capabilitySatisfies(version, '1.2.0'), false);
   assert.equal(capabilitySatisfies('1.2.0', '1.3.0'), false);
@@ -71,7 +71,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // response echoes it; unknown → 400) — the single read only, the shared
   // projection is untouched (1.5.0, additive)
   // Included dependency reads add sharedRoot without widening standalone ACLs.
-  assert.equal(manifest.features['api.things']?.version, '1.10.0');
+  assert.equal(manifest.features['api.things']?.version, '1.11.0');
   assert.equal(manifest.features['api.lopu-reminders']?.version, '1.1.0');
   assert.equal(manifest.features['api.lopu-voice-reply']?.version, '1.3.0');
   assert.equal(manifest.features['api.lopu-recordings-run']?.version, '1.5.0');

@@ -9,6 +9,7 @@ export const ownerLibraryMatch = (ownerId: string, excludedKinds: readonly strin
     { thingtime: { $nin: [...excludedKinds] } },
     { thingtime: ['theme'] },
     { thingtime: ['feed-algorithm'] },
+    { thingtime: ['custom-emoji'], targetId: null },
     { thingtime: [ATTACHMENT_THINGTIME], attachmentPurpose: 'recording', attachmentState: 'ready', attachmentImportDraft: { $ne: true }, targetId: { $exists: false } }
   ]
 });

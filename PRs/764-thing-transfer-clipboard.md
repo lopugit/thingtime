@@ -1,5 +1,30 @@
 # PR 764 — portable Thing transfer
 
+## Custom emoji pipeline integration — 2026-09-12
+
+Owner-only emoji export now handles both authorized stored images and bounded
+legacy inline image bytes. Inline bytes exist only in the transient export plan;
+the portable ZIP contains an ordinary checksummed file. Imports upload through
+the custom-emoji purpose and call the fresh-upload writer below, with new personal
+names and no restored community membership or uniqueness identity. Personal
+emojis appear in the owner library and support folder placement and Cut moves;
+community emojis cannot be filed through that path.
+
+Image annotations are restored only after the dedicated writer successfully
+claims the fresh upload. Annotation or placement failure compensates the new
+emoji through its canonical deletion path. A rejected upload never gets
+annotated, and uncertain client responses do not trigger destructive cleanup.
+
+Export/import capabilities are 1.8.0; owner-library Things is 1.11.0 and bulk
+placement is 1.3.0. Older clients/servers are covered by negotiation tests.
+Desktop 1280px and mobile 390px headed Chrome file-picker checks passed and
+screenshots were reviewed: upload purpose, file-map submission, bounded dialog,
+and no cleanup after uncertain import. These use simulated upload responses,
+not live S3. Live uploaded-byte and concurrent-transaction acceptance remain
+open; the fixture account has no upload approval. Messenger archive versus live
+chat representation also remains unresolved. Earlier groundwork entries below
+describe historical commits, not the current enabled endpoint state.
+
 ## Fresh custom emoji writer groundwork — 2026-09-12
 
 The server adapter now calls the canonical emoji writer with a server-generated
