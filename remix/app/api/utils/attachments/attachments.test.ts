@@ -51,6 +51,7 @@ const attachmentDoc = (overrides: Partial<AttachmentDoc> = {}): AttachmentDoc =>
 });
 
 const noopS3 = (overrides: Partial<AttachmentS3> = {}): AttachmentS3 => ({
+	copyUploadPart: async () => {},
 	createMultipartUpload: async () => ({ uploadId: 'mpu-1' }),
 	signUploadPart: async ({ partNumber, checksumSha256 }) => ({
 		url: `https://s3.example/${partNumber}`,
@@ -115,6 +116,35 @@ test('shared media downloads reauthorize without bypassing readiness, moderation
 	assert.equal((await service.download(viewer, doc.shareId, false)).ok, false);
 	assert.equal(rootChecks, 3, 'Storage and moderation failures do not reach the root grant');
 	assert.equal(signs, 2);
+});
+
+test('file copies use the download authorization fences before reserving or copying bytes', async () => {
+	let doc: AttachmentDoc | null = attachmentDoc({ attachmentState: 'ready', attachmentPurpose: 'post', targetId: 'page', objectVersionId: 'version-1' });
+	const original = doc;
+	let allowed = true;
+	let customMongo = false;
+	let reservations = 0;
+	let copies = 0;
+	const service = createAttachmentService({
+		canCopyFiles: async () => true,
+		store: { getById: async () => doc, reservePending: async () => { reservations++; throw Error('must not reserve'); } } as any,
+		now: () => now, customMongoActive: () => customMongo,
+		canViewSharedTarget: async () => allowed,
+		getS3: () => noopS3({ copyUploadPart: async () => { copies++; } })
+	});
+	const denied = async () => {
+		const result = await service.copy({ id: 'visitor', sharedRoot: 'page', linkKeys: new Set(['test-key']) }, 'attachment-1');
+		assert.equal(result.ok, false); if (!result.ok) assert.equal(result.status, 404);
+	};
+	for (const patch of [
+		{ attachmentState: 'pending' }, { moderation: { status: 'blocked' } }, { moderation: { status: 'pending' } },
+		{ targetId: undefined, attachmentExpiresAt: new Date(0) }, { attachmentLinked: true },
+		{ objectVersionId: 'null' }, { attachmentPurpose: 'message' }
+	] as Partial<AttachmentDoc>[]) { doc = { ...original, ...patch }; await denied(); }
+	doc = original; allowed = false; await denied();
+	allowed = true; customMongo = true; await denied();
+	customMongo = false; doc = null; await denied();
+	assert.equal(reservations, 0); assert.equal(copies, 0);
 });
 
 test('start reserves billed pending metadata before creating the S3 MPU', async () => {

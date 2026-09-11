@@ -1,6 +1,7 @@
 import { literalAttachmentId, mapCssMediaUrls, isRenderMediaStyleProp, mapStyleMediaUrls } from '../../../components/Sharing/renderMediaCore';
 import { visitAuthoredHtmlMedia } from './authoredHtmlMedia';
 import { createTemplateResolver, defaultsFromArgs, MAX_RESOLVED_NODES, sanitizeArgSpecs } from '../../../components/ComponentsLibrary/componentTemplate';
+import { copiedMediaRefs, copiedMediaUrl } from '../../../components/Sharing/copiedMediaRefs';
 
 // Media capabilities come only from literal first-party URLs in stored render
 // positions. Input values, arbitrary metadata and external links are not grants.
@@ -11,8 +12,10 @@ export type CompositionMediaOptions = {
 
 export const compositionAttachmentIds = (kinds: string[], crystal: Record<string, any>, options: CompositionMediaOptions = {}): Set<string> => {
 	const ids = new Set<string>();
+	const rootRefs = kinds.includes('component') ? copiedMediaRefs(crystal.render?.ttMediaRefs) : new Map<string, string>();
+	let resolvedRoot = true;
 	const url = (value: unknown) => {
-		const id = literalAttachmentId(value);
+		const id = literalAttachmentId(typeof value === 'string' && !resolvedRoot ? copiedMediaUrl(value, rootRefs) : value);
 		if (id) ids.add(id);
 	};
 	const cssUrl = (value: string) => { url(value); return value; };
@@ -108,9 +111,13 @@ export const compositionAttachmentIds = (kinds: string[], crystal: Record<string
 		// Keep literal dependencies in every authored branch. Resolve the actual
 		// stored state (including repeat indices), then inactive render positions
 		// against only persisted args, never query/action/viewer runtime values.
+		resolvedRoot = false;
 		render(crystal.render);
 		if (kinds.includes('component')) {
 			render(crystal.render, 0, 'stored');
+			// The full resolver already applied root bindings once. Partial props
+			// resolution above did not; applying twice would change authored chains.
+			resolvedRoot = true;
 			render(resolveStored(crystal.render, storedScope), 0, 'resolved');
 		}
 	}

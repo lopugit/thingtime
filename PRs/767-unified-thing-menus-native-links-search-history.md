@@ -3,6 +3,10 @@
 Date: 2026-09-11. Branch: `codex/unified-thing-menus`. Target: `develop`.
 PR: https://github.com/lopugit/thingtime/pull/767
 
+Reconciled develop `c1fdea98b` after publication. Preserved both changelog
+entries and incoming shared-file-copy contracts; immutable graph snapshots
+were treated as additions/deletions and regenerated, not hand-merged.
+
 ## Shared foundation
 
 `thingActions.ts` defines base Thing verbs; `buildThingEntityMenu` builds one
