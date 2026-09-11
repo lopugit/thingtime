@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { transferIntent } from '~/utils/thingTransfer/intent';
 
 import { Box, Button, Flex, Input, Menu, MenuButton, MenuItem, MenuList, Portal, Text } from '@chakra-ui/react';
 import { ArrowUpDown, Columns3, Eye, LayoutGrid, Layers, Plus, Rows3, Search as SearchIcon, Tag, X } from 'lucide-react';
@@ -128,14 +129,13 @@ export const ThingsPage = () => {
   const [importDestination, setImportDestination] = useState<string | null>(null);
   const [exportIds, setExportIds] = useState<string[]>([]);
   const transferOperation = useRef<AbortController | null>(null);
-  const cutIntent = useRef<{ ownerId: string; digest: string } | null>(null);
   const transferAccount = useRef(user?.id);
   useEffect(() => {
     if (transferAccount.current !== user?.id) {
       transferAccount.current = user?.id;
       setImportOpen(false); setImportBundle(null); setExportIds([]); setClipboard(null);
     }
-    return () => { transferOperation.current?.abort(); cutIntent.current = null; };
+    return () => { transferOperation.current?.abort(); };
   }, [user?.id]);
   const api = useApi();
   const lopu = useLopu();
@@ -196,7 +196,10 @@ export const ThingsPage = () => {
 
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const anchorRef = useRef<string | null>(null);
-  const [clipboard, setClipboard] = useState<ThingsClipboard>(null);
+  const [clipboard, setClipboard] = useState<ThingsClipboard>(() => {
+    const cut = transferIntent.peek(user?.id);
+    return cut ? { mode: 'cut', ids: [...cut.ids] } : null;
+  });
 
   // drag-and-drop: the ids in flight + the folder currently hovered as a drop
   // target (null = the root row/breadcrumb, undefined = nothing hovered)
@@ -658,6 +661,7 @@ export const ThingsPage = () => {
       const controller = new AbortController();
       transferOperation.current = controller;
       const ownerId = recordingOwner.current;
+      const ticket = transferIntent.ticket(ownerId);
       const bundle = apiRef.current.v1.things.export({ ids }, { signal: controller.signal }).then(async (result) => {
         if (!result?.ok) throw new Error(result?.error || 'Export failed');
         const value = await bundleFromPlan(result.plan, { signal: controller.signal });
@@ -668,7 +672,9 @@ export const ThingsPage = () => {
       void writeTransferClipboard(bundle, controller.signal).then(async (text) => {
         const digest = await transferChecksum(new TextEncoder().encode(text));
         if (controller.signal.aborted || recordingOwner.current !== ownerId) return;
-        cutIntent.current = mode === 'cut' && ownerId ? { ownerId, digest } : null;
+        if (mode === 'cut') {
+          if (!transferIntent.record(ticket, digest, ids)) return;
+        } else transferIntent.clear();
         setClipboard({ mode, ids });
         lopuRef.current({ title: mode === 'copy' ? `Copied ${ids.length} 📋` : `Cut ${ids.length} ✂️`,
           description: 'Copied portable content to your clipboard. Paste in Things to import; cut moves only within this account.', status: 'success' });
@@ -726,15 +732,16 @@ export const ThingsPage = () => {
         if (text.length > MAX_CLIPBOARD_BYTES) throw new Error('Clipboard content is too large. Import the ZIP file instead.');
         const digest = await transferChecksum(new TextEncoder().encode(text));
         if (controller.signal.aborted || recordingOwner.current !== ownerId) return;
-        if (clipboard?.mode === 'cut' && cutIntent.current?.ownerId === ownerId && cutIntent.current.digest === digest) {
-          const ids = clipboard.ids;
+        const cut = transferIntent.match(ownerId, digest);
+        if (cut) {
+          const ids = [...cut.ids];
           const result = await runBulk('move', ids, destination);
           if (!result.ok || recordingOwner.current !== ownerId) return;
           summarize('Moved', result.succeeded, result.failures);
           const succeeded = new Set(result.results.filter((entry) => entry.ok).map((entry) => entry.id));
           const remaining = ids.filter((id) => !succeeded.has(id));
           setClipboard(remaining.length ? { mode: 'cut', ids: remaining } : null);
-          if (!remaining.length) cutIntent.current = null;
+          transferIntent.settle(cut, [...succeeded]);
           setSelection(new Set()); refreshAfterMutation([...sourceKeysOf(ids), destination]);
         } else {
           const bundle = await readTransferClipboard(text, controller.signal);
@@ -745,7 +752,7 @@ export const ThingsPage = () => {
         if (!controller.signal.aborted && recordingOwner.current === ownerId) lopuRef.current({ title: 'Could not paste', description: error instanceof Error ? error.message : 'Choose a Thingtime transfer file instead.', status: 'error' });
       }
     },
-    [clipboard, refreshAfterMutation, runBulk, sourceKeysOf, summarize]
+    [refreshAfterMutation, runBulk, sourceKeysOf, summarize]
   );
 
   const pasteClipboard = useCallback(() => pasteClipboardTo(folderId), [folderId, pasteClipboardTo]);
@@ -1503,7 +1510,7 @@ export const ThingsPage = () => {
               <Button {...pillProps(true)} onClick={pasteClipboard}>
                 📥 Paste {clipboard.ids.length} here
               </Button>
-              <Button {...pillProps(false)} onClick={() => setClipboard(null)}>
+              <Button {...pillProps(false)} onClick={() => { transferIntent.clear(); setClipboard(null); }}>
                 ✕
               </Button>
             </>

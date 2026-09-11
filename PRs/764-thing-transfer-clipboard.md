@@ -1,5 +1,20 @@
 # PR 764 — portable Thing transfer
 
+## Navigation-safe Cut intent — 2026-09-11
+
+Move authority now resides only in tab memory, outside the ThingsPage mount.
+The root account lifecycle revokes intent on logout/account changes or root
+unmount, and epoch tickets reject stale copy completions even after A→B→A.
+Paste requires exact owner and clipboard digest; partial moves retain failed IDs
+and cannot settle a newer intent. Copy from shared Transfer controls and the
+clipboard dismiss button revoke prior move intent. Reloads still discard it.
+Unit tests cover continuity, immutable source IDs, account/clipboard mismatch,
+revocation, partial success and stale completion. A headed Chrome desktop check
+uses the real OS clipboard and SPA navigation with synthetic list/export/move
+responses: Cut → leave → return → Paste dispatches one move, not an import.
+No original data is mutated by this simulation. The local live health endpoint
+currently reports storage migration required; no migration was performed.
+
 ## Durable recording reads — 2026-09-11
 
 The real attachment reader treated every unbound object as an expiring draft,

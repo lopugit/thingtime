@@ -6703,3 +6703,9 @@ approval; `access.test.ts` — the reservation matrix) and
 - Repeat anonymously and as another account/admin: deny without signing a URL.
 - Expired/invalid-expiry recordings, import drafts without expiry, blocked media and custom data endpoints remain denied.
 - File exports require attachment-content 1.6.4 and things-export 1.6.1; reject pre-fix origins before starting the export.
+## Navigation-safe Cut
+
+- Cut a Thing, follow an internal link away, return to Things and paste: move the original IDs, not imported copies.
+- Change accounts or log out/back in before pasting: never move from old intent. A reload also drops move authority.
+- Replace clipboard text, use Copy, or dismiss the clipboard: prior Cut must not move anything.
+- A partially failed move retains only failed IDs; an older request completing must not consume newer Cut intent.

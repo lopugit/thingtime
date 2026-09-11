@@ -8,6 +8,7 @@ import { bundleFromPlan, writeTransferClipboard } from '~/utils/thingTransfer/br
 import { ThingExportDialog } from './ThingExportDialog';
 import { ThingImportDialog } from './ThingImportDialog';
 import { TRANSFER_MENU_Z } from './transferLayers';
+import { transferIntent } from '~/utils/thingTransfer/intent';
 
 type Props = { id?: string | null; linkKey?: string; disabledReason?: string; onImported?: () => void };
 
@@ -37,6 +38,7 @@ const TransferControls = ({ id, linkKey, disabledReason, ownerId, onImported }: 
     });
     // Invoke within the click, retaining activation while the bundle loads.
     void writeTransferClipboard(bundle, controller.signal).then(() => {
+      if (!controller.signal.aborted) transferIntent.clear();
       if (!controller.signal.aborted) lopu({ title: 'Copied to clipboard', description: 'Paste in Things to import a private copy.', status: 'success' });
     }).catch(error => {
       if (!controller.signal.aborted) lopu({ title: 'Could not copy', description: error instanceof Error ? error.message : 'Try Download instead.', status: 'error' });
