@@ -880,7 +880,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'Dispatch a CI control-plane workflow',
     endpoint: '/api/v1/admin/ci/dispatch',
-    featureVersion: '2.1.0',
+    featureVersion: '2.2.0',
     summary: 'Dispatch one allowlisted GitHub Actions workflow and write an immutable audit event.',
     detail:
       'Admins can request a multi-target Feature Stack, the resolver, stack rebaser, promoters, sync, Web CI, or Electron release. A Feature Stack accepts one or more ordered open same-repository PRs and one or more target branches. With auto-decide enabled, the server uses each live PR base branch to assign it only to compatible selected targets, safely omits selected sources and targets with no compatible partner, snapshots every remaining source ref and SHA into a canonical immutable plan, and rejects a plan with no compatible pair instead of crossing branch families. The protected Lopu controller combines each target-specific source list in order, mechanically verifies merge topology and conflict-only AI edits, then opens one branch-protected auto-merge PR per active target. Workflow names and inputs are server-allowlisted; arbitrary workflow paths, caller-provided SHAs, and secret-bearing inputs are rejected. GitHub App installation credentials remain server-only.',
@@ -927,14 +927,23 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'ci-stack-completion', group: 'integrations', title: 'Complete one stack AI attempt',
+    endpoint: '/api/v1/integrations/ci/stack-completion', featureVersion: '1.0.0',
+    summary: 'Run one immutable stack endpoint/model attempt without releasing its credential.',
+    detail: 'Requires HMAC SHA-256 over canonical JSON in x-thingtime-ci-signature, a fresh nonce, trusted workflow identity, and an active GitHub run whose title binds the durable featureStackRunId. The latest saved stack must still permit execution. Endpoint/model configuration and owner are loaded only from the immutable dispatch. Rechecks connection ownership and HTTPS allowlists, refuses redirects, and returns unavailable=true only for eligible provider availability failures. Request fields: repository, workflowRef, runId, runAttempt, nonce, requestedAt, featureStackRunId, index, prompt (120000 characters maximum). Never accepts endpoints or keys from the runner. Each request invokes one position; the trusted runner advances on unavailable=true only.',
+    auth: { mode: 'none', description: 'Protected CI HMAC, replay claim and live run authorization.' }, methods: ['POST'],
+    steps: ['Negotiate api.ci-stack-completion 1.0.0 on the selected Thingtime origin.', 'Sign canonical JSON and POST one attempt from an active immutable stack run.'],
+    requestExamples: [], responseExamples: [{ status: 503, description: 'Selected provider is unavailable; caller may advance.', body: { ok: false, unavailable: true } }]
+  }),
+  endpoint({
     id: 'admin-ci-feature-stacks',
     group: 'admin',
     title: 'Manage saved Feature Stacks',
     endpoint: '/api/v1/admin/ci/stacks',
-    featureVersion: '1.3.0',
+    featureVersion: '1.4.0',
     summary: 'Save, edit, list, run, pause, stop, restart, and archive reusable multi-target Feature Stacks.',
     detail:
-      'Saved stacks are protected system Things. Their ordered source pull requests and target branches are relational ci-feature-stack-entry Things, while each bounded run-history row is a relational ci-dispatch linked to the exact GitHub workflow run. GET includes a bounded stack-specific event stream so progress heartbeats remain visible even when unrelated repository activity exceeds the general dashboard event window. POST run reloads live PR metadata, safely omits sources that have already closed, merged, or become drafts, preserves the order of every remaining live source, and creates the immutable target-aware controller plan and durable run identity at execution time. Pause and stop cancel only the exact active linked workflow while preserving the saved definition and history; restart cancels active compute before dispatching a fresh immutable run.',
+      'Saved stacks are protected system Things. Optional modelWaterfall is a version-1 AI endpoint/model configuration with ordered entries (endpointId, modelId, effort, speed); null inherits shared routing, omission preserves the saved choice. Custom endpoint references must belong to the saving/running admin. Each run freezes its selection. Their ordered source pull requests and target branches are relational ci-feature-stack-entry Things, while each bounded run-history row is a relational ci-dispatch linked to the exact GitHub workflow run. GET includes a bounded stack-specific event stream so progress heartbeats remain visible even when unrelated repository activity exceeds the general dashboard event window. POST run reloads live PR metadata, safely omits sources that have already closed, merged, or become drafts, preserves the order of every remaining live source, and creates the immutable target-aware controller plan and durable run identity at execution time. Pause and stop cancel only the exact active linked workflow while preserving the saved definition and history; restart cancels active compute before dispatching a fresh immutable run.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET', 'POST'],
     steps: ['GET all saved stacks.', 'POST save to create or edit a stack.', 'POST run or restart to dispatch a current live plan.', 'POST pause or stop to cancel exact active compute while preserving history, or delete to archive it.'],

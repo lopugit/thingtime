@@ -14,10 +14,10 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
 	assert.equal(manifest.features['api.things-fork']?.version, '1.4.0');
   assert.equal(manifest.features['api.admin-migrations-run']?.version, '1.3.0');
   assert.equal(manifest.features['api.admin-subscriptions']?.version, '1.1.1');
-	assert.equal(manifest.features['api.admin-ci-dispatch']?.version, '2.1.0');
+	assert.equal(manifest.features['api.admin-ci-dispatch']?.version, '2.2.0');
   assert.equal(manifest.features['api.admin-ci-control']?.version, '1.0.2');
   assert.equal(manifest.features['api.admin-ci-credentials']?.version, '2.0.0');
-  assert.equal(manifest.features['api.admin-ci-feature-stacks']?.version, '1.3.0');
+  assert.equal(manifest.features['api.admin-ci-feature-stacks']?.version, '1.4.0');
   assert.equal(manifest.features['api.admin-ci-previews']?.version, '2.0.0');
   assert.equal(manifest.features['api.auth-passkeys-register-options']?.version, '1.1.0');
   assert.equal(manifest.features['api.auth-passkeys-login-options']?.version, '1.1.0');
