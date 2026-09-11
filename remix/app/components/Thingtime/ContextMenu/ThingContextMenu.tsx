@@ -1,10 +1,13 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
+import { Link, useInRouterContext } from 'react-router';
 import { Box, Flex, Text } from '@chakra-ui/react';
 
 import { Icon } from '../../Icon/Icon';
 import type { ThingContextAction, ThingContextMenuModel, ThingContextSection } from './contextMenuModel';
 import { resolveDrillPath } from './contextMenuModel';
+import { clampMenuAxisShift } from './contextMenuGeometry';
+import { isPlainLinkClick, safeMenuHref } from '~/utils/linkNavigation';
 
 // Thing Context Menu — design-system reference implementation, live in the
 // Thingtime UI via ThingContextMenuTrigger.
@@ -73,8 +76,12 @@ const MAX_MENU_WIDTH = 520;
 const MIN_MENU_HEIGHT = 220;
 const MAX_MENU_HEIGHT = 680;
 const DEFAULT_MENU_WIDTH = 264;
+// innerWidth includes the vertical scrollbar; using it clips the right edge
+// of a body-portaled menu on phones and systems with non-overlay scrollbars.
+const viewportWidth = () => Math.min(window.innerWidth, document.documentElement.clientWidth || window.innerWidth);
 
 export const ThingContextMenu = (props: ThingContextMenuProps) => {
+	const inRouter = useInRouterContext();
 	const {
 		model,
 		open,
@@ -110,6 +117,7 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 	// horizontal correction keeping popovers inside the viewport when the
 	// trigger sits near the right edge
 	const [popoverShift, setPopoverShift] = React.useState(0);
+	const [popoverShiftY, setPopoverShiftY] = React.useState(0);
 
 	// reset on every open/close so a closed (still-mounted) menu never paints
 	// one stale frame of old drill/drag/size state when it reopens
@@ -119,6 +127,7 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 		setMenuWidth(width);
 		setMenuHeight(null);
 		setPopoverShift(0);
+		setPopoverShiftY(0);
 		setLevelTick(0);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [open]);
@@ -127,8 +136,8 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 	// (getBoundingClientRect works even inside clipped ancestors); the surface
 	// itself portals to <body> at these fixed viewport coordinates, re-measured
 	// on any scroll (capture phase reaches nested scrollers) and resize so it
-	// stays glued to its open point. Horizontal viewport clamping stays with
-	// reclampPopover (one owner per axis); the measure only keeps the header
+	// stays glued to its open point. Viewport clamping stays with
+	// reclampPopover; the measure keeps the header
 	// row reachable at the bottom edge. `inline` popovers (the design-system
 	// anatomy stories) keep the legacy in-flow rendering and skip all of this.
 	const anchorRef = React.useRef<HTMLDivElement | null>(null);
@@ -185,29 +194,11 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 		}
 
 		const rect = surface.getBoundingClientRect();
-		const maxRight = window.innerWidth - CONTEXT_MENU_MARGIN;
-
-		setPopoverShift((shift) => {
-			const overflowRight = rect.right - maxRight;
-			const overflowLeft = CONTEXT_MENU_MARGIN - rect.left;
-
-			if (overflowRight > 0) {
-				return shift - overflowRight;
-			}
-			if (overflowLeft > 0) {
-				return shift + overflowLeft;
-			}
-			if (shift < 0) {
-				return Math.min(0, shift + (maxRight - rect.right));
-			}
-			if (shift > 0) {
-				return Math.max(0, shift - (rect.left - CONTEXT_MENU_MARGIN));
-			}
-			return shift;
-		});
+		setPopoverShift(shift => clampMenuAxisShift(rect.left - shift, rect.width, viewportWidth(), CONTEXT_MENU_MARGIN));
+		setPopoverShiftY(shift => clampMenuAxisShift(rect.top - shift, rect.height, window.innerHeight, CONTEXT_MENU_MARGIN));
 	}, []);
 
-	React.useEffect(() => {
+	React.useLayoutEffect(() => {
 		if (!open || presentation !== 'popover') {
 			return;
 		}
@@ -221,9 +212,12 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 		// anchorPoint: the portal'd surface mounts a commit AFTER open flips (the
 		// probe must be measured first) — reclamp again once it exists, and when
 		// the anchor moves under scroll
-	}, [open, presentation, menuWidth, reclampPopover, anchorPoint]);
+	}, [open, presentation, menuWidth, menuHeight, model, stack, reclampPopover, anchorPoint]);
 
-	const currentLevel = stack.length ? stack[stack.length - 1] : null;
+	// Resolve against current capabilities on every paint: an asynchronously
+	// loaded flair list or a changed permission must not leave a stale submenu.
+	const liveStack = resolveDrillPath(model, stack.map(action => action.id));
+	const currentLevel = liveStack.length ? liveStack[liveStack.length - 1] : null;
 	const currentSections = currentLevel?.submenu?.sections || model.sections;
 	const currentPath = React.useMemo(() => stack.map((action) => action.id), [stack]);
 
@@ -245,7 +239,7 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 		}
 
 		const rect = surface.getBoundingClientRect();
-		const maxX = window.innerWidth - rect.width - CONTEXT_MENU_MARGIN;
+		const maxX = viewportWidth() - rect.width - CONTEXT_MENU_MARGIN;
 		const maxY = window.innerHeight - rect.height - CONTEXT_MENU_MARGIN;
 
 		setClampedPosition({
@@ -506,7 +500,7 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 			const startWidth = surface?.offsetWidth || menuWidth;
 			const startHeight = surface?.offsetHeight || 0;
 			// never allow resizing past the viewport
-			const maxWidth = Math.min(MAX_MENU_WIDTH, window.innerWidth - CONTEXT_MENU_MARGIN * 2);
+			const maxWidth = Math.min(MAX_MENU_WIDTH, viewportWidth() - CONTEXT_MENU_MARGIN * 2);
 			const maxHeight = Math.min(MAX_MENU_HEIGHT, window.innerHeight - CONTEXT_MENU_MARGIN * 2);
 
 			startPointerGesture(e, (move) => {
@@ -523,10 +517,15 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 
 	const renderAction = (section: ThingContextSection, action: ThingContextAction) => {
 		const isRadio = action.selected !== undefined;
+		const href = !action.disabled && !action.submenu ? safeMenuHref(action.href) : undefined;
 
 		return (
 			<Flex
 				key={action.id}
+				as={href ? (inRouter ? Link : 'a') : 'button'}
+				{...(href ? { href, to: href } : { type: 'button' as const })}
+				textAlign="left"
+				flexShrink={0}
 				className={FOCUSABLE_ITEM_CLASS}
 				alignItems="center"
 				columnGap="9px"
@@ -551,11 +550,17 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 				aria-disabled={action.disabled || undefined}
 				aria-haspopup={action.submenu ? 'menu' : undefined}
 				tabIndex={-1}
-				onClick={() => onItemActivate(section, action)}
+				onClick={(event) => {
+					if (action.disabled) { event.preventDefault(); return; }
+					if (href) { if (isPlainLinkClick(event) && closeOnAction && !pinned) onClose?.(); return; }
+					onItemActivate(section, action);
+				}}
 				onKeyDown={(e) => {
+					if (href && e.key === 'Enter') return; // native link activation, including modifiers
 					if (e.key === 'Enter' || e.key === ' ') {
 						e.preventDefault();
-						onItemActivate(section, action);
+						if (href) e.currentTarget.click();
+						else onItemActivate(section, action);
 					} else if (e.key === 'ArrowRight' && action.submenu) {
 						e.preventDefault();
 						pushLevel(action);
@@ -617,8 +622,8 @@ export const ThingContextMenu = (props: ThingContextMenuProps) => {
 			position="relative"
 			overflow="hidden"
 			transform={
-				dragOffset.x || dragOffset.y || popoverShift
-					? `translate(${dragOffset.x + popoverShift}px, ${dragOffset.y}px)`
+				dragOffset.x || dragOffset.y || popoverShift || popoverShiftY
+					? `translate(${dragOffset.x + popoverShift}px, ${dragOffset.y + popoverShiftY}px)`
 					: undefined
 			}
 			role="menu"
