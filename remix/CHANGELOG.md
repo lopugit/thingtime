@@ -14,7 +14,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-09-11: Add a reusable AI model/endpoint waterfall dialog and per-stack
   immutable routing, with a protected completion gateway and mixed-provider
-  availability fallback. [Contract and rollout](../docs/ai-waterfall-selector.md).
+  availability fallback. [Contract and rollout](../docs/ai-waterfall-selector.md). [PR #771 notes](../PRs/771-ci-stack-model-selection-reusable-model-and-endpoint-waterfall.md).
 
 > `— Lopu, YYYY-MM-DD`. Keep the newest entries at the top.
 
