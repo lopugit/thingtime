@@ -6567,6 +6567,24 @@ approval; `access.test.ts` — the reservation matrix) and
 
 - When adding a scheduled-task/run schema, run `npm --prefix remix run test:schemas` and review its pinned builtin projection; every registered crystal schema must survive the schema-Thing write gate without lost fields.
 - Run `node remix/scripts/verify-lopu-linked-things.mjs` against the running worktree stack (or pass its loopback HTTP origin). It registers disposable local accounts and exercises real API comments, unchanged parent crystals, shared voice/Messenger history, retry deduplication, searchable scheduled-task Things, linked context, account isolation, protected writes, and pause/resume. It removes its created content and pauses schedules in `finally`; empty test accounts remain, with credentials never persisted. Production origins are rejected. This does not replace browser/device, provider inference, or scheduled-delivery acceptance.
+# Portable Thing transfers
+
+- In Things, open Import on desktop and mobile. Check invalid JSON, unsupported
+  envelopes, a complete JSON transfer, and ZIPs with missing/tampered files.
+  Validation must happen before uploads or creation; the dialog must fit and
+  scroll without clipping its controls.
+- Import into the top level and an owned folder. Copies must get new IDs,
+  private ACLs and current ownership, retain folder/schema/action/component
+  references and extended content, and appear without a manual reload.
+- Upload real files and verify imported bytes independently of the source.
+  Cancel, switch accounts, test quota/permission failure and lost responses;
+  never automatically repeat an import POST or delete source records.
+- Run transfer unit tests and the opt-in local
+  `app/api/utils/things/importTransfer.integration.test.ts` with
+  `TT_TRANSFER_TEST_URL` and a disposable `TT_TRANSFER_TEST_COOKIE` provided
+  securely. It must clean only its newly returned IDs. Clipboard/export and
+  file-bearing UI acceptance remain separate from this JSON import check.
+
 # Synthetic personal recording runtime smoke
 
 - Run `node --import tsx scripts/personal-recording-runtime-smoke.mts` from

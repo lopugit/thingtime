@@ -12195,6 +12195,21 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'things-import',
+    featureVersion: '1.0.0',
+    contractVersion: '1.0.0',
+    group: 'things',
+    title: 'Import portable Things',
+    endpoint: '/api/v1/things/import',
+    summary: 'Import a version-1 Thingtime content manifest into new private caller-owned Things.',
+    detail: 'Allocates fresh IDs, remaps internal composition, folder, target and schema references, and uses normal schema validation, quota accounting and transactional attachment binding. Never restores ownership, ACL grants, link secrets, site routes or managed account records. Files must first be uploaded through the normal attachment upload API; the files map binds manifest file IDs to distinct ready caller-owned upload IDs. File byte sizes are checked against the manifest. Repeated successful requests create separate copies; clients must not automatically retry an uncertain mutation. Failures clean only newly created Things; remainingIds reports any cleanup failures.',
+    auth: { mode: 'session', description: 'Requires a first-party user account. Cross-origin requests, app tokens, PATs and service accounts are not supported.' },
+    methods: ['POST'],
+    steps: ['POST JSON { manifest, files?, folderId? }. The manifest uses format thingtime.transfer, version 1, roots, things and files.', 'At most 1000 Things and 2000 file entries; manifest content is bounded to 16 MiB by the portable format. The request has 1 MiB additional upload-map headroom and execution is bounded to 120 seconds.', 'Upload each stored file normally before import and supply its new ready attachment ID. A successful response returns roots, the old-to-new ids map, imported and filesImported.'],
+    requestExamples: [{ name: 'Import a note', description: 'Create a private independent note.', method: 'POST', body: { manifest: { format: 'thingtime.transfer', version: 1, roots: ['note'], things: [{ id: 'note', thingtime: ['data'], crystal: { name: 'Note' } }], files: [] } } }],
+    responseExamples: [{ status: 200, description: 'Private content imported.', body: { ok: true, roots: ['new-note-id'], ids: { note: 'new-note-id' }, imported: 1, filesImported: 0 } }]
+  }),
+  endpoint({
     id: 'things-fork',
     // 1.4.0: root render media bindings preserve split-fragment template behavior.
     featureVersion: '1.4.0',

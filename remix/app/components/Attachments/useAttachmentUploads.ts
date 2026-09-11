@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { useApi } from '~/hooks/useApi';
+import { TRANSFER_LIMITS } from '~/utils/thingTransfer/format';
 import {
 	attachmentCleanupAction,
 	attachmentCompleteRetryPhase,
@@ -149,7 +150,7 @@ export const useAttachmentUploads = (
 ) => {
 	const uploadPurpose = options.purpose ?? 'post';
 	const maxFiles = Number.isSafeInteger(options.maxFiles)
-		? Math.max(1, Math.min(MAX_POST_ATTACHMENTS, Number(options.maxFiles)))
+		? Math.max(1, Math.min(options.selectionScope === 'transfer' ? TRANSFER_LIMITS.files : MAX_POST_ATTACHMENTS, Number(options.maxFiles)))
 		: MAX_POST_ATTACHMENTS;
 	const imageOnly = options.imageOnly === true;
 	const maxBytesPerFile =

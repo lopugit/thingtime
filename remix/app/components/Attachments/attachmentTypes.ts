@@ -3,6 +3,8 @@ export type AttachmentMediaKind = 'image' | 'video' | 'audio' | 'file';
 export type AttachmentUploadPurpose = 'post' | 'comment' | 'message' | 'profile-avatar' | 'profile-banner' | 'custom-emoji';
 
 export type AttachmentUploadOptions = {
+	// A transfer spans many Things; normal composers retain the per-Thing cap.
+	selectionScope?: 'single-thing' | 'transfer';
 	purpose?: AttachmentUploadPurpose;
 	maxFiles?: number;
 	imageOnly?: boolean;

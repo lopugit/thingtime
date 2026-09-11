@@ -18,6 +18,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Add the private Thing import API and JSON/ZIP picker with destination choice,
+  validated uploads and fresh reference IDs; verify real local imports and
+  responsive dialog states. Export/clipboard delivery remains in progress:
+  [PR 764 notes](../PRs/764-thing-transfer-clipboard.md). — Codex (AI), 2026-09-11
+
 - Verify real shared-file and linked-gallery copies on the exact PR preview,
   including private copies surviving source revocation/deletion and cleanup
   of all disposable test content. Record the separate post-login root-data

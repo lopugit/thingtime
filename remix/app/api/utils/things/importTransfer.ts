@@ -1,0 +1,116 @@
+import { randomUUID } from 'node:crypto';
+import { isProtectedThingtime } from '../../../schemas/registry';
+import { serializeTransfer, validateTransfer, type ThingTransfer, type TransferThing } from '../../../utils/thingTransfer/format';
+import { rewriteComposition } from '../actions/forkCompositionCore';
+import { rewriteCopiedAttachmentReferences } from '../actions/forkMediaCore';
+import { createReadyAttachmentPostInsertHook, inspectReadyAttachmentsForPost, prepareAttachmentCascadeForThing } from '../attachments/attachments';
+import { attachmentStore } from '../attachments/attachmentStore';
+import { createThing, deleteThing, fail, isFail, type Viewer } from './things';
+
+type ImportDependencies = {
+  create: typeof createThing;
+  remove: typeof deleteThing;
+  inspectFiles: typeof inspectReadyAttachmentsForPost;
+  getFile: typeof attachmentStore.getOwned;
+  bindFiles: typeof createReadyAttachmentPostInsertHook;
+  uuid: () => string;
+};
+const defaults: ImportDependencies = { create: createThing, remove: deleteThing, inspectFiles: inspectReadyAttachmentsForPost, getFile: attachmentStore.getOwned, bindFiles: createReadyAttachmentPostInsertHook, uuid: randomUUID };
+
+/** Import ordering only constrains structural/provenance references. Action
+ * cycles are legal: their fresh IDs are allocated before any create call.
+ */
+export const orderTransferImports = (manifest: ThingTransfer): TransferThing[] => {
+  const remaining = new Map(manifest.things.map((thing) => [thing.id, thing]));
+  const ordered: TransferThing[] = [];
+  while (remaining.size) {
+    const next = [...remaining.values()].find((thing) => ![thing.folderId, thing.targetId,
+      ...(thing.thingtime.includes('data') && typeof thing.crystal.schemaId === 'string' ? [thing.crystal.schemaId] : [])
+    ].some((id) => id && remaining.has(id)));
+    if (!next) throw new Error('Circular folder, target, or schema provenance in the import');
+    ordered.push(next); remaining.delete(next.id);
+  }
+  return ordered;
+};
+
+export const importTransfer = async (
+  viewer: Viewer, input: { manifest?: unknown; files?: unknown; folderId?: unknown },
+  signal?: AbortSignal, overrides: Partial<ImportDependencies> = {}
+) => {
+  if (!viewer?.id) return fail(401, 'Sign in to import Things');
+  const deps = { ...defaults, ...overrides };
+  let manifest: ThingTransfer;
+  let ordered: TransferThing[];
+  try {
+    manifest = validateTransfer(input.manifest);
+    serializeTransfer(manifest);
+    ordered = orderTransferImports(manifest);
+  } catch (error) { return fail(400, error instanceof Error ? error.message : 'Invalid transfer'); }
+  if (manifest.things.some((thing) => isProtectedThingtime(thing.thingtime))) return fail(403, 'Managed account records must use their dedicated import workflow');
+  if (input.folderId !== undefined && input.folderId !== null && (typeof input.folderId !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(input.folderId))) return fail(400, 'Invalid import destination');
+  const supplied = input.files === undefined ? {} : input.files;
+  if (!supplied || typeof supplied !== 'object' || Array.isArray(supplied)) return fail(400, 'Invalid uploaded file map');
+  const fileMap = new Map(Object.entries(supplied));
+  if (fileMap.size !== manifest.files.length || [...fileMap].some(([original, copied]) =>
+    !manifest.files.some((file) => file.id === original) || typeof copied !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(copied)
+  ) || new Set(fileMap.values()).size !== fileMap.size) return fail(400, 'Upload every file once before importing');
+  const files = fileMap as Map<string, string>;
+  const ids = new Map(manifest.things.map((thing) => [thing.id, deps.uuid()]));
+  const created: string[] = [];
+  const suffix = deps.uuid().slice(0, 8);
+  const expires = Date.now() + 120_000;
+  const check = () => {
+    signal?.throwIfAborted();
+    if (Date.now() > expires) throw new Error('The import timed out');
+  };
+  try {
+    // All uploads must be fresh, ready and owned by the real caller. Validate
+    // them before the first Thing write, then the bind hook checks again in
+    // the create transaction. A manifest cannot attach someone else's file.
+    const inspections = new Map<string, Awaited<ReturnType<typeof deps.inspectFiles>>>();
+    for (const thing of ordered) {
+      check();
+      const bound = manifest.files.filter((file) => file.targetId === thing.id);
+      if (!bound.length) continue;
+      const inspected = await deps.inspectFiles(viewer.id, bound.map((file) => files.get(file.id)!));
+      if (isFail(inspected)) throw inspected;
+      for (const file of bound) {
+        const uploaded = await deps.getFile(viewer.id, files.get(file.id)!);
+        if (!uploaded || uploaded.crystal.size !== file.bytes) throw new Error('Uploaded file does not match the transfer');
+      }
+      inspections.set(thing.id, inspected);
+    }
+    for (const thing of ordered) {
+      check();
+      const crystal = rewriteComposition(thing.thingtime,
+        rewriteCopiedAttachmentReferences(thing.crystal, files), (_kind, id) => ids.get(id) || id);
+      for (const key of ['componentKey', 'actionKey', 'pageKey']) if (typeof crystal[key] === 'string') crystal[key] = `${crystal[key].slice(0, 48)}-${suffix}`;
+      if (thing.thingtime.includes('schema') && typeof crystal.name === 'string') crystal.name = `${crystal.name.slice(0, 48)}-${suffix}`;
+      // Import is content creation, never site publication or posting back
+      // into the original community just because the source carried a route.
+      if (thing.thingtime.includes('webpage')) delete crystal.siteRoute;
+      if (thing.thingtime.includes('post')) { delete crystal.subspaceId; delete crystal.flairId; }
+      const bound = manifest.files.filter((file) => file.targetId === thing.id).map((file) => files.get(file.id)!);
+      const inspected = inspections.get(thing.id);
+      const result = await deps.create(viewer.id, {
+        shareId: ids.get(thing.id), thingtime: thing.thingtime, crystal, extended: thing.extended, tags: thing.tags,
+        acl: ['tt:user'], targetId: thing.targetId ? ids.get(thing.targetId) : undefined,
+        folderId: thing.folderId ? ids.get(thing.folderId) : input.folderId ?? null
+      }, viewer, null, bound.length && inspected && !isFail(inspected) ? {
+        postAttachments: { hasAny: inspected.hasAny, hasVisual: inspected.hasVisual }, afterInsert: deps.bindFiles(bound)
+      } : {});
+      if (isFail(result)) throw result;
+      created.push(result.doc.shareId);
+    }
+    return { ok: true as const, roots: manifest.roots.map((id) => ids.get(id)!), ids: Object.fromEntries(ids), imported: created.length, filesImported: files.size };
+  } catch (error) {
+    const remaining: string[] = [];
+    for (const id of [...created].reverse()) {
+      try { if (isFail(await deps.remove(viewer, id, null, { beforeCascade: prepareAttachmentCascadeForThing }))) remaining.push(id); }
+      catch { remaining.push(id); }
+    }
+    const failure = isFail(error) ? error : fail(400, error instanceof Error ? error.message : 'Import failed');
+    return { ...failure,
+      ...(remaining.length ? { status: 503, error: 'Import failed and some new copies could not be cleaned up', remainingIds: remaining } : {}) };
+  }
+};

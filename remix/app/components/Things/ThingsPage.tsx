@@ -25,6 +25,7 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { RAINBOW_TEXT } from '~/theme/rainbow';
 
 import { FolderTree } from './FolderTree';
+import { ThingImportDialog } from './ThingImportDialog';
 import { DeleteConfirmDialog, MoveDialog, NewFolderDialog, PreviewModal, RenameDialog, ShareDialog } from './ThingsDialogs';
 import { ThingsColumnsView, ThingsGridView, ThingsListView } from './ThingsViews';
 import type { ThingsItemAction, ThingsItemHandlers } from './ThingsViews';
@@ -119,6 +120,7 @@ const dedupeById = (things: ThingsThing[]): ThingsThing[] => {
 
 export const ThingsPage = () => {
   const user = useCurrentUser();
+  const [importOpen, setImportOpen] = useState(false);
   const api = useApi();
   const lopu = useLopu();
   const navigate = useNavigate();
@@ -1372,6 +1374,7 @@ export const ThingsPage = () => {
 
         {/* toolbar: browse controls stay available while contextual selection actions appear below */}
         <Flex alignItems="center" columnGap={4} rowGap={2} wrap="wrap">
+          {user?.id && <Button {...pillProps(false)} onClick={() => setImportOpen(true)}>Import…</Button>}
           <ToolbarGroup label="view">
             <Button {...pillProps(view === 'grid')} leftIcon={<LayoutGrid size={13} />} onClick={() => setView('grid')}>
               Grid
@@ -1684,6 +1687,10 @@ export const ThingsPage = () => {
 			/>
 
       {/* dialogs */}
+      {importOpen && user?.id && <ThingImportDialog key={user.id} ownerId={user.id} folderId={folderId} onClose={() => setImportOpen(false)} onImported={(destination) => {
+        refreshAfterMutation([destination]);
+        lopu({ title: 'Things imported', description: 'Your new private copies are ready.', status: 'success' });
+      }} />}
       <NewFolderDialog isOpen={newFolderOpen} onClose={() => setNewFolderOpen(false)} onCreate={createFolder} />
       <RenameDialog onClose={() => setRenameThing(null)} onRename={renameApplied} thing={renameThing} />
       <MoveDialog

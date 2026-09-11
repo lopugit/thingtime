@@ -55,7 +55,7 @@ test('export options are honored, external folder placement is detached, source 
   const doc = make('selected', 'folder', 'outside');
   const source = provider([doc]);
   source.children = source.dependencies = async () => { throw new Error('must not read'); };
-  source.files = async function* () { throw new Error('must not read'); };
+  source.files = () => { throw new Error('must not read'); };
   const bundle = await collectTransfer(['selected'], source, { includeChildren: false, includeDependencies: false, includeFiles: false });
   assert.equal(bundle.manifest.things[0].folderId, undefined);
   assert.equal(doc.folderId, 'outside');
