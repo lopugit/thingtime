@@ -42,13 +42,13 @@ building a surveillance or retaliation system.
 
 ## Layered safety contract
 
-| Layer | Purpose | Authority boundary |
-| --- | --- | --- |
-| Personal controls | Mute, block, leave, revoke invitations, and restrict contact immediately. | The person controls their own experience; no misconduct finding is implied. |
-| Community governance | Enforce published community rules within one community or channel. | Scoped moderators act only inside assigned communities; site-wide actions require escalation. |
-| Platform policy | Decide visibility and account actions under Thingtime-wide rules. | Trained site moderators/admins with reasoned, audited decisions. |
-| Automated assistance | Detect, prioritize, or temporarily quarantine supported content. | Models never define policy and cannot be the sole basis for durable high-impact sanctions. |
-| Legal/urgent process | Route credible urgent or legally defined notices. | Separately approved workflow with qualified counsel/safety input and honest staffing. |
+| Layer                | Purpose                                                                   | Authority boundary                                                                            |
+| -------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Personal controls    | Mute, block, leave, revoke invitations, and restrict contact immediately. | The person controls their own experience; no misconduct finding is implied.                   |
+| Community governance | Enforce published community rules within one community or channel.        | Scoped moderators act only inside assigned communities; site-wide actions require escalation. |
+| Platform policy      | Decide visibility and account actions under Thingtime-wide rules.         | Trained site moderators/admins with reasoned, audited decisions.                              |
+| Automated assistance | Detect, prioritize, or temporarily quarantine supported content.          | Models never define policy and cannot be the sole basis for durable high-impact sanctions.    |
+| Legal/urgent process | Route credible urgent or legally defined notices.                         | Separately approved workflow with qualified counsel/safety input and honest staffing.         |
 
 ## Architecture direction to approve
 
@@ -56,6 +56,12 @@ Do not implement these names until the owner approves the contract. Whatever
 names are chosen must follow [`FUNDAMENTALS.md`](../FUNDAMENTALS.md): protected
 API writers, versioned physical collections through named getters, and
 relational children rather than growing embedded arrays.
+
+The [relationship agency and consentful connection roadmap](./relationship-agency-and-consentful-connection-roadmap.md)
+owns the cross-surface state/effects matrix, current-state transitions,
+stopping UX, and private relationship receipts. This roadmap retains authority
+over personal block semantics, reports, moderation decisions, appeals, and
+safety remedies; a relationship transition is not a misconduct finding.
 
 - **Safety boundary:** one protected relation per blocker/blocked account, with
   deterministic uniqueness, server-enforced semantics, and no target
@@ -87,16 +93,16 @@ Approve definitions, minimum sample sizes, suppression rules, and owners before
 collection. Raw content and person-level safety histories are never product
 analytics.
 
-| Measure | Candidate definition | Guardrail |
-| --- | --- | --- |
-| Immediate-control success | Eligible block/mute/leave actions that take effect across the approved surface matrix without further unwanted exposure. | No target notification, identity leak, or cross-account cache bleed. |
-| Report completion | Started eligible reports that receive a stable acknowledgement and safe status path. | Accessibility task success and abandonment are studied without capturing report text. |
-| Time to first human disposition | Median and high-percentile time from actionable case creation to a reasoned human decision. | Publish only over minimum cohorts; urgent classes remain separately owned. |
-| Decision quality | Sampled decisions that match the current policy and evidence after quality review. | A high agreement rate cannot hide severe misses or reviewer conflicts. |
-| Appeal correction | Eligible appeals resulting in upheld, changed, or reversed decisions and the time to remedy. | Reversals improve policy/model/training; they are not used to punish reporters. |
-| Repeat-harm rate | Approved aggregate recurrence after a completed intervention. | No public person/community ranking and no opaque “risk score.” |
-| Queue health | Open actionable cases by age, class, and staffed capacity. | Launch gates respond to backlog; moderators are not incentivized to close without review. |
-| Automation contribution | Share of suggestions accepted, changed, rejected, or unavailable by category/version. | Models are evaluated separately; one score cannot authorize broader scanning. |
+| Measure                         | Candidate definition                                                                                                     | Guardrail                                                                                 |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| Immediate-control success       | Eligible block/mute/leave actions that take effect across the approved surface matrix without further unwanted exposure. | No target notification, identity leak, or cross-account cache bleed.                      |
+| Report completion               | Started eligible reports that receive a stable acknowledgement and safe status path.                                     | Accessibility task success and abandonment are studied without capturing report text.     |
+| Time to first human disposition | Median and high-percentile time from actionable case creation to a reasoned human decision.                              | Publish only over minimum cohorts; urgent classes remain separately owned.                |
+| Decision quality                | Sampled decisions that match the current policy and evidence after quality review.                                       | A high agreement rate cannot hide severe misses or reviewer conflicts.                    |
+| Appeal correction               | Eligible appeals resulting in upheld, changed, or reversed decisions and the time to remedy.                             | Reversals improve policy/model/training; they are not used to punish reporters.           |
+| Repeat-harm rate                | Approved aggregate recurrence after a completed intervention.                                                            | No public person/community ranking and no opaque “risk score.”                            |
+| Queue health                    | Open actionable cases by age, class, and staffed capacity.                                                               | Launch gates respond to backlog; moderators are not incentivized to close without review. |
+| Automation contribution         | Share of suggestions accepted, changed, rejected, or unavailable by category/version.                                    | Models are evaluated separately; one score cannot authorize broader scanning.             |
 
 ## Milestones
 
@@ -231,16 +237,16 @@ and incident thresholds without heroic manual cleanup.
 
 ## Risks and contingency paths
 
-| Risk | Early signal | Response |
-| --- | --- | --- |
-| Report tool becomes a weapon | Bursts against one target/community or decisions track volume rather than evidence | Slow coordinated bursts, group related reports for triage, preserve independent reporters, and require evidence-led disposition. |
-| Private evidence leaks | Broad admin payloads, content copied into logs/analytics, or moderators browse unrelated cases | Disable the affected projection, preserve minimal incident evidence, rotate access where needed, and complete privacy/security response. |
-| Automation silently becomes judge | Durable sanctions lack human actor/reason or reversal rate rises | Stop automated sanctions, quarantine only where approved, and return cases to human review. |
-| Community moderator overreach | Cross-community actions, owner conflicts, unexplained removals | Revoke scoped capability, restore reversible state, audit events, and escalate to the site policy owner. |
-| Queue outruns staffing | Oldest-case age or urgent backlog exceeds the approved bound | Pause public-community/invite growth, narrow report scope honestly, and add trained capacity before resuming. |
-| Reporter feedback exposes target details | Status text reveals identity, content, or exact sanction | Reduce to allowlisted coarse outcomes and review every projection/notification. |
-| Retention becomes indefinite | Closed cases and copied evidence exceed their approved expiry | Stop new copying, run tested expiry/deletion, and require explicit hold authority for exceptions. |
-| Safety UX excludes people under stress | Report/block flow fails keyboard, screen reader, language, low bandwidth, or content-gone paths | Hold release and repair the complete journey through the accessibility/language contract. |
+| Risk                                     | Early signal                                                                                    | Response                                                                                                                                 |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Report tool becomes a weapon             | Bursts against one target/community or decisions track volume rather than evidence              | Slow coordinated bursts, group related reports for triage, preserve independent reporters, and require evidence-led disposition.         |
+| Private evidence leaks                   | Broad admin payloads, content copied into logs/analytics, or moderators browse unrelated cases  | Disable the affected projection, preserve minimal incident evidence, rotate access where needed, and complete privacy/security response. |
+| Automation silently becomes judge        | Durable sanctions lack human actor/reason or reversal rate rises                                | Stop automated sanctions, quarantine only where approved, and return cases to human review.                                              |
+| Community moderator overreach            | Cross-community actions, owner conflicts, unexplained removals                                  | Revoke scoped capability, restore reversible state, audit events, and escalate to the site policy owner.                                 |
+| Queue outruns staffing                   | Oldest-case age or urgent backlog exceeds the approved bound                                    | Pause public-community/invite growth, narrow report scope honestly, and add trained capacity before resuming.                            |
+| Reporter feedback exposes target details | Status text reveals identity, content, or exact sanction                                        | Reduce to allowlisted coarse outcomes and review every projection/notification.                                                          |
+| Retention becomes indefinite             | Closed cases and copied evidence exceed their approved expiry                                   | Stop new copying, run tested expiry/deletion, and require explicit hold authority for exceptions.                                        |
+| Safety UX excludes people under stress   | Report/block flow fails keyboard, screen reader, language, low bandwidth, or content-gone paths | Hold release and repair the complete journey through the accessibility/language contract.                                                |
 
 ## Stop conditions
 

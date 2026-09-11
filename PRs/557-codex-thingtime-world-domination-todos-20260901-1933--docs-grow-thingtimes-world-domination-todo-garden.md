@@ -18,6 +18,43 @@ required sequence:
 The branch is intentionally cumulative. It does not merge itself, implement
 the product work, or treat a plausible idea as an approved decision.
 
+## 2026-09-12 — relationship agency and consentful connection
+
+This run grounds the garden in Thingtime's shipped one-way follows, mutual
+friend request/accept lifecycle, accepted-friend ACL audiences, public
+connection counts/lists, private pending inbox, Messenger request states,
+memberships, mutes, and notifications while refusing to treat any relationship
+as identity proof, trust, safety, private access, collaboration authority, or
+an engagement objective. It adds:
+
+- `NOTES/relationship-agency-and-consentful-connection-baseline.md`, a dated
+  evidence ledger and vocabulary for follow, request, friendship, circle,
+  membership, mute, remove, block, and relationship receipt;
+- `PLAN/relationship-agency-and-consentful-connection-roadmap.md`, a gated path
+  from an approved relationship charter and surface-effects matrix through
+  fresh versioned transitions, dependable stopping, private inspection,
+  remedies, and one bounded adult pilot; and
+- `TODO/claude-todo/41-relationship-agency-and-consentful-connection.md`, an
+  execution epic with owner decisions, capability obligations, acceptance
+  criteria, stop conditions, and a concrete first decision packet.
+
+The recommended experiment uses two approved adult test accounts with
+synthetic profiles and one synthetic friends-only Thing. It previews and
+exercises request, decline, cooldown, resend, accept, crossed request,
+idempotent repeat, unfriend, account switch, fresh ACL revocation, stale-client
+and cache convergence, export/deletion truth, and an owner-private
+content-minimal receipt. Account block remains separately gated on TODO 26's
+approved safety semantics.
+
+Contact upload, relationship inference/import, recommendations, public graph
+expansion, advertising, graph analytics, AI personalization/training, minors,
+institutions, sensitive contexts, dating, federation, and relationship-based
+identity/trust/safety claims remain excluded. The theme is linked from the
+NOTES, PLAN, main TODO, and Claude TODO indexes, plus the ethical-adoption
+baseline, trustworthy-adoption roadmap, TODO 22, and its adjacent agency
+boundaries. No runtime, API, schema, ACL, relationship, Messenger, moderation,
+notification, search, cache, analytics, or production behavior changed.
+
 ## 2026-09-11 evening — remix agency and responsible reuse
 
 This run grounds the garden in Thingtime's newly merged private composition

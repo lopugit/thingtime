@@ -60,6 +60,11 @@ independence, source-update notices, and reuse disputes. This roadmap owns
 shared-artifact invitations, roles, proposals, conflicts, and departure; a
 fork does not create collaborative authority over either artifact.
 
+The [relationship agency and consentful connection roadmap](./relationship-agency-and-consentful-connection-roadmap.md)
+owns follow/friend state, cross-surface effects, public/private graph exposure,
+and stopping. This roadmap owns artifact-specific roles and contributions; a
+friendship, follow, membership, or block never silently changes edit authority.
+
 ## Milestone C0 — Approve the collaboration charter
 
 **Outcome:** owners approve the exact human and product contract before schema

@@ -76,6 +76,10 @@ their separate need, threat model, governance, and evidence are approved.
 - [TODO 34](../TODO/claude-todo/34-collaboration-agency-and-shared-stewardship.md)
   owns artifact roles and contribution authority. A profile or claim grants no
   collaboration power.
+- [TODO 41](../TODO/claude-todo/41-relationship-agency-and-consentful-connection.md)
+  owns follow/friend states, relationship effects, public/private graph
+  boundaries, stopping, and receipts. A relationship is not identity proof,
+  assurance, trust, safety, endorsement, or authorization.
 
 ## Milestone I0 — Approve the identity charter
 
@@ -230,14 +234,14 @@ technical and human failure is visible, remediable, and included in the report.
 
 ## Measure contract
 
-| Question | Candidate evidence | Guardrail |
-| --- | --- | --- |
-| Is disclosure understood? | Correct predictions for owner and anonymous projections before action. | Opening a preview is not comprehension. |
-| Is product truth exact? | Automated equality between preview and canonical live projectors. | No copied visibility tables in UI code. |
-| Can people recover? | Correction, revoke, session-stop, report, and support exercises reach expected state. | Do not expose protected identifiers to explain errors. |
-| Is context separation preserved? | Adversarial payload/cache/link inspection finds no unapproved correlatable value. | A different display label is not unlinkability. |
-| Are assurance claims bounded? | People separately explain authenticator, proofing, issuer claim, role, and authorization. | Never infer correctness, safety, or authority from a badge. |
-| Is the journey inclusive? | Complete approved keyboard, touch, screen-reader, zoom, language, device, network, and error paths pass. | One aggregate score cannot erase a blocked profile. |
+| Question                         | Candidate evidence                                                                                       | Guardrail                                                   |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Is disclosure understood?        | Correct predictions for owner and anonymous projections before action.                                   | Opening a preview is not comprehension.                     |
+| Is product truth exact?          | Automated equality between preview and canonical live projectors.                                        | No copied visibility tables in UI code.                     |
+| Can people recover?              | Correction, revoke, session-stop, report, and support exercises reach expected state.                    | Do not expose protected identifiers to explain errors.      |
+| Is context separation preserved? | Adversarial payload/cache/link inspection finds no unapproved correlatable value.                        | A different display label is not unlinkability.             |
+| Are assurance claims bounded?    | People separately explain authenticator, proofing, issuer claim, role, and authorization.                | Never infer correctness, safety, or authority from a badge. |
+| Is the journey inclusive?        | Complete approved keyboard, touch, screen-reader, zoom, language, device, network, and error paths pass. | One aggregate score cannot erase a blocked profile.         |
 
 ## Stop conditions
 

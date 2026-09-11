@@ -126,6 +126,12 @@ experiment by itself.
   Adoption reporting cannot treat readability, fork success, copy count,
   remix depth, publication, or revenue as permission, creator benefit,
   independence, originality, usefulness, or a completed outcome.
+- [TODO 41](./41-relationship-agency-and-consentful-connection.md) owns
+  relationship states and cross-surface effects, current-state transitions,
+  stopping, public/private graph boundaries, receipts, and remedies. Adoption
+  reporting cannot treat requests, accepts, graph size, messages, invitations,
+  or relationship retention as consent, trust, safety, usefulness, or a
+  completed outcome.
 - Open PRs are evidence of active work, not dependencies that may be assumed
   merged. Recheck their head, base, review, CI, preview, and shipped behavior
   immediately before implementation.

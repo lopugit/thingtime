@@ -28,6 +28,7 @@ actionable item in [`../TODO/`](../TODO/TODO.md) when it is ready to execute.
 | [Search and discovery agency baseline](./search-and-discovery-agency-baseline.md)                                                     | Evidence on ACL-aware retrieval, query privacy, multi-rail semantics, ranking explanations, approximation, fair influence, and one private synthetic pilot          | 2026-09-10    |
 | [Recording agency and intimate-data stewardship baseline](./recording-agency-and-intimate-data-stewardship-baseline.md)               | Evidence on owner-private recording routes, represented people, audio/transcript/derivative lifecycles, correction, deletion, and one personal-device pilot         | 2026-09-11    |
 | [Remix agency and responsible reuse baseline](./remix-agency-and-responsible-reuse-baseline.md)                                       | Evidence on private composition copies, exact dependency/version plans, reuse terms, attribution, lineage, independence, updates, disputes, and one synthetic pilot | 2026-09-11    |
+| [Relationship agency and consentful connection baseline](./relationship-agency-and-consentful-connection-baseline.md)                 | Evidence on follows, mutual friendship, ACL audiences, public graph exposure, stopping, block gaps, transition receipts, and one two-account pilot                  | 2026-09-12    |
 
 ## Conventions
 

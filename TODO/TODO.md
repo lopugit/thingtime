@@ -619,3 +619,22 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     Public or commercial remixing, real creator work, payments, rankings,
     automatic updates, remote deletion, AI use, training, minors, institutions,
     sensitive domains, and legal or ownership claims remain separately gated.
+
+41. **🤝 Make relationship agency and consentful connection a product contract.**
+
+    Preserve Thingtime's protected one-way follows, mutual friend-request
+    handshake, home-pinned relationship identity, accepted-friend ACL audience,
+    owner-private pending inbox, Messenger request states, and optimistic UI
+    while making each state and its cross-surface effects legible. Start only
+    with two approved adult test accounts, synthetic profiles, and one synthetic
+    friends-only Thing; preview and exercise request, decline, cooldown, resend,
+    accept, crossed request, idempotent repeat, unfriend, account switch, fresh
+    ACL revocation, cache convergence, and truthful transition receipts. Execute
+    `claude-todo/41-relationship-agency-and-consentful-connection.md` only after
+    qualified owners approve the relationship charter, state/effects matrix,
+    public-list policy, stopping behavior, retention/remedy paths,
+    accessibility profiles, accountable owners, and manual stop authority.
+    Account block remains gated on TODO 26. Contact upload, inferred or imported
+    graphs, recommendations, public graph expansion, analytics, advertising, AI
+    use, minors, institutions, sensitive contexts, and relationship-based
+    identity, trust, safety, or authority claims remain separately gated.

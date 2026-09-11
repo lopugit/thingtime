@@ -76,6 +76,11 @@ contract at a time.
 8. **No attention surveillance.** Evaluation measures fidelity,
    comprehension, accessibility, recovery, and minimisation—not engagement.
 
+The [relationship agency and consentful connection roadmap](./relationship-agency-and-consentful-connection-roadmap.md)
+owns relationship states, who may act, and the effects of stopping. This
+roadmap owns the separate event, history, channel, presentation, read, outcome,
+and remedy evidence for any request, acceptance, removal, or block notice.
+
 ## Candidate contract
 
 Each registered event family should declare:
@@ -246,15 +251,15 @@ bounded data lifecycle, tested remedy, and safe disable path.
 
 ## Success measures
 
-| Measure | Proposed definition | Required guardrail |
-| --- | --- | --- |
-| Semantic accuracy | User-facing lifecycle labels match deterministic evidence in every fixture. | Unknown or absent evidence is never scored as success. |
-| State comprehension | Pilot participants distinguish recorded, presented, read, acknowledged, and outcome. | No optimization for faster acknowledgement or more opens. |
-| Recovery completion | People reach canonical state or remedy after stale/failure scenarios. | Notifications never replace the canonical product record. |
-| Preference fidelity | History and each channel follow their separately approved choices. | Explicit old choices survive migration and account switching. |
-| Accessibility completeness | Approved complete journeys pass all named interaction/language profiles. | Automated checks alone cannot satisfy the gate. |
-| Data minimisation | Stored fields and retention match the approved purpose and deletion proof. | Provider/log/metric data cannot become a shadow history. |
-| Operational truth | Attempt, acceptance, receipt, expiry, and failure totals reconcile within the approved envelope. | Aggregate operations cannot infer individual attention. |
+| Measure                    | Proposed definition                                                                              | Required guardrail                                            |
+| -------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
+| Semantic accuracy          | User-facing lifecycle labels match deterministic evidence in every fixture.                      | Unknown or absent evidence is never scored as success.        |
+| State comprehension        | Pilot participants distinguish recorded, presented, read, acknowledged, and outcome.             | No optimization for faster acknowledgement or more opens.     |
+| Recovery completion        | People reach canonical state or remedy after stale/failure scenarios.                            | Notifications never replace the canonical product record.     |
+| Preference fidelity        | History and each channel follow their separately approved choices.                               | Explicit old choices survive migration and account switching. |
+| Accessibility completeness | Approved complete journeys pass all named interaction/language profiles.                         | Automated checks alone cannot satisfy the gate.               |
+| Data minimisation          | Stored fields and retention match the approved purpose and deletion proof.                       | Provider/log/metric data cannot become a shadow history.      |
+| Operational truth          | Attempt, acceptance, receipt, expiry, and failure totals reconcile within the approved envelope. | Aggregate operations cannot infer individual attention.       |
 
 ## Stop conditions
 

@@ -99,6 +99,12 @@ Approve exact fields and versions before implementation. A response may need:
 The first pilot should return this as ephemeral response metadata. It should
 not persist query text or result identifiers server-side.
 
+The [relationship agency and consentful connection roadmap](./relationship-agency-and-consentful-connection-roadmap.md)
+owns follow/friend state, public/private graph policy, stopping, and block
+effects. This roadmap owns whether any approved relationship input may affect
+eligibility, matching, ordering, explanations, or recommendations; the first
+pilot remains non-personalized and uses none.
+
 ## Milestone D0 — Approve the discovery charter
 
 **Outcome:** scope, vocabulary, ownership, and forbidden shortcuts are decided.

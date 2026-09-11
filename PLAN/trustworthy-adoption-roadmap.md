@@ -50,6 +50,9 @@
 **Remix-agency dependency:**
 [Remix agency and responsible reuse](./remix-agency-and-responsible-reuse-roadmap.md)
 
+**Relationship-agency dependency:**
+[Relationship agency and consentful connection](./relationship-agency-and-consentful-connection-roadmap.md)
+
 ## Outcome
 
 Make Thingtime easier to discover, understand, trust, use repeatedly, share by
