@@ -31,6 +31,28 @@ of that scope.
 
 ## Evidence
 
+- Nested value menus now offer typed portable clipboard Copy/Cut, JSON/ZIP
+  Download and reviewed Import file. Their one-data-Thing envelope can also
+  enter the normal private Things importer; local import unwraps only explicit
+  value envelopes and directs saved app/file imports to My Things. Ordinary
+  JSON is accepted with the same value validation. Non-JSON values, unsafe
+  keys, cycles, accessors, hidden properties and lossy arrays fail explicitly.
+  Delayed Cut checks the copied value/context again before invoking deletion.
+- Top-level deletion uses the provider's explicit root boundary instead of
+  its ignored empty path; direct nested paths delete their leaf key rather
+  than the entire dotted label. Transfer confirmations use one layer above
+  stacked Lopu notifications, keeping mobile controls unobstructed.
+- Value helper and read-only menu regressions bring the focused Things suite
+  to 91 passing tests. Chrome has verified real nested-value JSON/ZIP downloads
+  and file-picker reimports, type-preserving Copy/Cut/Paste and desktop/mobile
+  bounds plus notification-obstruction hit-tests. Full-project typecheck has
+  baseline failures; no diagnostics remain in the new value helper/dialog or
+  modified context-menu entry point. Existing Thingtime hook warnings remain.
+- Direct nested-property and array-element Cut were checked through their own
+  editor URLs; siblings and array shape remained intact. The downloaded value
+  ZIP was imported through My Things into a fresh private data Thing, read back
+  through the normal API, then deleted through that same API. Other value
+  fixtures existed only in the isolated browser's local tree.
 - Shared Transfer controls now cover Thing details, component-family pages,
   public webpages and the Builder inspector. An isolated Chrome fixture checked
   real ZIP downloads and OS clipboard envelopes plus Import dialog bounds and
@@ -74,8 +96,8 @@ of that scope.
 Complete all file/gallery forms: linked galleries currently fail explicitly
 rather than silently disappearing. Split-template imported media now has its
 rebinding adapter, but real stored-file UI proof needs an upload-enabled test
-account. Builder/component/detail Transfer controls are wired; generic nested
-Thingtime-value menus still need Download/import integration. Verify stored file bytes through
+account. Builder/component/detail and generic nested-value controls are wired.
+Verify remaining stored file bytes through
 the real import UI, account transitions, partial failures and desktop/mobile
 dynamic states. Verify current-head CI and preview independently of local tests.
 

@@ -18,6 +18,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Add portable JSON/ZIP Download and reviewed file import to nested Thingtime
+  value menus. Copy/Cut use typed envelopes, preserve numeric strings, and
+  refuse lossy values; repair top-level and direct-path deletion for Cut.
+  Keep transfer dialogs above stacked success notifications on mobile.
+  [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-11
+
 - Add shared Transfer controls to Builder, component-family pages, Thing
   details and public webpages. Keep transfer menus/dialogs above the Builder
   inspector and require saving dirty Builder drafts before export. Verify

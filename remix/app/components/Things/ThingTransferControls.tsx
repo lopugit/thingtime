@@ -7,7 +7,7 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { bundleFromPlan, writeTransferClipboard } from '~/utils/thingTransfer/browser';
 import { ThingExportDialog } from './ThingExportDialog';
 import { ThingImportDialog } from './ThingImportDialog';
-import { DRAWER_Z } from '../Nav/Drawer/useDrawer';
+import { TRANSFER_MENU_Z } from './transferLayers';
 
 type Props = { id?: string | null; linkKey?: string; disabledReason?: string };
 
@@ -48,7 +48,7 @@ const TransferControls = ({ id, linkKey, disabledReason, ownerId }: Props & { ow
         between pointer-down and pointer-up, losing the menu item's click. */}
     <Menu isLazy strategy="fixed" placement="bottom-end">
       <MenuButton as={Button} size="xs" variant="outline" data-testid="thing-transfer-menu">{copying ? 'Copying…' : 'Transfer'}</MenuButton>
-      <Portal><MenuList zIndex={DRAWER_Z + 22} maxWidth="calc(100vw - 32px)" minWidth="min(240px, calc(100vw - 32px))">
+      <Portal><MenuList zIndex={TRANSFER_MENU_Z} maxWidth="calc(100vw - 32px)" minWidth="min(240px, calc(100vw - 32px))">
         <MenuItem onClick={copy} isDisabled={!id || !!disabledReason || copying}>Copy to clipboard</MenuItem>
         <MenuItem onClick={() => setExportOpen(true)} isDisabled={!id || !!disabledReason}>Download…</MenuItem>
         {disabledReason && <Text fontSize="xs" px={3} py={2} whiteSpace="normal">{disabledReason}</Text>}

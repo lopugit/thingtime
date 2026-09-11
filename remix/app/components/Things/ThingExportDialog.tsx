@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { DRAWER_Z } from '../Nav/Drawer/useDrawer';
+import { TRANSFER_DIALOG_Z } from './transferLayers';
 import { Button, Checkbox, Flex, Modal, ModalBody, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalOverlay, Select, Text } from '@chakra-ui/react';
 import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
@@ -32,8 +32,8 @@ export const ThingExportDialog = ({ ids, linkKey, onClose }: { ids: string[]; li
     } finally { if (!controller.signal.aborted) { setBusy(false); operation.current = null; } }
   };
   return <Modal isOpen onClose={onClose} size="lg" scrollBehavior="inside">
-    <ModalOverlay zIndex={DRAWER_Z + 20} />
-    <ModalContent containerProps={{ zIndex: DRAWER_Z + 21 }} width="calc(100% - 48px)" marginX={0} maxHeight="calc(100dvh - 48px)">
+    <ModalOverlay zIndex={TRANSFER_DIALOG_Z - 1} />
+    <ModalContent containerProps={{ zIndex: TRANSFER_DIALOG_Z }} width="calc(100% - 48px)" marginX={0} maxHeight="calc(100dvh - 48px)">
       <ModalHeader>Download {ids.length === 1 ? 'Thing' : `${ids.length} Things`}</ModalHeader>
       <ModalCloseButton />
       <ModalBody><Flex direction="column" gap={4}>
