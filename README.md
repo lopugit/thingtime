@@ -3085,3 +3085,7 @@ Never embed credentials in a menu, action request, source fixture or public docs
 Local menu QA uses this worktree's deterministic port (currently
 `http://localhost:16250`). Tailscale/Funnel was unavailable during verification:
 the local launcher points to a missing Tailscale app; no public mapping was changed.
+
+### Saved AI waterfalls
+
+Settings → AI waterfalls stores private named model/endpoint orders using the existing Things database and authenticated API. No extra collection, migration, or secret is required. Configure provider keys or personal Secure Vault connections as described in [the waterfall setup](docs/ai-waterfall-selector.md). Forks must deploy the registered `api.ai-waterfalls` 1.0.0 contract before clients can save a library.
