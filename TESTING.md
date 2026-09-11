@@ -6598,3 +6598,11 @@ approval; `access.test.ts` — the reservation matrix) and
   plus `node --test .github/scripts/feature-stack-waterfall.test.mjs`.
   Confirm a real text conflict preserves exact merge parents and touches only
   conflict paths; binary/oversized conflicts fail without publication.
+
+### Saved AI waterfall library
+
+- In Settings → AI waterfalls, create a mixed-provider order, save, reload, edit and reorder; verify persistence.
+- In a feature selector, select an existing config, Save as new, then edit and Save & apply; verify the returned snapshot and both library records. Cancel must preserve the feature value. Later library edits must not change that value.
+- Open the same saved config in two editors. Save one, then save the stale one: show a conflict, retain the unsaved draft, and refresh the library for reopening.
+- Anonymous requests return 401; changed-account headers return 409; another owner cannot read or replace a record. Reject extra secret/URL fields and incompatible endpoint selections.
+- At desktop and mobile widths, scroll Settings and the open dialog top to bottom; verify nested controls, fixed footer, focus, and no horizontal overflow.

@@ -3049,3 +3049,7 @@ This feature's local validation worktree uses `http://localhost:13310`
 Tailscale/Funnel is not available on the validation host: its configured CLI
 wrapper points at a missing Tailscale application. No public dev mapping was
 created or changed.
+
+### Saved AI waterfalls
+
+Settings → AI waterfalls stores private named model/endpoint orders using the existing Things database and authenticated API. No extra collection, migration, or secret is required. Configure provider keys or personal Secure Vault connections as described in [the waterfall setup](docs/ai-waterfall-selector.md). Forks must deploy the registered `api.ai-waterfalls` 1.0.0 contract before clients can save a library.

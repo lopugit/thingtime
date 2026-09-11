@@ -774,6 +774,28 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		notes: ['Vercel cron runs the production bootstrap. Preview and non-Vercel deployments need an equivalent trusted deploy hook or scheduler to join and keep renewing their lease.']
 	}),
 	endpoint({
+		id: 'ai-waterfalls',
+		group: 'ai',
+		title: 'Saved AI waterfalls',
+		featureVersion: '1.0.0',
+		endpoint: '/api/v1/ai/waterfalls',
+		methods: ['GET', 'POST'],
+		summary: 'List, create and update private named AI model/endpoint configurations.',
+		detail:
+			'Requires a non-temporary authenticated account and x-thingtime-expected-user matching its ID (409 on account change). GET returns up to 200 owned waterfalls ordered by updatedAt descending. POST accepts {name,config,id?,updatedAt?}; id plus the last returned updatedAt updates an owned record with compare-and-set (409 on stale edits), otherwise creates a copy. Config is version 1 with up to 256 distinct endpointId/modelId/effort/speed entries. Endpoint credentials are never accepted or returned. Personal endpoint references must belong to the caller. Library edits do not change already-applied feature snapshots. The legacy default entry is allowed in the library, but each consuming feature validates compatibility before applying. Data uses separate owner-private data Things with crystal.systemType ai-waterfall-v1, normal storage accounting and existing indexes. Maximum 160 KiB request body. No new secrets or migration required.',
+		auth: { mode: 'session', description: 'Signed-in account; library is owner-only.' },
+		steps: [
+			'Negotiate api.ai-waterfalls 1.0.0.',
+			'Send the current user ID in x-thingtime-expected-user.',
+			'GET the library; POST a named config to save or update it.'
+		],
+		requestExamples: [],
+		responseExamples: [
+			{ status: 200, description: 'Owned library.', body: { ok: true, waterfalls: [] } },
+			{ status: 409, description: 'Account changed or edit is stale.', body: { ok: false, error: 'Reload before saving.' } }
+		]
+	}),
+	endpoint({
 		id: 'admin-peers',
 		group: 'admin',
 		title: 'Deployment peer explorer',

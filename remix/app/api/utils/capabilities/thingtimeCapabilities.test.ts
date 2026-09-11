@@ -221,3 +221,8 @@ test('native recording uploads negotiate durable private Things before sending b
     assert.equal(capabilitySatisfies('2.0.0', '1.2.0'), false);
   }
 });
+
+test('saved AI waterfall library is an explicit versioned capability', () => {
+	const manifest = thingtimeCapabilityManifest('https://thingtime.com');
+	assert.equal(manifest.features['api.ai-waterfalls']?.version, '1.0.0');
+});

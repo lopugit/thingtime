@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button, Flex, Text } from '@chakra-ui/react';
-import { AiWaterfallSelector } from '~/components/AI/AiWaterfallSelector';
+import { SavedAiWaterfallSelector } from '~/components/AI/SavedAiWaterfallSelector';
 import {
 	AI_WORKFLOW_BASE_MODELS,
 	normalizePrConflictResolverModelWaterfall,
@@ -14,7 +14,7 @@ import { useLopu } from '~/components/Lopu/useLopu';
 const CACHE_KEY = 'tt-admin-pr-conflict-resolver-model-waterfall-v1';
 const cached = () => normalizePrConflictResolverModelWaterfall(readLocalCache(CACHE_KEY));
 const endpoints = (['anthropic', 'openai', 'default'] as const).map((provider) => ({
-	id: provider,
+	id: provider === 'default' ? 'default' : `server:${provider}`,
 	label: provider === 'default' ? 'Provider default' : provider === 'anthropic' ? 'Anthropic' : 'OpenAI',
 	models: AI_WORKFLOW_BASE_MODELS.filter((model) => model.provider === provider)
 }));
@@ -22,7 +22,12 @@ const asConfig = (waterfall: string[]): AiWaterfallConfig => ({
 	version: 1,
 	entries: waterfall.map((id) => {
 		const choice = parseAiWorkflowModelOptionId(id)!;
-		return { endpointId: choice.provider, modelId: choice.model, effort: choice.effort, speed: choice.speed };
+		return {
+			endpointId: choice.provider === 'default' ? 'default' : `server:${choice.provider}`,
+			modelId: choice.model,
+			effort: choice.effort,
+			speed: choice.speed
+		};
 	})
 });
 
@@ -99,7 +104,7 @@ export const PRConflictResolverModelWaterfallEditor = () => {
 				</Button>
 			</Flex>
 			<Text fontSize="xs">{dirty ? 'Unsaved changes' : refreshFailed ? 'Showing last-known order; reopen this page to refresh.' : 'Saved'}</Text>
-			<AiWaterfallSelector
+			<SavedAiWaterfallSelector
 				isOpen={open}
 				value={asConfig(waterfall)}
 				endpoints={endpoints}

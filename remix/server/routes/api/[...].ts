@@ -65,6 +65,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/algorithms/update': () => import('../../../app/routes/api/v1/algorithms/update/_update'),
   'v1/ai/connections': () => import('../../../app/routes/api/v1/ai/connections/_connections'),
   'v1/ai/models': () => import('../../../app/routes/api/v1/ai/models/_models'),
+	'v1/ai/waterfalls': () => import('../../../app/routes/api/v1/ai/waterfalls/_waterfalls'),
   'v1/ai/complete': () => import('../../../app/routes/api/v1/ai/complete/_complete'),
   'v1/app-data': () => import('../../../app/routes/api/v1/app-data/_app-data'),
   'v1/app-data/delete': () => import('../../../app/routes/api/v1/app-data/delete/_delete'),
