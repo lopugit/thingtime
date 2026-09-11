@@ -9,6 +9,7 @@ test('every category has a unique reloadable URL; profile is default', () => {
 	for (const tab of SETTINGS_TABS) assert.equal(resolveSettingsTab(settingsTabHref(tab.id).split('/').pop()), tab.id);
 });
 test('existing section bookmarks select the section’s category', () => {
+	assert.equal(resolveSettingsTab(null, '#ai-waterfalls'), 'ai-waterfalls');
 	assert.equal(resolveSettingsTab(null, '#secure-vault'), 'security');
 	assert.equal(resolveSettingsTab(null, '#lopu'), 'lopu');
 	assert.equal(resolveSettingsTab(null, '#lopu-credits'), 'lopu');

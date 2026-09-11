@@ -15,6 +15,8 @@ export type ThingContextAction = {
 	// semantic verb consumers switch on ('change-type', 'copy', …); several
 	// actions can share a command (e.g. every type option is 'change-type')
 	command?: string;
+	// Navigational destinations render as real anchors; mutations stay buttons.
+	href?: string;
 	// arbitrary data delivered with onAction (e.g. the type or template value)
 	payload?: unknown;
 	label: string;

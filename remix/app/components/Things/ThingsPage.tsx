@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { transferIntent } from '~/utils/thingTransfer/intent';
+import { readThingsLocation, writeThingsLocation, type ThingsLocationState } from './thingsLocation';
 
 import { Box, Button, Flex, Input, Menu, MenuButton, MenuItem, MenuList, Portal, Text } from '@chakra-ui/react';
 import { ArrowUpDown, Columns3, Eye, LayoutGrid, Layers, Plus, Rows3, Search as SearchIcon, Tag, X } from 'lucide-react';
@@ -177,17 +178,42 @@ export const ThingsPage = () => {
   const cacheKey = thingsCacheKey(user?.id);
   const cached = useMemo(() => readLocalCache<ThingsCache>(cacheKey), [cacheKey]);
 
-  const [view, setView] = useState<ThingsView>(cached?.view || 'grid');
-  const [displayMode, setDisplayMode] = useState<ThingsDisplayMode>(cached?.displayMode || 'name');
-  const [sort, setSort] = useState<ThingsSort>(cached?.sort || 'newest');
-  const [groupBy, setGroupBy] = useState<ThingsGroupBy>(cached?.groupBy || 'none');
-  const [kindFilter, setKindFilter] = useState<ThingsKindFilter>('all');
+  const locationState = readThingsLocation(searchParams, cached);
+  const { q: urlQ, view, display: displayMode, sort, group: groupBy, kind: kindFilter } = locationState;
+  // Router navigation may transition asynchronously; the input itself must
+  // update synchronously so fast typing/paste cannot lose characters.
+  const [q, setQueryDraft] = useState(urlQ);
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (new URLSearchParams(window.location.search).get('q') || '') !== urlQ) return;
+    setQueryDraft(urlQ);
+  }, [urlQ]);
+  const updateLocation = useCallback((patch: Partial<ThingsLocationState>, replace = false) => {
+    setSearchParams(previous => {
+      // A second click can arrive before the first navigation commits React
+      // state. Merge against the latest browser URL, not that stale render.
+      const current = typeof window === 'undefined' ? previous : new URLSearchParams(window.location.search);
+      return writeThingsLocation(current, { ...readThingsLocation(current, cached), ...patch });
+    },
+      { replace, preventScrollReset: true });
+  }, [setSearchParams, cached]);
+  // Normalize missing preferences once per entry, not on every keystroke. The
+  // URL remains the source of truth on POP/back/forward and shared links.
+  useEffect(() => {
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).toString() !== searchParams.toString()) return;
+    const next = writeThingsLocation(searchParams, readThingsLocation(searchParams, cached));
+    if (next.toString() !== searchParams.toString()) setSearchParams(next, { replace: true, preventScrollReset: true });
+  }, [searchParams, setSearchParams, cached]);
+  const setQ = useCallback((value: string) => { setQueryDraft(value); updateLocation({ q: value }, true); }, [updateLocation]);
+  const setView = useCallback((value: ThingsView) => updateLocation({ view: value }), [updateLocation]);
+  const setDisplayMode = useCallback((value: ThingsDisplayMode) => updateLocation({ display: value }), [updateLocation]);
+  const setSort = useCallback((value: ThingsSort) => updateLocation({ sort: value }), [updateLocation]);
+  const setGroupBy = useCallback((value: ThingsGroupBy) => updateLocation({ group: value }), [updateLocation]);
+  const setKindFilter = useCallback((value: ThingsKindFilter) => updateLocation({ kind: value }), [updateLocation]);
   const [folderPages, setFolderPages] = useState<Record<string, ThingsThing[]>>(cached?.folders || {});
   const [cursors, setCursors] = useState<Record<string, string | null>>({});
   const [loadingKeys, setLoadingKeys] = useState<Set<string>>(new Set());
   const [folderMeta, setFolderMeta] = useState<NonNullable<ThingsCache['folderMeta']>>(cached?.folderMeta || {});
 
-  const [q, setQ] = useState('');
   const [searchResults, setSearchResults] = useState<ThingsThing[] | null>(null);
   const [searching, setSearching] = useState(false);
   // bumped after mutations (duplicate) so an active search re-fetches and the
@@ -217,6 +243,16 @@ export const ThingsPage = () => {
   const [menuThing, setMenuThing] = useState<ThingsThing | null>(null);
 
   const [newFolderOpen, setNewFolderOpen] = useState(false);
+  useEffect(() => {
+    const action = searchParams.get('widget');
+    if (!user || (action !== 'search' && action !== 'newFolder')) return;
+    if (action === 'newFolder') setNewFolderOpen(true);
+    else requestAnimationFrame(() => document.getElementById('thingtime-things-search')?.focus());
+    const next = new URLSearchParams(searchParams);
+    next.delete('widget');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, user]);
+
   const [renameThing, setRenameThing] = useState<ThingsThing | null>(null);
   const [moveOpen, setMoveOpen] = useState(false);
   const [shareThings, setShareThings] = useState<ThingsThing[]>([]);
@@ -559,12 +595,12 @@ export const ThingsPage = () => {
     (targetFolderId: string | null) => {
       setSelection(new Set());
       anchorRef.current = null;
-      setQ('');
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
           if (targetFolderId) next.set('folder', targetFolderId);
           else next.delete('folder');
+          next.delete('q');
           next.delete('preview');
 					next.delete('device');
           return next;
@@ -998,7 +1034,14 @@ export const ThingsPage = () => {
         case 'preview':
           setPreviewThing(thing);
           break;
+        case 'inspect':
+          navigate(`/thing/${encodeURIComponent(thing.id)}`);
+          break;
+        case 'paste-into':
+          pasteClipboardTo(thing.id);
+          break;
         case 'rename':
+        case 'edit':
           setRenameThing(thing);
           break;
         case 'move':
@@ -1033,7 +1076,7 @@ export const ThingsPage = () => {
           break;
       }
     },
-    [copyLink, copyToClipboard, duplicateThings, openThing, selectedThings, selection, sendRecording]
+    [copyLink, copyToClipboard, duplicateThings, openThing, selectedThings, selection, sendRecording, navigate, pasteClipboardTo]
   );
 
   // ------------------------------------------------------------------ drag & drop
@@ -1122,8 +1165,8 @@ export const ThingsPage = () => {
 
   const itemMenuModel = useMemo(
     () =>
-			menuThing ? buildThingsItemMenu({ thing: menuThing, actCount: menuActCount, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id }) : { sections: [] },
-    [menuThing, menuActCount, clipboard?.ids.length, user?.id]
+			menuThing ? buildThingsItemMenu({ thing: menuThing, actCount: menuActCount, clipboardCount: clipboard?.ids.length || 0, ownerId: user?.id, locationSearch: searchParams.toString() }) : { sections: [] },
+    [menuThing, menuActCount, clipboard?.ids.length, user?.id, searchParams]
   );
 
   const onItemMenuAction = useCallback(
@@ -1137,16 +1180,19 @@ export const ThingsPage = () => {
           onItemAction(menuThing, 'send-to-lopu');
           break;
         case 'open':
-          // thingsMenuModel labels this "Preview" for every kind without a
-          // folder/post entry, so it stays the quick-look here; the tile's
-          // title link, double-click and the kebab "Open" reach the page
-          if (isFolder(menuThing) || menuThing.thingtime.includes('post')) openThing(menuThing);
-          else setPreviewThing(menuThing);
+          openThing(menuThing);
+          break;
+        case 'preview':
+          setPreviewThing(menuThing);
+          break;
+        case 'inspect':
+          navigate(`/thing/${encodeURIComponent(menuThing.id)}`);
           break;
         case 'copy-link':
           copyLink(menuThing);
           break;
         case 'rename':
+        case 'edit':
           onItemAction(menuThing, 'rename');
           break;
         case 'move':
@@ -1223,7 +1269,7 @@ export const ThingsPage = () => {
           break;
       }
     },
-    [folderId, pasteClipboard, selectAll]
+    [folderId, pasteClipboard, selectAll, setSort, setGroupBy, setView, setDisplayMode]
   );
 
   // context menus close on any outside press (their surfaces portal to <body>,
@@ -1307,6 +1353,8 @@ export const ThingsPage = () => {
   }
 
   const itemHandlers: ThingsItemHandlers = {
+    locationSearch: searchParams.toString(),
+    clipboardCount: clipboard?.ids.length || 0,
     ownerId: user?.id,
     selected: selection,
     cutIds,
@@ -1429,7 +1477,8 @@ export const ThingsPage = () => {
               height="100%"
               onChange={(event) => setQ(event.target.value)}
               padding={0}
-							placeholder="Search all your things and computers…"
+							id="thingtime-things-search"
+                            placeholder="Search all your things and computers…"
               value={q}
               variant="unstyled"
             />

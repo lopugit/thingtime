@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { WIDGET_CLIENT_ID, widgetClientSeed } from './widgetClient';
 
 import { listLinkedAppClientIds, userCanManageApp } from '../accounts/accountLinks';
 // Embed apps are auth-plane ("Login with Thingtime" clientId → allowlist
@@ -180,6 +181,15 @@ export const appIsRevoked = (appDoc: any): boolean => !!appDoc?.crystal?.revoked
 export const findAppByClientId = async (clientId: string) => {
   if (typeof clientId !== 'string' || !clientId.trim()) return null;
   const things = await getThingsCollection();
+  if (clientId.trim() === WIDGET_CLIENT_ID) {
+    // Canonical, protected system app record on every deployment. Insert-only:
+    // a later administrator suspension or callback removal stays effective.
+    await things.updateOne(
+      { thingtime: 'app', 'crystal.clientId': WIDGET_CLIENT_ID },
+      { $setOnInsert: widgetClientSeed(COLLECTION_SCHEMA_VERSIONS.things) },
+      { upsert: true }
+    );
+  }
   return things.findOne({ thingtime: 'app', 'crystal.clientId': clientId.trim() });
 };
 

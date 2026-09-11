@@ -1,6 +1,6 @@
 import { json, readJsonBody } from '~/api/http';
 
-import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { getScopedUser } from '~/api/utils/auth/scopedUser';
 import { deleteLopuChat } from '~/api/utils/messenger/lopuChats';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { chatWriteLimitError, requireJsonContentType } from '../_chats';
@@ -9,7 +9,7 @@ import { chatWriteLimitError, requireJsonContentType } from '../_chats';
 // its membership, every message and their reactions in one accounted
 // transaction (bound attachments release their objects first).
 export const action = async ({ request }: { request: Request }) => {
-	const user = await getCurrentUser(request);
+	const user = await getScopedUser(request, 'lopu.chat');
 	if (!user) {
 		return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
 	}

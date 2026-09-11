@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Center, Flex, Image, Text } from '@chakra-ui/react';
 import { useLocation, useMatches, useNavigate } from 'react-router';
+import { isPlainLinkClick } from '~/utils/linkNavigation';
 import { ChevronDown, Search } from 'lucide-react';
 
 import { Icon } from '../../Icon/Icon';
@@ -235,7 +236,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
 		[setSelectedItem, navigate, closesOnClick, dismissAfterNavigate]
 	);
 
-	const onSubItemClick = React.useCallback(
+	const subItemHref = React.useCallback(
 		(item) => {
 			if (item.mode) {
 				// mode items switch the mode for the thing path currently on
@@ -245,15 +246,20 @@ export const DrawerContent = (props: DrawerContentProps) => {
 				const thingPath = onThingRoute ? parseThingPath(pathname) : ROOT_THING_PATH;
 				const nextMode = item.mode === currentMode && item.mode !== 'view' ? 'view' : item.mode;
 
-				navigate(buildThingModeUrl(nextMode, thingPath));
-			} else if (item.to) {
-				navigate(item.to);
+				return buildThingModeUrl(nextMode, thingPath);
 			}
+			return item.to;
+		}, [onThingRoute, pathname]
+	);
+	const onSubItemClick = React.useCallback(
+		(item) => {
+			const href = subItemHref(item);
+			if (href) navigate(href);
 			if (closesOnClick(item.id)) {
 				dismissAfterNavigate();
 			}
 		},
-		[navigate, dismissAfterNavigate, onThingRoute, pathname, closesOnClick]
+		[navigate, dismissAfterNavigate, subItemHref, closesOnClick]
 	);
 
 	const onTopReorder = React.useCallback(
@@ -351,6 +357,8 @@ export const DrawerContent = (props: DrawerContentProps) => {
 
 		return (
 			<Flex
+				as={item.to ? 'a' : 'button'}
+				{...(item.to ? { href: item.to } : { type: 'button' as const })}
 				alignItems="center"
 				columnGap={2}
 				marginX={2}
@@ -361,7 +369,11 @@ export const DrawerContent = (props: DrawerContentProps) => {
 				_hover={{ background: selected ? 'var(--tt-surface-alt, #f5f5f7)' : 'var(--tt-surface-hover, #ececee)' }}
 				transition="background 0.15s ease"
 				cursor="pointer"
-				onClick={() => onTopItemClick(item)}
+				onClick={(event) => {
+					if (!isPlainLinkClick(event)) return;
+					event.preventDefault();
+					onTopItemClick(item);
+				}}
 			>
 				<Icon name={item.icon} size="13px"></Icon>
 				<Text fontSize="sm" fontWeight={selected ? 600 : 400}>
@@ -375,9 +387,12 @@ export const DrawerContent = (props: DrawerContentProps) => {
 
 	const subRow = (item) => {
 		const active = item.mode ? onThingRoute && parseThingMode(pathname) === item.mode : isActivePath(item.to);
+		const href = subItemHref(item);
 
 		return (
 			<Flex
+				as={href ? 'a' : 'button'}
+				{...(href ? { href } : { type: 'button' as const })}
 				alignItems="center"
 				columnGap={2}
 				marginX={2}
@@ -389,7 +404,11 @@ export const DrawerContent = (props: DrawerContentProps) => {
 				_hover={{ background: active ? 'var(--tt-surface-alt, #f5f5f7)' : 'var(--tt-surface-hover, #ececee)' }}
 				transition="background 0.15s ease"
 				cursor="pointer"
-				onClick={() => onSubItemClick(item)}
+				onClick={(event) => {
+					if (!isPlainLinkClick(event)) return;
+					event.preventDefault();
+					onSubItemClick(item);
+				}}
 			>
 				{item.icon && <Icon name={item.icon} size="11px" chakras={{ opacity: 0.85 }}></Icon>}
 				<Text fontSize="xs" fontWeight={active ? 600 : 400}>
@@ -417,8 +436,8 @@ export const DrawerContent = (props: DrawerContentProps) => {
 				paddingBottom="8px"
 			>
 				<Flex
-					as="button"
-					type="button"
+					as="a"
+					href="/"
 					alignItems="center"
 					columnGap={2}
 					minWidth={0}
@@ -430,7 +449,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
 					transition="background 0.15s ease"
 					cursor="pointer"
 					title="Home"
-					onClick={onBrandClick}
+					onClick={(event) => { if (isPlainLinkClick(event)) { event.preventDefault(); onBrandClick(); } }}
 				>
 					<Icon name="unicorn" size="13px"></Icon>
 					<Text fontSize="sm" fontWeight={600} whiteSpace="nowrap">
@@ -438,8 +457,8 @@ export const DrawerContent = (props: DrawerContentProps) => {
 					</Text>
 				</Flex>
 				<Center
-					as="button"
-					type="button"
+					as="a"
+					href="/search"
 					marginLeft="auto"
 					width="30px"
 					height="30px"
@@ -449,7 +468,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
 					transition="background 0.15s ease, opacity 0.15s ease"
 					cursor="pointer"
 					title="Search"
-					onClick={onSearchClick}
+					onClick={(event) => { if (isPlainLinkClick(event)) onSearchClick(event); }}
 				>
 					<Search size={15} strokeWidth={2} />
 				</Center>
@@ -611,17 +630,19 @@ export const DrawerContent = (props: DrawerContentProps) => {
 				transition="background 0.15s ease"
 				cursor="pointer"
 				title={user ? 'Your profile' : 'Log in'}
-				onClick={onAccountRowClick}
 			>
+				<Flex as="a" href={user ? '/profile' : '/login'} align="center" gap={2} flex={1} minWidth={0}
+					onClick={(event) => { if (isPlainLinkClick(event)) { event.preventDefault(); onAccountRowClick(); } }}>
 				<UserAvatarCircle></UserAvatarCircle>
 				{!isMobile && (
 					<Text fontSize="xs" fontWeight={600} noOfLines={1}>
 						{user ? (user.temporary ? LOGIN_TO_CLAIM_LABEL : getUserDisplayName(user)) : 'Log in'}
 					</Text>
 				)}
+				</Flex>
 				<Center
-					as="button"
-					type="button"
+					as="a"
+					href="/settings"
 					marginLeft="auto"
 					width="26px"
 					height="26px"
@@ -632,7 +653,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
 					cursor="pointer"
 					aria-label="Settings"
 					title="Settings"
-					onClick={onSettingsClick}
+					onClick={(event) => { if (isPlainLinkClick(event)) { event.preventDefault(); onSettingsClick(event); } }}
 				>
 					<Icon name="gear" size="11px"></Icon>
 				</Center>
