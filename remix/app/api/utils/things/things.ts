@@ -1,4 +1,5 @@
 import { ownerLibraryMatch } from './ownerLibraryQuery';
+import { moveManagedContent } from './managedPlacement';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { ObjectId, type Binary } from 'mongodb';
@@ -5186,7 +5187,8 @@ const collectFolderTree = async (
 
 export const bulkThings = async (
   viewerInput: string | Viewer,
-  input: BulkThingsInput
+  input: BulkThingsInput,
+  placementDependencies: { collection?: typeof getThingsCollection; moveRecording?: typeof moveManagedContent } = {}
 ): Promise<Fail | { ok: true; op: BulkOp; results: BulkItemResult[]; succeeded: number; failed: number }> => {
   const viewer = asViewer(viewerInput);
   if (!viewer?.id) return fail(401, 'Unauthorized');
@@ -5250,7 +5252,7 @@ export const bulkThings = async (
     );
   };
 
-  const things = await getThingsCollection();
+  const things = await (placementDependencies.collection || getThingsCollection)();
   const results: BulkItemResult[] = [];
   for (const id of ids) {
     if (op === 'delete') {
@@ -5259,6 +5261,20 @@ export const bulkThings = async (
       continue;
     }
     if (op === 'move') {
+      const owned = await things.findOne({ shareId: id, ownerId: viewer.id } as any) as unknown as ThingDoc | null;
+      if (owned?.thingtime?.length === 1 && owned.thingtime[0] === 'attachment') {
+        if (patSandboxBlocks(viewer, owned) || await patVisibilityBlocksDoc(viewer, owned)) {
+          results.push({ id, ok: false, error: 'This token cannot move that recording' });
+          continue;
+        }
+        try {
+          await (placementDependencies.moveRecording || moveManagedContent)(viewer.id, id, folderId, new Date(owned.updatedAt).toISOString());
+          results.push({ id, ok: true });
+        } catch {
+          results.push({ id, ok: false, error: 'Recording could not be moved. Refresh and check that it is a saved standalone recording and the destination is in your own library.' });
+        }
+        continue;
+      }
       const result = await updateThing(viewer, id, { folderId });
       results.push('error' in result ? { id, ok: false, error: result.error } : { id, ok: true });
       continue;

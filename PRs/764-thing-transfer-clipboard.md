@@ -1,5 +1,24 @@
 # PR 764 — portable Thing transfer
 
+## Recording placement integration — 2026-09-11
+
+Bulk move 1.1.0 routes owned standalone recordings through the dedicated
+home-plane placement writer, retaining source/token checks and reporting
+per-item failures. Generic attachment edits remain forbidden. Themes and
+algorithms are not yet wired for managed moves.
+
+Export/import 1.6.0 preserves recording placement inside included folders.
+Imports create parent folders before filing fresh private recordings; lone
+recordings use the selected destination. Placement failure compensates only
+newly created copies. Move clients require bulk 1.1.0 before dispatch.
+
+Validation: 124 Things tests and 40 capability tests pass, as do targeted lint,
+the production build and Vercel output verification. Chrome dialog simulations
+passed at 1280/390px; screenshots were reviewed for clipping and overflow.
+Full TypeScript checking still reports existing project errors, with none in
+the changed placement/transfer paths.
+Real approved-byte Cut and folder round-trip acceptance remain unverified.
+
 ## Recording adapter checkpoint — 2026-09-11
 
 Export/import 1.5.0 adds owned standalone recording roots. The portable attachment

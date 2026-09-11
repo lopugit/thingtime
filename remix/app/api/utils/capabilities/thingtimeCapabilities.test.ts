@@ -6,8 +6,8 @@ import { capabilitySatisfies } from './capabilityContract';
 import { THINGTIME_CAPABILITY_MANIFEST_PATH, thingtimeCapabilityManifest } from './thingtimeCapabilities';
 
 test('recording transfer clients reject old and breaking import/export contracts', () => {
-  for (const version of ['1.5.0', '1.5.1', '1.6.0']) assert.equal(capabilitySatisfies(version, '1.5.0'), true);
-  for (const version of ['1.0.1', '1.1.0', '1.2.0', '1.3.0', '1.4.0', '2.0.0', '']) assert.equal(capabilitySatisfies(version, '1.5.0'), false);
+  for (const version of ['1.6.0', '1.6.1', '1.7.0']) assert.equal(capabilitySatisfies(version, '1.6.0'), true);
+  for (const version of ['1.0.1', '1.1.0', '1.2.0', '1.3.0', '1.4.0', '1.5.0', '2.0.0', '']) assert.equal(capabilitySatisfies(version, '1.6.0'), false);
 });
 
 test('recording import upload requirements cover start and completion lifecycle versions', () => {
@@ -26,8 +26,11 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
 	assert.equal(manifest.features['api.webpages-resolve']?.version, '1.2.0');
 	assert.equal(manifest.features['api.actions-run']?.version, '1.3.1');
 	assert.equal(manifest.features['api.things-fork']?.version, '1.4.0');
-	assert.equal(manifest.features['api.things-import']?.version, '1.5.0');
-	assert.equal(manifest.features['api.things-export']?.version, '1.5.0');
+	assert.equal(manifest.features['api.things-import']?.version, '1.6.0');
+	assert.equal(manifest.features['api.things-export']?.version, '1.6.0');
+  assert.equal(manifest.features['api.things-bulk']?.version, '1.1.0');
+  for (const version of ['1.1.0', '1.1.1', '1.2.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), true);
+  for (const version of ['1.0.0', '2.0.0', '']) assert.equal(capabilitySatisfies(version, '1.1.0'), false);
   assert.equal(capabilitySatisfies('1.2.0', '1.3.0'), false);
   assert.equal(capabilitySatisfies('1.3.0', '1.3.0'), true);
   assert.equal(capabilitySatisfies('1.4.0', '1.3.0'), true);

@@ -11,6 +11,29 @@ const draft = () => ({ shareId: 'new-upload', ownerId: 'owner', attachmentPurpos
   attachmentState: 'ready', attachmentExpiresAt: new Date(Date.now() + 60_000), objectSizeBytes: 4,
   crystal: { name: 'clip.wav', contentType: 'audio/wav', mediaKind: 'audio', size: 4 } }) as any;
 
+test('recording import files into remapped folders only after the folder has been created', async () => {
+  const manifest = fixture();
+  manifest.things.unshift({ id: 'parent', thingtime: ['folder'], crystal: { name: 'Recordings' } });
+  manifest.things[1].folderId = 'parent'; manifest.roots = ['parent'];
+  const calls: string[] = []; let parentId = '';
+  const result = await importTransfer({ id: 'owner' }, { manifest, files: { bytes: 'new-upload' } }, undefined, {
+    getFile: async () => draft(), createRecording: async () => { calls.push('recording'); return draft(); },
+    create: async (_owner, input) => { calls.push('folder'); parentId = input.shareId as string; return { ok: true, doc: { shareId: parentId } } as any; },
+    moveRecording: async (owner, id, destination) => { calls.push('place'); assert.equal(owner, 'owner'); assert.equal(id, 'new-upload'); assert.equal(destination, parentId); return { id, folderId: destination }; }
+  });
+  assert.ok(result.ok); assert.deepEqual(calls, ['recording', 'folder', 'place']);
+});
+
+test('a standalone recording uses the selected destination and placement failure compensates the new recording', async () => {
+  const removed: string[] = [];
+  const result = await importTransfer({ id: 'owner' }, { manifest: fixture(), folderId: 'destination', files: { bytes: 'new-upload' } }, undefined, {
+    getFile: async () => draft(), createRecording: async () => draft(),
+    moveRecording: async (_owner, _id, destination) => { assert.equal(destination, 'destination'); throw new Error('Folder disappeared'); },
+    removeFile: async (_owner, { id }: any) => { removed.push(id); return { ok: true } as any; }
+  });
+  assert.equal(result.ok, false); assert.deepEqual(removed, ['new-upload']);
+});
+
 test('recording imports use the dedicated commit and never generic create or annotation', async () => {
   let commits = 0;
   const result = await importTransfer({ id: 'owner' }, { manifest: fixture(), files: { bytes: 'new-upload' } }, undefined, {

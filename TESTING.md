@@ -1,5 +1,16 @@
 # TESTING.md — per-area manual test checklists
 
+## Recording folder transfers
+
+- Cut an owned durable recording, paste into an owned folder, and confirm the
+  same recording ID/bytes/ACL remain; no upload or deletion should occur.
+- Download that folder as ZIP and re-import. The fresh recording must be filed
+  in the fresh parent folder, not silently moved to My Things root.
+- Import a lone recording into Current folder. Delete the destination during
+  placement and check explicit failure/compensation, never a dangling folder.
+- Refuse draft, bound/profile/linked, foreign-owned and custom-endpoint moves;
+  an old bulk capability must prevent client dispatch.
+
 ## Recording transfer lifecycle
 
 - [ ] `recording-import` upload starts require private-upload approval, including

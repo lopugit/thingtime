@@ -28,6 +28,27 @@ test('recording roots use distinct portable byte IDs and cannot omit their bytes
   assert.equal(missingBytes.ok, false);
 });
 
+test('recording export retains included folders but drops outside folder references', async () => {
+  const folder = doc('folder', ['folder']);
+  const recording = { ...doc('audio', ['attachment']), folderId: 'folder' };
+  const deps = {
+    read: async (id: unknown) => id === 'folder' ? folder : recording,
+    project,
+    readRecording: async () => ({ id: 'audio', thingtime: ['attachment'], folderId: 'folder', crystal: { recordingFileId: 'pending' } }),
+    list: async () => ({ ok: true as const, things: await project([recording]), nextCursor: null }),
+    bound: async () => [],
+    describe: async () => ({ ok: true as const, linked: false as const, attachment: {
+      id: 'audio', name: 'a.wav', contentType: 'audio/wav', size: 4, mediaKind: 'audio' as const
+    } })
+  };
+  const nested = await exportTransferPlan({ id: 'owner' }, { ids: ['folder'] }, undefined, deps);
+  assert.ok(nested.ok); if (!nested.ok) return;
+  assert.equal(nested.plan.things.find(item => item.id === 'audio')?.folderId, 'folder');
+  const standalone = await exportTransferPlan({ id: 'owner' }, { ids: ['audio'] }, undefined, deps);
+  assert.ok(standalone.ok); if (!standalone.ok) return;
+  assert.equal(standalone.plan.things[0].folderId, undefined);
+});
+
 test('export follows every folder page, preserves JSON extended values and excludes authority', async () => {
   const folder = doc('folder', ['folder']);
   const children = Array.from({ length: 102 }, (_, index) => ({ ...doc(`child-${index}`), folderId: 'folder' }));

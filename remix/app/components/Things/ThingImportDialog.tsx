@@ -71,7 +71,7 @@ export const ThingImportDialog = ({ ownerId, folderId, initialBundle, onClose, o
     uploads.uploads.every((upload) => upload.status === 'ready' && upload.attachment);
   const hasThemes = !!bundle?.manifest.things.some(thing => thing.thingtime.includes('theme') || thing.thingtime.includes('feed-algorithm'));
   const hasRecordings = !!bundle?.manifest.things.some(isTransferRecording);
-  const requiresLibraryRoot = hasThemes || hasRecordings;
+  const requiresLibraryRoot = hasThemes;
   const submit = async () => {
     if (!bundle || !filesReady || submission.current || lifetime.current?.signal.aborted) return;
     submission.current = true; setAttempted(true); setSubmitting(true); setError('');
@@ -105,7 +105,6 @@ export const ThingImportDialog = ({ ownerId, folderId, initialBundle, onClose, o
             <Text>{bundle.manifest.things.length} Things · {bundle.manifest.files.length} files · {bundle.manifest.links?.length || 0} links · {(bundle.manifest.files.reduce((total, file) => total + file.bytes, 0) / 1024 / 1024).toFixed(1)} MiB</Text>
             {!!bundle.manifest.links?.length && <Text fontSize="sm">Linked media stays on its original site. Import creates private gallery records; it does not download those external files.</Text>}
             {requiresLibraryRoot ? <Box>
-              {hasRecordings && <Text fontSize="sm">Recordings are imported as new private recordings in My Things (top level).</Text>}
               {hasThemes && <Text fontSize="sm">Themes and feed algorithms go to their own libraries without changing active selections. Algorithm files can contain private interest weights; share them only deliberately.</Text>}
               <Text fontSize="sm">Other root content goes to My Things (top level).</Text>
             </Box> : <Box>
@@ -115,6 +114,7 @@ export const ThingImportDialog = ({ ownerId, folderId, initialBundle, onClose, o
                 {folderId && <option value={folderId}>Current folder</option>}
               </Select>
             </Box>}
+            {hasRecordings && <Text fontSize="sm">Recordings stay private and retain included folders. Other recordings use the import destination.</Text>}
             <Text fontSize="sm">Apps may contain actions. Importing does not run them. Only use content from sources you trust.</Text>
             {bundle.manifest.files.length > 0 && !uploadStarted && <Button onClick={beginUploads}>Upload {bundle.manifest.files.length} files</Button>}
             {uploads.uploads.length > 0 && <Box maxHeight="180px" overflowY="auto" aria-label="Import file uploads">

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { moveManagedContent } from './managedPlacement';
 import { isProtectedThingtime } from '../../../schemas/registry';
 import { orderedTransferAttachments, serializeTransfer, transferAnnotations, validateTransfer, type ThingTransfer, type TransferThing } from '../../../utils/thingTransfer/format';
 import { rewriteComposition } from '../actions/forkCompositionCore';
@@ -26,8 +27,9 @@ type ImportDependencies = {
   createAlgorithm: typeof createTransferAlgorithm;
   removeAlgorithm: typeof removeTransferAlgorithm;
   createRecording: typeof commitRecordingImport;
+  moveRecording: typeof moveManagedContent;
 };
-const defaults: ImportDependencies = { create: createThing, remove: deleteThing, inspectFiles: inspectReadyAttachmentsForPost, getFile: attachmentStore.getOwned, bindFiles: createReadyAttachmentPostInsertHook, uuid: randomUUID, link: linkAttachment, annotate: annotateAttachment, removeFile: deleteAttachment, createTheme: createTransferTheme, removeTheme: removeTransferTheme, createAlgorithm: createTransferAlgorithm, removeAlgorithm: removeTransferAlgorithm, createRecording: commitRecordingImport };
+const defaults: ImportDependencies = { create: createThing, remove: deleteThing, inspectFiles: inspectReadyAttachmentsForPost, getFile: attachmentStore.getOwned, bindFiles: createReadyAttachmentPostInsertHook, uuid: randomUUID, link: linkAttachment, annotate: annotateAttachment, removeFile: deleteAttachment, createTheme: createTransferTheme, removeTheme: removeTransferTheme, createAlgorithm: createTransferAlgorithm, removeAlgorithm: removeTransferAlgorithm, createRecording: commitRecordingImport, moveRecording: moveManagedContent };
 const dedicatedTransfer = (thing: TransferThing) => isTransferTheme(thing) || isTransferAlgorithm(thing) || isTransferRecording(thing);
 
 /** Import ordering only constrains structural/provenance references. Action
@@ -68,7 +70,6 @@ export const importTransfer = async (
     }
     for (const recording of ordered.filter(isTransferRecording)) {
       recordingTransferFile(recording, manifest);
-      if (input.folderId) throw new Error('Recordings import into My Things at the top level');
     }
   } catch (error) { return fail(400, error instanceof Error ? error.message : 'Invalid transfer'); }
   if (manifest.things.some((thing) => isProtectedThingtime(thing.thingtime) && !dedicatedTransfer(thing))) return fail(403, 'Managed account records must use their dedicated import workflow');
@@ -194,6 +195,13 @@ export const importTransfer = async (
       } : {});
       if (isFail(result)) throw result;
       created.push(result.doc.shareId);
+    }
+    // All ordinary parent folders now exist. Placement never changes the
+    // recording's immutable upload purpose or turns it into a bound gallery.
+    for (const recording of ordered.filter(isTransferRecording)) {
+      check();
+      const destination = recording.folderId ? ids.get(recording.folderId)! : input.folderId;
+      if (typeof destination === 'string' && destination) await deps.moveRecording(viewer.id, ids.get(recording.id)!, destination);
     }
     return { ok: true as const, roots: manifest.roots.map((id) => ids.get(id)!), ids: Object.fromEntries(ids), imported: created.length, filesImported: manifest.files.length, linksImported: createdLinks.length };
   } catch (error) {
