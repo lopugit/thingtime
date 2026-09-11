@@ -1,9 +1,15 @@
-import type { ThingsThing } from '../Things/thingsCore';
+import { THING_ACTIONS_PATH } from '~/schemas/thingActions';
+import { supportsThingActions } from './recordingsCapabilities';
 import { supportsSavedRecordings } from './recordingsCapabilities';
+
+export type RecordingThingIdentity = {
+ id: string; author?: { id: string } | null; thingtime: string[]; acl?: string[];
+ targetId?: string | null; crystal?: Record<string, unknown>; tags?: string[];
+};
 
 // A menu hint, not authorization. The API rechecks protected purpose/state,
 // ownership and binding because those fields are deliberately not public.
-export const canOfferRecordingHandoff = (thing: ThingsThing, ownerId?: string | null) =>
+export const canOfferRecordingHandoff = (thing: RecordingThingIdentity, ownerId?: string | null) =>
 	!!ownerId && thing.author?.id === ownerId && /^[A-Za-z0-9_-]{1,160}$/.test(thing.id) &&
 	thing.acl?.length === 1 && thing.acl[0] === 'tt:user' && (
 		(thing.thingtime.length === 1 && thing.thingtime[0] === 'attachment' &&
@@ -12,7 +18,7 @@ export const canOfferRecordingHandoff = (thing: ThingsThing, ownerId?: string | 
 			thing.tags?.includes('apple-watch') && thing.id.startsWith('watch-upload-'))
 	);
 
-export async function sendRecordingThingToLopu(thing: ThingsThing, ownerId: string, options: {
+export async function sendRecordingThingToLopu(thing: RecordingThingIdentity, ownerId: string, options: {
 	origin: string;
 	activeOwner: () => string | undefined;
 	confirm: (message: string) => boolean;
@@ -40,12 +46,13 @@ export async function sendRecordingThingToLopu(thing: ThingsThing, ownerId: stri
 	};
 	const manifest = await request('/.well-known/thingtime-capabilities.json');
 	if (!supportsSavedRecordings(manifest, options.origin)) throw new Error('Send to Lopu for saved recordings is not available on this domain yet.');
+	if (!supportsThingActions(manifest, options.origin)) throw new Error('Thing actions are not available on this domain yet.');
 	const settings = await request('/api/v1/lopu/recordings');
 	if (settings.ownerId !== ownerId) throw new Error('Your account changed. Select your recording again.');
 	if (!settings.settings?.enabled) throw new Error('Choose and enable a recording processor in Recording settings first.');
 	if (!options.confirm('Send this recording’s transcript to Lopu to act on its instructions? Lopu may create Things and reminders. Other sensitive actions still require confirmation in the conversation.')) return false;
 	assertOwner();
-	const result = await request('/api/v1/lopu/recordings', { op: 'send-to-lopu', postId: thing.id });
+	const result = await request(THING_ACTIONS_PATH, { action: 'send-to-lopu', id: thing.id });
 	if (result.ownerId !== ownerId) throw new Error('Your account changed. Check Recording activity before retrying.');
 	return true;
 }

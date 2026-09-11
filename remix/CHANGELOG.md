@@ -18,6 +18,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Unify Thing, post, recording and message action-menu rendering and inherited
+  base verbs. Dispatch recording handoffs through the versioned Things action
+  API, retaining the legacy adapter and protected writers. Fix stale open
+  submenus and scrollbar-edge clipping. — Codex (AI), 2026-09-11
+
+- Make drawer and Thing-menu destinations native anchors, preserving browser
+  new-tab modifiers, and persist Things search/view/filter/sort/group rules in
+  URL history, including rapid input and folder navigation. — Codex (AI), 2026-09-11
+
 - Add confirmed Send to Lopu to private recording Things in desktop and phone menus, with capability, account-switch and processor-consent guards and a link to recording activity. Keep phone content inset. Details: [PR 761](../PRs/761-lopu-saved-recording-handoff.md). — Codex (AI), 2026-09-10
 
 - Allow explicitly selected private saved audio Things through the recording queue and confirmed Send to Lopu flow, with source-state revalidation and transactional attachment fences. Keep automatic discovery Watch-only, preserve relational transcripts and negotiate the new 1.5 recording controls. — Codex (AI), 2026-09-10

@@ -1,5 +1,37 @@
 # TESTING.md — per-area manual test checklists
 
+## Inherited Thing context menus
+
+- [ ] Type/paste a query, change kind/view/display/sort/group, open a Thing and
+  use browser Back/Forward and reload. The URL and controls retain the same
+  search and rules. Fast consecutive changes must not drop query characters;
+  folder navigation clears only the new entry's query, not the previous entry.
+- [ ] Drawer destinations and Thing-menu Open/View data are real anchors:
+  command/control-click, middle-click and the browser's open-in-new-tab menu
+  leave the current page unchanged. Alt/Shift keep browser-native behaviour.
+  Mutations remain buttons; disabled actions have no navigable href. Drawer
+  reorder ignores modified pointer presses, and profile/settings are sibling
+  links rather than nested interactive controls.
+- [ ] Open the same recording/post from Things (grid, list, columns, kebab and
+  right-click), its post card, the generic Thing page and recording activity.
+  Base labels/order come from the Thing menu; recording activity targets the
+  recording ID, never its processing-job ID. No per-card lookup on initial paint.
+- [ ] Test keyboard arrows, Escape/back, focus return, touch, pinned menus,
+  long labels and the full page/menu scroll at desktop and 390px. With a visible
+  scrollbar, the menu's right edge stays inside document.clientWidth minus 8px.
+  Options loaded while a submenu is open replace stale options immediately.
+- [ ] Post privacy opens beneath Share / permissions, preserves Custom and
+  hidden-link consent, and rolls back failed changes. Moderator-only flairs,
+  reports, approve/remove, pin, lock, NSFW and spoiler keep their existing guards.
+  Bound media and foreign Things never gain ordinary owner mutation rights.
+- [ ] Cancel Send to Lopu: no mutation. Try a foreign, public, bound or unavailable
+  recording and switch account/unmount during lookup or confirmation: no handoff.
+  Missing/wrong-origin/breaking api.things-actions blocks before any write.
+  Repeated confirmed handoffs still deduplicate through the protected writer.
+- [ ] Multi-select Things: bulk actions retain their exact target count; Send to
+  Lopu is absent. Test folder clipboard/paste and explicit Open versus Preview.
+  Message edit/delete still pass through chat-membership authorization.
+
 ## Unified Lopu conversations, scheduled Things and discussions
 
 - [ ] At 390px width, historical tool rows put long summaries below their label
