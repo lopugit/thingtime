@@ -1239,7 +1239,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 	const readableStoredAttachment = async (
 		viewer: AttachmentViewer,
 		idInput: unknown,
-		allowLinkedCopy = false
+		allowLinkedCopy = false,
+		verifyStoredObject = true
 	): Promise<AttachmentResult<{ doc: AttachmentDoc }>> => {
 		try {
 			const id = normalizeId(idInput);
@@ -1286,6 +1287,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			// first-party content URL into an open redirect to an attacker-chosen
 			// origin (CWE-601). Renderers always use crystal.url directly.
 			if (doc.attachmentLinked === true) return allowLinkedCopy ? { ok: true, doc } : fail(404, 'Attachment not found');
+			// Export may omit stored bytes, but only after all live read gates.
+			if (!verifyStoredObject) return { ok: true, doc };
 
 			const s3 = dependencies.getS3();
 			if (!doc.objectVersionId) {
@@ -1303,9 +1306,12 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 
 	// Content-only export metadata, behind the exact same live read gates as
 	// download/copy. Never expose object keys, versions or signed URLs.
-	const describeTransfer = async (viewer: AttachmentViewer, id: unknown) => {
-		const readable = await readableStoredAttachment(viewer, id, true);
+	const describeTransfer = async (viewer: AttachmentViewer, id: unknown, options: { includeFiles?: boolean; includeLinks?: boolean } = {}) => {
+		const readable = await readableStoredAttachment(viewer, id, true, options.includeFiles !== false);
 		if (readable.ok === false) return readable;
+		if (readable.doc.attachmentLinked ? options.includeLinks === false : options.includeFiles === false) {
+			return { ok: true as const, excluded: true as const };
+		}
 		// Link import does not upload/re-moderate bytes. Never turn a flagged
 		// source into an unmoderated portable gallery, even for its owner/admin.
 		if (readable.doc.attachmentLinked && ['blocked', 'pending', 'nsfw'].includes(readable.doc.moderation?.status || '')) return fail(403, 'Flagged linked media cannot be exported');

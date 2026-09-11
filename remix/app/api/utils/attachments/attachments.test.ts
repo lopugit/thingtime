@@ -78,6 +78,22 @@ const noopS3 = (overrides: Partial<AttachmentS3> = {}): AttachmentS3 => ({
 	...overrides
 });
 
+test('excluded export bytes skip storage without bypassing live authorization', async () => {
+	let doc = attachmentDoc({ attachmentState: 'ready', targetId: 'post', objectVersionId: undefined });
+	let storageReads = 0;
+	const service = createAttachmentService({ store: { getById: async () => doc } as any, now: () => now,
+		customMongoActive: () => false, canViewTarget: async () => false, canViewSharedTarget: async () => false,
+		getS3: () => { storageReads++; throw new Error('Storage unavailable'); } });
+	assert.deepEqual(await service.describeTransfer({ id: doc.ownerId }, doc.shareId, { includeFiles: false }), { ok: true, excluded: true });
+	assert.equal(storageReads, 0);
+	assert.equal((await service.describeTransfer({ id: 'stranger' }, doc.shareId, { includeFiles: false })).ok, false);
+	assert.equal((await service.describeTransfer({ id: doc.ownerId, sharedRoot: 'wrong-root' }, doc.shareId, { includeFiles: false })).ok, false);
+	assert.equal((await service.describeTransfer({ id: doc.ownerId }, doc.shareId)).ok, false);
+	assert.equal(storageReads, 1);
+	doc = { ...doc, moderation: { status: 'blocked' } } as AttachmentDoc;
+	assert.equal((await service.describeTransfer({ id: doc.ownerId }, doc.shareId, { includeFiles: false })).ok, false);
+});
+
 test('import annotation fence refuses already-bound, expired and non-post drafts', () => {
 	const fresh = attachmentDoc({ attachmentState: 'ready', attachmentPurpose: 'post' });
 	assert.doesNotThrow(() => assertUnboundPostAnnotation(fresh, now));

@@ -860,7 +860,7 @@ export function useApi() {
     },
     things: {
       export: useCallback(async (args: { ids: string[]; key?: string; includeChildren?: boolean; includeDependencies?: boolean; includeFiles?: boolean; includeLinks?: boolean }, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.things-export', '1.7.0');
+        await requireThingtimeCapability('api.things-export', '1.7.1');
         if (args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.6.4');
         return asyncFetcher.submit(args, { action: '/api/v1/things/export', signal: options?.signal, errorContext: 'export Things' });
       }, [asyncFetcher]),

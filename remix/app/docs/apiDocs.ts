@@ -12202,8 +12202,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-export',
-    featureVersion: '1.7.0',
-    contractVersion: '1.7.0',
+    featureVersion: '1.7.1',
+    contractVersion: '1.7.1',
+    // 1.7.1: excluded file bytes do not require storage access; read gates remain.
     // 1.7.0: owned themes/algorithms retain included folder placement.
     // 1.6.1: durable recordings pass owner-only live attachment reads without draft expiry.
     // 1.6.0: recordings preserve folderId when their parent is included.

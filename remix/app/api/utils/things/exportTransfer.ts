@@ -121,8 +121,11 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
       for (const [id, target] of targets) {
         check();
         if (!includedIds.has(target.targetId)) throw new Error('An attachment target is missing');
-        const result = await deps.describe({ ...viewer, sharedRoot: target.sharedRoot }, id);
+        const result = await deps.describe({ ...viewer, sharedRoot: target.sharedRoot }, id, {
+          includeFiles: input.includeFiles !== false, includeLinks: input.includeLinks !== false
+        });
         if (isFail(result)) throw result;
+        if ('excluded' in result && result.excluded) continue;
         if (result.linked ? input.includeLinks === false : input.includeFiles === false) continue;
         let portableId = id;
         if (recordingIds.has(id)) {

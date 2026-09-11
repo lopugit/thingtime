@@ -1,5 +1,21 @@
 # PR 764 — portable Thing transfer
 
+## Excluded-byte export recovery — 2026-09-12
+
+Export previously described every discovered attachment before applying file/link
+selection, so a file whose storage was unavailable could block a links-only
+download. The descriptor now applies selection after live owner/shared-root,
+moderation, expiry and data-plane checks but before accessing excluded stored
+objects. Missing or unauthorized metadata still fails closed. Recording roots
+still require their bytes. Direct download/copy retain full object verification.
+Export capability 1.7.1 advertises this correction and clients require it.
+
+Attachment tests prove excluded bytes cause zero storage calls while unrelated
+viewers, wrong shared roots and blocked sources remain denied. Export tests prove
+the selected flags reach the descriptor and links remain independently included.
+Suites: 185 attachment, 134 Things and 40 capability tests pass; focused lint
+passes. These are simulated storage-failure tests, not live S3 acceptance.
+
 ## Theme and algorithm folders — 2026-09-12
 
 Owned current-schema themes and algorithms now appear in the Things library.

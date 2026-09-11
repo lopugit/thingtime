@@ -6708,6 +6708,10 @@ approval; `access.test.ts` — the reservation matrix) and
 - Cut a Thing, follow an internal link away, return to Things and paste: move the original IDs, not imported copies.
 - Change accounts or log out/back in before pasting: never move from old intent. A reload also drops move authority.
 - Replace clipboard text, use Copy, or dismiss the clipboard: prior Cut must not move anything.
+- Export a readable gallery with files unchecked and links checked: unavailable
+  stored bytes must not block links-only export. Included bytes must still fail
+  on unavailable storage; exclusions must not bypass owner/shared-root,
+  moderation or expiry gates, and recording roots must still require bytes.
 - Export/import saved themes and algorithms both inside an included folder and
   alone into a selected current folder. Confirm new private IDs, remapped
   placement, unchanged active selections and dedicated cleanup on placement

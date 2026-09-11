@@ -9,6 +9,23 @@ const project = async (docs: ThingDoc[]) => docs.map((item) => ({ id: item.share
   tags: item.tags || [], author: { id: item.ownerId }, acl: item.acl, visibility: 'private', folderId: item.folderId || null, targetId: item.targetId || null, linkKey: 'NEVER-EXPORT', createdAt: '', updatedAt: '' })) as any;
 const composition = (root: ThingDoc, children: ThingDoc[] = []): SharedComposition => ({ root, docs: new Map([root, ...children].map((item) => [item.shareId, item])), actions: new Map(), children: new Map(), data: new Map(), references: new Map(), requiredReferences: new Set(), contexts: new Map(), boundaries: new Map() });
 
+test('file exclusions reach the authorized descriptor and omit only its excluded results', async () => {
+  const result = await exportTransferPlan({ id: 'owner' }, { ids: ['note'], includeFiles: false }, undefined, {
+    read: async () => doc('note'), project,
+    bound: async () => [{ id: 'stored', targetId: 'note' }, { id: 'linked', targetId: 'note' }],
+    describe: async (_viewer, id, options) => {
+      assert.deepEqual(options, { includeFiles: false, includeLinks: true });
+      return id === 'stored' ? { ok: true, excluded: true } : { ok: true, linked: true, attachment: {
+        id: 'linked', name: 'Link', contentType: 'image/png', size: 0, mediaKind: 'image', url: 'https://example.com/image.png'
+      } };
+    }
+  });
+  assert.ok(result.ok);
+  if (!result.ok) return;
+  assert.equal(result.plan.files.length, 0);
+  assert.deepEqual(result.plan.links?.map(link => link.id), ['linked']);
+});
+
 test('recording roots use distinct portable byte IDs and cannot omit their bytes', async () => {
   const deps = { read: async () => doc('audio', ['attachment']),
     readRecording: async () => ({ id: 'audio', thingtime: ['attachment'], crystal: { recordingFileId: 'pending' } }),
