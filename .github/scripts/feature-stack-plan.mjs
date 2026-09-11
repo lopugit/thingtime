@@ -13,8 +13,18 @@ const exactKeys = (value, keys) =>
   value && !Array.isArray(value) && typeof value === "object" &&
   Object.keys(value).join(",") === keys.join(",");
 
+export function validateWaterfall(value) {
+  if (!exactKeys(value, ["version", "entries"]) || value.version !== 1 || !Array.isArray(value.entries) || !value.entries.length || value.entries.length > 32) throw new Error("invalid AI waterfall");
+  const entries = value.entries.map(entry => {
+    if (!exactKeys(entry, ["endpointId", "modelId", "effort", "speed"]) || typeof entry.endpointId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9:_-]{0,179}$/.test(entry.endpointId) || typeof entry.modelId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,199}$/.test(entry.modelId) || (entry.effort !== null && !["none","minimal","low","medium","high","xhigh","max","ultra"].includes(entry.effort)) || !["normal","fast"].includes(entry.speed)) throw new Error("invalid AI attempt");
+    return { endpointId: entry.endpointId, modelId: entry.modelId, effort: entry.effort, speed: entry.speed };
+  });
+  if (new Set(entries.map(entry => JSON.stringify(entry))).size !== entries.length) throw new Error("duplicate AI attempt");
+  return { version: 1, entries };
+}
+
 export function canonicalFeatureStackPlan(input) {
-  if (!exactKeys(input, ["autoDecideBranches", "autoMerge", "name", "runId", "sources", "stackId", "targets", "version"]) || input.version !== 3) {
+  if (!exactKeys(input, ["autoDecideBranches", "autoMerge", "name", "runId", "sources", "stackId", "targets", "version", ...(input?.version === 4 ? ["modelWaterfall"] : [])]) || ![3, 4].includes(input.version)) {
     throw new Error("invalid feature stack envelope");
   }
   if (typeof input.autoDecideBranches !== "boolean" || input.autoMerge !== true ||
@@ -67,7 +77,8 @@ export function canonicalFeatureStackPlan(input) {
   });
   if (targets.some((target) => sourceRefs.has(target))) throw new Error("invalid feature stack target");
   if (targets.some((target) => !sources.some((source) => source.targets.includes(target)))) throw new Error("feature stack target has no routed source");
-  return { autoDecideBranches: input.autoDecideBranches, autoMerge: true, name: input.name, runId: input.runId, sources, stackId: input.stackId, targets, version: 3 };
+  const modelWaterfall = input.version === 4 ? validateWaterfall(input.modelWaterfall) : null;
+  return { autoDecideBranches: input.autoDecideBranches, autoMerge: true, name: input.name, runId: input.runId, sources, stackId: input.stackId, targets, version: input.version, ...(modelWaterfall ? { modelWaterfall } : {}) };
 }
 
 export function decodeFeatureStackPlan(encoded) {
@@ -203,7 +214,7 @@ else if (process.argv[2] === "decode") {
 } else if (process.argv[2] === "verify") {
   const plan = canonicalFeatureStackPlan(JSON.parse(readFileSync(process.argv[3], "utf8")));
   process.stdout.write(`${JSON.stringify(verifyFeatureStackHistory(plan, process.argv[4], process.argv[5]))}\n`);
-} else {
+} else if (process.argv[1]?.endsWith("/feature-stack-plan.mjs")) {
   console.error("usage: feature-stack-plan.mjs --self-test | decode <base64> | verify <plan.json> <target> <base-sha>");
   process.exit(2);
 }
