@@ -22,7 +22,8 @@ import {
 	sectionKey,
 	socialFeatureKey,
 	summarizePublications,
-	validatePublicationChanges
+	validatePublicationChanges,
+	visibleActions
 } from './publishing';
 
 test('every catalog surface has a publishable key and every key resolves back to its surface', () => {
@@ -221,4 +222,44 @@ test('summaries and bulk helpers agree with the catalog', () => {
 	assert.equal(stylesSummary.total, pagesInCategory('styles').length);
 	assert.equal(summary.categories.find((category) => category.key === 'landing')!.indexPublished, false);
 	assert.ok(PAGE_BY_SLUG['landing/feed'], 'the sample page used across these tests exists');
+});
+
+test('visibleActions never points a hero/CTA primary into the gate', () => {
+	// every use-cases/* page ships this exact shape: a marketing primary and a
+	// /register secondary (catalog.ts buildUseCase)
+	const template = { label: 'Copy the template', to: '/marketing/templates/car' };
+	const register = { label: 'Try Thingtime free', to: '/register' };
+
+	const publications = applyPublicationChanges(EMPTY_PUBLICATIONS, [{ key: pageKey('use-cases/car-maintenance-log'), state: 'published' }]);
+	const visitor = createVisibility({ publications, isAdmin: false, previewAsVisitor: false });
+
+	// the template page is NOT published: the secondary is promoted rather than
+	// the visitor being handed a prominent button into "Not published yet"
+	const gated = visibleActions(visitor, template, register);
+	assert.equal(gated.primary.to, '/register');
+	assert.equal(gated.secondary, null, 'the promoted action is never rendered twice');
+
+	// published: the block is untouched
+	const open = createVisibility({
+		publications: applyPublicationChanges(publications, [{ key: pageKey('templates/car'), state: 'published' }]),
+		isAdmin: false,
+		previewAsVisitor: false
+	});
+	assert.deepEqual(visibleActions(open, template, register), { primary: template, secondary: register });
+
+	// admins see the suite whole
+	const admin = createVisibility({ publications: EMPTY_PUBLICATIONS, isAdmin: true, previewAsVisitor: false });
+	assert.deepEqual(visibleActions(admin, template, register), { primary: template, secondary: register });
+
+	// a gated secondary still drops out of a visible primary's block
+	assert.deepEqual(visibleActions(visitor, register, template), { primary: register, secondary: null });
+
+	// both gated (no catalog block does this today) keeps one working button
+	assert.deepEqual(visibleActions(visitor, template, { label: 'The use case', to: '/marketing/use-cases/car-maintenance-log/vs-notion' }), {
+		primary: { label: 'Try Thingtime free', to: '/register' },
+		secondary: null
+	});
+
+	// non-marketing destinations are never gated
+	assert.deepEqual(visibleActions(visitor, { label: 'Open the tree', to: '/things' }, undefined), { primary: { label: 'Open the tree', to: '/things' }, secondary: null });
 });

@@ -11,7 +11,7 @@ import { SocialImageCard } from '~/components/Marketing/SocialImage';
 import { useMarketingVisibility } from '~/components/Marketing/useMarketingPublications';
 import { WalkthroughPlayer } from '~/components/Marketing/WalkthroughPlayer';
 import { MARKETING_BASE } from '~/marketing/catalog';
-import { pageSections } from '~/marketing/publishing';
+import { pageSections, visibleActions } from '~/marketing/publishing';
 import type { BuiltPage, SectionBlock, Walkthrough } from '~/marketing/types';
 import { getWalkthrough } from '~/marketing/walkthroughs';
 
@@ -357,7 +357,7 @@ const HeroOrnament = () => {
 
 export const MarketingHero = ({ section }: { section: Block<'hero'> }) => {
 	const visibility = useMarketingVisibility();
-	const secondary = section.secondary && visibility.href(section.secondary.to) ? section.secondary : null;
+	const { primary, secondary } = visibleActions(visibility, section.cta, section.secondary);
 	return (
 	<MkSection type="hero" hero>
 		<Grid
@@ -386,8 +386,8 @@ export const MarketingHero = ({ section }: { section: Block<'hero'> }) => {
 					{section.body}
 				</Text>
 				<Flex gap={3} flexWrap="wrap" marginTop={{ base: 6, md: 8 }} alignItems="center">
-					<MkButton to={section.cta.to} variant="primary" size="lg" data-testid="marketing-hero-cta">
-						{section.cta.label}
+					<MkButton to={primary.to} variant="primary" size="lg" data-testid="marketing-hero-cta">
+						{primary.label}
 					</MkButton>
 					{secondary ? (
 						<MkButton to={secondary.to} variant="secondary" size="lg">
@@ -834,7 +834,7 @@ const SocialSection = ({ section }: { section: Block<'social'> }) => (
 
 export const MarketingCta = ({ section }: { section: Block<'cta'> }) => {
 	const visibility = useMarketingVisibility();
-	const secondary = section.secondary && visibility.href(section.secondary.to) ? section.secondary : null;
+	const { primary, secondary } = visibleActions(visibility, section.cta, section.secondary);
 	return (
 	<MkSection type="cta">
 		<Box
@@ -865,8 +865,8 @@ export const MarketingCta = ({ section }: { section: Block<'cta'> }) => {
 				{section.body}
 			</Text>
 			<Flex gap={3} flexWrap="wrap" marginTop={{ base: 6, md: 8 }} alignItems="center">
-				<MkButton to={section.cta.to} variant="primary" size="lg">
-					{section.cta.label}
+				<MkButton to={primary.to} variant="primary" size="lg">
+					{primary.label}
 				</MkButton>
 				{secondary ? (
 					<MkButton to={secondary.to} variant="secondary" size="lg" background={MK.bg} color={MK.ink}>

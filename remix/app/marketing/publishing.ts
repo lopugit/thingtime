@@ -219,6 +219,36 @@ export const createVisibility = (input: { publications: MarketingPublications | 
 	};
 };
 
+// --------------------------------------------------------------- actions
+
+export type MarketingAction = { label: string; to: string };
+
+/** The one in-product destination that is never gated. */
+const REGISTER_ACTION: MarketingAction = { label: 'Try Thingtime free', to: '/register' };
+
+/**
+ * A hero/CTA block's two buttons as the viewer may actually follow them.
+ *
+ * The PRIMARY needs the same check as the secondary, not just the secondary:
+ * every `use-cases/*` page ships a "Copy the template" primary pointing at
+ * `templates/<key>`, so a visitor holding a published use case whose template
+ * is not published would otherwise get the page's most prominent button
+ * straight into the "Not published yet" gate.
+ *
+ * When the primary is not visible the visible secondary is promoted into its
+ * slot (never rendered twice); if neither is visible the block keeps one
+ * button pointing somewhere that always works.
+ */
+export const visibleActions = (
+	visibility: Pick<MarketingVisibility, 'href'>,
+	cta: MarketingAction,
+	secondary?: MarketingAction | null
+): { primary: MarketingAction; secondary: MarketingAction | null } => {
+	const visibleSecondary = secondary && visibility.href(secondary.to) ? secondary : null;
+	if (visibility.href(cta.to)) return { primary: cta, secondary: visibleSecondary };
+	return { primary: visibleSecondary ?? REGISTER_ACTION, secondary: null };
+};
+
 // --------------------------------------------------------------- summary
 
 export type CategoryPublicationSummary = {
