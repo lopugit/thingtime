@@ -38,8 +38,9 @@ export const prepareManagedPlacement = (
   }
   if (folder && (folder.ownerId !== ownerId || folder.shareId === source.shareId ||
     folder.thingtime.length !== 1 || folder.thingtime[0] !== 'folder' ||
+    !(folder.updatedAt instanceof Date) || !Number.isFinite(folder.updatedAt.getTime()) ||
     folder.appId != null || folder.sandbox != null || folder.sandboxSpace != null)) {
     throw new Error('Choose a folder in your own Thingtime library');
   }
-  return { folderId: folder?.shareId ?? null, updatedAt: new Date(now) };
+  return { folderId: folder?.shareId ?? null, updatedAt: new Date(Math.max(now.getTime(), source.updatedAt.getTime() + 1)) };
 };
