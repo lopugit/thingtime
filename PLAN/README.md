@@ -27,6 +27,7 @@ engineering decisions in [`../DECISIONS.md`](../DECISIONS.md).
 | [Notification agency and accountable-delivery roadmap](./notification-agency-and-accountable-delivery-roadmap.md)                   | Lifecycle charter through protected event evidence, truthful owner-visible state, one in-app action pilot, remedies, and separately gated channels          | Proposed |
 | [Search and discovery agency roadmap](./search-and-discovery-agency-roadmap.md)                                                     | Discovery charter through explicit scope and retention, deterministic match/order explanations, one private synthetic pilot, and separately gated expansion | Proposed |
 | [Recording agency and intimate-data stewardship roadmap](./recording-agency-and-intimate-data-stewardship-roadmap.md)               | Recording charter through lifecycle and route truth, correction and deletion proof, one single-person personal-device pilot, and gated expansion            | Proposed |
+| [Remix agency and responsible reuse roadmap](./remix-agency-and-responsible-reuse-roadmap.md)                                       | Reuse charter through exact copy planning, version-bound lineage, accessible comparison, optional source updates, remedies, and one synthetic private pilot | Proposed |
 
 ## Conventions
 

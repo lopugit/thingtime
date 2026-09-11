@@ -54,6 +54,12 @@ silent data loss or stale authority.
 8. **One narrow pilot before scale.** More people, artifacts, roles, or public
    reach require new evidence and approval.
 
+The [remix agency and responsible reuse roadmap](./remix-agency-and-responsible-reuse-roadmap.md)
+owns private forks, exact copy plans, reuse terms, derivative lineage, scoped
+independence, source-update notices, and reuse disputes. This roadmap owns
+shared-artifact invitations, roles, proposals, conflicts, and departure; a
+fork does not create collaborative authority over either artifact.
+
 ## Milestone C0 — Approve the collaboration charter
 
 **Outcome:** owners approve the exact human and product contract before schema
@@ -101,8 +107,8 @@ the pilot artifact and explain its exact authorization and failure state.
 have deterministic transitions and invariants.
 
 - Define collaboration states such as `draft | active | paused | archived |
-  closed` and membership states such as `invited | active | left | removed |
-  expired | declined`.
+closed` and membership states such as `invited | active | left | removed |
+expired | declined`.
 - Define a suggestion-only capability set: view the selected projection,
   propose bounded changes, inspect own proposals and authorized decisions,
   leave, and use remedies. Exclude direct mutation, invite, role, ACL, export,
@@ -237,15 +243,15 @@ remainder.
 
 ## Measure contract
 
-| Question | Candidate evidence | Guardrail |
-| --- | --- | --- |
-| Is consent informed? | Participant explanation of artifact, purpose, role, capabilities, duration, visibility, and exit effects before joining. | Redemption is not comprehension. |
-| Is the outcome useful? | Both participants' task-rubric result and reasons for correction or abandonment. | Do not optimize edits, messages, invites, or time. |
-| Is authority enforced? | Complete transition and adversarial tests across roles, accounts, endpoints, tabs, and stale states. | A happy-path UI test cannot prove authorization. |
-| Are intentions preserved? | Stale/concurrent cases retain proposals and recover without unnoticed loss. | A conflict count alone says nothing about resolution quality. |
-| Can people stop? | Leave/remove/expiry tests plus stale-request denial and residual-effect comprehension. | Removal is not deletion or recall. |
-| Is the journey accessible? | End-to-end keyboard, touch, screen-reader, zoom, language, device, network, and error-path exercises. | Do not average away a blocked profile. |
-| Do remedies work? | Revert, correction, report, dispute, restore, export, deletion, and support reach owned outcomes. | Do not log private draft or dispute content. |
+| Question                   | Candidate evidence                                                                                                       | Guardrail                                                     |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
+| Is consent informed?       | Participant explanation of artifact, purpose, role, capabilities, duration, visibility, and exit effects before joining. | Redemption is not comprehension.                              |
+| Is the outcome useful?     | Both participants' task-rubric result and reasons for correction or abandonment.                                         | Do not optimize edits, messages, invites, or time.            |
+| Is authority enforced?     | Complete transition and adversarial tests across roles, accounts, endpoints, tabs, and stale states.                     | A happy-path UI test cannot prove authorization.              |
+| Are intentions preserved?  | Stale/concurrent cases retain proposals and recover without unnoticed loss.                                              | A conflict count alone says nothing about resolution quality. |
+| Can people stop?           | Leave/remove/expiry tests plus stale-request denial and residual-effect comprehension.                                   | Removal is not deletion or recall.                            |
+| Is the journey accessible? | End-to-end keyboard, touch, screen-reader, zoom, language, device, network, and error-path exercises.                    | Do not average away a blocked profile.                        |
+| Do remedies work?          | Revert, correction, report, dispute, restore, export, deletion, and support reach owned outcomes.                        | Do not log private draft or dispute content.                  |
 
 ## Stop conditions
 

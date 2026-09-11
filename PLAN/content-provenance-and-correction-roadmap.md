@@ -19,6 +19,13 @@
 **Portability dependency:**
 [Data portability and graceful exit](./data-portability-and-exit-roadmap.md)
 
+**Remix-agency boundary:**
+[Remix agency and responsible reuse](./remix-agency-and-responsible-reuse-roadmap.md)
+owns exact pre-copy planning, the private fork journey, independence testing,
+optional source-update adoption, and reuse remedies; this roadmap remains the
+source for derivation assertions, correction integrity, verification limits,
+and portable provenance vocabulary.
+
 ## Outcome
 
 Help creators, readers, collaborators, and reusers understand who or what
@@ -73,14 +80,14 @@ owner approves their privacy and authority boundaries.
 
 The owner decision should approve semantics before field names.
 
-| Object | Proposed responsibility | Boundary |
-| --- | --- | --- |
-| Current artifact | The ordinary Thing and its current authorized projection. | Remains the content source of truth; no embedded history. |
-| Revision event | A protected writer records a material create/update/correction event linked by `targetId`, with version, actor role, exact digests, and safe summary. | Prior content is optional and separately authorized; pagination and retention are mandatory. |
-| Source assertion | Expresses a typed relation such as quote, import, translation, remix, generation, or derivation. | Records who asserted it and evidence strength; does not grant read or reuse permission. |
-| Verification receipt | Reproducible method/version/input digest/result/time for a signature, credential, or platform observation. | Expires or changes with trust material; proves only the scoped assertion. |
-| Correction note | Attributable explanation connected to a material revision. | Does not require publishing the superseded payload or reporter identity. |
-| Dispute event | References an accountable case/appeal outcome. | Community/platform authority remains in the safety system, not a writable content badge. |
+| Object               | Proposed responsibility                                                                                                                               | Boundary                                                                                     |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Current artifact     | The ordinary Thing and its current authorized projection.                                                                                             | Remains the content source of truth; no embedded history.                                    |
+| Revision event       | A protected writer records a material create/update/correction event linked by `targetId`, with version, actor role, exact digests, and safe summary. | Prior content is optional and separately authorized; pagination and retention are mandatory. |
+| Source assertion     | Expresses a typed relation such as quote, import, translation, remix, generation, or derivation.                                                      | Records who asserted it and evidence strength; does not grant read or reuse permission.      |
+| Verification receipt | Reproducible method/version/input digest/result/time for a signature, credential, or platform observation.                                            | Expires or changes with trust material; proves only the scoped assertion.                    |
+| Correction note      | Attributable explanation connected to a material revision.                                                                                            | Does not require publishing the superseded payload or reporter identity.                     |
+| Dispute event        | References an accountable case/appeal outcome.                                                                                                        | Community/platform authority remains in the safety system, not a writable content badge.     |
 
 Candidate assertion strengths are `platform-observed`, `signature-verified`,
 `user-declared`, and `imported-unverified`. The final names need accessibility,
@@ -216,15 +223,15 @@ moderation, and appeal scenarios converge to an explainable current state.
 
 ## Proposed measure registry
 
-| Measure | Candidate definition | Release interpretation |
-| --- | --- | --- |
-| State comprehension | Participants who correctly explain author/source/edit/assertion/verification in structured tasks ÷ participants tested. | A low or unequal result blocks broader disclosure UI. |
-| Material-edit correctness | Eligible material edits with one matching public state and revision event ÷ eligible material edits tested. | Must be exact; background touches and no-op writes stay excluded. |
-| Revision consistency | Current artifacts whose event-chain tail matches the current canonical digest ÷ sampled eligible artifacts. | Any mismatch is an integrity incident, not a percentage to average away. |
-| Authorized source resolution | Internal source references resolving to the exact allowed target or honest unavailable state ÷ tested references. | A private-data leak or enumeration signal is a release stop. |
-| Receipt reproducibility | Verification receipts reproducible with the recorded method/trust version ÷ eligible receipts sampled. | Expired trust material changes status explicitly; it is not silently accepted. |
-| Correction outcome | Accepted corrections with an attributable reader-visible outcome under the approved policy ÷ accepted corrections sampled. | Reporter identity and private evidence stay excluded from product analytics. |
-| Comprehension parity | Difference in successful provenance tasks across keyboard/touch/screen reader, target locales, and narrow/wide layouts. | One aggregate rate cannot hide a failing access mode or language. |
+| Measure                      | Candidate definition                                                                                                       | Release interpretation                                                         |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| State comprehension          | Participants who correctly explain author/source/edit/assertion/verification in structured tasks ÷ participants tested.    | A low or unequal result blocks broader disclosure UI.                          |
+| Material-edit correctness    | Eligible material edits with one matching public state and revision event ÷ eligible material edits tested.                | Must be exact; background touches and no-op writes stay excluded.              |
+| Revision consistency         | Current artifacts whose event-chain tail matches the current canonical digest ÷ sampled eligible artifacts.                | Any mismatch is an integrity incident, not a percentage to average away.       |
+| Authorized source resolution | Internal source references resolving to the exact allowed target or honest unavailable state ÷ tested references.          | A private-data leak or enumeration signal is a release stop.                   |
+| Receipt reproducibility      | Verification receipts reproducible with the recorded method/trust version ÷ eligible receipts sampled.                     | Expired trust material changes status explicitly; it is not silently accepted. |
+| Correction outcome           | Accepted corrections with an attributable reader-visible outcome under the approved policy ÷ accepted corrections sampled. | Reporter identity and private evidence stay excluded from product analytics.   |
+| Comprehension parity         | Difference in successful provenance tasks across keyboard/touch/screen reader, target locales, and narrow/wide layouts.    | One aggregate rate cannot hide a failing access mode or language.              |
 
 ## Security, privacy, accessibility, and abuse requirements
 
@@ -284,16 +291,16 @@ moderation, and appeal scenarios converge to an explainable current state.
 
 ## Risks and contingency paths
 
-| Risk | Early signal | Response |
-| --- | --- | --- |
-| Readers treat a credential as truth | Testing participants say “verified means true” | Remove the badge/wording, return to scoped evidence text, and rerun comprehension testing. |
-| History harms creator privacy or safety | Location/identity/source leakage, coercion, or disproportionate use against vulnerable creators | Stop collection/display, redact safely, shorten retention, and re-run harms review with affected communities. |
-| Revision logging threatens write reliability | Latency, partial events, or conflicts rise | Pause rollout; keep current writes truthful; simplify or move to a proven transactional outbox only after explicit design review. |
-| Provenance becomes a ranking caste | Unsigned/redacted/pseudonymous work is downranked or hidden | Remove ranking use; treat provenance as optional context, not reach or quality authority. |
-| External verification becomes an attack surface | SSRF, parser failures, oversized manifests, or validator churn | Disable remote lookup/pilot, retain safe local inspection, and patch under the security release gate. |
-| Cost grows faster than user value | Large histories, trust-list operations, or verification latency exceed bounds | Narrow artifact types, shorten detail retention, deduplicate receipts, or stop the service. |
-| Source graphs become spam or harassment | Attribution squatting, malicious links, repeated disputes | Rate-limit assertions, require owner preview for incoming links, and use scoped case/remedy flows. |
-| Standards or laws change | Validator/trust semantics or required disclosures drift | Version the contract, re-ground authoritative sources, and avoid claiming compliance until separately reviewed. |
+| Risk                                            | Early signal                                                                                    | Response                                                                                                                          |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Readers treat a credential as truth             | Testing participants say “verified means true”                                                  | Remove the badge/wording, return to scoped evidence text, and rerun comprehension testing.                                        |
+| History harms creator privacy or safety         | Location/identity/source leakage, coercion, or disproportionate use against vulnerable creators | Stop collection/display, redact safely, shorten retention, and re-run harms review with affected communities.                     |
+| Revision logging threatens write reliability    | Latency, partial events, or conflicts rise                                                      | Pause rollout; keep current writes truthful; simplify or move to a proven transactional outbox only after explicit design review. |
+| Provenance becomes a ranking caste              | Unsigned/redacted/pseudonymous work is downranked or hidden                                     | Remove ranking use; treat provenance as optional context, not reach or quality authority.                                         |
+| External verification becomes an attack surface | SSRF, parser failures, oversized manifests, or validator churn                                  | Disable remote lookup/pilot, retain safe local inspection, and patch under the security release gate.                             |
+| Cost grows faster than user value               | Large histories, trust-list operations, or verification latency exceed bounds                   | Narrow artifact types, shorten detail retention, deduplicate receipts, or stop the service.                                       |
+| Source graphs become spam or harassment         | Attribution squatting, malicious links, repeated disputes                                       | Rate-limit assertions, require owner preview for incoming links, and use scoped case/remedy flows.                                |
+| Standards or laws change                        | Validator/trust semantics or required disclosures drift                                         | Version the contract, re-ground authoritative sources, and avoid claiming compliance until separately reviewed.                   |
 
 ## Concrete next action
 

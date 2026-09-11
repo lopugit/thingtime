@@ -62,6 +62,11 @@ testable contract.
 - [TODO 28 — Service continuity and recovery](./28-service-continuity-and-recovery.md)
   owns write truth, recovery, and incident gates. Revision evidence cannot make
   ordinary content writes less durable or falsely successful.
+- [TODO 40 — Remix agency and responsible reuse](./40-remix-agency-and-responsible-reuse.md)
+  owns the pre-copy dependency/terms plan, private fork lifecycle, scoped
+  independence proof, optional source-update journey, and reuse remedies. This
+  epic remains the canonical source for derivation assertions, correction
+  integrity, verification limits, and portable provenance vocabulary.
 - PRs [#592](https://github.com/lopugit/thingtime/pull/592) and
   [#607](https://github.com/lopugit/thingtime/pull/607) were open when this epic
   was proposed. Recheck exact merge status and shipped behavior; do not design a

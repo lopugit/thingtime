@@ -47,6 +47,9 @@
 **Recording-agency dependency:**
 [Recording agency and intimate-data stewardship](./recording-agency-and-intimate-data-stewardship-roadmap.md)
 
+**Remix-agency dependency:**
+[Remix agency and responsible reuse](./remix-agency-and-responsible-reuse-roadmap.md)
+
 ## Outcome
 
 Make Thingtime easier to discover, understand, trust, use repeatedly, share by

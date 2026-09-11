@@ -600,3 +600,22 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     sharing, minors, institutions, sensitive domains, voice biometrics, emotion
     or credibility inference, training, and surveillance remain separately
     gated.
+
+40. **🧬 Make remix agency and responsible reuse a product contract.**
+
+    Preserve Thingtime's freshly authorized, bounded private-fork path, caller-
+    owned Things, independently copied first-party media, source immutability,
+    cleanup, and semantic capability negotiation while separating read access,
+    copy mechanics, reuse permission, adaptation, attribution, lineage,
+    independence, updates, disputes, and remedies. Start only with two approved
+    adult test accounts and one fully synthetic app; show an exact source and
+    dependency plan, apply one narrow synthetic-test grant, create one private
+    copy, change one labelled field, compare and export a version-bound receipt,
+    explicitly decline or adopt one synthetic correction, and delete every
+    fixture. Execute `claude-todo/40-remix-agency-and-responsible-reuse.md` only
+    after qualified owners approve the reuse charter, terms source, exact plan,
+    lineage/privacy contract, comparison and update semantics, dispute/remedy
+    paths, accessibility profiles, accountable owners, and stop authority.
+    Public or commercial remixing, real creator work, payments, rankings,
+    automatic updates, remote deletion, AI use, training, minors, institutions,
+    sensitive domains, and legal or ownership claims remain separately gated.

@@ -54,6 +54,11 @@ identity collection, or production transaction data.
 - [TODO 30](./30-resource-conscious-reach.md) owns constrained journeys and
   tier-neutral access. Checkout and remedy cannot assume a fast network or
   expensive device.
+- [TODO 40](./40-remix-agency-and-responsible-reuse.md) owns the pre-copy
+  dependency/terms plan, private fork lifecycle, attribution/change journey,
+  scoped independence, optional source updates, and reuse remedies. Payment or
+  entitlement never proves that adaptation, redistribution, sublicensing, AI
+  use, or training is permitted.
 - Payment-provider evidence never grants authority directly. Canonical
   entitlement state changes only through protected, idempotent API logic.
 - Qualified legal, tax, privacy, financial-risk, and accessibility owners must

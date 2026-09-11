@@ -120,6 +120,12 @@ experiment by itself.
   truth, correction propagation, and family deletion. Adoption reporting cannot
   use recording volume, transcript count, generated todos, or assistant handoff
   as proof of consent, accuracy, usefulness, or a completed outcome.
+- [TODO 40](./40-remix-agency-and-responsible-reuse.md) owns reuse grants,
+  exact copy plans, version-bound lineage, attribution/change notes,
+  independence limits, optional source updates, disputes, and remedies.
+  Adoption reporting cannot treat readability, fork success, copy count,
+  remix depth, publication, or revenue as permission, creator benefit,
+  independence, originality, usefulness, or a completed outcome.
 - Open PRs are evidence of active work, not dependencies that may be assumed
   merged. Recheck their head, base, review, CI, preview, and shipped behavior
   immediately before implementation.

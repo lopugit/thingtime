@@ -27,6 +27,9 @@ complements rather than replaces:
 - the [content-provenance roadmap](./content-provenance-and-correction-roadmap.md),
   which owns authorship, artifact revision, source, correction, and dispute
   context;
+- the [remix-agency roadmap](./remix-agency-and-responsible-reuse-roadmap.md),
+  which owns pre-copy dependency/terms review, private fork lineage,
+  attribution/change presentation, independence, updates, and reuse remedies;
 - the [trusted-developer roadmap](./trusted-developer-ecosystem-roadmap.md),
   which owns app declarations, releases, review, incident recovery, and fair
   discovery; and

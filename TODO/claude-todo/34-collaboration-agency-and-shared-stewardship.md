@@ -80,6 +80,10 @@ participants.
       evidence; collaboration activity must not become a learning claim.
 - [ ] [TODO 33](./33-ai-agency-and-accountable-assistance.md) owns AI context,
       authority, confirmation, receipts, and autonomy. No AI actor in pilot.
+- [ ] [TODO 40](./40-remix-agency-and-responsible-reuse.md) owns private fork,
+      exact copy planning, reuse terms, derivative lineage, scoped independence,
+      source-update notices, and reuse disputes. A fork does not create a shared
+      artifact, collaborator role, or authority over either side.
 - [ ] Recheck PR [#649](https://github.com/lopugit/thingtime/pull/649) before
       implementation. Its open subspace work may supply later membership and
       transfer lessons, but is neither merged nor the pilot authority model.

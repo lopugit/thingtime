@@ -18,6 +18,39 @@ required sequence:
 The branch is intentionally cumulative. It does not merge itself, implement
 the product work, or treat a plausible idea as an approved decision.
 
+## 2026-09-11 evening — remix agency and responsible reuse
+
+This run grounds the garden in Thingtime's newly merged private composition
+fork and independently copied media path while refusing to treat readability,
+a successful byte copy, `forkOf`, payment, or attribution as reuse permission,
+ownership, endorsement, universal independence, or safe execution. It adds:
+
+- `NOTES/remix-agency-and-responsible-reuse-baseline.md`, a dated evidence
+  ledger and vocabulary for read, copy, fork, remix, source version, copy plan,
+  lineage, attribution, independence, withdrawal, and dispute;
+- `PLAN/remix-agency-and-responsible-reuse-roadmap.md`, a gated route from an
+  approved reuse charter through exact pre-copy planning, version-bound
+  lineage, accessible comparison, optional source updates, remedies, and one
+  private synthetic pilot; and
+- `TODO/claude-todo/40-remix-agency-and-responsible-reuse.md`, an execution
+  epic with owner decisions, API/capability obligations, acceptance criteria,
+  stop conditions, and a concrete first decision packet.
+
+The recommended experiment uses two approved adult test accounts and one
+fully synthetic app with purpose-made text, a generated tiny image, and an
+inert action. It applies one narrow synthetic-test grant, creates one private
+copy, changes one labelled field, compares and exports a content-minimal
+lineage receipt, explicitly declines or adopts one synthetic correction, and
+deletes every fixture. It excludes real creator work, public/commercial reuse,
+payments, rankings, automatic updates, remote deletion, AI use, training,
+minors, institutions, sensitive domains, and legal or ownership claims.
+
+The theme is linked from the NOTES, PLAN, main TODO, and Claude TODO indexes;
+the ethical-adoption baseline, trustworthy-adoption roadmap, TODO 22,
+provenance, creator-sustainability, and collaboration plans now name its
+ownership boundary. No runtime, API, schema, ACL, attachment, sharing,
+capability, moderation, payment, analytics, or production behavior changed.
+
 ## 2026-09-11 — recording agency and intimate-data stewardship
 
 This run grounds the garden in Thingtime's merged owner-private Watch and saved
