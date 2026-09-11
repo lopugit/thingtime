@@ -9,10 +9,37 @@ import {
 	HeadObjectCommand,
 	PutObjectTaggingCommand,
 	S3Client,
-	UploadPartCommand
+	UploadPartCommand,
+	UploadPartCopyCommand
 } from '@aws-sdk/client-s3';
 
 import { createPrivateS3 } from './privateS3';
+
+test('stored copies pin same-bucket source version, bucket owners and exact byte range', async () => {
+	const commands: any[] = [];
+	const config = { roleArn: 'test', bucket: 'private-test', region: 'ap-southeast-2', expectedBucketOwner: '123456789012' };
+	const version = 'version/with+reserved?characters';
+	const s3 = createPrivateS3(config, { send: async (command: any) => {
+		commands.push(command);
+		return { CopySourceVersionId: version, CopyPartResult: { ETag: 'etag', ChecksumSHA256: Buffer.alloc(32).toString('base64') } };
+	} } as any);
+	const input = { objectKey: 'objects/destination', uploadId: 'mpu', partNumber: 1, sourceObjectKey: 'objects/source', sourceVersionId: version };
+	await s3.copyUploadPart(input);
+	await s3.copyUploadPart({ ...input, range: { start: 8388608, end: 9437183 } });
+	assert.ok(commands[0] instanceof UploadPartCopyCommand);
+	assert.deepEqual(commands[0].input, {
+		Bucket: 'private-test', ExpectedBucketOwner: '123456789012', ExpectedSourceBucketOwner: '123456789012',
+		Key: 'objects/destination', UploadId: 'mpu', PartNumber: 1,
+		CopySource: `private-test/objects/source?versionId=${encodeURIComponent(version)}`
+	});
+	assert.equal(commands[1].input.CopySourceRange, 'bytes=8388608-9437183');
+	for (const invalid of [{ sourceObjectKey: 'https://attacker.invalid/source' }, { objectKey: 'other/key' }, { sourceVersionId: 'null' }, { partNumber: 0 }, { range: { start: 10, end: 9 } }]) {
+		await assert.rejects(s3.copyUploadPart({ ...input, ...invalid }));
+	}
+	assert.equal(commands.length, 2);
+	const bad = createPrivateS3(config, { send: async () => ({ CopySourceVersionId: 'other', CopyPartResult: { ETag: 'etag', ChecksumSHA256: 'digest' } }) } as any);
+	await assert.rejects(bad.copyUploadPart(input), /integrity/);
+});
 
 test('multipart creation omits ACLs and fixes encryption, checksum, metadata, and pending tag', async () => {
 	const commands: any[] = [];

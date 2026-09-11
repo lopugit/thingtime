@@ -22,6 +22,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-09-10: Add shared iOS/Mac WidgetKit actions, dashboards, Thing rendering, recent Things, and iOS Control Centre buttons. Add opt-in bounded content sync, native launch routes, Mac companion signing/install runbook, and widget acceptance checks. See [PR #727 notes](../PRs/727-apple-widget-suite.md) and [Apple widget setup](../apple/README.md). — Codex (AI), 2026-09-10
 
+- Verify real shared-file and linked-gallery copies on the exact PR preview,
+  including private copies surviving source revocation/deletion and cleanup
+  of all disposable test content. Record the separate post-login root-data
+  network failure and acceptance boundaries in
+  [PR #755](../PRs/755-shared-composition-file-copies.md).
+  — Codex (AI), 2026-09-11
+
 - Add confirmed Send to Lopu to private recording Things in desktop and phone menus, with capability, account-switch and processor-consent guards and a link to recording activity. Keep phone content inset. Details: [PR 761](../PRs/761-lopu-saved-recording-handoff.md). — Codex (AI), 2026-09-10
 
 - Allow explicitly selected private saved audio Things through the recording queue and confirmed Send to Lopu flow, with source-state revalidation and transactional attachment fences. Keep automatic discovery Watch-only, preserve relational transcripts and negotiate the new 1.5 recording controls. — Codex (AI), 2026-09-10
@@ -35,6 +42,49 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - Show earlier Lopu confirmation requests as "Approval requested" after reload,
   not failed executions. Historical receipts never restore approval grants or
   claim that later actions succeeded. — Codex (AI), 2026-09-10
+
+- Preserve split-fragment media templates in private copies using bounded
+  root-render bindings after interpolation. Keep labels and action inputs
+  unchanged, compose bindings on re-fork, and align shared media discovery.
+  Negotiate fork 1.4.0 and attachment-content 1.6.3. Real storage acceptance
+  remains tracked in [PR #755](../PRs/755-shared-composition-file-copies.md).
+  — Codex (AI), 2026-09-10
+
+- Reconcile the shared-copy follow-up with develop's personal-recording
+  contracts, preserving fork 1.3.3 and device-pairing 1.1.0 assertions.
+  Acceptance boundaries remain listed in [PR #755](../PRs/755-shared-composition-file-copies.md).
+  — Codex (AI), 2026-09-10
+
+- Preserve linked gallery records and annotations in shared-content copies
+  without fetching external bytes or changing download redirect protections.
+  Negotiate fork 1.3.3 and check late revocation/metadata changes; live acceptance
+  remains tracked in [PR #755](../PRs/755-shared-composition-file-copies.md).
+  — Codex (AI), 2026-09-10
+
+- Include relational post-purpose galleries when copying shared content,
+  preserving copied home targets and order with one bounded discovery query.
+  Negotiate fork 1.3.2; live storage acceptance remains pending in
+  [PR #755](../PRs/755-shared-composition-file-copies.md).
+  — Codex (AI), 2026-09-10
+
+- Correct shared-app file copies whose templates interpolate stored attachment
+  IDs, including defaults, nested lists, branch selectors and page-instance overrides. Preserve
+  template behavior and non-argument text; enforce recipient upload approval
+  inside the copy service and negotiate fork 1.3.1. Split partial
+  IDs and real-storage acceptance remain tracked in [PR #755](../PRs/755-shared-composition-file-copies.md).
+  — Codex (AI), 2026-09-10
+
+- Connect shared app forks to exact-version file copying, retarget authored
+  media and bind newly owned files transactionally. Add revocation/cleanup
+  coverage and negotiate the additive fork 1.3.0 contract. Live storage and
+  browser-copy acceptance remain pending. See [PR #755](../PRs/755-shared-composition-file-copies.md).
+  — Codex (AI), 2026-09-10
+
+- Prepare the internal exact-version file-copy path for shared app forks.
+  Reuse attachment authorization, quota reservation, multipart finalization,
+  moderation and deferred cleanup. Fork-route/media rewriting integration and
+  live object-store acceptance remain pending; no new HTTP capability is exposed.
+  — Codex (AI), 2026-09-10
 
 - Verify real macOS Keychain recording state storage and add explicit,
   confirmed recovery cleanup for expired unfinished pairing; completed local

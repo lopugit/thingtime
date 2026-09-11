@@ -1174,6 +1174,37 @@ email whose link points at the attacker.
 
 ## Post and comment attachments (`remix/app/components/Attachments/`)
 
+- [ ] Internal shared-file copies: run `npm --prefix remix run test:attachments`.
+      With post-purpose upload approval denied (or its lookup unavailable),
+      copying must reserve no quota or S3 upload. Revoke approval between parts:
+      no next part/finalization may run and only the new upload is cleaned.
+      Confirm source authorization precedes quota reservation; revocation,
+      moderation, purpose or exact-version changes stop copying; only the new
+      owner's partial upload is cleaned, with deferred cleanup still billed.
+      Repeat through `/things/fork` using real private storage and
+      verify the copied image after revoking/deleting the original. Unit mocks
+      alone do not prove that live-S3 acceptance or the Copy button works.
+      Run the action suite for URL/HTML/CSS retargeting, transactional binding,
+      failed-copy cleanup, late root revocation and no-write template failures.
+      Cover exact attachment IDs in saved args, argument defaults, nested lists
+      and page overrides: generated URLs must use copied IDs, while labels,
+      prose and URL template strings stay unchanged. Matching `ttMap` keys and
+      `ttIf` comparisons must still select the same branch after ID retargeting. Split partial IDs
+      must resolve to copied files in loops and inactive branches without changing
+      input data. Re-fork and check the new file IDs again; unused root media
+      bindings must grant nothing. Oversized bindings must fail before writes.
+      Copy a post/data Thing with a relational file gallery but no inline media
+      URL: all eligible files must retain their copied home target and order.
+      A file also embedded elsewhere must be copied once. Oversized galleries
+      and discovery failures must perform no upload writes; recording/message/
+      profile-purpose files must not enter this copy plan.
+      Linked gallery copies must mint new private records with the same URL
+      and annotations, never fetch external bytes or permit content redirects.
+      Invalid/flagged sources fail before minting; late URL changes or revoked
+      access clean only the new record. Confirm ordinary downloads still reject
+      linked attachments, while authorized shared copies can include them.
+      Confirm the button requires `api.things-fork` 1.4.0 before sending a copy.
+
 - [ ] With `THINGTIME_MODERATION_PROVIDER=test`, upload an image named
       `tt-test-nsfw.png` to a post: after analysis it renders heavily blurred
       with a red border, light red wash, centered NSFW badge, and a

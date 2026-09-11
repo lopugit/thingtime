@@ -43,7 +43,9 @@ export const APP_SCOPE_CATALOG: AppScopeDescriptor[] = [
     title: scope.id === 'things' ? 'All Things — full access'
       : scope.id === 'things.create' ? 'Create Things'
         : `${scope.title} Things`,
-    description: scope.description + ' Applies to your account, beyond individually selected Things.',
+    description: scope.id === 'things'
+      ? 'Read, create, update, delete, comment, react, save, vote, and share Things in your account, including private Things.'
+      : scope.description + ' Applies to your account, beyond individually selected Things.',
     kind: 'capability'
   })),
   {
