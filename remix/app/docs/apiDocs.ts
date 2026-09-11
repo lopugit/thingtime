@@ -635,6 +635,16 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 
 export const apiEndpointDocs: ApiEndpointDoc[] = [
 	endpoint({
+		id: 'things-actions', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'things', title: 'Thing actions',
+		endpoint: '/api/v1/things/actions', methods: ['POST'],
+		summary: 'Dispatch an explicit semantic action against a Thing by ID, irrespective of its presentation.',
+		detail: 'Accepts only id and action=send-to-lopu. This first action supports owned private ready Watch recording posts and standalone audio Things. The protected recording writer re-resolves source ownership, privacy, binding, ready state and enabled processing consent. Stable jobs deduplicate requests; transcription precedes a private Lopu conversation with normal billing and sensitive-tool confirmation. This is not arbitrary crystal mutation or permission inheritance. Existing /api/v1/things CRUD remains canonical; the recordings send-to-lopu operation is a compatibility adapter to this same dispatcher. No owner, endpoint, credentials or transcript may be supplied. The response includes ownerId and the action result, not recording settings. Ambiguous failures must be reconciled in recording activity, not blindly retried.',
+		auth: { mode: 'session-or-bearer', description: 'Full first-party user session only. Temporary, service, app, device and PAT actors are rejected. Same-origin application/json, 2 KiB maximum body. Uses the shared subscription-aware lopu.recordings account rate bucket; unlimited tiers still obey all security and provider limits. Private no-store responses.' },
+		steps: ['Negotiate api.things-actions >=1.0.0 with matching major on the selected origin.', 'Select the home data source; custom data sources return 409 to prevent cross-database ID collisions.', 'Read current recording consent and explicitly confirm sending this Thing to Lopu.', 'POST the exact Thing ID and action; inspect recording activity for progress.'],
+		requestExamples: [{ name: 'Send recording Thing', description: 'Explicitly act on this recording.', method: 'POST', body: { id: 'watch-upload-your-id', action: 'send-to-lopu' } }],
+		responseExamples: [{ status: 200, description: 'Handoff queued or already requested.', body: { ok: true, ownerId: 'your-user-id', message: 'Recording queued for Lopu.' } }, { status: 403, description: 'Processor not enabled or source not eligible.', body: { ok: false, error: 'Enable recording processing first.' } }]
+	}),
+	endpoint({
 		id: 'ai-complete', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'lopu', title: 'AI connection waterfall',
 		endpoint: '/api/v1/ai/complete', methods: ['POST'],
 		summary: 'Complete text through an explicit ordered waterfall of your own Secure Vault endpoint connections.',
@@ -5774,13 +5784,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-content',
-		contractVersion: '1.6.2',
-		featureVersion: '1.6.2',
+		contractVersion: '1.6.3',
+		featureVersion: '1.6.3',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
 		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
 		detail:
+			'Root component render ttMediaRefs bindings are applied once after stored interpolation in media props/CSS, matching the browser. Only resulting rendered URLs are dependencies; unused pairs, labels and action inputs grant nothing. ' +
 			'An independently readable foreign component establishes its own freshly checked audience for its same-author authored media and bound children. The outer root remains required. Cross-author page argument overrides never inherit either author private media authority. ' +
 			'Owners may read live unattached drafts. Bound content is purpose-authorized against the exact target: post/comment ACL inheritance, active or pending chat membership, the current public profile slot, or the current personal/community emoji reference. The bucket never becomes public. ' +
 			'Conditional media properties and conditional props/style records include their stored output alternatives. Condition operands, lookup keys, action inputs and non-rendering metadata are not media grants. ' +
@@ -12195,18 +12206,19 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-fork',
-    featureVersion: '1.2.1',
-    contractVersion: '1.2.1',
+    // 1.4.0: root render media bindings preserve split-fragment template behavior.
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
     group: 'things',
     title: 'Copy a shared composition',
     endpoint: '/api/v1/things/fork',
-    summary: 'Create an independent private copy of readable standalone content, including pages, components, actions, schema controls and data with extended content; independently readable foreign components include their authored same-author children.',
+    summary: 'Create an independent private copy of readable standalone content, including pages, components, actions, schema controls and data with extended content and bound post-purpose file galleries; independently readable foreign components include their authored same-author children. Bound files keep their copied home target and gallery order, even when also embedded elsewhere. Linked gallery entries become new private quota-accounted records with the same validated external URL and annotations; external bytes are never fetched, stored or redirected by the content endpoint. Flagged linked media cannot be re-minted as unflagged. Non-post purposes are excluded and unavailable or unsupported files fail the copy instead of silently dropping a gallery.',
     detail: 'Revalidates the root audience and traverses stored component, action, schema and data references, including saved component arguments and every persisted page instance. Creates fresh caller-owned private Things through normal quota and schema gates. Rewrites executable references and capability scopes to copied ids; never edits the original or overwrites a prior fork. Templated controls retain their editable arguments and receive a bounded ttActionRefs array of [original resolved reference, copied id] pairs on the authored control node. The renderer applies the first matching pair once after ttAction interpolation, never to labels or inputs, and strips the marker from rendered output. Unused pairs are not access grants. Forks of forks rebind to their own actions. Missing dependencies fail before writes. Failed writes trigger best-effort cleanup of exact newly created ids; a cleanup failure is reported explicitly. Repeated successful calls create separate copies.',
-    auth: { mode: 'session', description: 'Requires a signed-in user and read access to id, including its key or group membership when needed.' },
+    auth: { mode: 'session', description: 'Requires a signed-in user and read access to id, including its key or group membership when needed. File-bearing copies additionally require the recipient to be a user account with normal post-purpose upload approval; that permission is checked before reservation and throughout copying.' },
     methods: ['POST'],
-    steps: ['POST { id, key? }. Supported roots are post, data, schema, component, webpage and action content; organizational folders, managed records and target-attached relationship rows retain their dedicated lifecycle.', 'Open the returned id in Builder for a webpage or /thing/:id for other content.'],
+    steps: ['POST { id, key? }. Supported roots are post, data, schema, component, webpage and action content; organizational folders, managed records and target-attached relationship rows retain their dedicated lifecycle.', 'Stored first-party media referenced by pages/components is copied to new caller-owned uploads through quota, exact-version authorization and normal moderation. HTML/CSS, saved URL arguments and exact attachment IDs in persisted argument values/defaults are retargeted, including nested lists and page-instance overrides. Matching ttMap keys and ttIf comparison values follow copied IDs so branch selection is preserved. URL template strings, argument labels and unrelated prose are preserved. External URLs are unchanged. Split-fragment file IDs retain their argument program and use root render ttMediaRefs pairs after interpolation. At most 512 valid first-match ID pairs map only first-party unkeyed media props and parsed CSS; the marker is stripped from output, generated text shares the render budget, and unused pairs never grant access. Re-forks compose targets onto their newly copied files.', 'Files bind transactionally to a copied Thing, with at most 25 files per target. The operation shares a 120-second copy deadline and revalidates the source composition before and after writes. Failure cleans only new Things/uploads; deferred cleanup remains billed and is reported. filesCopied counts newly owned attachments, separately from copied Things.', 'Open the returned id in Builder for a webpage or /thing/:id for other content.'],
     requestExamples: [{ name: 'Copy a shared page', description: 'Save an editable private copy.', method: 'POST', body: { id: 'page-id', key: 'owner-issued-link-key' } }],
-    responseExamples: [{ status: 200, description: 'Independent private copy created.', body: { ok: true, id: 'new-page-id', copied: 3, ids: ['new-action-id', 'new-component-id', 'new-page-id'] } }]
+    responseExamples: [{ status: 200, description: 'Independent private copy created.', body: { ok: true, id: 'new-page-id', copied: 3, ids: ['new-action-id', 'new-component-id', 'new-page-id'], filesCopied: 1 } }]
   }),
   endpoint({
     id: 'actions-run',

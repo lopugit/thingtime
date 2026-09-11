@@ -1,5 +1,37 @@
 # TESTING.md — per-area manual test checklists
 
+## Inherited Thing context menus
+
+- [ ] Type/paste a query, change kind/view/display/sort/group, open a Thing and
+  use browser Back/Forward and reload. The URL and controls retain the same
+  search and rules. Fast consecutive changes must not drop query characters;
+  folder navigation clears only the new entry's query, not the previous entry.
+- [ ] Drawer destinations and Thing-menu Open/View data are real anchors:
+  command/control-click, middle-click and the browser's open-in-new-tab menu
+  leave the current page unchanged. Alt/Shift keep browser-native behaviour.
+  Mutations remain buttons; disabled actions have no navigable href. Drawer
+  reorder ignores modified pointer presses, and profile/settings are sibling
+  links rather than nested interactive controls.
+- [ ] Open the same recording/post from Things (grid, list, columns, kebab and
+  right-click), its post card, the generic Thing page and recording activity.
+  Base labels/order come from the Thing menu; recording activity targets the
+  recording ID, never its processing-job ID. No per-card lookup on initial paint.
+- [ ] Test keyboard arrows, Escape/back, focus return, touch, pinned menus,
+  long labels and the full page/menu scroll at desktop and 390px. With a visible
+  scrollbar, the menu's right edge stays inside document.clientWidth minus 8px.
+  Options loaded while a submenu is open replace stale options immediately.
+- [ ] Post privacy opens beneath Share / permissions, preserves Custom and
+  hidden-link consent, and rolls back failed changes. Moderator-only flairs,
+  reports, approve/remove, pin, lock, NSFW and spoiler keep their existing guards.
+  Bound media and foreign Things never gain ordinary owner mutation rights.
+- [ ] Cancel Send to Lopu: no mutation. Try a foreign, public, bound or unavailable
+  recording and switch account/unmount during lookup or confirmation: no handoff.
+  Missing/wrong-origin/breaking api.things-actions blocks before any write.
+  Repeated confirmed handoffs still deduplicate through the protected writer.
+- [ ] Multi-select Things: bulk actions retain their exact target count; Send to
+  Lopu is absent. Test folder clipboard/paste and explicit Open versus Preview.
+  Message edit/delete still pass through chat-membership authorization.
+
 ## Unified Lopu conversations, scheduled Things and discussions
 
 - [ ] At 390px width, historical tool rows put long summaries below their label
@@ -1173,6 +1205,37 @@ email whose link points at the attacker.
       with no upper limit, and never below the small floor.
 
 ## Post and comment attachments (`remix/app/components/Attachments/`)
+
+- [ ] Internal shared-file copies: run `npm --prefix remix run test:attachments`.
+      With post-purpose upload approval denied (or its lookup unavailable),
+      copying must reserve no quota or S3 upload. Revoke approval between parts:
+      no next part/finalization may run and only the new upload is cleaned.
+      Confirm source authorization precedes quota reservation; revocation,
+      moderation, purpose or exact-version changes stop copying; only the new
+      owner's partial upload is cleaned, with deferred cleanup still billed.
+      Repeat through `/things/fork` using real private storage and
+      verify the copied image after revoking/deleting the original. Unit mocks
+      alone do not prove that live-S3 acceptance or the Copy button works.
+      Run the action suite for URL/HTML/CSS retargeting, transactional binding,
+      failed-copy cleanup, late root revocation and no-write template failures.
+      Cover exact attachment IDs in saved args, argument defaults, nested lists
+      and page overrides: generated URLs must use copied IDs, while labels,
+      prose and URL template strings stay unchanged. Matching `ttMap` keys and
+      `ttIf` comparisons must still select the same branch after ID retargeting. Split partial IDs
+      must resolve to copied files in loops and inactive branches without changing
+      input data. Re-fork and check the new file IDs again; unused root media
+      bindings must grant nothing. Oversized bindings must fail before writes.
+      Copy a post/data Thing with a relational file gallery but no inline media
+      URL: all eligible files must retain their copied home target and order.
+      A file also embedded elsewhere must be copied once. Oversized galleries
+      and discovery failures must perform no upload writes; recording/message/
+      profile-purpose files must not enter this copy plan.
+      Linked gallery copies must mint new private records with the same URL
+      and annotations, never fetch external bytes or permit content redirects.
+      Invalid/flagged sources fail before minting; late URL changes or revoked
+      access clean only the new record. Confirm ordinary downloads still reject
+      linked attachments, while authorized shared copies can include them.
+      Confirm the button requires `api.things-fork` 1.4.0 before sending a copy.
 
 - [ ] With `THINGTIME_MODERATION_PROVIDER=test`, upload an image named
       `tt-test-nsfw.png` to a post: after analysis it renders heavily blurred
