@@ -1,5 +1,7 @@
 import React from 'react';
-import { Box, Button, Flex, Image, Menu, MenuButton, MenuItem, MenuList, Portal } from '@chakra-ui/react';
+import { Box, Button, Flex, Image } from '@chakra-ui/react';
+import { ThingActionMenuButton } from '../Thingtime/ContextMenu/ThingActionMenuButton';
+import { buildThingEntityMenu } from '../Thingtime/ContextMenu/thingEntityMenu';
 
 import { ReactionControl } from '../Feed/ReactionControl';
 import { PostAttachments } from '../Attachments/PostAttachments';
@@ -233,21 +235,12 @@ export const MessageRow = (props: MessageRowProps) => {
         </Button>
       ) : null}
       {!sourceLocked && (canEdit || props.onDelete) ? (
-        <Menu isLazy placement="bottom-end">
-          <MenuButton as={Button} size="xs" variant="ghost" color="var(--tt-muted, #9a9aa6)">
-            ⋯
-          </MenuButton>
-          <Portal>
-            <MenuList zIndex={10260} minWidth="140px" fontSize="13px">
-              {canEdit ? <MenuItem onClick={() => props.onEdit!(message)}>✏️ Edit</MenuItem> : null}
-              {props.onDelete ? (
-                <MenuItem color="var(--tt-danger, #e5484d)" onClick={() => props.onDelete!(message)}>
-                  🗑️ Delete
-                </MenuItem>
-              ) : null}
-            </MenuList>
-          </Portal>
-        </Menu>
+        <ThingActionMenuButton identity={message.id} label="Message actions"
+          model={buildThingEntityMenu({ edit: !!canEdit, delete: !!props.onDelete })}
+          onAction={({ action }) => {
+            if (action.command === 'edit' && canEdit) props.onEdit?.(message);
+            else if (action.command === 'delete') props.onDelete?.(message);
+          }} />
       ) : null}
     </Flex>
   );

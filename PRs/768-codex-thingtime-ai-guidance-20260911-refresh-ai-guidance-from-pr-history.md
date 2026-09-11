@@ -39,3 +39,9 @@ in an isolated checkout of the current integration source. The PR remains open
 for review; there is no primary-branch merge or production mutation. Exact-head
 CI and preview outcomes belong to the live PR checks and delivery message,
 rather than becoming evergreen policy in the root file.
+
+Integration follow-up: `develop` advanced to `056018962` with PR #767 while
+this review was running. Its application changes and both changelog entries
+are preserved. The dated review/inventory remain the original capture; no
+historical PR state is silently rewritten to the later observation. Generated
+snapshot rename conflicts are resolved as a complete set and regenerated.

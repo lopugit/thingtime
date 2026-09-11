@@ -18,7 +18,7 @@ function fixture({ version = '1.5.0', enabled = true, confirm = true, responseOw
 			fetch: (async (path: string, init?: RequestInit) => {
 				calls.push({ path, init });
 				assert.equal(init?.credentials, 'same-origin'); assert.equal(init?.cache, 'no-store');
-				return Response.json(path.includes('capabilities') ? { origin, features: { 'api.lopu-recordings': { version } } } :
+				return Response.json(path.includes('capabilities') ? { origin, features: { 'api.lopu-recordings': { version }, 'api.things-actions': { version: '1.0.0' } } } :
 					{ ok: true, ownerId: responseOwner, settings: { enabled } });
 			}) as typeof fetch }
 	};
@@ -41,7 +41,8 @@ test('handoff negotiates, reads consent, confirms, and submits only the selected
 	assert.equal(await sendRecordingThingToLopu(recording, 'owner', f.options), true);
 	assert.equal(f.confirmations(), 1);
 	assert.equal(f.calls.length, 3);
-	assert.deepEqual(JSON.parse(String(f.calls[2].init?.body)), { op: 'send-to-lopu', postId: recording.id });
+	assert.equal(f.calls[2].path, '/api/v1/things/actions');
+	assert.deepEqual(JSON.parse(String(f.calls[2].init?.body)), { action: 'send-to-lopu', id: recording.id });
 });
 
 test('cancel never submits or enables processing', async () => {
