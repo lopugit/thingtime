@@ -3031,3 +3031,39 @@ uses production APNs. Never expose keys or device tokens in public diagnostics.
 an optional owner guard on registration. `api.notifications-test` 1.1.0 adds the
 sanitized delivery report. Single and bulk native delivery remain attached to
 the Vercel request lifetime through `waitUntil`.
+
+## Inherited Thing actions
+
+Persisted entity menus use `ThingContextMenu` and `buildThingEntityMenu`;
+`schemas/thingActions.ts` owns the base verbs. Post privacy/moderation and
+Drive selection/clipboard operations extend this model. `PersistedThingMenu`
+resolves only an opened Thing through `/api/v1/things` and guards recording
+handoff against account changes. Do not add a new per-kind dropdown renderer.
+Navigation actions carry an explicit `href` and render real anchors; they never
+reuse mutation callbacks. Drawer navigation also preserves native modified and
+middle clicks. Actions without a destination remain buttons.
+
+The Things browser stores `q`, `kind`, `view`, `display`, `sort`, and `group` in
+the URL alongside folder/device/preview state. Preference defaults are written
+explicitly so Back and shared links do not depend on later local-cache changes.
+Search typing replaces the current history entry; filter changes create entries.
+
+CRUD remains `/api/v1/things`. Semantic operations use
+`POST /api/v1/things/actions` with `{ "id": "your-thing-id", "action": "send-to-lopu" }`.
+Negotiate origin-scoped `api.things-actions` 1.0.0 before dispatch. The first
+operation delegates to the protected recording writer; old recording clients
+retain their compatibility operation. Shared schema/UI does not mean arbitrary
+protected-state mutation: attachment lifecycle, chat membership, moderation,
+consent and quota checks remain enforced by their domain writers. A schema's
+menu hints never grant authority. No storage migration or new secret is required.
+Handoff requires the home data source; a custom source returns 409 so an ID
+from another database cannot accidentally select a home recording.
+
+For forks, configure normal account/storage setup and explicitly enable a
+recording processor before testing handoff. Personal processing uses a paired
+device; API processing uses the account's configured provider connections.
+Never embed credentials in a menu, action request, source fixture or public docs.
+
+Local menu QA uses this worktree's deterministic port (currently
+`http://localhost:16250`). Tailscale/Funnel was unavailable during verification:
+the local launcher points to a missing Tailscale app; no public mapping was changed.
