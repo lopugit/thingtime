@@ -1,5 +1,21 @@
 # PR 764 — portable Thing transfer
 
+## Recording lifecycle foundation — 2026-09-11
+
+Standalone recording transfer is still NOT exposed by this checkpoint. Purpose
+is immutable: converting an ordinary post draft into a recording is not allowed.
+The server-only reservation option now supports a recording import draft. Its
+purpose is recording from birth; completion retains expiry until import commits.
+The import commit helper atomically checks owner, ready state, draft marker,
+expiry, absence of gallery/profile binding and expected bytes, applies canonical
+annotations, preserves object/moderation state, accounts the metadata delta and
+clears the draft marker/expiry under the home transaction and CAS fence. Reusing
+a durable recording is rejected. Drafts are excluded from My Things and enter
+normal expired-draft cleanup. No HTTP input currently sets this marker, so no
+new API capability is advertised yet. Next: wire the authorized upload-intent
+and portable recording adapters, then exercise approved-upload round trips and
+transaction/cleanup failure paths through real APIs.
+
 ## Scope and current checkpoint — 2026-09-11
 
 The requested outcome is broad export/import, actual browser/OS clipboard

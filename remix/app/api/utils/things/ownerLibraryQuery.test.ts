@@ -13,6 +13,7 @@ const matches = (doc: Record<string, any>, query: Record<string, any>): boolean 
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     return Object.entries(value).every(([op, operand]) => {
       if (op === '$exists') return (actual !== undefined) === operand;
+      if (op === '$ne') return !isDeepStrictEqual(actual, operand);
       if (op === '$nin') return !(operand as unknown[]).some(item => (Array.isArray(actual) ? actual : [actual]).includes(item));
       if (op === '$in') return (operand as unknown[]).some(item => item === null ? actual == null : (Array.isArray(actual) ? actual : [actual]).includes(item));
       throw new Error(`Unsupported fixture query operator ${op}`);
@@ -27,6 +28,7 @@ test('owner library includes completed standalone recordings without exposing dr
   const query = ownerLibraryMatch('alice', PROTECTED_THINGTIME);
   const rows = [
     { ...recording, id: 'saved-audio' },
+    { ...recording, attachmentImportDraft: true, id: 'unfinished-import' },
     { ownerId: 'alice', thingtime: ['post'], id: 'post' },
     ...['pending', 'finalizing', 'deleting'].map(state => ({ ...recording, attachmentState: state, id: state })),
     ...['post', 'comment', 'message', 'profile', 'emoji'].map(purpose => ({ ...recording, attachmentPurpose: purpose, id: purpose })),

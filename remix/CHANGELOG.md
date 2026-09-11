@@ -18,6 +18,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Added server-only recording-import draft lifecycle groundwork, preserving immutable upload purpose, normal expiry cleanup and transactional storage accounting. Recording transfer adapters are not enabled yet; see [PR 764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI), 2026-09-11
+
 - Feed-algorithm transfer preserves private weights and training statistics via
   owner-only reads and dedicated quota-accounted imports, with fresh unshared
   copies and no active-selection change. Settings exposes Copy/Download/Import

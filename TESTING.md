@@ -1,5 +1,15 @@
 # TESTING.md — per-area manual test checklists
 
+## Recording transfer lifecycle (adapter not yet enabled)
+
+- [ ] When the recording transfer adapter is enabled, verify normal approved
+  uploads retain recording purpose throughout import; incomplete imports stay
+  expiring drafts, do not appear in My Things, and are reclaimed normally.
+- [ ] Verify committed imports are new private recordings with preserved bytes
+  and annotations. Replay, another owner, expired/bound/profile media and wrong
+  byte counts must fail without changing existing recordings. Verify quota and
+  metadata changes commit together and a failed commit leaves a recoverable draft.
+
 ## Portable theme transfers
 
 - [ ] In Settings → Things → Feed algorithms, copy/download a trained profile,

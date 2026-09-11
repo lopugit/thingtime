@@ -1858,7 +1858,7 @@ test('global expired draft scan is expiry-first, unattached, bounded, and repeat
 		attachmentExpiresAt: { $lte: now },
 		$or: [
 			{ targetId: { $exists: false }, attachmentState: 'pending' },
-			{ targetId: { $exists: false }, attachmentState: 'ready', attachmentPurpose: { $ne: 'recording' } },
+			{ targetId: { $exists: false }, attachmentState: 'ready', $or: [{ attachmentPurpose: { $ne: 'recording' } }, { attachmentPurpose: 'recording', attachmentImportDraft: true }] },
 			{
 				targetId: { $exists: false },
 				attachmentState: 'finalizing',

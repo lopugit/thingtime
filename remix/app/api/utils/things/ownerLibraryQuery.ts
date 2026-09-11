@@ -6,6 +6,6 @@ export const ownerLibraryMatch = (ownerId: string, excludedKinds: readonly strin
   ownerId,
   $or: [
     { thingtime: { $nin: [...excludedKinds] } },
-    { thingtime: [ATTACHMENT_THINGTIME], attachmentPurpose: 'recording', attachmentState: 'ready', targetId: { $exists: false } }
+    { thingtime: [ATTACHMENT_THINGTIME], attachmentPurpose: 'recording', attachmentState: 'ready', attachmentImportDraft: { $ne: true }, targetId: { $exists: false } }
   ]
 });
