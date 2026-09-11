@@ -3001,6 +3001,19 @@ A healthy Mac connection panel can be hidden from Things using “Don’t show a
 
 Shared-settings validation worktree: `http://localhost:13040` (HMR 13041, Nitro 13042), managed by the repository PM2 lifecycle. Funnel was unavailable during validation because the installed Tailscale CLI points to a missing application executable; no public Funnel URL was verified. No new environment variables or external setup are required for these settings changes.
 
+### Apple widgets and Control Centre
+
+The iOS app and native Mac widget companion share a configurable WidgetKit suite.
+See [Apple widget setup](apple/README.md) for gallery choices, content privacy,
+App Group provisioning, local signing, and fork-safe build settings. App Group
+capabilities must be enabled on both the iOS app and its widget extension before
+installing a signed build; no credentials belong in project files.
+
+The Mac companion now uses a native interface and browser OAuth. Open
+**Connection** to select production or your local server and approve widget
+permissions. No client secret or manual app registration is required; fork
+callback identifiers and capability requirements are documented in
+[Apple widget setup](apple/README.md#oauth-setup-for-forks-and-local-servers).
 
 ### Automatic import and native push recovery (10 September 2026)
 
@@ -3031,6 +3044,24 @@ uses production APNs. Never expose keys or device tokens in public diagnostics.
 an optional owner guard on registration. `api.notifications-test` 1.1.0 adds the
 sanitized delivery report. Single and bulk native delivery remain attached to
 the Vercel request lifetime through `waitUntil`.
+
+### Stack AI endpoint selection
+
+Stack merges can save an ordered AI model/endpoint waterfall. Configure
+`ANTHROPIC_API_KEY` and/or `OPENAI_API_KEY` on the Thingtime deployment for
+built-in HTTP endpoints. For personal endpoints, use Settings → Secure Vault;
+custom hosts retain the existing `THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS`
+allowlist and public HTTPS restrictions. The controller and app must share
+`THINGTIME_CI_ROUTER_SECRET` (secret-store values only). API keys stay on the app;
+never put them into workflow inputs. Roll out the protected controller's v4 plan
+support before using custom orders. Inherited orders keep the existing CLI
+workflow. See [the reusable selector contract](docs/ai-waterfall-selector.md).
+
+This feature's local validation worktree uses `http://localhost:13310`
+(Vite), 13311 (HMR), and 13312 (Nitro), derived by `npm run web-ports`.
+Tailscale/Funnel is not available on the validation host: its configured CLI
+wrapper points at a missing Tailscale application. No public dev mapping was
+created or changed.
 
 ## Inherited Thing actions
 
@@ -3067,3 +3098,7 @@ Never embed credentials in a menu, action request, source fixture or public docs
 Local menu QA uses this worktree's deterministic port (currently
 `http://localhost:16250`). Tailscale/Funnel was unavailable during verification:
 the local launcher points to a missing Tailscale app; no public mapping was changed.
+
+### Saved AI waterfalls
+
+Settings → AI waterfalls stores private named model/endpoint orders using the existing Things database and authenticated API. No extra collection, migration, or secret is required. Configure provider keys or personal Secure Vault connections as described in [the waterfall setup](docs/ai-waterfall-selector.md). Forks must deploy the registered `api.ai-waterfalls` 1.0.0 contract before clients can save a library.
