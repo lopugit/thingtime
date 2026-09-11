@@ -13,6 +13,7 @@ import type { WebpageBlock } from '~/components/Builder/webpageBlocks';
 import { WebpageBlocksRenderer } from '~/components/Builder/WebpageBlocksRenderer';
 import { WebpageRuntimeProvider } from '~/components/Builder/webpageRuntime';
 import { ForkSharedThingButton } from '~/components/Sharing/ForkSharedThingButton';
+import { ThingTransferControls } from '~/components/Things/ThingTransferControls';
 import { canForkThing } from '~/components/Sharing/forkThingCore';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { PostCard } from '~/components/Feed/PostCard';
@@ -818,6 +819,7 @@ export default function ThingPage() {
 							{diagnostic ? `Migration error · ${diagnostic.migrationId}` : diagnosticRoute ? 'Migration error' : displayName || 'Thing'}
 						</Heading>
 						{thing && !isThingOwner && canForkThing(thing) ? <ForkSharedThingButton id={thing.id} linkKey={linkKey} webpage={isWebpage} /> : null}
+						{thing && <ThingTransferControls id={thing.id} linkKey={linkKey} />}
 					</Box>
 					<Button
 						as={Link}

@@ -31,6 +31,14 @@ of that scope.
 
 ## Evidence
 
+- Shared Transfer controls now cover Thing details, component-family pages,
+  public webpages and the Builder inspector. An isolated Chrome fixture checked
+  real ZIP downloads and OS clipboard envelopes plus Import dialog bounds and
+  hit-testing on all four surfaces at 1280px and 390px. Dialogs and portaled
+  menus explicitly layer above the Builder inspector. Fixtures were deleted
+  through the ordinary Things API after each run; no source user data changed.
+- Current focused Things suite: 87 passing tests. All seven changed frontend
+  files pass targeted lint. These results do not prove stored-file acceptance.
 - Follow-up: import 1.0.1 reconstructs persisted component instance contexts
   from canonical transfer content and reuses the fork media bindings. Saved
   defaults, distinct page instances, CSS media and a second re-import retain
@@ -66,8 +74,8 @@ of that scope.
 Complete all file/gallery forms: linked galleries currently fail explicitly
 rather than silently disappearing. Split-template imported media now has its
 rebinding adapter, but real stored-file UI proof needs an upload-enabled test
-account. Wire OS clipboard Copy/Cut/Paste and
-Download across Builder/components and generic menus. Verify stored file bytes through
+account. Builder/component/detail Transfer controls are wired; generic nested
+Thingtime-value menus still need Download/import integration. Verify stored file bytes through
 the real import UI, account transitions, partial failures and desktop/mobile
 dynamic states. Verify current-head CI and preview independently of local tests.
 

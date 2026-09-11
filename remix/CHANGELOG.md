@@ -18,6 +18,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Add shared Transfer controls to Builder, component-family pages, Thing
+  details and public webpages. Keep transfer menus/dialogs above the Builder
+  inspector and require saving dirty Builder drafts before export. Verify
+  desktop/mobile clipboard and download behavior across all four surfaces.
+  [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-11
+
 - Preserve split-template component media during import and repeated transfers;
   negotiate import contract 1.0.1 and retain ordinary upload approval gates.
   [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).

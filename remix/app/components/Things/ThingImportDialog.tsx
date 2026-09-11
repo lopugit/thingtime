@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { DRAWER_Z } from '../Nav/Drawer/useDrawer';
 import { Box, Button, Flex, Input, Modal, ModalBody, ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalOverlay, Select, Text } from '@chakra-ui/react';
 import { useAttachmentUploads } from '~/components/Attachments/useAttachmentUploads';
 import { useApi } from '~/hooks/useApi';
@@ -79,8 +80,8 @@ export const ThingImportDialog = ({ ownerId, folderId, initialBundle, onClose, o
   };
 
   return <Modal isOpen onClose={onClose} size="lg" scrollBehavior="inside" closeOnOverlayClick={!submitting} closeOnEsc={!submitting}>
-    <ModalOverlay />
-    <ModalContent width="calc(100% - 48px)" marginX={0} maxHeight="calc(100dvh - 48px)">
+    <ModalOverlay zIndex={DRAWER_Z + 20} />
+    <ModalContent containerProps={{ zIndex: DRAWER_Z + 21 }} width="calc(100% - 48px)" marginX={0} maxHeight="calc(100dvh - 48px)">
       <ModalHeader>Import Things</ModalHeader>
       {!submitting && <ModalCloseButton />}
       <ModalBody>
