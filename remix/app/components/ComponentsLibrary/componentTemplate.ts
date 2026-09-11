@@ -1,3 +1,5 @@
+import { copiedMediaRefs, mapResolvedCopiedMedia } from '../Sharing/copiedMediaRefs';
+
 // Arg-template resolver for component things. A component's crystal.render is
 // an HtmlThingNode/ChakraThingNode TEMPLATE: plain nodes plus tiny wrapper
 // objects (ttArg / ttMap / ttIf / ttMerge / ttRepeat / ttEach / ttFormat) and
@@ -432,7 +434,7 @@ const resolveNode = (template: unknown, scope: ComponentScope, budget: ResolveBu
 		if (budget.left <= 0) break;
 		// ttAction/ttActionInputs are interactive-intent markers, folded into
 		// allowlisted data-* props below — never copied through as node keys
-		if (key === 'ttAction' || key === 'ttActionInputs' || key === 'ttActionRefs') continue;
+		if (key === 'ttAction' || key === 'ttActionInputs' || key === 'ttActionRefs' || key === 'ttMediaRefs') continue;
 		const resolved = resolveNode(value, scope, budget);
 		if (resolved === undefined) continue;
 		// A node KEY is tree text exactly like a string value, and nothing else
@@ -490,7 +492,11 @@ const resolveNode = (template: unknown, scope: ComponentScope, budget: ResolveBu
 // Ordinary UI resolution retains its existing empty-token behavior.
 export const createTemplateResolver = (options: { preserveUnboundTokens?: boolean } = {}) => {
 	const budget: ResolveBudget = { left: MAX_RESOLVED_NODES, chars: MAX_RESOLVED_CHARS, ...options };
-	return (template: unknown, scope: ComponentScope = {}): unknown => resolveNode(template, scope, budget);
+	return (template: unknown, scope: ComponentScope = {}): unknown => {
+		const resolved = resolveNode(template, scope, budget);
+		const refs = copiedMediaRefs(isPlainObject(template) ? template.ttMediaRefs : undefined);
+		return mapResolvedCopiedMedia(resolved, refs, budget);
+	};
 };
 
 export const resolveTemplate = (template: unknown, scope: ComponentScope = {}): unknown =>
