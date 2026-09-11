@@ -22,7 +22,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   preserve existing repo topics and the full global reference snapshot, add
   recurring regression/verification rules, and correct stale hook/typecheck
   advice. Keep canonical instruction symlinks unchanged. See the
-  [review and evidence](../docs/ai-guidance-review-2026-09-11.md).
+  [PR #768](../PRs/768-codex-thingtime-ai-guidance-20260911-refresh-ai-guidance-from-pr-history.md)
+  and its linked review/inventory.
   — Codex (AI), 2026-09-11
 
 - Verify real shared-file and linked-gallery copies on the exact PR preview,
