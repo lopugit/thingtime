@@ -3,6 +3,7 @@ import React from 'react';
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router';
 
 import { useLopu } from '~/components/Lopu/useLopu';
+import { ThingTransferControls } from '~/components/Things/ThingTransferControls';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { useTtTheme } from '~/hooks/useTtTheme';
@@ -605,6 +606,7 @@ export const ThemeStudio = () => {
 				<Text {...sectionHeaderStyle} marginTop={10} marginBottom={2}>
 					My themes
 				</Text>
+				<Box marginBottom={3}><ThingTransferControls onImported={refreshMyThemes} /></Box>
 				{!user ? (
 					<Text fontSize="sm" color="var(--tt-muted, #9a9aa6)">
 						<Box as="button" onClick={() => navigate('/login')} color="var(--tt-link, #2f8fd6)" cursor="pointer" fontWeight={600}>
@@ -645,6 +647,7 @@ export const ThemeStudio = () => {
 									</Box>
 									<Flex gap="6px" flexWrap="wrap">
 										<ActionButton onClick={() => applySaved(saved)}>Apply</ActionButton>
+										<ThingTransferControls id={saved.id} onImported={refreshMyThemes} />
 										{saved.visibility === 'public' ? <ActionButton onClick={() => shareSaved(saved)}>Share 🔗</ActionButton> : null}
 										<ActionButton tone="danger" onClick={() => deleteSaved(saved)}>
 											Delete

@@ -1,5 +1,15 @@
 # TESTING.md — per-area manual test checklists
 
+## Portable theme transfers
+
+- [ ] On `/themes`, use Transfer to copy/download a saved theme at desktop and
+  mobile widths. Scroll the full page, open the transfer dialogs, then import
+  JSON and ZIP files. Verify fresh private copies in My themes, equal resolved
+  tokens, no change to the active theme, and denial for anonymous readers.
+- [ ] Reject theme entries with account fields, folder placement, child Things
+  or attached galleries before writes. A later mixed-import failure must clean
+  new themes through the dedicated theme delete writer, never generic CRUD.
+
 ## Unified Lopu conversations, scheduled Things and discussions
 
 - [ ] At 390px width, historical tool rows put long summaries below their label

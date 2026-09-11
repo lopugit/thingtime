@@ -9,8 +9,9 @@ import { isProtectedThingtime } from '../../../schemas/registry';
 import { collectTransfer } from '../../../utils/thingTransfer/collect';
 import { transferAnnotations, TRANSFER_LIMITS, type TransferThing, type JsonValue } from '../../../utils/thingTransfer/format';
 import type { TransferPlan } from '../../../utils/thingTransfer/plan';
+import { readTransferTheme } from './themeTransfer';
 
-const defaults = { read: findViewableThing, list: listThings, resolve: resolveSharedComposition, project: toPublicThings, bound: listForkBoundMedia, describe: describeAttachmentTransfer };
+const defaults = { read: findViewableThing, readTheme: readTransferTheme, list: listThings, resolve: resolveSharedComposition, project: toPublicThings, bound: listForkBoundMedia, describe: describeAttachmentTransfer };
 
 const content = (thing: PublicThing): TransferThing => ({
   id: thing.id, thingtime: thing.thingtime, crystal: thing.crystal,
@@ -38,6 +39,11 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
         check();
         if (docs.has(id)) return docs.get(id)!;
         const doc = await deps.read(id, viewer);
+        if (!doc || doc.thingtime.includes('theme')) {
+          const theme = await deps.readTheme(viewer?.id, id);
+          if (theme) { docs.set(id, theme); return theme; }
+          throw fail(404, 'Thing not found');
+        }
         if (!doc) throw fail(404, 'Thing not found');
         const thing = (await deps.project([doc], viewer))[0];
         if (isProtectedThingtime(thing.thingtime)) throw new Error('This managed Thing needs its dedicated export workflow');
@@ -82,13 +88,14 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
     if (input.includeFiles !== false || input.includeLinks !== false) {
       const includedIds = new Set(plan.things.map((thing) => thing.id));
       const targets = new Map<string, { targetId: string; sharedRoot?: string }>();
-      for (const file of await deps.bound(plan.things.map((thing) => stored.get(thing.id)!))) {
+      for (const file of await deps.bound(plan.things.flatMap((thing) => stored.has(thing.id) ? [stored.get(thing.id)!] : []))) {
         targets.set(file.id, { targetId: file.targetId, sharedRoot: authorizedRoots.get(file.targetId) });
       }
       for (const thing of plan.things) {
         const root = authorizedRoots.get(thing.id);
         const composition = root && compositions.get(root);
         const original = stored.get(thing.id)!;
+        if (!original) continue; // Dedicated themes have tokens, never gallery attachments.
         for (const args of composition ? composition.contexts.get(thing.id) || [undefined] : [undefined]) {
           for (const id of compositionAttachmentIds(thing.thingtime, original.crystal, {
             args,

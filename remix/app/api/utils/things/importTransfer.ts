@@ -6,6 +6,7 @@ import { rewriteTransferMedia } from './transferMediaCore';
 import { annotateAttachment, linkAttachment, deleteAttachment, createReadyAttachmentPostInsertHook, inspectReadyAttachmentsForPost, prepareAttachmentCascadeForThing } from '../attachments/attachments';
 import { attachmentStore } from '../attachments/attachmentStore';
 import { createThing, deleteThing, fail, isFail, type Viewer } from './things';
+import { createTransferTheme, isTransferTheme, removeTransferTheme, validateTransferTheme } from './themeTransfer';
 
 type ImportDependencies = {
   create: typeof createThing;
@@ -17,8 +18,10 @@ type ImportDependencies = {
   link: typeof linkAttachment;
   annotate: typeof annotateAttachment;
   removeFile: typeof deleteAttachment;
+  createTheme: typeof createTransferTheme;
+  removeTheme: typeof removeTransferTheme;
 };
-const defaults: ImportDependencies = { create: createThing, remove: deleteThing, inspectFiles: inspectReadyAttachmentsForPost, getFile: attachmentStore.getOwned, bindFiles: createReadyAttachmentPostInsertHook, uuid: randomUUID, link: linkAttachment, annotate: annotateAttachment, removeFile: deleteAttachment };
+const defaults: ImportDependencies = { create: createThing, remove: deleteThing, inspectFiles: inspectReadyAttachmentsForPost, getFile: attachmentStore.getOwned, bindFiles: createReadyAttachmentPostInsertHook, uuid: randomUUID, link: linkAttachment, annotate: annotateAttachment, removeFile: deleteAttachment, createTheme: createTransferTheme, removeTheme: removeTransferTheme };
 
 /** Import ordering only constrains structural/provenance references. Action
  * cycles are legal: their fresh IDs are allocated before any create call.
@@ -48,8 +51,15 @@ export const importTransfer = async (
     manifest = validateTransfer(input.manifest);
     serializeTransfer(manifest);
     ordered = orderTransferImports(manifest);
+    for (const theme of ordered.filter(isTransferTheme)) {
+      validateTransferTheme(theme);
+      if (input.folderId || ordered.some(thing => thing.folderId === theme.id || thing.targetId === theme.id) ||
+        orderedTransferAttachments(manifest).some(file => file.targetId === theme.id)) {
+        throw new Error('Themes import into My themes, without folders, child Things or gallery files');
+      }
+    }
   } catch (error) { return fail(400, error instanceof Error ? error.message : 'Invalid transfer'); }
-  if (manifest.things.some((thing) => isProtectedThingtime(thing.thingtime))) return fail(403, 'Managed account records must use their dedicated import workflow');
+  if (manifest.things.some((thing) => isProtectedThingtime(thing.thingtime) && !isTransferTheme(thing))) return fail(403, 'Managed account records must use their dedicated import workflow');
   if (input.folderId !== undefined && input.folderId !== null && (typeof input.folderId !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(input.folderId))) return fail(400, 'Invalid import destination');
   const supplied = input.files === undefined ? {} : input.files;
   if (!supplied || typeof supplied !== 'object' || Array.isArray(supplied)) return fail(400, 'Invalid uploaded file map');
@@ -60,6 +70,7 @@ export const importTransfer = async (
   const files = fileMap as Map<string, string>;
   const ids = new Map(manifest.things.map((thing) => [thing.id, deps.uuid()]));
   const created: string[] = [];
+  const createdThemes = new Set<string>();
   const createdLinks: string[] = [];
   const attachments = orderedTransferAttachments(manifest);
   const suffix = deps.uuid().slice(0, 8);
@@ -107,8 +118,20 @@ export const importTransfer = async (
       const annotated = await deps.annotate(viewer.id, { id: files.get(file.id)!, ...annotations }, { unboundPostOnly: true });
       if (isFail(annotated)) throw annotated;
     }
+    // Dedicated writers mint their own IDs. Resolve those only after file
+    // validation, before rewriting references in ordinary content. Roll back
+    // through that same writer if a subsequent operation fails.
+    for (const theme of ordered.filter(isTransferTheme)) {
+      check();
+      const result = await deps.createTheme(viewer.id, theme);
+      if (isFail(result)) throw result;
+      ids.set(theme.id, result.theme.id);
+      created.push(result.theme.id);
+      createdThemes.add(result.theme.id);
+    }
     for (const thing of ordered) {
       check();
+      if (isTransferTheme(thing)) continue;
       const crystal = rewriteComposition(thing.thingtime, crystals.get(thing.id)!, (_kind, id) => ids.get(id) || id);
       for (const key of ['componentKey', 'actionKey', 'pageKey']) if (typeof crystal[key] === 'string') crystal[key] = `${crystal[key].slice(0, 48)}-${suffix}`;
       if (thing.thingtime.includes('schema') && typeof crystal.name === 'string') crystal.name = `${crystal.name.slice(0, 48)}-${suffix}`;
@@ -132,7 +155,7 @@ export const importTransfer = async (
   } catch (error) {
     const remaining: string[] = [];
     for (const id of [...created].reverse()) {
-      try { if (isFail(await deps.remove(viewer, id, null, { beforeCascade: prepareAttachmentCascadeForThing }))) remaining.push(id); }
+      try { if (isFail(createdThemes.has(id) ? await deps.removeTheme(viewer.id, id) : await deps.remove(viewer, id, null, { beforeCascade: prepareAttachmentCascadeForThing }))) remaining.push(id); }
       catch { remaining.push(id); }
     }
     for (const id of createdLinks) {

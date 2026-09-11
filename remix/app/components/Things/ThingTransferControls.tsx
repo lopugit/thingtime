@@ -9,7 +9,7 @@ import { ThingExportDialog } from './ThingExportDialog';
 import { ThingImportDialog } from './ThingImportDialog';
 import { TRANSFER_MENU_Z } from './transferLayers';
 
-type Props = { id?: string | null; linkKey?: string; disabledReason?: string };
+type Props = { id?: string | null; linkKey?: string; disabledReason?: string; onImported?: () => void };
 
 /** Shared persisted-Thing entry point. Account, source or key changes tear down
  * every pending transfer before another context can receive its result. */
@@ -19,7 +19,7 @@ export const ThingTransferControls = (props: Props) => {
     {...props} ownerId={user?.id} />;
 };
 
-const TransferControls = ({ id, linkKey, disabledReason, ownerId }: Props & { ownerId?: string }) => {
+const TransferControls = ({ id, linkKey, disabledReason, ownerId, onImported }: Props & { ownerId?: string }) => {
   const api = useApi();
   const lopu = useLopu();
   const [exportOpen, setExportOpen] = useState(false);
@@ -58,6 +58,6 @@ const TransferControls = ({ id, linkKey, disabledReason, ownerId }: Props & { ow
     </Menu>
     {exportOpen && id && <ThingExportDialog ids={[id]} linkKey={linkKey} onClose={() => setExportOpen(false)} />}
     {importOpen && ownerId && <ThingImportDialog ownerId={ownerId} folderId={null} onClose={() => setImportOpen(false)}
-      onImported={() => lopu({ title: 'Things imported', description: 'Your private copies are available in My Things.', status: 'success' })} />}
+      onImported={() => { onImported?.(); lopu({ title: 'Private copies imported', description: 'Themes appear in My themes; other content appears in My Things.', status: 'success' }); }} />}
   </>;
 };

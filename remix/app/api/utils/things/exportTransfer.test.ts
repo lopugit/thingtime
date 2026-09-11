@@ -49,7 +49,7 @@ test('composition aliases are canonicalized and gallery targets win over embedde
 });
 
 test('unreadable roots and required dependencies fail without a partial export', async () => {
-  const missing = await exportTransferPlan(null, { ids: ['private'] }, undefined, { read: async () => null });
+  const missing = await exportTransferPlan(null, { ids: ['private'] }, undefined, { read: async () => null, readTheme: async () => null });
   assert.equal(missing.ok, false);
   const root = doc('page', ['webpage']); const graph = composition(root); graph.requiredReferences.add('page:component:private');
   const result = await exportTransferPlan(null, { ids: ['page'] }, undefined, { read: async () => root, project, resolve: async () => graph });

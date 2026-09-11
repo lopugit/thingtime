@@ -18,6 +18,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Portable transfers now support saved themes through dedicated owner/public
+  readers and private theme writers, including legacy reads and rollback.
+  Theme Studio exposes Copy/Download/Import and identifies the My themes
+  destination. Transfer capabilities advance to 1.3.0. See
+  [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md). — Codex (AI), 2026-09-11
+
 - Preserve stored-file titles, multiline descriptions and display filenames
   in transfer plans, ZIP/clipboard bundles and imported copies. Fence import
   annotation writes transactionally to fresh unbound post drafts; negotiate

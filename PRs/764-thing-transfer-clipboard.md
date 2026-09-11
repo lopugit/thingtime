@@ -31,6 +31,19 @@ of that scope.
 
 ## Evidence
 
+- Theme coverage (2026-09-11): dedicated owned/public theme reads (including
+  legacy records), content-only name/tokens export, fresh private imports via
+  saveTheme, and dedicated rollback. Active theme selection is never changed.
+  Generic protected-kind policy remains intact. Invalid theme structure and
+  extra fields are refused rather than silently discarded. Theme Studio now
+  exposes the shared transfer controls and refreshes My themes after import.
+  Transfer contracts/client minimums are 1.3.0. Desktop JSON and mobile ZIP
+  download/file-picker round trips preserved resolved tokens and private read
+  denial. The first test cleanup used the wrong route; its three exact temporary
+  fixtures were removed through `/themes/delete` before rerunning.
+  Feed algorithms and stored-file upload-approved-account acceptance remain
+  outstanding; this is not a claim of completion of the broad request.
+
 - Stored-file annotation correction (2026-09-11): export plans and portable
   bundles now retain optional title, multiline description and filenamePreview
   for uploaded files as well as links. Import/export clients negotiate 1.2.0.
