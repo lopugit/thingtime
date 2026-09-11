@@ -12,6 +12,14 @@
 //   - develop and main are level → do nothing. That is the normal state right
 //     after a promotion merges and "Sync main into develop" levels the
 //     branches again.
+//   - develop is ahead in commits but its tree already equals main's → keep
+//     refreshing the changelog, but say the promotion ships nothing instead of
+//     promising the listed PRs will land. That is the state after a develop PR
+//     reaches main by another route (a per-feature promotion PR, or a direct
+//     merge): develop's own "Merge pull request #N" commit stays unreachable
+//     from main, so it remains in main..develop, while its content is already
+//     on main. Merging is then a zero-diff history reconciliation, not a
+//     shipment, and claiming otherwise misreports the release.
 //
 // The changelog is the first-parent spine of main..develop: the PR merges and
 // direct pushes that landed on develop and that merging the promotion PR would
@@ -624,6 +632,9 @@ function selfTest() {
   assert(noop.includes("already present in `main`"), "no-op promotion reframes the table");
   assert(noop.includes("already in `main`"), "no-op promotion corrects no-promote advice");
   assert(!noop.includes("ships their changes anyway"), "no-op promotion drops stale no-promote advice");
+  // Reframing the wording must not cost the reader the rows themselves: the
+  // no-op section still has to render the carried PR table, flags included.
+  assert(noop.includes("#635 ⚠️"), "no-op promotion still lists carried PRs");
   assert(noop.includes("promotion-changelog-prs: 635"), "no-op promotion keeps the delta set line");
   assert(parsePrSet(noop).has(635), "no-op promotion set line stays parseable");
 
