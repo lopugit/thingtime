@@ -3793,6 +3793,189 @@ async function selfTest() {
   );
   assert.match(structuredPlanFailure.error, /cannot inspect merge commit/);
 
+  // Redundancy is measured on promoted source only. PR #695 promoted #692,
+  // whose merge was already an ancestor of `main`; its whole remaining diff
+  // was `graphify-out/**` refresh commits, so the pre-fix bare `out !== ""`
+  // test kept a zero-content promotion open indefinitely.
+  const okDiff = (out) => ({ ok: true, status: 0, out, err: "" });
+  assert.deepEqual(
+    redundantPromotionDecision(okDiff("")),
+    { close: true, reason: "empty", generated: [] },
+  );
+  const graphifyOnly = redundantPromotionDecision(okDiff(
+    "graphify-out/snapshots/v1/aaa/bbb/graph.json\n" +
+    "graphify-out/snapshots/v1/aaa/bbb/snapshot.json",
+  ));
+  assert.equal(graphifyOnly.close, true);
+  assert.equal(graphifyOnly.reason, "generated-only");
+  assert.equal(graphifyOnly.generated.length, 2);
+  // `remix/CHANGELOG.md` is hand-authored release content, not build state, so
+  // it holds a promotion open on its own account even though `readPlannedPatch`
+  // declines to promote it beside real files. Closing here would drop the entry.
+  const changelogResidual = redundantPromotionDecision(okDiff(
+    "graphify-out/snapshots/v1/aaa/bbb/graph.json\nremix/CHANGELOG.md",
+  ));
+  assert.equal(changelogResidual.close, false);
+  assert.equal(changelogResidual.reason, "content");
+  assert.deepEqual(changelogResidual.promoted, ["remix/CHANGELOG.md"]);
+  // One real promoted file still holds the PR open, even beside generated churn.
+  const withContent = redundantPromotionDecision(okDiff(
+    "graphify-out/snapshots/v1/aaa/bbb/graph.json\nremix/app/api/utils/mongodb/indexAudit.ts",
+  ));
+  assert.equal(withContent.close, false);
+  assert.equal(withContent.reason, "content");
+  assert.deepEqual(withContent.promoted, ["remix/app/api/utils/mongodb/indexAudit.ts"]);
+  // A path that merely starts with the prefix is not inside the directory.
+  assert.equal(redundantPromotionDecision(okDiff("graphify-outside/thing.ts")).close, false);
+  // Fail closed: never close a promotion we could not read.
+  assert.deepEqual(
+    redundantPromotionDecision({ ok: false, status: 1, out: "", err: "gh: rate limited" }),
+    { close: false, reason: "diff-unavailable" },
+  );
+  assert.equal(redundantPromotionDecision(undefined).close, false);
+  // A runner reporting success with no readable stdout must fail closed too,
+  // not throw and abort the batch mid-pass.
+  assert.deepEqual(
+    redundantPromotionDecision({ ok: true, status: 0, err: "" }),
+    { close: false, reason: "diff-unavailable" },
+  );
+  assert.equal(
+    redundantPromotionDecision(okDiff("graphify-out/snap\u0007shots/v1/graph.json")).reason,
+    "unreadable-path",
+  );
+
+  // Pin the real premise behind `generated-only`. Excluding these paths is a
+  // preference in `readPlannedPatch`, not an invariant: a source PR carrying
+  // nothing else still yields a valid promotion patch built from those paths.
+  // If this ever starts failing, the exclusion became an invariant and the
+  // close comment may drop its "intentionally not promoted" wording.
+  const generatedOnlyPlan = readPlannedPatch([{ sha: "c".repeat(40) }], "/nonexistent", {
+    gitRunner: (args) => args.includes("--name-only")
+      ? { ok: true, status: 0, out: "graphify-out/snapshots/v1/aa/graph.json\0remix/CHANGELOG.md\0", err: "" }
+      : { ok: true, status: 0, out: "a".repeat(40), err: "" },
+    commandRunner: (_cmd, args) => args[0] === "patch-id"
+      ? { ok: true, status: 0, out: `${"b".repeat(40)} ${"c".repeat(40)}`, err: "" }
+      : { ok: true, status: 0, out: "diff --git a/graphify-out/x b/graphify-out/x\n", err: "" },
+  });
+  assert.equal(
+    generatedOnlyPlan.ok,
+    true,
+    "a generated-only source PR still yields a promotion patch, so such a promotion is constructible",
+  );
+  assert.deepEqual(generatedOnlyPlan.paths, [
+    "graphify-out/snapshots/v1/aa/graph.json",
+    "remix/CHANGELOG.md",
+  ]);
+  // That constructible promotion carries a changelog entry, so the redundancy
+  // rule must keep it open rather than close it: its entry has not reached the
+  // base yet. Once an omnibus merge lands it, the diff goes empty and the
+  // ordinary `empty` branch closes the PR, so nothing is stranded open.
+  assert.deepEqual(
+    redundantPromotionDecision(okDiff(generatedOnlyPlan.paths.join("\n"))),
+    { close: false, reason: "content", promoted: ["remix/CHANGELOG.md"] },
+  );
+  assert.deepEqual(
+    redundantPromotionDecision(okDiff("")),
+    { close: true, reason: "empty", generated: [] },
+  );
+
+  // Drive the side-effecting pass itself, not just the decision. This pass now
+  // closes strictly more PRs than the bare `out !== ""` test did, and closing
+  // is the irreversible half: it posts a public comment and drops the PR. The
+  // decision being right does not prove the pass wires it to the right PR
+  // number, guards `--dry-run`, or describes the head honestly.
+  const runClosePass = (prs, { dryRun = false, closeOk = true } = {}) => {
+    const calls = [];
+    const previous = { dryRun: CFG.dryRun, repo: CFG.repo, source: CFG.source, target: CFG.target };
+    Object.assign(CFG, { dryRun, repo: "lopugit/thingtime", source: "develop", target: "main" });
+    const results = { closed: [], warnings: [] };
+    try {
+      closeRedundantPass(prs, results, (args) => {
+        calls.push(args);
+        if (args[1] === "diff") {
+          const pr = prs.find((candidate) => String(candidate.number) === args[2]);
+          return pr.diff ?? { ok: false, status: 1, out: "", err: "gh: not found" };
+        }
+        return closeOk
+          ? { ok: true, status: 0, out: "", err: "" }
+          : { ok: false, status: 1, out: "", err: "gh: pull request already closed" };
+      });
+    } finally {
+      Object.assign(CFG, previous);
+    }
+    return { calls, results };
+  };
+  const generatedOnlyPr = {
+    number: 695, state: "OPEN", headRefName: "promote/x--to-main", baseRefName: "main",
+    diff: okDiff("graphify-out/snapshots/v1/aa/graph.json\ngraphify-out/snapshots/v1/aa/snap.json"),
+  };
+  const contentPr = {
+    number: 696, state: "OPEN", headRefName: "promote/y--to-main", baseRefName: "main",
+    diff: okDiff("graphify-out/snapshots/v1/aa/graph.json\nremix/app/routes/thing.tsx"),
+  };
+  const alreadyClosedPr = {
+    number: 697, state: "CLOSED", headRefName: "promote/z--to-main", baseRefName: "main",
+    diff: okDiff(""),
+  };
+  const live = runClosePass([generatedOnlyPr, contentPr, alreadyClosedPr]);
+  // Only the generated-only PR is closed, and only it is even diffed beyond
+  // the content check: a CLOSED promotion must not be touched at all.
+  assert.deepEqual(
+    live.calls.filter((args) => args[1] === "close").map((args) => args[2]),
+    ["695"],
+  );
+  assert.equal(live.calls.some((args) => args[2] === "697"), false);
+  assert.equal(generatedOnlyPr.state, "CLOSED");
+  assert.equal(contentPr.state, "OPEN");
+  assert.equal(live.results.warnings.length, 0);
+  assert.equal(live.results.closed.length, 1);
+  assert.match(live.results.closed[0], /closed #695 .* no promoted source change vs `main`/);
+  // The close comment must not claim an empty diff for a head that still has
+  // one, and must say the remaining paths are dropped on purpose.
+  const closeComment = live.calls.find((args) => args[1] === "close").at(-1);
+  assert.equal(closeComment.includes("diff is empty"), false);
+  assert.match(closeComment, /every promoted source file here has already reached `main`/);
+  assert.match(closeComment, /intentionally not promoted/);
+  assert.equal(live.calls.find((args) => args[1] === "close").includes("--repo"), true);
+
+  // An empty-diff promotion keeps the original, accurate wording.
+  const emptyPr = {
+    number: 698, state: "OPEN", headRefName: "promote/w--to-main", baseRefName: "main",
+    diff: okDiff(""),
+  };
+  const emptyRun = runClosePass([emptyPr]);
+  assert.match(
+    emptyRun.calls.find((args) => args[1] === "close").at(-1),
+    /so this PR's diff is empty/,
+  );
+  assert.equal(emptyPr.state, "CLOSED");
+
+  // Dry run reports the same decision without touching the PR.
+  const dryPr = { ...generatedOnlyPr, state: "OPEN" };
+  const dry = runClosePass([dryPr], { dryRun: true });
+  assert.equal(dry.calls.some((args) => args[1] === "close"), false);
+  assert.equal(dryPr.state, "OPEN");
+  assert.match(dry.results.closed[0], /^\(dry-run\) would close #695 /);
+
+  // A failed close warns and leaves the PR open rather than recording a close
+  // that never happened.
+  const failingPr = { ...generatedOnlyPr, state: "OPEN" };
+  const failed = runClosePass([failingPr], { closeOk: false });
+  assert.equal(failingPr.state, "OPEN");
+  assert.deepEqual(failed.results.closed, []);
+  assert.match(failed.results.warnings[0], /failed to close redundant #695/);
+
+  // An unreadable diff never closes anything.
+  const unreadablePr = {
+    number: 699, state: "OPEN", headRefName: "promote/v--to-main", baseRefName: "main",
+    diff: { ok: false, status: 1, out: "", err: "gh: rate limited" },
+  };
+  const unreadable = runClosePass([unreadablePr]);
+  assert.equal(unreadable.calls.some((args) => args[1] === "close"), false);
+  assert.equal(unreadablePr.state, "OPEN");
+  assert.deepEqual(unreadable.results.closed, []);
+  assert.deepEqual(unreadable.results.warnings, []);
+
   pathspecAuthorityIntegrationTest(assert);
   orphanedMergeHydrationIntegrationTest(assert);
 
@@ -4328,27 +4511,105 @@ function retargetPass(promotionPrs, results) {
 
 // ---------------------------------------------------------------------------
 // Maintenance: close promotion PRs made redundant by an omnibus (or direct)
-// merge — their diff against the base is empty, so there is nothing to review.
+// merge — no promoted source file still differs from the base, so there is
+// nothing left to review.
 // ---------------------------------------------------------------------------
 
-function closeRedundantPass(promotionPrs, results) {
+// `readPlannedPatch` drops both `graphify-out/**` and `remix/CHANGELOG.md`
+// from a promotion patch whenever the source PR also carries real files, so
+// redundancy detection has to agree that neither one holds a promotion open on
+// its own account. Only the first is safe to *close* a promotion over, though,
+// and the two are not interchangeable here:
+//
+//   * `graphify-out/**` is per-checkout build state. The Graphify snapshot
+//     rules in `AI_ALL.md` (mirrored in this branch's `README.md`) keep
+//     retention per-checkout — the router retains one active portable snapshot
+//     and prunes superseded trees only after activating a valid replacement —
+//     so promoting a branch's snapshot rewrites the base's active snapshot
+//     rather than adding to it. Nothing is lost by declining to promote it.
+//   * `remix/CHANGELOG.md` is hand-authored release content (`AI_ALL.md`
+//     §"Delivery messaging" requires a dated `[Unreleased]` entry). A
+//     promotion whose only remaining diff is a changelog entry is still
+//     promoting something that has *not* reached the base, so closing it would
+//     silently drop a release note — the exact failure this pass fails closed
+//     to avoid everywhere else.
+//
+// The exclusion is also a *preference*, not an invariant: when a source PR
+// carries nothing else, `readPlannedPatch` falls back to promoting the excluded
+// paths (`selectedPaths = meaningfulPaths.length > 0 ? meaningfulPaths : paths`),
+// so a promotion carrying only those paths is constructible — the self-test
+// pins that. Such a changelog-only promotion therefore stays open here until
+// its entry genuinely reaches the base, at which point the diff goes empty and
+// the `empty` branch below closes it on the ordinary path. Nothing is stranded.
+function isBranchLocalBuildStatePath(path) {
+  return path.startsWith("graphify-out/");
+}
+
+// Decide whether an open promotion PR still promotes anything. Pure so the
+// self-test can drive it without a live `gh`.
+//
+// Fails closed in every unreadable direction: an errored `gh pr diff`, a
+// result carrying no readable stdout, and a path we cannot trust to compare
+// (control characters) all keep the PR open, because wrongly closing a
+// promotion silently drops a release. `tryGh` always reports `out` as a
+// string, but this function takes its input from `closeRedundantPass`'s
+// injectable `ghRunner`, so a runner that reports success without stdout must
+// fail closed rather than throw and abort the whole promotion batch.
+export function redundantPromotionDecision(diff) {
+  if (!diff?.ok || typeof diff.out !== "string") {
+    return { close: false, reason: "diff-unavailable" };
+  }
+  const paths = diff.out === "" ? [] : diff.out.split("\n").filter(Boolean);
+  if (paths.some((path) => !validPromotionPath(path))) {
+    return { close: false, reason: "unreadable-path" };
+  }
+  const promoted = paths.filter((path) => !isBranchLocalBuildStatePath(path));
+  if (promoted.length > 0) return { close: false, reason: "content", promoted };
+  return {
+    close: true,
+    reason: paths.length === 0 ? "empty" : "generated-only",
+    generated: paths,
+  };
+}
+
+function closeRedundantPass(promotionPrs, results, ghRunner = tryGh) {
   const closed = [];
   for (const pr of promotionPrs) {
     if (pr.state !== "OPEN") continue;
-    const diff = tryGh(["pr", "diff", String(pr.number), ...repoFlag(), "--name-only"]);
-    if (!diff.ok || diff.out !== "") continue;
+    const diff = ghRunner(["pr", "diff", String(pr.number), ...repoFlag(), "--name-only"]);
+    const decision = redundantPromotionDecision(diff);
+    if (!decision.close) continue;
+    // Say what is actually true of this head. A "generated-only" promotion
+    // still has a non-empty diff, and claiming otherwise would misreport the
+    // release just as a false "will land" claim would.
+    const state = decision.reason === "empty"
+      ? `empty diff vs \`${pr.baseRefName}\``
+      : `no promoted source change vs \`${pr.baseRefName}\` ` +
+        `(${decision.generated.length} generated path(s) remain)`;
     if (CFG.dryRun) {
-      results.closed.push(`(dry-run) would close #${pr.number} (\`${pr.headRefName}\`) — empty diff vs \`${pr.baseRefName}\``);
+      results.closed.push(`(dry-run) would close #${pr.number} (\`${pr.headRefName}\`) — ${state}`);
       continue;
     }
-    const res = tryGh(["pr", "close", String(pr.number), ...repoFlag(), "--comment",
-      `🧹 Closing as redundant: these changes have already reached \`${pr.baseRefName}\` ` +
-      `(for example via an omnibus ${CFG.source} → ${CFG.target} merge), so this PR's diff is empty. ` +
+    // Scope the "already reached" claim to what actually reached the base. In
+    // the generated-only case the remaining paths have *not* landed there and
+    // are being dropped on purpose; saying otherwise would misreport the
+    // release exactly the way a false "will land" claim would.
+    const rationale = decision.reason === "empty"
+      ? `these changes have already reached \`${pr.baseRefName}\` ` +
+        `(for example via an omnibus ${CFG.source} → ${CFG.target} merge), ` +
+        "so this PR's diff is empty. "
+      : `every promoted source file here has already reached \`${pr.baseRefName}\` ` +
+        `(for example via an omnibus ${CFG.source} → ${CFG.target} merge). ` +
+        "Its remaining diff is generated `graphify-out/` snapshot output, which is per-checkout " +
+        "build state rather than release content, so it is intentionally not promoted — merging it " +
+        `would replace \`${pr.baseRefName}\`'s current snapshot with this branch's. `;
+    const res = ghRunner(["pr", "close", String(pr.number), ...repoFlag(), "--comment",
+      "🧹 Closing as redundant: " + rationale +
       "Reopen if that looks wrong."]);
     if (res.ok) {
       pr.state = "CLOSED";
       closed.push(pr);
-      results.closed.push(`closed #${pr.number} (\`${pr.headRefName}\`) — empty diff vs \`${pr.baseRefName}\``);
+      results.closed.push(`closed #${pr.number} (\`${pr.headRefName}\`) — ${state}`);
     } else {
       results.warnings.push(`failed to close redundant #${pr.number}: ${res.err}`);
     }
