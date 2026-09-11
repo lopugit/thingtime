@@ -18,6 +18,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Keep copied-component media bindings non-destructive: past the binding pass's
+  own depth/visit caps, hand the already resolved render tree back untouched
+  instead of dropping it, so a deeply nested copied component cannot silently
+  lose the authored nodes below that depth. Details in
+  [PR #755](../PRs/755-shared-composition-file-copies.md). — Lopu (AI), 2026-09-11
+
 - Verify real shared-file and linked-gallery copies on the exact PR preview,
   including private copies surviving source revocation/deletion and cleanup
   of all disposable test content. Record the separate post-login root-data

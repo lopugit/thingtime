@@ -70,6 +70,21 @@ Attachment-content 1.6.3 uses the same mapping during dependency discovery.
 Unused pairs grant nothing. Real browser and storage acceptance remains
 separate from these focused tests.
 
+## Lopu review correction — non-destructive binding bounds
+
+The `ttMediaRefs` pass runs over an already resolved render tree on its own
+visit/depth caps, which are smaller than the resolver's `MAX_RESOLVED_NODES`
+budget. It previously returned `undefined` past those caps, so a copied
+component nested deeper than about 24 element levels silently lost every node
+below that depth: measured at 25 levels, the authored `<img>` disappeared from
+the rendered output entirely, while the same template rendered in full before
+the copy. The pass now hands the already resolved value back untouched instead.
+It stays equally bounded, and the unmapped URL still names only the source
+owner's attachment, which `canViewSharedCompositionAttachment` cannot authorize
+through this copy — it skips every boundary whose owner differs from the
+attachment owner — so a broken image is the worst case, never lost content or
+a new grant.
+
 ## Deployed storage and browser acceptance — 2026-09-11
 
 Tested revision `5ceb018316c54e7e0435e5779211415de2b7c2ea` on the exact

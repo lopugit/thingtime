@@ -35,8 +35,12 @@ export const mapResolvedCopiedMedia = (tree: unknown, refs: ReadonlyMap<string, 
 		budget.chars -= growth;
 		return next;
 	};
+	// Past either bound, stop mapping and hand back the already resolved value
+	// untouched. Dropping it would delete authored output the resolver produced
+	// within its own larger budget; an unmapped URL only names the source
+	// owner's attachment, which no boundary of this copy can authorize.
 	const props = (value: unknown, style = false, depth = 0): unknown => {
-		if (++visits > 4000 || depth > 48) return undefined;
+		if (++visits > 4000 || depth > 48) return value;
 		if (typeof value === 'string') return style ? text(value, true) : value;
 		if (!value || typeof value !== 'object') return value;
 		if (Array.isArray(value)) return style ? value.map((child) => props(child, true, depth + 1)) : value;
@@ -46,7 +50,7 @@ export const mapResolvedCopiedMedia = (tree: unknown, refs: ReadonlyMap<string, 
 			key.startsWith('_') ? props(child, false, depth + 1) : child]));
 	};
 	const render = (node: unknown, depth = 0): unknown => {
-		if (++visits > 4000 || depth > 48) return undefined;
+		if (++visits > 4000 || depth > 48) return node;
 		if (!node || typeof node !== 'object') return node;
 		if (Array.isArray(node)) return node.map((child) => render(child, depth + 1));
 		const out = { ...node } as Record<string, unknown>;

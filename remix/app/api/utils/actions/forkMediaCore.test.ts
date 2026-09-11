@@ -19,9 +19,28 @@ test('media bindings reject malformed IDs, bound work and charge generated text'
 	const budget = { chars: 100 };
 	assert.equal((mapResolvedCopiedMedia(input, refs, budget) as any).props.src, '/api/v1/attachments/content?id=longer-copy-id');
 	assert.equal(budget.chars, 87);
+	// Bounded, but never destructive: past the pass's own depth/visit caps the
+	// already resolved tree is handed back whole with its URL simply unmapped.
 	let nested: any = input;
 	for (let index = 0; index < 60; index++) nested = { tag: 'div', children: [nested] };
-	assert.ok(JSON.stringify(mapResolvedCopiedMedia(nested, refs, { chars: 100 })).length < JSON.stringify(nested).length);
+	assert.deepEqual(mapResolvedCopiedMedia(nested, refs, { chars: 100 }), nested);
+	let shallow: any = input;
+	for (let index = 0; index < 20; index++) shallow = { tag: 'div', children: [shallow] };
+	assert.ok(JSON.stringify(mapResolvedCopiedMedia(shallow, refs, { chars: 100 })).includes('longer-copy-id'));
+});
+
+test('a copied component deeper than the binding pass keeps rendering its authored tree', () => {
+	const leaf = { tag: 'img', props: { src: '/api/v1/attachments/content?id=att_source' } };
+	const nest = (levels: number) => { let node: any = leaf; for (let index = 0; index < levels; index++) node = { tag: 'div', children: [node] }; return node; };
+	const nodes = (tree: unknown) => JSON.stringify(tree).match(/"tag"/g)?.length ?? 0;
+	for (const levels of [24, 25, 40]) {
+		const plain = resolveTemplate(nest(levels), {});
+		const bound = resolveTemplate({ ...nest(levels), ttMediaRefs: [['att_source', 'att_copy']] }, {});
+		// Deep enough to outrun the binding pass, the media stays unmapped — but
+		// none of the author's resolved nodes may silently disappear.
+		assert.equal(nodes(bound), nodes(plain), `levels=${levels}`);
+		assert.match(JSON.stringify(bound), /att_(source|copy)/);
+	}
 });
 
 test('late media bindings preserve split-fragment loops, inactive branches and unrelated input data', () => {
