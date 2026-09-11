@@ -1,5 +1,28 @@
 # PR 764 — portable Thing transfer
 
+## Custom emoji transfer contract groundwork — 2026-09-12
+
+The coverage audit found that custom emoji, messenger/community records,
+subspaces and app data are refused by the generic crystal writer even when
+they are not in `PROTECTED_THINGTIME`. The existing transfer paths must not be
+described as universal content coverage. Account, membership and credential
+records are not ordinary portable content.
+
+Added a pure custom-emoji transfer envelope and regression tests: one stored
+image, a valid name, optional folder placement, no community target, membership,
+uniqueness key or inline image. The preflight checks the canonical emoji MIME
+and size limits; the upload service must still sniff and authorize real bytes.
+Imported-name generation adds a bounded suffix instead of replacing an existing
+emoji. This is groundwork only, not an enabled export/import adapter.
+
+Remaining emoji work: authorized stored/legacy image export, fresh-upload
+validation and dedicated emoji writer/rollback, reference remapping, library
+placement, client upload-purpose selection, controls, capability registration
+and live round-trip verification. No endpoint or client contract changed in
+this groundwork commit. Conversation representation still needs the user's
+archive-versus-live-chat decision. The live fixture account's public and private
+uploads were both disabled on recheck; no approval policy was changed.
+
 ## Excluded-byte export recovery — 2026-09-12
 
 Export previously described every discovered attachment before applying file/link

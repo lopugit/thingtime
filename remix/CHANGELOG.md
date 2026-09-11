@@ -18,6 +18,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Added custom-emoji transfer-envelope groundwork and tests for stored images,
+  names, source-scope exclusion and upload limits. The adapter is not enabled
+  yet; see [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-12
+
 - 2026-09-12 (Codex): Shorten download-format labels to avoid mobile clipping; keep byte inclusion guidance below the selector. Real browser ZIP/JSON round-trip evidence is recorded on PR 764.
 
 - 2026-09-12 (Codex): Export 1.7.1 skips storage verification for excluded file bytes after live attachment authorization. Links remain independently selectable. See [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
