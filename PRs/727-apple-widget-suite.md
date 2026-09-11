@@ -25,3 +25,41 @@ See [setup and feature behavior](../apple/README.md) and the Apple widget checkl
 ## Develop integration
 
 Preserved the newly merged recording-import and native-push recovery behavior when moving bridge script generation into the shared Apple module. Voice advertises contract 1.2; notification settings advertise support only on iOS. Mac recording synchronization now forwards the import preference. Combined native builds/tests are rechecked after this integration; physical device acceptance remains separate.
+
+
+## 2026-09-11: native connection and expanded OAuth consent
+
+The Mac companion now uses native Overview, Things, Widget Gallery, and Connection
+pages. Sign-in opens the system browser with a one-time S256 PKCE transaction; the
+app checks the exact callback, state, expiry, and replay status. Credentials stay
+in the app-only Keychain. Disconnect revokes that credential and clears widget
+content; cancelled replacement grants are discarded. Quick actions open the
+selected Thingtime origin in the default browser.
+
+Consent supports account-wide Things access, individual Things read/write/social
+permissions, Run actions, Lopu chat, voice/transcription, and recording processing.
+The existing selected-Things grant remains read-only and never implies account
+access. Account grants reuse per-operation Things authorization and existing ACLs;
+actions and Lopu routes explicitly opt in to their own scopes. Account-security
+APIs continue to reject app tokens. Origin capability and contract versions track
+the expanded routes.
+
+Validation includes native PKCE/callback tests, consent parsing and permission
+boundary tests, actor routing and scoped-user tests, capability coverage, focused
+lint, and desktop/phone consent inspection. Native sign-in callback and actual
+widget content acceptance are separate checks before merge.
+
+## 2026-09-11: native OAuth acceptance
+
+The user completed browser sign-in. Live inspection of the installed Mac app
+confirmed the native Connection page showed an authenticated account and its
+selected local origin. The native Things page loaded two permitted Things.
+After quitting and reopening the installed app, a new process refreshed the
+widget snapshot after launch, confirming credential restoration and authenticated
+content refresh. No credential or full Thing data was exposed during inspection.
+The native UI automation helper remains intermittent after app relaunch, but the
+successful post-relaunch refresh was verified from the bounded snapshot timestamp.
+
+The tested installed companion uses http://127.0.0.1:11240. The public PR preview
+must publish the updated OAuth capability versions before connecting to that
+origin with this build. Physical iPhone acceptance remains separate.

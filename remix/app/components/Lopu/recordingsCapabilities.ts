@@ -16,3 +16,5 @@ const supports = (manifest: any, origin: string, requirements: Record<string, st
 export const supportsRecordingAutomation = (manifest: any, origin: string) => supports(manifest, origin, RECORDING_AUTOMATION_REQUIREMENTS);
 export const supportsPersonalRecordingSettings = (manifest: any, origin: string) => supports(manifest, origin, PERSONAL_RECORDING_SETTINGS_REQUIREMENTS);
 export const supportsSavedRecordings = (manifest: any, origin: string) => supports(manifest, origin, SAVED_RECORDING_REQUIREMENTS);
+export const supportsThingActions = (manifest: any, origin: string) => supports(manifest, origin, THING_ACTIONS_REQUIREMENTS);
+import { THING_ACTIONS_REQUIREMENTS } from '~/schemas/thingActions';

@@ -1,5 +1,5 @@
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
-import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { getScopedUser } from '~/api/utils/auth/scopedUser';
 import { assertLopuAccess, lopuAccessResponse } from '~/api/utils/lopu/access';
 import { debitLopuUsage } from '~/api/utils/lopu/accounting';
 import { createLopuVoiceRealtimeSession } from '~/api/utils/lopu/voice';
@@ -16,7 +16,7 @@ const MAX_BODY_BYTES = 16 * 1024;
 // shape that names the rule, never the key or the provider's raw body.
 export const action = async ({ request }: { request: Request }) => {
 	if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed' }, { status: 405, headers: { ...NO_STORE, Allow: 'POST' } });
-	const user = await getCurrentUser(request);
+	const user = await getScopedUser(request, 'lopu.voice');
 	if (!user) return json({ ok: false, error: 'Unauthorized' }, { status: 401, headers: NO_STORE });
 	if (user.temporary) return json({ ok: false, error: 'Create an account to talk to Lopu — direct voice uses your own Secure Vault provider' }, { status: 403, headers: NO_STORE });
 	const unsupported = requireJsonContentType(request);

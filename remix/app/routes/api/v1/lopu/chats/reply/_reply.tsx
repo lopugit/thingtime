@@ -3,7 +3,7 @@ import { lopuReferenceIds, resolveLopuThingReferences, lopuReferenceContext } fr
 import { listAiModels, resolveLopuModelChoice } from '~/api/utils/ai/models';
 import { isAiModelEffort } from '~/api/utils/ai/modelsCore';
 import { LOPU_TEST_MODEL_ID } from '~/api/utils/ai/pricing';
-import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { getScopedUser } from '~/api/utils/auth/scopedUser';
 import { assertLopuAccess, billingForProvider, lopuAccessResponse, resolveLopuBilling } from '~/api/utils/lopu/access';
 import { debitLopuUsage } from '~/api/utils/lopu/accounting';
 import { hasLopuChatProviderConfigured, lopuChatProviderMode, streamLopuChatTurn, type LopuVaultTurnProvider } from '~/api/utils/lopu/chat';
@@ -192,12 +192,12 @@ const interruptedNote = (outcome: LopuChatTurnOutcome | null): string => {
 };
 
 export const action = async ({ request }: { request: Request }) => {
-  return replyAsUser(request, await getCurrentUser(request));
+  return replyAsUser(request, await getScopedUser(request, 'lopu.chat'));
 };
 
 // Internal entry point for an explicitly requested recording handoff. The
 // public action always authenticates above; no caller-supplied user is accepted.
-export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typeof getCurrentUser>>, execution: { scheduled?: boolean } = {}) => {
+export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typeof getScopedUser>>, execution: { scheduled?: boolean } = {}) => {
   if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed' }, { status: 405 });
   if (!user) return json({ ok: false, error: 'Sign in to talk to Lopu' }, { status: 401 });
   if (user.temporary) return json({ ok: false, error: 'Create an account to chat with Lopu — conversations are saved to your account' }, { status: 403 });

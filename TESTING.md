@@ -1,5 +1,37 @@
 # TESTING.md — per-area manual test checklists
 
+## Inherited Thing context menus
+
+- [ ] Type/paste a query, change kind/view/display/sort/group, open a Thing and
+  use browser Back/Forward and reload. The URL and controls retain the same
+  search and rules. Fast consecutive changes must not drop query characters;
+  folder navigation clears only the new entry's query, not the previous entry.
+- [ ] Drawer destinations and Thing-menu Open/View data are real anchors:
+  command/control-click, middle-click and the browser's open-in-new-tab menu
+  leave the current page unchanged. Alt/Shift keep browser-native behaviour.
+  Mutations remain buttons; disabled actions have no navigable href. Drawer
+  reorder ignores modified pointer presses, and profile/settings are sibling
+  links rather than nested interactive controls.
+- [ ] Open the same recording/post from Things (grid, list, columns, kebab and
+  right-click), its post card, the generic Thing page and recording activity.
+  Base labels/order come from the Thing menu; recording activity targets the
+  recording ID, never its processing-job ID. No per-card lookup on initial paint.
+- [ ] Test keyboard arrows, Escape/back, focus return, touch, pinned menus,
+  long labels and the full page/menu scroll at desktop and 390px. With a visible
+  scrollbar, the menu's right edge stays inside document.clientWidth minus 8px.
+  Options loaded while a submenu is open replace stale options immediately.
+- [ ] Post privacy opens beneath Share / permissions, preserves Custom and
+  hidden-link consent, and rolls back failed changes. Moderator-only flairs,
+  reports, approve/remove, pin, lock, NSFW and spoiler keep their existing guards.
+  Bound media and foreign Things never gain ordinary owner mutation rights.
+- [ ] Cancel Send to Lopu: no mutation. Try a foreign, public, bound or unavailable
+  recording and switch account/unmount during lookup or confirmation: no handoff.
+  Missing/wrong-origin/breaking api.things-actions blocks before any write.
+  Repeated confirmed handoffs still deduplicate through the protected writer.
+- [ ] Multi-select Things: bulk actions retain their exact target count; Send to
+  Lopu is absent. Test folder clipboard/paste and explicit Open versus Preview.
+  Message edit/delete still pass through chat-membership authorization.
+
 ## Unified Lopu conversations, scheduled Things and discussions
 
 - [ ] At 390px width, historical tool rows put long summaries below their label
@@ -6618,6 +6650,10 @@ approval; `access.test.ts` — the reservation matrix) and
 
 ## Apple widgets and Control Centre
 
+- [ ] Native Mac companion: Overview, Things, Widget Gallery, and Connection render without a webview. Inspect every page and its full scroll range; test connection cancellation, wrong/expired/replayed callbacks, secure Keychain restoration, and disconnect/revocation on the installed signed copy.
+- [ ] OAuth: review all Things, individual read/create/update/delete permissions, Run actions, and each Lopu permission. Untick full Things and choose read-only in Share more. Confirm selected-only and legacy app-storage grants never gain account access; read-only cannot write, revoked/sandbox tokens fail, and action/voice endpoints require their own scopes. Verify real approved calls as well as denied calls; do not treat a catalog checkbox as enforcement proof.
+- [ ] Verify account/origin changes clear widgets, offline revocation reports its limitation, and toggling content cannot renew an old snapshot. Test browser return into the exact native app on local and preview origins.
+
 - [ ] Add Quick Action, Dashboard, Render a Thing, and Recent Things at every supported device size. Inspect long text, dark/light/tinted appearance, large Dynamic Type, and the full native layout gallery from top to bottom.
 - [ ] On iOS 18+, add all four Control Centre buttons at compact and expanded sizes; cold/warm taps must reach the correct screen once. New Folder opens its dialog, Search focuses its input, and New Thing opens the schema chooser.
 - [ ] Transcribe launches Lopu in transcription mode; Talk launches voice mode. Sign-in/access gates and denied microphone/speech permissions remain effective. Stop, tap again, background/foreground, and verify transcript, local recording, private upload, and iOS Live Activity independently.
@@ -6668,3 +6704,31 @@ approval; `access.test.ts` — the reservation matrix) and
   allowance and verify note/todo output with exact transcript evidence. Do not
   pass real recordings or tokens. Fixture files must be cleaned up on failure
   as well as success. This is not a substitute for paired-account/Watch tests.
+
+## Shared AI waterfall and stack overrides
+
+- Open the shared selector from CI stack selection and the Admin model-order
+  editor. Add OpenAI, custom endpoint and Claude entries; reorder/remove rows,
+  vary effort/speed, Apply, reopen, then Cancel an edit. Verify the returned
+  config and saved draft keep the intended order and no credentials/URLs.
+- Check desktop and mobile from top to bottom, including the scrolled modal
+  footer, long endpoint labels, focus restoration and duplicate validation.
+- Save/reload a custom stack; omit the field to preserve it, send null to inherit,
+  and restart it. Verify the immutable dispatch includes the saved selection,
+  foreign connections are rejected, and edits never change an active run.
+- Run `node --import tsx --test app/api/utils/ai/waterfallConfig.test.ts`
+  from Remix and the CI-control suite (including the signed gateway tests).
+  Verify missing-model/capacity failures advance, ownership/output errors stop,
+  and stopped/unrelated/replayed run requests cannot consume provider access.
+- On the controller branch run the feature-stack plan and routing self-tests,
+  plus `node --test .github/scripts/feature-stack-waterfall.test.mjs`.
+  Confirm a real text conflict preserves exact merge parents and touches only
+  conflict paths; binary/oversized conflicts fail without publication.
+
+### Saved AI waterfall library
+
+- In Settings → AI waterfalls, create a mixed-provider order, save, reload, edit and reorder; verify persistence.
+- In a feature selector, select an existing config, Save as new, then edit and Save & apply; verify the returned snapshot and both library records. Cancel must preserve the feature value. Later library edits must not change that value.
+- Open the same saved config in two editors. Save one, then save the stale one: show a conflict, retain the unsaved draft, and refresh the library for reopening.
+- Anonymous requests return 401; changed-account headers return 409; another owner cannot read or replace a record. Reject extra secret/URL fields and incompatible endpoint selections.
+- At desktop and mobile widths, scroll Settings and the open dialog top to bottom; verify nested controls, fixed footer, focus, and no horizontal overflow.

@@ -18,6 +18,7 @@ targets:
     platform: macOS
     sources:
       - path: WidgetApp.swift
+      - path: Connection
       - path: ../../iOS/Thingtime/Lopu
       - path: ../../apple/Shared
       - path: ../../apple/Widgets
@@ -26,9 +27,11 @@ targets:
       properties:
         CFBundleDisplayName: Thingtime Widgets
         CFBundleURLTypes:
-          - CFBundleURLSchemes: [thingtime-widgets]
+          - CFBundleURLSchemes: [thingtime-widgets, com.thingtime.widgets]
         ThingtimeWidgetGroup: $(THINGTIME_WIDGET_GROUP)
         ThingtimeWebURL: $(THINGTIME_WEB_URL)
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
         NSMicrophoneUsageDescription: Thingtime uses the microphone for Lopu voice and transcription.
         NSSpeechRecognitionUsageDescription: Thingtime transcribes your speech for Lopu.
     entitlements:
@@ -44,6 +47,19 @@ targets:
         PRODUCT_NAME: Thingtime Widgets
     dependencies:
       - target: ThingtimeWidgetsExtension
+  ThingtimeWidgetsTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.thingtime.widgets.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Thingtime Widgets.app/Contents/MacOS/Thingtime Widgets"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+    dependencies:
+      - target: ThingtimeWidgets
   ThingtimeWidgetsExtension:
     type: app-extension
     platform: macOS
@@ -73,3 +89,6 @@ schemes:
     build:
       targets:
         ThingtimeWidgets: all
+    test:
+      targets:
+        - ThingtimeWidgetsTests

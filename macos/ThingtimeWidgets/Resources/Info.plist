@@ -24,11 +24,17 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>thingtime-widgets</string>
+				<string>com.thingtime.widgets</string>
 			</array>
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Thingtime uses the microphone for Lopu voice and transcription.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

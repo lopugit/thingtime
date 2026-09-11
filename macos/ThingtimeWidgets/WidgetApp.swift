@@ -1,133 +1,217 @@
 import AppKit
 import SwiftUI
-import WebKit
 
 @main
 struct ThingtimeWidgetsApp: App {
-    @NSApplicationDelegateAdaptor(WidgetAppDelegate.self) private var appDelegate
+    @NSApplicationDelegateAdaptor(WidgetAppDelegate.self) private var delegate
     @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var model = WidgetBrowserModel.shared
+    @StateObject private var connection = WidgetConnection.shared
     var body: some Scene {
         Window("Thingtime Widgets", id: "main") {
-            WidgetBrowser(model: model)
-                .frame(minWidth: 360, minHeight: 500)
-                .toolbar {
-                    Button { model.open(path: "/things") } label: { Label("My Things", systemImage: "square.grid.2x2") }
-                    SettingsLink { Label("Widget settings", systemImage: "slider.horizontal.3") }
+            WidgetHome(connection: connection)
+                .onReceive(NotificationCenter.default.publisher(for: .thingtimeWidgetAction)) { _ in connection.takePending() }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active {
+                        connection.takePending()
+                        Task { await connection.refresh() }
+                    }
                 }
-                .onReceive(NotificationCenter.default.publisher(for: .thingtimeWidgetAction)) { _ in model.takePending() }
-                .onChange(of: scenePhase) { _, phase in if phase == .active { model.takePending() } }
-                .onAppear { model.takePending() }
-                .onDisappear { model.stopVoice() }
-        }.defaultSize(width: 1000, height: 760)
-        Settings { NavigationStack { WidgetPreferences() }.frame(width: 500, height: 600) }
+                .task {
+                    connection.takePending()
+                    while !Task.isCancelled {
+                        await connection.refresh()
+                        do { try await Task.sleep(for: .seconds(60)) } catch { break }
+                    }
+                }
+        }
+        .defaultSize(width: 900, height: 680)
+        Settings {
+            WidgetConnectionSettings(connection: connection)
+                .frame(width: 540, height: 520)
+        }
     }
 }
+
 @MainActor
 final class WidgetAppDelegate: NSObject, NSApplicationDelegate {
-    static var openMainWindow: (() -> Void)?
     func applicationDidFinishLaunching(_ notification: Notification) { NSWindow.allowsAutomaticWindowTabbing = false }
     func application(_ application: NSApplication, open urls: [URL]) {
-        for url in urls where WidgetRoute.path(for: url) != nil {
-            Self.openMainWindow?()
-            WidgetBrowserModel.shared.open(url: url)
+        for url in urls where WidgetRoute.path(for: url) != nil { WidgetConnection.shared.open(url) }
+        // OAuth responses are delivered only to the originating system auth
+        // session. Arbitrary launch URLs cannot establish a connection.
+    }
+}
+
+private enum WidgetSection: String, CaseIterable, Identifiable {
+    case home = "Overview", things = "Things", gallery = "Widget Gallery", connection = "Connection"
+    var id: String { rawValue }
+    var symbol: String {
+        switch self {
+        case .home: return "square.grid.2x2"
+        case .things: return "square.stack.3d.up"
+        case .gallery: return "rectangle.3.group"
+        case .connection: return "person.crop.circle"
         }
     }
 }
-@MainActor
-final class WidgetBrowserModel: NSObject, ObservableObject, WKScriptMessageHandler, WKNavigationDelegate {
-    static let shared = WidgetBrowserModel()
-    let root: URL
-    lazy var webView: WKWebView = {
-        let configuration = WKWebViewConfiguration()
-        configuration.userContentController.add(self, name: "thingtimeNative")
-        configuration.userContentController.addUserScript(ThingtimeBridgeScript.script)
-        let view = WKWebView(frame: .zero, configuration: configuration)
-        view.navigationDelegate = self
-        view.allowsBackForwardNavigationGestures = true
-        view.load(URLRequest(url: root))
-        return view
-    }()
-    private let voice = LopuVoiceSessionController()
-    private var generation = UUID()
-    private var syncGeneration = UUID()
-    private var ownerID: String?
-    override init() {
-        let configured = Bundle.main.object(forInfoDictionaryKey: "ThingtimeWebURL") as? String ?? "https://thingtime.com"
-        root = URL(string: configured) ?? URL(string: "https://thingtime.com")!
-        super.init()
-        voice.sendToWeb = { [weak self] type, payload in self?.send(type, payload) }
-    }
-    func stopVoice() { generation = UUID(); voice.stop() }
-    func takePending() { if let url = WidgetActionInbox.take() { open(url: url) } }
-    func open(url: URL) { if let path = WidgetRoute.path(for: url) { open(path: path) } }
-    func open(path: String) {
-        guard let target = URL(string: path, relativeTo: root)?.absoluteURL, LopuVoiceContract.sameOrigin(target, root) else { return }
-        generation = UUID()
-        voice.stop()
-        webView.load(URLRequest(url: target))
-        webView.window?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-    }
-    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
-        if navigationAction.targetFrame?.isMainFrame != false, !LopuVoiceContract.sameOrigin(url, root) {
-            if ["https", "http"].contains(url.scheme) { NSWorkspace.shared.open(url) }
-            decisionHandler(.cancel)
-        } else { decisionHandler(.allow) }
-    }
-    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.frameInfo.isMainFrame, let current = webView.url, LopuVoiceContract.sameOrigin(current, root),
-              let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
-        let payload = body["payload"] as? [String: Any] ?? [:]
-        switch type {
-        case "widget-state-request": send("widget-state", ["enabled": WidgetStore.enabled])
-        case "widget-clear": WidgetStore.clear()
-        case "widget-snapshot": WidgetStore.save(payload, origin: root.absoluteString)
-        case "lopu-voice-stop": generation = UUID(); voice.stop()
-        case "lopu-voice-start", "lopu-voice-recordings-sync":
-            let owner = payload["ownerId"] as? String
-            if ownerID != owner {
-                generation = UUID(); syncGeneration = UUID()
-                voice.stop(); voice.suspendRecordingUploads(); ownerID = owner
+
+private struct WidgetHome: View {
+    @ObservedObject var connection: WidgetConnection
+    @State private var section: WidgetSection? = .home
+    var body: some View {
+        NavigationSplitView {
+            List(WidgetSection.allCases, selection: $section) { item in
+                Label(item.rawValue, systemImage: item.symbol).tag(item)
             }
-            let token = UUID()
-            if type == "lopu-voice-start" { generation = token } else { syncGeneration = token }
-            let settings = LopuVoiceSessionController.Settings(
-                textResponse: payload["textResponse"] as? Bool ?? false,
-                transcribeMode: payload["transcribeMode"] as? Bool ?? false,
-                providerId: payload["providerId"] as? String ?? "",
-                sessionId: payload["sessionId"] as? String ?? UUID().uuidString,
-                inputMode: payload["inputMode"] as? String ?? "native-transcript",
-                model: payload["model"] as? String ?? "", effort: payload["effort"] as? String ?? "",
-                speed: payload["speed"] as? String ?? "normal", chatId: payload["chatId"] as? String, ownerId: payload["ownerId"] as? String)
-            webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] cookies in
-                Task { @MainActor in
-                    guard let self, (type == "lopu-voice-start" ? self.generation : self.syncGeneration) == token, let current = self.webView.url, LopuVoiceContract.sameOrigin(current, self.root) else { return }
-                    let host = self.root.host?.lowercased() ?? ""
-                    let scoped = cookies.filter { cookie in
-                        let domain = cookie.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
-                        return (host == domain || host.hasSuffix("." + domain)) && (!cookie.isSecure || self.root.scheme == "https") && (cookie.expiresDate.map { $0 > Date() } ?? true) && cookie.path == "/"
-                    }
-                    let header = HTTPCookie.requestHeaderFields(with: scoped)["Cookie"] ?? ""
-                    if type == "lopu-voice-start" { self.voice.start(settings: settings, baseURL: self.root, cookieHeader: header) }
-                    else { self.voice.syncRecordings(ownerId: settings.ownerId, baseURL: self.root, cookieHeader: header, autoImport: payload["autoImportRecordings"] as? Bool ?? true) }
+            .navigationSplitViewColumnWidth(min: 170, ideal: 200, max: 240)
+            .safeAreaInset(edge: .bottom) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Label(connection.credential?.displayName ?? "Not connected", systemImage: "person.crop.circle")
+                    Text(connection.origin.host ?? "Thingtime").font(.caption).foregroundStyle(.secondary)
+                }.frame(maxWidth: .infinity, alignment: .leading).padding()
+            }
+        } detail: {
+            Group {
+                switch section ?? .home {
+                case .home: overview
+                case .things: sharedThings
+                case .gallery: WidgetGallery()
+                case .connection: WidgetConnectionSettings(connection: connection)
                 }
             }
-        default: break
+            .navigationTitle((section ?? .home).rawValue)
+            .toolbar { Button { Task { await connection.refresh() } } label: {
+                Label("Refresh shared Things", systemImage: "arrow.clockwise")
+            }.disabled(connection.busy || connection.credential == nil) }
+        }
+        .frame(minWidth: 740, minHeight: 540)
+        .safeAreaInset(edge: .bottom) {
+            if let error = connection.error {
+                HStack {
+                    Image(systemName: "exclamationmark.circle")
+                    Text(error).font(.callout).fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Button("Dismiss") { connection.error = nil }
+                }.padding().background(.regularMaterial)
+            }
         }
     }
-    private func send(_ type: String, _ payload: [String: Any]) {
-        guard let data = try? JSONSerialization.data(withJSONObject: ["type": type, "payload": payload]), let json = String(data: data, encoding: .utf8) else { return }
-        webView.evaluateJavaScript("window.thingtimeNativeBridge?.receiveMessageFromNative(\(json))")
+
+    private var overview: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Your Things, a glance away.").font(.largeTitle.bold())
+                    Text("Connect Thingtime, choose what to share, and make each widget your own.")
+                        .foregroundStyle(.secondary)
+                }
+                GroupBox {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(connection.credential.map { "Connected as \($0.displayName)" } ?? "Connect your account").font(.headline)
+                            Text(connection.credential == nil ? "Sign in securely in your browser, then return here." : "\(connection.things.count) Things available on this Mac.")
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button(connection.credential == nil ? "Connect Thingtime" : "Manage Connection") { section = .connection }
+                    }.padding(8)
+                }
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Quick actions").font(.title2.bold())
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 170))], spacing: 12) {
+                        ForEach(WidgetAction.allCases, id: \.rawValue) { action in
+                            Button { connection.open(action.url) } label: {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Image(systemName: action.symbol).font(.title2).foregroundStyle(.tint)
+                                    Text(action.title).font(.headline)
+                                }.frame(maxWidth: .infinity, minHeight: 80, alignment: .leading).padding(12)
+                            }.buttonStyle(.bordered)
+                        }
+                    }
+                    Text("Actions open your selected Thingtime site. Lopu voice and transcription start there after microphone permission.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                GroupBox("Configure each widget") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Right-click your desktop → Edit Widgets → Thingtime to add a widget.")
+                        Text("Right-click the actual widget → Edit Widget to choose its Thing, action, title, and layout.")
+                        Button("Browse widget layouts") { section = .gallery }
+                    }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
+                }
+            }.padding(28).frame(maxWidth: 860)
+        }
+    }
+
+    private var sharedThings: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Choose what your widgets can show").font(.title2.bold())
+                    Text("Choose specific Things or approve access to all Things in the browser.").foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Permissions…") { connection.connect() }.disabled(connection.busy)
+            }
+            Toggle("Show shared Things in widgets", isOn: $connection.shareContent)
+            if connection.things.isEmpty {
+                ContentUnavailableView("No shared Things yet", systemImage: "square.stack.3d.up",
+                    description: Text("Open Permissions, choose Things or approve All Things, then enable widget content."))
+            } else {
+                List(connection.things) { thing in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(thing.title).font(.headline)
+                            if !thing.text.isEmpty { Text(thing.text).lineLimit(2).foregroundStyle(.secondary) }
+                            Text(thing.kind).font(.caption).foregroundStyle(.tertiary)
+                        }
+                        Spacer()
+                        Button("Open") { connection.open(thing.url) }
+                    }.padding(.vertical, 6)
+                }
+            }
+            if let date = connection.lastRefresh {
+                Text("Updated \(date.formatted(date: .omitted, time: .shortened)). Widget copies expire after 30 minutes without a refresh.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }.padding(24)
     }
 }
-struct WidgetBrowser: NSViewRepresentable {
-    @Environment(\.openWindow) private var openWindow
-    @ObservedObject var model: WidgetBrowserModel
-    func makeNSView(context: Context) -> WKWebView {
-        WidgetAppDelegate.openMainWindow = { openWindow(id: "main") }
-        return model.webView
+
+private struct WidgetConnectionSettings: View {
+    @ObservedObject var connection: WidgetConnection
+    var body: some View {
+        Form {
+            Section("Thingtime connection") {
+                TextField("Server address", text: $connection.address)
+                    .textContentType(.URL)
+                    .disabled(connection.busy)
+                Text("Use thingtime.com or the address of your own Thingtime server. Local connections can use http://127.0.0.1 with your server’s port.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let credential = connection.credential {
+                    LabeledContent("Account", value: credential.displayName)
+                    LabeledContent("Connected server", value: credential.origin)
+                }
+                HStack {
+                    Button(connection.credential == nil ? "Sign in with Thingtime" : "Sign in / Change permissions") { connection.connect() }
+                        .disabled(connection.busy)
+                    if connection.busy { Button("Cancel") { connection.cancelSignIn() } }
+                }
+                Text("Your browser handles sign-in. The connection credential stays in this app’s Keychain; widgets receive only the display content you enable.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Widget content") {
+                Toggle("Show shared Things in widgets", isOn: $connection.shareContent)
+                Text("Off by default. Up to 50 Things covered by your permissions are copied to widget storage. They may be visible on your desktop. Right-click each widget to select its Thing and display options.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button("Clear widget content") { connection.shareContent = false }
+            }
+            if connection.credential != nil {
+                Section("Disconnect") {
+                    Button("Disconnect this Mac", role: .destructive) { connection.disconnect() }
+                    Text("Revokes this connection and removes its saved credential and widget content from this Mac. Other devices remain connected.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }.formStyle(.grouped)
     }
-    func updateNSView(_ view: WKWebView, context: Context) {}
 }
