@@ -48,3 +48,18 @@ Validation includes native PKCE/callback tests, consent parsing and permission
 boundary tests, actor routing and scoped-user tests, capability coverage, focused
 lint, and desktop/phone consent inspection. Native sign-in callback and actual
 widget content acceptance are separate checks before merge.
+
+## 2026-09-11: native OAuth acceptance
+
+The user completed browser sign-in. Live inspection of the installed Mac app
+confirmed the native Connection page showed an authenticated account and its
+selected local origin. The native Things page loaded two permitted Things.
+After quitting and reopening the installed app, a new process refreshed the
+widget snapshot after launch, confirming credential restoration and authenticated
+content refresh. No credential or full Thing data was exposed during inspection.
+The native UI automation helper remains intermittent after app relaunch, but the
+successful post-relaunch refresh was verified from the bounded snapshot timestamp.
+
+The tested installed companion uses http://127.0.0.1:11240. The public PR preview
+must publish the updated OAuth capability versions before connecting to that
+origin with this build. Physical iPhone acceptance remains separate.
