@@ -150,6 +150,7 @@
     "draft-js": "^0.11.7",
     "emojis-list": "^3.0.0",
     "emotion": "^11.0.0",
+    "fflate": "0.8.3",
     "file-type": "^21.3.4",
     "flatted": "^3.3.3",
     "fuse.js": "^6.6.2",
