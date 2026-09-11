@@ -11,6 +11,7 @@ type RouteModule = {
 };
 
 export const routeModules: Record<string, () => Promise<RouteModule>> = {
+  'v1/integrations/ci/stack-completion': () => import('../../../app/routes/api/v1/integrations/ci/stack-completion/_stack-completion'),
   'v1/watch/recordings': () => import('../../../app/routes/api/v1/watch/recordings/_recordings'),
   'v1/notifications/test': () => import('../../../app/routes/api/v1/notifications/test/_test'),
   'v1/lopu/reminders': () => import('../../../app/routes/api/v1/lopu/reminders/_reminders'),

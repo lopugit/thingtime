@@ -6578,3 +6578,23 @@ approval; `access.test.ts` — the reservation matrix) and
   allowance and verify note/todo output with exact transcript evidence. Do not
   pass real recordings or tokens. Fixture files must be cleaned up on failure
   as well as success. This is not a substitute for paired-account/Watch tests.
+
+## Shared AI waterfall and stack overrides
+
+- Open the shared selector from CI stack selection and the Admin model-order
+  editor. Add OpenAI, custom endpoint and Claude entries; reorder/remove rows,
+  vary effort/speed, Apply, reopen, then Cancel an edit. Verify the returned
+  config and saved draft keep the intended order and no credentials/URLs.
+- Check desktop and mobile from top to bottom, including the scrolled modal
+  footer, long endpoint labels, focus restoration and duplicate validation.
+- Save/reload a custom stack; omit the field to preserve it, send null to inherit,
+  and restart it. Verify the immutable dispatch includes the saved selection,
+  foreign connections are rejected, and edits never change an active run.
+- Run `node --import tsx --test app/api/utils/ai/waterfallConfig.test.ts`
+  from Remix and the CI-control suite (including the signed gateway tests).
+  Verify missing-model/capacity failures advance, ownership/output errors stop,
+  and stopped/unrelated/replayed run requests cannot consume provider access.
+- On the controller branch run the feature-stack plan and routing self-tests,
+  plus `node --test .github/scripts/feature-stack-waterfall.test.mjs`.
+  Confirm a real text conflict preserves exact merge parents and touches only
+  conflict paths; binary/oversized conflicts fail without publication.

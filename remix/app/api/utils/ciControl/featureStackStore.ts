@@ -1,3 +1,7 @@
+import { authorizeAiWaterfall } from '../ai/waterfallService';
+import type { AiWaterfallConfig } from '~/api/utils/ai/waterfallConfig';
+import { validateFeatureStackModels } from './featureStackModels';
+
 import { randomUUID } from 'node:crypto';
 
 import { getCiControlCollection } from '../mongodb/collections';
@@ -15,6 +19,7 @@ export type SavedFeatureStack = {
 	sourcePrNumbers: number[];
 	targets: string[];
 	autoDecideBranches: boolean;
+	modelWaterfall: AiWaterfallConfig | null;
 	status: string;
 	lastDispatchId: string | null;
 	lastRunAt: string | null;
@@ -129,6 +134,7 @@ export const listFeatureStacks = async (): Promise<SavedFeatureStack[]> => {
 			sourcePrNumbers: rows.filter((row) => row.crystal?.entryType === 'source').map((row) => Number(row.crystal?.prNumber)),
 			targets: rows.filter((row) => row.crystal?.entryType === 'target').map((row) => String(row.crystal?.branch ?? '')),
 			autoDecideBranches: root.crystal?.autoDecideBranches !== false,
+			modelWaterfall: root.crystal?.modelWaterfall ?? null,
 			status: String(root.crystal?.status ?? 'saved'),
 			lastDispatchId: typeof root.crystal?.lastDispatchId === 'string' ? root.crystal.lastDispatchId : null,
 			lastRunAt: root.crystal?.lastRunAt ? dateString(root.crystal.lastRunAt) : null,
@@ -146,6 +152,7 @@ export const saveFeatureStack = async (
 		sourcePrNumbers?: unknown;
 		targets?: unknown;
 		autoDecideBranches?: unknown;
+		modelWaterfall?: unknown;
 	},
 	actorId: string
 ): Promise<SavedFeatureStack> => {
@@ -157,6 +164,8 @@ export const saveFeatureStack = async (
 	const sourcePrNumbers = validateSources(input.sourcePrNumbers);
 	const targets = validateTargets(input.targets);
 	const autoDecideBranches = input.autoDecideBranches !== false;
+	const modelWaterfall = validateFeatureStackModels(input.modelWaterfall === undefined ? current?.crystal?.modelWaterfall : input.modelWaterfall);
+	if (modelWaterfall) await authorizeAiWaterfall(actorId, modelWaterfall);
 	const now = new Date();
 	const repository = REPOSITORY();
 	const revision = randomUUID();
@@ -190,6 +199,7 @@ export const saveFeatureStack = async (
 				'crystal.title': name,
 				'crystal.repository': repository,
 				'crystal.autoDecideBranches': autoDecideBranches,
+				'crystal.modelWaterfall': modelWaterfall,
 				'crystal.revision': revision,
 				'crystal.status': current?.crystal?.status && current.crystal.status !== 'archived' ? String(current.crystal.status) : 'saved',
 				'crystal.archived': false,

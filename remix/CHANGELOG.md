@@ -12,6 +12,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-09-11: Add a reusable AI model/endpoint waterfall dialog and per-stack
+  immutable routing, with a protected completion gateway and mixed-provider
+  availability fallback. [Contract and rollout](../docs/ai-waterfall-selector.md).
+
 > `— Lopu, YYYY-MM-DD`. Keep the newest entries at the top.
 
 ---
