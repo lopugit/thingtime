@@ -87,3 +87,23 @@ do not merge it into the permanently separate product branches to test it.
 - Record observed run IDs and conclusions. A replay or local test is not live
   proof; a cancelled run is not proof of a code failure. Do not rerun or repair
   unrelated work just to turn historic checks green.
+
+## Feature Stack snapshot publication and merge gates
+
+- Run `node --test .github/scripts/feature-stack-publish-merge.test.mjs`,
+  `node .github/scripts/feature-stack-plan.mjs --self-test`, and
+  `node .github/scripts/feature-stack-progress.mjs --self-test`.
+- A source PR that advances or merges after admission must still publish the
+  captured SHA, with the exact merge parents checked by the history verifier.
+  Identity changes, drafts, closed-unmerged PRs and explicit pause labels stop
+  publication. Admission still authenticates the initially captured head.
+- On an unprotected target, simulate the auto-merge rejection and verify two
+  complete passing check snapshots precede a normal exact-head merge. Failed,
+  missing, pending, stale-head and later-page checks cannot bypass the gate.
+- A lost successful merge response reconciles the existing PR before retrying;
+  unrelated authorization errors must never select the fallback merge path.
+- A failed target publisher ends its confirmation job immediately; the progress
+  reporter must not let a still-running gate conceal that failure at 99%.
+  Other successfully merged targets retain their success receipts.
+- After rollout, inspect an actual run's publisher, confirmation jobs and final
+  dashboard receipt. Local tests alone do not establish live recovery.

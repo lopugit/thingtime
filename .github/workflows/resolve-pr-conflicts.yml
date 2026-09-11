@@ -4029,13 +4029,8 @@ jobs:
             base="$(jq -r '.base' <<<"$source")"
             gh api "repos/$REPO/pulls/$pr" | jq -e \
               --arg repo "$REPO" --arg head "$head" --arg sha "$sha" --arg base "$base" \
-              '.state == "open" and .draft == false
-               and .head.repo.full_name == $repo
-               and .head.ref == $head and .head.sha == $sha
-               and .base.ref == $base
-               and ([.labels[].name] | index("no-ai-merge") == null)
-               and ([.labels[].name] | index("ai-merge-paused") == null)' >/dev/null || {
-                 echo "::error::Source PR #$pr changed or was paused while the Feature Stack was running."
+              -f "$GITHUB_WORKSPACE/trusted/.github/scripts/feature-stack-source-publication.jq" >/dev/null || {
+                 echo "::error::Source PR #$pr changed identity, closed without merging, or was paused while the Feature Stack was running."
                  exit 1
                }
           done < <(jq -c '.sources[]' "$RUNNER_TEMP/feature-stack-plan.json")
@@ -4075,7 +4070,9 @@ jobs:
           else
             gh pr edit "$pr_url" --title "$title" --body-file "$body"
           fi
-          gh pr merge "$pr_url" --auto --merge
+          pr_number="${pr_url##*/}"
+          verified_head="$(git rev-parse HEAD)"
+          node "$GITHUB_WORKSPACE/trusted/.github/scripts/feature-stack-publish-merge.mjs" "$pr_number" "$verified_head"
           echo "Feature Stack auto-merge PR: $pr_url"
 
   feature_stack_progress:
@@ -4160,6 +4157,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 330
     permissions:
+      actions: read
       contents: read
       pull-requests: read
     env:
@@ -4172,6 +4170,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Check this target, not the aggregate matrix result.
+          gh api --paginate --slurp \
+            "repos/$REPO/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" \
+            | jq -e --arg name "Merge Feature Stack into $TARGET_BRANCH" \
+              '[.[].jobs[] | select(.name == $name or (.name | endswith(" / " + $name)))] | max_by(.id) | .status == "completed" and .conclusion == "success"' >/dev/null || {
+                echo "::error::Publisher failed for $TARGET_BRANCH; inspect its worker log before retrying."
+                exit 1
+              }
           safe_target="$(printf '%s' "$TARGET_BRANCH" | tr '/_' '--' | tr -cd 'A-Za-z0-9.-')"
           publish_branch="lopu/feature-stack-$STACK_ID-to-$safe_target"
           initial_head_sha="$(gh api "repos/$REPO/git/ref/heads/$publish_branch" --jq '.object.sha' 2>/dev/null || true)"
