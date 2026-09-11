@@ -6,6 +6,7 @@ import { useApi } from '~/hooks/useApi';
 import { readTransferFile } from '~/utils/thingTransfer/readFile';
 import { TRANSFER_LIMITS } from '~/utils/thingTransfer/format';
 import type { TransferBundle } from '~/utils/thingTransfer/archive';
+import { isTransferRecording, recordingTransferFile } from '~/utils/thingTransfer/recording';
 
 /** Mount only while open, keyed by account. Unmount cancels parsing/import
  * and delegates uncommitted file cleanup to the normal upload workflow. */
@@ -29,7 +30,10 @@ export const ThingImportDialog = ({ ownerId, folderId, initialBundle, onClose, o
   const submission = useRef(false);
   const fileIds = useRef(new Map<File, string>());
   const uploads = useAttachmentUploads(ownerId, setError, setError, false, undefined,
-    { maxFiles: TRANSFER_LIMITS.files, purpose: 'post', selectionScope: 'transfer' });
+    { maxFiles: TRANSFER_LIMITS.files, purpose: 'post', selectionScope: 'transfer', purposeForFile: file => {
+      const entry = bundle?.manifest.files.find(entry => entry.id === fileIds.current.get(file));
+      return bundle?.manifest.things.some(thing => thing.id === entry?.targetId && isTransferRecording(thing)) ? 'recording-import' : 'post';
+    } });
   useEffect(() => {
     const controller = new AbortController();
     lifetime.current = controller;
@@ -51,6 +55,8 @@ export const ThingImportDialog = ({ ownerId, folderId, initialBundle, onClose, o
   };
   const beginUploads = () => {
     if (!bundle || uploadStarted) return;
+    try { for (const thing of bundle.manifest.things.filter(isTransferRecording)) recordingTransferFile(thing, bundle.manifest); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'Invalid recording transfer'); return; }
     setUploadStarted(true);
     const files = bundle.manifest.files.map((entry, index) => {
       // Distinct timestamps prevent the normal picker dedupe from dropping
@@ -64,17 +70,22 @@ export const ThingImportDialog = ({ ownerId, folderId, initialBundle, onClose, o
   const filesReady = !!bundle && uploads.uploads.length === bundle.manifest.files.length &&
     uploads.uploads.every((upload) => upload.status === 'ready' && upload.attachment);
   const hasThemes = !!bundle?.manifest.things.some(thing => thing.thingtime.includes('theme') || thing.thingtime.includes('feed-algorithm'));
+  const hasRecordings = !!bundle?.manifest.things.some(isTransferRecording);
+  const requiresLibraryRoot = hasThemes || hasRecordings;
   const submit = async () => {
     if (!bundle || !filesReady || submission.current || lifetime.current?.signal.aborted) return;
     submission.current = true; setAttempted(true); setSubmitting(true); setError('');
     const controller = lifetime.current!;
     try {
       const files = Object.fromEntries(uploads.uploads.map((upload) => [fileIds.current.get(upload.file)!, upload.attachment!.id]));
-      const result = await api.v1.things.import({ manifest: bundle.manifest, files, folderId: hasThemes ? null : destination }, { signal: controller.signal });
+      // A lost response may hide a successful recording commit. From dispatch
+      // onward, do not let dialog unmount delete those potentially durable
+      // copies. Server compensation and normal draft expiry own cleanup.
+      uploads.markCommitted(Object.values(files));
+      const result = await api.v1.things.import({ manifest: bundle.manifest, files, folderId: requiresLibraryRoot ? null : destination }, { signal: controller.signal });
       if (controller.signal.aborted) return;
       if (result?.ok !== true) throw new Error(result?.error || 'Import did not confirm success');
-      uploads.markCommitted(Object.values(files));
-      onImported(hasThemes ? null : destination); onClose();
+      onImported(requiresLibraryRoot ? null : destination); onClose();
     } catch (cause) {
       if (!controller.signal.aborted) setError(`${cause instanceof Error ? cause.message : 'Import failed'}. Check your Things before trying again; if the response was lost, copies may already exist.`);
     } finally { if (!controller.signal.aborted) setSubmitting(false); }
@@ -93,7 +104,11 @@ export const ThingImportDialog = ({ ownerId, folderId, initialBundle, onClose, o
           {bundle && <>
             <Text>{bundle.manifest.things.length} Things · {bundle.manifest.files.length} files · {bundle.manifest.links?.length || 0} links · {(bundle.manifest.files.reduce((total, file) => total + file.bytes, 0) / 1024 / 1024).toFixed(1)} MiB</Text>
             {!!bundle.manifest.links?.length && <Text fontSize="sm">Linked media stays on its original site. Import creates private gallery records; it does not download those external files.</Text>}
-            {hasThemes ? <Text fontSize="sm">Themes and feed algorithms are saved privately in their own libraries without changing your active selections. Other content goes to My Things (top level). Algorithm files contain private interest weights; share them only deliberately.</Text> : <Box>
+            {requiresLibraryRoot ? <Box>
+              {hasRecordings && <Text fontSize="sm">Recordings are imported as new private recordings in My Things (top level).</Text>}
+              {hasThemes && <Text fontSize="sm">Themes and feed algorithms go to their own libraries without changing active selections. Algorithm files can contain private interest weights; share them only deliberately.</Text>}
+              <Text fontSize="sm">Other root content goes to My Things (top level).</Text>
+            </Box> : <Box>
               <Text as="label" htmlFor="thing-import-destination" fontSize="sm">Import destination</Text>
               <Select id="thing-import-destination" value={destination || ''} isDisabled={attempted} onChange={(event) => setDestination(event.target.value || null)}>
                 <option value="">My Things (top level)</option>

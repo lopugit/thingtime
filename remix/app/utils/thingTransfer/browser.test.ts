@@ -6,6 +6,17 @@ import { encodeTransferArchive, decodeTransferArchive } from './archive';
 
 const plan = (): TransferPlan => ({ roots: ['note'], things: [{ id: 'note', thingtime: ['note'], crystal: { name: 'A note' }, extended: ['json', 42] }], files: [] });
 
+test('recording download source IDs authorize bytes without entering the portable archive', async () => {
+  const p = plan(); p.files = [{ id: 'portable-file', sourceId: 'original-recording', targetId: 'note', name: 'a.wav', mime: 'audio/wav', bytes: 4 }];
+  const bundle = await bundleFromPlan(p, { fetch: async (url) => {
+    assert.equal(new URL(String(url), 'https://example.test').searchParams.get('id'), 'original-recording');
+    return new Response(new Uint8Array([1, 2, 3, 4]));
+  } });
+  assert.equal(bundle.files.has('portable-file'), true);
+  assert.equal('sourceId' in bundle.manifest.files[0], false);
+  assert.deepEqual(await readTransferClipboard(await transferClipboardText(bundle)), bundle);
+});
+
 test('linked metadata round-trips clipboard and ZIP without fetching external URLs', async () => {
   const original = plan();
   original.links = [{ id: 'link', targetId: 'note', url: 'https://example.com/photo.png', mediaKind: 'image', title: 'Photo 🥰', description: 'First\nSecond' }];

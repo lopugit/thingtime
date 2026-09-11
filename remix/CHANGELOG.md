@@ -18,6 +18,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Connected standalone recordings to portable export/import 1.5.0, with collision-safe byte entries, per-file upload purpose, private independent copies and attachment-lifecycle rollback. Approved-upload round-trip acceptance remains pending; see [PR 764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI), 2026-09-11
+
 - Added private-approved `recording-import` upload intents, purpose-separated replay checks and upload lifecycle capability negotiation (1.3.0). Portable recording adapters remain in progress. — Codex (AI), 2026-09-11
 
 - Added server-only recording-import draft lifecycle groundwork, preserving immutable upload purpose, normal expiry cleanup and transactional storage accounting. Recording transfer adapters are not enabled yet; see [PR 764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI), 2026-09-11

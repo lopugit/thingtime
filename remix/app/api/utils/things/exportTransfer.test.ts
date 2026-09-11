@@ -9,6 +9,25 @@ const project = async (docs: ThingDoc[]) => docs.map((item) => ({ id: item.share
   tags: item.tags || [], author: { id: item.ownerId }, acl: item.acl, visibility: 'private', folderId: item.folderId || null, targetId: item.targetId || null, linkKey: 'NEVER-EXPORT', createdAt: '', updatedAt: '' })) as any;
 const composition = (root: ThingDoc, children: ThingDoc[] = []): SharedComposition => ({ root, docs: new Map([root, ...children].map((item) => [item.shareId, item])), actions: new Map(), children: new Map(), data: new Map(), references: new Map(), requiredReferences: new Set(), contexts: new Map(), boundaries: new Map() });
 
+test('recording roots use distinct portable byte IDs and cannot omit their bytes', async () => {
+  const deps = { read: async () => doc('audio', ['attachment']),
+    readRecording: async () => ({ id: 'audio', thingtime: ['attachment'], crystal: { recordingFileId: 'pending' } }),
+    bound: async () => [], describe: async () => ({ ok: true as const, linked: false as const,
+      attachment: { id: 'audio', name: 'a.wav', contentType: 'audio/wav', size: 4, mediaKind: 'audio' as const, title: 'Saved voice' } }) };
+  const result = await exportTransferPlan({ id: 'owner' }, { ids: ['audio'] }, undefined, deps);
+  assert.ok(result.ok); if (!result.ok) return;
+  assert.notEqual(result.plan.files[0].id, 'audio');
+  assert.equal(result.plan.files[0].sourceId, 'audio');
+  assert.equal(result.plan.files[0].targetId, 'audio');
+  assert.equal(result.plan.things[0].crystal.recordingFileId, result.plan.files[0].id);
+  const collision = await exportTransferPlan({ id: 'owner' }, { ids: ['audio', 'recording-file:0'] }, undefined, {
+    ...deps, project, read: async id => doc(String(id), id === 'audio' ? ['attachment'] : ['note'])
+  });
+  assert.ok(collision.ok); if (collision.ok) assert.equal(collision.plan.files[0].id, 'recording-file:1');
+  const missingBytes = await exportTransferPlan({ id: 'owner' }, { ids: ['audio'], includeFiles: false }, undefined, deps);
+  assert.equal(missingBytes.ok, false);
+});
+
 test('export follows every folder page, preserves JSON extended values and excludes authority', async () => {
   const folder = doc('folder', ['folder']);
   const children = Array.from({ length: 102 }, (_, index) => ({ ...doc(`child-${index}`), folderId: 'folder' }));

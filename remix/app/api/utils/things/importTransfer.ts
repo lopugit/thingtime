@@ -4,7 +4,9 @@ import { orderedTransferAttachments, serializeTransfer, transferAnnotations, val
 import { rewriteComposition } from '../actions/forkCompositionCore';
 import { rewriteTransferMedia } from './transferMediaCore';
 import { annotateAttachment, linkAttachment, deleteAttachment, createReadyAttachmentPostInsertHook, inspectReadyAttachmentsForPost, prepareAttachmentCascadeForThing } from '../attachments/attachments';
-import { attachmentStore } from '../attachments/attachmentStore';
+import { attachmentStore, commitRecordingImport } from '../attachments/attachmentStore';
+import { prepareRecordingImport } from '../attachments/recordingImportCore';
+import { isTransferRecording, recordingTransferFile } from '../../../utils/thingTransfer/recording';
 import { createThing, deleteThing, fail, isFail, type Viewer } from './things';
 import { createTransferTheme, isTransferTheme, removeTransferTheme, validateTransferTheme } from './themeTransfer';
 import { createTransferAlgorithm, isTransferAlgorithm, removeTransferAlgorithm, validateTransferAlgorithm } from './algorithmTransfer';
@@ -23,9 +25,10 @@ type ImportDependencies = {
   removeTheme: typeof removeTransferTheme;
   createAlgorithm: typeof createTransferAlgorithm;
   removeAlgorithm: typeof removeTransferAlgorithm;
+  createRecording: typeof commitRecordingImport;
 };
-const defaults: ImportDependencies = { create: createThing, remove: deleteThing, inspectFiles: inspectReadyAttachmentsForPost, getFile: attachmentStore.getOwned, bindFiles: createReadyAttachmentPostInsertHook, uuid: randomUUID, link: linkAttachment, annotate: annotateAttachment, removeFile: deleteAttachment, createTheme: createTransferTheme, removeTheme: removeTransferTheme, createAlgorithm: createTransferAlgorithm, removeAlgorithm: removeTransferAlgorithm };
-const dedicatedTransfer = (thing: TransferThing) => isTransferTheme(thing) || isTransferAlgorithm(thing);
+const defaults: ImportDependencies = { create: createThing, remove: deleteThing, inspectFiles: inspectReadyAttachmentsForPost, getFile: attachmentStore.getOwned, bindFiles: createReadyAttachmentPostInsertHook, uuid: randomUUID, link: linkAttachment, annotate: annotateAttachment, removeFile: deleteAttachment, createTheme: createTransferTheme, removeTheme: removeTransferTheme, createAlgorithm: createTransferAlgorithm, removeAlgorithm: removeTransferAlgorithm, createRecording: commitRecordingImport };
+const dedicatedTransfer = (thing: TransferThing) => isTransferTheme(thing) || isTransferAlgorithm(thing) || isTransferRecording(thing);
 
 /** Import ordering only constrains structural/provenance references. Action
  * cycles are legal: their fresh IDs are allocated before any create call.
@@ -55,13 +58,17 @@ export const importTransfer = async (
     manifest = validateTransfer(input.manifest);
     serializeTransfer(manifest);
     ordered = orderTransferImports(manifest);
-    for (const theme of ordered.filter(dedicatedTransfer)) {
+    for (const theme of ordered.filter(thing => isTransferTheme(thing) || isTransferAlgorithm(thing))) {
       if (isTransferTheme(theme)) validateTransferTheme(theme);
       else validateTransferAlgorithm(theme);
       if (input.folderId || ordered.some(thing => thing.folderId === theme.id || thing.targetId === theme.id) ||
         orderedTransferAttachments(manifest).some(file => file.targetId === theme.id)) {
         throw new Error('Themes and algorithms import into their own libraries, without folders, child Things or gallery files');
       }
+    }
+    for (const recording of ordered.filter(isTransferRecording)) {
+      recordingTransferFile(recording, manifest);
+      if (input.folderId) throw new Error('Recordings import into My Things at the top level');
     }
   } catch (error) { return fail(400, error instanceof Error ? error.message : 'Invalid transfer'); }
   if (manifest.things.some((thing) => isProtectedThingtime(thing.thingtime) && !dedicatedTransfer(thing))) return fail(403, 'Managed account records must use their dedicated import workflow');
@@ -77,6 +84,7 @@ export const importTransfer = async (
   const created: string[] = [];
   const createdThemes = new Set<string>();
   const createdAlgorithms = new Set<string>();
+  const createdRecordings = new Set<string>();
   const createdLinks: string[] = [];
   const attachments = orderedTransferAttachments(manifest);
   const suffix = deps.uuid().slice(0, 8);
@@ -86,6 +94,18 @@ export const importTransfer = async (
     if (Date.now() > expires) throw new Error('The import timed out');
   };
   try {
+    for (const recording of ordered.filter(isTransferRecording)) {
+      check();
+      const file = recordingTransferFile(recording, manifest);
+      const copied = files.get(file.id)!;
+      const uploaded = await deps.getFile(viewer.id, copied);
+      if (!uploaded) throw new Error('Recording upload not found');
+      prepareRecordingImport(uploaded, viewer.id, file.bytes, transferAnnotations(file));
+      // Embedded recording URLs use the original Thing ID, whereas archive
+      // byte entries have distinct portable IDs. Both resolve to the new file.
+      files.set(recording.id, copied);
+      ids.set(recording.id, copied);
+    }
     for (const link of manifest.links || []) {
       check();
       // Same canonical writer/quota policy as pasting a URL into a gallery.
@@ -107,6 +127,7 @@ export const importTransfer = async (
     const inspections = new Map<string, Awaited<ReturnType<typeof deps.inspectFiles>>>();
     for (const thing of ordered) {
       check();
+      if (isTransferRecording(thing)) continue;
       const bound = attachments.filter((file) => file.targetId === thing.id);
       if (!bound.length) continue;
       const inspected = await deps.inspectFiles(viewer.id, bound.map((file) => files.get(file.id)!));
@@ -118,6 +139,7 @@ export const importTransfer = async (
       inspections.set(thing.id, inspected);
     }
     for (const file of manifest.files) {
+      if (ordered.some(thing => thing.id === file.targetId && isTransferRecording(thing))) continue;
       const annotations = transferAnnotations(file);
       if (!Object.keys(annotations).length) continue;
       check();
@@ -142,6 +164,14 @@ export const importTransfer = async (
       ids.set(algorithm.id, result.algorithm.id);
       created.push(result.algorithm.id);
       createdAlgorithms.add(result.algorithm.id);
+    }
+    for (const recording of ordered.filter(isTransferRecording)) {
+      check();
+      const file = recordingTransferFile(recording, manifest);
+      const doc = await deps.createRecording(viewer.id, files.get(file.id)!, file.bytes, transferAnnotations(file));
+      ids.set(recording.id, doc.shareId);
+      created.push(doc.shareId);
+      createdRecordings.add(doc.shareId);
     }
     for (const thing of ordered) {
       check();
@@ -170,6 +200,11 @@ export const importTransfer = async (
     const remaining: string[] = [];
     for (const id of [...created].reverse()) {
       try {
+        if (createdRecordings.has(id)) {
+          const removed = await deps.removeFile(viewer.id, { id });
+          if (isFail(removed) || removed.deferred) remaining.push(id);
+          continue;
+        }
         const removed = createdThemes.has(id) ? await deps.removeTheme(viewer.id, id) : createdAlgorithms.has(id)
           ? await deps.removeAlgorithm(viewer.id, id) : await deps.remove(viewer, id, null, { beforeCascade: prepareAttachmentCascadeForThing });
         if (isFail(removed)) remaining.push(id);

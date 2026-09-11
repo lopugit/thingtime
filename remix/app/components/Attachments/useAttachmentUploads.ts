@@ -149,6 +149,8 @@ export const useAttachmentUploads = (
 	options: AttachmentUploadOptions = {}
 ) => {
 	const uploadPurpose = options.purpose ?? 'post';
+	const purposeForFileRef = React.useRef(options.purposeForFile);
+	purposeForFileRef.current = options.purposeForFile;
 	const maxFiles = Number.isSafeInteger(options.maxFiles)
 		? Math.max(1, Math.min(options.selectionScope === 'transfer' ? TRANSFER_LIMITS.files : MAX_POST_ATTACHMENTS, Number(options.maxFiles)))
 		: MAX_POST_ATTACHMENTS;
@@ -243,6 +245,7 @@ export const useAttachmentUploads = (
 			const controller = new AbortController();
 			activeRequestsRef.current.set(localId, controller);
 			const existing = uploadsRef.current.find((upload) => upload.localId === localId);
+			const purpose = existing?.purpose ?? uploadPurpose;
 			if (completeOnly && existing?.uploadId) {
 				await completeUpload(localId, existing.uploadId, attempt, controller.signal);
 				if (activeRequestsRef.current.get(localId) === controller) activeRequestsRef.current.delete(localId);
@@ -269,7 +272,7 @@ export const useAttachmentUploads = (
 							filename: file.name,
 							contentType: file.type || 'application/octet-stream',
 							sizeBytes: file.size,
-							...(uploadPurpose === 'post' ? {} : { purpose: uploadPurpose })
+							...(purpose === 'post' ? {} : { purpose })
 						},
 						{ signal: controller.signal }
 					);
@@ -286,6 +289,10 @@ export const useAttachmentUploads = (
 						return;
 					}
 					patchUpload(localId, attempt, { uploadId, status: 'uploading' });
+					if (prepared.state === 'ready') {
+						await completeUpload(localId, uploadId, attempt, controller.signal);
+						return;
+					}
 				}
 
 				let committedBytes = 0;
@@ -417,6 +424,7 @@ export const useAttachmentUploads = (
 				const previewUrl = mediaKind === 'image' || mediaKind === 'video' ? URL.createObjectURL(file) : null;
 				attemptsRef.current.set(localId, 1);
 				return {
+					purpose: purposeForFileRef.current?.(file) ?? uploadPurpose,
 					localId,
 					file,
 					previewUrl,
@@ -433,7 +441,7 @@ export const useAttachmentUploads = (
 			setUploads(nextUploads);
 			for (const upload of next) enqueue({ localId: upload.localId, file: upload.file, attempt: 1 });
 		},
-		[allowedContentTypes, cleanupUpload, enqueue, imageOnly, maxBytesPerFile, maxFiles, onCleanupDeferred, onCleanupError, onSelectionError]
+		[allowedContentTypes, cleanupUpload, enqueue, imageOnly, maxBytesPerFile, maxFiles, onCleanupDeferred, onCleanupError, onSelectionError, uploadPurpose]
 	);
 
 	const addFiles = React.useCallback((files: File[]) => addFilesInternal(files, false), [addFilesInternal]);

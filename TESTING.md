@@ -1,19 +1,26 @@
 # TESTING.md — per-area manual test checklists
 
-## Recording transfer lifecycle (adapter not yet enabled)
+## Recording transfer lifecycle
 
 - [ ] `recording-import` upload starts require private-upload approval, including
   when public uploads alone are approved. The same request ID cannot be reused
   across recording-import and ordinary recording/post purposes. Completed drafts
   retain expiry; expired or already committed draft replays return 409.
 
-- [ ] When the recording transfer adapter is enabled, verify normal approved
+- [ ] Verify normal approved
   uploads retain recording purpose throughout import; incomplete imports stay
   expiring drafts, do not appear in My Things, and are reclaimed normally.
 - [ ] Verify committed imports are new private recordings with preserved bytes
   and annotations. Replay, another owner, expired/bound/profile media and wrong
   byte counts must fail without changing existing recordings. Verify quota and
   metadata changes commit together and a failed commit leaves a recoverable draft.
+- [ ] Export a standalone recording and a mixed recording/component ZIP on
+  desktop/mobile. Download/clipboard/import/re-export must preserve bytes and
+  annotations with new IDs, including embedded recording URLs and file-ID
+  collisions. A no-files recording export must fail, not create an empty copy.
+- [ ] Simulate a lost import response, then close the dialog. It must not retry
+  the mutation or delete potentially committed recordings. A ready upload-start
+  receipt must go directly to completion metadata, never PUT the bytes again.
 
 ## Portable theme transfers
 

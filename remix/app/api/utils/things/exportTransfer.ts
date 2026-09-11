@@ -11,8 +11,10 @@ import { transferAnnotations, TRANSFER_LIMITS, type TransferThing, type JsonValu
 import type { TransferPlan } from '../../../utils/thingTransfer/plan';
 import { readTransferTheme } from './themeTransfer';
 import { readTransferAlgorithm } from './algorithmTransfer';
+import { readTransferRecording } from './recordingTransfer';
+import { isTransferRecording } from '../../../utils/thingTransfer/recording';
 
-const defaults = { read: findViewableThing, readTheme: readTransferTheme, readAlgorithm: readTransferAlgorithm, list: listThings, resolve: resolveSharedComposition, project: toPublicThings, bound: listForkBoundMedia, describe: describeAttachmentTransfer };
+const defaults = { read: findViewableThing, readTheme: readTransferTheme, readAlgorithm: readTransferAlgorithm, readRecording: readTransferRecording, list: listThings, resolve: resolveSharedComposition, project: toPublicThings, bound: listForkBoundMedia, describe: describeAttachmentTransfer };
 
 const content = (thing: PublicThing): TransferThing => ({
   id: thing.id, thingtime: thing.thingtime, crystal: thing.crystal,
@@ -40,9 +42,10 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
         check();
         if (docs.has(id)) return docs.get(id)!;
         const doc = await deps.read(id, viewer);
-        if (!doc || doc.thingtime.includes('theme') || doc.thingtime.includes('feed-algorithm')) {
+        if (!doc || doc.thingtime.includes('theme') || doc.thingtime.includes('feed-algorithm') || doc.thingtime.includes('attachment')) {
           const dedicated = (!doc || doc.thingtime.includes('theme') ? await deps.readTheme(viewer?.id, id) : null) ||
-            (!doc || doc.thingtime.includes('feed-algorithm') ? await deps.readAlgorithm(viewer?.id, id) : null);
+            (!doc || doc.thingtime.includes('feed-algorithm') ? await deps.readAlgorithm(viewer?.id, id) : null) ||
+            (!doc || doc.thingtime.includes('attachment') ? await deps.readRecording(viewer?.id, id) : null);
           if (dedicated) { docs.set(id, dedicated); return dedicated; }
           throw fail(404, 'Thing not found');
         }
@@ -87,6 +90,8 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
       files: async function* () { yield* []; /* Bytes follow this authorized plan. */ }
     }, { includeChildren: input.includeChildren !== false, includeDependencies: input.includeDependencies !== false, includeFiles: false, signal });
     const plan: TransferPlan = { roots: bundle.manifest.roots, things: bundle.manifest.things, files: [] };
+    const recordings = plan.things.filter(isTransferRecording);
+    if (recordings.length && input.includeFiles === false) throw new Error('Recordings require their file bytes; download a ZIP with files included');
     if (input.includeFiles !== false || input.includeLinks !== false) {
       const includedIds = new Set(plan.things.map((thing) => thing.id));
       const targets = new Map<string, { targetId: string; sharedRoot?: string }>();
@@ -106,6 +111,12 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
         }
       }
       if (targets.size > TRANSFER_LIMITS.files) throw new Error('This export has too many files');
+      // A recording can also be embedded in another included Thing. Its own
+      // root owns the one byte entry; import remaps both forms of reference.
+      for (const recording of recordings) targets.set(recording.id, { targetId: recording.id });
+      if (targets.size > TRANSFER_LIMITS.files) throw new Error('This export has too many files');
+      const reservedIds = new Set([...includedIds, ...targets.keys()]);
+      const recordingIds = new Set(recordings.map(thing => thing.id));
       let bytes = 0;
       for (const [id, target] of targets) {
         check();
@@ -113,7 +124,15 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
         const result = await deps.describe({ ...viewer, sharedRoot: target.sharedRoot }, id);
         if (isFail(result)) throw result;
         if (result.linked ? input.includeLinks === false : input.includeFiles === false) continue;
-        (plan.attachmentOrder ||= []).push(id);
+        let portableId = id;
+        if (recordingIds.has(id)) {
+          if (result.linked) throw new Error('A recording must contain stored file bytes');
+          let index = 0;
+          do { portableId = `recording-file:${index++}`; } while (reservedIds.has(portableId));
+          reservedIds.add(portableId);
+          plan.things.find(thing => thing.id === id)!.crystal = { recordingFileId: portableId };
+        }
+        (plan.attachmentOrder ||= []).push(portableId);
         if (result.linked) {
           const attachment = result.attachment;
           if (!attachment.url || attachment.nsfw || attachment.pending) throw new Error('Linked media cannot be exported');
@@ -122,7 +141,7 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
         }
         bytes += result.attachment.size;
         if (bytes > TRANSFER_LIMITS.fileBytes) throw new Error('This export exceeds the file byte limit');
-        plan.files.push({ id, ...target, name: result.attachment.name, mime: result.attachment.contentType, bytes: result.attachment.size, ...transferAnnotations(result.attachment) });
+        plan.files.push({ id: portableId, ...(portableId !== id ? { sourceId: id } : {}), ...target, name: result.attachment.name, mime: result.attachment.contentType, bytes: result.attachment.size, ...transferAnnotations(result.attachment) });
       }
     }
     check();

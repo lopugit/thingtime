@@ -1,8 +1,27 @@
 # PR 764 — portable Thing transfer
 
+## Recording adapter checkpoint — 2026-09-11
+
+Export/import 1.5.0 adds owned standalone recording roots. The portable attachment
+Thing contains only recordingFileId; one distinct file entry carries its bytes
+and owner annotations. Plan-only sourceId authorizes the original download and
+is discarded before archiving. No-files recording exports fail explicitly.
+The importer accepts only fresh owned recording-import drafts, preserves immutable
+purpose and moderation, commits annotations/durability together, remaps embedded
+references, and compensates failures through the attachment deletion lifecycle.
+The import dialog selects recording-import per recording file in mixed ZIPs,
+keeps other media on post purpose, and forces dedicated content to top level.
+Upload retries receiving a ready receipt finalize metadata without PUTting again.
+Once an import is dispatched, dialog cleanup no longer deletes supplied uploads:
+a lost response may hide a successful recording commit. Server compensation and
+draft expiry own cleanup from that point. Simulated Chrome runs check mixed
+purposes, ready receipts, lost responses and close-without-delete at 1280/390px.
+Real approved-upload/byte round-trip acceptance remains outstanding; unit/mocked
+coverage and upload-denial browser checks are not substitutes for that gate.
+
 ## Recording lifecycle foundation — 2026-09-11
 
-Standalone recording transfer is still NOT exposed by this checkpoint. Purpose
+At the initial lifecycle checkpoint recording transfer was not exposed. Purpose
 is immutable: converting an ordinary post draft into a recording is not allowed.
 The server-only reservation option now supports a recording import draft. Its
 purpose is recording from birth; completion retains expiry until import commits.
@@ -17,7 +36,7 @@ draft marker only on a new recording reservation, includes the distinct intent i
 the request fingerprint, and refuses expired or committed ready-upload replay.
 Upload start and completion advertise 1.3.0; the browser upload API negotiates both
 before requesting this intent. Ordinary recording callers remain compatible.
-Next: wire the portable recording adapters, then exercise approved-upload round trips and
+The adapter checkpoint above wires portable recording support; next exercise approved-upload round trips and
 transaction/cleanup failure paths through real APIs.
 
 ## Scope and current checkpoint — 2026-09-11

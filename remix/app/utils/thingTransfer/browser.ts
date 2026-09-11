@@ -16,7 +16,9 @@ export const bundleFromPlan = async (plan: TransferPlan, options: { key?: string
   for (const [index, entry] of plan.files.entries()) {
     options.signal?.throwIfAborted();
     if (entry.sharedRoot !== undefined && !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(entry.sharedRoot)) invalid('Invalid file audience');
-    const query = new URLSearchParams({ id: entry.id, download: '1' });
+    const sourceId = entry.sourceId ?? entry.id;
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(sourceId)) invalid('Invalid file source');
+    const query = new URLSearchParams({ id: sourceId, download: '1' });
     if (entry.bytes <= 16 * 1024 * 1024) query.set('cache', 'bytes');
     if (entry.sharedRoot) query.set('sharedRoot', entry.sharedRoot);
     if (options.key) query.set('key', options.key);
