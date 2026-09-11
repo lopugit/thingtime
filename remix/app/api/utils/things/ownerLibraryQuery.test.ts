@@ -24,6 +24,16 @@ const matches = (doc: Record<string, any>, query: Record<string, any>): boolean 
 
 const recording = { ownerId: 'alice', thingtime: ['attachment'], attachmentPurpose: 'recording', attachmentState: 'ready' };
 
+test('owner library exposes exact managed content kinds without weakening mixed-kind or owner fences', () => {
+  const query = ownerLibraryMatch('alice', PROTECTED_THINGTIME);
+  for (const kind of ['theme', 'feed-algorithm']) {
+    assert.equal(matches({ ownerId: 'alice', thingtime: [kind], folderId: 'folder' }, query), true);
+    assert.equal(matches({ ownerId: 'bob', thingtime: [kind] }, query), false);
+    assert.equal(matches({ ownerId: 'alice', thingtime: [kind, 'user'] }, query), false);
+    assert.equal(isProtectedThingtime([kind]), true);
+  }
+});
+
 test('owner library includes completed standalone recordings without exposing drafts, other owners or protected records', () => {
   const query = ownerLibraryMatch('alice', PROTECTED_THINGTIME);
   const rows = [

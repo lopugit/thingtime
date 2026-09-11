@@ -71,7 +71,6 @@ export const ThingImportDialog = ({ ownerId, folderId, initialBundle, onClose, o
     uploads.uploads.every((upload) => upload.status === 'ready' && upload.attachment);
   const hasThemes = !!bundle?.manifest.things.some(thing => thing.thingtime.includes('theme') || thing.thingtime.includes('feed-algorithm'));
   const hasRecordings = !!bundle?.manifest.things.some(isTransferRecording);
-  const requiresLibraryRoot = hasThemes;
   const submit = async () => {
     if (!bundle || !filesReady || submission.current || lifetime.current?.signal.aborted) return;
     submission.current = true; setAttempted(true); setSubmitting(true); setError('');
@@ -82,10 +81,10 @@ export const ThingImportDialog = ({ ownerId, folderId, initialBundle, onClose, o
       // onward, do not let dialog unmount delete those potentially durable
       // copies. Server compensation and normal draft expiry own cleanup.
       uploads.markCommitted(Object.values(files));
-      const result = await api.v1.things.import({ manifest: bundle.manifest, files, folderId: requiresLibraryRoot ? null : destination }, { signal: controller.signal });
+      const result = await api.v1.things.import({ manifest: bundle.manifest, files, folderId: destination }, { signal: controller.signal });
       if (controller.signal.aborted) return;
       if (result?.ok !== true) throw new Error(result?.error || 'Import did not confirm success');
-      onImported(requiresLibraryRoot ? null : destination); onClose();
+      onImported(destination); onClose();
     } catch (cause) {
       if (!controller.signal.aborted) setError(`${cause instanceof Error ? cause.message : 'Import failed'}. Check your Things before trying again; if the response was lost, copies may already exist.`);
     } finally { if (!controller.signal.aborted) setSubmitting(false); }
@@ -104,16 +103,14 @@ export const ThingImportDialog = ({ ownerId, folderId, initialBundle, onClose, o
           {bundle && <>
             <Text>{bundle.manifest.things.length} Things · {bundle.manifest.files.length} files · {bundle.manifest.links?.length || 0} links · {(bundle.manifest.files.reduce((total, file) => total + file.bytes, 0) / 1024 / 1024).toFixed(1)} MiB</Text>
             {!!bundle.manifest.links?.length && <Text fontSize="sm">Linked media stays on its original site. Import creates private gallery records; it does not download those external files.</Text>}
-            {requiresLibraryRoot ? <Box>
-              {hasThemes && <Text fontSize="sm">Themes and feed algorithms go to their own libraries without changing active selections. Algorithm files can contain private interest weights; share them only deliberately.</Text>}
-              <Text fontSize="sm">Other root content goes to My Things (top level).</Text>
-            </Box> : <Box>
+            {hasThemes && <Text fontSize="sm">Themes and algorithms retain included folders and also appear in their own libraries, without changing active selections. Algorithm files can contain private interest weights; share them only deliberately.</Text>}
+            <Box>
               <Text as="label" htmlFor="thing-import-destination" fontSize="sm">Import destination</Text>
               <Select id="thing-import-destination" value={destination || ''} isDisabled={attempted} onChange={(event) => setDestination(event.target.value || null)}>
                 <option value="">My Things (top level)</option>
                 {folderId && <option value={folderId}>Current folder</option>}
               </Select>
-            </Box>}
+            </Box>
             {hasRecordings && <Text fontSize="sm">Recordings stay private and retain included folders. Other recordings use the import destination.</Text>}
             <Text fontSize="sm">Apps may contain actions. Importing does not run them. Only use content from sources you trust.</Text>
             {bundle.manifest.files.length > 0 && !uploadStarted && <Button onClick={beginUploads}>Upload {bundle.manifest.files.length} files</Button>}

@@ -16,6 +16,8 @@ test('theme projection uses owned/public readers and excludes identity, publicat
   };
   assert.deepEqual(await readTransferTheme('viewer', 'source', deps), theme());
   assert.deepEqual(calls, ['viewer', 'public']);
+  deps.folder = async (owner: string, id: string) => { assert.equal(owner, 'viewer'); assert.equal(id, 'source'); return 'owned-parent'; };
+  assert.equal((await readTransferTheme('viewer', 'source', deps))?.folderId, 'owned-parent');
   deps.shared = async () => null;
   assert.equal(await readTransferTheme(undefined, 'private', deps), null);
 });
@@ -27,7 +29,8 @@ test('theme importer invokes canonical writer without source ID and always priva
   } } as any);
   assert.equal(result.ok, true);
   assert.deepEqual(input, { ...theme().crystal, visibility: 'private' });
-  for (const bad of [{ ...theme(), folderId: 'folder' }, { ...theme(), thingtime: ['theme', 'user'] },
+  assert.doesNotThrow(() => validateTransferTheme({ ...theme(), folderId: 'folder' }));
+  for (const bad of [{ ...theme(), thingtime: ['theme', 'user'] },
     { ...theme(), extended: { secret: true } }, { ...theme(), crystal: { ...theme().crystal, active: true } }]) {
     assert.throws(() => validateTransferTheme(bad));
   }
@@ -36,6 +39,7 @@ test('theme importer invokes canonical writer without source ID and always priva
 test('generic transfer resolves theme IDs via dedicated writer and rolls back with dedicated delete', async () => {
   const removed: string[] = [];
   const deps: any = {
+    moveContent: async () => { throw new Error('Destination unavailable'); },
     createTheme: async () => ({ ok: true, theme: { id: 'minted-theme' } }),
     removeTheme: async (owner: string, id: string) => { assert.equal(owner, 'recipient'); removed.push(id); return { ok: true }; },
     create: async () => ({ ok: false, status: 409, error: 'quota' }),

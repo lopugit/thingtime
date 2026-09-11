@@ -7,6 +7,19 @@ const collection = async () => ({ findOne: async (query: any) => {
   assert.equal(query.ownerId, 'owner'); assert.equal(query.shareId, 'recording'); return doc;
 } }) as any;
 
+for (const kind of ['theme', 'feed-algorithm']) test(`bulk ${kind} moves through the same guarded placement writer`, async () => {
+  let moves = 0;
+  const result = await bulkThings({ id: 'owner' }, { op: 'move', ids: ['recording'] }, {
+    collection: async () => ({ findOne: async () => ({ ...doc, thingtime: [kind] }) }) as any,
+    moveRecording: async (owner, id, folder, version) => {
+      moves++; assert.deepEqual([owner, id, folder, version], ['owner', 'recording', null, doc.updatedAt.toISOString()]);
+      return { id, folderId: folder };
+    }
+  });
+  assert.ok(result.ok); if (!result.ok) return;
+  assert.equal(result.succeeded, 1); assert.equal(moves, 1);
+});
+
 test('bulk recording move uses the dedicated writer with the read version', async () => {
   let calls = 0;
   const result = await bulkThings({ id: 'owner' }, { op: 'move', ids: ['recording'], folderId: null }, {

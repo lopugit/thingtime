@@ -12,6 +12,15 @@ const defaults = {
 const validId = (value: unknown): value is string =>
   typeof value === 'string' && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,199}$/.test(value);
 
+/** Placement is owner-only metadata, never inferred from a shared preview. */
+export const readManagedContentFolder = async (ownerId: string | undefined, id: string, deps = defaults): Promise<string | undefined> => {
+  if (!ownerId || !validId(ownerId) || !validId(id) || deps.customEndpoint()) return undefined;
+  const row = await (await deps.collection()).findOne({ ownerId, shareId: id,
+    $or: [{ thingtime: ['theme'] }, { thingtime: ['feed-algorithm'] }]
+  } as any, { projection: { folderId: 1 } }) as unknown as { folderId?: unknown } | null;
+  return validId(row?.folderId) ? row.folderId : undefined;
+};
+
 /** Internal home-plane placement writer. Callers must enforce their token
  * scope before entering; this does not grant generic protected-kind edits.
  * No payload/ACL/type/object field or storage-ledger entry is modified. */

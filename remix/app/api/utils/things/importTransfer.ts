@@ -28,6 +28,7 @@ type ImportDependencies = {
   removeAlgorithm: typeof removeTransferAlgorithm;
   createRecording: typeof commitRecordingImport;
   moveRecording: typeof moveManagedContent;
+  moveContent?: typeof moveManagedContent;
 };
 const defaults: ImportDependencies = { create: createThing, remove: deleteThing, inspectFiles: inspectReadyAttachmentsForPost, getFile: attachmentStore.getOwned, bindFiles: createReadyAttachmentPostInsertHook, uuid: randomUUID, link: linkAttachment, annotate: annotateAttachment, removeFile: deleteAttachment, createTheme: createTransferTheme, removeTheme: removeTransferTheme, createAlgorithm: createTransferAlgorithm, removeAlgorithm: removeTransferAlgorithm, createRecording: commitRecordingImport, moveRecording: moveManagedContent };
 const dedicatedTransfer = (thing: TransferThing) => isTransferTheme(thing) || isTransferAlgorithm(thing) || isTransferRecording(thing);
@@ -53,7 +54,7 @@ export const importTransfer = async (
   signal?: AbortSignal, overrides: Partial<ImportDependencies> = {}
 ) => {
   if (!viewer?.id) return fail(401, 'Sign in to import Things');
-  const deps = { ...defaults, ...overrides };
+  const deps = { ...defaults, moveContent: moveManagedContent, ...overrides };
   let manifest: ThingTransfer;
   let ordered: TransferThing[];
   try {
@@ -63,9 +64,9 @@ export const importTransfer = async (
     for (const theme of ordered.filter(thing => isTransferTheme(thing) || isTransferAlgorithm(thing))) {
       if (isTransferTheme(theme)) validateTransferTheme(theme);
       else validateTransferAlgorithm(theme);
-      if (input.folderId || ordered.some(thing => thing.folderId === theme.id || thing.targetId === theme.id) ||
+      if (ordered.some(thing => thing.folderId === theme.id || thing.targetId === theme.id) ||
         orderedTransferAttachments(manifest).some(file => file.targetId === theme.id)) {
-        throw new Error('Themes and algorithms import into their own libraries, without folders, child Things or gallery files');
+        throw new Error('Themes and algorithms cannot own child Things or gallery files');
       }
     }
     for (const recording of ordered.filter(isTransferRecording)) {
@@ -202,6 +203,11 @@ export const importTransfer = async (
       check();
       const destination = recording.folderId ? ids.get(recording.folderId)! : input.folderId;
       if (typeof destination === 'string' && destination) await deps.moveRecording(viewer.id, ids.get(recording.id)!, destination);
+    }
+    for (const thing of ordered.filter(thing => isTransferTheme(thing) || isTransferAlgorithm(thing))) {
+      check();
+      const destination = thing.folderId ? ids.get(thing.folderId)! : input.folderId;
+      if (typeof destination === 'string' && destination) await (deps.moveContent || moveManagedContent)(viewer.id, ids.get(thing.id)!, destination);
     }
     return { ok: true as const, roots: manifest.roots.map((id) => ids.get(id)!), ids: Object.fromEntries(ids), imported: created.length, filesImported: manifest.files.length, linksImported: createdLinks.length };
   } catch (error) {

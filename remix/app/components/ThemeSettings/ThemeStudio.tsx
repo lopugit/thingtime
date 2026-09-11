@@ -647,7 +647,7 @@ export const ThemeStudio = () => {
 									</Box>
 									<Flex gap="6px" flexWrap="wrap">
 										<ActionButton onClick={() => applySaved(saved)}>Apply</ActionButton>
-										<ThingTransferControls id={saved.id} onImported={refreshMyThemes} />
+										<ThingTransferControls id={saved.id} canCut onImported={refreshMyThemes} />
 										{saved.visibility === 'public' ? <ActionButton onClick={() => shareSaved(saved)}>Share 🔗</ActionButton> : null}
 										<ActionButton tone="danger" onClick={() => deleteSaved(saved)}>
 											Delete

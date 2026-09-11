@@ -6708,4 +6708,10 @@ approval; `access.test.ts` — the reservation matrix) and
 - Cut a Thing, follow an internal link away, return to Things and paste: move the original IDs, not imported copies.
 - Change accounts or log out/back in before pasting: never move from old intent. A reload also drops move authority.
 - Replace clipboard text, use Copy, or dismiss the clipboard: prior Cut must not move anything.
+- Export/import saved themes and algorithms both inside an included folder and
+  alone into a selected current folder. Confirm new private IDs, remapped
+  placement, unchanged active selections and dedicated cleanup on placement
+  failure. Check their owned-library Cut menus and same-account folder paste;
+  shared viewers must never receive Cut authority. Exercise the import
+  destination selector at desktop/mobile widths with both kinds in one file.
 - A partially failed move retains only failed IDs; an older request completing must not consume newer Cut intent.

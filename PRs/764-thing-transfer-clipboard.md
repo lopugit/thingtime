@@ -1,5 +1,29 @@
 # PR 764 — portable Thing transfer
 
+## Theme and algorithm folders — 2026-09-12
+
+Owned current-schema themes and algorithms now appear in the Things library.
+Their export adapters read owner-only folder placement; import creates fresh
+private records through dedicated creators, then places them after included
+parent folders exist. Standalone imports honor the selected destination.
+Placement failures compensate newly created records. Active selections are not
+changed. Generic protected-kind edits/deletes remain forbidden, and legacy
+records without current-schema placement fail moves explicitly.
+
+Saved-theme and algorithm Transfer menus expose Cut. Same-account paste uses
+the dedicated managed-content placement writer, retaining token/source fences;
+clipboard content alone never grants move authority. Contracts are export and
+import 1.7.0, bulk 1.2.0 and owner Things reads 1.10.0.
+
+Validation: 133 Things tests and 40 capability tests pass, including included
+folder remapping, selected destinations, placement compensation and owner-only
+library reads. Focused lint passes. Headed Chrome at 1280 and 390 pixels proves
+the import selector remains available, fits the viewport and submits the
+chosen folder for mixed theme/algorithm files. Import requests were intercepted
+and synthetic: this is UI wiring evidence, not a live database round trip.
+Real approved-upload byte acceptance and remaining dedicated content adapters
+remain open; this section does not claim broad transfer completion.
+
 ## Navigation-safe Cut intent — 2026-09-11
 
 Move authority now resides only in tab memory, outside the ThingsPage mount.

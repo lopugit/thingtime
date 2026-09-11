@@ -18,6 +18,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-12 (Codex): Retain theme/algorithm folders during transfer, enable their owned-library Cut controls and dedicated folder moves, and negotiate export/import 1.7.0, bulk 1.2.0 and own-library 1.10.0. See [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+
 - 2026-09-11 (Codex): Preserve Cut intent across SPA navigation, revoke on account/root changes, and fence stale async completions. See [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
 
 - 2026-09-11 (Codex): Fix durable recording export/download being rejected as expired drafts; preserve owner-only access and advertise attachment-content 1.6.4 / export 1.6.1. See [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).

@@ -5262,16 +5262,16 @@ export const bulkThings = async (
     }
     if (op === 'move') {
       const owned = await things.findOne({ shareId: id, ownerId: viewer.id } as any) as unknown as ThingDoc | null;
-      if (owned?.thingtime?.length === 1 && owned.thingtime[0] === 'attachment') {
+      if (owned?.thingtime?.length === 1 && ['attachment', 'theme', 'feed-algorithm'].includes(owned.thingtime[0])) {
         if (patSandboxBlocks(viewer, owned) || await patVisibilityBlocksDoc(viewer, owned)) {
-          results.push({ id, ok: false, error: 'This token cannot move that recording' });
+          results.push({ id, ok: false, error: 'This token cannot move that managed content' });
           continue;
         }
         try {
           await (placementDependencies.moveRecording || moveManagedContent)(viewer.id, id, folderId, new Date(owned.updatedAt).toISOString());
           results.push({ id, ok: true });
         } catch {
-          results.push({ id, ok: false, error: 'Recording could not be moved. Refresh and check that it is a saved standalone recording and the destination is in your own library.' });
+          results.push({ id, ok: false, error: 'Content could not be moved. Refresh and check that it is saved managed content and the destination is in your own library. Legacy themes/algorithms must first be copied into the current library.' });
         }
         continue;
       }

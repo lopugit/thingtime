@@ -430,7 +430,7 @@ export const AlgorithmManager = () => {
                 >
                   Branch 🌿
                 </Button>
-                <ThingTransferControls id={algorithm.id} onImported={refresh} />
+                <ThingTransferControls id={algorithm.id} canCut onImported={refresh} />
                 <Button
                   size="xs"
                   variant="ghost"
