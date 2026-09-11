@@ -18,6 +18,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-11 (Codex): Fix durable recording export/download being rejected as expired drafts; preserve owner-only access and advertise attachment-content 1.6.4 / export 1.6.1. See [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+
 - Codex — recording Cut/paste uses dedicated folder placement (bulk 1.1.0);
   export/import 1.6.0 retains included recording folders and supports a selected
   destination. Verification and remaining acceptance: [PR 764](../PRs/764-thing-transfer-clipboard.md).

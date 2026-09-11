@@ -27,7 +27,13 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
 	assert.equal(manifest.features['api.actions-run']?.version, '1.3.1');
 	assert.equal(manifest.features['api.things-fork']?.version, '1.4.0');
 	assert.equal(manifest.features['api.things-import']?.version, '1.6.0');
-	assert.equal(manifest.features['api.things-export']?.version, '1.6.0');
+	assert.equal(manifest.features['api.things-export']?.version, '1.6.1');
+  for (const [feature, required, previous] of [['api.things-export', '1.6.1', '1.6.0'], ['api.attachment-content', '1.6.4', '1.6.3']]) {
+    assert.equal(manifest.features[feature]?.version, required);
+    assert.equal(capabilitySatisfies(required, required), true);
+    assert.equal(capabilitySatisfies(previous, required), false);
+    assert.equal(capabilitySatisfies('2.0.0', required), false);
+  }
   assert.equal(manifest.features['api.things-bulk']?.version, '1.1.0');
   for (const version of ['1.1.0', '1.1.1', '1.2.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), true);
   for (const version of ['1.0.0', '2.0.0', '']) assert.equal(capabilitySatisfies(version, '1.1.0'), false);
@@ -71,7 +77,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.lopu-recordings-run']?.version, '1.5.0');
   assert.equal(manifest.features['api.lopu-recordings-personal']?.version, '1.1.0');
   assert.equal(manifest.features['api.notifications-test']?.version, '1.2.0');
-  assert.equal(manifest.features['api.attachment-content']?.version, '1.6.3');
+  assert.equal(manifest.features['api.attachment-content']?.version, '1.6.4');
   // round 2 S6 — discovery: the home feed takes scope=all|subspaces ("My
   // subspaces" — only the viewer's ACTIVE subspaces, empty for guests) and
   // echoes it (1.5.0, additive)

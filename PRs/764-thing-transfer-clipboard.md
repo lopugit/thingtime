@@ -1,5 +1,17 @@
 # PR 764 — portable Thing transfer
 
+## Durable recording reads — 2026-09-11
+
+The real attachment reader treated every unbound object as an expiring draft,
+so a durable recording could pass export planning mocks but fail the live
+descriptor/download path. Exact owners can now read ready, standalone recording
+Things without expiry; import drafts, linked/profile records, expired or invalid
+expiry values and unrelated viewers receive no exemption. Moderation, authorized
+shared-root checks, home storage and exact object-version validation still run.
+Attachment content is 1.6.4 and export is 1.6.1; file-export clients negotiate
+both before proceeding. Service tests exercise description and signed download,
+including denial paths. Real S3-byte round-trip acceptance remains outstanding.
+
 ## Recording placement integration — 2026-09-11
 
 Bulk move 1.1.0 routes owned standalone recordings through the dedicated

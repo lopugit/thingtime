@@ -86,6 +86,35 @@ test('import annotation fence refuses already-bound, expired and non-post drafts
 	}
 });
 
+test('durable recording export and download work without a draft expiry, for the owner only', async () => {
+	const saved = attachmentDoc({ attachmentPurpose: 'recording', attachmentState: 'ready', attachmentExpiresAt: undefined, objectVersionId: 'version-1' });
+	let doc = saved;
+	let signs = 0;
+	let custom = false;
+	const service = createAttachmentService({ store: { getById: async () => doc } as any, now: () => now,
+		customMongoActive: () => custom, canViewSharedTarget: async () => false,
+		getS3: () => noopS3({ signDownload: async () => { signs++; return { url: 'https://s3.example/recording', expiresAt: now.toISOString() }; } }) });
+	assert.equal((await service.describeTransfer({ id: saved.ownerId }, saved.shareId)).ok, true);
+	assert.equal((await service.download({ id: saved.ownerId }, saved.shareId, true)).ok, true);
+	assert.equal(signs, 1);
+	for (const viewer of [null, { id: 'stranger' }, { id: 'admin', isAdmin: true }, { id: saved.ownerId, sharedRoot: 'unrelated-page' }]) {
+		assert.equal((await service.describeTransfer(viewer, saved.shareId)).ok, false);
+		assert.equal((await service.download(viewer, saved.shareId, true)).ok, false);
+	}
+	for (const patch of [
+		{ attachmentPurpose: 'post' }, { attachmentImportDraft: true }, { attachmentLinked: true },
+		{ attachmentProfileSlot: 'avatar' }, { attachmentExpiresAt: new Date(0) },
+		{ attachmentExpiresAt: new Date(NaN) }, { attachmentState: 'pending' },
+		{ moderation: { status: 'blocked' } }
+	]) {
+		doc = { ...saved, ...patch } as AttachmentDoc;
+		assert.equal((await service.describeTransfer({ id: saved.ownerId }, saved.shareId)).ok, false);
+	}
+	doc = saved; custom = true;
+	assert.equal((await service.download({ id: saved.ownerId }, saved.shareId, true)).ok, false);
+	assert.equal(signs, 1);
+});
+
 test('portable linked metadata refuses flagged sources even for administrators and never signs a redirect', async () => {
 	let doc = attachmentDoc({ attachmentLinked: true, attachmentState: 'ready', attachmentPurpose: 'post', targetId: 'page', objectSizeBytes: 0,
 		crystal: { name: 'a.png', size: 0, contentType: 'image/png', mediaKind: 'image', url: 'https://example.com/a.png' } });

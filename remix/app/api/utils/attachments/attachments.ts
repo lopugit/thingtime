@@ -1257,7 +1257,16 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			// live. Profile replacement stamps immediate expiry in the same Mongo
 			// transaction that removes the user-slot reference, making the old object
 			// inaccessible while it remains billed until exact-version cleanup.
-			if (!doc.targetId && (!doc.attachmentExpiresAt || doc.attachmentExpiresAt.getTime() <= dependencies.now().getTime())) {
+			// Saved recordings intentionally have no expiry: they are private
+			// library content, not abandoned upload drafts. This exception is
+			// exact-owner only and must not revive an expiring/import draft.
+			const durableRecording = doc.attachmentPurpose === 'recording' &&
+				doc.attachmentImportDraft !== true && !doc.attachmentExpiresAt &&
+				!doc.attachmentLinked && !doc.attachmentProfileSlot &&
+				doc.thingtime.length === 1 && doc.thingtime[0] === 'attachment' &&
+				viewer?.id === doc.ownerId;
+			if (!doc.targetId && !durableRecording && (!doc.attachmentExpiresAt ||
+				!Number.isFinite(doc.attachmentExpiresAt.getTime()) || doc.attachmentExpiresAt.getTime() <= dependencies.now().getTime())) {
 				return fail(404, 'Attachment not found');
 			}
 			// Post attachments must never authorize a home object against a caller-

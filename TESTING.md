@@ -6697,3 +6697,9 @@ approval; `access.test.ts` — the reservation matrix) and
   allowance and verify note/todo output with exact transcript evidence. Do not
   pass real recordings or tokens. Fixture files must be cleaned up on failure
   as well as success. This is not a substitute for paired-account/Watch tests.
+## Durable recording reads
+
+- A completed owner recording with no expiry must export a descriptor and download successfully.
+- Repeat anonymously and as another account/admin: deny without signing a URL.
+- Expired/invalid-expiry recordings, import drafts without expiry, blocked media and custom data endpoints remain denied.
+- File exports require attachment-content 1.6.4 and things-export 1.6.1; reject pre-fix origins before starting the export.
