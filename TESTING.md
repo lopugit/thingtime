@@ -6569,6 +6569,11 @@ approval; `access.test.ts` — the reservation matrix) and
 - Run `node remix/scripts/verify-lopu-linked-things.mjs` against the running worktree stack (or pass its loopback HTTP origin). It registers disposable local accounts and exercises real API comments, unchanged parent crystals, shared voice/Messenger history, retry deduplication, searchable scheduled-task Things, linked context, account isolation, protected writes, and pause/resume. It removes its created content and pauses schedules in `finally`; empty test accounts remain, with credentials never persisted. Production origins are rejected. This does not replace browser/device, provider inference, or scheduled-delivery acceptance.
 # Portable Thing transfers
 
+- Import a file-bearing app whose image/CSS URL is assembled from multiple
+  saved argument fragments. Repeat with two different page-instance arguments,
+  then export and import that copy again. Every rendered media ID must point
+  to its new owned upload; labels and editable argument text must stay intact.
+  An upload-unapproved account must get an explicit refusal before import.
 - Copy a folder using its context menu, then paste into Things. Verify the OS
   clipboard holds portable content and importing creates fresh private IDs.
   Cut/Paste in the same account/session must move the original; after reload,

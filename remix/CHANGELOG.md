@@ -18,6 +18,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Preserve split-template component media during import and repeated transfers;
+  negotiate import contract 1.0.1 and retain ordinary upload approval gates.
+  [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-11
+
 - Add authorized exports and real clipboard Copy/Cut/Paste plus JSON/ZIP
   Download in Things. Verify browser download/import round trips, same-session
   moves, responsive dialogs and a full build. Broader surfaces and file/gallery

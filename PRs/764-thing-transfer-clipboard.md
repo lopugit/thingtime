@@ -31,6 +31,15 @@ of that scope.
 
 ## Evidence
 
+- Follow-up: import 1.0.1 reconstructs persisted component instance contexts
+  from canonical transfer content and reuses the fork media bindings. Saved
+  defaults, distinct page instances, CSS media and a second re-import retain
+  fresh attachment references without rewriting labels or template arguments.
+  Seven import tests pass, including service-level ready-upload checks.
+- Real file-bearing browser acceptance was attempted with a generated PNG ZIP.
+  The disposable fixture account was refused by the normal upload approval
+  gate before any Thing import. The UI displayed the refusal and kept Import
+  disabled. This is not stored-file round-trip proof; no gate was bypassed.
 - 85 Things tests and 38 API capability tests passed, covering content, ZIP bytes,
   malformed/oversized envelopes, authorization, rollback and cancellation.
 - Real local API integration imported six disposable folder/schema/data/action/
@@ -55,8 +64,9 @@ of that scope.
 ## Remaining acceptance
 
 Complete all file/gallery forms: linked galleries currently fail explicitly
-rather than silently disappearing, and split-template imported media still
-needs its dedicated rebinding adapter. Wire OS clipboard Copy/Cut/Paste and
+rather than silently disappearing. Split-template imported media now has its
+rebinding adapter, but real stored-file UI proof needs an upload-enabled test
+account. Wire OS clipboard Copy/Cut/Paste and
 Download across Builder/components and generic menus. Verify stored file bytes through
 the real import UI, account transitions, partial failures and desktop/mobile
 dynamic states. Verify current-head CI and preview independently of local tests.

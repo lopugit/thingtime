@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { isProtectedThingtime } from '../../../schemas/registry';
 import { serializeTransfer, validateTransfer, type ThingTransfer, type TransferThing } from '../../../utils/thingTransfer/format';
 import { rewriteComposition } from '../actions/forkCompositionCore';
-import { rewriteCopiedAttachmentReferences } from '../actions/forkMediaCore';
+import { rewriteTransferMedia } from './transferMediaCore';
 import { createReadyAttachmentPostInsertHook, inspectReadyAttachmentsForPost, prepareAttachmentCascadeForThing } from '../attachments/attachments';
 import { attachmentStore } from '../attachments/attachmentStore';
 import { createThing, deleteThing, fail, isFail, type Viewer } from './things';
@@ -64,6 +64,7 @@ export const importTransfer = async (
     if (Date.now() > expires) throw new Error('The import timed out');
   };
   try {
+    const crystals = rewriteTransferMedia(ordered, files);
     // All uploads must be fresh, ready and owned by the real caller. Validate
     // them before the first Thing write, then the bind hook checks again in
     // the create transaction. A manifest cannot attach someone else's file.
@@ -82,8 +83,7 @@ export const importTransfer = async (
     }
     for (const thing of ordered) {
       check();
-      const crystal = rewriteComposition(thing.thingtime,
-        rewriteCopiedAttachmentReferences(thing.crystal, files), (_kind, id) => ids.get(id) || id);
+      const crystal = rewriteComposition(thing.thingtime, crystals.get(thing.id)!, (_kind, id) => ids.get(id) || id);
       for (const key of ['componentKey', 'actionKey', 'pageKey']) if (typeof crystal[key] === 'string') crystal[key] = `${crystal[key].slice(0, 48)}-${suffix}`;
       if (thing.thingtime.includes('schema') && typeof crystal.name === 'string') crystal.name = `${crystal.name.slice(0, 48)}-${suffix}`;
       // Import is content creation, never site publication or posting back

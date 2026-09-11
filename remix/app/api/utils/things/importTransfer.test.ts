@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { importTransfer, orderTransferImports } from './importTransfer';
 import { TRANSFER_FORMAT, type ThingTransfer } from '../../../utils/thingTransfer/format';
+import { rewriteTransferMedia } from './transferMediaCore';
+import { resolveTemplate } from '../../../components/ComponentsLibrary/componentTemplate';
+import { compositionAttachmentIds } from '../actions/compositionMediaCore';
 
 const fixture = (): ThingTransfer => ({ format: TRANSFER_FORMAT, version: 1, roots: ['folder'], files: [], things: [
   { id: 'data', thingtime: ['data'], folderId: 'folder', crystal: { schemaId: 'schema', name: 'note', text: 'schema' }, extended: { custom: 42 } },
@@ -81,4 +84,54 @@ test('cancelled imports perform no writes and do not retry creation', async () =
   const result = await importTransfer({ id: 'recipient' }, { manifest: fixture() }, AbortSignal.abort(new Error('cancelled')), deps);
   assert.equal(result.ok, false);
   assert.equal(writes.length, 0);
+});
+
+test('imported split-template media preserves saved and page-instance arguments and composes on re-import', () => {
+  const things: ThingTransfer['things'] = [
+    { id: 'component', thingtime: ['component'], crystal: {
+      savedArgs: { prefix: 'att_', suffix: 'default' },
+      render: { tag: 'img', props: { src: '/api/v1/attachments/content?id={prefix}{suffix}', title: '{prefix}{suffix}',
+        _hover: { backgroundImage: 'url(/api/v1/attachments/content?id={prefix}{suffix})' } }
+      }
+    } },
+    { id: 'page', thingtime: ['webpage'], crystal: { blocks: [
+      { id: 'a', type: 'component', component: 'component', args: { prefix: 'att_', suffix: 'instance' } },
+      { id: 'b', type: 'component', component: 'component', args: { prefix: 'att_', suffix: 'second' } }
+    ] } }
+  ];
+  const original = structuredClone(things);
+  const copies = new Map([['att_default', 'copy_default'], ['att_instance', 'copy_instance'], ['att_second', 'copy_second']]);
+  const crystals = rewriteTransferMedia(things, copies);
+  const component = crystals.get('component')!;
+  for (const suffix of ['default', 'instance', 'second']) {
+    const rendered = resolveTemplate(component.render, { prefix: 'att_', suffix }) as any;
+    assert.equal(rendered.props.src, `/api/v1/attachments/content?id=copy_${suffix}`);
+    assert.equal(rendered.props.title, `att_${suffix}`);
+    assert.match(rendered.props._hover.backgroundImage, new RegExp(`copy_${suffix}`));
+  }
+  const pageMedia = compositionAttachmentIds(['webpage'], crystals.get('page')!, { component: () => component });
+  assert.deepEqual([...pageMedia].sort(), ['copy_instance', 'copy_second']);
+  const again = rewriteTransferMedia(things.map(thing => ({ ...thing, crystal: crystals.get(thing.id)! })),
+    new Map([...copies.values()].map(id => [id, `again_${id}`]))).get('component')!;
+  assert.equal((resolveTemplate(again.render, { prefix: 'att_', suffix: 'instance' }) as any).props.src, '/api/v1/attachments/content?id=again_copy_instance');
+  assert.deepEqual(things, original);
+});
+
+test('import service persists late bindings only after normal ready-upload checks', async () => {
+  const { writes, deps } = harness();
+  const manifest: ThingTransfer = { format: TRANSFER_FORMAT, version: 1, roots: ['component'], things: [
+    { id: 'component', thingtime: ['component'], crystal: { savedArgs: { suffix: 'source' }, render: {
+      tag: 'img', props: { src: '/api/v1/attachments/content?id=att_{suffix}' }
+    } } }
+  ], files: [{ id: 'att_source', targetId: 'component', name: 'photo.png', mime: 'image/png', bytes: 1, path: 'files/000000', sha256: 'a'.repeat(64) }] };
+  let inspected = false;
+  const result = await importTransfer({ id: 'recipient' }, { manifest, files: { att_source: 'uploaded_copy' } }, undefined, {
+    ...deps,
+    inspectFiles: async () => { inspected = true; return { ok: true, hasAny: true, hasVisual: true } as any; },
+    getFile: async () => ({ crystal: { size: 1 } } as any),
+    bindFiles: () => (async () => {}) as any
+  });
+  assert.equal(result.ok, true); assert.equal(inspected, true); assert.equal(writes.length, 1);
+  const crystal = writes[0].input.crystal;
+  assert.equal((resolveTemplate(crystal.render, crystal.savedArgs) as any).props.src, '/api/v1/attachments/content?id=uploaded_copy');
 });

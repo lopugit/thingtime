@@ -12211,12 +12211,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-import',
-    featureVersion: '1.0.0',
-    contractVersion: '1.0.0',
+    // Compatible correction: preserve split-template media through re-import.
+    featureVersion: '1.0.1',
+    contractVersion: '1.0.1',
     group: 'things',
     title: 'Import portable Things',
     endpoint: '/api/v1/things/import',
-    summary: 'Import a version-1 Thingtime content manifest into new private caller-owned Things.',
+    summary: 'Import a version-1 Thingtime content manifest into new private caller-owned Things, preserving saved and instance-specific templated media bindings.',
     detail: 'Allocates fresh IDs, remaps internal composition, folder, target and schema references, and uses normal schema validation, quota accounting and transactional attachment binding. Never restores ownership, ACL grants, link secrets, site routes or managed account records. Files must first be uploaded through the normal attachment upload API; the files map binds manifest file IDs to distinct ready caller-owned upload IDs. File byte sizes are checked against the manifest. Repeated successful requests create separate copies; clients must not automatically retry an uncertain mutation. Failures clean only newly created Things; remainingIds reports any cleanup failures.',
     auth: { mode: 'session', description: 'Requires a first-party user account. Cross-origin requests, app tokens, PATs and service accounts are not supported.' },
     methods: ['POST'],
