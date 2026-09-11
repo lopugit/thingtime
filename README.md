@@ -3031,3 +3031,23 @@ uses production APNs. Never expose keys or device tokens in public diagnostics.
 an optional owner guard on registration. `api.notifications-test` 1.1.0 adds the
 sanitized delivery report. Single and bulk native delivery remain attached to
 the Vercel request lifetime through `waitUntil`.
+
+## Portable transfer real-storage acceptance
+
+The optional `remix` command `test:transfer-binary` exercises real multipart
+uploads and image ZIP import/export through the application API. It is disabled
+unless `TT_TRANSFER_BINARY_TEST=1` is explicitly set. Use a local fixture server
+(`TT_TRANSFER_TEST_URL=http://127.0.0.1:<your-worktree-port>`) backed by a
+disposable test account and the private storage setup documented above. That
+account must already have public-upload approval and a ready storage ledger.
+Provide its session cookie through `TT_TRANSFER_TEST_COOKIE` in the process
+environment using your local secret tooling; never put it in a command literal,
+tracked file, screenshot or test report. Do not use a production account.
+
+Run `corepack pnpm --dir remix run test:transfer-binary` with those environment
+values. The test checks API capability versions, uploads tiny PNG fixtures,
+compares bytes and annotations after ZIP/reimport, checks anonymous denial and
+concurrent emoji import claims, then deletes its own returned IDs and verifies
+cleanup. It does not connect directly to MongoDB, enable uploads, reconcile
+storage or run migrations. A failed approval/storage precondition is a blocker,
+not a passed test. Investigate any reported cleanup IDs before another run.

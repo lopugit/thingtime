@@ -1,5 +1,22 @@
 # PR 764 — portable Thing transfer
 
+## Executable real-storage acceptance gate — 2026-09-12
+
+Added `test:transfer-binary`, an explicitly opted-in local API test for real PNG
+uploads, mixed post/emoji import, ZIP export/decode/reimport, exact byte and image
+annotation comparisons, anonymous denial, distinct copy IDs and two concurrent
+emoji imports claiming one fresh upload. Cleanup uses only IDs returned during
+that invocation and checks both content and exported records become unavailable.
+Session credentials are origin-fenced; storage PUTs receive only a checksum and
+never the session cookie. The test negotiates every API feature it uses before
+mutating data, and never changes upload approvals or runs migrations.
+
+The actual local run reached the capability and account endpoints, then failed
+the explicit existing-upload-approval precondition before creating any records.
+This is confirmed blocked storage acceptance, not a passed binary round trip.
+Focused lint passes; the new test introduces no TypeScript diagnostics (the
+project still has 106 baseline diagnostics). Without explicit opt-in it skips.
+
 ## Custom emoji pipeline integration — 2026-09-12
 
 Owner-only emoji export now handles both authorized stored images and bounded

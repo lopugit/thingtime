@@ -6621,6 +6621,15 @@ approval; `access.test.ts` — the reservation matrix) and
 - Run `node remix/scripts/verify-lopu-linked-things.mjs` against the running worktree stack (or pass its loopback HTTP origin). It registers disposable local accounts and exercises real API comments, unchanged parent crystals, shared voice/Messenger history, retry deduplication, searchable scheduled-task Things, linked context, account isolation, protected writes, and pause/resume. It removes its created content and pauses schedules in `finally`; empty test accounts remain, with credentials never persisted. Production origins are rejected. This does not replace browser/device, provider inference, or scheduled-delivery acceptance.
 # Portable Thing transfers
 
+- With a disposable, already upload-approved local fixture account, run
+  `TT_TRANSFER_BINARY_TEST=1 corepack pnpm --dir remix run test:transfer-binary`
+  with `TT_TRANSFER_TEST_URL` and `TT_TRANSFER_TEST_COOKIE` provided securely in
+  the environment. This uses real storage and creates/deletes fixture content;
+  it does not enable uploads. Require PNG byte and annotation equality across
+  ZIP/reimport, anonymous denial, exactly one concurrent emoji-claim winner,
+  and confirmed cleanup. A precondition failure or skipped test is not live
+  storage acceptance. See the README for fork-safe setup.
+
 - Round-trip stored files with a title, multiline description and display
   filename through export, ZIP and clipboard import. Verify those annotations
   on fresh copies while the original filename/bytes stay unchanged. Reject
