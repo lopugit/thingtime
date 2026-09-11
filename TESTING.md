@@ -6721,3 +6721,8 @@ approval; `access.test.ts` — the reservation matrix) and
   shared viewers must never receive Cut authority. Exercise the import
   destination selector at desktop/mobile widths with both kinds in one file.
 - A partially failed move retains only failed IDs; an older request completing must not consume newer Cut intent.
+- Before enabling emoji transfers, verify two simultaneous imports cannot claim
+  one upload; stale/bound/foreign uploads must fail without deleting an existing
+  emoji. An uncertain commit may recover only the same server import attempt.
+  The internal writer groundwork is unit-tested; live transaction acceptance
+  remains required when the endpoint and upload UI are connected.

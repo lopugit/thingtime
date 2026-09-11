@@ -1,5 +1,25 @@
 # PR 764 — portable Thing transfer
 
+## Fresh custom emoji writer groundwork — 2026-09-12
+
+The server adapter now calls the canonical emoji writer with a server-generated
+attempt UUID and a suffixed personal-library name. An internal-only argument
+requires a fresh, ready, owner-held emoji upload of the expected MIME/byte size.
+The writer rechecks that condition inside its existing insert/bind transaction;
+the binding write supplies the conflict against concurrent use of the upload.
+An uncertain-commit recovery may only return an emoji carrying this exact
+server attempt identity, never an older emoji with the same image/name.
+Normal emoji upload behavior is unchanged: the public route passes two
+arguments and cannot supply the internal attempt through its body.
+
+The pure gate and adapter tests cover foreign/bound/expired/wrong-purpose
+uploads, byte/type mismatches, invalid attempts, source-scope rejection and
+canonical writer failure. These are dependency-isolated tests, not a real
+MongoDB transaction or S3 acceptance test. Attachment and messenger regressions
+also pass. The generic transfer endpoint has not enabled this adapter, so no
+external feature contract or UI changed in this step. Wire export, import,
+rollback, placement and client controls together before advertising support.
+
 ## Custom emoji transfer contract groundwork — 2026-09-12
 
 The coverage audit found that custom emoji, messenger/community records,
@@ -15,8 +35,8 @@ and size limits; the upload service must still sniff and authorize real bytes.
 Imported-name generation adds a bounded suffix instead of replacing an existing
 emoji. This is groundwork only, not an enabled export/import adapter.
 
-Remaining emoji work: authorized stored/legacy image export, fresh-upload
-validation and dedicated emoji writer/rollback, reference remapping, library
+Remaining emoji work: authorized stored/legacy image export, integration of the
+fresh-upload adapter and dedicated rollback, reference remapping, library
 placement, client upload-purpose selection, controls, capability registration
 and live round-trip verification. No endpoint or client contract changed in
 this groundwork commit. Conversation representation still needs the user's

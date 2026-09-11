@@ -18,6 +18,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Added internal custom-emoji import writer groundwork: fresh-upload checks in
+  the binding transaction, server-owned attempt identity and a personal-library
+  adapter. Transfer endpoints are not enabled for emojis yet; see
+  [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-12
+
 - Added custom-emoji transfer-envelope groundwork and tests for stored images,
   names, source-scope exclusion and upload limits. The adapter is not enabled
   yet; see [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
