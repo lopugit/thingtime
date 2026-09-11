@@ -9,6 +9,7 @@ import {
 	PutObjectTaggingCommand,
 	S3Client,
 	UploadPartCommand,
+	UploadPartCopyCommand,
 	type CompletedPart
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -33,6 +34,12 @@ export type AttachmentObjectHead = {
 };
 
 export type AttachmentS3 = {
+	copyUploadPart(input: {
+		objectKey: string; uploadId: string; partNumber: number;
+		sourceObjectKey: string; sourceVersionId: string;
+		range?: { start: number; end: number };
+		signal?: AbortSignal;
+	}): Promise<void>;
 	createMultipartUpload(input: { objectKey: string; attachmentId: string }): Promise<{ uploadId: string }>;
 	signUploadPart(input: {
 		objectKey: string;
@@ -91,6 +98,24 @@ export const createPrivateS3 = (config: PrivateS3Config, client = makeClient(con
 	const common = { Bucket: config.bucket, ExpectedBucketOwner: config.expectedBucketOwner } as const;
 
 	return {
+		async copyUploadPart({ objectKey, uploadId, partNumber, sourceObjectKey, sourceVersionId, range, signal }) {
+			// Only protected same-bucket keys are accepted, never a URL supplied by
+			// a client. Pin both bucket owners and the exact authorized source version.
+			if (!/^objects\/[A-Za-z0-9_-]+$/.test(objectKey) || !/^objects\/[A-Za-z0-9_-]+$/.test(sourceObjectKey) ||
+				!sourceVersionId || sourceVersionId === 'null' || !Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10000 ||
+				(range && (!Number.isSafeInteger(range.start) || !Number.isSafeInteger(range.end) || range.start < 0 || range.end < range.start))) {
+				throw new Error('Invalid stored attachment copy');
+			}
+			const result = await client.send(new UploadPartCopyCommand({
+				...common, Key: objectKey, UploadId: uploadId, PartNumber: partNumber,
+				CopySource: `${config.bucket}/${sourceObjectKey.split('/').map(encodeURIComponent).join('/')}?versionId=${encodeURIComponent(sourceVersionId)}`,
+				ExpectedSourceBucketOwner: config.expectedBucketOwner,
+				...(range ? { CopySourceRange: `bytes=${range.start}-${range.end}` } : {})
+			}), { abortSignal: signal });
+			if (!result.CopyPartResult?.ETag || !result.CopyPartResult.ChecksumSHA256 || result.CopySourceVersionId !== sourceVersionId) {
+				throw new Error('Stored attachment copy failed integrity verification');
+			}
+		},
 		async createMultipartUpload({ objectKey, attachmentId }) {
 			const result = await client.send(
 				new CreateMultipartUploadCommand({
