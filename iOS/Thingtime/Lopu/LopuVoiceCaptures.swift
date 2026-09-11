@@ -1,6 +1,8 @@
 import CryptoKit
 import Foundation
+#if os(iOS)
 import UIKit
+#endif
 
 final class VoiceCaptureRedirectPolicy: NSObject, URLSessionTaskDelegate {
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
@@ -118,11 +120,15 @@ final class LopuVoiceCaptures {
         guard worker == nil, let context, !cookie.isEmpty, pending().contains(where: { $0.context == context }) else { return }
         let token = generation, cookie = cookie
         worker = Task {
+#if os(iOS)
             let background = UIApplication.shared.beginBackgroundTask(withName: "Save Lopu voice text") {
                 Task { @MainActor in if self.generation == token { self.worker?.cancel() } }
             }
+#endif
             defer {
+#if os(iOS)
                 if background != .invalid { UIApplication.shared.endBackgroundTask(background) }
+#endif
                 worker = nil
                 if generation != token { pump() }
             }

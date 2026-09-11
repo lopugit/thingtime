@@ -3001,6 +3001,19 @@ A healthy Mac connection panel can be hidden from Things using “Don’t show a
 
 Shared-settings validation worktree: `http://localhost:13040` (HMR 13041, Nitro 13042), managed by the repository PM2 lifecycle. Funnel was unavailable during validation because the installed Tailscale CLI points to a missing application executable; no public Funnel URL was verified. No new environment variables or external setup are required for these settings changes.
 
+### Apple widgets and Control Centre
+
+The iOS app and native Mac widget companion share a configurable WidgetKit suite.
+See [Apple widget setup](apple/README.md) for gallery choices, content privacy,
+App Group provisioning, local signing, and fork-safe build settings. App Group
+capabilities must be enabled on both the iOS app and its widget extension before
+installing a signed build; no credentials belong in project files.
+
+The Mac companion now uses a native interface and browser OAuth. Open
+**Connection** to select production or your local server and approve widget
+permissions. No client secret or manual app registration is required; fork
+callback identifiers and capability requirements are documented in
+[Apple widget setup](apple/README.md#oauth-setup-for-forks-and-local-servers).
 
 ### Automatic import and native push recovery (10 September 2026)
 
