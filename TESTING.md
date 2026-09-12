@@ -7013,6 +7013,13 @@ approval; `access.test.ts` — the reservation matrix) and
 
 ## Durable recording reads
 
+- Live Messenger archive snapshot reader: require home first-party scope at the
+  eventual caller, check current membership in the same transaction as history,
+  include former members and every thread, and reject foreign/duplicate records
+  or row-budget overflow. An exhausted budget must still query one overflow
+  sentinel, never MongoDB's unbounded `limit(0)`. This reader is internal only;
+  it must not be returned directly or counted as live export UI acceptance.
+
 - A completed owner recording with no expiry must export a descriptor and download successfully.
 - Repeat anonymously and as another account/admin: deny without signing a URL.
 - Expired/invalid-expiry recordings, import drafts without expiry, blocked media and custom data endpoints remain denied.

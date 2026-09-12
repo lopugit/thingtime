@@ -893,3 +893,20 @@ dynamic states. Verify current-head CI and preview independently of local tests.
 
 Local stack: http://127.0.0.1:12280 (Nitro 12282, HMR 12281).
 No verified Tailscale/Funnel URL is available for this worktree.
+
+## 2026-09-12 — Authorized live-chat snapshot reader foundation
+
+Added `liveChatArchiveRead.ts`, a server-internal home-database reader that
+checks chat membership and reads members, all message threads, reactions and
+message attachment descriptors in one MongoDB snapshot transaction. Former
+members remain in history. Denied membership stops before history queries;
+foreign namespaces, inconsistent owners/targets, duplicate IDs and oversized
+history fail closed rather than returning a truncated archive. Every query has
+a five-second server bound and an explicit projection. Zero remaining row
+budget uses a one-row overflow sentinel, never an unbounded Mongo limit.
+
+Validation: seven reader/conversion tests passed and both new reader files
+passed focused ESLint. The reader is not yet wired to export routes or UI.
+It returns internal projected source records, not a portable/public response:
+safe profile/media resolution and system/AI history rendering remain required
+before the whitelist conversion. No new API contract is exposed by this commit.
