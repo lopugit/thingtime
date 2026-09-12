@@ -140,6 +140,7 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
     // folder descendant. Never make a successful but incomplete archive copy.
     const included = new Map(plan.things.map(thing => [thing.id, thing]));
     const archiveTargets = new Map<string, string>();
+    const inlineAvatars = new Map<string, TransferPlan['files'][number]>();
     for (const archive of archives.values()) {
       const { participants, messages, reactions } = archive.group;
       for (const row of [...participants, ...messages, ...reactions]) {
@@ -159,6 +160,13 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
       for (const target of archive.attachmentTargets) {
         if (archiveTargets.has(target.id)) throw new Error('Archive media has conflicting IDs');
         archiveTargets.set(target.id, target.targetId);
+      }
+      for (const file of archive.inlineAvatarFiles || []) {
+        if (inlineAvatars.has(file.id) || archiveTargets.get(file.id) !== file.targetId ||
+          !participants.some(person => person.id === file.targetId && person.crystal.avatarFileId === file.id)) {
+          throw new Error('Archive avatar has conflicting identity');
+        }
+        inlineAvatars.set(file.id, file);
       }
       if (included.size > TRANSFER_LIMITS.things || archiveTargets.size > TRANSFER_LIMITS.files) throw new Error('This archive export exceeds the transfer limit');
     }
@@ -208,6 +216,15 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
       for (const [id, target] of targets) {
         check();
         if (!includedIds.has(target.targetId)) throw new Error('An attachment target is missing');
+        const inlineAvatar = inlineAvatars.get(id);
+        if (inlineAvatar) {
+          if (input.includeFiles === false) continue;
+          bytes += inlineAvatar.bytes;
+          if (bytes > TRANSFER_LIMITS.fileBytes) throw new Error('This export exceeds the file byte limit');
+          plan.files.push(structuredClone(inlineAvatar));
+          (plan.attachmentOrder ||= []).push(id);
+          continue;
+        }
         const result = await deps.describe({ ...viewer, sharedRoot: target.sharedRoot }, id, {
           includeFiles: input.includeFiles !== false, includeLinks: input.includeLinks !== false
         });

@@ -2,6 +2,13 @@
 
 ## Real browser portable transfer acceptance
 
+- [ ] Export an authorized chat whose historical participant has a public HTTPS
+  avatar. With export capability 1.14.0, require exact image bytes in its ZIP,
+  no original URL in the archive, a fresh private avatar after normal upload/import,
+  and successful re-export after the source URL is unavailable. Refuse HTTP,
+  redirects, private-network DNS, invalid images and excessive sizes without a
+  partial archive; do not bypass upload approval or create live recipients.
+
 - [ ] Run `node --import tsx --test app/api/utils/things/recordingTransfer.integration.test.ts`
   from `remix/` with `TT_TRANSFER_RECORDING_TEST=1 TT_TRANSFER_REMOTE_DEV_TEST=1`,
   the approved dev/PR-preview URL and username, and an ephemeral fixture cookie.

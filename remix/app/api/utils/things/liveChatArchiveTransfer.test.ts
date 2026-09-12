@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { managedArchiveAvatarId, readLiveChatArchiveTransfer } from './liveChatArchiveTransfer';
+import { exportTransferPlan } from './exportTransfer';
+import { bundleFromPlan } from '../../../utils/thingTransfer/browser';
+import { encodeTransferArchive, decodeTransferArchive } from '../../../utils/thingTransfer/archive';
+import { archiveAuthor, validateChatArchives } from '../../../utils/thingTransfer/chatArchive';
 
 const at = new Date('2026-09-01T00:00:00.000Z');
 const row = (shareId: string, ownerId: string, crystal: any = {}, targetId = 'chat') => ({ shareId, ownerId, crystal, targetId, createdAt: at, updatedAt: at });
@@ -14,6 +18,7 @@ const fixture = () => {
     ['friend', { id: 'friend', username: 'friend', avatarUrl: '/api/v1/attachments/content?id=avatar' }]]);
   const calls: string[] = [];
   const deps = { custom: () => false,
+    async avatar(): Promise<{ bytes: Uint8Array; mime: string }> { throw new Error('Complete chat media is unavailable'); },
     async read(ownerId: string, id: string) { assert.equal(ownerId, 'self'); assert.equal(id, 'chat'); calls.push('read'); return source; },
     async profiles(ids: string[]) { assert.deepEqual(ids, ['self', 'friend']); calls.push('profiles'); return profiles; },
     async describe(viewer: any, id: string, options: any): Promise<any> {
@@ -37,6 +42,45 @@ test('authorized AI history reaches the archive adapter with assistant identity 
   assert.ok(author); assert.equal(result?.group.messages[0].crystal.participantId, author.id);
   assert.deepEqual(result?.group.messages[0].crystal.toolHistory, [{ name: 'note', ok: true, summary: 'Saved' }]);
   assert.doesNotMatch(JSON.stringify(result), /private-source|private-connector|private-target/);
+});
+
+test('authorized external avatars reach ZIP as exact bytes with fresh private import references and no URL', async () => {
+  const f = fixture(); f.source.attachments = [];
+  const url = 'https://avatar.example/historical.png?public-version=2';
+  f.profiles.get('friend').avatarUrl = url;
+  const bytes = new Uint8Array([1, 2, 3]); // downloader decoding is covered separately
+  f.deps.avatar = async (value?: string) => { assert.equal(value, url); return { bytes, mime: 'image/png' }; };
+  const archive = await read(f);
+  assert.ok(archive);
+  const result = await exportTransferPlan({ id: 'self' }, { ids: ['chat'] }, undefined, {
+    read: async () => null, readLiveArchive: async () => archive, bound: async () => [],
+    describe: async () => { throw new Error('Resolved avatars must never become attachment lookup authority'); }
+  }, { liveChatOwnerId: 'self' });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.plan.files.length, 1);
+  const file = result.plan.files[0];
+  assert.equal(file.targetId, 'member-friend');
+  for (const mutate of [
+    (entry: typeof file) => { entry.targetId = 'message'; },
+    (entry: typeof file) => { entry.sourceId = 'live-file'; },
+    (entry: typeof file) => { entry.bytes = 2097153; },
+    (entry: typeof file) => { entry.inlineBase64 = 'AQID\n'; }
+  ]) {
+    const invalid = structuredClone(result.plan); mutate(invalid.files[0]);
+    await assert.rejects(bundleFromPlan(invalid));
+  }
+  assert.doesNotMatch(JSON.stringify(result.plan), /avatar\.example|public-version|sourceId/);
+  const bundle = await bundleFromPlan(result.plan, { fetch: async () => { throw new Error('No URL or attachment refetch'); } });
+  const decoded = await decodeTransferArchive(await encodeTransferArchive(bundle));
+  assert.deepEqual(decoded.files.get(file.id), bytes);
+  const [group] = validateChatArchives(decoded.manifest);
+  const author = archiveAuthor(group, 'member-friend', 'importer', new Map([['member-friend', 'fresh-participant']]), new Map([[file.id, 'fresh-private-avatar']]));
+  assert.deepEqual(author, { archived: true, participantId: 'fresh-participant', username: 'friend', displayName: 'friend', avatarFileId: 'fresh-private-avatar' });
+  const excluded = await exportTransferPlan({ id: 'self' }, { ids: ['chat'], includeFiles: false }, undefined, {
+    read: async () => null, readLiveArchive: async () => archive, bound: async () => []
+  }, { liveChatOwnerId: 'self' });
+  assert.equal(excluded.ok, false, 'cannot silently omit historical avatars');
 });
 
 test('adapter joins an authorized snapshot with canonical profiles and ordered media, without raw profile URLs', async () => {

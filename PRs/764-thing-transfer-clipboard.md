@@ -1,5 +1,28 @@
 # PR 764 — portable Thing transfer
 
+## External HTTPS avatar archive integration — 2026-09-12
+
+The membership-authorized live-chat adapter now resolves public-profile HTTPS
+avatars through the bounded downloader. Original URLs never enter the plan:
+ephemeral inline image entries bind to their historical participant and become
+ordinary checksummed ZIP files. Import keeps its existing fresh private-upload
+binding; no URL fetch or source identity is restored on import. Omitting required
+avatar files fails the whole export. HTTP, redirects and unsafe/unreadable images
+remain explicitly unsupported rather than silently omitted.
+
+Export feature and route contract advance to 1.14.0, and the browser negotiates
+that minimum. Both manifest suites cover old/missing/breaking contract refusal.
+The injected-adapter round trip covers exact bytes, ZIP, source URL removal and
+fresh archived-author file mapping. This is not yet a live provider/download/
+upload/browser round trip; the corresponding TESTING.md gate remains unchecked.
+
+Validation: 122 focused archive/transfer/capability tests pass; full Vite/embed/
+Nitro build and Vercel-output verification pass. The built handler returns export
+1.14.0 on the synthetic selected origin with network access disabled. Its unrelated
+index bootstrap reports missing Mongo configuration, so this is not a database
+health claim. Scoped TypeScript reports no changed-transfer diagnostics; the
+whole project retains 106 baseline diagnostics.
+
 ## External avatar transport prerequisite — 2026-09-12
 
 Added an internal, currently unwired downloader for authorized historical profile

@@ -6,9 +6,16 @@ import { routeModules } from '../../server/routes/api/[...]';
 import { thingtimeCapabilityManifest } from '../api/utils/capabilities/thingtimeCapabilities';
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 
+test('external avatar export requires the bounded-download contract on both manifests', () => {
+  assert.equal(createApiCapabilitiesManifest().features['api.things-export'], '1.14.0');
+  assert.equal(thingtimeCapabilityManifest('https://archive.test').features['api.things-export'].version, '1.14.0');
+  for (const version of [undefined, '1.13.0', '1.13.9', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.14.0'), false);
+  for (const version of ['1.14.0', '1.14.1', '1.15.0']) assert.equal(capabilitySatisfies(version, '1.14.0'), true);
+});
+
 test('emoji transfer, library and move capabilities reject pre-support origins', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-  for (const [feature, version] of [['api.things-export', '1.13.0'], ['api.things-import', '1.10.0'], ['api.things', '1.17.0'], ['api.things-bulk', '1.4.0']]) {
+  for (const [feature, version] of [['api.things-export', '1.14.0'], ['api.things-import', '1.10.0'], ['api.things', '1.17.0'], ['api.things-bulk', '1.4.0']]) {
     assert.equal(manifest.features[feature].version, version);
     assert.equal(capabilitySatisfies(version, version), true);
     assert.equal(capabilitySatisfies('1.0.0', version), false);
@@ -26,25 +33,25 @@ test('archive root moves negotiate the additive bulk contract on both manifests'
 
 test('archive library and folder export reject origins without complete archive traversal', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-  for (const [feature, required, previous] of [['api.things', '1.17.0', '1.13.1'], ['api.things-export', '1.13.0', '1.9.0']]) {
+  for (const [feature, required, previous] of [['api.things', '1.17.0', '1.13.1'], ['api.things-export', '1.14.0', '1.9.0']]) {
     assert.equal(manifest.features[feature].version, required);
     for (const version of [undefined, previous, '2.0.0']) assert.equal(capabilitySatisfies(version, required), false);
     assert.equal(capabilitySatisfies(required, required), true);
   }
   assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.16.0');
-  assert.equal(createApiCapabilitiesManifest().features['api.things-export'], '1.13.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.things-export'], '1.14.0');
 });
 
 test('archive re-export is advertised by both manifests and rejects incomplete older implementations', () => {
-  assert.equal(createApiCapabilitiesManifest().features['api.things-export'], '1.13.0');
-  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-export'].version, '1.13.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.things-export'], '1.14.0');
+  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-export'].version, '1.14.0');
   for (const version of [undefined, '1.8.0', '1.8.1', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.9.0'), false);
   for (const version of ['1.9.0', '1.9.1', '1.10.0']) assert.equal(capabilitySatisfies(version, '1.9.0'), true);
 });
 
 test('live-chat shared emoji export requires the additive contract on both manifests', () => {
-  assert.equal(createApiCapabilitiesManifest().features['api.things-export'], '1.13.0');
-  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-export'].version, '1.13.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.things-export'], '1.14.0');
+  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-export'].version, '1.14.0');
   for (const version of [undefined, '1.10.0', '1.11.0', '1.11.1', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.12.0'), false);
   for (const version of ['1.12.0', '1.12.1', '1.13.0']) assert.equal(capabilitySatisfies(version, '1.12.0'), true);
 });

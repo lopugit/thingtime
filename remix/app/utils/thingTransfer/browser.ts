@@ -16,11 +16,14 @@ export const bundleFromPlan = async (plan: TransferPlan, options: { key?: string
   for (const [index, entry] of plan.files.entries()) {
     options.signal?.throwIfAborted();
     if (entry.inlineBase64 !== undefined) {
-      if (typeof entry.inlineBase64 !== 'string' || entry.inlineBase64.length > 700 * 1024 ||
-        entry.sourceId !== undefined || entry.sharedRoot !== undefined || entry.bytes > 512 * 1024 ||
+      const avatar = plan.things.some(thing => thing.id === entry.targetId && thing.thingtime.length === 1 &&
+        thing.thingtime[0] === 'chat-archive-participant' && thing.crystal.avatarFileId === entry.id);
+      const limit = avatar ? 2 * 1024 * 1024 : 512 * 1024;
+      if (typeof entry.inlineBase64 !== 'string' || entry.inlineBase64.length > Math.ceil(limit / 3) * 4 ||
+        entry.sourceId !== undefined || entry.sharedRoot !== undefined || entry.bytes > limit ||
         !['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(entry.mime) ||
-        !plan.things.some(thing => thing.id === entry.targetId && thing.thingtime.length === 1 &&
-          thing.thingtime[0] === 'custom-emoji' && thing.crystal.emojiFileId === entry.id)) invalid('Invalid inline emoji image');
+        (!avatar && !plan.things.some(thing => thing.id === entry.targetId && thing.thingtime.length === 1 &&
+          thing.thingtime[0] === 'custom-emoji' && thing.crystal.emojiFileId === entry.id))) invalid('Invalid inline image');
       let binary: string;
       try { binary = atob(entry.inlineBase64); } catch { return invalid('Invalid inline emoji encoding'); }
       if (binary.length !== entry.bytes || !binary.length || btoa(binary) !== entry.inlineBase64) invalid('Inline emoji image changed size or encoding');

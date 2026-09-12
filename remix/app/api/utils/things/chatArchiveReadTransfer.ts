@@ -5,6 +5,7 @@ import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/co
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { orderAttachmentDocsByStoredSort, toAttachmentPublicMetadata, type AttachmentPublicMetadata } from '../attachments/attachmentCore';
 import { EMOJI_NAME_PATTERN } from '../../../schemas/registry';
+import type { TransferPlan } from '../../../utils/thingTransfer/plan';
 
 const defaults = { collection: getHomeThingsCollection, transaction: withHomeMongoTransaction, custom: isCustomMongoEndpointActive };
 const validId = (id: unknown): id is string => typeof id === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(id);
@@ -19,6 +20,9 @@ export type OwnedChatArchive = {
   group: ChatArchiveGroup;
   updatedAt: string;
   attachmentTargets: { id: string; targetId: string }[];
+  /** Ephemeral server-resolved avatar bytes from live profile export only.
+   * Never persisted or reconstructed from imported participant metadata. */
+  inlineAvatarFiles?: TransferPlan['files'];
   /** Owner-only gallery projection; blocked and noncanonical media are omitted.
    * Targets stay separate above so re-export never silently drops hidden files. */
   attachments?: (AttachmentPublicMetadata & { targetId: string })[];

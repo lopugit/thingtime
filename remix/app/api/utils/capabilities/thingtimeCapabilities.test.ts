@@ -82,8 +82,8 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
 	assert.equal(manifest.features['api.actions-run']?.version, '1.4.0');
 	assert.equal(manifest.features['api.things-fork']?.version, '1.4.0');
 	assert.equal(manifest.features['api.things-import']?.version, '1.10.0');
-	assert.equal(manifest.features['api.things-export']?.version, '1.13.0');
-  for (const [feature, required, previous] of [['api.things-export', '1.13.0', '1.12.0'], ['api.attachment-content', '1.6.4', '1.6.3']]) {
+	assert.equal(manifest.features['api.things-export']?.version, '1.14.0');
+  for (const [feature, required, previous] of [['api.things-export', '1.14.0', '1.12.0'], ['api.attachment-content', '1.6.4', '1.6.3']]) {
     assert.equal(manifest.features[feature]?.version, required);
     assert.equal(capabilitySatisfies(required, required), true);
     assert.equal(capabilitySatisfies(previous, required), false);
@@ -236,7 +236,7 @@ test('capability negotiation accepts compatible updates and rejects missing or b
 
 test('AI archive clients require the presentation contract before import, export and history reads', () => {
   const manifest = thingtimeCapabilityManifest('https://archive.test');
-  for (const [feature, required, previous] of [['api.things-export', '1.13.0', '1.12.0'],
+  for (const [feature, required, previous] of [['api.things-export', '1.14.0', '1.12.0'],
     ['api.things-import', '1.10.0', '1.9.1'], ['api.things', '1.17.0', '1.16.1']]) {
     assert.equal(manifest.features[feature].version, required);
     assert.equal(capabilitySatisfies(required, required), true);

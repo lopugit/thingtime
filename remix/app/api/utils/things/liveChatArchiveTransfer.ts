@@ -11,9 +11,12 @@ import type { LiveChatArchiveSnapshot } from './liveChatArchiveCore';
 import type { OwnedChatArchive } from './chatArchiveReadTransfer';
 import { readLiveChatArchiveEmojis } from './liveChatArchiveEmojiTransfer';
 import type { TransferEmojiSource } from './emojiTransfer';
+import { randomUUID } from 'node:crypto';
+import { downloadArchiveAvatar } from './archiveAvatarDownload';
 
 const defaults = { read: readLiveChatArchiveSource, profiles: resolveProfiles,
-  describe: describeAttachmentTransfer, custom: isCustomMongoEndpointActive, emojis: readLiveChatArchiveEmojis };
+  describe: describeAttachmentTransfer, custom: isCustomMongoEndpointActive, emojis: readLiveChatArchiveEmojis,
+  avatar: downloadArchiveAvatar };
 const reject = (): never => { throw new Error('Complete chat media is unavailable'); };
 
 /** Public profile projections contain either an exact first-party attachment
@@ -48,18 +51,32 @@ export const readLiveChatArchiveTransfer = async (viewer: Viewer, id: string, fi
       orderAttachmentDocsByStoredSort(source.attachments as { shareId: string; targetId: string; attachmentLinked?: boolean; attachmentSortIndex?: unknown }[]).map(row => ({ id: row.shareId, targetId: row.targetId,
         avatar: false, linked: row.attachmentLinked === true }));
     const avatars = new Map<string, string>();
+    const inlineAvatarFiles: NonNullable<OwnedChatArchive['inlineAvatarFiles']> = [];
+    let avatarBytes = 0;
     for (const member of source.members) {
       const profile = profiles.get(member.ownerId);
       if (!profile || profile.id !== member.ownerId) reject();
       if (!profile!.avatarUrl) continue;
+      if (/^https:\/\//i.test(profile!.avatarUrl)) {
+        const image = await deps.avatar(profile!.avatarUrl, signal);
+        check();
+        avatarBytes += image.bytes.length;
+        if (!image.bytes.length || image.bytes.length > 2 * 1024 * 1024 || avatarBytes > TRANSFER_LIMITS.fileBytes ||
+          !['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(image.mime)) reject();
+        const avatarId = `avatar-file:${randomUUID()}`;
+        avatars.set(member.ownerId, avatarId);
+        inlineAvatarFiles.push({ id: avatarId, targetId: member.shareId, name: 'historical-avatar',
+          mime: image.mime, bytes: image.bytes.length, inlineBase64: Buffer.from(image.bytes).toString('base64') });
+        continue;
+      }
       const avatarId = managedArchiveAvatarId(profile!.avatarUrl);
       avatars.set(member.ownerId, avatarId);
       targets.push({ id: avatarId, targetId: member.shareId, avatar: true, linked: false });
     }
-    if (targets.length > TRANSFER_LIMITS.files || new Set(targets.map(row => row.id)).size !== targets.length) reject();
-    const files: LiveChatArchiveSnapshot['files'] = [];
+    if (targets.length + inlineAvatarFiles.length > TRANSFER_LIMITS.files || new Set([...targets, ...inlineAvatarFiles].map(row => row.id)).size !== targets.length + inlineAvatarFiles.length) reject();
+    const files: LiveChatArchiveSnapshot['files'] = inlineAvatarFiles.map(({ id, targetId, mime, bytes }) => ({ id, targetId, mime, bytes }));
     const links: LiveChatArchiveSnapshot['links'] = [];
-    let bytes = 0;
+    let bytes = avatarBytes;
     for (const target of targets) {
       check();
       const result = await deps.describe(viewer, target.id, { includeFiles: true, includeLinks: true });
@@ -85,7 +102,8 @@ export const readLiveChatArchiveTransfer = async (viewer: Viewer, id: string, fi
     check();
     if (transferEmojis.length !== archive.emojiIds.length || new Set(transferEmojis.map(row => row.thing.id)).size !== archive.emojiIds.length ||
       transferEmojis.some(row => !archive.emojiIds.includes(row.thing.id))) reject();
-    return { ...archive, transferEmojis, attachmentTargets: targets.map(({ id, targetId }) => ({ id, targetId })),
+    return { ...archive, transferEmojis, inlineAvatarFiles,
+      attachmentTargets: [...targets, ...inlineAvatarFiles].map(({ id, targetId }) => ({ id, targetId })),
       updatedAt: source.chat.updatedAt.toISOString() };
   }, parent);
 };

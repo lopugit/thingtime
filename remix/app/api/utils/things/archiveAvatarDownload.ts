@@ -29,9 +29,9 @@ const defaults = { lookup, get };
  * resolving an authorized participant's public profile. No cookies, bearer
  * tokens, referrer, proxy settings, redirects or pooled connections are used.
  * The socket uses the vetted DNS answer, not a second hostname resolution.
- * Kept unwired until archive file planning and capability coverage are ready. */
+ * Only the membership-authorized live-chat adapter calls this helper. */
 export const downloadArchiveAvatar = async (value: string, parent?: AbortSignal,
-  overrides: Partial<typeof defaults> = {}) => withExportDeadline(async signal => {
+  overrides: Partial<typeof defaults> = {}): Promise<{ bytes: Uint8Array; mime: string }> => withExportDeadline(async signal => {
   const deps = { ...defaults, ...overrides };
   let url: URL;
   try { url = new URL(value); } catch { throw unavailable(); }
