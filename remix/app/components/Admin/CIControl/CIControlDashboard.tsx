@@ -1,3 +1,5 @@
+import type { AiWaterfallConfig } from '~/api/utils/ai/waterfallConfig';
+import { FeatureStackModelSelection } from './FeatureStackModelSelection';
 import React from 'react';
 import {
   Alert,
@@ -594,6 +596,7 @@ const DispatchModal = ({ isOpen, onClose, initialWorkflow, initialPr, isSubmitti
 };
 
 type FeatureStackDraft = {
+	modelWaterfall?: AiWaterfallConfig | null;
 	id: string | null;
   name: string;
   selectedFeatureIds: string[];
@@ -603,6 +606,7 @@ type FeatureStackDraft = {
 };
 
 type SavedFeatureStack = {
+	modelWaterfall?: AiWaterfallConfig | null;
 	id: string;
 	name: string;
 	sourcePrNumbers: number[];
@@ -655,6 +659,8 @@ type FeatureStackLiveSnapshot = {
 };
 
 type FeatureStackComposerProps = {
+	modelWaterfall: AiWaterfallConfig | null;
+	onModelWaterfallChange: (value: AiWaterfallConfig | null) => void;
   name: string;
   selected: { feature: CiEntity; pr: CiEntity }[];
 	pendingSourcePrNumbers: number[];
@@ -685,6 +691,8 @@ type FeatureStackComposerProps = {
 };
 
 const FeatureStackComposer = ({
+	modelWaterfall,
+	onModelWaterfallChange,
   name,
   selected,
 	pendingSourcePrNumbers,
@@ -891,6 +899,7 @@ const FeatureStackComposer = ({
         <FormControl>
           <FormLabel fontSize="xs">Stack name</FormLabel>
 					<Input size="sm" value={name} maxLength={80} onChange={(event) => onNameChange(event.target.value)} placeholder="Search + Messenger" />
+					<FeatureStackModelSelection value={modelWaterfall} onChange={onModelWaterfallChange} disabled={isSaving || isSubmitting} />
         </FormControl>
         <FormControl>
           <FormLabel fontSize="xs">Ordered feature list</FormLabel>
@@ -1297,6 +1306,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 	const [pendingFeatureStackPrNumbers, setPendingFeatureStackPrNumbers] = React.useState(
 		initialStackDraft.pendingSourcePrNumbers ?? []
 	);
+  const [featureStackModels, setFeatureStackModels] = React.useState<AiWaterfallConfig | null>(initialStackDraft.modelWaterfall ?? null);
   const [featureStackTargets, setFeatureStackTargets] = React.useState(initialStackDraft.targets);
 	const [featureStackAutoDecide, setFeatureStackAutoDecide] = React.useState(initialStackDraft.autoDecideBranches !== false);
   const [collapsedSections, setCollapsedSections] = React.useState<Set<string>>(
@@ -1323,11 +1333,13 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
       selectedFeatureIds: featureStackIds,
 			pendingSourcePrNumbers: pendingFeatureStackPrNumbers,
 			targets: featureStackTargets,
+			modelWaterfall: featureStackModels,
 			autoDecideBranches: featureStackAutoDecide
     } satisfies FeatureStackDraft);
 	}, [
 		activeFeatureStackId,
 		featureStackAutoDecide,
+		featureStackModels,
 		featureStackIds,
 		featureStackName,
 		featureStackTargets,
@@ -1695,6 +1707,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 		setFeatureStackName(stack.name);
 		setFeatureStackTargets(stack.targets);
 		setFeatureStackAutoDecide(stack.autoDecideBranches);
+		setFeatureStackModels(stack.modelWaterfall ?? null);
 		if (dashboard?.features.length) {
 			const resolved = resolveFeatureStackSources(stack.sourcePrNumbers, dashboard.pullRequests);
 			setFeatureStackIds(resolved.selectedFeatureIds);
@@ -1712,19 +1725,21 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 		setPendingFeatureStackPrNumbers([]);
 		setFeatureStackTargets(['develop', 'main']);
 		setFeatureStackAutoDecide(true);
+		setFeatureStackModels(null);
 	};
 
 	const saveCurrentFeatureStack = async () => {
 		if (featureStackSaving || featureStackSelection.length < 1 || featureStackTargets.length < 1 || !featureStackName.trim()) return null;
 		setFeatureStackSaving(true);
 		try {
-			await requireThingtimeCapability('api.admin-ci-feature-stacks', '1.0.0');
+			await requireThingtimeCapability('api.admin-ci-feature-stacks', '1.4.0');
 			const result = await apiRef.current.v1.admin.mutateCiFeatureStack({
 				action: 'save',
 				...(activeFeatureStackId ? { id: activeFeatureStackId } : {}),
 				name: featureStackName.trim(),
 				sourcePrNumbers: featureStackSelection.map(({ pr }) => Number(pr.number)),
 				targets: featureStackTargets,
+				modelWaterfall: featureStackModels,
 				autoDecideBranches: featureStackAutoDecide
 			});
 			if (!result?.ok || !result.stack?.id) throw new Error(result?.error || 'Feature Stack save failed.');
@@ -1768,7 +1783,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 		}
 		setFeatureStackLifecycleBusy({ id: stack.id, action });
 		try {
-			await requireThingtimeCapability('api.admin-ci-feature-stacks', '1.3.0');
+			await requireThingtimeCapability('api.admin-ci-feature-stacks', '1.4.0');
 			const result = await apiRef.current.v1.admin.mutateCiFeatureStack({ action, id: stack.id });
 			if (!result?.ok) throw new Error(result?.error || `Feature Stack ${action} failed.`);
 			setSavedFeatureStacks(result.stacks ?? []);
@@ -1838,8 +1853,8 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 		if (featureStackDispatching || featureStackSelection.length < 1 || featureStackTargets.length < 1) return;
     setFeatureStackDispatching(true);
     try {
-			await requireThingtimeCapability('api.admin-ci-dispatch', '2.1.0');
-			await requireThingtimeCapability('api.admin-ci-feature-stacks', '1.3.0');
+			await requireThingtimeCapability('api.admin-ci-dispatch', '2.2.0');
+			await requireThingtimeCapability('api.admin-ci-feature-stacks', '1.4.0');
 			const saved = await saveCurrentFeatureStack();
 			if (!saved) throw new Error('Feature Stack save failed');
 			const result = await apiRef.current.v1.admin.mutateCiFeatureStack({ action: 'run', id: saved.id });
@@ -2109,6 +2124,8 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
       />
 
       <FeatureStackComposer
+				modelWaterfall={featureStackModels}
+				onModelWaterfallChange={setFeatureStackModels}
         name={featureStackName}
         selected={featureStackSelection}
 				pendingSourcePrNumbers={pendingFeatureStackPrNumbers}

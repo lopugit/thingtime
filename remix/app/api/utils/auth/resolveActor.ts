@@ -36,7 +36,7 @@ import { scopeCovers } from '../apps/scopes';
 
 export type Actor =
   | { kind: 'user'; user: PublicUser }
-  | { kind: 'pat'; user: PublicUser; pat: PatContext }
+  | { kind: 'pat'; user: PublicUser; pat: PatContext; cors?: Record<string, string> }
   | {
       kind: 'app';
       ctx: AppTokenContext;
@@ -49,7 +49,7 @@ export type Actor =
 export const actorUser = (actor: Actor): PublicUser | null =>
   actor.kind === 'anonymous' ? null : actor.kind === 'app' ? actor.ctx.user : actor.user;
 
-export const actorCors = (actor: Actor): Record<string, string> => (actor.kind === 'app' ? actor.cors : {});
+export const actorCors = (actor: Actor): Record<string, string> => (actor.kind === 'app' ? actor.cors : actor.kind === 'pat' ? actor.cors ?? {} : {});
 
 // The pat context (or null) for threading into viewerOf — a helper so call
 // sites can't accidentally hand a pat-less viewer to the util layer and skip
@@ -79,6 +79,16 @@ export const resolveActor = async (
     // to; server-to-server calls (no Origin) pass.
     if (requestOrigin && requestOrigin !== ctx.origin) {
       return json({ ok: false, error: 'Origin does not match this token' }, { status: 403, headers: cors });
+    }
+
+    // Account grants deliberately opt into the user's Things surface. Keep
+    // legacy app-data grants in their existing isolated app namespace.
+    if (!ctx.sandbox && opts.thingsScope !== undefined && ctx.scopes.some((scope) => scope.startsWith('account.things'))) {
+      const resolved = await resolvePatOrSessionActor(request, opts.thingsScope);
+      if (resolved.ok === false) return json({ ok: false, error: resolved.error }, { status: resolved.status, headers: cors });
+      const { user, pat } = resolved.actor;
+      if (user && pat) return { kind: 'pat', user, pat, cors };
+      return json({ ok: false, error: 'Unauthorized' }, { status: 401, headers: cors });
     }
 
     const requiredScope = opts.requiredAppScope ?? 'app-data';
