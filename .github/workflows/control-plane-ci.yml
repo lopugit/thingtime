@@ -95,6 +95,11 @@ jobs:
           node --test .github/scripts/feature-stack-waterfall.test.mjs
           node .github/scripts/feature-stack-plan.mjs --self-test
 
+      - name: Validate Feature Stack publication and progress
+        run: |
+          node --test .github/scripts/feature-stack-publish-merge.test.mjs
+          node .github/scripts/feature-stack-progress.mjs --self-test
+
       - name: Validate main/develop sync merger
         run: node .github/scripts/merge-main-develop-sync-pr.mjs --self-test
 

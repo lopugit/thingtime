@@ -16,6 +16,14 @@ const STEP_PHASES = [
 ];
 
 export const targetProgress = (target, job, mergeGateJob = null) => {
+  // A running gate cannot revive a failed publisher. A completed successful
+  // gate still wins when it has independently confirmed the merge.
+  if (job?.status === 'completed' && job.conclusion !== 'success'
+    && !(mergeGateJob?.status === 'completed' && mergeGateJob.conclusion === 'success')) {
+    const failedStep = job.steps?.find((step) => step.conclusion === 'failure')?.name;
+    return { target, status: ['cancelled', 'skipped'].includes(job.conclusion) ? job.conclusion : 'failure', progressPercent: 100, jobUrl: job.html_url ?? null,
+      phase: failedStep ? `Worker failed: ${failedStep}` : `Worker ${job.conclusion || 'failure'}` };
+  }
   if (mergeGateJob) {
     if (mergeGateJob.status === 'completed') {
       const rawConclusion = TERMINAL_CONCLUSIONS.has(mergeGateJob.conclusion) ? mergeGateJob.conclusion : 'failure';
@@ -102,14 +110,20 @@ export const progressSnapshot = ({ targets, jobs, startedAt, now = Date.now() })
   };
 };
 
-const githubJobs = async ({ repository, runId, token }) => {
-  const response = await fetch(`https://api.github.com/repos/${repository}/actions/runs/${runId}/jobs?filter=all&per_page=100`, {
-    headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28' },
-    signal: AbortSignal.timeout(20_000)
-  });
-  if (!response.ok) throw new Error(`GitHub jobs API returned ${response.status}`);
-  const payload = await response.json();
-  return Array.isArray(payload.jobs) ? payload.jobs : [];
+const githubJobs = async ({ repository, runId, runAttempt, token }) => {
+  const jobs = [];
+  for (let page = 1; page <= 100; page += 1) {
+    const response = await fetch(`https://api.github.com/repos/${repository}/actions/runs/${runId}/attempts/${runAttempt}/jobs?per_page=100&page=${page}`, {
+      headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28' },
+      signal: AbortSignal.timeout(20_000)
+    });
+    if (!response.ok) throw new Error(`GitHub jobs API returned ${response.status}`);
+    const payload = await response.json();
+    if (!Array.isArray(payload.jobs)) throw new Error('GitHub jobs inventory is incomplete');
+    jobs.push(...payload.jobs);
+    if (payload.jobs.length < 100) return jobs;
+  }
+  throw new Error('GitHub jobs inventory exceeded its page bound');
 };
 
 const postProgress = async ({ endpoint, secret, payload }) => {
@@ -228,7 +242,7 @@ const run = async () => {
   let lastSnapshot = null;
   while (true) {
     try {
-      const jobs = await githubJobs({ repository, runId, token });
+      const jobs = await githubJobs({ repository, runId, runAttempt, token });
       lastSnapshot = progressSnapshot({ targets, jobs, startedAt });
       const phaseSignature = JSON.stringify(lastSnapshot.targets.map(({ target, status, phase }) => ({ target, status, phase })));
       const now = Date.now();
