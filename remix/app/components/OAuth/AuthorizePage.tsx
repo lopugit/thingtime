@@ -374,10 +374,8 @@ export const AuthorizePage = () => {
     [requiredIds, selected]
   );
 
-  // "Share more" candidates: leaf/capability/picker scopes neither the
-  // required nor the optional set already covers (namespaces stay out — the
-  // fields say it better). Coverage, not exact id, so a leaf whose ancestor is
-  // already offered never double-appears.
+  // Show narrower alternatives when an optional parent permission is unticked.
+  // A selected parent already includes its leaves; required parents remain locked.
   const extraScopes = React.useMemo(
     () =>
       catalog.filter(
@@ -385,17 +383,20 @@ export const AuthorizePage = () => {
           scope.kind !== 'namespace' &&
           !scope.baseline &&
           !anyCovers(requiredIds, scope.id, exactIds) &&
-          !anyCovers(optionalIds, scope.id, exactIds)
+          !optionalIds.includes(scope.id) &&
+          !anyCovers(selection.filter((id) => id !== scope.id), scope.id, exactIds)
       ),
-    [catalog, requiredIds, optionalIds, exactIds]
+    [catalog, requiredIds, optionalIds, exactIds, selection]
   );
 
   const thingsActive = React.useMemo(() => anyCovers(selection, 'things'), [selection]);
+  const allThingsRead = anyCovers(selection, 'account.things.read', exactIds);
+  const pickerActive = thingsActive && !allThingsRead;
 
   // ---- things picker -------------------------------------------------------
 
   React.useEffect(() => {
-    if (!thingsActive || pickerThings !== null) return;
+    if (!pickerActive || pickerThings !== null) return;
 
     if (sandbox) {
       // Sandbox always uses mock things — it never reads the real account.
@@ -445,7 +446,7 @@ export const AuthorizePage = () => {
     return () => {
       cancelled = true;
     };
-  }, [thingsActive, pickerThings, sandbox, user]);
+  }, [pickerActive, pickerThings, sandbox, user]);
 
   const pickedIds = React.useMemo(
     () => Object.keys(pickedThings).filter((id) => pickedThings[id]),
@@ -867,7 +868,12 @@ export const AuthorizePage = () => {
           </Flex>
         ) : null}
 
-        {thingsActive ? (
+        {allThingsRead ? (
+          <Box padding={3} borderRadius="var(--tt-radius-md, 12px)" background="var(--tt-surface-alt, #f5f5f7)" fontSize="13px">
+            All Things access includes your private Things, beyond the picker. Uncheck it and use “Share more” for individual permissions, or “Things you choose” for a limited selection.
+          </Box>
+        ) : null}
+        {pickerActive ? (
           <Flex
             flexDirection="column"
             gap={1}
@@ -942,7 +948,7 @@ export const AuthorizePage = () => {
 
         <Flex gap={2} alignItems="center" fontSize="13px" color="var(--tt-muted, #9a9aa6)">
           <Box>🔒</Box>
-          <Box>It only ever gets what’s ticked above — never your password, unselected items, or other apps’ data.</Box>
+          <Box>Only the permissions approved above are granted. Your password and account security settings are never shared.</Box>
         </Flex>
 
         {issueError ? (

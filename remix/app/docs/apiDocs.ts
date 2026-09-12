@@ -655,9 +655,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [{ status: 200, description: 'Completion and safe routing trace.', body: { ok: true, text: 'Notes', connectionId: 'your-fallback-id', attempts: [{ connectionId: 'your-primary-id', outcome: 'unavailable', status: 429 }, { connectionId: 'your-fallback-id', outcome: 'succeeded' }] } }, { status: 503, description: 'All selected connections unavailable.', body: { ok: false, error: 'The selected AI connections are unavailable. Check their status and allowance.', attempts: [] } }]
 	}),
 	endpoint({
-		id: 'lopu-recordings', contractVersion: '1.5.0', featureVersion: '1.5.0', group: 'lopu', title: 'Watch recording automation',
+		id: 'lopu-recordings', contractVersion: '1.6.0', featureVersion: '1.6.0', group: 'lopu', title: 'Watch recording automation',
 		endpoint: '/api/v1/lopu/recordings', methods: ['GET', 'POST'],
-		summary: 'Opt in to private Watch audio transcription, generated notes/todos and daily reminders; choose a paired personal device or API providers.',
+		summary: 'Opt in to private Watch audio transcription, generated notes/todos and daily reminders; choose a paired personal device or API providers. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
 		detail: 'Version 1.5 also accepts an owned private ready standalone recording Thing ID in the existing postId field for explicit queue and send-to-lopu operations. Automatic discovery remains Watch-only; standalone recording libraries are never scanned implicitly. Source attachment identity, ownership, purpose, ready state, privacy and binding are rechecked before disclosure and transactionally fenced before writes. Transcript comments target that recording Thing without changing its crystal or binding. Version 1.4 adds runtimeDeviceId (null or an owned eligible paired device), provider.mode/device/devices metadata and per-job runtimeDeviceId. Personal mode downloads audio to that device for local transcription and sends only text to its native Claude Code session; offline jobs wait without provider fallback. Explicit retry uses the current processor while preserving checkpoints. Version 1.3 adds op=send-to-lopu with postId, and handoffStatus/handoffChatId on jobs. Explicit handoff lets Lopu act on the transcript in a private conversation with normal billing and tool confirmation rules; automatic notes/todos alone still cannot execute arbitrary tools. Home-origin account feature. GET returns ownerId, settings, provider configuration availability, redacted provider choices, the newest 50 processing jobs and newest 100 recording todos. POST accepts op=settings with a partial settings object (enabled, createTodos, createNotes, dailyReminders booleans; IANA timeZone; reminderHour 0–23; transcriptionProviders and analysisProviders ordered lists of 1–4 unique connection ids), op=queue with an owned private Watch post or standalone recording Thing ID in postId, op=retry with a failed/retry/paused job id, or op=todo with an owned generated todo id and completed/reminders booleans. Connection ids must be owned Secure Vault API connections or configured/configured-anthropic platform connections, and support their stage. Defaults remain configured for both stages. OpenAI connections support transcription and analysis; Anthropic API keys support analysis only, not audio or Claude Code setup tokens. Availability/authentication/quota failures fall through the selected list once per connection, with consent checked before each attempt; malformed requests and security failures stop. GET provider choices expose id, name, provider, transcription/analysis compatibility and configured status, never tokens or endpoints. Configured is not a live quota check. Opt-in defaults off; new uploads are discovered after first setup. Queued jobs and scheduled reminders are durable and idempotent. In provider mode audio/transcript go only to selected providers; audio is limited to 24 MiB. Full transcripts become private relational comments, and generated notes/todos are quota-billed private data Things. Model output cannot invoke tools, buy anything or contact users. Completion, deletion and pausing stop reminders; local calendar dates deduplicate them across DST. Existing recordings require an explicit queue request. Retries resume saved checkpoints.',
 		auth: { mode: 'session-or-bearer', description: 'Full, live first-party account session only; app, Watch and personal scoped tokens are not account sessions. Mutation requires a non-temporary user account and same-origin JSON. Protected subscription tier controls the account mutation rate: Free/custom tiers use the configured things.write rule, Plus 5x, Pro/PAYG unlimited. The existing recordings account bucket survives tier/session/IP changes. Subscription or limiter outages fail closed with 503; finite exhaustion returns 429 with Retry-After. Provider quotas, attachment limits, privacy checks and bounded job processing remain unchanged.' },
 		steps: ['Sign in on the same domain as your Watch.', 'Version 1.4 adds nullable settings.runtimeDeviceId (default null: existing API waterfall). Select only an owned live paired session advertising recordings.personal.v1. GET provider adds mode, device and devices with id/name/online/lastSeenAt; configured means paired, not proven runtime or provider health. No credentials are returned.', 'New jobs snapshot the selected processor; changing settings pauses mismatched in-flight work. An explicit retry reassigns a paused/failed/retry job to the current processor while preserving saved transcript/content checkpoints. GET jobs include runtimeDeviceId or null.', 'Open /lopu/recordings, review the selected processor disclosure and enable automation. Personal jobs download to that device, transcribe locally, and send only text to native Claude Code. They never silently fall back to cloud credentials.', 'Upload a recording and inspect its private comments, generated Things and reminder todos. Personal workers can discover only their own account uploads even when the origin has no cron.', 'On retry, job.error identifies failures using fixed safe text; raw provider errors and signed URLs are never returned.'],
@@ -4387,9 +4387,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // temporary session is 403 { code: LOPU_GUEST } like every other Lopu write (additive
     // refusals; GET is never gated). contractVersion feeds /api/v1/capabilities, featureVersion
     // the well-known Thingtime manifest.
-    contractVersion: '1.2.0',
-    featureVersion: '1.2.0',
-    summary: 'Lists the caller’s conversations with Lopu, or starts a new one.',
+    contractVersion: '1.3.0',
+    featureVersion: '1.3.0',
+    summary: 'Lists the caller’s conversations with Lopu, or starts a new one. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
     detail:
       'A Lopu conversation is an ordinary messenger chat (a one-member group owned by the caller) whose ' +
       'externalSource carries { access: "lopu", provider: "lopu" }, so it also appears in /api/v1/chats and its ' +
@@ -4468,9 +4468,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.1.0: `providerId` retunes / clears the chat's pinned Secure Vault provider
     // (additive). 1.1.1: fails closed on a limiter outage. contractVersion feeds
     // /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.1.1',
-    featureVersion: '1.1.1',
-    summary: 'Renames a Lopu conversation or retunes its model, effort, speed and pinned provider.',
+    contractVersion: '1.2.0',
+    featureVersion: '1.2.0',
+    summary: 'Renames a Lopu conversation or retunes its model, effort, speed and pinned provider. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
     detail:
       'POST { chatId, title?, model?, effort?, speed?, providerId? }. Only the conversation’s member (its owner) may update it. ' +
       'Settings follow the same catalog validation as creation: a composed model id carries its own effort/fast ' +
@@ -4526,9 +4526,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Delete Lopu conversation',
     endpoint: '/api/v1/lopu/chats/delete',
     // 1.0.1: fails closed on a limiter outage (compatible correction).
-    contractVersion: '1.0.1',
-    featureVersion: '1.0.1',
-    summary: 'Deletes a Lopu conversation with every message in it.',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
+    summary: 'Deletes a Lopu conversation with every message in it. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
     detail:
       'POST { chatId }. Owner only. The chat, its membership row, every message and their reactions are removed ' +
       'in one accounted transaction, so storage quota is refunded together with the rows; attachments bound to ' +
@@ -4584,9 +4584,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // each spend the same last credit — past the cap the request is refused 429
     // LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted (additive). contractVersion
     // feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.6.2',
-    featureVersion: '1.6.2',
-    summary: 'Sends one message to Lopu and streams its reply — text, tool calls and live builder patches — as newline-delimited JSON.',
+    contractVersion: '1.7.0',
+    featureVersion: '1.7.0',
+    summary: 'Sends one message to Lopu and streams its reply — text, tool calls and live builder patches — as newline-delimited JSON. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
     detail:
       'Version 1.6.2 clarifies comment proposal guidance: the first unapproved comment_on_thing call opens the exact-target/full-text Confirm card without posting; only a subsequent server-verified approved call can post. Plain-text agreement is not a substitute for a signed confirmation. ' +
       'Version 1.6.1 retains bounded public tool receipts in server-loaded conversation history, so later turns can distinguish completed and failed actions. Receipts are historical outcomes, not current-state guarantees or authorization to repeat actions; raw tool results and confirmation tokens are never replayed. ' +
@@ -4777,12 +4777,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		// unless Thingtime.LopuAccess.allowByoUnverified; transcribe mode is not gated) and are
 		// recorded as lopu-usage rows — meta carries billing "byo", done carries the provider's
 		// usage, billing and the list-price costMicros (never debited) — compatible additions.
-		contractVersion: '1.3.0',
-		featureVersion: '1.3.0',
+		contractVersion: '1.4.0',
+		featureVersion: '1.4.0',
 		group: 'lopu',
 		title: 'Lopu voice turn',
 		endpoint: '/api/v1/lopu/voice/reply',
-		summary: 'Streams one Lopu conversation turn or persists one private transcription page.',
+		summary: 'Streams one Lopu conversation turn or persists one private transcription page. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
 		detail:
 			'Conversation mode decrypts only the selected owner-scoped provider token in server memory, calls the fixed provider endpoint through the shared SSRF fence, and streams NDJSON text deltas. The model is the connection’s own, else the kind’s first catalog model, else the optional `model` in the body; optional `effort` and `speed` must be supported by that model. Version 1.3 transcribe mode accepts chatId and requestId, persists the transcript in the same Lopu conversation and as a linked owner-private data Thing, and returns meta.chatId, quote.page and done.messages. Stable request IDs deduplicate chat/page/turn writes. Transcription makes no provider call and is limited to 12000 characters per utterance.',
 		auth: { mode: 'session', description: 'Requires the current full Thingtime user session (a temporary guest session is a 403). Bodies must be application/json (415 otherwise).' },
@@ -4803,10 +4803,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		]
 	}),
   endpoint({
-		id: 'lopu-voice-capture', contractVersion: '1.0.0', featureVersion: '1.0.0',
+		id: 'lopu-voice-capture', contractVersion: '1.1.0', featureVersion: '1.1.0',
 		group: 'lopu', title: 'Save a completed direct-voice transcript',
 		endpoint: '/api/v1/lopu/voice/capture', methods: ['POST'],
-		summary: 'Save a device-reported user or assistant transcript into the same owned Lopu chat without another AI call.',
+		summary: 'Save a device-reported user or assistant transcript into the same owned Lopu chat without another AI call. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
 		detail: 'Requires ownerId matching the authenticated user to reject queued captures after an account switch. Accepts sessionId and eventId (1–128 letters/digits/underscore/dash/dot/colon), optional chatId, role user or assistant, and text (1–12000 characters). A new chat is deterministic within the owner/session. Stable event IDs deduplicate exact retries; changed text under the same ID is rejected. Assistant captures are explicitly labelled device-reported transcripts, not verified provider output or tool execution. No supplied billing, recipient, credentials or tool metadata is accepted. Writes are pinned to the home account database and use normal transactional storage accounting.',
 		auth: { mode: 'session', description: 'Full first-party user; same-origin JSON; subscription-tier recording mutation limit, with fail-closed entitlement lookup.' },
 		steps: ['Negotiate api.lopu-voice-capture 1.0.0 on the selected origin before starting direct voice.', 'Save each final transcript with stable session/event IDs; retain failed saves for retry.', 'Reconcile using returned chatId and canonical messages; never replay inference to retry storage.'],
@@ -4817,12 +4817,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		id: 'lopu-voice-session',
 		// 1.1.0: the verified-access gate (a byo turn: 403 LOPU_UNVERIFIED unless
 		// allowByoUnverified) and one lopu-usage row per minted session — compatible additions.
-		contractVersion: '1.1.0',
-		featureVersion: '1.1.0',
+		contractVersion: '1.2.0',
+		featureVersion: '1.2.0',
 		group: 'lopu',
 		title: 'Lopu direct voice session',
 		endpoint: '/api/v1/lopu/voice/session',
-		summary: 'Mints a short-lived provider credential for a direct (realtime speech-to-speech) Lopu voice session.',
+		summary: 'Mints a short-lived provider credential for a direct (realtime speech-to-speech) Lopu voice session. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
 		detail:
 			'Direct voice streams the microphone straight to one of the caller’s own Secure Vault providers that offers realtime speech (xAI Grok Voice today: the kind’s catalog lists the model with audioInput "realtime"). The server decrypts the selected owner-scoped token in memory, exchanges it through the shared SSRF fence (allowlist, fresh public DNS, redirects refused, bounded timeout and response) for a five-minute ephemeral client secret, and returns that secret with the fixed realtime WebSocket URL. The long-lived token never reaches the browser or the native app; a credential that echoes it is refused. `model` is optional (the kind’s first realtime model, or the connection’s own when that is one); `effort` must be one the model lists; `textResponse` asks the client to show the reply without playing audio.',
 		auth: { mode: 'session', description: 'Requires the current full Thingtime user session (a temporary guest session is a 403). Bodies must be application/json (415 otherwise).' },
@@ -8063,10 +8063,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'apps-public',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'embed',
     title: 'Public app lookup',
     endpoint: '/api/v1/apps/public',
-    summary: 'Anonymous lookup the authorize popup uses to validate a clientId + origin pair.',
+    summary: 'Anonymous lookup the authorize popup uses to validate a clientId + origin pair. The native ttapp_thingtime_widgets client is provisioned as a protected system app on first lookup, with only com.thingtime.widgets://oauth/callback registered.',
     detail:
       "GET ?clientId=…&origin=…&scope=…&optional_scope=…. Returns the app's public face (clientId + " +
       'name) plus the REQUIRED (`scope`) and OPTIONAL (`optional_scope`) permission sets as descriptor ' +
@@ -8194,10 +8196,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'oauth-desktop-authorize',
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'embed',
     title: 'Desktop authorize (issue PKCE code)',
     endpoint: '/api/v1/oauth/desktop/authorize',
-    summary: 'Turn installed-app consent into a short-lived one-time code for an exact loopback callback.',
+    summary: 'Turn installed-app consent into a short-lived one-time code for an exact loopback or registered native callback. The consent catalog includes account-wide Things permissions, running actions, and Lopu permissions; existing grants never gain them automatically.',
     detail:
       'POST from the first-party consent page with clientId, redirectUri, S256 codeChallenge, state, and approved scopes. The callback must be plain HTTP on 127.0.0.1 or [::1] with an explicit unprivileged port and an allowlisted exact origin. The response contains a five-minute code and echoed state; it cannot authenticate a normal Thingtime endpoint and is consumed once at /api/v1/oauth/token.',
     auth: { mode: 'session', description: "The end user's Thingtime browser session after explicit consent." },
@@ -8233,10 +8237,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'oauth-token',
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'embed',
     title: 'Desktop token exchange',
     endpoint: '/api/v1/oauth/token',
-    summary: 'Exchange a one-time desktop authorization code with its S256 verifier.',
+    summary: 'Exchange a one-time desktop authorization code with S256 PKCE, or revoke the calling app token with grantType: revoke and its Bearer header. The consent catalog includes account-wide Things permissions, running actions, and Lopu permissions; existing grants never gain them automatically.',
     detail:
       'POST { grantType: "authorization_code", clientId, redirectUri, code, codeVerifier }. Native apps are public clients: an exact callback, five-minute one-time code, and PKCE verifier replace a client secret. Success returns the existing revocable, origin-bound app token.',
     auth: { mode: 'none', description: 'The one-time code plus S256 verifier are the public client proof.' },
@@ -8342,10 +8348,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'oauth-scopes',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'embed',
     title: 'Scope catalog',
     endpoint: '/api/v1/oauth/scopes',
-    summary: 'The public catalog of permission-scope paths platforms can request.',
+    summary: 'The public catalog of permission-scope paths platforms can request. The consent catalog includes account-wide Things permissions, running actions, and Lopu permissions; existing grants never gain them automatically.',
     detail:
       'Anonymous, CORS-open (platforms feature-detect scopes here before opening the popup). Scopes ' +
       'are hierarchical dot paths — granting an ancestor (profile) covers every descendant ' +
@@ -8867,12 +8875,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // recording attachments — pending uploads and the other protected kinds
     // stay excluded (additive, on top of the sharedRoot correction)
     // Includes additive discussions and the 1.7.5 conditional-media write correction.
-    featureVersion: '1.9.1',
-    contractVersion: '1.8.1',
+    featureVersion: '1.10.0',
+    contractVersion: '1.10.0',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
-    summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares.',
+    summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
 			'Contextual reads preserve independently readable foreign composition boundaries and their same-author descendants. Non-owner writers may include such public/group-readable compositions, but newly unresolved private references and cross-author overrides cannot acquire inherited authority. Every audience is revalidated per invocation. ' +
 			'Stored action references include component argument defaults, savedArgs and each persisted page-block override, in that precedence order. New dependencies introduced through argument-only edits require independent read access for non-owner writers. Runtime query, viewer, result and loop values cannot mint grants. ' +
@@ -9253,11 +9261,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-search',
-    featureVersion: '1.1.1',
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'things',
     title: 'Search things',
     endpoint: '/api/v1/things/search',
-    summary: 'Structured MongoDB-style search plus Google-like ranked text search over every thing you can see.',
+    summary: 'Structured MongoDB-style search plus Google-like ranked text search over every thing you can see. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
       'The search behind /search. Two modes that compose: q runs a ranked text search (weighted ' +
       'wildcard text index over every string field — relevance-sorted like a web search), and ' +
@@ -9396,12 +9405,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // the author's USER flair in the post's subspace (additive)
     // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
     // subspace post, for that subspace's moderators only (S5, additive)
-    featureVersion: '1.4.0',
-    contractVersion: '1.3.0',
+    featureVersion: '1.5.0',
+    contractVersion: '1.5.0',
     group: 'things',
     title: 'Comment on post',
     endpoint: '/api/v1/things/comment',
-    summary: 'Adds a comment — comments share the post schema — to a thing visible to the current user.',
+    summary: 'Adds a comment — comments share the post schema — to a thing visible to the current user. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
 			'Simple comments are standalone things (thingtime ["comment"]) pointing at their target via targetId and inheriting its visibility — this route is sugar over the unified thing path. Comments share the post schema: sending post fields (type, richText, images, listing, thing, tags) creates a RICH comment, a full ["post","comment"] thing validated by the post crystal rules, so comments can retain native rich-text presentation, linked photo URLs, marketplace listings, thingtime things, and private purpose=comment uploads. Attachment-only comments and replies are valid. Attachment comments require a stable client-generated shareId and bind every completed attachmentId atomically in the same home transaction as the comment. Comments are reactable and commentable like any post, and every comment has its own /post/:id permalink. The id may be a post or another comment (replies). Visibility is re-checked before writing, and attachment reads inherit the root post ACL through the complete reply chain, so private or circle-limited content stays private.',
     auth: {
@@ -9472,10 +9481,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-delete',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'things',
     title: 'Delete feed post',
     endpoint: '/api/v1/things/delete',
-    summary: 'Deletes one of the current user things (post, comment, reaction, or share).',
+    summary: 'Deletes one of the current user things (post, comment, reaction, or share). OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
       'Only the owning user may delete a thing. Deleting a thing also deletes the comment and reaction things attached to it; share things pointing at it survive and render an original-unavailable placeholder.',
     auth: {
@@ -9594,12 +9605,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // the page to posts from the viewer's ACTIVE subspaces (empty for guests /
     // non-members, every other fence intact); the response echoes scope; an
     // unknown scope answers 400 (S6, additive)
-    featureVersion: '1.5.0',
-    contractVersion: '1.4.0',
+    featureVersion: '1.6.0',
+    contractVersion: '1.6.0',
     group: 'things',
     title: 'Feed page',
     endpoint: '/api/v1/things/feed',
-    summary: 'Returns public and viewer-visible feed posts with optional algorithm ranking.',
+    summary: 'Returns public and viewer-visible feed posts with optional algorithm ranking. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
       'The feed reads recent posts whose acl admits the viewer (tt:all for logged-out callers, plus your own things when authenticated — acl exclusions like -tt:user/<you> are honoured), applies filters, then optionally ranks them with the selected or active feed algorithm. tag narrows to posts carrying one tag (normalized to the stored trim/lowercase form) — the public tag feeds behind /feed?tag=<tag>. scope=subspaces narrows the page to posts from the subspaces the viewer is an ACTIVE member of (the "🪐 My subspaces" chip on /feed) — a pending join request is not a membership, a guest or someone in no subspace gets an empty page, and the usual fences (removed posts hidden, private subspaces members-only) still apply on top; scope=all is the default and the response echoes the scope it served.',
     auth: {
@@ -9643,10 +9654,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-trending',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'things',
     title: 'Trending posts',
     endpoint: '/api/v1/things/trending',
-    summary: 'Returns the explore board: public posts from the last week ranked by time-decayed engagement.',
+    summary: 'Returns the explore board: public posts from the last week ranked by time-decayed engagement. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
       'Candidates are public (tt:all) posts created in the last 7 days — the newest 300 are scored in memory as (reactions×3 + comments×4 + pollVotes×2 + views×0.25 + 1) / (hoursOld + 2)^1.4, so fresh engagement outranks stale piles, and the top 30 come back as the same PublicPost projections the feed returns (reactions, comments, polls, and view stats all batch-aggregated). The pool is public-only regardless of who asks; a session only personalises viewer fields like viewerReactions and poll viewerVote.',
     auth: {
@@ -9717,10 +9730,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-react',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'things',
     title: 'React to post',
     endpoint: '/api/v1/things/react',
-    summary: 'Toggles one of the current user reactions on a visible post (multi-react).',
+    summary: 'Toggles one of the current user reactions on a visible post (multi-react). OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
       'emoji may be a single emoji or a multi-emoji group typed/pasted as one token (e.g. "🤣🤣🙌💀💦"). Toggling a token you already have removes it, a new one is added — you can hold several at once. Adding a token also records it in your recent reactions; posting null is a no-op. Reactions are standalone things (thingtime ["reaction"], crystal.emoji = the token) pointing at their target via targetId — this route is toggle sugar over the unified thing path. Reaction counts are returned for immediate card updates.',
     auth: {
@@ -9758,10 +9773,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-save',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'things',
     title: 'Save to library',
     endpoint: '/api/v1/things/save',
-    summary: 'Toggles a private library save of a visible thing ("add to my library").',
+    summary: 'Toggles a private library save of a visible thing ("add to my library"). OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
       'Saves are relational child things (thingtime ["save"], targetId = the saved thing, acl ' +
       '["tt:user"]) — always private to the saver, never inheriting the target audience, so a ' +
@@ -9797,10 +9814,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-saved',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'things',
     title: 'Saved library',
     endpoint: '/api/v1/things/saved',
-    summary: 'Lists the posts the current user saved to their library, newest-saved-first.',
+    summary: 'Lists the posts the current user saved to their library, newest-saved-first. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
       'Reads the caller’s save things (written by POST /api/v1/things/save) newest first and batch-loads ' +
       'their post-shaped targets in two indexed queries — never N+1. Targets that no longer resolve ' +
@@ -10561,12 +10580,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-vote',
-    contractVersion: '1.0.1',
-    featureVersion: '1.0.1',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'things',
     title: 'Vote on poll',
     endpoint: '/api/v1/things/vote',
-    summary: 'Casts (or moves, or removes) the current user vote on a visible poll thing.',
+    summary: 'Casts (or moves, or removes) the current user vote on a visible poll thing. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
       'Polls are posts (or data things) whose thing carries a string question plus an options ' +
       'list of 2+ entries. One vote per (user, poll), enforced structurally: votes are standalone ' +
@@ -10609,10 +10628,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-updown',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'things',
     title: 'Upvote / downvote',
     endpoint: '/api/v1/things/updown',
-    summary: 'Casts, flips, or clears the current user’s up/down vote on a visible post or comment.',
+    summary: 'Casts, flips, or clears the current user’s up/down vote on a visible post or comment. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
       'Reddit-style scoring as a SEPARATE focused reaction kind: exactly one of "up" | "down" per (user, ' +
       'target). The same direction again clears the vote, the other direction flips it in place, and ' +
@@ -10639,10 +10660,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-reactions-recent',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'things',
     title: 'Recent reactions',
     endpoint: '/api/v1/things/reactions-recent',
-    summary: 'Returns the caller recently-used emoji tokens (most-recent-first).',
+    summary: 'Returns the caller recently-used emoji tokens (most-recent-first). OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
       'The custom-emoji picker loads this lazily when it opens and pages through it 20 at a time. Tokens are single emoji or multi-emoji groups. Anonymous callers get an empty list.',
     auth: {
@@ -10672,11 +10695,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-share',
-    featureVersion: '1.1.0',
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'things',
     title: 'Share post',
     endpoint: '/api/v1/things/share',
-    summary: 'Creates a share post that points back to a visible root post.',
+    summary: 'Creates a share post that points back to a visible root post. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail: 'Shares copy the root post reference rather than chaining share-of-share references, so delete and count behavior stays deterministic.',
     auth: {
       mode: 'session-or-bearer',
@@ -10715,12 +10739,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'things-update',
     // Stored component and page-block arguments use the same media-addition guard as render edits.
-    featureVersion: '1.2.6',
-    contractVersion: '1.0.6',
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
     group: 'things',
     title: 'Update thing',
     endpoint: '/api/v1/things/update',
-    summary: 'Updates one of the current user things — crystal payload, acl audience, or tags.',
+    summary: 'Updates one of the current user things — crystal payload, acl audience, or tags. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
       'Independently readable foreign components may be included with their authored private dependencies. Cross-author page overrides cannot borrow private authority, and newly unresolved required references are rejected before saving. ' +
       'New action dependencies selected by saved component arguments or page-block overrides require independent read access for non-owner writers, including a new instance of an already included component. ' +
@@ -10778,12 +10802,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // the author's USER flair in the post's subspace (additive)
     // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
     // subspace post, for that subspace's moderators only (S5, additive)
-    featureVersion: '1.4.0',
-    contractVersion: '1.3.0',
+    featureVersion: '1.5.0',
+    contractVersion: '1.5.0',
     group: 'things',
     title: 'User posts',
     endpoint: '/api/v1/things/user',
-    summary: 'Returns posts for a public profile, filtered by viewer visibility.',
+    summary: 'Returns posts for a public profile, filtered by viewer visibility. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail: 'Profile pages use this route to page through a user posts. Owners can see their full circle set; other viewers only see public content.',
     auth: {
       mode: 'optional',
@@ -12259,12 +12283,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'actions-run',
-    featureVersion: '1.3.1',
-    contractVersion: '1.3.1',
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',
-    summary: 'Execute one action thing inside its declared capability + budget envelope.',
+    summary: 'Execute one action thing inside its declared capability + budget envelope. OAuth callers must explicitly approve actions.run, including declared action side effects and costs.',
     detail:
       'An independently readable foreign component starts its own audience boundary for its authored same-author descendants. The outer root is still required, and revoking either audience removes shared access. Page-authored cross-author arguments may select only independently readable actions, never guessed private actions belonging to either author. Execution remains read-only and never uses an author identity. ' +
       'Shared controls can select actions through persisted component argument defaults, savedArgs and each page-block override. Discovery follows authored render branches and bounded stored repeats; runtime query/result/viewer input and arbitrary metadata grant no access. Copied ttActionRefs bindings resolve to the copied actions without changing input data. ' +

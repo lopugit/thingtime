@@ -1,5 +1,5 @@
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
-import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { getScopedUser } from '~/api/utils/auth/scopedUser';
 import { isSameOriginAttachmentRequest } from '~/api/utils/attachments/attachmentResponses';
 import { runWithMongoEndpoint } from '~/api/utils/mongodb/endpoint';
 import { enforceSubscriptionRateLimit } from '~/api/utils/rateLimit/subscription';
@@ -11,7 +11,7 @@ export const action = async ({ request }: { request: Request }) => {
 	if (request.method !== 'POST') return reply({ ok: false, error: 'Method not allowed.' }, 405);
 	if (!isSameOriginAttachmentRequest(request)) return reply({ ok: false, error: 'Cross-origin requests are not allowed.' }, 403);
 	const unsupported = requireJsonContentType(request); if (unsupported) return unsupported;
-	const user = await getCurrentUser(request);
+	const user = await getScopedUser(request, 'lopu.voice');
 	if (!user || user.temporary || user.accountKind !== 'user') return reply({ ok: false, error: 'Sign in to save voice transcripts.' }, 401);
 	const limit = await enforceSubscriptionRateLimit(request, 'lopu.recordings', user.id);
 	if (!limit.allowed) return reply({ ok: false, error: 'Voice transcript saving is temporarily unavailable. Retry shortly.' }, limit.unavailable ? 503 : 429);

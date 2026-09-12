@@ -24,6 +24,20 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Promote the native Apple widget suite, browser OAuth scopes, saved endpoints, per-widget routing, automatic signed Widgets releases and Recovery support from PRs #727 and #774. — Codex (AI), 2026-09-12
+- Bound root session reads to two attempts with timeout/cancellation, provide
+  recoverable retry/reload controls, and hide/reset account-owned UI across
+  sign-in changes without falling back to another account's root data.
+  — Codex (AI), 2026-09-12
+
+- Refresh root AI guidance from two months of PR history and current source:
+  preserve existing repo topics and the full global reference snapshot, add
+  recurring regression/verification rules, and correct stale hook/typecheck
+  advice. Keep canonical instruction symlinks unchanged. See the
+  [PR #768](../PRs/768-codex-thingtime-ai-guidance-20260911-refresh-ai-guidance-from-pr-history.md)
+  and its linked review/inventory.
+  — Codex (AI), 2026-09-11
+
 - Unify Thing, post, recording and message action-menu rendering and inherited
   base verbs. Dispatch recording handoffs through the versioned Things action
   API, retaining the legacy adapter and protected writers. Fix stale open
