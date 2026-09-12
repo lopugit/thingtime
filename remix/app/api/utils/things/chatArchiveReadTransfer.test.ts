@@ -116,3 +116,26 @@ test('history and attachment limits reject incomplete snapshots instead of silen
     await assert.rejects(readOwnedChatArchive('owner', 'archive', deps));
   }
 });
+
+test('archive gallery metadata is batched, whitelisted, ordered and moderation-aware', async () => {
+  const { state, deps } = harness();
+  state.attachments = ['clear', 'pending', 'nsfw', 'blocked'].map((status, index) => ({
+    shareId: status, targetId: 'message', ownerId: 'owner', attachmentState: 'ready', attachmentPurpose: 'post',
+    attachmentSortIndex: 4 - index, createdAt: new Date(at), objectKey: 'private-storage-key', uploadId: 'private-upload-id',
+    moderation: { status, reason: 'private-moderation-reason', provider: 'private-provider' },
+    crystal: { name: `${status}.png`, contentType: 'image/png', size: 68, mediaKind: 'image', title: 'Historical picture',
+      description: 'Original caption', filenamePreview: 'Picture' }
+  }));
+  const result = await readOwnedChatArchive('owner', 'archive', deps); assert.ok(result);
+  assert.equal(state.reads, 3, 'Media projection must not add a query per message or file');
+  assert.deepEqual(result.attachments?.map(file => file.id), ['nsfw', 'pending', 'clear']);
+  assert.equal(result.attachments?.[0].nsfw, true); assert.equal(result.attachments?.[1].pending, true);
+  assert.equal(result.attachments?.[2].title, 'Historical picture');
+  assert.equal(result.attachments?.[2].description, 'Original caption');
+  assert.ok(result.attachments?.every(file => file.targetId === 'message'));
+  assert.equal(result.attachmentTargets.length, 4, 'Blocked files must still prevent incomplete re-export');
+  assert.doesNotMatch(JSON.stringify(result), /private-storage-key|private-upload-id|private-moderation-reason|private-provider|private-crystal-value/);
+  state.attachments[0].crystal.secret = 'private-crystal-value';
+  const malformed = await readOwnedChatArchive('owner', 'archive', deps);
+  assert.ok(!malformed?.attachments?.some(file => file.id === 'clear'), 'Noncanonical metadata must not render');
+});

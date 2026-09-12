@@ -1,9 +1,0 @@
-{
-  "schema": "thingtime.graphify-snapshot.v1",
-  "source_fingerprint": "547c8511ceb72fd287f4fec25f543c527026bc71ac1e9e0f5c8655cfb2608e53",
-  "source_tree": "de9521b34bf187bc9390482b2864e04a85be10b4",
-  "artifact_hash": "04e71505ee2e099b7035e5842e3964ac7a4dacbee6c40c3c849dd0b25a695ebe",
-  "graphify_version": "graphify 0.9.4",
-  "node_count": 42703,
-  "link_count": 108231
-}

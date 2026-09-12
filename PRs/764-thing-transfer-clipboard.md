@@ -1,5 +1,21 @@
 # PR 764 — portable Thing transfer
 
+## Archive gallery projection preparation — 2026-09-12
+
+The owner-only archive snapshot now includes ordered canonical attachment
+metadata with target IDs, using the existing batched home-plane query and
+shared gallery projection. Blocked/noncanonical metadata stays hidden; pending
+and NSFW flags survive for the existing gallery controls. Storage keys, upload
+identifiers and moderation diagnostics are never projected. All attachment IDs
+remain in the separate export binding list, so hidden files cannot silently
+disappear from a supposedly complete export. Things is feature 1.15.0 /
+contract 1.14.0; the archive client negotiates 1.15.0.
+
+This prepares the server contract only: the archive view still shows attachment
+counts, and inline galleries/custom emoji remain unfinished. Reader/projection,
+export and capability tests cover the new field; the local Nitro manifest
+advertises 1.15.0. Live stored-media acceptance remains separate.
+
 ## Archive library and initial historical view — 2026-09-12
 
 Owner library pagination now includes exact home-plane private archive roots

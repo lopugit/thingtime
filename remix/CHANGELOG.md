@@ -24,6 +24,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-12: Prepare owner-only archive gallery metadata with canonical
+  moderation flags and bounded batched reads; inline rendering remains pending.
+  See [PR 764](../PRs/764-thing-transfer-clipboard.md). — **Codex (AI)**
+
 - 2026-09-12: Surface owner-only archive roots in Things and add a read-only
   historical chat page with account-change clearing, reply links, transfer and
   dedicated deletion. Include archives in owner folder exports; Things is now

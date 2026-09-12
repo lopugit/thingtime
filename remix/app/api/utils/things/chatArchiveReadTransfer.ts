@@ -3,7 +3,7 @@ import { TRANSFER_LIMITS, type TransferThing } from '../../../utils/thingTransfe
 import { customReactionEmojiId } from '../../../utils/reactionTokens';
 import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
-import { orderAttachmentDocsByStoredSort } from '../attachments/attachmentCore';
+import { orderAttachmentDocsByStoredSort, toAttachmentPublicMetadata, type AttachmentPublicMetadata } from '../attachments/attachmentCore';
 
 const defaults = { collection: getHomeThingsCollection, transaction: withHomeMongoTransaction, custom: isCustomMongoEndpointActive };
 const validId = (id: unknown): id is string => typeof id === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(id);
@@ -18,6 +18,9 @@ export type OwnedChatArchive = {
   group: ChatArchiveGroup;
   updatedAt: string;
   attachmentTargets: { id: string; targetId: string }[];
+  /** Owner-only gallery projection; blocked and noncanonical media are omitted.
+   * Targets stay separate above so re-export never silently drops hidden files. */
+  attachments?: (AttachmentPublicMetadata & { targetId: string })[];
   emojiIds: string[];
 };
 
@@ -54,7 +57,9 @@ export const readOwnedChatArchive = async (ownerId: string | undefined, rootId: 
     const attachments = await collection.find({ ownerId, thingtime: ['attachment'], targetId: { $in: targets } } as any,
       { session, maxTimeMS: 5000, projection: { shareId: 1, ownerId: 1, targetId: 1, attachmentLinked: 1, attachmentState: 1,
         attachmentPurpose: 1, attachmentSortIndex: 1, createdAt: 1, appId: 1, sandbox: 1, sandboxSpace: 1,
-        'crystal.contentType': 1, 'crystal.size': 1 } }).limit(TRANSFER_LIMITS.files + 1).toArray();
+        'crystal.contentType': 1, 'crystal.size': 1, 'crystal.name': 1, 'crystal.mediaKind': 1,
+        'crystal.title': 1, 'crystal.description': 1, 'crystal.filenamePreview': 1,
+        'crystal.detectedContentType': 1, 'crystal.url': 1, 'moderation.status': 1 } }).limit(TRANSFER_LIMITS.files + 1).toArray();
     if (attachments.length > TRANSFER_LIMITS.files || new Set(attachments.map(row => row.shareId)).size !== attachments.length || attachments.some(row =>
       !validId(row.shareId) || targets.includes(row.shareId) || row.ownerId !== ownerId || !targets.includes(row.targetId) ||
       row.attachmentState !== 'ready' || row.attachmentPurpose !== 'post' || row.appId != null || row.sandbox != null || row.sandboxSpace != null)) reject();
@@ -66,6 +71,15 @@ export const readOwnedChatArchive = async (ownerId: string | undefined, rootId: 
     }, new Set(emojiIds));
     if (groups.length !== 1 || groups[0].root.id !== rootId) reject();
     const result = { group: groups[0], updatedAt: root.updatedAt.toISOString(), emojiIds,
+      attachments: orderAttachmentDocsByStoredSort<{
+        shareId: string; targetId: string; crystal: unknown; moderation?: unknown; attachmentSortIndex?: unknown;
+      }>(attachments as any).flatMap(row => {
+        // The enclosing snapshot has already checked exact owner, target,
+        // ready state and home namespace for every row. Reuse the gallery's
+        // canonical whitelist/moderation projection, never raw crystal/S3 data.
+        const media = toAttachmentPublicMetadata(row.shareId, row.crystal, row.moderation, { ownerView: true });
+        return media ? [{ ...media, targetId: row.targetId }] : [];
+      }),
       attachmentTargets: orderAttachmentDocsByStoredSort<{ shareId: string; targetId: string; attachmentSortIndex?: unknown }>(attachments as any)
         .map(row => ({ id: row.shareId, targetId: row.targetId })) };
     const encoded = JSON.stringify(result);

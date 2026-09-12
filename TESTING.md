@@ -39,13 +39,20 @@
 
 - [ ] Run the explicitly enabled `test:transfer-archives` against the provided
   dev fixture only after its capability preflight succeeds. Verify no skipped
-  live test and no cleanup failures. It is metadata lifecycle acceptance only;
-  separately test avatar/emoji bytes, export/re-import and the visible chat UI.
+  live test and no cleanup failures. It covers folder export, metadata ZIP
+  encode/decode and re-import, move and source-deletion independence; separately
+  test avatar/emoji bytes and the visible chat UI.
 
 - [ ] GET /things?id=<archive>&archive=true as the importing owner returns the
   complete historical group, exact text, reply/thread/reaction references and
   ordered attachment IDs. It must not return userId, ACLs, roles, tokens, S3
-  paths or live-user lookup results. The client requires api.things 1.13.0.
+  paths or live-user lookup results. The client requires api.things 1.15.0.
+- [ ] Archive attachment metadata preserves labels, order and target IDs in
+  one bounded batch. Blocked/noncanonical media is omitted, pending owner media
+  has pending=true and NSFW media has nsfw=true. No moderation diagnostics,
+  object/upload keys or unknown crystal fields escape. attachmentTargets still
+  covers blocked bindings, preventing incomplete exports. Inline archive media
+  rendering is a separate unfinished acceptance item.
 - [ ] Signed-out/PAT/app/service readers cannot use archive mode. A foreign,
   missing, deleting or custom-plane archive does not expose history. Oversized
   or inconsistent history returns an error, never a truncated success. All

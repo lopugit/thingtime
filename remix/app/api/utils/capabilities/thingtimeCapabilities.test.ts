@@ -18,15 +18,22 @@ test('owner archive deletion requires the additive Things capability at the chos
   const origin = 'https://preview.example.test';
   const manifest = thingtimeCapabilityManifest(origin);
   assert.equal(manifest.origin, origin);
-  assert.equal(manifest.features['api.things'].version, '1.14.0');
-  assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.13.0');
+  assert.equal(manifest.features['api.things'].version, '1.15.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.14.0');
 });
 
 test('archive history readers require the selected origin to support the private snapshot contract', () => {
   for (const version of ['1.13.1', '1.13.2', '1.14.0']) assert.equal(capabilitySatisfies(version, '1.13.1'), true);
   for (const version of ['', '1.13.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.13.1'), false);
-  assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.13.0');
-  assert.equal(thingtimeCapabilityManifest('https://archive.test').features['api.things'].version, '1.14.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.14.0');
+  assert.equal(thingtimeCapabilityManifest('https://archive.test').features['api.things'].version, '1.15.0');
+});
+
+test('archive gallery readers reject origins without moderation-aware media projection', () => {
+  for (const version of ['', '1.13.1', '1.14.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.15.0'), false);
+  for (const version of ['1.15.0', '1.15.1', '1.16.0']) assert.equal(capabilitySatisfies(version, '1.15.0'), true);
+  assert.equal(thingtimeCapabilityManifest('https://archive.test').features['api.things'].version, '1.15.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.14.0');
 });
 
 test('Messenger custom-emoji parsing and projections publish a compatible correction on both manifests', () => {
@@ -112,7 +119,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // response echoes it; unknown → 400) — the single read only, the shared
   // projection is untouched (1.5.0, additive)
   // Included dependency reads add sharedRoot without widening standalone ACLs.
-  assert.equal(manifest.features['api.things']?.version, '1.14.0');
+  assert.equal(manifest.features['api.things']?.version, '1.15.0');
   assert.equal(manifest.features['api.lopu-reminders']?.version, '1.1.0');
   assert.equal(manifest.features['api.lopu-voice-reply']?.version, '1.4.0');
   assert.equal(manifest.features['api.lopu-recordings-run']?.version, '1.5.0');
