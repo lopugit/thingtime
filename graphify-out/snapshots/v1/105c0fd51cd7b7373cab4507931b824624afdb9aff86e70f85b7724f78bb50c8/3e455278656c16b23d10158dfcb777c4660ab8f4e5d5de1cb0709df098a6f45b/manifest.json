@@ -92,7 +92,7 @@
   ".github/workflows/control-plane-ci.yml": {
     "mtime": 1789179582.7459872,
     "ast_hash": "6fc3169d6d04eb039cd1ede33ec549d3",
-    "semantic_hash": ""
+    "semantic_hash": "6fc3169d6d04eb039cd1ede33ec549d3"
   },
   ".github/workflows/develop-pr-preview.yml": {
     "mtime": 1789179582.7460604,
@@ -122,7 +122,7 @@
   ".github/workflows/resolve-pr-conflicts.yml": {
     "mtime": 1789181392.635149,
     "ast_hash": "d243edf7ece67201e6bcf5919b0d3f51",
-    "semantic_hash": ""
+    "semantic_hash": "d243edf7ece67201e6bcf5919b0d3f51"
   },
   ".github/workflows/sync-main-into-develop.yml": {
     "mtime": 1789179582.7493849,
@@ -287,7 +287,7 @@
   ".github/scripts/feature-stack-progress.mjs": {
     "mtime": 1789181741.805475,
     "ast_hash": "393aee5ec3e48e241e0b927110af6b9f",
-    "semantic_hash": ""
+    "semantic_hash": "393aee5ec3e48e241e0b927110af6b9f"
   },
   "PRs/534-codex-feature-stack-progress-heartbeats-controller.md": {
     "mtime": 1789179582.750852,
@@ -362,7 +362,7 @@
   ".github/TESTING.md": {
     "mtime": 1789181342.2943673,
     "ast_hash": "05484984ccb9fde59d9bef99f4a8ad2b",
-    "semantic_hash": ""
+    "semantic_hash": "05484984ccb9fde59d9bef99f4a8ad2b"
   },
   "PRs/634-control-plane-event-hardening--harden-lopu-comment-admission.md": {
     "mtime": 1789179582.7514186,
@@ -477,7 +477,7 @@
   ".github/scripts/feature-stack-chat.test.mjs": {
     "mtime": 1789181741.8113241,
     "ast_hash": "2dbf558833ae5f40806bd7587f7f46fe",
-    "semantic_hash": ""
+    "semantic_hash": "2dbf558833ae5f40806bd7587f7f46fe"
   },
   ".githooks/post-checkout": {
     "mtime": 1789181437.8113043,
