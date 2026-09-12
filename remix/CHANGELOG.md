@@ -24,6 +24,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-12: Save real headed-Chrome transfer acceptance for OS clipboard
+  Copy/Cut, Paste copy/move, downloaded JSON/ZIP file-chooser imports and verified
+  cleanup. Passed on the PR preview; stored-emoji acceptance remains unresolved.
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — **Codex (AI)**
+
 - 2026-09-12: Correct historical emoji reads to use persisted attachment purpose
   `emoji`, not its upload alias. A real ZIP test exposed the mismatch; expand
   regression coverage for remapped reactions and source-emoji deletion. Things

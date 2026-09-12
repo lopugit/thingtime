@@ -1,5 +1,28 @@
 # PR 764 — portable Thing transfer
 
+## Real browser clipboard and file import — 2026-09-12
+
+`remix/scripts/transfer-browser.integration.mts` passed against deployed
+d82a43d11ab57449246cc9fee39b5dc4a14bac31 with a fresh headed Chrome context and
+the approved disposable dev account. The test overwrites the macOS clipboard
+with known sentinel text, clicks the real Transfer Copy/Cut controls, and reads
+the OS pasteboard with pbpaste without printing unrelated contents. Paste in
+Things created a private copy; Cut/Paste moved the original archive from its
+fixture folder to top level without creating another archive. The real Download
+dialog produced JSON and ZIP files; the file chooser imported each downloaded
+file and the backend returned independent archive roots. Cleanup verified all
+four archives and the fixture folder absent. Desktop/mobile screenshots were
+inspected. This run covers metadata-only history through shared UI controls,
+not arbitrary file bytes through the browser picker or every context-menu kind.
+
+The initial browser test incorrectly depended on a visible success toast;
+direct OS clipboard verification passed. Stored custom-emoji projection still
+returned empty on the purpose-corrected deployment, so that claim remains
+unverified. A subsequent upload run reached HTTP 429 and stopped; all its known
+fixtures were cleaned up. Binary diagnostics now report only safe upload
+moderation flags, never credentials or signed storage URLs. Do not bypass the
+upload rate limit to finish this acceptance case.
+
 ## Stored emoji purpose correction — 2026-09-12
 
 The real binary test on deployed 3ab78ef1d correctly failed: reaction IDs remapped,

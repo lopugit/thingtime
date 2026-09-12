@@ -73,6 +73,7 @@ test('real image and archive ZIP round-trip and concurrent emoji claims preserve
   assert.equal(me.user.publicUploadsEnabled, true, 'Fixture uploads need existing approval; this test never enables uploads');
 
   const uploads = new Set<string>();
+  const uploadModeration: { purpose: string; pending: boolean; nsfw: boolean }[] = [];
   const copies = new Map<string, 'post' | 'custom-emoji' | 'chat-archive'>();
   const unresolved = new Set<string>();
   const upload = async (bytes: Uint8Array, purpose: 'post' | 'custom-emoji') => {
@@ -100,6 +101,7 @@ test('real image and archive ZIP round-trip and concurrent emoji claims preserve
     const ready = await json('/api/v1/attachments/uploads/complete', 'POST', { uploadId: id });
     assert.equal(ready.attachment?.id, id);
     assert.equal(ready.attachment?.size, bytes.length);
+    uploadModeration.push({ purpose, pending: ready.attachment.pending === true, nsfw: ready.attachment.nsfw === true });
     return id;
   };
   const remember = (result: any, manifest: ThingTransfer) => {
@@ -164,7 +166,7 @@ test('real image and archive ZIP round-trip and concurrent emoji claims preserve
     const copiedEmojiId = second.ids[first.ids['emoji-source']];
     assert.equal(archive.group.reactions[0].crystal.emoji, `custom:${copiedEmojiId}`);
     assert.deepEqual(archive.emojiIds, [copiedEmojiId]);
-    assert.equal(archive.emojis.length, 1);
+    assert.equal(archive.emojis.length, 1, `Missing safe emoji projection; completed-upload flags: ${JSON.stringify(uploadModeration)}`);
     assert.equal(archive.emojis[0].id, copiedEmojiId);
     const emojiImage = await request(`/api/v1/attachments/content?id=${encodeURIComponent(archive.emojis[0].attachmentId)}&cache=bytes`);
     assert.equal(emojiImage.status, 200);

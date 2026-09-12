@@ -1,5 +1,17 @@
 # TESTING.md — per-area manual test checklists
 
+## Real browser portable transfer acceptance
+
+- [ ] With explicit disposable dev-session variables, run
+  `node --import tsx scripts/transfer-browser.integration.mts` from remix.
+  Requires `TT_TRANSFER_BROWSER_TEST=1`, a PR preview origin, expected fixture
+  username and ephemeral cookie; never store the cookie in a file or command
+  argument. This opens fresh headed Chrome and overwrites the macOS clipboard
+  with disposable fixture data. Check Copy/Paste import, Cut/Paste move,
+  downloaded JSON and ZIP imports through the file chooser, desktop/mobile
+  bounds, and successful cleanup. File-byte browser uploads and other entry
+  points still need their own coverage.
+
 ## Private chat archive import integration
 
 - [ ] Run the opt-in `test:transfer-binary` against the approved upload-enabled
