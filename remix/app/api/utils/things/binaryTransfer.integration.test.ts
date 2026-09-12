@@ -3,12 +3,36 @@ import test from 'node:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { bundleFromPlan } from '../../../utils/thingTransfer/browser';
 import { decodeTransferArchive, encodeTransferArchive, type TransferBundle } from '../../../utils/thingTransfer/archive';
-import type { ThingTransfer } from '../../../utils/thingTransfer/format';
+import { validateTransfer, type ThingTransfer } from '../../../utils/thingTransfer/format';
 import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from '../capabilities/capabilityContract';
 
 const base = process.env.TT_TRANSFER_TEST_URL;
 const cookie = process.env.TT_TRANSFER_TEST_COOKIE;
 const enabled = process.env.TT_TRANSFER_BINARY_TEST === '1';
+const expectedUsername = process.env.TT_TRANSFER_TEST_USERNAME;
+const fixtureOrigin = (value: string, remoteDev = false, username?: string) => {
+  const origin = new URL(value);
+  assert.equal(origin.username + origin.password, '', 'Do not embed credentials in the URL');
+  assert.equal(origin.pathname + origin.search + origin.hash, '/', 'Use an origin, not a resource URL');
+  const local = ['localhost', '127.0.0.1'].includes(origin.hostname) && ['http:', 'https:'].includes(origin.protocol);
+  const dev = origin.protocol === 'https:' && !origin.port &&
+    (origin.hostname === 'dev.thingtime.com' || /^pr-[1-9][0-9]*\.previews\.dev\.thingtime\.com$/.test(origin.hostname));
+  assert.ok(local || (remoteDev && dev && !!username?.trim()),
+    'Remote tests require explicit dev opt-in and an expected fixture username; production is never allowed');
+  return origin;
+};
+
+test('binary fixture origin guard requires explicit dev consent and refuses production and lookalike hosts', () => {
+  assert.equal(fixtureOrigin('http://127.0.0.1:12280').hostname, '127.0.0.1');
+  assert.equal(fixtureOrigin('https://pr-764.previews.dev.thingtime.com', true, 'fixture').protocol, 'https:');
+  for (const value of ['https://thingtime.com', 'https://dev.thingtime.com.evil.test',
+    'http://dev.thingtime.com', 'https://pr-764.previews.dev.thingtime.com:444',
+    'https://user:secret@dev.thingtime.com', 'https://dev.thingtime.com/p/thing']) {
+    assert.throws(() => fixtureOrigin(value, true, 'fixture'));
+  }
+  assert.throws(() => fixtureOrigin('https://dev.thingtime.com'));
+  assert.throws(() => fixtureOrigin('https://dev.thingtime.com', true));
+});
 // A real, small PNG. This test uses the ordinary upload/sniff/storage pipeline,
 // never MongoDB, direct object credentials, approval changes or mock storage.
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
@@ -16,10 +40,8 @@ const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
 test('real image ZIP round-trip and concurrent emoji claims preserve bytes and existing copies', {
   skip: !enabled, timeout: 240_000
 }, async () => {
-  assert.ok(base && cookie, 'Set a local TT_TRANSFER_TEST_URL and disposable TT_TRANSFER_TEST_COOKIE');
-  const origin = new URL(base!);
-  assert.ok(['localhost', '127.0.0.1'].includes(origin.hostname), 'Only a local fixture server is allowed');
-  assert.equal(origin.username + origin.password, '', 'Do not embed credentials in the URL');
+  assert.ok(base && cookie, 'Set TT_TRANSFER_TEST_URL and disposable TT_TRANSFER_TEST_COOKIE');
+  const origin = fixtureOrigin(base!, process.env.TT_TRANSFER_REMOTE_DEV_TEST === '1', expectedUsername);
   const request = async (path: string, method = 'GET', body?: unknown, authenticated = true) => {
     const url = new URL(path, origin);
     assert.equal(url.origin, origin.origin, 'Session credentials must stay on the fixture origin');
@@ -47,6 +69,7 @@ test('real image ZIP round-trip and concurrent emoji claims preserve bytes and e
   }
   const me = await json('/api/v1/auth/me');
   assert.ok(me.user?.id, 'A signed-in disposable fixture account is required');
+  if (expectedUsername) assert.equal(me.user.username, expectedUsername, 'Unexpected fixture account');
   assert.equal(me.user.publicUploadsEnabled, true, 'Fixture uploads need existing approval; this test never enables uploads');
 
   const uploads = new Set<string>();
@@ -87,6 +110,7 @@ test('real image ZIP round-trip and concurrent emoji claims preserve bytes and e
     for (const id of result.remainingIds || []) if (typeof id === 'string') unresolved.add(id);
   };
   const importBundle = async (bundle: TransferBundle) => {
+    validateTransfer(bundle.manifest);
     const files: Record<string, string> = {};
     for (const file of bundle.manifest.files) {
       const thing = bundle.manifest.things.find(thing => thing.id === file.targetId)!;
@@ -94,7 +118,8 @@ test('real image ZIP round-trip and concurrent emoji claims preserve bytes and e
     }
     const response = await request('/api/v1/things/import', 'POST', { manifest: bundle.manifest, files });
     const result = await response.json(); remember(result, bundle.manifest);
-    assert.equal(response.status, 200, `Import returned ${response.status}`);
+    const errorFingerprint = typeof result.error === 'string' ? createHash('sha256').update(result.error).digest('hex') : 'none';
+    assert.equal(response.status, 200, `Import returned ${response.status}; error fingerprint ${errorFingerprint}`);
     assert.equal(result.ok, true);
     return result;
   };
@@ -107,9 +132,10 @@ test('real image ZIP round-trip and concurrent emoji claims preserve bytes and e
     things: [
       { id: 'post', thingtime: ['post'], crystal: { type: 'text', text: `binary-transfer-${randomUUID()}` } },
       { id: 'emoji', thingtime: ['custom-emoji'], crystal: { name: 'transfer', emojiFileId: 'emoji-image' } }
-    ], files: ['post', 'emoji'].map((id, index) => ({ id: `${id}-image`, targetId: id, path: `files/${index}.png`,
+    ], files: ['post', 'emoji'].map((id, index) => ({ id: `${id}-image`, targetId: id, path: `files/${String(index).padStart(6, '0')}`,
       name: 'transfer-fixture.png', mime: 'image/png', bytes: png.length, sha256: createHash('sha256').update(png).digest('hex'),
       title: 'Image title', description: 'Image description', filenamePreview: 'retained.png' })) };
+  let primaryFailure: unknown;
   try {
     const first = await importBundle({ manifest, files: new Map(manifest.files.map(file => [file.id, png])) });
     const exported = await exportedBundle(first.roots);
@@ -127,7 +153,7 @@ test('real image ZIP round-trip and concurrent emoji claims preserve bytes and e
       assert.equal((await request('/api/v1/things/export', 'POST', { ids: roots }, false)).status, 404);
     }
 
-    const raceManifest: ThingTransfer = { ...manifest, roots: ['emoji'], things: [manifest.things[1]], files: [manifest.files[1]] };
+    const raceManifest = validateTransfer({ ...manifest, roots: ['emoji'], things: [manifest.things[1]], files: [{ ...manifest.files[1], path: 'files/000000' }] });
     const oneUpload = await upload(png, 'custom-emoji');
     const raced = await Promise.all([0, 1].map(async () => {
       const response = await request('/api/v1/things/import', 'POST', { manifest: raceManifest, files: { 'emoji-image': oneUpload } });
@@ -141,13 +167,19 @@ test('real image ZIP round-trip and concurrent emoji claims preserve bytes and e
     const winner = raced.find(item => item.status === 200 && item.result.ok)!;
     const survived = await exportedBundle(winner.result.roots);
     assert.deepEqual(Buffer.from([...survived.files.values()][0]), png, 'Losing import must not delete the winner');
+    // Prove the ordinary read path can see each copy before using its 404
+    // as deletion evidence. Cleanup reads must not consume the export budget.
+    for (const id of copies.keys()) assert.equal((await request(`/api/v1/things?id=${encodeURIComponent(id)}`)).status, 200);
+  } catch (error) {
+    primaryFailure = error;
   } finally {
     const failures: string[] = [];
     for (const [id, kind] of copies) {
       try {
         const response = await request(kind === 'custom-emoji' ? '/api/v1/emojis/delete' : '/api/v1/things', kind === 'custom-emoji' ? 'POST' : 'DELETE', { id });
-        if (![200, 404].includes(response.status)) failures.push(id);
-        if ((await request('/api/v1/things/export', 'POST', { ids: [id] })).status !== 404) failures.push(id);
+        if (![200, 404].includes(response.status)) failures.push(`${id}: delete HTTP ${response.status}`);
+        const verify = await request(`/api/v1/things?id=${encodeURIComponent(id)}`);
+        if (verify.status !== 404) failures.push(`${id}: verify HTTP ${verify.status}`);
       } catch { failures.push(id); }
     }
     for (const id of uploads) {
@@ -160,7 +192,9 @@ test('real image ZIP round-trip and concurrent emoji claims preserve bytes and e
         if (response.status !== 404) failures.push(id);
       } catch { failures.push(id); }
     }
-    assert.equal(unresolved.size, 0, 'Server reported unresolved compensation; inspect this fixture run before retrying');
-    assert.deepEqual(failures, [], 'Disposable binary fixture cleanup failed; retained IDs shown for recovery');
+    const errors = primaryFailure ? [primaryFailure] : [];
+    if (unresolved.size) errors.push(new Error('Server reported unresolved compensation; inspect this fixture run before retrying'));
+    if (failures.length) errors.push(new Error(`Disposable fixture cleanup requires verification: ${failures.join(', ')}`));
+    if (errors.length) throw new AggregateError(errors, 'Binary transfer acceptance or cleanup failed');
   }
 });

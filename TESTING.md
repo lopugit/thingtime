@@ -6673,6 +6673,14 @@ approval; `access.test.ts` — the reservation matrix) and
   and confirmed cleanup. A precondition failure or skipped test is not live
   storage acceptance. See the README for fork-safe setup.
 
+- For an explicitly authorized dev fixture, additionally set
+  `TT_TRANSFER_REMOTE_DEV_TEST=1` and `TT_TRANSFER_TEST_USERNAME` to the exact
+  expected username. Only HTTPS dev.thingtime.com or numbered PR preview origins
+  are permitted; production and lookalike hosts must fail before requests.
+  Validate synthetic manifests before uploads. Verify ordinary Thing reads return
+  200 before cleanup and 404 after deletion, without spending the shared export
+  budget on cleanup. Preserve both primary and cleanup failures in test output.
+
 - Round-trip stored files with a title, multiline description and display
   filename through export, ZIP and clipboard import. Verify those annotations
   on fresh copies while the original filename/bytes stay unchanged. Reject

@@ -24,6 +24,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Verified real post/emoji image ZIP round trips and concurrent upload claims on
+  PR 764's dev preview, including byte/annotation equality and confirmed cleanup.
+  Hardened the opt-in fixture guard and corrected its archive/cleanup checks.
+  Broader UI/type acceptance remains open. See [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-12
+
 - Connected custom emoji export/import, including legacy inline images, fresh
   personal copies, image annotations, dedicated rollback and folder placement.
   Desktop/mobile import-dialog checks passed with simulated uploads; real storage

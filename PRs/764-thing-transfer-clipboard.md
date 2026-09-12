@@ -1,5 +1,34 @@
 # PR 764 — portable Thing transfer
 
+## Real preview storage acceptance — 2026-09-12
+
+The binary gate passed with no skips against PR 764 preview source
+`138b429e9ee94a602065fef565ede968ac723b90`, using an explicitly approved dev
+fixture. Both public/private upload approvals were verified through auth/me;
+no approvals, database configuration or migrations were changed. The fixture
+account was not available on the local server, so the harness now permits an
+explicit dev-only opt-in and requires an expected username before remote writes.
+Production, lookalike hosts, non-HTTPS remote origins and resource URLs are denied.
+Credentials remain transient and are never stored in this repo.
+
+The final run passed both tests in about 11 seconds: real PNG multipart uploads,
+mixed post/custom-emoji import, ZIP export/decode/reimport, exact bytes and image
+annotations, fresh copy IDs, anonymous export denial, and a concurrent shared
+upload claim with exactly one winner whose bytes survive the losing import.
+All created copies were readable before deletion, then returned 404; all upload
+content returned 404 after cleanup.
+
+Earlier attempts exposed two harness defects: noncanonical archive paths and
+cleanup verification consuming the shared export/import rate budget. Fixtures
+now validate before upload and use canonical numbered ZIP paths; cleanup uses
+ordinary Thing reads, proven readable before deletion. Primary failures are
+preserved alongside cleanup errors. A prior cleanup timeout was followed up by
+exact-ID absence checks; the final complete run passed without these failures.
+
+This proves the post/emoji storage round trip, not all file/gallery/recording UI
+flows. Remaining broad acceptance and Messenger archive-versus-live-chat semantics
+are still open. No production deployment or universal-content claim is implied.
+
 ## Executable real-storage acceptance gate — 2026-09-12
 
 Added `test:transfer-binary`, an explicitly opted-in local API test for real PNG
