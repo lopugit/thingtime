@@ -115,7 +115,20 @@ export const ConnectionsFeedPage = () => {
     // (no provider fan-out on the request), then the full read syncs fresh —
     // a second request, because serverless can't background work after a
     // response. The seq guard makes the fresh read supersede cleanly.
-    load(activeConnection, null, true).then(() => load(activeConnection, null));
+    //
+    // The chained call needs its OWN cancellation, because the seq guard cannot
+    // cover it: seq only discards a superseded request's RESULT, and this
+    // `.then` runs on the superseded defer read to START a request. Switching
+    // tabs while the defer read is in flight would let the old tab's follow-up
+    // fire after the new tab's, take the newest seq, and repaint the previous
+    // connection's posts (and its cursor) under the selected tab.
+    let cancelled = false;
+    load(activeConnection, null, true).then(() => {
+      if (!cancelled) load(activeConnection, null);
+    });
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConnection, load]);
 
