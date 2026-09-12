@@ -8887,6 +8887,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // then older first) and the response echoes commentSort; an unknown value
     // is a 400. Only this read grew — the shared projection is unchanged, so
     // things-comment / -feed / -user stay put (S7, additive)
+    // 1.6.2 / contract 1.5.2: GET ?id= with sharedRoot reads an included
+    // dependency through the freshly authorized stored root (compatible
+    // correction, promoted to main by #716)
+    // 1.7.0 / contract 1.6.0: own-things lists include completed standalone
+    // recording attachments — pending uploads and the other protected kinds
+    // stay excluded (additive, on top of the sharedRoot correction)
     // Includes additive discussions and the 1.7.5 conditional-media write correction.
     featureVersion: '1.10.0',
     contractVersion: '1.10.0',
