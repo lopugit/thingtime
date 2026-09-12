@@ -9,9 +9,11 @@ import { withExportDeadline } from '../../../utils/thingTransfer/exportDeadline'
 import { TRANSFER_LIMITS } from '../../../utils/thingTransfer/format';
 import type { LiveChatArchiveSnapshot } from './liveChatArchiveCore';
 import type { OwnedChatArchive } from './chatArchiveReadTransfer';
+import { readLiveChatArchiveEmojis } from './liveChatArchiveEmojiTransfer';
+import type { TransferEmojiSource } from './emojiTransfer';
 
 const defaults = { read: readLiveChatArchiveSource, profiles: resolveProfiles,
-  describe: describeAttachmentTransfer, custom: isCustomMongoEndpointActive };
+  describe: describeAttachmentTransfer, custom: isCustomMongoEndpointActive, emojis: readLiveChatArchiveEmojis };
 const reject = (): never => { throw new Error('Complete chat media is unavailable'); };
 
 /** Public profile projections contain either an exact first-party attachment
@@ -30,7 +32,7 @@ export const managedArchiveAvatarId = (url: string): string => {
  * notification operations. Attachment metadata and later byte downloads each
  * pass the canonical attachment service's CURRENT read/moderation gates. */
 export const readLiveChatArchiveTransfer = async (viewer: Viewer, id: string, firstPartyUserId: string | undefined,
-  parent?: AbortSignal, overrides: Partial<typeof defaults> = {}): Promise<OwnedChatArchive | null> => {
+  parent?: AbortSignal, overrides: Partial<typeof defaults> = {}): Promise<(OwnedChatArchive & { transferEmojis?: TransferEmojiSource[] }) | null> => {
   const deps = { ...defaults, ...overrides };
   if (!firstPartyUserId || viewer?.id !== firstPartyUserId || viewer.pat || deps.custom()) return null;
   return withExportDeadline(async signal => {
@@ -79,7 +81,11 @@ export const readLiveChatArchiveTransfer = async (viewer: Viewer, id: string, fi
     }
     const archive = normalizeLiveChatArchive(source, firstPartyUserId, profiles, { files, links, avatars });
     check();
-    return { ...archive, attachmentTargets: targets.map(({ id, targetId }) => ({ id, targetId })),
+    const transferEmojis = await deps.emojis(archive.emojiIds);
+    check();
+    if (transferEmojis.length !== archive.emojiIds.length || new Set(transferEmojis.map(row => row.thing.id)).size !== archive.emojiIds.length ||
+      transferEmojis.some(row => !archive.emojiIds.includes(row.thing.id))) reject();
+    return { ...archive, transferEmojis, attachmentTargets: targets.map(({ id, targetId }) => ({ id, targetId })),
       updatedAt: source.chat.updatedAt.toISOString() };
   }, parent);
 };

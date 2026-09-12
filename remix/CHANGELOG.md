@@ -31,6 +31,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-12 — Include shared emoji dependencies from membership-authorized
+  live chat history, without widening standalone owner-only emoji export or
+  importing source account/community authority. Export capability 1.12.0;
+  real multi-user media acceptance remains pending.
+  [PR #764 notes](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
 - 2026-09-12 — Reconcile the transfer branch with current develop, preserving
   newer archive capability requirements alongside the incoming marketing and
   social-preview features. [PR #764 notes](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)

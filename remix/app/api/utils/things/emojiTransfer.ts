@@ -22,10 +22,16 @@ export const readTransferEmoji = async (ownerId: string | undefined, id: string,
   const doc = await (await deps.collection()).findOne({ ownerId, shareId: id, thingtime: ['custom-emoji'] } as any);
   if (!doc || String(doc.ownerId) !== ownerId || doc.appId != null || doc.sandbox != null ||
     doc.sandboxSpace != null || doc.moderation?.status === 'blocked') return null;
+  return projectTransferEmojiSource(doc, id, true);
+};
+
+/** Content projection only, never authorization. Callers must authorize the
+ * source first; shared history must not retain someone else's folder placement. */
+export const projectTransferEmojiSource = (doc: any, id: string, includeFolder = false): TransferEmojiSource => {
   const name = doc.crystal?.name;
   if (typeof name !== 'string' || name !== name.trim() || !EMOJI_NAME_PATTERN.test(name)) throw new Error('This emoji has an invalid name');
   const thing: TransferThing = { id, thingtime: ['custom-emoji'], crystal: { name, emojiFileId: 'pending' },
-    ...(typeof doc.folderId === 'string' && doc.folderId ? { folderId: doc.folderId } : {}) };
+    ...(includeFolder && typeof doc.folderId === 'string' && doc.folderId ? { folderId: doc.folderId } : {}) };
   if (typeof doc.emojiAttachmentId === 'string' && doc.emojiAttachmentId) return { thing, attachmentId: doc.emojiAttachmentId };
   const image = emojiImageToString(doc.crystal?.image);
   if (image.length > 700 * 1024) throw new Error('Legacy emoji image is too large');

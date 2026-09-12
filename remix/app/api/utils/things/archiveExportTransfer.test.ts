@@ -73,6 +73,24 @@ test('live chat source failures are recoverable errors without provider details 
   assert.doesNotMatch(JSON.stringify(result), /private Mongo|"plan"/);
 });
 
+test('authorized live reaction emoji content exports without widening standalone owner reads', async () => {
+  const { deps, archive } = harness();
+  archive.group.reactions[0].crystal.emoji = 'custom:friend-emoji'; archive.emojiIds = ['friend-emoji'];
+  let ownerReads = 0;
+  const source = { thing: { id: 'friend-emoji', thingtime: ['custom-emoji'], crystal: { name: 'party', emojiFileId: 'pending' } },
+    inlineImage: { base64: 'AQID', mime: 'image/png', bytes: 3, name: 'party.png' } };
+  const live = { ...deps, readArchive: async () => null,
+    readEmoji: async () => { ownerReads++; return null; },
+    readLiveArchive: async (_viewer: unknown, id: string) => id === 'archive' ? { ...archive, transferEmojis: [source] } : null };
+  const result = await exportTransferPlan({ id: 'owner' }, { ids: ['archive'] }, undefined, live, { liveChatOwnerId: 'owner' });
+  assert.ok(result.ok); if (!result.ok) return;
+  assert.equal(ownerReads, 0);
+  assert.ok(result.plan.things.some(row => row.id === 'friend-emoji'));
+  assert.equal(result.plan.files[0].inlineBase64, 'AQID');
+  const standalone = await exportTransferPlan({ id: 'owner' }, { ids: ['friend-emoji'] }, undefined, live, { liveChatOwnerId: 'owner' });
+  assert.equal(standalone.ok, false); assert.ok(ownerReads > 0);
+});
+
 test('owner folder traversal carries archive scope and exports the complete nested group', async () => {
   const { archive, deps } = harness(); archive.group.root.folderId = 'folder';
   const result = await exportTransferPlan({ id: 'owner' }, { ids: ['folder'] }, undefined, {

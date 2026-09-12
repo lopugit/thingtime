@@ -2,6 +2,13 @@
 
 ## Real browser portable transfer acceptance
 
+- [ ] A member exporting a live chat must retain a custom emoji referenced by
+  another participant, without needing to own its definition. Verify the new
+  archive has independent personal emoji bytes and preserves the reaction.
+  Standalone export of that other-owned emoji must still be denied; blocked,
+  pending, foreign-namespace or missing definitions must not produce a partial
+  archive. Negotiate export 1.12.0 before expecting this behavior.
+
 - [ ] After the canonical self-only live chat fixture passes, run
   `TT_TRANSFER_LIVE_CHAT_BROWSER_TEST=1 node --import tsx scripts/live-chat-transfer-browser.integration.mts`
   from `remix/`, using an ephemeral approved preview session and expected

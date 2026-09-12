@@ -1,5 +1,23 @@
 # PR 764 — portable Thing transfer
 
+## Shared live-history emoji dependencies — 2026-09-12
+
+Export capability 1.12.0 adds content-only emoji definitions referenced by a
+validated, membership-authorized live-chat snapshot. The batch reader is internal
+to that adapter, bounded by the transfer limits and a five-second Mongo query;
+it is not a new standalone lookup endpoint. It excludes account, community,
+folder, namespace and credential fields, rejects hidden/foreign/incomplete
+definitions, and preserves bounded legacy inline images or stored attachment
+references. Stored-byte access still goes through the canonical attachment gate.
+Standalone emoji export remains owner-only; imported copies remain personal.
+
+Validation: 242 Things tests and 53 capability tests pass, including authority
+stripping, absent membership, bounded batches, hidden/malformed data, and export
+orchestration without an owner-only fallback for shared history. Focused lint
+passes, and changed modules have no reported typecheck errors (whole-project
+baseline errors remain). Both local manifests return export 1.12.0. A real
+multi-user/custom-emoji round trip is still required; this is not live acceptance.
+
 ## Develop reconciliation — 2026-09-12
 
 Integrate develop `be7423134` (including main-sync PR 783 and the marketing/social

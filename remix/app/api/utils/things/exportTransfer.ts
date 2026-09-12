@@ -41,6 +41,7 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
   const authorizedRoots = new Map<string, string>();
   const emojiSources = new Map<string, TransferEmojiSource>();
   const archives = new Map<string, OwnedChatArchive>();
+  const liveEmojiSources = new Map<string, Map<string, TransferEmojiSource>>();
   let archiveRows = 0;
   const deadline = Date.now() + 120_000;
   const check = () => { signal?.throwIfAborted(); if (Date.now() > deadline) throw new Error('Export timed out'); };
@@ -70,6 +71,7 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
             .catch(() => { throw new Error('Complete chat history or media is unavailable for export'); });
           if (archive) {
             if (archive.group.root.id !== id) throw new Error('Chat history is unavailable');
+            liveEmojiSources.set(id, new Map((archive.transferEmojis || []).map(source => [source.thing.id, source])));
             archiveRows += 1 + archive.group.participants.length + archive.group.messages.length + archive.group.reactions.length;
             if (archiveRows > TRANSFER_LIMITS.things) throw new Error('This archive export exceeds the transfer limit');
             archives.set(id, structuredClone(archive));
@@ -148,7 +150,7 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
         check();
         let source = emojiSources.get(id);
         if (!source) {
-          source = await deps.readEmoji(viewer?.id, id) || undefined;
+          source = liveEmojiSources.get(archive.group.root.id)?.get(id) || await deps.readEmoji(viewer?.id, id) || undefined;
           if (!source || source.thing.id !== id || included.has(id)) throw new Error('An archive emoji is unavailable');
           emojiSources.set(id, source);
           included.set(id, structuredClone(source.thing));

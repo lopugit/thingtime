@@ -12312,8 +12312,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-export',
-    featureVersion: '1.11.1',
-    contractVersion: '1.11.1',
+    featureVersion: '1.12.0',
+    contractVersion: '1.12.0',
+    // 1.12.0: include shared emoji content referenced by authorized live history.
+    // Standalone emoji exports remain owner-only; stored bytes keep current gates.
     // 1.11.1: preserve the canonical ISO crystal edit/deletion timestamps.
     // 1.11.0: first-party members export ordinary live chats as private archives.
     // 1.10.0: owner folder traversal includes complete private archive roots.
@@ -12327,9 +12329,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'things',
     title: 'Plan a portable Thing export',
     notes: [
-      'Live ordinary chat IDs require first-party user scope and current active/pending membership. History is read in one home-database snapshot, including former participants and all threads, then converted to private archive rows. Import replaces self with the importer and never sends messages or restores live memberships. Preparation is bounded to 30 seconds. Managed avatars and message media use canonical attachment reads; inaccessible or incomplete media fails the entire export. External/legacy avatar URLs and AI/device-source chat attribution are not yet supported and fail explicitly. Custom-emoji dependencies retain the existing owner-only export rule.',
+      'Live ordinary chat IDs require first-party user scope and current active/pending membership. History is read in one home-database snapshot, including former participants and all threads, then converted to private archive rows. Import replaces self with the importer and never sends messages or restores live memberships. Preparation is bounded to 30 seconds. Managed avatars and message media use canonical attachment reads; inaccessible or incomplete media fails the entire export. External/legacy avatar URLs and AI/device-source chat attribution are not yet supported and fail explicitly. Custom-emoji dependencies referenced by this authorized live history are resolved in one bounded batch, including other participants’ emoji. Hidden, foreign or incomplete definitions fail; stored bytes retain current attachment gates. Source account, community and folder fields are excluded.',
       'Private chat-archive roots can be re-exported only by their first-party user owner. Every participant, message, reply and reaction is included regardless of optional traversal flags; independent history-row roots are rejected. All archive media and required custom emoji definitions must remain readable and included, or the entire export fails. Re-import creates fresh private ownership; archived identities never become live accounts or memberships.',
-      'Custom emojis export only for their owner. Each portable custom-emoji Thing contains name and emojiFileId, requires image bytes, and excludes source community scope. Legacy inline images use a bounded plan-only inlineBase64 file field (512 KiB image maximum); clients decode that into checksummed ZIP bytes and omit inlineBase64 from the manifest. Stored images use the normal content endpoint.'
+      'Standalone custom emojis export only for their owner; authorized live-history dependencies use the separate content-only path. Each portable custom-emoji Thing contains name and emojiFileId, requires image bytes, and excludes source community scope. Legacy inline images use a bounded plan-only inlineBase64 file field (512 KiB image maximum); clients decode that into checksummed ZIP bytes and omit inlineBase64 from the manifest. Stored images use the normal content endpoint.'
     ],
     // 1.5.0: owned standalone recordings require stored bytes. Their portable
     // attachment Thing contains only recordingFileId; plan-only sourceId on the
@@ -12353,7 +12355,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     notes: [
       'Chat archive records use only chat-archive, chat-archive-participant, chat-archive-message and chat-archive-reaction kinds. A root contains name, topic, chatType (dm/group/channel), createdAt and selfParticipantId. Participants target the root and contain username, displayName, nickname, joinedAt and optional avatarFileId. Messages target the root and contain participantId, text, createdAt, deleted and optional editedAt, replyToId, threadRootId and systemText. Reactions target a message and contain participantId, emoji and createdAt. Dates are canonical millisecond UTC ISO strings; all participant, reply and thread references must stay inside the same archive.',
       'The importer replaces the self participant. Other participants are archived snapshots, never live user accounts. Only roots can have folderId; archive records cannot carry extended fields, tags, roles, source user IDs or ACLs. Avatars require one fresh stored PNG/JPEG/GIF/WebP file; deleted message tombstones cannot carry text or media. Custom reaction tokens require an included custom-emoji definition. Each complete archive is inserted and file-bound atomically on the home plane after its folders and emoji dependencies. No memberships, messages to real recipients, invitations or notifications are created.',
-      'A failed later import rolls back each previously created archive through its dedicated child-first attachment cleanup and accounted deletion. Incomplete cleanup returns the archive root in remainingIds and retains earlier dependencies. Archive export, owner lifecycle UI and historical chat rendering are not yet available in this preview.',
+      'A failed later import rolls back each previously created archive through its dedicated child-first attachment cleanup and accounted deletion. Incomplete cleanup returns the archive root in remainingIds and retains earlier dependencies. Private archive export, owner lifecycle controls and read-only historical rendering are supported.',
       'Custom emoji image files must be uploaded with purpose custom-emoji. Each emoji imports through the canonical writer into the personal library with a suffixed name and fresh server attempt identity. MIME/size, freshness and ownership are checked in the binding transaction; existing emojis and community membership are not restored or changed. New copies use the dedicated emoji cleanup path if a later import step fails.'
     ],
     // Dedicated themes/algorithms/emojis use remapped folders or the selected destination.

@@ -77,3 +77,15 @@ test('cancellation prevents work and fences late profile results before any medi
   f.deps.profiles = async () => { controller.abort(); return f.profiles; };
   await assert.rejects(read(f, controller.signal)); assert.deepEqual(f.calls, ['read']);
 });
+
+test('only normalized authorized reaction IDs reach the shared emoji reader', async () => {
+  const f = fixture(); f.source.reactions = [row('reaction', 'friend', { emoji: 'custom:emoji-friend' }, 'message')];
+  const ids: string[][] = [];
+  const emoji = { thing: { id: 'emoji-friend', thingtime: ['custom-emoji'], crystal: { name: 'party', emojiFileId: 'pending' } }, attachmentId: 'emoji-image' };
+  const deps = { ...f.deps, emojis: async (values: readonly string[]) => { ids.push([...values]); return [emoji]; } };
+  const result = await readLiveChatArchiveTransfer({ id: 'self' }, 'chat', 'self', undefined, deps);
+  assert.deepEqual(ids, [['emoji-friend']]); assert.deepEqual(result?.transferEmojis, [emoji]);
+  deps.read = async () => null;
+  assert.equal(await readLiveChatArchiveTransfer({ id: 'self' }, 'chat', 'self', undefined, deps), null);
+  assert.equal(ids.length, 1);
+});
