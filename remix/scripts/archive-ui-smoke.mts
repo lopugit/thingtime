@@ -36,15 +36,33 @@ rootData.user = user;
 const output = await mkdtemp(join(tmpdir(), 'thingtime-archive-ui-'));
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
 let mutations = 0;
+let downloadNotices = 0;
+const mutationPaths: string[] = [];
 const mediaRequests = new Set<string>();
 try {
   const context = await browser.newContext();
   let failRead = false;
   let hangRead = false;
+  let hangExport = true;
+  let exportRequests = 0;
   await context.route('**/api/**', async (route: any) => {
     const request = route.request(); const url = new URL(request.url());
+    if (url.pathname === '/api/v1/things/export' && request.method() === 'POST') {
+      exportRequests++;
+      if (hangExport) return;
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true,
+        plan: { roots: ['note'], things: [{ id: 'note', thingtime: ['note'], crystal: { name: 'Export retry fixture' } }], files: [] } }) });
+    }
+    if (url.pathname === '/api/v1/notifications/record' && request.method() === 'POST') {
+      const payload = request.postDataJSON();
+      assert.equal(payload.userId, user.id);
+      assert.equal(payload.title, 'Download ready');
+      assert.equal(payload.status, 'success');
+      downloadNotices++;
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) });
+    }
     if (!['GET', 'HEAD'].includes(request.method())) {
-      mutations++; return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ ok: false, error: 'Fixture prevents writes' }) });
+      mutations++; mutationPaths.push(url.pathname); return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ ok: false, error: 'Fixture prevents writes' }) });
     }
     if (url.pathname === '/api/root-data') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(rootData) });
     if (url.pathname === '/api/v1/auth/me') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, user }) });
@@ -111,7 +129,18 @@ try {
     await page.waitForFunction((el: HTMLElement) => Number(getComputedStyle(el).opacity) >= 0.99, await page.getByRole('dialog').elementHandle());
     assert.ok(await page.getByRole('dialog').evaluate((el: HTMLElement) => { const b = el.getBoundingClientRect(); return b.left >= 0 && b.right <= innerWidth && b.top >= 0 && b.bottom <= innerHeight; }), `${name}: dialog clipped`);
     await page.screenshot({ path: join(output, `${name}-download.png`) });
-    await page.getByRole('button', { name: 'Close', exact: true }).last().click();
+    hangExport = true;
+    const before = exportRequests;
+    await page.getByRole('button', { name: 'Download', exact: true }).click();
+    await page.getByRole('dialog').getByRole('alert').filter({ hasText: 'Preparing the export timed out' }).waitFor({ timeout: 40_000 });
+    assert.equal(exportRequests, before + 1, 'Export must not retry automatically');
+    assert.ok(await page.getByRole('button', { name: 'Download', exact: true }).isEnabled());
+    await page.screenshot({ path: join(output, `${name}-export-timeout.png`) });
+    hangExport = false;
+    const downloaded = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download', exact: true }).click();
+    assert.equal((await downloaded).suggestedFilename(), 'thingtime.zip');
+    assert.equal(exportRequests, before + 2);
     await page.getByRole('dialog').waitFor({ state: 'hidden' });
   }
   hangRead = true;
@@ -133,9 +162,10 @@ try {
   await page.reload();
   await page.getByText('Sign in to view your private archive.', { exact: true }).waitFor();
   assert.equal(await page.getByTestId('chat-archive-history').count(), 0);
-  assert.equal(mutations, 0, 'Read-only inspection must not write to any API');
+  assert.equal(mutations, 0, `Read-only inspection must not write to any API: ${mutationPaths.join(', ')}`);
+  assert.equal(downloadNotices, 2, 'Each intentional download records only its own success notice');
   assert.equal(mediaRequests.has('avatar-flagged'), false); assert.equal(mediaRequests.has('blocked'), false);
   assert.ok(mediaRequests.has('picture') && mediaRequests.has('shielded'));
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ ok: true, viewports: ['desktop', 'mobile'], fullScroll: true, gallery: true, nsfwReveal: true, lightbox: true, downloadDialog: true, boundedReadTimeout: true, retry: true, identityClearing: true, mutations, output }));
+  console.log(JSON.stringify({ ok: true, viewports: ['desktop', 'mobile'], fullScroll: true, gallery: true, nsfwReveal: true, lightbox: true, downloadDialog: true, boundedExportTimeout: true, boundedReadTimeout: true, retry: true, identityClearing: true, mutations, output }));
 } finally { await browser.close(); }

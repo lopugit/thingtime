@@ -31,6 +31,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-12 — Bound portable export metadata preparation to 30 seconds, with
+  cancellation and a recoverable retry message shared by Copy and Download.
+  Large file downloads retain their separate lifecycle. See [PR #764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
 - 2026-09-12: Bound private archive reads to 15 seconds with a recoverable Retry
   state and account-safe cancellation. Verify the stalled-read path in Chrome
   and real folder context-menu clipboard/ZIP behavior; see

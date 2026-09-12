@@ -1,5 +1,21 @@
 # PR 764 — portable Thing transfer
 
+## Export metadata deadline — 2026-09-12
+
+The live browser test on fe7aa4458 stalled during folder ZIP preparation before
+reaching uploads. Its remaining fixture was confirmed absent through ordinary
+and archive reads. The cause of intermittent server/network stalls is unknown.
+The shared export metadata call now has a cancellable 30-second deadline across
+capability negotiation and response parsing. It returns a recoverable error,
+does not retry automatically, and does not impose this deadline on large file
+byte downloads. Unit coverage includes ignored cancellation, pre-aborted work,
+successful completion and retry. Rendered QA stalls the actual export request
+on desktop/mobile, then retries and observes a real ZIP download.
+
+The complete live Messenger-to-archive export bridge and positive live binary
+round-trip acceptance remain unfinished; paginated main-thread messages and
+reaction totals must not be mistaken for a complete historical snapshot.
+
 ## Folder context menu and stalled archive read — 2026-09-12
 
 The live browser run now exercises right-click folder Copy/Cut and Download.

@@ -11,6 +11,7 @@ import { useAsyncFetcher } from './useAsyncFetcher';
 import { clearLocalCachePrefix } from './localCache';
 import { createApiFailure, readApiResponsePayload } from './apiFailure';
 import { buildThingCommentRequestPayload, buildThingCreateRequestPayload } from './thingsRequestPayload';
+import { withExportDeadline } from '~/utils/thingTransfer/exportDeadline';
 
 const refreshRootData = () => {
   window.dispatchEvent(new Event('thingtime:root-data-refresh'));
@@ -862,9 +863,12 @@ export function useApi() {
     },
     things: {
       export: useCallback(async (args: { ids: string[]; key?: string; includeChildren?: boolean; includeDependencies?: boolean; includeFiles?: boolean; includeLinks?: boolean }, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.things-export', '1.10.0');
-        if (args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.6.4');
-        return asyncFetcher.submit(args, { action: '/api/v1/things/export', signal: options?.signal, errorContext: 'export Things' });
+        return withExportDeadline(async signal => {
+          await requireThingtimeCapability('api.things-export', '1.10.0');
+          if (args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.6.4');
+          signal.throwIfAborted();
+          return asyncFetcher.submit(args, { action: '/api/v1/things/export', signal, errorContext: 'export Things' });
+        }, options?.signal);
       }, [asyncFetcher]),
       import: useCallback(async (args: { manifest: unknown; files?: Record<string, string>; folderId?: string | null }, options?: { signal?: AbortSignal }) => {
         await requireThingtimeCapability('api.things-import', '1.9.1');

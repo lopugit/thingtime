@@ -2,6 +2,12 @@
 
 ## Real browser portable transfer acceptance
 
+- [ ] Stall export metadata: Copy/Download must leave busy state within 30
+  seconds with an actionable error and no automatic retry. Retry Download after
+  recovery produces a real ZIP. Check desktop/mobile dialog bounds. Cancellation
+  and account changes prevent late exports; file-byte downloads are not subject
+  to the metadata deadline.
+
 - [ ] Right-click a fixture folder in Things. Copy and Cut must put all nested
   history on the real OS clipboard; Cut alone must not move/delete it. Download
   from that same context menu must produce a ZIP containing the folder and its
