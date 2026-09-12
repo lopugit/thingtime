@@ -1,5 +1,5 @@
 import React from 'react';
-import { Badge, Box, Button, Checkbox, Flex, FormControl, FormLabel, Input, Menu, MenuButton, MenuList, MenuItem, Select, Switch, Text } from '@chakra-ui/react';
+import { Badge, Box, Button, Checkbox, Flex, FormControl, FormLabel, Input, Select, Switch, Text } from '@chakra-ui/react';
 import { Link } from 'react-router';
 import { PageHeader, PageShell } from '~/components/Layout/PageShell';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -10,6 +10,9 @@ import { parseRecordingReference } from './recordingReference';
 import type { RecordingConnectionChoice } from '~/api/utils/lopu/recordingsConnections';
 import type { PersonalRecordingDevice } from '~/api/utils/lopu/personalRecordingDevices';
 import { PersonalRecordingSetup } from './PersonalRecordingSetup';
+import { PersistedThingMenu } from '../Thingtime/ContextMenu/PersistedThingMenu';
+import { supportsThingActions } from './recordingsCapabilities';
+import { THING_ACTIONS_PATH } from '~/schemas/thingActions';
 
 type RecordingData = {
 	ownerId: string;
@@ -132,7 +135,14 @@ export function RecordingAutomationPage() {
 			if (!supportsRecordingAutomation(manifest, window.location.origin)) throw new Error('Recording automation is not supported on this domain.');
 			if ((body as any)?.settings?.runtimeDeviceId !== undefined && !supportsPersonalRecordingSettings(manifest, window.location.origin))
 				throw new Error('Personal recording devices are not supported on this domain yet.');
-			const next = await jsonRequest('/api/v1/lopu/recordings', body);
+			if ((body as any)?.op === 'send-to-lopu' && !supportsThingActions(manifest, window.location.origin)) throw new Error('Thing actions are not available on this domain yet.');
+			if (generation.current !== seq) return;
+			let next;
+			if ((body as any)?.op === 'send-to-lopu') {
+				const result = await jsonRequest(THING_ACTIONS_PATH, { id: (body as any).postId, action: 'send-to-lopu' });
+				if (generation.current !== seq || result.ownerId !== userId) return;
+				next = await jsonRequest('/api/v1/lopu/recordings');
+			} else next = await jsonRequest('/api/v1/lopu/recordings', body);
 			if (generation.current !== seq || next.ownerId !== userId) return;
 			setData(next);
 			setError(null);
@@ -441,14 +451,8 @@ export function RecordingAutomationPage() {
 											</Link>
 											<Badge>{job.status}</Badge>
 											<Badge>{job.runtimeDeviceId ? 'Personal device' : 'AI providers'}</Badge>
-											<Menu>
-												<MenuButton as={Button} size="xs" variant="outline" aria-label={`Actions for ${job.filename}`}>•••</MenuButton>
-												<MenuList>
-													<MenuItem isDisabled={busy || !settings.enabled || !!job.handoffStatus} onClick={() => {
-														if (window.confirm('Send this transcript to Lopu to act on its instructions? Lopu may create Things and reminders. Other sensitive actions still require confirmation in the conversation.')) void change({ op: 'send-to-lopu', postId: job.postId });
-													}}>🦄 Send to Lopu</MenuItem>
-												</MenuList>
-											</Menu>
+											<PersistedThingMenu id={job.postId} label={`Actions for ${job.filename}`}
+												handoffDisabled={busy || !settings.enabled || !!job.handoffStatus} onChanged={() => void load()} />
 										</Flex>
 										{job.handoffStatus && <Text fontSize="sm" mt={2}>Lopu: {job.handoffStatus}. {job.handoffChatId && <Link to={`/lopu/${encodeURIComponent(job.handoffChatId)}`}>Open conversation →</Link>}</Text>}
 										{job.error ? (
