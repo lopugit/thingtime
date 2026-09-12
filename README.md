@@ -433,6 +433,45 @@ every ten minutes, and one terminal snapshot. The route uses the same
 stored stack/run identity, and never accepts browser sessions or arbitrary
 workflow log text.
 
+Feature Stack activity shows one card per target with its reported phase, blocker,
+next step, and source link. The progress bar counts confirmed target merges only;
+a published PR, failed worker, or closed PR is never a completed target. Waiting
+has no predicted finish time. Worker updates older than twelve minutes are marked
+stale, separately from target PR updates.
+
+**Ask Lopu about this run** opens a private status conversation for the selected
+saved run. Enable the product and the matching protected controller together:
+
+- Deploy `/api/v1/admin/ci/stacks/chat` and the signed
+  `/api/v1/integrations/ci/chat` route. Their origin-scoped capability identifiers
+  are `api.admin-ci-stack-chat` and `api.integrations-ci-chat`, both `1.0.0`.
+- Keep `THINGTIME_CI_ROUTER_SECRET` identical in the application deployment and
+  GitHub repository secret store. Set `THINGTIME_CREDENTIAL_VAULT_ORIGIN` in GitHub
+  repository variables to the application's HTTPS origin. Configure at least one
+  enabled Claude account in the existing CI credential waterfall; no new secret
+  is required. The status responder uses the shared Claude model selection and
+  credential waterfall, independently of a stack's custom merge endpoint/model.
+- Roll out the matching progress reporter on `github-actions`, then start a new
+  stack run. Existing running jobs cannot acquire the responder retroactively.
+  Old controllers show an explicit unavailable state. A missing/incompatible
+  product capability disables chat without blocking merge progress.
+
+The responder runs inside the progress job alongside the merge workers. It has
+no tools or repository checkout in its model session and receives only bounded
+job/step/target PR facts and the last four answered exchanges. It is not an input
+to the workers' private reasoning sessions: questions cannot restart jobs, edit
+code, change merge plans or grant merge authority. It checks every thirty seconds;
+replies can take a couple of minutes. The panel polls only while expanded and
+visible, with a user-controlled auto-refresh checkbox and manual Refresh.
+
+Questions/replies are shared among CI administrators, redacted for credential-like
+text, stored as relational protected `ci-stack-chat-message` records, and expire
+after ninety days. Reads return the latest fifty exchanges. Sending is limited to
+six questions per minute per admin. Retrying an uncertain send preserves its UUID;
+worker delivery uses a four-minute lease and at most two claims, with exact
+workflow/run-attempt fencing. Offline, answering, failed and answered states stay
+visible. Paused, stopped, ended, or replaced runs accept no new questions.
+
 Store each secret directly in the deployment environment. Also add the same
 `THINGTIME_CI_ROUTER_SECRET` as a GitHub Actions repository secret and set the
 repository variable `THINGTIME_CI_ROUTER_URL` to the stable route above. The
@@ -3093,3 +3132,39 @@ Recovery's **App → Thingtime Widgets** selector; its cache and install target 
 isolated from Desktop, Commander and Recovery. Local bundle construction is not
 proof of a successful cloud release: the first main run and download/install via
 Recovery remain release acceptance checks.
+
+## Inherited Thing actions
+
+Persisted entity menus use `ThingContextMenu` and `buildThingEntityMenu`;
+`schemas/thingActions.ts` owns the base verbs. Post privacy/moderation and
+Drive selection/clipboard operations extend this model. `PersistedThingMenu`
+resolves only an opened Thing through `/api/v1/things` and guards recording
+handoff against account changes. Do not add a new per-kind dropdown renderer.
+Navigation actions carry an explicit `href` and render real anchors; they never
+reuse mutation callbacks. Drawer navigation also preserves native modified and
+middle clicks. Actions without a destination remain buttons.
+
+The Things browser stores `q`, `kind`, `view`, `display`, `sort`, and `group` in
+the URL alongside folder/device/preview state. Preference defaults are written
+explicitly so Back and shared links do not depend on later local-cache changes.
+Search typing replaces the current history entry; filter changes create entries.
+
+CRUD remains `/api/v1/things`. Semantic operations use
+`POST /api/v1/things/actions` with `{ "id": "your-thing-id", "action": "send-to-lopu" }`.
+Negotiate origin-scoped `api.things-actions` 1.0.0 before dispatch. The first
+operation delegates to the protected recording writer; old recording clients
+retain their compatibility operation. Shared schema/UI does not mean arbitrary
+protected-state mutation: attachment lifecycle, chat membership, moderation,
+consent and quota checks remain enforced by their domain writers. A schema's
+menu hints never grant authority. No storage migration or new secret is required.
+Handoff requires the home data source; a custom source returns 409 so an ID
+from another database cannot accidentally select a home recording.
+
+For forks, configure normal account/storage setup and explicitly enable a
+recording processor before testing handoff. Personal processing uses a paired
+device; API processing uses the account's configured provider connections.
+Never embed credentials in a menu, action request, source fixture or public docs.
+
+Local menu QA uses this worktree's deterministic port (currently
+`http://localhost:16250`). Tailscale/Funnel was unavailable during verification:
+the local launcher points to a missing Tailscale app; no public mapping was changed.

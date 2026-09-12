@@ -12,6 +12,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-09-12 — CI Control now distinguishes target activity, waiting, conflicts,
+  failed workers and confirmed merges; removes the rolling finish estimate.
+  Adds private per-run Ask Lopu status chat with capability negotiation, durable
+  delivery/retry states, and an optional responder in the matching controller.
+  Requires both product and controller rollout for new live conversations.
+  Validation and rollout: [PR #782](../PRs/782-codex-stack-progress-chat-clarify-stack-progress-and-add-ask-lopu-run-chat.md).
+
 - 2026-09-11: Add Settings saved AI waterfalls and reusable select, edit, save-copy and save-and-apply controls with private storage and stale-edit protection. See [PR 771](../PRs/771-ci-stack-model-selection-reusable-model-and-endpoint-waterfall.md).
 
 - 2026-09-11: Add a reusable AI model/endpoint waterfall dialog and per-stack
@@ -37,6 +44,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   [PR #768](../PRs/768-codex-thingtime-ai-guidance-20260911-refresh-ai-guidance-from-pr-history.md)
   and its linked review/inventory.
   — Codex (AI), 2026-09-11
+
+- Unify Thing, post, recording and message action-menu rendering and inherited
+  base verbs. Dispatch recording handoffs through the versioned Things action
+  API, retaining the legacy adapter and protected writers. Fix stale open
+  submenus and scrollbar-edge clipping. Details:
+  [PR 767](../PRs/767-unified-thing-menus-native-links-search-history.md).
+  — Codex (AI), 2026-09-11
+
+- Make drawer and Thing-menu destinations native anchors, preserving browser
+  new-tab modifiers, and persist Things search/view/filter/sort/group rules in
+  URL history, including rapid input and folder navigation. — Codex (AI), 2026-09-11
 
 - Verify real shared-file and linked-gallery copies on the exact PR preview,
   including private copies surviving source revocation/deletion and cleanup
@@ -323,6 +341,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-09-10: Recover older iPhone Lopu recordings into private Things with durable import receipts; fix notification bell toggling and refresh, reconnect native push from Settings, report APNs outcomes, and keep single/bulk push delivery alive through Vercel responses. Details: [PR 726](../PRs/726-ios-push-recording-import.md).
 
+- Refresh the custom-audience promotion preview with released main's shared-index readers. Resolve equivalent ACL merge blocks and duplicate viewer fields, composer state, and modal rendering; retain main's unified audience controls and drawer layering. Database migration activation remains separate. — Codex (AI), 2026-09-09
+
+- Refresh the standing promotion preview with released main's shared-index readers and poll writer before database index retirement; preserve the feature branch and keep migration activation separate. — Codex (AI), 2026-09-09
+
 - Save new iOS Lopu voice recordings as owner-private playable audio Things,
   retaining on-device recovery files and an account-bound retry outbox.
   Completed recordings survive draft cleanup; upload/complete contracts are
@@ -455,6 +477,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - Refresh the clipboard-attachment preview with released main's shared-index readers and poll writer, preserving its bounded paste queue and attachment permissions. Database migration activation remains separate. — Codex (AI), 2026-09-09
 
 - Refresh the Commander intent-ranking preview with released main's shared-index readers and poll writer before database index retirement; retain its ranking changes without promoting them to production. — Codex (AI), 2026-09-09
+
+- Refresh the saved Feature Stack workflow promotion preview with released main's shared-index readers and poll writer. The feature is already integrated upstream; keep the preview branch and database activation separate. — Codex (AI), 2026-09-09
+
+- 2026-09-09: Refresh the notification-history preview with released main's staged shared-index readers and poll identity writer, preserving feature changes. Preview replacement and live production/develop index activation remain pending. — Codex (AI)
+
 - Repair a poll writer found during the index audit: stamp the shared protected vote identity (no new index), preserve legacy lookup compatibility and unbilled engagement policy. Native regression reproduces 16 duplicate rows before the fix and checks concurrent votes, toggles, private access and cascade cleanup. — Codex (AI), 2026-09-08
 
 - Extend [Thing index consolidation](../PRs/692-thing-index-consolidation-shared-plan-audit.md) to a 47-index candidate: canonical legacy/feed/search/embed readers, eight exact retirements, one shared updated-order index, and two-stage cache-drained migrations. Native MongoDB verifies 60 → 47 with bounded sampled plans and preserved ACL/CAS behavior. Production/develop rollout remains pending. — Codex (AI), 2026-09-08
@@ -678,6 +705,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-09-05: Reconcile PR #592 with current develop, preserving Lopu widget support and passkey entitlements, both capability suites, all private logout caches, and both unit-test lists. Verify its exact-SHA preview and make preview delivery visible above collapsed PR comments. — Codex (AI)
 
 - 2026-09-05: Fix Commander's emoji permission feedback widening the picker beyond its window, stop failed pastes changing ranking or the clipboard, and provide explicit Accessibility recovery for stale signing grants. [Investigation](../PRs/662-codex-commander-emoji-paste-recovery-picker-overflow.md). — Codex (AI)
+- 2026-09-05: Align Lopu notifications with the desktop content area as the drawer opens, closes, or resizes; keep mobile messages readable. — Codex (AI)
 
 - 2026-09-05: Add bounded persistent media caching with access revalidation,
   responsive low-resolution image previews, and cache controls in Settings.
@@ -712,35 +740,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   from `post.linkKey`, which is already owner-only and hidden-only, and a new
   `hiddenLinkContract.test.ts` pins the derivation. — Lopu (AI)
 
-### 2026-09-02 — Lopu toast position setting + `/notifications` history page — Claude (AI)
+### 2026-09-04 — Rich public link previews — Codex (AI)
 
-- Grouped summary; details in the PR note (`PRs/611-claude-lopu-toast-position-notifications-history--lopu-toast-position-notifications-history.md`).
-- **Lopu messages move to the bottom-left** by default. Settings →
-  Appearance (page + drawer modal) gains a "Lopu messages 🦄" dropdown for
-  any of Chakra's six corners; the preference lives at
-  `settings.lopu.position` (cross-tab, undo-exempt) and is mirrored into the
-  synchronous `tt-lopu-position` cache that `useLopu` reads at fire time, so
-  none of the ~86 callers subscribe to settings state. `--toast-z-index`
-  (10260) lifts toasts above the drawer and modals.
-- **`/notifications`**: every notification the viewer has received, newest
-  first, with the filter grammar in the URL — category chips
-  (social / engagement / feed / system), a type dropdown, unread-only,
-  debounced search, and a from/to day window — plus per-row mark-read on
-  click, "Mark all read", cursor "Load older", and a flash-free cached first
-  page. Linked from the bell ("See all →"), Settings → Notifications
-  ("History 📜"), and the drawer's Account group.
-- **System notifications**: new `action-run` type (category `system`, actor
-  `thingtime` / "Lopu", headline + `href` + `outcome`) emitted by the action
-  executor for every explicit run and any failed delegated run; push on by
-  default, email opt-in. `NOTIFICATION_TYPE_CATEGORY` in the registry maps
-  every type to a family (coverage-tested).
-- `GET /api/v1/notifications` → contract 1.1.0: optional `category`, `types`,
-  `unread`, `q`, `since`, `until`, `withTotal` (→ `total`); rows now carry
-  `category`, `title`, `href`, `outcome`. `/api/v1/notifications/settings` →
-  1.1.0 (accepts `action-run`). Per-recipient tail raised from 500 to 10,000.
-  Query resolution lives in `api/utils/notifications/listQuery.ts`
-  (`npm run test:notifications`).
-
+- Shared public pages now publish route-aware Open Graph/Twitter metadata and
+  colourful 1200×630 Thingtime PNG cards. Posts carry author/excerpt/context;
+  image posts safely render up to four stored images as a collage; text,
+  marketplace, structured Thingtime, poll, share, comment, reply, standalone
+  image/video/audio/file, profile, Thing, published page, feed and public
+  catalogue/docs variants each have their own preview treatment.
+- Cards ship their own copy of Liberation Sans (SIL OFL 1.1, metric-compatible
+  with Arial) embedded in the server bundle. The deployed Vercel Node runtime
+  has no fonts installed, so the renderer previously drew every card's artwork
+  and not one glyph; CI and dev machines have system fonts and looked fine. —
+  Lopu (AI)
+- Details in the PR note
+  (`PRs/607-codex-rich-link-previews--rich-route-aware-thingtime-link-previews.md`).
 
 - 2026-09-05: Correct Commander archive architecture and UI resource verification after Apple's successful notarization; add real macOS lipo and Vite output regression checks. [Release notes](../../PRs/648-commander-cloud-releases-publish-installable-signed-commander-builds-with-recovery-provenance.md).
 - 2026-09-05: Repair passkey request cancellation across login, account switching and settings; isolate concurrent challenges and reject saved-cookie replay; add native Apple domain association support and account-scoped settings caches. Verified a signed iOS Release build and configured the matching public Apple application ID in Vercel; production code rollout and device acceptance remain pending. See `PRs/641-passkey-reliability-fix-passkey-cancellation-concurrent-challenges-and-native-app-association.md` for validation and rollout requirements.
@@ -960,6 +974,57 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   direct provider-audio mode streams PCM microphone and response audio to
   xAI Grok Voice on a server-minted five-minute ephemeral credential, on the
   web and on iOS (background audio session + Live Activity).
+
+### 2026-09-03 — Generated marketing suite: 1,600+ pages, animated walkthroughs, social image suite — Claude (AI)
+
+- Grouped summary; details in the PR note (`PRs/610-claude-marketing-suite--generated-marketing-suite.md`).
+- **`/marketing`** is a catalog-generated marketing site: feature landing
+  pages, how-to guides, animated cursor walkthroughs over mock screens,
+  fair competitor comparisons and alternatives, audience pages, use cases,
+  concept explainers, starter templates, twelve "style editions" per lead
+  feature, FAQ pages and getting-started checklists — 1,635 pages from one
+  data set (`remix/app/marketing/`), every slug validated, every link
+  resolved, hero-first and CTA-last, deterministic per slug.
+- **`/marketing/social-media`** is a menu-navigable image suite: every
+  feature × twelve viral trend styles × ten platform formats renders as a
+  self-contained SVG and downloads as PNG at the exact platform size, with
+  per-platform captions and hashtags (10,680 images).
+- Routes are lazy (`marketing`, `marketing/social-media`,
+  `marketing/:category`, `marketing/*`); the root title effect defers to
+  `useMarketingSeo` under `/marketing`; the drawer gains a Marketing hub.
+- Tests: `npm run test:marketing` (catalog validation, walkthrough target
+  coverage, SVG rendering, copy determinism, mock-screen coverage, player
+  engine); manual checklist in `TESTING.md` ("Marketing suite"); design
+  notes in `docs/marketing-suite.md`.
+
+### 2026-09-02 — Lopu toast position setting + `/notifications` history page — Claude (AI)
+
+- Grouped summary; details in the PR note (`PRs/611-claude-lopu-toast-position-notifications-history--lopu-toast-position-notifications-history.md`).
+- **Lopu messages move to the bottom-left** by default. Settings →
+  Appearance (page + drawer modal) gains a "Lopu messages 🦄" dropdown for
+  any of Chakra's six corners; the preference lives at
+  `settings.lopu.position` (cross-tab, undo-exempt) and is mirrored into the
+  synchronous `tt-lopu-position` cache that `useLopu` reads at fire time, so
+  none of the ~86 callers subscribe to settings state. `--toast-z-index`
+  (10260) lifts toasts above the drawer and modals.
+- **`/notifications`**: every notification the viewer has received, newest
+  first, with the filter grammar in the URL — category chips
+  (social / engagement / feed / system), a type dropdown, unread-only,
+  debounced search, and a from/to day window — plus per-row mark-read on
+  click, "Mark all read", cursor "Load older", and a flash-free cached first
+  page. Linked from the bell ("See all →"), Settings → Notifications
+  ("History 📜"), and the drawer's Account group.
+- **System notifications**: new `action-run` type (category `system`, actor
+  `thingtime` / "Lopu", headline + `href` + `outcome`) emitted by the action
+  executor for every explicit run and any failed delegated run; push on by
+  default, email opt-in. `NOTIFICATION_TYPE_CATEGORY` in the registry maps
+  every type to a family (coverage-tested).
+- `GET /api/v1/notifications` → contract 1.1.0: optional `category`, `types`,
+  `unread`, `q`, `since`, `until`, `withTotal` (→ `total`); rows now carry
+  `category`, `title`, `href`, `outcome`. `/api/v1/notifications/settings` →
+  1.1.0 (accepts `action-run`). Per-recipient tail raised from 500 to 10,000.
+  Query resolution lives in `api/utils/notifications/listQuery.ts`
+  (`npm run test:notifications`).
 
 ### 2026-09-03 — Multi-environment PR preview links — Codex (AI)
 

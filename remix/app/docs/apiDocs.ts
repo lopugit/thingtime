@@ -635,6 +635,16 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 
 export const apiEndpointDocs: ApiEndpointDoc[] = [
 	endpoint({
+		id: 'things-actions', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'things', title: 'Thing actions',
+		endpoint: '/api/v1/things/actions', methods: ['POST'],
+		summary: 'Dispatch an explicit semantic action against a Thing by ID, irrespective of its presentation.',
+		detail: 'Accepts only id and action=send-to-lopu. This first action supports owned private ready Watch recording posts and standalone audio Things. The protected recording writer re-resolves source ownership, privacy, binding, ready state and enabled processing consent. Stable jobs deduplicate requests; transcription precedes a private Lopu conversation with normal billing and sensitive-tool confirmation. This is not arbitrary crystal mutation or permission inheritance. Existing /api/v1/things CRUD remains canonical; the recordings send-to-lopu operation is a compatibility adapter to this same dispatcher. No owner, endpoint, credentials or transcript may be supplied. The response includes ownerId and the action result, not recording settings. Ambiguous failures must be reconciled in recording activity, not blindly retried.',
+		auth: { mode: 'session-or-bearer', description: 'Full first-party user session only. Temporary, service, app, device and PAT actors are rejected. Same-origin application/json, 2 KiB maximum body. Uses the shared subscription-aware lopu.recordings account rate bucket; unlimited tiers still obey all security and provider limits. Private no-store responses.' },
+		steps: ['Negotiate api.things-actions >=1.0.0 with matching major on the selected origin.', 'Select the home data source; custom data sources return 409 to prevent cross-database ID collisions.', 'Read current recording consent and explicitly confirm sending this Thing to Lopu.', 'POST the exact Thing ID and action; inspect recording activity for progress.'],
+		requestExamples: [{ name: 'Send recording Thing', description: 'Explicitly act on this recording.', method: 'POST', body: { id: 'watch-upload-your-id', action: 'send-to-lopu' } }],
+		responseExamples: [{ status: 200, description: 'Handoff queued or already requested.', body: { ok: true, ownerId: 'your-user-id', message: 'Recording queued for Lopu.' } }, { status: 403, description: 'Processor not enabled or source not eligible.', body: { ok: false, error: 'Enable recording processing first.' } }]
+	}),
+	endpoint({
 		id: 'ai-complete', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'lopu', title: 'AI connection waterfall',
 		endpoint: '/api/v1/ai/complete', methods: ['POST'],
 		summary: 'Complete text through an explicit ordered waterfall of your own Secure Vault endpoint connections.',
@@ -956,6 +966,25 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     auth: { mode: 'none', description: 'Protected CI HMAC, replay claim and live run authorization.' }, methods: ['POST'],
     steps: ['Negotiate api.ci-stack-completion 1.0.0 on the selected Thingtime origin.', 'Sign canonical JSON and POST one attempt from an active immutable stack run.'],
     requestExamples: [], responseExamples: [{ status: 503, description: 'Selected provider is unavailable; caller may advance.', body: { ok: false, unavailable: true } }]
+  }),
+  endpoint({
+    id: 'admin-ci-stack-chat', group: 'admin', title: 'Ask Lopu about a Feature Stack run',
+    endpoint: '/api/v1/admin/ci/stacks/chat', featureVersion: '1.0.0', methods: ['GET', 'POST'],
+    summary: 'Read the latest 50 run questions/replies or enqueue a status question for its live GitHub Actions responder.',
+    detail: 'Admin-only, private/no-store. GET requires runId and returns supported, online, active, lastSeenAt, workflowRunId and messages in chronological order. POST requires runId, requestId (UUID) and question (1–2000 characters); retries reuse the same UUID and exact text. The server binds to the stored current stack dispatch, requires a fresh responder check-in, rate-limits questions, redacts credential-like text and stores bounded relational ci-stack-chat-message records for 90 days. All CI admins can see the conversation. Questions are status-only: they do not grant permission to change code, run commands, merge or restart. Old controllers cannot receive chat.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
+    steps: ['Negotiate api.admin-ci-stack-chat >= 1.0.0 on the selected origin.', 'Read the exact saved run ID and responder status.', 'Submit once; retry uncertain delivery with the same message ID.', 'Refresh replies; distinguish queued, answering, answered and failed.'],
+    requestExamples: [{ name: 'Ask about a run', description: 'Ask the live status responder.', method: 'POST', body: { runId: 'feature-stack-run-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', requestId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', question: 'What is blocking the main target?' } }],
+    responseExamples: [{ status: 202, description: 'Question stored or idempotently replayed.', body: { ok: true, message: { id: 'ci-stack-chat-example', status: 'queued' } } }]
+  }),
+  endpoint({
+    id: 'integrations-ci-chat', group: 'admin', title: 'Poll the Feature Stack run chat mailbox',
+    endpoint: '/api/v1/integrations/ci/chat', featureVersion: '1.0.0', methods: ['POST'],
+    summary: 'The trusted run responder advertises availability, leases one question and returns its answer.',
+    detail: 'Requires HMAC of the exact JSON with THINGTIME_CI_ROUTER_SECRET. Body includes repository, runId, workflowRunId, runAttempt, at (within 60 seconds), available and optional reply {id, lease, status: answered|failed, answer}. Maximum body 32 KiB, answer 8000 characters. Exact stored dispatch/run identity and monotonic attempts are enforced; four-minute leases prevent duplicate answers, expired claims retry at most twice. available=false marks the responder offline and claims no work. Response returns message:null or one leased question with up to four previous answered exchanges. Private/no-store. The worker must negotiate this feature before sending requests.',
+    auth: { mode: 'none', description: 'Server-to-server HMAC via X-Thingtime-CI-Signature.' },
+    steps: ['Negotiate api.integrations-ci-chat >= 1.0.0.', 'Sign the exact bounded body and check the current run mailbox.', 'Generate an answer with no tools using only sanitized job and PR facts.', 'Return the same lease and reply on retries.'],
+    requestExamples: [], responseExamples: [{ status: 200, description: 'No pending question.', body: { ok: true, message: null } }]
   }),
   endpoint({
     id: 'admin-ci-feature-stacks',
