@@ -14,7 +14,7 @@ import {
 import { recordingConnectionStatus, validateRecordingConnections } from '~/api/utils/lopu/recordingsConnections';
 import { parseRecordingSettingsPatch } from '~/api/utils/lopu/recordingsCore';
 import { updateRecordingTodo } from '~/api/utils/lopu/recordingsReminders';
-import { requestRecordingHandoff } from '~/api/utils/lopu/recordingHandoff';
+import { dispatchThingAction } from '~/api/utils/things/thingActions';
 
 const headers = { 'Cache-Control': 'private, no-store', Pragma: 'no-cache' };
 const reply = (body: unknown, status = 200) => json(body, { status, headers });
@@ -69,7 +69,7 @@ export const action = async ({ request }: { request: Request }) => {
 				if (!(await queueRecordingPost(user.id, body.postId))) return reply({ ok: false, error: 'This Thing has no ready audio recording.' }, 400);
 			} else if (body?.op === 'send-to-lopu') {
 				if (typeof body.postId !== 'string' || body.postId.length > 160) return reply({ ok: false, error: 'Choose a recording.' }, 400);
-				const result = await requestRecordingHandoff(user.id, body.postId);
+				const result = await dispatchThingAction(user.id, { id: body.postId, action: 'send-to-lopu' });
 				if (!result.ok) return reply(result, result.status);
 			} else if (body?.op === 'todo') {
 				if (typeof body.id !== 'string' || body.id.length > 160) return reply({ ok: false, error: 'Choose a recording todo.' }, 400);

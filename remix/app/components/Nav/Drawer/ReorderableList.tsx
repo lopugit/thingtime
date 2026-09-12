@@ -193,7 +193,7 @@ export const ReorderableList = (props: ReorderableListProps) => {
 			}
 
 			// primary button / touch only
-			if (event.pointerType === 'mouse' && event.button !== 0) {
+			if ((event.pointerType === 'mouse' && event.button !== 0) || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
 				return;
 			}
 
