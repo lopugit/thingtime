@@ -31,6 +31,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-12 — Correct the second capability suite's stale archive contract
+  assertions after the AI transfer addition; 53 capability tests pass. Live
+  round-trip limits are recorded in [PR 764](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI)
+
 - 2026-09-12 — Private AI-chat archives preserve assistant avatar presets,
   inert tool receipts and explicit message/segment order through transfer and
   re-export. Capability negotiation prevents older servers from silently

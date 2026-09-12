@@ -1,5 +1,20 @@
 # PR 764 — portable Thing transfer
 
+## Capability CI follow-up — 2026-09-12
+
+Web CI run 34686812675 on `319514c20` exposed eight stale exact-version
+assertions in `app/docs/apiCapabilities.test.ts`, the second manifest suite.
+Updated those expectations to the AI archive contracts without weakening the
+historical compatibility boundary checks. Both capability suites now pass:
+53 tests, zero skips; focused ESLint and whitespace checks pass.
+
+The exact-head preview became ready and its origin-scoped manifest reports
+export 1.13.0 and import 1.10.0. During deployment the same API routes returned
+HTML 404s; no credentials or fixture writes were sent to that transient state.
+The local stack advertises the new contracts but rejected the approved fixture
+login with 401, so no local archive was created. Live AI round-trip acceptance
+remains outstanding; preview readiness alone is not that proof.
+
 ## Internal AI normalization integration — 2026-09-12
 
 The canonical source normalizer now feeds an explicit internal AI opt-in through
