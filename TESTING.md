@@ -2,6 +2,15 @@
 
 ## Private chat archive import integration
 
+- [ ] GET /things?id=<archive>&archive=true as the importing owner returns the
+  complete historical group, exact text, reply/thread/reaction references and
+  ordered attachment IDs. It must not return userId, ACLs, roles, tokens, S3
+  paths or live-user lookup results. The client requires api.things 1.13.0.
+- [ ] Signed-out/PAT/app/service readers cannot use archive mode. A foreign,
+  missing, deleting or custom-plane archive does not expose history. Oversized
+  or inconsistent history returns an error, never a truncated success. All
+  responses are private/no-store, including auth and retryable failures.
+
 - [ ] Delete an imported archive through DELETE /things from the owner session:
   drain stored files, remove all history rows and refund storage. A stale
   expectedUpdatedAt returns 409 before cleanup. A deferred provider operation

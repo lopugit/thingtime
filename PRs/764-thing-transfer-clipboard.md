@@ -1,5 +1,27 @@
 # PR 764 — portable Thing transfer
 
+## Private archive history reader — 2026-09-12
+
+Added an API-layer home-plane snapshot reader for complete archive history and
+ordered attachment identities. Root, participants, messages and reactions are
+explicitly projected and structurally validated; server owner/user IDs, ACLs,
+roles, token grants and storage fields are omitted. The self participant still
+identifies the importing account, without resolving historical usernames to
+real users. Foreign/namespaced/deleting roots and malformed identities are
+rejected. Row, file, query-time and response-size bounds fail rather than
+silently truncating history. File identities require separate canonical media
+authorization; referenced emoji IDs alone confer no access.
+
+GET /things?id=<root>&archive=true enforces a first-party user account, private
+no-store responses, a rate limit and sanitized errors. The client negotiates
+Things feature 1.13.0 (documentation contract 1.12.0). Structural validation is
+shared with the portable import contract without fabricating file hashes.
+Five new dependency tests cover snapshots/redaction, forbidden roots, identity
+and topology corruption, avatar/gallery binding and bounded completeness.
+The local runtime advertises the capability and signed-out reads return 401.
+Owner-authenticated live reads, archive listing/rendering, folder lifecycle,
+export/re-export and broad transfer acceptance remain unfinished.
+
 ## Owner archive deletion route — 2026-09-12
 
 DELETE /things now recognizes exact private archive roots only for first-party

@@ -1,6 +1,6 @@
 import { CHAT_ARCHIVE_THINGTIME, MAX_CHAT_NAME_CHARS, MAX_CHAT_TOPIC_CHARS, MAX_MESSAGE_CHARS, MAX_NICKNAME_CHARS } from '../../schemas/registry';
 import { customReactionEmojiId, sanitizeChatReactionToken } from '../reactionTokens';
-import { validateTransfer, type TransferThing } from './format';
+import { validateTransfer, type TransferThing, type TransferFile, type TransferLink } from './format';
 
 // Portable historical records, never live users, memberships or send commands.
 // The dedicated writer must store these as separate private, importer-owned
@@ -34,6 +34,18 @@ export type ChatArchiveGroup = {
  */
 export const validateChatArchives = (input: unknown): ChatArchiveGroup[] => {
   const manifest = validateTransfer(input);
+  return validateChatArchiveRecords(manifest);
+};
+
+/** Shared structural validation for authenticated stored snapshots and portable
+ * manifests. Byte hashes/paths belong to validateTransfer at the file boundary;
+ * a history reader never invents hashes merely to validate relational content.
+ */
+export const validateChatArchiveRecords = (manifest: {
+  things: TransferThing[];
+  files: Pick<TransferFile, 'id' | 'targetId' | 'mime' | 'bytes'>[];
+  links?: Pick<TransferLink, 'id' | 'targetId'>[];
+}, emojiIds = new Set(manifest.things.filter(row => row.thingtime.length === 1 && row.thingtime[0] === 'custom-emoji').map(row => row.id))): ChatArchiveGroup[] => {
   const archives = manifest.things.filter(thing => thing.thingtime.includes('chat-archive'));
   const consumed = new Set<string>();
   const groups: ChatArchiveGroup[] = [];
@@ -96,7 +108,7 @@ export const validateChatArchives = (input: unknown): ChatArchiveGroup[] => {
       const token = sanitizeChatReactionToken(reaction.crystal.emoji);
       if (!token || token !== reaction.crystal.emoji) reject();
       const customId = customReactionEmojiId(token);
-      if (customId && !manifest.things.some(thing => thing.id === customId && thing.thingtime.length === 1 && thing.thingtime[0] === 'custom-emoji')) reject();
+      if (customId && !emojiIds.has(customId)) reject();
       const key = JSON.stringify([reaction.targetId, reaction.crystal.participantId, reaction.crystal.emoji]);
       if (reactionKeys.has(key)) reject();
       reactionKeys.add(key); consumed.add(reaction.id);

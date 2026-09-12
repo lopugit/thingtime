@@ -24,6 +24,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-12: Add bounded owner-only chat archive snapshot reads with explicit
+  history projection, private responses and api.things 1.13.0 negotiation.
+  Archive rendering, listing and re-export remain unfinished. — **Codex (AI)**
+
 - 2026-09-12: Route first-party owner archive deletion through whole-history
   cleanup with transactional preview timestamps and sanitized retryable errors.
   Negotiate api.things 1.12.0; archive browsing/export remain unfinished.

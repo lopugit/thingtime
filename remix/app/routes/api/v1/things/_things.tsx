@@ -33,6 +33,7 @@ import {
 import { parseCommentSort } from '~/api/utils/things/updownCore';
 import { sharedThingRead } from './sharedThingRead';
 import { deleteOwnedChatArchive } from '~/api/utils/things/chatArchiveOwnerTransfer';
+import { readOwnedChatArchive } from '~/api/utils/things/chatArchiveReadTransfer';
 
 // Route a unified mutation to the rate-limit key its dedicated sub-route would
 // use, so the generic endpoint can't be used to bypass the per-op limits.
@@ -103,6 +104,24 @@ export const loader = async ({ request }: { request: Request }) => {
   const viewer = withLinkKeys(viewerOf(user, actorPat(actor)), [(params.get('key') || '').trim()]);
   const app = actor.kind === 'app' ? actor.scope : null;
   const cors = actorCors(actor);
+
+  if (params.has('archive')) {
+    const headers = { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' };
+    if (actor.kind !== 'user' || user?.accountKind !== 'user') return json({ ok: false, error: 'Sign in to read your archive' }, { status: 401, headers });
+    const id = (params.get('id') || '').trim();
+    if (params.get('archive') !== 'true' || !id || params.has('sharedRoot') || params.has('key') || params.has('appId')) return json({ ok: false, error: 'Invalid archive request' }, { status: 400, headers });
+    const limit = await enforceRateLimit(request, 'oauth.read', `archive-user:${user.id}`, { failClosed: true });
+    if (!limit.allowed) {
+      const init = rateLimitedResponseInit(limit);
+      return json({ ok: false, error: 'Archive reads are temporarily rate-limited' }, { ...init, headers: { ...init.headers, ...headers } });
+    }
+    try {
+      const archive = await readOwnedChatArchive(user.id, id);
+      return archive ? json({ ok: true, archive }, { headers }) : json({ ok: false, error: 'Archive not found' }, { status: 404, headers });
+    } catch {
+      return json({ ok: false, error: 'Archive history is unavailable; try again' }, { status: 503, headers });
+    }
+  }
 
   if (params.has('sharedRoot')) return sharedThingRead(request, { viewer, app: actor.kind === 'app', cors });
 

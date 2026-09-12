@@ -8871,14 +8871,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // is a 400. Only this read grew — the shared projection is unchanged, so
     // things-comment / -feed / -user stay put (S7, additive)
     // Includes additive discussions and the 1.7.5 conditional-media write correction.
-    featureVersion: '1.12.0',
-    contractVersion: '1.11.0',
+    featureVersion: '1.13.0',
+    contractVersion: '1.12.0',
     notes: ['DELETE accepts private chat-archive roots only for a first-party user account on the same origin and the home data plane. Whole-archive attachment cleanup precedes accounted relational deletion. Individual historical rows remain protected. Optional expectedUpdatedAt is checked in the claiming transaction; a stale preview returns 409 before object cleanup. Incomplete cleanup returns a recoverable 503 without exposing storage details. PATs, app tokens and service accounts do not gain archive access.'],
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+			'GET ?id=<archive-root>&archive=true returns {ok, archive:{group,updatedAt,attachmentTargets,emojiIds}} only for the first-party owning user on the home plane. Group contains root, self, participants, messages and reactions with whitelisted historical fields. Server account IDs, permissions, live participant markers and storage metadata are omitted; root.selfParticipantId identifies the importing account for rendering. Reads are private/no-store, rate-limited and bounded to 1000 history rows, 2000 attachments and 16 MiB. Missing/deleting archives return 404; malformed or incomplete history returns a sanitized retryable 503 rather than partial history. PATs, apps and service accounts cannot use this mode; key, sharedRoot and appId parameters are rejected. Attachment IDs require separate canonical authorization to render/download, and referenced emoji IDs grant no access on their own. ' +
 			'Contextual reads preserve independently readable foreign composition boundaries and their same-author descendants. Non-owner writers may include such public/group-readable compositions, but newly unresolved private references and cross-author overrides cannot acquire inherited authority. Every audience is revalidated per invocation. ' +
 			'Stored action references include component argument defaults, savedArgs and each persisted page-block override, in that precedence order. New dependencies introduced through argument-only edits require independent read access for non-owner writers. Runtime query, viewer, result and loop values cannot mint grants. ' +
 			'Version 1.8 adds scheduled-task-run child notes: targetId is required, the default audience is owner-only, the typed crystal is bounded, and deleting the task cascades its run notes. Run notes are editable user content, not trusted security audit records. ' +
