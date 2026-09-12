@@ -31,6 +31,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-12 — Add the internal bounded external-avatar downloader prerequisite:
+  pinned public DNS, credential-free HTTPS and image/size validation. Not yet
+  enabled in chat export. [PR 764](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI)
+
 - 2026-09-12 — Verified the private AI archive-format API/ZIP round trip on the
   PR preview, including fresh copy IDs, preserved presentation and denied anonymous
   reads; cleaned both fixtures. Source-adapter and browser acceptance remain

@@ -1,5 +1,19 @@
 # PR 764 — portable Thing transfer
 
+## External avatar transport prerequisite — 2026-09-12
+
+Added an internal, currently unwired downloader for authorized historical profile
+avatars. HTTPS requests pin a vetted public DNS answer to the socket, disable
+connection pooling, send no credentials and refuse redirects. A ten-second
+deadline covers DNS and transport; encoded bodies, oversized bytes, unsafe MIME,
+truncated images and excessive decoded pixels are rejected. Original validated
+image bytes are retained. Focused tests use injected DNS/transport and real Sharp
+decoding; they do not claim live external-provider acceptance.
+
+No endpoint calls this helper yet. External/legacy avatars remain unsupported
+until archive file planning, capability contracts and end-to-end acceptance are
+integrated. This is a prerequisite, not completion of avatar preservation.
+
 ## Live AI archive-format round trip — 2026-09-12
 
 On the PR preview advertising export 1.13.0 / import 1.10.0, the approved test
