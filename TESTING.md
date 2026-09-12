@@ -2,6 +2,13 @@
 
 ## Private chat archive import integration
 
+- [ ] Download/Copy an owned archive, then re-import: preserve every historical
+  message, reply, reaction, archived identity and media byte under fresh private
+  IDs. Optional traversal must not truncate history. Missing emoji/media access
+  or excluded required files/links must fail the whole export. Independent child
+  roots and non-first-party owners cannot export archive history. Require export
+  1.9.0 on the selected origin; repeat with avatar, gallery and custom emoji bytes.
+
 - [ ] Use a real stored-upload emoji ID (emoji_ plus 64 lowercase hex digits)
   in live Messenger and an archive. Import must remap it to the fresh personal
   emoji; archive reads and message projections must retain/resolve the token.

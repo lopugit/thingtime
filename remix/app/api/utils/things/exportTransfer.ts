@@ -15,8 +15,10 @@ import { readTransferRecording } from './recordingTransfer';
 import { isTransferRecording } from '../../../utils/thingTransfer/recording';
 import { isTransferEmoji } from '../../../utils/thingTransfer/emoji';
 import { readTransferEmoji, type TransferEmojiSource } from './emojiTransfer';
+import { readOwnedChatArchive, type OwnedChatArchive } from './chatArchiveReadTransfer';
+import { validateChatArchiveRecords } from '../../../utils/thingTransfer/chatArchive';
 
-const defaults = { read: findViewableThing, readTheme: readTransferTheme, readAlgorithm: readTransferAlgorithm, readRecording: readTransferRecording, readEmoji: readTransferEmoji, list: listThings, resolve: resolveSharedComposition, project: toPublicThings, bound: listForkBoundMedia, describe: describeAttachmentTransfer };
+const defaults = { read: findViewableThing, readArchive: readOwnedChatArchive, readTheme: readTransferTheme, readAlgorithm: readTransferAlgorithm, readRecording: readTransferRecording, readEmoji: readTransferEmoji, list: listThings, resolve: resolveSharedComposition, project: toPublicThings, bound: listForkBoundMedia, describe: describeAttachmentTransfer };
 
 const content = (thing: PublicThing): TransferThing => ({
   id: thing.id, thingtime: thing.thingtime, crystal: thing.crystal,
@@ -28,7 +30,7 @@ const content = (thing: PublicThing): TransferThing => ({
 
 export const exportTransferPlan = async (viewer: Viewer, input: {
   ids?: unknown; includeChildren?: unknown; includeDependencies?: unknown; includeFiles?: unknown; includeLinks?: unknown;
-}, signal?: AbortSignal, overrides: Partial<typeof defaults> = {}) => {
+}, signal?: AbortSignal, overrides: Partial<typeof defaults> = {}, context: { archiveOwnerId?: string } = {}) => {
   const deps = { ...defaults, ...overrides };
   if (!Array.isArray(input.ids) || !input.ids.length || input.ids.length > TRANSFER_LIMITS.things || input.ids.some((id) => typeof id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(id))) return fail(400, 'Choose valid Thing IDs to export');
   for (const key of ['includeChildren', 'includeDependencies', 'includeFiles', 'includeLinks'] as const) if (input[key] !== undefined && typeof input[key] !== 'boolean') return fail(400, 'Invalid export option');
@@ -37,6 +39,8 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
   const compositions = new Map<string, SharedComposition>();
   const authorizedRoots = new Map<string, string>();
   const emojiSources = new Map<string, TransferEmojiSource>();
+  const archives = new Map<string, OwnedChatArchive>();
+  let archiveRows = 0;
   const deadline = Date.now() + 120_000;
   const check = () => { signal?.throwIfAborted(); if (Date.now() > deadline) throw new Error('Export timed out'); };
   try {
@@ -45,6 +49,20 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
         check();
         if (docs.has(id)) return docs.get(id)!;
         const doc = await deps.read(id, viewer);
+        // This authority is supplied only by the first-party route, never by
+        // portable input or a shared-link/PAT viewer. Child rows are not roots.
+        if ((!doc || (doc.thingtime.length === 1 && doc.thingtime[0] === 'chat-archive')) &&
+          context.archiveOwnerId && context.archiveOwnerId === viewer?.id && !viewer.pat) {
+          const archive = await deps.readArchive(context.archiveOwnerId, id).catch(() => { throw new Error('Archive history is unavailable'); });
+          if (archive) {
+            if (archive.group.root.id !== id) throw new Error('Archive history is unavailable');
+            archiveRows += 1 + archive.group.participants.length + archive.group.messages.length + archive.group.reactions.length;
+            if (archiveRows > TRANSFER_LIMITS.things) throw new Error('This archive export exceeds the transfer limit');
+            archives.set(id, structuredClone(archive));
+            docs.set(id, structuredClone(archive.group.root));
+            return docs.get(id)!;
+          }
+        }
         if (doc?.thingtime.includes('custom-emoji')) {
           const emoji = await deps.readEmoji(viewer?.id, id);
           if (emoji) { emojiSources.set(id, emoji); docs.set(id, emoji.thing); return emoji.thing; }
@@ -102,6 +120,34 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
       files: async function* () { yield* []; /* Bytes follow this authorized plan. */ }
     }, { includeChildren: input.includeChildren !== false, includeDependencies: input.includeDependencies !== false, includeFiles: false, signal });
     const plan: TransferPlan = { roots: bundle.manifest.roots, things: bundle.manifest.things, files: [] };
+    // History is an atomic part of its root, not an optional dependency or
+    // folder descendant. Never make a successful but incomplete archive copy.
+    const included = new Map(plan.things.map(thing => [thing.id, thing]));
+    const archiveTargets = new Map<string, string>();
+    for (const archive of archives.values()) {
+      const { participants, messages, reactions } = archive.group;
+      for (const row of [...participants, ...messages, ...reactions]) {
+        if (included.has(row.id)) throw new Error('Archive history has conflicting IDs');
+        included.set(row.id, row);
+      }
+      for (const id of archive.emojiIds) {
+        check();
+        let source = emojiSources.get(id);
+        if (!source) {
+          source = await deps.readEmoji(viewer?.id, id) || undefined;
+          if (!source || source.thing.id !== id || included.has(id)) throw new Error('An archive emoji is unavailable');
+          emojiSources.set(id, source);
+          included.set(id, structuredClone(source.thing));
+        }
+      }
+      for (const target of archive.attachmentTargets) {
+        if (archiveTargets.has(target.id)) throw new Error('Archive media has conflicting IDs');
+        archiveTargets.set(target.id, target.targetId);
+      }
+      if (included.size > TRANSFER_LIMITS.things || archiveTargets.size > TRANSFER_LIMITS.files) throw new Error('This archive export exceeds the transfer limit');
+    }
+    plan.things = [...included.values()];
+    for (const thing of plan.things) if (thing.folderId && !included.has(thing.folderId)) delete thing.folderId;
     const recordings = plan.things.filter(isTransferRecording);
     const emojis = plan.things.filter(isTransferEmoji);
     if (recordings.length && input.includeFiles === false) throw new Error('Recordings require their file bytes; download a ZIP with files included');
@@ -111,6 +157,10 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
       const targets = new Map<string, { targetId: string; sharedRoot?: string }>();
       for (const file of await deps.bound(plan.things.flatMap((thing) => stored.has(thing.id) ? [stored.get(thing.id)!] : []))) {
         targets.set(file.id, { targetId: file.targetId, sharedRoot: authorizedRoots.get(file.targetId) });
+      }
+      for (const [id, targetId] of archiveTargets) {
+        if (targets.has(id) || includedIds.has(id)) throw new Error('Archive media has conflicting IDs');
+        targets.set(id, { targetId });
       }
       for (const thing of plan.things) {
         const root = authorizedRoots.get(thing.id);
@@ -183,6 +233,13 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
         (plan.attachmentOrder ||= []).push(id);
       }
     }
+    const exportedMedia = new Map([...plan.files, ...(plan.links || [])].map(file => [file.id, file.targetId]));
+    for (const [id, targetId] of archiveTargets) {
+      if (exportedMedia.get(id) !== targetId) {
+        throw new Error('Archives require all their media; include files and links');
+      }
+    }
+    validateChatArchiveRecords(plan);
     check();
     if (new TextEncoder().encode(JSON.stringify(plan)).byteLength > TRANSFER_LIMITS.manifestBytes) throw new Error('This export is too large');
     return { ok: true as const, plan };

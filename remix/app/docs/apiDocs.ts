@@ -12281,15 +12281,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-export',
-    featureVersion: '1.8.0',
-    contractVersion: '1.8.0',
+    featureVersion: '1.9.0',
+    contractVersion: '1.9.0',
+    // 1.9.0: first-party owners re-export complete private archive histories;
+    // optional traversal never strips participants/messages/reactions. Required
+    // media and custom emojis remain owner-authorized and cannot be omitted.
     // 1.7.1: excluded file bytes do not require storage access; read gates remain.
     // 1.7.0: owned themes/algorithms retain included folder placement.
     // 1.6.1: durable recordings pass owner-only live attachment reads without draft expiry.
     // 1.6.0: recordings preserve folderId when their parent is included.
     group: 'things',
     title: 'Plan a portable Thing export',
-    notes: ['Custom emojis export only for their owner. Each portable custom-emoji Thing contains name and emojiFileId, requires image bytes, and excludes source community scope. Legacy inline images use a bounded plan-only inlineBase64 file field (512 KiB image maximum); clients decode that into checksummed ZIP bytes and omit inlineBase64 from the manifest. Stored images use the normal content endpoint.'],
+    notes: ['Private chat-archive roots can be re-exported only by their first-party user owner. Every participant, message, reply and reaction is included regardless of optional traversal flags; independent history-row roots are rejected. All archive media and required custom emoji definitions must remain readable and included, or the entire export fails. Re-import creates fresh private ownership; archived identities never become live accounts or memberships.', 'Custom emojis export only for their owner. Each portable custom-emoji Thing contains name and emojiFileId, requires image bytes, and excludes source community scope. Legacy inline images use a bounded plan-only inlineBase64 file field (512 KiB image maximum); clients decode that into checksummed ZIP bytes and omit inlineBase64 from the manifest. Stored images use the normal content endpoint.'],
     // 1.5.0: owned standalone recordings require stored bytes. Their portable
     // attachment Thing contains only recordingFileId; plan-only sourceId on the
     // file identifies the authorized download and never enters the archive.

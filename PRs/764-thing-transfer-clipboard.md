@@ -1,5 +1,28 @@
 # PR 764 — portable Thing transfer
 
+## Whole-history archive re-export — 2026-09-12
+
+Portable export planning now uses the owner snapshot reader for chat-archive
+roots only when the HTTP route supplies an authenticated first-party user owner.
+Shared links, scoped viewers and independent history rows cannot gain archive
+export authority. The full relational group is mandatory regardless of optional
+traversal flags. Avatar/gallery IDs still pass the canonical attachment reader;
+custom reactions pull actual owned emoji definitions and image bytes. Missing or
+excluded required media fails the entire plan. History validation and transfer
+bounds run before success; external folder placement and server authority stay
+out of the portable output. Both manifests and the client require export 1.9.0.
+
+Focused regressions cover complete history, scope rejection, media/emoji reads,
+exclusion failures, corrupt snapshots, limits and cancellation. This is export
+planning coverage, not yet proof of a live image-byte archive round-trip or the
+visible archive UI. Listing/rendering, live-chat source export and folder lifecycle
+integration remain unfinished.
+
+Validation: the combined transfer/capability command passes 198 tests, targeted
+lint passes, and the running local Nitro manifest at localhost:12282 reports
+origin-scoped api.things-export 1.9.0. TypeScript emits no diagnostics for the
+new exporter/test/route files; the repository-wide baseline is not clean.
+
 ## Canonical custom emoji ID compatibility — 2026-09-12
 
 The canonical stored-upload emoji writer returns emoji_ plus a full 64-character

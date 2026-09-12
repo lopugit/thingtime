@@ -24,6 +24,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-12: Add owner-only whole-history archive re-export to portable transfer
+  plans, including required media and custom emojis; optional traversal cannot
+  silently truncate chats. Export contract/client minimum is 1.9.0. See
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
 - 2026-09-12: Fix shared custom reaction parsing for canonical 70-character
   stored-emoji IDs, preserving archive remapping/readback and Messenger emoji
   projections without widening feed reactions or ownership rules. Clients
