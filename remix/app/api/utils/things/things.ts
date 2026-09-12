@@ -3373,7 +3373,8 @@ export type ListThingsQuery = {
 export const listThings = async (
   viewerInput: string | Viewer,
   query: ListThingsQuery,
-  app: AppLens = null
+  app: AppLens = null,
+  context: { archiveOwnerId?: string } = {}
 ): Promise<Fail | { ok: true; things: PublicThing[]; nextCursor: string | null }> => {
   const viewer = await withFriendIds(asViewer(viewerInput));
   const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_LIMIT), MAX_FEED_LIMIT);
@@ -3401,7 +3402,7 @@ export const listThings = async (
       ? [...PROTECTED_THINGTIME, ...FOLDER_UNFILEABLE]
       : [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME, ...SUBSPACE_THINGTIME, UPDOWN_THINGTIME];
     match = withMatch(
-      ownerLibraryMatch(viewer.id, hiddenKinds),
+      ownerLibraryMatch(viewer.id, hiddenKinds, context.archiveOwnerId === viewer.id && !viewer.pat && !query.appId && !isCustomMongoEndpointActive()),
       await legacyThingReadsRequired() ? { $or: [{ thingtime: { $exists: true } }, { kind: 'post' }] } : { thingtime: { $exists: true } }
     );
     if (folder === 'root') {
@@ -3457,6 +3458,13 @@ export const listThings = async (
     visible = page.filter((_, index) => verdicts[index]);
   }
   const projected = await toPublicThings(visible, viewer);
+  for (const thing of projected) if (thing.thingtime.length === 1 && thing.thingtime[0] === 'chat-archive') {
+    // Library entries are private root summaries, never history or stored
+    // authority. Only the dedicated snapshot route returns archived people.
+    thing.crystal = { name: typeof thing.crystal.name === 'string' ? thing.crystal.name : 'Chat archive' };
+    thing.acl = ['tt:user']; thing.visibility = 'private'; thing.extended = null; thing.tags = [];
+    delete thing.linkKey; delete thing.tokenAcl;
+  }
   if (app) await appShapeProjections(app, visible, projected);
   return { ok: true, things: projected, nextCursor };
 };

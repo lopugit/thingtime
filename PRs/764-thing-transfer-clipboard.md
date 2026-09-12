@@ -1,5 +1,43 @@
 # PR 764 — portable Thing transfer
 
+## Archive library and initial historical view — 2026-09-12
+
+Owner library pagination now includes exact home-plane private archive roots
+only with first-party user context. Historical child records, other owners,
+PAT/app/service access, namespaces and deleting roots remain excluded. Root
+summaries contain only the name plus normal owner-facing listing metadata;
+full historical people/messages stay on the dedicated private snapshot route.
+Folder export carries the same context and includes complete archive groups.
+Things advertises feature 1.14.0 / contract 1.13.0; export is 1.10.0. Clients and
+both manifest tests are updated.
+
+The archive page presents historical messages/replies/reactions, participant
+snapshots and You/Archived labels, with no live Messenger callbacks or username
+resolution. State is keyed by owner/root/identity generation, cleared during
+identity refresh, and aborts on unmount. Retry is recoverable; same-owner prior
+history can remain during a retry. Transfer uses real shared Copy/Cut/Download
+controls, and deletion uses the existing timestamp-guarded archive lifecycle.
+Unsupported generic share/duplicate/delete/inspect menu entries are hidden.
+
+The local-only Playwright smoke uses a fresh Chrome context, fabricated API
+history and intercepted mutations. It passes 1280x900 and 390x844 full scrolling,
+long text, expanded participants, Download modal bounds, Retry, identity
+clearing and signed-out denial with zero API mutations. Visual inspection caught
+and fixed missing fixed-nav clearance and mobile wrapper sizing; direct history
+and Back-link bounds now catch clipping that document scrollWidth alone misses.
+This is rendered fixture evidence, not
+real-account import/download proof. Initial archive media displays attachment
+counts and custom-emoji placeholders; inline galleries/emoji images, search,
+live-chat source export, remaining bulk lifecycle work and real media/clipboard
+round-trips are still unfinished. The broader transfer goal remains active.
+
+Validation: 226 combined transfer/library/menu/navigation/capability tests pass.
+Targeted lint passes (the .mts smoke uses the TypeScript parser explicitly);
+new/changed archive files have no targeted TypeScript diagnostics, while the
+repository-wide baseline remains non-clean. Local Nitro confirms Things 1.14.0
+and export 1.10.0 on its own origin. The live fixture's final screenshots are
+temporary local artifacts, not production acceptance or committed account data.
+
 ## Archive root placement — 2026-09-12
 
 The bulk move path now accepts exact private chat-archive roots only with

@@ -9,6 +9,7 @@ import { ownerLibraryMatch } from './ownerLibraryQuery';
 const matches = (doc: Record<string, any>, query: Record<string, any>): boolean => Object.entries(query).every(([key, value]) => {
   if (key === '$or') return value.some((part: any) => matches(doc, part));
   if (key === '$and') return value.every((part: any) => matches(doc, part));
+  if (key === '$expr') return doc[value.$eq[0].slice(1)] === doc[value.$eq[1].slice(1)];
   const actual = doc[key];
   if (value === null) return actual == null;
   if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -24,6 +25,21 @@ const matches = (doc: Record<string, any>, query: Record<string, any>): boolean 
 });
 
 const recording = { ownerId: 'alice', thingtime: ['attachment'], attachmentPurpose: 'recording', attachmentState: 'ready' };
+
+test('archive listing is opt-in, root-only and namespace/version/deletion fenced before pagination', () => {
+  const archive = { shareId: 'root', ownerId: 'alice', thingtime: ['chat-archive'], archiveVersion: 1, archiveRootId: 'root' };
+  assert.equal(matches(archive, ownerLibraryMatch('alice', PROTECTED_THINGTIME)), false);
+  const query = ownerLibraryMatch('alice', PROTECTED_THINGTIME, true);
+  assert.equal(matches(archive, query), true);
+  assert.equal(matches({ ...archive, folderId: 'folder' }, query), true);
+  for (const change of [{ ownerId: 'other' }, { archiveVersion: 2 }, { archiveRootId: 'other' },
+    { archiveDeleting: true }, { archiveDeleting: 'false' }, { appId: 'app' }, { sandbox: true },
+    { sandboxSpace: 'test' }, { targetId: 'parent' }, { thingtime: ['chat-archive', 'data'] },
+    ...['chat-archive-message', 'chat-archive-participant', 'chat-archive-reaction', 'chat', 'chat-message'].map(kind => ({ thingtime: [kind] }))]) {
+    // Live Messenger kinds are excluded by the real caller's hidden-kind set.
+    assert.equal(matches({ ...archive, ...change }, ownerLibraryMatch('alice', [...PROTECTED_THINGTIME, 'chat', 'chat-message'], true)), false);
+  }
+});
 
 test('personal emoji library inclusion never exposes a community emoji or another owner', () => {
   const query = ownerLibraryMatch('alice', [...PROTECTED_THINGTIME, 'custom-emoji']);

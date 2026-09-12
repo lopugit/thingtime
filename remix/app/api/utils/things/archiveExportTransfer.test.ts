@@ -46,6 +46,22 @@ test('archive exports are whole histories even when optional traversal is disabl
   assert.doesNotMatch(JSON.stringify(result.plan), /ownerId|userId|archiveVersion|archived|updatedAt/);
 });
 
+test('owner folder traversal carries archive scope and exports the complete nested group', async () => {
+  const { archive, deps } = harness(); archive.group.root.folderId = 'folder';
+  const result = await exportTransferPlan({ id: 'owner' }, { ids: ['folder'] }, undefined, {
+    ...deps,
+    read: async id => id === 'folder' ? { shareId: 'folder', ownerId: 'owner', thingtime: ['folder'], crystal: { name: 'History folder' }, acl: ['tt:user'] } as any : null,
+    project: async () => [{ id: 'folder', thingtime: ['folder'], crystal: { name: 'History folder' }, author: { id: 'owner' }, acl: ['tt:user'] }] as any,
+    list: async (viewer, query, app, context) => {
+      assert.equal(typeof viewer === 'string' ? viewer : viewer?.id, 'owner'); assert.equal(query.folder, 'folder'); assert.equal(app, null); assert.equal(context?.archiveOwnerId, 'owner');
+      return { ok: true, things: [{ id: 'archive' }] as any, nextCursor: null };
+    }
+  }, { archiveOwnerId: 'owner' });
+  assert.ok(result.ok); if (!result.ok) return;
+  assert.equal(result.plan.things.length, 7);
+  assert.equal(validateChatArchiveRecords(result.plan)[0].root.folderId, 'folder');
+});
+
 test('archive export requires explicit first-party owner context and refuses independent child roots', async () => {
   const { deps, reads, run } = harness();
   for (const [viewer, context] of [

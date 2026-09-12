@@ -167,12 +167,13 @@ export const loader = async ({ request }: { request: Request }) => {
       limit: Number(params.get('limit')) || undefined,
       appId: actor.kind === 'user' || actor.kind === 'pat' ? (params.get('appId') || '').trim() || null : null
     },
-    app
+    app,
+    { archiveOwnerId: actor.kind === 'user' && user?.accountKind === 'user' ? user.id : undefined }
   );
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
   }
-  return json({ ok: true, things: result.things, nextCursor: result.nextCursor }, { headers: cors });
+  return json({ ok: true, things: result.things, nextCursor: result.nextCursor }, { headers: { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' } });
 };
 
 // One endpoint, full CRUD (the GET loader above is the R):

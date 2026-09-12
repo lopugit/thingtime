@@ -24,6 +24,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-12: Surface owner-only archive roots in Things and add a read-only
+  historical chat page with account-change clearing, reply links, transfer and
+  dedicated deletion. Include archives in owner folder exports; Things is now
+  feature 1.14.0 and export 1.10.0. Desktop/mobile fictional-browser checks pass;
+  inline media rendering remains unfinished. See
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
 - 2026-09-12: Add first-party owner-only archive root moves through the guarded
   managed placement writer, preserving historical records and accounting.
   Bulk contract/client minimum is 1.4.0. See

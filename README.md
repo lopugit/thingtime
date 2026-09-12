@@ -3123,6 +3123,14 @@ cleanup. It does not connect directly to MongoDB, enable uploads, reconcile
 storage or run migrations. A failed approval/storage precondition is a blocker,
 not a passed test. Investigate any reported cleanup IDs before another run.
 
+For isolated archive UI checks, run `node --import tsx scripts/archive-ui-smoke.mts`
+from `remix` with `TT_TRANSFER_UI_ORIGIN=http://localhost:<worktree-port>`.
+Install Playwright and Chrome locally, or point `TT_PLAYWRIGHT_MODULE` at an
+existing Playwright module. The test accepts loopback HTTP only, starts a fresh
+browser context, supplies fictional history, blocks API mutations, and writes
+screenshots to a temporary directory. It never copies browser credentials or
+imports real account data. This does not replace live media/clipboard acceptance.
+
 `corepack pnpm --dir remix run test:transfer-archives` adds a metadata-only
 archive import/read/delete lifecycle check. Enable it with
 `TT_TRANSFER_ARCHIVE_TEST=1` and the same origin/cookie variables, plus

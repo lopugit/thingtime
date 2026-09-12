@@ -1,4 +1,5 @@
 import React from 'react';
+import { ChatArchivePage } from '~/components/Things/ChatArchivePage';
 import { SharedMediaProvider } from '~/components/Sharing/SharedMedia';
 import { Badge, Box, Button, Center, Flex, Heading, Spinner, Stack, Switch, Text } from '@chakra-ui/react';
 import { ArrowLeft, Copy, ExternalLink } from 'lucide-react';
@@ -254,6 +255,11 @@ const InertLabel = ({ kind, author, platform }: { kind: string; author: string |
 // stricter home-plane/current-admin reader; every other id rides the normal
 // ACL-aware Things API.
 export default function ThingPage() {
+	const [params] = useSearchParams();
+	return params.get('archive') === 'true' ? <ChatArchivePage /> : <GenericThingPage />;
+}
+
+function GenericThingPage() {
 	const { id = '' } = useParams();
 	const [searchParams] = useSearchParams();
 	const linkKey = (searchParams.get('key') || '').trim();

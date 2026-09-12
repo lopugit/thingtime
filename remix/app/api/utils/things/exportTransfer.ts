@@ -109,7 +109,7 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
       },
       children: async (folder, cursor) => {
         check();
-        const result = await deps.list(viewer, { folder, cursor, limit: 100 });
+        const result = await deps.list(viewer, { folder, cursor, limit: 100 }, null, context);
         if (isFail(result)) throw result;
         return { ids: result.things.map((thing) => thing.id), cursor: result.nextCursor };
       },

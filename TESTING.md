@@ -2,6 +2,20 @@
 
 ## Private chat archive import integration
 
+- [ ] Owned archives appear as private root entries in Things/folders, never as
+  separate historical message/person rows. Open reaches the read-only archive
+  page with the correct Back link. Other users, PATs, apps, service accounts,
+  deleting roots and custom planes do not list them. Exporting an owned folder
+  preserves the entire included archive group and its folder placement.
+- [ ] On desktop/mobile, expand participants, scroll all history, open/close
+  Transfer → Download, retry a failed load and switch/sign out. The importer is
+  You; historical people have Archived badges and no profile/mention/send/react
+  actions. Old private content disappears on identity refresh. Check fixed-nav
+  clearance, long text, reply links and modal bounds. The local fictional smoke
+  is `node --import tsx scripts/archive-ui-smoke.mts` from remix; it proves no
+  real account lifecycle or media bytes. Inline galleries/custom emoji images
+  are not yet rendered in this initial archive view.
+
 - [ ] Cut an owned archive and paste into another owned folder, then back to
   root: only root placement/timestamp change; message, participant, reply,
   reaction and media IDs remain identical. Stale/deleting/mixed-kind roots,

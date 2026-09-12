@@ -8881,13 +8881,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // is a 400. Only this read grew — the shared projection is unchanged, so
     // things-comment / -feed / -user stay put (S7, additive)
     // Includes additive discussions and the 1.7.5 conditional-media write correction.
-    featureVersion: '1.13.1',
-    contractVersion: '1.12.1',
+    featureVersion: '1.14.0',
+    contractVersion: '1.13.0',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+			'First-party user owner library lists include private chat-archive root summaries under the normal chronological/folder pagination. Historical child rows, deleting or namespace-stamped roots, PAT/app/service readers and custom data planes are excluded. Summary crystals contain only the archive name; full history remains on the dedicated archive read mode. Library responses are private/no-store. ' +
 			'GET ?id=<archive-root>&archive=true returns {ok, archive:{group,updatedAt,attachmentTargets,emojiIds}} only for the first-party owning user on the home plane. Group contains root, self, participants, messages and reactions with whitelisted historical fields. Server account IDs, permissions, live participant markers and storage metadata are omitted; root.selfParticipantId identifies the importing account for rendering. Reads are private/no-store, rate-limited and bounded to 1000 history rows, 2000 attachments and 16 MiB. Missing/deleting archives return 404; malformed or incomplete history returns a sanitized retryable 503 rather than partial history. PATs, apps and service accounts cannot use this mode; key, sharedRoot and appId parameters are rejected. Attachment IDs require separate canonical authorization to render/download, and referenced emoji IDs grant no access on their own. ' +
 			'Contextual reads preserve independently readable foreign composition boundaries and their same-author descendants. Non-owner writers may include such public/group-readable compositions, but newly unresolved private references and cross-author overrides cannot acquire inherited authority. Every audience is revalidated per invocation. ' +
 			'Stored action references include component argument defaults, savedArgs and each persisted page-block override, in that precedence order. New dependencies introduced through argument-only edits require independent read access for non-owner writers. Runtime query, viewer, result and loop values cannot mint grants. ' +
@@ -12283,8 +12284,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-export',
-    featureVersion: '1.9.0',
-    contractVersion: '1.9.0',
+    featureVersion: '1.10.0',
+    contractVersion: '1.10.0',
+    // 1.10.0: owner folder traversal includes complete private archive roots.
     // 1.9.0: first-party owners re-export complete private archive histories;
     // optional traversal never strips participants/messages/reactions. Required
     // media and custom emojis remain owner-authorized and cannot be omitted.
