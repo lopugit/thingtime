@@ -1,5 +1,32 @@
 # PR 764 — portable Thing transfer
 
+## Live AI archive-format round trip — 2026-09-12
+
+On the PR preview advertising export 1.13.0 / import 1.10.0, the approved test
+account imported a synthetic private archive with Lopu, ChatGPT and Claude
+participants, three ordered messages and three inert tool receipts. Real API
+read → export → ZIP encode/decode → import → read → re-export preserved all
+three presets, exact Unicode/newline text, receipt fields and positions, with
+fresh copy IDs and anonymous history reads denied. Export contained none of
+the checked user/owner/ACL/session/device/connector authority fields.
+
+An initial import timed out during preview deployment but had committed. A
+complete owner archive listing found exactly its named fixture, and the test
+resumed from that exact ID rather than replaying the uncertain write. Both
+disposable roots (`c55aa090-6805-437c-bcc3-66411d9d9443` and
+`df4c2407-9e87-46d3-856b-c904d22a0f70`) were deleted through the normal API
+with version fences and verified 404 afterward. No source live chat was created.
+
+The final whole-response chat-list comparison failed only on its dynamic
+`serverTime` field; the chat records matched. Thus the inline harness is not
+reported as wholly green. A durable harness must compare stable chat fields.
+This proves the archive-format storage/ZIP path, not the live AI source adapter,
+provider sync completeness, external avatars or real browser file-picker flow.
+
+Web CI run 34687084867 completed successfully on `5777384e3`, including the
+build/typecheck-ratchet/unit job and headless API suite. The ratchet remains
+warning-only; its successful job is not a clean TypeScript claim.
+
 ## Capability CI follow-up — 2026-09-12
 
 Web CI run 34686812675 on `319514c20` exposed eight stale exact-version

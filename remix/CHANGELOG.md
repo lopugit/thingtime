@@ -31,6 +31,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-12 — Verified the private AI archive-format API/ZIP round trip on the
+  PR preview, including fresh copy IDs, preserved presentation and denied anonymous
+  reads; cleaned both fixtures. Source-adapter and browser acceptance remain
+  separate. [Evidence and harness caveat](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI)
+
 - 2026-09-12 — Correct the second capability suite's stale archive contract
   assertions after the AI transfer addition; 53 capability tests pass. Live
   round-trip limits are recorded in [PR 764](../PRs/764-thing-transfer-clipboard.md).
