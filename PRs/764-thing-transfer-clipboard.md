@@ -1,5 +1,25 @@
 # PR 764 — portable Thing transfer
 
+## Folder context menu and stalled archive read — 2026-09-12
+
+The live browser run now exercises right-click folder Copy/Cut and Download.
+After correcting a test selector to account for icon-prefixed accessible names,
+it verified the OS clipboard contained all five folder/history rows, Cut alone
+left the original in place, and the actual downloaded ZIP contained the folder
+and descendants. Archive Copy/Paste and JSON/ZIP chooser steps then completed,
+but a later archive GET stayed on "Opening private history" for the browser's
+30-second wait. The test is not an overall pass. Cleanup reported one network
+timeout; follow-up verified that exact fixture already absent through both
+archive and ordinary reads. All known fixtures are cleaned up.
+
+Added a 15-second archive-read deadline, cancellation and recoverable Retry;
+it neither clears usable same-account history nor accepts late aborted results.
+The local Chrome fixture deliberately stalls the GET and verifies the timeout,
+successful Retry and identity clearing. Desktop/mobile full-scroll, media,
+lightbox and download states passed with zero API mutations. Targeted lint and
+13 reader/identity tests pass. This proves the recovery behavior, not the cause
+of the dev network stall or the still-unrun browser binary phase.
+
 ## Browser file-byte acceptance harness — 2026-09-12
 
 Added a separately opted-in `TT_TRANSFER_BROWSER_BINARY_TEST=1` phase to the

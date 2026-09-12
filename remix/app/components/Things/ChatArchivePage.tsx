@@ -115,12 +115,17 @@ const OwnedArchivePage = ({ id, user }: { id: string; user: ArchiveUser }) => {
   React.useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   React.useEffect(() => {
     const controller = new AbortController(); setError('');
+    const timeout = setTimeout(() => {
+      controller.abort();
+      setError('Opening this archive timed out. Please retry.');
+    }, 15_000);
     void apiRef.current.v1.things.archive({ id }, { signal: controller.signal }).then(result => {
       if (controller.signal.aborted) return;
       if (!result?.ok || result.archive?.group?.root?.id !== id) throw new Error(result?.error || 'Archive unavailable');
       setArchive(result.archive);
-    }).catch(cause => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Archive unavailable'); });
-    return () => controller.abort();
+    }).catch(cause => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'Archive unavailable'); })
+      .finally(() => clearTimeout(timeout));
+    return () => { clearTimeout(timeout); controller.abort(); };
   }, [id, retry]);
   const remove = async () => {
     if (!archive || deleting || !window.confirm('Delete this private archive and its attachments? This cannot be undone.')) return;

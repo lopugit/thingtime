@@ -2,6 +2,16 @@
 
 ## Real browser portable transfer acceptance
 
+- [ ] Right-click a fixture folder in Things. Copy and Cut must put all nested
+  history on the real OS clipboard; Cut alone must not move/delete it. Download
+  from that same context menu must produce a ZIP containing the folder and its
+  descendants. The real browser harness exercises these controls before the
+  shared Transfer-menu checks.
+- [ ] Stall the archive GET indefinitely: within 15 seconds, show a recoverable
+  timeout with Retry, not permanent "Opening private history". Retry must load
+  normally after the network recovers. Unmount/account changes must cancel the
+  deadline and prevent late responses from exposing the previous account's data.
+
 - [ ] With explicit disposable dev-session variables, run
   `node --import tsx scripts/transfer-browser.integration.mts` from remix.
   Requires `TT_TRANSFER_BROWSER_TEST=1`, a PR preview origin, expected fixture

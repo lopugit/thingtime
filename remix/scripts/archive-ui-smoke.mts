@@ -40,6 +40,7 @@ const mediaRequests = new Set<string>();
 try {
   const context = await browser.newContext();
   let failRead = false;
+  let hangRead = false;
   await context.route('**/api/**', async (route: any) => {
     const request = route.request(); const url = new URL(request.url());
     if (!['GET', 'HEAD'].includes(request.method())) {
@@ -53,6 +54,7 @@ try {
       return route.fulfill({ status: 200, contentType: id === 'document' ? 'text/plain' : 'image/png', body: id === 'document' ? Buffer.from('Fixture text') :
         Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64') });
     }
+    if (url.pathname === '/api/v1/things' && url.searchParams.get('archive') === 'true' && hangRead) return;
     if (url.pathname === '/api/v1/things' && url.searchParams.get('archive') === 'true') return route.fulfill({
       status: failRead ? 503 : 200, contentType: 'application/json', body: JSON.stringify(failRead ? { ok: false, error: 'Temporary history failure' } : { ok: true, archive })
     });
@@ -112,6 +114,13 @@ try {
     await page.getByRole('button', { name: 'Close', exact: true }).last().click();
     await page.getByRole('dialog').waitFor({ state: 'hidden' });
   }
+  hangRead = true;
+  await page.reload();
+  await page.getByRole('alert').filter({ hasText: 'Opening this archive timed out' }).waitFor({ timeout: 25_000 });
+  assert.equal(await page.getByText('Opening private history…', { exact: true }).count(), 0);
+  await page.screenshot({ path: join(output, 'read-timeout.png') });
+  hangRead = false; await page.getByRole('button', { name: 'Retry', exact: true }).click();
+  await page.getByTestId('chat-archive-history').waitFor();
   failRead = true;
   await page.reload();
   await page.getByRole('alert').filter({ hasText: 'Temporary history failure' }).waitFor();
@@ -128,5 +137,5 @@ try {
   assert.equal(mediaRequests.has('avatar-flagged'), false); assert.equal(mediaRequests.has('blocked'), false);
   assert.ok(mediaRequests.has('picture') && mediaRequests.has('shielded'));
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ ok: true, viewports: ['desktop', 'mobile'], fullScroll: true, gallery: true, nsfwReveal: true, lightbox: true, downloadDialog: true, retry: true, identityClearing: true, mutations, output }));
+  console.log(JSON.stringify({ ok: true, viewports: ['desktop', 'mobile'], fullScroll: true, gallery: true, nsfwReveal: true, lightbox: true, downloadDialog: true, boundedReadTimeout: true, retry: true, identityClearing: true, mutations, output }));
 } finally { await browser.close(); }

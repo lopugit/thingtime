@@ -24,6 +24,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-12: Bound private archive reads to 15 seconds with a recoverable Retry
+  state and account-safe cancellation. Verify the stalled-read path in Chrome
+  and real folder context-menu clipboard/ZIP behavior; see
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — **Codex (AI)**
+
 - 2026-09-12: Add an opt-in real browser ZIP/media round-trip acceptance phase,
   including duplicate-name uploads, annotation/byte checks and source-deletion
   independence. Live execution remains pending; see

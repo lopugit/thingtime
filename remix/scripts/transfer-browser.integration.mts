@@ -87,16 +87,37 @@ try {
     assert.ok(data.roots.every((root: string) => root !== id)); await page.getByRole('dialog').waitFor({ state: 'hidden' });
     return data;
   };
-  const clipboard = async () => {
+  const clipboard = async (root = id) => {
     for (let attempt = 0; attempt < 20; attempt++) {
       try {
         const bundle = await readTransferClipboard(execFileSync('/usr/bin/pbpaste', { encoding: 'utf8', maxBuffer: 34 * 1024 * 1024 }));
-        if (bundle.manifest.roots.length === 1 && bundle.manifest.roots[0] === id) return bundle;
+        if (bundle.manifest.roots.length === 1 && bundle.manifest.roots[0] === root) return bundle;
       } catch { /* Never print unrelated clipboard content or parse errors. */ }
       await new Promise(resolve => setTimeout(resolve, 500));
     }
     throw new Error('The OS clipboard did not receive this fixture transfer');
   };
+  // Exercise the actual Finder-style context menu, not only the shared
+  // Transfer button. Copy/Cut must include the selected folder descendants.
+  await page.goto(new URL('/things', origin).href);
+  const folder = page.locator(`[data-thing-id="${first.ids.folder}"]`).first();
+  await folder.waitFor();
+  for (const action of ['Copy', 'Cut']) {
+    execFileSync('/usr/bin/pbcopy', { input: `Thingtime transfer QA waiting for folder ${action}` });
+    await folder.click({ button: 'right' });
+    await page.getByRole('menuitem').filter({ has: page.getByText(action, { exact: true }) }).click();
+    const transfer = await clipboard(first.ids.folder);
+    assert.equal(transfer.manifest.things.length, 5);
+    assert.equal(transfer.manifest.things.find(thing => thing.id === id)?.folderId, first.ids.folder);
+    assert.equal((await readArchive()).group.root.folderId, first.ids.folder, 'Cut alone must not move or delete content');
+  }
+  await folder.click({ button: 'right' });
+  await page.getByRole('menuitem').filter({ has: page.getByText('Download…', { exact: true }) }).click();
+  await page.getByLabel('Download format').selectOption('zip');
+  const folderDownloadEvent = page.waitForEvent('download'); await page.getByRole('button', { name: 'Download', exact: true }).click();
+  const folderDownload = await folderDownloadEvent; const folderPath = join(output, 'folder.zip'); await folderDownload.saveAs(folderPath);
+  const folderBundle = await decodeTransferArchive(await readFile(folderPath));
+  assert.deepEqual(folderBundle.manifest.roots, [first.ids.folder]); assert.equal(folderBundle.manifest.things.length, 5);
   await open(); execFileSync('/usr/bin/pbcopy', { input: 'Thingtime transfer QA waiting for Copy' }); await menu('Copy to clipboard');
   const copied = await clipboard();
   assert.deepEqual(copied.manifest.roots, [id]); assert.equal(copied.manifest.things.length, 4);
@@ -211,4 +232,4 @@ finally {
 }
 if (failure) throw failure;
 console.log(JSON.stringify({ ok: true, osClipboardCopyCut: true, pasteCopyAndMove: true, jsonZipDownloadImport: true,
-  browserBinaryRoundTrip: binary, cleanup: true, output }));
+  folderContextMenuCopyCutDownload: true, browserBinaryRoundTrip: binary, cleanup: true, output }));
