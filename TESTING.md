@@ -1,5 +1,43 @@
 # TESTING.md — per-area manual test checklists
 
+## Feature Stack activity and run chat
+
+- [ ] Open a saved run with one merged, one conflicting, and one failed target.
+  Only the merged target contributes to progress; each card names its next step.
+  A running merge gate says waiting, not working. No rolling finish ETA appears.
+- [ ] Check absent/stale heartbeats, closed PRs, queued workers, all-merged and
+  stopped runs. Fresh PR status and old worker telemetry remain distinguishable.
+- [ ] Open Ask Lopu, send a question, observe queued/answering/answered and failed
+  delivery. Turn auto-refresh off; manual Refresh still works. Switching runs or
+  accounts removes the prior conversation and draft immediately.
+- [ ] Simulate accepting a POST then losing its response: Retry same message
+  creates no duplicate. Delay a GET across Send; its older response must not hide
+  the accepted question or a newer reply. Test long text and keyboard focus.
+- [ ] Test online/offline/old-controller/ended states. New sends are disabled when
+  unavailable; a saved uncertain request remains retryable with the same UUID.
+- [ ] Check the entire dashboard from top to bottom at desktop and 390px widths,
+  open and close chat, scroll long replies/history and verify no overflow.
+- [ ] In the updated trusted action, ask what the run is waiting for. Verify the
+  response against its actual job/step/PR facts; asking to restart does not restart.
+  Cancel/restart a test run and prove stale attempts cannot publish new replies.
+- [ ] Check unauthenticated admin reads/writes, bad/stale/cross-run signatures,
+  oversized bodies, lease expiry and capability negotiation. All chat responses,
+  including errors, are private/no-store and expose no worker lease or credential.
+
+
+## Session read recovery
+
+- [ ] Fail the first `/api/root-data` GET after sign-in: one automatic retry
+  restores the app without repeating the login POST. Fail both reads: show
+  a clean error with Try again and Reload page, never a raw stack or response.
+- [ ] Restore connectivity and click Try again: render current session data.
+  Cancel navigation during a request/backoff: no abandoned request retries.
+- [ ] Switch accounts with a delayed/failing root read: previous account content
+  disappears immediately; stale generations cannot reveal it. Successful
+  switches reset account-owned component state. OTP challenges stay mounted.
+- [ ] Check recovery at desktop and 390px, scroll top to bottom, and keyboard
+  focus both buttons: no clipping, overlap or horizontal overflow.
+
 ## Inherited Thing context menus
 
 - [ ] Type/paste a query, change kind/view/display/sort/group, open a Thing and
@@ -633,42 +671,69 @@ is fixed, and cite the checklist you ran in the PR description.
 - [ ] Run `npm run test:attachments` (it carries the public-upload permission
       unit tests alongside the upload-gate regression test).
 
-## Social meta / link unfurls (`remix/app/api/utils/meta/socialMeta.ts`)
+## Social meta / link unfurls (`remix/app/api/utils/meta/socialMeta.ts`, `socialPreview.ts`, `socialCard.ts`)
 
 Crawlers never run JS, so verify with plain `curl` against the Nitro port (the
 Vite dev port serves the raw shell without injection; in production, Vercel
-routes `/post/:id` and `/profile/:username` to the Nitro `__server` function —
-`remix/scripts/patch-vercel-output.mjs`).
+routes every public share surface plus `/social-card` to the Nitro `__server`
+function — `remix/scripts/patch-vercel-output.mjs`).
 
 - [ ] `curl -s <nitro>/post/<public post id>` returns `og:type article`, an
       `og:title` carrying the author + truncated text (or the poll question),
       an `og:description` capped near 200 chars, an absolute `og:url` /
-      `og:image`, and `twitter:card summary` (`summary_large_image` when the
-      post has an image attachment or a legacy `images[0]` URL, which then
-      becomes the `og:image`).
+      `/social-card?path=...` `og:image`, and `twitter:card summary_large_image`.
+- [ ] `curl -o card.png '<nitro>/social-card?path=/post/<public-photo-post-id>'`
+      yields a valid 1200×630 PNG. A two-photo post is a two-tile collage; a
+      four-or-more-photo post is a four-tile collage, while its excerpt, author
+      and `N photos` badge remain visible alongside it. Text, image,
+      marketplace, and structured Thingtime posts each have their own card
+      variant; polls show question + options, listings show
+      price/category/location, and shares identify the original content type.
+- [ ] A rich comment permalink has the comment treatment; a reply permalink
+      has the threaded reply treatment and identifies its visible parent.
+      Comments with photos retain their collage, while text-post attachments
+      select a video, audio, or file treatment rather than the generic card.
+- [ ] `/media/:id`, `/thing/:id`, `/p/:id`, `/profile/:username`, `/feed`,
+      `/explore`, deep docs/catalogue URLs, and `/social-card?path=/...` each
+      produce a route-appropriate title, eyebrow and descriptive card rather
+      than the indistinguishable pink placeholder. Standalone image, video,
+      audio, and file routes have distinct media treatments. A published
+      `/p/:id` page uses its name, description or safely extracted block text.
 - [ ] Fail closed: `curl -s <nitro>/post/<private post id>` and
       `/post/<garbage id>` both return ONLY the generic site block —
       indistinguishable from each other, and no post text, author, or image
       may appear anywhere in the HTML. (Status stays 200 by design: h3 treats
       a 404 Response from this middleware as "unhandled" and would fall
       through to the raw source template — see `server/routes/[...].ts`.)
-- [ ] `curl -s <nitro>/profile/<username>` returns `og:type profile`, the
-      `displayName (@username)` title, the bio as description, and the avatar
-      as `og:image` when set; an unknown username gets the generic block.
+- [ ] The image renderer fetches only stored, public Thingtime image
+      attachments via a short-lived download URL; a linked remote attachment,
+      private attachment, oversized response, malformed `path`, or non-image
+      MIME type never becomes a server-side fetch or an image-card leak.
 - [ ] User-authored text with `<`, `>`, `&`, quotes, and newlines arrives
-      HTML-escaped and whitespace-collapsed inside `content="…"`.
+      HTML/XML-escaped and whitespace-collapsed inside both `content="…"` and
+      the generated card.
 - [ ] `curl -s -H 'x-forwarded-host: thingtime.com' -H 'x-forwarded-proto:
       https' <nitro>/post/<id>` derives `https://thingtime.com/...` absolute
       URLs (the request-origin pattern, not a hardcoded host).
-- [ ] Every other page (`/`, `/feed`, deep unknown paths) carries the injected
-      site-default block (site_name Thingtime, generic description, brand
-      image, `twitter:card summary`) with absolute URLs, and responses from
-      the shell handler carry the `X-TT-Shell: social-meta` header.
+- [ ] The colourful Thingtime browser-card (wordmark, five-colour mark and
+      playful icon treatment) remains readable at 1200×630 and iMessage-sized
+      previews; no text or photo tile clips at the edge.
+- [ ] Check the card from the **deployed** preview, not just locally:
+      `curl -o card.png '<preview-origin>/social-card?path=/feed'` and open it.
+      Cards ship their own Liberation Sans (`socialCardFontData.ts`) because the
+      Vercel runtime has no system fonts, and a dev machine's fonts hide a
+      missing one — a fontless deploy renders full artwork with zero glyphs.
+      Emoji are deliberately dropped from the PNG (the face has no pictographs,
+      so they would draw as tofu boxes) while the `og:`/`twitter:` text tags
+      keep them. Non-Latin scripts the face lacks (CJK, Arabic, Thai) still draw
+      as tofu — known gap.
+- [ ] `npm --prefix remix run test:social-previews` passes.
 - [ ] After `npm run build`, `verify:vercel-output` passes: the permalink
-      routes sit between the API routes and the SPA fallback and point at the
-      Nitro server function.
-- [ ] A normal browser load of `/post/<id>` and `/profile/<username>` still
-      renders the SPA (the injected head block must not break the shell).
+      and social-card routes sit between the API routes and the SPA fallback,
+      point at the Nitro server function, and trace the native PNG renderer.
+- [ ] A normal browser load of `/post/<id>`, `/profile/<username>`, and
+      `/p/<id>` still renders the SPA (the injected head block must not break
+      the shell).
 
 ## Emailed-link origin trust (`remix/app/api/utils/auth/appOrigin.ts`)
 
@@ -694,6 +759,15 @@ email whose link points at the attacker.
 
 ## Canonical AI instruction links (`AI_ALL.md`)
 
+- [ ] After a history-based guidance refresh, every new recurring rule links to
+      PR evidence and a current source/runbook. Group promotions with their
+      original feature; distinguish open/closed/merged metadata from deployed
+      behavior and retain explicit review/acceptance limitations.
+- [ ] The preserved global snapshot between the labelled markers is byte-for-byte
+      equal to the captured source (verify its recorded SHA-256). Keep it
+      reference-only; it must not override the current repo's Graphify, runtime
+      or contribution guidance. Do not modify the live global source or symlinks
+      when updating repo-only guidance.
 - [ ] Root `AGENTS.md` and `CLAUDE.md` are relative symlinks whose target is
       exactly `AI_ALL.md`.
 - [ ] `cmp -s AI_ALL.md AGENTS.md` and `cmp -s AI_ALL.md CLAUDE.md` both pass,
@@ -1169,6 +1243,62 @@ email whose link points at the attacker.
       `npm --prefix remix run branding-assets` and commit the refreshed
       `remix/public/branding/` + `brandingAssets.generated.json` (byte-stable
       when nothing changed).
+
+## Marketing suite (`remix/app/routes/marketing/`, `remix/app/components/Marketing/`, `remix/app/marketing/`)
+
+- [ ] `npm --prefix remix run test:marketing` passes: 1000+ pages, 1000+ social
+      assets, unique slugs, every related/in-page link resolves, every page
+      builds hero-first and CTA-last, every mock screen renders every
+      `data-wt` target its walkthrough scripts use.
+- [ ] `/marketing` hub: counts match the catalog, every category card and the
+      social card navigate, the search box lands on `/marketing/search?q=…`
+      with results, the showcase walkthrough autoplays and pauses when
+      scrolled out of view.
+- [ ] Category index (`/marketing/styles` is the largest): groups render with
+      counts, the filter narrows client-side, "Show more" paginates without
+      reloading, nothing scrolls horizontally at 390px.
+- [ ] `/marketing/search?q=api` (mixes every grouping namespace): two separate
+      "Developers" sections render — the audience and the feature family — with
+      their own counts, and the console logs no duplicate-key warning. Typing
+      in the filter and clicking "Show more" keep both sections intact.
+- [ ] `/marketing/search?q=thingtime` (a query matching most of the catalog):
+      the heading reports the true match count — 1,091, not a round cap — and
+      clicking "Show more" all the way down reaches the last one instead of
+      stopping early. The count in the heading, the tab title/meta description
+      and the "n more of m" button must all agree.
+- [ ] A page from each kind opens by URL (`landing/feed`, `guides/passkeys`,
+      `walkthroughs/feature-messages`, `compare/thingtime-vs-notion`,
+      `compare/notion-alternative`, `compare/feed-vs-twitter`,
+      `for/developers`, `for/developers/open-api`, `use-cases/recipe-book`,
+      `use-cases/recipe-book/vs-notion`, `concepts/thing`, `templates/car`,
+      `styles/dark-neon/polls`, `faq/themes`,
+      `checklists/creators-getting-started`): hero renders with the animated
+      rainbow highlight word, tables scroll inside their own wrapper, FAQ
+      accordions toggle, the walkthrough cursor moves/clicks/types over the
+      mock screen, the social block shows three images with working PNG/SVG
+      downloads, related links resolve. An unknown slug shows the not-found
+      card with suggestions (no white screen).
+- [ ] "Same page, other looks": `landing/feed` (a lead feature) offers eleven
+      style editions and each chip lands on a different `styles/…` page.
+      `landing/everything-is-a-thing` (one of the 43 features outside
+      `STYLE_FEATURE_KEYS`) has no editions, so the whole section is absent —
+      never a row of chips that navigate back to the page you are on.
+- [ ] Dark trends (`styles/dark-neon/*`, `styles/gradient-glow/*`,
+      `styles/kinetic-type/*`, `styles/listicle/*`) keep every text readable
+      and the sub-nav chips legible; the browser tab title and meta
+      description follow the page (`useMarketingSeo`) and revert when leaving
+      `/marketing`.
+- [ ] `/marketing/social-media`: the menu is navigable (feature → style →
+      format) and the URL updates; the grid re-renders with the right count;
+      PNG download produces a file at the platform's exact pixel size and SVG
+      opens standalone; "Copy caption" copies hashtags; "Download all shown"
+      caps at 40 and reports skipped items via Lopu; sidebar collapses to a
+      Menu button at 390px.
+- [ ] Reduced motion: with `prefers-reduced-motion: reduce` the cursor jumps
+      instead of gliding, the rainbow text is static and the hero voxel logo
+      does not float.
+- [ ] Drawer: the Marketing hub appears with its seven children and keeps the
+      drawer open on click like Branding/Docs.
 
 ## Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`)
 
@@ -3978,6 +4108,9 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       `/thing/<id>?key=<key>`. A no-key visit remains 404 and never paints a
       bearer-key response from local cache. Moving away from hidden invalidates
       the old link.
+- [ ] When reconciling older audience feature branches, each post/composer opens
+      exactly one Custom audience picker. Preserve the shared viewer fields,
+      composer state, ACL payload and drawer layering without duplicate blocks.
 - [ ] Token visibility fence 'hidden' mode ("Hidden only 🕵️" chip): the token
       lives entirely in hidden link-key things — its no-acl creates are born
       hidden WITH a fresh linkKey, public/private things 404, creating
@@ -6566,6 +6699,12 @@ approval; `access.test.ts` — the reservation matrix) and
   control/result and top-to-bottom scrolling. List/grid previews remain inert.
 
 ## Apple widgets and Control Centre
+
+- [ ] Widgets release/Recovery: verify the main-only workflow runs tests before importing secrets and publishes both Widgets and matching Recovery ZIPs after notarization/extraction checks. In Recovery select Thingtime Widgets; verify architecture filtering, isolated cache, download verification, install/launch and rollback without touching another app. Reject mismatched bundle IDs and never accept development signing as a production release.
+
+- [ ] Per-widget Mac endpoints: pin two widgets to different saved, authenticated servers, including Things with identical IDs. Verify the picker lists only the chosen server’s Things, each dashboard/Thing/action link opens that server, and changing the companion’s active endpoint does not change pinned widgets. Remove/disconnect one server and confirm its content clears without affecting the other. Verify unconfigured widgets still follow the active endpoint and turning content sharing off clears every endpoint.
+
+- [ ] Mac saved endpoints: migrate an existing local connection, add a named HTTPS domain, edit/remove an inactive entry, and restart to verify persistence. Reject duplicate or credential-bearing addresses. Switch between compatible origins and verify separate Keychain sessions, cleared content, and correct widget click destinations. An outdated production manifest must leave the previous endpoint active and show an actionable error. Open both Connection and Command-comma settings; test the editor, removal confirmation, scrolling, and reopening after closing the main window.
 
 - [ ] Native Mac companion: Overview, Things, Widget Gallery, and Connection render without a webview. Inspect every page and its full scroll range; test connection cancellation, wrong/expired/replayed callbacks, secure Keychain restoration, and disconnect/revocation on the installed signed copy.
 - [ ] OAuth: review all Things, individual read/create/update/delete permissions, Run actions, and each Lopu permission. Untick full Things and choose read-only in Share more. Confirm selected-only and legacy app-storage grants never gain account access; read-only cannot write, revoked/sandbox tokens fail, and action/voice endpoints require their own scopes. Verify real approved calls as well as denied calls; do not treat a catalog checkbox as enforcement proof.

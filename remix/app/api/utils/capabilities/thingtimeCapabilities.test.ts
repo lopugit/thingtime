@@ -47,6 +47,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // response echoes it; unknown → 400) — the single read only, the shared
   // projection is untouched (1.5.0, additive)
   // Included dependency reads add sharedRoot without widening standalone ACLs.
+  // Own-things lists also carry completed standalone recording attachments.
   assert.equal(manifest.features['api.things']?.version, '1.10.0');
   assert.equal(manifest.features['api.lopu-reminders']?.version, '1.1.0');
   assert.equal(manifest.features['api.lopu-voice-reply']?.version, '1.4.0');

@@ -17,6 +17,7 @@ final class WidgetConnection: NSObject, ObservableObject, ASWebAuthenticationPre
     @Published private(set) var things: [WidgetThing] = []
     @Published private(set) var busy = false
     @Published var error: String?
+    @Published private(set) var endpoints: WidgetEndpoints
     @Published var address: String
     @Published private(set) var origin: URL
     @Published private(set) var lastRefresh: Date?
@@ -47,7 +48,10 @@ final class WidgetConnection: NSObject, ObservableObject, ASWebAuthenticationPre
         let initialOrigin = (try? WidgetOAuthRequest.normalizeOrigin(value)) ?? URL(string: "https://thingtime.com")!
         origin = initialOrigin
         address = initialOrigin.absoluteString
+        endpoints = WidgetEndpoints(currentOrigin: initialOrigin.absoluteString)
         super.init()
+        try? endpoints.persist()
+        publishEndpoints()
         do {
             credential = try WidgetCredentialStore.read(origin: origin.absoluteString)
             if let credential, credential.expiresAt <= Date() {
@@ -60,6 +64,70 @@ final class WidgetConnection: NSObject, ObservableObject, ASWebAuthenticationPre
                 lastRefresh = snapshot.date
             } else { WidgetStore.clear() }
         } catch { self.error = error.localizedDescription; WidgetStore.clear() }
+    }
+
+    /// Saving a bookmark does not activate it or transmit credentials.
+    func saveEndpoint(id: UUID?, name: String, address: String) throws {
+        var next = endpoints
+        let old = next.entries.first(where: { $0.id == id })
+        let saved = try next.save(id: id, name: name, address: address)
+        if old?.origin == origin.absoluteString && saved.origin != origin.absoluteString {
+            throw WidgetEndpoints.Failure.message("Switch to another endpoint before changing the active address. You can rename it here at any time.")
+        }
+        try next.persist()
+        endpoints = next
+        publishEndpoints()
+    }
+
+    func useEndpoint(_ endpoint: WidgetEndpoint) {
+        guard !busy, endpoint.origin != origin.absoluteString else { return }
+        error = nil
+        busy = true
+        let attempt = UUID()
+        generation = attempt
+        Task {
+            do {
+                let target = try WidgetOAuthRequest.normalizeOrigin(endpoint.origin)
+                try await checkCapabilities(at: target)
+                guard generation == attempt else { return }
+                var saved = try WidgetCredentialStore.read(origin: target.absoluteString)
+                if let expired = saved, expired.expiresAt <= Date() {
+                    try WidgetCredentialStore.remove(origin: target.absoluteString)
+                    saved = nil
+                }
+                // Atomically switch the origin and its own credential, never borrow another server's token.
+                WidgetStore.clearLegacy()
+                things = []
+                lastRefresh = nil
+                credential = saved
+                origin = target
+                address = target.absoluteString
+                UserDefaults.standard.set(target.absoluteString, forKey: "widgets.connection.origin")
+                publishEndpoints()
+                busy = false
+                if saved != nil { await refresh() }
+            } catch {
+                guard generation == attempt else { return }
+                busy = false
+                self.error = error.localizedDescription
+            }
+        }
+    }
+
+    func removeEndpoint(_ endpoint: WidgetEndpoint) {
+        guard !busy, endpoint.origin != origin.absoluteString else { return }
+        do {
+            let saved = try WidgetCredentialStore.read(origin: endpoint.origin)
+            try WidgetCredentialStore.remove(origin: endpoint.origin)
+            var next = endpoints
+            next.remove(endpoint.id)
+            try next.persist()
+            endpoints = next
+        publishEndpoints()
+            if let saved, let target = URL(string: endpoint.origin) {
+                Task { await discardToken(saved.accessToken, at: target) }
+            }
+        } catch { self.error = error.localizedDescription }
     }
 
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
@@ -149,10 +217,14 @@ final class WidgetConnection: NSObject, ObservableObject, ASWebAuthenticationPre
             origin = transaction.origin
             address = origin.absoluteString
             UserDefaults.standard.set(origin.absoluteString, forKey: "widgets.connection.origin")
+            if !endpoints.entries.contains(where: { $0.origin == origin.absoluteString }) {
+                _ = try? endpoints.save(id: nil, name: origin.host ?? "Thingtime", address: origin.absoluteString)
+                try? endpoints.persist()
+            }
+            publishEndpoints()
             busy = false
-            if let previous {
+            if let previous, previous.origin == next.origin {
                 Task { await discardToken(previous.accessToken, at: URL(string: previous.origin)!) }
-                if previous.origin != next.origin { try? WidgetCredentialStore.remove(origin: previous.origin) }
             }
             await refresh()
         } catch {
@@ -167,7 +239,44 @@ final class WidgetConnection: NSObject, ObservableObject, ASWebAuthenticationPre
         _ = try? await request(at: origin, path: "/api/v1/oauth/token", token: token, body: ["grantType": "revoke"])
     }
 
+    private func publishEndpoints() {
+        WidgetEndpointCatalog.publish(endpoints.entries.map { .init(id: $0.id.uuidString, name: $0.name, origin: $0.origin) }, activeOrigin: origin.absoluteString)
+    }
+
     func refresh() async {
+        guard !busy else { return }
+        await refreshActive()
+        guard !busy, shareContent else { return }
+        let attempt = generation
+        busy = true
+        defer { if generation == attempt { busy = false } }
+        for endpoint in endpoints.entries where endpoint.origin != origin.absoluteString {
+            guard generation == attempt, shareContent else { return }
+            do {
+                guard let saved = try WidgetCredentialStore.read(origin: endpoint.origin), saved.expiresAt > Date() else {
+                    WidgetStore.clear(origin: endpoint.origin)
+                    continue
+                }
+                let target = try WidgetOAuthRequest.normalizeOrigin(endpoint.origin)
+                try await checkCapabilities(at: target)
+                guard generation == attempt, shareContent else { return }
+                let all = saved.scopes.contains("account.things") || saved.scopes.contains("account.things.read")
+                guard all || saved.scopes.contains("things") else { WidgetStore.clear(origin: endpoint.origin); continue }
+                let result = try await request(at: target, path: all ? "/api/v1/things?limit=50" : "/api/v1/oauth/shared", token: saved.accessToken)
+                guard generation == attempt, shareContent else { return }
+                guard let rows = result["things"] as? [[String: Any]] else { throw ConnectionFailure.invalidResponse }
+                WidgetStore.save(["owner": saved.ownerID, "things": Self.project(rows).map {
+                    ["id": $0.id, "title": $0.title, "text": $0.text, "kind": $0.kind, "value": $0.value]
+                }], origin: endpoint.origin, active: false)
+            } catch {
+                guard generation == attempt else { return }
+                // An unverified endpoint must not keep showing an old account's content.
+                WidgetStore.clear(origin: endpoint.origin)
+            }
+        }
+    }
+
+    private func refreshActive() async {
         guard !busy, let credential else { return }
         guard credential.expiresAt > Date() else {
             error = "Your connection expired. Sign in again to refresh your widgets."
@@ -177,9 +286,11 @@ final class WidgetConnection: NSObject, ObservableObject, ASWebAuthenticationPre
         }
         busy = true
         let attempt = generation
+        let refreshOrigin = origin
         defer { if generation == attempt { busy = false } }
         do {
-            try await checkCapabilities(at: origin)
+            try await checkCapabilities(at: refreshOrigin)
+            guard generation == attempt else { return }
             let allThings = credential.scopes.contains("account.things") || credential.scopes.contains("account.things.read")
             guard allThings || credential.scopes.contains("things") else {
                 things = []
@@ -188,19 +299,10 @@ final class WidgetConnection: NSObject, ObservableObject, ASWebAuthenticationPre
                 error = "To display Things, change permissions and approve read access or choose individual Things."
                 return
             }
-            let result = try await request(at: origin, path: allThings ? "/api/v1/things?limit=50" : "/api/v1/oauth/shared", token: credential.accessToken)
+            let result = try await request(at: refreshOrigin, path: allThings ? "/api/v1/things?limit=50" : "/api/v1/oauth/shared", token: credential.accessToken)
             guard generation == attempt else { return }
             guard let rows = result["things"] as? [[String: Any]] else { throw ConnectionFailure.invalidResponse }
-            things = rows.prefix(50).compactMap { row in
-                guard let id = (row["id"] ?? row["shareId"]) as? String,
-                      WidgetRoute.path(for: WidgetRoute.url(action: .things, thingID: id)) != nil else { return nil }
-                let crystal = row["crystal"] as? [String: Any] ?? [:]
-                func string(_ value: Any?, _ limit: Int) -> String { String((value as? String ?? "").prefix(limit)) }
-                return WidgetThing(id: id, title: string(crystal["name"] ?? crystal["title"] ?? "Untitled Thing", 160),
-                    text: string(crystal["text"] ?? crystal["description"], 1200),
-                    kind: string((row["thingtime"] as? [String])?.first, 40),
-                    value: string((crystal["value"] as? NSNumber)?.stringValue ?? crystal["value"], 100))
-            }
+            things = Self.project(rows)
             lastRefresh = Date()
             error = nil
             publishSnapshot()
@@ -212,6 +314,19 @@ final class WidgetConnection: NSObject, ObservableObject, ASWebAuthenticationPre
             }
             self.error = error.localizedDescription
         }
+    }
+
+    private static func project(_ rows: [[String: Any]]) -> [WidgetThing] {
+        rows.prefix(50).compactMap { row in
+                guard let id = (row["id"] ?? row["shareId"]) as? String,
+                      WidgetRoute.path(for: WidgetRoute.url(action: .things, thingID: id)) != nil else { return nil }
+                let crystal = row["crystal"] as? [String: Any] ?? [:]
+                func string(_ value: Any?, _ limit: Int) -> String { String((value as? String ?? "").prefix(limit)) }
+                return WidgetThing(id: id, title: string(crystal["name"] ?? crystal["title"] ?? "Untitled Thing", 160),
+                    text: string(crystal["text"] ?? crystal["description"], 1200),
+                    kind: string((row["thingtime"] as? [String])?.first, 40),
+                    value: string((crystal["value"] as? NSNumber)?.stringValue ?? crystal["value"], 100))
+            }
     }
 
     func disconnect() {
@@ -242,7 +357,17 @@ final class WidgetConnection: NSObject, ObservableObject, ASWebAuthenticationPre
     }
 
     func open(_ url: URL) {
-        guard let path = WidgetRoute.path(for: url), let target = URL(string: path, relativeTo: origin)?.absoluteURL else { return }
+        guard let path = WidgetRoute.path(for: url) else { return }
+        let destination: URL
+        if let id = WidgetRoute.endpointID(for: url) {
+            guard let saved = endpoints.entries.first(where: { $0.id.uuidString == id }),
+                  let target = try? WidgetOAuthRequest.normalizeOrigin(saved.origin) else {
+                error = "This widget’s endpoint was removed. Edit the widget and choose a saved endpoint."
+                return
+            }
+            destination = target
+        } else { destination = origin }
+        guard let target = URL(string: path, relativeTo: destination)?.absoluteURL else { return }
         NSWorkspace.shared.open(target)
     }
     func takePending() { if let url = WidgetActionInbox.take() { open(url) } }
@@ -264,7 +389,7 @@ final class WidgetConnection: NSObject, ObservableObject, ASWebAuthenticationPre
                             "api.oauth-token": [1, 2, 0], "api.oauth-userinfo": [1, 0, 0], "api.oauth-shared": [1, 0, 0], "api.oauth-scopes": [1, 1, 0], "api.things": [1, 10, 0]]
         for (feature, minimum) in requirements {
             guard let version = features[feature]?["version"] as? String, Self.compatible(version, minimum: minimum) else {
-                throw ConnectionFailure.message("This Thingtime server needs an update before it can connect Widgets.")
+                throw ConnectionFailure.message("\(origin.host ?? "This server") needs an update before Widgets can connect: \(feature) requires \(minimum.map(String.init).joined(separator: ".")) or a compatible newer version. Your active endpoint is unchanged.")
             }
         }
     }

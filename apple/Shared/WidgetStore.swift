@@ -22,21 +22,46 @@ enum WidgetStore {
     static var enabled: Bool { defaults?.bool(forKey: "widget.content.enabled") ?? false }
     static func setEnabled(_ enabled: Bool) {
         defaults?.set(enabled, forKey: "widget.content.enabled")
-        if !enabled { clear() }
+        if !enabled {
+            for endpoint in WidgetEndpointCatalog.entries { clear(origin: endpoint.origin) }
+            clear()
+        }
     }
-    static func clear() {
+    private static func key(_ origin: String) -> String { "widget.snapshot.origin." + Data(origin.utf8).base64EncodedString() }
+    static func clear(origin: String) {
+        defaults?.removeObject(forKey: key(origin))
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+    static func clearLegacy() {
         defaults?.removeObject(forKey: "widget.snapshot")
         WidgetCenter.shared.reloadAllTimelines()
     }
-    static func read(now: Date = Date()) -> WidgetSnapshot? {
+    static func clear() {
+        if let active = WidgetEndpointCatalog.resolve(nil) { clear(origin: active.origin) }
+        defaults?.removeObject(forKey: "widget.snapshot")
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+    static func read(now: Date = Date(), endpointID: String? = nil) -> WidgetSnapshot? {
+        #if os(macOS)
+        if let endpointID {
+            guard let endpoint = WidgetEndpointCatalog.resolve(endpointID) else { return nil }
+            return read(origin: endpoint.origin, now: now)
+        }
+        #endif
         guard enabled, let data = defaults?.data(forKey: "widget.snapshot"),
               let snapshot = try? JSONDecoder().decode(WidgetSnapshot.self, from: data),
               snapshot.isFresh(at: now) else { return nil }
         return snapshot
     }
-    static func save(_ payload: [String: Any], origin: String, date: Date = Date()) {
+    static func read(origin: String, now: Date = Date()) -> WidgetSnapshot? {
+        guard enabled, let data = defaults?.data(forKey: key(origin)),
+              let snapshot = try? JSONDecoder().decode(WidgetSnapshot.self, from: data),
+              snapshot.origin == origin, snapshot.isFresh(at: now) else { return nil }
+        return snapshot
+    }
+    static func save(_ payload: [String: Any], origin: String, date: Date = Date(), active: Bool = true) {
         guard enabled, let owner = payload["owner"] as? String, !owner.isEmpty,
-              let rows = payload["things"] as? [[String: Any]] else { clear(); return }
+              let rows = payload["things"] as? [[String: Any]] else { clear(origin: origin); if active { clearLegacy() }; return }
         let things = rows.prefix(50).compactMap { row -> WidgetThing? in
             guard let id = row["id"] as? String,
                   WidgetRoute.path(for: WidgetRoute.url(action: .things, thingID: id)) != nil else { return nil }
@@ -45,7 +70,10 @@ enum WidgetStore {
         }
         let snapshot = WidgetSnapshot(owner: String(owner.prefix(200)), origin: origin, date: date, things: things)
         guard let data = try? JSONEncoder().encode(snapshot) else { return }
-        defaults?.set(data, forKey: "widget.snapshot")
+        #if os(macOS)
+        defaults?.set(data, forKey: key(origin))
+        #endif
+        if active { defaults?.set(data, forKey: "widget.snapshot") }
         WidgetCenter.shared.reloadAllTimelines()
     }
 }
