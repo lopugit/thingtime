@@ -635,6 +635,16 @@ const deviceEndpointDocs: ApiEndpointDoc[] = [
 
 export const apiEndpointDocs: ApiEndpointDoc[] = [
 	endpoint({
+		id: 'things-actions', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'things', title: 'Thing actions',
+		endpoint: '/api/v1/things/actions', methods: ['POST'],
+		summary: 'Dispatch an explicit semantic action against a Thing by ID, irrespective of its presentation.',
+		detail: 'Accepts only id and action=send-to-lopu. This first action supports owned private ready Watch recording posts and standalone audio Things. The protected recording writer re-resolves source ownership, privacy, binding, ready state and enabled processing consent. Stable jobs deduplicate requests; transcription precedes a private Lopu conversation with normal billing and sensitive-tool confirmation. This is not arbitrary crystal mutation or permission inheritance. Existing /api/v1/things CRUD remains canonical; the recordings send-to-lopu operation is a compatibility adapter to this same dispatcher. No owner, endpoint, credentials or transcript may be supplied. The response includes ownerId and the action result, not recording settings. Ambiguous failures must be reconciled in recording activity, not blindly retried.',
+		auth: { mode: 'session-or-bearer', description: 'Full first-party user session only. Temporary, service, app, device and PAT actors are rejected. Same-origin application/json, 2 KiB maximum body. Uses the shared subscription-aware lopu.recordings account rate bucket; unlimited tiers still obey all security and provider limits. Private no-store responses.' },
+		steps: ['Negotiate api.things-actions >=1.0.0 with matching major on the selected origin.', 'Select the home data source; custom data sources return 409 to prevent cross-database ID collisions.', 'Read current recording consent and explicitly confirm sending this Thing to Lopu.', 'POST the exact Thing ID and action; inspect recording activity for progress.'],
+		requestExamples: [{ name: 'Send recording Thing', description: 'Explicitly act on this recording.', method: 'POST', body: { id: 'watch-upload-your-id', action: 'send-to-lopu' } }],
+		responseExamples: [{ status: 200, description: 'Handoff queued or already requested.', body: { ok: true, ownerId: 'your-user-id', message: 'Recording queued for Lopu.' } }, { status: 403, description: 'Processor not enabled or source not eligible.', body: { ok: false, error: 'Enable recording processing first.' } }]
+	}),
+	endpoint({
 		id: 'ai-complete', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'lopu', title: 'AI connection waterfall',
 		endpoint: '/api/v1/ai/complete', methods: ['POST'],
 		summary: 'Complete text through an explicit ordered waterfall of your own Secure Vault endpoint connections.',
@@ -8858,6 +8868,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // then older first) and the response echoes commentSort; an unknown value
     // is a 400. Only this read grew — the shared projection is unchanged, so
     // things-comment / -feed / -user stay put (S7, additive)
+    // 1.6.2 / contract 1.5.2: GET ?id= with sharedRoot reads an included
+    // dependency through the freshly authorized stored root (compatible
+    // correction, promoted to main by #716)
+    // 1.7.0 / contract 1.6.0: own-things lists include completed standalone
+    // recording attachments — pending uploads and the other protected kinds
+    // stay excluded (additive, on top of the sharedRoot correction)
     // Includes additive discussions and the 1.7.5 conditional-media write correction.
     featureVersion: '1.10.0',
     contractVersion: '1.10.0',
