@@ -47,21 +47,32 @@ enum WidgetRoute {
     #else
     static let scheme = "thingtime"
     #endif
-    static func url(action: WidgetAction, thingID: String? = nil) -> URL {
+    static func url(action: WidgetAction, thingID: String? = nil, endpointID: String? = nil) -> URL {
         var parts = URLComponents()
         parts.scheme = scheme
         parts.host = "widget"
         parts.path = "/\(action.rawValue)"
         if let thingID { parts.queryItems = [URLQueryItem(name: "thing", value: thingID)] }
+        #if os(macOS)
+        if let endpointID { parts.queryItems = (parts.queryItems ?? []) + [URLQueryItem(name: "endpoint", value: endpointID)] }
+        #endif
         return parts.url!
+    }
+    static func endpointID(for url: URL) -> String? {
+        URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "endpoint" })?.value
     }
     static func path(for url: URL) -> String? {
         guard url.scheme == scheme, url.host == "widget", url.user == nil, url.password == nil,
               url.port == nil, url.fragment == nil,
               let action = WidgetAction(rawValue: String(url.path.dropFirst())) else { return nil }
         let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        #if os(macOS)
+        guard items.count <= 2, Set(items.map(\.name)).count == items.count,
+              items.allSatisfy({ $0.name == "thing" || ($0.name == "endpoint" && UUID(uuidString: $0.value ?? "") != nil) }) else { return nil }
+        #else
         guard items.count <= 1, items.allSatisfy({ $0.name == "thing" }) else { return nil }
-        if let id = items.first?.value {
+        #endif
+        if let id = items.first(where: { $0.name == "thing" })?.value {
             guard action == .things, !id.isEmpty, id.count <= 200,
                   id.unicodeScalars.allSatisfy({ CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_-" )).contains($0) }) else { return nil }
             return "/thing/\(id)"

@@ -114,6 +114,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   'ci-deployment': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-preview': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-preview-policy': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
+  'ci-stack-chat-message': ['repository', 'runId', 'actorId', 'question', 'answer', 'status', 'attempts', 'lease', 'completedLease', 'leaseUntil', 'runAttempt'],
   'ci-dispatch': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-event': ['provider', 'repository', 'deliveryId', 'eventType', 'action', 'actor', 'statusFrom', 'statusTo', 'occurredAt'], // data: record → dropped
   friend: ['status', 'friendKey'],

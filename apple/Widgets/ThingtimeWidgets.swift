@@ -9,11 +9,11 @@ struct ThingEntry: TimelineEntry {
 struct ThingProvider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> ThingEntry { .init(date: Date(), configuration: .init(), snapshot: nil) }
     func snapshot(for configuration: ThingWidgetConfiguration, in context: Context) async -> ThingEntry {
-        .init(date: Date(), configuration: configuration, snapshot: WidgetStore.read())
+        .init(date: Date(), configuration: configuration, snapshot: WidgetStore.read(endpointID: configuration.endpointID))
     }
     func timeline(for configuration: ThingWidgetConfiguration, in context: Context) async -> Timeline<ThingEntry> {
         let now = Date()
-        let snapshot = WidgetStore.read(now: now)
+        let snapshot = WidgetStore.read(now: now, endpointID: configuration.endpointID)
         let entry = ThingEntry(date: now, configuration: configuration, snapshot: snapshot)
         // An explicit expiry entry removes content even if background refresh is delayed.
         let expiry = snapshot?.date.addingTimeInterval(1800) ?? now.addingTimeInterval(1800)
@@ -31,7 +31,7 @@ private var actionFamilies: [WidgetFamily] {
 struct ThingtimeActionWidget: Widget {
     var body: some WidgetConfiguration {
         AppIntentConfiguration(kind: "thingtime.action", intent: ThingWidgetConfiguration.self, provider: ThingProvider()) { entry in
-            ActionWidgetView(action: entry.configuration.action, title: entry.configuration.customTitle)
+            ActionWidgetView(action: entry.configuration.action, title: entry.configuration.customTitle, destination: entry.configuration.url(action: entry.configuration.action))
                 .containerBackground(.background, for: .widget)
         }.configurationDisplayName("Quick Action").description("One tap to transcribe, talk, create, search, or browse.").supportedFamilies(actionFamilies)
     }
@@ -63,6 +63,7 @@ struct ActionWidgetView: View {
     private var family: WidgetFamily { previewFamily ?? systemFamily }
     let action: WidgetAction
     var title = ""
+    var destination: URL? = nil
     var body: some View {
         Group {
             if family.thingtimeInline { Label(title.isEmpty ? action.title : title, systemImage: action.symbol) }
@@ -75,7 +76,7 @@ struct ActionWidgetView: View {
                     if !family.thingtimeRectangular { Text("Thingtime").font(.caption).foregroundStyle(.secondary) }
                 }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             }
-        }.widgetURL(action.url).accessibilityLabel(title.isEmpty ? action.title : title)
+        }.widgetURL(destination ?? action.url).accessibilityLabel(title.isEmpty ? action.title : title)
     }
 }
 struct DashboardWidgetView: View {
@@ -84,13 +85,13 @@ struct DashboardWidgetView: View {
     private var family: WidgetFamily { previewFamily ?? systemFamily }
     let entry: ThingEntry
     var body: some View {
-        if family == .systemSmall { ActionWidgetView(action: entry.configuration.action) }
+        if family == .systemSmall { ActionWidgetView(action: entry.configuration.action, destination: entry.configuration.url(action: entry.configuration.action)) }
         else {
             VStack(alignment: .leading, spacing: 12) {
                 Label(entry.configuration.customTitle.isEmpty ? "Thingtime" : entry.configuration.customTitle, systemImage: "sparkles").font(.headline).lineLimit(1)
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: family == .systemMedium ? 4 : 2), spacing: 10) {
                     ForEach(Array(WidgetAction.allCases.prefix(family == .systemMedium ? 4 : 8)), id: \.self) { action in
-                        Link(destination: action.url) {
+                        Link(destination: entry.configuration.url(action: action)) {
                             VStack(spacing: 5) {
                                 Image(systemName: action.symbol).font(.title2).widgetAccentable()
                                 Text(action.title).font(.caption).lineLimit(2).multilineTextAlignment(.center)
@@ -99,7 +100,7 @@ struct DashboardWidgetView: View {
                     }
                 }
                 Spacer(minLength: 0)
-            }.widgetURL(entry.configuration.action.url)
+            }.widgetURL(entry.configuration.url(action: entry.configuration.action))
         }
     }
 }
@@ -110,7 +111,7 @@ struct RenderThingWidgetView: View {
     let entry: ThingEntry
     private var thing: WidgetThing? {
         guard entry.configuration.showContent, let id = entry.configuration.thing?.id else { return nil }
-        return entry.snapshot?.things.first { $0.id == id }
+        return entry.snapshot?.things.first { WidgetEndpointCatalog.matches(id, thingID: $0.id, endpoint: WidgetEndpointCatalog.resolve(entry.configuration.endpointID), explicit: entry.configuration.endpointID != nil) }
     }
     var body: some View {
         if let thing {
@@ -130,9 +131,9 @@ struct RenderThingWidgetView: View {
                     }
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                .privacySensitive().widgetURL(thing.url)
+                .privacySensitive().widgetURL(entry.configuration.url(action: .things, thingID: thing.id))
         } else {
-            ActionWidgetView(action: .things, title: entry.configuration.showContent ? "Open to refresh your Thing" : "Choose a Thing in Edit Widget")
+            ActionWidgetView(action: .things, title: entry.configuration.showContent ? "Open to refresh your Thing" : "Choose a Thing in Edit Widget", destination: entry.configuration.url(action: .things))
         }
     }
 }
@@ -146,7 +147,7 @@ struct RecentThingsWidgetView: View {
             Label(entry.configuration.customTitle.isEmpty ? "Recent Things" : entry.configuration.customTitle, systemImage: "clock").font(.headline).lineLimit(1)
             if entry.configuration.showContent, let snapshot = entry.snapshot, !snapshot.things.isEmpty {
                 ForEach(Array(snapshot.things.prefix(family == .systemSmall ? 2 : family == .systemMedium ? 3 : 7))) { thing in
-                    Link(destination: thing.url) {
+                    Link(destination: entry.configuration.url(action: .things, thingID: thing.id)) {
                         HStack {
                             Image(systemName: "doc.text").foregroundStyle(.secondary)
                             Text(thing.title).font(.subheadline).lineLimit(1)
@@ -159,7 +160,7 @@ struct RecentThingsWidgetView: View {
                 Text("Enable content in Widgets settings, then turn on Show content in Edit Widget.").font(.caption).foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
-        }.widgetURL(WidgetAction.things.url)
+        }.widgetURL(entry.configuration.url(action: .things))
     }
 }
 
