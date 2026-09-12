@@ -1,6 +1,6 @@
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 
-import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { getScopedUser } from '~/api/utils/auth/scopedUser';
 import { assertLopuAccess, LOPU_GUEST_CODE, LOPU_GUEST_ERROR, lopuAccessResponse, resolveLopuBilling } from '~/api/utils/lopu/access';
 import { hasLopuChatProviderConfigured, lopuChatProviderMode } from '~/api/utils/lopu/chat';
 import { createLopuChat, listLopuChats } from '~/api/utils/messenger/lopuChats';
@@ -23,7 +23,7 @@ export const chatWriteLimitError = (limit: { unavailable?: boolean }): string =>
 // lastMessage preview, membership) so the messenger sidebar and the Lopu
 // page render them from one projection.
 export const loader = async ({ request }: { request: Request }) => {
-	const user = await getCurrentUser(request);
+	const user = await getScopedUser(request, 'lopu.chat');
 	if (!user) {
 		return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
 	}
@@ -44,7 +44,7 @@ export const loader = async ({ request }: { request: Request }) => {
 // externalSource.access === 'lopu'). Settings are validated against the model
 // catalog or the selected owner-only Secure Vault provider template.
 export const action = async ({ request }: { request: Request }) => {
-	const user = await getCurrentUser(request);
+	const user = await getScopedUser(request, 'lopu.chat');
 	if (!user) {
 		return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
 	}
