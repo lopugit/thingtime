@@ -119,10 +119,10 @@ contains the saved endpoint list; it does not embed the website.
   development. Paths such as `/api/v1`, credentials, queries and fragments are
   rejected: enter the origin that serves Thingtime's capability manifest.
 - **Use endpoint** verifies that server's capabilities before changing the active
-  origin. All Mac widget clicks and data reads then use that origin. If needed,
+  origin. The native window and widgets with no explicit endpoint then use that origin. If needed,
   choose **Sign in with Thingtime** to approve that server in the browser.
 - Each origin retains its own Keychain sign-in, so switching back restores it.
-  Display content clears when switching, before the new server is refreshed.
+  The active display clears when switching; other endpoints retain their own bounded snapshots.
   A failed compatibility check leaves the active connection unchanged.
 - **Edit** renames a bookmark or changes an inactive bookmark's address. Switch
   away before changing an active address. **Remove** deletes an inactive bookmark
@@ -135,3 +135,24 @@ The public production server must ship the OAuth/capability changes from PR #727
 before it can accept the native connection. Adding it to the list does not bypass
 that requirement or transfer a local server's credential to production. Saved
 bookmarks live locally; this Mac endpoint manager does not change iOS settings.
+
+### Choose an endpoint per Mac widget
+
+Right-click the actual desktop widget → **Edit Widget → Endpoint**. Choose any
+saved endpoint, then select a Thing from that server if using Render a Thing.
+This applies to Quick Action, Dashboard (including every button), Render a Thing,
+and Recent Things in every supported Mac size. An empty Endpoint follows the
+companion's active connection. Existing widgets keep that default behavior.
+
+Sign in once to each endpoint from the native Connection page. When content
+sharing is enabled, the open companion refreshes every saved signed-in endpoint
+with its own Keychain credential. Extensions receive only saved endpoint names,
+origins and separate bounded display snapshots, never credentials. Each snapshot
+expires independently after 30 minutes. Turning content sharing off clears all
+snapshots; disconnecting/removing one endpoint clears its content only.
+
+Thing selections are namespaced by endpoint, so identical IDs on different servers
+cannot substitute for each other. After changing a widget's endpoint, choose its
+Thing again. A removed endpoint yields no content and its links do not fall back
+to the active server. This picker uses the Mac companion's local saved list; it
+does not synchronize that list to iPhone or change iOS Control Centre routing.

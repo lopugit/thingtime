@@ -132,13 +132,13 @@ private struct WidgetHome: View {
                             }.buttonStyle(.bordered)
                         }
                     }
-                    Text("Actions open your selected Thingtime site. Lopu voice and transcription start there after microphone permission.")
+                    Text("Actions in this window open the active Thingtime site. Lopu voice and transcription start there after microphone permission.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 GroupBox("Configure each widget") {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Right-click your desktop → Edit Widgets → Thingtime to add a widget.")
-                        Text("Right-click the actual widget → Edit Widget to choose its Thing, action, title, and layout.")
+                        Text("Right-click the actual widget → Edit Widget to choose its endpoint, Thing, action, title, and layout.")
                         Button("Browse widget layouts") { section = .gallery }
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
                 }
@@ -192,7 +192,7 @@ private struct WidgetConnectionSettings: View {
     var body: some View {
         Form {
             Section("Saved endpoints") {
-                Text("All widgets on this Mac use the active endpoint. Each server keeps its own sign-in. Saving an address does not connect to it.")
+                Text("Right-click a widget → Edit Widget → Endpoint to choose any saved server. Widgets without a selection follow the active endpoint. Sign in to each server once; content refreshes while this app is open.")
                     .font(.caption).foregroundStyle(.secondary)
                 ForEach(connection.endpoints.entries) { endpoint in
                     VStack(alignment: .leading, spacing: 8) {

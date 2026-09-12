@@ -6567,6 +6567,8 @@ approval; `access.test.ts` — the reservation matrix) and
 
 ## Apple widgets and Control Centre
 
+- [ ] Per-widget Mac endpoints: pin two widgets to different saved, authenticated servers, including Things with identical IDs. Verify the picker lists only the chosen server’s Things, each dashboard/Thing/action link opens that server, and changing the companion’s active endpoint does not change pinned widgets. Remove/disconnect one server and confirm its content clears without affecting the other. Verify unconfigured widgets still follow the active endpoint and turning content sharing off clears every endpoint.
+
 - [ ] Mac saved endpoints: migrate an existing local connection, add a named HTTPS domain, edit/remove an inactive entry, and restart to verify persistence. Reject duplicate or credential-bearing addresses. Switch between compatible origins and verify separate Keychain sessions, cleared content, and correct widget click destinations. An outdated production manifest must leave the previous endpoint active and show an actionable error. Open both Connection and Command-comma settings; test the editor, removal confirmation, scrolling, and reopening after closing the main window.
 
 - [ ] Native Mac companion: Overview, Things, Widget Gallery, and Connection render without a webview. Inspect every page and its full scroll range; test connection cancellation, wrong/expired/replayed callbacks, secure Keychain restoration, and disconnect/revocation on the installed signed copy.
