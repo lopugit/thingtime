@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readOwnedChatArchive } from './chatArchiveReadTransfer';
+import { customEmojiIdForAttachment } from '../messenger/messengerMediaCore';
 
 const at = '2026-09-01T00:00:00.000Z';
 const fixture = () => [
@@ -55,6 +56,16 @@ test('reads full owner history in one snapshot and projects no live account or s
   assert.equal(result.updatedAt, at);
   assert.doesNotMatch(JSON.stringify(result), /not-exportable|administrator|private-token|ownerId|userId|archiveVersion|archived/);
   state.rows[3].crystal.text = 'mutated'; assert.equal(result.group.messages[0].crystal.text, 'exact\n history 🥰');
+});
+
+test('archive reads preserve canonical uploaded-emoji reactions and discover their IDs', async () => {
+  const { state, deps } = harness();
+  const emojiId = customEmojiIdForAttachment('owner', 'upload');
+  state.rows[5].crystal.emoji = `custom:${emojiId}`;
+  const result = await readOwnedChatArchive('owner', 'archive', deps);
+  assert.ok(result);
+  assert.deepEqual(result.emojiIds, [emojiId]);
+  assert.equal(result.group.reactions[0].crystal.emoji, `custom:${emojiId}`);
 });
 
 test('missing, foreign, deleting and namespaced roots never expose history', async () => {

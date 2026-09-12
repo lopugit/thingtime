@@ -24,6 +24,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-12: Fix shared custom reaction parsing for canonical 70-character
+  stored-emoji IDs, preserving archive remapping/readback and Messenger emoji
+  projections without widening feed reactions or ownership rules. Clients
+  negotiate the corrected contracts. Live image rendering remains unverified.
+  — **Codex (AI)**
+
 - 2026-09-12: Add an opt-in, dev-fenced archive HTTP lifecycle acceptance test
   with capability/identity checks and exact-root cleanup. Both tests pass live
   against the dev fixture with zero skips; the imported test archive was removed

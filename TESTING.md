@@ -2,6 +2,13 @@
 
 ## Private chat archive import integration
 
+- [ ] Use a real stored-upload emoji ID (emoji_ plus 64 lowercase hex digits)
+  in live Messenger and an archive. Import must remap it to the fresh personal
+  emoji; archive reads and message projections must retain/resolve the token.
+  Legacy UUID/short IDs still work. Oversized noncanonical IDs and invalid hash
+  characters fail; feed reactions still reject every custom token. Verify real
+  image bytes and rendering separately from parser/identity unit tests.
+
 - [ ] Run the explicitly enabled `test:transfer-archives` against the provided
   dev fixture only after its capability preflight succeeds. Verify no skipped
   live test and no cleanup failures. It is metadata lifecycle acceptance only;

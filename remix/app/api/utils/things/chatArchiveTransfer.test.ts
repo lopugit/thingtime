@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createTransferChatArchive, type ChatArchiveImportResources } from './chatArchiveTransfer';
 import type { ThingTransfer } from '../../../utils/thingTransfer/format';
+import { customEmojiIdForAttachment } from '../messenger/messengerMediaCore';
 
 const at = '2026-09-01T00:00:00.000Z';
 const fixture = (): ThingTransfer => ({ format: 'thingtime.transfer', version: 1, roots: ['chat'], files: [], things: [
@@ -155,14 +156,16 @@ test('archive folder placement fences deletion and refuses foreign, missing and 
 });
 
 test('custom reactions remap only to an owned imported personal emoji', async () => {
-  const manifest = fixture(); manifest.things[5].crystal.emoji = 'custom:source_emoji';
-  manifest.things.push({ id: 'source_emoji', thingtime: ['custom-emoji'], crystal: { name: 'party' } });
+  const source = customEmojiIdForAttachment('original', 'old-upload');
+  const copied = customEmojiIdForAttachment('importer', 'new-upload');
+  const manifest = fixture(); manifest.things[5].crystal.emoji = `custom:${source}`;
+  manifest.things.push({ id: source, thingtime: ['custom-emoji'], crystal: { name: 'party' } });
   for (const scoped of [false, true]) {
     const { state, deps } = harness();
-    state.records.set('fresh_emoji', { ownerId: 'importer', ...(scoped ? { targetId: 'community' } : {}) });
-    const run = createTransferChatArchive('importer', manifest, 'chat', { ...empty(), emojis: new Map([['source_emoji', 'fresh_emoji']]) }, deps);
+    state.records.set(copied, { ownerId: 'importer', ...(scoped ? { targetId: 'community' } : {}) });
+    const run = createTransferChatArchive('importer', manifest, 'chat', { ...empty(), emojis: new Map([[source, copied]]) }, deps);
     if (scoped) { await assert.rejects(run, /reaction emoji/); assert.equal(state.inserts, 0); }
-    else { await run; assert.equal(state.committed[5].crystal.emoji, 'custom:fresh_emoji'); }
+    else { await run; assert.equal(state.committed[5].crystal.emoji, `custom:${copied}`); }
   }
 });
 

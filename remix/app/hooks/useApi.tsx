@@ -865,7 +865,7 @@ export function useApi() {
         return asyncFetcher.submit(args, { action: '/api/v1/things/export', signal: options?.signal, errorContext: 'export Things' });
       }, [asyncFetcher]),
       import: useCallback(async (args: { manifest: unknown; files?: Record<string, string>; folderId?: string | null }, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.things-import', '1.9.0');
+        await requireThingtimeCapability('api.things-import', '1.9.1');
         return asyncFetcher.submit(args, { action: '/api/v1/things/import', signal: options?.signal, errorContext: 'import Things' });
       }, [asyncFetcher]),
       // scope: 'subspaces' narrows the page to posts from the viewer's ACTIVE
@@ -928,7 +928,7 @@ export function useApi() {
         []
       ),
       archive: useCallback(async (args: { id: string }, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.things', '1.13.0');
+        await requireThingtimeCapability('api.things', '1.13.1');
         return getJson(`/api/v1/things${toQuery({ id: args.id, archive: true })}`, options);
       }, []),
       update: useCallback(

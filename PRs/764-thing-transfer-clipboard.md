@@ -1,5 +1,26 @@
 # PR 764 — portable Thing transfer
 
+## Canonical custom emoji ID compatibility — 2026-09-12
+
+The canonical stored-upload emoji writer returns emoji_ plus a full 64-character
+SHA-256 hex digest. The shared reaction parser previously capped every ID at 64
+characters, rejecting these 70-character IDs. It now accepts that exact long
+form in addition to the unchanged legacy grammar; it does not accept arbitrary
+long IDs, uppercase/non-hex digests or URL/path suffixes. Feed reactions still
+reject custom tokens. Existing personal/community authorization is unchanged.
+
+Regression coverage uses IDs from the real canonical ID generator, checks feed
+rejection and invalid forms, remaps an archive reaction between old/new canonical
+emoji IDs, and reads the resulting history token without losing it. Things
+archive reads are feature 1.13.1 / contract 1.12.1; import is 1.9.1. Messenger
+messages, edit projections and reactions are 1.0.1. Corresponding clients now
+negotiate these minimum versions. Both manifest generators are tested.
+
+All 213 transfer, 54 Messenger and 46 capability tests pass, with targeted lint
+passing. These do not prove real uploaded-image rendering or full archive
+export/re-export. Archive UI/listing, folder integration, media round-trips and
+remaining broad transfer acceptance are still unfinished.
+
 ## Real archive lifecycle acceptance harness — 2026-09-12
 
 Added opt-in `test:transfer-archives` using actual application HTTP APIs, a
