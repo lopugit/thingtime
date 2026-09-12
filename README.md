@@ -3102,37 +3102,6 @@ Tailscale/Funnel is not available on the validation host: its configured CLI
 wrapper points at a missing Tailscale application. No public dev mapping was
 created or changed.
 
-### Saved AI waterfalls
-
-Settings → AI waterfalls stores private named model/endpoint orders using the existing Things database and authenticated API. No extra collection, migration, or secret is required. Configure provider keys or personal Secure Vault connections as described in [the waterfall setup](docs/ai-waterfall-selector.md). Forks must deploy the registered `api.ai-waterfalls` 1.0.0 contract before clients can save a library.
-
-## Thingtime Widgets automatic releases
-
-`.github/workflows/widgets-release.yml` publishes an Apple-silicon Widgets ZIP and
-a matching Recovery ZIP after relevant changes reach `main`. Owner-only manual
-dispatch is also restricted to `main`; PR code cannot reach its signing or publish
-steps. This dedicated job pins the exact main SHA, runs native/Recovery tests before
-importing signing material, and leaves the Electron repository-wide latest release
-unchanged. The version comes from `macos/ThingtimeWidgets/project.yml`, with a
-workflow build number and source SHA appended to the release tag.
-
-Fork setup: enable Actions and configure `MAC_CSC_LINK` (base64 Developer ID P12),
-`MAC_CSC_KEY_PASSWORD`, `APPLE_TEAM_ID`, and `APPLE_API_KEY_BASE64`,
-`APPLE_API_KEY_ID`, `APPLE_API_ISSUER` for notarization. The existing `ASC_KEY_CONTENT`,
-`ASC_KEY_ID`, `ASC_ISSUER_ID` aliases are accepted. Store actual values only in
-GitHub Actions secrets. A fork must also deliberately update the repository-owner
-guard and Recovery's release-catalog origin. No Apple Development/ad-hoc fallback
-is allowed for published production builds.
-
-The workflow imports credentials into a temporary Keychain, signs nested widget
-code before the app, notarizes and staples, then verifies both final ZIPs after
-extraction. It publishes `SHA256SUMS.txt` and removes temporary signing material.
-The `Thingtime-Widgets-App-Release-<version>-macos-arm64.zip` asset is recognized by
-Recovery's **App → Thingtime Widgets** selector; its cache and install target are
-isolated from Desktop, Commander and Recovery. Local bundle construction is not
-proof of a successful cloud release: the first main run and download/install via
-Recovery remain release acceptance checks.
-
 ## Inherited Thing actions
 
 Persisted entity menus use `ThingContextMenu` and `buildThingEntityMenu`;
@@ -3168,3 +3137,34 @@ Never embed credentials in a menu, action request, source fixture or public docs
 Local menu QA uses this worktree's deterministic port (currently
 `http://localhost:16250`). Tailscale/Funnel was unavailable during verification:
 the local launcher points to a missing Tailscale app; no public mapping was changed.
+
+### Saved AI waterfalls
+
+Settings → AI waterfalls stores private named model/endpoint orders using the existing Things database and authenticated API. No extra collection, migration, or secret is required. Configure provider keys or personal Secure Vault connections as described in [the waterfall setup](docs/ai-waterfall-selector.md). Forks must deploy the registered `api.ai-waterfalls` 1.0.0 contract before clients can save a library.
+
+## Thingtime Widgets automatic releases
+
+`.github/workflows/widgets-release.yml` publishes an Apple-silicon Widgets ZIP and
+a matching Recovery ZIP after relevant changes reach `main`. Owner-only manual
+dispatch is also restricted to `main`; PR code cannot reach its signing or publish
+steps. This dedicated job pins the exact main SHA, runs native/Recovery tests before
+importing signing material, and leaves the Electron repository-wide latest release
+unchanged. The version comes from `macos/ThingtimeWidgets/project.yml`, with a
+workflow build number and source SHA appended to the release tag.
+
+Fork setup: enable Actions and configure `MAC_CSC_LINK` (base64 Developer ID P12),
+`MAC_CSC_KEY_PASSWORD`, `APPLE_TEAM_ID`, and `APPLE_API_KEY_BASE64`,
+`APPLE_API_KEY_ID`, `APPLE_API_ISSUER` for notarization. The existing `ASC_KEY_CONTENT`,
+`ASC_KEY_ID`, `ASC_ISSUER_ID` aliases are accepted. Store actual values only in
+GitHub Actions secrets. A fork must also deliberately update the repository-owner
+guard and Recovery's release-catalog origin. No Apple Development/ad-hoc fallback
+is allowed for published production builds.
+
+The workflow imports credentials into a temporary Keychain, signs nested widget
+code before the app, notarizes and staples, then verifies both final ZIPs after
+extraction. It publishes `SHA256SUMS.txt` and removes temporary signing material.
+The `Thingtime-Widgets-App-Release-<version>-macos-arm64.zip` asset is recognized by
+Recovery's **App → Thingtime Widgets** selector; its cache and install target are
+isolated from Desktop, Commander and Recovery. Local bundle construction is not
+proof of a successful cloud release: the first main run and download/install via
+Recovery remain release acceptance checks.
