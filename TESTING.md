@@ -2,6 +2,16 @@
 
 ## Real browser portable transfer acceptance
 
+- [ ] Run `node --import tsx --test app/api/utils/things/recordingTransfer.integration.test.ts`
+  from `remix/` with `TT_TRANSFER_RECORDING_TEST=1 TT_TRANSFER_REMOTE_DEV_TEST=1`,
+  the approved dev/PR-preview URL and username, and an ephemeral fixture cookie.
+  Verify synthetic WAV ZIP bytes, a fresh durable recording ID, anonymous denial,
+  source-deletion independence, re-export and both content/Thing 404 cleanup.
+  No microphone or transcription is used. If upload start times out before an ID,
+  reconcile the logged stable request ID with the identical upload metadata before
+  another run; never generate a replacement operation to mask uncertain completion.
+  A default skipped test is not acceptance or playback/transcript coverage.
+
 - [ ] Run `node --import tsx --test app/api/utils/things/libraryTransfer.integration.test.ts`
   from `remix/` with `TT_TRANSFER_LIBRARY_TEST=1 TT_TRANSFER_REMOTE_DEV_TEST=1`,
   the approved dev/PR-preview URL and username, and an ephemeral fixture cookie.

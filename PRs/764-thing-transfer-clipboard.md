@@ -1,5 +1,22 @@
 # PR 764 — portable Thing transfer
 
+## Real recording independence — 2026-09-12
+
+The explicitly enabled `recordingTransfer.integration.test.ts` passed against
+preview `e225c5b8d62a5e4d4255168cb768e24377b826f1`: one test, no skips, five seconds.
+A synthetic 100ms silent WAV went through ordinary private recording upload,
+ZIP export, fresh `recording-import` upload and the dedicated import commit.
+The new ID is readable as a Thing, denies anonymous byte access, retains exact
+bytes after source deletion and supports another export. Both attachment IDs
+were deleted through the lifecycle API; content and Thing reads returned 404.
+No microphone, human recording, transcription, processor, or approval change was
+used. This proves recording transport, not playback UI or transcript transfer.
+
+Live Chrome on that same SHA also opened theme and algorithm Import dialogs at
+desktop and 390px mobile width. File controls and buttons remained visible;
+submission stayed disabled without a file. This was read-only dialog coverage,
+not a file-picker round trip for those libraries.
+
 ## Real mixed-library round trip — 2026-09-12
 
 The explicitly enabled `libraryTransfer.integration.test.ts` passed against
