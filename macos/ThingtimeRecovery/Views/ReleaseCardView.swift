@@ -25,7 +25,7 @@ struct ReleaseCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
-                Label(component.title, systemImage: component == .recovery ? "cross.case.fill" : (component == .commander ? "command" : "desktopcomputer"))
+                Label(component.title, systemImage: component == .recovery ? "cross.case.fill" : (component == .widgets ? "rectangle.3.group" : component == .commander ? "command" : "desktopcomputer"))
                     .font(.headline)
                 Spacer(minLength: 4)
                 Text(release.metadata.version?.components(separatedBy: CharacterSet(charactersIn: "+-")).first ?? "Release")

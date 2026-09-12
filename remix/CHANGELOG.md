@@ -24,6 +24,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Promote the native Apple widget suite, browser OAuth scopes, saved endpoints, per-widget routing, automatic signed Widgets releases and Recovery support from PRs #727 and #774. — Codex (AI), 2026-09-12
 - Bound root session reads to two attempts with timeout/cancellation, provide
   recoverable retry/reload controls, and hide/reset account-owned UI across
   sign-in changes without falling back to another account's root data.

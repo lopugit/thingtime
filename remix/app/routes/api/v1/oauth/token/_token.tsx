@@ -1,3 +1,5 @@
+import { resolveAppToken } from '~/api/utils/apps/appTokens';
+import { revokeSession } from '~/api/utils/auth/sessions';
 import { json, readJsonBody } from '~/api/http';
 
 import { exchangeDesktopAuthorizationCode } from '~/api/utils/apps/desktopOAuth';
@@ -14,6 +16,12 @@ export const action = async ({ request }: { request: Request }) => {
 	}
 
 	const body = await readJsonBody(request, 16 * 1024);
+	if (body?.grantType === 'revoke') {
+    const context = await resolveAppToken(request);
+    if (!context) return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+    await revokeSession(context.jti);
+    return json({ ok: true }, { headers: { 'Cache-Control': 'no-store' } });
+  }
 	if (body?.grantType !== 'authorization_code') {
 		return json({ ok: false, error: 'grantType must be authorization_code' }, { status: 400 });
 	}
