@@ -17,6 +17,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Adds private per-run Ask Lopu status chat with capability negotiation, durable
   delivery/retry states, and an optional responder in the matching controller.
   Requires both product and controller rollout for new live conversations.
+  Validation and rollout: [PR #782](../PRs/782-codex-stack-progress-chat-clarify-stack-progress-and-add-ask-lopu-run-chat.md).
 
 - 2026-09-11: Add Settings saved AI waterfalls and reusable select, edit, save-copy and save-and-apply controls with private storage and stale-edit protection. See [PR 771](../PRs/771-ci-stack-model-selection-reusable-model-and-endpoint-waterfall.md).
 
