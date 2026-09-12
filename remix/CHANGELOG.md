@@ -24,6 +24,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Unify Thing, post, recording and message action-menu rendering and inherited
+  base verbs. Dispatch recording handoffs through the versioned Things action
+  API, retaining the legacy adapter and protected writers. Fix stale open
+  submenus and scrollbar-edge clipping. Details:
+  [PR 767](../PRs/767-unified-thing-menus-native-links-search-history.md).
+  — Codex (AI), 2026-09-11
+
+- Make drawer and Thing-menu destinations native anchors, preserving browser
+  new-tab modifiers, and persist Things search/view/filter/sort/group rules in
+  URL history, including rapid input and folder navigation. — Codex (AI), 2026-09-11
+
 - Verify real shared-file and linked-gallery copies on the exact PR preview,
   including private copies surviving source revocation/deletion and cleanup
   of all disposable test content. Record the separate post-login root-data
@@ -953,6 +964,28 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   direct provider-audio mode streams PCM microphone and response audio to
   xAI Grok Voice on a server-minted five-minute ephemeral credential, on the
   web and on iOS (background audio session + Live Activity).
+
+### 2026-09-03 — Generated marketing suite: 1,600+ pages, animated walkthroughs, social image suite — Claude (AI)
+
+- Grouped summary; details in the PR note (`PRs/610-claude-marketing-suite--generated-marketing-suite.md`).
+- **`/marketing`** is a catalog-generated marketing site: feature landing
+  pages, how-to guides, animated cursor walkthroughs over mock screens,
+  fair competitor comparisons and alternatives, audience pages, use cases,
+  concept explainers, starter templates, twelve "style editions" per lead
+  feature, FAQ pages and getting-started checklists — 1,635 pages from one
+  data set (`remix/app/marketing/`), every slug validated, every link
+  resolved, hero-first and CTA-last, deterministic per slug.
+- **`/marketing/social-media`** is a menu-navigable image suite: every
+  feature × twelve viral trend styles × ten platform formats renders as a
+  self-contained SVG and downloads as PNG at the exact platform size, with
+  per-platform captions and hashtags (10,680 images).
+- Routes are lazy (`marketing`, `marketing/social-media`,
+  `marketing/:category`, `marketing/*`); the root title effect defers to
+  `useMarketingSeo` under `/marketing`; the drawer gains a Marketing hub.
+- Tests: `npm run test:marketing` (catalog validation, walkthrough target
+  coverage, SVG rendering, copy determinism, mock-screen coverage, player
+  engine); manual checklist in `TESTING.md` ("Marketing suite"); design
+  notes in `docs/marketing-suite.md`.
 
 ### 2026-09-03 — Multi-environment PR preview links — Codex (AI)
 
