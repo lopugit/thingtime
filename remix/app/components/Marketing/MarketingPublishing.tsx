@@ -205,9 +205,14 @@ export const MarketingAdminBar = ({ surface }: { surface?: AdminSurface }) => {
 						</AdminButton>
 					) : null}
 					{bulk && bulk.keys.length ? (
+						// Same cold-start guard as the single-surface switch above, and it
+						// matters more here: on a true cold start every key reads as
+						// unpublished, so this renders "Publish all N" over the WHOLE set
+						// and one click would publish the pages an admin deliberately left
+						// unpublished. Wait the one round trip for a known state.
 						bulkRemaining > 0 ? (
 							<AdminButton
-								disabled={busy}
+								disabled={busy || status === 'cold'}
 								onClick={() => void setState(bulk.keys.filter((key) => !visibility.isPublished(key)), 'published', `${bulkRemaining} ${bulk.noun}`)}
 								data-testid="marketing-publish-all"
 								title={`${bulkPublished} of ${bulk.keys.length} ${bulk.noun} published`}
@@ -216,7 +221,7 @@ export const MarketingAdminBar = ({ surface }: { surface?: AdminSurface }) => {
 							</AdminButton>
 						) : (
 							<AdminButton
-								disabled={busy}
+								disabled={busy || status === 'cold'}
 								onClick={() => void setState(bulk.keys, null, `${bulk.keys.length} ${bulk.noun}`)}
 								data-testid="marketing-unpublish-all"
 							>
