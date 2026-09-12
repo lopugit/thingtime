@@ -1,5 +1,26 @@
 # PR 764 — portable Thing transfer
 
+## Real mixed-library round trip — 2026-09-12
+
+The explicitly enabled `libraryTransfer.integration.test.ts` passed against
+preview `634cfd3d650ee4565dfeedac6510e4bc97a206e6`: one test, no skips. A folder
+containing schema, data, component, webpage, action, post, theme and algorithm
+content imported through the real API, exported through ZIP, and imported/exported
+again. All nine kinds retain fresh IDs and folder placement. Data points to the
+copied schema; the page points to the copied component. Nested values and extended
+data, component render/args, action steps, post text, resolved theme tokens and
+algorithm weights are checked. Actions are never executed and themes/algorithms
+are never activated. Anonymous folder exports fail. All 18 records were removed
+through their canonical deletion endpoints, with 404 readback.
+
+The first attempt timed out during import. Before retrying, read-only reconciliation
+after its deadline found no matching fixture folder, theme or algorithm. A later
+assertion exposed a fixture mismatch: real theme saves resolve defaults, so the
+fixture now starts with canonical full theme tokens. That attempt's nine records
+were also cleaned. The final run completed in seven seconds. This is HTTP/ZIP
+transport evidence, not nine separate rendered UI checks or proof that every
+possible schema, action or component form is supported.
+
 ## Real live-chat image independence — 2026-09-12
 
 `liveChatMedia.integration.test.ts` passed explicitly enabled against preview
@@ -984,6 +1005,9 @@ blockers and must not be read as the present acceptance state.
   components, schemas, actions, nested values, themes, algorithms, files,
   recordings and mixed galleries. Wired controls or one generic fixture alone
   do not prove each content-specific round trip.
+- The nine-kind HTTP/ZIP library fixture now proves basic content/reference and
+  copy-of-copy transport on `634cfd3d6`; browser interaction/rendering for those
+  particular library surfaces remains separate acceptance work.
 - Retain account-transition, partial-failure, desktop/mobile and source-revocation
   checks. Verify current-head CI and preview separately from earlier acceptance.
 

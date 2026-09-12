@@ -31,6 +31,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-12 — Added and passed real nine-kind library ZIP/import regression:
+  folders, schemas/data, components/pages, actions, posts, themes and algorithms,
+  including fresh references on a second copy and verified cleanup. See
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
 - 2026-09-12 — Added and passed opt-in real live-chat image ZIP/import acceptance
   on preview `3e29ad283`: fresh media binding, byte independence after source
   deletion, anonymous denial and verified cleanup. Updated current transfer

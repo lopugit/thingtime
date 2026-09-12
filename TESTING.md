@@ -2,6 +2,16 @@
 
 ## Real browser portable transfer acceptance
 
+- [ ] Run `node --import tsx --test app/api/utils/things/libraryTransfer.integration.test.ts`
+  from `remix/` with `TT_TRANSFER_LIBRARY_TEST=1 TT_TRANSFER_REMOTE_DEV_TEST=1`,
+  the approved dev/PR-preview URL and username, and an ephemeral fixture cookie.
+  Verify all nine kinds, copied schema/component references, copy-of-copy content,
+  anonymous folder denial and 18-record cleanup. The test logs its fixture marker
+  before writes. If an import times out without IDs, do not blindly rerun: wait
+  out the server deadline, reconcile that marker in Things plus theme/algorithm
+  libraries, and resolve any retained records through their canonical APIs first.
+  A skipped run is not acceptance; this HTTP test does not replace UI checks.
+
 - [ ] Run the real live-image archive acceptance with explicit
   `TT_TRANSFER_LIVE_MEDIA_TEST=1 TT_TRANSFER_REMOTE_DEV_TEST=1`, a dev/PR-preview
   `TT_TRANSFER_TEST_URL`, the expected `TT_TRANSFER_TEST_USERNAME`, and an
