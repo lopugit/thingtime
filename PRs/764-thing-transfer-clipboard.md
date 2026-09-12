@@ -1,5 +1,17 @@
 # PR 764 — portable Thing transfer
 
+## Historical AI identity foundation — 2026-09-12
+
+Added a pure presentation classifier using the canonical external-source
+projection. It distinguishes human turns from archived assistant/system/unknown
+authors, accepts canonical Lopu human rows without externalSource, and rejects
+missing/conflicting role or source provenance instead of assigning it to self.
+Only provider, historical role and display name survive; source/session/device/
+connector IDs, capabilities, tool targets, request IDs and billing do not.
+Three focused tests and lint pass. This is not wired into export: complete
+history fencing, synthetic participant IDs, avatar presentation and inert tool
+history still need integration. The existing AI-export refusal remains intact.
+
 ## Real recording independence — 2026-09-12
 
 The explicitly enabled `recordingTransfer.integration.test.ts` passed against
