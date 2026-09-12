@@ -25,6 +25,9 @@ import VerifyEmail from './routes/verify-email';
 import Welcome from './routes/welcome';
 import { recoverStaleChunk } from './utils/staleChunkRecovery';
 import { shouldBootstrapTemporaryUser } from './utils/temporaryUserBootstrap';
+import { fetchRootData } from './utils/rootDataRecovery';
+import { rootIdentity } from './utils/rootIdentity';
+import { RootRecovery } from './components/Layout/RootRecovery';
 
 // Everything else is code-split. Statically importing every route put the
 // admin dashboard, the migrations console and the whole API-docs registry into
@@ -80,20 +83,26 @@ const fetchJson = async <T,>(url: string, init: RequestInit = {}) => {
 
 const rootLoader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
-  const rootData = await fetchJson<RootLoaderData>(`/api/root-data${url.search}`);
+  const generation = rootIdentity.read().generation;
+  const rootData = await fetchRootData<RootLoaderData>(`/api/root-data${url.search}`, request.signal);
+  const current = (data: RootLoaderData) => {
+    request.signal.throwIfAborted();
+    if (rootIdentity.read().generation !== generation) throw new DOMException('Session changed during refresh', 'AbortError');
+    return { ...data, clientIdentityGeneration: generation };
+  };
 
   if (!shouldBootstrapTemporaryUser(url.pathname, rootData.user)) {
-    return rootData;
+    return current(rootData);
   }
 
   try {
-    const temporary = await fetchJson<{ user: RootLoaderData['user'] }>('/api/v1/auth/temporary', { method: 'POST' });
-    return temporary.user ? { ...rootData, user: temporary.user } : rootData;
+    const temporary = await fetchJson<{ user: RootLoaderData['user'] }>('/api/v1/auth/temporary', { method: 'POST', signal: request.signal });
+    return current(temporary.user ? { ...rootData, user: temporary.user } : rootData);
   } catch {
     // Authentication remains recoverable through the existing login UI when
     // the bootstrap service is unavailable; never replace the whole route
     // with an error boundary for an optional first-session convenience.
-    return rootData;
+    return current(rootData);
   }
 };
 
@@ -131,6 +140,7 @@ export const router = createBrowserRouter([
     element: <App />,
     HydrateFallback,
     loader: rootLoader,
+    errorElement: <RootRecovery />,
     children: [
       { index: true, element: <Index /> },
       // "Login with Thingtime" popup (embed SDK) — no guest/user guard: it

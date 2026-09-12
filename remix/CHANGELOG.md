@@ -24,6 +24,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Bound root session reads to two attempts with timeout/cancellation, provide
+  recoverable retry/reload controls, and hide/reset account-owned UI across
+  sign-in changes without falling back to another account's root data.
+  — Codex (AI), 2026-09-12
+
 - Verify real shared-file and linked-gallery copies on the exact PR preview,
   including private copies surviving source revocation/deletion and cleanup
   of all disposable test content. Record the separate post-login root-data
