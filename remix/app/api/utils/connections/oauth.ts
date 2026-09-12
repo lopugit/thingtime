@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { signPurposeToken, verifyPurposeToken } from '../auth/jwt';
 import { upsertAccountAndLink, type PublicConnection } from './connections';
 import { connectionProviderById, oauthCredsFor } from './providers';
-import { fail, pkceVerifierFor, type Fail } from './shared';
+import { fail, pkceVerifierFor, type Fail, type OAuthErrorCode } from './shared';
 
 // SSO account linking: POST /api/v1/connections/oauth/begin hands the client
 // the provider's authorize URL; the provider's own sign-in page collects the
@@ -83,27 +83,31 @@ export const completeOAuth = async (
   user: SessionUser,
   params: { code?: string | null; state?: string | null; error?: string | null; errorDescription?: string | null },
   requestOrigin: string
-): Promise<{ ok: true; connection: PublicConnection; provider: string } | Fail> => {
-  if (params.error) {
-    return fail(400, `The provider declined the sign-in: ${String(params.errorDescription || params.error).slice(0, 200)}`);
-  }
+): Promise<{ ok: true; connection: PublicConnection; provider: string } | (Fail & { oauthCode?: OAuthErrorCode })> => {
+  // `error`/`error_description` are query parameters on a GET anyone can aim a
+  // signed-in browser at, so they are caller-chosen text, not the provider
+  // speaking. They are classified, never quoted: the old message interpolated
+  // 200 characters of them into prose the page then rendered in a Lopu toast.
+  // See OAUTH_ERROR_CODES. Keeping the raw value out of `error` also keeps it
+  // out of any future log line or JSON body this result reaches.
+  if (params.error) return { ...fail(400, 'The provider declined the sign-in'), oauthCode: 'declined' };
   const state = typeof params.state === 'string' ? params.state : '';
   const code = typeof params.code === 'string' ? params.code : '';
-  if (!state || !code) return fail(400, 'The sign-in response was missing its code or state');
+  if (!state || !code) return { ...fail(400, 'The sign-in response was missing its code or state'), oauthCode: 'state' };
 
   // verifyPurposeToken checks the signature, the expiry, and the purpose — a
   // session cookie, a PAT, or another purpose's token can never satisfy it.
   const claims = await verifyPurposeToken(state, STATE_PURPOSE);
-  if (!claims) return fail(400, 'The sign-in state is invalid or expired — start the connect again');
+  if (!claims) return { ...fail(400, 'The sign-in state is invalid or expired — start the connect again'), oauthCode: 'state' };
   if (typeof claims.sub !== 'string' || claims.sub !== user.id) {
-    return fail(403, 'This sign-in was started from a different Thingtime session');
+    return { ...fail(403, 'This sign-in was started from a different Thingtime session'), oauthCode: 'session' };
   }
   const providerId = typeof claims.provider === 'string' ? claims.provider : '';
   const nonce = typeof claims.nonce === 'string' ? claims.nonce : '';
   const provider = connectionProviderById(providerId);
-  if (!provider?.oauth) return fail(400, 'The sign-in state names an unknown provider');
+  if (!provider?.oauth) return { ...fail(400, 'The sign-in state names an unknown provider'), oauthCode: 'provider' };
   const creds = oauthCredsFor(provider);
-  if (!creds) return fail(400, `${provider.name} is not configured on this deployment`);
+  if (!creds) return { ...fail(400, `${provider.name} is not configured on this deployment`), oauthCode: 'provider' };
   // Recomputed, not read back out of the state — the same derivation beginOAuth
   // used, keyed by the nonce the signature covers.
   const codeVerifier = provider.oauth.pkce ? pkceVerifierFor(provider.id, nonce) : undefined;
@@ -115,12 +119,16 @@ export const completeOAuth = async (
     redirectUri: redirectUriFor(requestOrigin),
     codeVerifier
   });
-  if (exchanged.ok === false) return exchanged;
+  // These three carry the plain Fail their own modules author. Classify them
+  // here rather than leaving the route to infer a code from a status: the two
+  // provider round trips are a different story to the viewer than our own write
+  // failing, and neither message is ours to put in a URL.
+  if (exchanged.ok === false) return { ...exchanged, oauthCode: 'exchange' };
 
   const resolved = await provider.oauth.resolveAccountFromTokens(exchanged.tokens);
-  if (resolved.ok === false) return resolved;
+  if (resolved.ok === false) return { ...resolved, oauthCode: 'exchange' };
 
   const linked = await upsertAccountAndLink(user, provider, resolved.account, exchanged.tokens);
-  if (linked.ok === false) return linked;
+  if (linked.ok === false) return { ...linked, oauthCode: 'failed' };
   return { ok: true, connection: linked.connection, provider: provider.id };
 };

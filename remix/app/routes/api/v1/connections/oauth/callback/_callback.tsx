@@ -24,13 +24,11 @@ export const loader = async ({ request }: { request: Request }) => {
   // bucket the config already defines for exactly this ("calls that leave our
   // infrastructure for a provider API"); a real link needs ONE callback, so
   // 20/min is invisible to the actual flow. Redirect (not JSON) on refusal:
-  // this route is a browser landing, and /connections renders oauthError as a
+  // this route is a browser landing, and /connections turns oauthError into a
   // Lopu toast — same shape as the failure path below.
   const limit = await enforceRateLimit(request, 'connections.provider', `user:${user.id}`);
   if (!limit.allowed) {
-    return redirect(
-      `/connections?oauthError=${encodeURIComponent('Finishing sign-ins very enthusiastically — take a breather and try connecting again 🌸')}`
-    );
+    return redirect('/connections?oauthError=rateLimited');
   }
 
   const url = new URL(request.url);
@@ -44,8 +42,13 @@ export const loader = async ({ request }: { request: Request }) => {
     },
     requestOrigin(request)
   );
+  // A CODE, never the message. Everything this redirect carries is text the
+  // page renders inside Thingtime's own toast, and this route is a GET a
+  // stranger can send a signed-in victim to — so prose here is prose they
+  // chose. `result.provider` is safe for the opposite reason: it is a provider
+  // id off our static catalogue, not anything off the request.
   if (result.ok === false) {
-    return redirect(`/connections?oauthError=${encodeURIComponent(result.error.slice(0, 200))}`);
+    return redirect(`/connections?oauthError=${result.oauthCode || 'failed'}`);
   }
   return redirect(`/connections?connected=${encodeURIComponent(result.provider)}`);
 };

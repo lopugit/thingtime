@@ -29,6 +29,61 @@ export const cardStyle = {
   borderRadius: 'var(--tt-radius-lg, 16px)'
 } as const;
 
+// --- the /connections OAuth landing ---
+//
+// Both of these exist because ?connected= and ?oauthError= are READ OFF THE
+// URL and rendered in a Lopu toast. Nothing authenticates them: the callback
+// route is a GET a stranger can aim a signed-in victim at, and the landing
+// params can be typed directly. So whatever the page echoes verbatim is copy
+// the attacker wrote, shown in Thingtime's own chrome at a genuine
+// thingtime.com address — the exact ingredients of a credible lure ("Session
+// expired — reverify at …", "Connection failed, call +1-555-…"). It is not
+// XSS; Chakra renders these as text. It is the phishing surface underneath it.
+//
+// The rule both follow: the page owns the words. The URL may only SELECT them.
+
+const OAUTH_ERROR_GENERIC = 'Could not finish that sign-in 😞';
+
+// Mirrors OAUTH_ERROR_CODES in api/utils/connections/shared.ts, which is the
+// contract's source of truth; oauthErrorCopy.test.ts pins the key sets equal so
+// a code added there without copy here fails the suite instead of quietly
+// degrading every one of its failures to the generic line.
+//
+// A Map, not a plain object, because the lookup key is a URL parameter: on an
+// object literal `?oauthError=__proto__` resolves to Object.prototype, which is
+// truthy, so the `||` fallback never fires and a non-string reaches the toast's
+// title (React throws on an object child). A Map has no inherited keys, so the
+// whole class is unrepresentable rather than guarded against.
+export const OAUTH_ERROR_COPY = new Map<string, string>([
+  ['declined', 'That sign-in was declined 🙅'],
+  ['state', 'That sign-in link has expired — start the connect again 🌸'],
+  ['session', 'That sign-in was started from a different Thingtime session 🔐'],
+  ['provider', 'That app is not set up on this deployment yet 🔧'],
+  ['exchange', 'Could not finish the sign-in with that app 😞'],
+  ['rateLimited', 'Finishing sign-ins very enthusiastically — take a breather and try connecting again 🌸'],
+  ['failed', OAUTH_ERROR_GENERIC]
+]);
+
+// An unrecognised code is the interesting case, not the edge case: it is what a
+// hand-typed `?oauthError=<whatever>` looks like from here. It degrades to the
+// generic line rather than being shown, which is what makes the echo dead.
+export const oauthErrorMessage = (code: string | null | undefined): string | null =>
+  code ? OAUTH_ERROR_COPY.get(code) || OAUTH_ERROR_GENERIC : null;
+
+// Provider ids are catalogue slugs (`youtube`, `bluesky-account`). Resolving the
+// real display name is preferred, but the landing effect runs on mount, before
+// the first providers read settles, so a first-ever link has nothing to resolve
+// against — hence the slug fallback rather than dropping the name. The shape
+// check is what makes that fallback safe: no spaces and no punctuation beyond a
+// hyphen means an unknown value cannot be a sentence, only a word-shaped token.
+const PROVIDER_SLUG = /^[a-z0-9][a-z0-9-]{0,31}$/;
+export const connectedProviderLabel = (raw: string | null | undefined, providers: { id: string; name: string }[]): string | null => {
+  if (!raw) return null;
+  const known = providers.find((provider) => provider.id === raw);
+  if (known) return known.name;
+  return PROVIDER_SLUG.test(raw) ? raw : null;
+};
+
 // Append one connections-feed page to what is already rendered, dropping posts
 // the reader is already holding. Appended pages can legitimately OVERLAP, so
 // this is a correctness requirement, not defensive padding — the list keys on

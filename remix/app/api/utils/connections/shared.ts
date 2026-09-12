@@ -8,6 +8,25 @@ import { createHash, createHmac } from 'node:crypto';
 export type Fail = { ok: false; status: number; error: string };
 export const fail = (status: number, error: string): Fail => ({ ok: false, status, error });
 
+// What the OAuth callback is allowed to tell /connections went wrong.
+//
+// The callback is a plain GET landing: it answers with a redirect carrying a
+// flag, and the page turns that flag into a Lopu toast. Anything it puts in
+// that URL is therefore text ANYONE can choose — the route is reachable by
+// aiming a signed-in victim at a crafted link, and `?oauthError=…` is readable
+// straight off the address bar without involving the callback at all. Prose in
+// the URL is consequently attacker-authored copy wearing Thingtime's own
+// chrome ("your session expired, re-verify at …"), which is the whole value of
+// a phishing lure. So the wire carries a CODE from this closed set and the
+// page owns every word it renders (components/Connections/shared.ts).
+//
+// Keep this a flat, opaque slug list: the codes ARE the contract with the
+// client mirror, and oauthErrorCopy.test.ts pins the two sets equal so adding
+// one here without copy there fails the suite rather than silently degrading
+// to the generic line.
+export const OAUTH_ERROR_CODES = ['declined', 'state', 'session', 'provider', 'exchange', 'rateLimited', 'failed'] as const;
+export type OAuthErrorCode = (typeof OAUTH_ERROR_CODES)[number];
+
 export const sha48 = (parts: string[]): string => {
   const hash = createHash('sha256');
   parts.forEach((part, index) => {

@@ -5,7 +5,7 @@ import { Link, useSearchParams } from 'react-router';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
-import { cardStyle, type ChannelRef, type Connection } from './shared';
+import { cardStyle, connectedProviderLabel, oauthErrorMessage, type ChannelRef, type Connection } from './shared';
 
 // /connections — link third-party apps (Reddit, YouTube, Mastodon, Bluesky,
 // RSS, …), manage the linked accounts, and manage AI feed filters. The feeds
@@ -88,16 +88,19 @@ export const ConnectionsPage = () => {
     refresh();
   }, [refresh]);
 
-  // OAuth callback landing: /connections?connected=<provider> or ?oauthError=…
+  // OAuth callback landing: /connections?connected=<provider id> or
+  // ?oauthError=<code>. Neither is rendered verbatim — both are untrusted URL
+  // input, so the copy comes from ./shared and the param only selects it.
   React.useEffect(() => {
     const connected = searchParams.get('connected');
-    const oauthError = searchParams.get('oauthError');
-    if (!connected && !oauthError) return;
+    const failure = oauthErrorMessage(searchParams.get('oauthError'));
+    if (!connected && !failure) return;
     if (connected) {
-      lopu({ title: `Account linked via ${connected} 🎉`, status: 'success', duration: 6000 });
+      const label = connectedProviderLabel(connected, providers);
+      lopu({ title: label ? `Account linked via ${label} 🎉` : 'Account linked 🎉', status: 'success', duration: 6000 });
       refresh();
-    } else if (oauthError) {
-      lopu({ title: oauthError, status: 'error' });
+    } else if (failure) {
+      lopu({ title: failure, status: 'error' });
     }
     setSearchParams({}, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps

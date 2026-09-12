@@ -13487,7 +13487,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'The OAuth redirect target. Verifies the signed state belongs to the current session, exchanges the code ' +
       'server-side, resolves the external identity, seals the token response into the external account’s secure ' +
       'storage, links the account, and redirects the browser back to /connections (connected=<provider> on ' +
-      'success, oauthError=<message> on failure). No token material ever reaches the client.',
+      'success, oauthError=<code> on failure — one of declined, state, session, provider, exchange, rateLimited ' +
+      'or failed). The failure reason is a code and never prose: this is a GET landing, so anything it carried ' +
+      'would be text a stranger could choose and /connections renders in a Lopu toast. No token material ever ' +
+      'reaches the client.',
     auth: {
       mode: 'session',
       description: 'The browser session that began the link (redirects to /login when signed out).'
