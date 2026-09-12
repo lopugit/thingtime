@@ -42,6 +42,25 @@ test('synthetic participants cannot collide with existing source identities', ()
   assert.equal(group.messages[1].crystal.participantId, 'archive-ai-author:1');
 });
 
+test('segmented replies preserve every row and reject gaps, duplicates and inconsistent counts', () => {
+  const input = fixture(); input.messages.push({ ...input.messages[1], id: 'answer-tail', text: 'Tail' });
+  const metadata: Map<string, any> = authors();
+  for (const [segmentIndex, id] of ['answer', 'answer-tail'].entries()) metadata.set(id, {
+    externalSource: { ...source, role: 'assistant', readOnly: true, messageId: 'turn', segmentIndex, segmentCount: 2 },
+    lopu: { role: 'assistant', requestId: 'turn', segmentIndex, segmentCount: 2 }
+  });
+  const result = projectAiChatArchive(input, 'original', source, metadata);
+  assert.deepEqual(result.group.messages.map(row => row.crystal.text), ['Question 🥰', 'Exact\nanswer', 'Tail']);
+  assert.equal(result.group.messages[1].crystal.participantId, result.group.messages[2].crystal.participantId);
+  for (const patch of [{ segmentIndex: 0 }, { segmentCount: 3 }, { segmentIndex: -1 }, { segmentCount: 1001 }]) {
+    const changed = structuredClone(metadata), tail = changed.get('answer-tail');
+    changed.set('answer-tail', { externalSource: { ...tail.externalSource, ...patch }, lopu: { ...tail.lopu, ...patch } });
+    assert.throws(() => projectAiChatArchive(input, 'original', source, changed), /AI message segments/);
+  }
+  const missing = structuredClone(metadata); missing.delete('answer-tail');
+  assert.throws(() => projectAiChatArchive(fixture(), 'original', source, missing), /Complete AI message segments/);
+});
+
 test('incomplete metadata and unpreserved tool history reject instead of producing a partial archive', () => {
   const missing = authors(); missing.delete('answer');
   assert.throws(() => projectAiChatArchive(fixture(), 'original', source, missing), /Complete AI author/);

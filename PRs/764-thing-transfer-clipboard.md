@@ -2,6 +2,13 @@
 
 ## AI archive participant projection — 2026-09-12
 
+Segment validation now requires one complete, non-duplicated 0..N-1 index set
+for each stable owner/role/message identity, with agreeing Lopu/external metadata
+and bounded counts. Four projection tests pass, including exact multi-row text,
+missing tails, repeated indexes and conflicting counts. Legacy imported
+multi-part records without a stable message identity remain refused; matching
+them by timestamp or author would conflate distinct messages.
+
 The pure `projectAiChatArchive` transformation now feeds historical AI identities
 into the existing archive grammar. Human turns retain self mapping; assistants
 receive collision-checked archive-local participants, so the canonical import

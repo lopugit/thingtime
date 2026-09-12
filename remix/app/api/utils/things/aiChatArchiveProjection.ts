@@ -1,6 +1,7 @@
 import { publicExternalAiSource } from '../messenger/externalAi';
 import { archiveAiIdentity } from './archiveAiIdentity';
 import { projectLiveChatArchive, type LiveChatArchiveSnapshot } from './liveChatArchiveCore';
+import { TRANSFER_LIMITS } from '../../../utils/thingTransfer/format';
 
 /** Metadata is supplied only by the authorized source reader, never by a
  * portable manifest. This transformation is not wired to the live endpoint yet:
@@ -18,10 +19,30 @@ export const projectAiChatArchive = (snapshot: LiveChatArchiveSnapshot, viewerId
     ...copy.files.map(row => row.id), ...copy.links.map(row => row.id)]);
   const humanIds = new Set(copy.participants.map(row => row.userId));
   const historical = new Map<string, string>();
+  const segments = new Map<string, { count: number; indices: Set<number> }>();
   let index = 0;
   for (const row of copy.messages) {
     if (!humanIds.has(row.authorId)) throw new Error('AI message owner is not a source participant');
     const meta = authors.get(row.id)!;
+    const external = meta.externalSource && typeof meta.externalSource === 'object' ? meta.externalSource as Record<string, unknown> : undefined;
+    const turn = meta.lopu && typeof meta.lopu === 'object' ? meta.lopu as Record<string, unknown> : undefined;
+    const parts = turn?.segmentCount !== undefined || turn?.segmentIndex !== undefined ? turn : external;
+    if (parts?.segmentCount !== undefined || parts?.segmentIndex !== undefined) {
+      const count = parts.segmentCount, partIndex = parts.segmentIndex;
+      if (!Number.isSafeInteger(count) || !Number.isSafeInteger(partIndex) || Number(count) < 1 ||
+        Number(count) > TRANSFER_LIMITS.things || Number(partIndex) < 0 || Number(partIndex) >= Number(count))
+        throw new Error('Complete AI message segments are required');
+      if (turn && external && (external.segmentCount !== undefined || external.segmentIndex !== undefined) &&
+        (turn.segmentCount !== external.segmentCount || turn.segmentIndex !== external.segmentIndex))
+        throw new Error('Conflicting AI message segments');
+      const messageKey = turn?.requestId ?? external?.messageId;
+      if (Number(count) > 1 && (typeof messageKey !== 'string' || !messageKey))
+        throw new Error('A stable AI message identity is required for segmented history');
+      const key = JSON.stringify([row.authorId, parts.role, messageKey ?? row.id]);
+      const group = segments.get(key) || { count: Number(count), indices: new Set<number>() };
+      if (group.count !== count || group.indices.has(Number(partIndex))) throw new Error('Conflicting AI message segments');
+      group.indices.add(Number(partIndex)); segments.set(key, group);
+    }
     // Preserve visible tool history later; do not silently drop it now.
     const tools = meta.lopu && typeof meta.lopu === 'object' ? (meta.lopu as Record<string, unknown>).toolCalls : undefined;
     if (tools !== undefined && (!Array.isArray(tools) || tools.length)) throw new Error('Historical tool presentation is required');
@@ -38,5 +59,7 @@ export const projectAiChatArchive = (snapshot: LiveChatArchiveSnapshot, viewerId
     }
     row.authorId = authorId;
   }
+  if ([...segments.values()].some(group => group.indices.size !== group.count))
+    throw new Error('Complete AI message segments are required');
   return projectLiveChatArchive(copy, viewerId);
 };
