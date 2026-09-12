@@ -24,6 +24,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Preserve earlier dependencies and linked resources when transfer rollback
+  cannot finish; report retained IDs for recovery. Import contract/client
+  requirement is now 1.8.1. See [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-12
+
 - Added retryable internal Messenger archive deletion/compensation: keep history
   until object cleanup succeeds, then refund/remove the archive atomically.
   HTTP/UI integration is still pending. See [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).

@@ -8,7 +8,7 @@ import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContrac
 
 test('emoji transfer, library and move capabilities reject pre-support origins', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-  for (const [feature, version] of [['api.things-export', '1.8.0'], ['api.things-import', '1.8.0'], ['api.things', '1.11.0'], ['api.things-bulk', '1.3.0']]) {
+  for (const [feature, version] of [['api.things-export', '1.8.0'], ['api.things-import', '1.8.1'], ['api.things', '1.11.0'], ['api.things-bulk', '1.3.0']]) {
     assert.equal(manifest.features[feature].version, version);
     assert.equal(capabilitySatisfies(version, version), true);
     assert.equal(capabilitySatisfies('1.0.0', version), false);

@@ -235,6 +235,10 @@ export const importTransfer = async (
   } catch (error) {
     const remaining: string[] = [];
     for (const id of [...created].reverse()) {
+      // Earlier records can be folders, schemas, or media definitions used by
+      // a surviving copy. After an uncertain/failed child cleanup, retain the
+      // rest of this attempt rather than deleting its recovery dependencies.
+      if (remaining.length) { remaining.push(id); continue; }
       try {
         if (createdRecordings.has(id)) {
           const removed = await deps.removeFile(viewer.id, { id });
@@ -250,6 +254,7 @@ export const importTransfer = async (
     for (const id of createdLinks) {
       try {
         const doc = await deps.getFile(viewer.id, id);
+        if (doc && remaining.length) { remaining.push(id); continue; }
         // Bound links belong to the Thing cascade above. Never detach a link
         // from a surviving copy whose cascade failed.
         if (doc && !doc.targetId) {

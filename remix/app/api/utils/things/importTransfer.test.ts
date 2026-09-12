@@ -122,6 +122,45 @@ test('file imports require distinct authorized ready uploads before any Thing wr
   assert.equal(writes.length, 0);
 });
 
+test('failed or uncertain child rollback preserves its earlier folder and schema dependencies', async () => {
+  for (const throws of [false, true]) {
+    const { writes, removed, deps } = harness(); const originalCreate = deps.create;
+    const manifest = fixture();
+    manifest.things.push({ id: 'last', thingtime: ['data'], crystal: { name: 'Fail here' } });
+    deps.create = async (...args) => writes.length === 3 ? { ok: false, status: 403, error: 'quota' } : originalCreate(...args);
+    deps.remove = async (_viewer, id) => {
+      removed.push(id);
+      if (throws) throw new Error('Deletion response lost');
+      return { ok: false, status: 503, error: 'Deferred child cleanup' };
+    };
+    const result = await importTransfer({ id: 'recipient' }, { manifest }, undefined, deps);
+    assert.equal(result.ok, false);
+    const createdIds = writes.map(write => write.input.shareId);
+    assert.deepEqual(removed, [createdIds[2]], 'never attempt to delete the surviving child\'s earlier schema/folder');
+    assert.equal('status' in result && result.status, 503);
+    assert.deepEqual('remainingIds' in result && result.remainingIds, [...createdIds].reverse());
+  }
+});
+
+test('incomplete rollback preserves linked resources and reports them with recovery dependencies', async () => {
+  const { writes, deps } = harness(); const originalCreate = deps.create; const fileDeletes: unknown[] = [];
+  const manifest = fixture();
+  manifest.things.push({ id: 'last', thingtime: ['data'], crystal: {} });
+  manifest.links = [{ id: 'link', targetId: 'data', url: 'https://example.com/photo.png', mediaKind: 'image' }];
+  manifest.attachmentOrder = ['link'];
+  deps.create = async (...args) => writes.length === 3 ? { ok: false, status: 403, error: 'quota' } : originalCreate(...args);
+  const result = await importTransfer({ id: 'recipient' }, { manifest }, undefined, {
+    ...deps, remove: async () => ({ ok: false, status: 503, error: 'Deferred child cleanup' }),
+    link: async () => ({ ok: true, attachment: { id: 'new-link' } }) as any,
+    inspectFiles: async () => ({ ok: true, hasAny: true, hasVisual: true }),
+    getFile: async () => ({ attachmentLinked: true, crystal: { url: manifest.links![0].url } }) as any,
+    bindFiles: () => (async () => {}) as any,
+    removeFile: async (_owner, input) => { fileDeletes.push(input); return { ok: true, deferred: false }; }
+  });
+  assert.equal(result.ok, false); assert.deepEqual(fileDeletes, []);
+  assert.deepEqual('remainingIds' in result && result.remainingIds, [...writes.map(write => write.input.shareId).reverse(), 'new-link']);
+});
+
 test('stored-file annotations use a fresh-unbound fence after upload validation and before Thing writes', async () => {
   for (const rejected of [false, true]) {
     const { writes, deps } = harness();

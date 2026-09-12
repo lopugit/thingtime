@@ -1,5 +1,22 @@
 # PR 764 — portable Thing transfer
 
+## Preserve recovery dependencies after incomplete rollback — 2026-09-12
+
+While connecting the archive lifecycle, the existing importer rollback was found
+to continue deleting earlier folders/schemas/media definitions after cleanup of
+a later copy failed. Stop the reverse cleanup at the first failed, deferred or
+uncertain content deletion. Retain earlier created dependencies and remaining
+linked resources, and include their IDs in the 503 recovery response. Successful
+rollback still uses the existing canonical deletion paths. This preserves more
+of an incomplete attempt; it is not a claim that previously successful deletions
+can be undone or that the whole multi-Thing import is one transaction.
+
+The import contract and client requirement are now `1.8.1`. Regression tests
+cover returned errors, lost deletion responses, parent/schema preservation and
+linked-resource retention. All 194 transfer and 43 capability tests pass, with
+targeted lint passing. Built-preview manifest and live UI acceptance of this
+patch remain to be verified. Archive endpoint wiring is still unfinished.
+
 ## Retryable archive deletion and compensation — 2026-09-12
 
 Added the internal `removeTransferChatArchive` adapter and server-owned

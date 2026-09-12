@@ -865,7 +865,7 @@ export function useApi() {
         return asyncFetcher.submit(args, { action: '/api/v1/things/export', signal: options?.signal, errorContext: 'export Things' });
       }, [asyncFetcher]),
       import: useCallback(async (args: { manifest: unknown; files?: Record<string, string>; folderId?: string | null }, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.things-import', '1.8.0');
+        await requireThingtimeCapability('api.things-import', '1.8.1');
         return asyncFetcher.submit(args, { action: '/api/v1/things/import', signal: options?.signal, errorContext: 'import Things' });
       }, [asyncFetcher]),
       // scope: 'subspaces' narrows the page to posts from the viewer's ACTIVE
