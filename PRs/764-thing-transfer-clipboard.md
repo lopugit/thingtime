@@ -1,5 +1,21 @@
 # PR 764 — portable Thing transfer
 
+## Stored emoji purpose correction — 2026-09-12
+
+The real binary test on deployed 3ab78ef1d correctly failed: reaction IDs remapped,
+but the safe emoji projection was empty. The canonical attachment writer stores
+purpose `emoji`, whereas the upload API accepts alias `custom-emoji`. The reader
+and its old synthetic fixture both incorrectly used the alias. Corrected the
+reader and fixture; added a rejection case for a stored alias rather than
+widening accepted purposes. Things feature 1.16.1 / docs contract 1.15.1 and the
+client minimum now advertise the fix. All failed-run fixture roots/uploads were
+cleaned up, with absence verified and no cleanup failures.
+
+The persisted binary test now includes a real custom reaction, verifies its
+remapped definition and image bytes, and requires the copied archive to export
+avatar, message and reaction images after deleting its source archive and source
+emoji. The corrected deployed runtime still needs that live acceptance rerun.
+
 ## Historical custom emoji rendering — 2026-09-12
 
 Archive snapshots now project referenced personal custom emoji as only id, name

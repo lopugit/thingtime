@@ -24,6 +24,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-12: Correct historical emoji reads to use persisted attachment purpose
+  `emoji`, not its upload alias. A real ZIP test exposed the mismatch; expand
+  regression coverage for remapped reactions and source-emoji deletion. Things
+  1.16.1 negotiates the correction. [PR 764](../PRs/764-thing-transfer-clipboard.md).
+  — **Codex (AI)**
+
 - 2026-09-12: Render safe personal custom emoji images in private chat archives
   through an owner-only snapshot projection and Things 1.16.0 negotiation.
   Unavailable/moderated images retain readable placeholders. See

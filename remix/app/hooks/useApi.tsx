@@ -928,7 +928,7 @@ export function useApi() {
         []
       ),
       archive: useCallback(async (args: { id: string }, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.things', '1.16.0');
+        await requireThingtimeCapability('api.things', '1.16.1');
         return getJson(`/api/v1/things${toQuery({ id: args.id, archive: true })}`, options);
       }, []),
       update: useCallback(

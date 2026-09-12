@@ -9,7 +9,7 @@ test('historical emoji images require exact personal ownership, canonical bindin
   const emoji = { shareId: 'emoji-one', ownerId: 'owner', thingtime: ['custom-emoji'], targetId: null,
     emojiAttachmentId: 'image-one', crystal: { name: 'party' } };
   const image = { shareId: 'image-one', ownerId: 'owner', thingtime: ['attachment'], targetId: 'emoji-one',
-    attachmentState: 'ready', attachmentPurpose: 'custom-emoji', crystal: { name: 'party.png', contentType: 'image/png', mediaKind: 'image', size: 68 } };
+    attachmentState: 'ready', attachmentPurpose: 'emoji', crystal: { name: 'party.png', contentType: 'image/png', mediaKind: 'image', size: 68 } };
   const session = {};
   const read = async (person = emoji, file = image) => {
     let queries = 0;
@@ -30,7 +30,7 @@ test('historical emoji images require exact personal ownership, canonical bindin
     assert.deepEqual(await read({ ...emoji, ...change } as any), []);
   }
   for (const change of [{ ownerId: 'other' }, { targetId: 'other-emoji' }, { appId: 'app' }, { sandboxSpace: '' },
-    { attachmentState: 'deleting' }, { attachmentPurpose: 'post' }, { attachmentLinked: true },
+    { attachmentState: 'deleting' }, { attachmentPurpose: 'post' }, { attachmentPurpose: 'custom-emoji' }, { attachmentLinked: true },
     ...['blocked', 'pending', 'nsfw'].map(status => ({ moderation: { status } })),
     { crystal: { ...image.crystal, url: 'https://example.com/tracker.png' } }]) {
     assert.deepEqual(await read(emoji, { ...image, ...change } as any), []);

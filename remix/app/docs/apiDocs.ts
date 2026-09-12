@@ -8881,13 +8881,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // is a 400. Only this read grew — the shared projection is unchanged, so
     // things-comment / -feed / -user stay put (S7, additive)
     // Includes additive discussions and the 1.7.5 conditional-media write correction.
-    featureVersion: '1.16.0',
-    contractVersion: '1.15.0',
+    featureVersion: '1.16.1',
+    contractVersion: '1.15.1',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+			'The archive emoji projection recognizes the canonical persisted attachment purpose emoji (the upload API alias is custom-emoji). ' +
 			'Owner archive snapshots include emojis: referenced personal definitions reduced to id, name and attachmentId. Two bounded snapshot queries enforce exact owner/home scope, ready custom-emoji binding and canonical image metadata; blocked, pending, NSFW, linked, foreign or missing images are omitted and remain unavailable historical reactions. No live accounts or community membership are resolved. ' +
 			'Archive snapshots additionally include ordered attachments with targetId and canonical gallery metadata. The existing owner-only batch query projects safe labels, media type and linked URLs; blocked/noncanonical metadata is omitted, pending owner media is marked pending, and NSFW media is marked nsfw for reveal consent. No object keys, upload identifiers or moderation diagnostics are exposed. attachmentTargets still includes every binding so exports cannot silently omit quarantined files. Stored bytes remain independently authorized by the attachment content endpoint. ' +
 			'First-party user owner library lists include private chat-archive root summaries under the normal chronological/folder pagination. Historical child rows, deleting or namespace-stamped roots, PAT/app/service readers and custom data planes are excluded. Summary crystals contain only the archive name; full history remains on the dedicated archive read mode. Library responses are private/no-store. ' +

@@ -55,7 +55,7 @@ export const readArchiveReactionEmojis = async (
   return owned.flatMap(emoji => {
     const file = files.find(row => row.shareId === emoji.emojiAttachmentId);
     if (!file || !home(file) || hidden(file) || file.targetId !== emoji.shareId || file.attachmentLinked ||
-      file.attachmentState !== 'ready' || file.attachmentPurpose !== 'custom-emoji' ||
+      file.attachmentState !== 'ready' || file.attachmentPurpose !== 'emoji' ||
       file.thingtime?.length !== 1 || file.thingtime[0] !== 'attachment') return [];
     const media = toAttachmentPublicMetadata(file.shareId, file.crystal, file.moderation, { ownerView: true });
     return media?.mediaKind === 'image' && !media.url && !media.nsfw && !media.pending

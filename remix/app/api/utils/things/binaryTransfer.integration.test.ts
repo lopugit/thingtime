@@ -60,7 +60,7 @@ test('real image and archive ZIP round-trip and concurrent emoji claims preserve
   const capabilities = await json(THINGTIME_CAPABILITY_MANIFEST_PATH);
   assert.equal(capabilities.origin, origin.origin);
   for (const [feature, version] of Object.entries({
-    'api.auth-me': '1.0.0', 'api.things-export': '1.10.0', 'api.things-import': '1.9.1', 'api.things': '1.15.0',
+    'api.auth-me': '1.0.0', 'api.things-export': '1.10.0', 'api.things-import': '1.9.1', 'api.things': '1.16.1',
     'api.attachment-uploads': '1.3.0', 'api.attachment-upload-parts': '1.1.0',
     'api.attachment-upload-complete': '1.3.0', 'api.attachment-upload-abort': '1.1.0',
     'api.attachment-delete': '1.1.0', 'api.attachment-content': '1.6.4', 'api.emojis-delete': '1.0.0'
@@ -132,15 +132,16 @@ test('real image and archive ZIP round-trip and concurrent emoji claims preserve
     return decodeTransferArchive(await encodeTransferArchive(bundle));
   };
   const at = '2026-09-01T00:00:00.000Z';
-  const manifest: ThingTransfer = { format: 'thingtime.transfer', version: 1, roots: ['post', 'emoji', 'archive'],
+  const manifest: ThingTransfer = { format: 'thingtime.transfer', version: 1, roots: ['post', 'emoji-source', 'archive'],
     things: [
       { id: 'post', thingtime: ['post'], crystal: { type: 'text', text: `binary-transfer-${randomUUID()}` } },
-      { id: 'emoji', thingtime: ['custom-emoji'], crystal: { name: 'transfer', emojiFileId: 'emoji-image' } },
+      { id: 'emoji-source', thingtime: ['custom-emoji'], crystal: { name: 'transfer', emojiFileId: 'emoji-source-image' } },
       { id: 'archive', thingtime: ['chat-archive'], crystal: { name: 'Binary archive fixture', topic: '', chatType: 'dm', createdAt: at, selfParticipantId: 'self' } },
       { id: 'self', targetId: 'archive', thingtime: ['chat-archive-participant'], crystal: { username: 'fictional-original', displayName: 'Original self', nickname: '', joinedAt: at } },
       { id: 'friend', targetId: 'archive', thingtime: ['chat-archive-participant'], crystal: { username: 'fictional-archived-friend', displayName: 'Archived friend', nickname: 'F', joinedAt: at, avatarFileId: 'friend-image' } },
-      { id: 'message', targetId: 'archive', thingtime: ['chat-archive-message'], crystal: { participantId: 'self', text: 'Exact media history 🥰', createdAt: at, deleted: false } }
-    ], files: ['post', 'emoji', 'friend', 'message'].map((id, index) => ({ id: `${id}-image`, targetId: id, path: `files/${String(index).padStart(6, '0')}`,
+      { id: 'message', targetId: 'archive', thingtime: ['chat-archive-message'], crystal: { participantId: 'self', text: 'Exact media history 🥰', createdAt: at, deleted: false } },
+      { id: 'reaction', targetId: 'message', thingtime: ['chat-archive-reaction'], crystal: { participantId: 'friend', emoji: 'custom:emoji-source', createdAt: at } }
+    ], files: ['post', 'emoji-source', 'friend', 'message'].map((id, index) => ({ id: `${id}-image`, targetId: id, path: `files/${String(index).padStart(6, '0')}`,
       name: 'transfer-fixture.png', mime: 'image/png', bytes: png.length, sha256: createHash('sha256').update(png).digest('hex'),
       title: 'Image title', description: 'Image description', filenamePreview: 'retained.png' })) };
   let primaryFailure: unknown;
@@ -160,6 +161,14 @@ test('real image and archive ZIP round-trip and concurrent emoji claims preserve
     const archivePath = (id: string) => `/api/v1/things?id=${encodeURIComponent(id)}&archive=true`;
     const archive = (await json(archivePath(copiedArchiveId))).archive;
     assert.equal(archive.group.messages[0].crystal.text, 'Exact media history 🥰');
+    const copiedEmojiId = second.ids[first.ids['emoji-source']];
+    assert.equal(archive.group.reactions[0].crystal.emoji, `custom:${copiedEmojiId}`);
+    assert.deepEqual(archive.emojiIds, [copiedEmojiId]);
+    assert.equal(archive.emojis.length, 1);
+    assert.equal(archive.emojis[0].id, copiedEmojiId);
+    const emojiImage = await request(`/api/v1/attachments/content?id=${encodeURIComponent(archive.emojis[0].attachmentId)}&cache=bytes`);
+    assert.equal(emojiImage.status, 200);
+    assert.deepEqual(Buffer.from(await emojiImage.arrayBuffer()), png);
     const friend = archive.group.participants.find((row: any) => row.crystal.username === 'fictional-archived-friend');
     assert.ok(friend); assert.equal(friend.crystal.displayName, 'Archived friend');
     assert.equal(archive.attachments.length, 2);
@@ -175,10 +184,10 @@ test('real image and archive ZIP round-trip and concurrent emoji claims preserve
       assert.equal((await request('/api/v1/things/export', 'POST', { ids: roots }, false)).status, 404);
     }
 
-    const raceManifest = validateTransfer({ ...manifest, roots: ['emoji'], things: [manifest.things[1]], files: [{ ...manifest.files[1], path: 'files/000000' }] });
+    const raceManifest = validateTransfer({ ...manifest, roots: ['emoji-source'], things: [manifest.things[1]], files: [{ ...manifest.files[1], path: 'files/000000' }] });
     const oneUpload = await upload(png, 'custom-emoji');
     const raced = await Promise.all([0, 1].map(async () => {
-      const response = await request('/api/v1/things/import', 'POST', { manifest: raceManifest, files: { 'emoji-image': oneUpload } });
+      const response = await request('/api/v1/things/import', 'POST', { manifest: raceManifest, files: { 'emoji-source-image': oneUpload } });
       const result = await response.json(); remember(result, raceManifest);
       return { status: response.status, result };
     }));
@@ -195,8 +204,11 @@ test('real image and archive ZIP round-trip and concurrent emoji claims preserve
     await json('/api/v1/things', 'DELETE', { id: first.ids.archive });
     assert.equal((await request(archivePath(first.ids.archive))).status, 404);
     copies.delete(first.ids.archive);
+    await json('/api/v1/emojis/delete', 'POST', { id: first.ids['emoji-source'] });
+    assert.equal((await request(`/api/v1/things?id=${encodeURIComponent(first.ids['emoji-source'])}`)).status, 404);
+    copies.delete(first.ids['emoji-source']);
     const independent = await exportedBundle([copiedArchiveId]);
-    assert.equal(independent.files.size, 2, 'Copied avatar and message image must survive source deletion');
+    assert.equal(independent.files.size, 3, 'Copied avatar, message image and custom reaction must survive source deletion');
     for (const bytes of independent.files.values()) assert.deepEqual(Buffer.from(bytes), png);
   } catch (error) {
     primaryFailure = error;

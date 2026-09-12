@@ -6,6 +6,9 @@
   dev fixture. Verify archive avatar/message bytes and annotations survive ZIP
   re-import and source deletion; all created roots and uploads must be cleaned
   up. This storage test complements, not replaces, the visible gallery checks.
+- [ ] Include an imported custom reaction in that real ZIP test. Verify the
+  projected emoji ID/bytes and re-export after deleting the source emoji;
+  fixtures must use the stored `emoji` purpose, not upload alias `custom-emoji`.
 
 - [ ] Owned archives appear as private root entries in Things/folders, never as
   separate historical message/person rows. Open reaches the read-only archive
