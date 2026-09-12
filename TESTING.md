@@ -675,6 +675,15 @@ email whose link points at the attacker.
 
 ## Canonical AI instruction links (`AI_ALL.md`)
 
+- [ ] After a history-based guidance refresh, every new recurring rule links to
+      PR evidence and a current source/runbook. Group promotions with their
+      original feature; distinguish open/closed/merged metadata from deployed
+      behavior and retain explicit review/acceptance limitations.
+- [ ] The preserved global snapshot between the labelled markers is byte-for-byte
+      equal to the captured source (verify its recorded SHA-256). Keep it
+      reference-only; it must not override the current repo's Graphify, runtime
+      or contribution guidance. Do not modify the live global source or symlinks
+      when updating repo-only guidance.
 - [ ] Root `AGENTS.md` and `CLAUDE.md` are relative symlinks whose target is
       exactly `AI_ALL.md`.
 - [ ] `cmp -s AI_ALL.md AGENTS.md` and `cmp -s AI_ALL.md CLAUDE.md` both pass,
