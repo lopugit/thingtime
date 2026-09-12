@@ -207,7 +207,7 @@ until the owner packet is approved.
       cannot conceal a blocker.
 - [ ] Integrate keyboard, screen reader, reduced motion, narrow view, locale,
       low-bandwidth, offline/reconnect, stale state, and permission tests with
-      TODO 25 and TODO 28.
+      [TODO 25](./25-accessibility-and-language-readiness.md) and TODO 28.
 - [ ] Keep data-saver, accessibility, calm-use, safety, export, and deletion
       behavior available on every tier.
 - [ ] Require two consecutive release-candidate passes before calling the first

@@ -176,7 +176,8 @@ and person-level analytics.
 2. Is in-app-only delivery sufficient for the first pilot?
 3. May a person write before revealing the source, and should that distinction
    be preserved without grading the response?
-4. What source-version evidence is available before TODO 29 and TODO 20 land?
+4. What source-version evidence is available before TODO 29 and
+   [TODO 20](../TODO/claude-todo/20-versioned-experience-history.md) land?
 5. How long do completed intentions and private reflections persist by default?
 6. Can the first evaluation remain local and qualitative with no server product
    analytics?

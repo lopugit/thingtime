@@ -173,7 +173,8 @@ control of derivatives.
   the source; explain bounded retained receipts, backups, exports, recipients,
   provider records, and completed effects.
 - Reconcile lineage receipt, Thing/file inventory, export, selective deletion,
-  account closure, and restore through canonical TODO 23 contracts.
+  account closure, and restore through canonical
+  [TODO 23](../TODO/claude-todo/23-data-portability-and-exit.md) contracts.
 - Route rights, attribution, privacy, impersonation, malware, and safety claims
   to typed intake with minimum evidence, interim-action policy, human authority,
   notification, appeal, correction, remedy, and retention.

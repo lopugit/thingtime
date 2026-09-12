@@ -184,7 +184,8 @@ misled.
 - Use programmatically determinable status updates without stealing focus or
   producing duplicate live-region announcements.
 - Provide owner-facing export/delete and the approved remedy for the pilot;
-  coordinate account-wide behavior with TODO 23.
+  coordinate account-wide behavior with
+  [TODO 23](../TODO/claude-todo/23-data-portability-and-exit.md).
 
 **Gate:** desktop/mobile, keyboard, touch, screen reader, zoom/reflow, reduced
 motion, locale, long text, slow/offline, stale-link, and account-switch journeys
@@ -219,7 +220,8 @@ provider evidence or weakening calm-use controls.
 - If justified, select one event family and one channel; document permission,
   preference, urgency, TTL, templates, sensitivity, batching, retry, provider
   acceptance/receipt semantics, failure, unsubscribe, expiry, and support.
-- Preserve TODO 24's quiet/default decisions and platform-level controls.
+- Preserve [TODO 24's quiet/default decisions](../TODO/claude-todo/24-attention-agency-and-calm-use.md)
+  and platform-level controls.
 - Label provider acceptance, device acknowledgement, and unknown delivery
   exactly; never label them seen, read, understood, or completed.
 - Test revoked permission, invalid token, provider outage, late receipt,

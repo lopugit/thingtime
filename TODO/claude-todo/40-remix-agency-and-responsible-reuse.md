@@ -156,8 +156,9 @@ and stop condition is approved.
 - [ ] Let a derivative owner delete their Things/files without changing the
       source; report backups, exports, recipients, provider state, receipts,
       cleanup, and completed effects truthfully.
-- [ ] Use canonical TODO 23 inventory/export/delete/closure/restore contracts,
-      and TODO 29 provenance/correction receipts.
+- [ ] Use canonical [TODO 23](./23-data-portability-and-exit.md)
+      inventory/export/delete/closure/restore contracts, and TODO 29
+      provenance/correction receipts.
 - [ ] Route rights, attribution, privacy, impersonation, malware, and safety
       claims to typed, minimum-evidence intake with interim policy, human
       authority, notification, appeal, correction, remedy, and retention.

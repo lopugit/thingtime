@@ -197,8 +197,9 @@ and evidence boundary before any external learning-effect language.
 **Outcome:** eligible creators and learners can preserve, correct, adapt, and
 share knowledge without confusing licence, quality, truth, and authority.
 
-- Build only on TODO 29's provenance/correction evidence and TODO 23's portable
-  archive; do not create parallel revision or export formats.
+- Build only on TODO 29's provenance/correction evidence and
+  [TODO 23's portable archive](../TODO/claude-todo/23-data-portability-and-exit.md);
+  do not create parallel revision or export formats.
 - Keep copyright holder, asserted licence/version, source/derivation,
   accessibility metadata, language, quality review, and educational claim as
   distinct fields with distinct authorities.

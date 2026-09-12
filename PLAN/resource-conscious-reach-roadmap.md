@@ -236,7 +236,9 @@ not measured.
   tighten through measured improvements rather than silently loosening them.
 - Test keyboard, screen reader, reduced motion, approved locales, narrow view,
   low bandwidth, offline/reconnect, stale state, and permission changes as one
-  complete journey matrix with TODO 25 and TODO 28.
+  complete journey matrix with
+  [TODO 25](../TODO/claude-todo/25-accessibility-and-language-readiness.md) and
+  TODO 28.
 - Keep data-saver, accessibility, calm-use, safety, export, and delete controls
   available to every tier.
 - Publish a bounded changelog of verified resource improvements, regressions,

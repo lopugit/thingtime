@@ -145,7 +145,8 @@ federation, advertising, AI personalization, or production block semantics.
 - Let a person report an unauthorized, wrong-target, stale, duplicated, or
   misrepresented transition and receive a trackable remedy state.
 - Reconcile export, deletion, closure, backup, restore, and residual effects
-  through TODO 23 rather than creating a second account-history system.
+  through [TODO 23](../TODO/claude-todo/23-data-portability-and-exit.md) rather
+  than creating a second account-history system.
 - Keep relationship motives, block reasons, profile values, messages, and
   private graph structure out of analytics, logs, public pages, and support
   views by default.

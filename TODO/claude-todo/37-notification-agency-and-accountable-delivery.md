@@ -123,7 +123,8 @@ prove, do not prove, and cannot reconstruct.
 - [ ] Preserve optimistic cached history while refetching and fence cache,
       filters, unread state, mutations, and retries by account and endpoint.
 - [ ] Add owner-facing pilot export/delete under the approved temporary
-      retention contract and coordinate account-wide behavior with TODO 23.
+      retention contract and coordinate account-wide behavior with
+      [TODO 23](./23-data-portability-and-exit.md).
 - [ ] Make status updates programmatically determinable without focus theft,
       duplicate live announcements, hidden state, or color/sound-only meaning.
 
@@ -155,7 +156,8 @@ prove, do not prove, and cannot reconstruct.
       consent/default, urgency, TTL, payload template, sensitivity,
       deduplication/grouping, retry, receipt semantics, failure, unsubscribe,
       expiry, support, and cost.
-- [ ] Preserve TODO 24's quiet/default rules and platform controls; never use
+- [ ] Preserve [TODO 24's quiet/default rules](./24-attention-agency-and-calm-use.md)
+      and platform controls; never use
       higher urgency to improve opens or response speed.
 - [ ] Label requested, provider accepted, device acknowledged, unknown, expired,
       and failed exactly. Never relabel transport evidence as seen, read,

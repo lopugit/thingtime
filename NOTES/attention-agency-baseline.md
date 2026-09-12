@@ -142,8 +142,9 @@ training events, notification opens, or daily streaks.
 | Useful return | A later meaningful create/find/edit/compose outcome | Pair with no increase in unwanted notifications, reported pressure, or accessibility failures. |
 
 Start with structured usability sessions and local-only prototypes. The owner
-must approve any server signal through TODO 22's measurement contract before
-implementation.
+must approve any server signal through
+[TODO 22's measurement contract](../TODO/claude-todo/22-trustworthy-adoption-loop.md)
+before implementation.
 
 ## Privacy, safety, and abuse boundaries
 

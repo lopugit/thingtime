@@ -167,8 +167,8 @@ in production.
 the raw attention exhaust they are meant to govern.
 
 - Start with structured usability sessions and local-only prototypes.
-- Reuse TODO 22's approved useful-return outcome; do not create a second
-  analytics vocabulary.
+- Reuse [TODO 22's approved useful-return outcome](../TODO/claude-todo/22-trustworthy-adoption-loop.md);
+  do not create a second analytics vocabulary.
 - If server measurement is still necessary, approve each aggregate signal,
   purpose, retention, minimum cohort, opt-out, access, and deletion behavior
   through the trustworthy-adoption signal contract.

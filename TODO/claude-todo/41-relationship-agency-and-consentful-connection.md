@@ -138,7 +138,7 @@ effects matrix, data boundary, and stop condition is approved.
       misrepresented, or incompletely propagated transitions, with human
       authority, correction, appeal, and remedy.
 - [ ] Reconcile history, export, deletion, closure, backups, restore, and
-      residuals through TODO 23.
+      residuals through [TODO 23](./23-data-portability-and-exit.md).
 
 ## Phase 5 — Run the bounded private pilot
 

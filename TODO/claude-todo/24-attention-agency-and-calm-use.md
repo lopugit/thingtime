@@ -115,7 +115,8 @@ decision packet and assigns guardrail owners.
 - [ ] If finite catch-up ships, define an authoritative cut and distinguish
       caught-up, filtered, unavailable, new, and older content honestly.
 - [ ] Preserve scroll, keyboard focus, selected filters, algorithm state, and
-      unsaved work when a person pauses or leaves, reusing TODO 20.
+      unsaved work when a person pauses or leaves, reusing
+      [TODO 20](./20-versioned-experience-history.md).
 - [ ] Give continue, switch task, and leave equal non-shaming copy and focus
       order; never use a streak, countdown, loss warning, or obstructive modal.
 - [ ] Keep reminders local, optional, adjustable, reduced-motion aware, and
