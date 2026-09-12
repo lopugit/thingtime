@@ -1,5 +1,18 @@
 # TESTING.md — per-area manual test checklists
 
+## Session read recovery
+
+- [ ] Fail the first `/api/root-data` GET after sign-in: one automatic retry
+  restores the app without repeating the login POST. Fail both reads: show
+  a clean error with Try again and Reload page, never a raw stack or response.
+- [ ] Restore connectivity and click Try again: render current session data.
+  Cancel navigation during a request/backoff: no abandoned request retries.
+- [ ] Switch accounts with a delayed/failing root read: previous account content
+  disappears immediately; stale generations cannot reveal it. Successful
+  switches reset account-owned component state. OTP challenges stay mounted.
+- [ ] Check recovery at desktop and 390px, scroll top to bottom, and keyboard
+  focus both buttons: no clipping, overlap or horizontal overflow.
+
 ## Inherited Thing context menus
 
 - [ ] Type/paste a query, change kind/view/display/sort/group, open a Thing and
@@ -694,6 +707,15 @@ email whose link points at the attacker.
 
 ## Canonical AI instruction links (`AI_ALL.md`)
 
+- [ ] After a history-based guidance refresh, every new recurring rule links to
+      PR evidence and a current source/runbook. Group promotions with their
+      original feature; distinguish open/closed/merged metadata from deployed
+      behavior and retain explicit review/acceptance limitations.
+- [ ] The preserved global snapshot between the labelled markers is byte-for-byte
+      equal to the captured source (verify its recorded SHA-256). Keep it
+      reference-only; it must not override the current repo's Graphify, runtime
+      or contribution guidance. Do not modify the live global source or symlinks
+      when updating repo-only guidance.
 - [ ] Root `AGENTS.md` and `CLAUDE.md` are relative symlinks whose target is
       exactly `AI_ALL.md`.
 - [ ] `cmp -s AI_ALL.md AGENTS.md` and `cmp -s AI_ALL.md CLAUDE.md` both pass,
