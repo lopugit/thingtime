@@ -1,5 +1,15 @@
 # PR 764 — portable Thing transfer
 
+## Internal AI normalization integration — 2026-09-12
+
+The canonical source normalizer now feeds an explicit internal AI opt-in through
+the historical participant projection. A stored-message-shaped regression proves
+human self mapping, assistant identity, exact text/reply links, retained human
+avatar bindings and private-source stripping. All 13 normalization/projection/
+identity tests pass, plus focused lint. Default route callers still refuse AI
+history; no request field or capability contract enables this unfinished path.
+Avatar presentation, inert tool history and final live acceptance remain required.
+
 ## AI archive participant projection — 2026-09-12
 
 Segment validation now requires one complete, non-duplicated 0..N-1 index set

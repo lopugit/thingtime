@@ -2,6 +2,7 @@ import { systemMessageText, type ChatMember, type ChatMessage } from '../../../c
 import { getUserDisplayName } from '../../../utils/userIdentity';
 import type { FeedAuthor } from '../../../components/Feed/feedTypes';
 import { projectLiveChatArchive, type LiveChatArchiveSnapshot } from './liveChatArchiveCore';
+import { projectAiChatArchive } from './aiChatArchiveProjection';
 import type { readLiveChatArchiveSource } from './liveChatArchiveRead';
 
 type Source = NonNullable<Awaited<ReturnType<typeof readLiveChatArchiveSource>>>;
@@ -33,12 +34,13 @@ const optionalId = (value: unknown): string | undefined => value == null ? undef
  * Keep message text exact; render system rows with the same helper as chat UI.
  */
 export const normalizeLiveChatArchive = (source: Source, viewerId: string,
-  profiles: ReadonlyMap<string, FeedAuthor>, media: Media) => {
+  profiles: ReadonlyMap<string, FeedAuthor>, media: Media, options: { aiHistory?: boolean } = {}) => {
   const { chat, members, messages, reactions, attachments } = source;
   // AI/imported-device conversations need their own historical author mapping:
   // assistant rows often use the human owner's ownerId. Never misattribute them
   // or export live connectors/tool commands as if they were ordinary messages.
-  if (chat.crystal?.externalSource || messages.some(row => !row.crystal?.deletedAt && (row.crystal?.externalSource || row.crystal?.lopu))) reject();
+  const ai = !!chat.crystal?.externalSource;
+  if ((ai && !options.aiHistory) || (!ai && messages.some(row => !row.crystal?.deletedAt && (row.crystal?.externalSource || row.crystal?.lopu)))) reject();
   const participants: LiveChatArchiveSnapshot['participants'] = members.map(member => {
     const profile = profiles.get(member.ownerId);
     if (!profile || profile.id !== member.ownerId || typeof profile.username !== 'string' || !profile.username.trim()) return reject();
@@ -63,7 +65,7 @@ export const normalizeLiveChatArchive = (source: Source, viewerId: string,
   if (expected.size !== supplied.length || new Set(supplied.map(row => row.id)).size !== supplied.length || supplied.some(row => {
     const wanted = expected.get(row.id); return !wanted || wanted.targetId !== row.targetId || wanted.linked !== row.linked;
   })) reject();
-  return projectLiveChatArchive({
+  const snapshot: LiveChatArchiveSnapshot = {
     chat: { id: chat.shareId, name: string(chat.crystal?.name), topic: string(chat.crystal?.topic),
       chatType: chat.crystal?.chatType, createdAt: date(chat.createdAt) }, participants,
     messages: messages.map(row => {
@@ -82,5 +84,10 @@ export const normalizeLiveChatArchive = (source: Source, viewerId: string,
     reactions: reactions.map(row => ({ id: row.shareId, messageId: row.targetId, userId: row.ownerId,
       emoji: string(row.crystal?.emoji), createdAt: date(row.createdAt) })),
     files: media.files, links: media.links
-  }, viewerId);
+  };
+  // Internal opt-in only until avatar/tool presentation is complete. Existing
+  // route callers retain their refusal; portable input cannot enable this.
+  return ai ? projectAiChatArchive(snapshot, viewerId, chat.crystal.externalSource,
+    new Map(messages.map(row => [row.shareId, { externalSource: row.crystal?.externalSource, lopu: row.crystal?.lopu }])))
+    : projectLiveChatArchive(snapshot, viewerId);
 };

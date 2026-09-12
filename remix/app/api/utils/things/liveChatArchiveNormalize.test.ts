@@ -72,3 +72,25 @@ test('canonical Messenger ISO edit/delete timestamps survive normalization witho
     }
   }
 });
+
+test('internal AI normalization preserves source metadata boundaries and does not enable route callers', () => {
+  const f = fixture();
+  const ai = { access: 'lopu', provider: 'lopu', sourceId: 'source-private', label: 'Lopu', connector: 'connector-private', readOnly: false };
+  f.source.chat.crystal.externalSource = ai;
+  f.source.messages = [row('question', 'self', { text: 'Question', lopu: { role: 'user', requestId: 'request-private', segmentIndex: 0, segmentCount: 1 } }),
+    row('answer', 'self', { text: 'Exact assistant answer 🥰', replyToId: 'question',
+      externalSource: { ...ai, readOnly: true, role: 'assistant', messageId: 'request-private', segmentIndex: 0, segmentCount: 1 },
+      lopu: { role: 'assistant', requestId: 'request-private', segmentIndex: 0, segmentCount: 1 } })];
+  f.source.attachments = []; f.source.reactions = [];
+  f.media.files = f.media.files.filter(file => file.id === 'avatar');
+  assert.throws(() => normalize(f), /Complete chat presentation/);
+  const result = normalizeLiveChatArchive(f.source, 'self', f.profiles, f.media, { aiHistory: true });
+  const assistant = result.group.participants.find(person => person.crystal.username === 'lopu-assistant')!;
+  assert.ok(assistant);
+  assert.equal(result.group.messages[0].crystal.participantId, result.group.self.id);
+  assert.equal(result.group.messages[1].crystal.participantId, assistant.id);
+  assert.equal(result.group.messages[1].crystal.replyToId, 'question');
+  assert.equal(result.group.messages[1].crystal.text, 'Exact assistant answer 🥰');
+  assert.equal(result.group.participants.find(person => person.id === 'member-friend')!.crystal.avatarFileId, 'avatar');
+  assert.doesNotMatch(JSON.stringify(result), /source-private|connector-private|request-private/);
+});
