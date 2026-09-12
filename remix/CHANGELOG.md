@@ -24,6 +24,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-12: Add an opt-in, dev-fenced archive HTTP lifecycle acceptance test
+  with capability/identity checks and exact-root cleanup. Both tests pass live
+  against the dev fixture with zero skips; the imported test archive was removed
+  and verified absent. Media and rendered UI remain unverified. — **Codex (AI)**
+
 - 2026-09-12: Add bounded owner-only chat archive snapshot reads with explicit
   history projection, private responses and api.things 1.13.0 negotiation.
   Archive rendering, listing and re-export remain unfinished. — **Codex (AI)**

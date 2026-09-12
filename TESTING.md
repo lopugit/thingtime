@@ -2,6 +2,11 @@
 
 ## Private chat archive import integration
 
+- [ ] Run the explicitly enabled `test:transfer-archives` against the provided
+  dev fixture only after its capability preflight succeeds. Verify no skipped
+  live test and no cleanup failures. It is metadata lifecycle acceptance only;
+  separately test avatar/emoji bytes, export/re-import and the visible chat UI.
+
 - [ ] GET /things?id=<archive>&archive=true as the importing owner returns the
   complete historical group, exact text, reply/thread/reaction references and
   ordered attachment IDs. It must not return userId, ACLs, roles, tokens, S3

@@ -1,5 +1,29 @@
 # PR 764 — portable Thing transfer
 
+## Real archive lifecycle acceptance harness — 2026-09-12
+
+Added opt-in `test:transfer-archives` using actual application HTTP APIs, a
+credential-free local/dev origin fence, selected-origin capabilities and an
+expected fixture username. It imports fictional history, verifies identity
+mapping, replies/reactions and anonymous denial, rejects participant deletion
+and generic message edits, exercises stale conditional deletion, and removes
+only its returned archive root in success/failure cleanup. It never seeds a
+database directly or calls live messaging/user/invitation/upload APIs.
+
+Both tests pass against the provided dev fixture, with zero skips and verified
+cleanup. During verification the preview temporarily served missing.html and
+its capability endpoint returned 404; no writes were attempted then. After it
+advertised Things 1.13.0, the live run imported six fictional history rows,
+verified private full-history reads and protection against individual-row
+changes, rejected a stale delete, then deleted the archive and confirmed 404.
+The preview root-data source was verified as
+`8da040730b1a4664a14a475aeeb010869c84e951`. Credentials stayed out of repository
+files and test output; no existing chats were modified. This proves the metadata
+API lifecycle, not byte preservation, visual behavior or complete transfer.
+Archive listing/rendering, export/re-export, folder behavior and actual media
+round-trips remain unfinished. Canonical hash-length custom-emoji IDs also need
+compatibility correction before declaring archive emoji round-trips complete.
+
 ## Private archive history reader — 2026-09-12
 
 Added an API-layer home-plane snapshot reader for complete archive history and

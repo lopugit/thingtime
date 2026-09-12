@@ -3122,6 +3122,22 @@ concurrent emoji import claims, then deletes its own returned IDs and verifies
 cleanup. It does not connect directly to MongoDB, enable uploads, reconcile
 storage or run migrations. A failed approval/storage precondition is a blocker,
 not a passed test. Investigate any reported cleanup IDs before another run.
+
+`corepack pnpm --dir remix run test:transfer-archives` adds a metadata-only
+archive import/read/delete lifecycle check. Enable it with
+`TT_TRANSFER_ARCHIVE_TEST=1` and the same origin/cookie variables, plus
+`TT_TRANSFER_TEST_USERNAME` for the expected disposable fixture identity.
+Remote dev origins require `TT_TRANSFER_REMOTE_DEV_TEST=1`; only
+`https://dev.thingtime.com` or an exact `https://pr-N.previews.dev.thingtime.com`
+origin is accepted. Production, lookalikes and implicit remote writes are
+refused. The selected origin must advertise import 1.9.0 and Things 1.13.0
+before any archive is created. The test uses fictional participants, verifies
+full history and private reads, rejects individual-row mutation/deletion and
+stale preview deletion, then removes only its returned archive root. No real
+user, live-message, invitation, notification or upload APIs are called. This
+test does not yet cover avatars, custom emoji, export or UI rendering; a skipped
+or capability-blocked run is not live acceptance.
+
 ## Thingtime Widgets automatic releases
 
 `.github/workflows/widgets-release.yml` publishes an Apple-silicon Widgets ZIP and
