@@ -1149,3 +1149,18 @@ contracts and the client/live-fixture requirement now demand export 1.11.1.
 The focused suite passes 65 tests with one live opt-in skip, and lint passes.
 Local manifests serve 1.11.1. Positive deployed round-trip proof is still pending;
 the failed live run is not counted as acceptance.
+
+## 2026-09-12 — Transfer verification sweep
+
+At `20d7de455`, all Things utility tests completed with 196 passes and seven
+explicit live opt-in skips. The portable format, ZIP, clipboard, identity-bound
+cut, nested-value and capability suites added 77 passes with no skips. These
+are automated boundary checks, not fresh live object-store or browser proof.
+
+The full TypeScript check identified an owned compatibility error in the binary
+acceptance test: `AggregateError` is absent from the configured TS library.
+The test now preserves the primary and cleanup failures on an ordinary Error's
+`errors` property, consistent with the other transfer acceptance tests, without
+widening the app's TypeScript target or suppressing diagnostics. Focused lint
+passes. Whole-project typechecking still reports errors outside the transfer
+utilities; it is not claimed green.

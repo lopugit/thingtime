@@ -245,6 +245,6 @@ test('real image and archive ZIP round-trip and concurrent emoji claims preserve
     const errors = primaryFailure ? [primaryFailure] : [];
     if (unresolved.size) errors.push(new Error('Server reported unresolved compensation; inspect this fixture run before retrying'));
     if (failures.length) errors.push(new Error(`Disposable fixture cleanup requires verification: ${failures.join(', ')}`));
-    if (errors.length) throw new AggregateError(errors, 'Binary transfer acceptance or cleanup failed');
+    if (errors.length) throw Object.assign(new Error('Binary transfer acceptance or cleanup failed'), { errors });
   }
 });
