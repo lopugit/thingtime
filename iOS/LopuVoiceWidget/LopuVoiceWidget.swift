@@ -6,6 +6,16 @@ import WidgetKit
 struct ThingtimeLopuWidgetBundle: WidgetBundle {
     var body: some Widget {
         LopuVoiceLiveActivity()
+        ThingtimeActionWidget()
+        ThingtimeDashboardWidget()
+        ThingtimeRenderWidget()
+        ThingtimeRecentWidget()
+        if #available(iOS 18.0, *) {
+            ThingtimeTranscribeControl()
+            ThingtimeVoiceControl()
+            ThingtimeNewControl()
+            ThingtimeSearchControl()
+        }
     }
 }
 struct LopuVoiceLiveActivity: Widget {
@@ -68,7 +78,7 @@ struct LopuVoiceLiveActivity: Widget {
             } minimal: {
                 Text("🦄")
             }
-            .widgetURL(URL(string: "https://thingtime.com/lopu"))
+            .widgetURL(WidgetAction.chat.url)
             .keylineTint(.purple)
         }
     }

@@ -1,5 +1,5 @@
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
-import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { getScopedUser } from '~/api/utils/auth/scopedUser';
 import { assertLopuAccess, lopuAccessResponse } from '~/api/utils/lopu/access';
 import { streamLopuVoiceReply, type LopuVoiceEvent } from '~/api/utils/lopu/voice';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
@@ -17,7 +17,7 @@ const STREAM_HEADERS = {
 // provider call and is not gated) → the stream.
 export const action = async ({ request }: { request: Request }) => {
 	if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed' }, { status: 405, headers: { Allow: 'POST' } });
-	const user = await getCurrentUser(request);
+	const user = await getScopedUser(request, 'lopu.voice');
 	if (!user) return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
 	if (user.temporary) return json({ ok: false, error: 'Create an account to talk to Lopu — voice turns are saved to your account' }, { status: 403 });
 	const unsupported = requireJsonContentType(request);

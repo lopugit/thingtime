@@ -104,3 +104,11 @@ ds-bundle/
 .design-sync/.cache/
 .design-sync/learnings/
 .design-sync/node_modules
+
+# Generated native widget build products
+macos/ThingtimeWidgets/*.xcodeproj/
+macos/ThingtimeWidgets/build/
+
+# Native Widgets distribution artifacts
+macos/ThingtimeWidgets/release/
+macos/ThingtimeWidgets/release-upload/
