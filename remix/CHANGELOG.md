@@ -31,6 +31,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-12 — Added and passed opt-in real live-chat image ZIP/import acceptance
+  on preview `3e29ad283`: fresh media binding, byte independence after source
+  deletion, anonymous denial and verified cleanup. Updated current transfer
+  acceptance gaps in [PR 764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
 - 2026-09-12 — Include shared emoji dependencies from membership-authorized
   live chat history, without widening standalone owner-only emoji export or
   importing source account/community authority. Export capability 1.12.0;

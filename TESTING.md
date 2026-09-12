@@ -2,6 +2,16 @@
 
 ## Real browser portable transfer acceptance
 
+- [ ] Run the real live-image archive acceptance with explicit
+  `TT_TRANSFER_LIVE_MEDIA_TEST=1 TT_TRANSFER_REMOTE_DEV_TEST=1`, a dev/PR-preview
+  `TT_TRANSFER_TEST_URL`, the expected `TT_TRANSFER_TEST_USERNAME`, and an
+  ephemeral authenticated `TT_TRANSFER_TEST_COOKIE`:
+  `node --import tsx --test app/api/utils/things/liveChatMedia.integration.test.ts`
+  from `remix/`. It requires the existing self-only fixture, never adds members,
+  and verifies ZIP bytes, fresh imported attachment/message binding, anonymous
+  denial, unchanged source history during transfer, independent copied bytes
+  after source deletion, and 404 cleanup. A default skipped run is not acceptance.
+
 - [ ] A member exporting a live chat must retain a custom emoji referenced by
   another participant, without needing to own its definition. Verify the new
   archive has independent personal emoji bytes and preserves the reaction.

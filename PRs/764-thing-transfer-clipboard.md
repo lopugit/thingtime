@@ -1,5 +1,23 @@
 # PR 764 — portable Thing transfer
 
+## Real live-chat image independence — 2026-09-12
+
+`liveChatMedia.integration.test.ts` passed explicitly enabled against preview
+`3e29ad283f090ed35946f5b57e1a6c6550679350`: one test, no skips. The approved
+account reused its single self-only group, uploaded a real PNG through signed
+multipart storage, bound it to a message with a stable request ID, exported
+complete history through ZIP, uploaded independent bytes and imported the archive.
+The copy has a fresh attachment ID bound to the remapped message. Exact PNG bytes
+remain readable after deleting the source message and source attachment.
+Export/import left messages and membership/read-receipt projections unchanged;
+anonymous archive access was denied. Cleanup verified 404 for both uploads and
+the archive. The reusable group retains only the soft-deleted fixture message.
+No other participant was added or messaged; no upload/moderation gate changed.
+
+Focused lint passes. Preview worker 34683318457 completed successfully and the
+published preview comment identifies the tested SHA. This proves ordinary live
+chat image transport, not other-account emoji, AI history, or external avatars.
+
 ## Shared live-history emoji dependencies — 2026-09-12
 
 Export capability 1.12.0 adds content-only emoji definitions referenced by a
@@ -952,13 +970,22 @@ bypass that limit or count the default integration skip as acceptance.
 
 ## Remaining acceptance
 
-Complete all file/gallery forms: linked galleries currently fail explicitly
-rather than silently disappearing. Split-template imported media now has its
-rebinding adapter, but real stored-file UI proof needs an upload-enabled test
-account. Builder/component/detail and generic nested-value controls are wired.
-Verify remaining stored file bytes through
-the real import UI, account transitions, partial failures and desktop/mobile
-dynamic states. Verify current-head CI and preview independently of local tests.
+This section tracks current gaps; older dated sections above describe historical
+blockers and must not be read as the present acceptance state.
+
+- Real clipboard, ZIP/file-picker import, ordinary archive stored media and
+  custom-emoji race/independence passed on `66199212e`; real live text/history
+  browser transfer passed on `53951c614`; real live-chat PNG transport and source
+  deletion independence passed on `3e29ad283` (details above).
+- Shared other-participant emoji still needs a real multi-user round trip.
+  AI/device-source history attribution and external/legacy avatar preservation
+  remain explicitly unsupported, not silently discarded.
+- Audit all requested entry points and content kinds, including builder pages,
+  components, schemas, actions, nested values, themes, algorithms, files,
+  recordings and mixed galleries. Wired controls or one generic fixture alone
+  do not prove each content-specific round trip.
+- Retain account-transition, partial-failure, desktop/mobile and source-revocation
+  checks. Verify current-head CI and preview separately from earlier acceptance.
 
 Local stack: http://127.0.0.1:12280 (Nitro 12282, HMR 12281).
 No verified Tailscale/Funnel URL is available for this worktree.
