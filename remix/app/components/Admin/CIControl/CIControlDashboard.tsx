@@ -1,4 +1,7 @@
 import type { AiWaterfallConfig } from '~/api/utils/ai/waterfallConfig';
+import { StackActivityPanel } from './StackActivityPanel';
+import { StackRunChat } from './StackRunChat';
+import { stackActivities, stackActivitySummary, type StackActivity } from './featureStackActivity';
 import { FeatureStackModelSelection } from './FeatureStackModelSelection';
 import React from 'react';
 import {
@@ -647,6 +650,9 @@ type FeatureStackLiveLine = {
 };
 
 type FeatureStackLiveSnapshot = {
+  activities: StackActivity[];
+  heartbeatLabel: string;
+  chatRunId: string | null;
 	live: boolean;
 	needsAttention: boolean;
 	state: string;
@@ -733,11 +739,14 @@ const FeatureStackComposer = ({
           variant="unstyled"
           height="auto"
           textAlign="left"
+          minW={0}
+          maxW="100%"
+          whiteSpace="normal"
           onClick={onToggleCollapsed}
           aria-expanded={!collapsed}
           aria-controls="feature-stack-section"
         >
-          <Flex align="center" gap={2}>
+          <Flex align="center" gap={2} wrap="wrap">
             <FiLayers />
             <Heading size="sm">Feature Stack</Heading>
 						<Badge colorScheme={selectedCount >= 1 ? 'purple' : 'gray'}>{selectedCount} selected</Badge>
@@ -972,9 +981,9 @@ const FeatureStackComposer = ({
 					<Flex align={{ base: 'flex-start', md: 'center' }} justify="space-between" gap={2} direction={{ base: 'column', md: 'row' }}>
 						<Flex align="center" gap={2}>
 							<FiActivity />
-							<Heading size="xs">Live merge stream</Heading>
+							<Heading size="xs">Current stack activity</Heading>
 							<Badge colorScheme={liveSnapshot.needsAttention ? 'orange' : liveSnapshot.live ? 'green' : 'gray'}>
-								{liveSnapshot.live ? 'Live' : liveSnapshot.needsAttention ? 'Needs attention' : 'Latest run'}
+								{liveSnapshot.needsAttention ? 'Needs attention' : liveSnapshot.live ? 'Monitoring' : 'Latest run'}
 							</Badge>
 						</Flex>
 						<Flex align="center" gap={1.5} fontSize="xs" opacity={0.68}>
@@ -993,8 +1002,12 @@ const FeatureStackComposer = ({
 						colorScheme="purple"
 						borderRadius="999px"
 						mt={3}
-						aria-label={`${liveSnapshot.percent}% complete`}
+						aria-label={`${liveSnapshot.percent}% of targets merged`}
 					/>
+          <Text fontSize="xs" mt={2} opacity={0.65}>{liveSnapshot.heartbeatLabel}</Text>
+          <StackActivityPanel rows={liveSnapshot.activities} />
+          {liveSnapshot.chatRunId ? <StackRunChat key={liveSnapshot.chatRunId} runId={liveSnapshot.chatRunId} /> : null}
+          <Text fontSize="xs" fontWeight="bold" mt={4}>Activity history</Text>
 					<Box
 						role="log"
 						aria-live="polite"
@@ -1012,7 +1025,7 @@ const FeatureStackComposer = ({
 					>
 						<Stack spacing={1.5}>
 							{liveSnapshot.lines.map((line) => (
-								<Flex key={line.key} gap={2} align="baseline">
+								<Flex key={line.key} gap={2} align="baseline" direction={{ base: 'column', md: 'row' }} minW={0} overflowWrap="anywhere">
 									<Text color="#8b93a7" flex="0 0 auto">
 										{line.at ? formatTime(line.at) : '—'}
 									</Text>
@@ -1036,7 +1049,7 @@ const FeatureStackComposer = ({
 						{liveSnapshot.needsAttention ? (
 							<Alert status="warning" borderRadius="md" py={2} mb={3} fontSize="xs">
 								<AlertIcon />
-								The controller finished before any target branch PR was published. Open the GitHub run for its job-level result, then run this saved stack again after the workflow fix is deployed.
+								One or more targets need attention. Read the target cards above for the blocker and next step; other targets may still be running.
 							</Alert>
 						) : null}
 						<Stack spacing={2}>
@@ -1495,8 +1508,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 		const targetProgress = featureStackProgress.get(stack.id) ?? [];
 		const targetRows = stack.targets.map((target) => targetProgress.find((entry) => entry.target === target) ?? { target, status: 'waiting' });
 		const activeTargets = targetRows.filter((entry) => normalizedStatus(entry.status) !== 'skipped');
-		const terminalStatuses = new Set(['merged', 'closed', 'completed', 'success', 'succeeded', 'failure', 'failed', 'cancelled']);
-		const completedTargets = activeTargets.filter((entry) => terminalStatuses.has(normalizedStatus(entry.status))).length;
+		const completedTargets = activeTargets.filter((entry) => normalizedStatus(entry.status) === 'merged').length;
 		const dispatch = dashboard.dispatches.find((candidate) => candidate.id === stack.lastDispatchId) ?? null;
 		const dispatchEvents = [
 			...new Map(
@@ -1527,7 +1539,6 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 					.filter((candidate) => Number(candidate.runId) === Number(run.runId))
 					.sort((left, right) => (parseTime(left.startedAt)?.getTime() ?? 0) - (parseTime(right.startedAt)?.getTime() ?? 0))
 			: [];
-		const completedJobs = jobs.filter((job) => terminalStatuses.has(normalizedStatus(job.status))).length;
 		const allTargetsFinished = activeTargets.length > 0 && completedTargets === activeTargets.length;
 		const runStatus = run?.status ?? currentStoredRun?.status ?? dispatch?.status ?? stack.status;
 		const hasPublishedTarget = activeTargets.some((entry) => Boolean(entry.url));
@@ -1537,22 +1548,11 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 			hasPublishedTarget,
 			dispatchAccepted: Boolean(dispatch || currentStoredRun || stack.status === 'running')
 		});
-		let percent = dispatch ? 18 : 8;
-		if (run) percent = Math.max(percent, terminalStatuses.has(normalizedStatus(run.status)) ? 65 : 30);
-		if (jobs.length) percent = Math.max(percent, 30 + Math.round((completedJobs / jobs.length) * 35));
-		if (activeTargets.length) percent = Math.max(percent, 30 + Math.round((completedTargets / activeTargets.length) * 70));
-		if (heartbeat) percent = Math.max(percent, heartbeat.progressPercent);
-		if (allTargetsFinished) percent = 100;
-		percent = Math.min(100, Math.max(5, percent));
-		const startedMs = startedAt.getTime();
-		const estimatedMinutes = Math.max(8, stack.sourcePrNumbers.length * 2 + Math.max(1, activeTargets.length) * 4);
-		const baselineFinish = new Date(startedMs + estimatedMinutes * 60_000);
-		const heartbeatFinish = heartbeat?.expectedFinishAt ? parseTime(heartbeat.expectedFinishAt) : null;
-		const expectedFinish = heartbeatFinish && heartbeatFinish.getTime() > Date.now()
-			? heartbeatFinish
-			: baselineFinish.getTime() > Date.now()
-				? baselineFinish
-				: new Date(Date.now() + Math.max(2, activeTargets.length * 2) * 60_000);
+    const activities = stackActivities(targetRows, heartbeat, ['paused', 'stopped'].includes(stack.status) ? stack.status : String(runStatus));
+    const activity = stackActivitySummary(activities);
+    const held = ['paused', 'stopped'].includes(stack.status) || ['cancelled', 'stopped'].includes(String(runStatus));
+    const percent = activity.percent;
+    const needsAttention = outcome.needsAttention || activities.some(row => ['failed', 'blocked'].includes(row.state));
 		const latestFinishedAt = [run?.completedAt, ...targetRows.map((entry) => entry.updatedAt)]
 			.map(parseTime)
 			.filter((date): date is Date => Boolean(date))
@@ -1625,21 +1625,16 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
 			})
 			.sort((left, right) => (parseTime(right.startedAt)?.getTime() ?? 0) - (parseTime(left.startedAt)?.getTime() ?? 0));
 		return {
-			live: outcome.live,
-			needsAttention: outcome.needsAttention,
-			state: outcome.state,
-			percent,
-			summary: outcome.needsAttention
-				? `${percent}% · controller completed but 0/${activeTargets.length || stack.targets.length} target branch PRs were published`
-				: outcome.live && heartbeat
-					? `${percent}% · ${heartbeat.message}`
-				: `${percent}% · ${completedTargets}/${activeTargets.length || stack.targets.length} target branches finished · ${completedJobs}/${jobs.length} visible workflow jobs finished`,
-			finishLabel:
-				allTargetsFinished && latestFinishedAt
-					? `Finished ${timeFormatter.format(latestFinishedAt)}`
-					: outcome.needsAttention || (!outcome.live && latestFinishedAt)
-						? `Stopped ${timeFormatter.format(latestFinishedAt ?? startedAt)}`
-						: `Estimated finish ${timeFormatter.format(expectedFinish)}`,
+      activities,
+      chatRunId: currentStoredRun?.runId ?? null,
+      heartbeatLabel: heartbeat ? `Worker update ${timeFormatter.format(new Date(heartbeat.at))}${Date.now() - Date.parse(heartbeat.at) > 12 * 60_000 ? ' · stale; current worker activity is unconfirmed' : ' · updates on phase changes and at least every 10 minutes'}` : 'No worker heartbeat received yet. Target PR status is shown separately.',
+      live: outcome.live && !['paused', 'stopped'].includes(stack.status),
+      needsAttention,
+      state: activity.finished ? 'merged' : held ? 'stopped' : needsAttention ? 'needs-attention' : activities.some(row => row.state === 'working') ? 'working' : 'waiting',
+      percent,
+      summary: activity.summary,
+      finishLabel: activity.finished && latestFinishedAt ? `Finished ${timeFormatter.format(latestFinishedAt)}` : held ? 'Run stopped; unmerged targets remain' : 'Finish time unknown — depends on workers, conflicts and checks',
+
 			timeZone,
 			lines,
 			runs: historicalRuns
@@ -2123,7 +2118,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
         onToggleCollapsed={() => toggleSection('credentials')}
       />
 
-      <FeatureStackComposer
+      <FeatureStackComposer key={cacheIdentity}
 				modelWaterfall={featureStackModels}
 				onModelWaterfallChange={setFeatureStackModels}
         name={featureStackName}
