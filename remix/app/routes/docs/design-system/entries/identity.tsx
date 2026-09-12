@@ -314,7 +314,7 @@ export const identityEntries: DesignSystemEntry[] = [
 			},
 			{
 				title: 'Shared keyframes',
-				source: 'remix/app/globals/GlobalStyles.tsx',
+				source: 'remix/app/globals/GlobalStyles.tsx (+ the pet, noted below)',
 				rows: [
 					{ name: 'moving-rainbow', type: '@keyframes', description: 'background-position 0 → calc(100px + 200%) — the gradient pan; always reached through var(--tt-rainbow-anim).' },
 					{ name: 'tt-pop', type: '@keyframes', description: 'opacity 0 + translateY(10px) → rest. Content entering; play once with `both` fill.' },
@@ -322,7 +322,8 @@ export const identityEntries: DesignSystemEntry[] = [
 					{ name: 'tt-blink', type: '@keyframes', description: '50% opacity 0, steps(1) — text carets and typing indicators.' },
 					{ name: 'tt-bob', type: '@keyframes', description: 'translateY 0 → 6px → 0 — floating decorative accents; decorative, gate it.' },
 					{ name: 'tt-pan', type: '@keyframes', description: 'background-position → 200% center — shimmer text over a 200%-wide gradient.' },
-					{ name: 'tt-gallop', type: '@keyframes', description: '🥚 translateX/rotate romp — the nav unicorn’s 7-click victory gallop.' }
+					{ name: 'tt-gallop', type: '@keyframes', description: '🥚 translateX/rotate romp — the nav unicorn’s 7-click victory gallop.' },
+					{ name: 'lopuuu-float / -sparkle / -rainbow', type: '@keyframes', description: 'The decorative pet’s bob, twinkle and hue cycle — the one deliberate exception to this group’s single source. Declared in the sx of components/Pets/LopuuuPet.tsx (Emotion hoists them to the top level, so the name is still global) rather than here, because only that one component uses them and they should not sit in every page’s stylesheet while the pet is switched off. Gated by var(--tt-pet-anim), not --tt-rainbow-anim: three shorthands share one switch, so the var carries `initial` (guaranteed-invalid) and each element falls back to its own spec.' }
 				]
 			},
 			{
@@ -386,7 +387,7 @@ export const identityEntries: DesignSystemEntry[] = [
 			{ token: '--tt-anim-speed', usedFor: 'Base functional transition duration (200ms default)' }
 		],
 		adoption: [
-			'Done — gradients unified in ~/theme/rainbow; keyframes unified in GlobalStyles.tsx; the motion switch writes --tt-rainbow-anim/--tt-motion from themeToCssVars().',
+			'Done — gradients unified in ~/theme/rainbow; keyframes unified in GlobalStyles.tsx, the decorative pet’s three being the one deliberate component-local exception; the motion switch writes --tt-rainbow-anim/--tt-motion/--tt-pet-anim from themeToCssVars().',
 			'Done — ConfettiCanvas mounted once at the app root with the event-bus API; landing celebrations fire through burstAtEvent.',
 			'Ongoing — decorative loops written before the switch migrate onto var(--tt-rainbow-anim)/motionOK gating as surfaces are touched.',
 			'Next — a shared rotate keyframe for spinning conic rings if a real spinner ships; today RAINBOW_CONIC renders static.'

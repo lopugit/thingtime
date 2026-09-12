@@ -58,6 +58,15 @@ export const TT_CUSTOM_TARGETS: Record<string, TtCustomTarget> = {
   'general.icons': root('Icons'),
   'general.shadow': root('Shadows', '--tt-shadow-card/panel/popover'),
   'general.motion': root('Motion', '--tt-rainbow-anim'),
+  // Element-backed, not :root — the pet is a single fixed ornament with no
+  // --tt-* token behind it, so scoping to its own class is what makes
+  // "make it smaller / move it / fade it" work without the declarations
+  // landing on the whole document.
+  'general.pet': {
+    label: 'Pet',
+    selector: '.tt-pet',
+    classable: true,
+  },
   'general.animSpeed': root('Animation speed', '--tt-anim-speed'),
   'windows.close': {
     label: 'Close button',

@@ -521,6 +521,9 @@ export const ThemeStudio = () => {
 					<Row label="Motion" hint="rainbow animations" customKey="general.motion">
 						<Switch isChecked={g.motion} onChange={(e) => setGeneral('motion', e.target.checked)} />
 					</Row>
+					<Row label="Pet" hint="floating unicorn 🦄" customKey="general.pet">
+						<Switch isChecked={g.pet} onChange={(e) => setGeneral('pet', e.target.checked)} />
+					</Row>
 					<Row label="Animation speed" customKey="general.animSpeed">
 						<StepControl
 							value={g.animSpeed}
