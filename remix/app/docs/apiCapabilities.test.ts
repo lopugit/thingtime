@@ -415,3 +415,14 @@ test('subspace discovery publishes its contract versions', () => {
 	assert.equal(manifest.features['api.subspaces-feed'], '1.3.0');
 	assert.equal(manifest.features['api.subspaces-get'], '1.4.0');
 });
+
+test('run chat advertises both origin-scoped contracts and rejects incompatible responders', () => {
+  const manifest = thingtimeCapabilityManifest('https://thingtime.test');
+  for (const [feature, path] of [['api.admin-ci-stack-chat', '/api/v1/admin/ci/stacks/chat'], ['api.integrations-ci-chat', '/api/v1/integrations/ci/chat']]) {
+    assert.equal(createApiCapabilitiesManifest().features[feature], '1.0.0');
+    assert.equal(manifest.features[feature].version, '1.0.0');
+    assert.ok(manifest.operations.some(row => row.feature === feature && row.path === path && row.methods.includes('POST')));
+  }
+  assert.equal(capabilitySatisfies('1.1.0', '1.0.0'), true);
+  for (const version of ['', '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
+});
