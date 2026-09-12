@@ -24,6 +24,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Bound root session reads to two attempts with timeout/cancellation, provide
+  recoverable retry/reload controls, and hide/reset account-owned UI across
+  sign-in changes without falling back to another account's root data.
+  — Codex (AI), 2026-09-12
+
 - Replace the Mac Widgets webview with native navigation and browser PKCE sign-in, app-only Keychain credentials, and revocable connections. Expand OAuth consent and route enforcement for account Things, actions, and Lopu; preserve selected-only legacy grants and granular read/write choices. See [PR #727 notes](../PRs/727-apple-widget-suite.md). — Codex (AI), 2026-09-11
 
 - 2026-09-10: Add shared iOS/Mac WidgetKit actions, dashboards, Thing rendering, recent Things, and iOS Control Centre buttons. Add opt-in bounded content sync, native launch routes, Mac companion signing/install runbook, and widget acceptance checks. See [PR #727 notes](../PRs/727-apple-widget-suite.md) and [Apple widget setup](../apple/README.md). — Codex (AI), 2026-09-10
