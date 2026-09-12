@@ -1,16 +1,4 @@
-# Lopu PR manager protected control plane. Product branches are thin reusable
-# workflow callers pinned to @github-actions; external events only detect work,
-# and bot-authenticated workflow_dispatch runs perform secret-bearing repairs.
-#
-# Security invariants: exact live PR and branch SHAs are revalidated before
-# checkout, model execution, and publication; fork, protected-head, default-branch,
-# and user-paused PRs are rejected; git hooks and persisted checkout credentials
-# are disabled; model output is scope-checked before an exact-lease push.
-#
-# Detailed behavior is enforced by resolve-pr-conflicts-routing-contract.mjs and
-# the comments beside each job and publication boundary below. Keep this file
-# below the guarded byte limit: GitHub leaves oversized revisions permanently
-# pre-queued with no jobs, logs, or cancellable run graph.
+# Protected Lopu controller; invariants and byte-limit rationale: .github/TESTING.md.
 
 name: Lopu PR manager
 
@@ -3320,13 +3308,7 @@ jobs:
             exit 1
           }
 
-          # A wrapper can be cancelled after its protected target PR has
-          # already merged (for example while an older merge gate is still
-          # following a repaired head SHA). In that state the immutable source
-          # PRs are legitimately closed, so rerunning AI is both impossible
-          # and incorrect. Reconcile only when every exact stack branch/base
-          # pair has a merged PR whose merge commit is still contained by the
-          # requested target branch.
+          # Recover only exact merged stack PRs whose commits remain on the targets.
           recovery_matrix='{"include":[]}'
           recovery_complete=true
           while IFS= read -r target; do
@@ -3764,9 +3746,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.feature_stack_plan.outputs.matrix) }}
     concurrency:
-      # Admin-triggered stacks use their own vault-backed lane. Serialize the
-      # same target, but do not make a main/develop stack wait behind unrelated
-      # PR reviews, promotions, rebases, or all-branch maintenance.
+      # Serialize each target independently of other Lopu lanes.
       group: lopu-feature-stack-${{ github.repository }}-${{ matrix.target }}
       queue: max
       cancel-in-progress: false
@@ -3808,9 +3788,7 @@ jobs:
             echo "::error::Feature Stack target '$TARGET_BRANCH' moved after admission."
             exit 1
           }
-          # The trusted full checkout already owns every admitted object. A
-          # shared local clone gives the integration worktree its own config
-          # and index without repacking the repository once per source ref.
+          # Separate index, sharing only admitted objects from the trusted clone.
           git clone --shared --no-checkout "$GITHUB_WORKSPACE/trusted" "$integration"
           git -C "$integration" remote rename origin snapshot
           git -C "$integration" switch --detach "$BASE_SHA"
@@ -4097,6 +4075,7 @@ jobs:
     permissions:
       actions: read
       contents: read
+      pull-requests: read
     env:
       GH_TOKEN: ${{ github.token }}
       STACK_ID: ${{ needs.feature_stack_plan.outputs.stack_id }}
@@ -4113,10 +4092,26 @@ jobs:
           ref: github-actions
           fetch-depth: 1
           persist-credentials: false
-          sparse-checkout: .github/scripts/feature-stack-progress.mjs
+          sparse-checkout: |
+            .github/scripts/feature-stack-progress.mjs
+            .github/scripts/feature-stack-chat.mjs
+            .github/scripts/lopu-credential-vault.mjs
           sparse-checkout-cone-mode: false
 
+      - name: Prepare the optional run chat responder
+        id: chat_setup
+        timeout-minutes: 3
+        continue-on-error: true
+        env:
+          THINGTIME_CREDENTIAL_VAULT_ORIGIN: ${{ vars.THINGTIME_CREDENTIAL_VAULT_ORIGIN || 'https://thingtime.com' }}
+        run: |
+          npm install --global @anthropic-ai/claude-code@2.1.208
+          node .github/scripts/lopu-credential-vault.mjs
+
       - name: Stream immediate, phase-change, ten-minute, and terminal updates
+        env:
+          STACK_CHAT_ENABLED: ${{ steps.chat_setup.outcome == 'success' && steps.chat_setup.outputs.count != '0' }}
+          STACK_CHAT_MODEL_ARGS: ${{ needs.model_config.outputs.agent_backend == 'claude' && needs.model_config.outputs.model_args || '' }}
         run: node .github/scripts/feature-stack-progress.mjs
 
   feature_stack_reconcile_receipt:
@@ -4144,7 +4139,10 @@ jobs:
           ref: github-actions
           fetch-depth: 1
           persist-credentials: false
-          sparse-checkout: .github/scripts/feature-stack-progress.mjs
+          sparse-checkout: |
+            .github/scripts/feature-stack-progress.mjs
+            .github/scripts/feature-stack-chat.mjs
+            .github/scripts/lopu-credential-vault.mjs
           sparse-checkout-cone-mode: false
 
       - name: Publish the signed terminal success receipt
