@@ -86,6 +86,8 @@ try {
     await page.getByTestId('chat-archive-history').waitFor();
     const emoji = page.getByRole('img', { name: ':party:', exact: true });
     await emoji.waitFor();
+    await page.waitForFunction((el: HTMLImageElement) => el.complete && el.naturalWidth > 0,
+      await emoji.elementHandle(), { timeout: 10_000 });
     assert.ok(await emoji.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0), 'Historical custom emoji image failed to load');
     await page.getByText('Custom emoji unavailable', { exact: true }).waitFor();
     const historyBounds = await page.getByTestId('chat-archive-history').boundingBox();

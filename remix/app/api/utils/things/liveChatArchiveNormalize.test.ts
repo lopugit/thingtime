@@ -56,3 +56,19 @@ test('AI source rows cannot silently inherit the human owner attribution or live
     (f: ReturnType<typeof fixture>) => { f.source.messages[0].crystal.lopu = { role: 'assistant', toolCalls: [{ name: 'send' }] }; }
   ]) { const f = fixture(); change(f); assert.throws(() => normalize(f), /Complete chat presentation is unavailable/); }
 });
+
+test('canonical Messenger ISO edit/delete timestamps survive normalization without restoring deleted text', () => {
+  const f = fixture();
+  f.source.messages[1].crystal.editedAt = at.toISOString();
+  f.source.messages[3].crystal.deletedAt = at.toISOString();
+  const result = normalize(f);
+  assert.equal(result.group.messages[1].crystal.editedAt, at.toISOString());
+  assert.equal(result.group.messages[3].crystal.deleted, true);
+  assert.equal(result.group.messages[3].crystal.text, '');
+  for (const value of ['2026-02-30T00:00:00.000Z', '2026-09-01', '2026-09-01T00:00:00+00:00', '0', 0]) {
+    for (const key of ['editedAt', 'deletedAt']) {
+      const malformed = fixture(); malformed.source.messages[0].crystal[key] = value;
+      assert.throws(() => normalize(malformed), /Complete chat presentation is unavailable/);
+    }
+  }
+});

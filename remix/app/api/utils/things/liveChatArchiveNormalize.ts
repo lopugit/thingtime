@@ -15,6 +15,15 @@ const date = (value: unknown): string => {
   if (!(value instanceof Date) || !Number.isFinite(value.getTime())) return reject();
   return value.toISOString();
 };
+// Root timestamps are BSON Dates, but Messenger's edit/delete writers store
+// ISO strings inside crystal. Accept that exact canonical spelling, not loose
+// Date parsing (which normalizes invalid days, offsets or numeric strings).
+const eventDate = (value: unknown): string => {
+  if (value instanceof Date) return date(value);
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) ||
+    !Number.isFinite(Date.parse(value)) || new Date(value).toISOString() !== value) return reject();
+  return value;
+};
 const string = (value: unknown, fallback = ''): string => value == null ? fallback : typeof value === 'string' ? value : reject();
 const optionalId = (value: unknown): string | undefined => value == null ? undefined : string(value);
 
@@ -60,12 +69,12 @@ export const normalizeLiveChatArchive = (source: Source, viewerId: string,
     messages: messages.map(row => {
       const crystal = row.crystal || {};
       const deleted = crystal.deletedAt != null;
-      if (deleted) date(crystal.deletedAt);
+      if (deleted) eventDate(crystal.deletedAt);
       const systemText = !deleted && crystal.systemType ? systemMessageText({ authorId: row.ownerId,
         systemType: crystal.systemType, systemMeta: crystal.systemMeta } as ChatMessage, publicMembers) : undefined;
       return { id: row.shareId, authorId: row.ownerId, text: deleted ? '' : string(crystal.text),
         createdAt: date(row.createdAt), deleted,
-        ...(crystal.editedAt == null ? {} : { editedAt: date(crystal.editedAt) }),
+        ...(crystal.editedAt == null ? {} : { editedAt: eventDate(crystal.editedAt) }),
         ...(optionalId(crystal.replyToId) === undefined ? {} : { replyToId: optionalId(crystal.replyToId) }),
         ...(optionalId(crystal.threadRootId) === undefined ? {} : { threadRootId: optionalId(crystal.threadRootId) }),
         ...(systemText === undefined ? {} : { systemText }) };

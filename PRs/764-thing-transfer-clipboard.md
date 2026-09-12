@@ -944,3 +944,24 @@ capability endpoints returned 1.11.0. This is not yet built-deployment or real
 Messenger round-trip proof. Remaining: AI attribution, external/legacy avatar
 preservation, shared emoji export and live browser acceptance. No live chat
 write, invite, membership creation or notification path was introduced.
+
+## 2026-09-12 — Live fixture finds ISO timestamp mismatch
+
+Exact `eaeb72db8` built and deployed successfully; its preview manifest served
+export 1.11.0. The new opt-in `liveChatArchive.integration.test.ts` authenticated
+the approved dev fixture, created one self-only group, and successfully sent a
+message/thread, edited, reacted and soft-deleted. Export then returned 422;
+no archive copy was created. The named self-only group is retained for reuse
+because ordinary group chats have no delete endpoint. No other participants
+were added or messaged. An earlier launcher typo used the wrong login URL and
+stopped with 404 before any fixture creation.
+
+The normalizer incorrectly required BSON Dates for crystal edit/deletion
+timestamps. The canonical Messenger writers store ISO strings. It now accepts
+strict canonical ISO strings for those two fields (plus existing Date inputs),
+while rejecting invalid dates and preserving deleted-text redaction. Regression
+coverage uses the real writer's timestamp representation. Both capability
+contracts and the client/live-fixture requirement now demand export 1.11.1.
+The focused suite passes 65 tests with one live opt-in skip, and lint passes.
+Local manifests serve 1.11.1. Positive deployed round-trip proof is still pending;
+the failed live run is not counted as acceptance.

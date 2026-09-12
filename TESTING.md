@@ -7013,6 +7013,12 @@ approval; `access.test.ts` — the reservation matrix) and
 
 ## Durable recording reads
 
+- Live-chat archive timestamps: exercise the actual Messenger edit/delete APIs,
+  which store canonical ISO strings inside `crystal`, unlike BSON root dates.
+  Export edited messages and tombstones together; preserve `editedAt`, never
+  restore deleted text, and reject invalid calendar dates or loose date strings.
+  Require export 1.11.1 before running the self-only live-history ZIP fixture.
+
 - Ordinary live-chat export: use a first-party active/pending member, include
   former participants and thread replies, then import as a private archive.
   Confirm self substitution, historical names/avatars, mixed gallery order,

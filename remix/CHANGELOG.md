@@ -31,6 +31,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-12 — Fix live-chat archive conversion of the canonical ISO edit and
+  deletion timestamps after a real self-only chat export exposed a 422. Keep
+  deleted text redacted and require export capability 1.11.1. [PR #764 notes](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
 - 2026-09-12 — Connect ordinary live-chat export to private archive conversion
   with membership-gated snapshots, canonical managed media reads, bounded
   preparation and export capability 1.11.0. AI/external-avatar/shared-emoji

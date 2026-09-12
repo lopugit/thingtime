@@ -12306,8 +12306,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-export',
-    featureVersion: '1.11.0',
-    contractVersion: '1.11.0',
+    featureVersion: '1.11.1',
+    contractVersion: '1.11.1',
+    // 1.11.1: preserve the canonical ISO crystal edit/deletion timestamps.
     // 1.11.0: first-party members export ordinary live chats as private archives.
     // 1.10.0: owner folder traversal includes complete private archive roots.
     // 1.9.0: first-party owners re-export complete private archive histories;
