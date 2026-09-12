@@ -86,6 +86,31 @@ const ThingImportStep = ({ ownerId, folderId, initialBundle, onClose, batch, com
   };
   const selectFiles = (files: File[]) => { if (files.length) void selectContent(signal => readTransferFiles(files, signal)); };
   const pasteText = (text: string) => { void selectContent(async signal => [await readTransferClipboard(text, signal)]); };
+  // This dialog invites a file drop, but only its dashed box handles one. A
+  // near-miss drop would reach the browser default, navigate away from the SPA
+  // and discard this dialog with any parsed batch or in-flight import. Claim
+  // window-level file drops while open, as the Builder canvas already does.
+  const drop = useRef({ accept: selectFiles, open: false });
+  drop.current = { accept: selectFiles, open: !running && !uploadStarted && !attempted };
+  useEffect(() => {
+    const hasFiles = (event: DragEvent) => !!event.dataTransfer && Array.from(event.dataTransfer.types || []).includes('Files');
+    const onDragOver = (event: DragEvent) => { if (hasFiles(event)) event.preventDefault(); };
+    const onDrop = (event: DragEvent) => {
+      // An inner surface (the dashed box, a tree row) already claimed this drop.
+      if (!hasFiles(event) || event.defaultPrevented) return;
+      // Suppress the navigation even once the picker is closed: losing a
+      // running import to a stray drop is the outcome worth preventing.
+      event.preventDefault();
+      const files = Array.from(event.dataTransfer?.files || []);
+      if (drop.current.open && files.length) drop.current.accept(files);
+    };
+    window.addEventListener('dragover', onDragOver);
+    window.addEventListener('drop', onDrop);
+    return () => {
+      window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('drop', onDrop);
+    };
+  }, []);
   const pasteClipboard = () => {
     void selectContent(async signal => {
       let text: string;
