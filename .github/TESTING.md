@@ -127,3 +127,42 @@ do not merge it into the permanently separate product branches to test it.
   Other successfully merged targets retain their success receipts.
 - After rollout, inspect an actual run's publisher, confirmation jobs and final
   dashboard receipt. Local tests alone do not establish live recovery.
+
+## Feature Stack run status conversations
+
+- Run `node --test .github/scripts/feature-stack*.test.mjs` and the progress
+  reporter self-test. Waiting gates must not count as active model work; failed
+  publishers remain failed. A published PR never counts as a confirmed merge.
+- The product must advertise origin-scoped `api.integrations-ci-chat` 1.x before
+  the worker polls. Missing/incompatible discovery disables chat only. Deploy the
+  matching product PR before verifying a newly started live run.
+- The progress job uses the existing vault origin/router secret and shared Claude
+  model/credential waterfall. Claude is pinned; its status session runs in an empty
+  temporary HOME/cwd, with no tools, MCP servers, source checkout, GH token, router
+  secret, settings, plugins or persisted session. Test provider credential fallback.
+- Ask a harmless status question on a test run; compare with GitHub's actual
+  jobs/steps and exact stack-branch target PRs. Ask to restart: no mutation occurs.
+  This is a responder alongside the workers, not their private model session.
+- Verify uncertain reply delivery retries the original lease without generating
+  another answer. Expired/replaced leases and older workflow attempts must not
+  overwrite a newer answer. Ended/paused/stopped/replaced runs claim no new work.
+- Cancel the test responder: the product shows offline within 150 seconds. Confirm
+  merge workers continue if the optional model setup or mailbox service fails.
+- Product UI coverage includes desktop/mobile overflow, long messages, queued /
+  answering / failed / answered states, manual refresh, retry and legacy runs.
+
+### Protected manager invariants
+
+Lopu PR manager protected control plane. Product branches are thin reusable
+workflow callers pinned to @github-actions; external events only detect work,
+and bot-authenticated workflow_dispatch runs perform secret-bearing repairs.
+
+Security invariants: exact live PR and branch SHAs are revalidated before
+checkout, model execution, and publication; fork, protected-head, default-branch,
+and user-paused PRs are rejected; git hooks and persisted checkout credentials
+are disabled; model output is scope-checked before an exact-lease push.
+
+Detailed behavior is enforced by resolve-pr-conflicts-routing-contract.mjs and
+the comments beside each job and publication boundary below. Keep this file
+below the guarded byte limit: GitHub leaves oversized revisions permanently
+pre-queued with no jobs, logs, or cancellable run graph.

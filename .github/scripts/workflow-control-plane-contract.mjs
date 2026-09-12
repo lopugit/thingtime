@@ -1829,7 +1829,7 @@ export function assertControlPlaneContract() {
   assert.match(featureStackProgress, /!cancelled\(\)[\s\S]*feature_stack_plan\.result == 'success'[\s\S]*model_config\.result == 'success'/u);
   assert.match(featureStackProgress, /continue-on-error: true/u);
   assert.match(featureStackProgress, /actions: read[\s\S]*contents: read/u);
-  assert.match(featureStackProgress, /ref: github-actions[\s\S]*persist-credentials: false[\s\S]*sparse-checkout: \.github\/scripts\/feature-stack-progress\.mjs/u);
+  assert.match(featureStackProgress, /ref: github-actions[\s\S]*persist-credentials: false[\s\S]*sparse-checkout: \|\s+\.github\/scripts\/feature-stack-progress\.mjs\s+\.github\/scripts\/feature-stack-chat\.mjs\s+\.github\/scripts\/lopu-credential-vault\.mjs/u);
   assert.match(featureStackProgress, /THINGTIME_CI_ROUTER_SECRET: \$\{\{ secrets\.THINGTIME_CI_ROUTER_SECRET \}\}/u);
   assert.match(
     resolver,
