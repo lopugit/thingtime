@@ -219,8 +219,8 @@ export const navigationEntries: DesignSystemEntry[] = [
 				rows: [
 					{ name: 'DrawerTopItem', type: '{ id, label, icon, to?, children }', description: 'A hub: navigates via to (optional — without it a click only selects) and owns a submenu.' },
 					{ name: 'DrawerSubItem', type: '{ id, label, icon?, to?, mode?, group?, auth flags }', description: 'mode items switch the thing mode (view/edit/editor) for the thing path currently on screen instead of navigating; group nests them under a collapsible header; authOnly/guestOnly/adminOnly filter per user.' },
-					{ name: 'drawerMenuItems', type: 'DrawerTopItem[]', description: 'The default model: Home, Feed, Messages, Search, Schemas, Components, Actions, Builder, Things, Account, Status, Dev, Branding, Docs.' },
-					{ name: 'DRAWER_KEEP_OPEN_DEFAULT_IDS', type: "['dev','status','branding','docs']", description: 'Hubs whose click keeps the drawer open by default so their submenu stays browsable; the per-item setting always wins in either direction.' },
+					{ name: 'drawerMenuItems', type: 'DrawerTopItem[]', description: 'The default model: Home, Feed, Subspaces, Messages, Lopu, Search, Schemas, Components, Actions, Builder, Things, Account, Status, Dev, Branding, Marketing, Docs.' },
+					{ name: 'DRAWER_KEEP_OPEN_DEFAULT_IDS', type: "['dev','status','branding','marketing','docs']", description: 'Hubs whose click keeps the drawer open by default so their submenu stays browsable; the per-item setting always wins in either direction.' },
 					{ name: 'applyDrawerOrdering / filterDrawerItemsByAuth / buildDrawerSubSections', type: 'pure helpers', description: 'Saved-order merge (new ids append at their default slot), auth filtering, and the flat-list → ungrouped + named-group sectioning — all pure, all reused by the stories on this page.' }
 				]
 			},

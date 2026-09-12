@@ -1,5 +1,17 @@
 # PR 764 — portable Thing transfer
 
+## Develop reconciliation — 2026-09-12
+
+Integrate develop `be7423134` (including main-sync PR 783 and the marketing/social
+preview additions). Resolve the two capability-test conflicts by retaining the
+newer transfer/archive versions while preserving develop's recording and native
+Widgets coverage. No production/main ref is updated by this reconciliation.
+Graph snapshots are regenerated from one consistent branch snapshot, not manually
+merged. The transfer implementation, account-transition guards and Messenger
+drawer portal fix remain present. Focused Things tests: 236 passing; marketing:
+62 passing; social previews: 33 passing. Build, rendered regression and exact
+new-head deployment still require separate verification.
+
 ## Real live Messenger round trips — 2026-09-12
 
 The corrected export capability 1.11.1 passed the opted-in HTTP integration:

@@ -50,6 +50,7 @@ test('ordinary live-chat archive export requires the ISO timestamp correction on
 });
 
 test('shared dependency reads negotiate the additive Things contract on both manifests', () => {
+	// Preserve the newer archive contracts on top of the recording and Widgets additions.
 	assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.15.1');
 	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things'].version, '1.16.1');
 	assert.equal(capabilitySatisfies('1.8.2', '1.7.5'), true);
