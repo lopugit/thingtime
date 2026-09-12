@@ -1,5 +1,24 @@
 # PR 764 — portable Thing transfer
 
+## Retryable archive deletion and compensation — 2026-09-12
+
+Added the internal `removeTransferChatArchive` adapter and server-owned
+`archiveRootId` on imported rows. Deletion is scoped to the exact owner/root/
+archive version. It marks a durable deleting root, drains objects child-first
+through the canonical attachment cascade, then removes/refunds all historical
+rows in one home-plane accounted transaction. Object deletion failures retain
+the root and rows for retry; unexpected children and inconsistent archive sets
+fail closed. Concurrent completed deletion does not double-refund content.
+No live chats, users, memberships, source records or shared emoji definitions
+are deleted by this adapter.
+
+Dependency-level tests cover deferred/ambiguous object cleanup, retries, missing
+roots, foreign/app/live records, bounded scans, root fencing, leftover children,
+changed row sets and transaction rollback. This remains an internal lifecycle
+checkpoint, not live S3/Mongo acceptance: import/export endpoints, protected-kind
+and capability registration, full-history export/re-export and the archive chat
+UI still need integration and real account/browser tests.
+
 ## Accounted archive storage writer — 2026-09-12
 
 Added the internal `createTransferChatArchive` adapter. It validates a detached

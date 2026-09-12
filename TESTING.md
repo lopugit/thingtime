@@ -6664,6 +6664,13 @@ approval; `access.test.ts` — the reservation matrix) and
 - Run `node remix/scripts/verify-lopu-linked-things.mjs` against the running worktree stack (or pass its loopback HTTP origin). It registers disposable local accounts and exercises real API comments, unchanged parent crystals, shared voice/Messenger history, retry deduplication, searchable scheduled-task Things, linked context, account isolation, protected writes, and pause/resume. It removes its created content and pauses schedules in `finally`; empty test accounts remain, with credentials never persisted. Production origins are rejected. This does not replace browser/device, provider inference, or scheduled-delivery acceptance.
 # Portable Thing transfers
 
+- Archive deletion regression: deferred or ambiguous object cleanup must leave
+  a deleting root and all message history for retry. Only refund/delete archive
+  rows after canonical object cleanup and an empty-child check. Refuse foreign,
+  app-scoped, live, malformed and changed record sets; make repeated/concurrent
+  completion idempotent. Verify actual S3 deletion and account ledgers before
+  enabling the archive lifecycle in the HTTP/UI transfer flow.
+
 - Archive storage regression: each historical row must be importer-owned and
   private, with no live memberships/account lookups. Test fresh avatar/message
   bindings, mixed file/link order, custom-reaction remapping, missing/foreign/

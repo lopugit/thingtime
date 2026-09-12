@@ -69,7 +69,7 @@ export const createTransferChatArchive = async (
     if (emojiId) crystal.emoji = `custom:${emojis.get(emojiId)}`;
     return { ...newThingDoc(row.thingtime[0], { ownerId, shareId: mapped(row.id),
       targetId: row.targetId ? mapped(row.targetId) : null, crystal }),
-    archiveVersion: 1, createdAt: now, updatedAt: now,
+    archiveVersion: 1, archiveRootId: mapped(rootId), createdAt: now, updatedAt: now,
     ...(row === group.root ? { folderId } : {}) };
   });
   return deps.transaction(async session => {

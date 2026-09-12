@@ -76,6 +76,7 @@ test('archive writer owns every historical row without minting live recipients o
   for (const row of state.committed) {
     assert.equal(row.ownerId, 'importer'); assert.deepEqual(row.acl, ['tt:user']);
     assert.ok(row.thingtime[0].startsWith('chat-archive')); assert.equal(row.uniqueKeys, undefined);
+    assert.equal(row.archiveRootId, result.rootId);
     assert.equal(row.archiveVersion, 1); assert.equal(row.createdAt.toISOString(), '2026-09-12T00:00:00.000Z');
   }
   assert.equal(root.crystal.selfParticipantId, self.shareId); assert.equal(self.crystal.userId, 'importer');

@@ -24,6 +24,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Added retryable internal Messenger archive deletion/compensation: keep history
+  until object cleanup succeeds, then refund/remove the archive atomically.
+  HTTP/UI integration is still pending. See [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-12
+
 - Added the internal quota-accounted Messenger archive writer with atomic file
   binding, fresh identity/reference remapping and folder-deletion fencing.
   Endpoint and chat UI integration remain unfinished. See [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
