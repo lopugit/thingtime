@@ -1,9 +1,43 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readOwnedChatArchive } from './chatArchiveReadTransfer';
+import { readOwnedChatArchive, readArchiveReactionEmojis } from './chatArchiveReadTransfer';
 import { customEmojiIdForAttachment } from '../messenger/messengerMediaCore';
 
 const at = '2026-09-01T00:00:00.000Z';
+
+test('historical emoji images require exact personal ownership, canonical binding and safe moderation', async () => {
+  const emoji = { shareId: 'emoji-one', ownerId: 'owner', thingtime: ['custom-emoji'], targetId: null,
+    emojiAttachmentId: 'image-one', crystal: { name: 'party' } };
+  const image = { shareId: 'image-one', ownerId: 'owner', thingtime: ['attachment'], targetId: 'emoji-one',
+    attachmentState: 'ready', attachmentPurpose: 'custom-emoji', crystal: { name: 'party.png', contentType: 'image/png', mediaKind: 'image', size: 68 } };
+  const session = {};
+  const read = async (person = emoji, file = image) => {
+    let queries = 0;
+    const collection: any = { find: (filter: any, options: any) => {
+      queries++; assert.equal(options.session, session); assert.equal(options.maxTimeMS, 5000);
+      assert.equal(filter.ownerId, 'owner'); assert.equal(options.projection.crystal, undefined);
+      const emojis = filter.thingtime[0] === 'custom-emoji';
+      if (emojis) { assert.equal(filter.targetId, null); assert.deepEqual(filter.shareId.$in, ['emoji-one']); }
+      else assert.deepEqual(filter.shareId.$in, ['image-one']);
+      return { limit: (limit: number) => { assert.equal(limit, 2); return { toArray: async () => [emojis ? person : file] }; } };
+    } };
+    const result = await readArchiveReactionEmojis(collection, session as any, 'owner', ['emoji-one']);
+    assert.ok(queries <= 2); return result;
+  };
+  assert.deepEqual(await read(), [{ id: 'emoji-one', name: 'party', attachmentId: 'image-one' }]);
+  for (const change of [{ ownerId: 'other' }, { targetId: 'community' }, { appId: 'app' }, { sandbox: false },
+    ...['blocked', 'pending', 'nsfw'].map(status => ({ moderation: { status } }))]) {
+    assert.deepEqual(await read({ ...emoji, ...change } as any), []);
+  }
+  for (const change of [{ ownerId: 'other' }, { targetId: 'other-emoji' }, { appId: 'app' }, { sandboxSpace: '' },
+    { attachmentState: 'deleting' }, { attachmentPurpose: 'post' }, { attachmentLinked: true },
+    ...['blocked', 'pending', 'nsfw'].map(status => ({ moderation: { status } })),
+    { crystal: { ...image.crystal, url: 'https://example.com/tracker.png' } }]) {
+    assert.deepEqual(await read(emoji, { ...image, ...change } as any), []);
+  }
+  assert.deepEqual(await readArchiveReactionEmojis({} as any, session as any, 'owner', []), []);
+});
+
 const fixture = () => [
   { shareId: 'archive', thingtime: ['chat-archive'], crystal: { name: 'History', topic: '', chatType: 'dm', createdAt: at, selfParticipantId: 'self' } },
   { shareId: 'self', targetId: 'archive', thingtime: ['chat-archive-participant'], crystal: { username: 'original', displayName: 'Original', nickname: '', joinedAt: at, archived: false, userId: 'owner' } },
@@ -27,6 +61,7 @@ const harness = () => {
       },
       find: (filter: any, options: any) => {
         state.reads++; assert.equal(options.session, session); assert.equal(options.maxTimeMS, 5000); assert.equal(filter.ownerId, 'owner');
+        if (filter.thingtime?.[0] === 'custom-emoji') return { limit: () => ({ toArray: async () => [] }) };
         const attachments = !!filter.targetId;
         if (attachments) {
           assert.deepEqual(filter.thingtime, ['attachment']); assert.deepEqual(filter.targetId.$in, state.rows.map(row => row.shareId));

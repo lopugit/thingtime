@@ -15,12 +15,21 @@ const NAV_CLEARANCE = 'calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-c
 const when = (value: unknown) => new Date(String(value)).toLocaleString();
 type ArchiveUser = Pick<NonNullable<CurrentUser>, 'id' | 'username' | 'displayName' | 'avatarUrl'>;
 
+const HistoricalEmoji = ({ emoji }: { emoji: NonNullable<OwnedChatArchive['emojis']>[number] | undefined }) => {
+  const [failed, setFailed] = React.useState(false);
+  if (!emoji || failed) return <span>Custom emoji unavailable</span>;
+  return <img src={mediaUrl(emoji.attachmentId)} alt={`:${emoji.name}:`} width={18} height={18} draggable={false}
+    style={{ display: 'inline-block', verticalAlign: 'text-bottom', objectFit: 'contain', width: 18, height: 18 }}
+    onError={() => setFailed(true)} />;
+};
+
 /** No live Messenger components/callbacks: historical text and identities must
  * never resolve usernames, mention people, send, react or mark messages read. */
 export const ChatArchiveHistory = ({ archive, user }: { archive: OwnedChatArchive; user: ArchiveUser }) => {
   const { group } = archive;
   const people = new Map(group.participants.map(person => [person.id, person]));
   const media = new Map((archive.attachments || []).map(file => [file.id, file]));
+  const emojis = new Map((archive.emojis || []).map(emoji => [emoji.id, emoji]));
   const avatar = (personId: string) => {
     const file = media.get(String(people.get(personId)?.crystal.avatarFileId));
     // Historical avatars have no reveal control: only show the canonical,
@@ -74,7 +83,9 @@ export const ChatArchiveHistory = ({ archive, user }: { archive: OwnedChatArchiv
           </Box>
           {reactions.length > 0 && <Flex gap={1} wrap="wrap" paddingTop={1} aria-label="Historical reactions">
             {reactions.map(reaction => <Box key={reaction.id} as="span" borderWidth="1px" borderRadius="full" paddingX={2} fontSize="sm" title={`${label(String(reaction.crystal.participantId))} · historical reaction`}>
-              {customReactionEmojiId(String(reaction.crystal.emoji)) ? 'Custom emoji' : String(reaction.crystal.emoji)}
+              {customReactionEmojiId(String(reaction.crystal.emoji))
+                ? <HistoricalEmoji key={emojis.get(customReactionEmojiId(String(reaction.crystal.emoji))!)?.attachmentId || 'unavailable'} emoji={emojis.get(customReactionEmojiId(String(reaction.crystal.emoji))!)} />
+                : String(reaction.crystal.emoji)}
             </Box>)}
           </Flex>}
         </Box>

@@ -1,5 +1,24 @@
 # PR 764 — portable Thing transfer
 
+## Historical custom emoji rendering — 2026-09-12
+
+Archive snapshots now project referenced personal custom emoji as only id, name
+and attachmentId. Two bounded reads in the same owner snapshot require exact
+home ownership, personal scope, canonical ready custom-emoji attachment binding,
+and unflagged image metadata. Missing, foreign, blocked, pending, NSFW, linked
+or malformed media remains an unavailable historical reaction; no broader emoji
+ID lookup or live chat actions are used. The image source is constructed from
+the canonical attachment endpoint and failed loads fall back to readable text.
+
+Things feature 1.16.0 / documentation contract 1.15.0 advertises this addition;
+the archive client requires 1.16.0. Focused reader tests exercise ownership,
+binding and moderation fences. Desktop/mobile Chrome fixture checks cover a
+loaded emoji, unavailable placeholder, full scrolling, galleries/lightbox,
+download dialog, retry and identity clearing with zero writes. Real stored
+emoji reaction projection still needs deployment acceptance. The user's local
+Chrome session shows not-found for the fictional fixture, as expected; rendered
+fixture QA uses a fresh isolated Chrome context and no copied session cookies.
+
 ## Real archive image bytes — 2026-09-12
 
 The exact deployed preview source 40afdd138ce80f74676834b3f962191afcc9fb49

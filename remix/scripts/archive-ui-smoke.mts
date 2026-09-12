@@ -26,7 +26,9 @@ const attachments = [
   { id: 'avatar-flagged', targetId: 'friend', name: 'avatar.png', size: 68, contentType: 'image/png', mediaKind: 'image', nsfw: true }
 ];
 const archive = { group: { root, self, participants: [self, friend], messages, reactions: [{ id: 'reaction', targetId: 'message-00', thingtime: ['chat-archive-reaction'], crystal: { participantId: 'friend', emoji: '🥰', createdAt: at } }] }, updatedAt: at,
-  attachments, attachmentTargets: [...attachments.map(({ id, targetId }) => ({ id, targetId })), { id: 'blocked', targetId: 'message-00' }], emojiIds: [] };
+  attachments, attachmentTargets: [...attachments.map(({ id, targetId }) => ({ id, targetId })), { id: 'blocked', targetId: 'message-00' }],
+  emojiIds: ['emoji-safe', 'emoji-hidden'], emojis: [{ id: 'emoji-safe', name: 'party', attachmentId: 'emoji-image' }] };
+for (const id of archive.emojiIds) archive.group.reactions.push({ id, targetId: 'message-00', thingtime: ['chat-archive-reaction'], crystal: { participantId: 'friend', emoji: `custom:${id}`, createdAt: at } });
 const baseResponse = await fetch(new URL('/api/root-data', origin));
 assert.equal(baseResponse.status, 200);
 const rootData = await baseResponse.json();
@@ -47,7 +49,7 @@ try {
     if (url.pathname === '/api/v1/auth/me') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, user }) });
     if (url.pathname === '/api/v1/attachments/content') {
       const id = url.searchParams.get('id') || ''; mediaRequests.add(id);
-      assert.ok(['picture', 'shielded', 'document'].includes(id), 'Hidden historical avatar or unavailable attachment was fetched');
+      assert.ok(['picture', 'shielded', 'document', 'emoji-image'].includes(id), 'Hidden historical avatar or unavailable attachment was fetched');
       return route.fulfill({ status: 200, contentType: id === 'document' ? 'text/plain' : 'image/png', body: id === 'document' ? Buffer.from('Fixture text') :
         Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64') });
     }
@@ -62,6 +64,10 @@ try {
     await page.setViewportSize({ width, height });
     await page.goto(new URL(`/thing/${root.id}?archive=true`, origin).href);
     await page.getByTestId('chat-archive-history').waitFor();
+    const emoji = page.getByRole('img', { name: ':party:', exact: true });
+    await emoji.waitFor();
+    assert.ok(await emoji.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0), 'Historical custom emoji image failed to load');
+    await page.getByText('Custom emoji unavailable', { exact: true }).waitFor();
     const historyBounds = await page.getByTestId('chat-archive-history').boundingBox();
     assert.ok(historyBounds && historyBounds.x >= 0 && historyBounds.x + historyBounds.width <= width, `${name}: history escapes a clipped parent`);
     await page.locator('summary').filter({ hasText: 'participants' }).click();

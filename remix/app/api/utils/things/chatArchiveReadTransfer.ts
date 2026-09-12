@@ -4,6 +4,7 @@ import { customReactionEmojiId } from '../../../utils/reactionTokens';
 import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { orderAttachmentDocsByStoredSort, toAttachmentPublicMetadata, type AttachmentPublicMetadata } from '../attachments/attachmentCore';
+import { EMOJI_NAME_PATTERN } from '../../../schemas/registry';
 
 const defaults = { collection: getHomeThingsCollection, transaction: withHomeMongoTransaction, custom: isCustomMongoEndpointActive };
 const validId = (id: unknown): id is string => typeof id === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(id);
@@ -22,6 +23,44 @@ export type OwnedChatArchive = {
    * Targets stay separate above so re-export never silently drops hidden files. */
   attachments?: (AttachmentPublicMetadata & { targetId: string })[];
   emojiIds: string[];
+  emojis?: { id: string; name: string; attachmentId: string }[];
+};
+
+/** Exactly two bounded snapshot queries, never a per-reaction lookup or live
+ * participant/community resolution. Imported emojis are personal and owned. */
+export const readArchiveReactionEmojis = async (
+  collection: Awaited<ReturnType<typeof getHomeThingsCollection>>,
+  session: Parameters<Parameters<typeof withHomeMongoTransaction>[0]>[0],
+  ownerId: string, ids: string[]
+): Promise<NonNullable<OwnedChatArchive['emojis']>> => {
+  if (!ids.length) return [];
+  if (ids.length > TRANSFER_LIMITS.things || ids.some(id => !validId(id))) reject();
+  const home = (row: any) => row.ownerId === ownerId && row.appId == null && row.sandbox == null && row.sandboxSpace == null;
+  const hidden = (row: any) => ['blocked', 'pending', 'nsfw'].includes(row.moderation?.status);
+  const docs = await collection.find({ ownerId, thingtime: ['custom-emoji'], targetId: null, shareId: { $in: ids } } as any,
+    { session, maxTimeMS: 5000, projection: { shareId: 1, ownerId: 1, targetId: 1, thingtime: 1, emojiAttachmentId: 1,
+      appId: 1, sandbox: 1, sandboxSpace: 1, 'crystal.name': 1, 'moderation.status': 1 } }).limit(ids.length + 1).toArray();
+  if (docs.length > ids.length) reject();
+  const owned = docs.filter(row => home(row) && !hidden(row) && row.targetId == null &&
+    row.thingtime?.length === 1 && row.thingtime[0] === 'custom-emoji' && ids.includes(row.shareId) &&
+    validId(row.emojiAttachmentId) && typeof row.crystal?.name === 'string' && EMOJI_NAME_PATTERN.test(row.crystal.name));
+  if (!owned.length) return [];
+  const files = await collection.find({ ownerId, thingtime: ['attachment'], shareId: { $in: owned.map(row => row.emojiAttachmentId) } } as any,
+    { session, maxTimeMS: 5000, projection: { shareId: 1, ownerId: 1, targetId: 1, thingtime: 1,
+      appId: 1, sandbox: 1, sandboxSpace: 1, attachmentState: 1, attachmentPurpose: 1, attachmentLinked: 1,
+      'crystal.name': 1, 'crystal.contentType': 1, 'crystal.size': 1, 'crystal.mediaKind': 1,
+      'crystal.title': 1, 'crystal.description': 1, 'crystal.filenamePreview': 1, 'crystal.detectedContentType': 1,
+      'crystal.url': 1, 'moderation.status': 1 } }).limit(owned.length + 1).toArray();
+  if (files.length > owned.length) reject();
+  return owned.flatMap(emoji => {
+    const file = files.find(row => row.shareId === emoji.emojiAttachmentId);
+    if (!file || !home(file) || hidden(file) || file.targetId !== emoji.shareId || file.attachmentLinked ||
+      file.attachmentState !== 'ready' || file.attachmentPurpose !== 'custom-emoji' ||
+      file.thingtime?.length !== 1 || file.thingtime[0] !== 'attachment') return [];
+    const media = toAttachmentPublicMetadata(file.shareId, file.crystal, file.moderation, { ownerView: true });
+    return media?.mediaKind === 'image' && !media.url && !media.nsfw && !media.pending
+      ? [{ id: emoji.shareId, name: emoji.crystal.name, attachmentId: file.shareId }] : [];
+  });
 };
 
 /** API-layer snapshot reader, shared by rendering and re-export adapters.
@@ -70,7 +109,8 @@ export const readOwnedChatArchive = async (ownerId: string | undefined, rootId: 
       links: attachments.filter(row => row.attachmentLinked).map(row => ({ id: row.shareId, targetId: row.targetId }))
     }, new Set(emojiIds));
     if (groups.length !== 1 || groups[0].root.id !== rootId) reject();
-    const result = { group: groups[0], updatedAt: root.updatedAt.toISOString(), emojiIds,
+    const emojis = await readArchiveReactionEmojis(collection, session, ownerId, emojiIds);
+    const result = { group: groups[0], updatedAt: root.updatedAt.toISOString(), emojiIds, emojis,
       attachments: orderAttachmentDocsByStoredSort<{
         shareId: string; targetId: string; crystal: unknown; moderation?: unknown; attachmentSortIndex?: unknown;
       }>(attachments as any).flatMap(row => {

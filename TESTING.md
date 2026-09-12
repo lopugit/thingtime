@@ -21,7 +21,9 @@
   real account lifecycle or media bytes. Open the historical gallery lightbox,
   confirm shielded media cannot be reached by its navigation until Show Anyway,
   and check pending badges and file download links. Flagged historical avatars
-  and unavailable files must not be fetched. Custom emoji images remain pending.
+  and unavailable files must not be fetched. Referenced owner-bound custom emoji
+  images render; missing/flagged/foreign images show an unavailable placeholder
+  without fetching them. No historical reaction chip performs a live action.
 
 - [ ] Cut an owned archive and paste into another owned folder, then back to
   root: only root placement/timestamp change; message, participant, reply,
