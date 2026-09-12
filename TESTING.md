@@ -2579,9 +2579,15 @@ email whose link points at the attacker.
 
 ## Decorative pet (`remix/app/components/Pets/`, `general.pet`)
 
-- [ ] The pet sits bottom-right on ordinary pages and is absent from
-      full-bleed surfaces (chat/Commander), where it would land on the
-      composer. It never blocks a click or a focus ring anywhere it shows.
+- [ ] The pet sits bottom-right on ordinary pages and is absent entirely from
+      the full-bleed chat routes (`/messages`, `/lopu`), where it would land on
+      the composer. It never blocks a click or a focus ring anywhere it shows.
+- [ ] Overlay chrome is z-order, NOT unmounting — open Commander (z-index
+      10050) or the nav drawer over a page that shows the pet: the pet stays
+      mounted and simply renders UNDERNEATH, never over the dropdown. Check
+      the mobile drawer specifically: the pet must stay put while the content
+      shifts, not slide with it (it is a sibling of mainShiftContainer
+      precisely because that element's transform would otherwise capture it).
 - [ ] On a non-production build the pet sits CLEAR of the DevKit bubble
       rather than behind it (regression: a raw-corner inset rendered a 74px
       unicorn underneath the dev trigger on every preview and local run).
