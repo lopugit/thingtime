@@ -311,6 +311,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - Refresh the custom-audience promotion preview with released main's shared-index readers. Resolve equivalent ACL merge blocks and duplicate viewer fields, composer state, and modal rendering; retain main's unified audience controls and drawer layering. Database migration activation remains separate. — Codex (AI), 2026-09-09
 
+- Refresh the standing promotion preview with released main's shared-index readers and poll writer before database index retirement; preserve the feature branch and keep migration activation separate. — Codex (AI), 2026-09-09
+
 - Save new iOS Lopu voice recordings as owner-private playable audio Things,
   retaining on-device recovery files and an account-bound retry outbox.
   Completed recordings survive draft cleanup; upload/complete contracts are
