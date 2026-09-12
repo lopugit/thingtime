@@ -339,11 +339,15 @@ product direction or architecture tradeoffs matter. Default to
 single-source-of-truth, determinism, test-equals-live cohesion, and merge
 commits.
 
-## Commander macOS distribution signing
-
-- For Commander direct-distribution builds, prefer an installed `Developer ID Application` identity whenever one is available. Do not silently fall back to `Apple Development`, `Apple Distribution`, or ad-hoc signing for a release build: those identities do not provide the same Gatekeeper contract.
-- Keep local iteration explicit with `COMMANDER_SIGNING_MODE=development`; production/direct-distribution builds must fail closed when no Developer ID Application certificate and private key are installed.
-- Keep Apple Developer and notarization credentials in the Keychain or CI secret store only. Never print, export, commit, or copy their values into project documentation.
+Evidence and sequencing sit upstream of that backlog, one stage per tree:
+`NOTES/` holds dated, sourced observations and open questions that nothing has
+committed to yet; `PLAN/` turns a note into gated milestones, metrics, and stop
+conditions; `TODO/` is the actionable work; `DECISIONS.md` records the durable
+fork once the owner decides. Write a note before a plan and a plan before a new
+`TODO/claude-todo/NN-*.md`, and update the index that fronts each tree
+(`NOTES/README.md`, `PLAN/README.md`, `TODO/TODO.md` plus
+`TODO/claude-todo/README.md`) in the same change — those indexes are the entry
+points, not the individual files.
 
 ## Local development and worktrees
 
@@ -408,6 +412,12 @@ commits.
   no hook: local checkouts generate untracked `remix/.env.auto` via `pre-dev.sh`,
   and Vercel reads `VERCEL_GIT_COMMIT_REF` at build and runtime.
 - If local web dev 500s with a missing `bcrypt_lib.node` native binding, run `corepack pnpm --dir remix run ensure-bcrypt`, then restart the PM2-managed `tt-nitro-react-router-9999` app. The app `postinstall`, `dev`, and `build` scripts also run this check automatically.
+
+## Commander macOS distribution signing
+
+- For Commander direct-distribution builds, prefer an installed `Developer ID Application` identity whenever one is available. Do not silently fall back to `Apple Development`, `Apple Distribution`, or ad-hoc signing for a release build: those identities do not provide the same Gatekeeper contract.
+- Keep local iteration explicit with `COMMANDER_SIGNING_MODE=development`; production/direct-distribution builds must fail closed when no Developer ID Application certificate and private key are installed.
+- Keep Apple Developer and notarization credentials in the Keychain or CI secret store only. Never print, export, commit, or copy their values into project documentation.
 
 ## Browser and UI validation
 

@@ -17,6 +17,11 @@ The optional prefill maps to the existing account/profile contract:
 - profile image → `avatarUrl` or a managed profile attachment
 - banner image → `bannerUrl` or a managed profile attachment
 
+[TODO 35](./35-identity-agency-and-context-safe-presence.md) owns the wider
+identity and audience-projection vocabulary. Invite prefill remains an editable
+recipient choice: it is not identity proof, attestation, endorsement,
+relationship, role, or authorization.
+
 Email, password/passkey, consent, and verification remain the recipient's own
 inputs. An invitation must never create an account in the background or let an
 inviter control the resulting account.
