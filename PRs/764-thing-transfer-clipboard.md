@@ -799,6 +799,17 @@ of that scope.
   Full typecheck still has unrelated baseline errors; the focused output has
   no errors in changed transfer/import/upload files after corrections.
 
+## 2026-09-12 — Bounded moderation acceptance
+
+The binary fixture now allows up to 30 seconds for the archive emoji projection
+after re-import. Canonical upload completion stamps `pending` and queues analysis
+asynchronously, so an immediate empty projection alone does not prove a broken
+binding. The exact image assertion remains mandatory; no moderation gate is
+relaxed. Reader unit coverage checks a later `clear` snapshot after `pending`.
+This is a timing hypothesis, not confirmed live resolution: the most recent
+live retry hit the normal upload rate limit and cleaned its fixtures. Do not
+bypass that limit or count the default integration skip as acceptance.
+
 ## Remaining acceptance
 
 Complete all file/gallery forms: linked galleries currently fail explicitly

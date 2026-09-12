@@ -24,6 +24,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-12: Bound the archive-emoji binary acceptance wait to 30 seconds for
+  asynchronous moderation, retaining strict safe-image assertions. Live
+  confirmation remains pending the ordinary upload rate limit.
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — **Codex (AI)**
+
 - 2026-09-12: Save real headed-Chrome transfer acceptance for OS clipboard
   Copy/Cut, Paste copy/move, downloaded JSON/ZIP file-chooser imports and verified
   cleanup. Passed on the PR preview; stored-emoji acceptance remains unresolved.

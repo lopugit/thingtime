@@ -25,6 +25,9 @@ test('historical emoji images require exact personal ownership, canonical bindin
     assert.ok(queries <= 2); return result;
   };
   assert.deepEqual(await read(), [{ id: 'emoji-one', name: 'party', attachmentId: 'image-one' }]);
+  assert.deepEqual(await read(emoji, { ...image, moderation: { status: 'pending' } } as any), []);
+  assert.deepEqual(await read(emoji, { ...image, moderation: { status: 'clear' } } as any),
+    [{ id: 'emoji-one', name: 'party', attachmentId: 'image-one' }], 'A later snapshot can expose a cleared image without changing historical identities');
   for (const change of [{ ownerId: 'other' }, { targetId: 'community' }, { appId: 'app' }, { sandbox: false },
     ...['blocked', 'pending', 'nsfw'].map(status => ({ moderation: { status } }))]) {
     assert.deepEqual(await read({ ...emoji, ...change } as any), []);

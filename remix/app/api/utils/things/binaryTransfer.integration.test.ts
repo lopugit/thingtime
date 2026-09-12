@@ -161,7 +161,15 @@ test('real image and archive ZIP round-trip and concurrent emoji claims preserve
     const copiedArchiveId = second.ids[first.ids.archive];
     assert.equal(typeof copiedArchiveId, 'string');
     const archivePath = (id: string) => `/api/v1/things?id=${encodeURIComponent(id)}&archive=true`;
-    const archive = (await json(archivePath(copiedArchiveId))).archive;
+    let archive = (await json(archivePath(copiedArchiveId))).archive;
+    // markReady quarantines every new object and schedules moderation after
+    // returning. Do not mistake that expected asynchronous window for a lost
+    // reaction image, or weaken the reader to expose quarantined images.
+    // Still fail after 30 seconds if the canonical safe projection never lands.
+    for (let attempt = 0; archive.emojis?.length !== 1 && attempt < 6; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 5_000));
+      archive = (await json(archivePath(copiedArchiveId))).archive;
+    }
     assert.equal(archive.group.messages[0].crystal.text, 'Exact media history 🥰');
     const copiedEmojiId = second.ids[first.ids['emoji-source']];
     assert.equal(archive.group.reactions[0].crystal.emoji, `custom:${copiedEmojiId}`);

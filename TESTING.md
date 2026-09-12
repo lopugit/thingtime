@@ -6836,6 +6836,13 @@ approval; `access.test.ts` — the reservation matrix) and
   and confirmed cleanup. A precondition failure or skipped test is not live
   storage acceptance. See the README for fork-safe setup.
 
+- Newly durable emoji files start quarantined while asynchronous moderation
+  runs. The binary fixture polls the owner-only archive projection for at most
+  30 seconds and still requires the exact remapped image; it must fail if the
+  safe projection never appears. Unit coverage uses the canonical `pending`
+  and `clear` statuses. Never disable moderation or bypass upload rate limits
+  to make this acceptance test pass.
+
 - For an explicitly authorized dev fixture, additionally set
   `TT_TRANSFER_REMOTE_DEV_TEST=1` and `TT_TRANSFER_TEST_USERNAME` to the exact
   expected username. Only HTTPS dev.thingtime.com or numbered PR preview origins
