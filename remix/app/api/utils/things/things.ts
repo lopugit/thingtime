@@ -297,7 +297,13 @@ export type FeedAuthor = {
   temporary?: boolean;
   avatarUrl: string | null;
   // set ONLY for third-party authors of synced external posts — the honest
-  // discriminator consumers use instead of routing to a dead /profile/<handle>
+  // discriminator consumers use instead of routing to a dead /profile/<handle>.
+  // It is the FLAG, not the url, that carries that meaning: a provider need
+  // not give us a link at all (the demo feed never does, and an RSS <item>
+  // with a <guid> but no <link> does not either), so keying "is this a
+  // Thingtime user?" off externalUrl alone silently falls back to the native
+  // profile route for exactly those authors.
+  external?: boolean;
   externalUrl?: string | null;
 };
 
@@ -2618,6 +2624,10 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
           username: String(external.author.handle || external.author.name || external.providerName || 'external'),
           displayName: external.author.name || external.author.handle || external.providerName || null,
           temporary: false,
+          // Not a Thingtime account — say so explicitly rather than leaving
+          // consumers to infer it from externalUrl, which a provider may not
+          // give us (see FeedAuthor).
+          external: true,
           // Scheme-checked on the way out as well as on the way in: the
           // connections sync guards these (connections.ts), but this
           // projection is what PostCard turns into <a href>/<img src>, so a

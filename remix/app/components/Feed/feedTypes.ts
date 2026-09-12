@@ -22,15 +22,36 @@ export type PublicProfile = {
 
 // Lean author embed on posts/comments — identity only (the API never sends
 // bio/bannerUrl inside feed payloads).
-// externalUrl is set ONLY for third-party authors of synced external posts
-// (connections feeds) — consumers link there instead of a dead /profile route
+// `external` marks a third-party author of a synced external post (connections
+// feeds); `externalUrl` is where they live on the source platform, when the
+// provider gave us one. Route with authorLinkTarget below, never on the url.
 export type FeedAuthor = {
   id: string;
   username: string;
   displayName: string | null;
   temporary?: boolean;
   avatarUrl: string | null;
+  external?: boolean;
   externalUrl?: string | null;
+};
+
+// Where an author's name/avatar should link, or null for "render it as plain
+// text". Third-party authors of synced external posts are NOT Thingtime users:
+// their handle is provider-supplied, and a provider is any RSS feed or
+// fediverse instance a user named — so `/profile/<handle>` either dead-ends or,
+// when the handle happens to match a real account, presents an unrelated
+// Thingtime user as the author of third-party content. They link to the source
+// platform when the provider gave us a url, and nowhere when it did not.
+// One `href` for both cases rather than a discriminated union: the caller
+// still has to branch on `external` to pick <a> over react-router's <Link>,
+// and a single field means that branch needs no type narrowing to survive
+// this project's non-strict tsconfig.
+export type AuthorLinkTarget = { external: boolean; href: string };
+
+export const authorLinkTarget = (author: FeedAuthor | null): AuthorLinkTarget | null => {
+  if (!author?.username) return null;
+  if (author.external) return author.externalUrl ? { external: true, href: author.externalUrl } : null;
+  return { external: false, href: `/profile/${author.username}` };
 };
 
 export type PostType = 'text' | 'image' | 'marketplace' | 'thingtime';
