@@ -108,6 +108,7 @@ export const CI_CONTROL_THINGTIME = [
   'ci-preview',
   'ci-preview-policy',
   'ci-dispatch',
+  'ci-stack-chat-message',
   'ci-event'
 ] as const;
 
@@ -2408,6 +2409,27 @@ const ciControlSchemas: ThingtimeSchema[] = [
   ciEntitySchema('ci-deployment', 'CI deployment', 'Current state of one GitHub or Vercel deployment.'),
   ciEntitySchema('ci-preview', 'CI preview', 'Current address and readiness of one branch/deployment preview.'),
   ciEntitySchema('ci-preview-policy', 'CI preview policy', 'Admin-only develop and production-data preview choices for one pull request.'),
+  {
+    id: 'ci-stack-chat-message', version: 1, kind: 'crystal', collection: null,
+    title: 'Stack run conversation', summary: 'A private run question and bounded responder result.',
+    detail: 'System-protected, relational records in ciControl. Only CI administrators can read/send; HMAC-authenticated exact-run workers can lease and answer. Retained for 90 days.',
+    createdVia: '/api/v1/admin/ci/stacks/chat',
+    fields: [
+      { name: 'repository', description: 'Repository bound to the dispatch.', type: 'string', required: true, max: 300 },
+      { name: 'runId', description: 'Immutable Feature Stack run identity.', type: 'string', required: true, max: 80 },
+      { name: 'actorId', description: 'Administrator who asked the question.', type: 'string', required: true, max: 180 },
+      { name: 'question', description: 'Redacted question, at most 2000 characters.', type: 'string', required: true, max: 2000 },
+      // The protected chat writer enforces 8000; public schema maxLength caps at 5000.
+      { name: 'answer', description: 'Redacted responder result, at most 8000 characters.', type: 'string', required: false },
+      { name: 'status', description: 'Durable delivery state.', type: 'enum', required: true, values: ['queued', 'answering', 'answered', 'failed'] },
+      { name: 'attempts', description: 'Number of delivery claims.', type: 'number', required: true },
+      { name: 'lease', description: 'Opaque worker delivery token, never exposed to admins.', type: 'string', required: false, max: 80 },
+      { name: 'completedLease', description: 'Private idempotent reply receipt token.', type: 'string', required: false, max: 80 },
+      { name: 'leaseUntil', description: 'Claim expiry.', type: 'date', required: false },
+      { name: 'runAttempt', description: 'GitHub workflow attempt owning the delivery.', type: 'number', required: false }
+    ],
+    example: { repository: 'owner/repo', runId: 'feature-stack-run-example', actorId: 'admin', question: 'What is waiting?', status: 'queued', attempts: 0 }
+  },
   ciEntitySchema('ci-dispatch', 'CI dispatch', 'An administrator-requested, allowlisted GitHub Actions dispatch.'),
   {
     id: 'ci-event',

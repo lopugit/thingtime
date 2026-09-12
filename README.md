@@ -433,6 +433,45 @@ every ten minutes, and one terminal snapshot. The route uses the same
 stored stack/run identity, and never accepts browser sessions or arbitrary
 workflow log text.
 
+Feature Stack activity shows one card per target with its reported phase, blocker,
+next step, and source link. The progress bar counts confirmed target merges only;
+a published PR, failed worker, or closed PR is never a completed target. Waiting
+has no predicted finish time. Worker updates older than twelve minutes are marked
+stale, separately from target PR updates.
+
+**Ask Lopu about this run** opens a private status conversation for the selected
+saved run. Enable the product and the matching protected controller together:
+
+- Deploy `/api/v1/admin/ci/stacks/chat` and the signed
+  `/api/v1/integrations/ci/chat` route. Their origin-scoped capability identifiers
+  are `api.admin-ci-stack-chat` and `api.integrations-ci-chat`, both `1.0.0`.
+- Keep `THINGTIME_CI_ROUTER_SECRET` identical in the application deployment and
+  GitHub repository secret store. Set `THINGTIME_CREDENTIAL_VAULT_ORIGIN` in GitHub
+  repository variables to the application's HTTPS origin. Configure at least one
+  enabled Claude account in the existing CI credential waterfall; no new secret
+  is required. The status responder uses the shared Claude model selection and
+  credential waterfall, independently of a stack's custom merge endpoint/model.
+- Roll out the matching progress reporter on `github-actions`, then start a new
+  stack run. Existing running jobs cannot acquire the responder retroactively.
+  Old controllers show an explicit unavailable state. A missing/incompatible
+  product capability disables chat without blocking merge progress.
+
+The responder runs inside the progress job alongside the merge workers. It has
+no tools or repository checkout in its model session and receives only bounded
+job/step/target PR facts and the last four answered exchanges. It is not an input
+to the workers' private reasoning sessions: questions cannot restart jobs, edit
+code, change merge plans or grant merge authority. It checks every thirty seconds;
+replies can take a couple of minutes. The panel polls only while expanded and
+visible, with a user-controlled auto-refresh checkbox and manual Refresh.
+
+Questions/replies are shared among CI administrators, redacted for credential-like
+text, stored as relational protected `ci-stack-chat-message` records, and expire
+after ninety days. Reads return the latest fifty exchanges. Sending is limited to
+six questions per minute per admin. Retrying an uncertain send preserves its UUID;
+worker delivery uses a four-minute lease and at most two claims, with exact
+workflow/run-attempt fencing. Offline, answering, failed and answered states stay
+visible. Paused, stopped, ended, or replaced runs accept no new questions.
+
 Store each secret directly in the deployment environment. Also add the same
 `THINGTIME_CI_ROUTER_SECRET` as a GitHub Actions repository secret and set the
 repository variable `THINGTIME_CI_ROUTER_URL` to the stable route above. The
@@ -3096,6 +3135,19 @@ A healthy Mac connection panel can be hidden from Things using “Don’t show a
 
 Shared-settings validation worktree: `http://localhost:13040` (HMR 13041, Nitro 13042), managed by the repository PM2 lifecycle. Funnel was unavailable during validation because the installed Tailscale CLI points to a missing application executable; no public Funnel URL was verified. No new environment variables or external setup are required for these settings changes.
 
+### Apple widgets and Control Centre
+
+The iOS app and native Mac widget companion share a configurable WidgetKit suite.
+See [Apple widget setup](apple/README.md) for gallery choices, content privacy,
+App Group provisioning, local signing, and fork-safe build settings. App Group
+capabilities must be enabled on both the iOS app and its widget extension before
+installing a signed build; no credentials belong in project files.
+
+The Mac companion now uses a native interface and browser OAuth. Open
+**Connection** to select production or your local server and approve widget
+permissions. No client secret or manual app registration is required; fork
+callback identifiers and capability requirements are documented in
+[Apple widget setup](apple/README.md#oauth-setup-for-forks-and-local-servers).
 
 ### Automatic import and native push recovery (10 September 2026)
 
@@ -3126,6 +3178,24 @@ uses production APNs. Never expose keys or device tokens in public diagnostics.
 an optional owner guard on registration. `api.notifications-test` 1.1.0 adds the
 sanitized delivery report. Single and bulk native delivery remain attached to
 the Vercel request lifetime through `waitUntil`.
+
+### Stack AI endpoint selection
+
+Stack merges can save an ordered AI model/endpoint waterfall. Configure
+`ANTHROPIC_API_KEY` and/or `OPENAI_API_KEY` on the Thingtime deployment for
+built-in HTTP endpoints. For personal endpoints, use Settings → Secure Vault;
+custom hosts retain the existing `THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS`
+allowlist and public HTTPS restrictions. The controller and app must share
+`THINGTIME_CI_ROUTER_SECRET` (secret-store values only). API keys stay on the app;
+never put them into workflow inputs. Roll out the protected controller's v4 plan
+support before using custom orders. Inherited orders keep the existing CLI
+workflow. See [the reusable selector contract](docs/ai-waterfall-selector.md).
+
+This feature's local validation worktree uses `http://localhost:13310`
+(Vite), 13311 (HMR), and 13312 (Nitro), derived by `npm run web-ports`.
+Tailscale/Funnel is not available on the validation host: its configured CLI
+wrapper points at a missing Tailscale application. No public dev mapping was
+created or changed.
 
 ## Inherited Thing actions
 
@@ -3162,3 +3232,34 @@ Never embed credentials in a menu, action request, source fixture or public docs
 Local menu QA uses this worktree's deterministic port (currently
 `http://localhost:16250`). Tailscale/Funnel was unavailable during verification:
 the local launcher points to a missing Tailscale app; no public mapping was changed.
+
+### Saved AI waterfalls
+
+Settings → AI waterfalls stores private named model/endpoint orders using the existing Things database and authenticated API. No extra collection, migration, or secret is required. Configure provider keys or personal Secure Vault connections as described in [the waterfall setup](docs/ai-waterfall-selector.md). Forks must deploy the registered `api.ai-waterfalls` 1.0.0 contract before clients can save a library.
+
+## Thingtime Widgets automatic releases
+
+`.github/workflows/widgets-release.yml` publishes an Apple-silicon Widgets ZIP and
+a matching Recovery ZIP after relevant changes reach `main`. Owner-only manual
+dispatch is also restricted to `main`; PR code cannot reach its signing or publish
+steps. This dedicated job pins the exact main SHA, runs native/Recovery tests before
+importing signing material, and leaves the Electron repository-wide latest release
+unchanged. The version comes from `macos/ThingtimeWidgets/project.yml`, with a
+workflow build number and source SHA appended to the release tag.
+
+Fork setup: enable Actions and configure `MAC_CSC_LINK` (base64 Developer ID P12),
+`MAC_CSC_KEY_PASSWORD`, `APPLE_TEAM_ID`, and `APPLE_API_KEY_BASE64`,
+`APPLE_API_KEY_ID`, `APPLE_API_ISSUER` for notarization. The existing `ASC_KEY_CONTENT`,
+`ASC_KEY_ID`, `ASC_ISSUER_ID` aliases are accepted. Store actual values only in
+GitHub Actions secrets. A fork must also deliberately update the repository-owner
+guard and Recovery's release-catalog origin. No Apple Development/ad-hoc fallback
+is allowed for published production builds.
+
+The workflow imports credentials into a temporary Keychain, signs nested widget
+code before the app, notarizes and staples, then verifies both final ZIPs after
+extraction. It publishes `SHA256SUMS.txt` and removes temporary signing material.
+The `Thingtime-Widgets-App-Release-<version>-macos-arm64.zip` asset is recognized by
+Recovery's **App → Thingtime Widgets** selector; its cache and install target are
+isolated from Desktop, Commander and Recovery. Local bundle construction is not
+proof of a successful cloud release: the first main run and download/install via
+Recovery remain release acceptance checks.

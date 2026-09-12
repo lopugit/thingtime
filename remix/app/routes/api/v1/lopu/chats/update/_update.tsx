@@ -1,6 +1,6 @@
 import { json, readJsonBody } from '~/api/http';
 
-import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { getScopedUser } from '~/api/utils/auth/scopedUser';
 import { updateLopuChat } from '~/api/utils/messenger/lopuChats';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { chatWriteLimitError, requireJsonContentType } from '../_chats';
@@ -10,7 +10,7 @@ import { chatWriteLimitError, requireJsonContentType } from '../_chats';
 // against the catalog; null resets a field to the catalog default). Unlike
 // /api/v1/chats/update no system message is inserted.
 export const action = async ({ request }: { request: Request }) => {
-	const user = await getCurrentUser(request);
+	const user = await getScopedUser(request, 'lopu.chat');
 	if (!user) {
 		return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
 	}

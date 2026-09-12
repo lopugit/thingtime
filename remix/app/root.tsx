@@ -24,6 +24,8 @@ import { WatchPendingApprovals } from './components/Watch/WatchPendingApprovals'
 import { SiteBlocksHost } from './components/Builder/SiteBlocksHost';
 import { LopuHost } from './components/Lopu/LopuHost';
 import { rememberAuthReturnTo } from './utils/authReturn';
+import { rootIdentity } from './utils/rootIdentity';
+import { RootRecovery } from './components/Layout/RootRecovery';
 
 const setThingtime = (glob: any) => {
   try {
@@ -52,7 +54,9 @@ try {
 }
 
 export default function App() {
-  const rootData = useLoaderData() as RootLoaderData;
+  const rootData = useLoaderData() as RootLoaderData & { clientIdentityGeneration: number };
+  const identity = React.useSyncExternalStore(rootIdentity.subscribe, rootIdentity.read, rootIdentity.read);
+  React.useLayoutEffect(() => { rootIdentity.confirm(rootData.clientIdentityGeneration); }, [rootData.clientIdentityGeneration]);
   const { envFromCookie, titlePrefix } = rootData;
   const { pathname, search, hash } = useLocation();
   const isAuthorizePopup = pathname === '/authorize' || pathname === '/watch/pair' || pathname.startsWith('/pair/');
@@ -82,6 +86,13 @@ export default function App() {
 
   React.useEffect(() => {
     if (typeof document !== 'undefined') {
+      // the generated marketing pages set their own title + meta description
+      // (components/Marketing/MarketingShell.tsx useMarketingSeo). Match the
+      // four registered routes exactly: a bare startsWith('/marketing') also
+      // swallows /marketingfoo, which the '*' catch-all renders as the tree
+      // viewer — nothing would then set its title and the tab would keep the
+      // previous page's one.
+      if (pathname === '/marketing' || pathname.startsWith('/marketing/')) return;
       const baseTitle = titlePrefix ? `${titlePrefix} Thingtime` : 'Thingtime';
       const routeTitle = pathname.startsWith('/docs/design')
         ? `${baseTitle} docs - Design mockups`
@@ -128,11 +139,12 @@ export default function App() {
     return () => window.removeEventListener('thingtime:root-data-refresh', refreshRootData);
   }, [revalidator]);
 
+  if (identity.pending && rootData.clientIdentityGeneration !== identity.generation) return <RootRecovery refreshing />;
 
   return (
     <ChakraWrapper>
       <GlobalStyles />
-      <ThingtimeProvider>
+      <ThingtimeProvider key={rootData.user?.id || 'guest'}>
         <VisualSettingsHost />
         <ThemeHost />
         {/* Mirrors settings.lopu.position into the cache useLopu reads at fire time. */}

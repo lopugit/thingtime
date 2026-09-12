@@ -192,6 +192,7 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   'oauth.grants': { limit: 60, windowMs: 60_000, enabled: true },
   // password-reset requests email any address you name — the classic mail-bomb
   // + enumeration vector, so the window is tight (anonymous, keyed by IP)
+  'ci.stack-chat': { limit: 6, windowMs: 60_000, enabled: true },
   'auth.passwordReset': { limit: 5, windowMs: 15 * 60_000, enabled: true },
   // reset-token redemption: throttle repeated token guesses / password sets
   // before any token work (its own bucket so it can't starve reset requests)
