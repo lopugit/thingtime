@@ -17,9 +17,26 @@ const wellKnownDiscoveryRoute = {
   dest: '/__server'
 };
 const appShellHeaders = {
-  'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
-  Pragma: 'no-cache',
-  Expires: '0'
+	'Cache-Control': 'private, no-store, max-age=0, must-revalidate',
+	Pragma: 'no-cache',
+	Expires: '0'
+};
+const socialCardHeaders = {
+	'Cache-Control': 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400',
+	'X-Content-Type-Options': 'nosniff'
+};
+const socialMetaRoute = {
+	// Public, shareable screens get server-injected Open Graph tags. Keep
+	// account/admin/auth routes on the ordinary static shell: a card must never
+	// become an oracle for a private screen.
+	src: '^/(?:feed|explore|design-system|post/[^/]+|profile(?:/[^/]+)?|media/[^/]+|thing/[^/]+|p/[^/]+|docs(?:/[^/]+){0,3}|schemas(?:/[^/]+)?|themes(?:/[^/]+)?|components(?:/[^/]+){0,2}|actions(?:/[^/]+)?|search|things(?:/[^/]+)?)/?$',
+	headers: appShellHeaders,
+	dest: serverFallbackRoute?.dest || '/index.html'
+};
+const socialCardRoute = {
+	src: '^/social-card$',
+	headers: socialCardHeaders,
+	dest: serverFallbackRoute?.dest || '/index.html'
 };
 
 config.routes = [
@@ -64,7 +81,9 @@ config.routes = [
     },
     continue: true
   },
-  { src: '^/$', headers: appShellHeaders, dest: '/index.html' },
+	// The homepage and every public permalink need server-generated metadata;
+	// the browser still receives the identical Vite shell from the handler.
+	{ src: '^/$', headers: appShellHeaders, dest: serverFallbackRoute?.dest || '/index.html' },
   { src: '^/index\\.html$', headers: appShellHeaders, dest: '/index.html' },
   // Content-hashed build output can be cached forever. Vite gives every file
   // under /assets/ an 8-char content hash, so a changed file is a changed URL
@@ -95,15 +114,10 @@ config.routes = [
   filesystemRoute ?? { handle: 'filesystem' },
   apiRootDataRoute ?? { src: '/api/root-data', dest: '/api/root-data' },
   apiCatchAllRoute ?? { src: '/api/(?:.*)', dest: '/api/[...]' },
-  // Social permalinks go through the Nitro shell handler (server/routes/[...].ts)
-  // so crawlers receive per-post/per-profile Open Graph tags; every other page
-  // keeps the plain static shell below.
-  ...(serverFallbackRoute
-    ? [
-        { src: '^/post/[^/]+/?$', headers: appShellHeaders, dest: serverFallbackRoute.dest },
-        { src: '^/profile/[^/]+/?$', headers: appShellHeaders, dest: serverFallbackRoute.dest }
-      ]
-    : []),
+	// Rich 1200×630 cards are rendered only by the safe social controller. The
+	// companion public route list sends every shareable URL variant through the
+	// same handler, where its tags are built from anonymous projections.
+	...(serverFallbackRoute ? [socialCardRoute, socialMetaRoute] : []),
   { src: '/(?:.*)', headers: appShellHeaders, dest: '/index.html' }
 ];
 

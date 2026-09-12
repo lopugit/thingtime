@@ -7,6 +7,10 @@ import { thingtimeCapabilityManifest } from '../api/utils/capabilities/thingtime
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 
 test('shared dependency reads negotiate the additive Things contract on both manifests', () => {
+	// The sharedRoot dependency read shipped as the 1.6.2 / contract 1.5.2
+	// correction; recording attachments in own-things lists then took the
+	// family additively on to 1.7.0 / contract 1.6.0, and the native Widgets
+	// promotion has since carried it on to 1.10.0 on both manifests.
 	assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.10.0');
 	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things'].version, '1.10.0');
 	assert.equal(capabilitySatisfies('1.8.2', '1.7.5'), true);
@@ -378,4 +382,15 @@ test('subspace discovery publishes its contract versions', () => {
 	assert.equal(manifest.features['api.things'], '1.10.0');
 	assert.equal(manifest.features['api.subspaces-feed'], '1.3.0');
 	assert.equal(manifest.features['api.subspaces-get'], '1.4.0');
+});
+
+test('run chat advertises both origin-scoped contracts and rejects incompatible responders', () => {
+  const manifest = thingtimeCapabilityManifest('https://thingtime.test');
+  for (const [feature, path] of [['api.admin-ci-stack-chat', '/api/v1/admin/ci/stacks/chat'], ['api.integrations-ci-chat', '/api/v1/integrations/ci/chat']]) {
+    assert.equal(createApiCapabilitiesManifest().features[feature], '1.0.0');
+    assert.equal(manifest.features[feature].version, '1.0.0');
+    assert.ok(manifest.operations.some(row => row.feature === feature && row.path === path && row.methods.includes('POST')));
+  }
+  assert.equal(capabilitySatisfies('1.1.0', '1.0.0'), true);
+  for (const version of ['', '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
 });
