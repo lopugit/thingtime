@@ -46,6 +46,33 @@ test('archive exports are whole histories even when optional traversal is disabl
   assert.doesNotMatch(JSON.stringify(result.plan), /ownerId|userId|archiveVersion|archived|updatedAt/);
 });
 
+test('ordinary live chats use the membership adapter only with explicit first-party scope', async () => {
+  const { deps, archive } = harness(); let reads = 0;
+  const live = { ...deps, readArchive: async () => null,
+    readLiveArchive: async (viewer: any, id: string, owner: string | undefined) => {
+      reads++; assert.equal(viewer.id, 'owner'); assert.equal(owner, 'owner'); assert.equal(id, 'archive'); return archive;
+    } };
+  for (const context of [{}, { archiveOwnerId: 'owner' }, { liveChatOwnerId: 'other' }])
+    assert.equal((await exportTransferPlan({ id: 'owner' }, { ids: ['archive'] }, undefined, live, context)).ok, false);
+  assert.equal(reads, 0);
+  const result = await exportTransferPlan({ id: 'owner' }, { ids: ['archive'], includeDependencies: false,
+    includeChildren: false }, undefined, live, { liveChatOwnerId: 'owner' });
+  assert.ok(result.ok); if (!result.ok) return;
+  assert.equal(reads, 1); assert.equal(result.plan.things.length, 6);
+  assert.equal(validateChatArchiveRecords(result.plan)[0].messages.length, 2);
+  assert.equal((await exportTransferPlan({ id: 'owner', pat: { tokenId: 'token', onlyCreatedThings: false } },
+    { ids: ['archive'] }, undefined, live, { liveChatOwnerId: 'owner' })).ok, false);
+  assert.equal(reads, 1);
+});
+
+test('live chat source failures are recoverable errors without provider details or partial plans', async () => {
+  const { deps } = harness();
+  const result = await exportTransferPlan({ id: 'owner' }, { ids: ['archive'] }, undefined,
+    { ...deps, readLiveArchive: async () => { throw new Error('private Mongo provider details'); } }, { liveChatOwnerId: 'owner' });
+  assert.equal(result.ok, false);
+  assert.doesNotMatch(JSON.stringify(result), /private Mongo|"plan"/);
+});
+
 test('owner folder traversal carries archive scope and exports the complete nested group', async () => {
   const { archive, deps } = harness(); archive.group.root.folderId = 'folder';
   const result = await exportTransferPlan({ id: 'owner' }, { ids: ['folder'] }, undefined, {

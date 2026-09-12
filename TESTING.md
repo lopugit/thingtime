@@ -7013,6 +7013,15 @@ approval; `access.test.ts` — the reservation matrix) and
 
 ## Durable recording reads
 
+- Ordinary live-chat export: use a first-party active/pending member, include
+  former participants and thread replies, then import as a private archive.
+  Confirm self substitution, historical names/avatars, mixed gallery order,
+  exact bytes and no outgoing messages/invitations/notifications. Repeat as a
+  nonmember, PAT, app account and custom data plane: deny. Revoke media access
+  during export: fail without a partial plan. AI/device chats, external avatars
+  and other-owned emoji definitions remain unsupported; do not count a refusal
+  or unit-test fixture as end-to-end Messenger acceptance.
+
 - Live Messenger archive snapshot reader: require home first-party scope at the
   eventual caller, check current membership in the same transaction as history,
   include former members and every thread, and reject foreign/duplicate records

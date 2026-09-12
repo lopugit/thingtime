@@ -17,8 +17,9 @@ import { isTransferEmoji } from '../../../utils/thingTransfer/emoji';
 import { readTransferEmoji, type TransferEmojiSource } from './emojiTransfer';
 import { readOwnedChatArchive, type OwnedChatArchive } from './chatArchiveReadTransfer';
 import { validateChatArchiveRecords } from '../../../utils/thingTransfer/chatArchive';
+import { readLiveChatArchiveTransfer } from './liveChatArchiveTransfer';
 
-const defaults = { read: findViewableThing, readArchive: readOwnedChatArchive, readTheme: readTransferTheme, readAlgorithm: readTransferAlgorithm, readRecording: readTransferRecording, readEmoji: readTransferEmoji, list: listThings, resolve: resolveSharedComposition, project: toPublicThings, bound: listForkBoundMedia, describe: describeAttachmentTransfer };
+const defaults = { read: findViewableThing, readArchive: readOwnedChatArchive, readLiveArchive: readLiveChatArchiveTransfer, readTheme: readTransferTheme, readAlgorithm: readTransferAlgorithm, readRecording: readTransferRecording, readEmoji: readTransferEmoji, list: listThings, resolve: resolveSharedComposition, project: toPublicThings, bound: listForkBoundMedia, describe: describeAttachmentTransfer };
 
 const content = (thing: PublicThing): TransferThing => ({
   id: thing.id, thingtime: thing.thingtime, crystal: thing.crystal,
@@ -30,7 +31,7 @@ const content = (thing: PublicThing): TransferThing => ({
 
 export const exportTransferPlan = async (viewer: Viewer, input: {
   ids?: unknown; includeChildren?: unknown; includeDependencies?: unknown; includeFiles?: unknown; includeLinks?: unknown;
-}, signal?: AbortSignal, overrides: Partial<typeof defaults> = {}, context: { archiveOwnerId?: string } = {}) => {
+}, signal?: AbortSignal, overrides: Partial<typeof defaults> = {}, context: { archiveOwnerId?: string; liveChatOwnerId?: string } = {}) => {
   const deps = { ...defaults, ...overrides };
   if (!Array.isArray(input.ids) || !input.ids.length || input.ids.length > TRANSFER_LIMITS.things || input.ids.some((id) => typeof id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(id))) return fail(400, 'Choose valid Thing IDs to export');
   for (const key of ['includeChildren', 'includeDependencies', 'includeFiles', 'includeLinks'] as const) if (input[key] !== undefined && typeof input[key] !== 'boolean') return fail(400, 'Invalid export option');
@@ -56,6 +57,19 @@ export const exportTransferPlan = async (viewer: Viewer, input: {
           const archive = await deps.readArchive(context.archiveOwnerId, id).catch(() => { throw new Error('Archive history is unavailable'); });
           if (archive) {
             if (archive.group.root.id !== id) throw new Error('Archive history is unavailable');
+            archiveRows += 1 + archive.group.participants.length + archive.group.messages.length + archive.group.reactions.length;
+            if (archiveRows > TRANSFER_LIMITS.things) throw new Error('This archive export exceeds the transfer limit');
+            archives.set(id, structuredClone(archive));
+            docs.set(id, structuredClone(archive.group.root));
+            return docs.get(id)!;
+          }
+        }
+        if ((!doc || (doc.thingtime.length === 1 && doc.thingtime[0] === 'chat')) &&
+          context.liveChatOwnerId && context.liveChatOwnerId === viewer?.id && !viewer.pat) {
+          const archive = await deps.readLiveArchive(viewer, id, context.liveChatOwnerId, signal)
+            .catch(() => { throw new Error('Complete chat history or media is unavailable for export'); });
+          if (archive) {
+            if (archive.group.root.id !== id) throw new Error('Chat history is unavailable');
             archiveRows += 1 + archive.group.participants.length + archive.group.messages.length + archive.group.reactions.length;
             if (archiveRows > TRANSFER_LIMITS.things) throw new Error('This archive export exceeds the transfer limit');
             archives.set(id, structuredClone(archive));

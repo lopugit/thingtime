@@ -31,6 +31,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-12 — Connect ordinary live-chat export to private archive conversion
+  with membership-gated snapshots, canonical managed media reads, bounded
+  preparation and export capability 1.11.0. AI/external-avatar/shared-emoji
+  completion and live round-trip proof remain pending. [PR #764 notes](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
 - 2026-09-12 — Bound portable export metadata preparation to 30 seconds, with
   cancellation and a recoverable retry message shared by Copy and Download.
   Large file downloads retain their separate lifecycle. See [PR #764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)

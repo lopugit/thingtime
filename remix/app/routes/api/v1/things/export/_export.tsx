@@ -17,7 +17,8 @@ export const action = async ({ request }: { request: Request }) => withAttachmen
   if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some((key) => !['ids', 'key', 'includeChildren', 'includeDependencies', 'includeFiles', 'includeLinks'].includes(key)) || (body.key !== undefined && (typeof body.key !== 'string' || body.key.length > 256))) return json({ ok: false, error: 'Invalid export request' }, { status: 400 });
   const viewer = await withFriendIds(withLinkKeys(viewerOf(user), [body.key || '']));
   const result = await exportTransferPlan(viewer, body, request.signal, {}, {
-    archiveOwnerId: user?.accountKind === 'user' ? user.id : undefined
+    archiveOwnerId: user?.accountKind === 'user' ? user.id : undefined,
+    liveChatOwnerId: user?.accountKind === 'user' ? user.id : undefined
   });
   return json(result, { status: result.ok === false ? result.status : 200 });
 });

@@ -926,3 +926,21 @@ and shared-emoji media resolution must still be connected. AI/device-source
 chats explicitly reject for now: their assistant rows can carry the human
 owner's ID, so ordinary attribution would be incorrect. Historical AI author
 presentation must be implemented before claiming all Messenger export works.
+
+## 2026-09-12 — Ordinary live-chat export route connected
+
+The new transfer adapter combines the membership-gated snapshot, canonical
+public profile lookup, managed-avatar paths and canonical attachment metadata
+reads. It preserves mixed gallery order, refuses incomplete/misbound media,
+uses a 30-second preparation deadline, and fences cancelled late results.
+Only exact relative managed-avatar paths are accepted; no arbitrary URL fetch.
+
+`things/export` now supplies separate authenticated first-party live-chat scope
+and converts ordinary chat IDs to complete private archive rows. Existing
+re-export logic still checks every required media and custom-emoji dependency.
+Both capability contracts and the client requirement are `api.things-export`
+1.11.0. Seventy focused archive/adapter/route/manifest tests passed; local live
+capability endpoints returned 1.11.0. This is not yet built-deployment or real
+Messenger round-trip proof. Remaining: AI attribution, external/legacy avatar
+preservation, shared emoji export and live browser acceptance. No live chat
+write, invite, membership creation or notification path was introduced.

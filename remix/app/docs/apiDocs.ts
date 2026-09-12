@@ -12306,8 +12306,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-export',
-    featureVersion: '1.10.0',
-    contractVersion: '1.10.0',
+    featureVersion: '1.11.0',
+    contractVersion: '1.11.0',
+    // 1.11.0: first-party members export ordinary live chats as private archives.
     // 1.10.0: owner folder traversal includes complete private archive roots.
     // 1.9.0: first-party owners re-export complete private archive histories;
     // optional traversal never strips participants/messages/reactions. Required
@@ -12318,7 +12319,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.6.0: recordings preserve folderId when their parent is included.
     group: 'things',
     title: 'Plan a portable Thing export',
-    notes: ['Private chat-archive roots can be re-exported only by their first-party user owner. Every participant, message, reply and reaction is included regardless of optional traversal flags; independent history-row roots are rejected. All archive media and required custom emoji definitions must remain readable and included, or the entire export fails. Re-import creates fresh private ownership; archived identities never become live accounts or memberships.', 'Custom emojis export only for their owner. Each portable custom-emoji Thing contains name and emojiFileId, requires image bytes, and excludes source community scope. Legacy inline images use a bounded plan-only inlineBase64 file field (512 KiB image maximum); clients decode that into checksummed ZIP bytes and omit inlineBase64 from the manifest. Stored images use the normal content endpoint.'],
+    notes: [
+      'Live ordinary chat IDs require first-party user scope and current active/pending membership. History is read in one home-database snapshot, including former participants and all threads, then converted to private archive rows. Import replaces self with the importer and never sends messages or restores live memberships. Preparation is bounded to 30 seconds. Managed avatars and message media use canonical attachment reads; inaccessible or incomplete media fails the entire export. External/legacy avatar URLs and AI/device-source chat attribution are not yet supported and fail explicitly. Custom-emoji dependencies retain the existing owner-only export rule.',
+      'Private chat-archive roots can be re-exported only by their first-party user owner. Every participant, message, reply and reaction is included regardless of optional traversal flags; independent history-row roots are rejected. All archive media and required custom emoji definitions must remain readable and included, or the entire export fails. Re-import creates fresh private ownership; archived identities never become live accounts or memberships.',
+      'Custom emojis export only for their owner. Each portable custom-emoji Thing contains name and emojiFileId, requires image bytes, and excludes source community scope. Legacy inline images use a bounded plan-only inlineBase64 file field (512 KiB image maximum); clients decode that into checksummed ZIP bytes and omit inlineBase64 from the manifest. Stored images use the normal content endpoint.'
+    ],
     // 1.5.0: owned standalone recordings require stored bytes. Their portable
     // attachment Thing contains only recordingFileId; plan-only sourceId on the
     // file identifies the authorized download and never enters the archive.
