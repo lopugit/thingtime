@@ -64,7 +64,7 @@ public actor GitHubReleaseCatalog {
             guard release.draft != true, let key = release.id.map(String.init) ?? release.tagName else { return false }
             return seen.insert(key).inserted
         }
-        return RecoveryCatalogSnapshot(publishedReleaseCount: releases.count, desktop: project(releases, component: .desktop), recovery: project(releases, component: .recovery), commander: project(releases, component: .commander))
+        return RecoveryCatalogSnapshot(publishedReleaseCount: releases.count, desktop: project(releases, component: .desktop), recovery: project(releases, component: .recovery), commander: project(releases, component: .commander), widgets: project(releases, component: .widgets))
     }
 
     private func project(_ collected: [GitHubRelease], component: RecoveryComponent) -> [RecoveryRelease] {
@@ -126,6 +126,8 @@ public actor GitHubReleaseCatalog {
                 let prefix: String
                 if component == .desktop {
                     prefix = isUnsigned ? "Thingtime-Electron-App-UNSIGNED-Release-" : "Thingtime-Electron-App-Release-"
+                } else if component == .widgets {
+                    prefix = isUnsigned ? "Thingtime-Widgets-App-UNSIGNED-Release-" : "Thingtime-Widgets-App-Release-"
                 } else if component == .commander {
                     prefix = isUnsigned ? "Commander-App-UNSIGNED-Release-" : "Commander-App-Release-"
                 } else {

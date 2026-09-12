@@ -1,5 +1,5 @@
 import { json, readJsonBody } from '~/api/http';
-import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { getScopedUser } from '~/api/utils/auth/scopedUser';
 import { isSameOriginAttachmentRequest } from '~/api/utils/attachments/attachmentResponses';
 import { runWithMongoEndpoint } from '~/api/utils/mongodb/endpoint';
 import { rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
@@ -20,7 +20,7 @@ const headers = { 'Cache-Control': 'private, no-store', Pragma: 'no-cache' };
 const reply = (body: unknown, status = 200) => json(body, { status, headers });
 
 export const loader = async ({ request }: { request: Request }) => {
-	const user = await getCurrentUser(request);
+	const user = await getScopedUser(request, 'lopu.recordings');
 	if (!user || user.temporary) return reply({ ok: false, error: 'Sign in to manage your recordings.' }, 401);
 	return runWithMongoEndpoint(null, async () =>
 		reply({ ok: true, ownerId: user.id, ...(await listRecordingAutomation(user.id)), provider: await recordingConnectionStatus(user.id) })
@@ -32,7 +32,7 @@ export const action = async ({ request }: { request: Request }) => {
 	if (!isSameOriginAttachmentRequest(request)) return reply({ ok: false, error: 'Cross-origin requests are not allowed.' }, 403);
 	if (request.headers.get('content-type')?.split(';')[0].trim() !== 'application/json')
 		return reply({ ok: false, error: 'Use application/json.' }, 415);
-	const user = await getCurrentUser(request);
+	const user = await getScopedUser(request, 'lopu.recordings');
 	if (!user || user.temporary || user.accountKind !== 'user') return reply({ ok: false, error: 'Sign in to manage your recordings.' }, 401);
 	const limit = await enforceSubscriptionRateLimit(request, 'lopu.recordings', user.id);
 	if (limit.unavailable) return reply({ ok: false, error: 'Your account allowance is temporarily unavailable. Please retry.' }, 503);
