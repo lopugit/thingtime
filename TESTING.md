@@ -6664,6 +6664,13 @@ approval; `access.test.ts` — the reservation matrix) and
 - Run `node remix/scripts/verify-lopu-linked-things.mjs` against the running worktree stack (or pass its loopback HTTP origin). It registers disposable local accounts and exercises real API comments, unchanged parent crystals, shared voice/Messenger history, retry deduplication, searchable scheduled-task Things, linked context, account isolation, protected writes, and pause/resume. It removes its created content and pauses schedules in `finally`; empty test accounts remain, with credentials never persisted. Production origins are rejected. This does not replace browser/device, provider inference, or scheduled-delivery acceptance.
 # Portable Thing transfers
 
+- Archive storage regression: each historical row must be importer-owned and
+  private, with no live memberships/account lookups. Test fresh avatar/message
+  bindings, mixed file/link order, custom-reaction remapping, missing/foreign/
+  reused resources, quota and concurrent-bind failures, folder-deletion fencing,
+  caller mutation during awaits, and stable IDs across transaction retries.
+  Dependency tests do not replace live storage/rollback and UI acceptance.
+
 - Messenger archive regression contract: preserve exact text, historical dates,
   reply/thread links, reactions and avatar file references. On import, replace
   only the exporting self with the importer; other authors must remain archived

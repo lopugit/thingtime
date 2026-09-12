@@ -1,5 +1,28 @@
 # PR 764 — portable Thing transfer
 
+## Accounted archive storage writer — 2026-09-12
+
+Added the internal `createTransferChatArchive` adapter. It validates a detached
+manifest snapshot, mints fresh IDs, rewrites participant/reply/thread/reaction
+references, replaces the self participant with the importing account, and stores
+the other participants as archived profile snapshots. Every relational row is
+private and owned by the importer; no live chat, membership, inbox preview,
+account or notification writer is called.
+
+Rows use `insertAccountedThing` on the home plane inside one transaction with
+the canonical fresh post-attachment binder. File size/type/link identity is
+rechecked in that transaction; folder placement advances the existing deletion
+fence. Custom reactions require mapped, owned personal emoji records. Quota or
+binding failures propagate out of the transaction, and retries preserve IDs
+without reusing driver-mutated documents. These are dependency-level writer
+tests, not live Mongo/quota/browser acceptance.
+
+The writer remains internal and is not yet called by the HTTP import service.
+Remaining: dedicated archive deletion/compensation, full-history export and
+re-export, endpoint/protected-kind/capability wiring, and Messenger archive UI
+with live account-boundary and desktop/mobile acceptance. No endpoint version
+change is claimed for this unconnected storage adapter.
+
 ## Messenger archive decision and contract groundwork — 2026-09-12
 
 The user clarified that imported conversations should retain their chat
