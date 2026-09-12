@@ -1,5 +1,14 @@
 # PR 764 — portable Thing transfer
 
+## Develop integration — 2026-09-12
+
+Integrated develop 47576f22117ce4b31cb0598aa875d3bc9803b4c7 without
+hand-merging generated graphs. Disabling rename detection preserved immutable
+snapshot identities; the sole source conflict was additive changelog history,
+resolved by retaining both entries. The incoming application diff only moves
+the existing recording capability import to the top of its module. Transfer
+and archive implementations were preserved; 201 focused tests pass after merge.
+
 ## Inline historical galleries — 2026-09-12
 
 Chat archives now use the existing PostAttachments gallery with authenticated
