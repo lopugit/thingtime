@@ -16,7 +16,13 @@ export const archiveAiIdentity = (chatSource: unknown, messageSource: unknown, t
   const turnRole = turn == null ? undefined : typeof turn === 'object' && !Array.isArray(turn)
     ? (turn as Record<string, unknown>).role : reject();
   if (turn != null && (!chat || chat.provider !== 'lopu' || !['user', 'assistant'].includes(String(turnRole)))) reject();
-  if (message && (!chat || message.provider !== chat.provider || message.sourceId !== chat.sourceId)) reject();
+  if (message && (!chat || message.provider !== chat.provider || message.sourceId !== chat.sourceId ||
+    message.access !== chat.access)) reject();
+  // Live sourceId identifies the connector, not the conversation. The same
+  // connector can serve many sessions and devices; match the full stored scope.
+  if (message?.access === 'live' && (chat?.access !== 'live' ||
+    message.deviceId !== chat.deviceId || message.connectorId !== chat.connectorId ||
+    message.sessionId !== chat.sessionId)) reject();
   if (message && turnRole !== undefined && message.role !== turnRole) reject();
   if (!message) {
     // Canonical Lopu user rows have no externalSource. Imported/device rows

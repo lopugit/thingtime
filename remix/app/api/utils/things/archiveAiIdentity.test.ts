@@ -39,3 +39,16 @@ test('missing, conflicting and malformed provenance never silently becomes the i
     [{ provider: 'invented' }, undefined, undefined], [source(), { bad: true }, undefined]
   ]) assert.throws(() => archiveAiIdentity(...args as [unknown, unknown, unknown]), /Historical AI author is unavailable/);
 });
+
+test('live identity requires the exact device, connector and session, not only the shared source ID', () => {
+  const chat = { ...source('claude'), access: 'live', deviceId: 'device-one', connectorId: 'connector-one',
+    sessionId: 'session-one', readOnly: false, capabilities: ['read-history', 'send-message'] };
+  const message = { ...chat, role: 'assistant' };
+  assert.deepEqual(archiveAiIdentity(chat, message, undefined), {
+    kind: 'historical', provider: 'claude', role: 'assistant', displayName: 'claude'
+  });
+  for (const key of ['deviceId', 'connectorId', 'sessionId']) {
+    assert.throws(() => archiveAiIdentity(chat, { ...message, [key]: 'another' }, undefined), /Historical AI author/);
+  }
+  assert.throws(() => archiveAiIdentity(chat, { ...message, access: 'imported' }, undefined), /Historical AI author/);
+});

@@ -2,6 +2,12 @@
 
 ## Historical AI identity foundation — 2026-09-12
 
+Writer tracing confirmed live `sourceId` is connector-scoped, not session-scoped.
+The classifier additionally matches access mode, deviceId, connectorId and
+sessionId before discarding that authority. Four identity tests now pass,
+including same-connector/different-session refusal. This helper remains internal
+and unwired; it does not claim complete live-device history acceptance.
+
 Added a pure presentation classifier using the canonical external-source
 projection. It distinguishes human turns from archived assistant/system/unknown
 authors, accepts canonical Lopu human rows without externalSource, and rejects
