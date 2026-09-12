@@ -3,11 +3,12 @@ import Foundation
 public enum RecoveryProduct: String, CaseIterable, Identifiable {
     case electron
     case commander
+    case widgets
 
     public var id: String { rawValue }
-    public var title: String { self == .electron ? "Thingtime Electron" : "Commander" }
-    public var component: RecoveryComponent { self == .electron ? .desktop : .commander }
-    public var systemImage: String { self == .electron ? "desktopcomputer" : "command" }
+    public var title: String { self == .electron ? "Thingtime Electron" : self == .widgets ? "Thingtime Widgets" : "Commander" }
+    public var component: RecoveryComponent { self == .electron ? .desktop : self == .widgets ? .widgets : .commander }
+    public var systemImage: String { self == .electron ? "desktopcomputer" : self == .widgets ? "rectangle.3.group" : "command" }
 }
 
 /// Read legacy bundles directly as well as new manifests. Never invent a build

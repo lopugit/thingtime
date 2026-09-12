@@ -6542,6 +6542,23 @@ approval; `access.test.ts` — the reservation matrix) and
 - Verify the detail page at desktop and mobile widths, including the visible
   control/result and top-to-bottom scrolling. List/grid previews remain inert.
 
+## Apple widgets and Control Centre
+
+- [ ] Widgets release/Recovery: verify the main-only workflow runs tests before importing secrets and publishes both Widgets and matching Recovery ZIPs after notarization/extraction checks. In Recovery select Thingtime Widgets; verify architecture filtering, isolated cache, download verification, install/launch and rollback without touching another app. Reject mismatched bundle IDs and never accept development signing as a production release.
+
+- [ ] Per-widget Mac endpoints: pin two widgets to different saved, authenticated servers, including Things with identical IDs. Verify the picker lists only the chosen server’s Things, each dashboard/Thing/action link opens that server, and changing the companion’s active endpoint does not change pinned widgets. Remove/disconnect one server and confirm its content clears without affecting the other. Verify unconfigured widgets still follow the active endpoint and turning content sharing off clears every endpoint.
+
+- [ ] Mac saved endpoints: migrate an existing local connection, add a named HTTPS domain, edit/remove an inactive entry, and restart to verify persistence. Reject duplicate or credential-bearing addresses. Switch between compatible origins and verify separate Keychain sessions, cleared content, and correct widget click destinations. An outdated production manifest must leave the previous endpoint active and show an actionable error. Open both Connection and Command-comma settings; test the editor, removal confirmation, scrolling, and reopening after closing the main window.
+
+- [ ] Native Mac companion: Overview, Things, Widget Gallery, and Connection render without a webview. Inspect every page and its full scroll range; test connection cancellation, wrong/expired/replayed callbacks, secure Keychain restoration, and disconnect/revocation on the installed signed copy.
+- [ ] OAuth: review all Things, individual read/create/update/delete permissions, Run actions, and each Lopu permission. Untick full Things and choose read-only in Share more. Confirm selected-only and legacy app-storage grants never gain account access; read-only cannot write, revoked/sandbox tokens fail, and action/voice endpoints require their own scopes. Verify real approved calls as well as denied calls; do not treat a catalog checkbox as enforcement proof.
+- [ ] Verify account/origin changes clear widgets, offline revocation reports its limitation, and toggling content cannot renew an old snapshot. Test browser return into the exact native app on local and preview origins.
+
+- [ ] Add Quick Action, Dashboard, Render a Thing, and Recent Things at every supported device size. Inspect long text, dark/light/tinted appearance, large Dynamic Type, and the full native layout gallery from top to bottom.
+- [ ] On iOS 18+, add all four Control Centre buttons at compact and expanded sizes; cold/warm taps must reach the correct screen once. New Folder opens its dialog, Search focuses its input, and New Thing opens the schema chooser.
+- [ ] Transcribe launches Lopu in transcription mode; Talk launches voice mode. Sign-in/access gates and denied microphone/speech permissions remain effective. Stop, tap again, background/foreground, and verify transcript, local recording, private upload, and iOS Live Activity independently.
+- [ ] Open Widget settings from the iOS native destination drawer; its controls must be inaccessible when closed and must not overlay the web microphone/composer. Content starts disabled. Enable host sync and per-widget content; select a Thing and change card/note/value layout and title. Disable sharing, log out, change account/origin, delete a Thing, and verify stale content clears. Offline content expires after 30 minutes without another refresh.
+- [ ] Install and test the signed Mac companion itself. Verify both the host and extension signatures and the same designated requirement across rebuilds. Never equate simulator or layout-preview success with physical Control Centre/microphone acceptance.
 
 ### Recording recovery and native push regression checks
 

@@ -24,6 +24,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Promote the native Apple widget suite, browser OAuth scopes, saved endpoints, per-widget routing, automatic signed Widgets releases and Recovery support from PRs #727 and #774. — Codex (AI), 2026-09-12
+
 - Refresh root AI guidance from two months of PR history and current source:
   preserve existing repo topics and the full global reference snapshot, add
   recurring regression/verification rules, and correct stale hook/typecheck
