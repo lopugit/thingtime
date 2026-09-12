@@ -8,6 +8,7 @@ import { useApi } from '~/hooks/useApi';
 import { rootIdentity } from '~/utils/rootIdentity';
 import { customReactionEmojiId } from '~/utils/reactionTokens';
 import { ThingTransferControls } from './ThingTransferControls';
+import { PostAttachments } from '../Attachments/PostAttachments';
 
 const mediaUrl = (id: string) => `/api/v1/attachments/content?id=${encodeURIComponent(id)}`;
 const NAV_CLEARANCE = 'calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))';
@@ -19,6 +20,15 @@ type ArchiveUser = Pick<NonNullable<CurrentUser>, 'id' | 'username' | 'displayNa
 export const ChatArchiveHistory = ({ archive, user }: { archive: OwnedChatArchive; user: ArchiveUser }) => {
   const { group } = archive;
   const people = new Map(group.participants.map(person => [person.id, person]));
+  const media = new Map((archive.attachments || []).map(file => [file.id, file]));
+  const avatar = (personId: string) => {
+    const file = media.get(String(people.get(personId)?.crystal.avatarFileId));
+    // Historical avatars have no reveal control: only show the canonical,
+    // unflagged, correctly-bound projection. Never bypass gallery moderation
+    // by requesting an avatar directly from an ID in the historical crystal.
+    return file && file.targetId === personId && file.mediaKind === 'image' && !file.nsfw && !file.pending && !file.url
+      ? mediaUrl(file.id) : undefined;
+  };
   const byId = new Map(group.messages.map(message => [message.id, message]));
   const messages = [...group.messages].sort((a, b) => String(a.crystal.createdAt).localeCompare(String(b.crystal.createdAt)) || a.id.localeCompare(b.id));
   const label = (id: string) => id === group.self.id ? user.displayName || user.username :
@@ -27,8 +37,7 @@ export const ChatArchiveHistory = ({ archive, user }: { archive: OwnedChatArchiv
     <Box as="details" borderWidth="1px" borderRadius="lg" padding={3}>
       <Box as="summary" cursor="pointer">{group.participants.length} participants · private historical snapshots</Box>
       <Stack paddingTop={3} spacing={2}>{group.participants.map(person => <Flex key={person.id} gap={2} align="center" minWidth={0}>
-        <Avatar size="sm" name={label(person.id)} src={person.id === group.self.id ? user.avatarUrl || undefined :
-          typeof person.crystal.avatarFileId === 'string' ? mediaUrl(person.crystal.avatarFileId) : undefined} />
+        <Avatar size="sm" name={label(person.id)} src={person.id === group.self.id ? user.avatarUrl || undefined : avatar(person.id)} />
         <Text overflowWrap="anywhere">{label(person.id)} · @{person.id === group.self.id ? user.username : String(person.crystal.username)}</Text>
         <Badge flexShrink={0}>{person.id === group.self.id ? 'You' : 'Archived'}</Badge>
       </Flex>)}</Stack>
@@ -37,14 +46,16 @@ export const ChatArchiveHistory = ({ archive, user }: { archive: OwnedChatArchiv
     {messages.map(message => {
       const author = String(message.crystal.participantId);
       const mine = author === group.self.id;
-      const person = people.get(author);
       const reply = byId.get(String(message.crystal.replyToId));
       const reactions = group.reactions.filter(row => row.targetId === message.id);
       const attachments = archive.attachmentTargets.filter(file => file.targetId === message.id);
+      const gallery = message.crystal.deleted ? [] : attachments.flatMap(binding => {
+        const file = media.get(binding.id);
+        return file?.targetId === message.id ? [file] : [];
+      });
       return <Flex key={message.id} id={`archive-message-${message.id}`} direction={mine ? 'row-reverse' : 'row'} gap={2} align="start">
-        <Avatar size="sm" name={label(author)} src={mine ? user.avatarUrl || undefined :
-          typeof person?.crystal.avatarFileId === 'string' ? mediaUrl(person.crystal.avatarFileId) : undefined} />
-        <Box minWidth={0} maxWidth={{ base: 'calc(100% - 44px)', md: '82%' }}>
+        <Avatar size="sm" name={label(author)} src={mine ? user.avatarUrl || undefined : avatar(author)} />
+        <Box minWidth={0} width={gallery.length ? { base: 'calc(100% - 44px)', md: '82%' } : undefined} maxWidth={{ base: 'calc(100% - 44px)', md: '82%' }}>
           <Flex wrap="wrap" gap={2} align="center" marginBottom={1} justify={mine ? 'end' : 'start'}>
             <Text fontSize="sm" fontWeight={600} overflowWrap="anywhere">{mine ? 'You' : label(author)}</Text>
             {!mine && <Badge fontSize="xs">Archived</Badge>}
@@ -58,7 +69,8 @@ export const ChatArchiveHistory = ({ archive, user }: { archive: OwnedChatArchiv
             <Text whiteSpace="pre-wrap" fontStyle={message.crystal.deleted ? 'italic' : undefined}>{message.crystal.deleted ? 'Deleted message' : String(message.crystal.text)}</Text>
             {message.crystal.systemText && <Text fontSize="sm" whiteSpace="pre-wrap">{String(message.crystal.systemText)}</Text>}
             {message.crystal.editedAt && <Text fontSize="xs" marginTop={1}>Edited {when(message.crystal.editedAt)}</Text>}
-            {attachments.length > 0 && <Text fontSize="sm" marginTop={2}>{attachments.length} attachment{attachments.length === 1 ? '' : 's'} · included in Transfer → Download</Text>}
+            {gallery.length > 0 && <Box marginTop={2} data-testid={`archive-gallery-${message.id}`}><PostAttachments attachments={gallery} compact ariaLabel="Historical attachments" /></Box>}
+            {attachments.length > gallery.length && <Text fontSize="sm" marginTop={2}>Some historical attachments are unavailable.</Text>}
           </Box>
           {reactions.length > 0 && <Flex gap={1} wrap="wrap" paddingTop={1} aria-label="Historical reactions">
             {reactions.map(reaction => <Box key={reaction.id} as="span" borderWidth="1px" borderRadius="full" paddingX={2} fontSize="sm" title={`${label(String(reaction.crystal.participantId))} · historical reaction`}>

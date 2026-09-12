@@ -1,5 +1,25 @@
 # PR 764 — portable Thing transfer
 
+## Inline historical galleries — 2026-09-12
+
+Chat archives now use the existing PostAttachments gallery with authenticated
+media URLs, file links, pending badges, NSFW reveal controls and image lightbox.
+Only metadata matching a historical message binding renders. Blocked/missing
+metadata gets an unavailable notice; it is not silently advertised as downloadable.
+Archived avatars require an unflagged, correctly bound image projection rather
+than bypassing moderation with the raw avatar ID. Current-self identity remains
+the importer and no live messaging callbacks are introduced.
+
+The isolated Chrome smoke passed at 1280x900 and 390x844: full scrolling, gallery
+and lightbox, NSFW exclusion before reveal, pending/file display, Download dialog,
+retry and identity clearing with zero API mutations. Final gallery/lightbox/modal
+screenshots were inspected. Media responses were synthetic PNGs: this does not
+prove real storage-byte independence, video/audio playback or custom emoji images.
+The existing global floating Lopu/DevKit controls remain visible over the media
+overlay; this change does not claim to resolve their application-wide layering.
+Targeted lint and component TypeScript diagnostics pass; full repository typecheck
+is not claimed clean. The earlier server-only note below is historical.
+
 ## Archive gallery projection preparation — 2026-09-12
 
 The owner-only archive snapshot now includes ordered canonical attachment

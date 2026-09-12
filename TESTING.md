@@ -13,8 +13,10 @@
   actions. Old private content disappears on identity refresh. Check fixed-nav
   clearance, long text, reply links and modal bounds. The local fictional smoke
   is `node --import tsx scripts/archive-ui-smoke.mts` from remix; it proves no
-  real account lifecycle or media bytes. Inline galleries/custom emoji images
-  are not yet rendered in this initial archive view.
+  real account lifecycle or media bytes. Open the historical gallery lightbox,
+  confirm shielded media cannot be reached by its navigation until Show Anyway,
+  and check pending badges and file download links. Flagged historical avatars
+  and unavailable files must not be fetched. Custom emoji images remain pending.
 
 - [ ] Cut an owned archive and paste into another owned folder, then back to
   root: only root placement/timestamp change; message, participant, reply,
@@ -51,8 +53,8 @@
   one bounded batch. Blocked/noncanonical media is omitted, pending owner media
   has pending=true and NSFW media has nsfw=true. No moderation diagnostics,
   object/upload keys or unknown crystal fields escape. attachmentTargets still
-  covers blocked bindings, preventing incomplete exports. Inline archive media
-  rendering is a separate unfinished acceptance item.
+  covers blocked bindings, preventing incomplete exports. Verify the shared
+  gallery with real stored image/video/audio bytes separately from fixture UI.
 - [ ] Signed-out/PAT/app/service readers cannot use archive mode. A foreign,
   missing, deleting or custom-plane archive does not expose history. Oversized
   or inconsistent history returns an error, never a truncated success. All
