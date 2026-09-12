@@ -910,3 +910,19 @@ passed focused ESLint. The reader is not yet wired to export routes or UI.
 It returns internal projected source records, not a portable/public response:
 safe profile/media resolution and system/AI history rendering remain required
 before the whitelist conversion. No new API contract is exposed by this commit.
+
+## 2026-09-12 — Live-chat presentation normalization
+
+Added the ordinary-chat normalization step between the authorized source
+snapshot and portable archive projection. It preserves exact text, dates,
+threads, edits, tombstones and historical profile names, uses Messenger's
+existing system-message formatter, and requires a complete one-to-one mapping
+of source message media and participant avatars. Raw profile fields and system
+metadata do not enter the portable manifest. Ten focused reader, normalization
+and conversion tests pass; focused lint passes.
+
+This remains internal, not a live export endpoint. Canonical profile/avatar
+and shared-emoji media resolution must still be connected. AI/device-source
+chats explicitly reject for now: their assistant rows can carry the human
+owner's ID, so ordinary attribution would be incorrect. Historical AI author
+presentation must be implemented before claiming all Messenger export works.
