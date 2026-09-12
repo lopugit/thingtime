@@ -50,3 +50,22 @@ test('folder-only placement preserves canonical content storage accounting and a
   assert.equal(thingStorageSizeBytes(after), thingStorageSizeBytes(before));
   for (const key of ['crystal', 'acl', 'tags', 'extended'] as const) assert.equal(after[key], before[key]);
 });
+
+test('archive placement moves only a complete owned root and preserves history and accounting', () => {
+  const archive = { ...source('chat-archive'), archiveRootId: 'source', archiveVersion: 1,
+    crystal: { name: 'History', selfParticipantId: 'self' }, acl: ['tt:user'] };
+  const before = structuredClone(archive);
+  const patch = prepareManagedPlacement(archive, 'owner', folder(), now);
+  assert.deepEqual(Object.keys(patch), ['folderId', 'updatedAt']);
+  assert.equal(patch.folderId, 'destination');
+  assert.equal(thingStorageSizeBytes({ ...archive, ...patch }), thingStorageSizeBytes(archive));
+  assert.deepEqual(archive, before);
+  assert.equal(prepareManagedPlacement(archive, 'owner', null, now).folderId, null);
+  for (const change of [{ archiveVersion: undefined }, { archiveVersion: 2 }, { archiveRootId: 'other' },
+    { archiveDeleting: true }, { archiveDeleting: 'false' }, { ownerId: 'other' },
+    { thingtime: ['chat-archive', 'data'] }, { thingtime: ['chat-archive-participant'] },
+    { thingtime: ['chat-archive-message'] }, { thingtime: ['chat-archive-reaction'] },
+    { appId: 'app' }, { sandbox: true }, { targetId: 'root' }]) {
+    assert.throws(() => prepareManagedPlacement({ ...archive, ...change }, 'owner', folder(), now));
+  }
+});

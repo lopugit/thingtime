@@ -61,3 +61,18 @@ test('folder or source CAS failure rejects the whole transaction, never reports 
     assert.equal(h.writes.length, field === 'folderMatches' ? 1 : 2);
   }
 });
+
+test('archive move rechecks root state in the transaction and never rewrites history rows', async () => {
+  const h = harness();
+  h.state.source = { shareId: 'recording', ownerId: 'owner', thingtime: ['chat-archive'], updatedAt: time,
+    archiveVersion: 1, archiveRootId: 'recording', crystal: { selfParticipantId: 'self' }, acl: ['tt:user'] };
+  const before = structuredClone(h.state.source);
+  await moveManagedContent('owner', 'recording', 'folder', time.toISOString(), h.deps);
+  assert.deepEqual(h.state.source, before);
+  assert.equal(h.writes.length, 2);
+  assert.deepEqual(h.writes[1].query, { shareId: 'recording', ownerId: 'owner', thingtime: ['chat-archive'], updatedAt: time });
+  assert.deepEqual(h.writes[1].update, { $set: { folderId: 'folder', updatedAt: new Date(time.getTime() + 1) } });
+  h.state.source.archiveDeleting = true;
+  await assert.rejects(moveManagedContent('owner', 'recording', 'folder', undefined, h.deps), /complete archive/);
+  assert.equal(h.writes.length, 2);
+});

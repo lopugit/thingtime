@@ -1,5 +1,23 @@
 # PR 764 — portable Thing transfer
 
+## Archive root placement — 2026-09-12
+
+The bulk move path now accepts exact private chat-archive roots only with
+explicit first-party user-owner context from the same-origin HTTP route. Scoped
+viewers and service accounts receive no archive-move authority. The existing
+home-plane managed placement transaction re-reads the root and destination,
+rejects deleting/version-mismatched/namespaced or non-root records, touches the
+destination fence and CAS-updates only folderId/updatedAt. Historical children,
+identities, content, ACLs, media bindings and quota remain unchanged. Root moves
+to null use the same writer. Both manifests/client now require bulk 1.4.0.
+
+The combined transfer/capability suite passes 202 tests; local Nitro advertises
+origin-scoped bulk 1.4.0. Focused tests cover first-party scope, root/child/state
+validation, source/folder CAS, storage-size invariance and sanitized failures.
+This proves the API/transaction path under tests, not visible Cut/Paste or a
+live folder round-trip. Archive listing/rendering, live-chat export and broad
+browser/media acceptance remain unfinished.
+
 ## Whole-history archive re-export — 2026-09-12
 
 Portable export planning now uses the owner snapshot reader for chat-archive

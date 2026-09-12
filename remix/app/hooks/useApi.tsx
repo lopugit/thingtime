@@ -956,7 +956,7 @@ export function useApi() {
       // multi-select move/copy/delete/share — see /docs/api things-bulk
       bulk: useCallback(
         async (args) => {
-          if (args?.op === 'move') await requireThingtimeCapability('api.things-bulk', '1.3.0');
+          if (args?.op === 'move') await requireThingtimeCapability('api.things-bulk', '1.4.0');
           return asyncFetcher.submit(
             {
               op: args?.op,

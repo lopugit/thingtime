@@ -75,7 +75,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
     assert.equal(capabilitySatisfies(previous, required), false);
     assert.equal(capabilitySatisfies('2.0.0', required), false);
   }
-  assert.equal(manifest.features['api.things-bulk']?.version, '1.3.0');
+  assert.equal(manifest.features['api.things-bulk']?.version, '1.4.0');
   for (const version of ['1.2.0', '1.2.1', '1.3.0']) assert.equal(capabilitySatisfies(version, '1.2.0'), true);
   for (const version of ['1.0.0', '1.1.0', '1.1.1', '2.0.0', '']) assert.equal(capabilitySatisfies(version, '1.2.0'), false);
   assert.equal(capabilitySatisfies('1.2.0', '1.3.0'), false);

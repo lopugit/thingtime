@@ -2,6 +2,13 @@
 
 ## Private chat archive import integration
 
+- [ ] Cut an owned archive and paste into another owned folder, then back to
+  root: only root placement/timestamp change; message, participant, reply,
+  reaction and media IDs remain identical. Stale/deleting/mixed-kind roots,
+  historical children, foreign folders and non-first-party callers must fail.
+  Re-read the full history and verify quota is unchanged. The selected origin
+  must advertise bulk 1.4.0; repeat after deleting the containing folder.
+
 - [ ] Download/Copy an owned archive, then re-import: preserve every historical
   message, reply, reaction, archived identity and media byte under fresh private
   IDs. Optional traversal must not truncate history. Missing emoji/media access

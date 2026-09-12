@@ -47,3 +47,29 @@ test('sandboxed token cannot route an ungranted recording to the managed writer'
   assert.ok(result.ok); if (!result.ok) return;
   assert.equal(result.failed, 1); assert.match(result.results[0].error!, /token cannot move/);
 });
+
+test('archive bulk moves require explicit first-party owner context and retain the source version', async () => {
+  let moves = 0;
+  const deps = { collection: async () => ({ findOne: async () => ({ ...doc, thingtime: ['chat-archive'] }) }) as any,
+    moveRecording: async (owner: string, id: string, folder: string | null, version?: string) => {
+      moves++; assert.deepEqual([owner, id, folder, version], ['owner', 'recording', null, doc.updatedAt.toISOString()]);
+      return { id, folderId: folder };
+    }
+  };
+  for (const [viewer, context] of [
+    [{ id: 'owner' }, {}], [{ id: 'owner' }, { archiveOwnerId: 'other' }],
+    [{ id: 'owner', pat: { tokenId: 'token', onlyCreatedThings: false } }, { archiveOwnerId: 'owner' }]
+  ] as const) {
+    const result = await bulkThings(viewer, { op: 'move', ids: ['recording'] }, deps, context);
+    assert.ok(result.ok); if (result.ok) assert.equal(result.failed, 1);
+  }
+  assert.equal(moves, 0);
+  const moved = await bulkThings({ id: 'owner' }, { op: 'move', ids: ['recording'] }, deps, { archiveOwnerId: 'owner' });
+  assert.ok(moved.ok); if (moved.ok) assert.deepEqual(moved.results, [{ id: 'recording', ok: true }]);
+  assert.equal(moves, 1);
+  const failed = await bulkThings({ id: 'owner' }, { op: 'move', ids: ['recording'] }, {
+    ...deps, moveRecording: async () => { throw new Error('private database details'); }
+  }, { archiveOwnerId: 'owner' });
+  assert.ok(failed.ok); if (failed.ok) assert.equal(failed.failed, 1);
+  assert.doesNotMatch(JSON.stringify(failed), /private database details/);
+});

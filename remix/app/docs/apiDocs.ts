@@ -9528,14 +9528,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-bulk',
-    featureVersion: '1.3.0',
-    contractVersion: '1.3.0',
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
+    // 1.4.0: first-party owners can move complete private archive roots.
     // Dedicated home-plane moves also accept owned current-schema themes/algorithms.
     group: 'things',
     title: 'Bulk move / copy / delete / share',
     endpoint: '/api/v1/things/bulk',
     summary: 'Multi-select operations for /things: move, copy, delete, or share up to 100 owned things in one request.',
     detail:
+      'Owned private chat archives can be moved by their first-party user owner on same-origin requests. Only complete archive roots move: deleting roots, historical children, scoped credentials and service accounts cannot enter this path. A home transaction checks source/destination ownership and source version, advancing the destination fence; only folderId and updatedAt change, never history, identities, ACLs or storage accounting. ' +
       'Owned standalone personal emojis can be moved through the dedicated placement writer; community-bound emojis cannot be filed. ' +
       'Each id runs through its canonical writer (updateThing, createThing, deleteThing, or the dedicated managed-content placement writer); ownership, protected-kind, folder, and validation rules remain enforced. move rewrites each thing’s folderId (folderId null or omitted = the /things root; the destination must be one of YOUR folder things). copy mints brand-new things through the real create path (fresh shareId, storage accounting, acl preserved) — comment/reaction/save/share things can’t be copied; copying a FOLDER copies its whole subtree (bounded at 500 things), skipping uncopyable kinds with per-item copied/skipped counts. delete cascades like the single delete (attached comments/reactions/saves go with each thing; deleting a folder re-parents its contents to the folder’s parent instead of deleting them). share applies an acl (or legacy visibility circle) to each thing; with recursive true, folders also apply it to everything inside (same 500-thing bound) — inherit-locked things are counted as skipped, never silently changed. Results are per-item: one bad id never fails the batch.',
     auth: {
