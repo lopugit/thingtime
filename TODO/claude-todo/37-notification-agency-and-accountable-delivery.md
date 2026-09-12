@@ -60,6 +60,11 @@ No unchecked item above is permission to engineer or recruit participants.
 - [ ] [TODO 29](./29-content-provenance-and-correction-integrity.md) owns content
       authorship, revisions, sources, corrections, and disputes. A delivery
       receipt is not content verification.
+- [ ] [TODO 43](./43-automation-agency-and-accountable-recurrence.md) owns why
+      and when a task recurs, occurrence/run identity, destination continuity,
+      missed-run behavior, and stopping. This TODO owns the separate event,
+      channel, presentation, read, outcome, and remedy evidence after a run
+      requests notification.
 - [ ] Domain TODOs retain authority for moderation, collaboration, identity,
       governance, commerce, learning, and AI remedies. Notification state must
       never decide those outcomes.

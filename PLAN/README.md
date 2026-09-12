@@ -30,6 +30,7 @@ engineering decisions in [`../DECISIONS.md`](../DECISIONS.md).
 | [Remix agency and responsible reuse roadmap](./remix-agency-and-responsible-reuse-roadmap.md)                                       | Reuse charter through exact copy planning, version-bound lineage, accessible comparison, optional source updates, remedies, and one synthetic private pilot | Proposed |
 | [Relationship agency and consentful connection roadmap](./relationship-agency-and-consentful-connection-roadmap.md)                 | Relationship charter through a state/effects matrix, fresh transitions, dependable stopping, private receipts, remedies, and one two-account pilot          | Proposed |
 | [Joyful delight and play agency roadmap](./joyful-delight-and-play-agency-roadmap.md)                                               | Delight charter through truthful feedback, preference fidelity, bounded recipes, safe cleanup, regression proof, and one local synthetic preview            | Proposed |
+| [Automation agency and accountable-recurrence roadmap](./automation-agency-and-accountable-recurrence-roadmap.md)                   | Automation charter through exact preview, persistent destinations, occurrence truth, dependable stopping, repair, and one synthetic message pilot           | Proposed |
 
 ## Conventions
 

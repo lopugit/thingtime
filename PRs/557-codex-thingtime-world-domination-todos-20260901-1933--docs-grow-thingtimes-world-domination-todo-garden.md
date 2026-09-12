@@ -18,6 +18,40 @@ required sequence:
 The branch is intentionally cumulative. It does not merge itself, implement
 the product work, or treat a plausible idea as an approved decision.
 
+## 2026-09-13 — automation agency and accountable recurrence
+
+This run grounds the garden in Thingtime's shipped current-chat default, saved
+destination reuse, deterministic occurrence identity, relational run Things,
+lease and pause fences, missed-backlog skip, notification separation, and
+ambiguous-run stop while refusing to treat a schedule, run, message, alert, or
+recurrence as proof of usefulness, delivery, attention, or outcome. It adds:
+
+- `NOTES/automation-agency-and-accountable-recurrence-baseline.md`, a dated
+  evidence ledger and vocabulary separating intent, schedule, occurrence,
+  claim, run, output, destination, stop operations, retry, and receipts;
+- `PLAN/automation-agency-and-accountable-recurrence-roadmap.md`, a gated path
+  from an approved automation charter through exact preview, time truth,
+  dependable execution/stopping, owner inspection/remedy, and one bounded
+  pilot; and
+- `TODO/claude-todo/43-automation-agency-and-accountable-recurrence.md`, an
+  execution epic with owner decisions, acceptance criteria, hard stop
+  conditions, non-goals, and a concrete first decision packet.
+
+The recommended pilot uses one approved adult test account, one synthetic
+private Thing, one existing Lopu conversation, and one short recurring
+`message` schedule in a named IANA zone. It proves that duplicate ticks,
+restart, pause/resume, skipped downtime, DST fixtures, source completion,
+account switch, destination loss, notification failure, cancel, delete, and
+cleanup create exactly one output per occurrence and zero surprise chats.
+
+Assistant inference, arbitrary tools, purchases, external messaging, public or
+bulk action, production telemetry, new-chat-per-run by default,
+self-replication, urgency escalation, backlog floods, minors, and sensitive or
+high-impact contexts remain excluded. The theme is linked from the NOTES,
+PLAN, main TODO, and Claude TODO indexes, plus trustworthy adoption, AI agency,
+and notification agency. No runtime, API, schema, scheduler, chat,
+notification, account, or production behavior changed.
+
 ## 2026-09-12 evening — joyful delight and play agency
 
 This run grounds the garden in Thingtime's factual Lopu notification path,

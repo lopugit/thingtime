@@ -56,6 +56,9 @@
 **Joyful-delight dependency:**
 [Joyful delight and play agency](./joyful-delight-and-play-agency-roadmap.md)
 
+**Automation-agency dependency:**
+[Automation agency and accountable recurrence](./automation-agency-and-accountable-recurrence-roadmap.md)
+
 ## Outcome
 
 Make Thingtime easier to discover, understand, trust, use repeatedly, share by
@@ -183,6 +186,10 @@ privacy, reliability, or data-loss regression.
 - Treat the [notification agency and accountable-delivery roadmap](./notification-agency-and-accountable-delivery-roadmap.md)
   as the evidence boundary: a stored row, provider receipt, display, or read
   state must not be reported as human attention or a completed useful outcome.
+- Treat the [automation agency and accountable-recurrence roadmap](./automation-agency-and-accountable-recurrence-roadmap.md)
+  as the scheduled-return boundary: a schedule, occurrence, run, message, or
+  notification must not be reported as useful return, consent, or outcome, and
+  recurrence must not expand destination, authority, urgency, or scope.
 - Treat the [search and discovery agency roadmap](./search-and-discovery-agency-roadmap.md)
   as the findability boundary: query, corpus, match, rank, recommendation,
   promotion, trust, and truth stay distinct, and useful return cannot be

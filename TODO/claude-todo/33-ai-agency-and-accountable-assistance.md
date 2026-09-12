@@ -60,6 +60,11 @@ participants.
       whether audio/transcript may enter assistant context, represented-person
       boundaries, correction propagation, and recording-family deletion. This
       epic owns model/tool authority after an exact handoff.
+- [ ] [TODO 43](./43-automation-agency-and-accountable-recurrence.md) owns
+      schedule intent, recurrence, occurrence identity, missed runs,
+      destinations, stopping, and run lifecycle. This epic continues to own
+      model/provider context and tool authority inside any approved occurrence;
+      a schedule never grants broader or fresher action permission.
 - [ ] Name product, AI safety, privacy/security, accessibility, legal,
       operations, support, and relevant domain owners for the approved scope.
 

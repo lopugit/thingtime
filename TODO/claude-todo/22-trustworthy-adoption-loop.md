@@ -138,6 +138,11 @@ experiment by itself.
   experiments cannot count delight interactions as useful return, condition
   celebration on growth or data collection, or use streaks, variable rewards,
   scarcity, or social comparison to drive continued use.
+- [TODO 43](./43-automation-agency-and-accountable-recurrence.md) owns exact
+  schedule preview, recurrence and occurrence truth, persistent destinations,
+  missed-run behavior, stopping, run receipts, and repair. Adoption reporting
+  cannot treat schedules, runs, messages, notifications, response speed, or
+  continued recurrence as useful return, consent, attention, or completion.
 - Open PRs are evidence of active work, not dependencies that may be assumed
   merged. Recheck their head, base, review, CI, preview, and shipped behavior
   immediately before implementation.

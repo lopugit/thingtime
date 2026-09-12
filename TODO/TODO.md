@@ -657,3 +657,22 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     rewards, scarcity, leaderboards, behavioral advertising, emotional or
     vulnerability targeting, AI, minors, and sensitive or high-impact contexts
     remain separately gated.
+
+43. **⏱️ Make automation agency and accountable recurrence a product contract.**
+
+    Preserve Thingtime's current-chat default, saved destination reuse,
+    deterministic occurrence claims, relational run Things, pause fences,
+    ambiguity stop, and missed-backlog skip while making schedule intent,
+    time-zone calculation, destination, context, authority, cost, run state,
+    stopping, repair, export, and deletion inspectable. Start only with one
+    approved adult test account, one synthetic private Thing, one existing Lopu
+    chat, and one short recurring `message` schedule; prove duplicate-tick,
+    restart, pause/resume, downtime, DST, account-switch, destination-loss,
+    notification-failure, cancel, delete, and cleanup behavior. Execute
+    `claude-todo/43-automation-agency-and-accountable-recurrence.md` only after
+    qualified owners approve the vocabulary, persistent-chat default,
+    edit/version policy, recurrence and missed-run semantics, lifecycle,
+    measures, stop conditions, and manual authority. Assistant inference,
+    arbitrary tools, external messaging, production telemetry, new-chat-per-run
+    by default, self-replication, backlog floods, minors, and sensitive or
+    high-impact contexts remain separately gated.
