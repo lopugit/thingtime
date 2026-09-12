@@ -1,5 +1,18 @@
 # PR 764 — portable Thing transfer
 
+## Browser file-byte acceptance harness — 2026-09-12
+
+Added a separately opted-in `TT_TRANSFER_BROWSER_BINARY_TEST=1` phase to the
+real browser test. It uses the actual file chooser and Upload button for two
+same-name/same-size PNG entries, re-imports a real downloaded ZIP, and verifies
+exact bytes, annotations and fresh file IDs after source deletion. Upload IDs
+are captured for canonical abort/delete cleanup on failures. No account approval,
+rate limits or moderation rules are changed. TypeScript-parser lint passes and
+the script refuses execution without its existing explicit consent gate.
+The new media phase has not yet run live; respect the active upload limit and
+do not count this harness addition as browser storage proof. Existing metadata
+acceptance below remains evidence for the earlier script, not this new phase.
+
 ## Real browser clipboard and file import — 2026-09-12
 
 `remix/scripts/transfer-browser.integration.mts` passed against deployed

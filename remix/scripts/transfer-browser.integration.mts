@@ -6,10 +6,10 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readTransferClipboard } from '../app/utils/thingTransfer/browser';
-import { decodeTransferArchive } from '../app/utils/thingTransfer/archive';
-import { parseTransfer } from '../app/utils/thingTransfer/format';
+import { decodeTransferArchive, encodeTransferArchive } from '../app/utils/thingTransfer/archive';
+import { parseTransfer, type ThingTransfer } from '../app/utils/thingTransfer/format';
 import { capabilitySatisfies } from '../app/api/utils/capabilities/capabilityContract';
 
 assert.equal(process.env.TT_TRANSFER_BROWSER_TEST, '1', 'Explicit browser fixture consent required');
@@ -33,11 +33,14 @@ for (const [id, version] of Object.entries({ 'api.things': '1.16.1', 'api.things
   assert.ok(capabilitySatisfies(capabilities.features?.[id]?.version, version), `Preview lacks ${id} ${version}; no fixture created`);
 }
 const me = await json('/api/v1/auth/me'); assert.equal(me.user?.username, username);
+const binary = process.env.TT_TRANSFER_BROWSER_BINARY_TEST === '1';
+if (binary) assert.equal(me.user.publicUploadsEnabled, true, 'Media acceptance needs existing upload approval');
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.TT_PLAYWRIGHT_MODULE || 'playwright');
 const output = await mkdtemp(join(tmpdir(), 'thingtime-transfer-browser-'));
 const browser = await chromium.launch({ channel: 'chrome', headless: false });
 const archives = new Set<string>(); const folders = new Set<string>();
+const uploads = new Set<string>();
 const pending = new Set<Promise<void>>(); const observerErrors: unknown[] = [];
 const remember = (result: any) => {
   for (const id of result.roots || []) if (typeof id === 'string') archives.add(id);
@@ -54,12 +57,16 @@ try {
   // Capture cleanup anchors even if a UI assertion fails after the server writes.
   context.on('response', (response: any) => {
     const url = new URL(response.url());
-    if (url.origin !== origin.origin || url.pathname !== '/api/v1/things/import' || response.request().method() !== 'POST') return;
-    const task = response.json().then(remember).catch((error: unknown) => { observerErrors.push(error); });
+    if (url.origin !== origin.origin || response.request().method() !== 'POST') return;
+    if (!['/api/v1/things/import', '/api/v1/attachments/uploads'].includes(url.pathname)) return;
+    const task = response.json().then((data: any) => {
+      if (url.pathname === '/api/v1/things/import') remember(data);
+      else if (typeof data.upload?.id === 'string') uploads.add(data.upload.id);
+    }).catch((error: unknown) => { observerErrors.push(error); });
     pending.add(task); void task.finally(() => pending.delete(task));
   });
   const at = '2026-09-01T00:00:00.000Z'; const name = `Browser transfer fixture ${randomUUID()}`;
-  const manifest = { format: 'thingtime.transfer', version: 1, roots: ['folder'], files: [], things: [
+  const manifest: ThingTransfer = { format: 'thingtime.transfer', version: 1, roots: ['folder'], files: [], things: [
     { id: 'folder', thingtime: ['folder'], crystal: { name } },
     { id: 'archive', folderId: 'folder', thingtime: ['chat-archive'], crystal: { name, topic: 'Disposable browser acceptance', chatType: 'dm', createdAt: at, selfParticipantId: 'self' } },
     { id: 'self', targetId: 'archive', thingtime: ['chat-archive-participant'], crystal: { username: 'fictional-self', displayName: 'Original', nickname: '', joinedAt: at } },
@@ -78,6 +85,7 @@ try {
     await page.getByRole('button', { name: 'Import private copies', exact: true }).click();
     const r = await response; const data = await r.json(); remember(data); assert.equal(r.status(), 200); assert.equal(data.ok, true);
     assert.ok(data.roots.every((root: string) => root !== id)); await page.getByRole('dialog').waitFor({ state: 'hidden' });
+    return data;
   };
   const clipboard = async () => {
     for (let attempt = 0; attempt < 20; attempt++) {
@@ -116,6 +124,60 @@ try {
     await page.getByText('End of archive · no messages will be sent').scrollIntoViewIfNeeded();
     await page.screenshot({ path: join(output, `${name}.png`) });
   }
+  if (binary) {
+    // Two distinct same-name, same-size files exercise the real browser's
+    // upload dedupe boundary; both must survive with separate fresh bindings.
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
+    const mediaManifest: ThingTransfer = { ...manifest, roots: ['archive'],
+      things: manifest.things.filter(thing => thing.id !== 'folder').map(thing => {
+        const { folderId: _folder, ...row } = thing as typeof thing & { folderId?: string };
+        return row;
+      }), files: [0, 1].map(index => ({ id: `image-${index}`, targetId: 'message', path: `files/${String(index).padStart(6, '0')}`,
+        name: 'same-name.png', mime: 'image/png', bytes: png.length, sha256: createHash('sha256').update(png).digest('hex'),
+        title: `Historical image ${index}`, description: 'Exact\nimage annotation', filenamePreview: `retained-${index}.png` })) };
+    const zip = await encodeTransferArchive({ manifest: mediaManifest, files: new Map(mediaManifest.files.map(file => [file.id, png])) });
+    const importMediaFile = async (file: string | { name: string; mimeType: string; buffer: Buffer }) => {
+      await menu('Import into my Things…'); await page.getByLabel('Thingtime transfer file').setInputFiles(file);
+      await page.getByRole('button', { name: 'Upload 2 files', exact: true }).click();
+      // No automatic Retry upload clicks or account/origin changes on refusal.
+      await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button =>
+        button.textContent === 'Import private copies' && !button.disabled) || !!document.querySelector('[role="dialog"] [role="alert"]'), null, { timeout: 60_000 });
+      assert.equal(await page.getByRole('button', { name: 'Import private copies', exact: true }).isEnabled(), true,
+        'Browser upload did not become ready; inspect the fixture screenshot, no limits bypassed');
+      return importDialog();
+    };
+    const exportMedia = async (archiveId: string) => {
+      await page.goto(new URL(`/thing/${archiveId}?archive=true`, origin).href); await page.getByTestId('chat-archive-history').waitFor();
+      await menu('Download…'); await page.getByLabel('Download format').selectOption('zip');
+      const event = page.waitForEvent('download'); await page.getByRole('button', { name: 'Download', exact: true }).click();
+      const download = await event; const path = join(output, `media-${archiveId}.zip`); await download.saveAs(path);
+      const bundle = await decodeTransferArchive(await readFile(path));
+      assert.equal(bundle.manifest.files.length, 2); assert.equal(bundle.files.size, 2);
+      for (const file of bundle.manifest.files) {
+        assert.deepEqual(Buffer.from(bundle.files.get(file.id)!), png);
+        assert.equal(file.description, 'Exact\nimage annotation');
+      }
+      assert.deepEqual(bundle.manifest.files.map(file => file.title).sort(), ['Historical image 0', 'Historical image 1']);
+      assert.deepEqual(bundle.manifest.files.map(file => file.filenamePreview).sort(), ['retained-0.png', 'retained-1.png']);
+      return { path, bundle };
+    };
+    await page.setViewportSize({ width: 1280, height: 900 }); await open();
+    const source = await importMediaFile({ name: 'media-fixture.zip', mimeType: 'application/zip', buffer: Buffer.from(zip) });
+    const sourceId = source.ids.archive; const downloaded = await exportMedia(sourceId);
+    const copied = await importMediaFile(downloaded.path); const copyId = copied.ids[sourceId];
+    assert.equal(typeof copyId, 'string'); assert.notEqual(copyId, sourceId);
+    const sourceFiles = downloaded.bundle.manifest.files.map(file => file.id);
+    await json('/api/v1/things', 'DELETE', { id: sourceId });
+    assert.equal((await request(`/api/v1/things?id=${sourceId}&archive=true`)).status, 404); archives.delete(sourceId);
+    const independent = await exportMedia(copyId);
+    assert.ok(independent.bundle.manifest.files.every(file => !sourceFiles.includes(file.id)), 'Copied files need fresh IDs');
+    for (const [name, width, height] of [['desktop', 1280, 900], ['mobile', 390, 844]] as const) {
+      await page.setViewportSize({ width, height });
+      await page.getByText('End of archive · no messages will be sent').scrollIntoViewIfNeeded();
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+      await page.screenshot({ path: join(output, `media-${name}.png`) });
+    }
+  }
   assert.deepEqual(errors, []); assert.deepEqual(observerErrors, []);
 } catch (error) {
   failure = error;
@@ -124,15 +186,29 @@ try {
 }
 finally {
   await Promise.all([...pending]); await browser.close();
-  const cleanup: string[] = [];
+  const cleanup: { id: string; phase: string; status?: number }[] = [];
   for (const [kind, ids] of [['archive', archives], ['folder', folders]] as const) for (const id of ids) {
+    let phase = 'delete';
     try {
       const r = await request('/api/v1/things', 'DELETE', { id });
-      assert.ok([200, 404].includes(r.status));
-      assert.equal((await request(`/api/v1/things?id=${encodeURIComponent(id)}${kind === 'archive' ? '&archive=true' : ''}`)).status, 404);
-    } catch { cleanup.push(id); }
+      if (![200, 404].includes(r.status)) cleanup.push({ id, phase, status: r.status });
+      phase = 'verify';
+      const check = await request(`/api/v1/things?id=${encodeURIComponent(id)}${kind === 'archive' ? '&archive=true' : ''}`);
+      if (check.status !== 404) cleanup.push({ id, phase, status: check.status });
+    } catch { cleanup.push({ id, phase: `${phase}-network` }); }
   }
-  assert.deepEqual(cleanup, [], 'Browser fixture cleanup incomplete');
+  for (const id of uploads) {
+    try {
+      await request('/api/v1/attachments/uploads/abort', 'POST', { uploadId: id });
+      await request('/api/v1/attachments/delete', 'POST', { id });
+      assert.equal((await request(`/api/v1/attachments/content?id=${encodeURIComponent(id)}&cache=bytes`)).status, 404);
+    } catch { cleanup.push({ id, phase: 'upload-cleanup' }); }
+  }
+  if (cleanup.length) {
+    console.log(JSON.stringify({ cleanup, output }));
+    throw new AggregateError([...(failure ? [failure] : []), new Error('Browser fixture cleanup incomplete')], 'Browser acceptance or cleanup failed');
+  }
 }
 if (failure) throw failure;
-console.log(JSON.stringify({ ok: true, osClipboardCopyCut: true, pasteCopyAndMove: true, jsonZipDownloadImport: true, cleanup: true, output }));
+console.log(JSON.stringify({ ok: true, osClipboardCopyCut: true, pasteCopyAndMove: true, jsonZipDownloadImport: true,
+  browserBinaryRoundTrip: binary, cleanup: true, output }));

@@ -9,8 +9,16 @@
   argument. This opens fresh headed Chrome and overwrites the macOS clipboard
   with disposable fixture data. Check Copy/Paste import, Cut/Paste move,
   downloaded JSON and ZIP imports through the file chooser, desktop/mobile
-  bounds, and successful cleanup. File-byte browser uploads and other entry
-  points still need their own coverage.
+  bounds, and successful cleanup.
+- [ ] Additionally set `TT_TRANSFER_BROWSER_BINARY_TEST=1` only when the fixture
+  already has upload approval and its normal rate-limit window permits it.
+  Select a generated two-image ZIP, click Upload, import, download the actual
+  ZIP and re-import that downloaded file. Both same-name/same-size images must
+  survive browser dedupe with exact bytes and annotations. Delete the source
+  archive and download the copy again; require independent file IDs and bytes.
+  Inspect `media-desktop.png` and `media-mobile.png`, and require every fixture
+  upload to return 404 after cleanup. A refusal or unrun opt-in is not acceptance.
+  This currently added media phase still needs its first live passing run.
 
 ## Private chat archive import integration
 
