@@ -352,6 +352,8 @@ export function useApi() {
       ),
       ciCredentials: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/credentials', options), []),
       ciFeatureStacks: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/stacks', options), []),
+      ciStackChat: useCallback(async (runId: string) => getJson(`/api/v1/admin/ci/stacks/chat${toQuery({ runId })}`), []),
+      sendCiStackQuestion: useCallback(async (args: Record<string, unknown>) => asyncFetcher.submit(args, { action: '/api/v1/admin/ci/stacks/chat', errorContext: 'ask Lopu about a stack run' }), [asyncFetcher]),
       mutateCiFeatureStack: useCallback(
         async (args: Record<string, unknown>) =>
           asyncFetcher.submit(args, { action: '/api/v1/admin/ci/stacks', errorContext: 'manage Feature Stacks' }),

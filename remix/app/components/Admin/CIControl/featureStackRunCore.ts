@@ -17,6 +17,7 @@ export const sortFeatureStackTimeline = <T extends FeatureStackTimelineLine>(lin
 		.map(({ line }) => line);
 
 export type FeatureStackHeartbeat = {
+	targets: Array<{ target: string; status: string; phase: string; jobUrl: string | null }>;
 	at: string;
 	message: string;
 	progressPercent: number;
@@ -36,7 +37,11 @@ export const latestFeatureStackHeartbeat = (
 		const expectedFinishAt = typeof data.expectedFinishAt === 'string' ? data.expectedFinishAt : null;
 		const workflowRunUrl = typeof data.workflowRunUrl === 'string' && data.workflowRunUrl.startsWith('https://github.com/') ? data.workflowRunUrl : null;
 		if (!message || timeValue(at) === Number.MAX_SAFE_INTEGER || !Number.isFinite(progressPercent) || progressPercent < 0 || progressPercent > 100) return [];
-		return [{ at, message, progressPercent: Math.round(progressPercent), expectedFinishAt, workflowRunUrl }];
+		const targets = Array.isArray(data.targets) ? data.targets.flatMap((row) => {
+      if (!row || typeof row !== 'object' || typeof row.target !== 'string' || typeof row.status !== 'string' || typeof row.phase !== 'string') return [];
+      return [{ target: row.target, status: row.status, phase: row.phase, jobUrl: typeof row.jobUrl === 'string' && row.jobUrl.startsWith('https://github.com/') ? row.jobUrl : null }];
+    }) : [];
+    return [{ at, message, progressPercent: Math.round(progressPercent), expectedFinishAt, workflowRunUrl, targets }];
 	});
 	return candidates.sort((left, right) => timeValue(right.at) - timeValue(left.at))[0] ?? null;
 };
