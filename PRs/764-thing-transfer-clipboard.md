@@ -1,5 +1,31 @@
 # PR 764 — portable Thing transfer
 
+## Messenger archive decision and contract groundwork — 2026-09-12
+
+The user clarified that imported conversations should retain their chat
+appearance and history as private archives: the importer replaces the original
+exporting participant; all other participants retain snapshot usernames, avatars
+and messages but become archived identities, not real recipients. No live
+memberships, messages or notifications should be created for those people.
+
+Added a side-effect-free relational archive contract and author mapping tests.
+Roots, participants, messages and reactions are separate portable Things; names,
+topics, dates, exact message text, thread/reply references, tombstones and avatar
+file references are validated before import planning. Historical usernames never
+resolve to accounts. The self author maps to the importer, others to fresh
+archive-local IDs; avatars require fresh file mapping. Source authority fields,
+credentials, invalid/cross-archive references, identity collisions and restored
+deleted text/media are rejected. Custom reaction references must exist in the
+same envelope rather than resolving arbitrary live emoji IDs.
+
+This is not yet enabled in export/import endpoints or Messenger. Remaining work:
+authorized full-history extraction including attachment/avatar/custom-emoji
+bytes; canonical accounted, private relational storage and rollback; folder and
+re-export/copy-of-copy support; reuse chat rendering with archived-person labels
+and no live profile/recipient actions; API registration/version negotiation;
+real account-boundary and desktop/mobile browser acceptance. No API contract
+version is bumped for these currently unconnected helpers.
+
 ## Real preview storage acceptance — 2026-09-12
 
 The binary gate passed with no skips against PR 764 preview source

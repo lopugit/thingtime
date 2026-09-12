@@ -24,6 +24,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Added Messenger archive contract groundwork following the requested importer
+  identity replacement and archived-participant model. Runtime import/export and
+  chat UI integration are not enabled yet. See [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-12
+
 - Verified real post/emoji image ZIP round trips and concurrent upload claims on
   PR 764's dev preview, including byte/annotation equality and confirmed cleanup.
   Hardened the opt-in fixture guard and corrected its archive/cleanup checks.
