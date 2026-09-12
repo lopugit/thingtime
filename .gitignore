@@ -108,3 +108,7 @@ ds-bundle/
 # Generated native widget build products
 macos/ThingtimeWidgets/*.xcodeproj/
 macos/ThingtimeWidgets/build/
+
+# Native Widgets distribution artifacts
+macos/ThingtimeWidgets/release/
+macos/ThingtimeWidgets/release-upload/

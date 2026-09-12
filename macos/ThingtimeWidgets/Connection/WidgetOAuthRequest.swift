@@ -27,7 +27,9 @@ struct WidgetOAuthRequest {
     }
 
     static func normalizeOrigin(_ value: String) throws -> URL {
-        guard var parts = URLComponents(string: value.trimmingCharacters(in: .whitespacesAndNewlines)),
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let supplied = trimmed.contains("://") ? trimmed : "https://" + trimmed
+        guard var parts = URLComponents(string: supplied),
               let host = parts.host, !host.isEmpty,
               parts.user == nil, parts.password == nil, parts.query == nil, parts.fragment == nil,
               parts.path.isEmpty || parts.path == "/",

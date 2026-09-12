@@ -24,6 +24,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-12: Add a main-only signed/notarized Thingtime Widgets release workflow and a dedicated Widgets product, cache and installer path in Thingtime Recovery.
 - Bound root session reads to two attempts with timeout/cancellation, provide
   recoverable retry/reload controls, and hide/reset account-owned UI across
   sign-in changes without falling back to another account's root data.
