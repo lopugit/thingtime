@@ -7,6 +7,10 @@ import { thingtimeCapabilityManifest } from '../api/utils/capabilities/thingtime
 import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 
 test('shared dependency reads negotiate the additive Things contract on both manifests', () => {
+	// The sharedRoot dependency read shipped as the 1.6.2 / contract 1.5.2
+	// correction; recording attachments in own-things lists then took the
+	// family additively on to 1.7.0 / contract 1.6.0, and main has since
+	// carried it on to 1.9.1 / contract 1.8.1.
 	assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.8.1');
 	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things'].version, '1.9.1');
 	assert.equal(capabilitySatisfies('1.8.2', '1.7.5'), true);
