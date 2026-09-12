@@ -758,13 +758,13 @@ export const ThingsPage = () => {
   );
 
   const pasteClipboardTo = useCallback(
-    async (destination: string | null) => {
+    async (destination: string | null, pastedText?: string) => {
       const ownerId = recordingOwner.current;
       transferOperation.current?.abort();
       const controller = new AbortController();
       transferOperation.current = controller;
       try {
-        const text = await navigator.clipboard.readText();
+        const text = pastedText ?? await navigator.clipboard.readText();
         if (text.length > MAX_CLIPBOARD_BYTES) throw new Error('Clipboard content is too large. Import the ZIP file instead.');
         const digest = await transferChecksum(new TextEncoder().encode(text));
         if (controller.signal.aborted || recordingOwner.current !== ownerId) return;
@@ -1303,9 +1303,6 @@ export const ThingsPage = () => {
       } else if (meta && event.key.toLowerCase() === 'x' && selection.size) {
         event.preventDefault();
         copyToClipboard('cut', [...selection]);
-      } else if (meta && event.key.toLowerCase() === 'v') {
-        event.preventDefault();
-        pasteClipboard();
       } else if ((event.key === 'Delete' || event.key === 'Backspace') && selection.size) {
         event.preventDefault();
         setDeleteThings(selectedThings);
@@ -1313,9 +1310,21 @@ export const ThingsPage = () => {
         setSelection(new Set());
       }
     };
+    // Native paste supplies the text without requiring clipboard-read permission.
+    // Leave editable controls and other dialogs' clipboard handling untouched.
+    const onPaste = (event: ClipboardEvent) => {
+      if (event.defaultPrevented || dialogOpen || itemMenu.open || backgroundMenu.open) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input, textarea, [contenteditable]:not([contenteditable="false"]), [role="dialog"]')) return;
+      const text = event.clipboardData?.getData('text/plain');
+      if (!text) return;
+      event.preventDefault();
+      void pasteClipboardTo(folderId, text);
+    };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [backgroundMenu.open, clipboard, copyToClipboard, dialogOpen, itemMenu.open, pasteClipboard, selectAll, selectedThings, selection]);
+    window.addEventListener('paste', onPaste);
+    return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('paste', onPaste); };
+  }, [backgroundMenu.open, clipboard, copyToClipboard, dialogOpen, itemMenu.open, pasteClipboardTo, folderId, selectAll, selectedThings, selection]);
 
   // ------------------------------------------------------------------ render
 

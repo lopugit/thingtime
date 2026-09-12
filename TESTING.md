@@ -2,6 +2,16 @@
 
 ## Real browser portable transfer acceptance
 
+- [ ] On desktop and mobile, copy a Thing and use Cmd/Ctrl+V on the Things
+  canvas and inside Import. Require ready content without a file chooser;
+  editable search/text controls must keep native paste. Test clipboard denial,
+  invalid content, selection cancellation and account changes. Select and drop
+  multiple JSON/ZIP files with colliding portable IDs; all validate before writes,
+  import independently in order, and stop on error without replaying completed
+  imports. Confirm every copy and attachment through the API and clean fixtures.
+  Expand the input panel and scroll to both ends; footer controls must remain
+  reachable above floating DevKit controls at mobile widths.
+
 - [ ] Export an authorized chat whose historical participant has a public HTTPS
   avatar. With export capability 1.14.0, require exact image bytes in its ZIP,
   no original URL in the archive, a fresh private avatar after normal upload/import,

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readTransferFile } from './readFile';
+import { readTransferFile, readTransferFiles, MAX_TRANSFER_BATCH } from './readFile';
 import { encodeTransferArchive, transferChecksum } from './archive';
 import { serializeTransfer, type ThingTransfer } from './format';
 
@@ -29,4 +29,30 @@ test('aborted selection does not publish a stale parsed transfer', async () => {
   const pending = readTransferFile(file, controller.signal);
   controller.abort();
   await assert.rejects(pending, { name: 'AbortError' });
+});
+
+test('multi-file selection keeps overlapping identities and different bytes independent', async () => {
+  const originals = [manifest(), manifest()];
+  const payloads = [new Uint8Array([1, 2]), new Uint8Array([3, 4])];
+  const files: File[] = [];
+  for (const [index, original] of originals.entries()) {
+    original.files = [{ id: 'same-id', targetId: 'post', path: 'files/000000', name: 'same.txt', mime: 'text/plain', bytes: 2, sha256: await transferChecksum(payloads[index]) }];
+    const zip = await encodeTransferArchive({ manifest: original, files: new Map([['same-id', payloads[index]]]) });
+    files.push(new File([Uint8Array.from(zip)], 'same.zip'));
+  }
+  const bundles = await readTransferFiles(files);
+  assert.equal(bundles.length, 2);
+  bundles.forEach((bundle, index) => {
+    assert.deepEqual(bundle.manifest, originals[index]);
+    assert.deepEqual(bundle.files.get('same-id'), payloads[index]);
+  });
+});
+
+test('batch selection validates every file before returning and rejects excessive selection', async () => {
+  const valid = new File([serializeTransfer(manifest())], 'thing.json');
+  await assert.rejects(readTransferFiles([valid, new File(['invalid'], 'bad.json')]), /valid JSON/);
+  await assert.rejects(readTransferFiles([]), /Choose/);
+  await assert.rejects(readTransferFiles(Array(MAX_TRANSFER_BATCH + 1).fill(valid)), /Choose/);
+  const controller = new AbortController(); controller.abort();
+  await assert.rejects(readTransferFiles([valid], controller.signal), { name: 'AbortError' });
 });

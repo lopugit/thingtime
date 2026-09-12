@@ -1,5 +1,26 @@
 # PR 764 — portable Thing transfer
 
+## Direct paste and batch importer — 2026-09-12
+
+Things uses the native paste event payload instead of cancelling Cmd/Ctrl+V and
+requiring clipboard-read permission. Editable controls keep native text paste.
+The shared importer accepts native pasted text/files, a clipboard button with
+an actionable permission fallback, manual text, multiple JSON/ZIP selections,
+and file drops. Ready content collapses file selection; one confirmation starts
+a bounded serial batch (up to 12 files, aggregate transfer limits). Archives stay
+independent even when IDs collide. A failed or uncertain write stops the batch;
+prior successes are not replayed, and cancellation/account unmount aborts work.
+
+Validation so far: 60 portable transfer tests pass, including batch collisions,
+different same-name bytes, malformed selection and cancellation. Full build and
+Vercel output validation pass; TypeScript retains 106 unrelated diagnostics and
+no changed-file diagnostics. Chrome verified multi-file selection, native canvas
+paste, importer paste and editable-field paste. Desktop/mobile popup checks found
+the floating DevKit overlapping the expanded mobile footer; the dialog now
+reserves bottom space. Raw browser file-drop automation is unsupported, so actual
+drag/drop and live batch mutation acceptance remain separate checks, not claimed
+by the file-picker or parser tests.
+
 ## External HTTPS avatar archive integration — 2026-09-12
 
 The membership-authorized live-chat adapter now resolves public-profile HTTPS

@@ -31,6 +31,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-12 — Add native Things paste, clipboard capture in Import, and bounded
+  multi-file selection/drop with serial private imports and stop-on-error behavior.
+  Pasted content opens ready for confirmation with the file picker collapsed.
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
 - 2026-09-12 — Connect authorized external HTTPS chat avatars to portable ZIP
   files with fresh private import bindings; negotiate export 1.14.0. Unsafe or
   unreadable images still fail explicitly. Live provider acceptance remains
