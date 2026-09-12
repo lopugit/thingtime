@@ -2,6 +2,12 @@
 
 ## Real browser portable transfer acceptance
 
+- [ ] When wiring live Messenger export, supply a complete authorized snapshot
+  including former authors/reactors and every thread. Preserve edits, tombstones,
+  reply links and safe historical system content; never export membership roles,
+  receipts, source user authority or credentials. Reject incomplete/oversized
+  history rather than emitting a truncated successful archive.
+
 - [ ] Stall export metadata: Copy/Download must leave busy state within 30
   seconds with an actionable error and no automatic retry. Retry Download after
   recovery produces a real ZIP. Check desktop/mobile dialog bounds. Cancellation

@@ -1,5 +1,27 @@
 # PR 764 — portable Thing transfer
 
+## Live Messenger conversion foundation — 2026-09-12
+
+Added a pure complete-snapshot projection to the existing relational private
+archive grammar. Source account IDs match authors/reactors internally but never
+enter portable participant records; importer-as-self and archived counterpart
+mapping reuse the canonical archive author helper. Projection preserves threads,
+replies, edit timestamps, deleted tombstones, system text, custom reaction IDs and
+avatar references. It rejects missing authors/targets, duplicate identities,
+invalid topology and oversized history rather than truncating. Unit coverage
+also injects roles, receipts, ACLs and private email to prove whitelist output.
+
+This foundation is not called by a live endpoint yet. Still required: one
+membership-authorized complete snapshot (including former authors/reactors),
+canonical media/emoji authorization, safe system/AI history projection, capability
+contract updates, and Messenger export UI. A normal paginated message list must
+not substitute for that snapshot.
+
+Positive acceptance now completed on deployed 66199212e: the full paced Chrome
+clipboard/JSON/ZIP/media round trip, and the explicit real binary/custom-emoji
+concurrency suite (2 passed, no skips). Both verified cleanup. Test pacing used
+the existing shared import/export quota; no quota/account/origin changes.
+
 ## Export metadata deadline — 2026-09-12
 
 The live browser test on fe7aa4458 stalled during folder ZIP preparation before
