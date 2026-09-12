@@ -343,6 +343,10 @@ const ipv4Blocked = (address: string): boolean => {
   if (a === 192 && b === 0) return true; // IETF protocol assignments
   if (a === 100 && b >= 64 && b <= 127) return true; // carrier-grade NAT
   if (a === 198 && (b === 18 || b === 19)) return true; // benchmarking
+  // 192.88.99.0/24 is the 6to4 RELAY anycast address (RFC 7526 deprecated it
+  // but did not withdraw the route): a packet sent there is handed to whatever
+  // relay answers, which is an off-path third party deciding where it lands.
+  if (a === 192 && b === 88 && parts[2] === 99) return true; // 6to4 relay anycast
   if (a >= 224) return true; // multicast + reserved + broadcast
   return false;
 };
@@ -371,6 +375,11 @@ const ipv6Groups = (value: string): number[] | null => {
   return groups;
 };
 
+// The v4 address carried in two adjacent v6 groups, spelled as a dotted quad
+// so the one set of v4 rules above judges every embedding format.
+const embeddedIpv4 = (high: number, low: number): string =>
+  `${high >> 8}.${high & 0xff}.${low >> 8}.${low & 0xff}`;
+
 const ipv6Blocked = (address: string): boolean => {
   const groups = ipv6Groups(address.toLowerCase().split('%')[0]); // drop any zone index
   if (!groups) return true; // unparseable — refuse rather than guess
@@ -378,7 +387,20 @@ const ipv6Blocked = (address: string): boolean => {
   // address in the low 32 bits, and `::`/`::1` fall out of the same branch as
   // 0.0.0.0/0.0.0.1 — both already blocked by the v4 rules.
   if (groups.slice(0, 5).every((group) => group === 0) && (groups[5] === 0xffff || groups[5] === 0)) {
-    return ipv4Blocked(`${groups[6] >> 8}.${groups[6] & 0xff}.${groups[7] >> 8}.${groups[7] & 0xff}`);
+    return ipv4Blocked(embeddedIpv4(groups[6], groups[7]));
+  }
+  // 6to4 and NAT64 are TRANSITION formats that carry a v4 destination inside an
+  // address whose leading groups are non-zero — so the v4-mapped branch above,
+  // which keys on a five-group zero run, never sees them. On a host with either
+  // route configured, `[2002:7f00:1::]` reaches 127.0.0.1 and
+  // `[64:ff9b::a9fe:a9fe]` reaches the metadata service, while the prefix looks
+  // like ordinary global unicast. Decode the embedded quad and apply the same
+  // v4 rules rather than trusting the prefix: a 6to4/NAT64 address wrapping a
+  // genuinely public v4 stays allowed, so this blocks the bypass without
+  // becoming over-broad.
+  if (groups[0] === 0x2002) return ipv4Blocked(embeddedIpv4(groups[1], groups[2])); // 2002::/16
+  if (groups[0] === 0x0064 && groups[1] === 0xff9b && groups.slice(2, 6).every((group) => group === 0)) {
+    return ipv4Blocked(embeddedIpv4(groups[6], groups[7])); // 64:ff9b::/96 well-known prefix
   }
   const head = groups[0];
   if ((head & 0xfe00) === 0xfc00) return true; // fc00::/7 unique-local

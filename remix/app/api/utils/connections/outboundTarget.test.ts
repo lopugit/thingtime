@@ -78,6 +78,16 @@ const BLOCKED_TARGETS: [string, string][] = [
   ['unique-local fc00::/7', 'https://[fd12:3456::1]/'],
   ['link-local fe80::/10', 'https://[fe80::abcd]/'],
   ['multicast ff00::/8', 'https://[ff02::1]/'],
+  // 6to4/NAT64 embed a v4 destination in an address whose LEADING groups are
+  // non-zero, so the ipv4-mapped cases above do not cover them: the prefix
+  // reads as ordinary global unicast while the packet lands on the embedded
+  // v4. Only reachable on a host that has such a route, which is exactly the
+  // deployment we must not assume we are never on.
+  ['6to4 2002::/16 wrapping loopback', 'https://[2002:7f00:1::]/'],
+  ['6to4 2002::/16 wrapping metadata', 'https://[2002:a9fe:a9fe::]/'],
+  ['NAT64 64:ff9b::/96 wrapping loopback', 'https://[64:ff9b::7f00:1]/'],
+  ['NAT64 64:ff9b::/96 wrapping metadata', 'https://[64:ff9b::a9fe:a9fe]/'],
+  ['6to4 relay anycast 192.88.99.0/24', 'https://192.88.99.1/'],
   ['localhost by name', 'https://localhost/feed.xml'],
   ['*.internal', 'https://db.internal/feed.xml'],
   ['*.local', 'https://printer.local/feed.xml'],
@@ -216,6 +226,22 @@ test('a global-unicast IPv6 literal is not collateral damage', async () => {
   assert.equal(result.ok, true, 'public v6 addresses must still be reachable');
   assert.deepEqual(calls, ['https://[2606:4700:4700::1111]/feed.xml']);
 });
+
+// The transition-format rule decodes the EMBEDDED v4 and applies the ordinary
+// v4 rules to it — it does not blanket-refuse the prefixes. Pinning that here
+// keeps a later "just block 2002::/16 outright" simplification from silently
+// turning a working feed source into a refusal.
+for (const [label, feedUrl] of [
+  ['6to4 wrapping a public v4', 'https://[2002:808:808::]/feed.xml'],
+  ['NAT64 wrapping a public v4', 'https://[64:ff9b::808:808]/feed.xml']
+] as [string, string][]) {
+  test(`${label} is not collateral damage`, async () => {
+    stubFetch(() => feedResponse(RSS_BODY));
+    const result = await rss.resolveAccount({ feedUrl });
+    assert.equal(result.ok, true, `${feedUrl} embeds 8.8.8.8 and must stay reachable`);
+    assert.deepEqual(calls, [feedUrl]);
+  });
+}
 
 // --- response size cap -------------------------------------------------------
 // The same reason the target guard exists applies to the response: the feed
