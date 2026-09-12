@@ -30,3 +30,19 @@ export const createTransferIntent = () => {
 };
 
 export const transferIntent = createTransferIntent();
+
+/** Revoke move authority synchronously when sign-in starts refreshing root
+ * data. An old root snapshot must not re-arm cuts when a newer generation is
+ * confirmed before React has installed that generation's account snapshot. */
+export const bindTransferIdentity = (
+  identity: { read: () => { pending: boolean; generation: number }; subscribe: (listener: () => void) => () => void },
+  ownerId: string | undefined, confirmedGeneration: number, intent = transferIntent
+) => {
+  const sync = () => {
+    const state = identity.read();
+    intent.account(!state.pending && state.generation === confirmedGeneration ? ownerId : undefined);
+  };
+  const unsubscribe = identity.subscribe(sync);
+  sync();
+  return () => { unsubscribe(); intent.account(undefined); };
+};

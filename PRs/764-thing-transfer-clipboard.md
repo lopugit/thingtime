@@ -1,5 +1,23 @@
 # PR 764 — portable Thing transfer
 
+## Develop integration and pending-identity Cut revocation — 2026-09-12
+
+Merged develop source `ee5f9da7a1eb73e962a1960866dc3533db8c7f63` into the
+transfer branch. Preserved both README/changelog additions and both root
+integrations: transfer intent plus bounded sign-in recovery. Disabled rename
+detection for this merge so independent immutable Graphify snapshots were not
+mistaken for conflicting renames; regenerate the selected merged-source graph
+rather than hand-merging generated JSON.
+
+The combined root flow now revokes Cut intent synchronously on pending identity
+changes, not only when the replacement account's root data finally arrives.
+Generation matching prevents a stale snapshot from restoring authority when a
+newer refresh is confirmed. Regression tests cover saved intent, late copy
+tickets, stale confirmation and the new account binding. All 196 transfer,
+23 root-data and 43 capability tests pass. Targeted root/intent lint passes.
+Live sign-in/Cut race and complete desktop/mobile transfer acceptance remain
+unverified; archive endpoint/UI integration is still unfinished.
+
 ## Preserve recovery dependencies after incomplete rollback — 2026-09-12
 
 While connecting the archive lifecycle, the existing importer rollback was found

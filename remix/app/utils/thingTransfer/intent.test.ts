@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createTransferIntent } from './intent';
+import { bindTransferIdentity, createTransferIntent } from './intent';
+import { createRootIdentityState } from '../rootIdentity';
 
 test('cut survives page remount without trusting clipboard text as move authority', () => {
   const session = createTransferIntent(); session.account('a');
@@ -34,4 +35,27 @@ test('partial moves retain failed ids without consuming newer clipboard intent',
   const ticket = session.ticket('a'); session.clear();
   assert.equal(session.record(ticket, 'new', ['three']), false);
   assert.equal(session.peek('a'), null);
+});
+
+test('identity refresh revokes cuts before root data arrives and cannot re-arm an old snapshot', () => {
+  const identity = createRootIdentityState(); const intent = createTransferIntent();
+  const unbind = bindTransferIdentity(identity, 'old-owner', 0, intent);
+  const ticket = intent.ticket('old-owner');
+  assert.equal(intent.record(ticket, 'digest', ['thing']), true);
+  identity.changed();
+  assert.equal(intent.peek('old-owner'), null); assert.equal(intent.ticket('old-owner'), null);
+  assert.equal(intent.record(ticket, 'late-result', ['thing']), false);
+  identity.confirm(0); assert.equal(intent.ticket('old-owner'), null);
+  identity.confirm(1); assert.equal(intent.ticket('old-owner'), null);
+  unbind();
+  const unbindNext = bindTransferIdentity(identity, 'new-owner', 1, intent);
+  assert.ok(intent.ticket('new-owner')); assert.equal(intent.ticket('old-owner'), null);
+  unbindNext(); assert.equal(intent.ticket('new-owner'), null);
+});
+
+test('binding a stale account during a pending identity refresh never grants cut authority', () => {
+  const identity = createRootIdentityState(); const intent = createTransferIntent(); identity.changed();
+  const unbind = bindTransferIdentity(identity, 'old-owner', 0, intent);
+  assert.equal(intent.ticket('old-owner'), null);
+  identity.confirm(1); assert.equal(intent.ticket('old-owner'), null); unbind();
 });
