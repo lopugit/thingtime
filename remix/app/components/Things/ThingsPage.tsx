@@ -1315,7 +1315,9 @@ export const ThingsPage = () => {
     const onPaste = (event: ClipboardEvent) => {
       if (event.defaultPrevented || dialogOpen || itemMenu.open || backgroundMenu.open) return;
       const target = event.target as HTMLElement | null;
-      if (target?.closest('input, textarea, [contenteditable]:not([contenteditable="false"]), [role="dialog"]')) return;
+      // Paste can target a non-Element node (the document) when nothing is
+      // focused; call closest() optionally so the listener cannot throw.
+      if (target?.closest?.('input, textarea, [contenteditable]:not([contenteditable="false"]), [role="dialog"]')) return;
       const text = event.clipboardData?.getData('text/plain');
       if (!text) return;
       event.preventDefault();
