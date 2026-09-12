@@ -1,5 +1,21 @@
 # PR 764 — portable Thing transfer
 
+## Messenger transfer entry point — 2026-09-12
+
+Chat details now exposes Copy, Download and Import through the existing transfer
+controls. It labels exports as private read-only archives and never offers Cut
+for a live source. AI chat export remains explicitly unavailable pending proper
+historical attribution. Authorization stays server-side.
+
+Rendered Chrome validation found that a body-level menu portal was hidden by
+the drawer's accessibility isolation. An optional menu container keeps this
+menu inside the drawer without changing other transfer entry points. The new
+fictional-account smoke verifies desktop/mobile drawer scrolling, accessible
+menu items, ZIP/JSON selection, nested import/download dialogs and zero writes.
+This is UI-entry-point proof, not real Messenger clipboard/ZIP round-trip proof.
+Focused lint passes; whole-project typecheck still has baseline errors, with
+no errors reported for the two changed components.
+
 ## Live Messenger conversion foundation — 2026-09-12
 
 Added a pure complete-snapshot projection to the existing relational private

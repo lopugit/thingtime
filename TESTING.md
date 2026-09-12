@@ -2,6 +2,13 @@
 
 ## Real browser portable transfer acceptance
 
+- [ ] Messenger details: open Transfer with an active or pending membership;
+  Copy and Download must be accessible, but Cut must be absent. Open Download
+  and Import dialogs above the drawer at desktop/mobile widths, scroll the
+  drawer fully, and confirm opening/closing controls sends no chat mutations.
+  `node --import tsx scripts/messenger-transfer-ui-smoke.mts` in `remix/`
+  covers this with a fictional account; live clipboard/history acceptance is separate.
+
 - [ ] When wiring live Messenger export, supply a complete authorized snapshot
   including former authors/reactors and every thread. Preserve edits, tombstones,
   reply links and safe historical system content; never export membership roles,
