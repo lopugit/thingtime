@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { randomUUID } from 'node:crypto';
 import { capabilitySatisfies, THINGTIME_CAPABILITY_MANIFEST_PATH } from '../capabilities/capabilityContract';
+import { decodeTransferArchive, encodeTransferArchive } from '../../../utils/thingTransfer/archive';
+import { validateTransfer } from '../../../utils/thingTransfer/format';
 
 const fixtureOrigin = (value: string, remoteDev: boolean, username?: string) => {
   const origin = new URL(value);
@@ -24,8 +26,8 @@ test('archive live-test origin fence refuses production, lookalikes and implicit
   assert.throws(() => fixtureOrigin('https://dev.thingtime.com', true));
 });
 
-test('real private archive import/read/delete preserves history and substitutes only the importing identity', {
-  skip: process.env.TT_TRANSFER_ARCHIVE_TEST !== '1', timeout: 180_000
+test('real private archive folder ZIP round trip preserves history, fresh identities and owner-only lifecycle', {
+  skip: process.env.TT_TRANSFER_ARCHIVE_TEST !== '1', timeout: 240_000
 }, async () => {
   const base = process.env.TT_TRANSFER_TEST_URL;
   const cookie = process.env.TT_TRANSFER_TEST_COOKIE;
@@ -43,7 +45,10 @@ test('real private archive import/read/delete preserves history and substitutes 
   };
   const capabilities = await request(THINGTIME_CAPABILITY_MANIFEST_PATH);
   assert.equal(capabilities.status, 200); assert.equal(capabilities.data.origin, origin.origin);
-  for (const [feature, version] of Object.entries({ 'api.auth-me': '1.0.0', 'api.things-import': '1.9.0', 'api.things': '1.13.0' })) {
+  for (const [feature, version] of Object.entries({
+    'api.auth-me': '1.0.0', 'api.things-import': '1.9.1', 'api.things': '1.14.0',
+    'api.things-export': '1.10.0', 'api.things-bulk': '1.4.0'
+  })) {
     assert.ok(capabilitySatisfies(capabilities.data.features?.[feature]?.version, version), `Missing ${feature} ${version}; no archive created`);
   }
   const me = await request('/api/v1/auth/me');
@@ -52,7 +57,8 @@ test('real private archive import/read/delete preserves history and substitutes 
   const at = '2026-09-01T00:00:00.000Z';
   const name = `Archive transfer fixture ${randomUUID()}`;
   const things = [
-    { id: 'archive', thingtime: ['chat-archive'], crystal: { name, topic: 'Private test history', chatType: 'dm', createdAt: at, selfParticipantId: 'self' } },
+    { id: 'folder', thingtime: ['folder'], crystal: { name } },
+    { id: 'archive', folderId: 'folder', thingtime: ['chat-archive'], crystal: { name, topic: 'Private test history', chatType: 'dm', createdAt: at, selfParticipantId: 'self' } },
     { id: 'self', targetId: 'archive', thingtime: ['chat-archive-participant'], crystal: { username: 'fictional-original', displayName: 'Original self', nickname: '', joinedAt: at } },
     { id: 'friend', targetId: 'archive', thingtime: ['chat-archive-participant'], crystal: { username: 'fictional-archived-friend', displayName: 'Archived friend', nickname: 'F', joinedAt: at } },
     { id: 'message', targetId: 'archive', thingtime: ['chat-archive-message'], crystal: { participantId: 'self', text: 'Exact\n history 🥰', createdAt: at, deleted: false } },
@@ -60,9 +66,16 @@ test('real private archive import/read/delete preserves history and substitutes 
     { id: 'reaction', targetId: 'message', thingtime: ['chat-archive-reaction'], crystal: { participantId: 'friend', emoji: '🥰', createdAt: at } }
   ];
   let created: string | undefined;
+  const archiveCleanup = new Set<string>();
+  const folderCleanup = new Set<string>();
+  const remember = (value: unknown, cleanup: Set<string>) => {
+    if (typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value)) cleanup.add(value);
+  };
   try {
-    const imported = await request('/api/v1/things/import', 'POST', { manifest: { format: 'thingtime.transfer', version: 1, roots: ['archive'], things, files: [] } });
+    const imported = await request('/api/v1/things/import', 'POST', { manifest: { format: 'thingtime.transfer', version: 1, roots: ['folder'], things, files: [] } });
     // Record the returned cleanup anchor before checking response details.
+    remember(imported.data?.ids?.archive, archiveCleanup);
+    remember(imported.data?.ids?.folder, folderCleanup);
     if (typeof imported.data?.ids?.archive === 'string') created = imported.data.ids.archive;
     assert.equal(imported.status, 200, `Archive import returned ${imported.status}`);
     assert.ok(created && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(created), 'Import did not return a safe cleanup anchor');
@@ -70,6 +83,7 @@ test('real private archive import/read/delete preserves history and substitutes 
     assert.equal(imported.data.imported, things.length);
     assert.equal(new Set(Object.values(ids)).size, things.length);
     assert.ok(Object.values(ids).every(id => !things.some(row => row.id === id) && id !== me.data.user.id));
+    assert.ok(folderCleanup.has(ids.folder), 'Import did not return a safe folder cleanup anchor');
     const path = `/api/v1/things?id=${encodeURIComponent(created!)}&archive=true`;
     const anonymous = await request(path, 'GET', undefined, false);
     assert.equal(anonymous.status, 401); assert.match(anonymous.cache || '', /no-store/);
@@ -85,6 +99,49 @@ test('real private archive import/read/delete preserves history and substitutes 
     assert.equal(reply.crystal.participantId, ids.friend); assert.equal(reply.crystal.replyToId, ids.message); assert.equal(reply.crystal.threadRootId, ids.message);
     assert.equal(group.reactions[0].targetId, ids.message); assert.equal(group.reactions[0].crystal.participantId, ids.friend);
     assert.doesNotMatch(JSON.stringify(read.data.archive), /"(?:ownerId|userId|acl|tokenAcl|archiveVersion|appId)"/);
+
+    const listing = await request(`/api/v1/things?folder=${encodeURIComponent(ids.folder)}&limit=100`);
+    assert.equal(listing.status, 200); assert.match(listing.cache || '', /no-store/);
+    assert.ok(listing.data.things.some((row: any) => row.id === created), 'Archive root missing from its owner folder');
+    const exported = await request('/api/v1/things/export', 'POST', { ids: [ids.folder] });
+    assert.equal(exported.status, 200); assert.match(exported.cache || '', /no-store/);
+    assert.equal(exported.data.plan.things.length, things.length);
+    assert.equal(exported.data.plan.things.find((row: any) => row.id === created).folderId, ids.folder);
+    assert.equal(exported.data.plan.files.length, 0, 'This fixture proves metadata ZIP transport, not media bytes');
+    const manifest = validateTransfer({ format: 'thingtime.transfer', version: 1, ...exported.data.plan });
+    const decoded = await decodeTransferArchive(await encodeTransferArchive({ manifest, files: new Map() }));
+    assert.deepEqual(decoded.manifest, manifest);
+    const copied = await request('/api/v1/things/import', 'POST', { manifest: decoded.manifest });
+    remember(copied.data?.ids?.[created!], archiveCleanup);
+    remember(copied.data?.ids?.[ids.folder], folderCleanup);
+    assert.equal(copied.status, 200); assert.equal(copied.data.imported, things.length);
+    const copyIds = copied.data.ids;
+    assert.equal(new Set(Object.values(copyIds)).size, things.length);
+    assert.ok(Object.values(copyIds).every(id => !Object.values(ids).includes(id) && id !== me.data.user.id));
+    const copyRoot = copyIds[created!], copyFolder = copyIds[ids.folder];
+    assert.ok(archiveCleanup.has(copyRoot) && folderCleanup.has(copyFolder));
+    const copyPath = `/api/v1/things?id=${encodeURIComponent(copyRoot)}&archive=true`;
+    const copiedRead = await request(copyPath);
+    assert.equal(copiedRead.status, 200);
+    const copyGroup = copiedRead.data.archive.group;
+    assert.equal(copyGroup.self.id, copyIds[ids.self]);
+    assert.equal(copyGroup.root.crystal.selfParticipantId, copyIds[ids.self]);
+    assert.equal(copyGroup.participants.length, 2); assert.equal(copyGroup.messages.length, 2); assert.equal(copyGroup.reactions.length, 1);
+    assert.equal(copyGroup.participants.find((row: any) => row.id === copyIds[ids.friend]).crystal.username, 'fictional-archived-friend');
+    assert.deepEqual(copyGroup.messages.find((row: any) => row.id === copyIds[ids.message]).crystal,
+      { ...message.crystal, participantId: copyIds[ids.self] });
+    assert.deepEqual(copyGroup.messages.find((row: any) => row.id === copyIds[ids.reply]).crystal,
+      { ...reply.crystal, participantId: copyIds[ids.friend], replyToId: copyIds[ids.message], threadRootId: copyIds[ids.message] });
+    assert.equal(copyGroup.reactions[0].targetId, copyIds[ids.message]);
+    assert.equal(copyGroup.reactions[0].crystal.participantId, copyIds[ids.friend]);
+    assert.doesNotMatch(JSON.stringify(copiedRead.data.archive), /"(?:ownerId|userId|acl|tokenAcl|archiveVersion|appId)"/);
+    const moved = await request('/api/v1/things/bulk', 'POST', { op: 'move', ids: [copyRoot], folderId: null });
+    assert.equal(moved.status, 200); assert.equal(moved.data.succeeded, 1); assert.equal(moved.data.failed, 0);
+    const emptyFolder = await request('/api/v1/things/export', 'POST', { ids: [copyFolder] });
+    assert.equal(emptyFolder.status, 200); assert.equal(emptyFolder.data.plan.things.length, 1);
+    const standalone = await request('/api/v1/things/export', 'POST', { ids: [copyRoot], includeChildren: false, includeDependencies: false });
+    assert.equal(standalone.status, 200); assert.equal(standalone.data.plan.things.length, things.length - 1);
+    assert.equal(standalone.data.plan.things.find((row: any) => row.id === copyRoot).folderId, undefined);
     const participantDelete = await request('/api/v1/things', 'DELETE', { id: ids.friend });
     assert.equal(participantDelete.status, 404, 'Individual archived participants must remain protected');
     const attemptedEdit = await request('/api/v1/things', 'PATCH', { id: ids.message, crystal: { text: 'Not historical' } });
@@ -97,13 +154,26 @@ test('real private archive import/read/delete preserves history and substitutes 
     const removed = await request('/api/v1/things', 'DELETE', { id: created, expectedUpdatedAt: read.data.archive.updatedAt });
     assert.equal(removed.status, 200);
     assert.equal((await request(path)).status, 404);
+    archiveCleanup.delete(created!);
+    // The imported copy must still work after deleting its source history.
+    assert.equal((await request(copyPath)).status, 200);
     created = undefined;
   } finally {
-    if (created) {
-      const cleanup = await request('/api/v1/things', 'DELETE', { id: created });
-      assert.ok(cleanup.status === 200 || cleanup.status === 404, `Fixture cleanup incomplete for archive ${created}; status ${cleanup.status}`);
-      const absent = await request(`/api/v1/things?id=${encodeURIComponent(created)}&archive=true`);
-      assert.equal(absent.status, 404, `Fixture archive ${created} still exists`);
+    const failures: string[] = [];
+    // Attempt every known root even if one deletion fails. Never recursively
+    // delete a folder to compensate for an uncertain archive cascade.
+    for (const [kind, cleanupIds] of [['archive', archiveCleanup], ['folder', folderCleanup]] as const) {
+      for (const id of cleanupIds) {
+        try {
+          const cleanup = await request('/api/v1/things', 'DELETE', { id });
+          assert.ok(cleanup.status === 200 || cleanup.status === 404, `Fixture cleanup incomplete for ${kind} ${id}; status ${cleanup.status}`);
+          const absent = await request(`/api/v1/things?id=${encodeURIComponent(id)}${kind === 'archive' ? '&archive=true' : ''}`);
+          assert.equal(absent.status, 404, `Fixture ${kind} ${id} still exists`);
+        } catch {
+          failures.push(`${kind} ${id}`);
+        }
+      }
     }
+    assert.equal(failures.length, 0, `Archive round-trip fixture cleanup incomplete: ${failures.join(', ')}`);
   }
 });
