@@ -1,5 +1,30 @@
 # TESTING.md — per-area manual test checklists
 
+## Feature Stack activity and run chat
+
+- [ ] Open a saved run with one merged, one conflicting, and one failed target.
+  Only the merged target contributes to progress; each card names its next step.
+  A running merge gate says waiting, not working. No rolling finish ETA appears.
+- [ ] Check absent/stale heartbeats, closed PRs, queued workers, all-merged and
+  stopped runs. Fresh PR status and old worker telemetry remain distinguishable.
+- [ ] Open Ask Lopu, send a question, observe queued/answering/answered and failed
+  delivery. Turn auto-refresh off; manual Refresh still works. Switching runs or
+  accounts removes the prior conversation and draft immediately.
+- [ ] Simulate accepting a POST then losing its response: Retry same message
+  creates no duplicate. Delay a GET across Send; its older response must not hide
+  the accepted question or a newer reply. Test long text and keyboard focus.
+- [ ] Test online/offline/old-controller/ended states. New sends are disabled when
+  unavailable; a saved uncertain request remains retryable with the same UUID.
+- [ ] Check the entire dashboard from top to bottom at desktop and 390px widths,
+  open and close chat, scroll long replies/history and verify no overflow.
+- [ ] In the updated trusted action, ask what the run is waiting for. Verify the
+  response against its actual job/step/PR facts; asking to restart does not restart.
+  Cancel/restart a test run and prove stale attempts cannot publish new replies.
+- [ ] Check unauthenticated admin reads/writes, bad/stale/cross-run signatures,
+  oversized bodies, lease expiry and capability negotiation. All chat responses,
+  including errors, are private/no-store and expose no worker lease or credential.
+
+
 ## Session read recovery
 
 - [ ] Fail the first `/api/root-data` GET after sign-in: one automatic retry
