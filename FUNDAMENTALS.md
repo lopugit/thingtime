@@ -394,3 +394,7 @@ server-only `webauthn:<ceremony>:<challenge SHA-256>` spent markers, unique by
 `challenge`, expire after ten minutes. They contain no private key, credential
 response, account data or browser cookie. Only a cryptographically verified
 ceremony can consume a marker, before any session is issued.
+
+### Saved AI waterfall data
+
+Personal waterfall library entries are owner-only `data` Things with `crystal.systemType: ai-waterfall-v1`; each config is its own bounded record, not an array embedded on the user. Generic Thing create/update supplies storage accounting and optimistic revision checks. No new physical collection is introduced.
