@@ -10,8 +10,8 @@ const defaults = { collection: getHomeThingsCollection, transaction: withHomeMon
 const validId = (id: unknown): id is string => typeof id === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(id);
 const fields: Record<string, string[]> = {
   'chat-archive': ['name', 'topic', 'chatType', 'createdAt', 'selfParticipantId'],
-  'chat-archive-participant': ['username', 'displayName', 'nickname', 'avatarFileId', 'joinedAt'],
-  'chat-archive-message': ['participantId', 'text', 'createdAt', 'editedAt', 'deleted', 'replyToId', 'threadRootId', 'systemText'],
+  'chat-archive-participant': ['username', 'displayName', 'nickname', 'avatarFileId', 'avatarPreset', 'joinedAt'],
+  'chat-archive-message': ['participantId', 'text', 'createdAt', 'editedAt', 'deleted', 'replyToId', 'threadRootId', 'systemText', 'toolHistory', 'position'],
   'chat-archive-reaction': ['participantId', 'emoji', 'createdAt']
 };
 const reject = (): never => { throw new Error('Archive history is unavailable'); };

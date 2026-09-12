@@ -61,6 +61,17 @@ const harness = () => {
   return { state, deps };
 };
 const empty = (): ChatArchiveImportResources => ({ files: new Map() });
+
+test('archive writer retains inert assistant presentation on fresh private rows', async () => {
+  const { state, deps } = harness(); const input = fixture();
+  input.things[2].crystal.avatarPreset = 'lopu';
+  input.things[4].crystal.toolHistory = [{ name: 'note', ok: true, summary: 'Saved' }];
+  const result = await createTransferChatArchive('importer', input, 'chat', empty(), deps);
+  const participant = state.committed.find(row => row.shareId === result.ids.friend);
+  assert.equal(participant.crystal.avatarPreset, 'lopu'); assert.equal(participant.crystal.archived, true);
+  assert.equal(participant.crystal.userId, undefined);
+  assert.deepEqual(state.committed.find(row => row.shareId === result.ids.reply).crystal.toolHistory, input.things[4].crystal.toolHistory);
+});
 const withAvatar = () => {
   const manifest = fixture();
   manifest.things[2].crystal.avatarFileId = 'avatar';

@@ -7152,6 +7152,15 @@ approval; `access.test.ts` — the reservation matrix) and
 
 ## Durable recording reads
 
+- AI chat archives: export a complete authorized Lopu/AI history, import and
+  re-export it, and confirm assistant avatar presets and name/result/summary
+  tool receipts survive without target IDs, approvals, billing or connector
+  metadata. Expand receipt lists at desktop/mobile widths and scroll to the
+  bottom; no action control may execute history. Deleted rows retain neither
+  receipts nor content. Reverse equal-timestamp source segments and verify the
+  imported view retains segment order despite fresh IDs. Reject missing,
+  duplicate or mixed-revision segments and incomplete device synchronization.
+
 - Live-chat archive timestamps: exercise the actual Messenger edit/delete APIs,
   which store canonical ISO strings inside `crystal`, unlike BSON root dates.
   Export edited messages and tombstones together; preserve `editedAt`, never

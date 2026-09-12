@@ -85,8 +85,8 @@ export const normalizeLiveChatArchive = (source: Source, viewerId: string,
       emoji: string(row.crystal?.emoji), createdAt: date(row.createdAt) })),
     files: media.files, links: media.links
   };
-  // Internal opt-in only until avatar/tool presentation is complete. Existing
-  // route callers retain their refusal; portable input cannot enable this.
+  // Only the membership-authorized server adapter opts in to AI history.
+  // Portable input cannot enable this or provide source provenance.
   return ai ? projectAiChatArchive(snapshot, viewerId, chat.crystal.externalSource,
     new Map(messages.map(row => [row.shareId, { externalSource: row.crystal?.externalSource, lopu: row.crystal?.lopu }])))
     : projectLiveChatArchive(snapshot, viewerId);

@@ -96,6 +96,17 @@ test('reads full owner history in one snapshot and projects no live account or s
   state.rows[3].crystal.text = 'mutated'; assert.equal(result.group.messages[0].crystal.text, 'exact\n history 🥰');
 });
 
+test('archive reads and re-export retain assistant presentation without live targets', async () => {
+  const { state, deps } = harness();
+  state.rows[2].crystal.avatarPreset = 'lopu';
+  state.rows[4].crystal.toolHistory = [{ name: 'note', ok: true, summary: 'Saved' }];
+  const result = await readOwnedChatArchive('owner', 'archive', deps);
+  assert.equal(result?.group.participants[1].crystal.avatarPreset, 'lopu');
+  assert.deepEqual(result?.group.messages[1].crystal.toolHistory, state.rows[4].crystal.toolHistory);
+  state.rows[4].crystal.toolHistory[0].thingId = 'private-target';
+  await assert.rejects(readOwnedChatArchive('owner', 'archive', deps), /Invalid private chat archive/);
+});
+
 test('archive reads preserve canonical uploaded-emoji reactions and discover their IDs', async () => {
   const { state, deps } = harness();
   const emojiId = customEmojiIdForAttachment('owner', 'upload');

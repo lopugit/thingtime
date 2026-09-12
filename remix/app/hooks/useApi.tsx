@@ -865,14 +865,14 @@ export function useApi() {
     things: {
       export: useCallback(async (args: { ids: string[]; key?: string; includeChildren?: boolean; includeDependencies?: boolean; includeFiles?: boolean; includeLinks?: boolean }, options?: { signal?: AbortSignal }) => {
         return withExportDeadline(async signal => {
-          await requireThingtimeCapability('api.things-export', '1.12.0');
+          await requireThingtimeCapability('api.things-export', '1.13.0');
           if (args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.6.4');
           signal.throwIfAborted();
           return asyncFetcher.submit(args, { action: '/api/v1/things/export', signal, errorContext: 'export Things' });
         }, options?.signal);
       }, [asyncFetcher]),
       import: useCallback(async (args: { manifest: unknown; files?: Record<string, string>; folderId?: string | null }, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.things-import', '1.9.1');
+        await requireThingtimeCapability('api.things-import', '1.10.0');
         return asyncFetcher.submit(args, { action: '/api/v1/things/import', signal: options?.signal, errorContext: 'import Things' });
       }, [asyncFetcher]),
       // scope: 'subspaces' narrows the page to posts from the viewer's ACTIVE
@@ -935,7 +935,7 @@ export function useApi() {
         []
       ),
       archive: useCallback(async (args: { id: string }, options?: { signal?: AbortSignal }) => {
-        await requireThingtimeCapability('api.things', '1.16.1');
+        await requireThingtimeCapability('api.things', '1.17.0');
         return getJson(`/api/v1/things${toQuery({ id: args.id, archive: true })}`, options);
       }, []),
       update: useCallback(

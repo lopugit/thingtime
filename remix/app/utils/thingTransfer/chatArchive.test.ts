@@ -4,6 +4,32 @@ import { archiveAuthor, validateChatArchives } from './chatArchive';
 import type { ThingTransfer } from './format';
 
 const at = '2026-09-12T00:00:00.000Z';
+
+test('historical AI presentation accepts only bounded inert fields and never deleted receipts', () => {
+  const input = fixture(); input.things[2].crystal.avatarPreset = 'claude';
+  input.things[4].crystal.toolHistory = [{ name: 'create_note', ok: false, summary: 'Not approved' }];
+  assert.equal(validateChatArchives(input)[0].participants[1].crystal.avatarPreset, 'claude');
+  for (const bad of ['external', ['lopu'], { provider: 'lopu' }]) {
+    const changed = structuredClone(input); changed.things[2].crystal.avatarPreset = bad;
+    assert.throws(() => validateChatArchives(changed));
+  }
+  for (const bad of [[{ name: 'run', ok: true, summary: '', thingId: 'live-target' }],
+    [{ name: 'run', ok: 'yes', summary: '' }], [{ name: 'run', ok: true, summary: 'x'.repeat(241) }],
+    Array.from({ length: 21 }, () => ({ name: 'run', ok: true, summary: '' }))]) {
+    const changed = structuredClone(input); changed.things[4].crystal.toolHistory = bad;
+    assert.throws(() => validateChatArchives(changed));
+  }
+  const deleted = structuredClone(input); deleted.things[4].crystal.deleted = true; deleted.things[4].crystal.text = '';
+  assert.throws(() => validateChatArchives(deleted));
+  const ordered = structuredClone(input); ordered.things[3].crystal.position = 0; ordered.things[4].crystal.position = 1;
+  assert.equal(validateChatArchives(ordered)[0].messages[1].crystal.position, 1);
+  for (const invalid of [0, -1, 2, 0.5, '1', null]) {
+    const changed = structuredClone(ordered); changed.things[4].crystal.position = invalid;
+    assert.throws(() => validateChatArchives(changed));
+  }
+  delete ordered.things[4].crystal.position;
+  assert.throws(() => validateChatArchives(ordered));
+});
 const fixture = (): ThingTransfer => ({ format: 'thingtime.transfer', version: 1, roots: ['chat'], files: [], things: [
   { id: 'chat', thingtime: ['chat-archive'], crystal: { name: 'Our chat', topic: 'Preserved topic', chatType: 'dm', createdAt: at, selfParticipantId: 'self' } },
   { id: 'self', targetId: 'chat', thingtime: ['chat-archive-participant'], crystal: { username: 'exporter', displayName: 'Original owner', nickname: '', joinedAt: at } },

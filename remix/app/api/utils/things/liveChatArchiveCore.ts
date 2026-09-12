@@ -1,4 +1,4 @@
-import { validateChatArchiveRecords, type ChatArchiveGroup } from '../../../utils/thingTransfer/chatArchive';
+import { validateChatArchiveRecords, type ChatArchiveGroup, type ArchiveAvatarPreset, type ArchiveToolReceipt } from '../../../utils/thingTransfer/chatArchive';
 import { TRANSFER_LIMITS, type TransferThing } from '../../../utils/thingTransfer/format';
 import { customReactionEmojiId } from '../../../utils/reactionTokens';
 
@@ -8,9 +8,9 @@ import { customReactionEmojiId } from '../../../utils/reactionTokens';
 export type LiveChatArchiveSnapshot = {
   chat: { id: string; name: string; topic: string; chatType: 'dm' | 'group' | 'channel'; createdAt: string };
   participants: { id: string; userId: string; username: string; displayName: string; nickname: string;
-    joinedAt: string; avatarFileId?: string }[];
+    joinedAt: string; avatarFileId?: string; avatarPreset?: ArchiveAvatarPreset }[];
   messages: { id: string; authorId: string; text: string; createdAt: string; editedAt?: string;
-    deleted: boolean; replyToId?: string; threadRootId?: string; systemText?: string }[];
+    deleted: boolean; replyToId?: string; threadRootId?: string; systemText?: string; toolHistory?: ArchiveToolReceipt[] }[];
   reactions: { id: string; messageId: string; userId: string; emoji: string; createdAt: string }[];
   files: { id: string; targetId: string; mime: string; bytes: number }[];
   links: { id: string; targetId: string }[];
@@ -42,14 +42,17 @@ export const projectLiveChatArchive = (snapshot: LiveChatArchiveSnapshot, viewer
   } }];
   for (const row of participants) things.push({ id: row.id, targetId: chat.id, thingtime: ['chat-archive-participant'], crystal: {
     username: row.username, displayName: row.displayName, nickname: row.nickname, joinedAt: row.joinedAt,
-    ...(row.avatarFileId === undefined ? {} : { avatarFileId: row.avatarFileId })
+    ...(row.avatarFileId === undefined ? {} : { avatarFileId: row.avatarFileId }),
+    ...(row.avatarPreset === undefined ? {} : { avatarPreset: row.avatarPreset })
   } });
-  for (const row of messages) things.push({ id: row.id, targetId: chat.id, thingtime: ['chat-archive-message'], crystal: {
+  for (const [position, row] of messages.entries()) things.push({ id: row.id, targetId: chat.id, thingtime: ['chat-archive-message'], crystal: {
+    position,
     participantId: participant(row.authorId), text: row.deleted ? '' : row.text, createdAt: row.createdAt, deleted: row.deleted,
     ...(row.editedAt === undefined ? {} : { editedAt: row.editedAt }),
     ...(row.replyToId === undefined ? {} : { replyToId: row.replyToId }),
     ...(row.threadRootId === undefined ? {} : { threadRootId: row.threadRootId }),
-    ...(row.systemText === undefined || row.deleted ? {} : { systemText: row.systemText })
+    ...(row.systemText === undefined || row.deleted ? {} : { systemText: row.systemText }),
+    ...(row.toolHistory === undefined || row.deleted ? {} : { toolHistory: row.toolHistory })
   } });
   for (const row of reactions) things.push({ id: row.id, targetId: row.messageId, thingtime: ['chat-archive-reaction'], crystal: {
     participantId: participant(row.userId), emoji: row.emoji, createdAt: row.createdAt

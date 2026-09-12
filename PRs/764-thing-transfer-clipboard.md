@@ -1150,6 +1150,41 @@ The focused suite passes 65 tests with one live opt-in skip, and lint passes.
 Local manifests serve 1.11.1. Positive deployed round-trip proof is still pending;
 the failed live run is not counted as acceptance.
 
+## 2026-09-12 — AI archive presentation connected
+
+The membership-authorized live export adapter now opts into historical AI
+normalization. Assistant portraits reuse the canonical Lopu/ChatGPT/Claude
+avatar styles through a closed display-only preset. Tool history is a bounded
+list of name/result/summary receipts; source target IDs, arguments, approvals,
+billing and connector metadata are excluded. Deleted messages carry no receipts.
+The private writer, owner reader, portable validator and archive view retain
+these fields without introducing live account lookup or execution controls.
+
+Explicit contiguous message positions prevent fresh IDs from reshuffling
+equal-timestamp history. AI parts are ordered by their canonical segment index;
+missing/duplicate parts, mixed revisions/identities and incomplete synchronized
+device history reject. Legacy multi-part imports lacking a stable message key
+and external/legacy profile avatar URLs still require further work.
+
+Export/import capabilities are 1.13.0/1.10.0. The Things history feature is
+1.17.0 (route contract 1.16.0); clients negotiate the corresponding requirements.
+Focused tests cover validation, authorized normalization, private writes/reads,
+receipt redaction, deletion, segmentation and manifest versions. The production
+Vite/embed/Nitro build and Vercel output verifier passed. Chrome inspected the
+real archive component with a temporary synthetic fixture at desktop and
+390x844 mobile sizes, expanded participant and 20-receipt sections, scrolled to
+the end, and measured no horizontal overflow. The temporary fixture was removed;
+no account or chat data was changed. This is component/contract validation, not
+a live provider-backed AI export/import acceptance claim.
+
+The focused combined suite passed 143 tests with one opt-in live skip; focused
+lint passed, and the scoped TypeScript check reported no archive, Messenger
+types or useApi diagnostics (the full project retains other errors). Both
+built capability handlers returned the new versions with JSON HTTP 200. The
+first no-env smoke accidentally followed the existing production API fallback;
+the corrected isolated smoke pinned the fallback origin to the synthetic test
+origin and asserted no fallback header, without connecting to a database.
+
 ## 2026-09-12 — Transfer verification sweep
 
 At `20d7de455`, all Things utility tests completed with 196 passes and seven

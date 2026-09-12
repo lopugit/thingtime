@@ -26,6 +26,19 @@ const fixture = () => {
 };
 const read = (f: ReturnType<typeof fixture>, signal?: AbortSignal) => readLiveChatArchiveTransfer({ id: 'self' } as any, 'chat', 'self', signal, f.deps);
 
+test('authorized AI history reaches the archive adapter with assistant identity and inert receipts', async () => {
+  const f = fixture();
+  const source = { provider: 'lopu', access: 'lopu', sourceId: 'private-source', label: 'Lopu', connector: 'private-connector', readOnly: false };
+  f.source.chat.crystal.externalSource = source;
+  f.source.messages[0].crystal.externalSource = { ...source, readOnly: true, role: 'assistant' };
+  f.source.messages[0].crystal.lopu = { role: 'assistant', toolCalls: [{ name: 'note', ok: true, summary: 'Saved', thingId: 'private-target' }] };
+  const result = await read(f);
+  const author = result?.group.participants.find(row => row.crystal.avatarPreset === 'lopu');
+  assert.ok(author); assert.equal(result?.group.messages[0].crystal.participantId, author.id);
+  assert.deepEqual(result?.group.messages[0].crystal.toolHistory, [{ name: 'note', ok: true, summary: 'Saved' }]);
+  assert.doesNotMatch(JSON.stringify(result), /private-source|private-connector|private-target/);
+});
+
 test('adapter joins an authorized snapshot with canonical profiles and ordered media, without raw profile URLs', async () => {
   const f = fixture(); const archive = await read(f);
   assert.deepEqual(f.calls, ['read', 'profiles', 'link', 'file', 'avatar']);

@@ -6,6 +6,12 @@ import { validateTransfer, type TransferThing, type TransferFile, type TransferL
 // The dedicated writer must store these as separate private, importer-owned
 // Things. This module deliberately has no API/storage/notification side effects.
 export const CHAT_ARCHIVE_KINDS = CHAT_ARCHIVE_THINGTIME;
+export type ArchiveAvatarPreset = 'lopu' | 'chatgpt' | 'claude';
+export type ArchiveToolReceipt = { name: string; ok: boolean; summary: string };
+export const validArchiveToolHistory = (value: unknown): value is ArchiveToolReceipt[] =>
+  Array.isArray(value) && value.length <= 20 && value.every(call => call && typeof call === 'object' &&
+    !Array.isArray(call) && Object.keys(call).every(key => ['name', 'ok', 'summary'].includes(key)) &&
+    text(call.name, 80, true) && typeof call.ok === 'boolean' && text(call.summary, 240));
 export const isTransferChatArchive = (thing: Pick<TransferThing, 'thingtime'>) =>
   thing.thingtime.length === 1 && (CHAT_ARCHIVE_KINDS as readonly string[]).includes(thing.thingtime[0]);
 
@@ -62,7 +68,9 @@ export const validateChatArchiveRecords = (manifest: {
     const self = people.get(String(root.crystal.selfParticipantId));
     if (!self) reject();
     for (const person of participants) {
-      fields(person, ['username', 'displayName', 'nickname', 'avatarFileId', 'joinedAt']);
+      fields(person, ['username', 'displayName', 'nickname', 'avatarFileId', 'avatarPreset', 'joinedAt']);
+      if (person.crystal.avatarPreset !== undefined && (person.id === self.id || person.crystal.avatarFileId !== undefined ||
+        typeof person.crystal.avatarPreset !== 'string' || !['lopu', 'chatgpt', 'claude'].includes(person.crystal.avatarPreset))) reject();
       if (person.folderId || !text(person.crystal.username, 200, true) ||
         !text(person.crystal.displayName, 500) || !text(person.crystal.nickname, MAX_NICKNAME_CHARS) || !date(person.crystal.joinedAt)) reject();
       const files = manifest.files.filter(file => file.targetId === person.id);
@@ -74,8 +82,12 @@ export const validateChatArchiveRecords = (manifest: {
       consumed.add(person.id);
     }
     const rows = new Map(messages.map(thing => [thing.id, thing]));
+    if (messages.some(row => row.crystal.position !== undefined) && (messages.some(row =>
+      !Number.isSafeInteger(row.crystal.position) || Number(row.crystal.position) < 0 || Number(row.crystal.position) >= messages.length) ||
+      new Set(messages.map(row => row.crystal.position)).size !== messages.length)) reject();
     for (const message of messages) {
-      fields(message, ['participantId', 'text', 'createdAt', 'editedAt', 'deleted', 'replyToId', 'threadRootId', 'systemText']);
+      fields(message, ['participantId', 'text', 'createdAt', 'editedAt', 'deleted', 'replyToId', 'threadRootId', 'systemText', 'toolHistory', 'position']);
+      if (message.crystal.toolHistory !== undefined && !validArchiveToolHistory(message.crystal.toolHistory)) reject();
       if (message.folderId || !people.has(String(message.crystal.participantId)) || !text(message.crystal.text, MAX_MESSAGE_CHARS) ||
         !date(message.crystal.createdAt) || typeof message.crystal.deleted !== 'boolean' ||
         (message.crystal.editedAt !== undefined && !date(message.crystal.editedAt)) ||
@@ -84,7 +96,7 @@ export const validateChatArchiveRecords = (manifest: {
         const target = message.crystal[key];
         if (target !== undefined && (typeof target !== 'string' || target === message.id || !rows.has(target))) reject();
       }
-      if (message.crystal.deleted && (message.crystal.text || message.crystal.systemText ||
+      if (message.crystal.deleted && (message.crystal.text || message.crystal.systemText || message.crystal.toolHistory !== undefined ||
         manifest.files.some(file => file.targetId === message.id) || manifest.links?.some(link => link.targetId === message.id))) reject();
       // Thread roots are top-level messages; no recursive thread topology.
       const thread = rows.get(String(message.crystal.threadRootId));
@@ -131,7 +143,7 @@ export const validateChatArchiveRecords = (manifest: {
 
 export type ArchiveAuthor =
   | { archived: false; userId: string }
-  | { archived: true; participantId: string; username: string; displayName: string; avatarFileId?: string };
+  | { archived: true; participantId: string; username: string; displayName: string; avatarFileId?: string; avatarPreset?: ArchiveAvatarPreset };
 
 /** Call only after validating the archive; no lookup by historical username.
  * The importing account replaces the exporting participant on every message.
@@ -152,5 +164,6 @@ export const archiveAuthor = (group: ChatArchiveGroup, participantId: string, im
   const avatarFileId = typeof avatar === 'string' ? importedFileIds.get(avatar) : undefined;
   if (avatar !== undefined && (!avatarFileId || avatarFileId === avatar)) return reject();
   return { archived: true, participantId: freshId, username: String(participant.crystal.username),
-    displayName: String(participant.crystal.displayName), ...(avatarFileId ? { avatarFileId } : {}) };
+    displayName: String(participant.crystal.displayName), ...(avatarFileId ? { avatarFileId } : {}),
+    ...(participant.crystal.avatarPreset === undefined ? {} : { avatarPreset: participant.crystal.avatarPreset as ArchiveAvatarPreset }) };
 };

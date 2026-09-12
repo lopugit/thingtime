@@ -31,6 +31,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-12 — Private AI-chat archives preserve assistant avatar presets,
+  inert tool receipts and explicit message/segment order through transfer and
+  re-export. Capability negotiation prevents older servers from silently
+  dropping presentation. [PR #764 notes](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI)
+
 - 2026-09-12 — **Codex (AI):** Add an opt-in real recording ZIP regression proving fresh private recording import, exact-byte independence after source deletion, re-export and cleanup. [PR #764 evidence](../PRs/764-thing-transfer-clipboard.md).
 
 - 2026-09-12 — Added and passed real nine-kind library ZIP/import regression:

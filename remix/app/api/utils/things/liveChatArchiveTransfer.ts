@@ -79,7 +79,7 @@ export const readLiveChatArchiveTransfer = async (viewer: Viewer, id: string, fi
         files.push({ id: target.id, targetId: target.targetId, mime: file.contentType, bytes: file.size });
       }
     }
-    const archive = normalizeLiveChatArchive(source, firstPartyUserId, profiles, { files, links, avatars });
+    const archive = normalizeLiveChatArchive(source, firstPartyUserId, profiles, { files, links, avatars }, { aiHistory: true });
     check();
     const transferEmojis = await deps.emojis(archive.emojiIds);
     check();
