@@ -2,6 +2,14 @@
 
 ## Private chat archive import integration
 
+- [ ] Delete an imported archive through DELETE /things from the owner session:
+  drain stored files, remove all history rows and refund storage. A stale
+  expectedUpdatedAt returns 409 before cleanup. A deferred provider operation
+  returns a sanitized retryable error, retaining history for another deletion.
+- [ ] Repeat as another user, PAT, app, service account, cross-origin caller or
+  custom data plane: no archive lookup/deletion authority. A participant/message
+  ID cannot delete the archive. Require api.things 1.12.0 before client deletion.
+
 - [ ] Import a complete archive with folders, avatars, message galleries,
   replies, deleted tombstones and custom emoji reactions. Verify fresh IDs,
   exact history, importer-as-self and archived counterparts; no real user,

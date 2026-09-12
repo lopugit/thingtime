@@ -19,8 +19,11 @@ const reject = (message: string): never => { throw new Error(message); };
  * then refunds/removes the relational rows atomically. Never delete live chats,
  * users, emoji definitions, memberships, or source records through this path.
  */
-export const removeTransferChatArchive = async (ownerId: string, rootId: string, deps = defaults) => {
+export const removeTransferChatArchive = async (ownerId: string, rootId: string, deps = defaults, expectedUpdatedAt?: unknown) => {
   if (!validId(ownerId) || !validId(rootId)) reject('Invalid archive deletion request');
+  if (expectedUpdatedAt != null && (typeof expectedUpdatedAt !== 'string' || !Number.isFinite(Date.parse(expectedUpdatedAt)))) {
+    throw { ok: false, status: 400, error: 'expectedUpdatedAt must be an ISO timestamp' };
+  }
   if (deps.custom()) reject('Chat archives belong to the home Thingtime library');
   const scope = { ownerId, archiveRootId: rootId, archiveVersion: 1 };
   const rootFilter = { ...scope, shareId: rootId, thingtime: ['chat-archive'] };
@@ -42,6 +45,9 @@ export const removeTransferChatArchive = async (ownerId: string, rootId: string,
     }
     if (!rows.some(row => row.shareId === rootId) || rows.filter(row => row.thingtime[0] === 'chat-archive').length !== 1 ||
       !(root.updatedAt instanceof Date) || !Number.isFinite(root.updatedAt.getTime())) reject('Archive root is invalid');
+    if (typeof expectedUpdatedAt === 'string' && root.updatedAt.getTime() !== Date.parse(expectedUpdatedAt)) {
+      throw { ok: false, status: 409, error: 'Archive changed after the preview — refresh before deleting' };
+    }
     // This server-only envelope flag does not change billable payload bytes.
     // Readers/exporters must hide deleting roots; no archive append API exists.
     const now = deps.now();

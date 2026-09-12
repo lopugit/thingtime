@@ -24,6 +24,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-12: Route first-party owner archive deletion through whole-history
+  cleanup with transactional preview timestamps and sanitized retryable errors.
+  Negotiate api.things 1.12.0; archive browsing/export remain unfinished.
+  — **Codex (AI)**
+
 - 2026-09-12: Connect private chat archive groups to the transfer importer,
   protect their records from generic CRUD, and negotiate import contract 1.9.0.
   Archive UI/export and public owner deletion remain unfinished. See

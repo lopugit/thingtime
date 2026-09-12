@@ -12,6 +12,16 @@ test('archive import clients reject missing, pre-archive and breaking contracts 
   assert.equal(thingtimeCapabilityManifest('https://preview.example.test').features['api.things-import'].version, '1.9.0');
 });
 
+test('owner archive deletion requires the additive Things capability at the chosen origin', () => {
+  for (const version of ['1.12.0', '1.12.1', '1.13.0']) assert.equal(capabilitySatisfies(version, '1.12.0'), true);
+  for (const version of ['', '1.11.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.12.0'), false);
+  const origin = 'https://preview.example.test';
+  const manifest = thingtimeCapabilityManifest(origin);
+  assert.equal(manifest.origin, origin);
+  assert.equal(manifest.features['api.things'].version, '1.12.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.11.0');
+});
+
 test('managed-folder transfer clients reject old and breaking import/export contracts', () => {
   for (const version of ['1.7.0', '1.7.1', '1.8.0']) assert.equal(capabilitySatisfies(version, '1.7.0'), true);
   for (const version of ['1.0.1', '1.5.0', '1.6.0', '1.6.1', '2.0.0', '']) assert.equal(capabilitySatisfies(version, '1.7.0'), false);
@@ -83,7 +93,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // response echoes it; unknown → 400) — the single read only, the shared
   // projection is untouched (1.5.0, additive)
   // Included dependency reads add sharedRoot without widening standalone ACLs.
-  assert.equal(manifest.features['api.things']?.version, '1.11.0');
+  assert.equal(manifest.features['api.things']?.version, '1.12.0');
   assert.equal(manifest.features['api.lopu-reminders']?.version, '1.1.0');
   assert.equal(manifest.features['api.lopu-voice-reply']?.version, '1.4.0');
   assert.equal(manifest.features['api.lopu-recordings-run']?.version, '1.5.0');

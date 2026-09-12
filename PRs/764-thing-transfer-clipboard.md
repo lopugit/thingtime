@@ -1,5 +1,22 @@
 # PR 764 — portable Thing transfer
 
+## Owner archive deletion route — 2026-09-12
+
+DELETE /things now recognizes exact private archive roots only for first-party
+user accounts on the same origin and home plane. It delegates to whole-archive
+cleanup instead of generic cascading. PAT/app/service/cross-origin callers and
+individual history rows remain excluded. The optional preview timestamp is
+checked within the claim transaction before any external object cleanup.
+Provider errors are sanitized into retryable responses without storage details.
+The Things feature is 1.12.0 (documentation contract 1.11.0); the client negotiates
+before deleting and forwards expectedUpdatedAt.
+
+Five new dependency-level tests cover dispatch, forbidden actors/planes,
+namespace and missing records, sanitized errors and the transactional timestamp
+fence. Archive read/render, folder lifecycle routing, full-history export and
+live Mongo/S3/browser acceptance remain unfinished. This is not a completion
+claim for the archive experience or the broader transfer goal.
+
 ## Archive import service integration — 2026-09-12
 
 The transfer importer now validates complete archive groups before writes,

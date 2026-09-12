@@ -32,6 +32,7 @@ import {
 } from '~/api/utils/things/things';
 import { parseCommentSort } from '~/api/utils/things/updownCore';
 import { sharedThingRead } from './sharedThingRead';
+import { deleteOwnedChatArchive } from '~/api/utils/things/chatArchiveOwnerTransfer';
 
 // Route a unified mutation to the rate-limit key its dedicated sub-route would
 // use, so the generic endpoint can't be used to bypass the per-op limits.
@@ -371,6 +372,9 @@ export const action = async ({ request }: { request: Request }) => {
 
   if (method === 'DELETE') {
     const id = (new URL(request.url).searchParams.get('id') || '').trim() || body?.id;
+    const archiveResult = await deleteOwnedChatArchive({ actorKind: actor.kind, accountKind: user.accountKind,
+      ownerId: user.id, id, sameOrigin: isSameOriginAttachmentRequest(request), expectedUpdatedAt: body?.expectedUpdatedAt });
+    if (archiveResult) return json(archiveResult, { status: archiveResult.ok === false ? archiveResult.status : 200, headers: { ...cors, 'Cache-Control': 'private, no-store' } });
     const attachmentHooks =
       actor.kind !== 'app' && user.accountKind === 'user'
         ? { beforeCascade: prepareAttachmentCascadeForThing, expectedUpdatedAt: body?.expectedUpdatedAt }

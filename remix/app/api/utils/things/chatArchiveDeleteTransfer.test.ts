@@ -73,6 +73,18 @@ test('archive deletion cleans child objects first then removes/refunds only exac
   assert.equal(state.transactions, 2); assert.equal(state.removed, 1);
 });
 
+test('preview timestamp is checked inside the claiming transaction before touching objects', async () => {
+  for (const timestamp of ['not-a-date', '2026-09-11T00:00:00.000Z']) {
+    const { state, deps } = harness();
+    await assert.rejects(removeTransferChatArchive('owner', 'archive', deps, timestamp),
+      error => (error as any).status === (timestamp === 'not-a-date' ? 400 : 409));
+    assert.deepEqual(state.prepared, []); assert.equal(state.locks, 0); assert.equal(state.removed, 0);
+  }
+  const { state, deps } = harness();
+  assert.deepEqual(await removeTransferChatArchive('owner', 'archive', deps, at.toISOString()), { ok: true, deleted: 4 });
+  assert.equal(state.removed, 1);
+});
+
 test('deferred object cleanup retains all history and deleting root for an idempotent retry', async () => {
   const { state, deps } = harness(); state.failPrepare = 'message';
   await assert.rejects(removeTransferChatArchive('owner', 'archive', deps), error => (error as any).status === 503);

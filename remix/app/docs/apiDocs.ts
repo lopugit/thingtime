@@ -8871,8 +8871,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // is a 400. Only this read grew — the shared projection is unchanged, so
     // things-comment / -feed / -user stay put (S7, additive)
     // Includes additive discussions and the 1.7.5 conditional-media write correction.
-    featureVersion: '1.11.0',
-    contractVersion: '1.10.0',
+    featureVersion: '1.12.0',
+    contractVersion: '1.11.0',
+    notes: ['DELETE accepts private chat-archive roots only for a first-party user account on the same origin and the home data plane. Whole-archive attachment cleanup precedes accounted relational deletion. Individual historical rows remain protected. Optional expectedUpdatedAt is checked in the claiming transaction; a stale preview returns 409 before object cleanup. Incomplete cleanup returns a recoverable 503 without exposing storage details. PATs, app tokens and service accounts do not gain archive access.'],
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',

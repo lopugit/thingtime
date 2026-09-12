@@ -1049,7 +1049,8 @@ export function useApi() {
       ),
 			remove: useCallback(
 				async (args) => {
-					const ret = asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things', method: 'DELETE' });
+					await requireThingtimeCapability('api.things', '1.12.0');
+					const ret = asyncFetcher.submit({ id: args?.id, expectedUpdatedAt: args?.expectedUpdatedAt }, { action: '/api/v1/things', method: 'DELETE' });
 					ret.then(refreshRootData).catch(() => {});
 					return ret;
 				},
