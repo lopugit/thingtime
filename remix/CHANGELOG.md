@@ -309,6 +309,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 - 2026-09-10: Recover older iPhone Lopu recordings into private Things with durable import receipts; fix notification bell toggling and refresh, reconnect native push from Settings, report APNs outcomes, and keep single/bulk push delivery alive through Vercel responses. Details: [PR 726](../PRs/726-ios-push-recording-import.md).
 
+- Refresh the custom-audience promotion preview with released main's shared-index readers. Resolve equivalent ACL merge blocks and duplicate viewer fields, composer state, and modal rendering; retain main's unified audience controls and drawer layering. Database migration activation remains separate. — Codex (AI), 2026-09-09
+
 - Save new iOS Lopu voice recordings as owner-private playable audio Things,
   retaining on-device recovery files and an account-bound retry outbox.
   Completed recordings survive draft cleanup; upload/complete contracts are

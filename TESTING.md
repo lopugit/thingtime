@@ -3946,6 +3946,9 @@ clientId>` (tt:all, other apps, other users, exclusions) 400s; an
       `/thing/<id>?key=<key>`. A no-key visit remains 404 and never paints a
       bearer-key response from local cache. Moving away from hidden invalidates
       the old link.
+- [ ] When reconciling older audience feature branches, each post/composer opens
+      exactly one Custom audience picker. Preserve the shared viewer fields,
+      composer state, ACL payload and drawer layering without duplicate blocks.
 - [ ] Token visibility fence 'hidden' mode ("Hidden only 🕵️" chip): the token
       lives entirely in hidden link-key things — its no-acl creates are born
       hidden WITH a fresh linkKey, public/private things 404, creating
