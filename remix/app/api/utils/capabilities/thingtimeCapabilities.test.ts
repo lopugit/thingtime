@@ -5,9 +5,11 @@ import { apiEndpointDocs, apiV1DocsRouteKeys, apiV1RouteKeys, createApiCapabilit
 import { capabilitySatisfies } from './capabilityContract';
 import { THINGTIME_CAPABILITY_MANIFEST_PATH, thingtimeCapabilityManifest } from './thingtimeCapabilities';
 
-test('import clients require the rollback recovery patch and reject missing or breaking contracts', () => {
-  for (const version of ['1.8.1', '1.8.2', '1.9.0']) assert.equal(capabilitySatisfies(version, '1.8.1'), true);
-  for (const version of ['', '1.8.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.8.1'), false);
+test('archive import clients reject missing, pre-archive and breaking contracts on both manifests', () => {
+  for (const version of ['1.9.0', '1.9.1', '1.10.0']) assert.equal(capabilitySatisfies(version, '1.9.0'), true);
+  for (const version of ['', '1.8.0', '1.8.1', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.9.0'), false);
+  assert.equal(createApiCapabilitiesManifest().features['api.things-import'], '1.9.0');
+  assert.equal(thingtimeCapabilityManifest('https://preview.example.test').features['api.things-import'].version, '1.9.0');
 });
 
 test('managed-folder transfer clients reject old and breaking import/export contracts', () => {
@@ -36,7 +38,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
 	assert.equal(manifest.features['api.webpages-resolve']?.version, '1.2.0');
 	assert.equal(manifest.features['api.actions-run']?.version, '1.4.0');
 	assert.equal(manifest.features['api.things-fork']?.version, '1.4.0');
-	assert.equal(manifest.features['api.things-import']?.version, '1.8.1');
+	assert.equal(manifest.features['api.things-import']?.version, '1.9.0');
 	assert.equal(manifest.features['api.things-export']?.version, '1.8.0');
   for (const [feature, required, previous] of [['api.things-export', '1.8.0', '1.7.1'], ['api.attachment-content', '1.6.4', '1.6.3']]) {
     assert.equal(manifest.features[feature]?.version, required);

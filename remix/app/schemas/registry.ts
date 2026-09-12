@@ -4040,7 +4040,11 @@ export const DEVICE_THINGTIME = [
 // imported chat rows stay ordinary quota-billed content.
 export const DEVICE_CONTROL_THINGTIME = ['device-command', 'device-command-event', 'device-ai-live-state', 'device-approval'] as const;
 
+// Historical chats have a dedicated atomic lifecycle, never generic CRUD.
+export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
+
 export const PROTECTED_THINGTIME = [
+  ...CHAT_ARCHIVE_THINGTIME,
 	'lopu-recording-settings',
 	'lopu-recording-job',
 	'lopu-recording-reminder',

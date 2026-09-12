@@ -5,6 +5,8 @@ import { TRANSFER_FORMAT, type ThingTransfer } from '../../../utils/thingTransfe
 import { rewriteTransferMedia } from './transferMediaCore';
 import { resolveTemplate } from '../../../components/ComponentsLibrary/componentTemplate';
 import { compositionAttachmentIds } from '../actions/compositionMediaCore';
+import { CHAT_ARCHIVE_KINDS } from '../../../utils/thingTransfer/chatArchive';
+import { isProtectedThingtime } from '../../../schemas/registry';
 
 const fixture = (): ThingTransfer => ({ format: TRANSFER_FORMAT, version: 1, roots: ['folder'], files: [], things: [
   { id: 'data', thingtime: ['data'], folderId: 'folder', crystal: { schemaId: 'schema', name: 'note', text: 'schema' }, extended: { custom: 42 } },
@@ -22,6 +24,106 @@ const harness = () => {
     remove: async (_viewer: any, id: any) => { removed.push(id); return { ok: true } as any; }
   } };
 };
+
+const archiveFixture = (id = 'archive'): ThingTransfer['things'] => {
+  const at = '2026-09-01T00:00:00.000Z';
+  return [
+    { id, thingtime: ['chat-archive'], folderId: 'folder', crystal: { name: 'History', topic: '', chatType: 'dm', createdAt: at, selfParticipantId: `${id}-self` } },
+    { id: `${id}-self`, targetId: id, thingtime: ['chat-archive-participant'], crystal: { username: 'original', displayName: 'Original', nickname: '', joinedAt: at } },
+    { id: `${id}-other`, targetId: id, thingtime: ['chat-archive-participant'], crystal: { username: 'friend', displayName: 'Friend', nickname: '', joinedAt: at } },
+    { id: `${id}-message`, targetId: id, thingtime: ['chat-archive-message'], crystal: { participantId: `${id}-self`, text: 'Exact\n history 🥰', createdAt: at, deleted: false } }
+  ];
+};
+
+test('imports entire archives after folders through the dedicated writer and returns its actual identities', async () => {
+  const { writes, deps } = harness();
+  const manifest = fixture(); manifest.things.push(...archiveFixture()); manifest.roots.push('archive');
+  const result = await importTransfer({ id: 'recipient' }, { manifest }, undefined, {
+    ...deps,
+    createArchive: async (owner, input, root, resources) => {
+      assert.equal(owner, 'recipient'); assert.equal(root, 'archive'); assert.deepEqual(input, manifest);
+      assert.equal(resources.folderId, writes[0].input.shareId);
+      assert.deepEqual([...resources.files], []); assert.deepEqual([...resources.emojis!], []);
+      assert.deepEqual(writes.map(row => row.input.thingtime[0]), ['folder', 'schema', 'data']);
+      return { rootId: 'copied-archive', ids: Object.fromEntries(archiveFixture().map(row => [row.id, `copied-${row.id}`])), imported: 4 };
+    }
+  });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.imported, 7); assert.equal(result.ids['archive-message'], 'copied-archive-message');
+  assert.deepEqual(result.roots, [writes[0].input.shareId, 'copied-archive']);
+  for (const kind of CHAT_ARCHIVE_KINDS) assert.equal(isProtectedThingtime([kind]), true);
+});
+
+test('invalid archive authorities and orphan rows are rejected before any writes', async () => {
+  for (const invalid of ['authority', 'orphan', 'mixed']) {
+    const { writes, deps } = harness(); const manifest = fixture(); const rows = archiveFixture();
+    if (invalid === 'authority') rows[1].crystal.userId = 'victim';
+    if (invalid === 'orphan') rows.shift();
+    if (invalid === 'mixed') rows[1].thingtime.push('user');
+    manifest.things.push(...rows);
+    const result = await importTransfer({ id: 'recipient' }, { manifest }, undefined, {
+      ...deps, createArchive: async () => { assert.fail('must not write an invalid archive'); }
+    });
+    assert.equal(result.ok, false); assert.deepEqual(writes, []);
+  }
+});
+
+test('archive avatars use fresh prepared uploads and are not bound by generic Thing creation', async () => {
+  const { deps, writes } = harness(); const manifest = fixture(); const rows = archiveFixture();
+  rows[2].crystal.avatarFileId = 'avatar'; manifest.things.push(...rows);
+  manifest.files.push({ id: 'avatar', targetId: 'archive-other', name: 'avatar.png', mime: 'image/png', bytes: 68, path: 'files/000000', sha256: 'a'.repeat(64) });
+  let inspected = false;
+  const result = await importTransfer({ id: 'recipient' }, { manifest, files: { avatar: 'fresh-upload' } }, undefined, {
+    ...deps,
+    inspectFiles: async (owner, ids) => { assert.equal(owner, 'recipient'); assert.deepEqual(ids, ['fresh-upload']); inspected = true; return { ok: true, hasAny: true, hasVisual: true }; },
+    getFile: async () => ({ crystal: { size: 68 } }) as any,
+    bindFiles: () => { assert.fail('archive writer owns the binding transaction'); },
+    createArchive: async (_owner, input, _root, resources) => {
+      assert.equal(inspected, true); assert.equal(resources.files.get('avatar'), 'fresh-upload');
+      assert.equal(input.things.find(row => row.id === 'archive-other')!.crystal.avatarFileId, 'avatar');
+      return { rootId: 'copied-archive', ids: Object.fromEntries(rows.map(row => [row.id, `copied-${row.id}`])), imported: rows.length };
+    }
+  });
+  assert.equal(result.ok, true); assert.equal(writes.length, 3);
+});
+
+test('failed later archive uses whole-archive cleanup and retains dependencies when cleanup fails', async () => {
+  for (const cleanupFails of [false, true]) {
+    const { writes, removed, deps } = harness(); const manifest = fixture();
+    manifest.things.push(...archiveFixture(), ...archiveFixture('second'));
+    const archiveRemovals: string[] = [];
+    const result = await importTransfer({ id: 'recipient' }, { manifest }, undefined, {
+      ...deps,
+      createArchive: async (_owner, _input, root) => {
+        if (root === 'second') throw new Error('quota exhausted');
+        return { rootId: 'copied-archive', ids: Object.fromEntries(archiveFixture().map(row => [row.id, `copied-${row.id}`])), imported: 4 };
+      },
+      removeArchive: async (owner, root) => {
+        assert.equal(owner, 'recipient'); archiveRemovals.push(root);
+        if (cleanupFails) throw new Error('object deletion deferred');
+        return { ok: true, deleted: 4 };
+      }
+    });
+    assert.equal(result.ok, false); assert.deepEqual(archiveRemovals, ['copied-archive']);
+    assert.deepEqual(removed, cleanupFails ? [] : writes.map(row => row.input.shareId).reverse());
+    if (cleanupFails) {
+      assert.ok('remainingIds' in result);
+      assert.deepEqual(result.remainingIds, ['copied-archive', ...writes.map(row => row.input.shareId).reverse()]);
+    }
+  }
+});
+
+test('abort during the final archive commit cleans the returned archive instead of claiming success', async () => {
+  const { deps, removed } = harness(); const controller = new AbortController();
+  const manifest = fixture(); manifest.things.push(...archiveFixture());
+  const result = await importTransfer({ id: 'recipient' }, { manifest }, controller.signal, {
+    ...deps,
+    createArchive: async () => { controller.abort(); return { rootId: 'copied-archive', ids: {}, imported: 4 }; },
+    removeArchive: async (_owner, id) => { removed.push(id); return { ok: true, deleted: 4 }; }
+  });
+  assert.equal(result.ok, false); assert.equal(removed[0], 'copied-archive');
+});
 
 test('imports fresh private linked galleries in mixed attachment order through normal link writers', async () => {
   const { writes, deps } = harness();

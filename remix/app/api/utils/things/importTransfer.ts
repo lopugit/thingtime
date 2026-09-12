@@ -13,6 +13,9 @@ import { createTransferTheme, isTransferTheme, removeTransferTheme, validateTran
 import { createTransferAlgorithm, isTransferAlgorithm, removeTransferAlgorithm, validateTransferAlgorithm } from './algorithmTransfer';
 import { isTransferEmoji, emojiTransferFile } from '../../../utils/thingTransfer/emoji';
 import { createTransferEmoji, removeTransferEmoji } from './emojiTransfer';
+import { isTransferChatArchive, validateChatArchives, type ChatArchiveGroup } from '../../../utils/thingTransfer/chatArchive';
+import { createTransferChatArchive } from './chatArchiveTransfer';
+import { removeTransferChatArchive } from './chatArchiveDeleteTransfer';
 
 type ImportDependencies = {
   create: typeof createThing;
@@ -33,9 +36,11 @@ type ImportDependencies = {
   moveContent?: typeof moveManagedContent;
   createEmoji: typeof createTransferEmoji;
   removeEmoji: typeof removeTransferEmoji;
+  createArchive?: typeof createTransferChatArchive;
+  removeArchive?: typeof removeTransferChatArchive;
 };
 const defaults: ImportDependencies = { create: createThing, remove: deleteThing, inspectFiles: inspectReadyAttachmentsForPost, getFile: attachmentStore.getOwned, bindFiles: createReadyAttachmentPostInsertHook, uuid: randomUUID, link: linkAttachment, annotate: annotateAttachment, removeFile: deleteAttachment, createTheme: createTransferTheme, removeTheme: removeTransferTheme, createAlgorithm: createTransferAlgorithm, removeAlgorithm: removeTransferAlgorithm, createRecording: commitRecordingImport, moveRecording: moveManagedContent, createEmoji: createTransferEmoji, removeEmoji: removeTransferEmoji };
-const dedicatedTransfer = (thing: TransferThing) => isTransferTheme(thing) || isTransferAlgorithm(thing) || isTransferRecording(thing) || isTransferEmoji(thing);
+const dedicatedTransfer = (thing: TransferThing) => isTransferTheme(thing) || isTransferAlgorithm(thing) || isTransferRecording(thing) || isTransferEmoji(thing) || isTransferChatArchive(thing);
 
 /** Import ordering only constrains structural/provenance references. Action
  * cycles are legal: their fresh IDs are allocated before any create call.
@@ -58,13 +63,15 @@ export const importTransfer = async (
   signal?: AbortSignal, overrides: Partial<ImportDependencies> = {}
 ) => {
   if (!viewer?.id) return fail(401, 'Sign in to import Things');
-  const deps = { ...defaults, moveContent: moveManagedContent, ...overrides };
+  const deps = { ...defaults, createArchive: createTransferChatArchive, removeArchive: removeTransferChatArchive, moveContent: moveManagedContent, ...overrides };
   let manifest: ThingTransfer;
   let ordered: TransferThing[];
+  let archives: ChatArchiveGroup[];
   try {
     manifest = validateTransfer(input.manifest);
     serializeTransfer(manifest);
     ordered = orderTransferImports(manifest);
+    archives = validateChatArchives(manifest);
     for (const theme of ordered.filter(thing => isTransferTheme(thing) || isTransferAlgorithm(thing))) {
       if (isTransferTheme(theme)) validateTransferTheme(theme);
       else validateTransferAlgorithm(theme);
@@ -93,6 +100,8 @@ export const importTransfer = async (
   const createdAlgorithms = new Set<string>();
   const createdRecordings = new Set<string>();
   const createdEmojis = new Set<string>();
+  const createdArchives = new Set<string>();
+  let archiveChildren = 0;
   const createdLinks: string[] = [];
   const attachments = orderedTransferAttachments(manifest);
   const suffix = deps.uuid().slice(0, 8);
@@ -231,7 +240,22 @@ export const importTransfer = async (
       const destination = thing.folderId ? ids.get(thing.folderId)! : input.folderId;
       if (typeof destination === 'string' && destination) await (deps.moveContent || moveManagedContent)(viewer.id, ids.get(thing.id)!, destination);
     }
-    return { ok: true as const, roots: manifest.roots.map((id) => ids.get(id)!), ids: Object.fromEntries(ids), imported: created.length, filesImported: manifest.files.length, linksImported: createdLinks.length };
+    // Whole histories are atomic groups, never individual generic Thing writes.
+    // Folders and personal emoji definitions must exist before their archive.
+    for (const archive of archives) {
+      check();
+      const result = await deps.createArchive(viewer.id, manifest, archive.root.id, {
+        files,
+        emojis: new Map(ordered.filter(isTransferEmoji).map(thing => [thing.id, ids.get(thing.id)!])),
+        folderId: archive.root.folderId ? ids.get(archive.root.folderId)! : input.folderId as string | null | undefined
+      });
+      created.push(result.rootId);
+      createdArchives.add(result.rootId);
+      archiveChildren += result.imported - 1;
+      for (const [source, copied] of Object.entries(result.ids)) ids.set(source, copied);
+      check();
+    }
+    return { ok: true as const, roots: manifest.roots.map((id) => ids.get(id)!), ids: Object.fromEntries(ids), imported: created.length + archiveChildren, filesImported: manifest.files.length, linksImported: createdLinks.length };
   } catch (error) {
     const remaining: string[] = [];
     for (const id of [...created].reverse()) {
@@ -240,6 +264,10 @@ export const importTransfer = async (
       // rest of this attempt rather than deleting its recovery dependencies.
       if (remaining.length) { remaining.push(id); continue; }
       try {
+        if (createdArchives.has(id)) {
+          await deps.removeArchive(viewer.id, id);
+          continue;
+        }
         if (createdRecordings.has(id)) {
           const removed = await deps.removeFile(viewer.id, { id });
           if (isFail(removed) || removed.deferred) remaining.push(id);

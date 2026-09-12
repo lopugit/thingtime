@@ -1,5 +1,24 @@
 # PR 764 — portable Thing transfer
 
+## Archive import service integration — 2026-09-12
+
+The transfer importer now validates complete archive groups before writes,
+creates their folders and personal emoji dependencies first, and calls the
+atomic archive writer instead of generic Thing creation. Its response uses the
+writer's fresh identities for every historical row and counts the whole group.
+Prepared avatar/gallery uploads remain bound by the archive transaction.
+Cancellation after a final commit cleans up the returned archive rather than
+reporting success. Later failures call whole-archive cleanup; uncertain cleanup
+retains the archive root and all earlier recovery dependencies.
+
+Archive kinds are protected from generic CRUD. Import contract and client
+minimum are 1.9.0, with both capability generators covered. Five integration
+regressions cover routing/counts/placement, fresh avatars, invalid authority,
+multi-archive compensation and final-commit cancellation. These are dependency
+tests, not live MongoDB/S3 acceptance. Archive export/re-export, owner deletion
+surface, folder lifecycle routing, chat rendering and end-to-end acceptance
+remain unfinished. Do not treat this preview as a finished archive experience.
+
 ## Develop integration and pending-identity Cut revocation — 2026-09-12
 
 Merged develop source `ee5f9da7a1eb73e962a1960866dc3533db8c7f63` into the

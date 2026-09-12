@@ -1,11 +1,11 @@
-import { MAX_CHAT_NAME_CHARS, MAX_CHAT_TOPIC_CHARS, MAX_MESSAGE_CHARS, MAX_NICKNAME_CHARS } from '../../schemas/registry';
+import { CHAT_ARCHIVE_THINGTIME, MAX_CHAT_NAME_CHARS, MAX_CHAT_TOPIC_CHARS, MAX_MESSAGE_CHARS, MAX_NICKNAME_CHARS } from '../../schemas/registry';
 import { customReactionEmojiId, sanitizeChatReactionToken } from '../reactionTokens';
 import { validateTransfer, type TransferThing } from './format';
 
 // Portable historical records, never live users, memberships or send commands.
 // The dedicated writer must store these as separate private, importer-owned
 // Things. This module deliberately has no API/storage/notification side effects.
-export const CHAT_ARCHIVE_KINDS = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
+export const CHAT_ARCHIVE_KINDS = CHAT_ARCHIVE_THINGTIME;
 export const isTransferChatArchive = (thing: Pick<TransferThing, 'thingtime'>) =>
   thing.thingtime.length === 1 && (CHAT_ARCHIVE_KINDS as readonly string[]).includes(thing.thingtime[0]);
 

@@ -1,5 +1,19 @@
 # TESTING.md — per-area manual test checklists
 
+## Private chat archive import integration
+
+- [ ] Import a complete archive with folders, avatars, message galleries,
+  replies, deleted tombstones and custom emoji reactions. Verify fresh IDs,
+  exact history, importer-as-self and archived counterparts; no real user,
+  membership, invitation or notification writes. This awaits archive UI/export.
+- [ ] Make a later archive fail. Earlier completed archives use whole-archive
+  cleanup; deferred object deletion retains their roots and earlier dependencies
+  in remainingIds. Cancel during the final commit: do not report success.
+- [ ] Reject orphan/mixed-kind archives and source participant userId/roles
+  before any writes. Generic Thing CRUD must not modify archive records.
+- [ ] Require api.things-import 1.9.0 before upload/import; reject pre-archive,
+  missing and incompatible-major manifests from the selected origin.
+
 ## Session read recovery
 
 - [ ] Fail the first `/api/root-data` GET after sign-in: one automatic retry
