@@ -31,6 +31,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-12 — Verify ordinary live Messenger history through real dev export,
+  ZIP import and Chrome clipboard/download/file-picker controls. Preserve edits,
+  threads and deletion markers; verify source messages and copied-archive cleanup.
+  Media and AI history acceptance remain separate. [PR #764 notes](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
 - 2026-09-12 — Add private-archive transfer controls to Messenger details,
   omit Cut for live chats, and keep nested transfer menus accessible inside
   drawers. Desktop/mobile rendered smoke covers the entry point and dialogs.

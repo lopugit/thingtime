@@ -1,5 +1,28 @@
 # PR 764 — portable Thing transfer
 
+## Real live Messenger round trips — 2026-09-12
+
+The corrected export capability 1.11.1 passed the opted-in HTTP integration:
+two tests, no skips. The reusable self-only chat exported its actual root and
+thread history, edited text/ISO timestamp, deletion marker and reaction through
+ZIP into fresh private archive IDs. Export/import left source messages,
+membership and read receipts unchanged. The imported copy was deleted and its
+read endpoint returned 404. The one named self-only source remains reusable.
+
+The new `remix/scripts/live-chat-transfer-browser.integration.mts` then passed
+on exact preview SHA `53951c614e4ffac2958a91da9d3dafabec6648a3`: fresh headed
+Chrome, real macOS clipboard Copy, ZIP download, real file-picker import,
+rendered archive, exact historical text comparison and source-message equality.
+The UI path offers no Cut and sent no new messages. Opening a live conversation
+can perform its ordinary read-receipt update; only the HTTP export/import-only
+test claims receipt equality. The imported browser copy was deleted and 404
+verified. No fixture cookies or passwords are stored in the script or artifacts.
+
+Deployment worker 34681879248 succeeded, with exact-source authorization and
+the stable PR alias confirmed by its preview comment. This acceptance covers
+ordinary text/history chats, not live-chat media, shared emoji or AI attribution.
+Those remain required follow-up work; the overall transfer goal is incomplete.
+
 ## Messenger transfer entry point — 2026-09-12
 
 Chat details now exposes Copy, Download and Import through the existing transfer

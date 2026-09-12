@@ -2,6 +2,15 @@
 
 ## Real browser portable transfer acceptance
 
+- [ ] After the canonical self-only live chat fixture passes, run
+  `TT_TRANSFER_LIVE_CHAT_BROWSER_TEST=1 node --import tsx scripts/live-chat-transfer-browser.integration.mts`
+  from `remix/`, using an ephemeral approved preview session and expected
+  fixture username. Verify real clipboard Copy, ZIP download/file-picker import,
+  exact history, unchanged source messages and imported-copy cleanup. The test
+  refuses chats containing anyone else and never sends messages or creates a
+  live chat. It writes fixture content to the macOS clipboard. Media and AI
+  history require separate acceptance; do not infer them from this test.
+
 - [ ] Messenger details: open Transfer with an active or pending membership;
   Copy and Download must be accessible, but Cut must be absent. Open Download
   and Import dialogs above the drawer at desktop/mobile widths, scroll the
