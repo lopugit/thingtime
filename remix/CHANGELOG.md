@@ -24,6 +24,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-12: Verify real archive avatar/message-image ZIP round trips and
+  independent copies after source deletion on the deployed PR preview. Extend
+  the dev-fenced binary regression test; see [PR 764](../PRs/764-thing-transfer-clipboard.md).
+  — **Codex (AI)**
+
 - 2026-09-12: Render imported chat media with the shared gallery, NSFW reveal
   and lightbox; preserve moderation for historical avatars. Desktop/mobile
   fixture checks pass; real media acceptance remains separate. See

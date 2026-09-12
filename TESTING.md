@@ -2,6 +2,11 @@
 
 ## Private chat archive import integration
 
+- [ ] Run the opt-in `test:transfer-binary` against the approved upload-enabled
+  dev fixture. Verify archive avatar/message bytes and annotations survive ZIP
+  re-import and source deletion; all created roots and uploads must be cleaned
+  up. This storage test complements, not replaces, the visible gallery checks.
+
 - [ ] Owned archives appear as private root entries in Things/folders, never as
   separate historical message/person rows. Open reaches the read-only archive
   page with the correct Back link. Other users, PATs, apps, service accounts,

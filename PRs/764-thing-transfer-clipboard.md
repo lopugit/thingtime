@@ -1,5 +1,23 @@
 # PR 764 — portable Thing transfer
 
+## Real archive image bytes — 2026-09-12
+
+The exact deployed preview source 40afdd138ce80f74676834b3f962191afcc9fb49
+serves root-data and Things 1.15.0 / import 1.9.1 / export 1.10.0 capabilities.
+The extended binary integration test passed both tests with zero skips using
+the explicitly approved upload fixture. It uploaded four real PNG files through
+the canonical storage pipeline: post image, personal emoji, historical avatar
+and archive message image. ZIP export/re-import preserved bytes and attachment
+annotations, generated independent roots, and exposed correctly bound archive
+gallery metadata. Deleting the source archive did not prevent exporting the
+copied avatar and message bytes. The concurrent emoji upload claim still passed.
+Every created root and upload was cleaned up and its absence verified.
+
+The separate archive folder/history ZIP lifecycle test also passed both tests
+without skips on that source. These are HTTP/storage acceptance tests, not a
+claim that all real-browser clipboard, file-picker, media playback or live-chat
+source-export touchpoints are finished.
+
 ## Develop integration — 2026-09-12
 
 Integrated develop 47576f22117ce4b31cb0598aa875d3bc9803b4c7 without
