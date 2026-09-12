@@ -18,6 +18,39 @@ required sequence:
 The branch is intentionally cumulative. It does not merge itself, implement
 the product work, or treat a plausible idea as an approved decision.
 
+## 2026-09-12 evening — joyful delight and play agency
+
+This run grounds the garden in Thingtime's factual Lopu notification path,
+single app-wide confetti surface, operating-system and theme motion controls,
+deterministic time-based musings, and discoverable easter eggs while refusing
+to treat animation, surprise, replay, clicks, smiles, streaks, or continued use
+as proof of value, consent, wellbeing, or successful adoption. It adds:
+
+- `NOTES/joyful-delight-and-play-agency-baseline.md`, a dated evidence ledger
+  and vocabulary separating factual feedback, decoration, celebration,
+  surprise, play, reward, and growth conditioning;
+- `PLAN/joyful-delight-and-play-agency-roadmap.md`, a gated path from an
+  approved delight charter through preference fidelity, bounded recipes,
+  truthful triggers, cleanup, regression proof, and one local preview; and
+- `TODO/claude-todo/42-joyful-delight-and-play-agency.md`, an execution epic
+  with owner decisions, acceptance criteria, stop conditions, non-goals, and a
+  concrete first decision packet.
+
+The recommended experiment is an explicit local design-system preview using
+one fictional private-Thing completion and the same factual Lopu message across
+neutral, optional-confetti, operating-system-reduced-motion, and
+Thingtime-motion-disabled modes. It proves replay-once, dismissal, disablement,
+route departure, cleanup, and functional equivalence without sound, haptics,
+telemetry, production triggers, account data, or a growth objective.
+
+Streaks, variable rewards, scarcity or loss framing, leaderboards, social
+comparison, gambling patterns, behavioral advertising, emotion or
+vulnerability targeting, public milestones, AI, minors, and sensitive or
+high-impact contexts remain excluded. The theme is linked from the NOTES,
+PLAN, main TODO, and Claude TODO indexes, plus the delight idea bank,
+trustworthy-adoption epic, and its roadmap. No runtime, API, schema, analytics,
+notification, confetti, preference, account, or production behavior changed.
+
 ## 2026-09-12 — relationship agency and consentful connection
 
 This run grounds the garden in Thingtime's shipped one-way follows, mutual

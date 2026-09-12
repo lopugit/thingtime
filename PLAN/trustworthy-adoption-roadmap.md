@@ -53,6 +53,9 @@
 **Relationship-agency dependency:**
 [Relationship agency and consentful connection](./relationship-agency-and-consentful-connection-roadmap.md)
 
+**Joyful-delight dependency:**
+[Joyful delight and play agency](./joyful-delight-and-play-agency-roadmap.md)
+
 ## Outcome
 
 Make Thingtime easier to discover, understand, trust, use repeatedly, share by

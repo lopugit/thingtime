@@ -29,6 +29,7 @@ engineering decisions in [`../DECISIONS.md`](../DECISIONS.md).
 | [Recording agency and intimate-data stewardship roadmap](./recording-agency-and-intimate-data-stewardship-roadmap.md)               | Recording charter through lifecycle and route truth, correction and deletion proof, one single-person personal-device pilot, and gated expansion            | Proposed |
 | [Remix agency and responsible reuse roadmap](./remix-agency-and-responsible-reuse-roadmap.md)                                       | Reuse charter through exact copy planning, version-bound lineage, accessible comparison, optional source updates, remedies, and one synthetic private pilot | Proposed |
 | [Relationship agency and consentful connection roadmap](./relationship-agency-and-consentful-connection-roadmap.md)                 | Relationship charter through a state/effects matrix, fresh transitions, dependable stopping, private receipts, remedies, and one two-account pilot          | Proposed |
+| [Joyful delight and play agency roadmap](./joyful-delight-and-play-agency-roadmap.md)                                               | Delight charter through truthful feedback, preference fidelity, bounded recipes, safe cleanup, regression proof, and one local synthetic preview            | Proposed |
 
 ## Conventions
 

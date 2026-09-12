@@ -638,3 +638,22 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     graphs, recommendations, public graph expansion, analytics, advertising, AI
     use, minors, institutions, sensitive contexts, and relationship-based
     identity, trust, safety, or authority claims remain separately gated.
+
+42. **🌈 Make joyful delight and play agency a product contract.**
+
+    Preserve Thingtime's factual Lopu path, single bounded confetti surface,
+    motion preference, deterministic musings, and discoverable playful details
+    while separating feedback, decoration, celebration, surprise, play, and
+    reward. Start only with an explicit local design-system preview of one
+    fictional private-Thing completion: show the same factual message with
+    neutral presentation, optional confetti, operating-system reduced motion,
+    and Thingtime motion disabled; prove replay-once, dismissal, disablement,
+    route departure, cleanup, and functional equivalence. Execute
+    `claude-todo/42-joyful-delight-and-play-agency.md` only after qualified
+    owners approve the vocabulary, serious-context denylist, trigger and recipe
+    contract, preference precedence, cultural/accessibility review, measures,
+    incident/removal path, and manual stop authority. Sound, haptics, telemetry,
+    production triggers, account data, public milestones, streaks, variable
+    rewards, scarcity, leaderboards, behavioral advertising, emotional or
+    vulnerability targeting, AI, minors, and sensitive or high-impact contexts
+    remain separately gated.

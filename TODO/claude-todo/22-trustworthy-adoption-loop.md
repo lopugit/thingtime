@@ -132,6 +132,12 @@ experiment by itself.
   reporting cannot treat requests, accepts, graph size, messages, invitations,
   or relationship retention as consent, trust, safety, usefulness, or a
   completed outcome.
+- [TODO 42](./42-joyful-delight-and-play-agency.md) owns the distinction between
+  factual feedback, decoration, celebration, surprise, and play; preference
+  precedence; truthful triggers; cleanup; and non-coercive design. Adoption
+  experiments cannot count delight interactions as useful return, condition
+  celebration on growth or data collection, or use streaks, variable rewards,
+  scarcity, or social comparison to drive continued use.
 - Open PRs are evidence of active work, not dependencies that may be assumed
   merged. Recheck their head, base, review, CI, preview, and shipped behavior
   immediately before implementation.
