@@ -25,6 +25,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ## [Unreleased]
 
 - Promote the native Apple widget suite, browser OAuth scopes, saved endpoints, per-widget routing, automatic signed Widgets releases and Recovery support from PRs #727 and #774. — Codex (AI), 2026-09-12
+- 2026-09-12: Add a main-only signed/notarized Thingtime Widgets release workflow and a dedicated Widgets product, cache and installer path in Thingtime Recovery.
 - Bound root session reads to two attempts with timeout/cancellation, provide
   recoverable retry/reload controls, and hide/reset account-owned UI across
   sign-in changes without falling back to another account's root data.
@@ -37,6 +38,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   [PR #768](../PRs/768-codex-thingtime-ai-guidance-20260911-refresh-ai-guidance-from-pr-history.md)
   and its linked review/inventory.
   — Codex (AI), 2026-09-11
+
+- Replace the Mac Widgets webview with native navigation and browser PKCE sign-in, app-only Keychain credentials, and revocable connections. Expand OAuth consent and route enforcement for account Things, actions, and Lopu; preserve selected-only legacy grants and granular read/write choices. See [PR #727 notes](../PRs/727-apple-widget-suite.md). — Codex (AI), 2026-09-11
+
+- 2026-09-10: Add shared iOS/Mac WidgetKit actions, dashboards, Thing rendering, recent Things, and iOS Control Centre buttons. Add opt-in bounded content sync, native launch routes, Mac companion signing/install runbook, and widget acceptance checks. See [PR #727 notes](../PRs/727-apple-widget-suite.md) and [Apple widget setup](../apple/README.md). — Codex (AI), 2026-09-10
+
+- Unify Thing, post, recording and message action-menu rendering and inherited
+  base verbs. Dispatch recording handoffs through the versioned Things action
+  API, retaining the legacy adapter and protected writers. Fix stale open
+  submenus and scrollbar-edge clipping. Details:
+  [PR 767](../PRs/767-unified-thing-menus-native-links-search-history.md).
+  — Codex (AI), 2026-09-11
+
+- Make drawer and Thing-menu destinations native anchors, preserving browser
+  new-tab modifiers, and persist Things search/view/filter/sort/group rules in
+  URL history, including rapid input and folder navigation. — Codex (AI), 2026-09-11
 
 - Verify real shared-file and linked-gallery copies on the exact PR preview,
   including private copies surviving source revocation/deletion and cleanup

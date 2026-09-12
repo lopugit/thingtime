@@ -249,6 +249,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/groups': () => import('../../../app/routes/api/v1/groups/_groups'),
   'v1/groups/audience-sources': () => import('../../../app/routes/api/v1/groups/audience-sources/_audience-sources'),
   'v1/things': () => import('../../../app/routes/api/v1/things/_things'),
+  'v1/things/actions': () => import('../../../app/routes/api/v1/things/actions/_actions'),
   'v1/things/bulk': () => import('../../../app/routes/api/v1/things/bulk/_bulk'),
   'v1/tiers': () => import('../../../app/routes/api/v1/tiers/_tiers'),
   'v1/tokens': () => import('../../../app/routes/api/v1/tokens/_tokens'),
