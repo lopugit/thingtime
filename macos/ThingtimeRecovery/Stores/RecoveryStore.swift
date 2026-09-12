@@ -5,6 +5,8 @@ import ThingtimeRecoveryCore
 
 @MainActor
 final class RecoveryStore: ObservableObject {
+    @Published private(set) var widgetBundles: [CachedBundle] = []
+    @Published private(set) var widgetReleases: [RecoveryRelease] = []
     @Published private(set) var desktopBundles: [CachedBundle] = []
     @Published private(set) var commanderBundles: [CachedBundle] = []
     @Published private(set) var commanderReleases: [RecoveryRelease] = []
@@ -38,6 +40,7 @@ final class RecoveryStore: ObservableObject {
             desktopBundles = try cache(for: .desktop).listBundles()
             recoveryBundles = try cache(for: .recovery).listBundles()
             commanderBundles = try cache(for: .commander).listBundles()
+            widgetBundles = try cache(for: .widgets).listBundles()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -52,6 +55,7 @@ final class RecoveryStore: ObservableObject {
             desktopReleases = snapshot.desktop
             recoveryReleases = snapshot.recovery
             commanderReleases = snapshot.commander
+            widgetReleases = snapshot.widgets
             catalogStatus = "GitHub: \(snapshot.publishedReleaseCount) published releases · \(snapshot.desktop.count) desktop · \(snapshot.recovery.count) Recovery for this Mac"
             reloadCaches()
             notice = installerNotice ?? "Release catalog refreshed. Cached bundles remain available if GitHub is offline later."
@@ -93,7 +97,7 @@ final class RecoveryStore: ObservableObject {
 
     func launch(_ bundle: CachedBundle) {
         guard bundle.component != .recovery else { return }
-        handoff(action: bundle.component == .commander ? .launchCommander : .launchDesktop, bundle: bundle)
+        handoff(action: bundle.component == .widgets ? .launchWidgets : bundle.component == .commander ? .launchCommander : .launchDesktop, bundle: bundle)
     }
 
     func install(_ bundle: CachedBundle) {
@@ -102,6 +106,7 @@ final class RecoveryStore: ObservableObject {
         case .desktop: action = .installDesktop
         case .recovery: action = .installRecovery
         case .commander: action = .installCommander
+        case .widgets: action = .installWidgets
         }
         handoff(action: action, bundle: bundle)
     }
@@ -120,6 +125,7 @@ final class RecoveryStore: ObservableObject {
         case .desktop: desktopBundles
         case .recovery: recoveryBundles
         case .commander: commanderBundles
+        case .widgets: widgetBundles
         }
     }
 
@@ -128,6 +134,7 @@ final class RecoveryStore: ObservableObject {
         case .desktop: desktopReleases
         case .recovery: recoveryReleases
         case .commander: commanderReleases
+        case .widgets: widgetReleases
         }
     }
 

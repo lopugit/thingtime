@@ -1,3 +1,5 @@
+import { resolveAppToken } from '../apps/appTokens';
+import { appAccountAllows, appAccountThingScopes } from '../apps/accountScopes';
 import { getAuthToken } from './authCookie';
 import { sessionPurposeCanActAsAccount } from './credentialPurpose';
 import { serviceAccountAuthenticationAllowed } from './getCurrentUser';
@@ -421,6 +423,24 @@ export const resolveThingsActor = async (request: Request, scope: string | strin
     if (!header?.startsWith('Bearer ')) return anonymous;
     const resolved = await resolvePatSessionActor(session, claims.sub, scope);
     return resolved ?? anonymous;
+  }
+
+  if (session.purpose === 'app') {
+    const app = await resolveAppToken(request);
+    if (!app || app.sandbox) return anonymous;
+    const origin = request.headers.get('Origin');
+    if (origin && origin !== app.origin) return { ok: false, status: 403, error: 'Origin does not match this token' };
+    if (!appAccountAllows(app.scopes, scope)) {
+      return { ok: false, status: 403, error: 'Approve the required account Things permissions for this app' };
+    }
+    const userDoc = await findUserById(claims.sub);
+    if (!userDoc || !serviceAccountAuthenticationAllowed(userDoc)) return anonymous;
+    return { ok: true, actor: { user: app.user, pat: {
+      jti: session.jti, name: 'Connected app', scopes: appAccountThingScopes(app.scopes),
+      onlyCreatedThings: false, visibility: 'all',
+      expiresAt: session.expiresAt ? new Date(session.expiresAt) : null,
+      maxUses: null, usesRemaining: null
+    } } };
   }
 
   // Every other scoped credential (app, sandbox app, one-time OAuth code, and

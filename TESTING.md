@@ -1,5 +1,18 @@
 # TESTING.md — per-area manual test checklists
 
+## Session read recovery
+
+- [ ] Fail the first `/api/root-data` GET after sign-in: one automatic retry
+  restores the app without repeating the login POST. Fail both reads: show
+  a clean error with Try again and Reload page, never a raw stack or response.
+- [ ] Restore connectivity and click Try again: render current session data.
+  Cancel navigation during a request/backoff: no abandoned request retries.
+- [ ] Switch accounts with a delayed/failing root read: previous account content
+  disappears immediately; stale generations cannot reveal it. Successful
+  switches reset account-owned component state. OTP challenges stay mounted.
+- [ ] Check recovery at desktop and 390px, scroll top to bottom, and keyboard
+  focus both buttons: no clipping, overlap or horizontal overflow.
+
 ## Unified Lopu conversations, scheduled Things and discussions
 
 - [ ] At 390px width, historical tool rows put long summaries below their label
@@ -662,6 +675,15 @@ email whose link points at the attacker.
 
 ## Canonical AI instruction links (`AI_ALL.md`)
 
+- [ ] After a history-based guidance refresh, every new recurring rule links to
+      PR evidence and a current source/runbook. Group promotions with their
+      original feature; distinguish open/closed/merged metadata from deployed
+      behavior and retain explicit review/acceptance limitations.
+- [ ] The preserved global snapshot between the labelled markers is byte-for-byte
+      equal to the captured source (verify its recorded SHA-256). Keep it
+      reference-only; it must not override the current repo's Graphify, runtime
+      or contribution guidance. Do not modify the live global source or symlinks
+      when updating repo-only guidance.
 - [ ] Root `AGENTS.md` and `CLAUDE.md` are relative symlinks whose target is
       exactly `AI_ALL.md`.
 - [ ] `cmp -s AI_ALL.md AGENTS.md` and `cmp -s AI_ALL.md CLAUDE.md` both pass,
@@ -6533,6 +6555,23 @@ approval; `access.test.ts` — the reservation matrix) and
 - Verify the detail page at desktop and mobile widths, including the visible
   control/result and top-to-bottom scrolling. List/grid previews remain inert.
 
+## Apple widgets and Control Centre
+
+- [ ] Widgets release/Recovery: verify the main-only workflow runs tests before importing secrets and publishes both Widgets and matching Recovery ZIPs after notarization/extraction checks. In Recovery select Thingtime Widgets; verify architecture filtering, isolated cache, download verification, install/launch and rollback without touching another app. Reject mismatched bundle IDs and never accept development signing as a production release.
+
+- [ ] Per-widget Mac endpoints: pin two widgets to different saved, authenticated servers, including Things with identical IDs. Verify the picker lists only the chosen server’s Things, each dashboard/Thing/action link opens that server, and changing the companion’s active endpoint does not change pinned widgets. Remove/disconnect one server and confirm its content clears without affecting the other. Verify unconfigured widgets still follow the active endpoint and turning content sharing off clears every endpoint.
+
+- [ ] Mac saved endpoints: migrate an existing local connection, add a named HTTPS domain, edit/remove an inactive entry, and restart to verify persistence. Reject duplicate or credential-bearing addresses. Switch between compatible origins and verify separate Keychain sessions, cleared content, and correct widget click destinations. An outdated production manifest must leave the previous endpoint active and show an actionable error. Open both Connection and Command-comma settings; test the editor, removal confirmation, scrolling, and reopening after closing the main window.
+
+- [ ] Native Mac companion: Overview, Things, Widget Gallery, and Connection render without a webview. Inspect every page and its full scroll range; test connection cancellation, wrong/expired/replayed callbacks, secure Keychain restoration, and disconnect/revocation on the installed signed copy.
+- [ ] OAuth: review all Things, individual read/create/update/delete permissions, Run actions, and each Lopu permission. Untick full Things and choose read-only in Share more. Confirm selected-only and legacy app-storage grants never gain account access; read-only cannot write, revoked/sandbox tokens fail, and action/voice endpoints require their own scopes. Verify real approved calls as well as denied calls; do not treat a catalog checkbox as enforcement proof.
+- [ ] Verify account/origin changes clear widgets, offline revocation reports its limitation, and toggling content cannot renew an old snapshot. Test browser return into the exact native app on local and preview origins.
+
+- [ ] Add Quick Action, Dashboard, Render a Thing, and Recent Things at every supported device size. Inspect long text, dark/light/tinted appearance, large Dynamic Type, and the full native layout gallery from top to bottom.
+- [ ] On iOS 18+, add all four Control Centre buttons at compact and expanded sizes; cold/warm taps must reach the correct screen once. New Folder opens its dialog, Search focuses its input, and New Thing opens the schema chooser.
+- [ ] Transcribe launches Lopu in transcription mode; Talk launches voice mode. Sign-in/access gates and denied microphone/speech permissions remain effective. Stop, tap again, background/foreground, and verify transcript, local recording, private upload, and iOS Live Activity independently.
+- [ ] Open Widget settings from the iOS native destination drawer; its controls must be inaccessible when closed and must not overlay the web microphone/composer. Content starts disabled. Enable host sync and per-widget content; select a Thing and change card/note/value layout and title. Disable sharing, log out, change account/origin, delete a Thing, and verify stale content clears. Offline content expires after 30 minutes without another refresh.
+- [ ] Install and test the signed Mac companion itself. Verify both the host and extension signatures and the same designated requirement across rebuilds. Never equate simulator or layout-preview success with physical Control Centre/microphone acceptance.
 
 ### Recording recovery and native push regression checks
 
@@ -6578,3 +6617,31 @@ approval; `access.test.ts` — the reservation matrix) and
   allowance and verify note/todo output with exact transcript evidence. Do not
   pass real recordings or tokens. Fixture files must be cleaned up on failure
   as well as success. This is not a substitute for paired-account/Watch tests.
+
+## Shared AI waterfall and stack overrides
+
+- Open the shared selector from CI stack selection and the Admin model-order
+  editor. Add OpenAI, custom endpoint and Claude entries; reorder/remove rows,
+  vary effort/speed, Apply, reopen, then Cancel an edit. Verify the returned
+  config and saved draft keep the intended order and no credentials/URLs.
+- Check desktop and mobile from top to bottom, including the scrolled modal
+  footer, long endpoint labels, focus restoration and duplicate validation.
+- Save/reload a custom stack; omit the field to preserve it, send null to inherit,
+  and restart it. Verify the immutable dispatch includes the saved selection,
+  foreign connections are rejected, and edits never change an active run.
+- Run `node --import tsx --test app/api/utils/ai/waterfallConfig.test.ts`
+  from Remix and the CI-control suite (including the signed gateway tests).
+  Verify missing-model/capacity failures advance, ownership/output errors stop,
+  and stopped/unrelated/replayed run requests cannot consume provider access.
+- On the controller branch run the feature-stack plan and routing self-tests,
+  plus `node --test .github/scripts/feature-stack-waterfall.test.mjs`.
+  Confirm a real text conflict preserves exact merge parents and touches only
+  conflict paths; binary/oversized conflicts fail without publication.
+
+### Saved AI waterfall library
+
+- In Settings → AI waterfalls, create a mixed-provider order, save, reload, edit and reorder; verify persistence.
+- In a feature selector, select an existing config, Save as new, then edit and Save & apply; verify the returned snapshot and both library records. Cancel must preserve the feature value. Later library edits must not change that value.
+- Open the same saved config in two editors. Save one, then save the stale one: show a conflict, retain the unsaved draft, and refresh the library for reopening.
+- Anonymous requests return 401; changed-account headers return 409; another owner cannot read or replace a record. Reject extra secret/URL fields and incompatible endpoint selections.
+- At desktop and mobile widths, scroll Settings and the open dialog top to bottom; verify nested controls, fixed footer, focus, and no horizontal overflow.
