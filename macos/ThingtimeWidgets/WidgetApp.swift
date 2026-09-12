@@ -27,7 +27,7 @@ struct ThingtimeWidgetsApp: App {
         .defaultSize(width: 900, height: 680)
         Settings {
             WidgetConnectionSettings(connection: connection)
-                .frame(width: 540, height: 520)
+                .frame(width: 640, height: 680)
         }
     }
 }
@@ -35,6 +35,10 @@ struct ThingtimeWidgetsApp: App {
 @MainActor
 final class WidgetAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) { NSWindow.allowsAutomaticWindowTabbing = false }
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag { sender.windows.first(where: { $0.title == "Thingtime Widgets" })?.makeKeyAndOrderFront(nil) }
+        return true
+    }
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls where WidgetRoute.path(for: url) != nil { WidgetConnection.shared.open(url) }
         // OAuth responses are delivered only to the originating system auth
@@ -128,13 +132,13 @@ private struct WidgetHome: View {
                             }.buttonStyle(.bordered)
                         }
                     }
-                    Text("Actions open your selected Thingtime site. Lopu voice and transcription start there after microphone permission.")
+                    Text("Actions in this window open the active Thingtime site. Lopu voice and transcription start there after microphone permission.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 GroupBox("Configure each widget") {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Right-click your desktop → Edit Widgets → Thingtime to add a widget.")
-                        Text("Right-click the actual widget → Edit Widget to choose its Thing, action, title, and layout.")
+                        Text("Right-click the actual widget → Edit Widget to choose its endpoint, Thing, action, title, and layout.")
                         Button("Browse widget layouts") { section = .gallery }
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
                 }
@@ -179,12 +183,47 @@ private struct WidgetHome: View {
 
 private struct WidgetConnectionSettings: View {
     @ObservedObject var connection: WidgetConnection
+    @State private var editing: WidgetEndpoint?
+    @State private var showingEditor = false
+    @State private var endpointName = ""
+    @State private var endpointAddress = "https://"
+    @State private var editError: String?
+    @State private var removing: WidgetEndpoint?
     var body: some View {
         Form {
+            Section("Saved endpoints") {
+                Text("Right-click a widget → Edit Widget → Endpoint to choose any saved server. Widgets without a selection follow the active endpoint. Sign in to each server once; content refreshes while this app is open.")
+                    .font(.caption).foregroundStyle(.secondary)
+                ForEach(connection.endpoints.entries) { endpoint in
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(endpoint.name).font(.headline)
+                            if endpoint.origin == connection.origin.absoluteString {
+                                Label("Active", systemImage: "checkmark.circle.fill").foregroundStyle(.green).font(.caption)
+                            }
+                            Spacer()
+                        }
+                        Text(endpoint.origin).font(.caption).textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                        HStack {
+                            Button("Use endpoint") { connection.useEndpoint(endpoint) }
+                                .disabled(connection.busy || endpoint.origin == connection.origin.absoluteString)
+                            Button("Edit…") {
+                                editing = endpoint; endpointName = endpoint.name; endpointAddress = endpoint.origin
+                                editError = nil; showingEditor = true
+                            }.disabled(connection.busy)
+                            Button("Remove…", role: .destructive) { removing = endpoint }
+                                .disabled(connection.busy || endpoint.origin == connection.origin.absoluteString)
+                        }
+                    }.padding(.vertical, 4)
+                }
+                Button("Add endpoint…") {
+                    editing = nil; endpointName = ""; endpointAddress = "https://"
+                    editError = nil; showingEditor = true
+                }.disabled(connection.busy)
+            }
             Section("Thingtime connection") {
-                TextField("Server address", text: $connection.address)
-                    .textContentType(.URL)
-                    .disabled(connection.busy)
+                LabeledContent("Active endpoint", value: connection.origin.absoluteString)
                 Text("Use thingtime.com or the address of your own Thingtime server. Local connections can use http://127.0.0.1 with your server’s port.")
                     .font(.caption).foregroundStyle(.secondary)
                 if let credential = connection.credential {
@@ -212,6 +251,39 @@ private struct WidgetConnectionSettings: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
+            if let error = connection.error {
+                Section("Connection status") {
+                    Text(error).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+                    Button("Dismiss") { connection.error = nil }
+                }
+            }
         }.formStyle(.grouped)
+        .sheet(isPresented: $showingEditor) {
+            VStack(alignment: .leading, spacing: 16) {
+                Text(editing == nil ? "Add endpoint" : "Edit endpoint").font(.title2.bold())
+                TextField("Name", text: $endpointName)
+                TextField("Thingtime address", text: $endpointAddress).textContentType(.URL)
+                Text("Enter an HTTPS domain, such as thingtime.com, or a local HTTP address with its port. Use the server’s root address, without /api, page paths, or query parameters.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let editError { Text(editError).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
+                HStack {
+                    Spacer()
+                    Button("Cancel") { showingEditor = false }.keyboardShortcut(.cancelAction)
+                    Button("Save") {
+                        do {
+                            try connection.saveEndpoint(id: editing?.id, name: endpointName, address: endpointAddress)
+                            showingEditor = false
+                        } catch { editError = error.localizedDescription }
+                    }.keyboardShortcut(.defaultAction)
+                }
+            }.textFieldStyle(.roundedBorder).padding(24).frame(width: 460)
+        }
+        .alert("Remove saved endpoint?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
+            Button("Cancel", role: .cancel) { removing = nil }
+            Button("Remove", role: .destructive) {
+                if let removing { connection.removeEndpoint(removing) }
+                removing = nil
+            }
+        } message: { Text("This removes its saved sign-in from this Mac and attempts to revoke it on that server.") }
     }
 }

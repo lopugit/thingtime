@@ -441,3 +441,31 @@ func commanderCloudReleasePair() async throws {
     #expect(snapshot.commander.first?.isUnsigned == false)
     #expect(snapshot.recovery.first?.metadata.shortCommit == "abcdef123456")
 }
+
+@Test("Widgets releases are isolated from Desktop, Commander, and Recovery assets")
+func widgetsRecoveryIsolation() async throws {
+    let endpoint = URL(string: "https://api.github.com/repos/lopugit/thingtime/releases?per_page=100")!
+    let names = ["Thingtime-Widgets-App-Release-1.0.0-macos-arm64.zip", "Thingtime-Widgets-App-Release-1.0.0-macos-x64.zip", "Thingtime-Recovery-App-Release-1.0.0-macos-arm64.zip", "Commander-App-Release-1.0.0-macos-arm64.zip"]
+    let data = try JSONSerialization.data(withJSONObject: [["id": 901, "tag_name": "widgets-v1.0.0+build.2.gabcdef123456", "assets": names.map { ["name": $0, "browser_download_url": "https://github.com/lopugit/thingtime/releases/download/v1/\($0)"] }]])
+    let catalog = GitHubReleaseCatalog(endpoint: endpoint) { _ in (data, HTTPURLResponse(url: endpoint, statusCode: 200, httpVersion: nil, headerFields: nil)!) }
+    let snapshot = try await catalog.fetchAll()
+    #expect(snapshot.widgets.count == 1)
+    #expect(snapshot.widgets[0].asset.name == names[0])
+    #expect(snapshot.widgets[0].metadata.buildNumber == "2")
+    #expect(snapshot.desktop.isEmpty)
+    #expect(snapshot.recovery.count == 1)
+    #expect(RecoveryProduct.widgets.component == .widgets)
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let paths = RecoveryPaths(homeDirectory: root)
+    let cache = paths.cacheRoot(for: .widgets)
+    #expect(cache != paths.cacheRoot(for: .desktop))
+    #expect(cache != paths.cacheRoot(for: .commander))
+    let source = cache.appendingPathComponent("bundles/widgets-abcdef123456/Thingtime Widgets.app")
+    try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+    let plan = RecoveryInstallPlan(action: .installWidgets, cacheRoot: cache, sourceApp: source, waitForPID: .max)
+    #expect(try plan.validate(paths: paths) == .widgets)
+    let wrong = RecoveryInstallPlan(action: .installDesktop, cacheRoot: cache, sourceApp: source, waitForPID: .max)
+    #expect(throws: (any Error).self) { try wrong.validate(paths: paths) }
+    #expect(paths.installedApp(for: .widgets).lastPathComponent == "Thingtime Widgets.app")
+}
