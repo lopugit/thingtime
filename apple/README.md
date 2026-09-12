@@ -107,3 +107,31 @@ share children) controls account-wide Things access independently of the legacy
 and `lopu.recordings` each enable their named API family. The ordinary account
 resolver continues rejecting app tokens: these grants cannot change account
 security or mint other credentials. Sandbox tokens cannot access real accounts.
+
+## Saved Mac endpoints
+
+Open `~/Applications/Thingtime Widgets.app` and choose **Connection**, or use
+**Thingtime Widgets → Settings…** (Command-comma). The dedicated SwiftUI window
+contains the saved endpoint list; it does not embed the website.
+
+- **Add endpoint** saves a name and server root address. Bare domains use HTTPS;
+  custom HTTPS hosts and ports are supported. HTTP is limited to loopback local
+  development. Paths such as `/api/v1`, credentials, queries and fragments are
+  rejected: enter the origin that serves Thingtime's capability manifest.
+- **Use endpoint** verifies that server's capabilities before changing the active
+  origin. All Mac widget clicks and data reads then use that origin. If needed,
+  choose **Sign in with Thingtime** to approve that server in the browser.
+- Each origin retains its own Keychain sign-in, so switching back restores it.
+  Display content clears when switching, before the new server is refreshed.
+  A failed compatibility check leaves the active connection unchanged.
+- **Edit** renames a bookmark or changes an inactive bookmark's address. Switch
+  away before changing an active address. **Remove** deletes an inactive bookmark
+  and its local credential and attempts server-side revocation. **Disconnect**
+  revokes the active sign-in but keeps its bookmark.
+- The first launch migrates the existing connection and adds `thingtime.com`.
+  An existing local connection is preserved rather than silently replaced.
+
+The public production server must ship the OAuth/capability changes from PR #727
+before it can accept the native connection. Adding it to the list does not bypass
+that requirement or transfer a local server's credential to production. Saved
+bookmarks live locally; this Mac endpoint manager does not change iOS settings.
