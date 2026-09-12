@@ -1,5 +1,18 @@
 # TESTING.md — per-area manual test checklists
 
+## Session read recovery
+
+- [ ] Fail the first `/api/root-data` GET after sign-in: one automatic retry
+  restores the app without repeating the login POST. Fail both reads: show
+  a clean error with Try again and Reload page, never a raw stack or response.
+- [ ] Restore connectivity and click Try again: render current session data.
+  Cancel navigation during a request/backoff: no abandoned request retries.
+- [ ] Switch accounts with a delayed/failing root read: previous account content
+  disappears immediately; stale generations cannot reveal it. Successful
+  switches reset account-owned component state. OTP challenges stay mounted.
+- [ ] Check recovery at desktop and 390px, scroll top to bottom, and keyboard
+  focus both buttons: no clipping, overlap or horizontal overflow.
+
 ## Inherited Thing context menus
 
 - [ ] Type/paste a query, change kind/view/display/sort/group, open a Thing and

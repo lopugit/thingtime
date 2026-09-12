@@ -24,6 +24,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Bound root session reads to two attempts with timeout/cancellation, provide
+  recoverable retry/reload controls, and hide/reset account-owned UI across
+  sign-in changes without falling back to another account's root data.
+  — Codex (AI), 2026-09-12
+
 - Refresh root AI guidance from two months of PR history and current source:
   preserve existing repo topics and the full global reference snapshot, add
   recurring regression/verification rules, and correct stale hook/typecheck
