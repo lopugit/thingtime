@@ -1,5 +1,17 @@
 # PR 764 — portable Thing transfer
 
+## AI archive participant projection — 2026-09-12
+
+The pure `projectAiChatArchive` transformation now feeds historical AI identities
+into the existing archive grammar. Human turns retain self mapping; assistants
+receive collision-checked archive-local participants, so the canonical import
+author resolver returns an archived author rather than the importer. Exact text
+and reply references survive without mutating the input snapshot. Live histories
+without an explicit completed sync marker, incomplete author maps, and tool
+history without a portable presentation are refused. Three projection tests and
+focused lint pass. This remains unwired from the endpoint pending segment/history,
+avatar and inert tool presentation integration; it is not live AI export proof.
+
 ## Historical AI identity foundation — 2026-09-12
 
 Writer tracing confirmed live `sourceId` is connector-scoped, not session-scoped.
