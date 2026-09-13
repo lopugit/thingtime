@@ -11,7 +11,7 @@ import { formatCredits, type LopuAccount } from './useLopuAccount';
 // action; a BYO turn (the chat thinks with the viewer's own provider) reads
 // "your provider" instead — Thingtime credits are not used for it. Tapping
 // the chip opens a small popover with the balance, this month's usage, and
-// the way to get more: "Request credits" (Settings → Lopu) and "Buy credits"
+// the way to get more: "Request credits" (Settings → Account) and "Buy credits"
 // when the deployment set THINGTIME_LOPU_TOPUP_URL.
 
 export const LOPU_CREDITS_SETTINGS_PATH = '/settings#lopu-credits';

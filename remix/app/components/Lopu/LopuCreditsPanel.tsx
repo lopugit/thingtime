@@ -8,7 +8,7 @@ import { formatTurnCredits } from './lopuTurnCore';
 import { useLopu } from './useLopu';
 import { formatCredits, useLopuAccount, type LopuHistoryItem, type LopuLedgerEntry, type LopuUsageRow } from './useLopuAccount';
 
-// Settings → Lopu 🦄 → "Credits & usage" (verified-credits design note §4):
+// Settings → Account → "Lopu credits & usage 🦄" (verified-credits design note §4):
 // the balance, this month, lifetime tokens / cost, the verified status line,
 // the ledger + usage history (cursor "Load more"), the "Request credits"
 // form and — when the deployment set THINGTIME_LOPU_TOPUP_URL — "Buy

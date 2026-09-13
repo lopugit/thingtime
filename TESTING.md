@@ -6875,7 +6875,7 @@ formatting, the store's reactions to `done` and the gate; `lopuTurnCore.test.ts`
       before the refetch lands; the turn's footer reads "via <model> · <effort>
       · 0.0132 credits" (BYO / free turns show no credits), and a reloaded
       history row keeps the same footer.
-- [ ] Settings → Lopu credits & usage (`/settings#lopu-credits`): the verified
+- [ ] Settings → Account → Lopu credits & usage (`/settings#lopu-credits`): the verified
       status line, balance (red at zero / amber low), this month (key, cost,
       turns), lifetime (cost, turns, tokens in/out), the request form
       (0.5–1000 credits + note; a pending request replaces the form with
@@ -7283,7 +7283,7 @@ approval; `access.test.ts` — the reservation matrix) and
 
 ## Gifted signup invitations (2026-09-13)
 
-- [ ] In Settings → Lopu, create an invite with a profile photo, display name,
+- [ ] In Settings → Account, create an invite with a profile photo, display name,
       username and fractional gift. The balance decreases once; copied links use
       the browser/deployment origin, never the internal Nitro port.
 - [ ] Visit the link signed out at desktop and mobile widths; scroll top to

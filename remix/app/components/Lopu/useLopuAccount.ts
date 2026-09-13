@@ -2,7 +2,7 @@
 // verified flag + the access rules, the credit balance, this month's and the
 // lifetime usage, a pending top-up request and the optional "Buy credits"
 // URL — one module store shared by every Lopu surface (the chat views, the
-// composer's balance chip, Settings → Lopu, the user settings modal) and a
+// composer's balance chip, Settings → Account, the user settings modal) and a
 // thin React hook over it.
 //
 // Optimistic-render house rule: the account seeds from `tt-lopu-account-<uid>`
