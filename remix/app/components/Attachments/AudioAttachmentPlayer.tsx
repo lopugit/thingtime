@@ -8,6 +8,7 @@ import { readOfflineAudio, removeOfflineAudio, saveOfflineAudio } from './audioP
 import { nextQueuedAudioIndex } from './audioPlaybackCore';
 import type { PublicAttachment } from './attachmentTypes';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { RecordingTranscript } from './RecordingTranscript';
 
 const BORDER = '1px solid var(--tt-border, #ececef)';
 const MUTED = 'var(--tt-muted, #9a9aa6)';
@@ -210,6 +211,7 @@ export const AudioAttachmentPlayer = ({ attachments, compact = false }: { attach
 			>
 				Download original
 			</Button>
+			{!active.url && <RecordingTranscript attachmentId={active.id} compact={compact} />}
 
 			{attachments.length > 1 ? (
 				<Flex mt={3} flexDirection="column" rowGap={1} aria-label="Audio queue">

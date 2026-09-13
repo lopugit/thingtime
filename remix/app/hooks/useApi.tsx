@@ -11,6 +11,7 @@ import { useAsyncFetcher } from './useAsyncFetcher';
 import { clearLocalCachePrefix } from './localCache';
 import { createApiFailure, readApiResponsePayload } from './apiFailure';
 import { buildThingCommentRequestPayload, buildThingCreateRequestPayload } from './thingsRequestPayload';
+import { withExportDeadline } from '~/utils/thingTransfer/exportDeadline';
 
 const refreshRootData = () => {
   window.dispatchEvent(new Event('thingtime:root-data-refresh'));
@@ -141,7 +142,8 @@ export function useApi() {
           // signed-out viewer bookmarked — same shared-browser privacy bar
           clearLocalCachePrefix('tt-saved-');
           clearLocalCachePrefix('tt-passkeys');
-          // Notification history can include private posts and action runs.
+          // the /notifications history seed quotes private posts and the
+          // viewer's own action runs — same shared-browser privacy bar
           clearLocalCachePrefix('tt-notif-history-');
           // builder-page source results are whole action results run AS the
           // viewer (their orders, their expense rows, their trainer) cached to
@@ -351,6 +353,8 @@ export function useApi() {
       ),
       ciCredentials: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/credentials', options), []),
       ciFeatureStacks: useCallback(async (options?: { signal?: AbortSignal }) => getJson('/api/v1/admin/ci/stacks', options), []),
+      ciStackChat: useCallback(async (runId: string) => getJson(`/api/v1/admin/ci/stacks/chat${toQuery({ runId })}`), []),
+      sendCiStackQuestion: useCallback(async (args: Record<string, unknown>) => asyncFetcher.submit(args, { action: '/api/v1/admin/ci/stacks/chat', errorContext: 'ask Lopu about a stack run' }), [asyncFetcher]),
       mutateCiFeatureStack: useCallback(
         async (args: Record<string, unknown>) =>
           asyncFetcher.submit(args, { action: '/api/v1/admin/ci/stacks', errorContext: 'manage Feature Stacks' }),
@@ -639,6 +643,10 @@ export function useApi() {
 						},
 						options?: { signal?: AbortSignal }
 					) => {
+						if (args.purpose === 'recording-import') {
+							await requireThingtimeCapability('api.attachment-uploads', '1.3.0');
+							await requireThingtimeCapability('api.attachment-upload-complete', '1.3.0');
+						}
 						const ret = asyncFetcher.submit(
 							{
 								requestId: args?.requestId,
@@ -855,6 +863,18 @@ export function useApi() {
       )
     },
     things: {
+      export: useCallback(async (args: { ids: string[]; key?: string; includeChildren?: boolean; includeDependencies?: boolean; includeFiles?: boolean; includeLinks?: boolean }, options?: { signal?: AbortSignal }) => {
+        return withExportDeadline(async signal => {
+          await requireThingtimeCapability('api.things-export', '1.14.0');
+          if (args.includeFiles !== false) await requireThingtimeCapability('api.attachment-content', '1.6.4');
+          signal.throwIfAborted();
+          return asyncFetcher.submit(args, { action: '/api/v1/things/export', signal, errorContext: 'export Things' });
+        }, options?.signal);
+      }, [asyncFetcher]),
+      import: useCallback(async (args: { manifest: unknown; files?: Record<string, string>; folderId?: string | null }, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.things-import', '1.10.0');
+        return asyncFetcher.submit(args, { action: '/api/v1/things/import', signal: options?.signal, errorContext: 'import Things' });
+      }, [asyncFetcher]),
       // scope: 'subspaces' narrows the page to posts from the viewer's ACTIVE
       // subspaces (the "🪐 My subspaces" chip); default all
       feed: useCallback(async (args) => getJson(`/api/v1/things/feed${toQuery(args)}`), []),
@@ -897,8 +917,9 @@ export function useApi() {
 				[]
 			),
       list: useCallback(
-        async (args) =>
-          getJson(
+        async (args) => {
+          if (!args?.target) await requireThingtimeCapability('api.things', '1.14.0');
+          return getJson(
             `/api/v1/things${toQuery({
               target: args?.target,
               key: args?.key,
@@ -909,9 +930,14 @@ export function useApi() {
               // session-auth data browser: narrow own-things to ONE app's namespace
               appId: args?.appId
             })}`
-          ),
+          );
+        },
         []
       ),
+      archive: useCallback(async (args: { id: string }, options?: { signal?: AbortSignal }) => {
+        await requireThingtimeCapability('api.things', '1.17.0');
+        return getJson(`/api/v1/things${toQuery({ id: args.id, archive: true })}`, options);
+      }, []),
       update: useCallback(
         async (args) =>
           asyncFetcher.submit(
@@ -936,8 +962,9 @@ export function useApi() {
       ),
       // multi-select move/copy/delete/share — see /docs/api things-bulk
       bulk: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
+        async (args) => {
+          if (args?.op === 'move') await requireThingtimeCapability('api.things-bulk', '1.4.0');
+          return asyncFetcher.submit(
             {
               op: args?.op,
               ids: args?.ids,
@@ -947,7 +974,8 @@ export function useApi() {
               ...(args?.recursive ? { recursive: true } : {})
             },
             { action: '/api/v1/things/bulk' }
-          ),
+          );
+        },
         [asyncFetcher]
       ),
       upsert: useCallback(
@@ -1032,7 +1060,8 @@ export function useApi() {
       ),
 			remove: useCallback(
 				async (args) => {
-					const ret = asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things', method: 'DELETE' });
+					await requireThingtimeCapability('api.things', '1.12.0');
+					const ret = asyncFetcher.submit({ id: args?.id, expectedUpdatedAt: args?.expectedUpdatedAt }, { action: '/api/v1/things', method: 'DELETE' });
 					ret.then(refreshRootData).catch(() => {});
 					return ret;
 				},

@@ -42,6 +42,7 @@ export const THING_KIND_ICONS: Readonly<Record<string, string>> = {
   link: '🔗',
   bookmark: '🔖',
   chat: '💬',
+  'chat-archive': '🗃️',
   'chat-message': '🗨️',
   'chat-member': '👤',
   'chat-section': '🗂️',

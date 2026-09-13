@@ -3,6 +3,7 @@
 // submit) so error handling reads identically: `catch (err) { err?.error }`.
 import { useCallback, useMemo } from 'react';
 import { useAsyncFetcher } from '~/hooks/useAsyncFetcher';
+import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 
 const getJson = async (url: string) => {
   const response = await fetch(url, {
@@ -40,7 +41,10 @@ export const useMessengerApi = () => {
   const fetcher = useAsyncFetcher();
   const submit = fetcher.submit;
   const post = useCallback(
-    (action: string) => (data?: Record<string, unknown>) => submit(data || {}, { action }),
+    (action: string, feature?: string) => async (data?: Record<string, unknown>) => {
+      if (feature) await requireThingtimeCapability(feature, '1.0.1');
+      return submit(data || {}, { action });
+    },
     [submit]
   );
 
@@ -55,12 +59,14 @@ export const useMessengerApi = () => {
       updateChat: post('/api/v1/chats/update'),
       members: post('/api/v1/chats/members'),
       leaveChat: post('/api/v1/chats/leave'),
-      messages: (args: { chatId: string; cursor?: string | null; limit?: number; threadRootId?: string | null }) =>
-        getJson(`/api/v1/chats/messages${toQuery(args)}`),
-      sendMessage: post('/api/v1/chats/messages'),
-      editMessage: post('/api/v1/chats/messages/edit'),
+      messages: async (args: { chatId: string; cursor?: string | null; limit?: number; threadRootId?: string | null }) => {
+        await requireThingtimeCapability('api.chats-messages', '1.0.1');
+        return getJson(`/api/v1/chats/messages${toQuery(args)}`);
+      },
+      sendMessage: post('/api/v1/chats/messages', 'api.chats-messages'),
+      editMessage: post('/api/v1/chats/messages/edit', 'api.chats-messages-edit'),
       deleteMessage: post('/api/v1/chats/messages/delete'),
-      react: post('/api/v1/chats/react'),
+      react: post('/api/v1/chats/react', 'api.chats-react'),
       markRead: post('/api/v1/chats/read'),
       requests: () => getJson('/api/v1/chats/requests'),
       respondRequest: post('/api/v1/chats/requests'),

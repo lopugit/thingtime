@@ -21,6 +21,9 @@ struct ThingtimeWebView: View {
     @AppStorage(StorageKey.lastConfiguredDestinationID) private var lastConfiguredDestinationID = ""
     @AppStorage(StorageKey.hasExplicitDestinationSelection) private var hasExplicitDestinationSelection = false
 
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var widgetPath: String?
+    @State private var widgetSettingsOpen = false
     @State private var deploymentGroups: [ThingtimeWebDestination.DeploymentGroup] = []
     @State private var isDestinationPickerOpen = false
     @State private var deploymentsLoadState = DeploymentsLoadState.idle
@@ -53,7 +56,7 @@ struct ThingtimeWebView: View {
             let drawerWidth = min(proxy.size.width - 48, 360)
 
             ZStack(alignment: .leading) {
-                WebView(url: selectedDestination.url)
+                WebView(url: selectedDestination.url, widgetPath: $widgetPath)
                     .ignoresSafeArea(.container, edges: [.bottom])
 
                 if isDestinationPickerOpen {
@@ -72,8 +75,10 @@ struct ThingtimeWebView: View {
                     safeAreaInsets: proxy.safeAreaInsets,
                     onSelect: select,
                     onRefreshDeployments: refreshDeployments,
-                    onClose: closeDestinationPicker
+                    onClose: closeDestinationPicker,
+                    onWidgetSettings: { closeDestinationPicker(); widgetSettingsOpen = true }
                 )
+                .accessibilityHidden(!isDestinationPickerOpen)
                 .frame(width: max(drawerWidth, 280))
                 .frame(maxHeight: .infinity)
                 .offset(x: isDestinationPickerOpen ? 0 : -max(drawerWidth, 280))
@@ -83,7 +88,17 @@ struct ThingtimeWebView: View {
             .background(Color.white.ignoresSafeArea())
             .simultaneousGesture(openDrawerGesture(leadingEdgeWidth: 28))
             .animation(.easeOut(duration: 0.22), value: isDestinationPickerOpen)
-            .onAppear(perform: prepareDestinationState)
+            .sheet(isPresented: $widgetSettingsOpen) {
+                NavigationStack {
+                    WidgetPreferences().toolbar {
+                        ToolbarItem(placement: .confirmationAction) { Button("Done") { widgetSettingsOpen = false } }
+                    }
+                }
+            }
+            .onOpenURL { url in widgetPath = WidgetRoute.path(for: url) }
+            .onReceive(NotificationCenter.default.publisher(for: .thingtimeWidgetAction)) { _ in receiveWidgetAction() }
+            .onChange(of: scenePhase) { _, phase in if phase == .active { receiveWidgetAction() } }
+            .onAppear { prepareDestinationState(); receiveWidgetAction() }
             .task {
                 await refreshDeploymentsIfNeeded()
             }
@@ -94,6 +109,10 @@ struct ThingtimeWebView: View {
                 ensureSelectedDestinationIsAvailable()
             }
         }
+    }
+
+    private func receiveWidgetAction() {
+        if let url = WidgetActionInbox.take() { widgetPath = WidgetRoute.path(for: url) }
     }
 
     private func openDrawerGesture(leadingEdgeWidth: CGFloat) -> some Gesture {
