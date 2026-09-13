@@ -31,6 +31,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-13 — Show saved recording transcripts as subtle, expandable quotes
+  beneath the shared audio player and recording activity. Owner-scoped batched
+  reads resolve existing relational comments without inference, copied parent
+  data or migrations; recordings capability 1.7.0. **Codex (AI)**
+
 - 2026-09-12 — Add native Things paste, clipboard capture in Import, and bounded
   multi-file selection/drop with serial private imports and stop-on-error behavior.
   Pasted content opens ready for confirmation with the file picker collapsed.
