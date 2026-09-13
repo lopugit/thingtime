@@ -474,6 +474,16 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Lopu Apple Watch recording automation
 
+- [ ] Recording transcript quotes: on desktop and 390px mobile inspect a post,
+      Thing/media detail, chat attachment and recording activity. Saved text
+      appears beneath its own player/file; switching audio tracks switches the
+      quote. Expand/collapse a long multiline transcript, scroll to the bottom,
+      and copy its text. No overflow, markup execution or empty quote shell.
+      Batch lookups negotiate recordings 1.7.0; missing/deleted/foreign/shared
+      sources or comments reveal nothing. Account switch/unmount fences stale
+      replies. A transient refresh failure preserves same-view text; successful
+      deletion/revocation refresh clears it. No inference or data migration.
+
 - [ ] Recording/AI subscription rates: Free retains configured windows, Plus receives 5x, Pro/PAYG bypass only the two product request-rate buckets. A spoofed request tier or foreign account cannot grant access. Upgrade/downgrade re-resolves the protected home assignment and keeps the same account bucket across sessions/devices/IPs. Entitlement/limiter outages return private 503 without provider calls; finite exhaustion returns 429/Retry-After. Authentication, upload constraints and provider quotas stay enforced. Negotiate ai-complete 1.1.0 and lopu-recordings 1.2.0; reject older/breaking manifests.
 
 - [ ] Shared AI endpoint: negotiate `api.ai-complete` on the selected origin, then submit text with 1–4 owned Secure Vault IDs. Reject inline URLs/tokens, audio, foreign IDs anywhere in the list, temporary/service/scoped accounts, cross-origin or non-JSON requests, duplicate IDs and oversized input before external delivery. Force a 429 on one endpoint and verify only the next selected endpoint receives its own credential; stop on success, malformed output, unsafe host, other 4xx or caller cancellation. Inspect redacted attempt receipts, no-store and fail-closed rate limiting. Existing recording retry/consent tests must still pass against the same shared waterfall engine.
