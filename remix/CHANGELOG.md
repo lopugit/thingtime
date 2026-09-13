@@ -31,6 +31,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-13 — Reconciled marketing publishing PR #638 with main, preserving both marketing and run-chat capability regressions. Verified 85 marketing, 56 capability and 16 navigation tests, plus the anonymous admin boundary and unpublished marketing gate in the PR preview at desktop/mobile sizes. — Codex (AI)
+
 - 2026-09-13 — Correct transcript reads for Watch attachments and comments with
   inherited privacy. Resolve only their exact, still-private owned parent;
   reject shared/rebound/deleted children. Recordings capability 1.7.1.
@@ -1213,6 +1215,31 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - Live verification: `node scripts/verify-lopu.mjs <base>` (147 checks incl. the
   vault-unconfigured path; the BYO turn needs `THINGTIME_USER_VAULT_KEY` and
   `THINGTIME_LOPU_PROVIDER_DEV_REWRITES`, README "Lopu AI assistant").
+
+### 2026-09-05 — Marketing suite locked behind an admin publish gate — Claude (AI)
+
+- Grouped summary; details in the PR note (`PRs/638-claude-marketing-pages-admin-guard--marketing-publish-gate.md`).
+- Everything under `/marketing` (hub, category indexes, the 1,600+ generated
+  pages, their sections, the social-image suite and each feature's image set)
+  is now admin-only until an admin publishes it, one key at a time
+  (`remix/app/marketing/publishingCore.ts` + `publishing.ts`; model in
+  `docs/marketing-suite.md` → Publishing). Nothing cascades: an index lists
+  whatever is published beneath it; sections can be hidden inside a published
+  page.
+- Visitors get a `noindex` "Not published yet" card (never a redirect); every
+  in-suite link, crumb, count, footer link, drawer entry and search result
+  follows the viewer's visibility. Unknown state fails closed.
+- State is one `settings` singleton (`marketing-publications`), read by
+  `GET /api/v1/marketing/publications` and written by the admin-only
+  `GET|POST /api/v1/admin/marketing/publications` (≤ 2,000 catalog-validated
+  changes per atomic write, fail-closed rate limit); both documented and
+  published through `/api/v1/capabilities` at 1.0.0.
+- Controls: an admin bar under the sub-nav on every marketing page (publish
+  this surface, bulk over its children, 👁️ View as visitor, Manage all →),
+  🌐/🔒 chips on cards and social menu rows, hide/show frames on page sections,
+  and a new `/admin/marketing` tab for whole-suite sweeps.
+- Tests: `test:marketing` now also covers the publishing core, the store and
+  the API route folders; `test:api-capabilities` pins the two new contracts.
 
 - 2026-09-03: Keep `/api/v1/capabilities` aligned with the protected admin preview dispatcher by publishing `api.admin-ci-previews` 2.0.0 from the canonical endpoint contract.
 
