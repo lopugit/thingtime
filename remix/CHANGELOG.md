@@ -12,17 +12,665 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-09-12 — CI Control now distinguishes target activity, waiting, conflicts,
+  failed workers and confirmed merges; removes the rolling finish estimate.
+  Adds private per-run Ask Lopu status chat with capability negotiation, durable
+  delivery/retry states, and an optional responder in the matching controller.
+  Requires both product and controller rollout for new live conversations.
+  Validation and rollout: [PR #782](../PRs/782-codex-stack-progress-chat-clarify-stack-progress-and-add-ask-lopu-run-chat.md).
+
+- 2026-09-11: Add Settings saved AI waterfalls and reusable select, edit, save-copy and save-and-apply controls with private storage and stale-edit protection. See [PR 771](../PRs/771-ci-stack-model-selection-reusable-model-and-endpoint-waterfall.md).
+
+- 2026-09-11: Add a reusable AI model/endpoint waterfall dialog and per-stack
+  immutable routing, with a protected completion gateway and mixed-provider
+  availability fallback. [Contract and rollout](../docs/ai-waterfall-selector.md). [PR #771 notes](../PRs/771-ci-stack-model-selection-reusable-model-and-endpoint-waterfall.md).
+
 > `— Lopu, YYYY-MM-DD`. Keep the newest entries at the top.
 
 ---
 
 ## [Unreleased]
 
+- 2026-09-13 — Show saved recording transcripts as subtle, expandable quotes
+  beneath the shared audio player and recording activity. Owner-scoped batched
+  reads resolve existing relational comments without inference, copied parent
+  data or migrations; recordings capability 1.7.0. **Codex (AI)**
+
+- 2026-09-12 — Add native Things paste, clipboard capture in Import, and bounded
+  multi-file selection/drop with serial private imports and stop-on-error behavior.
+  Pasted content opens ready for confirmation with the file picker collapsed.
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12 — Connect authorized external HTTPS chat avatars to portable ZIP
+  files with fresh private import bindings; negotiate export 1.14.0. Unsafe or
+  unreadable images still fail explicitly. Live provider acceptance remains
+  pending. [PR 764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12 — Add the internal bounded external-avatar downloader prerequisite:
+  pinned public DNS, credential-free HTTPS and image/size validation. Not yet
+  enabled in chat export. [PR 764](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI)
+
+- 2026-09-12 — Verified the private AI archive-format API/ZIP round trip on the
+  PR preview, including fresh copy IDs, preserved presentation and denied anonymous
+  reads; cleaned both fixtures. Source-adapter and browser acceptance remain
+  separate. [Evidence and harness caveat](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI)
+
+- 2026-09-12 — Correct the second capability suite's stale archive contract
+  assertions after the AI transfer addition; 53 capability tests pass. Live
+  round-trip limits are recorded in [PR 764](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI)
+
+- 2026-09-12 — Private AI-chat archives preserve assistant avatar presets,
+  inert tool receipts and explicit message/segment order through transfer and
+  re-export. Capability negotiation prevents older servers from silently
+  dropping presentation. [PR #764 notes](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI)
+
+- 2026-09-12 — **Codex (AI):** Add an opt-in real recording ZIP regression proving fresh private recording import, exact-byte independence after source deletion, re-export and cleanup. [PR #764 evidence](../PRs/764-thing-transfer-clipboard.md).
+
+- 2026-09-12 — Added and passed real nine-kind library ZIP/import regression:
+  folders, schemas/data, components/pages, actions, posts, themes and algorithms,
+  including fresh references on a second copy and verified cleanup. See
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12 — Added and passed opt-in real live-chat image ZIP/import acceptance
+  on preview `3e29ad283`: fresh media binding, byte independence after source
+  deletion, anonymous denial and verified cleanup. Updated current transfer
+  acceptance gaps in [PR 764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12 — Include shared emoji dependencies from membership-authorized
+  live chat history, without widening standalone owner-only emoji export or
+  importing source account/community authority. Export capability 1.12.0;
+  real multi-user media acceptance remains pending.
+  [PR #764 notes](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12 — Reconcile the transfer branch with current develop, preserving
+  newer archive capability requirements alongside the incoming marketing and
+  social-preview features. [PR #764 notes](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12 — Verify ordinary live Messenger history through real dev export,
+  ZIP import and Chrome clipboard/download/file-picker controls. Preserve edits,
+  threads and deletion markers; verify source messages and copied-archive cleanup.
+  Media and AI history acceptance remain separate. [PR #764 notes](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12 — Add private-archive transfer controls to Messenger details,
+  omit Cut for live chats, and keep nested transfer menus accessible inside
+  drawers. Desktop/mobile rendered smoke covers the entry point and dialogs.
+  [PR #764 notes](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12 — Fix live-chat archive conversion of the canonical ISO edit and
+  deletion timestamps after a real self-only chat export exposed a 422. Keep
+  deleted text redacted and require export capability 1.11.1. [PR #764 notes](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12 — Connect ordinary live-chat export to private archive conversion
+  with membership-gated snapshots, canonical managed media reads, bounded
+  preparation and export capability 1.11.0. AI/external-avatar/shared-emoji
+  completion and live round-trip proof remain pending. [PR #764 notes](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12 — Bound portable export metadata preparation to 30 seconds, with
+  cancellation and a recoverable retry message shared by Copy and Download.
+  Large file downloads retain their separate lifecycle. See [PR #764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12: Bound private archive reads to 15 seconds with a recoverable Retry
+  state and account-safe cancellation. Verify the stalled-read path in Chrome
+  and real folder context-menu clipboard/ZIP behavior; see
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — **Codex (AI)**
+
+- 2026-09-12: Add an opt-in real browser ZIP/media round-trip acceptance phase,
+  including duplicate-name uploads, annotation/byte checks and source-deletion
+  independence. Live execution remains pending; see
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — **Codex (AI)**
+
+- 2026-09-12: Bound the archive-emoji binary acceptance wait to 30 seconds for
+  asynchronous moderation, retaining strict safe-image assertions. Live
+  confirmation remains pending the ordinary upload rate limit.
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — **Codex (AI)**
+
+- 2026-09-12: Save real headed-Chrome transfer acceptance for OS clipboard
+  Copy/Cut, Paste copy/move, downloaded JSON/ZIP file-chooser imports and verified
+  cleanup. Passed on the PR preview; stored-emoji acceptance remains unresolved.
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — **Codex (AI)**
+
+- 2026-09-12: Correct historical emoji reads to use persisted attachment purpose
+  `emoji`, not its upload alias. A real ZIP test exposed the mismatch; expand
+  regression coverage for remapped reactions and source-emoji deletion. Things
+  1.16.1 negotiates the correction. [PR 764](../PRs/764-thing-transfer-clipboard.md).
+  — **Codex (AI)**
+
+- 2026-09-12: Render safe personal custom emoji images in private chat archives
+  through an owner-only snapshot projection and Things 1.16.0 negotiation.
+  Unavailable/moderated images retain readable placeholders. See
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — **Codex (AI)**
+
+- 2026-09-12: Verify real archive avatar/message-image ZIP round trips and
+  independent copies after source deletion on the deployed PR preview. Extend
+  the dev-fenced binary regression test; see [PR 764](../PRs/764-thing-transfer-clipboard.md).
+  — **Codex (AI)**
+
+- 2026-09-12: Render imported chat media with the shared gallery, NSFW reveal
+  and lightbox; preserve moderation for historical avatars. Desktop/mobile
+  fixture checks pass; real media acceptance remains separate. See
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — **Codex (AI)**
+
+- 2026-09-12: Prepare owner-only archive gallery metadata with canonical
+  moderation flags and bounded batched reads; inline rendering remains pending.
+  See [PR 764](../PRs/764-thing-transfer-clipboard.md). — **Codex (AI)**
+
+- 2026-09-12: Surface owner-only archive roots in Things and add a read-only
+  historical chat page with account-change clearing, reply links, transfer and
+  dedicated deletion. Include archives in owner folder exports; Things is now
+  feature 1.14.0 and export 1.10.0. Desktop/mobile fictional-browser checks pass;
+  inline media rendering remains unfinished. See
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12: Add first-party owner-only archive root moves through the guarded
+  managed placement writer, preserving historical records and accounting.
+  Bulk contract/client minimum is 1.4.0. See
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12: Add owner-only whole-history archive re-export to portable transfer
+  plans, including required media and custom emojis; optional traversal cannot
+  silently truncate chats. Export contract/client minimum is 1.9.0. See
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12: Fix shared custom reaction parsing for canonical 70-character
+  stored-emoji IDs, preserving archive remapping/readback and Messenger emoji
+  projections without widening feed reactions or ownership rules. Clients
+  negotiate the corrected contracts. Live image rendering remains unverified.
+  — **Codex (AI)**
+
+- 2026-09-12: Add an opt-in, dev-fenced archive HTTP lifecycle acceptance test
+  with capability/identity checks and exact-root cleanup. Both tests pass live
+  against the dev fixture with zero skips; the imported test archive was removed
+  and verified absent. Media and rendered UI remain unverified. — **Codex (AI)**
+
+- 2026-09-12: Add bounded owner-only chat archive snapshot reads with explicit
+  history projection, private responses and api.things 1.13.0 negotiation.
+  Archive rendering, listing and re-export remain unfinished. — **Codex (AI)**
+
+- 2026-09-12: Route first-party owner archive deletion through whole-history
+  cleanup with transactional preview timestamps and sanitized retryable errors.
+  Negotiate api.things 1.12.0; archive browsing/export remain unfinished.
+  — **Codex (AI)**
+
+- 2026-09-12: Connect private chat archive groups to the transfer importer,
+  protect their records from generic CRUD, and negotiate import contract 1.9.0.
+  Archive UI/export and public owner deletion remain unfinished. See
+  [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+  — **Codex (AI)**
+
+- Integrate develop sign-in recovery with transfer intent; revoke Cut authority
+  synchronously during pending identity changes and reject stale generations.
+  See [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-12
+
+- Preserve earlier dependencies and linked resources when transfer rollback
+  cannot finish; report retained IDs for recovery. Import contract/client
+  requirement is now 1.8.1. See [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-12
+
+- Added retryable internal Messenger archive deletion/compensation: keep history
+  until object cleanup succeeds, then refund/remove the archive atomically.
+  HTTP/UI integration is still pending. See [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-12
+
+- Added the internal quota-accounted Messenger archive writer with atomic file
+  binding, fresh identity/reference remapping and folder-deletion fencing.
+  Endpoint and chat UI integration remain unfinished. See [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-12
+
+- Added Messenger archive contract groundwork following the requested importer
+  identity replacement and archived-participant model. Runtime import/export and
+  chat UI integration are not enabled yet. See [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-12
+
+- Verified real post/emoji image ZIP round trips and concurrent upload claims on
+  PR 764's dev preview, including byte/annotation equality and confirmed cleanup.
+  Hardened the opt-in fixture guard and corrected its archive/cleanup checks.
+  Broader UI/type acceptance remains open. See [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-12
+
+- Connected custom emoji export/import, including legacy inline images, fresh
+  personal copies, image annotations, dedicated rollback and folder placement.
+  Desktop/mobile import-dialog checks passed with simulated uploads; real storage
+  acceptance remains pending. See [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-12
+
+- Added internal custom-emoji import writer groundwork: fresh-upload checks in
+  the binding transaction, server-owned attempt identity and a personal-library
+  adapter. Transfer endpoints are not enabled for emojis yet; see
+  [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-12
+
+- Added custom-emoji transfer-envelope groundwork and tests for stored images,
+  names, source-scope exclusion and upload limits. The adapter is not enabled
+  yet; see [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-12
+
+- 2026-09-12 (Codex): Shorten download-format labels to avoid mobile clipping; keep byte inclusion guidance below the selector. Real browser ZIP/JSON round-trip evidence is recorded on PR 764.
+
+- 2026-09-12 (Codex): Export 1.7.1 skips storage verification for excluded file bytes after live attachment authorization. Links remain independently selectable. See [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+
+- 2026-09-12 (Codex): Retain theme/algorithm folders during transfer, enable their owned-library Cut controls and dedicated folder moves, and negotiate export/import 1.7.0, bulk 1.2.0 and own-library 1.10.0. See [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+
+- 2026-09-11 (Codex): Preserve Cut intent across SPA navigation, revoke on account/root changes, and fence stale async completions. See [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+
+- 2026-09-11 (Codex): Fix durable recording export/download being rejected as expired drafts; preserve owner-only access and advertise attachment-content 1.6.4 / export 1.6.1. See [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+
+- Codex — recording Cut/paste uses dedicated folder placement (bulk 1.1.0);
+  export/import 1.6.0 retains included recording folders and supports a selected
+  destination. Verification and remaining acceptance: [PR 764](../PRs/764-thing-transfer-clipboard.md).
+
+- Connected standalone recordings to portable export/import 1.5.0, with collision-safe byte entries, per-file upload purpose, private independent copies and attachment-lifecycle rollback. Approved-upload round-trip acceptance remains pending; see [PR 764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI), 2026-09-11
+
+- Added private-approved `recording-import` upload intents, purpose-separated replay checks and upload lifecycle capability negotiation (1.3.0). Portable recording adapters remain in progress. — Codex (AI), 2026-09-11
+
+- Added server-only recording-import draft lifecycle groundwork, preserving immutable upload purpose, normal expiry cleanup and transactional storage accounting. Recording transfer adapters are not enabled yet; see [PR 764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI), 2026-09-11
+
+- Feed-algorithm transfer preserves private weights and training statistics via
+  owner-only reads and dedicated quota-accounted imports, with fresh unshared
+  copies and no active-selection change. Settings exposes Copy/Download/Import
+  with a private-interest warning; transfer contracts advance to 1.4.0. See
+  [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md). — Codex (AI), 2026-09-11
+
+- Portable transfers now support saved themes through dedicated owner/public
+  readers and private theme writers, including legacy reads and rollback.
+  Theme Studio exposes Copy/Download/Import and identifies the My themes
+  destination. Transfer capabilities advance to 1.3.0. See
+  [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md). — Codex (AI), 2026-09-11
+
+- Preserve stored-file titles, multiline descriptions and display filenames
+  in transfer plans, ZIP/clipboard bundles and imported copies. Fence import
+  annotation writes transactionally to fresh unbound post drafts; negotiate
+  import/export 1.2.0 without accepting server-derived moderation/type stamps.
+  [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-11
+
+- Preserve linked galleries and their mixed file/link order in portable JSON/ZIP
+  transfers. Recreate private URL records through normal link and annotation
+  writers, without fetching external bytes; reject flagged link exports and
+  clean new drafts on failure. Import/export negotiate contract 1.1.0.
+  [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-11
+
+- Add portable JSON/ZIP Download and reviewed file import to nested Thingtime
+  value menus. Copy/Cut use typed envelopes, preserve numeric strings, and
+  refuse lossy values; repair top-level and direct-path deletion for Cut.
+  Keep transfer dialogs above stacked success notifications on mobile.
+  [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-11
+
+- Add shared Transfer controls to Builder, component-family pages, Thing
+  details and public webpages. Keep transfer menus/dialogs above the Builder
+  inspector and require saving dirty Builder drafts before export. Verify
+  desktop/mobile clipboard and download behavior across all four surfaces.
+  [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-11
+
+- Preserve split-template component media during import and repeated transfers;
+  negotiate import contract 1.0.1 and retain ordinary upload approval gates.
+  [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-11
+
+- Add authorized exports and real clipboard Copy/Cut/Paste plus JSON/ZIP
+  Download in Things. Verify browser download/import round trips, same-session
+  moves, responsive dialogs and a full build. Broader surfaces and file/gallery
+  acceptance remain in progress: [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-11
+
+- Add the private Thing import API and JSON/ZIP picker with destination choice,
+  validated uploads and fresh reference IDs; verify real local imports and
+  responsive dialog states. Export/clipboard delivery remains in progress:
+  [PR 764 notes](../PRs/764-thing-transfer-clipboard.md). — Codex (AI), 2026-09-11
+
+- Promote the native Apple widget suite, browser OAuth scopes, saved endpoints, per-widget routing, automatic signed Widgets releases and Recovery support from PRs #727 and #774. — Codex (AI), 2026-09-12
+- 2026-09-12: Add a main-only signed/notarized Thingtime Widgets release workflow and a dedicated Widgets product, cache and installer path in Thingtime Recovery.
+- Bound root session reads to two attempts with timeout/cancellation, provide
+  recoverable retry/reload controls, and hide/reset account-owned UI across
+  sign-in changes without falling back to another account's root data.
+  — Codex (AI), 2026-09-12
+
+- Refresh root AI guidance from two months of PR history and current source:
+  preserve existing repo topics and the full global reference snapshot, add
+  recurring regression/verification rules, and correct stale hook/typecheck
+  advice. Keep canonical instruction symlinks unchanged. See the
+  [PR #768](../PRs/768-codex-thingtime-ai-guidance-20260911-refresh-ai-guidance-from-pr-history.md)
+  and its linked review/inventory.
+  — Codex (AI), 2026-09-11
+
+- Replace the Mac Widgets webview with native navigation and browser PKCE sign-in, app-only Keychain credentials, and revocable connections. Expand OAuth consent and route enforcement for account Things, actions, and Lopu; preserve selected-only legacy grants and granular read/write choices. See [PR #727 notes](../PRs/727-apple-widget-suite.md). — Codex (AI), 2026-09-11
+
+- 2026-09-10: Add shared iOS/Mac WidgetKit actions, dashboards, Thing rendering, recent Things, and iOS Control Centre buttons. Add opt-in bounded content sync, native launch routes, Mac companion signing/install runbook, and widget acceptance checks. See [PR #727 notes](../PRs/727-apple-widget-suite.md) and [Apple widget setup](../apple/README.md). — Codex (AI), 2026-09-10
+
+- Unify Thing, post, recording and message action-menu rendering and inherited
+  base verbs. Dispatch recording handoffs through the versioned Things action
+  API, retaining the legacy adapter and protected writers. Fix stale open
+  submenus and scrollbar-edge clipping. Details:
+  [PR 767](../PRs/767-unified-thing-menus-native-links-search-history.md).
+  — Codex (AI), 2026-09-11
+
+- Make drawer and Thing-menu destinations native anchors, preserving browser
+  new-tab modifiers, and persist Things search/view/filter/sort/group rules in
+  URL history, including rapid input and folder navigation. — Codex (AI), 2026-09-11
+
+- Verify real shared-file and linked-gallery copies on the exact PR preview,
+  including private copies surviving source revocation/deletion and cleanup
+  of all disposable test content. Record the separate post-login root-data
+  network failure and acceptance boundaries in
+  [PR #755](../PRs/755-shared-composition-file-copies.md).
+  — Codex (AI), 2026-09-11
+
+- Add confirmed Send to Lopu to private recording Things in desktop and phone menus, with capability, account-switch and processor-consent guards and a link to recording activity. Keep phone content inset. Details: [PR 761](../PRs/761-lopu-saved-recording-handoff.md). — Codex (AI), 2026-09-10
+
+- Allow explicitly selected private saved audio Things through the recording queue and confirmed Send to Lopu flow, with source-state revalidation and transactional attachment fences. Keep automatic discovery Watch-only, preserve relational transcripts and negotiate the new 1.5 recording controls. — Codex (AI), 2026-09-10
+
+- Add an explicitly opted-in, loopback-only recording-delivery smoke with synthetic audio, real HTTP upload/pairing/completion paths, duplicate/privacy checks, and disposable-account cleanup. Document its upload-approval prerequisites and separate synthetic broker proof from real provider/Watch acceptance. — Codex (AI), 2026-09-10
+
+- Give historical Lopu tool summaries their own full-width row on phones,
+  preserving compact desktop rows and non-interactive approval history.
+  — Codex (AI), 2026-09-10
+
+- Show earlier Lopu confirmation requests as "Approval requested" after reload,
+  not failed executions. Historical receipts never restore approval grants or
+  claim that later actions succeeded. — Codex (AI), 2026-09-10
+
+- Preserve split-fragment media templates in private copies using bounded
+  root-render bindings after interpolation. Keep labels and action inputs
+  unchanged, compose bindings on re-fork, and align shared media discovery.
+  Negotiate fork 1.4.0 and attachment-content 1.6.3. Real storage acceptance
+  remains tracked in [PR #755](../PRs/755-shared-composition-file-copies.md).
+  — Codex (AI), 2026-09-10
+
+- Reconcile the shared-copy follow-up with develop's personal-recording
+  contracts, preserving fork 1.3.3 and device-pairing 1.1.0 assertions.
+  Acceptance boundaries remain listed in [PR #755](../PRs/755-shared-composition-file-copies.md).
+  — Codex (AI), 2026-09-10
+
+- Preserve linked gallery records and annotations in shared-content copies
+  without fetching external bytes or changing download redirect protections.
+  Negotiate fork 1.3.3 and check late revocation/metadata changes; live acceptance
+  remains tracked in [PR #755](../PRs/755-shared-composition-file-copies.md).
+  — Codex (AI), 2026-09-10
+
+- Include relational post-purpose galleries when copying shared content,
+  preserving copied home targets and order with one bounded discovery query.
+  Negotiate fork 1.3.2; live storage acceptance remains pending in
+  [PR #755](../PRs/755-shared-composition-file-copies.md).
+  — Codex (AI), 2026-09-10
+
+- Correct shared-app file copies whose templates interpolate stored attachment
+  IDs, including defaults, nested lists, branch selectors and page-instance overrides. Preserve
+  template behavior and non-argument text; enforce recipient upload approval
+  inside the copy service and negotiate fork 1.3.1. Split partial
+  IDs and real-storage acceptance remain tracked in [PR #755](../PRs/755-shared-composition-file-copies.md).
+  — Codex (AI), 2026-09-10
+
+- Connect shared app forks to exact-version file copying, retarget authored
+  media and bind newly owned files transactionally. Add revocation/cleanup
+  coverage and negotiate the additive fork 1.3.0 contract. Live storage and
+  browser-copy acceptance remain pending. See [PR #755](../PRs/755-shared-composition-file-copies.md).
+  — Codex (AI), 2026-09-10
+
+- Prepare the internal exact-version file-copy path for shared app forks.
+  Reuse attachment authorization, quota reservation, multipart finalization,
+  moderation and deferred cleanup. Fork-route/media rewriting integration and
+  live object-store acceptance remain pending; no new HTTP capability is exposed.
+  — Codex (AI), 2026-09-10
+
+- Verify real macOS Keychain recording state storage and add explicit,
+  confirmed recovery cleanup for expired unfinished pairing; completed local
+  pairings remain protected and server revocation stays separate. See
+  [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Make identical in-flight recording completion retries recoverable without
+  repeating inference or reporting a lease conflict; publish personal broker
+  1.0.1 and reconcile the latest develop sync. See
+  [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Verify synthetic WAV/M4A local transcription and native Claude OAuth
+  note/todo extraction with an opt-in runtime smoke. Real paired-account and
+  Watch delivery remain pending; details in
+  [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Add recording-settings Mac pairing with expiring masked secrets, explicit
+  copy/reveal and account-switch guards; publish pairing 1.1.0. Reconcile
+  develop's sharing boundaries and both manifest suites. Build and API smoke
+  pass; signed-in visual and real audio acceptance remain outstanding.
+  Details: [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Add an interactive Mac recording worker with hidden pairing input,
+  origin-bound Keychain storage, interrupted-claim recovery and bounded
+  foreground polling. Real local lost-receipt recovery passes; pairing UI,
+  native Keychain and audio acceptance remain pending.
+  Details: [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Register personal recording HTTP operations and owned-device settings,
+  origin-scoped capability negotiation, account-tier limits, private errors and
+  processor-change fences. Real local signup/pairing/selection smoke passes;
+  audio, deployed worker and visual acceptance remain pending.
+  Details: [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Add the unexposed personal recording broker, transactional device/consent
+  fences and crash-safe completion receipts; personal jobs cannot enter the
+  cloud-provider queue. HTTP/selection integration and live acceptance remain
+  pending. Details: [PR 754](../PRs/754-lopu-personal-recording-worker.md).
+  — Codex (AI), 2026-09-10
+
+- Add the personal recording worker's outbound transport and bounded result
+  contract: origin-scoped negotiation, credential-safe audio retrieval,
+  heartbeat cancellation, grounded text results and idempotent submission
+  retries. Server pairing/queue integration is still pending; no new endpoint
+  or automatic processing is enabled by this foundation. — Codex (AI), 2026-09-10
+
+- Include the origin-scoped capability-manifest suite in the standard API
+  capability CI command and reconcile its assertions after combining saved
+  action sharing and Lopu reply updates. — Codex (AI), 2026-09-10
+
+- Promote shared component audience boundaries to main and reconcile the
+  newly enabled origin-manifest assertions with the sharing patch versions.
+  See [PR #756](../PRs/756-promote-public-component-boundaries-main.md).
+  — Codex (AI), 2026-09-10
+
+- Preserve an independently readable foreign component's authored dependency
+  audience when embedded in a shared page. Revalidate each boundary, keep
+  cross-author page arguments from borrowing private authority, and preserve
+  independent copies and read-only execution. See [PR #753](../PRs/753-codex-shared-public-component-boundaries.md).
+  — Codex (AI), 2026-09-10
+
+- Include the origin-scoped capability-manifest suite in the standard API
+  capability CI command and reconcile its assertions after combining saved
+  action sharing and Lopu reply updates. — Codex (AI), 2026-09-10
+
+- Clarify Lopu's two-step comment tool: an unapproved call opens the real
+  approval card without posting; a verified follow-up posts the exact comment.
+  Publish reply capability 1.6.2 without weakening the write guard.
+  — Codex (AI), 2026-09-10
+
+- Bypass the browser HTTP cache when negotiating capabilities, bound checks
+  to 20 seconds and let failures retry without a page reload. Successful
+  concurrent checks still share a request; incompatible contracts fail closed.
+  — Codex (AI), 2026-09-10
+
+- Preserve bounded, sanitized action receipts in Lopu conversation history so
+  subsequent replies can distinguish past successes from failures. Publish
+  reply capability 1.6.1; historical results grant no new action permissions.
+  See [PR #731 follow-ups](../PRs/731-lopu-unified-scheduled-chats.md).
+  — Codex (AI), 2026-09-10
+
+- Keep uploaded file cards in Lopu's live user-message rows instead of hiding
+  them until reload; snapshot selected public metadata locally while sending
+  only attachment IDs to the server. — Codex (AI), 2026-09-10
+
+- Layer Lopu's Thing picker above the fixed navigation using the shared modal
+  stack, keeping its title and Close button accessible on phones.
+  — Codex (AI), 2026-09-10
+
+- Resolve shared controls from saved component arguments and every persisted
+  page instance; preserve argument templates when copying and rebind only the
+  executable actions. Guard argument-only collaborator edits against private
+  dependency injection. See [PR #747](../PRs/747-codex-shared-saved-action-contexts.md).
+  — Codex (AI), 2026-09-10
+
+- Preserve Lopu's mounted composer across text/voice route changes. Signed-in
+  development testing found that separate route wrappers discarded unsent
+  drafts; both modes now export the same component identity, guarded by a
+  route-module regression test. — Codex (AI), 2026-09-10
+
+- Keep long Thing-picker labels within the dialog and wrap the composer
+  toolbar so its settings and Send controls remain reachable on narrow phones.
+  — Codex (AI), 2026-09-10
+
+- Publish native build 31 for unified Lopu conversation recovery. All 51 native
+  CI tests and signed iPhone/Watch verification pass; Apple confirms VALID and
+  internal TestFlight availability. Physical-device acceptance remains separate.
+  See [PR #731](../PRs/731-lopu-unified-scheduled-chats.md).
+  — Codex (AI), 2026-09-10
+
+- Add a loopback-only real HTTP acceptance smoke for linked Lopu chats,
+  scheduled Things and relational comments, including account boundaries,
+  pause/resume and owned-fixture cleanup. No provider or scheduler delivery is
+  claimed by this smoke. — Codex (AI), 2026-09-10
+
+- Pin the scheduled-task run schema projection in the builtin seeding
+  regression gate; retain all five owner-editable run fields.
+  See [PR #731](../PRs/731-lopu-unified-scheduled-chats.md).
+  — Codex (AI), 2026-09-10
+
+- Add native direct-voice transcript recovery and bounded shared-chat context
+  behind bridge 1.3.0; reconcile transcription-only chat saves and expose native
+  retry state without storing credentials. Simulator/provider/device gates are
+  tracked in [PR 731](../PRs/731-lopu-unified-scheduled-chats.md).
+  — Codex (AI), 2026-09-10
+
+- Reconcile PR 731 with develop's authored/nested media inheritance without
+  downgrading Lopu discussions or notification-test capabilities; retain both
+  Things read and write compatibility coverage. — Codex (AI), 2026-09-10
+
+- Persist direct web voice transcripts into their Lopu conversation with
+  account-fenced recovery/retry; seed recent chat context when starting voice,
+  isolate message caches by account, and discard late account-switch fetches.
+  Live local API retries pass; native and real-provider acceptance remain
+  pending. See [PR 731](../PRs/731-lopu-unified-scheduled-chats.md).
+  — Codex (AI), 2026-09-10
+
+- Add relational discussions to Thing details/previews and confirmation-bound
+  Lopu comment tools; unify the text/voice page composer, add chat attachment
+  selection, and introduce searchable scheduled tasks with separate run Things
+  and Lopu-message notifications. Browser and end-to-end release checks remain
+  separate from focused tests; see the [feature validation notes](../PRs/731-lopu-unified-scheduled-chats.md) before deployment.
+  — Codex (AI), 2026-09-10
+
+- Use cryptographic UUIDs for voice-session and transcript request identities,
+  with regression coverage that refuses an insecure fallback. Reconcile the
+  conditional-media write fix without downgrading Lopu capabilities; the
+  combined Things contract is 1.8.2 (legacy 1.7.2).
+  See [PR #731](../PRs/731-lopu-unified-scheduled-chats.md).
+  — Codex (AI), 2026-09-10
+
+- Promote shared-page recovery from PR 740 without unrelated develop changes.
+  Temporary resolver failures offer Retry and retain same-viewer content;
+  viewer, target and link-key changes isolate drafts and stale responses.
+  See [validation and scope](../PRs/740-codex-shared-page-load-recovery.md).
+  — Codex (AI), 2026-09-10
+
+- Distinguish temporary shared-page resolve failures from unavailable pages.
+  Offer Retry, retain same-viewer content on a failed refresh, and reset drafts
+  before rendering under another viewer, target or link key. Keep optional site
+  decoration resolves nullable. See [PR 740 validation and scope](../PRs/740-codex-shared-page-load-recovery.md).
+  — Codex (AI), 2026-09-10
+
+- Follow stored conditional media-property alternatives through shared root
+  inheritance, including argument-backed src/poster/href and style records.
+  Exclude condition metadata and bound discovery across all property visits;
+  shared writers cannot smuggle unreadable uploads into inactive branches.
+  Advance content capability to 1.6.1 and patch both Things write contracts.
+  — Codex (AI), 2026-09-10
+
+- Prepare the focused main promotion of shared HTML/contained media, stored
+  component arguments and page-block overrides from PRs #730, #733 and #734.
+  Preserve main's prior sharing/startup release and APNs/recording fixes;
+  the application source matches #734, with separate main CI and preview
+  validation required before release.
+  [Main promotion #735](../PRs/735-codex-promote-shared-argument-media-main-promote-shared-html-and-component-argument-media-inheritance-to-main.md).
+  — Codex (AI), 2026-09-10
+
+- Include containing page-block argument overrides in same-author shared media
+  inheritance, matching defaults → savedArgs → block args render precedence.
+  Compare the same resolved dependencies before/after shared edits, reusing
+  query results within validation; guessed private media remains forbidden.
+  Advertise attachment-content 1.6.0 with patched Things write contracts.
+  Foreign templates retain independent authority; full conditional coverage
+  and independent protected-upload fork copies remain follow-ups.
+  — Codex (AI), 2026-09-10
+
+- Resolve stored component defaults and saved arguments in shared media
+  positions with the canonical template resolver and one expansion budget.
+  Preserve unknown runtime tokens and reject truncated candidate values;
+  apply identical discovery to non-owner write validation. Publish
+  attachment-content 1.5.0 and patch Things write contracts. Page-block
+  argument overrides, full conditional-state coverage and independent
+  protected-upload copies remain follow-ups. — Codex (AI), 2026-09-10
+
+- Extend shared-root media inheritance to authored rich/raw HTML rendering
+  positions and uploads bound directly to contained same-author Things.
+  Share the browser tag/depth/node policy with bounded server discovery;
+  retain foreign-owner, managed-purpose, revocation and non-owner writer
+  guards. Advertise attachment-content 1.4.0 and patch the Things write
+  contracts. Stored component arguments and independent protected-upload
+  copies remain separate follow-up work.
+  [PR 730 validation and scope](../PRs/730-codex-shared-nested-media-inheritance-inherit-shared-root-access-for-authored-html-and-contained-media.md).
+  — Codex (AI), 2026-09-10
+
+- Promote the shared CSS-media and early-startup recovery increment from
+  develop PR #719, including the reviewed single media-grant predicate and
+  unresolved-template preservation. Develop merge `5839533` is verified in
+  signed-out Safari; the main promotion requires its own CI and deployment
+  receipts. [Main promotion](../PRs/728-codex-promote-shared-media-boot-main-promote-shared-media-context-and-startup-recovery-to-main.md).
+  — Codex (AI), 2026-09-10
+
+- Fix APNs rejection of notification tests and long reminder IDs by hashing the collapse header to Apple’s 64-byte limit; expose the safe BadCollapseId diagnostic. — Codex (AI), 2026-09-10
+
+- 2026-09-10: Recover older iPhone Lopu recordings into private Things with durable import receipts; fix notification bell toggling and refresh, reconnect native push from Settings, report APNs outcomes, and keep single/bulk push delivery alive through Vercel responses. Details: [PR 726](../PRs/726-ios-push-recording-import.md).
+
+- Refresh the custom-audience promotion preview with released main's shared-index readers. Resolve equivalent ACL merge blocks and duplicate viewer fields, composer state, and modal rendering; retain main's unified audience controls and drawer layering. Database migration activation remains separate. — Codex (AI), 2026-09-09
+
+- Refresh the standing promotion preview with released main's shared-index readers and poll writer before database index retirement; preserve the feature branch and keep migration activation separate. — Codex (AI), 2026-09-09
+
 - Save new iOS Lopu voice recordings as owner-private playable audio Things,
   retaining on-device recovery files and an account-bound retry outbox.
   Completed recordings survive draft cleanup; upload/complete contracts are
   1.2.0 and native delivery is build 29.
   [Release and validation notes](../PRs/722-ios-voice-recording-things-save-ios-lopu-recordings-to-private-things.md).
+  — Codex (AI), 2026-09-09
+
+- Recover initial static-module download failures before the application entry
+  can install its listeners. Preserve the shared URL, retry automatically at
+  most once and provide an accessible manual fallback when recovery fails or
+  session storage is unavailable. Keep existing rendered content untouched.
+  Add desktop/mobile native-browser regressions and diagnostic bundled-client
+  sharing coverage. [Validation and rollout](../PRs/719-codex-shared-render-media-context.md).
+  — Codex (AI), 2026-09-09
+
+- Shared CSS media now carries the root audience through page/block backgrounds,
+  HTML styles and Chakra responsive/pseudo styles. A shared parser recognizes
+  literal URL/image-set references without granting quoted text or external
+  URLs; shared writers cannot insert unreadable private CSS media. Linked text
+  downloads use the same context. Publish attachment-content 1.3.0 and require it
+  before shared media renders. Rich HTML/argument dependency discovery and
+  independent protected-upload copying remain separate follow-ups.
+  Cover escaped CSS function identifiers (including hex-terminating whitespace)
+  with a bounded argument scanner shared by discovery and rendering.
+  Preserve recording-Thing support when integrating develop; publish the
+  combined Things feature 1.7.1 / contract 1.6.1 without a version downgrade.
+  [PR #719 validation and remaining browser gate](../PRs/719-codex-shared-render-media-context.md).
   — Codex (AI), 2026-09-09
 
 - 2026-09-09: Reconcile Watch/Lopu automation with current develop and main: preserve durable notification history, verified vault controls, shared Settings tabs and iPhone voice recovery. Combine notification contracts as list 1.6.0/settings 1.5.0 and remove the obsolete history-trimming call from the reminder transaction. — Codex (AI)
@@ -84,6 +732,16 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Native voice now checks the selected origin's semantic API capabilities.
   [Release evidence and device checklist](../PRs/715-ios-lopu-voice-recovery-deliver-lopu-voice-recording-and-live-activities.md).
 
+- Include schema-template actions in shared-root dependency resolution and
+  private copies. Data Thing detail controls use root-authorized read-only
+  execution unless both the data and its schema are owned by the viewer;
+  list/grid previews remain inert. Add API, copy, revocation and responsive
+  browser regressions. Shared searches resolve included schema definitions
+  without borrowing the author or visitor's private inventory (action contract
+  1.2.1). Validation and remaining scope:
+  [PR #714](../PRs/714-codex-shared-schema-action-inheritance.md).
+  — Codex (AI), 2026-09-09
+
 - 2026-09-09: Shared pages resolve author-owned embedded components through the
   root audience, including anonymous link readers and custom groups; preserve
   standalone privacy and prevent shared editors adding unrelated private
@@ -118,6 +776,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - Refresh the clipboard-attachment preview with released main's shared-index readers and poll writer, preserving its bounded paste queue and attachment permissions. Database migration activation remains separate. — Codex (AI), 2026-09-09
 
 - Refresh the Commander intent-ranking preview with released main's shared-index readers and poll writer before database index retirement; retain its ranking changes without promoting them to production. — Codex (AI), 2026-09-09
+
+- Refresh the saved Feature Stack workflow promotion preview with released main's shared-index readers and poll writer. The feature is already integrated upstream; keep the preview branch and database activation separate. — Codex (AI), 2026-09-09
+
+- 2026-09-09: Refresh the notification-history preview with released main's staged shared-index readers and poll identity writer, preserving feature changes. Preview replacement and live production/develop index activation remain pending. — Codex (AI)
+
 - Repair a poll writer found during the index audit: stamp the shared protected vote identity (no new index), preserve legacy lookup compatibility and unbilled engagement policy. Native regression reproduces 16 duplicate rows before the fix and checks concurrent votes, toggles, private access and cascade cleanup. — Codex (AI), 2026-09-08
 
 - Extend [Thing index consolidation](../PRs/692-thing-index-consolidation-shared-plan-audit.md) to a 47-index candidate: canonical legacy/feed/search/embed readers, eight exact retirements, one shared updated-order index, and two-stage cache-drained migrations. Native MongoDB verifies 60 → 47 with bounded sampled plans and preserved ACL/CAS behavior. Production/develop rollout remains pending. — Codex (AI), 2026-09-08
@@ -341,6 +1004,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-09-05: Reconcile PR #592 with current develop, preserving Lopu widget support and passkey entitlements, both capability suites, all private logout caches, and both unit-test lists. Verify its exact-SHA preview and make preview delivery visible above collapsed PR comments. — Codex (AI)
 
 - 2026-09-05: Fix Commander's emoji permission feedback widening the picker beyond its window, stop failed pastes changing ranking or the clipboard, and provide explicit Accessibility recovery for stale signing grants. [Investigation](../PRs/662-codex-commander-emoji-paste-recovery-picker-overflow.md). — Codex (AI)
+- 2026-09-05: Align Lopu notifications with the desktop content area as the drawer opens, closes, or resizes; keep mobile messages readable. — Codex (AI)
 
 - 2026-09-05: Add bounded persistent media caching with access revalidation,
   responsive low-resolution image previews, and cache controls in Settings.
@@ -375,35 +1039,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   from `post.linkKey`, which is already owner-only and hidden-only, and a new
   `hiddenLinkContract.test.ts` pins the derivation. — Lopu (AI)
 
-### 2026-09-02 — Lopu toast position setting + `/notifications` history page — Claude (AI)
+### 2026-09-04 — Rich public link previews — Codex (AI)
 
-- Grouped summary; details in the PR note (`PRs/611-claude-lopu-toast-position-notifications-history--lopu-toast-position-notifications-history.md`).
-- **Lopu messages move to the bottom-left** by default. Settings →
-  Appearance (page + drawer modal) gains a "Lopu messages 🦄" dropdown for
-  any of Chakra's six corners; the preference lives at
-  `settings.lopu.position` (cross-tab, undo-exempt) and is mirrored into the
-  synchronous `tt-lopu-position` cache that `useLopu` reads at fire time, so
-  none of the ~86 callers subscribe to settings state. `--toast-z-index`
-  (10260) lifts toasts above the drawer and modals.
-- **`/notifications`**: every notification the viewer has received, newest
-  first, with the filter grammar in the URL — category chips
-  (social / engagement / feed / system), a type dropdown, unread-only,
-  debounced search, and a from/to day window — plus per-row mark-read on
-  click, "Mark all read", cursor "Load older", and a flash-free cached first
-  page. Linked from the bell ("See all →"), Settings → Notifications
-  ("History 📜"), and the drawer's Account group.
-- **System notifications**: new `action-run` type (category `system`, actor
-  `thingtime` / "Lopu", headline + `href` + `outcome`) emitted by the action
-  executor for every explicit run and any failed delegated run; push on by
-  default, email opt-in. `NOTIFICATION_TYPE_CATEGORY` in the registry maps
-  every type to a family (coverage-tested).
-- `GET /api/v1/notifications` → contract 1.1.0: optional `category`, `types`,
-  `unread`, `q`, `since`, `until`, `withTotal` (→ `total`); rows now carry
-  `category`, `title`, `href`, `outcome`. `/api/v1/notifications/settings` →
-  1.1.0 (accepts `action-run`). Per-recipient tail raised from 500 to 10,000.
-  Query resolution lives in `api/utils/notifications/listQuery.ts`
-  (`npm run test:notifications`).
-
+- Shared public pages now publish route-aware Open Graph/Twitter metadata and
+  colourful 1200×630 Thingtime PNG cards. Posts carry author/excerpt/context;
+  image posts safely render up to four stored images as a collage; text,
+  marketplace, structured Thingtime, poll, share, comment, reply, standalone
+  image/video/audio/file, profile, Thing, published page, feed and public
+  catalogue/docs variants each have their own preview treatment.
+- Cards ship their own copy of Liberation Sans (SIL OFL 1.1, metric-compatible
+  with Arial) embedded in the server bundle. The deployed Vercel Node runtime
+  has no fonts installed, so the renderer previously drew every card's artwork
+  and not one glyph; CI and dev machines have system fonts and looked fine. —
+  Lopu (AI)
+- Details in the PR note
+  (`PRs/607-codex-rich-link-previews--rich-route-aware-thingtime-link-previews.md`).
 
 - 2026-09-05: Correct Commander archive architecture and UI resource verification after Apple's successful notarization; add real macOS lipo and Vite output regression checks. [Release notes](../../PRs/648-commander-cloud-releases-publish-installable-signed-commander-builds-with-recovery-provenance.md).
 - 2026-09-05: Repair passkey request cancellation across login, account switching and settings; isolate concurrent challenges and reject saved-cookie replay; add native Apple domain association support and account-scoped settings caches. Verified a signed iOS Release build and configured the matching public Apple application ID in Vercel; production code rollout and device acceptance remain pending. See `PRs/641-passkey-reliability-fix-passkey-cancellation-concurrent-challenges-and-native-app-association.md` for validation and rollout requirements.
@@ -623,6 +1273,57 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   direct provider-audio mode streams PCM microphone and response audio to
   xAI Grok Voice on a server-minted five-minute ephemeral credential, on the
   web and on iOS (background audio session + Live Activity).
+
+### 2026-09-03 — Generated marketing suite: 1,600+ pages, animated walkthroughs, social image suite — Claude (AI)
+
+- Grouped summary; details in the PR note (`PRs/610-claude-marketing-suite--generated-marketing-suite.md`).
+- **`/marketing`** is a catalog-generated marketing site: feature landing
+  pages, how-to guides, animated cursor walkthroughs over mock screens,
+  fair competitor comparisons and alternatives, audience pages, use cases,
+  concept explainers, starter templates, twelve "style editions" per lead
+  feature, FAQ pages and getting-started checklists — 1,635 pages from one
+  data set (`remix/app/marketing/`), every slug validated, every link
+  resolved, hero-first and CTA-last, deterministic per slug.
+- **`/marketing/social-media`** is a menu-navigable image suite: every
+  feature × twelve viral trend styles × ten platform formats renders as a
+  self-contained SVG and downloads as PNG at the exact platform size, with
+  per-platform captions and hashtags (10,680 images).
+- Routes are lazy (`marketing`, `marketing/social-media`,
+  `marketing/:category`, `marketing/*`); the root title effect defers to
+  `useMarketingSeo` under `/marketing`; the drawer gains a Marketing hub.
+- Tests: `npm run test:marketing` (catalog validation, walkthrough target
+  coverage, SVG rendering, copy determinism, mock-screen coverage, player
+  engine); manual checklist in `TESTING.md` ("Marketing suite"); design
+  notes in `docs/marketing-suite.md`.
+
+### 2026-09-02 — Lopu toast position setting + `/notifications` history page — Claude (AI)
+
+- Grouped summary; details in the PR note (`PRs/611-claude-lopu-toast-position-notifications-history--lopu-toast-position-notifications-history.md`).
+- **Lopu messages move to the bottom-left** by default. Settings →
+  Appearance (page + drawer modal) gains a "Lopu messages 🦄" dropdown for
+  any of Chakra's six corners; the preference lives at
+  `settings.lopu.position` (cross-tab, undo-exempt) and is mirrored into the
+  synchronous `tt-lopu-position` cache that `useLopu` reads at fire time, so
+  none of the ~86 callers subscribe to settings state. `--toast-z-index`
+  (10260) lifts toasts above the drawer and modals.
+- **`/notifications`**: every notification the viewer has received, newest
+  first, with the filter grammar in the URL — category chips
+  (social / engagement / feed / system), a type dropdown, unread-only,
+  debounced search, and a from/to day window — plus per-row mark-read on
+  click, "Mark all read", cursor "Load older", and a flash-free cached first
+  page. Linked from the bell ("See all →"), Settings → Notifications
+  ("History 📜"), and the drawer's Account group.
+- **System notifications**: new `action-run` type (category `system`, actor
+  `thingtime` / "Lopu", headline + `href` + `outcome`) emitted by the action
+  executor for every explicit run and any failed delegated run; push on by
+  default, email opt-in. `NOTIFICATION_TYPE_CATEGORY` in the registry maps
+  every type to a family (coverage-tested).
+- `GET /api/v1/notifications` → contract 1.1.0: optional `category`, `types`,
+  `unread`, `q`, `since`, `until`, `withTotal` (→ `total`); rows now carry
+  `category`, `title`, `href`, `outcome`. `/api/v1/notifications/settings` →
+  1.1.0 (accepts `action-run`). Per-recipient tail raised from 500 to 10,000.
+  Query resolution lives in `api/utils/notifications/listQuery.ts`
+  (`npm run test:notifications`).
 
 ### 2026-09-03 — Multi-environment PR preview links — Codex (AI)
 

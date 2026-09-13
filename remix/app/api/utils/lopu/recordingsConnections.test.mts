@@ -11,6 +11,10 @@ const entries = [
 	{ id: 'claude', name: 'My Claude API key', provider: 'anthropic' },
 	{ id: 'unsupported', name: 'Other connection', provider: 'unknown' }
 ];
+mock.module(new URL('./personalRecordingDevices.ts', import.meta.url).href, { namedExports: {
+	listPersonalRecordingDevices: async () => [{ id: 'worker', name: 'My worker', online: false, lastSeenAt: null }],
+	validatePersonalRecordingDevice: async (_owner: string, id: unknown) => { if (id && id !== 'worker') throw new TypeError('foreign worker'); }
+} });
 mock.module(new URL('./userVault.ts', import.meta.url).href, {
 	namedExports: {
 		userVaultConfigured: () => vaultReady,
@@ -89,4 +93,14 @@ test('missing keys, Claude audio and setup tokens never reach an endpoint', asyn
 	token = 'sk-ant-oat-synthetic-not-an-api-key';
 	await assert.rejects(resolveRecordingConnection('owner', 'claude', 'analysis'), /credentials/);
 	assert.deepEqual(guarded, []);
+});
+
+test('a selected personal device can queue while offline without requiring cloud API credentials', async () => {
+	await validateRecordingConnections('owner', { runtimeDeviceId: 'worker' });
+	await assert.rejects(validateRecordingConnections('owner', { runtimeDeviceId: 'foreign' }), TypeError);
+	const status = await recordingConnectionStatus('owner', { ...DEFAULT_RECORDING_SETTINGS, runtimeDeviceId: 'worker' });
+	assert.equal(status.configured, true);
+	assert.equal(status.mode, 'personal');
+	assert.equal(status.device?.online, false);
+	assert.equal((await recordingConnectionStatus('owner', { ...DEFAULT_RECORDING_SETTINGS, runtimeDeviceId: 'revoked' })).configured, false);
 });

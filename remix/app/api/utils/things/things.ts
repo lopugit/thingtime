@@ -1,4 +1,5 @@
 import { ownerLibraryMatch } from './ownerLibraryQuery';
+import { moveManagedContent } from './managedPlacement';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { ObjectId, type Binary } from 'mongodb';
@@ -1317,7 +1318,7 @@ export const createThing = async (
   // ["post","comment"] things — so a private thread can never leak through a
   // caller-supplied acl on the comment.
   let acl: string[];
-  if (validated.thingtime.includes('save')) {
+  if (validated.thingtime.includes('save') || validated.thingtime.includes('scheduled-task-run')) {
     acl = [ACL_OWNER];
   } else if (validated.thingtime.includes('comment')) {
     acl = [ACL_INHERIT];
@@ -3372,7 +3373,8 @@ export type ListThingsQuery = {
 export const listThings = async (
   viewerInput: string | Viewer,
   query: ListThingsQuery,
-  app: AppLens = null
+  app: AppLens = null,
+  context: { archiveOwnerId?: string } = {}
 ): Promise<Fail | { ok: true; things: PublicThing[]; nextCursor: string | null }> => {
   const viewer = await withFriendIds(asViewer(viewerInput));
   const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_LIMIT), MAX_FEED_LIMIT);
@@ -3400,7 +3402,7 @@ export const listThings = async (
       ? [...PROTECTED_THINGTIME, ...FOLDER_UNFILEABLE]
       : [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME, ...SUBSPACE_THINGTIME, UPDOWN_THINGTIME];
     match = withMatch(
-      ownerLibraryMatch(viewer.id, hiddenKinds),
+      ownerLibraryMatch(viewer.id, hiddenKinds, context.archiveOwnerId === viewer.id && !viewer.pat && !query.appId && !isCustomMongoEndpointActive()),
       await legacyThingReadsRequired() ? { $or: [{ thingtime: { $exists: true } }, { kind: 'post' }] } : { thingtime: { $exists: true } }
     );
     if (folder === 'root') {
@@ -3456,6 +3458,13 @@ export const listThings = async (
     visible = page.filter((_, index) => verdicts[index]);
   }
   const projected = await toPublicThings(visible, viewer);
+  for (const thing of projected) if (thing.thingtime.length === 1 && thing.thingtime[0] === 'chat-archive') {
+    // Library entries are private root summaries, never history or stored
+    // authority. Only the dedicated snapshot route returns archived people.
+    thing.crystal = { name: typeof thing.crystal.name === 'string' ? thing.crystal.name : 'Chat archive' };
+    thing.acl = ['tt:user']; thing.visibility = 'private'; thing.extended = null; thing.tags = [];
+    delete thing.linkKey; delete thing.tokenAcl;
+  }
   if (app) await appShapeProjections(app, visible, projected);
   return { ok: true, things: projected, nextCursor };
 };
@@ -5186,7 +5195,9 @@ const collectFolderTree = async (
 
 export const bulkThings = async (
   viewerInput: string | Viewer,
-  input: BulkThingsInput
+  input: BulkThingsInput,
+  placementDependencies: { collection?: typeof getThingsCollection; moveRecording?: typeof moveManagedContent } = {},
+  context: { archiveOwnerId?: string } = {}
 ): Promise<Fail | { ok: true; op: BulkOp; results: BulkItemResult[]; succeeded: number; failed: number }> => {
   const viewer = asViewer(viewerInput);
   if (!viewer?.id) return fail(401, 'Unauthorized');
@@ -5250,7 +5261,7 @@ export const bulkThings = async (
     );
   };
 
-  const things = await getThingsCollection();
+  const things = await (placementDependencies.collection || getThingsCollection)();
   const results: BulkItemResult[] = [];
   for (const id of ids) {
     if (op === 'delete') {
@@ -5259,6 +5270,24 @@ export const bulkThings = async (
       continue;
     }
     if (op === 'move') {
+      const owned = await things.findOne({ shareId: id, ownerId: viewer.id } as any) as unknown as ThingDoc | null;
+      if (owned?.thingtime?.length === 1 && ['attachment', 'theme', 'feed-algorithm', 'custom-emoji', 'chat-archive'].includes(owned.thingtime[0])) {
+        if (owned.thingtime[0] === 'chat-archive' && (context.archiveOwnerId !== viewer.id || viewer.pat)) {
+          results.push({ id, ok: false, error: 'Only the first-party archive owner can move this history' });
+          continue;
+        }
+        if (patSandboxBlocks(viewer, owned) || await patVisibilityBlocksDoc(viewer, owned)) {
+          results.push({ id, ok: false, error: 'This token cannot move that managed content' });
+          continue;
+        }
+        try {
+          await (placementDependencies.moveRecording || moveManagedContent)(viewer.id, id, folderId, new Date(owned.updatedAt).toISOString());
+          results.push({ id, ok: true });
+        } catch {
+          results.push({ id, ok: false, error: 'Content could not be moved. Refresh and check that it is saved managed content and the destination is in your own library. Legacy themes/algorithms must first be copied into the current library.' });
+        }
+        continue;
+      }
       const result = await updateThing(viewer, id, { folderId });
       results.push('error' in result ? { id, ok: false, error: result.error } : { id, ok: true });
       continue;

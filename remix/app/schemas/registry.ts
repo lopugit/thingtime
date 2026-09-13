@@ -108,6 +108,7 @@ export const CI_CONTROL_THINGTIME = [
   'ci-preview',
   'ci-preview-policy',
   'ci-dispatch',
+  'ci-stack-chat-message',
   'ci-event'
 ] as const;
 
@@ -2372,6 +2373,27 @@ const ciControlSchemas: ThingtimeSchema[] = [
   ciEntitySchema('ci-deployment', 'CI deployment', 'Current state of one GitHub or Vercel deployment.'),
   ciEntitySchema('ci-preview', 'CI preview', 'Current address and readiness of one branch/deployment preview.'),
   ciEntitySchema('ci-preview-policy', 'CI preview policy', 'Admin-only develop and production-data preview choices for one pull request.'),
+  {
+    id: 'ci-stack-chat-message', version: 1, kind: 'crystal', collection: null,
+    title: 'Stack run conversation', summary: 'A private run question and bounded responder result.',
+    detail: 'System-protected, relational records in ciControl. Only CI administrators can read/send; HMAC-authenticated exact-run workers can lease and answer. Retained for 90 days.',
+    createdVia: '/api/v1/admin/ci/stacks/chat',
+    fields: [
+      { name: 'repository', description: 'Repository bound to the dispatch.', type: 'string', required: true, max: 300 },
+      { name: 'runId', description: 'Immutable Feature Stack run identity.', type: 'string', required: true, max: 80 },
+      { name: 'actorId', description: 'Administrator who asked the question.', type: 'string', required: true, max: 180 },
+      { name: 'question', description: 'Redacted question, at most 2000 characters.', type: 'string', required: true, max: 2000 },
+      // The protected chat writer enforces 8000; public schema maxLength caps at 5000.
+      { name: 'answer', description: 'Redacted responder result, at most 8000 characters.', type: 'string', required: false },
+      { name: 'status', description: 'Durable delivery state.', type: 'enum', required: true, values: ['queued', 'answering', 'answered', 'failed'] },
+      { name: 'attempts', description: 'Number of delivery claims.', type: 'number', required: true },
+      { name: 'lease', description: 'Opaque worker delivery token, never exposed to admins.', type: 'string', required: false, max: 80 },
+      { name: 'completedLease', description: 'Private idempotent reply receipt token.', type: 'string', required: false, max: 80 },
+      { name: 'leaseUntil', description: 'Claim expiry.', type: 'date', required: false },
+      { name: 'runAttempt', description: 'GitHub workflow attempt owning the delivery.', type: 'number', required: false }
+    ],
+    example: { repository: 'owner/repo', runId: 'feature-stack-run-example', actorId: 'admin', question: 'What is waiting?', status: 'queued', attempts: 0 }
+  },
   ciEntitySchema('ci-dispatch', 'CI dispatch', 'An administrator-requested, allowlisted GitHub Actions dispatch.'),
   {
     id: 'ci-event',
@@ -2526,6 +2548,7 @@ export const NOTIFICATION_TYPES = [
   'action-run',
   'recording-reminder',
   'lopu-reminder',
+  'lopu-message',
   'login-success',
   'system-message'
 ] as const;
@@ -2593,6 +2616,7 @@ export const NOTIFICATION_TYPE_CATEGORY: Record<NotificationType, NotificationCa
   'post-from-friend': 'feed',
   'recording-reminder': 'system',
   'lopu-reminder': 'system',
+  'lopu-message': 'system',
   // subspaces: membership/role events are social, moderation of your content
   // and the mod queue are engagement
   'subspace-join-request': 'social',
@@ -2633,7 +2657,7 @@ export type EmailNotificationType = (typeof EMAIL_NOTIFICATION_TYPES)[number];
 // action can run sixty times a minute, and the mod-queue traffic of a big
 // subspace (join requests, reports) is the same class of firehose —
 // moderators opt in per type.
-export const EMAIL_DEFAULT_OFF_TYPES: readonly string[] = ['post-from-followed', 'post-from-friend', 'action-run', 'recording-reminder', 'lopu-reminder', 'login-success', 'system-message', 'subspace-join-request', 'subspace-report'];
+export const EMAIL_DEFAULT_OFF_TYPES: readonly string[] = ['post-from-followed', 'post-from-friend', 'action-run', 'recording-reminder', 'lopu-reminder', 'lopu-message', 'login-success', 'system-message', 'subspace-join-request', 'subspace-report'];
 
 export type NotificationChannelMasters = { push: boolean; email: boolean };
 export type NormalizedNotificationPrefs = {
@@ -4038,7 +4062,11 @@ export const DEVICE_THINGTIME = [
 // imported chat rows stay ordinary quota-billed content.
 export const DEVICE_CONTROL_THINGTIME = ['device-command', 'device-command-event', 'device-ai-live-state', 'device-approval'] as const;
 
+// Historical chats have a dedicated atomic lifecycle, never generic CRUD.
+export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
+
 export const PROTECTED_THINGTIME = [
+  ...CHAT_ARCHIVE_THINGTIME,
 	'lopu-recording-settings',
 	'lopu-recording-job',
 	'lopu-recording-reminder',
@@ -4105,7 +4133,7 @@ export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) =>
 // unreachable, unaccounted, and never pruned again — so create/run/delete
 // cycles would re-open exactly the unbounded accumulation the retention cap
 // closes. Cascading is also the only way an owner can ever remove them.
-export const CASCADE_CHILD_THINGTIME = [ATTACHMENT_THINGTIME, 'comment', 'reaction', 'save', 'action-run', UPDOWN_THINGTIME, 'lopu-recording-job', 'lopu-recording-reminder', 'lopu-reminder'] as const;
+export const CASCADE_CHILD_THINGTIME = [ATTACHMENT_THINGTIME, 'comment', 'reaction', 'save', 'action-run', 'scheduled-task-run', UPDOWN_THINGTIME, 'lopu-recording-job', 'lopu-recording-reminder', 'lopu-reminder'] as const;
 
 // Messenger kinds are owned by /api/v1/chats* end to end. Create/update are
 // already refused by the missing crystal sanitizers, and DELETE must be too:
@@ -4243,6 +4271,19 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   reactionSchema,
   shareSchema,
   dataSchema,
+  {
+    id: 'scheduled-task-run', version: 1, kind: 'crystal', collection: null,
+    title: 'Scheduled task run', summary: 'An owner-private, editable run note linked to its task by targetId.',
+    requiresTarget: true,
+    detail: 'A quota-billed child Thing, not an embedded task history. These owner-editable notes are not security audit records. Deleting the task cascades its run notes; destination conversations remain separate.',
+    fields: [
+      { name: 'title', type: 'string', required: true, max: 240, description: 'Run title.' },
+      { name: 'chatId', type: 'id', required: true, description: 'Destination Lopu conversation.' },
+      { name: 'scheduledAt', type: 'date', required: true, description: 'Scheduled occurrence.' },
+      { name: 'status', type: 'enum', required: true, values: ['running', 'done', 'needs-attention'], description: 'Last saved run status.' },
+      { name: 'notificationStatus', type: 'string', required: false, description: 'Optional notification delivery diagnostic.' }
+    ], example: { title: 'Daily update', chatId: 'chat-id', scheduledAt: '2026-09-10T09:00:00.000Z', status: 'done' }
+  },
   schemaThingSchema,
   componentSchema,
   webpageSchema,
@@ -6570,6 +6611,14 @@ const crystalSanitizers: Record<
   // minted only, and the missing entry makes the generic write path 403.
   action: sanitizeActionCrystal,
   data: sanitizeDataCrystal,
+  'scheduled-task-run': (input, ids) => {
+    if (ids.length !== 1) return fail(400, 'Scheduled run notes cannot combine with other schemas');
+    if (typeof input.title !== 'string' || !input.title.trim() || input.title.length > 240) return fail(400, 'A run title is required (up to 240 characters)');
+    if (typeof input.chatId !== 'string' || !/^[\w-]{1,128}$/.test(input.chatId)) return fail(400, 'A valid destination chat is required');
+    if (typeof input.scheduledAt !== 'string' || !Number.isFinite(Date.parse(input.scheduledAt))) return fail(400, 'A valid occurrence is required');
+    if (!['running', 'done', 'needs-attention'].includes(String(input.status))) return fail(400, 'Invalid run status');
+    return { ok: true, crystal: { title: input.title, chatId: input.chatId, scheduledAt: input.scheduledAt, status: input.status, ...(input.notificationStatus === 'unavailable' ? { notificationStatus: 'unavailable' } : {}) } };
+  },
   user: sanitizeUserCrystal,
   theme: sanitizeThemeCrystal,
   'feed-algorithm': sanitizeFeedAlgorithmCrystal,

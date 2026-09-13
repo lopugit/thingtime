@@ -30,6 +30,8 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   reaction: ['emoji'],
   share: [], // marker schema — the thingtime tag is the payload
   data: [], // '*' is a record; 'schema' is a reserved top-level name
+  // Owner-editable relational run notes, distinct from protected scheduler control state.
+  'scheduled-task-run': ['title', 'chatId', 'scheduledAt', 'status', 'notificationStatus'],
   schema: ['name', 'description', 'forkOf'], // fields + render: records → dropped
   // args + savedArgs + render: records → dropped
   component: ['name', 'description', 'library', 'category', 'componentKey', 'familyKey', 'version', 'forkOf', 'previewBg'],
@@ -112,6 +114,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   'ci-deployment': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-preview': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-preview-policy': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
+  'ci-stack-chat-message': ['repository', 'runId', 'actorId', 'question', 'answer', 'status', 'attempts', 'lease', 'completedLease', 'leaseUntil', 'runAttempt'],
   'ci-dispatch': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-event': ['provider', 'repository', 'deliveryId', 'eventType', 'action', 'actor', 'statusFrom', 'statusTo', 'occurredAt'], // data: record → dropped
   friend: ['status', 'friendKey'],

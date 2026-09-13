@@ -47,6 +47,16 @@ test('daily reminders use local dates and wait for the preferred hour', () => {
 	assert.deepEqual(recordingReminderWindow(new Date('2026-11-01T05:30:00Z'), ny), recordingReminderWindow(new Date('2026-11-01T06:30:00Z'), ny));
 });
 
+test('personal processing is an explicit bounded selection and legacy settings preserve provider mode', () => {
+	assert.equal(recordingSettingsOf(null).runtimeDeviceId, null);
+	assert.equal(recordingSettingsOf({ enabled: true }).runtimeDeviceId, null);
+	assert.deepEqual(parseRecordingSettingsPatch({ runtimeDeviceId: 'paired-worker_1' }), { runtimeDeviceId: 'paired-worker_1' });
+	assert.deepEqual(parseRecordingSettingsPatch({ runtimeDeviceId: null }), { runtimeDeviceId: null });
+	for (const value of ['', 'a'.repeat(161), 'https://worker.test', {}, [], 1, true])
+		assert.throws(() => parseRecordingSettingsPatch({ runtimeDeviceId: value }));
+	assert.deepEqual(parseRecordingSettingsPatch({ timeZone: 'UTC' }), { timeZone: 'UTC' });
+});
+
 test('analysis accepts grounded todos for bike tubes and ART toothpaste', () => {
 	const transcript = 'Remind me to buy bike tubes and ART toothpaste.';
 	const items = [

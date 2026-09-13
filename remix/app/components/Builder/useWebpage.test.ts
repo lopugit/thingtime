@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { mergeSavedWebpage, resolveWebpageClient, type ResolvedWebpage } from './useWebpage';
+import { loadWebpageClient, mergeSavedWebpage, resolveWebpageClient, type ResolvedWebpage } from './useWebpage';
 import { MAX_WEBPAGE_ROUTE_CHARS } from '~/schemas/registry';
 import { THINGTIME_CAPABILITY_MANIFEST_PATH } from '~/api/utils/capabilities/capabilityContract';
 
@@ -40,6 +40,28 @@ const okResponse = () =>
 		ok: true,
 		json: async () => ({ ok: true, page: null, source: null, components: [], refs: {} })
 	} as unknown as Response);
+
+test('temporary resolve failures are retryable, not missing pages', async () => {
+	for (const status of [408, 429, 500, 502, 503]) {
+		const { result } = await withFetch(async () => new Response('', { status }), () => loadWebpageClient({ kind: 'id', id: 'shared' }));
+		assert.deepEqual(result, { status: 'error' });
+	}
+	for (const impl of [async () => { throw new Error('offline'); }, async () => new Response('not json'), async () => Response.json({ ok: true }), async () => Response.json({ ok: false })]) {
+		const { result } = await withFetch(impl, () => loadWebpageClient({ kind: 'id', id: 'shared' }));
+		assert.deepEqual(result, { status: 'error' });
+	}
+	const { result } = await withFetch(okResponse, () => loadWebpageClient({ kind: 'id', id: 'shared' }));
+	assert.equal(result.status, 'ready', 'a subsequent retry can recover');
+});
+
+test('missing or refused pages remain indistinguishable and optional site resolves stay nullable', async () => {
+	for (const status of [400, 401, 403, 404]) {
+		const { result } = await withFetch(async () => new Response('', { status }), () => loadWebpageClient({ kind: 'id', id: 'shared' }));
+		assert.deepEqual(result, { status: 'missing' });
+	}
+	const { result } = await withFetch(async () => { throw new Error('offline'); }, () => resolveWebpageClient({ kind: 'path', path: '/status' }));
+	assert.equal(result, null, 'SiteBlocksHost must retain its fallback rather than get an unhandled rejection');
+});
 
 test('paths the server route gate refuses never reach the network', async () => {
 	// /post/<id> and the `*` thing-tree catch-all routinely carry uppercase,

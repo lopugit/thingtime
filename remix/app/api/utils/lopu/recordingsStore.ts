@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { packSecure, unpackSecure } from '../auth/users';
 import { getHomeThingsCollection } from '../mongodb/collections';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
+import { isPrivateRecordingPost, isPrivateSavedRecording } from './recordingSources';
 import {
 	parseRecordingSettingsPatch,
 	recordingSettingsOf,
@@ -11,6 +12,8 @@ import {
 	RECORDING_LEASE_MS,
 	type RecordingInsight
 } from './recordingsCore';
+
+export { isPrivateRecordingPost } from './recordingSources';
 
 export const recordingId = (scope: string, ...parts: string[]) =>
 	`lopu-recording-${scope}-${createHash('sha256').update(JSON.stringify(parts)).digest('hex')}`;
@@ -88,33 +91,23 @@ export const recordingJobState = (job: any): RecordingJobState => {
 
 export const recordingStateBlob = (state: RecordingJobState) => packSecure({ meta: { recording: state } } as any);
 
-export const isPrivateRecordingPost = (post: any, ownerId: string) =>
-	post &&
-	post.ownerId === ownerId &&
-	!post.appId &&
-	!post.deletedAt &&
-	Array.isArray(post.thingtime) &&
-	post.thingtime.includes('post') &&
-	!post.thingtime.includes('comment') &&
-	Array.isArray(post.acl) &&
-	post.acl.length === 1 &&
-	post.acl[0] === ACL_OWNER &&
-	Array.isArray(post.tags) &&
-	post.tags.includes('apple-watch') &&
-	/^watch-upload-/.test(post.shareId);
-
-export const recordingSource = async (job: any) => {
+export const recordingSource = async (job: any, session?: any) => {
 	const things = await getHomeThingsCollection();
-	const [post, attachment] = await Promise.all([
-		things.findOne({ shareId: job.targetId, ownerId: job.ownerId }),
-		things.findOne({
+	const readPost = () => things.findOne({ shareId: job.targetId, ownerId: job.ownerId }, { session });
+	if (job.targetId === job.crystal.attachmentId) {
+		const source = await readPost();
+		return isPrivateSavedRecording(source, job.ownerId) ? { post: source, attachment: source } : null;
+	}
+	const readAttachment = () => things.findOne({
 			shareId: job.crystal.attachmentId,
 			ownerId: job.ownerId,
 			thingtime: 'attachment',
 			targetId: job.targetId,
 			attachmentState: 'ready'
-		})
-	]);
+		}, { session });
+	// A transaction's driver operations must be sequential; ordinary reads keep
+	// the existing parallel lookup to avoid another database round-trip's wait.
+	const [post, attachment] = session ? [await readPost(), await readAttachment()] : await Promise.all([readPost(), readAttachment()]);
 	if (
 		!isPrivateRecordingPost(post, job.ownerId) ||
 		!attachment ||
@@ -128,9 +121,11 @@ export const recordingSource = async (job: any) => {
 
 export const queueRecordingPost = async (ownerId: string, postId: string) => {
 	const things = await getHomeThingsCollection();
+	const settings = await getRecordingSettings(ownerId);
 	const post = await things.findOne({ ownerId, shareId: postId });
-	if (!isPrivateRecordingPost(post, ownerId)) throw new TypeError('Choose one of your private Apple Watch recording posts.');
-	const attachments = await things
+	const standalone = isPrivateSavedRecording(post, ownerId);
+	if (!standalone && !isPrivateRecordingPost(post, ownerId)) throw new TypeError('Choose your own private saved recording or Apple Watch recording post.');
+	const attachments = standalone ? [post] : await things
 		.find({
 			ownerId,
 			thingtime: 'attachment',
@@ -154,11 +149,12 @@ export const queueRecordingPost = async (ownerId: string, postId: string) => {
 						{
 							status: 'queued',
 							attachmentId: attachment.shareId,
-							filename: String(attachment.crystal?.name || 'Watch recording').slice(0, 200),
+							filename: String(attachment.crystal?.name || 'Recording').slice(0, 200),
 							attempts: 0
 						},
 						postId
 					),
+					...(settings.runtimeDeviceId ? { runtimeDeviceId: settings.runtimeDeviceId } : {}),
 					nextRunAt: new Date(),
 					secure: recordingStateBlob({ commentIds: [], commentIndex: 0, insightIndex: 0, resultIds: [] })
 				}
@@ -172,7 +168,7 @@ export const queueRecordingPost = async (ownerId: string, postId: string) => {
 // Fair, bounded discovery with a durable (createdAt, shareId) cursor. The cursor
 // advances only after all matching audio attachments have durable job rows.
 // This covers both native direct uploads and older iPhone-relayed uploads.
-export const discoverRecordingUploads = async () => {
+export const discoverRecordingUploads = async (ownerId?: string) => {
 	const things = await getHomeThingsCollection();
 	let queued = 0;
 	for (let account = 0; account < 20; account++) {
@@ -181,6 +177,7 @@ export const discoverRecordingUploads = async () => {
 		const settings = await things.findOneAndUpdate(
 			{
 				thingtime: RECORDING_SETTINGS_KIND,
+				...(ownerId ? { ownerId } : {}),
 				'crystal.enabled': true,
 				nextRunAt: { $lte: now },
 				$or: [{ scanLeaseUntil: { $exists: false } }, { scanLeaseUntil: { $lte: now } }]
@@ -234,8 +231,10 @@ export const listRecordingAutomation = async (ownerId: string) => {
 		jobs: jobs.map((job: any) => ({
 			id: job.shareId,
 			postId: job.targetId,
+			attachmentId: job.crystal.attachmentId,
 			filename: job.crystal.filename,
 			status: job.crystal.status,
+			runtimeDeviceId: job.runtimeDeviceId || null,
 			handoffStatus: job.crystal.handoffStatus || null,
 			handoffChatId: job.crystal.handoffChatId || null,
 			attempts: job.crystal.attempts,
@@ -264,6 +263,7 @@ export const listRecordingAutomation = async (ownerId: string) => {
 };
 
 export const retryRecordingJob = async (ownerId: string, jobId: string) => {
+	const settings = await getRecordingSettings(ownerId);
 	const result = await (
 		await getHomeThingsCollection()
 	).updateOne(
@@ -274,8 +274,11 @@ export const retryRecordingJob = async (ownerId: string, jobId: string) => {
 			'crystal.status': { $in: ['failed', 'retry', 'paused'] }
 		},
 		{
-			$set: { 'crystal.status': 'queued', 'crystal.attempts': 0, updatedAt: new Date(), nextRunAt: new Date() },
-			$unset: { 'crystal.error': '', lease: '', leaseUntil: '' }
+			$set: { 'crystal.status': 'queued', 'crystal.attempts': 0, updatedAt: new Date(), nextRunAt: new Date(),
+				...(settings.runtimeDeviceId ? { runtimeDeviceId: settings.runtimeDeviceId } : {}) },
+			$unset: { 'crystal.error': '', lease: '', leaseUntil: '', runtimeCompleting: '', runtimeSessionId: '',
+				runtimeReceiptHash: '', runtimeReceiptLease: '', runtimeStartedAt: '',
+				...(!settings.runtimeDeviceId ? { runtimeDeviceId: '' } : {}) }
 		}
 	);
 	return result.matchedCount > 0;

@@ -8,20 +8,21 @@
 // paste / arrange / select). Every leaf fires a command the page dispatches.
 
 import type {
-  ThingContextAction,
   ThingContextMenuModel,
-  ThingContextSection,
   ThingContextSubmenu
 } from '~/components/Thingtime/ContextMenu/contextMenuModel';
+import { canOfferRecordingHandoff } from '../Lopu/recordingThingHandoff';
+import { buildThingEntityMenu } from '../Thingtime/ContextMenu/thingEntityMenu';
+import { thingBrowseHref } from './thingsLocation';
 
 import {
   THINGS_GROUP_OPTIONS,
   THINGS_SORT_OPTIONS,
-  ThingsDisplayMode,
-  ThingsGroupBy,
-  ThingsSort,
-  ThingsThing,
-  ThingsView,
+  type ThingsDisplayMode,
+  type ThingsGroupBy,
+  type ThingsSort,
+  type ThingsThing,
+  type ThingsView,
   isDuplicable,
   isFolder,
   primaryKindOf
@@ -41,107 +42,38 @@ export type ThingsItemMenuArgs = {
   // bigger selection)
   actCount: number;
   clipboardCount: number;
+  ownerId?: string;
+  locationSearch?: string;
 };
 
-export const buildThingsItemMenu = ({ thing, actCount, clipboardCount }: ThingsItemMenuArgs): ThingContextMenuModel => {
+export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, locationSearch }: ThingsItemMenuArgs): ThingContextMenuModel => {
   const folder = isFolder(thing);
-  const sections: ThingContextSection[] = [];
-
-  sections.push({
-    id: 'open',
-    actions: [
-      folder
-        ? { id: 'open', command: 'open', label: 'Open folder', icon: '📂', lucide: 'folder-open' }
-        : thing.thingtime.includes('post')
-          ? { id: 'open', command: 'open', label: 'Open post', icon: '📝', lucide: 'external-link' }
-          : { id: 'open', command: 'open', label: 'Preview', icon: '👀', lucide: 'eye' },
-      { id: 'copy-link', command: 'copy-link', label: 'Copy link', icon: '🔗', lucide: 'link' }
-    ]
-  });
-
-  sections.push({
-    id: 'organise',
-    label: 'Organise',
-    actions: [
-      ...(canRename(thing) && actCount === 1
-        ? [{ id: 'rename', command: 'rename', label: 'Rename…', icon: '✏️', lucide: 'pen-line' } as ThingContextAction]
-        : []),
-      { id: 'move', command: 'move', label: `${countLabel('Move', actCount)} to…`, icon: '📁', lucide: 'folder-input' },
-      {
-        id: 'share',
-        command: 'share',
-        label: `${countLabel('Share', actCount)}…`,
-        icon: '🌐',
-        lucide: 'share-2',
-        ...(folder ? { hint: 'Audience for the folder — optionally everything inside' } : {})
-      }
-    ]
-  });
-
-  sections.push({
-    id: 'clipboard',
-    label: 'Clipboard',
-    actions: [
-      {
-        id: 'copy',
-        command: 'copy',
-        label: countLabel('Copy', actCount),
-        icon: '📋',
-        lucide: 'copy',
-        kbd: '⌘C',
-        ...(folder ? { hint: 'Folders copy everything inside' } : {})
-      },
-      // one-click copy-into-this-folder (no clipboard round-trip). Hidden for
-      // uncopyable kinds the server would refuse anyway. No kbd: ⌘D is the
-      // browser's bookmark chord, so Duplicate stays context-menu only.
-      ...(isDuplicable(thing)
-        ? [
-            {
-              id: 'duplicate',
-              command: 'duplicate',
-              label: countLabel('Duplicate', actCount),
-              // 🐑 is the codebase's Duplicate emoji (theme/icons.tsx maps it
-              // to lucide copy-plus); emoji icon style falls back to 🤷‍♂️ for
-              // anything outside the emoji set, so no glyphs like ⧉ here
-              icon: '🐑',
-              lucide: 'copy-plus',
-              ...(folder ? { hint: 'Duplicates the folder and everything inside' } : {})
-            } as ThingContextAction
-          ]
-        : []),
+  const archive = thing.thingtime.length === 1 && thing.thingtime[0] === 'chat-archive';
+  const bulkHint = actCount > 1 ? `Applies to ${actCount} selected Things` : undefined;
+  return buildThingEntityMenu({
+    open: { href: thingBrowseHref(thing, locationSearch) }, inspect: !archive && { href: `/thing/${encodeURIComponent(thing.id)}?from=things` }, 'copy-link': true,
+    edit: canRename(thing) && actCount === 1,
+    share: !archive && { hint: bulkHint || (folder ? 'Audience for the folder — optionally everything inside' : undefined) },
+    delete: !archive && { hint: bulkHint, kbd: '⌫' },
+    'send-to-lopu': actCount === 1 && canOfferRecordingHandoff(thing, ownerId)
+  }, [
+    ...(!folder && !archive ? [{ id: 'preview', actions: [{ id: 'preview', command: 'preview', label: 'Preview', icon: '👀', lucide: 'eye' }] }] : []),
+    { id: 'organise', label: 'Organise', actions: [
+      { id: 'move', command: 'move', label: `${countLabel('Move', actCount)} to…`, icon: '📁', lucide: 'folder-input' }
+    ] },
+    { id: 'clipboard', label: 'Clipboard', actions: [
+      { id: 'copy', command: 'copy', label: countLabel('Copy', actCount), icon: '📋', lucide: 'copy', kbd: '⌘C',
+        hint: folder ? 'Folders copy everything inside' : undefined },
+      ...(!archive && isDuplicable(thing) ? [{ id: 'duplicate', command: 'duplicate', label: countLabel('Duplicate', actCount), icon: '🐑', lucide: 'copy-plus',
+        hint: folder ? 'Duplicates the folder and everything inside' : undefined }] : []),
       { id: 'cut', command: 'cut', label: countLabel('Cut', actCount), icon: '✂️', lucide: 'scissors', kbd: '⌘X' },
-      ...(folder
-        ? [
-            {
-              id: 'paste-into',
-              command: 'paste-into',
-              label: `Paste ${clipboardCount || ''} into folder`.replace('  ', ' '),
-              icon: '📥',
-              lucide: 'clipboard-paste',
-              disabled: !clipboardCount,
-              hint: clipboardCount ? undefined : 'Nothing on the clipboard yet'
-            } as ThingContextAction
-          ]
-        : [])
-    ]
-  });
-
-  sections.push({
-    id: 'danger',
-    actions: [
-      {
-        id: 'delete',
-        command: 'delete',
-        label: countLabel('Delete', actCount),
-        icon: '🗑️',
-        lucide: 'trash-2',
-        kbd: '⌫',
-        danger: true
-      }
-    ]
-  });
-
-  return { sections };
+      { id: 'download', command: 'download', label: `${countLabel('Download', actCount)}…`, icon: '📥', lucide: 'download' },
+      // portable paste: the OS clipboard may hold a Thingtime transfer even when
+      // this tab's clipboard is empty, so the entry stays enabled
+      ...(folder ? [{ id: 'paste-into', command: 'paste-into', label: `Paste ${clipboardCount || ''} into folder`.replace('  ', ' '),
+        icon: '📥', lucide: 'clipboard-paste', hint: 'Paste portable content from your clipboard' }] : [])
+    ] }
+  ]);
 };
 
 export type ThingsBackgroundMenuArgs = {
@@ -227,6 +159,7 @@ export const buildThingsBackgroundMenu = ({
       id: 'create',
       actions: [
         { id: 'new-folder', command: 'new-folder', label: 'New folder…', icon: '📁', lucide: 'folder-plus' },
+        { id: 'import', command: 'import', label: 'Import…', icon: '📥', lucide: 'upload' },
         {
           id: 'paste',
           command: 'paste',
@@ -234,8 +167,7 @@ export const buildThingsBackgroundMenu = ({
           icon: '📥',
           lucide: 'clipboard-paste',
           kbd: '⌘V',
-          disabled: !clipboardCount,
-          ...(clipboardCount ? {} : { hint: 'Copy or cut things first' })
+          hint: 'Paste a Thingtime transfer from your clipboard'
         }
       ]
     },

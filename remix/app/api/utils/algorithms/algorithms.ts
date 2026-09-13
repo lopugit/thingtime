@@ -10,6 +10,7 @@ import { applyEventsToWeights, emptyWeights, topInterests, type AlgorithmWeights
 import { getPostFeatures } from '../things/things';
 import { StorageMutationError, USER_STORAGE_ACCOUNTING_VERSION, currentContentStorageSizeBytes, thingStorageSizeBytes } from '../storage/storageCore';
 import { applyUserStorageDelta, markUserStorageNeedsReconcile, readyUserStorageMatch } from '../storage/userStorage';
+import { parseAlgorithmTransfer, type AlgorithmTransferContent } from './algorithmTransferCore';
 
 // Personal feed algorithms: named, branchable interest-weight profiles trained
 // by doomscroll engagement. A user can keep many and switch the active one
@@ -293,6 +294,21 @@ export const getOwnedAlgorithmWeights = async (ownerId: string, shareId: string)
   return doc ? doc.weights || emptyWeights() : null;
 };
 
+/** Owner-only full portable profile. Shared previews deliberately omit weights;
+ * possessing a preview URL is not authority for this export path. */
+export const getOwnedAlgorithmTransfer = async (ownerId: string, shareId: string): Promise<AlgorithmTransferContent | null> => {
+  const doc = await findOwnedAlgorithm(ownerId, shareId);
+  return doc ? parseAlgorithmTransfer({ name: doc.name, emoji: doc.emoji, weights: doc.weights || emptyWeights(),
+    eventCount: doc.eventCount, lastTrainedAt: doc.lastTrainedAt ? new Date(doc.lastTrainedAt).toISOString() : null }) : null;
+};
+
+/** Server-only entry point. Normal algorithm HTTP input cannot supply a seed.
+ * The canonical writer still owns caps, storage admission, private ACL and IDs. */
+export const importAlgorithmTransfer = async (ownerId: string, content: unknown) => {
+  const parsed = parseAlgorithmTransfer(content);
+  return createAlgorithm(ownerId, { name: parsed.name, emoji: parsed.emoji }, parsed);
+};
+
 export type CreateAlgorithmInput = {
   name?: unknown;
   emoji?: unknown;
@@ -303,7 +319,10 @@ export type CreateAlgorithmInput = {
 // Create a fresh algorithm, optionally branched from an existing one (weights
 // copied, lineage kept in parentId) and optionally seed-trained from a batch
 // of session events ("save this doomscroll session as an algorithm").
-export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInput): Promise<Fail | { ok: true; algorithm: PublicAlgorithm }> => {
+export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInput, transferSeed?: AlgorithmTransferContent): Promise<Fail | { ok: true; algorithm: PublicAlgorithm }> => {
+  // Validate again at the writer boundary, even for an in-process caller.
+  const imported = transferSeed === undefined ? undefined : parseAlgorithmTransfer(transferSeed);
+  if (imported && (input.branchFrom != null || input.events !== undefined)) return fail(400, 'An imported profile cannot also branch or train');
   const name = typeof input.name === 'string' ? input.name.trim().slice(0, MAX_NAME_CHARS) : '';
   if (!name) return fail(400, 'Algorithm name is required');
 
@@ -318,7 +337,7 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
     return fail(400, `Algorithm limit reached (${MAX_ALGORITHMS_PER_USER})`);
   }
 
-  let weights = emptyWeights();
+  let weights = imported?.weights || emptyWeights();
   let parentId: string | null = null;
   if (input.branchFrom !== undefined && input.branchFrom !== null) {
     // own algorithms first; otherwise a share-link branch — allowed only when
@@ -338,8 +357,8 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
   }
 
   const now = new Date();
-  let eventCount = 0;
-  let lastTrainedAt: Date | null = null;
+  let eventCount = imported?.eventCount || 0;
+  let lastTrainedAt: Date | null = imported?.lastTrainedAt ? new Date(imported.lastTrainedAt) : null;
 
   const seedEvents = sanitizeEvents(input.events);
   if (seedEvents.length) {
@@ -410,7 +429,9 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
 		if (projected) return projected;
 		throw error;
 	}
-  return { ok: true, algorithm: await toPublicAlgorithm(doc) };
+  // Import must return the minted ID without a fallible username lookup after
+  // commit; its caller needs that ID to compensate a later mixed-import failure.
+  return { ok: true, algorithm: imported ? projectAlgorithm(doc, new Map()) : await toPublicAlgorithm(doc) };
 };
 
 export const updateAlgorithm = async (

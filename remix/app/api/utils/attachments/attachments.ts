@@ -47,6 +47,8 @@ import {
 import { PrivateS3ConfigError } from './config';
 import { getPrivateS3, type AttachmentObjectHead, type AttachmentS3, type AttachmentUploadedPart } from './privateS3';
 import { queueAttachmentModeration } from '../moderation/analyzeAttachment';
+import { copyStoredAttachment } from './copyStoredAttachment';
+import { findUserById, userPublicUploadsEnabled } from '../auth/users';
 
 export const ATTACHMENT_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
 export const ATTACHMENT_READY_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
@@ -61,7 +63,7 @@ export const MAX_SESSION_REPLACEMENT_ATTACHMENT_CLEANUP = 25;
 export const MAX_ATTACHMENT_DETECTION_BACKFILL_PER_RUN = 200;
 export const ATTACHMENT_DETECTION_BACKFILL_WALL_CLOCK_MS = 25 * 1000;
 export const ATTACHMENT_DETECTION_BACKFILL_CONCURRENCY = 5;
-export const ATTACHMENT_UPLOAD_PURPOSES = ['post', 'comment', 'message', 'profile-avatar', 'profile-banner', 'custom-emoji', 'recording'] as const;
+export const ATTACHMENT_UPLOAD_PURPOSES = ['post', 'comment', 'message', 'profile-avatar', 'profile-banner', 'custom-emoji', 'recording', 'recording-import'] as const;
 export type AttachmentUploadPurpose = (typeof ATTACHMENT_UPLOAD_PURPOSES)[number];
 export const MAX_CUSTOM_EMOJI_ATTACHMENT_BYTES = 512 * 1024;
 export const CUSTOM_EMOJI_ATTACHMENT_CONTENT_TYPES = new Set(['image/gif', 'image/jpeg', 'image/png', 'image/webp']);
@@ -87,6 +89,7 @@ type AttachmentServiceDependencies = {
 	customMongoActive: () => boolean;
 	canViewTarget: (viewer: AttachmentViewer, attachment: AttachmentDoc) => Promise<boolean>;
 	canViewSharedTarget: typeof canViewSharedCompositionAttachment;
+	canCopyFiles: (ownerId: string) => Promise<boolean>;
 	clock: () => number;
 	// Fire-and-forget NSFW/TOS analysis kickoff after markReady; optional so
 	// unit tests that stub the store never trigger network analysis.
@@ -131,11 +134,12 @@ const attachmentRequestFingerprint = (metadata: AttachmentCrystal, purpose: Atta
 
 const attachmentUploadIntent = (
 	value: unknown
-): { requestPurpose: AttachmentUploadPurpose; purpose: AttachmentPurpose; profileSlot?: ProfileAttachmentSlot } | null => {
+): { requestPurpose: AttachmentUploadPurpose; purpose: AttachmentPurpose; profileSlot?: ProfileAttachmentSlot; recordingImportDraft?: true } | null => {
 	if (value === undefined || value === 'post') return { requestPurpose: 'post', purpose: 'post' };
 	if (value === 'comment') return { requestPurpose: value, purpose: 'comment' };
 	if (value === 'message') return { requestPurpose: value, purpose: 'message' };
 	if (value === 'recording') return { requestPurpose: value, purpose: 'recording' };
+	if (value === 'recording-import') return { requestPurpose: value, purpose: 'recording', recordingImportDraft: true };
 	if (value === 'profile-avatar') return { requestPurpose: value, purpose: 'profile', profileSlot: 'avatar' };
 	if (value === 'profile-banner') return { requestPurpose: value, purpose: 'profile', profileSlot: 'banner' };
 	if (value === 'custom-emoji') return { requestPurpose: value, purpose: 'emoji' };
@@ -145,7 +149,7 @@ const attachmentUploadIntent = (
 export const attachmentIdForRequest = (ownerId: string, requestId: string): string =>
 	`att_${createHash('sha256').update('thingtime-attachment-request-v1\0').update(ownerId).update('\0').update(requestId).digest('hex')}`;
 
-const attachmentPartPlan = (sizeBytes: number) => {
+export const attachmentPartPlan = (sizeBytes: number) => {
 	const oneMiB = 1024 * 1024;
 	const minimumForTenThousand = Math.ceil(sizeBytes / 10_000);
 	const partSizeBytes = Math.ceil(Math.max(ATTACHMENT_MIN_PART_BYTES, minimumForTenThousand) / oneMiB) * oneMiB;
@@ -263,6 +267,10 @@ const defaultDependencies: AttachmentServiceDependencies = {
 	customMongoActive: isCustomMongoEndpointActive,
 	canViewTarget: canViewHomeAttachmentTarget,
 	canViewSharedTarget: (viewer, attachment, rootId) => canViewSharedCompositionAttachment(viewer, attachment, rootId),
+	canCopyFiles: async (ownerId) => {
+		const user = await findUserById(ownerId);
+		return !!user && user.accountKind !== 'service' && userPublicUploadsEnabled(user);
+	},
 	clock: Date.now,
 	queueModeration: queueAttachmentModeration
 };
@@ -810,6 +818,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 						requestFingerprint,
 						purpose: intent.purpose,
 						profileSlot: intent.profileSlot,
+						...(intent.recordingImportDraft ? { recordingImportDraft: true as const } : {}),
 						expiresAt: expires
 					});
 					ownsInitialization = true;
@@ -827,6 +836,11 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			// Recording starts can be replayed after a lost completion receipt.
 			// The owner and exact metadata fingerprint have already been checked.
 			if (intent.purpose === 'recording' && reserved.attachmentState === 'ready') {
+				if (intent.recordingImportDraft && (reserved.attachmentImportDraft !== true ||
+					!(reserved.attachmentExpiresAt instanceof Date) || !Number.isFinite(reserved.attachmentExpiresAt.getTime()) ||
+					reserved.attachmentExpiresAt.getTime() <= dependencies.now().getTime())) {
+					return fail(409, 'Recording import upload has expired or already been committed');
+				}
 				return { ok: true, upload: { ...uploadPlan(reserved), state: 'ready' } };
 			}
 			if (
@@ -1222,11 +1236,12 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		}
 	};
 
-	const download = async (
+	const readableStoredAttachment = async (
 		viewer: AttachmentViewer,
 		idInput: unknown,
-		forceDownload: boolean
-	): Promise<AttachmentResult<{ url: string; expiresAt: string; cacheKey: string; size: number; contentType: string; disposition: string; image: boolean }>> => {
+		allowLinkedCopy = false,
+		verifyStoredObject = true
+	): Promise<AttachmentResult<{ doc: AttachmentDoc }>> => {
 		try {
 			const id = normalizeId(idInput);
 			if (!id) return fail(404, 'Attachment not found');
@@ -1243,7 +1258,16 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			// live. Profile replacement stamps immediate expiry in the same Mongo
 			// transaction that removes the user-slot reference, making the old object
 			// inaccessible while it remains billed until exact-version cleanup.
-			if (!doc.targetId && (!doc.attachmentExpiresAt || doc.attachmentExpiresAt.getTime() <= dependencies.now().getTime())) {
+			// Saved recordings intentionally have no expiry: they are private
+			// library content, not abandoned upload drafts. This exception is
+			// exact-owner only and must not revive an expiring/import draft.
+			const durableRecording = doc.attachmentPurpose === 'recording' &&
+				doc.attachmentImportDraft !== true && !doc.attachmentExpiresAt &&
+				!doc.attachmentLinked && !doc.attachmentProfileSlot &&
+				doc.thingtime.length === 1 && doc.thingtime[0] === 'attachment' &&
+				viewer?.id === doc.ownerId;
+			if (!doc.targetId && !durableRecording && (!doc.attachmentExpiresAt ||
+				!Number.isFinite(doc.attachmentExpiresAt.getTime()) || doc.attachmentExpiresAt.getTime() <= dependencies.now().getTime())) {
 				return fail(404, 'Attachment not found');
 			}
 			// Post attachments must never authorize a home object against a caller-
@@ -1262,7 +1286,9 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			// redirected through this endpoint: a 302 to crystal.url would turn the
 			// first-party content URL into an open redirect to an attacker-chosen
 			// origin (CWE-601). Renderers always use crystal.url directly.
-			if (doc.attachmentLinked === true) return fail(404, 'Attachment not found');
+			if (doc.attachmentLinked === true) return allowLinkedCopy ? { ok: true, doc } : fail(404, 'Attachment not found');
+			// Export may omit stored bytes, but only after all live read gates.
+			if (!verifyStoredObject) return { ok: true, doc };
 
 			const s3 = dependencies.getS3();
 			if (!doc.objectVersionId) {
@@ -1272,10 +1298,40 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			if (!isAttachmentObjectVersionId(doc.objectVersionId)) {
 				return fail(404, 'Attachment not found');
 			}
+			return { ok: true, doc };
+		} catch (error) {
+			return knownFailure(error) || unavailable('read', error);
+		}
+	};
+
+	// Content-only export metadata, behind the exact same live read gates as
+	// download/copy. Never expose object keys, versions or signed URLs.
+	const describeTransfer = async (viewer: AttachmentViewer, id: unknown, options: { includeFiles?: boolean; includeLinks?: boolean } = {}) => {
+		const readable = await readableStoredAttachment(viewer, id, true, options.includeFiles !== false);
+		if (readable.ok === false) return readable;
+		if (readable.doc.attachmentLinked ? options.includeLinks === false : options.includeFiles === false) {
+			return { ok: true as const, excluded: true as const };
+		}
+		// Link import does not upload/re-moderate bytes. Never turn a flagged
+		// source into an unmoderated portable gallery, even for its owner/admin.
+		if (readable.doc.attachmentLinked && ['blocked', 'pending', 'nsfw'].includes(readable.doc.moderation?.status || '')) return fail(403, 'Flagged linked media cannot be exported');
+		const attachment = toAttachmentPublicMetadata(readable.doc.shareId, readable.doc.crystal);
+		if (!attachment) return fail(404, 'Attachment not found');
+		return { ok: true as const, attachment, linked: readable.doc.attachmentLinked === true };
+	};
+
+	const download = async (
+		viewer: AttachmentViewer, idInput: unknown, forceDownload: boolean
+	): Promise<AttachmentResult<{ url: string; expiresAt: string; cacheKey: string; size: number; contentType: string; disposition: string; image: boolean }>> => {
+		try {
+			const readable = await readableStoredAttachment(viewer, idInput);
+			if (readable.ok === false) return readable;
+			const { doc } = readable;
+			const s3 = dependencies.getS3();
 			const inline = !forceDownload && attachmentMayRenderInline(doc.crystal);
 			const signed = await s3.signDownload({
 				objectKey: doc.objectKey,
-				versionId: doc.objectVersionId,
+				versionId: doc.objectVersionId!,
 				contentDisposition: attachmentContentDisposition(doc.crystal.name, inline),
 				contentType: inline ? doc.crystal.contentType : 'application/octet-stream'
 			});
@@ -1295,6 +1351,14 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			return knownFailure(error) || unavailable('download', error);
 		}
 	};
+
+	const copy = (viewer: AttachmentViewer, id: unknown, signal?: AbortSignal) => copyStoredAttachment({
+		canCopy: dependencies.canCopyFiles,
+		read: (viewer, id) => readableStoredAttachment(viewer, id, true), start, complete, remove,
+		readyDraftTtlMs: ATTACHMENT_READY_DRAFT_TTL_MS,
+		store: dependencies.store, getS3: dependencies.getS3,
+		plan: attachmentPartPlan, uuid: dependencies.uuid, now: dependencies.now
+	}, viewer, id, signal);
 
 	type ContentAttachmentPurpose = Extract<AttachmentPurpose, 'post' | 'comment' | 'message' | 'emoji'>;
 	type InspectedAttachments = {
@@ -1429,6 +1493,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		cancel,
 		remove,
 		download,
+		describeTransfer,
+		copy,
 		inspectForPost,
 		inspectForComment,
 		inspectForMessage,
@@ -1448,6 +1514,8 @@ export const completeAttachmentUpload = service.complete;
 export const cancelAttachmentUpload = service.cancel;
 export const deleteAttachment = service.remove;
 export const getAttachmentDownload = service.download;
+export const describeAttachmentTransfer = service.describeTransfer;
+export const copySharedAttachment = service.copy;
 export const inspectReadyAttachmentsForPost = service.inspectForPost;
 export const inspectReadyAttachmentsForComment = service.inspectForComment;
 export const inspectReadyAttachmentsForMessage = service.inspectForMessage;
@@ -1466,7 +1534,7 @@ export const createReadyAttachmentPostInsertHook =
 // POST /api/v1/attachments/annotate — owner-authored display metadata on a
 // ready attachment (draft or bound). The media's own Thing page and the post
 // lightbox render these; binding, audience, and object bytes are untouched.
-export const annotateAttachment = async (ownerId: string, input: unknown): Promise<AttachmentResult<{ attachment: AttachmentPublicMetadata }>> => {
+export const annotateAttachment = async (ownerId: string, input: unknown, options: { unboundPostOnly?: boolean } = {}): Promise<AttachmentResult<{ attachment: AttachmentPublicMetadata }>> => {
 	try {
 		if (isCustomMongoEndpointActive()) {
 			return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
@@ -1489,7 +1557,7 @@ export const annotateAttachment = async (ownerId: string, input: unknown): Promi
 		if (title === undefined && description === undefined && filenamePreview === undefined) {
 			return fail(400, 'Provide a filename preview, title or description to update');
 		}
-		const doc = await annotateOwnedAttachment(ownerId, id, { filenamePreview, title, description });
+		const doc = await annotateOwnedAttachment(ownerId, id, { filenamePreview, title, description }, options);
 		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal);
 		if (!attachment) return fail(409, 'Attachment metadata failed validation after update');
 		return { ok: true, attachment };

@@ -8,7 +8,9 @@ export type ThingtimeBridgeMessage = {
 export type ThingtimeNativeBridge = {
   version: string;
   lopuVoiceVersion?: string;
-  platform: 'ios';
+  widgetVersion?: string;
+  notificationsVersion?: string;
+  platform: 'ios' | 'macos';
   isNativeWebView: true;
   postMessage: (message: ThingtimeBridgeMessage) => void;
   receiveMessageFromNative?: (message: ThingtimeBridgeMessage) => void;
@@ -56,4 +58,10 @@ export function postNativeBridgeMessage(message: ThingtimeBridgeMessage) {
 // alone must never make the UI claim that an iPhone is recording.
 export function supportsNativeLopuVoice(bridge = getNativeBridge()): boolean {
   return Boolean(bridge?.isNativeWebView && /^1\.\d+\.\d+$/.test(bridge.lopuVoiceVersion ?? ''));
+}
+
+export function supportsNativeVoiceHistory(bridge = getNativeBridge()): boolean {
+  if (!supportsNativeLopuVoice(bridge)) return false;
+  const [, minor] = bridge!.lopuVoiceVersion!.split('.').map(Number);
+  return minor >= 3;
 }

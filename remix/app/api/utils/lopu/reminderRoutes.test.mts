@@ -5,6 +5,7 @@ mock.module(new URL('../auth/getCurrentUser.ts', import.meta.url).href, { namedE
 mock.module(new URL('../rateLimit/subscription.ts', import.meta.url).href, { namedExports: { enforceSubscriptionRateLimit: async () => ({ allowed }) } });
 mock.module(new URL('../mongodb/endpoint.ts', import.meta.url).href, { namedExports: { runWithMongoEndpoint: async (_: unknown, fn: any) => fn() } });
 mock.module(new URL('./reminders.ts', import.meta.url).href, { namedExports: {
+  getLopuScheduledTask: async (owner: string, thingId: string) => { calls.push({ owner, thingId }); return { ok: true, reminder: { thingId }, runs: [], relatedThings: [] }; },
   createLopuReminder: async (owner: string, input: any) => { calls.push({ owner, input }); return { ok: true, reminder: { id: 'saved' } }; },
   listLopuReminders: async (owner: string) => { calls.push({ owner }); return []; },
   setLopuReminderEnabled: async (owner: string, id: string, enabled: boolean) => { calls.push({ owner, id, enabled }); return { ok: true, reminder: { id, enabled } }; }

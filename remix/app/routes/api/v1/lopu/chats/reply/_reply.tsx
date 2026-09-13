@@ -1,8 +1,9 @@
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
+import { lopuReferenceIds, resolveLopuThingReferences, lopuReferenceContext } from '~/api/utils/lopu/chatAttachments';
 import { listAiModels, resolveLopuModelChoice } from '~/api/utils/ai/models';
 import { isAiModelEffort } from '~/api/utils/ai/modelsCore';
 import { LOPU_TEST_MODEL_ID } from '~/api/utils/ai/pricing';
-import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
+import { getScopedUser } from '~/api/utils/auth/scopedUser';
 import { assertLopuAccess, billingForProvider, lopuAccessResponse, resolveLopuBilling } from '~/api/utils/lopu/access';
 import { debitLopuUsage } from '~/api/utils/lopu/accounting';
 import { hasLopuChatProviderConfigured, lopuChatProviderMode, streamLopuChatTurn, type LopuVaultTurnProvider } from '~/api/utils/lopu/chat';
@@ -49,6 +50,8 @@ const HISTORY_TURNS = 40;
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
 
 type ReplyBody = {
+  attachmentIds: string[];
+  thingIds: string[];
   chatId: string | null;
   text: string;
   requestId: string;
@@ -119,6 +122,9 @@ const parseContext = (raw: unknown): { ok: true; context: LopuChatContext | null
 
 const parseBody = (body: unknown): Validation => {
   if (!isRecord(body)) return { ok: false, error: 'Send a JSON body with text and requestId' };
+  let attachmentIds: string[], thingIds: string[];
+  try { attachmentIds = lopuReferenceIds(body.attachmentIds); thingIds = lopuReferenceIds(body.thingIds); }
+  catch (error) { return { ok: false, error: (error as Error).message }; }
   const text = typeof body.text === 'string' ? body.text.trim() : '';
   if (!text) return { ok: false, error: 'Say something first' };
   if (Array.from(text).length > MAX_TEXT_CHARS) return { ok: false, error: `Messages to Lopu cap at ${MAX_TEXT_CHARS} characters` };
@@ -150,6 +156,7 @@ const parseBody = (body: unknown): Validation => {
   return {
     ok: true,
     value: {
+      attachmentIds, thingIds,
       chatId,
       text,
       requestId,
@@ -185,12 +192,12 @@ const interruptedNote = (outcome: LopuChatTurnOutcome | null): string => {
 };
 
 export const action = async ({ request }: { request: Request }) => {
-  return replyAsUser(request, await getCurrentUser(request));
+  return replyAsUser(request, await getScopedUser(request, 'lopu.chat'));
 };
 
 // Internal entry point for an explicitly requested recording handoff. The
 // public action always authenticates above; no caller-supplied user is accepted.
-export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typeof getCurrentUser>>) => {
+export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typeof getScopedUser>>, execution: { scheduled?: boolean } = {}) => {
   if (request.method !== 'POST') return json({ ok: false, error: 'Method not allowed' }, { status: 405 });
   if (!user) return json({ ok: false, error: 'Sign in to talk to Lopu' }, { status: 401 });
   if (user.temporary) return json({ ok: false, error: 'Create an account to chat with Lopu — conversations are saved to your account' }, { status: 403 });
@@ -210,6 +217,13 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
   if (parsed.ok === false) return json({ ok: false, error: parsed.error }, { status: 400 });
   const input = parsed.value;
   const viewer = { id: user.id, username: user.username };
+
+  // Reject inaccessible references before creating a conversation or reserving
+  // a billed turn. Store stable links alongside the user's original prompt.
+  let references: Awaited<ReturnType<typeof resolveLopuThingReferences>>;
+  try { references = await resolveLopuThingReferences(user.id, input.thingIds); }
+  catch { return json({ ok: false, error: 'One or more attached Things are unavailable.' }, { status: 400 }); }
+  const linkedText = input.thingIds.length ? `${input.text}\n\nAttached Things:\n${input.thingIds.map(id => `/thing/${id}`).join('\n')}` : input.text;
 
   // --- conversation -----------------------------------------------------
   let chatId = input.chatId;
@@ -339,7 +353,7 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
     };
     let userTurn: Awaited<ReturnType<typeof persistLopuUserTurn>>;
     try {
-      userTurn = await persistLopuUserTurn(user.id, { chatId, requestId: input.requestId, text: input.text });
+      userTurn = await persistLopuUserTurn(user.id, { chatId, requestId: input.requestId, text: linkedText, attachmentIds: input.attachmentIds, unread: execution.scheduled });
     } catch (error) {
       await discardCreated();
       throw error;
@@ -376,11 +390,12 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
 
         let outcome: LopuChatTurnOutcome | null = null;
         const generator = streamLopuChatTurn({
+          readOnly: execution.scheduled,
           viewer,
           chatId: persistedChatId,
           userMessageId,
           requestId: input.requestId,
-          text: input.text,
+          text: input.text + lopuReferenceContext(references) + (input.attachmentIds.length ? '\n\nFiles attached to this message: ' + JSON.stringify(userTurn.message.attachments ?? []).slice(0, 5000) + '\nThese are metadata only. Do not claim to have seen, heard or transcribed their contents.' : ''),
           history,
           choice,
           vaultProvider,
@@ -439,6 +454,7 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
           let messages: PublicChatMessage[] = [];
           try {
             const persisted = await persistLopuAssistantTurn(user.id, {
+              unread: execution.scheduled,
               chatId: persistedChatId,
               requestId: input.requestId,
               text,

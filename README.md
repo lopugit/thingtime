@@ -10,6 +10,52 @@ At Thingtime, we believe that data and knowledge should be open, accessible, and
 
 ## Lopu reminders and notification tests
 
+The Lopu page keeps one conversation while switching between Chat and Voice.
+Device-transcription mode saves its text and transcript Thing into that chat.
+The composer offers device attachments and an owned-Thing search picker. Files
+are private chat attachments; model context currently includes file metadata,
+not decoded audio/video/image content. Selected Things contribute readable text.
+Direct web voice saves completed user and assistant transcripts into the same
+chat through `api.lopu-voice-capture` 1.0.0, without repeating inference. The
+selected chat's newest 20 persisted text messages (up to 24000 characters) seed
+the direct provider session; binary attachments and tool payloads are not
+replayed. Direct voice stays opt-in and requires a supported owner-configured
+provider. History seeding may incur the provider's normal text-input charges.
+Failed transcript saves remain in an origin/account-scoped local outbox (up to
+50 events / 240000 characters), with a visible retry button and an online retry.
+No provider credentials are stored in that outbox. If browser storage is
+unavailable, keep the tab open until saving succeeds.
+Native bridge 1.3.0 also saves completed direct-voice text through this endpoint.
+Its protected Application Support outbox survives app relaunch, never stores
+cookies/tokens, and verifies both the origin contract and current account before
+delivery. It holds at most 50 events / 240000 characters per account/origin
+(200 total), stops recording if a new event cannot be saved safely, and retries
+when Lopu reconnects or **Retry saving voice** is tapped. Only the active voice
+session may select a newly created chat; older background saves update history
+without navigating away. Existing native builds must update before direct voice
+can promise shared history. Normal native transcription also reconciles its
+saved chat. Real-provider and physical-device acceptance remain release gates.
+
+Scheduled tasks support notification-only, saved chat-message, and fresh
+read-only AI-update modes, an existing conversation or a new chat each run,
+and five-field cron expressions with an IANA time zone. They are searchable
+Things; run notes are separate quota-billed `scheduled-task-run` Things linked
+by `targetId`. The protected schedule remains canonical: editing the displayed
+Thing does not reprogram execution. A paused task stops future starts, not an
+already-running response. Ambiguous failures require owner review rather than
+automatic replay. AI updates use normal account access and billing, and cannot
+run mutating tools. Each message may produce a `lopu-message` notification.
+
+Thing detail pages and `/things` previews fetch their discussion by target ID.
+Comments are separate Things inheriting the target audience; they are never
+embedded in the target crystal. Lopu can list comments and propose a comment
+with an explicit confirmation. No new database migration or index is required.
+
+Local validation for this worktree uses `http://localhost:11270` (Nitro 11272).
+No Tailscale/Funnel mapping has been configured or verified for these ports.
+The shared PM2 daemon was unresponsive during validation; the temporary
+foreground test stack is not a durable service configuration.
+
 Lopu chat and the standard voice page share `create_thing`, `send_notification`,
 `create_reminder`, `list_reminders`, and `set_reminder_enabled`. Only the signed-in
 owner can receive or manage these reminders. Notes/todos and reminder content
@@ -386,6 +432,45 @@ every ten minutes, and one terminal snapshot. The route uses the same
 `THINGTIME_CI_ROUTER_SECRET`, attaches each immutable event only to its exact
 stored stack/run identity, and never accepts browser sessions or arbitrary
 workflow log text.
+
+Feature Stack activity shows one card per target with its reported phase, blocker,
+next step, and source link. The progress bar counts confirmed target merges only;
+a published PR, failed worker, or closed PR is never a completed target. Waiting
+has no predicted finish time. Worker updates older than twelve minutes are marked
+stale, separately from target PR updates.
+
+**Ask Lopu about this run** opens a private status conversation for the selected
+saved run. Enable the product and the matching protected controller together:
+
+- Deploy `/api/v1/admin/ci/stacks/chat` and the signed
+  `/api/v1/integrations/ci/chat` route. Their origin-scoped capability identifiers
+  are `api.admin-ci-stack-chat` and `api.integrations-ci-chat`, both `1.0.0`.
+- Keep `THINGTIME_CI_ROUTER_SECRET` identical in the application deployment and
+  GitHub repository secret store. Set `THINGTIME_CREDENTIAL_VAULT_ORIGIN` in GitHub
+  repository variables to the application's HTTPS origin. Configure at least one
+  enabled Claude account in the existing CI credential waterfall; no new secret
+  is required. The status responder uses the shared Claude model selection and
+  credential waterfall, independently of a stack's custom merge endpoint/model.
+- Roll out the matching progress reporter on `github-actions`, then start a new
+  stack run. Existing running jobs cannot acquire the responder retroactively.
+  Old controllers show an explicit unavailable state. A missing/incompatible
+  product capability disables chat without blocking merge progress.
+
+The responder runs inside the progress job alongside the merge workers. It has
+no tools or repository checkout in its model session and receives only bounded
+job/step/target PR facts and the last four answered exchanges. It is not an input
+to the workers' private reasoning sessions: questions cannot restart jobs, edit
+code, change merge plans or grant merge authority. It checks every thirty seconds;
+replies can take a couple of minutes. The panel polls only while expanded and
+visible, with a user-controlled auto-refresh checkbox and manual Refresh.
+
+Questions/replies are shared among CI administrators, redacted for credential-like
+text, stored as relational protected `ci-stack-chat-message` records, and expire
+after ninety days. Reads return the latest fifty exchanges. Sending is limited to
+six questions per minute per admin. Retrying an uncertain send preserves its UUID;
+worker delivery uses a four-minute lease and at most two claims, with exact
+workflow/run-attempt fencing. Offline, answering, failed and answered states stay
+visible. Paused, stopped, ended, or replaced runs accept no new questions.
 
 Store each secret directly in the deployment environment. Also add the same
 `THINGTIME_CI_ROUTER_SECRET` as a GitHub Actions repository secret and set the
@@ -1402,7 +1487,7 @@ or **all** variation per user:
 | Scope | Covers | Flag |
 | --- | --- | --- |
 | `public` | post, comment, and custom-emoji attachments | `meta.publicUploads` |
-| `private` | message attachments + the user's own profile avatar/banner | `meta.privateUploads` |
+| `private` | message attachments, recordings (including recording-import drafts), and the user's own profile avatar/banner | `meta.privateUploads` |
 | `all` | both of the above in one write | both flags |
 
 The account carries `meta.publicUploads: false` and `meta.privateUploads:
@@ -1431,6 +1516,36 @@ a dev/preview-only helper for the `/tests` page restricted to the configured
 test recipient (or a plus alias of it).
 
 ### Private S3 media and attachments
+
+The internal shared-file copy helper uses the same private bucket and upload
+lifecycle described below. Its server role needs the existing exact-version
+read and multipart-write permissions (`s3:GetObjectVersion`, `s3:PutObject`,
+list/abort/finalize operations); no public bucket access or browser AWS
+credentials are needed. It accepts an authorized attachment ID, never an
+external URL, reserves the recipient's quota before copying, and sends copied
+bytes through normal type detection and moderation. A timed-out/failed copy
+remains billed until normal cleanup confirms the object is gone. `/things/fork`
+uses this path with capability `api.things-fork` 1.4.0, retargets authored
+HTML/CSS and stored URL or exact attachment-ID arguments (including defaults,
+lists, matching template branch selectors and page overrides), and binds new files to copied Things. It
+rechecks source sharing before and after writes and reports deferred cleanup.
+Bound post-purpose file galleries are discovered in one bounded query and keep
+their copied home target and order, including on post/data Things. A file also
+embedded in a page is copied once. Unsupported gallery files fail the copy;
+recording, message and profile-purpose files are not included by this path.
+Linked galleries receive new private quota-accounted link records, preserving
+validated URLs and annotations without fetching external bytes. Source changes
+or revocation trigger cleanup; flagged links cannot be copied into an unflagged
+record. The content endpoint still never redirects to an external URL.
+File copies require the recipient's normal post-purpose upload approval and
+recheck it during copying; the internal service does not bypass that gate.
+Split-fragment file IDs use bounded root-render `ttMediaRefs` bindings after
+interpolation, preserving editable inputs. Attachment-content 1.6.3 applies the
+same binding when discovering shared media; unused bindings grant no access.
+external media URLs remain external. Live storage and browser acceptance are
+tracked in [PR #755](PRs/755-shared-composition-file-copies.md), separately
+from unit-test proof.
+The byte-copy protocol follows [S3 UploadPartCopy](https://docs.aws.amazon.com/AmazonS3/latest/API/API_UploadPartCopy.html).
 
 Uploaded images are moderated asynchronously after upload: attachment
 completion atomically stamps protected `moderation.status: pending` before the
@@ -1783,9 +1898,70 @@ does not accept production or develop database URIs.
 
 ### Personal recording runtime (local adapter)
 
+Saved iPhone audio Things can be explicitly processed in `/lopu/recordings`:
+paste the recording's `/thing/<id>` link or ID, then choose **Queue recording**
+for transcription/notes or **Send to Lopu** for a confirmed transcript handoff.
+This requires `api.lopu-recordings` 1.5.0, an enabled recording processor, and a
+ready standalone owner-private audio attachment with purpose `recording`.
+The existing `postId` request field accepts either that recording Thing ID or
+a private Watch post ID. Automatic discovery still covers only new Watch posts;
+saved phone recordings are never processed merely because they exist. Upload
+approval, storage quotas, selected-provider/local-device setup and separate Lopu
+tool confirmations remain required. Transcript comments are linked children;
+processing never converts the audio into a post or rewrites its crystal/binding.
+
+In `/things`, an owned private audio recording also offers **Send to Lopu** in
+both the right-click and three-dot menus. The action checks this domain's
+capabilities and your enabled processor, then asks for confirmation. It sends
+only the selected recording, not other selected Things; it never enables a
+processor automatically. Recording activity shows the eventual transcript and
+conversation. The server remains authoritative for attachment readiness and
+privacy, even when a cached tile still shows the menu.
+
+The opt-in HTTP delivery smoke (`pnpm --dir remix run test:recording-delivery`)
+skips by default. To run it, use an isolated loopback Thingtime server backed by
+a disposable Mongo replica set and a configured private test S3 bucket. Register
+an unused `recqa`-prefixed account through the normal signup API, and have an
+administrator approve its **public upload** scope: Watch attachments use the
+post upload purpose even though their resulting Things are private. Do not
+bypass upload approval or seed the database directly.
+
+Inject `THINGTIME_RECORDING_QA_USERNAME` and `THINGTIME_RECORDING_QA_PASSWORD`
+through your local secret manager/environment (never chat, command arguments,
+or tracked files), then run:
+
+```sh
+pnpm --dir remix run test:recording-delivery http://127.0.0.1:18000 --confirm-disposable-qa
+```
+
+Substitute your configured local port. The script rejects remote origins and
+non-QA usernames, and requires disabled, unused recording settings. It uploads
+one second of synthetic silence, pairs disposable test devices, exercises real
+HTTP claims/completions with deterministic synthetic inference, and checks
+duplicate-safe private transcript/note/todo writes and opt-out enforcement.
+Cleanup disables processing, removes this run's source/output Things, and signs
+out its own API session. The disposable account, device records and job metadata
+remain for diagnosis; upload cleanup may be deferred by the storage lifecycle.
+Any cleanup failure makes the test fail. No real recordings, browser sessions,
+Keychain entries or AI providers are used. A pass proves broker delivery, not
+real speech recognition, Claude output quality, or physical Watch acceptance.
+
+For an opt-in macOS smoke test, run
+`node --import tsx scripts/personal-recording-runtime-smoke.mts` from `remix/`.
+It skips unless `TT_PERSONAL_RUNTIME_SMOKE=1` is set with absolute local paths
+in `TT_SMOKE_CLAUDE`, `TT_SMOKE_WHISPER`, `TT_SMOKE_FFMPEG`, and `TT_SMOKE_MODEL`.
+It generates synthetic speech, checks WAV/M4A transcription, and cleans up its
+temporary audio. Set `TT_PERSONAL_CLAUDE_SMOKE=1` separately to send only that
+synthetic transcript to your native Claude Code sign-in and verify notes/todos.
+This consumes your account allowance; no tokens or real recordings belong in
+these variables. It does not pair a device or enable account processing.
+
 `remix/scripts/personal-recording-runtime.mjs` provides local `transcribe` and
 `complete` operations for the forthcoming personally paired recording worker.
-It is **not yet connected to cloud recording jobs or the shared HTTP endpoint**.
+The paired-device broker is registered at `/api/v1/lopu/recordings/personal`;
+the interactive Mac launcher and recording-settings setup panel are available.
+Synthetic audio and real Keychain storage have been verified. Real paired-account
+audio delivery and end-to-end Watch acceptance are still pending.
 No server, public listener, background service or automatic recording processing
 is started by importing this module.
 
@@ -1806,6 +1982,95 @@ execution and output, and a temporary directory removed after success or failure
 Inherited API keys and endpoint overrides are excluded from its environment.
 Transcription can mishear names; inspect the transcript before relying on tasks.
 Run `npm --prefix remix run test:ai-models` for its regression coverage.
+
+The outbound transport in `remix/scripts/personal-recording-worker.ts` now
+provides one bounded `runOnce()` cycle around that runtime. It requires a
+personally paired Thingtime device credential and negotiates
+`api.lopu-recordings-personal` version `1.0.0` on the exact selected origin
+before sending the credential. HTTPS is required except for loopback testing;
+redirects are rejected. Audio stays local; only transcript text reaches Claude
+Code. Heartbeat loss stops local processing, and interrupted result submissions
+retry the identical lease/result rather than running inference again.
+
+The API-layer broker now implements device-bound claims, private audio reads,
+bounded heartbeats and completion receipts. It uses the shared recording content
+writer with transactional checks of current consent, device/session revocation
+and source privacy. Accepted transcripts and server-selected output IDs survive
+a worker crash; exact completion retries do not run inference or create content
+again. Jobs assigned to a personal device cannot fall back to cloud credentials.
+
+**Integration status:** the Mac CLI runs in the foreground, not as an installed
+background service. The settings UI and API accept `runtimeDeviceId` only for an owned paired
+device with an active `recordings.personal.v1` session. New jobs snapshot that
+selection; retry explicitly assigns the selected processor while preserving
+completed checkpoints. Offline personal jobs wait without a cloud fallback.
+Clients require `api.lopu-recordings` 1.4.0 and
+`api.lopu-recordings-personal` 1.0.0 on the selected origin. Older deployments
+fail closed. Do not copy an API key, CI credential or Claude OAuth
+token into its `credential` option: it accepts only an existing Thingtime paired
+device credential. Keep machine-local worker setup untracked; importing
+this module does not pair a device or enable recording processing.
+Do not set internal job or settings fields directly in a database to bypass
+that gate. Broker/authority mock tests in `test:lopu` are unit coverage, not real
+database race or Watch proof. Run
+`node --import tsx remix/scripts/personal-recording-api-smoke.mts <loopback-origin>`
+from a dependency-equipped checkout for the real HTTP signup, signed pairing,
+selection, empty-queue and opt-out smoke. It creates one synthetic local account
+and device, leaves processing disabled, prints no credentials, and invokes no
+audio or AI provider. It refuses non-loopback origins. Remaining acceptance:
+real audio/results, revocation races, deployed worker and physical Watch.
+
+Mac launcher (run from `remix/`):
+
+```sh
+npm run recordings:worker -- --help
+npm run recordings:worker -- configure --origin https://your-thingtime.example --claude /absolute/path/claude --whisper /absolute/path/whisper-cli --ffmpeg /absolute/path/ffmpeg --model /absolute/path/ggml-model.bin
+npm run recordings:worker -- pair --origin https://your-thingtime.example
+npm run recordings:worker -- status --origin https://your-thingtime.example
+npm run recordings:worker -- run --origin https://your-thingtime.example --once
+```
+
+If pairing was interrupted, try `resume` first. If an unfinished challenge has
+expired and cannot be resumed, inspect `/devices` and revoke any computer it
+already created before abandoning local recovery. The explicit command
+`npm run recordings:worker -- forget-pending --origin https://your-thingtime.example --confirm-abandon-recovery`
+permanently removes only the unfinished local Keychain entry, checks the exact
+stored state, and refuses a completed pairing. It does **not** revoke a server
+device. Create a fresh one-time secret and run `pair` afterward. No automatic
+cleanup occurs after an ambiguous network failure.
+
+Pairing requires a fresh one-time challenge from the signed-in account's
+`POST /api/v1/devices/pairing` operation. In `/lopu/recordings`, open **Pair a Mac
+for recordings**, review the instructions, then create the one-time secret.
+The panel requires `api.devices-pairing` 1.1.0 and discards responses whose
+`ownerId` differs from the displayed account. Secrets are masked initially,
+copied/revealed only by an explicit click, kept only in component memory and
+cleared on expiry, account change, unmount or hiding the panel. Hiding is not
+server-side revocation; the challenge remains usable until consumed or expired.
+Paste **only that
+Thingtime pairing secret** into the hidden interactive prompt, never a Claude
+token, password or API key. No secret belongs in command arguments or files.
+The launcher stores its origin-bound credential and interrupted claim in macOS
+Keychain, using stdin rather than process arguments. `resume --origin ...`
+recovers a lost response using the exact saved proof and credential; it does
+not create a second device. Keychain read-back must succeed before pairing
+continues. Expired/invalid pending challenges currently require manual recovery
+of this launcher's exact Keychain item; automatic reset is intentionally absent.
+
+Runtime paths are stored in a private per-origin config under
+`~/Library/Application Support/Thingtime/recording-worker/`; it contains no
+credentials. A per-origin lock prevents overlapping setup/workers. Stale locks
+fail closed and must be inspected manually, not blindly deleted. Pairing never
+enables recording processing: select the computer and explicitly opt in at
+`/lopu/recordings`. Run without `--once` for foreground polling; it stops after
+three consecutive failures, with no automatic restart. `status` is local setup
+status only, not an assertion of provider or transcription health. Real
+Keychain/native-runner acceptance remains separate from mocked tests.
+
+This worktree's local QA URL is `http://127.0.0.1:18000/lopu/recordings` (HMR
+18001, Nitro 18002), managed by `npm run web-pms`. Tailscale/Funnel was not
+available during validation: the installed shim points to a missing
+`/Applications/Tailscale.app` binary. No public local-server URL is configured.
 
 ### Shared AI endpoint waterfall
 
@@ -2774,3 +3039,175 @@ Settings uses one shared component in the drawer popup and full page. Direct lin
 A healthy Mac connection panel can be hidden from Things using “Don’t show again unless there’s a problem”. This preference is local to the browser and account; Desktop saves it per account and API endpoint so it survives app restarts and changing loopback ports. It persists across reloads, and does not change node operation or privacy access. Live service, pairing, connection, and permission failures reveal the panel again. Settings → Things always retains the panel and a switch to restore it.
 
 Shared-settings validation worktree: `http://localhost:13040` (HMR 13041, Nitro 13042), managed by the repository PM2 lifecycle. Funnel was unavailable during validation because the installed Tailscale CLI points to a missing application executable; no public Funnel URL was verified. No new environment variables or external setup are required for these settings changes.
+
+### Apple widgets and Control Centre
+
+The iOS app and native Mac widget companion share a configurable WidgetKit suite.
+See [Apple widget setup](apple/README.md) for gallery choices, content privacy,
+App Group provisioning, local signing, and fork-safe build settings. App Group
+capabilities must be enabled on both the iOS app and its widget extension before
+installing a signed build; no credentials belong in project files.
+
+The Mac companion now uses a native interface and browser OAuth. Open
+**Connection** to select production or your local server and approve widget
+permissions. No client secret or manual app registration is required; fork
+callback identifiers and capability requirements are documented in
+[Apple widget setup](apple/README.md#oauth-setup-for-forks-and-local-servers).
+
+### Automatic import and native push recovery (10 September 2026)
+
+The iPhone app automatically imports older `Lopu-*.caf` recordings from its
+`Documents/Lopu Recordings` folder when Lopu opens with a signed-in account.
+Voice settings → **Import older recordings** is enabled by default and can be
+turned off. Import uses the canonical `api.things` 1.7.0 and private attachment
+contracts. Local originals stay on the iPhone. A local account/origin-bound
+receipt prevents repeated imports; files already uploaded by build 29 are
+reconciled against the account's existing audio Things before uploading.
+Files created during the current app session use the normal recording outbox.
+Offline or failed imports retry when Lopu reconnects.
+
+For native alerts, open **Settings → Notifications → iPhone and Watch push**
+in the iPhone app and tap **Enable / reconnect iPhone push**. If iOS permission
+was denied, the adjacent button opens the iPhone notification settings. The
+page reports eligible account registrations; notification tests report whether
+Apple accepted the push, rejected it, or no device is connected. Apple acceptance
+is transport confirmation; verify a banner on a physical iPhone (including its
+Focus and notification presentation settings).
+
+Forks need an APNs-enabled Apple App ID, signed iOS entitlements, and the APNs
+variables documented above on each intended server deployment. Use a P-256 APNs
+`.p8` signing key; App Store Connect API keys are a different credential. The
+server selects sandbox versus production from the device registration. TestFlight
+uses production APNs. Never expose keys or device tokens in public diagnostics.
+`api.notifications-devices` 1.2.0 adds authenticated, non-cacheable GET status and
+an optional owner guard on registration. `api.notifications-test` 1.1.0 adds the
+sanitized delivery report. Single and bulk native delivery remain attached to
+the Vercel request lifetime through `waitUntil`.
+
+### Stack AI endpoint selection
+
+Stack merges can save an ordered AI model/endpoint waterfall. Configure
+`ANTHROPIC_API_KEY` and/or `OPENAI_API_KEY` on the Thingtime deployment for
+built-in HTTP endpoints. For personal endpoints, use Settings → Secure Vault;
+custom hosts retain the existing `THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS`
+allowlist and public HTTPS restrictions. The controller and app must share
+`THINGTIME_CI_ROUTER_SECRET` (secret-store values only). API keys stay on the app;
+never put them into workflow inputs. Roll out the protected controller's v4 plan
+support before using custom orders. Inherited orders keep the existing CLI
+workflow. See [the reusable selector contract](docs/ai-waterfall-selector.md).
+
+This feature's local validation worktree uses `http://localhost:13310`
+(Vite), 13311 (HMR), and 13312 (Nitro), derived by `npm run web-ports`.
+Tailscale/Funnel is not available on the validation host: its configured CLI
+wrapper points at a missing Tailscale application. No public dev mapping was
+created or changed.
+
+## Inherited Thing actions
+
+Persisted entity menus use `ThingContextMenu` and `buildThingEntityMenu`;
+`schemas/thingActions.ts` owns the base verbs. Post privacy/moderation and
+Drive selection/clipboard operations extend this model. `PersistedThingMenu`
+resolves only an opened Thing through `/api/v1/things` and guards recording
+handoff against account changes. Do not add a new per-kind dropdown renderer.
+Navigation actions carry an explicit `href` and render real anchors; they never
+reuse mutation callbacks. Drawer navigation also preserves native modified and
+middle clicks. Actions without a destination remain buttons.
+
+The Things browser stores `q`, `kind`, `view`, `display`, `sort`, and `group` in
+the URL alongside folder/device/preview state. Preference defaults are written
+explicitly so Back and shared links do not depend on later local-cache changes.
+Search typing replaces the current history entry; filter changes create entries.
+
+CRUD remains `/api/v1/things`. Semantic operations use
+`POST /api/v1/things/actions` with `{ "id": "your-thing-id", "action": "send-to-lopu" }`.
+Negotiate origin-scoped `api.things-actions` 1.0.0 before dispatch. The first
+operation delegates to the protected recording writer; old recording clients
+retain their compatibility operation. Shared schema/UI does not mean arbitrary
+protected-state mutation: attachment lifecycle, chat membership, moderation,
+consent and quota checks remain enforced by their domain writers. A schema's
+menu hints never grant authority. No storage migration or new secret is required.
+Handoff requires the home data source; a custom source returns 409 so an ID
+from another database cannot accidentally select a home recording.
+
+For forks, configure normal account/storage setup and explicitly enable a
+recording processor before testing handoff. Personal processing uses a paired
+device; API processing uses the account's configured provider connections.
+Never embed credentials in a menu, action request, source fixture or public docs.
+
+Local menu QA uses this worktree's deterministic port (currently
+`http://localhost:16250`). Tailscale/Funnel was unavailable during verification:
+the local launcher points to a missing Tailscale app; no public mapping was changed.
+
+### Saved AI waterfalls
+
+Settings → AI waterfalls stores private named model/endpoint orders using the existing Things database and authenticated API. No extra collection, migration, or secret is required. Configure provider keys or personal Secure Vault connections as described in [the waterfall setup](docs/ai-waterfall-selector.md). Forks must deploy the registered `api.ai-waterfalls` 1.0.0 contract before clients can save a library.
+
+## Portable transfer real-storage acceptance
+
+The optional `remix` command `test:transfer-binary` exercises real multipart
+uploads and image ZIP import/export through the application API. It is disabled
+unless `TT_TRANSFER_BINARY_TEST=1` is explicitly set. Use a local fixture server
+(`TT_TRANSFER_TEST_URL=http://127.0.0.1:<your-worktree-port>`) backed by a
+disposable test account and the private storage setup documented above. That
+account must already have public-upload approval and a ready storage ledger.
+Provide its session cookie through `TT_TRANSFER_TEST_COOKIE` in the process
+environment using your local secret tooling; never put it in a command literal,
+tracked file, screenshot or test report. Do not use a production account.
+
+Run `corepack pnpm --dir remix run test:transfer-binary` with those environment
+values. The test checks API capability versions, uploads tiny PNG fixtures,
+compares bytes and annotations after ZIP/reimport, checks anonymous denial and
+concurrent emoji import claims, then deletes its own returned IDs and verifies
+cleanup. It does not connect directly to MongoDB, enable uploads, reconcile
+storage or run migrations. A failed approval/storage precondition is a blocker,
+not a passed test. Investigate any reported cleanup IDs before another run.
+
+For isolated archive UI checks, run `node --import tsx scripts/archive-ui-smoke.mts`
+from `remix` with `TT_TRANSFER_UI_ORIGIN=http://localhost:<worktree-port>`.
+Install Playwright and Chrome locally, or point `TT_PLAYWRIGHT_MODULE` at an
+existing Playwright module. The test accepts loopback HTTP only, starts a fresh
+browser context, supplies fictional history, blocks API mutations, and writes
+screenshots to a temporary directory. It never copies browser credentials or
+imports real account data. This does not replace live media/clipboard acceptance.
+
+`corepack pnpm --dir remix run test:transfer-archives` adds a metadata-only
+archive import/read/delete lifecycle check. Enable it with
+`TT_TRANSFER_ARCHIVE_TEST=1` and the same origin/cookie variables, plus
+`TT_TRANSFER_TEST_USERNAME` for the expected disposable fixture identity.
+Remote dev origins require `TT_TRANSFER_REMOTE_DEV_TEST=1`; only
+`https://dev.thingtime.com` or an exact `https://pr-N.previews.dev.thingtime.com`
+origin is accepted. Production, lookalikes and implicit remote writes are
+refused. The selected origin must advertise import 1.9.0 and Things 1.13.0
+before any archive is created. The test uses fictional participants, verifies
+full history and private reads, rejects individual-row mutation/deletion and
+stale preview deletion, then removes only its returned archive root. No real
+user, live-message, invitation, notification or upload APIs are called. This
+test does not yet cover avatars, custom emoji, export or UI rendering; a skipped
+or capability-blocked run is not live acceptance.
+
+## Thingtime Widgets automatic releases
+
+`.github/workflows/widgets-release.yml` publishes an Apple-silicon Widgets ZIP and
+a matching Recovery ZIP after relevant changes reach `main`. Owner-only manual
+dispatch is also restricted to `main`; PR code cannot reach its signing or publish
+steps. This dedicated job pins the exact main SHA, runs native/Recovery tests before
+importing signing material, and leaves the Electron repository-wide latest release
+unchanged. The version comes from `macos/ThingtimeWidgets/project.yml`, with a
+workflow build number and source SHA appended to the release tag.
+
+Fork setup: enable Actions and configure `MAC_CSC_LINK` (base64 Developer ID P12),
+`MAC_CSC_KEY_PASSWORD`, `APPLE_TEAM_ID`, and `APPLE_API_KEY_BASE64`,
+`APPLE_API_KEY_ID`, `APPLE_API_ISSUER` for notarization. The existing `ASC_KEY_CONTENT`,
+`ASC_KEY_ID`, `ASC_ISSUER_ID` aliases are accepted. Store actual values only in
+GitHub Actions secrets. A fork must also deliberately update the repository-owner
+guard and Recovery's release-catalog origin. No Apple Development/ad-hoc fallback
+is allowed for published production builds.
+
+The workflow imports credentials into a temporary Keychain, signs nested widget
+code before the app, notarizes and staples, then verifies both final ZIPs after
+extraction. It publishes `SHA256SUMS.txt` and removes temporary signing material.
+The `Thingtime-Widgets-App-Release-<version>-macos-arm64.zip` asset is recognized by
+Recovery's **App → Thingtime Widgets** selector; its cache and install target are
+isolated from Desktop, Commander and Recovery. Local bundle construction is not
+proof of a successful cloud release: the first main run and download/install via
+Recovery remain release acceptance checks.

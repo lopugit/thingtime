@@ -1,8 +1,9 @@
+import { pushConfigured } from '~/api/utils/notifications/apns';
 import { json, readJsonBody } from '~/api/http';
 import { getAuthToken } from '~/api/utils/auth/authCookie';
 import { resolveTokenUser } from '~/api/utils/auth/getCurrentUser';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
-import { registerPushDevices, unregisterPushDevice } from '~/api/utils/notifications/pushDevices';
+import { registerPushDevices, unregisterPushDevice, listPushDevicesForUser } from '~/api/utils/notifications/pushDevices';
 import { resolveWatchDevice } from '~/api/utils/watch/watchPairing';
 
 export const action = async ({ request }: { request: Request }) => {
@@ -23,6 +24,7 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   const body = await readJsonBody(request, 16 * 1024);
+  if (body?.ownerId !== undefined && body.ownerId !== user.id) return json({ ok: false, error: 'Account changed; reconnect this device.' }, { status: 409 });
   if (request.method === 'DELETE') {
     const removed = await unregisterPushDevice(user.id, body?.id);
     return json({ ok: true, removed });
@@ -31,4 +33,14 @@ export const action = async ({ request }: { request: Request }) => {
   const result = await registerPushDevices(user.id, sessionId, body?.devices);
   if (result.ok === false) return json({ ok: false, error: result.error }, { status: result.status });
   return json({ ok: true, devices: result.devices });
+};
+
+export const loader = async ({ request }: { request: Request }) => {
+  const headers = { 'Cache-Control': 'private, no-store', Pragma: 'no-cache' };
+  const token = await getAuthToken(request);
+  const resolved = token ? await resolveTokenUser(token) : null;
+  if (!resolved) return json({ ok: false, error: 'Sign in to check native push.' }, { status: 401, headers });
+  const devices = await listPushDevicesForUser(resolved.user.id);
+  return json({ ok: true, ownerId: resolved.user.id, configured: pushConfigured(),
+    devices: { ios: devices.filter(d => d.platform === 'ios').length, watchos: devices.filter(d => d.platform === 'watchos').length } }, { headers });
 };

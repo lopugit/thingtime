@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 
 import { createApiFailure, readApiResponsePayload } from './apiFailure';
 import { recordApiCall } from './apiRequestLog';
+import { changesRootIdentity, rootIdentity } from '../utils/rootIdentity';
 
 export function useAsyncFetcher() {
   const [defaultOpts, setDefaultOpts] = useState({
@@ -84,6 +85,7 @@ export function useAsyncFetcher() {
         });
       }
 
+      if (changesRootIdentity(nextOpts.action, payload)) rootIdentity.changed();
       return payload;
     },
     [defaultOpts]

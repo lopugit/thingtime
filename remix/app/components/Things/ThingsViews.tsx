@@ -1,8 +1,8 @@
 import React from 'react';
 
-import { Box, Checkbox, Flex, Grid, IconButton, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Portal, Text } from '@chakra-ui/react';
+import { Box, Checkbox, Flex, Grid, Text } from '@chakra-ui/react';
 import type { TextProps } from '@chakra-ui/react';
-import { ChevronRight, MoreHorizontal } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { Link } from 'react-router';
 
 import { ChakraThingRenderer, HtmlThingRenderer, RenderThing, isChakraThingNode } from '~/components/Kinds';
@@ -11,6 +11,10 @@ import { DeviceCard } from '~/components/Devices/DeviceCard';
 import { DeviceListRow } from '~/components/Devices/DeviceListRow';
 import type { DeviceRuntimeState } from '~/components/Devices/deviceTypes';
 import { CARD_STYLES } from '~/theme/card';
+import { ThingActionMenuButton } from '../Thingtime/ContextMenu/ThingActionMenuButton';
+import { buildThingsItemMenu } from './thingsMenuModel';
+import { thingBrowseHref } from './thingsLocation';
+import { RecordingTranscript } from '../Attachments/RecordingTranscript';
 
 import type {
   ThingsDisplayMode,
@@ -19,12 +23,10 @@ import {
   VISIBILITY_META,
   formatWhen,
   interpolateRenderTree,
-  isDuplicable,
   isFolder,
   primaryKindOf,
   thingDisplayName,
-  thingIcon,
-  thingOpenHref
+  thingIcon
 } from './thingsCore';
 
 // What a preview draws: an explicit serialized render template wins, then a
@@ -40,6 +42,10 @@ const previewSourceOf = (thing: ThingsThing): unknown => {
 // The page looks a data thing's schema render template up per thing (fetched +
 // cached there); views just pass it through to the preview box.
 export type SchemaRenderLookup = (thing: ThingsThing) => Record<string, unknown> | null;
+
+const RecordingThingTranscript = ({ thing }: { thing: ThingsThing }) =>
+  thing.thingtime.includes('attachment') && thing.crystal?.mediaKind === 'audio'
+    ? <RecordingTranscript attachmentId={thing.id} compact /> : null;
 
 // A data thing drawn through its schema's render template: {field} tokens
 // interpolate the thing's own crystal values, then the tree goes through the
@@ -107,18 +113,26 @@ const ThingPreviewBox = ({
 // opens its own page — thingsCore.thingLink); 'preview' is the explicit
 // quick-look modal. Rename applies to kinds whose crystal carries a name.
 export type ThingsItemAction =
+  | 'send-to-lopu'
   | 'open'
   | 'preview'
+  | 'inspect'
+  | 'paste-into'
   | 'rename'
+  | 'edit'
   | 'move'
   | 'share'
   | 'copy'
+  | 'download'
   | 'cut'
   | 'duplicate'
   | 'copyLink'
   | 'delete';
 
 export type ThingsItemHandlers = {
+  locationSearch?: string;
+  clipboardCount?: number;
+  ownerId?: string;
   selected: Set<string>;
   cutIds: Set<string>;
   isMobile: boolean;
@@ -154,10 +168,6 @@ const pendingApprovalCount = (state: DeviceRuntimeState): number => state.approv
 
 const noopDeviceSelect = () => {};
 
-const canRename = (thing: ThingsThing) => {
-  const kind = primaryKindOf(thing);
-  return kind === 'folder' || kind === 'data' || kind === 'schema';
-};
 
 // Prop bags every view spreads on its item rows/tiles: drag source on every
 // thing, drop target + highlight on folders. Desktop only — mobile keeps
@@ -190,14 +200,6 @@ const dropHighlight = (thing: ThingsThing, handlers: ThingsItemHandlers) =>
 
 // What "Open" opens, named per kind so the menu never promises a preview
 // where a page will appear.
-const openLabelOf = (thing: ThingsThing): string => {
-  if (isFolder(thing)) return '📂 Open folder';
-  if (thing.thingtime.includes('post')) return '📝 Open post';
-  if (thing.thingtime.includes('action')) return '⚡ Open action';
-  if (thing.thingtime.includes('webpage')) return '🧱 Open page';
-  if (thing.thingtime.includes('schema')) return '💎 Open schema';
-  return '🔎 Open';
-};
 
 // A plain left click, no modifier — the one case the tile handles itself;
 // ⌘/ctrl/shift/middle clicks stay with the browser (new tab, window).
@@ -234,7 +236,7 @@ const TitleLink = ({
       else handlers.onItemOpen(thing);
     }}
     onDoubleClick={(event: React.MouseEvent) => event.stopPropagation()}
-    to={thingOpenHref(thing, 'things')}
+    to={thingBrowseHref(thing, handlers.locationSearch)}
     {...textProps}
   >
     {thingDisplayName(thing)}
@@ -242,39 +244,11 @@ const TitleLink = ({
 );
 
 const ItemMenu = ({ thing, handlers }: { thing: ThingsThing; handlers: ThingsItemHandlers }) => (
-  <Menu isLazy placement="bottom-end">
-    <MenuButton
-      aria-label="Thing actions"
-      as={IconButton}
-      icon={<MoreHorizontal size={15} />}
-      onClick={(event) => event.stopPropagation()}
-      onDoubleClick={(event) => event.stopPropagation()}
-      size="xs"
-      variant="ghost"
-    />
-    <Portal>
-      <MenuList fontSize="13px" minWidth="180px" zIndex={10250}>
-        <MenuItem onClick={() => handlers.onItemAction(thing, 'open')}>{openLabelOf(thing)}</MenuItem>
-        {!isFolder(thing) && <MenuItem onClick={() => handlers.onItemAction(thing, 'preview')}>👀 Preview</MenuItem>}
-        {canRename(thing) && <MenuItem onClick={() => handlers.onItemAction(thing, 'rename')}>✏️ Rename</MenuItem>}
-        <MenuItem onClick={() => handlers.onItemAction(thing, 'move')}>📁 Move to…</MenuItem>
-        <MenuItem onClick={() => handlers.onItemAction(thing, 'share')}>🌐 Share…</MenuItem>
-        <MenuDivider />
-        <MenuItem onClick={() => handlers.onItemAction(thing, 'copy')}>📋 Copy</MenuItem>
-        {/* the kebab menu is the ONLY path to these actions on touch devices
-            (iOS never fires contextmenu), so it mirrors the right-click set */}
-        {isDuplicable(thing) && (
-          <MenuItem onClick={() => handlers.onItemAction(thing, 'duplicate')}>🐑 Duplicate</MenuItem>
-        )}
-        <MenuItem onClick={() => handlers.onItemAction(thing, 'cut')}>✂️ Cut</MenuItem>
-        <MenuItem onClick={() => handlers.onItemAction(thing, 'copyLink')}>🔗 Copy link</MenuItem>
-        <MenuDivider />
-        <MenuItem color="var(--tt-danger, #e5484d)" onClick={() => handlers.onItemAction(thing, 'delete')}>
-          🗑️ Delete
-        </MenuItem>
-      </MenuList>
-    </Portal>
-  </Menu>
+  <ThingActionMenuButton identity={`${handlers.ownerId}:${thing.id}`}
+    model={buildThingsItemMenu({ thing, ownerId: handlers.ownerId, locationSearch: handlers.locationSearch,
+      actCount: handlers.selected.has(thing.id) ? Math.max(1, handlers.selected.size) : 1,
+      clipboardCount: handlers.clipboardCount || 0 })}
+    onAction={({ action }) => handlers.onItemAction(thing, (action.command === 'copy-link' ? 'copyLink' : action.command) as ThingsItemAction)} />
 );
 
 const selectionStyles = (selected: boolean) =>
@@ -392,6 +366,7 @@ export const ThingsGridView = ({
               {formatWhen(thing.updatedAt)}
             </Text>
           </Flex>
+          <RecordingThingTranscript thing={thing} />
         </Flex>
       );
     })}
@@ -536,6 +511,7 @@ export const ThingsListView = ({
 									<ThingPreviewBox fallback={null} maxHeight="120px" schemaRender={schemaRenderFor?.(thing) || null} thing={thing} />
           </Box>
         )}
+        <RecordingThingTranscript thing={thing} />
         </Flex>
       );
     })}
@@ -648,6 +624,7 @@ export const ThingsColumnsView = ({
 										<ThingPreviewBox fallback={null} maxHeight="90px" schemaRender={schemaRenderFor?.(thing) || null} thing={thing} />
                   </Box>
                 )}
+                <RecordingThingTranscript thing={thing} />
               </Flex>
             );
           })}

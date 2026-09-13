@@ -27,7 +27,7 @@ final class LopuRecordingUploadTests: XCTestCase {
 
     private var manifest: [String: Any] {
         ["schemaVersion": 1, "origin": context.origin.absoluteString, "features": [
-            "api.auth-me": ["version": "1.0.0"], "api.attachment-uploads": ["version": "1.2.0"],
+            "api.things": ["version": "1.7.0"], "api.auth-me": ["version": "1.0.0"], "api.attachment-uploads": ["version": "1.2.0"],
             "api.attachment-upload-parts": ["version": "1.1.0"], "api.attachment-upload-complete": ["version": "1.2.0"]]]
     }
 
@@ -148,6 +148,85 @@ final class LopuRecordingUploadTests: XCTestCase {
         catch LopuRecordingUploads.UploadError.unsafeUpload {}
         XCTAssertEqual(puts, 0)
         XCTAssertEqual(uploader.pending().count, 1)
+    }
+
+    func testLegacyImportClaimsOnceAndKeepsOriginalAccount() async throws {
+        let (directory, source) = try audio()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let transport: LopuRecordingUploads.Transport = { request in
+            switch request.url!.path {
+            case LopuVoiceContract.manifestPath: return try self.response(request, self.manifest)
+            case "/api/v1/auth/me": return try self.response(request, ["user": ["id": "owner-a"]])
+            case "/api/v1/things": return try self.response(request, ["things": [], "nextCursor": NSNull()])
+            default: XCTFail("Import inventory must only read"); throw LopuRecordingUploads.UploadError.failed
+            }
+        }
+        let uploader = LopuRecordingUploads(directory: directory, transport: transport)
+        try await uploader.importLegacy(context: context, cookie: "session")
+        let first = try XCTUnwrap(uploader.pending().first)
+        XCTAssertEqual(first.sourceName, source.lastPathComponent)
+        let restarted = LopuRecordingUploads(directory: directory, transport: transport)
+        try await restarted.importLegacy(context: .init(ownerId: "owner-b", origin: context.origin), cookie: "other")
+        XCTAssertEqual(restarted.inventory().count, 1)
+        XCTAssertEqual(restarted.pending().first?.id, first.id)
+        XCTAssertEqual(restarted.pending().first?.context.ownerId, "owner-a")
+    }
+
+    func testLegacyImportReconcilesBuild29AcrossPagesAndRetainsReceipt() async throws {
+        let (directory, source) = try audio()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let encoded = try await LopuRecordingUploads.exportAudio(source)
+        let size = try encoded.resourceValues(forKeys: [.fileSizeKey]).fileSize!
+        var pages = 0
+        let transport: LopuRecordingUploads.Transport = { request in
+            switch request.url!.path {
+            case LopuVoiceContract.manifestPath: return try self.response(request, self.manifest)
+            case "/api/v1/auth/me": return try self.response(request, ["user": ["id": "owner-a"]])
+            case "/api/v1/things":
+                pages += 1
+                if pages == 1 { return try self.response(request, ["things": [], "nextCursor": "next"]) }
+                XCTAssertTrue(request.url!.query!.contains("cursor=next"))
+                return try self.response(request, ["things": [["id": "existing", "crystal": ["name": encoded.lastPathComponent, "size": size]]], "nextCursor": NSNull()])
+            default: XCTFail("Must reuse ready Things"); throw LopuRecordingUploads.UploadError.failed
+            }
+        }
+        let uploader = LopuRecordingUploads(directory: directory, transport: transport)
+        try await uploader.importLegacy(context: context, cookie: "session")
+        XCTAssertTrue(uploader.pending().isEmpty)
+        XCTAssertEqual(uploader.inventory().first?.completedAttachmentId, "existing")
+        let restarted = LopuRecordingUploads(directory: directory, transport: transport)
+        try await restarted.importLegacy(context: context, cookie: "session")
+        XCTAssertEqual(pages, 2)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
+    }
+
+    func testLegacyImportExcludesNewActiveFilesAndRetainsFilesAfterFailure() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var requests = 0
+        let uploader = LopuRecordingUploads(directory: directory) { _ in requests += 1; throw URLError(.notConnectedToInternet) }
+        let file = directory.appendingPathComponent("Lopu-active.caf")
+        try Data([1, 2, 3]).write(to: file)
+        try await uploader.importLegacy(context: context, cookie: "session")
+        XCTAssertEqual(requests, 0)
+        let restarted = LopuRecordingUploads(directory: directory) { _ in throw URLError(.notConnectedToInternet) }
+        do { try await restarted.importLegacy(context: context, cookie: "session"); XCTFail("Expected offline") } catch {}
+        XCTAssertTrue(restarted.inventory().isEmpty)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
+    }
+
+    func testNativePushNegotiatesOwnerGuardAndRejectsIncompatibleOrigins() {
+        var manifest: [String: Any] = ["schemaVersion": 1, "origin": context.origin.absoluteString,
+            "features": ["api.auth-me": ["version": "1.0.0"], "api.notifications-devices": ["version": "1.2.0"]]]
+        XCTAssertTrue(ThingtimeNativeNotifications.supportsPushManifest(manifest, origin: context.origin))
+        for version in ["1.1.9", "2.0.0", "1.2.0-preview", ""] {
+            manifest["features"] = ["api.auth-me": ["version": "1.0.0"], "api.notifications-devices": ["version": version]]
+            XCTAssertFalse(ThingtimeNativeNotifications.supportsPushManifest(manifest, origin: context.origin))
+        }
+        manifest["features"] = ["api.auth-me": ["version": "1.0.1"], "api.notifications-devices": ["version": "1.3.0"]]
+        XCTAssertTrue(ThingtimeNativeNotifications.supportsPushManifest(manifest, origin: context.origin))
+        XCTAssertFalse(ThingtimeNativeNotifications.supportsPushManifest(manifest, origin: URL(string: "https://other.test")!))
     }
 
 }

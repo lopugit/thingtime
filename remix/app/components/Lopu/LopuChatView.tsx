@@ -8,6 +8,9 @@ import { useIsMobileViewport } from '../Nav/Drawer/useDrawer';
 import type { ComponentsByRef } from '../Builder/WebpageBlocksRenderer';
 import { LOPU_CREDITS_SETTINGS_PATH, LopuBalanceChip } from './LopuBalanceChip';
 import { LopuComposer } from './LopuComposer';
+import { LopuAttachments, EMPTY_LOPU_ATTACHMENTS, type LopuSelectedThing } from './LopuAttachments';
+import { PostAttachments } from '~/components/Attachments/PostAttachments';
+import type { AttachmentComposerHandle } from '~/components/Attachments/AttachmentComposer';
 import { LopuLivePreview } from './LopuLivePreview';
 import { LOPU_ADMIN_ACCOUNTS_PATH, LopuActionLink, LopuLockedState } from './LopuLockedState';
 import { LopuMarkdown, StreamingCaret } from './LopuMarkdown';
@@ -25,6 +28,7 @@ import {
 } from './lopuTurnCore';
 import type { LopuAccount } from './useLopuAccount';
 import { useLopuChat, type LopuContextProvider } from './useLopuChat';
+import type { SendLopuResult } from './lopuChatStore';
 
 // The Lopu chat surface (design note §3.2, restyled per the design brief)
 // shared by the /lopu page, the floating window (compact) and the Messenger
@@ -354,7 +358,7 @@ const MessageBubble = React.memo(function MessageBubble({
 }) {
 	const meta = React.useMemo(() => lopuMessageMeta(message), [message]);
 	if (message.deleted) return null;
-	if (role === 'user') return <LopuUserRow text={message.text} compact={compact} />;
+	if (role === 'user') return <Box minW={0}><LopuUserRow text={message.text} compact={compact} /><PostAttachments attachments={message.attachments} compact={compact} /></Box>;
 	const metaLine =
 		meta && meta.provider
 			? describeLopuTurnMeta(
@@ -451,6 +455,7 @@ const relativeTime = (iso: string | null | undefined): string => {
 export type LopuChatViewVariant = 'page' | 'pane' | 'window';
 
 export type LopuChatViewProps = {
+	externalSendRef?: React.MutableRefObject<((text: string) => Promise<SendLopuResult | undefined>) | null>;
 	// a specific conversation (null = fresh); undefined follows the shared store
 	chatId?: string | null;
 	onChatChange?: (chatId: string | null) => void;
@@ -479,6 +484,7 @@ export type LopuChatViewProps = {
 };
 
 export const LopuChatView = ({
+	externalSendRef,
 	chatId,
 	onChatChange,
 	variant,
@@ -500,6 +506,11 @@ export const LopuChatView = ({
 	const isMobile = useIsMobileViewport();
 	const chat = useLopuChat({ chatId, context, applyPatches });
 	const [draft, setDraft] = React.useState('');
+	const [uploads, setUploads] = React.useState(EMPTY_LOPU_ATTACHMENTS);
+	const [selectedThings, setSelectedThings] = React.useState<LopuSelectedThing[]>([]);
+	const uploadsRef = React.useRef<AttachmentComposerHandle>(null);
+	const [attachmentRevision, setAttachmentRevision] = React.useState(0);
+	React.useEffect(() => { setDraft(''); setSelectedThings([]); setUploads(EMPTY_LOPU_ATTACHMENTS); setAttachmentRevision(value => value + 1); }, [chat.viewer.id]);
 	const scrollRef = React.useRef<HTMLDivElement | null>(null);
 	const inputRef = React.useRef<HTMLTextAreaElement | null>(null);
 	const stickRef = React.useRef(true);
@@ -537,18 +548,34 @@ export const LopuChatView = ({
 		}
 	}, [isMobile]);
 
-	const send = React.useCallback(
+	const ownerRef = React.useRef(chat.viewer.id);
+	ownerRef.current = chat.viewer.id;
+	const submit = React.useCallback(
 		async (text: string) => {
+			if (uploads.blocking) return;
+			const ownerId = chat.viewer.id;
 			setDraft('');
 			stickRef.current = true;
 			focusInput();
-			const result = await chat.send(text);
+			const result = await chat.send(text, undefined, { attachmentIds: uploads.attachmentIds, attachments: uploads.attachments, thingIds: selectedThings.map(thing => thing.id) });
+			if (ownerRef.current !== ownerId) return result;
+			if (result.ok === true || (result.ok === false && result.chatIdKnown)) {
+				uploadsRef.current?.markCommitted(uploads.attachmentIds);
+				setUploads(EMPTY_LOPU_ATTACHMENTS); setSelectedThings([]); setAttachmentRevision(value => value + 1);
+			}
 			// a turn that never reached the server hands the text back
 			if (result.ok === false && result.text) setDraft((current) => current || result.text);
 			focusInput();
+			return result;
 		},
-		[chat, focusInput]
+		[chat, focusInput, uploads, selectedThings]
 	);
+	const send = React.useCallback(async (text: string) => { await submit(text); }, [submit]);
+	React.useLayoutEffect(() => {
+		if (!externalSendRef) return;
+		externalSendRef.current = submit;
+		return () => { if (externalSendRef.current === submit) externalSendRef.current = null; };
+	}, [externalSendRef, submit]);
 
 	const stop = React.useCallback(() => {
 		chat.abort();
@@ -727,13 +754,14 @@ export const LopuChatView = ({
 			>
 				<Box maxW={compact ? '100%' : LOPU_UI.composerMaxWidth} mx="auto" width="100%">
 					<LopuComposer
+						attachments={<LopuAttachments key={`${chat.viewer.id}:${attachmentRevision}`} uploadsRef={uploadsRef} onUploads={setUploads} selected={selectedThings} onSelect={setSelectedThings} disabled={chat.sending || streamingHere} />}
 						value={draft}
 						onChange={setDraft}
 						onSend={send}
 						onStop={stop}
 						streaming={streamingHere || chat.sending}
 						disabled={!chat.viewer.id || (locked && !byoUnlock)}
-						inputDisabled={locked}
+						inputDisabled={locked || uploads.blocking}
 						placeholder={composerPlaceholder}
 						enterSends={chat.preferences.enterSends}
 						models={chat.models}

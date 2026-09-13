@@ -4,6 +4,7 @@ public enum RecoveryComponent: String, CaseIterable, Codable, Hashable, Identifi
     case desktop
     case recovery
     case commander
+    case widgets
 
     public var id: String { rawValue }
 
@@ -12,6 +13,7 @@ public enum RecoveryComponent: String, CaseIterable, Codable, Hashable, Identifi
         case .desktop: "Thingtime.app"
         case .recovery: "Thingtime Recovery.app"
         case .commander: "Commander.app"
+        case .widgets: "Thingtime Widgets.app"
         }
     }
 
@@ -20,6 +22,7 @@ public enum RecoveryComponent: String, CaseIterable, Codable, Hashable, Identifi
         case .desktop: "com.thingtime.desktop"
         case .recovery: "com.thingtime.desktop.recovery"
         case .commander: "com.thingtime.Commander"
+        case .widgets: "com.thingtime.widgets"
         }
     }
 
@@ -28,6 +31,7 @@ public enum RecoveryComponent: String, CaseIterable, Codable, Hashable, Identifi
         case .desktop: "Thingtime Desktop"
         case .recovery: "Thingtime Recovery"
         case .commander: "Commander"
+        case .widgets: "Thingtime Widgets"
         }
     }
 }
@@ -216,12 +220,14 @@ public struct RecoveryCatalogSnapshot {
     public let desktop: [RecoveryRelease]
     public let recovery: [RecoveryRelease]
     public var commander: [RecoveryRelease] = []
+    public var widgets: [RecoveryRelease] = []
 
     public func releases(for component: RecoveryComponent) -> [RecoveryRelease] {
         switch component {
         case .desktop: desktop
         case .recovery: recovery
         case .commander: commander
+        case .widgets: widgets
         }
     }
 }

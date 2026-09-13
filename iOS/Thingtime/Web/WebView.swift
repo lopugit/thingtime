@@ -6,6 +6,7 @@ struct WebView: UIViewRepresentable {
     private static let nativeMessageHandlerName = "thingtimeNative"
 
     let url: URL
+    @Binding var widgetPath: String?
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -39,72 +40,24 @@ struct WebView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
-        guard context.coordinator.loadedRootURL != url else { return }
+        let rootChanged = context.coordinator.loadedRootURL != url
+        // Consume a pending widget request even when it cannot resolve, so a stale
+        // value cannot suppress the teardown for a later destination change.
+        let widgetTarget = widgetPath.flatMap { URL(string: $0, relativeTo: url)?.absoluteURL }
+        if widgetPath != nil { DispatchQueue.main.async { widgetPath = nil } }
+        guard rootChanged || widgetTarget != nil else { return }
 
+        // A destination switch always drops the previous origin's widget content
+        // and detaches its queued uploads, even when a widget tap is delivered in
+        // the same update. Widget navigation alone stays within the same origin.
+        if rootChanged { WidgetStore.clear() }
         context.coordinator.cancelVoice()
-        context.coordinator.suspendRecordingUploads()
+        if rootChanged { context.coordinator.suspendRecordingUploads() }
         context.coordinator.loadedRootURL = url
-        webView.load(URLRequest(url: url))
+        webView.load(URLRequest(url: widgetTarget ?? url))
     }
 
-    static let bridgeUserScript = WKUserScript(
-        source: """
-        (() => {
-          if (window.thingtimeNativeBridge) {
-            return;
-          }
-
-          document.documentElement?.classList.add('thingtime-native-webview');
-          const markNativeBody = () => {
-            document.body?.classList.add('thingtime-native-webview-body');
-          };
-          if (document.body) {
-            markNativeBody();
-          } else {
-            document.addEventListener('DOMContentLoaded', markNativeBody, { once: true });
-          }
-
-          const listeners = new Set();
-          const dispatchNativeMessage = (message) => {
-            const event = new CustomEvent('thingtime:native-message', { detail: message });
-            window.dispatchEvent(event);
-            listeners.forEach((listener) => {
-              try {
-                listener(message);
-              } catch (error) {
-                console.error('[ThingtimeNativeBridge] listener failed', error);
-              }
-            });
-          };
-
-          window.thingtimeNativeBridge = {
-            version: '1.2.0',
-            lopuVoiceVersion: '1.1.0',
-            platform: 'ios',
-            isNativeWebView: true,
-            postMessage(message) {
-              window.webkit.messageHandlers.thingtimeNative.postMessage(message);
-            },
-            receiveMessageFromNative(message) {
-              dispatchNativeMessage(message);
-            },
-            onMessage(listener) {
-              listeners.add(listener);
-              return () => listeners.delete(listener);
-            },
-            offMessage(listener) {
-              listeners.delete(listener);
-            }
-          };
-
-          window.dispatchEvent(new CustomEvent('thingtime:native-bridge-ready', {
-            detail: { platform: 'ios', version: '1.0.0' }
-          }));
-        })();
-        """,
-        injectionTime: .atDocumentStart,
-        forMainFrameOnly: true
-    )
+    static let bridgeUserScript = ThingtimeBridgeScript.script
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         weak var webView: WKWebView?
@@ -131,12 +84,13 @@ struct WebView: UIViewRepresentable {
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             (webView as? ThingtimeWKWebView)?.applyThingtimeScrollInsets(forceSafeAreaUpdate: true)
 
-            ThingtimeNativeNotifications.shared.attach(webView: webView)
+            if let rootURL = loadedRootURL ?? webView.url { ThingtimeNativeNotifications.shared.attach(webView: webView, rootURL: rootURL) }
 
             sendToWeb(type: "native-ready", payload: [
                 "platform": "ios",
-                "version": "1.2.0",
-                "lopuVoiceVersion": "1.1.0",
+                "version": "1.3.0",
+                "lopuVoiceVersion": "1.3.0",
+                "notificationsVersion": "1.0.0",
                 "watchNotifications": true
             ])
         }
@@ -147,7 +101,25 @@ struct WebView: UIViewRepresentable {
                 sendToWeb(type: "native-ack", payload: ["received": jsonCompatibleValue(message.body)])
                 return
             }
+            if type.hasPrefix("widget-") {
+                guard message.frameInfo.isMainFrame, let current = webView?.url, let root = loadedRootURL,
+                      LopuVoiceContract.sameOrigin(current, root) else { return }
+                if type == "widget-state-request" {
+                    sendToWeb(type: "widget-state", payload: ["enabled": WidgetStore.enabled])
+                } else if type == "widget-clear" { WidgetStore.clear() }
+                else if type == "widget-snapshot", let payload = body["payload"] as? [String: Any] {
+                    WidgetStore.save(payload, origin: root.absoluteString)
+                }
+                return
+            }
             switch type {
+            case "notification-settings":
+                guard message.frameInfo.isMainFrame, let webView, let rootURL = loadedRootURL,
+                      let currentURL = webView.url, LopuVoiceContract.sameOrigin(currentURL, rootURL),
+                      let payload = body["payload"] as? [String: Any], let ownerId = payload["ownerId"] as? String,
+                      let action = payload["action"] as? String, ["status", "enable", "open-settings"].contains(action) else { return }
+                Task { await ThingtimeNativeNotifications.shared.notificationSettings(action: action, ownerId: ownerId) }
+
             case "lopu-voice-start", "lopu-voice-recordings-sync":
                 guard message.frameInfo.isMainFrame, let webView, let rootURL = loadedRootURL,
                       let currentURL = webView.url, LopuVoiceContract.sameOrigin(currentURL, rootURL) else { return }
@@ -171,7 +143,8 @@ struct WebView: UIViewRepresentable {
                     effort: payload["effort"] as? String ?? "",
                     speed: payload["speed"] as? String ?? "normal",
                     chatId: payload["chatId"] as? String,
-                    ownerId: payload["ownerId"] as? String
+                    ownerId: payload["ownerId"] as? String,
+                    history: LopuVoiceHistory.bounded(payload["history"] as? [[String: String]] ?? [])
                 )
                 webView.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] cookies in
                     let replyURL = URL(string: "/api/v1/lopu/voice/reply", relativeTo: rootURL)?.absoluteURL ?? rootURL
@@ -182,7 +155,7 @@ struct WebView: UIViewRepresentable {
                               let currentURL = self.webView?.url, LopuVoiceContract.sameOrigin(currentURL, rootURL),
                               (type == "lopu-voice-recordings-sync" ? self.pendingRecordingSync : self.pendingVoiceStart) == startID else { return }
                         if type == "lopu-voice-recordings-sync" {
-                            self.lopuVoice.syncRecordings(ownerId: settings.ownerId, baseURL: rootURL, cookieHeader: header)
+                            self.lopuVoice.syncRecordings(ownerId: settings.ownerId, baseURL: rootURL, cookieHeader: header, autoImport: payload["autoImportRecordings"] as? Bool ?? true)
                         } else {
                             self.lopuVoice.start(settings: settings, baseURL: rootURL, cookieHeader: header)
                         }
