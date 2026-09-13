@@ -5,6 +5,21 @@ import XCTest
 
 @MainActor
 final class CommanderWebViewTests: XCTestCase {
+  func testExplicitDismissalReturnsFocusOnlyWhileLauncherOwnsIt() {
+    XCTAssertTrue(LauncherPanelController.shouldRestorePreviousApplication(
+      isPresented: true, applicationIsActive: true, hasOtherKeyWindow: false
+    ))
+    XCTAssertFalse(LauncherPanelController.shouldRestorePreviousApplication(
+      isPresented: false, applicationIsActive: true, hasOtherKeyWindow: false
+    ))
+    XCTAssertFalse(LauncherPanelController.shouldRestorePreviousApplication(
+      isPresented: true, applicationIsActive: false, hasOtherKeyWindow: false
+    ))
+    XCTAssertFalse(LauncherPanelController.shouldRestorePreviousApplication(
+      isPresented: true, applicationIsActive: true, hasOtherKeyWindow: true
+    ))
+  }
+
   func testNativeOAuthCallbackOnlyAcceptsTheRegisteredCommanderRoute() {
     XCTAssertTrue(
       CommanderOAuthCallback.isValid(

@@ -37,6 +37,10 @@ test('folder links carry view rules into a new tab without overwriting the searc
   assert.equal(new URLSearchParams(search).get('q'), 'recording');
 });
 
+test('archive links retain their dedicated read-only mode and the Things referrer', () => {
+  assert.equal(thingBrowseHref({ id: 'archive', thingtime: ['chat-archive'] }), '/thing/archive?archive=true&from=things');
+});
+
 test('native link modifiers, middle clicks and prevented events are never hijacked', () => {
   const plain = { button: 0, defaultPrevented: false, metaKey: false, ctrlKey: false, altKey: false, shiftKey: false };
   assert.equal(isPlainLinkClick(plain), true);

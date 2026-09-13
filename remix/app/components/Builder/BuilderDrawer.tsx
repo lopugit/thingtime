@@ -5,6 +5,7 @@ import { RichTextModal } from './RichTextModal';
 
 import { useLopu } from '~/components/Lopu/useLopu';
 import { ThingAudienceControl } from '~/components/Sharing/ThingAudienceControl';
+import { ThingTransferControls } from '~/components/Things/ThingTransferControls';
 import { sharePathForThing } from '~/components/Sharing/audienceCore';
 import { DRAWER_Z } from '../Nav/Drawer/useDrawer';
 import { sanitizeArgSpecs, type ComponentArgSpec } from '../ComponentsLibrary/componentTemplate';
@@ -946,6 +947,8 @@ export const BuilderDrawer = (props: {
 					</Flex>
 				</Box>
 
+				<ThingTransferControls id={pageId} linkKey={draft.resolved?.page?.linkKey}
+					disabledReason={!pageId || source !== 'user' || draft.dirty || metaDirty || anyDirty ? 'Save this page before copying or downloading its saved content.' : undefined} />
 				<Flex columnGap={2}>
 					<Button
 						size="sm"

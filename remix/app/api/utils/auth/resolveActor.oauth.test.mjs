@@ -34,6 +34,37 @@ test('account grants thread their scoped actor through reads and preserve missin
   assert.deepEqual(requested, ['things.create', 'things.update']);
 });
 
+test('a token holding both grants routes per operation, not on the mere presence of an account scope', async () => {
+  context = { user, scopes: ['account.things.read', 'app-data'], clientId: 'test-app', origin: 'https://client.test' };
+  const pat = { scopes: ['things.read'], visibility: 'all', onlyCreatedThings: false };
+  resolved = { ok: true, actor: { user, pat } };
+
+  // The account grant covers this operation, so it wins over the namespace.
+  const read = await resolveActor(request(), { thingsScope: 'things.read' });
+  assert.ok(!(read instanceof Response)); assert.equal(read.kind, 'pat'); assert.equal(actorPat(read), pat);
+  assert.equal(requested, 'things.read');
+
+  // It does not cover this one — the app must still reach its own namespace
+  // rather than being stranded on the account surface it can't use.
+  requested = null;
+  const create = await resolveActor(request(), { thingsScope: 'things.create' });
+  assert.ok(!(create instanceof Response)); assert.equal(create.kind, 'app'); assert.equal(actorPat(create), null);
+  assert.equal(requested, null);
+});
+
+test('an account-only token keeps the account-flavoured error for operations it lacks', async () => {
+  context = { user, scopes: ['account.things.read'], clientId: 'test-app', origin: 'https://client.test' };
+  resolved = { ok: false, status: 403, error: 'Approve the required account Things permissions for this app' };
+  requested = null;
+
+  // No namespace capability to fall back to, so this must still consult the
+  // account path instead of answering "not granted the app-data scope".
+  const denied = await resolveActor(request(), { thingsScope: 'things.create' });
+  assert.ok(denied instanceof Response); assert.equal(denied.status, 403);
+  assert.equal(requested, 'things.create');
+  assert.match((await denied.json()).error, /account Things permissions/);
+});
+
 test('account grants cannot bypass origin or sandbox restrictions', async () => {
   context = { user, scopes: ['account.things'], clientId: 'test-app', origin: 'https://client.test' };
   const denied = await resolveActor(request('https://another.test'), { thingsScope: 'things.read' });
