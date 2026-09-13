@@ -7312,3 +7312,5 @@ approval; `access.test.ts` — the reservation matrix) and
       the exact `CRON_SECRET` bearer fails closed without touching balances.
 
 - [ ] Creating a new invite and cancelling an older pending invite keeps the newest copyable link visible; cancelling that newest invite removes its link.
+
+- [ ] Settings → Account (`/settings/account` and popup `?settings=account`) groups account switching, storage, invitations, credits and plans. Profile retains profile editing/privacy; Lopu retains assistant preferences. Check direct reload, category switching, Back, modal close/Escape and Open settings page at desktop and 390px, scrolling both page and modal to the bottom. Old `/settings#lopu-credits` and `/settings/lopu#gift-invites` links select Account and reveal the section below the sticky navigation. Password-only accounts do not show a resend-email action without an email address.

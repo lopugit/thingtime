@@ -31,6 +31,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Add Settings → Account in the shared page and popup for account switching,
+  storage, invitations, credits and plans. Preserve old credits/invite bookmarks
+  and keep profile editing and assistant preferences in their existing tabs.
+  — Codex (AI), 2026-09-13
+
 - Add personal signup invitations with editable avatar, display name and username,
   password-only redemption, and credits reserved from the inviter's balance.
   Signup transfers the gift atomically once; cancellation and hourly expiry
