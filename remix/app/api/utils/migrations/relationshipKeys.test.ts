@@ -45,7 +45,7 @@ test('repairs missing individual keys, preserves other keys and converges', asyn
 	assert.equal((await repairRelationshipKeys(db.things, { dryRun: false })).migrated, 1);
 	assert.deepEqual(docs[0].uniqueKeys, [other, thingUniqueKey('dmKey', 'a:b')]);
 	assert.equal((await repairRelationshipKeys(db.things, { dryRun: true })).matched, 0);
-	assert.equal(db.closed(), 27);
+	assert.equal(db.closed(), 30); // three passes over ten relationship families
 });
 
 test('never stamps free-form data or absent/empty optional relationship keys', async () => {
@@ -66,10 +66,23 @@ test('more than one batch of duplicate slots terminates and stays pending withou
 	assert.equal(result.skipped, 1001);
 	assert.equal(result.migrated, 0);
 	assert.equal(db.writes(), 1001);
-	assert.equal(db.closed(), 9);
+	assert.equal(db.closed(), 10);
 	assert.equal(result.notes.length, 1);
 	assert.doesNotMatch(JSON.stringify(result), /private|sensitive/);
 	assert.equal((await repairRelationshipKeys(db.things, { dryRun: true })).matched, 1001);
+});
+
+test('external source membership shares protected identity repair without claiming data keys', async () => {
+	const docs = [
+		{ _id: 1, thingtime: ['external-post-source'], crystal: { sourceKey: 'post:account' }, uniqueKeys: [] },
+		{ _id: 2, thingtime: ['data'], crystal: { sourceKey: 'post:account' }, uniqueKeys: [] }
+	];
+	const db = fixture(docs);
+	const result = await repairRelationshipKeys(db.things, { dryRun: false });
+	assert.equal(result.migrated, 1);
+	assert.deepEqual(docs[0].uniqueKeys, [thingUniqueKey('sourceKey', 'post:account')]);
+	assert.deepEqual(docs[1].uniqueKeys, []);
+	assert.equal((await repairRelationshipKeys(db.things, { dryRun: true })).matched, 0);
 });
 
 test('concurrent identity change is not counted as a successful migration', async () => {

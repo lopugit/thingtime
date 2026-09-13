@@ -1,206 +1,6 @@
 # TESTING.md — per-area manual test checklists
 
-## Real browser portable transfer acceptance
-
-- [ ] On desktop and mobile, copy a Thing and use Cmd/Ctrl+V on the Things
-  canvas and inside Import. Require ready content without a file chooser;
-  editable search/text controls must keep native paste. Test clipboard denial,
-  invalid content, selection cancellation and account changes. Select and drop
-  multiple JSON/ZIP files with colliding portable IDs; all validate before writes,
-  import independently in order, and stop on error without replaying completed
-  imports. Confirm every copy and attachment through the API and clean fixtures.
-  Expand the input panel and scroll to both ends; footer controls must remain
-  reachable above floating DevKit controls at mobile widths.
-
-- [ ] Export an authorized chat whose historical participant has a public HTTPS
-  avatar. With export capability 1.14.0, require exact image bytes in its ZIP,
-  no original URL in the archive, a fresh private avatar after normal upload/import,
-  and successful re-export after the source URL is unavailable. Refuse HTTP,
-  redirects, private-network DNS, invalid images and excessive sizes without a
-  partial archive; do not bypass upload approval or create live recipients.
-
-- [ ] Run `node --import tsx --test app/api/utils/things/recordingTransfer.integration.test.ts`
-  from `remix/` with `TT_TRANSFER_RECORDING_TEST=1 TT_TRANSFER_REMOTE_DEV_TEST=1`,
-  the approved dev/PR-preview URL and username, and an ephemeral fixture cookie.
-  Verify synthetic WAV ZIP bytes, a fresh durable recording ID, anonymous denial,
-  source-deletion independence, re-export and both content/Thing 404 cleanup.
-  No microphone or transcription is used. If upload start times out before an ID,
-  reconcile the logged stable request ID with the identical upload metadata before
-  another run; never generate a replacement operation to mask uncertain completion.
-  A default skipped test is not acceptance or playback/transcript coverage.
-
-- [ ] Run `node --import tsx --test app/api/utils/things/libraryTransfer.integration.test.ts`
-  from `remix/` with `TT_TRANSFER_LIBRARY_TEST=1 TT_TRANSFER_REMOTE_DEV_TEST=1`,
-  the approved dev/PR-preview URL and username, and an ephemeral fixture cookie.
-  Verify all nine kinds, copied schema/component references, copy-of-copy content,
-  anonymous folder denial and 18-record cleanup. The test logs its fixture marker
-  before writes. If an import times out without IDs, do not blindly rerun: wait
-  out the server deadline, reconcile that marker in Things plus theme/algorithm
-  libraries, and resolve any retained records through their canonical APIs first.
-  A skipped run is not acceptance; this HTTP test does not replace UI checks.
-
-- [ ] Run the real live-image archive acceptance with explicit
-  `TT_TRANSFER_LIVE_MEDIA_TEST=1 TT_TRANSFER_REMOTE_DEV_TEST=1`, a dev/PR-preview
-  `TT_TRANSFER_TEST_URL`, the expected `TT_TRANSFER_TEST_USERNAME`, and an
-  ephemeral authenticated `TT_TRANSFER_TEST_COOKIE`:
-  `node --import tsx --test app/api/utils/things/liveChatMedia.integration.test.ts`
-  from `remix/`. It requires the existing self-only fixture, never adds members,
-  and verifies ZIP bytes, fresh imported attachment/message binding, anonymous
-  denial, unchanged source history during transfer, independent copied bytes
-  after source deletion, and 404 cleanup. A default skipped run is not acceptance.
-
-- [ ] A member exporting a live chat must retain a custom emoji referenced by
-  another participant, without needing to own its definition. Verify the new
-  archive has independent personal emoji bytes and preserves the reaction.
-  Standalone export of that other-owned emoji must still be denied; blocked,
-  pending, foreign-namespace or missing definitions must not produce a partial
-  archive. Negotiate export 1.12.0 before expecting this behavior.
-
-- [ ] After the canonical self-only live chat fixture passes, run
-  `TT_TRANSFER_LIVE_CHAT_BROWSER_TEST=1 node --import tsx scripts/live-chat-transfer-browser.integration.mts`
-  from `remix/`, using an ephemeral approved preview session and expected
-  fixture username. Verify real clipboard Copy, ZIP download/file-picker import,
-  exact history, unchanged source messages and imported-copy cleanup. The test
-  refuses chats containing anyone else and never sends messages or creates a
-  live chat. It writes fixture content to the macOS clipboard. Media and AI
-  history require separate acceptance; do not infer them from this test.
-
-- [ ] Messenger details: open Transfer with an active or pending membership;
-  Copy and Download must be accessible, but Cut must be absent. Open Download
-  and Import dialogs above the drawer at desktop/mobile widths, scroll the
-  drawer fully, and confirm opening/closing controls sends no chat mutations.
-  `node --import tsx scripts/messenger-transfer-ui-smoke.mts` in `remix/`
-  covers this with a fictional account; live clipboard/history acceptance is separate.
-
-- [ ] When wiring live Messenger export, supply a complete authorized snapshot
-  including former authors/reactors and every thread. Preserve edits, tombstones,
-  reply links and safe historical system content; never export membership roles,
-  receipts, source user authority or credentials. Reject incomplete/oversized
-  history rather than emitting a truncated successful archive.
-
-- [ ] Stall export metadata: Copy/Download must leave busy state within 30
-  seconds with an actionable error and no automatic retry. Retry Download after
-  recovery produces a real ZIP. Check desktop/mobile dialog bounds. Cancellation
-  and account changes prevent late exports; file-byte downloads are not subject
-  to the metadata deadline.
-
-- [ ] Right-click a fixture folder in Things. Copy and Cut must put all nested
-  history on the real OS clipboard; Cut alone must not move/delete it. Download
-  from that same context menu must produce a ZIP containing the folder and its
-  descendants. The real browser harness exercises these controls before the
-  shared Transfer-menu checks.
-- [ ] Stall the archive GET indefinitely: within 15 seconds, show a recoverable
-  timeout with Retry, not permanent "Opening private history". Retry must load
-  normally after the network recovers. Unmount/account changes must cancel the
-  deadline and prevent late responses from exposing the previous account's data.
-
-- [ ] With explicit disposable dev-session variables, run
-  `node --import tsx scripts/transfer-browser.integration.mts` from remix.
-  Requires `TT_TRANSFER_BROWSER_TEST=1`, a PR preview origin, expected fixture
-  username and ephemeral cookie; never store the cookie in a file or command
-  argument. This opens fresh headed Chrome and overwrites the macOS clipboard
-  with disposable fixture data. Check Copy/Paste import, Cut/Paste move,
-  downloaded JSON and ZIP imports through the file chooser, desktop/mobile
-  bounds, and successful cleanup.
-- [ ] Additionally set `TT_TRANSFER_BROWSER_BINARY_TEST=1` only when the fixture
-  already has upload approval and its normal rate-limit window permits it.
-  Select a generated two-image ZIP, click Upload, import, download the actual
-  ZIP and re-import that downloaded file. Both same-name/same-size images must
-  survive browser dedupe with exact bytes and annotations. Delete the source
-  archive and download the copy again; require independent file IDs and bytes.
-  Inspect `media-desktop.png` and `media-mobile.png`, and require every fixture
-  upload to return 404 after cleanup. A refusal or unrun opt-in is not acceptance.
-  This currently added media phase still needs its first live passing run.
-
-## Private chat archive import integration
-
-- [ ] Run the opt-in `test:transfer-binary` against the approved upload-enabled
-  dev fixture. Verify archive avatar/message bytes and annotations survive ZIP
-  re-import and source deletion; all created roots and uploads must be cleaned
-  up. This storage test complements, not replaces, the visible gallery checks.
-- [ ] Include an imported custom reaction in that real ZIP test. Verify the
-  projected emoji ID/bytes and re-export after deleting the source emoji;
-  fixtures must use the stored `emoji` purpose, not upload alias `custom-emoji`.
-
-- [ ] Owned archives appear as private root entries in Things/folders, never as
-  separate historical message/person rows. Open reaches the read-only archive
-  page with the correct Back link. Other users, PATs, apps, service accounts,
-  deleting roots and custom planes do not list them. Exporting an owned folder
-  preserves the entire included archive group and its folder placement.
-- [ ] On desktop/mobile, expand participants, scroll all history, open/close
-  Transfer → Download, retry a failed load and switch/sign out. The importer is
-  You; historical people have Archived badges and no profile/mention/send/react
-  actions. Old private content disappears on identity refresh. Check fixed-nav
-  clearance, long text, reply links and modal bounds. The local fictional smoke
-  is `node --import tsx scripts/archive-ui-smoke.mts` from remix; it proves no
-  real account lifecycle or media bytes. Open the historical gallery lightbox,
-  confirm shielded media cannot be reached by its navigation until Show Anyway,
-  and check pending badges and file download links. Flagged historical avatars
-  and unavailable files must not be fetched. Referenced owner-bound custom emoji
-  images render; missing/flagged/foreign images show an unavailable placeholder
-  without fetching them. No historical reaction chip performs a live action.
-
-- [ ] Cut an owned archive and paste into another owned folder, then back to
-  root: only root placement/timestamp change; message, participant, reply,
-  reaction and media IDs remain identical. Stale/deleting/mixed-kind roots,
-  historical children, foreign folders and non-first-party callers must fail.
-  Re-read the full history and verify quota is unchanged. The selected origin
-  must advertise bulk 1.4.0; repeat after deleting the containing folder.
-
-- [ ] Download/Copy an owned archive, then re-import: preserve every historical
-  message, reply, reaction, archived identity and media byte under fresh private
-  IDs. Optional traversal must not truncate history. Missing emoji/media access
-  or excluded required files/links must fail the whole export. Independent child
-  roots and non-first-party owners cannot export archive history. Require export
-  1.9.0 on the selected origin; repeat with avatar, gallery and custom emoji bytes.
-
-- [ ] Use a real stored-upload emoji ID (emoji_ plus 64 lowercase hex digits)
-  in live Messenger and an archive. Import must remap it to the fresh personal
-  emoji; archive reads and message projections must retain/resolve the token.
-  Legacy UUID/short IDs still work. Oversized noncanonical IDs and invalid hash
-  characters fail; feed reactions still reject every custom token. Verify real
-  image bytes and rendering separately from parser/identity unit tests.
-
-- [ ] Run the explicitly enabled `test:transfer-archives` against the provided
-  dev fixture only after its capability preflight succeeds. Verify no skipped
-  live test and no cleanup failures. It covers folder export, metadata ZIP
-  encode/decode and re-import, move and source-deletion independence; separately
-  test avatar/emoji bytes and the visible chat UI.
-
-- [ ] GET /things?id=<archive>&archive=true as the importing owner returns the
-  complete historical group, exact text, reply/thread/reaction references and
-  ordered attachment IDs. It must not return userId, ACLs, roles, tokens, S3
-  paths or live-user lookup results. The client requires api.things 1.15.0.
-- [ ] Archive attachment metadata preserves labels, order and target IDs in
-  one bounded batch. Blocked/noncanonical media is omitted, pending owner media
-  has pending=true and NSFW media has nsfw=true. No moderation diagnostics,
-  object/upload keys or unknown crystal fields escape. attachmentTargets still
-  covers blocked bindings, preventing incomplete exports. Verify the shared
-  gallery with real stored image/video/audio bytes separately from fixture UI.
-- [ ] Signed-out/PAT/app/service readers cannot use archive mode. A foreign,
-  missing, deleting or custom-plane archive does not expose history. Oversized
-  or inconsistent history returns an error, never a truncated success. All
-  responses are private/no-store, including auth and retryable failures.
-
-- [ ] Delete an imported archive through DELETE /things from the owner session:
-  drain stored files, remove all history rows and refund storage. A stale
-  expectedUpdatedAt returns 409 before cleanup. A deferred provider operation
-  returns a sanitized retryable error, retaining history for another deletion.
-- [ ] Repeat as another user, PAT, app, service account, cross-origin caller or
-  custom data plane: no archive lookup/deletion authority. A participant/message
-  ID cannot delete the archive. Require api.things 1.12.0 before client deletion.
-
-- [ ] Import a complete archive with folders, avatars, message galleries,
-  replies, deleted tombstones and custom emoji reactions. Verify fresh IDs,
-  exact history, importer-as-self and archived counterparts; no real user,
-  membership, invitation or notification writes. This awaits archive UI/export.
-- [ ] Make a later archive fail. Earlier completed archives use whole-archive
-  cleanup; deferred object deletion retains their roots and earlier dependencies
-  in remainingIds. Cancel during the final commit: do not report success.
-- [ ] Reject orphan/mixed-kind archives and source participant userId/roles
-  before any writes. Generic Thing CRUD must not modify archive records.
-- [ ] Require api.things-import 1.9.0 before upload/import; reject pre-archive,
-  missing and incompatible-major manifests from the selected origin.
+- Connections/index rollout: keep external-source authorization and private-subspace membership fences after merging shared readers. Stub DNS alongside fetch in outbound redirect tests so machine-local `.test` resolution cannot bypass credential-stripping assertions.
 
 ## Feature Stack activity and run chat
 
@@ -6439,6 +6239,67 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 - [ ] Confirm partial/large files use native streaming and cached range reads
       cannot bypass authorization. Verify storage failure degrades to HTTP.
 
+## Third-party connections (`/connections`, `/connections/feed`, `/api/v1/connections/*`)
+
+Automated first: `pnpm --dir remix run verify:connections` (94 real-API
+checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
+
+- [ ] `/connections` renders the provider catalog signed-out with a quiet
+      sign-in card; signed in, connecting the Demo provider adds it under
+      "Your connections" with Feed + Unlink working, and reconnecting the
+      same handle reports "Already connected".
+- [ ] Connecting the same external identity from a SECOND Thingtime account
+      converges on the same external account (many-to-many): both accounts
+      read the same posts through their own links, and each earns its own
+      acl grant even when the other account's sync fired first (the shared
+      per-account cooldown must never strand the second user's grants).
+- [ ] `/connections/feed` merges all connections newest-first with per-
+      connection tabs; external posts render through the native PostCard
+      with the third-party author (never "Anonymous"), comments and
+      reactions work natively, and `/post/<ext-post-…>` permalinks resolve
+      with aggregated counts.
+- [ ] A "warn" AI feed filter veils matched posts behind the ⚠️ card with a
+      working "Show anyway" button (reason + source line shown); a "hide"
+      filter drops them with the "N posts hidden" summary; pausing a filter
+      stops matching; verdicts stay stable across reads (cached) and editing
+      the prompt re-classifies.
+- [ ] SSO connect: unconfigured providers show "Needs setup" (disabled);
+      configured ones show "Sign in with <name>" and redirect to the
+      provider's own login; the callback lands on /connections with the
+      "Account linked" toast (or the oauthError toast on decline/forged
+      state); the fields-based POST /api/v1/connections always refuses SSO
+      providers with a pointer at oauth/begin; no token material ever appears
+      in any API response or client store.
+- [ ] Virtual YouTube list: searching a channel ID/URL/@handle returns a
+      Subscribe row keylessly (name search only with YOUTUBE_API_KEY, and the
+      hint line says so); first Subscribe auto-creates the "My YouTube
+      channels" connection; the connection row shows "N channels"; Unsubscribe
+      removes just that channel; the merged uploads feed interleaves channels
+      newest-first; two users' lists stay independent while a shared video
+      stays ONE post (one external-post-source row per sourcing account) with
+      unified comments.
+- [ ] Feed deepening: scrolling past the synced end (or "Fetch older from
+      your apps") pulls older provider pages without resetting scroll
+      position, and repeated deepens stop at the per-account depth cap.
+- [ ] Personal-provider posts stay invisible (404) to non-linked users;
+      `ext-` shareIds are refused on generic create/update; the connections
+      kinds never appear in the generic /things browser; unlink removes only
+      the caller's link and the shared account retires with its last link.
+- [ ] Relational source membership (regression — the post doc must never grow
+      per linker): with two Thingtime accounts linked to ONE external
+      identity, a synced post's `acl` is exactly the constant `tt:extsourced`
+      (personal) or `tt:all` (public) — never `tt:extacct/<accountId>`, which
+      would both grow without bound on a viral post and disclose the other
+      members' external-account ids through `PublicPost.acl`. The post carries
+      no `sourceIds` array; membership is one `external-post-source` row per
+      (post, account). Unlinking revokes that viewer instantly while every
+      other linked member still sees the post, and a feed page never shows the
+      same post twice even when two of the viewer's own accounts source it.
+- [ ] Migration `relational-external-post-sources` (admin → /docs/schemas):
+      dry run reports the pending legacy posts, the live run creates the
+      membership rows + rewrites the acl + unsets `sourceIds`, a legacy
+      `tt:extacct/` post stays visible to its linked member both BEFORE and
+      AFTER the run, and a second run is a no-op.
 
 ## Commander emoji paste recovery
 

@@ -50,11 +50,14 @@ import {
   ACL_HIDDEN,
   ACL_INHERIT,
   ACL_OWNER,
+	ACL_EXTACCT_PREFIX,
+	ACL_EXT_SOURCED,
   ACL_USER_PREFIX,
   aclCapabilityFor,
 	APP_STORAGE_RESERVED_ID_PREFIX,
 	CASCADE_CHILD_THINGTIME,
   COLLECTION_SCHEMA_VERSIONS,
+	EXTERNAL_RESERVED_ID_PREFIX,
   MAX_TEXT_CHARS,
   MESSENGER_THINGTIME,
 	MIGRATION_DIAGNOSTIC_ID_PREFIX,
@@ -294,6 +297,15 @@ export type FeedAuthor = {
   displayName: string | null;
   temporary?: boolean;
   avatarUrl: string | null;
+  // set ONLY for third-party authors of synced external posts — the honest
+  // discriminator consumers use instead of routing to a dead /profile/<handle>.
+  // It is the FLAG, not the url, that carries that meaning: a provider need
+  // not give us a link at all (the demo feed never does, and an RSS <item>
+  // with a <guid> but no <link> does not either), so keying "is this a
+  // Thingtime user?" off externalUrl alone silently falls back to the native
+  // profile route for exactly those authors.
+  external?: boolean;
+  externalUrl?: string | null;
 };
 
 // Comments share the post schema (rich comments are ["post","comment"]
@@ -461,6 +473,15 @@ export type Viewer = {
   username?: string | null;
   pat?: { tokenId: string; onlyCreatedThings: boolean; visibility?: 'all' | 'public' | 'private' | 'hidden' } | null;
   friendIds?: ReadonlySet<string>;
+  // external-account shareIds the viewer holds connections links to — serves
+  // LEGACY tt:extacct/ audiences; loaded LAZILY (ensureExtAccountIds) only
+  // when a doc under evaluation actually carries the prefix
+  extAccountIds?: ReadonlySet<string>;
+  // external-post shareIds this viewer sources — serves the constant
+  // tt:extsourced audience. Grows only with the posts actually evaluated in
+  // this request (ensureExtSourced), and the feed primes it in bulk from the
+  // membership page it already read.
+  extSourcedPostIds?: ReadonlySet<string>;
   // the viewer's subspace memberships (api/utils/subspaces/gate.ts), loaded
   // beside friendIds so private-subspace posts resolve for real members
   subspaceRoles?: ViewerSubspaceRoles;
@@ -502,6 +523,141 @@ export const withFriendIds = async (viewer: Viewer): Promise<Viewer> => {
     viewer.groupIds ? Promise.resolve(viewer.groupIds) : groupIdsOf(viewer.id)
   ]);
   return { ...viewer, friendIds, subspaceRoles, groupIds };
+};
+
+// In-flight load of a viewer's linked external-account ids, keyed weakly on
+// the viewer object. The memo has to be the PROMISE, not the finished field:
+// the callers below run concurrently (getThing's chain Promise.all, listThings'
+// page map), so a second caller routinely arrives while the first is still
+// awaiting its query and would otherwise start a duplicate one.
+const extAccountIdsLoad = new WeakMap<object, Promise<void>>();
+
+// Lazily attach the viewer's linked external-account ids the first time a doc
+// carrying a tt:extacct/ audience is evaluated. Deliberately MUTATES the
+// enriched viewer object (single monotone assignment): page loops pass the
+// same viewer reference per doc, so the home-DB links query runs at most once
+// per request path instead of once per external post on the page.
+const ensureExtAccountIds = async (viewer: Viewer): Promise<Viewer> => {
+  if (!viewer?.id || viewer.extAccountIds) return viewer;
+  let load = extAccountIdsLoad.get(viewer);
+  if (!load) {
+    load = (async () => {
+      const home = await getHomeThingsCollection();
+      const links = await home
+        .find({ thingtime: 'external-account-link', ownerId: viewer.id }, { projection: { 'crystal.accountId': 1 } })
+        .toArray();
+      (viewer as { extAccountIds?: ReadonlySet<string> }).extAccountIds = new Set(
+        links.map((link: any) => String(link?.crystal?.accountId || '')).filter(Boolean)
+      );
+    })();
+    extAccountIdsLoad.set(viewer, load);
+  }
+  // A failed load must not be cached: the next evaluation on this request
+  // should get a real attempt rather than replaying a stale rejection.
+  try {
+    await load;
+  } catch (err) {
+    extAccountIdsLoad.delete(viewer);
+    throw err;
+  }
+  return viewer;
+};
+
+const hasExtacctAudience = (doc: ThingDoc): boolean => {
+  const acl = Array.isArray(doc.acl) ? doc.acl : [];
+  return acl.some((entry) => typeof entry === 'string' && entry.includes(ACL_EXTACCT_PREFIX));
+};
+
+const hasExtSourcedAudience = (doc: ThingDoc): boolean => {
+  const acl = Array.isArray(doc.acl) ? doc.acl : [];
+  return acl.some((entry) => typeof entry === 'string' && entry.includes(ACL_EXT_SOURCED));
+};
+
+// Prime the viewer's sourced-post set for a known batch of external post ids.
+// The connections feed already paged the membership docs to build its page, so
+// it seeds the answer for free; other paths (permalinks, comment chains) come
+// through ensureExtSourced below with a single id.
+export const primeExtSourcedPostIds = (viewer: Viewer, postIds: Iterable<string>): void => {
+  if (!viewer?.id) return;
+  const known = new Set(viewer.extSourcedPostIds || []);
+  for (const id of postIds) if (id) known.add(id);
+  (viewer as { extSourcedPostIds?: ReadonlySet<string> }).extSourcedPostIds = known;
+  const asked = extSourcedResolution.get(viewer) || new Map<string, Promise<void>>();
+  const settled = Promise.resolve();
+  for (const id of postIds) if (id) asked.set(id, settled);
+  extSourcedResolution.set(viewer, asked);
+};
+
+// Which post ids we have already resolved for this viewer, held as the
+// RESOLUTION PROMISE rather than a bare "already asked" marker — distinct from
+// the positive set, so a miss is cached too and never re-queried. Keyed weakly
+// on the viewer object, which read paths already thread per request.
+//
+// The promise is load-bearing. ensureExtSourced publishes its memo entry before
+// the membership query it stands for has come back, and its callers run
+// CONCURRENTLY over entries that converge on the same post: getThing checks a
+// comment chain with one Promise.all, and every entry in that chain inherits
+// its acl from the same external post. Those entries sit at different inherit
+// depths, so their chain walks finish at different times — the shallow one can
+// reach the memo, claim the post, and still be awaiting Mongo when a deeper one
+// arrives. A bare marker sends that second caller straight on to canView with
+// the answer not yet loaded, and an unloaded set denies (deliberately, like
+// friendIds), so the viewer's own comment thread on a personal external post
+// intermittently loses its parent/root. Awaiting the same promise makes the
+// memo mean "resolved" instead of "claimed", and collapses the duplicate
+// queries the memo existed to avoid in the first place.
+const extSourcedResolution = new WeakMap<object, Map<string, Promise<void>>>();
+
+// Lazily resolve whether the viewer sources ONE external post, memoised per
+// request path (the same viewer object is threaded through page loops). One
+// indexed existence check per previously-unseen post; the feed path primes
+// instead, so this only ever fires for single-doc reads.
+const ensureExtSourced = async (viewer: Viewer, postId: string): Promise<Viewer> => {
+  if (!viewer?.id || !postId) return viewer;
+  let asked = extSourcedResolution.get(viewer);
+  if (!asked) {
+    asked = new Map<string, Promise<void>>();
+    extSourcedResolution.set(viewer, asked);
+  }
+  let resolving = asked.get(postId);
+  if (!resolving) {
+    resolving = (async () => {
+      await ensureExtAccountIds(viewer);
+      const accountIds = [...(viewer.extAccountIds || [])];
+      if (accountIds.length) {
+        const things = await getThingsCollection();
+        const hit = await things.findOne(
+          // (targetId, thingtime) is already this exact post's membership rows —
+          // one per sourcing account — so parentId is a residual over a handful of
+          // docs on the existing index, not a new one.
+          { thingtime: 'external-post-source', targetId: postId, parentId: { $in: accountIds } } as any,
+          { projection: { _id: 1 } }
+        );
+        if (hit) {
+          const known = new Set(viewer.extSourcedPostIds || []);
+          known.add(postId);
+          (viewer as { extSourcedPostIds?: ReadonlySet<string> }).extSourcedPostIds = known;
+          return;
+        }
+      }
+      // resolved-and-absent still needs an initialized set, or aclAllows can't
+      // tell "loaded, not a member" from "never loaded"
+      if (!viewer.extSourcedPostIds) {
+        (viewer as { extSourcedPostIds?: ReadonlySet<string> }).extSourcedPostIds = new Set<string>();
+      }
+    })();
+    asked.set(postId, resolving);
+  }
+  // A failed probe must not be cached as a resolved answer — drop it so this
+  // request can try again rather than treating a transient DB fault as "not a
+  // member" for the rest of the page.
+  try {
+    await resolving;
+  } catch (err) {
+    asked.delete(postId);
+    throw err;
+  }
+  return viewer;
 };
 
 export const POST_TYPES: PostType[] = [...REGISTRY_POST_TYPES];
@@ -886,6 +1042,28 @@ const thingtimeOf = (doc: ThingDoc): string[] => {
 
 export const isPostThing = (doc: ThingDoc): boolean => thingtimeOf(doc).includes('post');
 
+// Only http(s) links may be projected out of a synced external post's envelope
+// — those values become real <a href>/<img src> targets in the feed, and the
+// provider behind them can be any RSS feed or fediverse instance a user named.
+// Kept local (not imported from api/utils/connections) so the read path never
+// depends on the connections module.
+const safeExternalLink = (value: unknown): string | null => {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const parsed = new URL(value.trim());
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? value.trim() : null;
+  } catch {
+    return null;
+  }
+};
+
+// Post-like for rendering/interaction surfaces (permalink projection, share
+// targets): native posts PLUS synced third-party posts. Deliberately NOT used
+// by feed queries — those match kinds explicitly, so external posts never
+// enter first-party feeds. New "acts like a post" consumers use this, not a
+// per-callsite or-branch.
+export const isPostLikeThing = (doc: ThingDoc): boolean => isPostThing(doc) || thingtimeOf(doc).includes('external-post');
+
 const crystalOf = (doc: ThingDoc): Record<string, any> => {
   if (isV2(doc)) return doc.crystal || {};
   return { type: doc.type, text: doc.text || '', images: doc.images || [], listing: doc.listing || null };
@@ -1023,12 +1201,14 @@ export const sanitizeShareId = (value: unknown): string | null | Fail => {
 		trimmed.startsWith(SERVICE_QUOTA_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(MIGRATION_DIAGNOSTIC_ID_PREFIX) ||
 		trimmed.startsWith(APP_STORAGE_RESERVED_ID_PREFIX) ||
+		trimmed.startsWith(EXTERNAL_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(SEEDED_DATA_SUITE_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(SEEDED_DATA_APP_RESERVED_ID_PREFIX)
   ) {
 		// Deterministic migration, schema, tier-revision, subscription assignment,
-		// service-quota, app-storage, and seeded suite/app data destinations must
-		// never be squatted or impersonated by generic user-created Things.
+		// service-quota, app-storage, external-connection, and seeded suite/app
+		// data destinations must never be squatted or impersonated by generic
+		// user-created Things.
     return fail(400, 'shareId uses a reserved prefix');
   }
   return trimmed;
@@ -2434,6 +2614,30 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
 
   const project = (doc: ThingDoc, withShare: boolean): PublicPost => {
     const crystal = crystalOf(doc);
+    // external posts (api/utils/connections) are owned by 'system' — no
+    // Thingtime profile resolves — so their third-party author surfaces from
+    // the synced extended.external envelope on every read path (feed,
+    // permalink, thread root)
+    const external = thingtimeOf(doc).includes('external-post') ? (doc.extended as any)?.external : null;
+    const externalAuthor: FeedAuthor | null = external?.author
+      ? {
+          id: `ext:${external.provider || 'unknown'}:${external.author.handle || external.author.name || 'unknown'}`,
+          username: String(external.author.handle || external.author.name || external.providerName || 'external'),
+          displayName: external.author.name || external.author.handle || external.providerName || null,
+          temporary: false,
+          // Not a Thingtime account — say so explicitly rather than leaving
+          // consumers to infer it from externalUrl, which a provider may not
+          // give us (see FeedAuthor).
+          external: true,
+          // Scheme-checked on the way out as well as on the way in: the
+          // connections sync guards these (connections.ts), but this
+          // projection is what PostCard turns into <a href>/<img src>, so a
+          // row synced before that guard existed must not be able to render a
+          // `javascript:` target. Belt and braces on the boundary that matters.
+          avatarUrl: safeExternalLink(external.author.avatarUrl),
+          externalUrl: safeExternalLink(external.author.url) || safeExternalLink(external.url)
+        }
+      : null;
     const allComments = mergedCommentsOf(doc, related);
     const rootSubspaceId = rootSubspaceOf(doc);
     const comments = pageOf(allComments, RETURNED_COMMENTS).map((comment) => buildComment(comment, doc.shareId, rootSubspaceId));
@@ -2486,7 +2690,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       id: doc.shareId,
       thingtime: thingtimeOf(doc),
       type: (crystal.type as PostType) || 'text',
-      author: profiles.get(doc.ownerId) || null,
+      author: externalAuthor || profiles.get(doc.ownerId) || null,
       visibility: visibilityFromAcl(aclOf(doc)) as PostVisibility,
       acl: aclOf(doc),
       // owner-only: the hidden-link secret, only while the acl says hidden
@@ -2641,7 +2845,7 @@ export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
     const membership = subspaceId ? viewer?.subspaceRoles?.get(subspaceId) || null : null;
     if (!isActiveSubspaceMember(membership) && !canModerateSubspace(membership)) return false;
   }
-  return aclAllows(aclOf(doc), viewer, doc.ownerId);
+  return aclAllows(aclOf(doc), viewer, doc.ownerId, doc.shareId);
 };
 
 // ---------------------------------------------------------------------------
@@ -2702,7 +2906,14 @@ export const canViewInherited = async (
 		return false;
 	}
   const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findByShareId);
-  if (terminal) return canView(terminal, viewer);
+  if (terminal) {
+    // tt:extsourced / legacy tt:extacct/ audiences (synced external posts and
+    // their comment chains) resolve live against the viewer's connections —
+    // loaded lazily here and memoised on the viewer object for the request path
+    if (hasExtSourcedAudience(terminal)) await ensureExtSourced(viewer, terminal.shareId);
+    if (hasExtacctAudience(terminal)) await ensureExtAccountIds(viewer);
+    return canView(terminal, viewer);
+  }
 
   // Attachments are independently stored media objects. If a parent was
   // deleted or a legacy migration left the relation dangling, preserve an
@@ -3312,7 +3523,8 @@ export const getThing = async (
 	// aggregates (those resolvers are target-generic), and the parent walk
 	// links the page back to the post the media is bound to.
 	const isMediaAttachment = thingtimeOf(doc).includes('attachment');
-	const post = isPostThing(doc) || isComment || isMediaAttachment ? (await toPublicPosts([doc], viewer, options))[0] : null;
+	// post-like (not just post) so synced third-party posts project here too
+	const post = isPostLikeThing(doc) || isComment || isMediaAttachment ? (await toPublicPosts([doc], viewer, options))[0] : null;
 
   let parent: PublicPost | null = null;
   let root: PublicPost | null = null;
@@ -4084,7 +4296,9 @@ export const sharePost = async (
   if (!viewer?.id) return fail(401, 'Unauthorized');
   const viewerId = viewer.id;
   const original = await findViewableThing(shareId, viewer);
-  if (!original || !isPostThing(original)) return fail(404, 'Post not found');
+  // external posts share like posts (the tt:all-only gate below still keeps
+  // personal external posts unshareable)
+  if (!original || !isPostLikeThing(original)) return fail(404, 'Post not found');
   if (patSandboxBlocks(viewer, original)) return patSandboxFail();
   // custom audiences: sharing is amplification — comment capability required
   if (await customEngageBlocks(viewer, original)) return customEngageFail();
