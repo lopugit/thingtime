@@ -18,11 +18,11 @@ import { thingBrowseHref } from './thingsLocation';
 import {
   THINGS_GROUP_OPTIONS,
   THINGS_SORT_OPTIONS,
-  ThingsDisplayMode,
-  ThingsGroupBy,
-  ThingsSort,
-  ThingsThing,
-  ThingsView,
+  type ThingsDisplayMode,
+  type ThingsGroupBy,
+  type ThingsSort,
+  type ThingsThing,
+  type ThingsView,
   isDuplicable,
   isFolder,
   primaryKindOf
@@ -48,26 +48,30 @@ export type ThingsItemMenuArgs = {
 
 export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, locationSearch }: ThingsItemMenuArgs): ThingContextMenuModel => {
   const folder = isFolder(thing);
+  const archive = thing.thingtime.length === 1 && thing.thingtime[0] === 'chat-archive';
   const bulkHint = actCount > 1 ? `Applies to ${actCount} selected Things` : undefined;
   return buildThingEntityMenu({
-    open: { href: thingBrowseHref(thing, locationSearch) }, inspect: { href: `/thing/${encodeURIComponent(thing.id)}?from=things` }, 'copy-link': true,
+    open: { href: thingBrowseHref(thing, locationSearch) }, inspect: !archive && { href: `/thing/${encodeURIComponent(thing.id)}?from=things` }, 'copy-link': true,
     edit: canRename(thing) && actCount === 1,
-    share: { hint: bulkHint || (folder ? 'Audience for the folder — optionally everything inside' : undefined) },
-    delete: { hint: bulkHint, kbd: '⌫' },
+    share: !archive && { hint: bulkHint || (folder ? 'Audience for the folder — optionally everything inside' : undefined) },
+    delete: !archive && { hint: bulkHint, kbd: '⌫' },
     'send-to-lopu': actCount === 1 && canOfferRecordingHandoff(thing, ownerId)
   }, [
-    ...(!folder ? [{ id: 'preview', actions: [{ id: 'preview', command: 'preview', label: 'Preview', icon: '👀', lucide: 'eye' }] }] : []),
+    ...(!folder && !archive ? [{ id: 'preview', actions: [{ id: 'preview', command: 'preview', label: 'Preview', icon: '👀', lucide: 'eye' }] }] : []),
     { id: 'organise', label: 'Organise', actions: [
       { id: 'move', command: 'move', label: `${countLabel('Move', actCount)} to…`, icon: '📁', lucide: 'folder-input' }
     ] },
     { id: 'clipboard', label: 'Clipboard', actions: [
       { id: 'copy', command: 'copy', label: countLabel('Copy', actCount), icon: '📋', lucide: 'copy', kbd: '⌘C',
         hint: folder ? 'Folders copy everything inside' : undefined },
-      ...(isDuplicable(thing) ? [{ id: 'duplicate', command: 'duplicate', label: countLabel('Duplicate', actCount), icon: '🐑', lucide: 'copy-plus',
+      ...(!archive && isDuplicable(thing) ? [{ id: 'duplicate', command: 'duplicate', label: countLabel('Duplicate', actCount), icon: '🐑', lucide: 'copy-plus',
         hint: folder ? 'Duplicates the folder and everything inside' : undefined }] : []),
       { id: 'cut', command: 'cut', label: countLabel('Cut', actCount), icon: '✂️', lucide: 'scissors', kbd: '⌘X' },
+      { id: 'download', command: 'download', label: `${countLabel('Download', actCount)}…`, icon: '📥', lucide: 'download' },
+      // portable paste: the OS clipboard may hold a Thingtime transfer even when
+      // this tab's clipboard is empty, so the entry stays enabled
       ...(folder ? [{ id: 'paste-into', command: 'paste-into', label: `Paste ${clipboardCount || ''} into folder`.replace('  ', ' '),
-        icon: '📥', lucide: 'clipboard-paste', disabled: !clipboardCount, hint: clipboardCount ? undefined : 'Nothing on the clipboard yet' }] : [])
+        icon: '📥', lucide: 'clipboard-paste', hint: 'Paste portable content from your clipboard' }] : [])
     ] }
   ]);
 };
@@ -155,6 +159,7 @@ export const buildThingsBackgroundMenu = ({
       id: 'create',
       actions: [
         { id: 'new-folder', command: 'new-folder', label: 'New folder…', icon: '📁', lucide: 'folder-plus' },
+        { id: 'import', command: 'import', label: 'Import…', icon: '📥', lucide: 'upload' },
         {
           id: 'paste',
           command: 'paste',
@@ -162,8 +167,7 @@ export const buildThingsBackgroundMenu = ({
           icon: '📥',
           lucide: 'clipboard-paste',
           kbd: '⌘V',
-          disabled: !clipboardCount,
-          ...(clipboardCount ? {} : { hint: 'Copy or cut things first' })
+          hint: 'Paste a Thingtime transfer from your clipboard'
         }
       ]
     },

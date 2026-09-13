@@ -118,6 +118,7 @@ export type ThingsItemAction =
   | 'move'
   | 'share'
   | 'copy'
+  | 'download'
   | 'cut'
   | 'duplicate'
   | 'copyLink'

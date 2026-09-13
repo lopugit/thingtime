@@ -10,6 +10,7 @@ import {
 	validateCompletedAttachmentParts
 } from './attachments';
 import {
+	assertUnboundPostAnnotation,
 	attachmentDeleteClaimFence,
 	attachmentDeletingRetryAt,
 	attachmentDeletingRetryUpdate,
@@ -75,6 +76,77 @@ const noopS3 = (overrides: Partial<AttachmentS3> = {}): AttachmentS3 => ({
 	isNoSuchUpload: () => false,
 	isNotFound: () => false,
 	...overrides
+});
+
+test('excluded export bytes skip storage without bypassing live authorization', async () => {
+	let doc = attachmentDoc({ attachmentState: 'ready', targetId: 'post', objectVersionId: undefined });
+	let storageReads = 0;
+	const service = createAttachmentService({ store: { getById: async () => doc } as any, now: () => now,
+		customMongoActive: () => false, canViewTarget: async () => false, canViewSharedTarget: async () => false,
+		getS3: () => { storageReads++; throw new Error('Storage unavailable'); } });
+	assert.deepEqual(await service.describeTransfer({ id: doc.ownerId }, doc.shareId, { includeFiles: false }), { ok: true, excluded: true });
+	assert.equal(storageReads, 0);
+	assert.equal((await service.describeTransfer({ id: 'stranger' }, doc.shareId, { includeFiles: false })).ok, false);
+	assert.equal((await service.describeTransfer({ id: doc.ownerId, sharedRoot: 'wrong-root' }, doc.shareId, { includeFiles: false })).ok, false);
+	assert.equal((await service.describeTransfer({ id: doc.ownerId }, doc.shareId)).ok, false);
+	assert.equal(storageReads, 1);
+	doc = { ...doc, moderation: { status: 'blocked' } } as AttachmentDoc;
+	assert.equal((await service.describeTransfer({ id: doc.ownerId }, doc.shareId, { includeFiles: false })).ok, false);
+});
+
+test('import annotation fence refuses already-bound, expired and non-post drafts', () => {
+	const fresh = attachmentDoc({ attachmentState: 'ready', attachmentPurpose: 'post' });
+	assert.doesNotThrow(() => assertUnboundPostAnnotation(fresh, now));
+	for (const patch of [{ targetId: 'existing-gallery' }, { attachmentPurpose: 'message' }, { attachmentProfileSlot: 'avatar' }, { attachmentExpiresAt: new Date(0) }, { attachmentExpiresAt: new Date(NaN) }, { attachmentExpiresAt: undefined }]) {
+		assert.throws(() => assertUnboundPostAnnotation({ ...fresh, ...patch } as AttachmentDoc, now), /fresh unbound/);
+	}
+});
+
+test('durable recording export and download work without a draft expiry, for the owner only', async () => {
+	const saved = attachmentDoc({ attachmentPurpose: 'recording', attachmentState: 'ready', attachmentExpiresAt: undefined, objectVersionId: 'version-1' });
+	let doc = saved;
+	let signs = 0;
+	let custom = false;
+	const service = createAttachmentService({ store: { getById: async () => doc } as any, now: () => now,
+		customMongoActive: () => custom, canViewSharedTarget: async () => false,
+		getS3: () => noopS3({ signDownload: async () => { signs++; return { url: 'https://s3.example/recording', expiresAt: now.toISOString() }; } }) });
+	assert.equal((await service.describeTransfer({ id: saved.ownerId }, saved.shareId)).ok, true);
+	assert.equal((await service.download({ id: saved.ownerId }, saved.shareId, true)).ok, true);
+	assert.equal(signs, 1);
+	for (const viewer of [null, { id: 'stranger' }, { id: 'admin', isAdmin: true }, { id: saved.ownerId, sharedRoot: 'unrelated-page' }]) {
+		assert.equal((await service.describeTransfer(viewer, saved.shareId)).ok, false);
+		assert.equal((await service.download(viewer, saved.shareId, true)).ok, false);
+	}
+	for (const patch of [
+		{ attachmentPurpose: 'post' }, { attachmentImportDraft: true }, { attachmentLinked: true },
+		{ attachmentProfileSlot: 'avatar' }, { attachmentExpiresAt: new Date(0) },
+		{ attachmentExpiresAt: new Date(NaN) }, { attachmentState: 'pending' },
+		{ moderation: { status: 'blocked' } }
+	]) {
+		doc = { ...saved, ...patch } as AttachmentDoc;
+		assert.equal((await service.describeTransfer({ id: saved.ownerId }, saved.shareId)).ok, false);
+	}
+	doc = saved; custom = true;
+	assert.equal((await service.download({ id: saved.ownerId }, saved.shareId, true)).ok, false);
+	assert.equal(signs, 1);
+});
+
+test('portable linked metadata refuses flagged sources even for administrators and never signs a redirect', async () => {
+	let doc = attachmentDoc({ attachmentLinked: true, attachmentState: 'ready', attachmentPurpose: 'post', targetId: 'page', objectSizeBytes: 0,
+		crystal: { name: 'a.png', size: 0, contentType: 'image/png', mediaKind: 'image', url: 'https://example.com/a.png' } });
+	let allowed = true;
+	const service = createAttachmentService({ store: { getById: async () => doc } as any, now: () => now,
+		customMongoActive: () => false, canViewSharedTarget: async () => allowed,
+		getS3: () => { throw new Error('Links must not access S3'); } });
+	const viewer = { id: 'user-1', isAdmin: true, sharedRoot: 'page' };
+	assert.equal((await service.describeTransfer(viewer, doc.shareId)).ok, true);
+	assert.equal((await service.download(viewer, doc.shareId, false)).ok, false);
+	for (const status of ['blocked', 'pending', 'nsfw'] as const) {
+		doc = { ...doc, moderation: { status } };
+		assert.equal((await service.describeTransfer(viewer, doc.shareId)).ok, false);
+	}
+	doc = { ...doc, moderation: undefined }; allowed = false;
+	assert.equal((await service.describeTransfer(viewer, doc.shareId)).ok, false);
 });
 
 test('shared media downloads reauthorize without bypassing readiness, moderation or home-storage fences', async () => {
@@ -1831,7 +1903,7 @@ test('global expired draft scan is expiry-first, unattached, bounded, and repeat
 		attachmentExpiresAt: { $lte: now },
 		$or: [
 			{ targetId: { $exists: false }, attachmentState: 'pending' },
-			{ targetId: { $exists: false }, attachmentState: 'ready', attachmentPurpose: { $ne: 'recording' } },
+			{ targetId: { $exists: false }, attachmentState: 'ready', $or: [{ attachmentPurpose: { $ne: 'recording' } }, { attachmentPurpose: 'recording', attachmentImportDraft: true }] },
 			{
 				targetId: { $exists: false },
 				attachmentState: 'finalizing',
