@@ -33,7 +33,7 @@
     "preview": "node .output/server/index.mjs",
     "sync:nitro-template": "node scripts/sync-nitro-template.mjs",
     "test:acl": "node --import tsx --test app/api/utils/things/aclChainCore.test.ts",
-    "test:account-hints": "node --import tsx --test app/api/utils/auth/accountHintsHeaders.test.ts app/api/utils/deployment/dataEnvironment.test.ts app/components/Account/accountHintOrigin.test.ts app/components/Account/ssoHub.test.ts",
+    "test:account-hints": "node --import tsx --test app/api/utils/auth/accountHintsHeaders.test.ts app/api/utils/deployment/dataEnvironment.test.ts app/components/Account/accountHintOrigin.test.ts app/components/Account/ssoHub.test.ts app/components/Account/ssoNavigation.test.ts",
     "test:actions": "node --import tsx --test app/components/Actions/*.test.ts app/components/ComponentsLibrary/componentTemplate.test.ts app/api/utils/actions/*.test.ts",
     "test:action-packs": "node --import tsx --test app/api/utils/actions/packs/packs.test.ts app/api/utils/actions/packs/astro/astro.test.ts app/api/utils/actions/packs/pokeworld/pokeworld.test.ts",
     "test:admin-integrations": "node --import tsx --test app/api/utils/admin/integrationCore.test.ts app/components/Admin/adminRoutesCore.test.ts",

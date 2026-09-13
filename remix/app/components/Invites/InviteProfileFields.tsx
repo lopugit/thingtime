@@ -10,7 +10,7 @@ export const InviteProfileFields = ({
 	onPreparingChange
 }: {
 	value: InviteProfile;
-	onChange: (value: InviteProfile) => void;
+	onChange: React.Dispatch<React.SetStateAction<InviteProfile>>;
 	disabled?: boolean;
 	onPreparingChange?: (busy: boolean) => void;
 }) => {
@@ -43,7 +43,7 @@ export const InviteProfileFields = ({
 							onPreparingChange?.(true);
 							try {
 								const avatarUrl = await avatarThumbnail(file);
-								if (selection.current === current) onChange({ ...value, avatarUrl });
+								if (selection.current === current) onChange(current => ({ ...current, avatarUrl }));
 							} catch (error) {
 								lopu({ title: 'Could not use this photo', description: (error as Error).message, status: 'error' });
 							} finally {
@@ -54,7 +54,7 @@ export const InviteProfileFields = ({
 					/>
 				</FormControl>
 				{value.avatarUrl && (
-					<Button size="xs" variant="ghost" isDisabled={disabled || preparing} onClick={() => onChange({ ...value, avatarUrl: null })}>
+					<Button size="xs" variant="ghost" isDisabled={disabled || preparing} onClick={() => onChange(current => ({ ...current, avatarUrl: null }))}>
 						Remove photo
 					</Button>
 				)}
@@ -67,7 +67,7 @@ export const InviteProfileFields = ({
 					value={value.displayName}
 					maxLength={100}
 					disabled={disabled || preparing}
-					onChange={(e) => onChange({ ...value, displayName: e.target.value })}
+					onChange={(e) => { const displayName = e.target.value; onChange(current => ({ ...current, displayName })); }}
 					autoComplete="name"
 				/>
 			</FormControl>
@@ -78,7 +78,7 @@ export const InviteProfileFields = ({
 					value={value.username}
 					maxLength={40}
 					disabled={disabled || preparing}
-					onChange={(e) => onChange({ ...value, username: e.target.value })}
+					onChange={(e) => { const username = e.target.value; onChange(current => ({ ...current, username })); }}
 					autoCapitalize="none"
 					autoComplete="username"
 					pattern="[a-zA-Z0-9][a-zA-Z0-9._-]{1,39}"

@@ -3,6 +3,7 @@ import { Box, Button, Flex, IconButton, Input, Modal, ModalContent, ModalOverlay
 import { PictureInPicture2, Plus, X } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
+import { withPostRequestDeadline } from '~/hooks/postRequest';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { AttachmentComposer, type AttachmentComposerHandle } from '~/components/Attachments/AttachmentComposer';
 import {
@@ -32,7 +33,7 @@ import { UserAvatarCircle } from '~/components/Nav/Drawer/DrawerContent';
 import { EditorSplit } from '~/components/Thingtime/EditorSplit';
 import { ThingView } from '~/components/Thingtime/ThingView';
 import { useThingtime } from '~/components/Thingtime/useThingtime';
-import { hasUnknownMutationOutcome } from '~/hooks/apiFailure';
+import { apiErrorMessage, hasUnknownMutationOutcome } from '~/hooks/apiFailure';
 import { RAINBOW } from '~/theme/rainbow';
 import { extractInlineHashtags } from './hashtags';
 import { MentionAutocomplete } from './MentionAutocomplete';
@@ -699,6 +700,12 @@ export const PostComposer = (props: PostComposerProps) => {
 		};
 
 		try {
+			if (pendingSubmission?.unknownOutcome && !isComment && !isEdit && postShareId && committedExpectation) {
+				try {
+					const saved = await withPostRequestDeadline(signal => api.v1.things.get({ id: postShareId }, { signal }), 5_000);
+					if (matchesCommittedPostCreate(saved, committedExpectation)) { finishPost(saved.post); return; }
+				} catch { /* Retry only the already-frozen identity and payload. */ }
+			}
 			if (isEdit) {
 				// full-crystal replace: the server sanitizer rebuilds { type, text,
 				// images, listing, thing } per type, so switching type clears the
@@ -760,7 +767,7 @@ export const PostComposer = (props: PostComposerProps) => {
 				for (const delay of [0, 150, 400]) {
 					if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
 					try {
-						const readBack = await api.v1.things.get({ id: postShareId });
+						const readBack = await withPostRequestDeadline(signal => api.v1.things.get({ id: postShareId }, { signal }), 5_000);
 						if (matchesCommittedPostCreate(readBack, committedExpectation)) {
 							reconciled = readBack.post as PublicPost;
 						}
@@ -788,7 +795,11 @@ export const PostComposer = (props: PostComposerProps) => {
 					pendingPostSubmissionRef.current = null;
 					setSubmissionUncertain(false);
 				}
-				lopu({ title: isComment ? 'Comment did not go through 😞' : 'Post did not go through 😞', status: 'error' });
+				lopu({
+					title: preserveAmbiguousSubmission ? 'Still confirming your post' : isComment ? 'Comment did not go through 😞' : 'Post did not go through 😞',
+					description: apiErrorMessage(error, 'Please try again. Your draft is still here.'),
+					status: preserveAmbiguousSubmission ? 'info' : 'error'
+				});
 			}
 		} finally {
     setPosting(false);
@@ -854,8 +865,7 @@ export const PostComposer = (props: PostComposerProps) => {
 					{submissionUncertain && !posting && (
 						<Flex flexDirection="column" alignItems="center" textAlign="center" rowGap={3} maxWidth="360px">
 							<Text fontSize="sm" color={TEXT}>
-								Thingtime is still checking whether this exact {isComment ? 'comment' : 'post'} went live. The draft is frozen so retrying cannot
-								create a duplicate.
+								Thingtime could not confirm whether this exact {isComment ? 'comment' : 'post'} went live. Your draft is kept safe. Check again to recover the saved post or retry the same submission.
 							</Text>
 							<Button size="sm" borderRadius={RADIUS_MD} onClick={handlePost}>
 								Check and retry safely
