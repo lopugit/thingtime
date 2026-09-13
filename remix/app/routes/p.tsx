@@ -15,6 +15,7 @@ import { installSuite, installSuiteOnServer, suiteKeyFromActionKey, suiteKeyOfPa
 import { useWebpageDraft } from '../components/Builder/useWebpage';
 import { WebpageRuntimeProvider } from '../components/Builder/webpageRuntime';
 import { ForkSharedThingButton } from '../components/Sharing/ForkSharedThingButton';
+import { ThingTransferControls } from '~/components/Things/ThingTransferControls';
 import { useSharedMediaUrl } from '../components/Sharing/SharedMedia';
 import { mapCssMediaUrls } from '../components/Sharing/renderMediaCore';
 import type { WebpageBlock } from '../components/Builder/webpageBlocks';
@@ -249,12 +250,13 @@ export default function PublicWebpage() {
 						</Flex>
 					)}
 					{isOwner ? (
-						<Flex justifyContent="flex-end" marginBottom={2}>
+						<Flex justifyContent="flex-end" marginBottom={2} gap={2} flexWrap="wrap">
+							<ThingTransferControls id={page!.id} linkKey={linkKey} />
 							<Button as={Link} to={`/builder?page=${encodeURIComponent(page!.id)}`} size="xs" variant="outline" data-testid="p-edit-in-builder">
 								✏️ Edit in builder
 							</Button>
 						</Flex>
-					) : page ? <Flex justifyContent="flex-end" marginBottom={2}><ForkSharedThingButton id={page.id} linkKey={linkKey} webpage /></Flex> : null}
+					) : page ? <Flex justifyContent="flex-end" marginBottom={2} gap={2} flexWrap="wrap"><ThingTransferControls id={page.id} linkKey={linkKey} /><ForkSharedThingButton id={page.id} linkKey={linkKey} webpage /></Flex> : null}
 					<WebpageBlocksRenderer
 						blocks={(page?.crystal?.blocks as WebpageBlock[]) || []}
 						componentsByRef={draft.componentsByRef}

@@ -5477,8 +5477,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
 	endpoint({
 		id: 'attachment-uploads',
-		contractVersion: '1.2.0',
-		featureVersion: '1.2.0',
+		contractVersion: '1.3.0',
+		featureVersion: '1.3.0',
 		group: 'attachments',
 		title: 'Start attachment upload',
 		endpoint: '/api/v1/attachments/uploads',
@@ -5493,7 +5493,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		},
 		methods: ['POST'],
 		steps: [
-			'POST a stable random requestId, filename, browser-reported contentType, exact sizeBytes, and the surface purpose: post, comment, message, profile-avatar, profile-banner, custom-emoji, or recording.',
+			'POST a stable random requestId, filename, browser-reported contentType, exact sizeBytes, and the surface purpose: post, comment, message, profile-avatar, profile-banner, custom-emoji, recording, or recording-import.',
+			'Recording-import requires private-upload approval. It stamps recording purpose plus a server-owned import-draft marker, retains draft expiry after completion and stays out of My Things until the dedicated import commit. Its request fingerprint differs from ordinary recordings; expired or already-committed imports cannot be resumed. Supply this ready upload to the recording adapter of /api/v1/things/import.',
 			'Recording purpose requires private-upload approval and produces an owner-private standalone Thing. Replaying its exact request after completion returns upload.state=ready and expiresAt=null; do not PUT parts again.',
 			'Split the file using partSizeBytes; the final part may be smaller.',
 			'Compute base64 SHA-256 for each part and request its signed PUT URL.',
@@ -5601,8 +5602,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-upload-complete',
-		contractVersion: '1.2.0',
-		featureVersion: '1.2.0',
+		contractVersion: '1.3.0',
+		featureVersion: '1.3.0',
 		group: 'attachments',
 		title: 'Complete attachment upload',
 		endpoint: '/api/v1/attachments/uploads/complete',
@@ -5618,7 +5619,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		methods: ['POST'],
 		steps: [
 			'Wait for every direct S3 PUT to succeed.',
-			'Recording-purpose completions retain the owner-private attachment in /things without draft expiry or a parent binding. All other purposes retain their existing draft lifetime.',
+			'Ordinary recording completions retain the owner-private attachment in /things without draft expiry or a parent binding. Recording-import completions keep their draft marker and expiry until a dedicated import commit; all other purposes retain their existing draft lifetime. Purpose and moderation are never imported from portable content.',
 			'POST the uploadId; do not send browser-trusted ETags or sizes.',
 			'Store the returned canonical {id,name,size,contentType,mediaKind} metadata (plus detectedContentType when the object stays a generic download).',
 			'Pass the attachment id in attachmentIds when creating its purpose-matched post, comment, message, or custom emoji; profile slots use their dedicated attachment-id fields. The attachmentIds order IS the display order, and PATCH /api/v1/things { id, attachmentIds } later re-sorts a post’s bound set and binds newly uploaded ready drafts appended to it.'
@@ -5834,13 +5835,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-content',
-		contractVersion: '1.6.3',
-		featureVersion: '1.6.3',
+		contractVersion: '1.6.4',
+		featureVersion: '1.6.4',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
 		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
 		detail:
+			'Saved standalone recordings without a draft expiry remain readable by their exact owner. Import drafts, expired uploads, other viewers and custom data endpoints gain no new access. ' +
 			'Root component render ttMediaRefs bindings are applied once after stored interpolation in media props/CSS, matching the browser. Only resulting rendered URLs are dependencies; unused pairs, labels and action inputs grant nothing. ' +
 			'An independently readable foreign component establishes its own freshly checked audience for its same-author authored media and bound children. The outer root remains required. Cross-author page argument overrides never inherit either author private media authority. ' +
 			'Owners may read live unattached drafts. Bound content is purpose-authorized against the exact target: post/comment ACL inheritance, active or pending chat membership, the current public profile slot, or the current personal/community emoji reference. The bucket never becomes public. ' +
@@ -6600,6 +6602,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-messages',
+    featureVersion: '1.0.1',
+    contractVersion: '1.0.1',
     group: 'messenger',
     title: 'Chat messages',
     endpoint: '/api/v1/chats/messages',
@@ -6683,6 +6687,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       }
     ],
 		notes: [
+			'Version 1.0.1 projects custom emoji references using the canonical stored-upload emoji_ plus 64 lowercase hex digits, alongside legacy IDs. Existing read access and emoji scope checks are unchanged.',
 			'Sending draws from the chats.message rate-limit bucket (120 messages per minute).',
 			'Message rows are server-managed conversation plumbing; uploaded object bytes are billed exactly once through their attachment Things and refunded only after exact-version S3 deletion.',
 			'Browser attachment sends require same-origin JSON and a full user account. Text-only session/Bearer clients retain the existing contract.'
@@ -6690,6 +6695,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-messages-edit',
+    featureVersion: '1.0.1',
+    contractVersion: '1.0.1',
+    notes: ['Version 1.0.1 preserves canonical stored-upload custom emoji IDs when projecting the edited message. Editing rights and emoji ownership checks are unchanged.'],
     group: 'messenger',
     title: 'Edit message',
     endpoint: '/api/v1/chats/messages/edit',
@@ -6780,6 +6788,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-react',
+    featureVersion: '1.0.1',
+    contractVersion: '1.0.1',
     group: 'messenger',
     title: 'React to message',
     endpoint: '/api/v1/chats/react',
@@ -6788,7 +6798,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'POST a messageId and an emoji token to add the reaction, or again to remove it. The token is either a ' +
       'unicode emoji (the same grammar post reactions use) or custom:<emojiId> referencing an uploaded custom ' +
       'emoji from the community this chat belongs to or from your personal set. The response returns the ' +
-      'refreshed reactionCounts, your own viewerReactions, and a customEmojis map for rendering custom tokens.',
+      'refreshed reactionCounts, your own viewerReactions, and a customEmojis map for rendering custom tokens. ' +
+      'Version 1.0.1 recognizes the canonical emoji_ plus 64 lowercase hex digits produced by stored-image uploads, ' +
+      'alongside legacy 6-64 character IDs. Recognition does not grant access: the existing personal/community scope checks still apply. Plain feed reactions continue rejecting custom tokens.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -8894,17 +8906,22 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // recording attachments — pending uploads and the other protected kinds
     // stay excluded (additive, on top of the sharedRoot correction)
     // Includes additive discussions and the 1.7.5 conditional-media write correction.
-    featureVersion: '1.10.0',
-    contractVersion: '1.10.0',
+    featureVersion: '1.17.0',
+    contractVersion: '1.16.0',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+			'The archive emoji projection recognizes the canonical persisted attachment purpose emoji (the upload API alias is custom-emoji). ' +
+			'Owner archive snapshots include emojis: referenced personal definitions reduced to id, name and attachmentId. Two bounded snapshot queries enforce exact owner/home scope, ready custom-emoji binding and canonical image metadata; blocked, pending, NSFW, linked, foreign or missing images are omitted and remain unavailable historical reactions. No live accounts or community membership are resolved. ' +
+			'Archive snapshots additionally include ordered attachments with targetId and canonical gallery metadata. The existing owner-only batch query projects safe labels, media type and linked URLs; blocked/noncanonical metadata is omitted, pending owner media is marked pending, and NSFW media is marked nsfw for reveal consent. No object keys, upload identifiers or moderation diagnostics are exposed. attachmentTargets still includes every binding so exports cannot silently omit quarantined files. Stored bytes remain independently authorized by the attachment content endpoint. ' +
+			'First-party user owner library lists include private chat-archive root summaries under the normal chronological/folder pagination. Historical child rows, deleting or namespace-stamped roots, PAT/app/service readers and custom data planes are excluded. Summary crystals contain only the archive name; full history remains on the dedicated archive read mode. Library responses are private/no-store. ' +
+			'GET ?id=<archive-root>&archive=true returns {ok, archive:{group,updatedAt,attachmentTargets,emojiIds}} only for the first-party owning user on the home plane. Group contains root, self, participants, messages and reactions with whitelisted historical fields. Server account IDs, permissions, live participant markers and storage metadata are omitted; root.selfParticipantId identifies the importing account for rendering. Reads are private/no-store, rate-limited and bounded to 1000 history rows, 2000 attachments and 16 MiB. Missing/deleting archives return 404; malformed or incomplete history returns a sanitized retryable 503 rather than partial history. PATs, apps and service accounts cannot use this mode; key, sharedRoot and appId parameters are rejected. Attachment IDs require separate canonical authorization to render/download, and referenced emoji IDs grant no access on their own. ' +
 			'Contextual reads preserve independently readable foreign composition boundaries and their same-author descendants. Non-owner writers may include such public/group-readable compositions, but newly unresolved private references and cross-author overrides cannot acquire inherited authority. Every audience is revalidated per invocation. ' +
 			'Stored action references include component argument defaults, savedArgs and each persisted page-block override, in that precedence order. New dependencies introduced through argument-only edits require independent read access for non-owner writers. Runtime query, viewer, result and loop values cannot mint grants. ' +
 			'Version 1.8 adds scheduled-task-run child notes: targetId is required, the default audience is owner-only, the typed crystal is bounded, and deleting the task cascades its run notes. Run notes are editable user content, not trusted security audit records. ' +
-			'Own-things lists include completed standalone recording attachments; pending uploads and all other protected kinds remain excluded. Attachment creation, metadata mutation and deletion still use their dedicated endpoints. ' +
+			'Own-things lists include exact-kind themes, feed algorithms and completed standalone recordings, while pending uploads and other protected kinds remain excluded. Managed content retains dedicated creation/mutation/deletion writers. ' +
 			'Shared webpage writers may add component references only when they can independently read the referenced component; only the owner may delegate an unrelated private component through the page. Media introduced through page-block arguments is checked against the same resolved component contexts before and after the edit; new inaccessible media is forbidden. ' +
 			'Shared writers also need independent access before inserting new first-party private media references in page, component or schema render positions, including inactive conditional property alternatives and literal CSS url/image-set values in stored render styles and page backgrounds. ' +
 			'GET id with sharedRoot and optional key reads an included component/action/schema/data dependency through the freshly authorized stored root. This first-party contextual mode preserves standalone ACLs and owner-only keys, refuses unrelated ids and app-token namespace escapes, and returns private no-store responses. It does not authorize mutations or shared-context list queries. ' +
@@ -9135,7 +9152,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       }
     ],
     notes: [
+      'DELETE accepts private chat-archive roots only for a first-party user account on the same origin and the home data plane. Whole-archive attachment cleanup precedes accounted relational deletion. Individual historical rows remain protected. Optional expectedUpdatedAt is checked in the claiming transaction; a stale preview returns 409 before object cleanup. Incomplete cleanup returns a recoverable 503 without exposing storage details. PATs, app tokens and service accounts do not gain archive access.',
       'System kinds (user, theme, feed-algorithm, waitlist) are protected: this endpoint refuses to create, update, or delete them — they are managed exclusively by their dedicated endpoints (auth/register, users/profile, themes, algorithms, waitlist).',
+      'Owner-library reads also include standalone personal custom emojis. Their content and image lifecycle remain managed by the dedicated emoji endpoints; generic creation, editing and deletion are not enabled.',
       'acl entries: tt:all, tt:user (owner), tt:userFriends, tt:userFamily, tt:user/<username>, each optionally "-" prefixed; the most specific matching entry decides and owners always view. tt:userFriends resolves against the real friend graph (accepted friendships from /api/v1/users/friend); no family graph exists yet, so tt:userFamily still resolves to the owner only.',
       'Every doc stores the root schemaVersion it was written at; admins migrate older docs via /api/v1/admin/migrations.',
       'Browse every schema kind at /schemas or GET /api/v1/schemas.',
@@ -9538,12 +9557,18 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-bulk',
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
+    // 1.4.0: first-party owners can move complete private archive roots.
+    // Dedicated home-plane moves also accept owned current-schema themes/algorithms.
     group: 'things',
     title: 'Bulk move / copy / delete / share',
     endpoint: '/api/v1/things/bulk',
     summary: 'Multi-select operations for /things: move, copy, delete, or share up to 100 owned things in one request.',
     detail:
-      'Each id runs through the exact single-item path the dedicated endpoints use (updateThing, createThing, deleteThing), so every ownership, protected-kind, folder, and validation rule applies identically — bulk is a loop, never a second code path. move rewrites each thing’s folderId (folderId null or omitted = the /things root; the destination must be one of YOUR folder things). copy mints brand-new things through the real create path (fresh shareId, storage accounting, acl preserved) — comment/reaction/save/share things can’t be copied; copying a FOLDER copies its whole subtree (bounded at 500 things), skipping uncopyable kinds with per-item copied/skipped counts. delete cascades like the single delete (attached comments/reactions/saves go with each thing; deleting a folder re-parents its contents to the folder’s parent instead of deleting them). share applies an acl (or legacy visibility circle) to each thing; with recursive true, folders also apply it to everything inside (same 500-thing bound) — inherit-locked things are counted as skipped, never silently changed. Results are per-item: one bad id never fails the batch.',
+      'Owned private chat archives can be moved by their first-party user owner on same-origin requests. Only complete archive roots move: deleting roots, historical children, scoped credentials and service accounts cannot enter this path. A home transaction checks source/destination ownership and source version, advancing the destination fence; only folderId and updatedAt change, never history, identities, ACLs or storage accounting. ' +
+      'Owned standalone personal emojis can be moved through the dedicated placement writer; community-bound emojis cannot be filed. ' +
+      'Each id runs through its canonical writer (updateThing, createThing, deleteThing, or the dedicated managed-content placement writer); ownership, protected-kind, folder, and validation rules remain enforced. move rewrites each thing’s folderId (folderId null or omitted = the /things root; the destination must be one of YOUR folder things). copy mints brand-new things through the real create path (fresh shareId, storage accounting, acl preserved) — comment/reaction/save/share things can’t be copied; copying a FOLDER copies its whole subtree (bounded at 500 things), skipping uncopyable kinds with per-item copied/skipped counts. delete cascades like the single delete (attached comments/reactions/saves go with each thing; deleting a folder re-parents its contents to the folder’s parent instead of deleting them). share applies an acl (or legacy visibility circle) to each thing; with recursive true, folders also apply it to everything inside (same 500-thing bound) — inherit-locked things are counted as skipped, never silently changed. Results are per-item: one bad id never fails the batch.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -9551,6 +9576,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     methods: ['POST'],
     steps: [
       'POST op (move, copy, delete, or share), ids (1–100 shareIds you own), and folderId for move/copy destinations.',
+      'Move also supports owned durable standalone recordings through the dedicated home-plane placement writer. Folder-only placement preserves bytes, ACLs and accounting; drafts, bound/profile media and custom-endpoint placement are refused. Generic protected-record editing remains forbidden.',
       'share additionally takes acl (or legacy visibility) and optional recursive: true to flow a folder’s audience to everything inside.',
       'Read the per-item results list — each entry carries ok plus error (failures), newId (copies), and copied/applied/skipped counts for recursive folder ops.',
       'succeeded and failed counts summarise the batch.',
@@ -12283,6 +12309,70 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         }
       }
     ]
+  }),
+  endpoint({
+    id: 'things-export',
+    featureVersion: '1.14.0',
+    contractVersion: '1.14.0',
+    // 1.12.0: include shared emoji content referenced by authorized live history.
+    // Standalone emoji exports remain owner-only; stored bytes keep current gates.
+    // 1.11.1: preserve the canonical ISO crystal edit/deletion timestamps.
+    // 1.11.0: first-party members export ordinary live chats as private archives.
+    // 1.10.0: owner folder traversal includes complete private archive roots.
+    // 1.9.0: first-party owners re-export complete private archive histories;
+    // optional traversal never strips participants/messages/reactions. Required
+    // media and custom emojis remain owner-authorized and cannot be omitted.
+    // 1.7.1: excluded file bytes do not require storage access; read gates remain.
+    // 1.7.0: owned themes/algorithms retain included folder placement.
+    // 1.6.1: durable recordings pass owner-only live attachment reads without draft expiry.
+    // 1.6.0: recordings preserve folderId when their parent is included.
+    group: 'things',
+    title: 'Plan a portable Thing export',
+    notes: [
+      'External HTTPS participant avatars are downloaded only after live-chat membership and profile resolution. Downloads pin public DNS to the socket, omit credentials, refuse redirects, and enforce ten seconds, 2 MiB compressed and 4 million decoded pixels per image. PNG/JPEG/GIF/WebP bytes enter plan-only inlineBase64 entries bound to exactly one historical participant; clients checksum them into ZIP files and never retain the source URL. HTTP, redirected, unsafe, oversized or unreadable avatars fail the complete export. Imported copies use ordinary private uploads and never refetch the original URL.',
+      'Exported live messages include contiguous zero-based position values so fresh imported IDs cannot reorder equal-timestamp segments. When any archive message supplies position, all messages must provide distinct values spanning zero through messageCount minus one. Older archives without positions retain timestamp ordering.',
+      'AI chat archives preserve historical assistant avatarPreset (lopu/chatgpt/claude) and bounded inert toolHistory receipts (name, ok, summary only). No target IDs, approvals, billing or connector metadata is portable. Live-device sources require completely synchronized history; incomplete or ambiguous segmented messages fail explicitly. External HTTPS profile avatars use the bounded image snapshot path described above.',
+      'Live ordinary chat IDs require first-party user scope and current active/pending membership. History is read in one home-database snapshot, including former participants and all threads, then converted to private archive rows. Import replaces self with the importer and never sends messages or restores live memberships. Preparation is bounded to 30 seconds. Managed avatars and message media use canonical attachment reads; inaccessible or incomplete media fails the entire export. External HTTPS avatars use the bounded image snapshot path; unsupported URL forms fail explicitly. Custom-emoji dependencies referenced by this authorized live history are resolved in one bounded batch, including other participants’ emoji. Hidden, foreign or incomplete definitions fail; stored bytes retain current attachment gates. Source account, community and folder fields are excluded.',
+      'Private chat-archive roots can be re-exported only by their first-party user owner. Every participant, message, reply and reaction is included regardless of optional traversal flags; independent history-row roots are rejected. All archive media and required custom emoji definitions must remain readable and included, or the entire export fails. Re-import creates fresh private ownership; archived identities never become live accounts or memberships.',
+      'Standalone custom emojis export only for their owner; authorized live-history dependencies use the separate content-only path. Each portable custom-emoji Thing contains name and emojiFileId, requires image bytes, and excludes source community scope. Legacy inline images use a bounded plan-only inlineBase64 file field (512 KiB image maximum); clients decode that into checksummed ZIP bytes and omit inlineBase64 from the manifest. Stored images use the normal content endpoint.'
+    ],
+    // 1.5.0: owned standalone recordings require stored bytes. Their portable
+    // attachment Thing contains only recordingFileId; plan-only sourceId on the
+    // file identifies the authorized download and never enters the archive.
+    endpoint: '/api/v1/things/export',
+    summary: 'Read authorized content, folder descendants, app dependencies and file/link descriptors, including bounded annotations. Owned/public themes use dedicated readers. Feed algorithms use owner-only home-plane reads, including legacy profiles: exports contain name, emoji, exact weights, eventCount and lastTrainedAt, never shared status, lineage or active selection. Algorithm files contain private interest weights; public preview links do not authorize full export.',
+    detail: 'Read-only POST. Owned standalone recordings use an attachment Thing with only crystal.recordingFileId and exactly one required stored byte entry. Its plan-only sourceId identifies the authenticated content download; sourceId never enters portable files. includeFiles=false fails for recordings. Reuses live Thing and composition audience checks, canonicalizes executable aliases, and drains folder pagination. File metadata uses the same live moderation, audience and object-state gates as downloads. No ownership, ACL, tokens, object keys or signed URLs are exported. Clients download stored files through the normal content endpoint and compute checksums. Optional links contain validated external URLs, mediaKind and owner annotations; attachmentOrder preserves mixed gallery order. Linked bytes are never fetched. Flagged linked media, inaccessible dependencies, unsupported managed records and bounds violations fail explicitly rather than truncating.',
+    auth: { mode: 'optional', description: 'Session or anonymous public/keyed content access. Folder enumeration requires ownership. App tokens and PATs are not supported.' },
+    methods: ['POST'],
+    steps: ['POST JSON { ids, key?, includeChildren?, includeDependencies?, includeFiles?, includeLinks? }. All inclusion flags default to true. Links may be included in JSON independently of stored files.', 'Bounds: 1000 Things, 2000 total file/link entries, 512 MiB file bytes, 16 MiB plan JSON and 120 seconds. Existing composition bounds also apply.', 'Response plan contains roots, content-only things, files, optional links and attachmentOrder. Files carry id, targetId, name, mime, bytes and optional sharedRoot. Links carry id, targetId, plain http(s) url, mediaKind and optional title, description and filenamePreview. Keep the presented key only in memory for authorized downloads, never in the portable archive.'],
+    requestExamples: [{ name: 'Export a folder', description: 'Include its complete contents.', method: 'POST', body: { ids: ['folder-id'] } }],
+    responseExamples: [{ status: 200, description: 'Authorized content plan.', body: { ok: true, plan: { roots: ['note'], things: [{ id: 'note', thingtime: ['data'], crystal: { name: 'Note' } }], files: [] } } }]
+  }),
+  endpoint({
+    id: 'things-import',
+    // 1.4.0: owner-only algorithm snapshots and private validated restoration.
+    // 1.9.0: atomic private chat archives with importer identity substitution.
+    // 1.9.1: accept canonical stored-upload custom emoji IDs in archives.
+    featureVersion: '1.10.0',
+    contractVersion: '1.10.0',
+    notes: [
+      'Historical participants may carry avatarPreset lopu, chatgpt or claude instead of avatarFileId, never on self. Messages may carry toolHistory with at most 20 display-only {name, ok, summary} receipts (80/240 character limits). Extra fields and deleted-message receipts are rejected. These fields survive private storage and re-export; they never authorize tools or resolve live accounts.',
+      'Chat archive records use only chat-archive, chat-archive-participant, chat-archive-message and chat-archive-reaction kinds. A root contains name, topic, chatType (dm/group/channel), createdAt and selfParticipantId. Participants target the root and contain username, displayName, nickname, joinedAt and optional avatarFileId. Messages target the root and contain participantId, text, createdAt, deleted and optional editedAt, replyToId, threadRootId and systemText. Reactions target a message and contain participantId, emoji and createdAt. Dates are canonical millisecond UTC ISO strings; all participant, reply and thread references must stay inside the same archive.',
+      'The importer replaces the self participant. Other participants are archived snapshots, never live user accounts. Only roots can have folderId; archive records cannot carry extended fields, tags, roles, source user IDs or ACLs. File avatars require one fresh stored PNG/JPEG/GIF/WebP file; deleted message tombstones cannot carry text or media. Custom reaction tokens require an included custom-emoji definition. Each complete archive is inserted and file-bound atomically on the home plane after its folders and emoji dependencies. No memberships, messages to real recipients, invitations or notifications are created.',
+      'A failed later import rolls back each previously created archive through its dedicated child-first attachment cleanup and accounted deletion. Incomplete cleanup returns the archive root in remainingIds and retains earlier dependencies. Private archive export, owner lifecycle controls and read-only historical rendering are supported.',
+      'Custom emoji image files must be uploaded with purpose custom-emoji. Each emoji imports through the canonical writer into the personal library with a suffixed name and fresh server attempt identity. MIME/size, freshness and ownership are checked in the binding transaction; existing emojis and community membership are not restored or changed. New copies use the dedicated emoji cleanup path if a later import step fails.'
+    ],
+    // Dedicated themes/algorithms/emojis use remapped folders or the selected destination.
+    group: 'things',
+    title: 'Import portable Things',
+    endpoint: '/api/v1/things/import',
+    summary: 'Import private caller-owned content, preserving templated media and file/link annotations. Themes and feed algorithms use dedicated home-plane writers with fresh IDs and quota checks, without changing active selections. Themes accept name and token data. Algorithms accept name, emoji, weights, eventCount and canonical ISO lastTrainedAt or null; each weight bucket allows at most 10000 keys of at most 512 characters and finite weights from -50 to 50. Malformed data fails without truncation. Imported algorithms start unshared with no branch lineage and never execute training events. Both kinds retain folder placement but reject child Things, extended fields and gallery files. Other account/control kinds remain protected.',
+    detail: 'Recording attachment Things contain only crystal.recordingFileId referencing one stored file targeted at that Thing, with optional folderId but without extra fields, children or links. Upload those bytes with purpose recording-import and private-upload approval. Import validates a fresh ready owner draft, commits annotations and durability atomically without changing purpose or moderation, returns the new recording ID, and remaps embedded recording URLs. Included recording folders are remapped after all parent folders exist; otherwise recordings use the selected import destination. Placement uses the dedicated transactional home-plane writer, without changing bytes or ACLs. Existing recordings cannot be reused. Later failures delete newly committed recordings through the attachment lifecycle; deferred cleanup appears in remainingIds. Other content allocates fresh IDs, remaps composition, folder, target and schema references, and uses normal schema validation, quota accounting and transactional attachment binding. Never restores ownership, ACL grants, link secrets, site routes or managed account records. Other stored files use normal post-purpose uploads. Optional links recreate private URL-backed gallery drafts without fetching external bytes. Repeated successful requests create separate copies; never automatically retry an uncertain mutation. Returns linksImported separately from filesImported.',
+    auth: { mode: 'session', description: 'Requires a first-party user account. Cross-origin requests, app tokens, PATs and service accounts are not supported.' },
+    methods: ['POST'],
+    steps: ['POST JSON { manifest, files?, folderId? }. The manifest uses format thingtime.transfer, version 1, roots, things, files and optional links plus attachmentOrder. Links use the export descriptor shape; IDs must be unique across Things/files/links. When links exist, attachmentOrder must cover every file/link exactly once.', 'At most 1000 Things and 2000 total file/link entries; manifest content is bounded to 16 MiB. The request has 1 MiB additional upload-map headroom and execution is bounded to 120 seconds.', 'Upload stored files normally and supply each new ready attachment ID. Never upload or fetch linked URLs: import recreates their records. Success returns roots, old-to-new Thing ids, imported, filesImported and linksImported.', 'If rollback fails or is deferred, stop deleting earlier dependencies and preserve remaining linked resources. Return 503 with remainingIds for the surviving copies and deliberately retained records. Do not automatically retry the original import mutation.'],
+    requestExamples: [{ name: 'Import a note', description: 'Create a private independent note.', method: 'POST', body: { manifest: { format: 'thingtime.transfer', version: 1, roots: ['note'], things: [{ id: 'note', thingtime: ['data'], crystal: { name: 'Note' } }], files: [] } } }],
+    responseExamples: [{ status: 200, description: 'Private content imported.', body: { ok: true, roots: ['new-note-id'], ids: { note: 'new-note-id' }, imported: 1, filesImported: 0 } }]
   }),
   endpoint({
     id: 'things-fork',

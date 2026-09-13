@@ -36,7 +36,297 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   reads resolve existing relational comments without inference, copied parent
   data or migrations; recordings capability 1.7.0. **Codex (AI)**
 
+- 2026-09-12 — Add native Things paste, clipboard capture in Import, and bounded
+  multi-file selection/drop with serial private imports and stop-on-error behavior.
+  Pasted content opens ready for confirmation with the file picker collapsed.
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12 — Connect authorized external HTTPS chat avatars to portable ZIP
+  files with fresh private import bindings; negotiate export 1.14.0. Unsafe or
+  unreadable images still fail explicitly. Live provider acceptance remains
+  pending. [PR 764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12 — Add the internal bounded external-avatar downloader prerequisite:
+  pinned public DNS, credential-free HTTPS and image/size validation. Not yet
+  enabled in chat export. [PR 764](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI)
+
+- 2026-09-12 — Verified the private AI archive-format API/ZIP round trip on the
+  PR preview, including fresh copy IDs, preserved presentation and denied anonymous
+  reads; cleaned both fixtures. Source-adapter and browser acceptance remain
+  separate. [Evidence and harness caveat](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI)
+
+- 2026-09-12 — Correct the second capability suite's stale archive contract
+  assertions after the AI transfer addition; 53 capability tests pass. Live
+  round-trip limits are recorded in [PR 764](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI)
+
+- 2026-09-12 — Private AI-chat archives preserve assistant avatar presets,
+  inert tool receipts and explicit message/segment order through transfer and
+  re-export. Capability negotiation prevents older servers from silently
+  dropping presentation. [PR #764 notes](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI)
+
+- 2026-09-12 — **Codex (AI):** Add an opt-in real recording ZIP regression proving fresh private recording import, exact-byte independence after source deletion, re-export and cleanup. [PR #764 evidence](../PRs/764-thing-transfer-clipboard.md).
+
+- 2026-09-12 — Added and passed real nine-kind library ZIP/import regression:
+  folders, schemas/data, components/pages, actions, posts, themes and algorithms,
+  including fresh references on a second copy and verified cleanup. See
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12 — Added and passed opt-in real live-chat image ZIP/import acceptance
+  on preview `3e29ad283`: fresh media binding, byte independence after source
+  deletion, anonymous denial and verified cleanup. Updated current transfer
+  acceptance gaps in [PR 764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12 — Include shared emoji dependencies from membership-authorized
+  live chat history, without widening standalone owner-only emoji export or
+  importing source account/community authority. Export capability 1.12.0;
+  real multi-user media acceptance remains pending.
+  [PR #764 notes](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12 — Reconcile the transfer branch with current develop, preserving
+  newer archive capability requirements alongside the incoming marketing and
+  social-preview features. [PR #764 notes](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12 — Verify ordinary live Messenger history through real dev export,
+  ZIP import and Chrome clipboard/download/file-picker controls. Preserve edits,
+  threads and deletion markers; verify source messages and copied-archive cleanup.
+  Media and AI history acceptance remain separate. [PR #764 notes](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12 — Add private-archive transfer controls to Messenger details,
+  omit Cut for live chats, and keep nested transfer menus accessible inside
+  drawers. Desktop/mobile rendered smoke covers the entry point and dialogs.
+  [PR #764 notes](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12 — Fix live-chat archive conversion of the canonical ISO edit and
+  deletion timestamps after a real self-only chat export exposed a 422. Keep
+  deleted text redacted and require export capability 1.11.1. [PR #764 notes](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12 — Connect ordinary live-chat export to private archive conversion
+  with membership-gated snapshots, canonical managed media reads, bounded
+  preparation and export capability 1.11.0. AI/external-avatar/shared-emoji
+  completion and live round-trip proof remain pending. [PR #764 notes](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12 — Bound portable export metadata preparation to 30 seconds, with
+  cancellation and a recoverable retry message shared by Copy and Download.
+  Large file downloads retain their separate lifecycle. See [PR #764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12: Bound private archive reads to 15 seconds with a recoverable Retry
+  state and account-safe cancellation. Verify the stalled-read path in Chrome
+  and real folder context-menu clipboard/ZIP behavior; see
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — **Codex (AI)**
+
+- 2026-09-12: Add an opt-in real browser ZIP/media round-trip acceptance phase,
+  including duplicate-name uploads, annotation/byte checks and source-deletion
+  independence. Live execution remains pending; see
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — **Codex (AI)**
+
+- 2026-09-12: Bound the archive-emoji binary acceptance wait to 30 seconds for
+  asynchronous moderation, retaining strict safe-image assertions. Live
+  confirmation remains pending the ordinary upload rate limit.
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — **Codex (AI)**
+
+- 2026-09-12: Save real headed-Chrome transfer acceptance for OS clipboard
+  Copy/Cut, Paste copy/move, downloaded JSON/ZIP file-chooser imports and verified
+  cleanup. Passed on the PR preview; stored-emoji acceptance remains unresolved.
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — **Codex (AI)**
+
+- 2026-09-12: Correct historical emoji reads to use persisted attachment purpose
+  `emoji`, not its upload alias. A real ZIP test exposed the mismatch; expand
+  regression coverage for remapped reactions and source-emoji deletion. Things
+  1.16.1 negotiates the correction. [PR 764](../PRs/764-thing-transfer-clipboard.md).
+  — **Codex (AI)**
+
+- 2026-09-12: Render safe personal custom emoji images in private chat archives
+  through an owner-only snapshot projection and Things 1.16.0 negotiation.
+  Unavailable/moderated images retain readable placeholders. See
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — **Codex (AI)**
+
+- 2026-09-12: Verify real archive avatar/message-image ZIP round trips and
+  independent copies after source deletion on the deployed PR preview. Extend
+  the dev-fenced binary regression test; see [PR 764](../PRs/764-thing-transfer-clipboard.md).
+  — **Codex (AI)**
+
+- 2026-09-12: Render imported chat media with the shared gallery, NSFW reveal
+  and lightbox; preserve moderation for historical avatars. Desktop/mobile
+  fixture checks pass; real media acceptance remains separate. See
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — **Codex (AI)**
+
+- 2026-09-12: Prepare owner-only archive gallery metadata with canonical
+  moderation flags and bounded batched reads; inline rendering remains pending.
+  See [PR 764](../PRs/764-thing-transfer-clipboard.md). — **Codex (AI)**
+
+- 2026-09-12: Surface owner-only archive roots in Things and add a read-only
+  historical chat page with account-change clearing, reply links, transfer and
+  dedicated deletion. Include archives in owner folder exports; Things is now
+  feature 1.14.0 and export 1.10.0. Desktop/mobile fictional-browser checks pass;
+  inline media rendering remains unfinished. See
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12: Add first-party owner-only archive root moves through the guarded
+  managed placement writer, preserving historical records and accounting.
+  Bulk contract/client minimum is 1.4.0. See
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12: Add owner-only whole-history archive re-export to portable transfer
+  plans, including required media and custom emojis; optional traversal cannot
+  silently truncate chats. Export contract/client minimum is 1.9.0. See
+  [PR 764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI)
+
+- 2026-09-12: Fix shared custom reaction parsing for canonical 70-character
+  stored-emoji IDs, preserving archive remapping/readback and Messenger emoji
+  projections without widening feed reactions or ownership rules. Clients
+  negotiate the corrected contracts. Live image rendering remains unverified.
+  — **Codex (AI)**
+
+- 2026-09-12: Add an opt-in, dev-fenced archive HTTP lifecycle acceptance test
+  with capability/identity checks and exact-root cleanup. Both tests pass live
+  against the dev fixture with zero skips; the imported test archive was removed
+  and verified absent. Media and rendered UI remain unverified. — **Codex (AI)**
+
+- 2026-09-12: Add bounded owner-only chat archive snapshot reads with explicit
+  history projection, private responses and api.things 1.13.0 negotiation.
+  Archive rendering, listing and re-export remain unfinished. — **Codex (AI)**
+
+- 2026-09-12: Route first-party owner archive deletion through whole-history
+  cleanup with transactional preview timestamps and sanitized retryable errors.
+  Negotiate api.things 1.12.0; archive browsing/export remain unfinished.
+  — **Codex (AI)**
+
+- 2026-09-12: Connect private chat archive groups to the transfer importer,
+  protect their records from generic CRUD, and negotiate import contract 1.9.0.
+  Archive UI/export and public owner deletion remain unfinished. See
+  [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+  — **Codex (AI)**
+
+- Integrate develop sign-in recovery with transfer intent; revoke Cut authority
+  synchronously during pending identity changes and reject stale generations.
+  See [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-12
+
+- Preserve earlier dependencies and linked resources when transfer rollback
+  cannot finish; report retained IDs for recovery. Import contract/client
+  requirement is now 1.8.1. See [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-12
+
+- Added retryable internal Messenger archive deletion/compensation: keep history
+  until object cleanup succeeds, then refund/remove the archive atomically.
+  HTTP/UI integration is still pending. See [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-12
+
+- Added the internal quota-accounted Messenger archive writer with atomic file
+  binding, fresh identity/reference remapping and folder-deletion fencing.
+  Endpoint and chat UI integration remain unfinished. See [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-12
+
+- Added Messenger archive contract groundwork following the requested importer
+  identity replacement and archived-participant model. Runtime import/export and
+  chat UI integration are not enabled yet. See [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-12
+
+- Verified real post/emoji image ZIP round trips and concurrent upload claims on
+  PR 764's dev preview, including byte/annotation equality and confirmed cleanup.
+  Hardened the opt-in fixture guard and corrected its archive/cleanup checks.
+  Broader UI/type acceptance remains open. See [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-12
+
+- Connected custom emoji export/import, including legacy inline images, fresh
+  personal copies, image annotations, dedicated rollback and folder placement.
+  Desktop/mobile import-dialog checks passed with simulated uploads; real storage
+  acceptance remains pending. See [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-12
+
+- Added internal custom-emoji import writer groundwork: fresh-upload checks in
+  the binding transaction, server-owned attempt identity and a personal-library
+  adapter. Transfer endpoints are not enabled for emojis yet; see
+  [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-12
+
+- Added custom-emoji transfer-envelope groundwork and tests for stored images,
+  names, source-scope exclusion and upload limits. The adapter is not enabled
+  yet; see [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-12
+
+- 2026-09-12 (Codex): Shorten download-format labels to avoid mobile clipping; keep byte inclusion guidance below the selector. Real browser ZIP/JSON round-trip evidence is recorded on PR 764.
+
+- 2026-09-12 (Codex): Export 1.7.1 skips storage verification for excluded file bytes after live attachment authorization. Links remain independently selectable. See [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+
+- 2026-09-12 (Codex): Retain theme/algorithm folders during transfer, enable their owned-library Cut controls and dedicated folder moves, and negotiate export/import 1.7.0, bulk 1.2.0 and own-library 1.10.0. See [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+
+- 2026-09-11 (Codex): Preserve Cut intent across SPA navigation, revoke on account/root changes, and fence stale async completions. See [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+
+- 2026-09-11 (Codex): Fix durable recording export/download being rejected as expired drafts; preserve owner-only access and advertise attachment-content 1.6.4 / export 1.6.1. See [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+
+- Codex — recording Cut/paste uses dedicated folder placement (bulk 1.1.0);
+  export/import 1.6.0 retains included recording folders and supports a selected
+  destination. Verification and remaining acceptance: [PR 764](../PRs/764-thing-transfer-clipboard.md).
+
+- Connected standalone recordings to portable export/import 1.5.0, with collision-safe byte entries, per-file upload purpose, private independent copies and attachment-lifecycle rollback. Approved-upload round-trip acceptance remains pending; see [PR 764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI), 2026-09-11
+
+- Added private-approved `recording-import` upload intents, purpose-separated replay checks and upload lifecycle capability negotiation (1.3.0). Portable recording adapters remain in progress. — Codex (AI), 2026-09-11
+
+- Added server-only recording-import draft lifecycle groundwork, preserving immutable upload purpose, normal expiry cleanup and transactional storage accounting. Recording transfer adapters are not enabled yet; see [PR 764](../PRs/764-thing-transfer-clipboard.md). — Codex (AI), 2026-09-11
+
+- Feed-algorithm transfer preserves private weights and training statistics via
+  owner-only reads and dedicated quota-accounted imports, with fresh unshared
+  copies and no active-selection change. Settings exposes Copy/Download/Import
+  with a private-interest warning; transfer contracts advance to 1.4.0. See
+  [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md). — Codex (AI), 2026-09-11
+
+- Portable transfers now support saved themes through dedicated owner/public
+  readers and private theme writers, including legacy reads and rollback.
+  Theme Studio exposes Copy/Download/Import and identifies the My themes
+  destination. Transfer capabilities advance to 1.3.0. See
+  [PR 764 notes](../../PRs/764-thing-transfer-clipboard.md). — Codex (AI), 2026-09-11
+
+- Preserve stored-file titles, multiline descriptions and display filenames
+  in transfer plans, ZIP/clipboard bundles and imported copies. Fence import
+  annotation writes transactionally to fresh unbound post drafts; negotiate
+  import/export 1.2.0 without accepting server-derived moderation/type stamps.
+  [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-11
+
+- Preserve linked galleries and their mixed file/link order in portable JSON/ZIP
+  transfers. Recreate private URL records through normal link and annotation
+  writers, without fetching external bytes; reject flagged link exports and
+  clean new drafts on failure. Import/export negotiate contract 1.1.0.
+  [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-11
+
+- Add portable JSON/ZIP Download and reviewed file import to nested Thingtime
+  value menus. Copy/Cut use typed envelopes, preserve numeric strings, and
+  refuse lossy values; repair top-level and direct-path deletion for Cut.
+  Keep transfer dialogs above stacked success notifications on mobile.
+  [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-11
+
+- Add shared Transfer controls to Builder, component-family pages, Thing
+  details and public webpages. Keep transfer menus/dialogs above the Builder
+  inspector and require saving dirty Builder drafts before export. Verify
+  desktop/mobile clipboard and download behavior across all four surfaces.
+  [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-11
+
+- Preserve split-template component media during import and repeated transfers;
+  negotiate import contract 1.0.1 and retain ordinary upload approval gates.
+  [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-11
+
+- Add authorized exports and real clipboard Copy/Cut/Paste plus JSON/ZIP
+  Download in Things. Verify browser download/import round trips, same-session
+  moves, responsive dialogs and a full build. Broader surfaces and file/gallery
+  acceptance remain in progress: [PR 764 notes](../PRs/764-thing-transfer-clipboard.md).
+  — Codex (AI), 2026-09-11
+
+- Add the private Thing import API and JSON/ZIP picker with destination choice,
+  validated uploads and fresh reference IDs; verify real local imports and
+  responsive dialog states. Export/clipboard delivery remains in progress:
+  [PR 764 notes](../PRs/764-thing-transfer-clipboard.md). — Codex (AI), 2026-09-11
+
 - Promote the native Apple widget suite, browser OAuth scopes, saved endpoints, per-widget routing, automatic signed Widgets releases and Recovery support from PRs #727 and #774. — Codex (AI), 2026-09-12
+- 2026-09-12: Add a main-only signed/notarized Thingtime Widgets release workflow and a dedicated Widgets product, cache and installer path in Thingtime Recovery.
 - Bound root session reads to two attempts with timeout/cancellation, provide
   recoverable retry/reload controls, and hide/reset account-owned UI across
   sign-in changes without falling back to another account's root data.
@@ -49,6 +339,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   [PR #768](../PRs/768-codex-thingtime-ai-guidance-20260911-refresh-ai-guidance-from-pr-history.md)
   and its linked review/inventory.
   — Codex (AI), 2026-09-11
+
+- Replace the Mac Widgets webview with native navigation and browser PKCE sign-in, app-only Keychain credentials, and revocable connections. Expand OAuth consent and route enforcement for account Things, actions, and Lopu; preserve selected-only legacy grants and granular read/write choices. See [PR #727 notes](../PRs/727-apple-widget-suite.md). — Codex (AI), 2026-09-11
+
+- 2026-09-10: Add shared iOS/Mac WidgetKit actions, dashboards, Thing rendering, recent Things, and iOS Control Centre buttons. Add opt-in bounded content sync, native launch routes, Mac companion signing/install runbook, and widget acceptance checks. See [PR #727 notes](../PRs/727-apple-widget-suite.md) and [Apple widget setup](../apple/README.md). — Codex (AI), 2026-09-10
 
 - Unify Thing, post, recording and message action-menu rendering and inherited
   base verbs. Dispatch recording handoffs through the versioned Things action

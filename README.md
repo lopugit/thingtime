@@ -1487,7 +1487,7 @@ or **all** variation per user:
 | Scope | Covers | Flag |
 | --- | --- | --- |
 | `public` | post, comment, and custom-emoji attachments | `meta.publicUploads` |
-| `private` | message attachments + the user's own profile avatar/banner | `meta.privateUploads` |
+| `private` | message attachments, recordings (including recording-import drafts), and the user's own profile avatar/banner | `meta.privateUploads` |
 | `all` | both of the above in one write | both flags |
 
 The account carries `meta.publicUploads: false` and `meta.privateUploads:
@@ -3102,37 +3102,6 @@ Tailscale/Funnel is not available on the validation host: its configured CLI
 wrapper points at a missing Tailscale application. No public dev mapping was
 created or changed.
 
-### Saved AI waterfalls
-
-Settings → AI waterfalls stores private named model/endpoint orders using the existing Things database and authenticated API. No extra collection, migration, or secret is required. Configure provider keys or personal Secure Vault connections as described in [the waterfall setup](docs/ai-waterfall-selector.md). Forks must deploy the registered `api.ai-waterfalls` 1.0.0 contract before clients can save a library.
-
-## Thingtime Widgets automatic releases
-
-`.github/workflows/widgets-release.yml` publishes an Apple-silicon Widgets ZIP and
-a matching Recovery ZIP after relevant changes reach `main`. Owner-only manual
-dispatch is also restricted to `main`; PR code cannot reach its signing or publish
-steps. This dedicated job pins the exact main SHA, runs native/Recovery tests before
-importing signing material, and leaves the Electron repository-wide latest release
-unchanged. The version comes from `macos/ThingtimeWidgets/project.yml`, with a
-workflow build number and source SHA appended to the release tag.
-
-Fork setup: enable Actions and configure `MAC_CSC_LINK` (base64 Developer ID P12),
-`MAC_CSC_KEY_PASSWORD`, `APPLE_TEAM_ID`, and `APPLE_API_KEY_BASE64`,
-`APPLE_API_KEY_ID`, `APPLE_API_ISSUER` for notarization. The existing `ASC_KEY_CONTENT`,
-`ASC_KEY_ID`, `ASC_ISSUER_ID` aliases are accepted. Store actual values only in
-GitHub Actions secrets. A fork must also deliberately update the repository-owner
-guard and Recovery's release-catalog origin. No Apple Development/ad-hoc fallback
-is allowed for published production builds.
-
-The workflow imports credentials into a temporary Keychain, signs nested widget
-code before the app, notarizes and staples, then verifies both final ZIPs after
-extraction. It publishes `SHA256SUMS.txt` and removes temporary signing material.
-The `Thingtime-Widgets-App-Release-<version>-macos-arm64.zip` asset is recognized by
-Recovery's **App → Thingtime Widgets** selector; its cache and install target are
-isolated from Desktop, Commander and Recovery. Local bundle construction is not
-proof of a successful cloud release: the first main run and download/install via
-Recovery remain release acceptance checks.
-
 ## Inherited Thing actions
 
 Persisted entity menus use `ThingContextMenu` and `buildThingEntityMenu`;
@@ -3168,3 +3137,77 @@ Never embed credentials in a menu, action request, source fixture or public docs
 Local menu QA uses this worktree's deterministic port (currently
 `http://localhost:16250`). Tailscale/Funnel was unavailable during verification:
 the local launcher points to a missing Tailscale app; no public mapping was changed.
+
+### Saved AI waterfalls
+
+Settings → AI waterfalls stores private named model/endpoint orders using the existing Things database and authenticated API. No extra collection, migration, or secret is required. Configure provider keys or personal Secure Vault connections as described in [the waterfall setup](docs/ai-waterfall-selector.md). Forks must deploy the registered `api.ai-waterfalls` 1.0.0 contract before clients can save a library.
+
+## Portable transfer real-storage acceptance
+
+The optional `remix` command `test:transfer-binary` exercises real multipart
+uploads and image ZIP import/export through the application API. It is disabled
+unless `TT_TRANSFER_BINARY_TEST=1` is explicitly set. Use a local fixture server
+(`TT_TRANSFER_TEST_URL=http://127.0.0.1:<your-worktree-port>`) backed by a
+disposable test account and the private storage setup documented above. That
+account must already have public-upload approval and a ready storage ledger.
+Provide its session cookie through `TT_TRANSFER_TEST_COOKIE` in the process
+environment using your local secret tooling; never put it in a command literal,
+tracked file, screenshot or test report. Do not use a production account.
+
+Run `corepack pnpm --dir remix run test:transfer-binary` with those environment
+values. The test checks API capability versions, uploads tiny PNG fixtures,
+compares bytes and annotations after ZIP/reimport, checks anonymous denial and
+concurrent emoji import claims, then deletes its own returned IDs and verifies
+cleanup. It does not connect directly to MongoDB, enable uploads, reconcile
+storage or run migrations. A failed approval/storage precondition is a blocker,
+not a passed test. Investigate any reported cleanup IDs before another run.
+
+For isolated archive UI checks, run `node --import tsx scripts/archive-ui-smoke.mts`
+from `remix` with `TT_TRANSFER_UI_ORIGIN=http://localhost:<worktree-port>`.
+Install Playwright and Chrome locally, or point `TT_PLAYWRIGHT_MODULE` at an
+existing Playwright module. The test accepts loopback HTTP only, starts a fresh
+browser context, supplies fictional history, blocks API mutations, and writes
+screenshots to a temporary directory. It never copies browser credentials or
+imports real account data. This does not replace live media/clipboard acceptance.
+
+`corepack pnpm --dir remix run test:transfer-archives` adds a metadata-only
+archive import/read/delete lifecycle check. Enable it with
+`TT_TRANSFER_ARCHIVE_TEST=1` and the same origin/cookie variables, plus
+`TT_TRANSFER_TEST_USERNAME` for the expected disposable fixture identity.
+Remote dev origins require `TT_TRANSFER_REMOTE_DEV_TEST=1`; only
+`https://dev.thingtime.com` or an exact `https://pr-N.previews.dev.thingtime.com`
+origin is accepted. Production, lookalikes and implicit remote writes are
+refused. The selected origin must advertise import 1.9.0 and Things 1.13.0
+before any archive is created. The test uses fictional participants, verifies
+full history and private reads, rejects individual-row mutation/deletion and
+stale preview deletion, then removes only its returned archive root. No real
+user, live-message, invitation, notification or upload APIs are called. This
+test does not yet cover avatars, custom emoji, export or UI rendering; a skipped
+or capability-blocked run is not live acceptance.
+
+## Thingtime Widgets automatic releases
+
+`.github/workflows/widgets-release.yml` publishes an Apple-silicon Widgets ZIP and
+a matching Recovery ZIP after relevant changes reach `main`. Owner-only manual
+dispatch is also restricted to `main`; PR code cannot reach its signing or publish
+steps. This dedicated job pins the exact main SHA, runs native/Recovery tests before
+importing signing material, and leaves the Electron repository-wide latest release
+unchanged. The version comes from `macos/ThingtimeWidgets/project.yml`, with a
+workflow build number and source SHA appended to the release tag.
+
+Fork setup: enable Actions and configure `MAC_CSC_LINK` (base64 Developer ID P12),
+`MAC_CSC_KEY_PASSWORD`, `APPLE_TEAM_ID`, and `APPLE_API_KEY_BASE64`,
+`APPLE_API_KEY_ID`, `APPLE_API_ISSUER` for notarization. The existing `ASC_KEY_CONTENT`,
+`ASC_KEY_ID`, `ASC_ISSUER_ID` aliases are accepted. Store actual values only in
+GitHub Actions secrets. A fork must also deliberately update the repository-owner
+guard and Recovery's release-catalog origin. No Apple Development/ad-hoc fallback
+is allowed for published production builds.
+
+The workflow imports credentials into a temporary Keychain, signs nested widget
+code before the app, notarizes and staples, then verifies both final ZIPs after
+extraction. It publishes `SHA256SUMS.txt` and removes temporary signing material.
+The `Thingtime-Widgets-App-Release-<version>-macos-arm64.zip` asset is recognized by
+Recovery's **App → Thingtime Widgets** selector; its cache and install target are
+isolated from Desktop, Commander and Recovery. Local bundle construction is not
+proof of a successful cloud release: the first main run and download/install via
+Recovery remain release acceptance checks.

@@ -63,7 +63,7 @@ export const MAX_SESSION_REPLACEMENT_ATTACHMENT_CLEANUP = 25;
 export const MAX_ATTACHMENT_DETECTION_BACKFILL_PER_RUN = 200;
 export const ATTACHMENT_DETECTION_BACKFILL_WALL_CLOCK_MS = 25 * 1000;
 export const ATTACHMENT_DETECTION_BACKFILL_CONCURRENCY = 5;
-export const ATTACHMENT_UPLOAD_PURPOSES = ['post', 'comment', 'message', 'profile-avatar', 'profile-banner', 'custom-emoji', 'recording'] as const;
+export const ATTACHMENT_UPLOAD_PURPOSES = ['post', 'comment', 'message', 'profile-avatar', 'profile-banner', 'custom-emoji', 'recording', 'recording-import'] as const;
 export type AttachmentUploadPurpose = (typeof ATTACHMENT_UPLOAD_PURPOSES)[number];
 export const MAX_CUSTOM_EMOJI_ATTACHMENT_BYTES = 512 * 1024;
 export const CUSTOM_EMOJI_ATTACHMENT_CONTENT_TYPES = new Set(['image/gif', 'image/jpeg', 'image/png', 'image/webp']);
@@ -134,11 +134,12 @@ const attachmentRequestFingerprint = (metadata: AttachmentCrystal, purpose: Atta
 
 const attachmentUploadIntent = (
 	value: unknown
-): { requestPurpose: AttachmentUploadPurpose; purpose: AttachmentPurpose; profileSlot?: ProfileAttachmentSlot } | null => {
+): { requestPurpose: AttachmentUploadPurpose; purpose: AttachmentPurpose; profileSlot?: ProfileAttachmentSlot; recordingImportDraft?: true } | null => {
 	if (value === undefined || value === 'post') return { requestPurpose: 'post', purpose: 'post' };
 	if (value === 'comment') return { requestPurpose: value, purpose: 'comment' };
 	if (value === 'message') return { requestPurpose: value, purpose: 'message' };
 	if (value === 'recording') return { requestPurpose: value, purpose: 'recording' };
+	if (value === 'recording-import') return { requestPurpose: value, purpose: 'recording', recordingImportDraft: true };
 	if (value === 'profile-avatar') return { requestPurpose: value, purpose: 'profile', profileSlot: 'avatar' };
 	if (value === 'profile-banner') return { requestPurpose: value, purpose: 'profile', profileSlot: 'banner' };
 	if (value === 'custom-emoji') return { requestPurpose: value, purpose: 'emoji' };
@@ -817,6 +818,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 						requestFingerprint,
 						purpose: intent.purpose,
 						profileSlot: intent.profileSlot,
+						...(intent.recordingImportDraft ? { recordingImportDraft: true as const } : {}),
 						expiresAt: expires
 					});
 					ownsInitialization = true;
@@ -834,6 +836,11 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			// Recording starts can be replayed after a lost completion receipt.
 			// The owner and exact metadata fingerprint have already been checked.
 			if (intent.purpose === 'recording' && reserved.attachmentState === 'ready') {
+				if (intent.recordingImportDraft && (reserved.attachmentImportDraft !== true ||
+					!(reserved.attachmentExpiresAt instanceof Date) || !Number.isFinite(reserved.attachmentExpiresAt.getTime()) ||
+					reserved.attachmentExpiresAt.getTime() <= dependencies.now().getTime())) {
+					return fail(409, 'Recording import upload has expired or already been committed');
+				}
 				return { ok: true, upload: { ...uploadPlan(reserved), state: 'ready' } };
 			}
 			if (
@@ -1232,7 +1239,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 	const readableStoredAttachment = async (
 		viewer: AttachmentViewer,
 		idInput: unknown,
-		allowLinkedCopy = false
+		allowLinkedCopy = false,
+		verifyStoredObject = true
 	): Promise<AttachmentResult<{ doc: AttachmentDoc }>> => {
 		try {
 			const id = normalizeId(idInput);
@@ -1250,7 +1258,16 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			// live. Profile replacement stamps immediate expiry in the same Mongo
 			// transaction that removes the user-slot reference, making the old object
 			// inaccessible while it remains billed until exact-version cleanup.
-			if (!doc.targetId && (!doc.attachmentExpiresAt || doc.attachmentExpiresAt.getTime() <= dependencies.now().getTime())) {
+			// Saved recordings intentionally have no expiry: they are private
+			// library content, not abandoned upload drafts. This exception is
+			// exact-owner only and must not revive an expiring/import draft.
+			const durableRecording = doc.attachmentPurpose === 'recording' &&
+				doc.attachmentImportDraft !== true && !doc.attachmentExpiresAt &&
+				!doc.attachmentLinked && !doc.attachmentProfileSlot &&
+				doc.thingtime.length === 1 && doc.thingtime[0] === 'attachment' &&
+				viewer?.id === doc.ownerId;
+			if (!doc.targetId && !durableRecording && (!doc.attachmentExpiresAt ||
+				!Number.isFinite(doc.attachmentExpiresAt.getTime()) || doc.attachmentExpiresAt.getTime() <= dependencies.now().getTime())) {
 				return fail(404, 'Attachment not found');
 			}
 			// Post attachments must never authorize a home object against a caller-
@@ -1270,6 +1287,8 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 			// first-party content URL into an open redirect to an attacker-chosen
 			// origin (CWE-601). Renderers always use crystal.url directly.
 			if (doc.attachmentLinked === true) return allowLinkedCopy ? { ok: true, doc } : fail(404, 'Attachment not found');
+			// Export may omit stored bytes, but only after all live read gates.
+			if (!verifyStoredObject) return { ok: true, doc };
 
 			const s3 = dependencies.getS3();
 			if (!doc.objectVersionId) {
@@ -1283,6 +1302,22 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		} catch (error) {
 			return knownFailure(error) || unavailable('read', error);
 		}
+	};
+
+	// Content-only export metadata, behind the exact same live read gates as
+	// download/copy. Never expose object keys, versions or signed URLs.
+	const describeTransfer = async (viewer: AttachmentViewer, id: unknown, options: { includeFiles?: boolean; includeLinks?: boolean } = {}) => {
+		const readable = await readableStoredAttachment(viewer, id, true, options.includeFiles !== false);
+		if (readable.ok === false) return readable;
+		if (readable.doc.attachmentLinked ? options.includeLinks === false : options.includeFiles === false) {
+			return { ok: true as const, excluded: true as const };
+		}
+		// Link import does not upload/re-moderate bytes. Never turn a flagged
+		// source into an unmoderated portable gallery, even for its owner/admin.
+		if (readable.doc.attachmentLinked && ['blocked', 'pending', 'nsfw'].includes(readable.doc.moderation?.status || '')) return fail(403, 'Flagged linked media cannot be exported');
+		const attachment = toAttachmentPublicMetadata(readable.doc.shareId, readable.doc.crystal);
+		if (!attachment) return fail(404, 'Attachment not found');
+		return { ok: true as const, attachment, linked: readable.doc.attachmentLinked === true };
 	};
 
 	const download = async (
@@ -1458,6 +1493,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		cancel,
 		remove,
 		download,
+		describeTransfer,
 		copy,
 		inspectForPost,
 		inspectForComment,
@@ -1478,6 +1514,7 @@ export const completeAttachmentUpload = service.complete;
 export const cancelAttachmentUpload = service.cancel;
 export const deleteAttachment = service.remove;
 export const getAttachmentDownload = service.download;
+export const describeAttachmentTransfer = service.describeTransfer;
 export const copySharedAttachment = service.copy;
 export const inspectReadyAttachmentsForPost = service.inspectForPost;
 export const inspectReadyAttachmentsForComment = service.inspectForComment;
@@ -1497,7 +1534,7 @@ export const createReadyAttachmentPostInsertHook =
 // POST /api/v1/attachments/annotate — owner-authored display metadata on a
 // ready attachment (draft or bound). The media's own Thing page and the post
 // lightbox render these; binding, audience, and object bytes are untouched.
-export const annotateAttachment = async (ownerId: string, input: unknown): Promise<AttachmentResult<{ attachment: AttachmentPublicMetadata }>> => {
+export const annotateAttachment = async (ownerId: string, input: unknown, options: { unboundPostOnly?: boolean } = {}): Promise<AttachmentResult<{ attachment: AttachmentPublicMetadata }>> => {
 	try {
 		if (isCustomMongoEndpointActive()) {
 			return fail(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
@@ -1520,7 +1557,7 @@ export const annotateAttachment = async (ownerId: string, input: unknown): Promi
 		if (title === undefined && description === undefined && filenamePreview === undefined) {
 			return fail(400, 'Provide a filename preview, title or description to update');
 		}
-		const doc = await annotateOwnedAttachment(ownerId, id, { filenamePreview, title, description });
+		const doc = await annotateOwnedAttachment(ownerId, id, { filenamePreview, title, description }, options);
 		const attachment = toAttachmentPublicMetadata(doc.shareId, doc.crystal);
 		if (!attachment) return fail(409, 'Attachment metadata failed validation after update');
 		return { ok: true, attachment };

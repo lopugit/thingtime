@@ -505,6 +505,8 @@ export const buildThingContextMenuModel = (args: BuildThingContextMenuModelArgs 
 		label: 'Clipboard',
 		actions: [
 			{ id: 'copy', command: 'copy', label: 'Copy', icon: '📋', lucide: 'copy', kbd: '⌘C' },
+			{ id: 'download-value', command: 'download-value', label: 'Download…', icon: '⬇️', lucide: 'download', hint: 'Portable JSON or ZIP' },
+			...(!readonly ? [{ id: 'import-value', command: 'import-value', label: 'Import file…', icon: '📥', lucide: 'upload', hint: 'Review a file before replacing this value' }] : []),
 			...(!readonly ? [{ id: 'cut', command: 'cut', label: 'Cut', icon: '✂️', lucide: 'scissors', kbd: '⌘X' }] : []),
 			...(!readonly ? [{ id: 'paste', command: 'paste', label: 'Paste', icon: '📥', lucide: 'clipboard-paste', kbd: '⌘V' }] : [])
 		]

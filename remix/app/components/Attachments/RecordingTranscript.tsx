@@ -23,8 +23,9 @@ export const TranscriptQuote = ({ text, compact = false }: { text: string; compa
 	const quoteId = React.useId();
 	const long = text.length > 480 || text.split('\n').length > 6;
 	if (!text.trim()) return null;
-	return <Box mt={3} minW={0} data-recording-transcript>
-		<Box as="blockquote" m={0} borderLeft="2px solid var(--tt-border, #ececef)" pl={3} py={1} color="var(--tt-secondary, #62626f)">
+	return <Box mt={3} minW={0} width="100%" userSelect="text" data-recording-transcript
+		onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
+		<Box as="blockquote" m={0} borderLeft="2px solid var(--tt-border, #ececef)" pl={3} py={1} color="var(--tt-text, #62626f)">
 			<Text fontSize="10px" letterSpacing="0.08em" textTransform="uppercase" mb={1} color="var(--tt-muted, #9a9aa6)">Transcript</Text>
 			<Text id={quoteId} fontSize={compact ? 'xs' : 'sm'} fontStyle="italic" lineHeight="1.7" whiteSpace="pre-wrap" overflowWrap="anywhere"
 				noOfLines={long && !expanded ? 5 : undefined}>{text}</Text>
