@@ -87,7 +87,8 @@ export const isFolder = (thing: Pick<ThingsThing, 'thingtime'>): boolean => thin
 // api/utils/things/things.ts): attached children live under their target — a
 // duplicate would dangle. The menu hides Duplicate for these instead of
 // offering an action that can only fail.
-export const UNCOPYABLE_KINDS = ['comment', 'reaction', 'save', 'share', 'vote'] as const;
+// Archives copy through portable transfer, never generic duplicateThing.
+export const UNCOPYABLE_KINDS = ['comment', 'reaction', 'save', 'share', 'vote', 'chat-archive'] as const;
 
 export const isDuplicable = (thing: Pick<ThingsThing, 'thingtime'>): boolean =>
   !UNCOPYABLE_KINDS.some((kind) => thing.thingtime.includes(kind));
@@ -172,7 +173,7 @@ export type ThingsReferrer = 'things' | 'actions' | 'feed';
 // shareable permalink itself never carry it.
 export const thingOpenHref = (thing: Pick<ThingsThing, 'id' | 'thingtime'>, from: ThingsReferrer): string => {
   const href = thingLink(thing);
-  return href.startsWith('/thing/') ? `${href}?from=${from}` : href;
+  return href.startsWith('/thing/') ? `${href}${href.includes('?') ? '&' : '?'}from=${from}` : href;
 };
 
 // What a `?from=` param names, defaulting to the feed. An OWN-property check,
