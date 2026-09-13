@@ -6,7 +6,7 @@ import { ADMIN_TABS, adminTabIndex, adminTabPath } from './adminRoutesCore';
 test('every Admin tab has a stable unique subroute', () => {
   assert.deepEqual(
     ADMIN_TABS.map((tab) => tab.slug),
-    ['users', 'apps', 'moderation', 'tiers', 'ci-control', 'external-integrations', 'system']
+    ['users', 'apps', 'moderation', 'tiers', 'ci-control', 'external-integrations', 'marketing', 'system']
   );
   assert.equal(new Set(ADMIN_TABS.map((tab) => tab.slug)).size, ADMIN_TABS.length);
   ADMIN_TABS.forEach((tab, index) => {
