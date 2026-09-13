@@ -6391,6 +6391,9 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Commander emoji paste recovery
 
+- [ ] Seed a disposable clipboard value, paste an emoji into TextEdit and a browser text field, and verify the emoji arrives before restoration. Repeat with a busy destination, rapid Return presses, and two Commander windows. Copy a new value during the paste and verify restoration never overwrites that new copy; check Paste and Keep a Copy separately.
+- [ ] Open Commander over a text editor, dismiss the root launcher with Escape, and immediately type: input must return to the original editor. Escape from Actions must only close Actions. Clicking another app, opening a result, or switching to Commander Settings must not reactivate an older destination. Repeat with a pinned launcher.
+
 - [ ] Follow `Commander/docs/TESTING.md` for denied emoji paste: preserve the selected emoji, recents, learning and clipboard; keep the error, grid and recovery controls inside the native window at standard/minimum/compact widths and large text size. Verify the installed signing requirement stays stable and complete an approved Accessibility grant migration before claiming successful paste.
 
 ## App suites — Pokeworld + StarsAlign (`remix/app/schemas/appSuites/`, `/p/pokeworld`, `/p/starsalign`)
