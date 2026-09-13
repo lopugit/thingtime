@@ -35,8 +35,9 @@ Contracts: `api.auth-invites@1.0.0`, `api.auth-invites-expire@1.0.0`,
 Validation after integrating main `8c1be369f`:
 
 - Full `test:unit` and production `build` pass.
-- 15 focused invitation tests cover amount precision, hashes, privacy, moderation,
-  transaction rollback, refunds, replay, capacity, history visibility and routes.
+- 16 focused invitation tests cover amount precision, hashes, privacy, moderation,
+  transaction rollback, refunds, replay, capacity, history visibility, routes and
+  the canonical root-identity reset after successful signup.
 - Authentication API read-only suite: 25/25 passed. Live disposable API accounts
   prove password-only signup, edited profile/avatar persistence, fresh login and
   concurrent redemption (one 200, one 409), with replay denied. Positive gift
@@ -45,6 +46,7 @@ Validation after integrating main `8c1be369f`:
 - Desktop 1280px and mobile 390px browser checks cover recipient prefill, photo
   removal/replacement, profile editing, refresh, centered layout and full scrolling.
   Settings creation/link/cancellation controls were inspected on both sizes.
+  Cancelling an older invitation preserves the newest copyable link.
   Chrome initially worked but extension control became unavailable; final
   responsive checks used the in-app browser. New-password submission was tested
   through the API.

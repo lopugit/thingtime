@@ -7262,6 +7262,9 @@ approval; `access.test.ts` — the reservation matrix) and
       duplicate usernames, expired/cancelled tokens and ledger failures leave no
       partial account or consumed gift. No request log or auth return-to hint
       should persist the bearer token.
+- [ ] Successful invite signup advances the root account generation before
+      refresh, rejecting responses from the previous account. Failed signup and
+      invite preview must leave the current identity unchanged.
 - [ ] Cancel an unused link twice and run expiry twice: return credits once.
       Insufficient balances, active billed turns, concurrent creates and the
       20-pending cap must never overspend or leak another user's invites.
@@ -7270,3 +7273,5 @@ approval; `access.test.ts` — the reservation matrix) and
 - [ ] `test:invites`, accounting, schema and capability suites pass. Manifest
       advertises both invitation routes and invite-aware signup. Expiry without
       the exact `CRON_SECRET` bearer fails closed without touching balances.
+
+- [ ] Creating a new invite and cancelling an older pending invite keeps the newest copyable link visible; cancelling that newest invite removes its link.

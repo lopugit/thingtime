@@ -10,6 +10,7 @@ export const InvitePanel = () => {
 	const [busy, setBusy] = React.useState(false);
 	const [photoBusy, setPhotoBusy] = React.useState(false);
 	const [url, setUrl] = React.useState('');
+	const [createdId, setCreatedId] = React.useState('');
 	const [invites, setInvites] = React.useState<any[]>([]);
 	const [error, setError] = React.useState('');
 	const lopu = useLopu();
@@ -43,6 +44,7 @@ export const InvitePanel = () => {
 					try {
 						const data = await inviteRequest({ intent: 'create', ...profile, credits: Number(credits) });
 						setUrl(data.url);
+						setCreatedId(data.invite.id);
 						await refresh();
 						lopu({ title: 'Your invite is ready 🎁', description: 'Copy the link below and share it with your friend.', status: 'success' });
 					} catch (e) {
@@ -75,7 +77,7 @@ export const InvitePanel = () => {
 			</form>
 			{url && (
 				<Box mt={5} p={4} border="1px solid var(--tt-border)" borderRadius="12px" minW={0}>
-					<Text fontWeight={600}>Your invite link</Text>
+					<Text fontWeight={600}>Your latest created invite link</Text>
 					<Text fontSize="xs" my={2}>
 						Save this link now; it is shown only in this session. Anyone with it can claim the gift.
 					</Text>
@@ -119,9 +121,13 @@ export const InvitePanel = () => {
 									isDisabled={busy}
 									onClick={async () => {
 										setBusy(true);
+										setError('');
 										try {
 											await inviteRequest({ intent: 'cancel', id: invite.id });
-											setUrl('');
+											if (createdId === invite.id) {
+												setUrl('');
+												setCreatedId('');
+											}
 											await refresh();
 										} catch (e) {
 											failure(e);
