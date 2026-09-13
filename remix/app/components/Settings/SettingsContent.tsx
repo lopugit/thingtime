@@ -1,3 +1,4 @@
+import { InvitePanel } from '~/components/Invites/InvitePanel';
 import { SavedAiWaterfallsSettings } from './SavedAiWaterfallsSettings';
 import { MediaCacheSettings } from './MediaCacheSettings';
 import { TierFeatureComparison } from '~/components/Subscriptions/TierFeatureComparison';
@@ -859,6 +860,7 @@ export const SettingsContent = ({
 									description="What Lopu's turns on Thingtime's own models cost you, in credits (1 credit = 1 USD of list price). Turns on your own Secure Vault providers are free here."
 								>
 									<LopuCreditsPanel key={user.id} admin={user.isAdmin} />
+                    <Box mt={8}><InvitePanel key={`invites-${user.id}`} /></Box>
 								</SettingsSection>
 							</Box>
 						)}

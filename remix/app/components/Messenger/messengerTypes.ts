@@ -87,9 +87,13 @@ export const LOPU_RAINBOW_DISC = 'var(--tt-gradient-rainbow, linear-gradient(135
 // Avatar treatment for an AI-backed chat or message row: ChatGPT and Claude
 // keep their brand discs, Lopu gets the unicorn on the rainbow disc.
 export const externalSourceAvatar = (source: ExternalAiSource): { glyph: string; background: string; color: string } =>
-	isLopuAiSource(source)
+	aiProviderAvatar(isLopuAiSource(source) ? 'lopu' : source.provider);
+
+// Shared display-only treatment, also used for private historical archives.
+export const aiProviderAvatar = (provider: 'lopu' | 'chatgpt' | 'claude'): { glyph: string; background: string; color: string } =>
+	provider === 'lopu'
 		? { glyph: '🦄', background: LOPU_RAINBOW_DISC, color: 'white' }
-		: source.provider === 'chatgpt'
+		: provider === 'chatgpt'
 			? { glyph: '◎', background: '#17171c', color: 'white' }
 			: { glyph: '✦', background: '#d97757', color: 'white' };
 

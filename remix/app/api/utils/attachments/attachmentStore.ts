@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
+import { isDurableRecordingUpload, prepareRecordingImport } from './recordingImportCore';
 
 import { getHomeThingsCollection, withHomeMongoTransaction } from '../mongodb/collections';
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
@@ -64,6 +65,8 @@ export type AttachmentDoc = {
 	objectVersionId?: string;
 	attachmentRequestFingerprint?: string;
 	attachmentPurpose?: AttachmentPurpose;
+	// Server-only import lifecycle marker; never copied from portable content.
+	attachmentImportDraft?: true;
 	attachmentProfileSlot?: ProfileAttachmentSlot;
 	attachmentFinalizationLeaseId?: string;
 	attachmentPartsIssuedAt?: Date;
@@ -99,6 +102,7 @@ type PendingInput = {
 	objectKey: string;
 	requestFingerprint: string;
 	purpose: AttachmentPurpose;
+	recordingImportDraft?: true;
 	profileSlot?: ProfileAttachmentSlot;
 	expiresAt: Date;
 };
@@ -200,7 +204,7 @@ export const expiredAttachmentDraftFilter = (
 	attachmentExpiresAt: { $lte: expiredAtOrBefore },
 	$or: [
 		{ targetId: { $exists: false }, attachmentState: 'pending' },
-		{ targetId: { $exists: false }, attachmentState: 'ready', attachmentPurpose: { $ne: 'recording' } },
+		{ targetId: { $exists: false }, attachmentState: 'ready', $or: [{ attachmentPurpose: { $ne: 'recording' } }, { attachmentPurpose: 'recording', attachmentImportDraft: true }] },
 		{
 			targetId: { $exists: false },
 			attachmentState: 'finalizing',
@@ -214,7 +218,8 @@ export const expiredAttachmentDraftFilter = (
 });
 
 export const attachmentStore: AttachmentStore = {
-	async reservePending({ id, ownerId, crystal, objectKey, requestFingerprint, purpose, profileSlot, expiresAt }) {
+	async reservePending({ id, ownerId, crystal, objectKey, requestFingerprint, purpose, profileSlot, expiresAt, recordingImportDraft }) {
+		if (recordingImportDraft && (purpose !== 'recording' || profileSlot)) throw new AttachmentBindingError(400, 'Recording import drafts must retain recording purpose');
 		const now = new Date();
 		const unstamped = {
 			shareId: id,
@@ -233,6 +238,7 @@ export const attachmentStore: AttachmentStore = {
 			objectKey,
 			attachmentRequestFingerprint: requestFingerprint,
 			attachmentPurpose: purpose,
+			...(recordingImportDraft ? { attachmentImportDraft: true as const } : {}),
 			...(profileSlot ? { attachmentProfileSlot: profileSlot } : {}),
 			attachmentExpiresAt: expiresAt,
 			createdAt: now,
@@ -494,7 +500,7 @@ export const attachmentStore: AttachmentStore = {
 				updatedAt: new Date()
 			};
 			// A completed recording is an owner-private library Thing, not a draft.
-			if (before.attachmentPurpose === 'recording') delete next.attachmentExpiresAt;
+			if (isDurableRecordingUpload(before)) delete next.attachmentExpiresAt;
 			delete next.uploadId;
 			delete next.attachmentFinalizationLeaseId;
 			delete next.attachmentPartsIssuedAt;
@@ -517,11 +523,11 @@ export const attachmentStore: AttachmentStore = {
 						objectVersionId,
 						attachmentState: 'ready',
 						moderation: { status: 'pending' },
-						...(before.attachmentPurpose === 'recording' ? {} : { attachmentExpiresAt: expiresAt }),
+						...(isDurableRecordingUpload(before) ? {} : { attachmentExpiresAt: expiresAt }),
 						sizeBytes: nextSize,
 						updatedAt: next.updatedAt
 					},
-					$unset: { uploadId: '', attachmentFinalizationLeaseId: '', attachmentPartsIssuedAt: '', ...(before.attachmentPurpose === 'recording' ? { attachmentExpiresAt: '' } : {}) }
+					$unset: { uploadId: '', attachmentFinalizationLeaseId: '', attachmentPartsIssuedAt: '', ...(isDurableRecordingUpload(before) ? { attachmentExpiresAt: '' } : {}) }
 				},
 				{ session }
 			);
@@ -893,7 +899,39 @@ const bindReadyAttachmentsForPurpose = async (
 // object, so annotating an in-flight upload would be silently clobbered.
 // Crystal bytes change, so the delta rides the same exact-accounting
 // transaction markReady uses.
-export const annotateOwnedAttachment = async (ownerId: string, id: string, patch: AttachmentAnnotationPatch): Promise<AttachmentDoc> =>
+export const assertUnboundPostAnnotation = (doc: AttachmentDoc, now = new Date()) => {
+  if (doc.targetId || (doc.attachmentPurpose && doc.attachmentPurpose !== 'post') || doc.attachmentProfileSlot || !(doc.attachmentExpiresAt instanceof Date) || !Number.isFinite(doc.attachmentExpiresAt.getTime()) || doc.attachmentExpiresAt <= now) {
+    throw new AttachmentBindingError(409, 'Import annotations require a fresh unbound post attachment');
+  }
+};
+
+/** Server-only final step for recording imports. Upload approval, byte
+ * verification and moderation remain the normal upload pipeline's job.
+ * This cannot mint media, change purpose, or reuse an existing recording. */
+export const commitRecordingImport = async (ownerId: string, id: string, expectedBytes: number, patch: AttachmentAnnotationPatch = {}): Promise<AttachmentDoc> => {
+  if (isCustomMongoEndpointActive()) throw new AttachmentBindingError(400, 'Private attachments are unavailable with a custom MongoDB endpoint');
+  return withHomeMongoTransaction(async (session) => {
+    const things = await getHomeThingsCollection();
+    const before = await things.findOne({ ...attachmentMatch(id), ownerId } as any, { session }) as unknown as AttachmentDoc | null;
+    if (!before) throw new AttachmentBindingError(404, 'Attachment not found');
+    let next: AttachmentDoc;
+    try { next = prepareRecordingImport(before, ownerId, expectedBytes, patch); }
+    catch (error) { throw new AttachmentBindingError(409, error instanceof Error ? error.message : 'Invalid recording import'); }
+    const sizeBytes = thingStorageSizeBytes(next);
+    await applyUserStorageDelta(ownerId, sizeBytes - canonicalStoredBytes(before), session);
+    const write = await things.updateOne({
+      _id: before._id, ownerId, attachmentState: 'ready', attachmentPurpose: 'recording', attachmentImportDraft: true,
+      updatedAt: before.updatedAt, sizeBytes: before.sizeBytes
+    } as any, {
+      $set: { crystal: next.crystal, acl: [ACL_OWNER], updatedAt: next.updatedAt, sizeBytes },
+      $unset: { attachmentImportDraft: '', attachmentExpiresAt: '' }
+    }, { session });
+    if (write.matchedCount !== 1) throw new AttachmentBindingError(409, 'Recording changed during import');
+    return { ...next, sizeBytes };
+  });
+};
+
+export const annotateOwnedAttachment = async (ownerId: string, id: string, patch: AttachmentAnnotationPatch, options: { unboundPostOnly?: boolean } = {}): Promise<AttachmentDoc> =>
 	withHomeMongoTransaction(async (session) => {
 		const things = await getHomeThingsCollection();
 		const before = (await things.findOne({ ...attachmentMatch(id), ownerId } as any, { session })) as any as AttachmentDoc | null;
@@ -901,6 +939,9 @@ export const annotateOwnedAttachment = async (ownerId: string, id: string, patch
 		if (before.attachmentState !== 'ready') {
 			throw new AttachmentBindingError(409, 'This file is still uploading — try again once it is ready');
 		}
+		// Checked inside the same transaction as the metadata write. A concurrent
+		// bind retries against the new target and cannot alter an existing gallery.
+		if (options.unboundPostOnly) assertUnboundPostAnnotation(before);
 
 		const annotated = applyAttachmentAnnotationPatch(before.crystal, patch);
 		if (annotated.ok === false) throw new AttachmentBindingError(400, annotated.error);
