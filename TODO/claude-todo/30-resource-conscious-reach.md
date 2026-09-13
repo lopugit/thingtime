@@ -59,6 +59,10 @@ or environmental impact.
 - [TODO 28 — Service continuity](./28-service-continuity-and-recovery.md) owns
   availability, degraded operation, acknowledged writes, recovery, and
   incidents. Offline-local and durable-server state must stay distinct.
+- [TODO 44 — Local-first agency](./44-local-first-agency-and-accountable-synchronization.md)
+  owns drafts, pending intents, fresh-authority reconnect, conflict choices,
+  device-scope truth, and purge. This TODO owns their resource budgets and may
+  not silently broaden their authority.
 - [TODO 29 — Content provenance](./29-content-provenance-and-correction-integrity.md)
   owns source, edit, derivation, correction, and credential semantics. Media
   adaptation must preserve them.

@@ -62,6 +62,10 @@ experiment by itself.
   local-footprint controls, and environmental evidence. Adoption experiments
   must not exclude constrained users, paywall essential access, or turn logical
   storage bytes into an impact claim.
+- [TODO 44](./44-local-first-agency-and-accountable-synchronization.md) owns
+  honest local-draft, pending, conflict, canonical-confirmation, device-scope,
+  and purge semantics. Offline availability or fast first paint is not adoption
+  evidence, and local state may not become covert return telemetry.
 - [TODO 31](./31-creator-sustainability-and-fair-value.md) owns creator-commerce
   roles, provider-neutral transaction truth, receipts, entitlements,
   fulfilment, remedies, private settlement, and operating stop conditions.

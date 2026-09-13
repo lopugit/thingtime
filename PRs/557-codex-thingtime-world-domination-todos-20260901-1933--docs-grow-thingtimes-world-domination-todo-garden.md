@@ -18,6 +18,35 @@ required sequence:
 The branch is intentionally cumulative. It does not merge itself, implement
 the product work, or treat a plausible idea as an approved decision.
 
+## 2026-09-13 evening — local-first agency and accountable synchronization
+
+This run grounds the garden in Thingtime's flash-free local projections,
+safe-codec LocalForage tree, latest-revision autosave, same-origin tab channel,
+and bounded-cache helpers while refusing to treat local storage, connectivity,
+a channel message, an accepted response, or green tests as proof of canonical
+durability or device convergence. It adds:
+
+- `NOTES/local-first-agency-and-accountable-synchronization-baseline.md`, a
+  dated evidence ledger and explicit local/canonical vocabulary;
+- `PLAN/local-first-agency-and-accountable-synchronization-roadmap.md`, a gated
+  path through classification, honest drafts, fresh-authority reconnect,
+  conflict choices, bounded proof, and complete cleanup; and
+- `TODO/claude-todo/44-local-first-agency-and-accountable-synchronization.md`,
+  an execution epic with decisions, acceptance criteria, and stop conditions.
+
+The recommended pilot uses one approved adult test account, one synthetic
+private text Thing, one browser profile, two same-origin tabs, and deterministic
+network fixtures. It preserves a bounded draft across offline reload,
+reconnects after a canonical version change, shows both intentions, and tests
+keep-server, replace-with-draft, and edit-new-draft as separate fresh actions
+before deleting every fixture and local artifact.
+
+General offline queues, service workers, background replay, automatic merge,
+CRDTs, collaboration, attachments, multi-device replication, public or
+third-party content, analytics, AI, minors, institutions, and sensitive or
+high-impact work remain excluded. No runtime, API, schema, cache, sync,
+service-worker, storage, account, or production behavior changed.
+
 ## 2026-09-13 — automation agency and accountable recurrence
 
 This run grounds the garden in Thingtime's shipped current-chat default, saved

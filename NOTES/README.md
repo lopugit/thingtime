@@ -31,6 +31,7 @@ actionable item in [`../TODO/`](../TODO/TODO.md) when it is ready to execute.
 | [Relationship agency and consentful connection baseline](./relationship-agency-and-consentful-connection-baseline.md)                 | Evidence on follows, mutual friendship, ACL audiences, public graph exposure, stopping, block gaps, transition receipts, and one two-account pilot                  | 2026-09-12    |
 | [Joyful delight and play agency baseline](./joyful-delight-and-play-agency-baseline.md)                                               | Evidence on feedback, decoration, celebration, surprise, motion preferences, trigger truth, cleanup, non-coercion, and one local synthetic preview                  | 2026-09-12    |
 | [Automation agency and accountable-recurrence baseline](./automation-agency-and-accountable-recurrence-baseline.md)                   | Evidence on persistent-chat scheduling, recurrence and time-zone truth, occurrence identity, stopping, run receipts, remedies, and one synthetic message pilot      | 2026-09-13    |
+| [Local-first agency and accountable-synchronization baseline](./local-first-agency-and-accountable-synchronization-baseline.md)       | Evidence on optimistic caches, browser persistence, tab convergence limits, canonical truth, conflicts, scope, cleanup, and one synthetic draft pilot               | 2026-09-13    |
 
 ## Conventions
 

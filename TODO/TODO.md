@@ -676,3 +676,22 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     arbitrary tools, external messaging, production telemetry, new-chat-per-run
     by default, self-replication, backlog floods, minors, and sensitive or
     high-impact contexts remain separately gated.
+
+44. **💾 Make local-first agency and accountable synchronization a product contract.**
+
+    Preserve Thingtime's flash-free local projections, safe-codec LocalForage
+    tree, same-origin tab propagation, and bounded-cache helpers while keeping
+    drafts, pending intents, canonical API acceptance, authoritative reread,
+    conflicts, and device convergence distinct. Start only with one approved
+    adult test account, one synthetic private text Thing, one browser profile,
+    two same-origin tabs, and deterministic network fixtures: preserve a
+    bounded draft offline, reconnect after a canonical version change, show
+    both intentions, exercise keep-server/replace/edit-new choices, and verify
+    complete cleanup. Execute
+    `claude-todo/44-local-first-agency-and-accountable-synchronization.md` only
+    after qualified owners approve the claim boundary, vocabulary, storage
+    envelope and bounds, fresh-authority and conflict semantics, accessibility
+    profiles, evidence limits, accountable owners, and stop authority. General
+    offline queues, service workers, automatic merge, CRDTs, collaboration,
+    attachments, public or third-party state, analytics, AI, minors,
+    institutions, and sensitive or high-impact work remain separately gated.
