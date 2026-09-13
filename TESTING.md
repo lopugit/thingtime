@@ -274,6 +274,9 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Lopu Apple Watch recording automation
 
+- [ ] Recording transcript quotes: verify real Watch attachments and comments
+  using inherited ACLs beneath their private parent; sharing the parent or
+  rebinding/deleting either child must remove the quote on refresh.
 - [ ] Recording transcript quotes: on desktop and 390px mobile inspect a post,
       Thing/media detail, chat attachment and recording activity. Saved text
       appears beneath its own player/file; switching audio tracks switches the
