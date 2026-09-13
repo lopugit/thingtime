@@ -31,19 +31,6 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- Add personal signup invitations with editable avatar, display name and username,
-  password-only redemption, and credits reserved from the inviter's balance.
-  Signup transfers the gift atomically once; cancellation and hourly expiry
-  return unused gifts. Add capability negotiation, moderated thumbnails and
-  concurrency/rollback coverage. [PR #790 details](../PRs/790-codex-gift-credit-invites-signup-invitations.md). — Codex (AI), 2026-09-13
-
-- 2026-09-13 — Reconciled marketing publishing PR #638 with main, preserving both marketing and run-chat capability regressions. Verified 85 marketing, 56 capability and 16 navigation tests, plus the anonymous admin boundary and unpublished marketing gate in the PR preview at desktop/mobile sizes. — Codex (AI)
-
-- 2026-09-13 — Correct transcript reads for Watch attachments and comments with
-  inherited privacy. Resolve only their exact, still-private owned parent;
-  reject shared/rebound/deleted children. Recordings capability 1.7.1.
-  Regression includes production-shaped inherited ACLs. **Codex (AI)**
-
 - 2026-09-13 — Show saved recording transcripts as subtle, expandable quotes
   beneath the shared audio player and recording activity. Owner-scoped batched
   reads resolve existing relational comments without inference, copied parent

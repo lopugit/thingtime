@@ -1,4 +1,4 @@
-import { ACL_INHERIT, ACL_OWNER } from '~/schemas/registry';
+import { ACL_OWNER } from '~/schemas/registry';
 import { isPrivateRecordingPost, isPrivateSavedRecording } from './recordingSources';
 
 export const MAX_TRANSCRIPT_BATCH = 20;
@@ -8,15 +8,12 @@ export const parseTranscriptAttachmentIds = (value: string): string[] | null => 
 		? [...new Set(ids)] : null;
 };
 
-// Bound children normally inherit their parent's ACL. This predicate is only
-// used after resolving their exact, currently owned/private recording parent.
-const privateOwnedChild = (row: any, ownerId: string) => row?.ownerId === ownerId && !row.appId && !row.deletedAt &&
-	row.moderation?.status !== 'blocked' && Array.isArray(row.acl) && row.acl.length === 1 &&
-	(row.acl[0] === ACL_OWNER || row.acl[0] === ACL_INHERIT);
+const privateOwned = (row: any, ownerId: string) => row?.ownerId === ownerId && !row.appId && !row.deletedAt &&
+	Array.isArray(row.acl) && row.acl.length === 1 && row.acl[0] === ACL_OWNER;
 
 export const canReadRecordingTranscript = (ownerId: string, attachment: any, parent: any) =>
 	isPrivateSavedRecording(attachment, ownerId) || (
-		privateOwnedChild(attachment, ownerId) && attachment.thingtime?.includes('attachment') &&
+		privateOwned(attachment, ownerId) && attachment.thingtime?.includes('attachment') &&
 		attachment.attachmentState === 'ready' && !attachment.attachmentLinked &&
 		attachment.crystal?.mediaKind === 'audio' && attachment.moderation?.status !== 'blocked' &&
 		attachment.targetId === parent?.shareId && isPrivateRecordingPost(parent, ownerId)
@@ -29,7 +26,7 @@ export const projectRecordingTranscript = (ownerId: string, targetId: string, id
 	const parts: string[] = [];
 	for (const id of ids) {
 		const comment = comments.get(id);
-		if (!privateOwnedChild(comment, ownerId) || !comment.thingtime?.includes('comment') ||
+		if (!privateOwned(comment, ownerId) || !comment.thingtime?.includes('comment') ||
 			comment.targetId !== targetId || typeof comment.crystal?.text !== 'string') return null;
 		parts.push(comment.crystal.text.replace(/^🦄 Lopu transcription(?: \(\d+\/\d+\))?\r?\n\r?\n/u, ''));
 	}
