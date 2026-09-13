@@ -1,4 +1,5 @@
 export const SETTINGS_TABS = [
+	{ id: 'account', label: 'Account' },
 	{ id: 'profile', label: 'Profile' },
 	{ id: 'things', label: 'Things' },
 	{ id: 'appearance', label: 'Appearance' },
@@ -11,11 +12,15 @@ export const SETTINGS_TABS = [
 ] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number]['id'];
 export function resolveSettingsTab(value?: string | null, hash = ''): SettingsTab {
-	if (SETTINGS_TABS.some((tab) => tab.id === value)) return value as SettingsTab;
+	const knownTab = SETTINGS_TABS.some((tab) => tab.id === value);
+	// Credits and invitations moved from Lopu to Account. Preserve both older
+	// /settings#... bookmarks and /settings/lopu#... links.
+	if ((hash === '#lopu-credits' || hash === '#gift-invites') && (!knownTab || value === 'lopu' || value === 'account')) return 'account';
+	if (knownTab) return value as SettingsTab;
 	// Keep existing section bookmarks and links working after introducing tabs.
 	if (hash === '#ai-waterfalls') return 'ai-waterfalls';
 	if (hash === '#secure-vault') return 'security';
-	if (hash === '#lopu' || hash === '#lopu-credits') return 'lopu';
+	if (hash === '#lopu') return 'lopu';
 	return 'profile';
 }
 export const settingsTabHref = (tab: SettingsTab) => `/settings/${tab}`;

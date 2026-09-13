@@ -12,6 +12,15 @@ test('existing section bookmarks select the section’s category', () => {
 	assert.equal(resolveSettingsTab(null, '#ai-waterfalls'), 'ai-waterfalls');
 	assert.equal(resolveSettingsTab(null, '#secure-vault'), 'security');
 	assert.equal(resolveSettingsTab(null, '#lopu'), 'lopu');
-	assert.equal(resolveSettingsTab(null, '#lopu-credits'), 'lopu');
+	assert.equal(resolveSettingsTab(null, '#lopu-credits'), 'account');
 	assert.equal(resolveSettingsTab('things', '#lopu'), 'things');
+});
+
+test('Account owns new and legacy invite and credits links without overriding unrelated categories', () => {
+	assert.equal(settingsTabHref('account'), '/settings/account');
+	for (const hash of ['#gift-invites', '#lopu-credits']) {
+		for (const tab of [null, 'account', 'lopu', 'unknown']) assert.equal(resolveSettingsTab(tab, hash), 'account');
+		assert.equal(resolveSettingsTab('profile', hash), 'profile');
+	}
+	assert.equal(resolveSettingsTab('lopu'), 'lopu');
 });
