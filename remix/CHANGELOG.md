@@ -31,6 +31,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Recover committed text/link posts when the server omits an empty media layout;
+  bound stalled publish/readback requests and preserve the same retry UUID. Use
+  same-tab authority sign-in on foreign previews and keep login forms unobscured.
+  Retry brief moderation throttles once and preserve invite drafts on review
+  failure; auth-invites contract 1.0.1. — Codex (AI), 2026-09-13
+
 - Add Settings → Account in the shared page and popup for account switching,
   storage, invitations, credits and plans. Preserve old credits/invite bookmarks
   and keep profile editing and assistant preferences in their existing tabs.
