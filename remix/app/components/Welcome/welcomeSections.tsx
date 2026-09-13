@@ -55,7 +55,7 @@ export const WelcomeCardSection = () => {
 
 	return (
 		<UserCard user={user}>
-			{!user.emailVerified && !user.temporary && (
+			{user.email && !user.emailVerified && !user.temporary && (
 				<Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">
 					📬 We sent a verification link to your email.
 				</Text>
