@@ -15,6 +15,8 @@ import { recordingConnectionStatus, validateRecordingConnections } from '~/api/u
 import { parseRecordingSettingsPatch } from '~/api/utils/lopu/recordingsCore';
 import { updateRecordingTodo } from '~/api/utils/lopu/recordingsReminders';
 import { dispatchThingAction } from '~/api/utils/things/thingActions';
+import { parseTranscriptAttachmentIds } from '~/api/utils/lopu/recordingTranscriptProjection';
+import { readRecordingTranscripts } from '~/api/utils/lopu/recordingTranscripts';
 
 const headers = { 'Cache-Control': 'private, no-store', Pragma: 'no-cache' };
 const reply = (body: unknown, status = 200) => json(body, { status, headers });
@@ -22,6 +24,16 @@ const reply = (body: unknown, status = 200) => json(body, { status, headers });
 export const loader = async ({ request }: { request: Request }) => {
 	const user = await getScopedUser(request, 'lopu.recordings');
 	if (!user || user.temporary) return reply({ ok: false, error: 'Sign in to manage your recordings.' }, 401);
+	const requested = new URL(request.url).searchParams.get('transcriptAttachmentIds');
+	if (requested !== null) {
+		const ids = parseTranscriptAttachmentIds(requested);
+		if (!ids) return reply({ ok: false, error: 'Choose between 1 and 20 recording attachment IDs.' }, 400);
+		try {
+			return await runWithMongoEndpoint(null, async () => reply({ ok: true, ownerId: user.id, transcripts: await readRecordingTranscripts(user.id, ids) }));
+		} catch {
+			return reply({ ok: false, error: 'Transcripts are temporarily unavailable.' }, 503);
+		}
+	}
 	return runWithMongoEndpoint(null, async () =>
 		reply({ ok: true, ownerId: user.id, ...(await listRecordingAutomation(user.id)), provider: await recordingConnectionStatus(user.id) })
 	);

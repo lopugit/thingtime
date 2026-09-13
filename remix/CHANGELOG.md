@@ -31,6 +31,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-13 — Show saved recording transcripts as subtle, expandable quotes
+  beneath the shared audio player and recording activity. Owner-scoped batched
+  reads resolve existing relational comments without inference, copied parent
+  data or migrations; recordings capability 1.7.0. **Codex (AI)**
+
 - Promote the native Apple widget suite, browser OAuth scopes, saved endpoints, per-widget routing, automatic signed Widgets releases and Recovery support from PRs #727 and #774. — Codex (AI), 2026-09-12
 - Bound root session reads to two attempts with timeout/cancellation, provide
   recoverable retry/reload controls, and hide/reset account-owned UI across
