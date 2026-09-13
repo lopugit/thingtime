@@ -545,13 +545,12 @@ export const SettingsContent = ({
 				))}
 			</Flex>
 			<Box as="section" aria-label={`${SETTINGS_TABS.find((item) => item.id === tab)?.label} settings`} minW={0}>
-				{tab === 'profile' && (
+				{tab === 'account' && (
 					<Flex direction="column" gap={4} minW={0}>
 						{/* 1 · account — the switcher lists every signed-in account and hosts
             the add / register-new inline forms */}
 						<SettingsSection eyebrow="Account">
 							<AccountSwitcher onNavigate={onNavigate} />
-							<TierFeatureComparison />
 							{user && (
 								<Flex flexDirection="column" rowGap={3} width="100%">
 									<AccountStorageSummary user={user} />
@@ -568,7 +567,7 @@ export const SettingsContent = ({
 												<Button size="xs" variant="outline" isLoading={loggingOut} onClick={handleLogout}>
 													Log out 🗝️
 												</Button>
-												{!user.emailVerified && (
+												{user.email && !user.emailVerified && (
 													<Button size="xs" variant="outline" onClick={handleResendVerification}>
 														Resend verification 📬
 													</Button>
@@ -579,6 +578,32 @@ export const SettingsContent = ({
 								</Flex>
 							)}
 						</SettingsSection>
+						{user && !user.temporary && (
+							<SettingsSection eyebrow="Invitations">
+								<InvitePanel key={`invites-${user.id}`} />
+							</SettingsSection>
+						)}
+						{/* 7 · Lopu credits & usage (auth only) — the verified status, the
+            balance, this month / lifetime, history and the request form.
+            Anchored: the balance chip and the locked state deep-link
+            #lopu-credits. */}
+						{user && !user.temporary && (
+							<Box id={LOPU_CREDITS_ANCHOR_ID} width="100%" scrollMarginTop="calc(var(--tt-nav-clearance, 54px) + 16px)">
+								<SettingsSection
+									eyebrow="Lopu credits & usage 🦄"
+									description="What Lopu's turns on Thingtime's own models cost you, in credits (1 credit = 1 USD of list price). Turns on your own Secure Vault providers are free here."
+								>
+									<LopuCreditsPanel key={user.id} admin={user.isAdmin} />
+								</SettingsSection>
+							</Box>
+						)}
+						<SettingsSection eyebrow="Plan & features">
+							<TierFeatureComparison />
+						</SettingsSection>
+					</Flex>
+				)}
+				{tab === 'profile' && (
+					<Flex direction="column" gap={4} minW={0}>
 						{user && !user.temporary && (
 							<SettingsSection eyebrow="Privacy" description="Choose what other people can see on your public profile.">
 								<Flex flexDirection="column">
@@ -849,21 +874,6 @@ export const SettingsContent = ({
 								</Flex>
 							</SettingsSection>
 						</Box>
-						{/* 7 · Lopu credits & usage (auth only) — the verified status, the
-            balance, this month / lifetime, history and the request form.
-            Anchored: the balance chip and the locked state deep-link
-            #lopu-credits. */}
-						{user && !user.temporary && (
-							<Box id={LOPU_CREDITS_ANCHOR_ID} width="100%" scrollMarginTop="calc(var(--tt-nav-clearance, 54px) + 16px)">
-								<SettingsSection
-									eyebrow="Lopu credits & usage 🦄"
-									description="What Lopu's turns on Thingtime's own models cost you, in credits (1 credit = 1 USD of list price). Turns on your own Secure Vault providers are free here."
-								>
-									<LopuCreditsPanel key={user.id} admin={user.isAdmin} />
-                    <Box mt={8}><InvitePanel key={`invites-${user.id}`} /></Box>
-								</SettingsSection>
-							</Box>
-						)}
 					</Flex>
 				)}
 				{tab === 'ai-waterfalls' && (
@@ -885,7 +895,7 @@ export const SettingsContent = ({
 						)}
 					</Flex>
 				)}
-				{!user && ['notifications', 'security', 'connections'].includes(tab) && (
+				{!user && ['profile', 'notifications', 'security', 'connections'].includes(tab) && (
 					<SettingsSection eyebrow={tab} description="Sign in to manage these account settings.">
 						<Button onClick={() => navigate('/login')}>Log in</Button>
 					</SettingsSection>

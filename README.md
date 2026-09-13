@@ -3214,7 +3214,7 @@ Recovery remain release acceptance checks.
 
 ## Gifted signup invitations
 
-Signed-in personal accounts can create single-use invites in **Settings → Lopu →
+Signed-in personal accounts can create single-use invites in **Settings → Account →
 Invite someone with a gift**. Choose a username, display name, optional avatar and
 0–10,000 credits (six decimal places). The gift is deducted immediately and held
 until signup. Cancelling an unused invite returns it; links expire after 30 days.
