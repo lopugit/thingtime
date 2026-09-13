@@ -37,6 +37,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   return unused gifts. Add capability negotiation, moderated thumbnails and
   concurrency/rollback coverage. [PR #790 details](../PRs/790-codex-gift-credit-invites-signup-invitations.md). — Codex (AI), 2026-09-13
 
+- 2026-09-13 — Correct transcript reads for Watch attachments and comments with
+  inherited privacy. Resolve only their exact, still-private owned parent;
+  reject shared/rebound/deleted children. Recordings capability 1.7.1.
+  Regression includes production-shaped inherited ACLs. **Codex (AI)**
+
 - 2026-09-13 — Show saved recording transcripts as subtle, expandable quotes
   beneath the shared audio player and recording activity. Owner-scoped batched
   reads resolve existing relational comments without inference, copied parent
