@@ -132,10 +132,12 @@ export const Footer = (props) => {
           </Flex>
           {/* Render the exact source identity for this build. */}
           {branchName && (
-            <Flex flexDirection="row" fontSize="xs">
+            <Flex flexDirection="row" fontSize="xs" minWidth={0}>
               <Box
                 as="a"
                 href={`https://github.com/lopugit/thingtime/tree/${branchName}`}
+                minWidth={0}
+                overflowWrap="anywhere"
                 target="_blank"
                 rel="noreferrer"
                 fontFamily="mono"

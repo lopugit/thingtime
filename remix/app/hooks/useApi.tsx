@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { withPostRequestDeadline } from './postRequest';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { AI_COMPLETION_REQUIREMENTS, type AiCompletionInput } from '~/api/utils/ai/completionCore';
 
@@ -1000,7 +1001,7 @@ export function useApi() {
         async (args) => {
 					const payload = buildThingCreateRequestPayload(args);
 					const attachmentIds = args?.attachmentIds;
-					const ret = asyncFetcher.submit(payload, { action: '/api/v1/things' });
+					const ret = withPostRequestDeadline(signal => asyncFetcher.submit(payload, { action: '/api/v1/things', errorContext: 'publish your post', signal }));
 					if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {
 						ret.then(refreshRootData).catch(() => {});
 					}
