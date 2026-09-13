@@ -65,12 +65,13 @@ final class RecoveryStore: ObservableObject {
         }
     }
 
-    func cache(_ release: RecoveryRelease, component: RecoveryComponent) async {
+    @discardableResult
+    func cache(_ release: RecoveryRelease, component: RecoveryComponent) async -> CachedBundle? {
         if let reason = release.unavailableReason {
             notice = reason
-            return
+            return nil
         }
-        guard !isCaching else { return }
+        guard !isCaching else { return nil }
         isCaching = true
         notice = "Downloading \(component.title) \(release.version ?? release.tag)…"
         defer { isCaching = false }
@@ -81,7 +82,7 @@ final class RecoveryStore: ObservableObject {
             notice = "Checking archive integrity…"
             let recoveryApp = Bundle.main.bundleURL
             let cacheRoot = cache.root
-            _ = try await Task.detached(priority: .userInitiated) {
+            let bundle = try await Task.detached(priority: .userInitiated) {
                 let context = release.isUnsigned ? nil : try BundleVerifier.signingContext(for: recoveryApp)
                 return try RecoveryArchive.cache(archive, release: release, component: component, cacheRoot: cacheRoot, signingContext: context)
             }.value
@@ -89,10 +90,19 @@ final class RecoveryStore: ObservableObject {
             notice = release.isUnsigned
                 ? "Cached UNSIGNED \(component.title) \(release.version ?? release.tag). macOS may require Open Anyway before first launch."
                 : "Cached verified \(component.title) \(release.version ?? release.tag)."
+            return bundle
         } catch {
             notice = "Download was not cached. Installed apps and existing cached versions are unchanged."
             errorMessage = error.localizedDescription
+            return nil
         }
+    }
+
+    func downloadAndInstall(_ release: RecoveryRelease, component: RecoveryComponent) async {
+        // Use only this download's verified result, never a previously selected
+        // or most-recent cache entry. cache's busy flag is cleared before handoff.
+        guard let bundle = await cache(release, component: component) else { return }
+        install(bundle)
     }
 
     func launch(_ bundle: CachedBundle) {

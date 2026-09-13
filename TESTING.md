@@ -6345,6 +6345,13 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ### Recovery cards, build IDs and app selection
 
+- [ ] In release details, use **Download & install** beside **Download and verify**.
+      It must verify and install the exact selected release through the existing
+      helper, preserving rollback; verify-only must leave installed apps unchanged.
+      Both buttons disable during a download and for withdrawn releases. Failed
+      downloads must never install an older cached build. Open/cancel unsigned
+      install acknowledgement, then verify cache-only still only caches. Check
+      the action row at wide and narrow window sizes, scrolling to the bottom.
 - [ ] In both This Mac views, confirm build IDs come from the bundle or manifest,
       old Electron bundles expose their embedded commit, and Recovery cards use
       the Recovery component name even if old metadata used a desktop title.
