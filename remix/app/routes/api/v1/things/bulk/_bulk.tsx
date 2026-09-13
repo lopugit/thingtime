@@ -3,6 +3,7 @@ import { json, readJsonBody } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import { bulkThings } from '~/api/utils/things/things';
+import { isSameOriginAttachmentRequest } from '~/api/utils/attachments/attachmentResponses';
 
 // POST /api/v1/things/bulk — { op: 'move'|'copy'|'delete'|'share', ids: [...],
 // folderId?, acl?, recursive? } — multi-select operations for /things. Each id
@@ -26,7 +27,9 @@ export const action = async ({ request }: { request: Request }) => {
   }
 
   const body = await readJsonBody(request, 64 * 1024);
-  const result = await bulkThings({ id: user.id, username: user.username }, body);
+  const result = await bulkThings({ id: user.id, username: user.username }, body, {}, {
+    archiveOwnerId: user.accountKind === 'user' && isSameOriginAttachmentRequest(request) ? user.id : undefined
+  });
 
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status });

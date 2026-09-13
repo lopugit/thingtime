@@ -65,6 +65,7 @@ export const thingPath = (thing: Pick<LinkableThing, 'id' | 'thingtime'>): strin
 	if (thing.thingtime.includes('action')) return `/actions/${id}`;
 	if (thing.thingtime.includes('webpage')) return `/p/${id}`;
 	if (thing.thingtime.includes('schema')) return `/schemas/${id}`;
+	if (thing.thingtime.length === 1 && thing.thingtime[0] === 'chat-archive') return `${universalThingLink(thing.id)}?archive=true`;
 	return universalThingLink(thing.id);
 };
 

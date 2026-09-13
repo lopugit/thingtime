@@ -70,6 +70,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
   private let nativeToken: String
   private let showLauncher: () -> Void
   private let hideLauncher: () -> Void
+  private let dismissLauncher: () -> Void
   private let launcherState: () throws -> [String: Any]
   private let updateLauncherPin: (Bool) throws -> [String: Any]
   private let openNewLauncherWindow: () throws -> [String: Any]
@@ -95,6 +96,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
     loginItem: LaunchAtLoginService,
     showLauncher: @escaping () -> Void,
     hideLauncher: @escaping () -> Void,
+    dismissLauncher: (() -> Void)? = nil,
     launcherState: @escaping () throws -> [String: Any] = {
       ["windowId": "default", "pinned": false, "pinningEnabled": false]
     },
@@ -123,6 +125,7 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
     self.loginItem = loginItem
     self.showLauncher = showLauncher
     self.hideLauncher = hideLauncher
+    self.dismissLauncher = dismissLauncher ?? hideLauncher
     self.launcherState = launcherState
     self.updateLauncherPin = updateLauncherPin
     self.openNewLauncherWindow = openNewLauncherWindow
@@ -218,7 +221,13 @@ final class CommanderNativeBridge: NSObject, WKScriptMessageHandler, UNUserNotif
     do {
       let result: Any?
       switch request.method {
-      case "launcher.hide": hideLauncher(); result = nil
+      case "launcher.hide":
+        if request.params?["restorePreviousApplication"]?.bool == true {
+          dismissLauncher()
+        } else {
+          hideLauncher()
+        }
+        result = nil
       case "launcher.show": showLauncher(); result = nil
       case "launcher.state": result = try launcherState()
       case "launcher.pin":

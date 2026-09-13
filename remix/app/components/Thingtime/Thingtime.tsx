@@ -1046,13 +1046,17 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 	);
 
 	const deleteValue = React.useCallback(() => {
+		// The provider's empty-path setter is a no-op. A top-level value has
+		// an empty parent path, so use its explicit root-replacement boundary.
+		const destination = Array.isArray(parentPath) && parentPath.length === 0 ? 'thingtime' : parentPath;
+		const leaf = fullPath[fullPath.length - 1];
 		// array parents stay arrays — spreading them into an object would
 		// corrupt the parent shape
 		if (parent instanceof Array) {
-			const index = Number(path);
+			const index = Number(leaf);
 			const clone = parent.filter((item, idx) => idx !== index);
 
-			setThingtime(parentPath, clone, {
+			setThingtime(destination, clone, {
 				namespace: 'user'
 			});
 			return;
@@ -1061,12 +1065,12 @@ export const Thingtime = (args: ThingtimeComponentProps = {}) => {
 		// use parent path to clone parent object but without this key
 		const clone = { ...parent };
 
-		delete clone[path];
+		delete clone[leaf];
 
-		setThingtime(parentPath, clone, {
+		setThingtime(destination, clone, {
 			namespace: 'user'
 		});
-	}, [path, parent, parentPath, setThingtime]);
+	}, [fullPath, parent, parentPath, setThingtime]);
 
 	const atomicValue = React.useMemo(() => {
 		const debug: any = {};

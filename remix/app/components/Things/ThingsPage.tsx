@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { transferIntent } from '~/utils/thingTransfer/intent';
 import { readThingsLocation, writeThingsLocation, type ThingsLocationState } from './thingsLocation';
 
 import { Box, Button, Flex, Input, Menu, MenuButton, MenuItem, MenuList, Portal, Text } from '@chakra-ui/react';
@@ -26,6 +27,10 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { RAINBOW_TEXT } from '~/theme/rainbow';
 
 import { FolderTree } from './FolderTree';
+import { ThingImportDialog } from './ThingImportDialog';
+import { ThingExportDialog } from './ThingExportDialog';
+import { bundleFromPlan, readTransferClipboard, writeTransferClipboard, MAX_CLIPBOARD_BYTES } from '~/utils/thingTransfer/browser';
+import { transferChecksum, type TransferBundle } from '~/utils/thingTransfer/archive';
 import { DeleteConfirmDialog, MoveDialog, NewFolderDialog, PreviewModal, RenameDialog, ShareDialog } from './ThingsDialogs';
 import { ThingsColumnsView, ThingsGridView, ThingsListView } from './ThingsViews';
 import type { ThingsItemAction, ThingsItemHandlers } from './ThingsViews';
@@ -120,6 +125,19 @@ const dedupeById = (things: ThingsThing[]): ThingsThing[] => {
 
 export const ThingsPage = () => {
   const user = useCurrentUser();
+  const [importOpen, setImportOpen] = useState(false);
+  const [importBundle, setImportBundle] = useState<TransferBundle | null>(null);
+  const [importDestination, setImportDestination] = useState<string | null>(null);
+  const [exportIds, setExportIds] = useState<string[]>([]);
+  const transferOperation = useRef<AbortController | null>(null);
+  const transferAccount = useRef(user?.id);
+  useEffect(() => {
+    if (transferAccount.current !== user?.id) {
+      transferAccount.current = user?.id;
+      setImportOpen(false); setImportBundle(null); setExportIds([]); setClipboard(null);
+    }
+    return () => { transferOperation.current?.abort(); };
+  }, [user?.id]);
   const api = useApi();
   const lopu = useLopu();
   const navigate = useNavigate();
@@ -204,7 +222,10 @@ export const ThingsPage = () => {
 
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const anchorRef = useRef<string | null>(null);
-  const [clipboard, setClipboard] = useState<ThingsClipboard>(null);
+  const [clipboard, setClipboard] = useState<ThingsClipboard>(() => {
+    const cut = transferIntent.peek(user?.id);
+    return cut ? { mode: 'cut', ids: [...cut.ids] } : null;
+  });
 
   // drag-and-drop: the ids in flight + the folder currently hovered as a drop
   // target (null = the root row/breadcrumb, undefined = nothing hovered)
@@ -238,7 +259,7 @@ export const ThingsPage = () => {
   const [deleteThings, setDeleteThings] = useState<ThingsThing[]>([]);
   const [previewThing, setPreviewThing] = useState<ThingsThing | null>(null);
 
-	const dialogOpen = newFolderOpen || !!renameThing || moveOpen || !!shareThings.length || !!deleteThings.length || !!previewThing || !!deviceParam;
+	const dialogOpen = importOpen || !!exportIds.length || newFolderOpen || !!renameThing || moveOpen || !!shareThings.length || !!deleteThings.length || !!previewThing || !!deviceParam;
 
   // ------------------------------------------------------------------ data
 
@@ -672,12 +693,31 @@ export const ThingsPage = () => {
 
 	const copyToClipboard = useCallback((mode: 'copy' | 'cut', ids: string[]) => {
       if (!ids.length) return;
-      setClipboard({ mode, ids });
-      lopuRef.current({
-        title: mode === 'copy' ? `Copied ${ids.length} 📋` : `Cut ${ids.length} ✂️`,
-        description: 'Paste into any folder.',
-        status: 'info',
-        duration: 5000
+      transferOperation.current?.abort();
+      const controller = new AbortController();
+      transferOperation.current = controller;
+      const ownerId = recordingOwner.current;
+      const ticket = transferIntent.ticket(ownerId);
+      const bundle = apiRef.current.v1.things.export({ ids }, { signal: controller.signal }).then(async (result) => {
+        if (!result?.ok) throw new Error(result?.error || 'Export failed');
+        const value = await bundleFromPlan(result.plan, { signal: controller.signal });
+        controller.signal.throwIfAborted();
+        return value;
+      });
+      // Invoke synchronously in the gesture, before the export promise resolves.
+      void writeTransferClipboard(bundle, controller.signal).then(async (text) => {
+        const digest = await transferChecksum(new TextEncoder().encode(text));
+        if (controller.signal.aborted || recordingOwner.current !== ownerId) return;
+        if (mode === 'cut') {
+          if (!transferIntent.record(ticket, digest, ids)) return;
+        } else transferIntent.clear();
+        setClipboard({ mode, ids });
+        lopuRef.current({ title: mode === 'copy' ? `Copied ${ids.length} 📋` : `Cut ${ids.length} ✂️`,
+          description: 'Copied portable content to your clipboard. Paste in Things to import; cut moves only within this account.', status: 'success' });
+      }).catch((error) => {
+        const cancelled = controller.signal.aborted;
+        controller.abort();
+        if (!cancelled && recordingOwner.current === ownerId) lopuRef.current({ title: 'Could not copy', description: error instanceof Error ? error.message : 'Use Download instead.', status: 'error' });
       });
 	}, []);
 
@@ -718,18 +758,37 @@ export const ThingsPage = () => {
   );
 
   const pasteClipboardTo = useCallback(
-    async (destination: string | null) => {
-      if (!clipboard?.ids.length) return;
-      const { mode, ids } = clipboard;
-      const sources = sourceKeysOf(ids);
-      const result = await runBulk(mode === 'cut' ? 'move' : 'copy', ids, destination);
-      if (!result.ok) return;
-      summarize(mode === 'cut' ? 'Moved' : 'Pasted', result.succeeded, result.failures);
-      if (mode === 'cut') setClipboard(null);
-      setSelection(new Set());
-      refreshAfterMutation([...sources, destination]);
+    async (destination: string | null, pastedText?: string) => {
+      const ownerId = recordingOwner.current;
+      transferOperation.current?.abort();
+      const controller = new AbortController();
+      transferOperation.current = controller;
+      try {
+        const text = pastedText ?? await navigator.clipboard.readText();
+        if (text.length > MAX_CLIPBOARD_BYTES) throw new Error('Clipboard content is too large. Import the ZIP file instead.');
+        const digest = await transferChecksum(new TextEncoder().encode(text));
+        if (controller.signal.aborted || recordingOwner.current !== ownerId) return;
+        const cut = transferIntent.match(ownerId, digest);
+        if (cut) {
+          const ids = [...cut.ids];
+          const result = await runBulk('move', ids, destination);
+          if (!result.ok || recordingOwner.current !== ownerId) return;
+          summarize('Moved', result.succeeded, result.failures);
+          const succeeded = new Set(result.results.filter((entry) => entry.ok).map((entry) => entry.id));
+          const remaining = ids.filter((id) => !succeeded.has(id));
+          setClipboard(remaining.length ? { mode: 'cut', ids: remaining } : null);
+          transferIntent.settle(cut, [...succeeded]);
+          setSelection(new Set()); refreshAfterMutation([...sourceKeysOf(ids), destination]);
+        } else {
+          const bundle = await readTransferClipboard(text, controller.signal);
+          if (controller.signal.aborted || recordingOwner.current !== ownerId) return;
+          setImportBundle(bundle); setImportDestination(destination); setImportOpen(true);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted && recordingOwner.current === ownerId) lopuRef.current({ title: 'Could not paste', description: error instanceof Error ? error.message : 'Choose a Thingtime transfer file instead.', status: 'error' });
+      }
     },
-    [clipboard, refreshAfterMutation, runBulk, sourceKeysOf, summarize]
+    [refreshAfterMutation, runBulk, sourceKeysOf, summarize]
   );
 
   const pasteClipboard = useCallback(() => pasteClipboardTo(folderId), [folderId, pasteClipboardTo]);
@@ -963,6 +1022,9 @@ export const ThingsPage = () => {
     (thing: ThingsThing, action: ThingsItemAction) => {
       const group = selection.has(thing.id) && selection.size > 1 ? selectedThings : [thing];
       switch (action) {
+        case 'download':
+          setExportIds(group.map((entry) => entry.id));
+          break;
         case 'send-to-lopu':
           void sendRecording(thing);
           break;
@@ -1111,6 +1173,9 @@ export const ThingsPage = () => {
     ({ action }: ThingContextMenuAction) => {
       if (!menuThing) return;
       switch (action.command) {
+        case 'download':
+          onItemAction(menuThing, 'download');
+          break;
         case 'send-to-lopu':
           onItemAction(menuThing, 'send-to-lopu');
           break;
@@ -1178,6 +1243,9 @@ export const ThingsPage = () => {
         displayMode?: ThingsDisplayMode;
       };
       switch (action.command) {
+        case 'import':
+          setImportBundle(null); setImportDestination(folderId); setImportOpen(true);
+          break;
         case 'new-folder':
           setNewFolderOpen(true);
           break;
@@ -1201,7 +1269,7 @@ export const ThingsPage = () => {
           break;
       }
     },
-    [pasteClipboard, selectAll, setSort, setGroupBy, setView, setDisplayMode]
+    [folderId, pasteClipboard, selectAll, setSort, setGroupBy, setView, setDisplayMode]
   );
 
   // context menus close on any outside press (their surfaces portal to <body>,
@@ -1230,11 +1298,11 @@ export const ThingsPage = () => {
         event.preventDefault();
         selectAll();
       } else if (meta && event.key.toLowerCase() === 'c' && selection.size) {
+        event.preventDefault();
         copyToClipboard('copy', [...selection]);
       } else if (meta && event.key.toLowerCase() === 'x' && selection.size) {
+        event.preventDefault();
         copyToClipboard('cut', [...selection]);
-      } else if (meta && event.key.toLowerCase() === 'v' && clipboard?.ids.length) {
-        pasteClipboard();
       } else if ((event.key === 'Delete' || event.key === 'Backspace') && selection.size) {
         event.preventDefault();
         setDeleteThings(selectedThings);
@@ -1242,9 +1310,23 @@ export const ThingsPage = () => {
         setSelection(new Set());
       }
     };
+    // Native paste supplies the text without requiring clipboard-read permission.
+    // Leave editable controls and other dialogs' clipboard handling untouched.
+    const onPaste = (event: ClipboardEvent) => {
+      if (event.defaultPrevented || dialogOpen || itemMenu.open || backgroundMenu.open) return;
+      const target = event.target as HTMLElement | null;
+      // Paste can target a non-Element node (the document) when nothing is
+      // focused; call closest() optionally so the listener cannot throw.
+      if (target?.closest?.('input, textarea, [contenteditable]:not([contenteditable="false"]), [role="dialog"]')) return;
+      const text = event.clipboardData?.getData('text/plain');
+      if (!text) return;
+      event.preventDefault();
+      void pasteClipboardTo(folderId, text);
+    };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [backgroundMenu.open, clipboard, copyToClipboard, dialogOpen, itemMenu.open, pasteClipboard, selectAll, selectedThings, selection]);
+    window.addEventListener('paste', onPaste);
+    return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('paste', onPaste); };
+  }, [backgroundMenu.open, clipboard, copyToClipboard, dialogOpen, itemMenu.open, pasteClipboardTo, folderId, selectAll, selectedThings, selection]);
 
   // ------------------------------------------------------------------ render
 
@@ -1421,6 +1503,11 @@ export const ThingsPage = () => {
 
         {/* toolbar: browse controls stay available while contextual selection actions appear below */}
         <Flex alignItems="center" columnGap={4} rowGap={2} wrap="wrap">
+          {user?.id && <>
+            <Button {...pillProps(false)} onClick={() => { setImportBundle(null); setImportDestination(folderId); setImportOpen(true); }}>Import…</Button>
+            <Button {...pillProps(false)} onClick={pasteClipboard}>Paste</Button>
+            {!!selection.size && <Button {...pillProps(false)} onClick={() => setExportIds([...selection])}>Download…</Button>}
+          </>}
           <ToolbarGroup label="view">
             <Button {...pillProps(view === 'grid')} leftIcon={<LayoutGrid size={13} />} onClick={() => setView('grid')}>
               Grid
@@ -1483,7 +1570,7 @@ export const ThingsPage = () => {
               <Button {...pillProps(true)} onClick={pasteClipboard}>
                 📥 Paste {clipboard.ids.length} here
               </Button>
-              <Button {...pillProps(false)} onClick={() => setClipboard(null)}>
+              <Button {...pillProps(false)} onClick={() => { transferIntent.clear(); setClipboard(null); }}>
                 ✕
               </Button>
             </>
@@ -1733,6 +1820,11 @@ export const ThingsPage = () => {
 			/>
 
       {/* dialogs */}
+      {!!exportIds.length && transferAccount.current === user?.id && <ThingExportDialog key={user?.id || 'anonymous'} ids={exportIds} onClose={() => setExportIds([])} />}
+      {importOpen && user?.id && transferAccount.current === user.id && <ThingImportDialog key={user.id} ownerId={user.id} initialBundle={importBundle} folderId={importDestination} onClose={() => { setImportOpen(false); setImportBundle(null); }} onImported={(destination) => {
+        refreshAfterMutation([destination]);
+        lopu({ title: 'Things imported', description: 'Your new private copies are ready.', status: 'success' });
+      }} />}
       <NewFolderDialog isOpen={newFolderOpen} onClose={() => setNewFolderOpen(false)} onCreate={createFolder} />
       <RenameDialog onClose={() => setRenameThing(null)} onRename={renameApplied} thing={renameThing} />
       <MoveDialog

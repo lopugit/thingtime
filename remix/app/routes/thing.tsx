@@ -1,4 +1,5 @@
 import React from 'react';
+import { ChatArchivePage } from '~/components/Things/ChatArchivePage';
 import { SharedMediaProvider } from '~/components/Sharing/SharedMedia';
 import { Badge, Box, Button, Center, Flex, Heading, Spinner, Stack, Switch, Text } from '@chakra-ui/react';
 import { ArrowLeft, Copy, ExternalLink } from 'lucide-react';
@@ -13,6 +14,7 @@ import type { WebpageBlock } from '~/components/Builder/webpageBlocks';
 import { WebpageBlocksRenderer } from '~/components/Builder/WebpageBlocksRenderer';
 import { WebpageRuntimeProvider } from '~/components/Builder/webpageRuntime';
 import { ForkSharedThingButton } from '~/components/Sharing/ForkSharedThingButton';
+import { ThingTransferControls } from '~/components/Things/ThingTransferControls';
 import { canForkThing } from '~/components/Sharing/forkThingCore';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { PostCard } from '~/components/Feed/PostCard';
@@ -253,6 +255,11 @@ const InertLabel = ({ kind, author, platform }: { kind: string; author: string |
 // stricter home-plane/current-admin reader; every other id rides the normal
 // ACL-aware Things API.
 export default function ThingPage() {
+	const [params] = useSearchParams();
+	return params.get('archive') === 'true' ? <ChatArchivePage /> : <GenericThingPage />;
+}
+
+function GenericThingPage() {
 	const { id = '' } = useParams();
 	const [searchParams] = useSearchParams();
 	const linkKey = (searchParams.get('key') || '').trim();
@@ -819,6 +826,7 @@ export default function ThingPage() {
 							{diagnostic ? `Migration error · ${diagnostic.migrationId}` : diagnosticRoute ? 'Migration error' : displayName || 'Thing'}
 						</Heading>
 						{thing && !isThingOwner && canForkThing(thing) ? <ForkSharedThingButton id={thing.id} linkKey={linkKey} webpage={isWebpage} /> : null}
+						{thing && <ThingTransferControls id={thing.id} linkKey={linkKey} />}
 					</Box>
 					{thing && !diagnosticRoute ? <PersistedThingMenu id={thing.id} initialThing={{ id: thing.id, thingtime: kinds,
 						author: thing.author, acl: thing.acl, crystal: thing.crystal, tags: thing.tags, targetId: thing.targetId, linkKey: thing.linkKey }} openHref={ownPage || undefined} /> : null}
