@@ -31,6 +31,17 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Recover committed text/link posts when the server omits an empty media layout;
+  bound stalled publish/readback requests and preserve the same retry UUID. Use
+  same-tab authority sign-in on foreign previews and keep login forms unobscured.
+  Retry brief moderation throttles once and preserve invite drafts on review
+  failure; auth-invites contract 1.0.1. [PR #796 evidence](../PRs/796-codex-mobile-auth-post-recovery-mobile-signin-and-invite-review.md). — Codex (AI), 2026-09-13
+
+- Add Settings → Account in the shared page and popup for account switching,
+  storage, invitations, credits and plans. Preserve old credits/invite bookmarks
+  and keep profile editing and assistant preferences in their existing tabs.
+  — Codex (AI), 2026-09-13
+
 - Add personal signup invitations with editable avatar, display name and username,
   password-only redemption, and credits reserved from the inviter's balance.
   Signup transfers the gift atomically once; cancellation and hourly expiry

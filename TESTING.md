@@ -7312,3 +7312,13 @@ approval; `access.test.ts` — the reservation matrix) and
       the exact `CRON_SECRET` bearer fails closed without touching balances.
 
 - [ ] Creating a new invite and cancelling an older pending invite keeps the newest copyable link visible; cancelling that newest invite removes its link.
+
+- [ ] Settings → Account (`/settings/account` and popup `?settings=account`) groups account switching, storage, invitations, credits and plans. Profile retains profile editing/privacy; Lopu retains assistant preferences. Check direct reload, category switching, Back, modal close/Escape and Open settings page at desktop and 390px, scrolling both page and modal to the bottom. Old `/settings#lopu-credits` and `/settings/lopu#gift-invites` links select Account and reveal the section below the sticky navigation. Password-only accounts do not show a resend-email action without an email address.
+
+## Mobile sign-in and ambiguous post recovery (2026-09-13)
+
+- [ ] On a foreign preview at 390px and desktop widths, /login offers its selected authority instead of a native passkey for another origin. Continue navigates in the same tab with popup blocking enabled. Approve and cancel both return safely; an expired, wrong-origin or replayed state cannot sign in. No auth code enters query strings, logs or persistent return state.
+- [ ] Scroll login, authorization and account invitations through the footer; expand the feed composer, menus and account controls at both sizes. No account-hint card covers the login form.
+- [ ] Lose the response after a text/link post commits with no media layout. Exact-ID readback recognises the server-omitted layout and completes once; different content, owner, audience, attachments or nonempty layout never reconcile. Retry checks the saved post first and retains the original UUID.
+- [ ] Leave a create request unresolved: after 30 seconds plus bounded readbacks, the composer keeps its draft and offers Check and retry safely. An unresolved readback cannot keep the button spinning indefinitely.
+- [ ] Avatar moderation 429 then success creates the invite; persistent 429, insufficient quota, malformed response and non-JSON 503 never produce a clear verdict. Failure retains the profile fields and thumbnail, reserves no gift, and offers explicit photo removal.

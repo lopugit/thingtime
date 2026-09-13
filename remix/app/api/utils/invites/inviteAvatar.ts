@@ -1,4 +1,5 @@
 import sharp from 'sharp';
+import { ModerationRequestError } from '../moderation/omniRequest';
 import { resolveConfiguredModerationProvider } from '../moderation/providers';
 import { InviteError, MAX_AVATAR_BYTES } from './inviteCore';
 
@@ -25,8 +26,13 @@ export const normalizeInviteAvatar = async (value: unknown): Promise<string | nu
 		let verdict;
 		try {
 			verdict = await choice.provider.analyzeImage({ bytes, contentType: 'image/jpeg', filename: 'invite-avatar.jpg' });
-		} catch {
-			throw new InviteError(503, 'Avatar review is unavailable. Try again shortly.');
+		} catch (error) {
+			if (error instanceof ModerationRequestError) {
+				console.warn('[invites] Avatar review unavailable', { status: error.status, code: error.code });
+				throw new InviteError(503, 'Photo review is busy. Your details are still here. Try again shortly, or remove the photo to create the invite now.');
+			}
+			console.warn('[invites] Avatar review unavailable', { provider: choice.provider.name, status: typeof (error as any)?.status === 'number' ? (error as any).status : null });
+			throw new InviteError(503, 'Avatar review is unavailable. Your details are still here. Try again shortly, or remove the photo to create the invite now.');
 		}
 		if (verdict.nsfw || verdict.tosViolation) throw new InviteError(400, 'Please choose a different avatar suitable for a public profile.');
 	}
