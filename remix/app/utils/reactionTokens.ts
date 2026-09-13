@@ -63,7 +63,9 @@ export const isValidReactionToken = (raw: unknown): boolean => sanitizeReactionT
 // Mongo-key-safe by construction; the shape checks below keep hostile input
 // (dots, `$`, whitespace, silly lengths) out just like sanitizeReactionToken.
 export const CUSTOM_REACTION_PREFIX = 'custom:';
-const CUSTOM_REACTION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{5,63}$/;
+// Stored-upload emojis use emoji_ + a full SHA-256 hex digest (70 chars).
+// Keep the legacy bounded-ID grammar, adding only that canonical long form.
+const CUSTOM_REACTION_ID = /^(?:[A-Za-z0-9][A-Za-z0-9_-]{5,63}|emoji_[a-f0-9]{64})$/;
 
 export const isCustomReactionToken = (raw: unknown): boolean =>
   typeof raw === 'string' && raw.startsWith(CUSTOM_REACTION_PREFIX);

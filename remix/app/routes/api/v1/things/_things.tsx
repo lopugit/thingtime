@@ -32,6 +32,8 @@ import {
 } from '~/api/utils/things/things';
 import { parseCommentSort } from '~/api/utils/things/updownCore';
 import { sharedThingRead } from './sharedThingRead';
+import { deleteOwnedChatArchive } from '~/api/utils/things/chatArchiveOwnerTransfer';
+import { readOwnedChatArchive } from '~/api/utils/things/chatArchiveReadTransfer';
 
 // Route a unified mutation to the rate-limit key its dedicated sub-route would
 // use, so the generic endpoint can't be used to bypass the per-op limits.
@@ -103,6 +105,24 @@ export const loader = async ({ request }: { request: Request }) => {
   const app = actor.kind === 'app' ? actor.scope : null;
   const cors = actorCors(actor);
 
+  if (params.has('archive')) {
+    const headers = { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' };
+    if (actor.kind !== 'user' || user?.accountKind !== 'user') return json({ ok: false, error: 'Sign in to read your archive' }, { status: 401, headers });
+    const id = (params.get('id') || '').trim();
+    if (params.get('archive') !== 'true' || !id || params.has('sharedRoot') || params.has('key') || params.has('appId')) return json({ ok: false, error: 'Invalid archive request' }, { status: 400, headers });
+    const limit = await enforceRateLimit(request, 'oauth.read', `archive-user:${user.id}`, { failClosed: true });
+    if (!limit.allowed) {
+      const init = rateLimitedResponseInit(limit);
+      return json({ ok: false, error: 'Archive reads are temporarily rate-limited' }, { ...init, headers: { ...init.headers, ...headers } });
+    }
+    try {
+      const archive = await readOwnedChatArchive(user.id, id);
+      return archive ? json({ ok: true, archive }, { headers }) : json({ ok: false, error: 'Archive not found' }, { status: 404, headers });
+    } catch {
+      return json({ ok: false, error: 'Archive history is unavailable; try again' }, { status: 503, headers });
+    }
+  }
+
   if (params.has('sharedRoot')) return sharedThingRead(request, { viewer, app: actor.kind === 'app', cors });
 
   if (actor.kind === 'app') {
@@ -147,12 +167,13 @@ export const loader = async ({ request }: { request: Request }) => {
       limit: Number(params.get('limit')) || undefined,
       appId: actor.kind === 'user' || actor.kind === 'pat' ? (params.get('appId') || '').trim() || null : null
     },
-    app
+    app,
+    { archiveOwnerId: actor.kind === 'user' && user?.accountKind === 'user' ? user.id : undefined }
   );
   if (result.ok === false) {
     return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
   }
-  return json({ ok: true, things: result.things, nextCursor: result.nextCursor }, { headers: cors });
+  return json({ ok: true, things: result.things, nextCursor: result.nextCursor }, { headers: { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' } });
 };
 
 // One endpoint, full CRUD (the GET loader above is the R):
@@ -371,6 +392,9 @@ export const action = async ({ request }: { request: Request }) => {
 
   if (method === 'DELETE') {
     const id = (new URL(request.url).searchParams.get('id') || '').trim() || body?.id;
+    const archiveResult = await deleteOwnedChatArchive({ actorKind: actor.kind, accountKind: user.accountKind,
+      ownerId: user.id, id, sameOrigin: isSameOriginAttachmentRequest(request), expectedUpdatedAt: body?.expectedUpdatedAt });
+    if (archiveResult) return json(archiveResult, { status: archiveResult.ok === false ? archiveResult.status : 200, headers: { ...cors, 'Cache-Control': 'private, no-store' } });
     const attachmentHooks =
       actor.kind !== 'app' && user.accountKind === 'user'
         ? { beforeCascade: prepareAttachmentCascadeForThing, expectedUpdatedAt: body?.expectedUpdatedAt }

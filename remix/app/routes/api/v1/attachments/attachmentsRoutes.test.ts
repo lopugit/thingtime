@@ -121,7 +121,7 @@ test('upload starts require the upload-permission scope matching the purpose', a
 		assert.equal(res.status, 403, `public purpose ${purpose} not gated`);
 		assert.equal((await res.json()).code, 'public_uploads_not_approved');
 	}
-	for (const purpose of ['message', 'profile-avatar', 'profile-banner', 'recording']) {
+	for (const purpose of ['message', 'profile-avatar', 'profile-banner', 'recording', 'recording-import']) {
 		const res = await gated(pending)({ request: post({ purpose }) });
 		assert.equal(res.status, 403, `private purpose ${purpose} not gated`);
 		assert.equal((await res.json()).code, 'private_uploads_not_approved');
@@ -135,15 +135,17 @@ test('upload starts require the upload-permission scope matching the purpose', a
 	const privateOnly = { id: 'user-priv', accountKind: 'user', publicUploadsEnabled: false, privateUploadsEnabled: true } as any;
 	assert.equal((await gated(privateOnly)({ request: post({ purpose: 'profile-avatar' }) })).status, 200);
 	assert.equal((await gated(privateOnly)({ request: post({ purpose: 'recording' }) })).status, 200);
+	assert.equal((await gated(privateOnly)({ request: post({ purpose: 'recording-import' }) })).status, 200);
+	assert.equal((await gated(publicOnly)({ request: post({ purpose: 'recording-import' }) })).status, 403);
 	assert.equal((await gated(privateOnly)({ request: post({ purpose: 'comment' }) })).status, 403);
 	const approvedAll = { id: 'user-ok', accountKind: 'user', publicUploadsEnabled: true, privateUploadsEnabled: true } as any;
 	assert.equal((await gated(approvedAll)({ request: post({}) })).status, 200);
 	assert.equal((await gated(approvedAll)({ request: post({ purpose: 'message' }) })).status, 200);
-	assert.equal(serviceCalls, 5);
+	assert.equal(serviceCalls, 6);
 
 	// an unknown purpose reaches the service's own validation (no scope gates it)
 	assert.equal((await gated(pending)({ request: post({ purpose: 'nonsense' }) })).status, 200);
-	assert.equal(serviceCalls, 6);
+	assert.equal(serviceCalls, 7);
 
 	// Lifecycle routes (parts/complete/abort/delete) never opt in, so a
 	// permission flipped off mid-upload can't strand a reserved MPU.

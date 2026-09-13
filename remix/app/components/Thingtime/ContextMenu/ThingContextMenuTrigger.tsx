@@ -7,7 +7,11 @@ import { Icon } from '../../Icon/Icon';
 import { useLopu } from '../../Lopu/useLopu';
 import { useThingtime } from '../useThingtime';
 import { buildThingModeUrl } from '../thingRoute';
-import { sanitizeParsedJson } from '../jsonValue';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { bundleFromValue, snapshotTransferValue, valueFromBundle } from '~/utils/thingTransfer/value';
+import { readTransferClipboard, writeTransferClipboard } from '~/utils/thingTransfer/browser';
+import { serializeTransfer, TRANSFER_FORMAT } from '~/utils/thingTransfer/format';
+import { ThingValueTransferDialog } from './ThingValueTransferDialog';
 import { resolveThingZone } from '../thingZones';
 import type { ThingZone } from '../thingZones';
 import { ThingContextMenu } from './ThingContextMenu';
@@ -72,18 +76,6 @@ const cloneValue = (value: unknown): unknown => {
 	}
 };
 
-const serializeThing = (thing: unknown): string => {
-	if (typeof thing === 'string') {
-		return thing;
-	}
-
-	try {
-		return JSON.stringify(thing, null, 2) ?? String(thing);
-	} catch {
-		return String(thing);
-	}
-};
-
 export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => {
 	const {
 		variant = 'thing',
@@ -112,6 +104,8 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 
 	const { thingtime, setThingtime, events } = useThingtime();
 	const lopu = useLopu();
+	const user = useCurrentUser();
+	const [transfer, setTransfer] = React.useState<{ mode: 'download' | 'import'; path: string; owner?: string; value: unknown; original?: string } | null>(null);
 	const menu = useThingContextMenu();
 
 	const menuUuid = React.useId();
@@ -199,7 +193,7 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 		};
 	}, [contextTargetRef, variant, menu.openAtPointer]);
 
-	const dottedPath = React.useMemo(() => safeJoin(fullPath) || 'thingtime', [safeJoin(fullPath)]);
+	const dottedPath = safeJoin(typeof fullPath === 'string' || Array.isArray(fullPath) ? fullPath : '') || 'thingtime';
 
 	// live types from settings (same source SettingsMenu read), mapped onto
 	// the model's option shape
@@ -326,36 +320,41 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 		}
 	}, [thing, parent, parentPath, path, setThingtime, lopu, dottedPath]);
 
+	const currentContext = React.useRef({ path: dottedPath, owner: user?.id, value: thing, readonly, onDelete });
+	currentContext.current = { path: dottedPath, owner: user?.id, value: thing, readonly, onDelete };
+	const contextMatches = React.useCallback(() => currentContext.current.path === dottedPath && currentContext.current.owner === user?.id && currentContext.current.readonly === readonly, [dottedPath, user?.id, readonly]);
 	const copyThing = React.useCallback(async () => {
 		try {
-			await navigator.clipboard.writeText(serializeThing(thing));
+			const bundle = bundleFromValue(thing, dottedPath);
+			const original = serializeTransfer(bundle.manifest);
+			await writeTransferClipboard(Promise.resolve(bundle));
+			// Cut may only remove the exact value copied, in the same context.
+			if (!contextMatches() || serializeTransfer(bundleFromValue(currentContext.current.value, dottedPath).manifest) !== original) return false;
 			lopu({ title: 'Copied 📋', description: `${dottedPath} is on your clipboard.`, status: 'success', duration: 4000 });
 			return true;
 		} catch (err) {
 			console.error('[tt][context-menu] copy failed', err);
-			lopu({ title: 'Could not copy 😅', description: 'Clipboard access was blocked.', status: 'error' });
+			lopu({ title: 'Could not copy 😅', description: err instanceof Error ? err.message : 'Clipboard access was blocked.', status: 'error' });
 			return false;
 		}
-	}, [thing, lopu, dottedPath]);
+	}, [thing, lopu, dottedPath, contextMatches]);
 
 	const pasteThing = React.useCallback(async () => {
 		try {
 			const text = await navigator.clipboard.readText();
 			let value: unknown = text;
-
-			try {
-				value = sanitizeParsedJson(JSON.parse(text));
-			} catch {
-				// plain string paste is fine
-			}
-
+			try { value = JSON.parse(text); } catch { /* Plain text paste remains supported. */ }
+			if (text.startsWith('thingtime:zip:v1:') || (value && typeof value === 'object' && 'format' in value && value.format === TRANSFER_FORMAT)) {
+				value = valueFromBundle(await readTransferClipboard(text));
+			} else value = snapshotTransferValue(value);
+			if (!contextMatches() || readonly) return;
 			setThingtime(fullPath, value, { namespace: 'user' });
 			lopu({ title: 'Pasted 📥', description: `${dottedPath} took the clipboard value.`, status: 'success', duration: 4000 });
 		} catch (err) {
 			console.error('[tt][context-menu] paste failed', err);
-			lopu({ title: 'Could not paste 😅', description: 'Clipboard access was blocked.', status: 'error' });
+			lopu({ title: 'Could not paste 😅', description: err instanceof Error ? err.message : 'Clipboard access was blocked.', status: 'error' });
 		}
-	}, [fullPath, setThingtime, lopu, dottedPath]);
+	}, [fullPath, setThingtime, lopu, dottedPath, contextMatches, readonly]);
 
 	const shareThing = React.useCallback(async () => {
 		try {
@@ -381,6 +380,7 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 	const onAction = React.useCallback(
 		(fired: ThingContextMenuAction) => {
 			const { action } = fired;
+			if (readonly && ['cut', 'paste', 'import-value'].includes(action.command || '')) return;
 			const payload = (action.payload || {}) as { type?: unknown; wrap?: boolean; template?: { label?: string; value?: unknown }; permission?: { label?: string } };
 
 			switch (action.command) {
@@ -440,10 +440,24 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 				case 'copy':
 					copyThing();
 					break;
+				case 'download-value':
+				case 'import-value':
+					try {
+						if (action.command === 'import-value') {
+							let original: string | undefined;
+							try { original = serializeTransfer(bundleFromValue(thing, dottedPath).manifest); } catch { /* Import may replace a non-portable current value. */ }
+							setTransfer({ mode: 'import', path: dottedPath, owner: user?.id, value: thing, original });
+							menu.closeMenu(); break;
+						}
+						const bundle = bundleFromValue(thing, dottedPath);
+						setTransfer({ mode: 'download', path: dottedPath, owner: user?.id, value: bundle.manifest.things[0].crystal.value, original: serializeTransfer(bundle.manifest) });
+						menu.closeMenu();
+					} catch (error) { lopu({ title: 'Could not transfer value', description: error instanceof Error ? error.message : 'Unsupported value', status: 'error' }); }
+					break;
 				case 'cut':
 					copyThing().then((copied) => {
 						if (copied) {
-							onDelete?.();
+							currentContext.current.onDelete?.();
 						}
 					});
 					break;
@@ -469,7 +483,7 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 					console.warn('[tt][context-menu] unhandled action', fired);
 			}
 		},
-		[setEditMode, onType, onAddChild, onCollapse, setThingtime, fullPath, lopu, dottedPath, modifyThing, duplicateThing, copyThing, pasteThing, shareThing, onDelete]
+		[setEditMode, onType, onAddChild, onCollapse, setThingtime, fullPath, lopu, dottedPath, modifyThing, duplicateThing, copyThing, pasteThing, shareThing, onDelete, readonly, thing, user?.id, menu, path, uuid]
 	);
 
 	const onClickAway = React.useCallback(() => {
@@ -479,6 +493,7 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 	}, [menu.closeMenu]);
 
 	return (
+		<>
 		<ClickAwayListener onClickAway={onClickAway}>
 			<Center className="thing-context-menu-trigger" position="relative">
 				<Flex
@@ -507,5 +522,14 @@ export const ThingContextMenuTrigger = (props: ThingContextMenuTriggerProps) => 
 				/>
 			</Center>
 		</ClickAwayListener>
+		{transfer && transfer.path === dottedPath && transfer.owner === user?.id && (transfer.mode === 'download' || !readonly) && <ThingValueTransferDialog
+			key={`${transfer.owner || 'local'}:${transfer.path}`} mode={transfer.mode} value={transfer.value} name={transfer.path} onClose={() => setTransfer(null)}
+			onApply={value => {
+				const unchanged = transfer.original === undefined ? thing === transfer.value : serializeTransfer(bundleFromValue(thing, dottedPath).manifest) === transfer.original;
+				if (!contextMatches() || readonly || !unchanged) throw new Error('This value changed while importing. Close and reopen Import to review the current value.');
+				setThingtime(fullPath, value, { namespace: 'user' });
+				lopu({ title: 'Value imported', description: `${dottedPath} was replaced with the reviewed value.`, status: 'success' });
+			}} />}
+		</>
 	);
 };
