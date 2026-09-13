@@ -4062,7 +4062,13 @@ export const DEVICE_THINGTIME = [
 // imported chat rows stay ordinary quota-billed content.
 export const DEVICE_CONTROL_THINGTIME = ['device-command', 'device-command-event', 'device-ai-live-state', 'device-approval'] as const;
 
+// Historical chats have a dedicated atomic lifecycle, never generic CRUD.
+export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
+
 export const PROTECTED_THINGTIME = [
+  ...CHAT_ARCHIVE_THINGTIME,
+
+  'account-invite',
 	'lopu-recording-settings',
 	'lopu-recording-job',
 	'lopu-recording-reminder',
@@ -4306,6 +4312,16 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   // the Lopu model catalog (protected, seeded by api/utils/ai/models.ts)
   aiModelSchema,
   // Lopu credits + usage accounting (protected, api/utils/lopu/accounting.ts)
+  {
+    id: 'account-invite', version: 1, kind: 'crystal', collection: null, title: 'Account invite', summary: 'Single-use signup invite with reserved gift credits.',
+    detail: 'Protected control Thing. Private editable profile suggestions are BinData; bearer tokens are hashed in uniqueKeys. Creation reserves credits atomically, cancellation/expiry refunds them, and redemption joins canonical account creation in one transaction. At most 20 pending invites per owner, each lasting 30 days, with a moderated 128px thumbnail capped at 16 KiB. No recipient identity is disclosed to the creator.',
+    createdVia: 'POST /api/v1/auth/invites',
+    example: { status: 'pending', amountMicros: 1000000 },
+    fields: [
+      { name: 'status', type: 'string', required: true, description: 'pending, claimed, cancelled or expired' },
+      { name: 'amountMicros', type: 'number', required: true, min: 0, description: 'Gift reserved from the creator balance, in millionths of a credit.' }
+    ]
+  },
   lopuAccountSchema,
   lopuUsageSchema,
   lopuCreditSchema,

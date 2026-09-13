@@ -10,6 +10,7 @@ import { parseRecordingReference } from './recordingReference';
 import type { RecordingConnectionChoice } from '~/api/utils/lopu/recordingsConnections';
 import type { PersonalRecordingDevice } from '~/api/utils/lopu/personalRecordingDevices';
 import { PersonalRecordingSetup } from './PersonalRecordingSetup';
+import { RecordingTranscript } from '../Attachments/RecordingTranscript';
 import { PersistedThingMenu } from '../Thingtime/ContextMenu/PersistedThingMenu';
 import { supportsThingActions } from './recordingsCapabilities';
 import { THING_ACTIONS_PATH } from '~/schemas/thingActions';
@@ -22,6 +23,7 @@ type RecordingData = {
 	jobs: Array<{
 		id: string;
 		postId: string;
+		attachmentId?: string;
 		filename: string;
 		status: string;
 		runtimeDeviceId?: string | null;
@@ -454,6 +456,7 @@ export function RecordingAutomationPage() {
 											<PersistedThingMenu id={job.postId} label={`Actions for ${job.filename}`}
 												handoffDisabled={busy || !settings.enabled || !!job.handoffStatus} onChanged={() => void load()} />
 										</Flex>
+										<RecordingTranscript attachmentId={job.attachmentId} compact />
 										{job.handoffStatus && <Text fontSize="sm" mt={2}>Lopu: {job.handoffStatus}. {job.handoffChatId && <Link to={`/lopu/${encodeURIComponent(job.handoffChatId)}`}>Open conversation →</Link>}</Text>}
 										{job.error ? (
 											<Text fontSize="sm" mt={1}>

@@ -16,6 +16,7 @@ test('Vercel cron path and schedule pairs are unique', () => {
 
 test('recording processing, attachment cleanup, moderation sweep, peer sync, and notification digest schedules are registered once', () => {
 	assert.deepEqual(vercelConfig.crons, [
+		{ path: '/api/v1/auth/invites/expire', schedule: '11 * * * *' },
 		{
 			path: '/api/v1/lopu/recordings/run',
 			schedule: '*/5 * * * *'

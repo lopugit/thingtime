@@ -599,7 +599,7 @@ export const insertUser = async (
 		targetId: null,
 		tags: [],
 		...profileAttachmentRefsForUserRoot(doc),
-		uniqueKeys: [userUsernameKey(doc.username), userEmailKey(doc.email)],
+		uniqueKeys: [userUsernameKey(doc.username), ...(doc.email ? [userEmailKey(doc.email)] : [])],
 		secure,
 		secureVersion: 0, // optimistic-concurrency token for blob mutations
 		// Durable signup fallback: if the relational subscription insert is ever
