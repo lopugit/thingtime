@@ -57,9 +57,15 @@ test('live-chat shared emoji export requires the additive contract on both manif
 });
 
 test('shared dependency reads negotiate the additive Things contract on both manifests', () => {
-	// Preserve the newer archive contracts on top of the recording and Widgets additions.
-	assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.16.0');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things'].version, '1.17.0');
+	// The sharedRoot dependency read shipped as the 1.6.2 / contract 1.5.2
+	// correction; recording attachments in own-things lists then took the
+	// family additively on to 1.7.0 / contract 1.6.0, and the native Widgets
+	// promotion — which also carried the additive account-wide OAuth Things
+	// permissions — has since taken it on to 1.10.0. That promotion realigned
+	// the contract version with the feature version, so both manifests now
+	// publish the same number.
+	assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.10.0');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things'].version, '1.10.0');
 	assert.equal(capabilitySatisfies('1.8.2', '1.7.5'), true);
 	assert.equal(capabilitySatisfies('1.8.1', '1.8.2'), false);
 	assert.equal(capabilitySatisfies('1.8.3', '1.8.2'), true);
