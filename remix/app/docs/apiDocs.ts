@@ -3708,9 +3708,28 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'auth-invites-expire', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'auth',
+    title: 'Expire unused invitations', endpoint: '/api/v1/auth/invites/expire', methods: ['GET'],
+    summary: 'Return credits from expired invitations in a bounded hourly maintenance batch.',
+    detail: 'Requires the exact CRON_SECRET Bearer credential. Processes up to 50 expired pending invitations, each refund and status transition in a transaction. Concurrent or repeated runs cannot return credits twice. No account details are returned.',
+    auth: { mode: 'bearer', description: 'Deployment CRON_SECRET only.' },
+    steps: ['Configure CRON_SECRET and the Vercel hourly schedule.'], requestExamples: [],
+    responseExamples: [{ status: 200, description: 'Bounded expiry pass completed.', body: { ok: true } }]
+  }),
+  endpoint({
+    id: 'auth-invites', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'auth',
+    title: 'Gift credit invitations', endpoint: '/api/v1/auth/invites', methods: ['POST'],
+    summary: 'Create, inspect and cancel single-use signup links with reserved gift credits.',
+    detail: 'POST intent=create with username, displayName, credits (0–10000, up to six decimals), and optional avatarUrl (small PNG/JPEG/WebP data URL). Server re-encodes and moderates a 128px thumbnail, max 16 KiB. Returns url with a 256-bit fragment token once only; only its hash is stored. POST intent=preview and token anonymously returns editable profile suggestions and gift amount. POST intent=list returns the latest 50 owned invites without bearer tokens. POST intent=cancel and id refunds an owned pending invite once. Links expire after 30 days; expiry refunds run hourly (up to 50 per run) and are also reconciled on owner list/create or expired-link access. At most 20 pending links; in-flight Lopu turns prevent reserving gifts. Pending profile suggestions are private binary state, deleted on completion. This narrow thumbnail upload does not enable general uploads. Invite signup grants no extra promotional starter credits.',
+    auth: { mode: 'optional', description: 'Full user session required for create/list/cancel. Preview requires the unguessable invite token. Scoped tokens cannot create or manage invites.' },
+    steps: ['Create an invite and copy its returned URL.', 'Recipient POSTs the fragment token with intent=preview.', 'Redeem with POST /api/v1/auth/register including inviteToken and password; profile overrides and email are optional.'],
+    requestExamples: [{ name: 'Create invitation', description: 'Gift one credit.', method: 'POST', body: { intent: 'create', username: 'new-friend', displayName: 'New friend', credits: 1 } }],
+    responseExamples: [{ status: 200, description: 'Invite created.', body: { ok: true, url: 'https://thingtime.com/invite#opaque-single-use-token' } }]
+  }),
+  endpoint({
     id: 'auth-register',
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'auth',
     title: 'Register user',
     endpoint: '/api/v1/auth/register',
@@ -3722,7 +3741,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['POST'],
     steps: [
-      'POST username, password, and email. displayName and meta are optional.',
+      'POST username, password, and email; displayName is optional. With a valid inviteToken, email is optional and omitted profile fields inherit editable invite suggestions. avatarUrl may replace/clear the suggested thumbnail. Invites are consumed with account creation and gift credit transfer in one transaction; no extra starter credits or upload/admin privileges are granted. meta is never accepted from public signup.',
       'Store the returned Set-Cookie header for browser clients.',
       'If verificationLink is present, it is a local/preview helper only; production sends email instead.',
       'Expect emailVerified to start false until the verification link is consumed.'
@@ -4603,10 +4622,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // each spend the same last credit — past the cap the request is refused 429
     // LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted (additive). contractVersion
     // feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.7.0',
-    featureVersion: '1.7.0',
+    contractVersion: '1.7.1',
+    featureVersion: '1.7.1',
     summary: 'Sends one message to Lopu and streams its reply — text, tool calls and live builder patches — as newline-delimited JSON. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
     detail:
+      'Version 1.7.1 rechecks positive balance atomically when reserving a billed turn, preventing a concurrent invite gift from spending the same available balance. ' +
       'Version 1.6.2 clarifies comment proposal guidance: the first unapproved comment_on_thing call opens the exact-target/full-text Confirm card without posting; only a subsequent server-verified approved call can post. Plain-text agreement is not a substitute for a signed confirmation. ' +
       'Version 1.6.1 retains bounded public tool receipts in server-loaded conversation history, so later turns can distinguish completed and failed actions. Receipts are historical outcomes, not current-state guarantees or authorization to repeat actions; raw tool results and confirmation tokens are never replayed. ' +
       'Version 1.6 adds attachmentIds and thingIds (up to ten each), and relational comment_on_thing/list_thing_comments tools. Device media is bound to the persisted user message; the model receives metadata only, plus readable selected Thing content. Comments are standalone Things linked by targetId; all Lopu comments require a server-verified confirmation and never edit parent content. ' +

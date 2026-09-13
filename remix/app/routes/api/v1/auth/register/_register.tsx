@@ -9,7 +9,7 @@ import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { prepareUnboundAttachmentCleanupForSessionReplacement } from '~/api/utils/attachments/attachments';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
-const MAX_BODY_BYTES = 16 * 1024;
+const MAX_BODY_BYTES = 48 * 1024;
 
 // POST /api/v1/auth/register — { username, password, email, displayName? }
 // On success: creates the user, logs them in (sets the httpOnly auth cookie),
@@ -39,7 +39,9 @@ export const action = async ({ request }: { request: Request }) => {
     password: body?.password,
     email: body?.email,
     displayName: body?.displayName,
-    origin
+    origin,
+    inviteToken: body?.inviteToken,
+    avatarUrl: body?.avatarUrl
   });
 
   if (result.ok === false) {
@@ -57,7 +59,7 @@ export const action = async ({ request }: { request: Request }) => {
 
   const rosterCookies = await mergeAccountSession(request, { userId: result.user.id, jti: result.jti });
 
-  const headers = new Headers();
+  const headers = new Headers({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
   headers.append('Set-Cookie', await serializeAuthCookie(result.jwt));
   for (const cookie of rosterCookies) headers.append('Set-Cookie', cookie);
 

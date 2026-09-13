@@ -11,6 +11,8 @@ export type RateLimitRule = { limit: number; windowMs: number; enabled: boolean 
 export type RateLimitConfig = Record<string, RateLimitRule>;
 
 export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
+  'invites.create': { limit: 20, windowMs: 3_600_000, enabled: true },
+  'invites.read': { limit: 120, windowMs: 60_000, enabled: true },
   // Private attachment storage: start and completion mutate both S3 and the
   // quota ledger; part-signing is batched (<=20 URLs/request), and reads issue
   // short-lived private redirects. Every surface stays bounded per account/IP.

@@ -14,7 +14,7 @@ import {
 	pruneRetiredHomeThingsIndexes
 } from './collections.ts';
 const REQUIRED_INDEX_HEADROOM = 4;
-const HOME_ONLY_THINGS_INDEXES = 1; // migration_diagnostic_expires_at
+const HOME_ONLY_THINGS_INDEXES = 2; // migration diagnostics TTL + non-TTL invite expiry
 // The CI satellite is deliberately small: two readers, one TTL, one unique.
 const CI_CONTROL_INDEX_BUDGET = 8;
 
