@@ -1,11 +1,11 @@
 import React from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
-import { useLocation, useNavigate, useRouteLoaderData } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 
 import { AccountHintRow } from './AccountHints';
-import { resolveSsoHub, SSO_HUB_CACHE_KEY, ssoHubDisplayName, type SsoHubEnvironment } from './ssoHub';
+import { useSsoHub } from './useSsoHub';
+import { beginSsoRedirect, consumeSsoReturn } from './ssoNavigation';
 import { useLopu } from '~/components/Lopu/useLopu';
-import { readLocalCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { isPasskeyCancel, passkeyErrorMessage, passkeysSupported, useAccountHints, usePasskeyAuth } from '~/hooks/usePasskeys';
@@ -18,12 +18,6 @@ import type { AccountHint } from '~/hooks/usePasskeys';
 // ENVIRONMENT-AWARE: feature previews belong to the development authority,
 // even though their Git branch is not literally `develop`. Users may override
 // this only with a valid origin in localStorage `tt-sso-hub`.
-
-const isThingtimeFamilyHost = (hostname: string) =>
-	hostname === 'thingtime.com' ||
-	hostname.endsWith('.thingtime.com') ||
-	hostname === 'localhost' ||
-	hostname === '127.0.0.1';
 
 // The auto-login popup: when this browser is signed out HERE but has live
 // Thingtime sessions on OTHER deployments (tt_hints → /api/v1/auth/
@@ -71,41 +65,9 @@ export const AutoLoginPopup = () => {
 		setEligible(!snoozedNow());
 	}, []);
 
-	// Outside the *.thingtime.com cookie family (immutable *.vercel.app
-	// previews, custom domains) hints physically can't exist — offer the SSO
-	// hub instead: FedCM's native sheet where the browser supports it, the
-	// /authorize?self=1 popup everywhere else.
-	const foreignOrigin =
-		typeof window !== 'undefined' && !isThingtimeFamilyHost(window.location.hostname);
-
-	// This deployment's public data authority picks the hub whose database
-	// matches. Vercel metadata is legacy fallback only — see resolveSsoHub.
-	const rootData = useRouteLoaderData('root') as
-		| {
-			envFromCookie?: { THINGTIME_BRANCH_NAME?: string; THINGTIME_VERCEL_ENV?: string };
-			dataEnvironment?: SsoHubEnvironment['dataEnvironment'];
-		}
-		| undefined;
-	const hubEnv = React.useMemo<SsoHubEnvironment>(
-		() => ({
-			dataEnvironment: rootData?.dataEnvironment,
-			branch: rootData?.envFromCookie?.THINGTIME_BRANCH_NAME,
-			vercelEnv: rootData?.envFromCookie?.THINGTIME_VERCEL_ENV
-		}),
-		[
-			rootData?.dataEnvironment,
-			rootData?.envFromCookie?.THINGTIME_BRANCH_NAME,
-			rootData?.envFromCookie?.THINGTIME_VERCEL_ENV
-		]
-	);
-	const ssoHub = React.useMemo(
-		() => resolveSsoHub(hubEnv, readLocalCache<string>(SSO_HUB_CACHE_KEY)),
-		[hubEnv]
-	);
+	const { hub: ssoHub, name: ssoHubName, foreign: foreignOrigin } = useSsoHub();
 	const ssoHubRef = React.useRef(ssoHub);
 	ssoHubRef.current = ssoHub;
-	const ssoHubName = ssoHubDisplayName(ssoHub);
-
 	// FedCM is DESIGNED for auto-prompt on load: on foreign origins the
 	// browser itself renders "Continue as …" with the user's thingtime.com
 	// accounts — the auto-login popup, in browser chrome, on any domain. The
@@ -113,9 +75,9 @@ export const AutoLoginPopup = () => {
 	// can't run (unsupported, no hub, no accounts, cooling down) the card with
 	// the manual button below is the fallback.
 	const autoFedcmTried = React.useRef(false);
-	const redeemRef = React.useRef<((code: string) => Promise<void>) | null>(null);
+	const redeemRef = React.useRef<((code: string) => Promise<boolean>) | null>(null);
 	React.useEffect(() => {
-		if (!foreignOrigin || !ssoHubRef.current || user || !eligible || dismissed || autoFedcmTried.current) return;
+		if (HIDDEN_PATHS.some(path => pathname.startsWith(path)) || !foreignOrigin || !ssoHubRef.current || user || !eligible || dismissed || autoFedcmTried.current) return;
 		if (typeof (window as any).IdentityCredential === 'undefined') return;
 		autoFedcmTried.current = true;
 		(async () => {
@@ -132,7 +94,7 @@ export const AutoLoginPopup = () => {
 				// dismissed / cooldown / no accounts — the manual card remains
 			}
 		})();
-	}, [foreignOrigin, user, eligible, dismissed]);
+	}, [foreignOrigin, user, eligible, dismissed, pathname]);
 
 	const redeemSsoCode = React.useCallback(
 		async (code: string) => {
@@ -141,6 +103,7 @@ export const AutoLoginPopup = () => {
 				if (resp?.ok) {
 					setDismissed(true);
 					lopu({ title: `Welcome back, ${resp.user?.username || 'friend'}! ✨`, status: 'success', duration: 5000 });
+					return true;
 				}
 			} catch (err: any) {
 				lopu({
@@ -150,85 +113,36 @@ export const AutoLoginPopup = () => {
 					duration: 6000
 				});
 			}
+			return false;
 		},
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 		[lopu]
 	);
 	redeemRef.current = redeemSsoCode;
+	React.useEffect(() => {
+		if (!window.location.hash.includes('tt-sso-state=')) return;
+		let result;
+		try { result = consumeSsoReturn(window.location.origin, window.location.hash, window.sessionStorage); } catch { return; }
+		// Remove the short-lived code before other navigation or a reload.
+		window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search);
+		if (result?.code) void redeemSsoCode(result.code).then((ok) => { if (ok) navigate(result.returnTo, { replace: true }); });
+	}, [redeemSsoCode, navigate]);
 
-	const signInViaHub = async () => {
+	const signInViaHub = () => {
 		if (ssoBusy || !ssoHub) return;
 		setSsoBusy(true);
-		const hub = ssoHub;
 		try {
-			// FedCM first: the browser's own "Continue as…" sheet, no popup.
-			const identityCredential = (window as any).IdentityCredential;
-			if (typeof identityCredential === 'function' || typeof identityCredential === 'object') {
-				try {
-					const credential: any = await (navigator.credentials as any).get({
-						identity: {
-							providers: [
-								{
-									configURL: `${hub}/api/v1/fedcm/config`,
-									clientId: 'thingtime-self',
-									nonce: crypto.randomUUID()
-								}
-							]
-						}
-					});
-					if (credential?.token) {
-						await redeemSsoCode(credential.token);
-						return;
-					}
-				} catch {
-					// user dismissed the sheet, no accounts, or FedCM unavailable —
-					// fall through to the popup
-				}
-			}
-
-			// Popup fallback: first-party hub confirm card → postMessage code →
-			// redeem here. Popup blockers allow it (we're in a click).
-			const popup = window.open(
-				`${hub}/authorize?self=1&origin=${encodeURIComponent(window.location.origin)}`,
-				'thingtime-sso',
-				'width=480,height=640,popup=1'
-			);
-			if (!popup) {
-				lopu({ title: 'Popup blocked', description: 'Allow popups for this site and try again.', status: 'info', duration: 5000 });
-				return;
-			}
-			await new Promise<void>((resolve) => {
-				const onMessage = (event: MessageEvent) => {
-					if (event.origin !== hub) return;
-					const data = event.data;
-					if (!data || data.type !== 'thingtime:sso') return;
-					window.removeEventListener('message', onMessage);
-					clearInterval(closedPoll);
-					if (data.ok && typeof data.code === 'string') {
-						redeemSsoCode(data.code).finally(resolve);
-					} else {
-						resolve();
-					}
-				};
-				const closedPoll = setInterval(() => {
-					if (popup.closed) {
-						window.removeEventListener('message', onMessage);
-						clearInterval(closedPoll);
-						resolve();
-					}
-				}, 500);
-				window.addEventListener('message', onMessage);
-			});
-		} finally {
+			beginSsoRedirect(ssoHub, window.location, window.sessionStorage);
+		} catch {
 			setSsoBusy(false);
+			lopu({ title: 'Could not open sign-in', description: 'Open this page in Safari or Chrome and try again.', status: 'info' });
 		}
 	};
 
 	const suggestions = hints.filter((hint) => !hint.alreadyHere);
 	const onHiddenPath = HIDDEN_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
-	const showForeignHubOnLogin = foreignOrigin && (pathname === '/login' || pathname === '/register');
 
-	if (user || dismissed || !eligible || (onHiddenPath && !showForeignHubOnLogin)) return null;
+	if (user || dismissed || !eligible || onHiddenPath) return null;
 
 	if (foreignOrigin) {
 		return (
