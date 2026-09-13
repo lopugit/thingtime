@@ -231,6 +231,7 @@ export const listRecordingAutomation = async (ownerId: string) => {
 		jobs: jobs.map((job: any) => ({
 			id: job.shareId,
 			postId: job.targetId,
+			attachmentId: job.crystal.attachmentId,
 			filename: job.crystal.filename,
 			status: job.crystal.status,
 			runtimeDeviceId: job.runtimeDeviceId || null,

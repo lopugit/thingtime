@@ -14,6 +14,7 @@ import type { ChakraThingNode, HtmlThingNode } from '~/components/Kinds';
 import { isSafeCssText } from '~/components/Kinds/safeUrl';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { ThingAudienceControl } from '~/components/Sharing/ThingAudienceControl';
+import { ThingTransferControls } from '~/components/Things/ThingTransferControls';
 import { pruneCacheNamespace, readStampedCache, writeStampedCache } from '~/hooks/localCache';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -784,11 +785,12 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
   return (
     <Flex background="var(--tt-surface, #fafafb)" justifyContent="center" minHeight="100vh" width="100%">
       <Flex direction="column" gap={5} maxWidth="860px" minWidth={0} pb={24} paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 36px)" px={4} width="100%">
-        <Flex align="center" gap={2}>
+        <Flex align="center" gap={2} flexWrap="wrap">
           <Button as={Link} leftIcon={<ArrowLeft size={14} />} size="xs" to="/components" variant="ghost">
             Components
           </Button>
           <Box flex={1} />
+          {active && <ThingTransferControls id={active.entry.id} linkKey={searchParams.get('key') || undefined} />}
           <Button leftIcon={<LinkIcon size={13} />} onClick={() => copyLink()} size="xs" variant="ghost">
             Copy link
           </Button>
