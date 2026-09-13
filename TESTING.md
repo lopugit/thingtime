@@ -3750,7 +3750,7 @@ halves.
 
 ## Register request body cap (`remix/app/routes/api/v1/auth/register/_register.tsx`)
 
-- [ ] Register rejects an oversize body with 413 (`readJsonBody` 16 KiB cap)
+- [ ] Register rejects an oversize body with 413 (`readJsonBody` 48 KiB cap)
       before validation, bcrypt, or account writes; the existing limiter still
       consumes the request first, and a normal signup from a fresh IP returns
       200 with a session cookie.
@@ -7280,3 +7280,35 @@ approval; `access.test.ts` — the reservation matrix) and
   A failed fresh-upload claim must not annotate any existing image; annotation
   or placement failure must clean up only the new emoji. Verify the file picker,
   destination selector and final controls at desktop and mobile sizes.
+
+## Gifted signup invitations (2026-09-13)
+
+- [ ] In Settings → Lopu, create an invite with a profile photo, display name,
+      username and fractional gift. The balance decreases once; copied links use
+      the browser/deployment origin, never the internal Nitro port.
+- [ ] Visit the link signed out at desktop and mobile widths; scroll top to
+      bottom. The avatar/name/username are prefilled, editable, and remain after
+      refresh. Remove and replace the photo; submit stays disabled while it is
+      being prepared. Floating app controls must not cover this focused form.
+- [ ] Enter only a password to complete signup. The chosen profile and gifted
+      balance persist after fresh login. Email-less users see no false email-sent
+      message; regular signup still requires email. No invitation may grant
+      administrator status, upload permissions, Lopu verification or bonus starter
+      credits. Optional email keeps ordinary verification/recovery behavior.
+- [ ] Race two claims: exactly one account receives the gift. Invalid passwords,
+      duplicate usernames, expired/cancelled tokens and ledger failures leave no
+      partial account or consumed gift. No request log or auth return-to hint
+      should persist the bearer token.
+- [ ] Successful invite signup advances the root account generation before
+      refresh, rejecting responses from the previous account. Failed signup and
+      invite preview must leave the current identity unchanged.
+- [ ] Cancel an unused link twice and run expiry twice: return credits once.
+      Insufficient balances, active billed turns, concurrent creates and the
+      20-pending cap must never overspend or leak another user's invites.
+- [ ] Test malformed/oversized images, remote URLs, rejected moderation and a
+      provider outage: no invitation or balance deduction is left behind.
+- [ ] `test:invites`, accounting, schema and capability suites pass. Manifest
+      advertises both invitation routes and invite-aware signup. Expiry without
+      the exact `CRON_SECRET` bearer fails closed without touching balances.
+
+- [ ] Creating a new invite and cancelling an older pending invite keeps the newest copyable link visible; cancelling that newest invite removes its link.
