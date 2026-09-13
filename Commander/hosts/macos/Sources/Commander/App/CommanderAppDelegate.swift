@@ -97,6 +97,9 @@ final class CommanderAppDelegate: NSObject, NSApplicationDelegate {
       loginItem: loginItem,
       showLauncher: { [weak self] in self?.showLauncher(id: launcherID) },
       hideLauncher: { [weak self] in self?.launcher(id: launcherID)?.hide() },
+      dismissLauncher: { [weak self] in
+        self?.launcher(id: launcherID)?.hide(restoringPreviousApplication: true)
+      },
       launcherState: { [weak self] in
         guard let self, let launcher = self.launcher(id: launcherID) else {
           throw CommanderHostError.launcherUnavailable

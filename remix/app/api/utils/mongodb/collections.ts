@@ -1316,6 +1316,11 @@ export const createCiControlIndexes = (db: any): Promise<any>[] => {
 // Home-only `things` indexes that ride beside createThingsDataIndexes in the
 // boot ensure (never on a custom endpoint's database).
 const createHomeOnlyThingsIndexes = (db: any): Promise<any>[] => [
+  // Invitation expiry must refund before removing private state; this is NOT TTL.
+  taggedCollection(thingsCollection(db), 'things').createIndex(
+    { 'crystal.status': 1, expiresAt: 1 },
+    { name: 'account_invite_expiry', partialFilterExpression: { thingtime: 'account-invite' } }
+  ),
   // Migration diagnostics exist only on Thingtime's HOME plane. Keep this
   // live TTL deleter out of createThingsDataIndexes(), which also installs
   // indexes on user-supplied custom Mongo endpoints.

@@ -16,6 +16,10 @@ test('only still-private, ready, owned standalone or correctly bound Watch audio
 	const post = { ...owned, shareId: 'watch-upload-test', thingtime: ['post'], tags: ['apple-watch'] };
 	const bound = { ...attachment, attachmentPurpose: 'post', targetId: post.shareId };
 	assert.equal(canReadRecordingTranscript('owner', bound, post), true);
+	assert.equal(canReadRecordingTranscript('owner', { ...bound, acl: ['tt:inherit'] }, post), true);
+	for (const parent of [null, { ...post, acl: ['tt:all'] }, { ...post, acl: ['tt:inherit'] }, { ...post, ownerId: 'other' }])
+		assert.equal(canReadRecordingTranscript('owner', { ...bound, acl: ['tt:inherit'] }, parent), false);
+	assert.equal(canReadRecordingTranscript('owner', { ...attachment, acl: ['tt:inherit'] }, null), false);
 	assert.equal(canReadRecordingTranscript('owner', bound, { ...post, acl: ['tt:all'] }), false);
 	assert.equal(canReadRecordingTranscript('owner', bound, { ...post, shareId: 'wrong' }), false);
 });
@@ -27,9 +31,11 @@ test('committed comments retain exact part ordering, whitespace, emoji and liter
 	assert.equal(projectRecordingTranscript('owner', 'audio', ['a', 'b'], comments), 'Hello world 🥰\n<script>literal</script>');
 	comments.set('a', comment('Edited text '));
 	assert.equal(projectRecordingTranscript('owner', 'audio', ['a'], comments), 'Edited text ');
+	comments.set('a', { ...comment('Inherited transcript'), acl: ['tt:inherit'] });
+	assert.equal(projectRecordingTranscript('owner', 'audio', ['a'], comments), 'Inherited transcript');
 });
 test('missing, deleted, shared, foreign and rebound comments cannot leak text', () => {
-	for (const patch of [{ ownerId: 'other' }, { acl: ['tt:all'] }, { appId: 'app' }, { deletedAt: new Date() }, { targetId: 'wrong' }, { thingtime: ['data'] }]) {
+	for (const patch of [{ ownerId: 'other' }, { acl: ['tt:all'] }, { acl: ['tt:inherit', 'tt:all'] }, { moderation: { status: 'blocked' } }, { appId: 'app' }, { deletedAt: new Date() }, { targetId: 'wrong' }, { thingtime: ['data'] }]) {
 		assert.equal(projectRecordingTranscript('owner', 'audio', ['a'], new Map([['a', { ...comment('private'), ...patch }]])), null);
 	}
 	assert.equal(projectRecordingTranscript('owner', 'audio', ['gone'], new Map()), null);
