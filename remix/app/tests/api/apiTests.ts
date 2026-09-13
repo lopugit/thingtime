@@ -310,6 +310,18 @@ export const apiTests: ApiTestDefinition[] = [
     expect: expectJson([400], (body) => body?.ok === false && Boolean(body?.error), 'Remove returned validation error.')
   },
   {
+    id: 'auth-invites-authorization', name: 'Invites require an account', group: 'auth', method: 'POST',
+    description: 'Anonymous callers cannot create credit-bearing invitations.', path: '/api/v1/auth/invites',
+    body: { intent: 'create', username: 'new-friend', displayName: 'Friend', credits: 0 },
+    expect: expectJson([401], (body) => body?.ok === false, 'Anonymous invitation creation refused.')
+  },
+  {
+    id: 'auth-invites-invalid-token', name: 'Unknown invitations stay private', group: 'auth', method: 'POST',
+    description: 'A malformed invitation token reveals no profile or balance.', path: '/api/v1/auth/invites',
+    body: { intent: 'preview', token: 'invalid' },
+    expect: expectJson([404], (body) => body?.ok === false && !body?.invite, 'Invalid invite token refused.')
+  },
+  {
     id: 'auth-register-validation',
     name: 'Register validation',
     description: 'Register fails before database writes when required fields are missing.',
@@ -327,7 +339,7 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'POST',
     path: '/api/v1/auth/register',
     headers: { 'X-Forwarded-For': uniqueTestIp() },
-    // ~64 KB payload, well over the 16 KB route cap.
+    // ~64 KB payload, well over the 48 KB route cap.
     body: { username: 'tt-api-test-oversized', password: 'valid-length-password', pad: 'x'.repeat(64 * 1024) },
     expect: expectJson(
       [413],

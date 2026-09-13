@@ -230,8 +230,8 @@ test('the Lopu family publishes its minor capability updates (own providers, ver
 	// 1.3.0: the verified-access gate + billing / usage / costMicros / balanceMicros on meta, done and the persisted turn;
 	// 1.4.0: the in-flight cap — a billed turn holds one of at most three slots on the account, past which
 	// the request is refused 429 LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted
-	assert.equal(manifest.features['api.lopu-chats-reply'], '1.7.0');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.lopu-chats-reply'].version, '1.7.0');
+	assert.equal(manifest.features['api.lopu-chats-reply'], '1.7.1');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.lopu-chats-reply'].version, '1.7.1');
 	assert.equal(capabilitySatisfies('1.6.2', '1.6.1'), true);
 	for (const unsupported of ['', '1.6.1', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.6.2'), false);
 	// 1.1.0: optional provider `model` + templates with catalog models / more kinds (vault);

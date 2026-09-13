@@ -701,6 +701,9 @@ export const createLopuAccountingService = (dependencies: LopuAccountingDependen
       const reserved = await things.findOneAndUpdate(
         {
           ...accountFilter(userId),
+          // Recheck at reservation: an invite may have reserved the balance
+          // since the access gate read it. Both operations write this row.
+          'crystal.balanceMicros': { $gt: 0 },
           // an account written before this field existed has no counter yet
           $or: [{ 'crystal.inflight': { $lt: LOPU_MAX_CONCURRENT_TURNS } }, { 'crystal.inflight': { $exists: false } }]
         },

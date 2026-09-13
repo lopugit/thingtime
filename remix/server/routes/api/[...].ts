@@ -120,6 +120,8 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/auth/passkeys/delete': () => import('../../../app/routes/api/v1/auth/passkeys/delete/_delete'),
   'v1/auth/password-reset': () => import('../../../app/routes/api/v1/auth/password-reset/_password-reset'),
   'v1/auth/password-reset/confirm': () => import('../../../app/routes/api/v1/auth/password-reset/confirm/_confirm'),
+  'v1/auth/invites/expire': () => import('../../../app/routes/api/v1/auth/invites/expire/_expire'),
+  'v1/auth/invites': () => import('../../../app/routes/api/v1/auth/invites/_invites'),
   'v1/auth/register': () => import('../../../app/routes/api/v1/auth/register/_register'),
   'v1/auth/temporary': () => import('../../../app/routes/api/v1/auth/temporary/_temporary'),
   'v1/auth/resend-verification': () => import('../../../app/routes/api/v1/auth/resend-verification/_resend-verification'),

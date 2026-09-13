@@ -51,6 +51,10 @@ const matchesValue = (actual: unknown, expected: unknown): boolean => {
           // multikey, like the server: an array field matches $ne only when
           // NO element equals the operand
           return Array.isArray(actual) && !Array.isArray(operand) ? !actual.some((entry) => same(entry, operand)) : !same(actual, operand);
+        case '$lte':
+          return actual !== undefined && compare(actual, operand) <= 0;
+        case '$gte':
+          return actual !== undefined && compare(actual, operand) >= 0;
         case '$lt':
           return actual !== undefined && compare(actual, operand) < 0;
         case '$gt':

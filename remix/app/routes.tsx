@@ -1,3 +1,4 @@
+import { InviteSignup } from './components/Invites/InviteSignup';
 import type { ComponentType } from 'react';
 import { createBrowserRouter, redirect, type LoaderFunctionArgs } from 'react-router';
 
@@ -227,6 +228,7 @@ export const router = createBrowserRouter([
       { path: 'profile/:username', element: <Profile /> },
       { path: 'rainbow/*', lazy: lazyRoute(() => import('./routes/rainbow.$')) },
       { path: 'raw', lazy: lazyRoute(() => import('./routes/raw')) },
+      { path: 'invite', element: <InviteSignup /> },
       { path: 'register', element: <Register />, loader: requireGuest('/welcome') },
       // password-reset + verification landing pages work logged-out by design
       // (the emailed token/link is the credential, not the session)

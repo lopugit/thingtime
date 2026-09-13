@@ -3211,3 +3211,39 @@ Recovery's **App → Thingtime Widgets** selector; its cache and install target 
 isolated from Desktop, Commander and Recovery. Local bundle construction is not
 proof of a successful cloud release: the first main run and download/install via
 Recovery remain release acceptance checks.
+
+## Gifted signup invitations
+
+Signed-in personal accounts can create single-use invites in **Settings → Lopu →
+Invite someone with a gift**. Choose a username, display name, optional avatar and
+0–10,000 credits (six decimal places). The gift is deducted immediately and held
+until signup. Cancelling an unused invite returns it; links expire after 30 days.
+Up to 20 unused invites are allowed per account. Copy the link when it is created:
+only its hash is stored, so the link cannot be recovered from the history list.
+
+The `/invite#<token>` page lets the recipient keep or replace every suggested
+profile field and choose their own password. Email is optional; supplying one
+enables the existing email verification and password recovery flow. An invited
+account receives its gift without another promotional starter grant. Invitations
+do not grant admin status, Lopu verification or general upload permissions.
+
+Fork setup uses the existing home MongoDB transaction support (a replica set),
+canonical account/credit collections, rate limiter and configured moderation
+provider. No new provider key is required. Set the existing `CRON_SECRET` in the
+deployment secret store so Vercel's hourly `/api/v1/auth/invites/expire` job can
+refund expired gifts, up to 50 per run; account visits also settle their expired
+invites. Do not add a TTL index that deletes invitation records before refund.
+The advertised contracts are `api.auth-invites@1.0.0`,
+`api.auth-invites-expire@1.0.0` and `api.auth-register@1.2.0`.
+
+Avatar upload is a narrowly scoped signup thumbnail: the browser crops an image
+under 10 MB, then the server decodes, strips metadata, moderates and re-encodes a
+128px JPEG of at most 16 KiB. The private control record holds this bounded
+thumbnail until redemption, cancellation or expiry. It becomes the new user's
+canonical profile avatar on signup; it never enables general attachment uploads
+or accepts an arbitrary remote URL or another user's attachment ID.
+
+Local validation for `codex/gift-credit-invites`: `http://localhost:11000`
+(Vite), API `11002`, HMR `11001`, managed through `npm run web-pms`. The local
+Tailscale CLI wrapper currently targets a missing Tailscale application, so no
+Funnel URL could be configured or verified for this worktree.
