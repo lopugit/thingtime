@@ -1566,6 +1566,37 @@ email whose link points at the attacker.
       does not float.
 - [ ] Drawer: the Marketing hub appears with its seven children and keeps the
       drawer open on click like Branding/Docs.
+- [ ] Publishing gate (`docs/marketing-suite.md` → Publishing): signed out or
+      as a non-admin, `/marketing`, a category index, a page and
+      `/marketing/social-media` each show the 🔒 "Not published yet" card until
+      an admin publishes them, the `<head>` carries `robots: noindex`, and the
+      drawer has no Marketing section. As an admin every surface renders with
+      the admin bar (state pill, Publish/Unpublish, "Publish all N", 👁️ View
+      as visitor, Manage all →) and `/admin/marketing` opens.
+- [ ] Publish ONE page only (`landing/feed`): a visitor opens it; its crumbs do
+      not link to the unpublished hub/category, the sub-nav lists no
+      categories and no search, footer links skip unpublished targets, related
+      cards and "Same page, other looks" list only published pages, and
+      `/marketing/landing` (the index) still gates.
+- [ ] Publish the `landing` index: visitors see only the published pages
+      (header count matches), cards for unpublished pages are absent; admins
+      see every card with unpublished ones dimmed + 🌐/🔒 chips. "Publish all
+      N pages" then "Unpublish all" round-trip and the count line updates.
+- [ ] Hide a section (the social block on `landing/feed`): admins see it
+      dimmed + dashed with "👁️ Show"; visitors get no such section;
+      `/admin/marketing` lists it under Hidden sections and "Show" restores it.
+- [ ] Social suite: with `social` published and no image set, visitors see
+      "Images are on their way"; publish one set — the visitor menu lists only
+      that feature and `?feature=<unpublished>` falls back to it.
+- [ ] 👁️ View as visitor: the admin bar collapses to the preview strip,
+      gates/filters match a signed-out visit, "Exit preview" restores, and the
+      flag survives a reload.
+- [ ] `/admin/marketing`: stats match the state, per-category page lists
+      filter + toggle, "Publish everything" / "Unpublish everything" need the
+      second confirmation click, Lopu toasts report success/failure, and a
+      rejected POST (e.g. after demotion) reverts the optimistic toggle.
+- [ ] `npm --prefix remix run test:marketing` (publishing + store tests) and
+      `npm --prefix remix run test:api-capabilities` pass.
 
 ## Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`)
 
@@ -3719,7 +3750,7 @@ halves.
 
 ## Register request body cap (`remix/app/routes/api/v1/auth/register/_register.tsx`)
 
-- [ ] Register rejects an oversize body with 413 (`readJsonBody` 16 KiB cap)
+- [ ] Register rejects an oversize body with 413 (`readJsonBody` 48 KiB cap)
       before validation, bcrypt, or account writes; the existing limiter still
       consumes the request first, and a normal signup from a fresh IP returns
       200 with a session cookie.
@@ -7249,3 +7280,37 @@ approval; `access.test.ts` — the reservation matrix) and
   A failed fresh-upload claim must not annotate any existing image; annotation
   or placement failure must clean up only the new emoji. Verify the file picker,
   destination selector and final controls at desktop and mobile sizes.
+
+## Gifted signup invitations (2026-09-13)
+
+- [ ] In Settings → Lopu, create an invite with a profile photo, display name,
+      username and fractional gift. The balance decreases once; copied links use
+      the browser/deployment origin, never the internal Nitro port.
+- [ ] Visit the link signed out at desktop and mobile widths; scroll top to
+      bottom. The avatar/name/username are prefilled, editable, and remain after
+      refresh. Remove and replace the photo; submit stays disabled while it is
+      being prepared. Floating app controls must not cover this focused form.
+- [ ] Enter only a password to complete signup. The chosen profile and gifted
+      balance persist after fresh login. Email-less users see no false email-sent
+      message; regular signup still requires email. No invitation may grant
+      administrator status, upload permissions, Lopu verification or bonus starter
+      credits. Optional email keeps ordinary verification/recovery behavior.
+- [ ] Race two claims: exactly one account receives the gift. Invalid passwords,
+      duplicate usernames, expired/cancelled tokens and ledger failures leave no
+      partial account or consumed gift. No request log or auth return-to hint
+      should persist the bearer token.
+- [ ] Successful invite signup advances the root account generation before
+      refresh, rejecting responses from the previous account. Failed signup and
+      invite preview must leave the current identity unchanged.
+- [ ] Cancel an unused link twice and run expiry twice: return credits once.
+      Insufficient balances, active billed turns, concurrent creates and the
+      20-pending cap must never overspend or leak another user's invites.
+- [ ] Test malformed/oversized images, remote URLs, rejected moderation and a
+      provider outage: no invitation or balance deduction is left behind.
+- [ ] `test:invites`, accounting, schema and capability suites pass. Manifest
+      advertises both invitation routes and invite-aware signup. Expiry without
+      the exact `CRON_SECRET` bearer fails closed without touching balances.
+
+- [ ] Creating a new invite and cancelling an older pending invite keeps the newest copyable link visible; cancelling that newest invite removes its link.
+
+- [ ] Settings → Account (`/settings/account` and popup `?settings=account`) groups account switching, storage, invitations, credits and plans. Profile retains profile editing/privacy; Lopu retains assistant preferences. Check direct reload, category switching, Back, modal close/Escape and Open settings page at desktop and 390px, scrolling both page and modal to the bottom. Old `/settings#lopu-credits` and `/settings/lopu#gift-invites` links select Account and reveal the section below the sticky navigation. Password-only accounts do not show a resend-email action without an email address.

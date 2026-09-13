@@ -3709,9 +3709,28 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'auth-invites-expire', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'auth',
+    title: 'Expire unused invitations', endpoint: '/api/v1/auth/invites/expire', methods: ['GET'],
+    summary: 'Return credits from expired invitations in a bounded hourly maintenance batch.',
+    detail: 'Requires the exact CRON_SECRET Bearer credential. Processes up to 50 expired pending invitations, each refund and status transition in a transaction. Concurrent or repeated runs cannot return credits twice. No account details are returned.',
+    auth: { mode: 'bearer', description: 'Deployment CRON_SECRET only.' },
+    steps: ['Configure CRON_SECRET and the Vercel hourly schedule.'], requestExamples: [],
+    responseExamples: [{ status: 200, description: 'Bounded expiry pass completed.', body: { ok: true } }]
+  }),
+  endpoint({
+    id: 'auth-invites', featureVersion: '1.0.0', contractVersion: '1.0.0', group: 'auth',
+    title: 'Gift credit invitations', endpoint: '/api/v1/auth/invites', methods: ['POST'],
+    summary: 'Create, inspect and cancel single-use signup links with reserved gift credits.',
+    detail: 'POST intent=create with username, displayName, credits (0–10000, up to six decimals), and optional avatarUrl (small PNG/JPEG/WebP data URL). Server re-encodes and moderates a 128px thumbnail, max 16 KiB. Returns url with a 256-bit fragment token once only; only its hash is stored. POST intent=preview and token anonymously returns editable profile suggestions and gift amount. POST intent=list returns the latest 50 owned invites without bearer tokens. POST intent=cancel and id refunds an owned pending invite once. Links expire after 30 days; expiry refunds run hourly (up to 50 per run) and are also reconciled on owner list/create or expired-link access. At most 20 pending links; in-flight Lopu turns prevent reserving gifts. Pending profile suggestions are private binary state, deleted on completion. This narrow thumbnail upload does not enable general uploads. Invite signup grants no extra promotional starter credits.',
+    auth: { mode: 'optional', description: 'Full user session required for create/list/cancel. Preview requires the unguessable invite token. Scoped tokens cannot create or manage invites.' },
+    steps: ['Create an invite and copy its returned URL.', 'Recipient POSTs the fragment token with intent=preview.', 'Redeem with POST /api/v1/auth/register including inviteToken and password; profile overrides and email are optional.'],
+    requestExamples: [{ name: 'Create invitation', description: 'Gift one credit.', method: 'POST', body: { intent: 'create', username: 'new-friend', displayName: 'New friend', credits: 1 } }],
+    responseExamples: [{ status: 200, description: 'Invite created.', body: { ok: true, url: 'https://thingtime.com/invite#opaque-single-use-token' } }]
+  }),
+  endpoint({
     id: 'auth-register',
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'auth',
     title: 'Register user',
     endpoint: '/api/v1/auth/register',
@@ -3723,7 +3742,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     },
     methods: ['POST'],
     steps: [
-      'POST username, password, and email. displayName and meta are optional.',
+      'POST username, password, and email; displayName is optional. With a valid inviteToken, email is optional and omitted profile fields inherit editable invite suggestions. avatarUrl may replace/clear the suggested thumbnail. Invites are consumed with account creation and gift credit transfer in one transaction; no extra starter credits or upload/admin privileges are granted. meta is never accepted from public signup.',
       'Store the returned Set-Cookie header for browser clients.',
       'If verificationLink is present, it is a local/preview helper only; production sends email instead.',
       'Expect emailVerified to start false until the verification link is consumed.'
@@ -4604,10 +4623,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // each spend the same last credit — past the cap the request is refused 429
     // LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted (additive). contractVersion
     // feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.7.0',
-    featureVersion: '1.7.0',
+    contractVersion: '1.7.1',
+    featureVersion: '1.7.1',
     summary: 'Sends one message to Lopu and streams its reply — text, tool calls and live builder patches — as newline-delimited JSON. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
     detail:
+      'Version 1.7.1 rechecks positive balance atomically when reserving a billed turn, preventing a concurrent invite gift from spending the same available balance. ' +
       'Version 1.6.2 clarifies comment proposal guidance: the first unapproved comment_on_thing call opens the exact-target/full-text Confirm card without posting; only a subsequent server-verified approved call can post. Plain-text agreement is not a substitute for a signed confirmation. ' +
       'Version 1.6.1 retains bounded public tool receipts in server-loaded conversation history, so later turns can distinguish completed and failed actions. Receipts are historical outcomes, not current-state guarantees or authorization to repeat actions; raw tool results and confirmation tokens are never replayed. ' +
       'Version 1.6 adds attachmentIds and thingIds (up to ten each), and relational comment_on_thing/list_thing_comments tools. Device media is bound to the persisted user message; the model receives metadata only, plus readable selected Thing content. Comments are standalone Things linked by targetId; all Lopu comments require a server-verified confirmation and never edit parent content. ' +
@@ -13311,6 +13331,102 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Unknown migration id.',
         body: { ok: false, error: 'Unknown migration' }
       }
+    ]
+  }),
+  endpoint({
+    id: 'marketing-publications',
+    group: 'marketing',
+    title: 'Marketing publish state',
+    endpoint: '/api/v1/marketing/publications',
+    summary: 'Which parts of the generated /marketing suite an admin has published — the read the client gates every marketing surface on.',
+    detail:
+      'Everything under /marketing (the hub, each category index, every generated page, each section inside a page, ' +
+      'the social-image suite and each feature\u2019s image set) is admin-only until an admin publishes it, one key at a ' +
+      'time. This endpoint returns the two key lists that decide what a visitor sees: `published` (keys switched on — ' +
+      'hub, social, social:<feature>, category:<key>, page:<slug>) and `hidden` (section:<slug>#<id> keys switched off ' +
+      'inside a published page). Publishing a category never cascades to its pages: an index lists whatever pages ' +
+      'are published. Admin sessions additionally receive `audit`, the username and timestamp behind every key. The ' +
+      'response is never cached so a publish shows on the next navigation.',
+    auth: {
+      mode: 'optional',
+      description: 'Anonymous-readable (the client needs it before first paint). Admin sessions also receive the per-key audit trail.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET without parameters.',
+      'Gate each marketing surface on publications.published containing its key; drop sections whose key is in publications.hidden.',
+      'Admins skip the gate client-side (they preview the unpublished suite) but still read the same lists to render publish controls.',
+      'Handle 429 when rate-limited (anonymous callers key by IP).'
+    ],
+    requestExamples: [{ name: 'Read the publish state', description: 'The lists every /marketing route reads.', method: 'GET' }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Two published pages inside a published category, one hidden section, hub open.',
+        body: {
+          ok: true,
+          publications: {
+            published: ['hub', 'category:landing', 'page:landing/feed', 'page:landing/messages'],
+            hidden: ['section:landing/feed#social'],
+            updatedAt: '2026-09-05T09:12:44.000Z'
+          }
+        }
+      }
+    ]
+  }),
+  endpoint({
+    id: 'admin-marketing-publications',
+    group: 'admin',
+    title: 'Publish / unpublish marketing surfaces',
+    endpoint: '/api/v1/admin/marketing/publications',
+    summary: 'Switch marketing hub, categories, pages, page sections and social image sets on or off, one key or a whole sweep at a time (admin only).',
+    detail:
+      'POST { changes: [{ key, state }] } applies up to 2,000 changes in one atomic write to the marketing-publications ' +
+      'settings singleton. Every key is validated against the generated catalog (unknown keys 400 the whole batch, ' +
+      'nothing is written), and each target accepts only its own state: hub, social, social:<feature>, category:<key> ' +
+      'and page:<slug> take "published"; section:<slug>#<id> takes "hidden"; null clears either. Duplicate keys ' +
+      'collapse to the last entry. GET returns the same state the public endpoint serves plus the per-key audit ' +
+      'trail (who, when). Both respond with the full new state so the client reconciles in one hop.',
+    auth: { mode: 'session', description: 'Requires an admin session (isAdmin); the POST rate limit fails closed.' },
+    methods: ['GET', 'POST'],
+    steps: [
+      'GET to read the current state with audit.',
+      'POST changes:[{ key: "page:landing/feed", state: "published" }] to publish one page; state null to unpublish.',
+      'Hide a section of a published page with { key: "section:landing/feed#social", state: "hidden" }; null shows it again.',
+      'Sweep a category with one request carrying every page:<slug> key in it (categoryPageKeys in marketing/publishing.ts).',
+      'Non-admins receive 401/403; an unknown key or a wrong state 400s the whole batch; 429 when rate-limited.'
+    ],
+    requestExamples: [
+      {
+        name: 'Publish the hub and one page',
+        description: 'Two switches in one atomic write.',
+        method: 'POST',
+        body: { changes: [{ key: 'hub', state: 'published' }, { key: 'page:landing/feed', state: 'published' }] }
+      },
+      {
+        name: 'Hide a section',
+        description: 'Keep the page published but drop its social block for visitors.',
+        method: 'POST',
+        body: { changes: [{ key: 'section:landing/feed#social', state: 'hidden' }] }
+      }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Applied; full state with audit returned.',
+        body: {
+          ok: true,
+          applied: 2,
+          publications: {
+            published: ['hub', 'page:landing/feed'],
+            hidden: [],
+            updatedAt: '2026-09-05T09:12:44.000Z',
+            audit: { hub: { at: '2026-09-05T09:12:44.000Z', by: 'nik' }, 'page:landing/feed': { at: '2026-09-05T09:12:44.000Z', by: 'nik' } }
+          }
+        }
+      },
+      { status: 400, description: 'A key the catalog does not generate.', body: { ok: false, error: 'Unknown page: landing/nope' } },
+      { status: 403, description: 'Not an admin.', body: { ok: false, error: 'Admins only' } }
     ]
   })
 ];
