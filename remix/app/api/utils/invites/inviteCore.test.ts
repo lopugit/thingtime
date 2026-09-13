@@ -28,7 +28,7 @@ test('profile suggestions cannot carry ACL separators or privileges', () => {
 });
 test('invites and invite-aware signup have explicit capability contracts', () => {
 	const manifest = thingtimeCapabilityManifest('https://thingtime.example');
-	assert.equal(manifest.features['api.auth-invites'].version, '1.0.0');
+	assert.equal(manifest.features['api.auth-invites'].version, '1.0.1');
 	assert.ok(capabilitySatisfies(manifest.features['api.auth-register'].version, '1.2.0'));
 	assert.equal(capabilitySatisfies('1.1.0', '1.2.0'), false);
 	assert.equal(capabilitySatisfies('2.0.0', '1.2.0'), false);
