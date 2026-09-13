@@ -363,7 +363,10 @@ func failedDownloadDoesNotInstall() async {
     let store = RecoveryStore()
     await store.downloadAndInstall(release, component: .commander)
     #expect(!store.isCaching)
-    #expect(store.errorMessage != nil)
+    // The rejection message must survive untouched: a handoff would overwrite
+    // errorMessage with the installer-helper failure, so an exact match is what
+    // proves install was skipped rather than attempted and failed.
+    #expect(store.errorMessage == "Thingtime Recovery accepts only GitHub-hosted macOS ZIP release assets.")
     #expect(store.notice == "Download was not cached. Installed apps and existing cached versions are unchanged.")
 }
 
