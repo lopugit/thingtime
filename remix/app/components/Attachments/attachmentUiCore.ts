@@ -503,6 +503,16 @@ const canonicalJson = (value: unknown): unknown => {
 
 const sameJson = (left: unknown, right: unknown) => JSON.stringify(canonicalJson(left)) === JSON.stringify(canonicalJson(right));
 
+// The post sanitizer omits an automatic media layout. Compare that one
+// optional field by its stored meaning, while keeping every content field
+// (including nested user data and rich-text formatting) exact.
+const committedPostCrystal = (value: unknown) => {
+	const crystal = recordOf(value);
+	if (!crystal) return value;
+	const { mediaLayout, ...content } = crystal;
+	return mediaLayout == null ? content : { ...content, mediaLayout };
+};
+
 const exactStringArray = (value: unknown, expected: readonly string[], unordered = false): boolean => {
 	if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string')) return false;
 	const actual = value as string[];
@@ -528,7 +538,7 @@ export const matchesCommittedPostCreate = (response: unknown, expected: Committe
 	if (thing.id !== expected.shareId || post.id !== expected.shareId) return false;
 	if (thingAuthor.id !== expected.ownerId || postAuthor.id !== expected.ownerId) return false;
 	if (!exactStringArray(thing.thingtime, ['post']) || thing.targetId !== null || post.isShare !== false) return false;
-	if (!sameJson(thing.crystal, expected.crystal)) return false;
+	if (!sameJson(committedPostCrystal(thing.crystal), committedPostCrystal(expected.crystal))) return false;
 	if (!exactStringArray(thing.tags, expected.tags) || !exactStringArray(post.tags, expected.tags)) return false;
 	if (post.visibility !== expected.visibility) return false;
 	const attachments = Array.isArray(post.attachments) ? post.attachments : null;

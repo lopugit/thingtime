@@ -1,3 +1,4 @@
+import { ssoReturnUrl } from '../Account/ssoNavigation';
 import React from 'react';
 import { Box, Button, Flex } from '@chakra-ui/react';
 
@@ -220,6 +221,7 @@ export const AuthorizePage = () => {
   // redeems at its own /api/v1/auth/sso-session. Origins stay default-open;
   // the per-code binding is the security.
   const selfMode = !sandbox && !desktopFlow && params.get('self') === '1';
+  const selfRedirect = selfMode && params.get('redirect') === '1';
   // opt-in sandbox pooling (see /api/v1/oauth/sandbox): passed through to the
   // mint verbatim — the server validates
   const sandboxSpace = (params.get('sandbox_space') || '').slice(0, 64);
@@ -274,7 +276,7 @@ export const AuthorizePage = () => {
       // still runs so a signed-in visitor goes straight to the confirm card.
       try {
         const normalized = new URL(origin).origin;
-        if (normalized !== origin) throw new Error('origin must be a bare web origin');
+        if (normalized !== origin || !/^https?:$/.test(new URL(origin).protocol) || (selfRedirect && !ssoReturnUrl(origin, state, { cancelled: true }))) throw new Error('origin must be a bare web origin');
         setVerifiedOrigin(normalized);
       } catch {
         setInvalidReason('This link is missing a valid target origin.');
@@ -605,7 +607,7 @@ export const AuthorizePage = () => {
     setIssuing(true);
     setIssueError(null);
 
-    if (!verifiedOrigin || typeof window === 'undefined' || !window.opener) {
+    if (!verifiedOrigin || typeof window === 'undefined' || (!selfRedirect && !window.opener)) {
       setIssueError('This window lost its connection to the site that opened it. Close it and start the sign-in again.');
       setIssuing(false);
       return;
@@ -618,6 +620,10 @@ export const AuthorizePage = () => {
     });
 
     if (resp?.ok && resp.code) {
+      if (selfRedirect) {
+        const callback = ssoReturnUrl(verifiedOrigin, state, { code: resp.code });
+        if (callback) { window.location.replace(callback); return; }
+      }
       const delivered = postToOpener({ type: 'thingtime:sso', ok: true, code: resp.code });
       if (delivered) {
         setDone('approved');
@@ -632,6 +638,10 @@ export const AuthorizePage = () => {
   };
 
   const cancel = () => {
+    if (selfRedirect && verifiedOrigin) {
+      const callback = ssoReturnUrl(verifiedOrigin, state, { cancelled: true });
+      if (callback) { window.location.replace(callback); return; }
+    }
     if (desktopFlow && desktopRedirect && desktopState) {
       window.location.assign(
         appendDesktopAuthorizationResult(desktopRedirect.uri, {

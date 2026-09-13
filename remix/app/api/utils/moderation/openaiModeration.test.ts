@@ -103,8 +103,8 @@ test('omni screen posts a data-URL image with bearer auth and rejects bad respon
 	assert.equal(body.input[0].type, 'image_url');
 	assert.ok(String(body.input[0].image_url.url).startsWith('data:image/png;base64,'));
 
-	const failing = createOmniScreen({} as any, (async () => ({ ok: false, status: 429 })) as unknown as typeof fetch);
-	await assert.rejects(() => failing(input), /omni-moderation request failed \(429\)/);
+	const failing = createOmniScreen({} as any, (async () => Response.json({ error: { code: 'insufficient_quota' } }, { status: 429 })) as unknown as typeof fetch);
+	await assert.rejects(() => failing(input), /Moderation provider unavailable \(429; insufficient_quota\)/);
 	const malformed = createOmniScreen({} as any, (async () => ({ ok: true, json: async () => ({ results: [] }) })) as unknown as typeof fetch);
 	await assert.rejects(() => malformed(input), /malformed omni-moderation response/);
 });
