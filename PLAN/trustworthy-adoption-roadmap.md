@@ -59,6 +59,9 @@
 **Automation-agency dependency:**
 [Automation agency and accountable recurrence](./automation-agency-and-accountable-recurrence-roadmap.md)
 
+**Youth-safety dependency:**
+[Youth safety and age-appropriate agency](./youth-safety-and-age-appropriate-agency-roadmap.md)
+
 ## Outcome
 
 Make Thingtime easier to discover, understand, trust, use repeatedly, share by
@@ -93,9 +96,12 @@ owner approves the exact journey and denominator.
    internationalization, reliability, export, and deletion are adoption gates.
 4. **One contract.** Tests, live behavior, direct API use, docs, and the
    capability manifest describe the same product.
-5. **Small reversible experiments.** Every experiment has an owner, hypothesis,
+5. **Adult-only until reviewed otherwise.** No adoption pilot recruits minors
+   until qualified owners approve and consistently enforce a product-wide
+   eligibility and age-appropriate-use contract.
+6. **Small reversible experiments.** Every experiment has an owner, hypothesis,
    guardrails, stop condition, and cleanup path.
-6. **Sustainable alignment.** Revenue should grow when people store, build,
+7. **Sustainable alignment.** Revenue should grow when people store, build,
    collaborate, or receive support—not when they surrender more attention or
    private data.
 

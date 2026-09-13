@@ -66,6 +66,12 @@ experiment by itself.
   honest local-draft, pending, conflict, canonical-confirmation, device-scope,
   and purge semantics. Offline availability or fast first paint is not adoption
   evidence, and local state may not become covert return telemetry.
+- [TODO 45](./45-youth-safety-and-age-appropriate-agency.md) owns product-wide
+  eligibility, likely-child-access assessment, age-assurance proportionality,
+  guardian boundaries, protective defaults, support, and remedies. Adoption
+  pilots remain adult-only until qualified owners approve and consistently
+  enforce another posture; birthday, terms text, authentication, or a guardian
+  checkbox is not eligibility evidence.
 - [TODO 31](./31-creator-sustainability-and-fair-value.md) owns creator-commerce
   roles, provider-neutral transaction truth, receipts, entitlements,
   fulfilment, remedies, private settlement, and operating stop conditions.

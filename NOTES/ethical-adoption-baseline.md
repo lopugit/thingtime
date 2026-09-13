@@ -95,6 +95,12 @@ turns these observations into phases. The executable backlog lives in
     people, subspaces, schemas, components, and apps use different corpus,
     match, rank, cache, and explanation rules; query privacy and commercial
     influence are not yet one visible contract.
+11. **Youth eligibility and protection are unowned.** Terms text, age-neutral
+    registration, optional birthday data, moderation labels, and repeated
+    minor exclusions do not form one enforceable, rights-respecting contract.
+    The [youth safety baseline](./youth-safety-and-age-appropriate-agency-baseline.md)
+    keeps adoption pilots adult-only while qualified owners decide scope,
+    likely child access, proportional safeguards, support, and remedies.
 
 ## Proposed outcome vocabulary
 
@@ -132,6 +138,9 @@ Any later measurement design should fail closed unless all of these are true:
   losing core product functionality.
 - Abuse metrics cannot become public leaderboards or tools for targeting
   vulnerable people.
+- Recruitment remains adult-only unless the separately reviewed
+  [youth-safety roadmap](../PLAN/youth-safety-and-age-appropriate-agency-roadmap.md)
+  approves and consistently enforces another posture.
 
 ## Open questions
 

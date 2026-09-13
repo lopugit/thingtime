@@ -32,6 +32,7 @@ engineering decisions in [`../DECISIONS.md`](../DECISIONS.md).
 | [Joyful delight and play agency roadmap](./joyful-delight-and-play-agency-roadmap.md)                                               | Delight charter through truthful feedback, preference fidelity, bounded recipes, safe cleanup, regression proof, and one local synthetic preview            | Proposed |
 | [Automation agency and accountable-recurrence roadmap](./automation-agency-and-accountable-recurrence-roadmap.md)                   | Automation charter through exact preview, persistent destinations, occurrence truth, dependable stopping, repair, and one synthetic message pilot           | Proposed |
 | [Local-first agency and accountable-synchronization roadmap](./local-first-agency-and-accountable-synchronization-roadmap.md)       | Local-state charter through classified storage, honest drafts, fresh-authority reconnect, explicit conflicts, bounded proof, and complete cleanup           | Proposed |
+| [Youth safety and age-appropriate agency roadmap](./youth-safety-and-age-appropriate-agency-roadmap.md)                             | Qualified ownership through a product-wide eligibility matrix, proportionate safeguards, protective defaults, synthetic proof, support, and remedies        | Proposed |
 
 ## Conventions
 

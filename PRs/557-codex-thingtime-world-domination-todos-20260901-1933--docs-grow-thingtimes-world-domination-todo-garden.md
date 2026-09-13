@@ -18,6 +18,39 @@ required sequence:
 The branch is intentionally cumulative. It does not merge itself, implement
 the product work, or treat a plausible idea as an approved decision.
 
+## 2026-09-14 morning — youth safety and age-appropriate agency
+
+This run identifies a product-wide ownership gap: Thingtime's garden repeatedly
+excludes minors from pilots, a merchandise-oriented terms surface mentions age
+16 and guardian consent, canonical account creation accepts no age input, and
+optional private birthday data has a separate profile-sharing purpose. None of
+those fragments proves eligibility, guardian authority, compliance, or safety.
+It adds:
+
+- `NOTES/youth-safety-and-age-appropriate-agency-baseline.md`, a dated evidence
+  ledger covering current registration and birthday boundaries plus qualified
+  Australian and international design references;
+- `PLAN/youth-safety-and-age-appropriate-agency-roadmap.md`, a gated path from
+  ownership and a product-wide matrix through an explicit interim posture,
+  protective behavior, synthetic proof, support, and remedies; and
+- `TODO/claude-todo/45-youth-safety-and-age-appropriate-agency.md`, an execution
+  epic with owner decisions, acceptance criteria, hard stop conditions, and a
+  concrete first decision packet.
+
+The recommended first study uses adult product, privacy, safety, accessibility,
+and support specialists with synthetic ages 15, 16, 17, and 18. It maps every
+account, visibility, contact, discovery, AI, recording, commerce, deletion,
+moderation, and support surface without recruiting minors or collecting new
+personal data. Until qualified owners approve a consistent alternative, all
+product pilots remain adult-only and Thingtime makes no claim that it is
+designed for, safe for, or verified to exclude children.
+
+Real minors, child accounts or content, production experiments, covert age
+inference, birthday repurposing, identity-document or biometric collection,
+behavioral analytics, and child-facing claims remain excluded. No runtime, API,
+schema, registration, profile, terms, moderation, account, or production
+behavior changed.
+
 ## 2026-09-13 evening — local-first agency and accountable synchronization
 
 This run grounds the garden in Thingtime's flash-free local projections,

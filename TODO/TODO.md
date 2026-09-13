@@ -695,3 +695,21 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     offline queues, service workers, automatic merge, CRDTs, collaboration,
     attachments, public or third-party state, analytics, AI, minors,
     institutions, and sensitive or high-impact work remain separately gated.
+
+45. **🧒 Make youth safety and age-appropriate agency a product contract.**
+
+    Resolve the mismatch between a merchandise-oriented terms age statement,
+    age-neutral canonical registration, optional private birthday data, and
+    scattered minor exclusions without pretending any fragment proves
+    eligibility, guardian authority, compliance, or safety. Start only with
+    adult specialists and synthetic personas for ages 15, 16, 17, and 18; map
+    every account, privacy, discovery, contact, AI, recording, commerce,
+    deletion, moderation, and support surface into one versioned policy matrix.
+    Execute `claude-todo/45-youth-safety-and-age-appropriate-agency.md` only
+    after qualified owners approve service and jurisdiction scope, the interim
+    eligibility posture, likely-child-access assessment, data and age-assurance
+    boundaries, guardian role, protective defaults, support and remedies,
+    evidence, refresh triggers, and stop authority. Real minors, child accounts
+    or content, production experiments, covert inference, identity-document or
+    biometric collection, behavioral analytics, and child-facing claims remain
+    separately gated.
