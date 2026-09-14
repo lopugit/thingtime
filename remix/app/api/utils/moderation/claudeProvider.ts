@@ -3,6 +3,7 @@
 // persists anywhere new — bytes come from the private S3 object and go only
 // to the Claude API call.
 import Anthropic from '@anthropic-ai/sdk';
+import { recordErrorLog } from '../errors/errorLogs';
 
 import { getAiPreferredModelWaterfall } from '../settings/prConflictResolverModelWaterfall';
 import { resolveAiPreferredAnthropicChoice, toAnthropicEffort } from '../settings/prConflictResolverModelWaterfallCore';
@@ -82,7 +83,11 @@ export const createClaudeModerationProvider = (env: NodeJS.ProcessEnv = process.
 						]
 					}
 				]
-			});
+			}).catch(async (error) => {
+        // Capture only the SDK's closed error snapshot, not headers/body/image.
+        await recordErrorLog(error, { source: 'moderation', provider: 'anthropic', status: error?.status, providerRequestId: error?.request_id, providerType: error?.error?.error?.type });
+        throw error;
+      });
 
 			// A safety-classifier refusal on a moderation request is itself signal:
 			// the image was extreme enough that the model declined to process it.
