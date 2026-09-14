@@ -6370,6 +6370,14 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ### Recovery cards, build IDs and app selection
 
+- [ ] Select Electron, Commander, Widgets and Thingtime Recovery in the App picker.
+      Each sidebar/cache page must contain only that app's builds and counts;
+      Recovery appears only in its own section. Relaunch with Recovery selected.
+      Every release row/detail and cached build shows a Built/Released date beside
+      the build identity, or an explicit unavailable date for legacy metadata.
+      Refresh and relaunch offline: cached release dates persist, Cached dates
+      stay distinct, and unsigned trust markers are unchanged. Check narrow/wide
+      windows, scroll all lists to the bottom, and open/cancel unsigned prompts.
 - [ ] In release details, use **Download & install** beside **Download and verify**.
       It must verify and install the exact selected release through the existing
       helper, preserving rollback; verify-only must leave installed apps unchanged.

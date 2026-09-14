@@ -3256,6 +3256,19 @@ Image review uses the Admin moderation selection and server-only `OPENAI_API_KEY
 
 Recovery worktree QA uses Vite `http://localhost:13210`, Nitro 13212 and HMR 13211 through the canonical PM2 worktree-port resolver. Tailscale Funnel could not be verified on 2026-09-13: the installed CLI wrapper points to an absent `/Applications/Tailscale.app` executable.
 
+### Recovery app sections and build dates
+
+In Thingtime Recovery, use the App picker to choose Thingtime Electron, Commander,
+Thingtime Widgets or Thingtime Recovery itself. Each section shows only that app's
+cached builds and GitHub releases, even when a GitHub release includes several apps.
+
+Build dates use the signed bundle's `ThingtimeBuildDate` ISO-8601 value (native)
+or `Contents/Resources/web/metadata.json` `builtAt` (Electron). Native packaging
+records the UTC timestamp before signing. Older builds use GitHub's publication
+date, labelled **Released**, which is retained in the local cache for offline use.
+A **Cached** date is separate and never presented as a build date. Builds without
+recorded build/release metadata show **Build date unavailable**.
+
 ### Admin error logs
 
 Current admins can open **Things → Error logs** (`/things?logs=1`) and search redacted failures by message, source, provider, route, code or request ID. Each record is a protected `error-log` Thing in the deployment's home database. Generic Things reads, writes, search, feeds and exports cannot expose or alter it. The admin endpoint rechecks current privileges on every request and disables caching.

@@ -48,6 +48,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Retry brief moderation throttles once and preserve invite drafts on review
   failure; auth-invites contract 1.0.1. [PR #796 evidence](../PRs/796-codex-mobile-auth-post-recovery-mobile-signin-and-invite-review.md). — Codex (AI), 2026-09-13
 
+- 2026-09-14 — Give Thingtime Recovery its own app section, isolate product build
+  lists, and show build/release dates on all Recovery build views. Cache release
+  dates for offline use and stamp new native bundles before signing. — Codex (AI)
+
 - Add Settings → Account in the shared page and popup for account switching,
   storage, invitations, credits and plans. Preserve old credits/invite bookmarks
   and keep profile editing and assistant preferences in their existing tabs.
