@@ -164,7 +164,11 @@ How (see `api/utils/things/things.ts`):
   Custom emoji images carry purpose `emoji` and bind to the exact owner/scope.
   Profile attachments carry server-owned purpose `profile` plus exact `avatar`
   or `banner` slot; the user root stores the current attachment id and content
-  authorization rechecks that exact slot reference. No purpose can be replayed
+  authorization rechecks that exact slot reference. Subspace branding attachments carry dedicated `subspace-icon` or
+  `subspace-banner` purpose and bind to the exact current root slot; branding
+  remains public directory identity even for private subspaces. Bytes are billed
+  to the uploading moderator, with replacement expiry and deletion through the
+  canonical attachment lifecycle. No purpose can be replayed
   into another surface. A child without a
   `shareId`, or any child using `kind`/`parentId` instead of
   `thingtime`/`targetId`, is legacy compatibility data, not the shape for new

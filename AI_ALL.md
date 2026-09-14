@@ -432,6 +432,10 @@ commits.
 
 ## Browser and UI validation
 
+### Configurable images and files
+
+- Every configurable or customizable image/file usage across Thingtime must use the shared upload-first pattern: offer an upload picker as the primary control and an optional **Use URL instead** button that reveals a URL field. Reuse the shared media/upload components; do not introduce URL-only settings. Preserve previews, replacement/removal, progress, retry, and unsaved drafts. Use canonical server-validated attachment purposes, target/slot authorization, moderation, quota accounting, and cleanup; a pasted URL remains a validated fallback and must never bypass these boundaries.
+
 ### Feature customization defaults
 
 - Every new user-facing feature or meaningful product addition must include a reasonably chosen settings surface for the behaviors users are likely to want to customize. Choose safe, useful defaults; avoid exposing implementation-only knobs; preserve existing preferences through migrations; and document what each control changes. If a feature genuinely has no meaningful user choice, no setting is required.
