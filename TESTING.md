@@ -4982,6 +4982,13 @@ default` unsets it, and runtime usage reports the effective cap. A custom
 
 ## Notifications (`api/utils/notifications/notifications.ts`, `/api/v1/notifications*`, nav bell)
 
+- [ ] Bell hit area (2026-09-14): at 1440px, 768px and 390px widths, with the
+      drawer open/closed and page scrolled to its footer, click the bell's centre,
+      bottom edge and padded corners to open and close it repeatedly. Every pixel
+      of the 36px button must hit the bell rather than Commander or a transparent
+      layer. Scroll the popup to its last row, reopen, and check Escape/outside
+      dismissal; desktop search must fit between the account and right controls.
+
 - [ ] Watch recovery: an expired/deleting unbound draft returns `watch_upload_restart_required`; retain local bytes and persist a new request identity before re-upload. Lost successful responses retry the same identity; live/bound/foreign drafts never grant rebind permission. A failed file must not mark a healthy account offline or block unrelated queued files. Account switching must not attribute results to the wrong account.
 - [ ] Lopu: ask standard voice/chat to create a private note, an immediate notification, a one-off reminder and a five-minute repeating reminder. Confirm persisted IDs/next runs, pause/resume in Settings, and verify the server sends with the browser closed. Completing/deleting the source or pausing during emission must prevent the send. Late runs skip backlog; owner/auth/CSRF and subscription limits remain enforced.
 - [ ] Settings notification tests: desktop/mobile, scroll top to bottom, expand every-type tests, send Quiet/Normal/Urgent/Rich/Image to yourself, and inspect history. Quiet has no sound; Urgent requests time-sensitive (not Critical). Test the muted response and offline/retry states. Native banners use plain text; richer content is in Thingtime history. Physical Watch display is a separate acceptance check.

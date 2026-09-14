@@ -31,6 +31,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Give the notifications bell a 36px click target and reserve desktop search
+  space between navigation controls so Commander cannot intercept bell clicks
+  when the drawer narrows the header. — Codex (AI), 2026-09-14
+
 - Recover committed text/link posts when the server omits an empty media layout;
   bound stalled publish/readback requests and preserve the same retry UUID. Use
   same-tab authority sign-in on foreign previews and keep login forms unobscured.
