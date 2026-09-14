@@ -35,6 +35,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   lists, and show build/release dates on all Recovery build views. Cache release
   dates for offline use and stamp new native bundles before signing. — Codex (AI)
 
+- 2026-09-14 — Dropping files onto a post composer opens Photos and queues the files through the existing uploader without deselecting other modes, including Poll. Collapsed prompts and rich comments use the same flow. — Codex (AI)
+
 - Recover committed text/link posts when the server omits an empty media layout;
   bound stalled publish/readback requests and preserve the same retry UUID. Use
   same-tab authority sign-in on foreign previews and keep login forms unobscured.
