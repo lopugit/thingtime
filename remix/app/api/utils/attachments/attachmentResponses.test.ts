@@ -62,3 +62,13 @@ test('Watch device credentials retain the post upload path', async () => {
 	assert.equal(response.status, 200);
 	assert.equal(serviceCalls, 1);
 });
+
+test('subspace image uploads require public approval even with private upload approval', async () => {
+  for (const purpose of ['subspace-icon', 'subspace-banner']) {
+    let called = false;
+    const action = createAttachmentMutationAction({ rateKey: 'attachments.start', requireUploadPermission: true, service: async () => { called = true; return { ok: true }; } }, { getUser: async () => ({ ...user, publicUploadsEnabled: false }), enforceLimit: async () => allowedLimit, readBody: async () => ({ purpose }) });
+    const response = await action({ request: new Request('https://thingtime.com/api/v1/attachments/uploads', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }) });
+    assert.equal(response.status, 403);
+    assert.equal(called, false);
+  }
+});
