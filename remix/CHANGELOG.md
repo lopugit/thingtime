@@ -31,11 +31,26 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-14 — **Codex (AI)** — Added protected admin-searchable error-log Things in `/things?logs=1`, bounded seven-day retention using shared Thing indexes, request correlation, redacted shared/API error capture and richer moderation provider diagnostics. [PR 799 details](../PRs/799-admin-error-log-things-searchable-admin-error-log-things.md).
+
+- 2026-09-14 · Codex: Subspace icon/banner settings now reuse upload-first media fields with **Use URL instead**, previews and retry; added purpose-bound, quota-accounted branding attachments and the repo-wide media-input rule. Desktop/mobile URL saves and production build verified; upload storage remains subject to existing approval. See [PR #805 details](../PRs/805-subspace-image-upload-upload-first-subspace-branding.md).
+- Give the notifications bell a 36px click target and reserve desktop search
+  space between navigation controls so Commander cannot intercept bell clicks
+  when the drawer narrows the header. — Codex (AI), 2026-09-14
+
+- 2026-09-14 — Dropping files onto a post composer opens Photos and queues the files through the existing uploader without deselecting other modes, including Poll. Collapsed prompts and rich comments use the same flow. — Codex (AI)
+
+- 2026-09-14 — Allow `thingtime` as a subspace slug and let owners rename URLs in Mod tools → Settings, preserving posts and memberships with atomic uniqueness checks and capability negotiation. **Codex (AI)**
+
 - Recover committed text/link posts when the server omits an empty media layout;
   bound stalled publish/readback requests and preserve the same retry UUID. Use
   same-tab authority sign-in on foreign previews and keep login forms unobscured.
   Retry brief moderation throttles once and preserve invite drafts on review
   failure; auth-invites contract 1.0.1. [PR #796 evidence](../PRs/796-codex-mobile-auth-post-recovery-mobile-signin-and-invite-review.md). — Codex (AI), 2026-09-13
+
+- 2026-09-14 — Give Thingtime Recovery its own app section, isolate product build
+  lists, and show build/release dates on all Recovery build views. Cache release
+  dates for offline use and stamp new native bundles before signing. — Codex (AI)
 
 - Add Settings → Account in the shared page and popup for account switching,
   storage, invitations, credits and plans. Preserve old credits/invite bookmarks
