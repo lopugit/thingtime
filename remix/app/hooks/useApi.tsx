@@ -771,7 +771,10 @@ export function useApi() {
       get: useCallback(async (args: { slug?: string; id?: string }) => getJson(`/api/v1/subspaces/get${toQuery(args)}`), []),
       create: useCallback(async (body: Record<string, unknown>) => asyncFetcher.submit(body, { action: '/api/v1/subspaces', errorContext: 'create the subspace' }), [asyncFetcher]),
       update: useCallback(
-        async (body: Record<string, unknown>) => asyncFetcher.submit(body, { action: '/api/v1/subspaces/update', errorContext: 'save the subspace settings' }),
+        async (body: Record<string, unknown>) => {
+          if (body.newSlug !== undefined) await requireThingtimeCapability('api.subspaces-update', '1.4.0');
+          return asyncFetcher.submit(body, { action: '/api/v1/subspaces/update', errorContext: 'save the subspace settings' });
+        },
         [asyncFetcher]
       ),
       // join answers { joined, pending }: a PRIVATE subspace files a join

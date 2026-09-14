@@ -740,6 +740,8 @@ const SettingsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSave
 	const api = useApi();
 	const lopu = useLopu();
 	const isOwner = subspace.viewer.role === 'owner';
+	const navigate = useNavigate();
+	const [newSlug, setNewSlug] = React.useState(subspace.slug);
 	const [name, setName] = React.useState(subspace.name);
 	const [description, setDescription] = React.useState(subspace.description || '');
 	const [access, setAccess] = React.useState<SubspaceAccess>(subspace.access);
@@ -757,8 +759,14 @@ const SettingsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSave
 				name,
 				description,
 				branding: { icon: icon || null, iconUrl: iconUrl || null, bannerUrl: bannerUrl || null, accent: accent || null },
-				...(isOwner ? { access, nsfw } : {})
+				...(isOwner ? { access, nsfw, ...(newSlug !== subspace.slug ? { newSlug } : {}) } : {})
 			});
+			if (resp.subspace.slug !== subspace.slug) {
+				clearLocalCachePrefix(`tt-subspace-${subspace.slug}-`);
+				clearLocalCachePrefix(`tt-subspace-${resp.subspace.slug}-`);
+				setNewSlug(resp.subspace.slug);
+				navigate(`/s/${resp.subspace.slug}/mod?tab=settings`, { replace: true });
+			}
 			onSaved(resp.subspace);
 			lopu({ title: 'Subspace settings saved ✨', status: 'success', duration: 4000 });
 		} catch (err: any) {
@@ -774,10 +782,15 @@ const SettingsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSave
 				<Box>
 					<Label>Identity</Label>
 					<Text fontSize="xs" color={MUTED}>
-						/s/{subspace.slug} · slug is permanent
+						/s/{subspace.slug}
 					</Text>
 				</Box>
 			</Flex>
+			{isOwner && <Box>
+				<Label>Subspace URL</Label>
+				<Input aria-label="Subspace slug" size="sm" borderRadius={RADIUS_MD} value={newSlug} maxLength={30} onChange={(event) => setNewSlug(event.target.value)} />
+				<Text fontSize="xs" color={MUTED} marginTop={1}>/s/{newSlug} · Renaming keeps posts and members. The old URL stops working and becomes available to others.</Text>
+			</Box>}
 			<Box>
 				<Label>Name</Label>
 				<Input size="sm" borderRadius={RADIUS_MD} value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />

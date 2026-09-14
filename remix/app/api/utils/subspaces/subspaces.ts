@@ -805,6 +805,7 @@ const activatePendingRequests = async (subspaceId: string, slug: string, actor: 
 };
 
 export type UpdateSubspaceInput = SubspaceRef & {
+	newSlug?: unknown;
 	name?: unknown;
 	description?: unknown;
 	access?: unknown;
@@ -833,6 +834,16 @@ export const updateSubspace = async (viewerInput: string | Viewer, input: Update
 
 	const set: Record<string, unknown> = {};
 	const changed: string[] = [];
+	if (input.newSlug !== undefined) {
+		if (!isOwner || subspace.ownerId !== auth.viewer.id) return fail(403, 'Only the owner can change the slug');
+		const slug = sanitizeSlug(input.newSlug);
+		if (isFail(slug)) return slug;
+		if (slug !== subspace.crystal?.slug) {
+			set['crystal.slug'] = slug;
+			set.uniqueKeys = [thingUniqueKey(SUBSPACE_SLUG_KEY_FIELD, slug)];
+			changed.push('slug');
+		}
+	}
 	if (input.name !== undefined) {
 		const name = sanitizeName(input.name);
 		if (isFail(name)) return name;
@@ -906,7 +917,18 @@ export const updateSubspace = async (viewerInput: string | Viewer, input: Update
 
 	const things = await getThingsCollection();
 	const now = new Date();
-	await updateAccountedThing(things, { shareId: id, thingtime: 'subspace' }, { $set: { ...set, updatedAt: now } });
+	try {
+		const result = await updateAccountedThing(things, {
+			shareId: id, thingtime: 'subspace',
+			...(input.newSlug !== undefined ? { ownerId: auth.viewer.id, 'crystal.slug': subspace.crystal?.slug } : {})
+		}, { $set: { ...set, updatedAt: now } });
+		if (!Number(result?.matchedCount)) return fail(409, 'Subspace changed while saving — reload and try again');
+	} catch (err) {
+		// The protected unique key arbitrates concurrent renames, creates and
+		// existing deletion holds; the accounted transaction rolls back on conflict.
+		if (isDuplicateKey(err)) return fail(409, 'That subspace slug is taken or held — pick another slug');
+		throw err;
+	}
 	const detail: Record<string, unknown> = { fields: changed };
 	if (set['crystal.access'] !== undefined) {
 		const previousAccess = accessOf(subspace);

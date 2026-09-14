@@ -330,10 +330,10 @@ test('subspace user flairs publish their contract versions', () => {
 	// things-comment, things-feed, things-user contract 1.1.0 → 1.2.0)
 	// (S4 moved list / get / update on to 1.3.0 — see the removal-reasons test;
 	// S6 moved list on to 1.4.0 — sort=new|members|active)
-	assert.equal(manifest.features['api.subspaces'], '1.5.0');
+	assert.equal(manifest.features['api.subspaces'], '1.5.1');
 	// (S5 moved get on to 1.4.0 — openReportCount for moderators)
 	assert.equal(manifest.features['api.subspaces-get'], '1.4.0');
-	assert.equal(manifest.features['api.subspaces-update'], '1.3.0');
+	assert.equal(manifest.features['api.subspaces-update'], '1.4.0');
 	// S3 review: kick / ban strip the flair, demotion strips a mod-only pick,
 	// mods may dress the owner (members 1.3.1, corrections); moderate's
 	// re-projected post carries authorFlair (1.1.0, additive) — S4 moved both
@@ -364,10 +364,10 @@ test('subspace removal reasons + moderation modals publish their contract versio
 	// feed + transfer 1.2.0, all additive); moderate remove takes reasonId and
 	// notifies the author (1.2.0, additive); ban takes a private mod-log note
 	// (members 1.4.0, additive)
-	for (const feature of ['api.subspaces-update', 'api.subspaces-join', 'api.subspaces-leave']) {
+	for (const feature of ['api.subspaces-join', 'api.subspaces-leave']) {
 		assert.equal(manifest.features[feature], '1.3.0', feature);
 	}
-	assert.equal(manifest.features['api.subspaces'], '1.5.0'); // S6: sort=new|members|active; S6 review: anon=1 + rate key + private activity fenced
+	assert.equal(manifest.features['api.subspaces'], '1.5.1'); // S6: sort=new|members|active; S6 review: anon=1 + rate key + private activity fenced
 	assert.equal(manifest.features['api.subspaces-get'], '1.4.0'); // S5: openReportCount
 	assert.equal(manifest.features['api.subspaces-feed'], '1.3.0'); // S5: subspaceMod.reportCount
 	assert.equal(manifest.features['api.subspaces-transfer'], '1.2.0');
@@ -419,7 +419,7 @@ test('subspace discovery publishes its contract versions', () => {
 	// anon=1 (the edge-cacheable logged-out view, additive), is rate-limited
 	// (subspaces.list, 120/min) and fences a private subspace's activity to
 	// its ACTIVE members (compatible corrections) — 1.4.0 → 1.5.0.
-	assert.equal(manifest.features['api.subspaces'], '1.5.0');
+	assert.equal(manifest.features['api.subspaces'], '1.5.1');
 	assert.equal(manifest.features['api.things-feed'], '1.6.0');
 	for (const feature of ['api.things-comment', 'api.things-user']) {
 		assert.equal(manifest.features[feature], '1.5.0', feature);
