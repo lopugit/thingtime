@@ -599,6 +599,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 			</Flex>
 
 			<Box
+				data-attachment-drop-zone
 				border={dragging ? '1px solid var(--tt-accent, #7c5cff)' : '1px dashed var(--tt-border, #d8d8df)'}
 				borderRadius="var(--tt-radius-md, 12px)"
 				background={dragging ? 'var(--tt-accent-tint, #fff5fa)' : 'var(--tt-surface, #fafafb)'}
