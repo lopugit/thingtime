@@ -18,6 +18,39 @@ required sequence:
 The branch is intentionally cumulative. It does not merge itself, implement
 the product work, or treat a plausible idea as an approved decision.
 
+## 2026-09-15 — support agency and accountable remedy
+
+This run identifies a shared-journey gap: Thingtime's domain plans define
+moderation appeals, incident recovery, refunds and disputes, portability and
+deletion, and product-claim corrections, while the repository also contains a
+declarative support-ticket demo and several “contact support” strings. None of
+those fragments establishes one discoverable, consentful, accessible support
+journey with an acknowledgement, accountable handoff, truthful status, domain
+authority, correction, reopening, closure, and cleanup. It adds:
+
+- `NOTES/support-agency-and-accountable-remedy-baseline.md`, a dated evidence
+  ledger separating shared support coordination from domain decisions;
+- `PLAN/support-agency-and-accountable-remedy-roadmap.md`, a gated path through
+  ownership, minimum case state, consistent help, data preview, accountable
+  routing, service-clock truth, domain outcomes, and evaluation; and
+- `TODO/claude-todo/47-support-agency-and-accountable-remedy.md`, an execution
+  epic with authority boundaries, acceptance criteria, hard stops, and a
+  concrete first owner packet.
+
+The recommended pilot uses adult internal reviewers, one synthetic private text
+Thing, one exact non-production build, and a deterministic failed export/restore
+request. It exercises discover, data preview, submit, acknowledgement, status,
+one portability handoff, bounded follow-up, resolution, correction, reopen,
+closure, export/deletion, failure injection, and full cleanup.
+
+Real people or failures, external helpdesks or email, public service promises,
+emergency or legal processes, production data or telemetry, payments,
+moderation reports, incidents, minors, credentials, identity documents, crisis
+content, and AI case decisions remain excluded. PR #802's public contributions,
+paid-setup, and sponsorship page remains separate. No runtime, API, schema,
+support service, staffing, integration, telemetry, account, or production
+behavior changed.
+
 ## 2026-09-14 evening — evidence agency and accountable product claims
 
 This run identifies a cross-product responsibility gap: individual Thingtime

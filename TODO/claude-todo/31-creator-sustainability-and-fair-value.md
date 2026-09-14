@@ -54,6 +54,10 @@ identity collection, or production transaction data.
 - [TODO 30](./30-resource-conscious-reach.md) owns constrained journeys and
   tier-neutral access. Checkout and remedy cannot assume a fast network or
   expensive device.
+- [TODO 47](./47-support-agency-and-accountable-remedy.md) owns shared help
+  discovery, consentful intake, acknowledgement, handoff, and case-status
+  truth. This TODO retains authority for commerce roles, refunds, disputes,
+  fulfilment, entitlements, and actual financial remedies.
 - [TODO 40](./40-remix-agency-and-responsible-reuse.md) owns the pre-copy
   dependency/terms plan, private fork lifecycle, attribution/change journey,
   scoped independence, optional source updates, and reuse remedies. Payment or

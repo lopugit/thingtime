@@ -730,3 +730,16 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     telemetry, comparative advertising, and security, privacy, accessibility,
     sustainability, health, safety, youth, identity, learning, AI,
     institutional, or high-impact assurances remain separately gated.
+
+47. **🧭 Make support agency and accountable remedy a product contract.**
+
+    Give people one consistent, accessible route from a product failure to
+    consentful intake, acknowledgement, accountable handoff, truthful status,
+    the proper domain-owned outcome, correction, reopening, and closure. Keep
+    moderation appeals, incident recovery, refunds, export/deletion, and
+    product-claim challenges under their existing authorities. Start with one
+    synthetic failed export/restore request in an exact non-production build;
+    do not contact real people, integrate an external helpdesk, publish response
+    promises, or collect production support data. The full scope, evidence,
+    stop conditions, and first owner packet live in
+    `claude-todo/47-support-agency-and-accountable-remedy.md`.

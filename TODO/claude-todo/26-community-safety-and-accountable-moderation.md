@@ -41,6 +41,10 @@ safety claims, response-time promises, or legal processes by itself.
 - [TODO 25](./25-accessibility-and-language-readiness.md) owns the complete
   journey and locale release gates for stressed reporting, decisions, appeals,
   and safety help.
+- [TODO 47](./47-support-agency-and-accountable-remedy.md) owns shared help
+  discovery, consentful intake, acknowledgement, and cross-domain handoff.
+  This TODO retains authority for conduct reports, moderation cases, appeals,
+  urgent safety routes, and safety remedies.
 - [TODO 24](./24-attention-agency-and-calm-use.md) owns notification defaults;
   safety delivery may override quiet behavior only under an approved urgent
   class.

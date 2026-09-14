@@ -35,6 +35,10 @@ itself.
   [`DECISIONS.md`](../../DECISIONS.md) remain authoritative.
 - [TODO 22](./22-trustworthy-adoption-loop.md) owns the adoption outcome and
   privacy-safe measurement contract. This TODO owns portability and exit proof.
+- [TODO 47](./47-support-agency-and-accountable-remedy.md) owns the shared help
+  entry, case acknowledgement, accountable handoff, and status journey. This
+  TODO alone owns export/restore outcomes, deletion and closure authority, and
+  the actual portability remedy.
 - [TODO 20](./20-versioned-experience-history.md) owns reversible experience
   history. Restoring a search/feed snapshot is not account backup.
 - The current API registry, runtime route map, capability manifest, and each

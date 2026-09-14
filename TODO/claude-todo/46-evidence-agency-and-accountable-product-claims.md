@@ -53,6 +53,10 @@ Thingtime makes stronger trust claims.
 - [TODO 28](./28-service-continuity-and-recovery.md) owns journey objectives,
   incidents, recovery, and availability evidence. A health or deployment signal
   cannot silently widen into a reliability claim.
+- [TODO 47](./47-support-agency-and-accountable-remedy.md) owns shared help
+  discovery, consentful intake, acknowledgement, handoff, and case-status
+  truth. This epic retains authority for product-claim challenges, evidence,
+  corrections, withdrawals, and claim-specific remedies.
 - [TODO 29](./29-content-provenance-and-correction-integrity.md) owns authorship,
   source, derivation, verification limits, and corrections for content
   artifacts. This epic owns Thingtime's own statements about the product.

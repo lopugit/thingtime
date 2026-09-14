@@ -60,6 +60,10 @@ or new database kinds by itself.
   owns personal boundaries, reports, moderation cases, appeals, remedies, and
   public safety transparency. Service incidents do not create a parallel
   sanction process.
+- [Support agency and accountable remedy](./47-support-agency-and-accountable-remedy.md)
+  owns shared help discovery, intake, acknowledgement, handoff, and case-status
+  truth. This epic retains authority for incident severity, recovery, service
+  communication, and continuity remedies.
 - [Trusted developer ecosystem](./27-trusted-developer-ecosystem.md) owns app
   release, review, consent-update, quarantine, vulnerability, abandonment, and
   ecosystem incident states. This epic owns shared service dependencies and

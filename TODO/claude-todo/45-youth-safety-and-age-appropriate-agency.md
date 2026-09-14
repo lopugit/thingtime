@@ -20,6 +20,11 @@ experience.
 
 ## Dependencies and boundaries
 
+- [TODO 47](./47-support-agency-and-accountable-remedy.md) may provide shared
+  help and handoff infrastructure only after this TODO's qualified owners
+  approve age-appropriate discovery, privacy, guardian, urgent, and remedy
+  boundaries. The general support queue cannot infer age or bypass them.
+
 - [ ] Preserve [`FUNDAMENTALS.md`](../../FUNDAMENTALS.md): protected API paths,
       ACLs, versioned storage, schema validation, quotas, and explicit authority
       remain mandatory.

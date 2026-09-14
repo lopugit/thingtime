@@ -77,6 +77,11 @@ experiment by itself.
   withdrawal, and remedy for Thingtime's own product claims. Adoption work may
   not turn a test, deployment, capability version, metric, assistant response,
   badge, or disclosure into a broader claim or proof of usefulness and trust.
+- [TODO 47](./47-support-agency-and-accountable-remedy.md) owns consistent help,
+  consentful intake, acknowledgement, accountable handoffs, support-time truth,
+  and domain-bound outcomes, correction, reopening, and closure. Adoption
+  reporting cannot treat contact, deflection, response, sentiment, closure, or
+  case volume as usefulness, trust, safety, satisfaction, or completion.
 - [TODO 31](./31-creator-sustainability-and-fair-value.md) owns creator-commerce
   roles, provider-neutral transaction truth, receipts, entitlements,
   fulfilment, remedies, private settlement, and operating stop conditions.
