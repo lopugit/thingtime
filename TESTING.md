@@ -1741,6 +1741,14 @@ email whose link points at the attacker.
       file. Safe image/video previews appear immediately; each row reports
       progress; Post stays disabled until every selected file is Ready; and a
       26th unique file is rejected with the fixed 25-attachment limit message.
+- [ ] With Photos off, drop image, video/audio, and generic files onto the
+      collapsed post prompt, expanded body editor, and comment/edit composer.
+      Photos opens and every file enters the single bounded uploader once.
+      Marketplace, Things, and Poll selections and entered values stay intact.
+      Repeat with Photos already open, dropping inside and outside its panel;
+      preserve existing attachments, text/link dragging, and tile reordering.
+      During submission/recovery, drops must not mutate the frozen draft or
+      navigate away. Portaled Thing editors must not attach files to the post.
 - [ ] With the post/comment text editor focused, paste (⌘/Ctrl+V) a screenshot,
       copied image, video, and generic file. File-bearing pastes turn Photos on
       when needed and queue into the one Media & files panel; pasting again
@@ -2662,7 +2670,11 @@ email whose link points at the attacker.
 
 ## Up/down votes (`remix/app/api/utils/things/updown.ts`, `remix/app/components/Feed/UpdownControl.tsx`)
 
-- [ ] Every post and comment card shows the ▲ score ▼ pill beside the
+- [ ] Post cards show the ▲ score ▼ pill only when the post belongs to a
+      subspace and the vote preference is enabled, including Feed, Explore,
+      profile, Saved, search and permalink views. Ordinary posts never show
+      the pill, even with existing votes. Comment voting is unchanged.
+- [ ] Subspace post and comment cards show the ▲ score ▼ pill beside the
       react button (native emoji reactions are untouched — react, multi-react
       and the picker keep working on the same card). Tap ▲: the arrow fills,
       score +1 INSTANTLY (optimistic), then the server tally reconciles; tap
