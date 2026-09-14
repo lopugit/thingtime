@@ -9959,8 +9959,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // counts for, and shows recentPostCount to, them only; everyone else
     // ranks it at zero and its row carries no recentPostCount (compatible
     // corrections)
-    featureVersion: '1.5.0',
-    contractVersion: '1.5.0',
+    featureVersion: '1.5.1',
+    contractVersion: '1.5.1',
     group: 'subspaces',
     title: 'Subspaces',
     endpoint: '/api/v1/subspaces',
@@ -10110,6 +10110,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'subspaces-update',
+    // 1.5.0: owner-only newSlug preserves stable identity; old URLs are released.
     // 1.1.0: changing access resolves the request queues — leaving private
     // activates every pending join request (and notifies them,
     // subspace-join-accepted), leaving restricted clears open posting-approval
@@ -10118,16 +10119,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // allowCustomUserFlair (moderators) — additive
     // 1.3.0: removalReasons (moderators) — the canned { id, title, message }
     // list moderate remove's reasonId picks from (S4, additive)
-    featureVersion: '1.4.0',
-    contractVersion: '1.4.0',
+    featureVersion: '1.5.0',
+    contractVersion: '1.5.0',
     group: 'subspaces',
     title: 'Subspace settings',
     endpoint: '/api/v1/subspaces/update',
-    summary: 'Moderators edit branding, rules, post flairs, user flairs and removal reasons; the owner changes access and the 18+ flag.',
+    summary: 'Moderators edit branding, rules, post flairs, user flairs and removal reasons; the owner changes the URL, access and the 18+ flag.',
     detail:
       'Optional media: { icon?, banner? } uses { kind: preserve|clear }, { kind: external, url }, or { kind: attachment, attachmentId }. Subspace uploads require public-upload approval, a dedicated subspace-icon/subspace-banner purpose, and a raster image up to 64 MiB. Images bind atomically to the exact current slot; branding remains public directory identity even for private subspaces. Replacements expire through canonical billed cleanup. ' +
       'POST { id|slug, name?, description?, rules?, flairs?, branding?, userFlairs?, userFlairSelfAssign?, ' +
-      'allowCustomUserFlair?, removalReasons? } as a moderator, plus access? and nsfw? as the owner. removalReasons ' +
+      'allowCustomUserFlair?, removalReasons? } as a moderator, plus access?, nsfw? and newSlug? as the owner. newSlug renames the URL while preserving the subspace id, posts and memberships; the old URL stops resolving and becomes available. Reserved, taken and held slugs are refused. removalReasons ' +
       'are the canned reasons moderators remove posts with — a list of { id (slug, minted from the title), title ' +
       '(≤80), message (≤500) }, ≤20 — that POST /api/v1/subspaces/moderate { action: remove, reasonId } picks from ' +
       '(the title — message become the stored reason the author sees). userFlairs are the templates ' +
@@ -10142,7 +10143,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'posting-approval requests (anyone / every member may post now). Every change writes a settings.update ' +
       'mod-log entry whose detail lists the changed fields plus acceptedRequests / clearedApprovalRequests when ' +
       'an access change resolved any.',
-    auth: { mode: 'session-or-bearer', description: 'Requires a moderator (owner for access/nsfw).' },
+    auth: { mode: 'session-or-bearer', description: 'Requires a moderator (owner for access/nsfw/newSlug).' },
     methods: ['POST'],
     steps: ['POST the fields to change.', 'Non-moderators receive 403; owner-only fields 403 for moderators.'],
     requestExamples: [

@@ -181,8 +181,8 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // S6 review: list takes anon=1 (the edge-cacheable logged-out view,
   // additive), is rate-limited (subspaces.list) and fences a private
   // subspace's activity to its members (compatible corrections) — 1.5.0
-  assert.equal(manifest.features['api.subspaces']?.version, '1.5.0');
-  assert.equal(manifest.features['api.subspaces-update']?.version, '1.4.0');
+  assert.equal(manifest.features['api.subspaces']?.version, '1.5.1');
+  assert.equal(manifest.features['api.subspaces-update']?.version, '1.5.0');
   assert.equal(manifest.features['api.subspaces-get']?.version, '1.4.0');
   // S3 review: kick / ban strip the flair, demotion strips a mod-only pick,
   // mods may dress the owner (members 1.3.1, corrections)

@@ -56,7 +56,6 @@ export const RESERVED_SUBSPACE_SLUGS = new Set([
 	'api',
 	'settings',
 	'search',
-	'thingtime',
 	'lopu',
 	'subspace',
 	'subspaces',
