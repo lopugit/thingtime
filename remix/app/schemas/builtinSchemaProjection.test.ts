@@ -102,6 +102,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
 	], // snapshots/overrides: records → dropped
   'app-storage': ['quotaKind', 'appId', 'usedBytes', 'storageAllowanceBytes'],
 	'service-quota': ['quotaKind', 'quotaVersion', 'key', 'dayKey', 'dailyUsed', 'permitIds', 'releasedIds'], // policy + state records → dropped
+  'error-log': ['source', 'message', 'provider', 'status', 'code', 'requestId', 'route', 'method', 'providerType', 'providerRequestId', 'retryAfter', 'attempt'],
 	'migration-diagnostic': ['diagnosticVersion', 'migrationId', 'mode', 'status', 'outcome', 'summary', 'capturedAt'],
   'ci-repository': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-automation': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],

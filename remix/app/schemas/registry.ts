@@ -84,6 +84,11 @@ export type ThingVisibility = (typeof THING_VISIBILITIES)[number];
 
 // Protected operational Things created when an admin migration throws. The
 // prefix is reserved so generic callers cannot squat a future diagnostic URL.
+export const ERROR_LOG_THINGTIME = 'error-log';
+export const ERROR_LOG_ID_PREFIX = 'error-log-';
+// One root expiry policy for disposable control Things; excludes content and
+// invitations whose expiry must perform cleanup/refunds before deletion.
+export const EPHEMERAL_CONTROL_THINGTIMES = ['migration-diagnostic', ERROR_LOG_THINGTIME] as const;
 export const MIGRATION_DIAGNOSTIC_THINGTIME = 'migration-diagnostic';
 export const MIGRATION_DIAGNOSTIC_ID_PREFIX = 'migration-diagnostic-';
 
@@ -2267,6 +2272,27 @@ const serviceQuotaSchema: ThingtimeSchema = {
 	}
 };
 
+const errorLogSchema: ThingtimeSchema = {
+  id: ERROR_LOG_THINGTIME, version: 1, kind: 'crystal', collection: null,
+  title: 'Error log', summary: 'A redacted server error, searchable by current admins in /things?logs=1.',
+  detail: 'Server-only, home-plane control Thing. No generic reads or writes. Seven-day TTL, bounded capture, no account storage charge. Redacted detail is binary; only safe metadata is searchable through the admin endpoint.',
+  createdVia: 'Server error capture',
+  fields: [
+    { name: 'source', type: 'string', required: true, max: 128, description: 'Authored operation label.' },
+    { name: 'message', type: 'string', required: true, max: 2048, description: 'Redacted error summary.' },
+    { name: 'provider', type: 'string', description: 'External provider when applicable.' },
+    { name: 'status', type: 'number', description: 'Upstream or HTTP status.' },
+    { name: 'code', type: 'string', description: 'Provider error code.' },
+    { name: 'requestId', type: 'string', description: 'Server-generated correlation id.' },
+    { name: 'route', type: 'string', description: 'Registered API route, without query strings.' },
+    { name: 'method', type: 'string', description: 'HTTP request method.' },
+    { name: 'providerType', type: 'string', description: 'Provider error classification.' },
+    { name: 'providerRequestId', type: 'string', description: 'Upstream request correlation id.' },
+    { name: 'retryAfter', type: 'string', description: 'Upstream retry delay.' },
+    { name: 'attempt', type: 'number', description: 'Bounded provider attempt number.' }
+  ], example: { source: 'moderation', message: 'Rate limit reached', provider: 'openai', status: 429 }
+};
+
 const migrationDiagnosticSchema: ThingtimeSchema = {
 	id: MIGRATION_DIAGNOSTIC_THINGTIME,
 	version: 1,
@@ -4102,6 +4128,7 @@ export const PROTECTED_THINGTIME = [
 	'app-storage',
 	'service-quota',
   MIGRATION_DIAGNOSTIC_THINGTIME,
+  ERROR_LOG_THINGTIME,
 	'moderationFlag',
   ...CI_CONTROL_THINGTIME,
   'follow',
@@ -4323,6 +4350,7 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   appStorageLedgerSchema,
 	serviceQuotaSchema,
   migrationDiagnosticSchema,
+  errorLogSchema,
   // the Lopu model catalog (protected, seeded by api/utils/ai/models.ts)
   aiModelSchema,
   // Lopu credits + usage accounting (protected, api/utils/lopu/accounting.ts)

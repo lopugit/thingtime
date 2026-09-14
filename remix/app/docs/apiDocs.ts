@@ -13102,6 +13102,22 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       }
     ]
   }),
+  endpoint({
+    id: 'admin-error-logs', featureVersion: '1.0.0', group: 'admin', title: 'Search server error logs',
+    endpoint: '/api/v1/admin/error-logs', methods: ['GET'],
+    summary: 'Current-admin search of redacted, short-lived error-log Things.',
+    detail: 'Home database only. Server-written protected control Things expire after seven days and are never quota billed. Returns at most 30 newest records with a stable opaque before cursor. q is a literal case-insensitive search (160 characters maximum) across redacted message, source, route, provider, code, type and request IDs. Detail is redacted, rendered as plain text and never includes request bodies or arbitrary SDK objects. Capture is best effort, limited to five errors per request, five concurrent writes and 60 per minute per instance; overload retains console metadata. Generic Things CRUD, search, export and feed access are forbidden. Every response is private/no-store; no client write operation exists.',
+    auth: { mode: 'session-or-bearer', description: 'Current admin required on every read, including pagination; app-scoped tokens cannot read logs.' },
+    steps: ['Negotiate api.admin-error-logs >= 1.0.0 on the selected origin.', 'GET with optional q and before.', 'Render redacted text safely in /things?logs=1; retain rows during refresh and clear them when admin access changes.'],
+    requestExamples: [{ name: 'Moderation failures', description: 'Find recent OpenAI errors.', method: 'GET', query: { q: 'openai' } }],
+    responseExamples: [
+      { status: 200, description: 'Newest matching error-log Things.', body: { ok: true, items: [], nextCursor: null } },
+      { status: 401, description: 'Authentication required.', body: { ok: false, error: 'Unauthorized' } },
+      { status: 403, description: 'Current admin required.', body: { ok: false, error: 'Admins only' } },
+      { status: 400, description: 'Invalid cursor.', body: { ok: false, error: 'Invalid error log cursor' } },
+      { status: 503, description: 'Log store unavailable.', body: { ok: false, error: 'Error logs are temporarily unavailable' } }
+    ]
+  }),
 	endpoint({
 		id: 'admin-migrations-diagnostic',
 		group: 'admin',
