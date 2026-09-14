@@ -3214,7 +3214,7 @@ Recovery remain release acceptance checks.
 
 ## Gifted signup invitations
 
-Signed-in personal accounts can create single-use invites in **Settings → Lopu →
+Signed-in personal accounts can create single-use invites in **Settings → Account →
 Invite someone with a gift**. Choose a username, display name, optional avatar and
 0–10,000 credits (six decimal places). The gift is deducted immediately and held
 until signup. Cancelling an unused invite returns it; links expire after 30 days.
@@ -3247,3 +3247,11 @@ Local validation for `codex/gift-credit-invites`: `http://localhost:11000`
 (Vite), API `11002`, HMR `11001`, managed through `npm run web-pms`. The local
 Tailscale CLI wrapper currently targets a missing Tailscale application, so no
 Funnel URL could be configured or verified for this worktree.
+
+### Mobile authentication and moderation recovery
+
+Foreign previews use the authority published by `dataEnvironment` for same-tab sign-in. Deploy the `/authorize?self=1&redirect=1` frontend to that authority as well as the preview. Keep the existing SSO signing/issuer configuration consistent within each environment; never share production sessions with an unrelated development database. Return codes are single-use, origin-bound and carried in fragments.
+
+Image review uses the Admin moderation selection and server-only `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` configuration. A short OpenAI throttle is retried once; persistent provider quota/auth failures require repairing that provider account or selecting another configured moderation provider in Admin. Logs expose only allowlisted status/code diagnostics. Never disable review to work around a provider outage. Invite drafts remain editable so the sender can explicitly remove the optional photo.
+
+Recovery worktree QA uses Vite `http://localhost:13210`, Nitro 13212 and HMR 13211 through the canonical PM2 worktree-port resolver. Tailscale Funnel could not be verified on 2026-09-13: the installed CLI wrapper points to an absent `/Applications/Tailscale.app` executable.

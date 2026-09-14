@@ -27,7 +27,7 @@ export const InvitePanel = () => {
 		lopu({ title: 'Invite request failed', description: e.message, status: 'error' });
 	};
 	return (
-		<Box id="gift-invites" width="100%" maxW="620px" mx="auto" minW={0}>
+		<Box id="gift-invites" width="100%" maxW="620px" mx="auto" minW={0} scrollMarginTop="calc(var(--tt-nav-clearance, 54px) + 16px)">
 			<Text as="h2" fontSize="xl" fontWeight={600}>
 				Invite someone with a gift 🎁
 			</Text>
