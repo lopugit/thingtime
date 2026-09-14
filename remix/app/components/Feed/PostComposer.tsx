@@ -256,7 +256,7 @@ export const PostComposer = (props: PostComposerProps) => {
 	// it and inserts `@username ` at the caret (posts and comments both)
 	const editorBoxRef = React.useRef<HTMLDivElement | null>(null);
 	const attachmentComposerRef = React.useRef<AttachmentComposerHandle | null>(null);
-	const pendingPastedFilesRef = React.useRef<File[]>([]);
+	const pendingMediaFilesRef = React.useRef<File[]>([]);
 	const postTextEditorRef = React.useRef<LongTextEditorHandle | null>(null);
 	// A stable client id turns a lost POST response into a safely reconcilable
 	// read. It is rotated only after the draft is definitively committed/reset.
@@ -293,18 +293,55 @@ export const PostComposer = (props: PostComposerProps) => {
 				attachmentComposerRef.current.addFiles(files);
 				return;
 			}
-			pendingPastedFilesRef.current = [...pendingPastedFilesRef.current, ...files];
+			pendingMediaFilesRef.current = [...pendingMediaFilesRef.current, ...files];
 			setPhotosOn(true);
 		},
 		[posting, submissionUncertain, user]
 	);
 
+	// Capture external files before the body editor can consume the drop. The
+	// mounted attachment drop zone owns its own events (including drag styling
+	// and tile reordering), so a file is never queued by both handlers.
+	const handleComposerDragOver = React.useCallback((event: React.DragEvent<HTMLDivElement>) => {
+		if (!event.currentTarget.contains(event.target as Node)) return;
+		if (!Array.from(event.dataTransfer.types).includes('Files')) return;
+		event.preventDefault();
+		event.dataTransfer.dropEffect = posting || submissionUncertain || !user ? 'none' : 'copy';
+	}, [posting, submissionUncertain, user]);
+
+	const handleComposerDrop = React.useCallback((event: React.DragEvent<HTMLDivElement>) => {
+		if (event.defaultPrevented || !event.currentTarget.contains(event.target as Node)) return;
+		const target = event.target instanceof Element ? event.target : null;
+		if (target?.closest('[data-attachment-drop-zone]')) return;
+		const files = attachmentFilesFromClipboard(event.dataTransfer);
+		if (!files.length) return;
+		event.preventDefault();
+		event.stopPropagation();
+		if (posting || submissionUncertain || !user) return;
+		// Enable only Photos: keep every selected mode and its draft intact,
+		// including Poll, whose question/options can coexist with attachments.
+		setExpanded(true);
+		setPhotosOn(true);
+		if (attachmentComposerRef.current) {
+			attachmentComposerRef.current.addFiles(files);
+			return;
+		}
+		pendingMediaFilesRef.current = [...pendingMediaFilesRef.current, ...files];
+	}, [posting, submissionUncertain, user]);
+
 	React.useEffect(() => {
-		if (!photosOn || !attachmentComposerRef.current || pendingPastedFilesRef.current.length === 0) return;
-		const files = pendingPastedFilesRef.current;
-		pendingPastedFilesRef.current = [];
-		attachmentComposerRef.current.addFiles(files);
-	}, [composerSession, photosOn, user?.id]);
+		if (!expanded || !photosOn || pendingMediaFilesRef.current.length === 0) return;
+		let cancelled = false;
+		// A newly mounted uploader replays its effects in React StrictMode.
+		// Queue after that replay so its cleanup cannot abort the first drop.
+		queueMicrotask(() => {
+			if (cancelled || !attachmentComposerRef.current) return;
+			const files = pendingMediaFilesRef.current;
+			pendingMediaFilesRef.current = [];
+			attachmentComposerRef.current.addFiles(files);
+		});
+		return () => { cancelled = true; };
+	}, [composerSession, expanded, photosOn, user?.id]);
 
   // edit mode: the thing to seed the draft branch with, captured at mount so
   // the seed effect's deps stay constant
@@ -809,6 +846,8 @@ export const PostComposer = (props: PostComposerProps) => {
   if (!expanded) {
     return (
       <Flex
+        onDragOverCapture={handleComposerDragOver}
+        onDropCapture={handleComposerDrop}
         background="var(--tt-card, #ffffff)"
         border={BORDER}
         borderRadius="var(--tt-radius-lg, 16px)"
@@ -850,6 +889,8 @@ export const PostComposer = (props: PostComposerProps) => {
       boxShadow="var(--tt-shadow-card, 0px 1px 2px rgba(22, 22, 26, 0.05))"
       padding={4}
 			onPasteCapture={handleComposerPaste}
+			onDragOverCapture={handleComposerDragOver}
+			onDropCapture={handleComposerDrop}
     >
 			{(posting || submissionUncertain) && (
 				<Flex
@@ -966,7 +1007,7 @@ export const PostComposer = (props: PostComposerProps) => {
           borderRadius="8px"
 						isDisabled={posting}
 						onClick={() => {
-							pendingPastedFilesRef.current = [];
+							pendingMediaFilesRef.current = [];
 							if (isComment || isEdit) onClose?.();
 							else {
 								setExpanded(false);

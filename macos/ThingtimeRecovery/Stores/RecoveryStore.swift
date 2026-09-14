@@ -11,7 +11,10 @@ final class RecoveryStore: ObservableObject {
     @Published private(set) var commanderBundles: [CachedBundle] = []
     @Published private(set) var commanderReleases: [RecoveryRelease] = []
     @Published var selectedProduct = RecoveryProduct(rawValue: UserDefaults.standard.string(forKey: "recovery.selectedProduct") ?? "") ?? .electron {
-        didSet { UserDefaults.standard.set(selectedProduct.rawValue, forKey: "recovery.selectedProduct") }
+        didSet {
+            UserDefaults.standard.set(selectedProduct.rawValue, forKey: "recovery.selectedProduct")
+            notice = nil
+        }
     }
     @Published private(set) var recoveryBundles: [CachedBundle] = []
     @Published private(set) var desktopReleases: [RecoveryRelease] = []
@@ -56,7 +59,10 @@ final class RecoveryStore: ObservableObject {
             recoveryReleases = snapshot.recovery
             commanderReleases = snapshot.commander
             widgetReleases = snapshot.widgets
-            catalogStatus = "GitHub: \(snapshot.publishedReleaseCount) published releases · \(snapshot.desktop.count) desktop · \(snapshot.recovery.count) Recovery for this Mac"
+            catalogStatus = "GitHub catalog up to date"
+            for component in RecoveryComponent.allCases {
+                try cache(for: component).updateReleaseDates(from: snapshot.releases(for: component))
+            }
             reloadCaches()
             notice = installerNotice ?? "Release catalog refreshed. Cached bundles remain available if GitHub is offline later."
         } catch {
@@ -170,6 +176,7 @@ final class RecoveryStore: ObservableObject {
                     try BundleVerifier.verify($0, component: component, signingContext: context)
                 }
             }.value
+            try cache(for: component).updateReleaseDates(from: releases(for: component))
             reloadCaches()
             notice = "Saved the verified installed \(component.title) for recovery."
         } catch { errorMessage = error.localizedDescription; notice = "The installed app was left unchanged." }

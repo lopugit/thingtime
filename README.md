@@ -3255,3 +3255,24 @@ Foreign previews use the authority published by `dataEnvironment` for same-tab s
 Image review uses the Admin moderation selection and server-only `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` configuration. A short OpenAI throttle is retried once; persistent provider quota/auth failures require repairing that provider account or selecting another configured moderation provider in Admin. Logs expose only allowlisted status/code diagnostics. Never disable review to work around a provider outage. Invite drafts remain editable so the sender can explicitly remove the optional photo.
 
 Recovery worktree QA uses Vite `http://localhost:13210`, Nitro 13212 and HMR 13211 through the canonical PM2 worktree-port resolver. Tailscale Funnel could not be verified on 2026-09-13: the installed CLI wrapper points to an absent `/Applications/Tailscale.app` executable.
+
+### Recovery app sections and build dates
+
+In Thingtime Recovery, use the App picker to choose Thingtime Electron, Commander,
+Thingtime Widgets or Thingtime Recovery itself. Each section shows only that app's
+cached builds and GitHub releases, even when a GitHub release includes several apps.
+
+Build dates use the signed bundle's `ThingtimeBuildDate` ISO-8601 value (native)
+or `Contents/Resources/web/metadata.json` `builtAt` (Electron). Native packaging
+records the UTC timestamp before signing. Older builds use GitHub's publication
+date, labelled **Released**, which is retained in the local cache for offline use.
+A **Cached** date is separate and never presented as a build date. Builds without
+recorded build/release metadata show **Build date unavailable**.
+
+### Admin error logs
+
+Current admins can open **Things → Error logs** (`/things?logs=1`) and search redacted failures by message, source, provider, route, code or request ID. Each record is a protected `error-log` Thing in the deployment's home database. Generic Things reads, writes, search, feeds and exports cannot expose or alter it. The admin endpoint rechecks current privileges on every request and disables caching.
+
+No new provider credentials or external logging service are required. Forks need the normal home MongoDB setup and an admin account (see existing `ADMIN_USERNAMES` setup). Boot-time index convergence adds the shared home-only `things_ephemeral_expires_at` in place of the former diagnostic TTL; error-log reads reuse `{ thingtime, createdAt, shareId }`; give the existing MongoDB application role index-creation permission. Logs expire after seven days and do not consume account storage. No content migration is needed.
+
+Captures cover shared `safeErrorText`, registered API unhandled exceptions/5xx responses, and OpenAI/Anthropic moderation failures. Records contain a closed, redacted error snapshot plus server-generated correlation metadata, never request bodies, cookies, authorization headers, images, or full SDK objects. Upstream request IDs and error types help distinguish throttling from account restrictions. Persistence is best effort: one-second deadline, five captures/request, five concurrent writes and 60 writes/minute per server instance. Console metadata remains when persistence is unavailable or capped; this is a diagnostic trail, not a complete audit ledger. Background paths should await `recordErrorLog` before returning. Do not pass user content as authored context fields.

@@ -1741,6 +1741,14 @@ email whose link points at the attacker.
       file. Safe image/video previews appear immediately; each row reports
       progress; Post stays disabled until every selected file is Ready; and a
       26th unique file is rejected with the fixed 25-attachment limit message.
+- [ ] With Photos off, drop image, video/audio, and generic files onto the
+      collapsed post prompt, expanded body editor, and comment/edit composer.
+      Photos opens and every file enters the single bounded uploader once.
+      Marketplace, Things, and Poll selections and entered values stay intact.
+      Repeat with Photos already open, dropping inside and outside its panel;
+      preserve existing attachments, text/link dragging, and tile reordering.
+      During submission/recovery, drops must not mutate the frozen draft or
+      navigate away. Portaled Thing editors must not attach files to the post.
 - [ ] With the post/comment text editor focused, paste (⌘/Ctrl+V) a screenshot,
       copied image, video, and generic file. File-bearing pastes turn Photos on
       when needed and queue into the one Media & files panel; pasting again
@@ -2267,6 +2275,7 @@ email whose link points at the attacker.
 
 ## Subspaces (`remix/app/components/Subspaces/`, `remix/app/api/utils/subspaces/`, `/api/v1/subspaces*`)
 
+- [ ] Owner can rename a subspace to `thingtime`; posts and memberships retain their IDs, settings navigates to the new URL, and reload works. Non-owner renames return 403; reserved slugs return 400; taken/held slugs and concurrent competing renames return 409 without changing the original. The old URL is released.
 - [ ] `/s` lists subspaces newest-first with member counts; search narrows by
       slug/name; **Mine ⭐** shows only joined ones; **Create ➕** (or
       `/s?create=1`, the drawer's Subspaces ▸ Create) opens the modal. The
@@ -2662,7 +2671,16 @@ email whose link points at the attacker.
 
 ## Up/down votes (`remix/app/api/utils/things/updown.ts`, `remix/app/components/Feed/UpdownControl.tsx`)
 
-- [ ] Every post and comment card shows the ▲ score ▼ pill beside the
+- [ ] Publish through the browser composer inside a subspace (and through the
+      Feed composer with a subspace selected): the POST body keeps `subspaceId`,
+      `title` and `flairId`. After reload, the new post appears in that subspace
+      and retains its subspace chip, title, flair and vote pill in Feed and its
+      permalink. An ordinary post remains outside subspaces with no vote pill.
+- [ ] Post cards show the ▲ score ▼ pill only when the post belongs to a
+      subspace and the vote preference is enabled, including Feed, Explore,
+      profile, Saved, search and permalink views. Ordinary posts never show
+      the pill, even with existing votes. Comment voting is unchanged.
+- [ ] Subspace post and comment cards show the ▲ score ▼ pill beside the
       react button (native emoji reactions are untouched — react, multi-react
       and the picker keep working on the same card). Tap ▲: the arrow fills,
       score +1 INSTANTLY (optimistic), then the server tally reconciles; tap
@@ -4982,6 +5000,13 @@ default` unsets it, and runtime usage reports the effective cap. A custom
 
 ## Notifications (`api/utils/notifications/notifications.ts`, `/api/v1/notifications*`, nav bell)
 
+- [ ] Bell hit area (2026-09-14): at 1440px, 768px and 390px widths, with the
+      drawer open/closed and page scrolled to its footer, click the bell's centre,
+      bottom edge and padded corners to open and close it repeatedly. Every pixel
+      of the 36px button must hit the bell rather than Commander or a transparent
+      layer. Scroll the popup to its last row, reopen, and check Escape/outside
+      dismissal; desktop search must fit between the account and right controls.
+
 - [ ] Watch recovery: an expired/deleting unbound draft returns `watch_upload_restart_required`; retain local bytes and persist a new request identity before re-upload. Lost successful responses retry the same identity; live/bound/foreign drafts never grant rebind permission. A failed file must not mark a healthy account offline or block unrelated queued files. Account switching must not attribute results to the wrong account.
 - [ ] Lopu: ask standard voice/chat to create a private note, an immediate notification, a one-off reminder and a five-minute repeating reminder. Confirm persisted IDs/next runs, pause/resume in Settings, and verify the server sends with the browser closed. Completing/deleting the source or pausing during emission must prevent the send. Late runs skip backlog; owner/auth/CSRF and subscription limits remain enforced.
 - [ ] Settings notification tests: desktop/mobile, scroll top to bottom, expand every-type tests, send Quiet/Normal/Urgent/Rich/Image to yourself, and inspect history. Quiet has no sound; Urgent requests time-sensitive (not Critical). Test the muted response and offline/retry states. Native banners use plain text; richer content is in Thingtime history. Physical Watch display is a separate acceptance check.
@@ -6345,6 +6370,14 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ### Recovery cards, build IDs and app selection
 
+- [ ] Select Electron, Commander, Widgets and Thingtime Recovery in the App picker.
+      Each sidebar/cache page must contain only that app's builds and counts;
+      Recovery appears only in its own section. Relaunch with Recovery selected.
+      Every release row/detail and cached build shows a Built/Released date beside
+      the build identity, or an explicit unavailable date for legacy metadata.
+      Refresh and relaunch offline: cached release dates persist, Cached dates
+      stay distinct, and unsigned trust markers are unchanged. Check narrow/wide
+      windows, scroll all lists to the bottom, and open/cancel unsigned prompts.
 - [ ] In release details, use **Download & install** beside **Download and verify**.
       It must verify and install the exact selected release through the existing
       helper, preserving rollback; verify-only must leave installed apps unchanged.
@@ -7329,3 +7362,20 @@ approval; `access.test.ts` — the reservation matrix) and
 - [ ] Lose the response after a text/link post commits with no media layout. Exact-ID readback recognises the server-omitted layout and completes once; different content, owner, audience, attachments or nonempty layout never reconcile. Retry checks the saved post first and retains the original UUID.
 - [ ] Leave a create request unresolved: after 30 seconds plus bounded readbacks, the composer keeps its draft and offers Check and retry safely. An unresolved readback cannot keep the button spinning indefinitely.
 - [ ] Avatar moderation 429 then success creates the invite; persistent 429, insufficient quota, malformed response and non-JSON 503 never produce a clear verdict. Failure retains the profile fields and thumbnail, reserves no gift, and offers explicit photo removal.
+
+## Admin error-log Things (2026-09-14)
+
+- [ ] Create a harmless server error via the canonical logger; Things → Error logs lists it for current admins. Search by provider, literal punctuation, code and request ID, expand details, refresh without clearing prior rows, and load older rows. At desktop and 390px, scroll from top through footer with details expanded; long traces wrap without overflow or overlays.
+- [ ] Anonymous/non-admin/app-token access returns no logs. Demote/logout/switch accounts while viewing logs: old records disappear and the next API request is denied. Generic Thing reads, search, export, create/update/delete and public ACL spoofing cannot expose or mutate error-log Things.
+- [ ] Provider 429 bodies with only `error.type` retain their redacted reason and request ID. JSON/non-JSON failures, timeout, retry success and retry exhaustion retain fail-closed moderation behavior. No request image/text, credentials, query strings, raw SDK fields or reversible reveal values enter stored detail.
+- [ ] Simulate unavailable log storage and a capture flood: original responses survive, persistence has a one-second deadline, per-request/instance caps apply, and console diagnostics remain. TTL indexes stay home-only; expired records cannot be read even before MongoDB reaps them.
+
+## Post tag rendering
+
+- [ ] At desktop and 390px mobile widths, open a tagged attachment post in the feed and its standalone post page. Each stored tag appears in one pill row beneath the body; tapping a pill opens the matching tag search. Check ordinary posts, comments, and shared originals; tags remain visible without an extra outer-card row. Scroll to the bottom and verify no wrapping overflow or overlap with the action row.
+
+### Subspace branding uploads
+
+- At `/s/:slug/mod?tab=settings`, verify icon and banner default to upload tiles, each with **Use URL instead**. Upload a raster image to each slot, verify preview/progress and Save blocking, save and reload; check directory/card/feed icon and subspace banner as another viewer. Branding remains public directory identity for private subspaces.
+- Replace, remove, cancel, retry a failed upload/save, and switch to/from a valid URL. Existing URLs survive unchanged saves; invalid URLs/non-images/over-64-MiB files and wrong-purpose, wrong-owner, expired or already-bound uploads are refused. Replacement URLs stop serving old managed bytes; abandoned/replaced objects remain billed until reaped.
+- Check revoked moderator access, upload approval, quota failure, ownership transfer and deletion cleanup. On desktop and 390px mobile, open both URL panels and scroll top to bottom; verify no overlap, clipping or horizontal overflow.

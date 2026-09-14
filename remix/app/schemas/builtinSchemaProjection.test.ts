@@ -102,6 +102,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
 	], // snapshots/overrides: records → dropped
   'app-storage': ['quotaKind', 'appId', 'usedBytes', 'storageAllowanceBytes'],
 	'service-quota': ['quotaKind', 'quotaVersion', 'key', 'dayKey', 'dailyUsed', 'permitIds', 'releasedIds'], // policy + state records → dropped
+  'error-log': ['source', 'message', 'provider', 'status', 'code', 'requestId', 'route', 'method', 'providerType', 'providerRequestId', 'retryAfter', 'attempt'],
 	'migration-diagnostic': ['diagnosticVersion', 'migrationId', 'mode', 'status', 'outcome', 'summary', 'capturedAt'],
   'ci-repository': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-automation': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
@@ -232,14 +233,14 @@ test('registered server-owned Things are protected from generic Thing CRUD', () 
 test('managed attachment, moderation, user, and emoji fields are closed server-owned root fields', () => {
 	const root = thingtimeSchemas.find((schema) => schema.id === 'thing')!;
 	const fields = new Map(root.fields.map((field) => [field.name, field]));
-	for (const name of ['attachmentPurpose', 'attachmentProfileSlot', 'moderation', 'avatarAttachmentId', 'bannerAttachmentId', 'emojiAttachmentId']) {
+	for (const name of ['attachmentPurpose', 'attachmentProfileSlot', 'moderation', 'avatarAttachmentId', 'bannerAttachmentId', 'iconAttachmentId', 'subspaceMediaDeleting', 'emojiAttachmentId']) {
 		assert.equal(fields.get(name)?.system, true, name);
 		assert.equal(fields.get(name)?.required, false, name);
 	}
 	// 'recording' is the owner-private standalone purpose: it never binds to a
 	// target, so it stays out of BindableAttachmentPurpose and is denied by
 	// canViewHomeAttachmentTarget's non-post fallthrough.
-	assert.deepEqual(fields.get('attachmentPurpose')?.values, ['post', 'comment', 'message', 'profile', 'emoji', 'recording']);
+	assert.deepEqual(fields.get('attachmentPurpose')?.values, ['post', 'comment', 'message', 'profile', 'emoji', 'recording', 'subspace-icon', 'subspace-banner']);
 	assert.deepEqual(fields.get('attachmentProfileSlot')?.values, ['avatar', 'banner']);
 });
 

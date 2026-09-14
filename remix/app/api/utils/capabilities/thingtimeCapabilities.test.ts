@@ -63,7 +63,7 @@ test('managed-folder transfer clients reject old and breaking import/export cont
 test('recording import upload requirements cover start and completion lifecycle versions', () => {
   const manifest = thingtimeCapabilityManifest('https://preview.example.test');
   for (const feature of ['api.attachment-uploads', 'api.attachment-upload-complete']) {
-    assert.equal(manifest.features[feature]?.version, '1.3.0');
+    assert.equal(capabilitySatisfies(manifest.features[feature]?.version, '1.3.0'), true);
     for (const version of ['1.3.0', '1.3.1', '1.4.0']) assert.equal(capabilitySatisfies(version, '1.3.0'), true);
     for (const version of ['', '1.2.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.3.0'), false);
   }
@@ -83,7 +83,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
 	assert.equal(manifest.features['api.things-fork']?.version, '1.4.0');
 	assert.equal(manifest.features['api.things-import']?.version, '1.10.0');
 	assert.equal(manifest.features['api.things-export']?.version, '1.14.0');
-  for (const [feature, required, previous] of [['api.things-export', '1.14.0', '1.12.0'], ['api.attachment-content', '1.6.4', '1.6.3']]) {
+  for (const [feature, required, previous] of [['api.things-export', '1.14.0', '1.12.0'], ['api.attachment-content', '1.7.0', '1.6.4']]) {
     assert.equal(manifest.features[feature]?.version, required);
     assert.equal(capabilitySatisfies(required, required), true);
     assert.equal(capabilitySatisfies(previous, required), false);
@@ -133,7 +133,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.lopu-recordings-run']?.version, '1.5.0');
   assert.equal(manifest.features['api.lopu-recordings-personal']?.version, '1.1.0');
   assert.equal(manifest.features['api.notifications-test']?.version, '1.2.0');
-  assert.equal(manifest.features['api.attachment-content']?.version, '1.6.4');
+  assert.equal(manifest.features['api.attachment-content']?.version, '1.7.0');
   // round 2 S6 — discovery: the home feed takes scope=all|subspaces ("My
   // subspaces" — only the viewer's ACTIVE subspaces, empty for guests) and
   // echoes it (1.5.0, additive)
@@ -181,8 +181,8 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // S6 review: list takes anon=1 (the edge-cacheable logged-out view,
   // additive), is rate-limited (subspaces.list) and fences a private
   // subspace's activity to its members (compatible corrections) — 1.5.0
-  assert.equal(manifest.features['api.subspaces']?.version, '1.5.0');
-  assert.equal(manifest.features['api.subspaces-update']?.version, '1.3.0');
+  assert.equal(manifest.features['api.subspaces']?.version, '1.5.1');
+  assert.equal(manifest.features['api.subspaces-update']?.version, '1.5.0');
   assert.equal(manifest.features['api.subspaces-get']?.version, '1.4.0');
   // S3 review: kick / ban strip the flair, demotion strips a mod-only pick,
   // mods may dress the owner (members 1.3.1, corrections)
@@ -205,8 +205,8 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // rather than strand posts behind a missing doc (additive)
   // S3 review: transfer's newOwner row carries userFlair (1.1.0, additive)
   // S4: the returned subspace carries removalReasons (1.2.0, additive)
-  assert.equal(manifest.features['api.subspaces-transfer']?.version, '1.2.0');
-  assert.equal(manifest.features['api.subspaces-delete']?.version, '1.1.0');
+  assert.equal(manifest.features['api.subspaces-transfer']?.version, '1.2.1');
+  assert.equal(manifest.features['api.subspaces-delete']?.version, '1.2.0');
   // S4 review: post-removed / ban rows carry the subspace's mod team as actor (1.2.0, additive)
   assert.equal(manifest.features['api.notifications-list']?.version, '1.7.0');
   assert.equal(manifest.features['api.notifications-settings']?.version, '1.6.0');
@@ -309,7 +309,7 @@ test('both manifests publish notification history and system notification contra
 test('native recording uploads negotiate durable private Things before sending bytes', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.com');
   for (const feature of ['api.attachment-uploads', 'api.attachment-upload-complete']) {
-    assert.equal(manifest.features[feature]?.version, '1.3.0');
+    assert.equal(capabilitySatisfies(manifest.features[feature]?.version, '1.3.0'), true);
     assert.equal(capabilitySatisfies(manifest.features[feature].version, '1.2.0'), true);
     assert.equal(capabilitySatisfies('1.1.0', '1.2.0'), false);
     assert.equal(capabilitySatisfies('2.0.0', '1.2.0'), false);

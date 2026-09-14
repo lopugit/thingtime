@@ -1,3 +1,6 @@
+import { ProfileMediaField, type ProfileMediaFieldHandle } from '~/components/Profile/ProfileMediaField';
+import { preservedProfileMediaSnapshot } from '~/components/Profile/profileMediaCore';
+import { requireSubspaceMediaCapabilities } from '~/utils/subspaceMediaCapabilities';
 import React from 'react';
 import {
 	Box,
@@ -740,25 +743,43 @@ const SettingsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSave
 	const api = useApi();
 	const lopu = useLopu();
 	const isOwner = subspace.viewer.role === 'owner';
+	const navigate = useNavigate();
+	const [newSlug, setNewSlug] = React.useState(subspace.slug);
 	const [name, setName] = React.useState(subspace.name);
 	const [description, setDescription] = React.useState(subspace.description || '');
 	const [access, setAccess] = React.useState<SubspaceAccess>(subspace.access);
 	const [nsfw, setNsfw] = React.useState(subspace.nsfw);
 	const [icon, setIcon] = React.useState(subspace.branding.icon || '');
-	const [iconUrl, setIconUrl] = React.useState(subspace.branding.iconUrl || '');
-	const [bannerUrl, setBannerUrl] = React.useState(subspace.branding.bannerUrl || '');
+	const user = useCurrentUser();
+	const [iconMedia, setIconMedia] = React.useState(() => preservedProfileMediaSnapshot(subspace.branding.iconUrl));
+	const [bannerMedia, setBannerMedia] = React.useState(() => preservedProfileMediaSnapshot(subspace.branding.bannerUrl));
+	const iconRef = React.useRef<ProfileMediaFieldHandle>(null);
+	const bannerRef = React.useRef<ProfileMediaFieldHandle>(null);
+	const iconUrl = iconMedia.previewUrl || '';
 	const [accent, setAccent] = React.useState(subspace.branding.accent || '');
 	const [saving, setSaving] = React.useState(false);
 	const save = async () => {
+		if (saving || iconMedia.blocking || bannerMedia.blocking) return;
 		setSaving(true);
 		try {
+			await requireSubspaceMediaCapabilities();
 			const resp: any = await api.v1.subspaces.update({
 				id: subspace.id,
 				name,
 				description,
-				branding: { icon: icon || null, iconUrl: iconUrl || null, bannerUrl: bannerUrl || null, accent: accent || null },
-				...(isOwner ? { access, nsfw } : {})
+				branding: { icon: icon || null, accent: accent || null },
+				media: { icon: iconMedia.mutation, banner: bannerMedia.mutation },
+				...(isOwner ? { access, nsfw, ...(newSlug !== subspace.slug ? { newSlug } : {}) } : {})
 			});
+			iconRef.current?.commit(resp.subspace.branding.iconUrl, resp.subspace.branding.iconUrl);
+			bannerRef.current?.commit(resp.subspace.branding.bannerUrl, resp.subspace.branding.bannerUrl);
+			if (resp.subspace.slug !== subspace.slug) {
+				clearLocalCachePrefix(`tt-subspace-${subspace.slug}-`);
+				clearLocalCachePrefix(`tt-subspace-${resp.subspace.slug}-`);
+				setNewSlug(resp.subspace.slug);
+				navigate(`/s/${resp.subspace.slug}/mod?tab=settings`, { replace: true });
+			}
+
 			onSaved(resp.subspace);
 			lopu({ title: 'Subspace settings saved ✨', status: 'success', duration: 4000 });
 		} catch (err: any) {
@@ -774,10 +795,15 @@ const SettingsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSave
 				<Box>
 					<Label>Identity</Label>
 					<Text fontSize="xs" color={MUTED}>
-						/s/{subspace.slug} · slug is permanent
+						/s/{subspace.slug}
 					</Text>
 				</Box>
 			</Flex>
+			{isOwner && <Box>
+				<Label>Subspace URL</Label>
+				<Input aria-label="Subspace slug" size="sm" borderRadius={RADIUS_MD} value={newSlug} maxLength={30} onChange={(event) => setNewSlug(event.target.value)} />
+				<Text fontSize="xs" color={MUTED} marginTop={1}>/s/{newSlug} · Renaming keeps posts and members. The old URL stops working and becomes available to others.</Text>
+			</Box>}
 			<Box>
 				<Label>Name</Label>
 				<Input size="sm" borderRadius={RADIUS_MD} value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />
@@ -795,14 +821,14 @@ const SettingsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSave
 					<Label>Accent</Label>
 					<Input size="sm" borderRadius={RADIUS_MD} fontFamily="mono" placeholder="#7c5cff" value={accent} maxLength={32} onChange={(event) => setAccent(event.target.value)} />
 				</Box>
-				<Box flex="1" minWidth="200px">
-					<Label>Icon image URL</Label>
-					<Input size="sm" borderRadius={RADIUS_MD} placeholder="https://…" value={iconUrl} onChange={(event) => setIconUrl(event.target.value)} />
-				</Box>
-				<Box flex="1" minWidth="200px">
-					<Label>Banner image URL</Label>
-					<Input size="sm" borderRadius={RADIUS_MD} placeholder="https://…" value={bannerUrl} onChange={(event) => setBannerUrl(event.target.value)} />
-				</Box>
+			</Flex>
+      <Flex gap={4} direction={{ base: 'column', md: 'row' }}>
+        <Box flex="1" minWidth={0}>
+          <ProfileMediaField ref={iconRef} slot="avatar" label="Icon" purpose="subspace-icon" ownerId={user?.id || ''} savedUrl={subspace.branding.iconUrl} savedLinkedUrl={subspace.branding.iconUrl} privateUploadsEnabled={user?.publicUploadsEnabled} disabled={saving} onChange={setIconMedia} />
+        </Box>
+        <Box flex="1" minWidth={0}>
+          <ProfileMediaField ref={bannerRef} slot="banner" label="Banner" purpose="subspace-banner" ownerId={user?.id || ''} savedUrl={subspace.branding.bannerUrl} savedLinkedUrl={subspace.branding.bannerUrl} privateUploadsEnabled={user?.publicUploadsEnabled} disabled={saving} onChange={setBannerMedia} />
+        </Box>
 			</Flex>
 			<Flex columnGap={3} rowGap={3} flexWrap="wrap" alignItems="flex-end">
 				<Box minWidth="220px">
@@ -824,7 +850,7 @@ const SettingsPanel = ({ subspace, onSaved }: { subspace: PublicSubspace; onSave
 					<Switch isChecked={nsfw} isDisabled={!isOwner} onChange={(event) => setNsfw(event.target.checked)} />
 					18+ subspace 🔞
 				</Flex>
-				<Button marginLeft="auto" size="sm" borderRadius={RADIUS_MD} isLoading={saving} onClick={save} data-testid="mod-save-settings">
+				<Button marginLeft="auto" size="sm" borderRadius={RADIUS_MD} isLoading={saving} isDisabled={iconMedia.blocking || bannerMedia.blocking} onClick={save} data-testid="mod-save-settings">
 					Save ✨
 				</Button>
 			</Flex>
@@ -1888,7 +1914,7 @@ export const SubspaceModPage = () => {
 							</TabPanel>
 							<TabPanel paddingX={0}>
 								<Flex flexDirection="column" rowGap={4}>
-									<SettingsPanel subspace={subspace} onSaved={setSubspace} />
+									<SettingsPanel key={subspace.id} subspace={subspace} onSaved={setSubspace} />
 									{/* stays mounted through an in-flight transfer: the optimistic crown
 									    flip dims it rather than unmounting the open confirm modal */}
 									{subspace.viewer.role === 'owner' || transferPending ? (
