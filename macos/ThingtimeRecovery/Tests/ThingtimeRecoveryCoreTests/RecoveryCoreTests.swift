@@ -349,9 +349,25 @@ func withdrawnReleaseDoesNotDownload() async {
     let reason = "This release archive was withdrawn. Choose a newer release."
     let release = RecoveryRelease(asset: RecoveryReleaseAsset(downloadURL: URL(string: "https://example.invalid/never-download.zip")!, name: "never-download.zip", size: nil), id: "withdrawn", isPrerelease: false, name: "withdrawn", publishedAt: nil, releaseURL: nil, tag: "v1.2.3", version: "1.2.3", unavailableReason: reason)
     let store = RecoveryStore()
-    await store.cache(release, component: .desktop)
+    let result = await store.cache(release, component: .desktop)
+    #expect(result == nil)
+    await store.downloadAndInstall(release, component: .desktop)
     #expect(store.notice == reason)
     #expect(!store.isCaching)
+}
+
+@Test("download and install stops on a rejected download instead of installing an older cached bundle")
+@MainActor
+func failedDownloadDoesNotInstall() async {
+    let release = RecoveryRelease(asset: RecoveryReleaseAsset(downloadURL: URL(string: "file:///not-a-release.zip")!, name: "not-a-release.zip", size: nil), id: "rejected", isPrerelease: false, name: "rejected", publishedAt: nil, releaseURL: nil, tag: "v1.2.3", version: "1.2.3")
+    let store = RecoveryStore()
+    await store.downloadAndInstall(release, component: .commander)
+    #expect(!store.isCaching)
+    // The rejection message must survive untouched: a handoff would overwrite
+    // errorMessage with the installer-helper failure, so an exact match is what
+    // proves install was skipped rather than attempted and failed.
+    #expect(store.errorMessage == "Thingtime Recovery accepts only GitHub-hosted macOS ZIP release assets.")
+    #expect(store.notice == "Download was not cached. Installed apps and existing cached versions are unchanged.")
 }
 
 @Test("legacy cached bundles expose their embedded build ID without changing the manifest")
