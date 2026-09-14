@@ -18,6 +18,7 @@ struct ReleaseDetailView: View {
                 ReleaseCardView(component: component, release: release)
                 Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 10) {
                     metadataRow("Build", release.metadata.buildNumber ?? "Not recorded in release tag")
+                    metadataRow("Date", release.publishedAt.map { RecoveryBuildDate.released($0).label } ?? RecoveryBuildDate.unavailable.label)
                     metadataRow("GitHub release", "#\(release.id)")
                     if let branch = release.branch { metadataRow("Branch", branch) }
                     if let commit = release.metadata.commit { metadataRow("Commit", commit) }

@@ -51,6 +51,7 @@ public struct CacheManifestEntry: Codable, Hashable, Identifiable {
     public let branch: String?
     public let buildNumber: String?
     public let cachedAt: String?
+    public var publishedAt: String?
     public let commit: String?
     public let key: String
     public let name: String?
@@ -83,7 +84,8 @@ public struct CacheManifestEntry: Codable, Hashable, Identifiable {
         sourceSha256: String? = nil,
         tag: String? = nil,
         isUnsigned: Bool? = nil,
-        version: String? = nil
+        version: String? = nil,
+        publishedAt: String? = nil
     ) {
         self.assetName = assetName
         self.branch = branch
@@ -98,6 +100,7 @@ public struct CacheManifestEntry: Codable, Hashable, Identifiable {
         self.tag = tag
         self.isUnsigned = isUnsigned
         self.version = version
+        self.publishedAt = publishedAt
     }
 }
 
@@ -110,6 +113,23 @@ public struct CachedBundle: Hashable, Identifiable {
     public var displayName: String { "\(component.title) \(entry.version ?? metadata.version ?? "Unknown version")" }
     public var metadata: RecoveryBuildMetadata {
         RecoveryBuildMetadata(bundleURL: appURL, version: entry.version, buildNumber: entry.buildNumber, tag: entry.tag, commit: entry.commit, branch: entry.branch)
+    }
+
+    public var buildDate: RecoveryBuildDate {
+        if let date = metadata.builtAt { return .built(date) }
+        if let date = RecoveryBuildDate.parse(entry.publishedAt) { return .released(date) }
+        return .unavailable
+    }
+
+    public func matchingRelease(in releases: [RecoveryRelease]) -> RecoveryRelease? {
+        let info = metadata
+        return releases.first { release in
+            if entry.tag == release.tag { return true }
+            // Saved installed/rollback entries have synthetic tags. Match both
+            // commit and build ID so another build of the same commit cannot win.
+            guard let commit = info.commit, let build = info.buildNumber else { return false }
+            return commit == release.metadata.commit && build == release.metadata.buildNumber
+        }
     }
 }
 
@@ -174,8 +194,9 @@ public struct CacheReleaseDescriptor: Hashable {
     public let tag: String
     public let isUnsigned: Bool
     public let version: String?
+    public let publishedAt: Date?
 
-    public init(assetName: String? = nil, branch: String? = nil, commit: String? = nil, id: String, name: String? = nil, pullRequestNumber: Int? = nil, releaseURL: String? = nil, tag: String, isUnsigned: Bool = false, version: String? = nil) {
+    public init(assetName: String? = nil, branch: String? = nil, commit: String? = nil, id: String, name: String? = nil, pullRequestNumber: Int? = nil, releaseURL: String? = nil, tag: String, isUnsigned: Bool = false, version: String? = nil, publishedAt: Date? = nil) {
         self.assetName = assetName
         self.branch = branch
         self.commit = commit
@@ -186,6 +207,7 @@ public struct CacheReleaseDescriptor: Hashable {
         self.tag = tag
         self.isUnsigned = isUnsigned
         self.version = version
+        self.publishedAt = publishedAt
     }
 
     public init(release: RecoveryRelease) {
@@ -198,7 +220,8 @@ public struct CacheReleaseDescriptor: Hashable {
             releaseURL: release.releaseURL?.absoluteString,
             tag: release.tag,
             isUnsigned: release.isUnsigned,
-            version: release.version
+            version: release.version,
+            publishedAt: release.publishedAt
         )
     }
 }
