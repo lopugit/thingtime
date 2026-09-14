@@ -809,6 +809,7 @@ const activatePendingRequests = async (subspaceId: string, slug: string, actor: 
 };
 
 export type UpdateSubspaceInput = SubspaceRef & {
+	newSlug?: unknown;
 	name?: unknown;
 	description?: unknown;
 	access?: unknown;
@@ -838,6 +839,16 @@ export const updateSubspace = async (viewerInput: string | Viewer, input: Update
 
 	const set: Record<string, unknown> = {};
 	const changed: string[] = [];
+	if (input.newSlug !== undefined) {
+		if (!isOwner || subspace.ownerId !== auth.viewer.id) return fail(403, 'Only the owner can change the slug');
+		const slug = sanitizeSlug(input.newSlug);
+		if (isFail(slug)) return slug;
+		if (slug !== subspace.crystal?.slug) {
+			set['crystal.slug'] = slug;
+			set.uniqueKeys = [thingUniqueKey(SUBSPACE_SLUG_KEY_FIELD, slug)];
+			changed.push('slug');
+		}
+	}
 	if (input.name !== undefined) {
 		const name = sanitizeName(input.name);
 		if (isFail(name)) return name;
@@ -924,15 +935,19 @@ export const updateSubspace = async (viewerInput: string | Viewer, input: Update
       if (!current) throw new AttachmentBindingError(404, 'Subspace not found');
       if (current.subspaceMediaDeleting) throw new AttachmentBindingError(409, 'Subspace deletion is in progress');
       if ((input.access !== undefined || input.nsfw !== undefined) && current.ownerId !== auth.viewer.id) throw new AttachmentBindingError(403, 'Only the current owner can change access');
+      if (input.newSlug !== undefined && (current.ownerId !== auth.viewer.id || membershipOfDoc(member)?.role !== 'owner')) throw new AttachmentBindingError(403, 'Only the current owner can change the slug');
+      if (input.newSlug !== undefined && current.crystal?.slug !== subspace.crystal?.slug) throw new AttachmentBindingError(409, 'Subspace changed while saving — reload and try again');
       const branding = { ...(set['crystal.branding'] as any || current.crystal?.branding) };
       Object.assign(set, await reconcileSubspaceMedia({ things, session, actorId: auth.viewer.id, current, branding, legacyBranding: input.branding, media, now }));
       set['crystal.branding'] = branding;
       await updateAccountedThing(things, { shareId: id, thingtime: 'subspace' }, { $set: { ...set, updatedAt: now } }, { session });
     });
   } catch (error) {
+    if (isDuplicateKey(error)) return fail(409, 'That subspace slug is taken or held — pick another slug');
     if (error instanceof AttachmentBindingError) return fail(error.status, error.message);
     throw error;
   }
+
 	const detail: Record<string, unknown> = { fields: changed };
 	if (set['crystal.access'] !== undefined) {
 		const previousAccess = accessOf(subspace);
