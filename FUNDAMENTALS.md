@@ -301,6 +301,10 @@ every namespace doc and can browse (`GET /api/v1/things?appId=`,
 (`POST /api/v1/apps/data/delete-all`) everything an app stores. Full model in
 `TODO/claude-todo/16-full-power-app-namespaces.md`.
 
+### Server error Things
+
+`error-log` is a server-minted, non-billable control kind in home `things_v2`. It uses the reserved `error-log-` ID namespace, no public ACL and no generic read/write path. Only the current-admin error-log endpoint projects bounded, irreversibly redacted detail from its binary envelope and safe searchable metadata. Seven-day TTL and bounded best-effort capture prevent indefinite retention; no account data or request payload is intentionally captured. `/things?logs=1` is its read-only admin browser.
+
 ## 4. One MongoDB connection source
 
 The connection string comes from exactly one place:
