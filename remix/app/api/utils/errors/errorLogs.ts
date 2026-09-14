@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { Binary } from 'mongodb';
+import { THINGS_CREATED_ORDER } from '../mongodb/thingIndexContracts';
 import { COLLECTION_SCHEMA_VERSIONS, ERROR_LOG_ID_PREFIX, ERROR_LOG_THINGTIME } from '../../../schemas/registry';
 import { captureAdminErrorDiagnostic, redactNotificationText, sanitizeStoredAdminDiagnosticDetail } from './adminDiagnostic';
 
@@ -103,22 +104,27 @@ export const withErrorLogRequest = async <T>(route: string, method: string, work
   });
 };
 
-export const listErrorLogs = async (input: { q?: string; before?: string }) => {
-  const { getHomeThingsCollection } = await import('../mongodb/collections');
-  const col = await getHomeThingsCollection();
+export const errorLogQuery = (input: { q?: string; before?: string }) => {
   const q = (input.q || '').trim().slice(0, 160);
   const match: Record<string, unknown> = { thingtime: ERROR_LOG_THINGTIME, storageClass: 'control', expiresAt: { $gt: new Date() } };
   if (input.before) {
     // shareId is a unique UUID; pagination uses it as a stable tie-breaker.
     const [time, id] = input.before.split('|');
     if (!Number.isFinite(Date.parse(time)) || !/^error-log-[a-f0-9-]{36}$/.test(id || '')) throw new TypeError('Invalid error log cursor');
-    match.$or = [{ createdAt: { $lt: new Date(time) } }, { createdAt: new Date(time), shareId: { $lt: id } }];
+    match.$or = [{ createdAt: { $lt: new Date(time) } }, { createdAt: new Date(time), shareId: { $gt: id } }];
   }
   if (q) {
     const expression = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     match.$and = [{ $or: ['shareId', ...['message', 'source', 'route', 'requestId', 'provider', 'code', 'providerType', 'providerRequestId'].map(k => 'crystal.' + k)].map(key => ({ [key]: { $regex: expression, $options: 'i' } })) }];
   }
-  const rows = await col.find(match, { projection: { shareId: 1, crystal: 1, secure: 1, createdAt: 1, expiresAt: 1 }, maxTimeMS: 2000 }).sort({ createdAt: -1, shareId: -1 }).limit(31).toArray();
+  return match;
+};
+
+export const listErrorLogs = async (input: { q?: string; before?: string }) => {
+  const match = errorLogQuery(input);
+  const { getHomeThingsCollection } = await import('../mongodb/collections');
+  const col = await getHomeThingsCollection();
+  const rows = await col.find(match, { projection: { shareId: 1, crystal: 1, secure: 1, createdAt: 1, expiresAt: 1 }, maxTimeMS: 2000 }).sort(THINGS_CREATED_ORDER).limit(31).toArray();
   const page = rows.slice(0, 30);
   const items = page.map((row: any) => {
     const c = row.crystal || {};
@@ -132,4 +138,21 @@ export const listErrorLogs = async (input: { q?: string; before?: string }) => {
   });
   const last = page.at(-1);
   return { items, nextCursor: rows.length > 30 && last ? new Date(last.createdAt).toISOString() + '|' + last.shareId : null };
+};
+
+// Server-side operational verification; no raw plan, namespace or document
+// content leaves this helper. Uses the same filter/order as the admin reader.
+export const inspectErrorLogQueryPlan = async () => {
+  const { getHomeThingsCollection } = await import('../mongodb/collections');
+  const col = await getHomeThingsCollection();
+  const plan = await col.find(errorLogQuery({}), { maxTimeMS: 2000 }).sort(THINGS_CREATED_ORDER).limit(31).explain('executionStats');
+  const indexes = new Set<string>(); let blockingSort = false;
+  const walk = (value: any) => {
+    if (!value || typeof value !== 'object') return;
+    if (value.stage === 'SORT') blockingSort = true;
+    if (typeof value.indexName === 'string') indexes.add(value.indexName);
+    for (const child of Object.values(value)) if (child && typeof child === 'object') walk(child);
+  };
+  walk(plan.queryPlanner?.winningPlan);
+  return { indexes: [...indexes], blockingSort, returned: plan.executionStats?.nReturned, keysExamined: plan.executionStats?.totalKeysExamined, docsExamined: plan.executionStats?.totalDocsExamined, executionTimeMillis: plan.executionStats?.executionTimeMillis };
 };

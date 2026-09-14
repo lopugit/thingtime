@@ -1479,7 +1479,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     [post.subspace, rootRemoved, canModerate]
   );
   const [subspacePrefs] = useSubspacePrefs();
-  const showVotes = subspacePrefs.showVotes;
+  const showVotes = !!post.subspace && subspacePrefs.showVotes;
 
   // up/down vote — the separate focused reaction kind. Optimistic through the
   // same functional PostChange path reactions use (idempotent against the

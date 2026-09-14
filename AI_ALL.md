@@ -122,6 +122,27 @@ or authorization for new work.
 
 ### Keep storage, uniqueness and migrations coherent
 
+- Keep MongoDB indexes to the smallest performant set. Define index creation at
+  the highest reusable Thing abstraction through the central index registry and
+  shared query builders. Logs, posts, media and other kinds must prefer common
+  property paths and the existing general Thing indexes instead of adding one
+  index per kind or field. Reuse or generalize an existing index wherever it can
+  serve the query correctly and efficiently.
+- A new index is a rare, evidence-backed exception. Before proposing one, inspect
+  existing definitions and representative `explain('executionStats')` plans;
+  document why shared indexes or a better query/property layout cannot meet the
+  need. Heavily favor performance and optimization: compare scan/sort work,
+  latency, write amplification, storage and index-budget headroom. Do not force
+  a slow scan merely to reduce the count, or assume one wildcard/compound index
+  can satisfy every sort, uniqueness constraint or TTL lifecycle.
+- Keep reusable index definitions, shared property semantics and query ordering
+  aligned across writers and readers. Consolidate kind-specific indexes when
+  practical, preserve authorization and uniqueness, and explicitly opt only
+  safe-to-delete kinds into shared TTL policies. Retention that refunds credits,
+  deletes external media or updates accounting requires its canonical cleanup
+  lifecycle. Verify replacement performance and live rollout before retiring
+  old indexes; never remove a required constraint to meet a numeric target.
+
 - Keep user-writable crystal fields separate from protected root `uniqueKeys`
   identities. Never add a kind-blind unique crystal-path index or reserve normal
   data-property names as the permanent fix. Trace **every** generic, dedicated,
