@@ -2671,6 +2671,11 @@ email whose link points at the attacker.
 
 ## Up/down votes (`remix/app/api/utils/things/updown.ts`, `remix/app/components/Feed/UpdownControl.tsx`)
 
+- [ ] Publish through the browser composer inside a subspace (and through the
+      Feed composer with a subspace selected): the POST body keeps `subspaceId`,
+      `title` and `flairId`. After reload, the new post appears in that subspace
+      and retains its subspace chip, title, flair and vote pill in Feed and its
+      permalink. An ordinary post remains outside subspaces with no vote pill.
 - [ ] Post cards show the ▲ score ▼ pill only when the post belongs to a
       subspace and the vote preference is enabled, including Feed, Explore,
       profile, Saved, search and permalink views. Ordinary posts never show

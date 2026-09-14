@@ -14,6 +14,9 @@ export const buildThingCreateRequestPayload = (args: ThingRequestArgs): Record<s
 		listing,
 		thing,
 		mediaLayout,
+		title,
+		subspaceId,
+		flairId,
 		thingtime,
 		crystal,
 		targetId,
@@ -30,7 +33,7 @@ export const buildThingCreateRequestPayload = (args: ThingRequestArgs): Record<s
 	// the first-class `richText` field beside their canonical text fallback.
 	return Array.isArray(thingtime)
 		? { thingtime, crystal, targetId, folderId, acl, visibility, tags, tokenAcl, attachmentIds, shareId }
-		: { type, text, richText, images, listing, thing, mediaLayout, acl, visibility, tags, attachmentIds, shareId };
+		: { type, text, richText, images, listing, thing, mediaLayout, title, subspaceId, flairId, acl, visibility, tags, attachmentIds, shareId };
 };
 
 export const buildThingCommentRequestPayload = (args: ThingRequestArgs): Record<string, unknown> => {
