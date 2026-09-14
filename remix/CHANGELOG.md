@@ -31,6 +31,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- Add a public support page with the existing GoFundMe contribution link and
+  editable paid-setup/sponsorship email enquiries. Replace unsupported landing
+  totals, reward promises and the unavailable Indiegogo link; add a funding
+  launch plan and fork-safe support setup notes. — Codex (AI), 2026-09-14
+
 - Recover committed text/link posts when the server omits an empty media layout;
   bound stalled publish/readback requests and preserve the same retry UUID. Use
   same-tab authority sign-in on foreign previews and keep login forms unobscured.

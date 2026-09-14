@@ -534,15 +534,36 @@ After deployment and App installation, create both provider webhooks and click
 open PRs, Actions runs, deployments, and previews; subsequent webhooks keep the
 projection current. Until that first successful reconcile, an empty dashboard
 with zero counts is expected.
-# 💹 Donate on Indiegogo to save humanity 🩷
+## Support Thingtime
 
-### You can get Merch 🌈 + other benefits 🦄💯
+Help cover Thingtime's hosting, storage and AI costs through the existing
+[Thingtime GoFundMe](https://www.gofundme.com/f/thingtime).
+The campaign checkout offers one-off and monthly contributions (verified
+14 September 2026); GoFundMe adds a 5% recurring fee for monthly donors.
+Contributions support the project; they do not purchase AI credits or services.
+The fundraiser is the source for its current total and payment terms.
 
-https://www.indiegogo.com/projects/thingtime-a-gui-for-the-internet/coming_soon
+The `/support` page also lets visitors draft a paid setup/workflow-help or
+business sponsorship enquiry to `connect@thingtime.com`. Scope, availability,
+price and payment terms are agreed before any work starts. The form opens an
+editable email draft or copies it; it does not send mail or process payments.
 
-## Or Donate on GoFundMe 💖
+The [funding launch runbook](docs/funding-launch-plan.md) covers the first
+48 hours, channel references, service experiments and verification. Keep actual
+budgets, prospects and draft investment materials in a private owner plan.
 
-https://www.gofundme.com/f/thingtime
+For forks, replace the public campaign URL and contact email in
+`remix/app/components/Support/supportContent.ts` before publishing, and update
+this README and `.github/FUNDING.yml` to match. No payment keys are needed for
+the support page. Keep donation links separate from `THINGTIME_LOPU_TOPUP_URL`:
+that existing optional setting does not process payments or grant credits.
+
+Funding worktree preview: `npm run web-pms` starts the deterministic
+`thingtime-funding-launch` stack on <http://localhost:14040/support>
+(HMR 14041, API 14042). The port resolver remains the source of truth for other
+worktrees. Tailscale/Funnel is currently unverified on the development machine:
+the installed CLI launcher points to a missing Tailscale application; no public
+Funnel mapping has been created for these ports.
 
 ### Force Push ? 👉👈
 

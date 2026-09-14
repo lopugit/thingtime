@@ -7322,3 +7322,24 @@ approval; `access.test.ts` — the reservation matrix) and
 - [ ] Lose the response after a text/link post commits with no media layout. Exact-ID readback recognises the server-omitted layout and completes once; different content, owner, audience, attachments or nonempty layout never reconcile. Retry checks the saved post first and retains the original UUID.
 - [ ] Leave a create request unresolved: after 30 seconds plus bounded readbacks, the composer keeps its draft and offers Check and retry safely. An unresolved readback cannot keep the button spinning indefinitely.
 - [ ] Avatar moderation 429 then success creates the invite; persistent 429, insufficient quota, malformed response and non-JSON 503 never produce a clear verdict. Failure retains the profile fields and thumbnail, reserves no gift, and offers explicit photo removal.
+
+
+## Funding and support (`/support`, landing funding section)
+
+- [ ] Signed out, open `/support` directly and reload; contribution, paid setup
+      enquiry and sponsorship enquiry paths remain visible without signing in.
+- [ ] At desktop and 375px widths, scroll the homepage and `/support` from top
+      to bottom. Cards, sticky navigation, form controls and footer links stay
+      reachable without horizontal overflow, clipping or overlap.
+- [ ] Homepage support links and the shared footer reach `/support`. Contribution
+      links reach the real Thingtime GoFundMe campaign. No Indiegogo prelaunch
+      link, hard-coded raised total/backer count/deadline, merch entitlement or
+      lifetime AI promise appears in the active funding section or FAQ.
+- [ ] Switch between setup and sponsorship enquiries, enter a brief including
+      punctuation/newlines, and inspect the generated email recipient, subject
+      and body. The visitor can edit the message; preparing it never sends it.
+- [ ] Copy the enquiry on desktop and mobile. If clipboard access is unavailable,
+      the visible draft and contact address remain available to copy manually.
+- [ ] Open the homepage funding FAQ with keyboard and pointer. Donation terms remain separate
+      from paid services and Lopu credits; no payment-success claim is shown
+      merely from clicking an outbound link or returning to the page.
