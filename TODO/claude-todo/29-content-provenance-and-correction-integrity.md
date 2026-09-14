@@ -62,6 +62,12 @@ testable contract.
 - [TODO 28 — Service continuity and recovery](./28-service-continuity-and-recovery.md)
   owns write truth, recovery, and incident gates. Revision evidence cannot make
   ordinary content writes less durable or falsely successful.
+- [TODO 46 — Evidence agency and accountable product claims](./46-evidence-agency-and-accountable-product-claims.md)
+  owns what Thingtime itself says about capabilities, qualities, outcomes,
+  policies, status, and future commitments. This epic continues to own the
+  provenance, assertion authority, verification limits, and corrections of
+  user- or app-authored content; neither surface may borrow the other's evidence
+  as a truth badge.
 - [TODO 40 — Remix agency and responsible reuse](./40-remix-agency-and-responsible-reuse.md)
   owns the pre-copy dependency/terms plan, private fork lifecycle, scoped
   independence proof, optional source-update journey, and reuse remedies. This

@@ -18,6 +18,39 @@ required sequence:
 The branch is intentionally cumulative. It does not merge itself, implement
 the product work, or treat a plausible idea as an approved decision.
 
+## 2026-09-14 evening — evidence agency and accountable product claims
+
+This run identifies a cross-product responsibility gap: individual Thingtime
+plans carefully limit claims, API capability manifests provide semantic
+compatibility evidence, and delivery receipts bind observations to exact
+commits, but no shared contract governs what Thingtime itself says across docs,
+UI, visuals, Lopu, support, status, releases, stores, translations, caches, and
+third-party channels. It adds:
+
+- `NOTES/evidence-agency-and-accountable-product-claims-baseline.md`, a dated
+  evidence ledger and vocabulary separating intent, implementation,
+  deployment, observation, user outcome, and ongoing assurance;
+- `PLAN/evidence-agency-and-accountable-product-claims-roadmap.md`, a gated path
+  through claim inventory, exact profiles, pre-publication evidence, visible
+  limitations, freshness, contradiction, correction-family convergence, and
+  continuous governance; and
+- `TODO/claude-todo/46-evidence-agency-and-accountable-product-claims.md`, an
+  execution epic with ownership boundaries, acceptance criteria, hard stops,
+  and a concrete first decision packet.
+
+The recommended pilot uses adult internal reviewers, synthetic private text,
+one exact non-production build, and one low-risk claim about specified fields
+surviving a tested export-and-restore journey. It exercises pass, fail,
+ambiguous, unavailable, stale, contradicted, narrowed, corrected, and withdrawn
+states, verifies every controlled preview copy converges, protects sensitive
+evidence, and deletes every fixture.
+
+Public claims, user telemetry, generic trust badges, comparative advertising,
+and security, privacy, accessibility, sustainability, health, safety, youth,
+identity, learning, AI, institutional, or high-impact assurances remain
+separately gated. No runtime, API, schema, claim surface, telemetry, account,
+export, restore, or production behavior changed.
+
 ## 2026-09-14 morning — youth safety and age-appropriate agency
 
 This run identifies a product-wide ownership gap: Thingtime's garden repeatedly

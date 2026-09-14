@@ -62,6 +62,9 @@
 **Youth-safety dependency:**
 [Youth safety and age-appropriate agency](./youth-safety-and-age-appropriate-agency-roadmap.md)
 
+**Product-claims dependency:**
+[Evidence agency and accountable product claims](./evidence-agency-and-accountable-product-claims-roadmap.md)
+
 ## Outcome
 
 Make Thingtime easier to discover, understand, trust, use repeatedly, share by
@@ -329,6 +332,7 @@ Every experiment copied into `TODO/` should contain:
 | Learning claims outrun evidence                                   | Saves, opens, completions, confidence, streaks, or time spent are labelled learning, mastery, or efficacy                                     | Remove the claim; preserve private reflection and source context, then satisfy the learning-agency gate before resuming.                                   |
 | AI fluency or tool activity is mistaken for authority or success  | Conversation history becomes implied consent, confirmations become blanket delegation, or tool completion is reported as a correct outcome    | Stop the affected assistance path; restore human control, bounded context, current authorization, receipts, correction, and remedy before resuming.        |
 | Identity presentation becomes coercive or deceptive               | Public fields surprise people, contexts become linkable, or authentication/attestation is presented as truth, trust, or authority             | Stop expansion; restore exact audience projections, context separation, correction/recovery, honest evidence labels, and the identity-agency gate.         |
+| Product claims outrun or outlive their evidence                   | Copy, visuals, Lopu, status, releases, stores, or support imply a broader, fresher, or more certain outcome than the exact evidence supports  | Narrow or withdraw every controlled copy; preserve contradictions and satisfy the accountable product-claims gate before resuming.                         |
 | Poll engagement is mistaken for legitimate authority              | Mutable ballots, unclear eligibility, live-result pressure, missing denominators, or an unexplained organizer decision                        | Stop the decision path; restore the approved ballot, privacy, result, response, challenge, and collective-decision gate before resuming.                   |
 | Discovery hides scope, retention, or influence                    | People cannot tell which corpus was searched, why an item ranked, whether a query persisted, or whether payment/personalization changed order | Stop expansion; restore explicit scope, no-history defaults, deterministic explanations, non-personalized control, and the search-and-discovery gate.      |
 | Costs grow faster than usefulness                                 | Storage, compute, email, moderation, or support cost per useful return rises                                                                  | Narrow the experiment, improve efficiency, or test an aligned paid tier.                                                                                   |

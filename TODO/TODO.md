@@ -713,3 +713,20 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     or content, production experiments, covert inference, identity-document or
     biometric collection, behavioral analytics, and child-facing claims remain
     separately gated.
+
+46. **🔎 Make evidence agency and accountable product claims a product contract.**
+
+    Inventory the statements and overall impressions Thingtime creates across
+    docs, UI, visuals, Lopu, support, APIs, status, releases, stores, caches,
+    translations, and approved third-party channels. Start only with adult
+    internal reviewers, synthetic data, one exact non-production build, and one
+    low-risk claim that a private text Thing preserves specified fields through
+    the tested export-and-restore journey. Execute
+    `claude-todo/46-evidence-agency-and-accountable-product-claims.md` only
+    after owners approve claim meaning, risk tiers, pre-publication evidence,
+    negative and contradictory results, visible qualifications, freshness,
+    sensitive-evidence boundaries, correction families, accessibility,
+    retention, remedy, and stop authority. Public claims, generic trust badges,
+    telemetry, comparative advertising, and security, privacy, accessibility,
+    sustainability, health, safety, youth, identity, learning, AI,
+    institutional, or high-impact assurances remain separately gated.

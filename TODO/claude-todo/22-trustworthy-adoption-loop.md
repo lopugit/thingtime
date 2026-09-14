@@ -72,6 +72,11 @@ experiment by itself.
   pilots remain adult-only until qualified owners approve and consistently
   enforce another posture; birthday, terms text, authentication, or a guardian
   checkbox is not eligibility evidence.
+- [TODO 46](./46-evidence-agency-and-accountable-product-claims.md) owns the
+  meaning, scope, evidence, limitations, freshness, copy family, correction,
+  withdrawal, and remedy for Thingtime's own product claims. Adoption work may
+  not turn a test, deployment, capability version, metric, assistant response,
+  badge, or disclosure into a broader claim or proof of usefulness and trust.
 - [TODO 31](./31-creator-sustainability-and-fair-value.md) owns creator-commerce
   roles, provider-neutral transaction truth, receipts, entitlements,
   fulfilment, remedies, private settlement, and operating stop conditions.
