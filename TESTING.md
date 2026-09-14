@@ -7341,3 +7341,7 @@ approval; `access.test.ts` — the reservation matrix) and
 - [ ] Lose the response after a text/link post commits with no media layout. Exact-ID readback recognises the server-omitted layout and completes once; different content, owner, audience, attachments or nonempty layout never reconcile. Retry checks the saved post first and retains the original UUID.
 - [ ] Leave a create request unresolved: after 30 seconds plus bounded readbacks, the composer keeps its draft and offers Check and retry safely. An unresolved readback cannot keep the button spinning indefinitely.
 - [ ] Avatar moderation 429 then success creates the invite; persistent 429, insufficient quota, malformed response and non-JSON 503 never produce a clear verdict. Failure retains the profile fields and thumbnail, reserves no gift, and offers explicit photo removal.
+
+## Post tag rendering
+
+- [ ] At desktop and 390px mobile widths, open a tagged attachment post in the feed and its standalone post page. Each stored tag appears in one pill row beneath the body; tapping a pill opens the matching tag search. Check ordinary posts, comments, and shared originals; tags remain visible without an extra outer-card row. Scroll to the bottom and verify no wrapping overflow or overlap with the action row.
