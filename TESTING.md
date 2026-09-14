@@ -7361,6 +7361,10 @@ approval; `access.test.ts` — the reservation matrix) and
 - [ ] Provider 429 bodies with only `error.type` retain their redacted reason and request ID. JSON/non-JSON failures, timeout, retry success and retry exhaustion retain fail-closed moderation behavior. No request image/text, credentials, query strings, raw SDK fields or reversible reveal values enter stored detail.
 - [ ] Simulate unavailable log storage and a capture flood: original responses survive, persistence has a one-second deadline, per-request/instance caps apply, and console diagnostics remain. TTL indexes stay home-only; expired records cannot be read even before MongoDB reaps them.
 
+## Post tag rendering
+
+- [ ] At desktop and 390px mobile widths, open a tagged attachment post in the feed and its standalone post page. Each stored tag appears in one pill row beneath the body; tapping a pill opens the matching tag search. Check ordinary posts, comments, and shared originals; tags remain visible without an extra outer-card row. Scroll to the bottom and verify no wrapping overflow or overlap with the action row.
+
 ### Subspace branding uploads
 
 - At `/s/:slug/mod?tab=settings`, verify icon and banner default to upload tiles, each with **Use URL instead**. Upload a raster image to each slot, verify preview/progress and Save blocking, save and reload; check directory/card/feed icon and subspace banner as another viewer. Branding remains public directory identity for private subspaces.
