@@ -2,7 +2,7 @@ import { getMongoUri } from './config';
 import { getActiveMongoDbName, getActiveMongoUri, isCustomMongoEndpointActive } from './endpoint';
 import { getMongoDb } from './mongodb';
 import { COLLECTIONS, physicalCollectionName } from './collectionNames';
-import { MIGRATION_DIAGNOSTIC_THINGTIME } from '../../../schemas/registry';
+import { MIGRATION_DIAGNOSTIC_THINGTIME, ERROR_LOG_THINGTIME } from '../../../schemas/registry';
 import { CI_DASHBOARD_UPDATED_INDEX } from '../ciControl/dashboardQueryCore';
 import { thingUniqueKey } from './uniqueKeys';
 
@@ -1316,6 +1316,12 @@ export const createCiControlIndexes = (db: any): Promise<any>[] => {
 // Home-only `things` indexes that ride beside createThingsDataIndexes in the
 // boot ensure (never on a custom endpoint's database).
 const createHomeOnlyThingsIndexes = (db: any): Promise<any>[] => [
+  taggedCollection(thingsCollection(db), 'things').createIndex(
+    { expiresAt: 1 }, { name: 'error_log_expires_at', expireAfterSeconds: 0, partialFilterExpression: { thingtime: ERROR_LOG_THINGTIME } }
+  ),
+  taggedCollection(thingsCollection(db), 'things').createIndex(
+    { createdAt: -1, shareId: -1 }, { name: 'error_log_recent', partialFilterExpression: { thingtime: ERROR_LOG_THINGTIME } }
+  ),
   // Invitation expiry must refund before removing private state; this is NOT TTL.
   taggedCollection(thingsCollection(db), 'things').createIndex(
     { 'crystal.status': 1, expiresAt: 1 },

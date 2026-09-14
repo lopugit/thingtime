@@ -18,7 +18,7 @@ test('unused emoji lookup retires without removing its protected uniqueness or l
   assert.ok(RETIRED_THINGS_INDEXES.includes('things_emoji_key_lookup'));
   assert.equal((RETIRED_THINGS_INDEXES as readonly string[]).includes('things_emoji_key_unique'), false);
   assert.equal(entries.find(({ name }) => name === 'uniqueKeys_1')?.options.unique, true);
-  assert.equal(summarizeThingIndexPlan(entries).total, 49); // released 47 + Watch recording scheduler + invite expiry
+  assert.equal(summarizeThingIndexPlan(entries).total, 51); // includes error-log TTL and recent-page indexes
   assert.deepEqual(entries.find(({ name }) => name === 'lopu_recording_due')?.keys, { thingtime: 1, nextRunAt: 1, shareId: 1 });
 });
 

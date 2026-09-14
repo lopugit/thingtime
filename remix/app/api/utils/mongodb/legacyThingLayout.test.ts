@@ -33,9 +33,9 @@ const fixture = async (residue = 0) => {
 
 test('steady home plan omits eight legacy indexes while compatibility plan retains them', async () => {
   const home = await thingsIndexPlanEntries();
-  assert.equal(home.length + 1, 49); // includes Watch recording scheduler and invite expiry
+  assert.equal(home.length + 1, 51); // includes error-log TTL and recent-page indexes
   const fallback = await thingsIndexPlanEntries({ legacyLookups: true });
-  assert.equal(fallback.length + 1, 57);
+  assert.equal(fallback.length + 1, 59);
   for (const name of LEGACY_THING_INDEX_NAMES) {
     assert.equal(home.some(index => index.name === name), false);
     assert.equal(fallback.some(index => index.name === name), true);
