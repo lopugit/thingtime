@@ -3255,3 +3255,16 @@ Foreign previews use the authority published by `dataEnvironment` for same-tab s
 Image review uses the Admin moderation selection and server-only `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` configuration. A short OpenAI throttle is retried once; persistent provider quota/auth failures require repairing that provider account or selecting another configured moderation provider in Admin. Logs expose only allowlisted status/code diagnostics. Never disable review to work around a provider outage. Invite drafts remain editable so the sender can explicitly remove the optional photo.
 
 Recovery worktree QA uses Vite `http://localhost:13210`, Nitro 13212 and HMR 13211 through the canonical PM2 worktree-port resolver. Tailscale Funnel could not be verified on 2026-09-13: the installed CLI wrapper points to an absent `/Applications/Tailscale.app` executable.
+
+### Recovery app sections and build dates
+
+In Thingtime Recovery, use the App picker to choose Thingtime Electron, Commander,
+Thingtime Widgets or Thingtime Recovery itself. Each section shows only that app's
+cached builds and GitHub releases, even when a GitHub release includes several apps.
+
+Build dates use the signed bundle's `ThingtimeBuildDate` ISO-8601 value (native)
+or `Contents/Resources/web/metadata.json` `builtAt` (Electron). Native packaging
+records the UTC timestamp before signing. Older builds use GitHub's publication
+date, labelled **Released**, which is retained in the local cache for offline use.
+A **Cached** date is separate and never presented as a build date. Builds without
+recorded build/release metadata show **Build date unavailable**.

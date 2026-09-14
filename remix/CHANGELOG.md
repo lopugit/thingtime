@@ -31,6 +31,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-14 — Give Thingtime Recovery its own app section, isolate product build
+  lists, and show build/release dates on all Recovery build views. Cache release
+  dates for offline use and stamp new native bundles before signing. — Codex (AI)
+
 - Recover committed text/link posts when the server omits an empty media layout;
   bound stalled publish/readback requests and preserve the same retry UUID. Use
   same-tab authority sign-in on foreign previews and keep login forms unobscured.
