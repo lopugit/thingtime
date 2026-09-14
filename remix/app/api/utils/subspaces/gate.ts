@@ -1,3 +1,4 @@
+import { subspaceMediaUrl } from './subspaceMediaCore';
 // The subspace posting/visibility gate — the small, things.ts-safe half of the
 // subspace family. things.ts imports THIS module (never subspaces.ts, which
 // imports things.ts for projections), so everything here talks to the
@@ -363,7 +364,7 @@ export const toSubspaceEmbed = (doc: any): SubspaceEmbed => ({
 	slug: String(doc.crystal?.slug || ''),
 	name: String(doc.crystal?.name || doc.crystal?.slug || 'Subspace'),
 	icon: doc.crystal?.branding?.icon ?? null,
-	iconUrl: doc.crystal?.branding?.iconUrl ?? null,
+	iconUrl: subspaceMediaUrl(doc, 'icon'),
 	accent: doc.crystal?.branding?.accent ?? null,
 	access: accessOf(doc),
 	nsfw: doc.crystal?.nsfw === true,
@@ -378,7 +379,7 @@ export const loadSubspaceEmbeds = async (subspaceIds: readonly string[]): Promis
 	const things = await getThingsCollection();
 	const docs = await things
 		.find({ thingtime: 'subspace', shareId: { $in: wanted } } as any)
-		.project({ shareId: 1, 'crystal.slug': 1, 'crystal.name': 1, 'crystal.branding': 1, 'crystal.access': 1, 'crystal.nsfw': 1, 'crystal.flairs': 1, 'crystal.userFlairs': 1 })
+		.project({ shareId: 1, iconAttachmentId: 1, 'crystal.slug': 1, 'crystal.name': 1, 'crystal.branding': 1, 'crystal.access': 1, 'crystal.nsfw': 1, 'crystal.flairs': 1, 'crystal.userFlairs': 1 })
 		.toArray();
 	for (const doc of docs) embeds.set(String(doc.shareId), toSubspaceEmbed(doc));
 	return embeds;

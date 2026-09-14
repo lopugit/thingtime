@@ -5498,8 +5498,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
 	endpoint({
 		id: 'attachment-uploads',
-		contractVersion: '1.3.0',
-		featureVersion: '1.3.0',
+		contractVersion: '1.4.0',
+		featureVersion: '1.4.0',
 		group: 'attachments',
 		title: 'Start attachment upload',
 		endpoint: '/api/v1/attachments/uploads',
@@ -5514,7 +5514,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		},
 		methods: ['POST'],
 		steps: [
-			'POST a stable random requestId, filename, browser-reported contentType, exact sizeBytes, and the surface purpose: post, comment, message, profile-avatar, profile-banner, custom-emoji, recording, or recording-import.',
+			'POST a stable random requestId, filename, browser-reported contentType, exact sizeBytes, and the surface purpose: post, comment, message, profile-avatar, profile-banner, custom-emoji, recording, recording-import, subspace-icon, or subspace-banner.',
 			'Recording-import requires private-upload approval. It stamps recording purpose plus a server-owned import-draft marker, retains draft expiry after completion and stays out of My Things until the dedicated import commit. Its request fingerprint differs from ordinary recordings; expired or already-committed imports cannot be resumed. Supply this ready upload to the recording adapter of /api/v1/things/import.',
 			'Recording purpose requires private-upload approval and produces an owner-private standalone Thing. Replaying its exact request after completion returns upload.state=ready and expiresAt=null; do not PUT parts again.',
 			'Split the file using partSizeBytes; the final part may be smaller.',
@@ -5856,13 +5856,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-content',
-		contractVersion: '1.6.4',
-		featureVersion: '1.6.4',
+		contractVersion: '1.7.0',
+		featureVersion: '1.7.0',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
 		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
 		detail:
+			'Subspace branding images require a live subspace and the exact current icon/banner slot binding. Branding is public directory identity even for private subspaces; replaced or deleted slots grant no public access. ' +
 			'Saved standalone recordings without a draft expiry remain readable by their exact owner. Import drafts, expired uploads, other viewers and custom data endpoints gain no new access. ' +
 			'Root component render ttMediaRefs bindings are applied once after stored interpolation in media props/CSS, matching the browser. Only resulting rendered URLs are dependencies; unused pairs, labels and action inputs grant nothing. ' +
 			'An independently readable foreign component establishes its own freshly checked audience for its same-author authored media and bound children. The outer root remains required. Cross-author page argument overrides never inherit either author private media authority. ' +
@@ -9958,8 +9959,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // counts for, and shows recentPostCount to, them only; everyone else
     // ranks it at zero and its row carries no recentPostCount (compatible
     // corrections)
-    featureVersion: '1.5.0',
-    contractVersion: '1.5.0',
+    featureVersion: '1.5.1',
+    contractVersion: '1.5.1',
     group: 'subspaces',
     title: 'Subspaces',
     endpoint: '/api/v1/subspaces',
@@ -10109,6 +10110,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'subspaces-update',
+    // 1.5.0: owner-only newSlug preserves stable identity; old URLs are released.
     // 1.1.0: changing access resolves the request queues — leaving private
     // activates every pending join request (and notifies them,
     // subspace-join-accepted), leaving restricted clears open posting-approval
@@ -10117,15 +10119,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // allowCustomUserFlair (moderators) — additive
     // 1.3.0: removalReasons (moderators) — the canned { id, title, message }
     // list moderate remove's reasonId picks from (S4, additive)
-    featureVersion: '1.3.0',
-    contractVersion: '1.3.0',
+    featureVersion: '1.5.0',
+    contractVersion: '1.5.0',
     group: 'subspaces',
     title: 'Subspace settings',
     endpoint: '/api/v1/subspaces/update',
-    summary: 'Moderators edit branding, rules, post flairs, user flairs and removal reasons; the owner changes access and the 18+ flag.',
+    summary: 'Moderators edit branding, rules, post flairs, user flairs and removal reasons; the owner changes the URL, access and the 18+ flag.',
     detail:
+      'Optional media: { icon?, banner? } uses { kind: preserve|clear }, { kind: external, url }, or { kind: attachment, attachmentId }. Subspace uploads require public-upload approval, a dedicated subspace-icon/subspace-banner purpose, and a raster image up to 64 MiB. Images bind atomically to the exact current slot; branding remains public directory identity even for private subspaces. Replacements expire through canonical billed cleanup. ' +
       'POST { id|slug, name?, description?, rules?, flairs?, branding?, userFlairs?, userFlairSelfAssign?, ' +
-      'allowCustomUserFlair?, removalReasons? } as a moderator, plus access? and nsfw? as the owner. removalReasons ' +
+      'allowCustomUserFlair?, removalReasons? } as a moderator, plus access?, nsfw? and newSlug? as the owner. newSlug renames the URL while preserving the subspace id, posts and memberships; the old URL stops resolving and becomes available. Reserved, taken and held slugs are refused. removalReasons ' +
       'are the canned reasons moderators remove posts with — a list of { id (slug, minted from the title), title ' +
       '(≤80), message (≤500) }, ≤20 — that POST /api/v1/subspaces/moderate { action: remove, reasonId } picks from ' +
       '(the title — message become the stored reason the author sees). userFlairs are the templates ' +
@@ -10140,7 +10143,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'posting-approval requests (anyone / every member may post now). Every change writes a settings.update ' +
       'mod-log entry whose detail lists the changed fields plus acceptedRequests / clearedApprovalRequests when ' +
       'an access change resolved any.',
-    auth: { mode: 'session-or-bearer', description: 'Requires a moderator (owner for access/nsfw).' },
+    auth: { mode: 'session-or-bearer', description: 'Requires a moderator (owner for access/nsfw/newSlug).' },
     methods: ['POST'],
     steps: ['POST the fields to change.', 'Non-moderators receive 403; owner-only fields 403 for moderators.'],
     requestExamples: [
@@ -10563,14 +10566,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'subspaces-transfer',
+    // 1.2.1: deletion fences concurrent ownership transfer before image cleanup.
     // 1.0.1: every write inside the transfer transaction is guarded by the
     // ownership/membership the gate saw — a concurrent transfer commits at most
     // once, the loser answers 409 (compatible correction)
     // 1.1.0: newOwner carries userFlair and the returned subspace the
     // user-flair settings + viewer.userFlair (S3 user flairs, additive)
     // 1.2.0: the returned subspace carries removalReasons (S4, additive)
-    featureVersion: '1.2.0',
-    contractVersion: '1.2.0',
+    featureVersion: '1.2.1',
+    contractVersion: '1.2.1',
     group: 'subspaces',
     title: 'Transfer subspace ownership',
     endpoint: '/api/v1/subspaces/transfer',
@@ -10605,13 +10609,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'subspaces-delete',
+    // 1.2.0: fences branding writes and drains bound images for every uploader before deleting the subspace.
     // 1.1.0: private-subspace posts and moderator-removed posts leave as
     // author-only posts (privatePosts in the response), rich ['post','comment']
     // things are released too, the slug is held for the previous owner
     // (subspace-tombstone), and a subspace with posts still pointing at it after
     // the release passes answers 409 instead of dropping its doc (additive)
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'subspaces',
     title: 'Delete subspace',
     endpoint: '/api/v1/subspaces/delete',
@@ -13095,6 +13100,22 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
         description: 'Anonymous or non-admin caller.',
         body: { ok: false, error: 'Unauthorized' }
       }
+    ]
+  }),
+  endpoint({
+    id: 'admin-error-logs', featureVersion: '1.0.0', group: 'admin', title: 'Search server error logs',
+    endpoint: '/api/v1/admin/error-logs', methods: ['GET'],
+    summary: 'Current-admin search of redacted, short-lived error-log Things.',
+    detail: 'Home database only. Server-written protected control Things expire after seven days and are never quota billed. Returns at most 30 newest records with a stable opaque before cursor. q is a literal case-insensitive search (160 characters maximum) across redacted message, source, route, provider, code, type and request IDs. Detail is redacted, rendered as plain text and never includes request bodies or arbitrary SDK objects. Capture is best effort, limited to five errors per request, five concurrent writes and 60 per minute per instance; overload retains console metadata. Generic Things CRUD, search, export and feed access are forbidden. Every response is private/no-store; no client write operation exists.',
+    auth: { mode: 'session-or-bearer', description: 'Current admin required on every read, including pagination; app-scoped tokens cannot read logs.' },
+    steps: ['Negotiate api.admin-error-logs >= 1.0.0 on the selected origin.', 'GET with optional q and before.', 'Render redacted text safely in /things?logs=1; retain rows during refresh and clear them when admin access changes.'],
+    requestExamples: [{ name: 'Moderation failures', description: 'Find recent OpenAI errors.', method: 'GET', query: { q: 'openai' } }],
+    responseExamples: [
+      { status: 200, description: 'Newest matching error-log Things.', body: { ok: true, items: [], nextCursor: null } },
+      { status: 401, description: 'Authentication required.', body: { ok: false, error: 'Unauthorized' } },
+      { status: 403, description: 'Current admin required.', body: { ok: false, error: 'Admins only' } },
+      { status: 400, description: 'Invalid cursor.', body: { ok: false, error: 'Invalid error log cursor' } },
+      { status: 503, description: 'Log store unavailable.', body: { ok: false, error: 'Error logs are temporarily unavailable' } }
     ]
   }),
 	endpoint({
