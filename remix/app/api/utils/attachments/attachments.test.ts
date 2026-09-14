@@ -2360,3 +2360,22 @@ test('recording upload starts remain owner-bound and replay a completed Thing wi
   assert.equal(other.ok, true);
   if (other.ok) assert.notEqual(other.upload.id, id);
 });
+
+test('subspace uploads stamp slot-specific purposes and bound raster limits before reservation', async () => {
+  const reserved: any[] = [];
+  const service = createAttachmentService({
+    store: {
+      listExpiredOwned: async () => [],
+      reservePending: async (input: any) => { reserved.push(input); return attachmentDoc({ uploadId: undefined, attachmentExpiresAt: input.expiresAt }); },
+      setUploadId: async () => attachmentDoc()
+    } as any,
+    getS3: () => noopS3(), now: () => now, uuid: () => 'image-id', customMongoActive: () => false
+  });
+  for (const purpose of ['subspace-icon', 'subspace-banner']) {
+    assert.equal((await service.start('user-1', { filename: 'image.png', contentType: 'image/png', sizeBytes: 128, purpose })).ok, true);
+    assert.equal(reserved.at(-1).purpose, purpose);
+    const count = reserved.length;
+    for (const [contentType, sizeBytes] of [['image/svg+xml', 128], ['text/plain', 128], ['image/png', 64 * 1024 * 1024 + 1]]) assert.equal((await service.start('user-1', { filename: 'bad', contentType, sizeBytes, purpose })).ok, false);
+    assert.equal(reserved.length, count);
+  }
+});

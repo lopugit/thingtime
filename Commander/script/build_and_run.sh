@@ -170,6 +170,7 @@ bundle_all() {
   /usr/bin/plutil -insert CFBundlePackageType -string APPL "$staged_bundle/Contents/Info.plist"
   /usr/bin/plutil -insert CFBundleShortVersionString -string "$PACKAGE_VERSION" "$staged_bundle/Contents/Info.plist"
   /usr/bin/plutil -insert CFBundleVersion -string "$BUILD_NUMBER" "$staged_bundle/Contents/Info.plist"
+  /usr/bin/plutil -insert ThingtimeBuildDate -string "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$staged_bundle/Contents/Info.plist"
   /usr/bin/plutil -insert LSMinimumSystemVersion -string "$MIN_SYSTEM_VERSION" "$staged_bundle/Contents/Info.plist"
   /usr/bin/plutil -insert LSUIElement -bool true "$staged_bundle/Contents/Info.plist"
   # Commander owns one daemon/loopback port. Let Launch Services reactivate the
