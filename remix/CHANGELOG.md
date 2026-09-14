@@ -32,6 +32,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ## [Unreleased]
 
 - 2026-09-14 · Codex: Subspace icon/banner settings now reuse upload-first media fields with **Use URL instead**, previews and retry; added purpose-bound, quota-accounted branding attachments and the repo-wide media-input rule. Desktop/mobile URL saves and production build verified; upload storage remains subject to existing approval. See [PR #805 details](../PRs/805-subspace-image-upload-upload-first-subspace-branding.md).
+- Give the notifications bell a 36px click target and reserve desktop search
+  space between navigation controls so Commander cannot intercept bell clicks
+  when the drawer narrows the header. — Codex (AI), 2026-09-14
 
 - 2026-09-14 — Dropping files onto a post composer opens Photos and queues the files through the existing uploader without deselecting other modes, including Poll. Collapsed prompts and rich comments use the same flow. — Codex (AI)
 
