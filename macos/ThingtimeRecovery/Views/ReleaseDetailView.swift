@@ -6,6 +6,7 @@ struct ReleaseDetailView: View {
     let release: RecoveryRelease
     @ObservedObject var store: RecoveryStore
     @State private var showingUnsignedAcknowledgement = false
+    @State private var installAfterDownload = false
 
     var body: some View {
         ScrollView {
@@ -37,16 +38,18 @@ struct ReleaseDetailView: View {
                         .foregroundStyle(.secondary)
                 }
                 ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 16) { downloadButton; githubLink }
-                    VStack(alignment: .leading, spacing: 12) { downloadButton; githubLink }
+                    HStack(spacing: 16) { downloadButton; installButton; githubLink }
+                    VStack(alignment: .leading, spacing: 12) { downloadButton; installButton; githubLink }
                 }
                 if let notice = store.notice { Text(notice).font(.callout).foregroundStyle(.secondary).textSelection(.enabled) }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(24)
         }
-        .alert("Cache unsigned release?", isPresented: $showingUnsignedAcknowledgement) {
-            Button("Cache unsigned bundle", role: .destructive) { Task { await store.cache(release, component: component) } }
+        .alert(installAfterDownload ? "Install unsigned release?" : "Cache unsigned release?", isPresented: $showingUnsignedAcknowledgement) {
+            Button(installAfterDownload ? "Download & install unsigned bundle" : "Cache unsigned bundle", role: .destructive) {
+                download(install: installAfterDownload)
+            }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This build has no Developer ID certificate or notarization. It can be launched or installed from Recovery, but macOS may require Privacy & Security → Open Anyway before it can run.")
@@ -61,11 +64,29 @@ struct ReleaseDetailView: View {
     }
     private var downloadButton: some View {
         Button(release.unavailableReason != nil ? "Unavailable" : (release.isUnsigned ? "Cache unsigned bundle" : "Download and verify")) {
+            installAfterDownload = false
             if release.isUnsigned { showingUnsignedAcknowledgement = true }
-            else { Task { await store.cache(release, component: component) } }
+            else { download(install: false) }
         }
         .buttonStyle(.borderedProminent)
         .disabled(release.unavailableReason != nil || store.isRefreshing || store.isCaching)
+    }
+    private var installButton: some View {
+        Button("Download & install") {
+            installAfterDownload = true
+            if release.isUnsigned { showingUnsignedAcknowledgement = true }
+            else { download(install: true) }
+        }
+        .buttonStyle(.bordered)
+        .disabled(release.unavailableReason != nil || store.isRefreshing || store.isCaching)
+        .help("Download and verify this release, then install it. The previous app is preserved for recovery.")
+    }
+
+    private func download(install: Bool) {
+        Task {
+            if install { await store.downloadAndInstall(release, component: component) }
+            else { await store.cache(release, component: component) }
+        }
     }
     @ViewBuilder private var githubLink: some View {
         if let url = release.releaseURL { Link("Open on GitHub", destination: url) }
