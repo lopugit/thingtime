@@ -27,6 +27,7 @@ xcodebuild -project ThingtimeWidgets.xcodeproj -scheme ThingtimeWidgets -destina
 app="$stage/Thingtime Widgets.app"
 ditto "$cache/DerivedData/Build/Products/Release/Thingtime Widgets.app" "$app"
 info="$app/Contents/Info.plist"
+/usr/bin/plutil -replace ThingtimeBuildDate -string "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$info"
 /usr/libexec/PlistBuddy -c "Add :ThingtimeReleaseVersion string $THINGTIME_WIDGETS_RELEASE_VERSION" "$info"
 /usr/libexec/PlistBuddy -c "Add :ThingtimeReleaseTag string widgets-v$THINGTIME_WIDGETS_RELEASE_VERSION" "$info"
 /usr/libexec/PlistBuddy -c "Add :ThingtimeGitCommit string $THINGTIME_WIDGETS_GIT_COMMIT" "$info"

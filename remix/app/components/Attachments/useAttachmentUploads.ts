@@ -1,3 +1,4 @@
+import { requireSubspaceMediaCapabilities } from '~/utils/subspaceMediaCapabilities';
 import React from 'react';
 
 import { useApi } from '~/hooks/useApi';
@@ -266,6 +267,10 @@ export const useAttachmentUploads = (
 			let partCount = canResume ? savedPlan.partCount : 0;
 			try {
 				if (!canResume) {
+          if (purpose === 'subspace-icon' || purpose === 'subspace-banner') {
+            await requireSubspaceMediaCapabilities();
+            if (controller.signal.aborted) return;
+          }
 					const response = await apiRef.current.uploads.create(
 						{
 							requestId: localId,

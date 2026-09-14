@@ -37,13 +37,17 @@ struct CacheListView: View {
 
     private func cachedCard(_ bundle: CachedBundle) -> some View {
         let metadata = bundle.metadata
+        let buildBadge = RecoveryBadge(title: metadata.buildLabel, icon: "number", color: .blue)
+        let buildDate = Text(bundle.buildDate.label).font(.caption).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         return VStack(alignment: .leading, spacing: 10) {
             Text(bundle.displayName).font(.headline).textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 6) {
-                RecoveryBadge(title: metadata.buildLabel, icon: "number", color: .blue)
-                RecoveryBadge(title: bundle.entry.isUnsigned == true ? "Unsigned" : "Signed", icon: bundle.entry.isUnsigned == true ? "exclamationmark.triangle.fill" : "checkmark.seal.fill", color: bundle.entry.isUnsigned == true ? .orange : .green)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) { buildBadge; buildDate }
+                VStack(alignment: .leading, spacing: 6) { buildBadge; buildDate }
             }
+            RecoveryBadge(title: bundle.entry.isUnsigned == true ? "Unsigned" : "Signed", icon: bundle.entry.isUnsigned == true ? "exclamationmark.triangle.fill" : "checkmark.seal.fill", color: bundle.entry.isUnsigned == true ? .orange : .green)
             if let sha = metadata.shortCommit {
                 Label(sha, systemImage: "point.3.connected.trianglepath.dotted")
                     .font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)

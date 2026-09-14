@@ -63,7 +63,7 @@ export const MAX_SESSION_REPLACEMENT_ATTACHMENT_CLEANUP = 25;
 export const MAX_ATTACHMENT_DETECTION_BACKFILL_PER_RUN = 200;
 export const ATTACHMENT_DETECTION_BACKFILL_WALL_CLOCK_MS = 25 * 1000;
 export const ATTACHMENT_DETECTION_BACKFILL_CONCURRENCY = 5;
-export const ATTACHMENT_UPLOAD_PURPOSES = ['post', 'comment', 'message', 'profile-avatar', 'profile-banner', 'custom-emoji', 'recording', 'recording-import'] as const;
+export const ATTACHMENT_UPLOAD_PURPOSES = ['post', 'comment', 'message', 'profile-avatar', 'profile-banner', 'custom-emoji', 'recording', 'recording-import', 'subspace-icon', 'subspace-banner'] as const;
 export type AttachmentUploadPurpose = (typeof ATTACHMENT_UPLOAD_PURPOSES)[number];
 export const MAX_CUSTOM_EMOJI_ATTACHMENT_BYTES = 512 * 1024;
 export const CUSTOM_EMOJI_ATTACHMENT_CONTENT_TYPES = new Set(['image/gif', 'image/jpeg', 'image/png', 'image/webp']);
@@ -142,6 +142,7 @@ const attachmentUploadIntent = (
 	if (value === 'recording-import') return { requestPurpose: value, purpose: 'recording', recordingImportDraft: true };
 	if (value === 'profile-avatar') return { requestPurpose: value, purpose: 'profile', profileSlot: 'avatar' };
 	if (value === 'profile-banner') return { requestPurpose: value, purpose: 'profile', profileSlot: 'banner' };
+	if (value === 'subspace-icon' || value === 'subspace-banner') return { requestPurpose: value, purpose: value };
 	if (value === 'custom-emoji') return { requestPurpose: value, purpose: 'emoji' };
 	return null;
 };
@@ -758,7 +759,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 				contentType: raw.contentType
 			});
 			if (sanitized.ok === false) return fail(400, sanitized.error);
-			if (intent.purpose === 'profile') {
+			if (intent.purpose === 'profile' || intent.purpose === 'subspace-icon' || intent.purpose === 'subspace-banner') {
 				if (sizeBytes > MAX_PROFILE_ATTACHMENT_BYTES) {
 					return fail(400, `Profile images can contain at most ${MAX_PROFILE_ATTACHMENT_BYTES} bytes`);
 				}
