@@ -139,17 +139,21 @@ export const NotificationsBell = () => {
           as="button"
           type="button"
           position="relative"
+          width="36px"
+          height="36px"
+          flexShrink={0}
+          borderRadius="8px"
           cursor="pointer"
           aria-label={unread > 0 ? `Notifications — ${unread} unread` : 'Notifications'}
           title="Notifications 🔔"
-          sx={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation' }}
+          sx={{ WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation', WebkitAppRegion: 'no-drag' }}
         >
-          <Bell size={16} strokeWidth={1.9} />
+          <Bell size={16} strokeWidth={1.9} style={{ pointerEvents: 'none' }} />
           {unread > 0 && (
             <Center
               position="absolute"
-              top="-6px"
-              right="-8px"
+              top="2px"
+              right="0px"
               minWidth="15px"
               height="15px"
               paddingX="4px"
