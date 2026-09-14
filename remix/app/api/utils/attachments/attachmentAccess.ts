@@ -1,3 +1,4 @@
+import { subspaceAttachmentTargetAllows } from '../subspaces/subspaceMediaCore';
 import { ObjectId } from 'mongodb';
 
 import { getHomeThingsCollection, getUsersCollection } from '../mongodb/collections';
@@ -214,6 +215,11 @@ export const createCanViewHomeAttachmentTarget = (overrides: Partial<AttachmentT
 		const targetId = attachment.targetId;
 		if (!targetId) return false;
 		const things = await dependencies.getThings();
+
+		if (attachment.attachmentPurpose === 'subspace-icon' || attachment.attachmentPurpose === 'subspace-banner') {
+			const target = await things.findOne({ shareId: targetId } as any, { projection: { shareId: 1, thingtime: 1, iconAttachmentId: 1, bannerAttachmentId: 1 } });
+			return subspaceAttachmentTargetAllows(attachment, target);
+		}
 
 		if (attachment.attachmentPurpose === 'profile') {
 			// Query by globally unique shareId first, then validate the exact canonical

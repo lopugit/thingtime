@@ -1,3 +1,4 @@
+import { recordErrorLog } from '../errors/errorLogs';
 import sharp from 'sharp';
 import { ModerationRequestError } from '../moderation/omniRequest';
 import { resolveConfiguredModerationProvider } from '../moderation/providers';
@@ -27,6 +28,7 @@ export const normalizeInviteAvatar = async (value: unknown): Promise<string | nu
 		try {
 			verdict = await choice.provider.analyzeImage({ bytes, contentType: 'image/jpeg', filename: 'invite-avatar.jpg' });
 		} catch (error) {
+      await recordErrorLog(error, { source: 'invite-avatar', provider: choice.provider.name, status: typeof (error as any)?.status === 'number' ? (error as any).status : undefined });
 			if (error instanceof ModerationRequestError) {
 				console.warn('[invites] Avatar review unavailable', { status: error.status, code: error.code });
 				throw new InviteError(503, 'Photo review is busy. Your details are still here. Try again shortly, or remove the photo to create the invite now.');

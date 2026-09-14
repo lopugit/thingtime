@@ -795,14 +795,16 @@ const attachmentPurposeLabel: Record<BindableAttachmentPurpose, string> = {
 	post: 'post',
 	comment: 'comment',
 	message: 'message',
-	emoji: 'custom emoji'
+	emoji: 'custom emoji',
+	'subspace-icon': 'subspace icon',
+	'subspace-banner': 'subspace banner'
 };
 
 // Called by each content writer inside the SAME home-Mongo transaction as its
 // target creation. This is the only supported transition from a private,
 // unbound object to a relational child. Purpose is immutable: an upload plan
 // minted for a DM cannot be replayed into a public post or custom emoji.
-const bindReadyAttachmentsForPurpose = async (
+export const bindReadyAttachmentsForPurpose = async (
 	ownerId: string,
 	attachmentIds: readonly string[],
 	targetId: string,

@@ -1448,6 +1448,7 @@ export const ThingsPage = () => {
             Things
           </Text>
           <Box flex={1} />
+          {user?.isAdmin && <Button as={RouterLink} to="/things?logs=1" size="sm" variant="outline">Error logs</Button>}
           <Menu placement="bottom-end">
             <MenuButton as={Button} bg="var(--tt-accent, hotpink)" color="var(--tt-accent-contrast, #ffffff)" leftIcon={<Plus size={14} />} size="sm" _hover={{ opacity: 0.9 }}>
               New
