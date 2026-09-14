@@ -772,7 +772,7 @@ export function useApi() {
       create: useCallback(async (body: Record<string, unknown>) => asyncFetcher.submit(body, { action: '/api/v1/subspaces', errorContext: 'create the subspace' }), [asyncFetcher]),
       update: useCallback(
         async (body: Record<string, unknown>) => {
-          if (body.newSlug !== undefined) await requireThingtimeCapability('api.subspaces-update', '1.4.0');
+          if (body.newSlug !== undefined) await requireThingtimeCapability('api.subspaces-update', '1.5.0');
           return asyncFetcher.submit(body, { action: '/api/v1/subspaces/update', errorContext: 'save the subspace settings' });
         },
         [asyncFetcher]

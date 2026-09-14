@@ -38,7 +38,7 @@ const raceSlug = `${slug}_race`;
 const race = await Promise.all([request('subspaces/update', owner.cookie, { id: a.id, newSlug: raceSlug }), request('subspaces/update', owner.cookie, { id: b.id, newSlug: raceSlug })]);
 assert.deepEqual(race.map(r=>r.status).sort(), [200,409]);
 const manifest = await (await fetch(base+'/.well-known/thingtime-capabilities.json')).json();
-assert.equal(manifest.features['api.subspaces-update'].version, '1.4.0');
+assert.equal(manifest.features['api.subspaces-update'].version, '1.5.0');
 assert.equal(manifest.features['api.subspaces'].version, '1.5.1');
 console.log('PASS: auth, membership, reserved/invalid/taken slugs, rename readback, old URL release, post preservation, concurrent uniqueness, runtime manifest');
 console.log(`UI fixture username: rename_owner_${suffix}; slug: ${race[0].status === 200 ? raceSlug : next}`);
