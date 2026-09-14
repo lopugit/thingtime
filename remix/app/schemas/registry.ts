@@ -836,7 +836,21 @@ const rootThingSchema: ThingtimeSchema = {
 			type: 'id',
 			required: false,
 			system: true,
-			description: 'Protected current managed-banner attachment reference on a canonical user Thing.'
+			description: 'Protected current managed-banner attachment reference on a canonical user or subspace Thing.'
+		},
+		{
+			name: 'iconAttachmentId',
+			type: 'id',
+			required: false,
+			system: true,
+			description: 'Protected current managed-icon attachment reference on a subspace Thing.'
+		},
+		{
+			name: 'subspaceMediaDeleting',
+			type: 'boolean',
+			required: false,
+			system: true,
+			description: 'Server-owned subspace deletion fence preventing new media bindings during cleanup.'
 		},
 		{
 			name: 'emojiAttachmentId',
