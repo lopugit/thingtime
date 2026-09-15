@@ -31,6 +31,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-15 — **Codex (AI)** — System now manages shared platform credentials,
+  integration secrets and Vercel environment variables with verified reveals.
+  Claude chat, voice, recordings and moderation use the shared Claude OAuth
+  runtime; explicit chat selections preserve model/effort/speed and never
+  silently switch providers. Packages the pinned runtime for Vercel.
+
 - 2026-09-15 — **Codex (AI)** — Moderation now resolves a dedicated encrypted
   `OpenAI Moderation` admin-vault credential per deployment environment for
   images, invitation avatars and text, ahead of the legacy server key. Rotation

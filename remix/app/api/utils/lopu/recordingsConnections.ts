@@ -1,3 +1,4 @@
+import { claudeOAuthConfigured, resolveClaudeOAuthToken, requireOAuthToken } from '../ai/claudeOAuth';
 import { getUserVaultProvider, listUserVaultProviders, userVaultConfigured } from './userVault';
 import { assertSafeProviderEndpoint, type LopuVaultProviderRecord } from './vaultProviderClient';
 import { getRecordingSettings } from './recordingsStore';
@@ -31,7 +32,7 @@ export const listRecordingConnections = async (ownerId: string): Promise<Recordi
 			provider: 'anthropic',
 			transcription: false,
 			analysis: true,
-			configured: Boolean(process.env.ANTHROPIC_API_KEY?.trim())
+			configured: claudeOAuthConfigured()
 		},
 		...entries
 			.filter((entry) => ['openai', 'anthropic'].includes(entry.provider || ''))
@@ -88,10 +89,10 @@ export const resolveRecordingConnection = async (ownerId: string, id: string, st
 			name: 'Configured AI provider',
 			provider: anthropic ? 'anthropic' : 'openai',
 			endpoint: anthropic
-				? process.env.ANTHROPIC_BASE_URL?.trim() || 'https://api.anthropic.com'
+				? 'https://api.anthropic.com'
 				: process.env.OPENAI_BASE_URL?.trim() || 'https://api.openai.com/v1',
 			model: null,
-			token: (anthropic ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY)?.trim() || ''
+			token: anthropic ? await resolveClaudeOAuthToken() : process.env.OPENAI_API_KEY?.trim() || ''
 		};
 	} else {
 		try {
@@ -100,8 +101,9 @@ export const resolveRecordingConnection = async (ownerId: string, id: string, st
 			throw new RecordingFailure('provider_auth');
 		}
 	}
-	if (!recordingProviderSupports(record.provider, stage) || !record.token || record.token.startsWith('sk-ant-oat'))
+	if (!recordingProviderSupports(record.provider, stage) || !record.token || (record.provider !== 'anthropic' && record.token.startsWith('sk-ant-oat')))
 		throw new RecordingFailure('provider_auth');
+	if (record.provider === 'anthropic') { requireOAuthToken(record.token); return { ...record, endpoint: 'https://api.anthropic.com' }; }
 	const safe = await assertSafeProviderEndpoint(record.endpoint);
 	return { ...record, endpoint: safe.endpoint };
 };

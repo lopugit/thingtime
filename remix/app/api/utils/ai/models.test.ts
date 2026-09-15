@@ -75,7 +75,7 @@ const createService = (overrides: Record<string, unknown> = {}) => {
   const service = createAiModelsService({
     getThingsCollection: async () => fake.collection,
     getStoredDefaults: async () => ({ ...DEFAULT_LOPU_CHAT_DEFAULTS }),
-    env: () => ({ ANTHROPIC_API_KEY: 'sk-test', OPENAI_API_KEY: 'sk-test' }),
+    env: () => ({ CLAUDE_CODE_OAUTH_TOKEN: 'sk-test', OPENAI_API_KEY: 'sk-test' }),
     now: () => NOW,
     log: (message: string) => logs.push(message),
     ...overrides
@@ -243,7 +243,7 @@ test('listAiModels layers the key probe onto providers and availability, forces 
 test('listAiModels projects enabled/available/isDefault from the rows, the env, and the stored defaults', async () => {
   let stored: { model: string; effort: 'ultra' | 'max'; speed: 'fast' | 'normal' } = { model: 'gpt-5.6-sol', effort: 'ultra', speed: 'fast' };
   const { fake, service } = createService({
-    env: () => ({ ANTHROPIC_AUTH_TOKEN: 'tok' }),
+    env: () => ({ CLAUDE_CODE_OAUTH_TOKEN: 'tok' }),
     getStoredDefaults: async () => ({ ...stored })
   });
 

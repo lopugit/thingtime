@@ -103,9 +103,9 @@ test('poll votes publish the shared-identity correction', () => {
 });
 
 test('verified vault reveal is explicit on both manifests with compatible client requirements', () => {
-	assert.equal(createApiCapabilitiesManifest().features['api.vault-reveal'], '1.0.0');
+	assert.equal(createApiCapabilitiesManifest().features['api.vault-reveal'], '1.1.0');
 	const manifest = thingtimeCapabilityManifest('https://thingtime.test');
-	assert.equal(manifest.features['api.vault-reveal'].version, '1.0.0');
+	assert.equal(manifest.features['api.vault-reveal'].version, '1.1.0');
 	assert.ok(manifest.operations.some(operation => operation.feature === 'api.vault-reveal' && operation.path === '/api/v1/vault/reveal' && operation.methods.includes('POST')));
 	assert.equal(capabilitySatisfies('1.1.0', '1.0.0'), true);
 	assert.equal(capabilitySatisfies('2.0.0', '1.0.0'), false);
@@ -219,7 +219,7 @@ test('the Lopu family publishes its minor capability updates (own providers, ver
 	const manifest = createApiCapabilitiesManifest();
 	// 1.3.0: vaultProviders[].realtimeModels + the kind-default model for a row saved without one;
 	// 1.4.0: models[].pricing (list price per million tokens, verified-access design note §2)
-	assert.equal(manifest.features['api.ai-models'], '1.4.0');
+	assert.equal(manifest.features['api.ai-models'], '1.4.1');
 	assert.equal(manifest.features['api.admin-ai-models'], '1.1.0');
 	assert.equal(manifest.features['api.settings-lopu-chat-defaults'], '1.1.0');
 	// 1.1.1 / 1.0.1: the chat write buckets fail closed on a limiter outage;
@@ -232,8 +232,8 @@ test('the Lopu family publishes its minor capability updates (own providers, ver
 	// 1.3.0: the verified-access gate + billing / usage / costMicros / balanceMicros on meta, done and the persisted turn;
 	// 1.4.0: the in-flight cap — a billed turn holds one of at most three slots on the account, past which
 	// the request is refused 429 LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted
-	assert.equal(manifest.features['api.lopu-chats-reply'], '1.7.1');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.lopu-chats-reply'].version, '1.7.1');
+	assert.equal(manifest.features['api.lopu-chats-reply'], '1.7.2');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.lopu-chats-reply'].version, '1.7.2');
 	assert.equal(capabilitySatisfies('1.6.2', '1.6.1'), true);
 	for (const unsupported of ['', '1.6.1', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.6.2'), false);
 	// 1.1.0: optional provider `model` + templates with catalog models / more kinds (vault);
