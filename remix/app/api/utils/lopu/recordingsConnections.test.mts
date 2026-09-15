@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, mock, test } from 'node:test';
-import { DEFAULT_RECORDING_SETTINGS } from './recordingsCore';
+import { DEFAULT_RECORDING_SETTINGS, RecordingFailure } from './recordingsCore';
+import { canFallbackRecordingProvider } from './recordingsWaterfall';
 
 let lookedUp: string[];
 let guarded: string[];
@@ -93,7 +94,18 @@ test('missing keys, Claude audio and API keys never reach an endpoint', async ()
 	await assert.rejects(resolveRecordingConnection('owner', 'absent', 'analysis'), /credentials/);
 	await assert.rejects(resolveRecordingConnection('owner', 'claude', 'transcription'), /credentials/);
 	token = 'sk-ant-api03-rejected';
-	await assert.rejects(resolveRecordingConnection('owner', 'claude', 'analysis'), /OAuth/);
+	// Rejected as an auth failure, so the owner's next selected connection is
+	// still tried rather than the whole waterfall ending on an untyped error.
+	const rejected = await resolveRecordingConnection('owner', 'claude', 'analysis').catch((error) => error);
+	assert.equal(rejected instanceof RecordingFailure && rejected.code, 'provider_auth');
+	assert.equal(canFallbackRecordingProvider(rejected), true);
+	assert.deepEqual(guarded, []);
+});
+
+test('an unconfigured platform Claude credential fails over instead of ending the waterfall', async () => {
+	const rejected = await resolveRecordingConnection('owner', 'configured-anthropic', 'analysis').catch((error) => error);
+	assert.equal(rejected instanceof RecordingFailure && rejected.code, 'provider_auth');
+	assert.equal(canFallbackRecordingProvider(rejected), true);
 	assert.deepEqual(guarded, []);
 });
 

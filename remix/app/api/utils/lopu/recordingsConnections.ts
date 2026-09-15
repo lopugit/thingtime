@@ -92,7 +92,9 @@ export const resolveRecordingConnection = async (ownerId: string, id: string, st
 				? 'https://api.anthropic.com'
 				: process.env.OPENAI_BASE_URL?.trim() || 'https://api.openai.com/v1',
 			model: null,
-			token: anthropic ? await resolveClaudeOAuthToken() : process.env.OPENAI_API_KEY?.trim() || ''
+			// An absent platform OAuth credential is an auth failure, not a crash:
+			// it must stay eligible for the owner's next selected connection.
+			token: anthropic ? await resolveClaudeOAuthToken().catch(() => '') : process.env.OPENAI_API_KEY?.trim() || ''
 		};
 	} else {
 		try {
@@ -103,7 +105,17 @@ export const resolveRecordingConnection = async (ownerId: string, id: string, st
 	}
 	if (!recordingProviderSupports(record.provider, stage) || !record.token || (record.provider !== 'anthropic' && record.token.startsWith('sk-ant-oat')))
 		throw new RecordingFailure('provider_auth');
-	if (record.provider === 'anthropic') { requireOAuthToken(record.token); return { ...record, endpoint: 'https://api.anthropic.com' }; }
+	// OAuth-only, but reported as provider_auth: a connection still holding an
+	// Anthropic API key fails over to the next selected one instead of ending the
+	// waterfall on an untyped error that canFallbackRecordingProvider refuses.
+	if (record.provider === 'anthropic') {
+		try {
+			requireOAuthToken(record.token);
+		} catch {
+			throw new RecordingFailure('provider_auth');
+		}
+		return { ...record, endpoint: 'https://api.anthropic.com' };
+	}
 	const safe = await assertSafeProviderEndpoint(record.endpoint);
 	return { ...record, endpoint: safe.endpoint };
 };
