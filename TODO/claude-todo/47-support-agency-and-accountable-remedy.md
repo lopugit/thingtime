@@ -54,6 +54,10 @@ domain's decision authority.
   protective defaults, guardian roles, and qualified youth-support boundaries.
 - [TODO 46](./46-evidence-agency-and-accountable-product-claims.md) owns
   challenges to Thingtime's product claims and correction-family truth.
+- [TODO 48](./48-change-agency-and-humane-product-evolution.md) owns change
+  impact, preview, choice, compatibility, rollback, deprecation, sunset, and
+  exit meaning. This epic owns the shared help journey and routes any actual
+  change remedy to the qualified product, data, incident, or domain owner.
 - PR #802's contributions, paid-setup, and sponsorship page is not a product
   support case system. Do not overload its public “support” meaning.
 - W3C, GOV.UK, OAIC, and ACCC references are design inputs, not adopted

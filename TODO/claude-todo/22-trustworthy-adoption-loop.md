@@ -82,6 +82,10 @@ experiment by itself.
   and domain-bound outcomes, correction, reopening, and closure. Adoption
   reporting cannot treat contact, deflection, response, sentiment, closure, or
   case volume as usefulness, trust, safety, satisfaction, or completion.
+- [TODO 48](./48-change-agency-and-humane-product-evolution.md) owns affected-
+  contract mapping, truthful preview and choice, prior-setting preservation,
+  compatibility, rollback, deprecation, sunset, and transition remedy. Change
+  adoption, deferral, dismissal, or support silence is not value evidence.
 - [TODO 31](./31-creator-sustainability-and-fair-value.md) owns creator-commerce
   roles, provider-neutral transaction truth, receipts, entitlements,
   fulfilment, remedies, private settlement, and operating stop conditions.

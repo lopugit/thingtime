@@ -65,6 +65,10 @@ No unchecked item above is permission to engineer or recruit participants.
       missed-run behavior, and stopping. This TODO owns the separate event,
       channel, presentation, read, outcome, and remedy evidence after a run
       requests notification.
+- [ ] [TODO 48](./48-change-agency-and-humane-product-evolution.md) owns which
+      product changes require notice and what the change means. This TODO owns
+      whether each approved notice was recorded, delivered, displayed, read,
+      expired, superseded, corrected, and remedied without leaking context.
 - [ ] Domain TODOs retain authority for moderation, collaboration, identity,
       governance, commerce, learning, and AI remedies. Notification state must
       never decide those outcomes.

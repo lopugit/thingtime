@@ -39,6 +39,10 @@ itself.
   entry, case acknowledgement, accountable handoff, and status journey. This
   TODO alone owns export/restore outcomes, deletion and closure authority, and
   the actual portability remedy.
+- [TODO 48](./48-change-agency-and-humane-product-evolution.md) owns the shared
+  change, compatibility, deprecation, sunset, and transition journey. This TODO
+  retains authority for export, restore, deletion, closure, and usable exit
+  before an old path is retired.
 - [TODO 20](./20-versioned-experience-history.md) owns reversible experience
   history. Restoring a search/feed snapshot is not account backup.
 - The current API registry, runtime route map, capability manifest, and each

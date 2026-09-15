@@ -35,6 +35,7 @@ actionable item in [`../TODO/`](../TODO/TODO.md) when it is ready to execute.
 | [Youth safety and age-appropriate agency baseline](./youth-safety-and-age-appropriate-agency-baseline.md)                             | Evidence on eligibility ambiguity, optional birthday boundaries, age assurance, guardian involvement, protective defaults, remedies, and one synthetic policy audit | 2026-09-14    |
 | [Evidence agency and accountable product claims baseline](./evidence-agency-and-accountable-product-claims-baseline.md)               | Evidence on platform claim surfaces, exact-version support, qualifications, freshness, contradictions, correction families, and one synthetic claim pilot           | 2026-09-14    |
 | [Support agency and accountable remedy baseline](./support-agency-and-accountable-remedy-baseline.md)                                 | Evidence on help discovery, consentful intake, acknowledgements, accountable handoffs, service-time truth, domain remedies, and one synthetic support pilot         | 2026-09-15    |
+| [Change agency and humane product evolution baseline](./change-agency-and-humane-product-evolution-baseline.md)                       | Evidence on human-facing change gaps, previews, prior choices, compatibility, deprecation, sunset, rollback, remedy, and one synthetic preference pilot             | 2026-09-15    |
 
 ## Conventions
 

@@ -18,6 +18,40 @@ required sequence:
 The branch is intentionally cumulative. It does not merge itself, implement
 the product work, or treat a plausible idea as an approved decision.
 
+## 2026-09-15 evening — change agency and humane product evolution
+
+This run identifies a human-transition gap: Thingtime has internal changelogs,
+exact-commit previews, semantic API capability versions, storage migration
+rules, notification and support plans, and future historical-state recovery,
+but no shared person-facing contract for what changes, which tasks and choices
+are affected, what can be previewed or deferred, how long old paths remain
+compatible, and what rollback, retirement, remedy, or exit means. It adds:
+
+- `NOTES/change-agency-and-humane-product-evolution-baseline.md`, a dated
+  evidence ledger separating technical delivery and compatibility from
+  affected-person understanding and continuity;
+- `PLAN/change-agency-and-humane-product-evolution-roadmap.md`, a gated path
+  through ownership, version-bound impact packets, truthful preview and choice,
+  coexistence, rollback, deprecation, sunset, remedy, and evaluation; and
+- `TODO/claude-todo/48-change-agency-and-humane-product-evolution.md`, an
+  execution epic with domain boundaries, acceptance criteria, hard stops, and
+  a concrete first owner packet.
+
+The recommended pilot uses adult internal reviewers, one synthetic account,
+one exact non-production build, and the reversible rename and relocation of one
+non-sensitive display preference while preserving its stored value and effect.
+It exercises old/new comparison, adopt/keep/defer only where those choices are
+real, direct and stale links, old clients, offline return, prior-choice
+preservation, account switching, interruption, rollback, re-entry, retirement
+simulation, accessibility and language profiles, and complete cleanup.
+
+Production rollout, real participants, public telemetry, personalized
+experiments, a feature-flag platform, policy, permission, data-model, external
+API, security, legal, youth, money, safety, health, identity, institutional, or
+high-impact changes remain separately gated. No runtime, API, schema, UI,
+setting, flag, migration, notification, support, telemetry, account, or
+production behavior changed.
+
 ## 2026-09-15 — support agency and accountable remedy
 
 This run identifies a shared-journey gap: Thingtime's domain plans define

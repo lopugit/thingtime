@@ -44,6 +44,10 @@ listing by itself.
   reports, impersonation, malicious-report handling, reasoned decisions,
   appeals, and privacy-safe transparency. Vulnerability disclosure stays a
   distinct private security process.
+- [TODO 48](./48-change-agency-and-humane-product-evolution.md) owns the shared
+  person-facing product-change journey. This epic retains third-party app
+  release identity, permission and compatibility diffs, re-consent, quarantine,
+  transfer, abandonment, and developer-facing retirement authority.
 - The existing ChatGPT plugin submission handoff is evidence and a reusable
   test-case source, not a general marketplace policy.
 - Open PRs, repository files, scan scores, and deployed URLs are not proof of a

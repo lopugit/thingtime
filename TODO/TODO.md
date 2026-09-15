@@ -743,3 +743,23 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     promises, or collect production support data. The full scope, evidence,
     stop conditions, and first owner packet live in
     `claude-todo/47-support-agency-and-accountable-remedy.md`.
+
+48. **🌿 Make change agency and humane product evolution a product contract.**
+
+    Give people a version-bound explanation of material Thingtime changes:
+    what changes and stays the same, why, when, which tasks, data, settings,
+    clients, or meanings are affected, which choices are real, how long old
+    paths remain compatible, and what rollback, support, remedy, or exit means.
+    Start only with adult internal reviewers, one synthetic account, one exact
+    non-production build, and the reversible rename and relocation of one
+    non-sensitive display preference while preserving its stored value and
+    effect. Execute
+    `claude-todo/48-change-agency-and-humane-product-evolution.md` only after
+    qualified owners approve the taxonomy, affected-contract and change-packet
+    vocabulary, preview/notice/choice rules, prior-setting preservation,
+    accessibility/language profiles, compatibility, stale-client, rollout,
+    rollback, deprecation, sunset, evidence, remedy, exit, cleanup, and stop
+    authority. Production rollout, real participants, public telemetry,
+    personalized experiments, a feature-flag platform, policy or permission
+    changes, external API changes, minors, and sensitive or high-impact changes
+    remain separately gated.

@@ -37,6 +37,10 @@ local-first claim.
       saver, and offline expansion.
 - [ ] [TODO 34](./34-collaboration-agency-and-shared-stewardship.md) owns shared
       proposals; this pilot is single-owner and synthetic.
+- [ ] [TODO 48](./48-change-agency-and-humane-product-evolution.md) owns change
+      preview, prior-setting preservation, compatibility, rollback, and sunset.
+      This epic retains local envelope migration, canonical reconciliation,
+      conflict choices, stale-client truth, and purge semantics.
 - [ ] Record approved persistence, schema, capability, retention, deletion, or
       compatibility forks in `DECISIONS.md`.
 

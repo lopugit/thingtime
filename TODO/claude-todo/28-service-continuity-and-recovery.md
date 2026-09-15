@@ -64,6 +64,10 @@ or new database kinds by itself.
   owns shared help discovery, intake, acknowledgement, handoff, and case-status
   truth. This epic retains authority for incident severity, recovery, service
   communication, and continuity remedies.
+- [Change agency and humane product evolution](./48-change-agency-and-humane-product-evolution.md)
+  owns affected-person preview, choice, compatibility, deprecation, and sunset.
+  This epic retains incident command, operational rollback, restoration, and
+  availability truth when a change fails.
 - [Trusted developer ecosystem](./27-trusted-developer-ecosystem.md) owns app
   release, review, consent-update, quarantine, vulnerability, abandonment, and
   ecosystem incident states. This epic owns shared service dependencies and

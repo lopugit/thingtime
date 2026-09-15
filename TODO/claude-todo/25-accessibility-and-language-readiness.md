@@ -40,6 +40,10 @@ itself.
 - [TODO 23](./23-data-portability-and-exit.md) and
   [TODO 24](./24-attention-agency-and-calm-use.md) must pass the same access and
   language gates for exit, feed, and notification journeys.
+- [TODO 48](./48-change-agency-and-humane-product-evolution.md) owns change
+  impact, preview, choice, coexistence, rollback, and retirement. This epic
+  retains complete-journey access and language gates for every old/new,
+  notice, comparison, error, support, and recovery state.
 - UI locale, authored-content language, and optional translation remain separate.
 - Accessibility and language choice are available to every account tier.
 - All preference/data writes go through the canonical Thingtime API and preserve

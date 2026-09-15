@@ -57,6 +57,10 @@ Thingtime makes stronger trust claims.
   discovery, consentful intake, acknowledgement, handoff, and case-status
   truth. This epic retains authority for product-claim challenges, evidence,
   corrections, withdrawals, and claim-specific remedies.
+- [TODO 48](./48-change-agency-and-humane-product-evolution.md) owns what a
+  product change affects, how it is previewed, and its compatibility, rollback,
+  deprecation, and sunset journey. This epic retains authority for every claim
+  Thingtime makes about that change and the correction of stale copies.
 - [TODO 29](./29-content-provenance-and-correction-integrity.md) owns authorship,
   source, derivation, verification limits, and corrections for content
   artifacts. This epic owns Thingtime's own statements about the product.

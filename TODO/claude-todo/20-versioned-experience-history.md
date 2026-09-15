@@ -92,6 +92,10 @@ unless the user explicitly adopts it into an account.
 - Version the snapshot envelope and each surface's view-state adapter
   independently. Migrations are deterministic, tested, and never execute code
   from stored state.
+- [TODO 48](./48-change-agency-and-humane-product-evolution.md) owns product-
+  change impact, preview, compatibility, rollback, deprecation, and sunset. A
+  historical checkpoint may aid recovery but never proves an old product
+  contract is supported or authorizes restoring code, data, or permissions.
 - A historical replay uses the captured ordered result set and cached safe
   projection. A current rerun uses today's data and current algorithm; the UI
   must never blur those modes.
