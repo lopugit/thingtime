@@ -1,4 +1,5 @@
 import { recordErrorLog } from '../errors/errorLogs';
+import { lopuResultLinks } from '~/utils/lopuLinks';
 import { createClaudeOAuthClient, claudeOAuthConfigured } from '../ai/claudeOAuth';
 import { createTtToolTextParser, type TtToolTextParser } from './toolTextParser';
 import Anthropic from '@anthropic-ai/sdk';
@@ -835,7 +836,8 @@ async function* runToolLoop(options: LoopOptions): AsyncGenerator<LopuChatStream
               name: call.name,
               ok: result.ok,
               summary: summarise(result.ok === true ? result.summary : result.error),
-              ...(thingIdOf(result) ? { thingId: thingIdOf(result) } : {})
+              ...(thingIdOf(result) ? { thingId: thingIdOf(result) } : {}),
+              ...(result.ok ? { links: lopuResultLinks(result.data) } : {})
             });
             const entry: LopuProviderToolResult = result.ok === true
               ? { id: call.id, name: call.name, ok: true, summary: result.summary, ...(result.data !== undefined ? { data: boundToolData(result.data) } : {}) }

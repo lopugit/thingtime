@@ -3378,3 +3378,6 @@ This branch's disposable local QA uses the normal worktree PM2 stack at
 `LOPU_CHAT_PROVIDER=test` at real account data: its scripted tools make real
 writes. `LOPU_TEST_PROVIDER_PACE_MS=150` slows disposable fixtures for tab-close,
 Stop and recovery checks.
+
+Funnel status for this QA worktree is unavailable: the installed `tailscale`
+wrapper targets a missing Tailscale.app executable; no mapping was changed.

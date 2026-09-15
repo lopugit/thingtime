@@ -417,7 +417,7 @@ test('markdown: an unterminated fence streams as an open code block', () => {
 	assert.deepEqual(parseLopuMarkdown(''), []);
 });
 
-test('markdown: links are site-relative only — anything else is demoted to plain text', () => {
+test('markdown: site-relative and HTTP links are clickable; unsafe schemes stay text', () => {
 	assert.deepEqual(parseLopuInlines('Open [the builder](/builder?page=p1) now'), [
 		{ kind: 'text', text: 'Open ' },
 		{ kind: 'link', text: 'the builder', href: '/builder?page=p1' },
@@ -425,7 +425,7 @@ test('markdown: links are site-relative only — anything else is demoted to pla
 	]);
 	assert.deepEqual(parseLopuInlines('See [docs](https://evil.example/x)'), [
 		{ kind: 'text', text: 'See ' },
-		{ kind: 'text', text: 'docs (https://evil.example/x)' }
+		{ kind: 'link', text: 'docs', href: 'https://evil.example/x' }
 	]);
 	assert.deepEqual(parseLopuInlines('[x](//evil.example) and [y](javascript:alert(1))'), [
 		{ kind: 'text', text: 'x (//evil.example)' },

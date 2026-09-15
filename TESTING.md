@@ -350,6 +350,12 @@
 
 ## Unified Lopu conversations, scheduled Things and discussions
 
+- [ ] Read a page with related components, search/list Things, and follow each
+      Open anchor before and after reloading the chat. Verify actual hrefs,
+      keyboard and new-tab navigation, safe external links, long labels at 390px,
+      expanded details, and top-to-bottom scrolling. Unsafe URL schemes stay text;
+      unsaved drafts and unresolved references do not invent destinations.
+
 - [ ] At 390px width, historical tool rows put long summaries below their label
       and status icon, not in a narrow side column. Check approval, success and
       failure states through the full chat scroll; desktop retains compact rows.

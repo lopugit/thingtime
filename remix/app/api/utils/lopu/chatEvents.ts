@@ -1,3 +1,4 @@
+import type { LopuToolLink } from '~/utils/lopuLinks';
 // The Lopu chat wire protocol — one JSON object per NDJSON line, streamed by
 // POST /api/v1/lopu/chats/reply. Types only (no runtime imports beyond other
 // type modules), so the client reducer imports this file directly and the
@@ -74,7 +75,7 @@ export type LopuChatContext = {
 
 // Persisted on the assistant message (crystal.lopu.toolCalls) — bounded there
 // to 20 entries / 240-char summaries by the messenger util.
-export type LopuToolCallSummary = { name: string; ok: boolean; summary: string; thingId?: string };
+export type LopuToolCallSummary = { name: string; ok: boolean; summary: string; thingId?: string; links?: LopuToolLink[] };
 
 // What a `confirm` event asks the user to approve: the exact action (`key`
 // binds the tool to its target and input), a human line for the card, and
