@@ -126,9 +126,9 @@ const InlineRun = ({ inlines }: { inlines: LopuInline[] }) => (
 				case 'link':
 					return (
 						<Box
-							as={RouterLink}
+							as={inline.href.startsWith('/') ? RouterLink : 'a'}
 							key={index}
-							to={inline.href}
+							{...(inline.href.startsWith('/') ? { to: inline.href } : { href: inline.href, target: '_blank', rel: 'noopener noreferrer' })}
 							color={LOPU_UI.link}
 							fontWeight={600}
 							textDecoration="underline"
