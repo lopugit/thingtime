@@ -57,6 +57,18 @@ const vaultKey = (): Buffer | null => {
 
 export const lopuCredentialVaultConfigured = () => vaultKey() !== null;
 
+// Server-only, purpose-scoped lookup in this deployment's own vault. Read only
+// the first enabled credential; never reveal/decrypt unrelated platform keys.
+// No process cache: rotation and disabling take effect on the next request.
+export const readServerCredential = async (platform: string): Promise<string | null> => {
+  const record = await (await getLopuCredentialsCollection())
+    .find({ platform, enabled: true })
+    .sort({ priority: 1, createdAt: 1 })
+    .limit(1)
+    .next();
+  return record ? decrypt(record as StoredLopuCredential) : null;
+};
+
 // Caller must enforce fresh verification and current admin authorization.
 export const revealLopuCredential = async (id: string): Promise<string | null> => {
   const record = await (await getLopuCredentialsCollection()).findOne({ id });
