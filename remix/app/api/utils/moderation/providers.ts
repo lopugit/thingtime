@@ -26,6 +26,7 @@
 
 import type { ModerationVerdict } from './moderationCore';
 import { DEFAULT_MODERATION_SETTINGS, type ModerationMediaProviderId } from './moderationSettingsCore';
+import { resolveModerationEnvironment } from './moderationCredentials';
 
 export type ModerationImageInput = {
 	bytes: Uint8Array;
@@ -129,5 +130,6 @@ export const resolveConfiguredModerationProvider = async (env: NodeJS.ProcessEnv
 	} catch (error) {
 		console.warn('[moderation] settings read failed; using env default provider:', (error as Error)?.message || error);
 	}
-	return resolveModerationProvider(env, adminProvider);
+	if (adminProvider === 'off') return { kind: 'off' };
+	return resolveModerationProvider(await resolveModerationEnvironment(env), adminProvider);
 };

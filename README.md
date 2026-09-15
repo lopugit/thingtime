@@ -1575,13 +1575,31 @@ THINGTIME_MODERATION_PROVIDER="openai+claude"  # 'openai+claude' (alias 'tiered'
                                                # unset default by keys: both → openai+claude; ANTHROPIC only → claude;
                                                # OPENAI only → openai; neither → off
 ANTHROPIC_API_KEY="<key>"                # Claude API key (escalation / claude provider)
-OPENAI_API_KEY="<key>"                   # OpenAI key for the free omni-moderation screen
+OPENAI_API_KEY="<key>"                   # legacy fallback; prefer the dedicated encrypted vault entry below
 TT_MODERATION_MODEL="claude-opus-5"      # optional Claude model override
 TT_MODERATION_ESCALATION_SCORE="0.2"     # optional; escalate unflagged images whose max
                                          # image-category score meets this 0..1 threshold
 ```
 
-Note: `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are shared with the Lopu musing
+For each deployment environment, open `/admin/ci-control` → AI credential
+waterfall and add an enabled credential with the exact platform **OpenAI
+Moderation** (use Add platform), a descriptive account name, and an OpenAI API
+key. The server reads the first enabled entry in that platform's priority order
+from that environment's encrypted admin vault. Production and develop must each
+have their own entry and existing `THINGTIME_ADMIN_VAULT_KEY` bootstrap; never
+copy encrypted records between environments. No new Vercel variable or MongoDB
+index is needed. This dedicated key is used only for image, invitation-avatar,
+and post/comment moderation, including the Admin settings effective-provider
+view. It does not replace paid chat or CI keys. Rotation takes effect on the
+next request; reads/decryption failures stop moderation rather than silently
+using a stale key. When there is no enabled entry, `OPENAI_API_KEY` remains a
+migration fallback. Verify an actual image verdict before removing that legacy
+value, and check its other consumers before removal. A successful models-list
+check alone does not prove moderation access. Omni has no usage charge, but the
+API organization must have working API access; persistent 429s can reflect
+account funding/provisioning even with a visible active key.
+
+Note: legacy `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are shared with the Lopu musing
 feature — their presence alone activates image moderation when
 `THINGTIME_MODERATION_PROVIDER` is unset. Set it to `off` explicitly in
 environments that carry the keys for musing but must not moderate. An
