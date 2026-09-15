@@ -43,7 +43,11 @@ an item is remembered, where it lives, how long it remains, or what it changes.
 ### Behavioral adaptation exists in a bounded domain
 
 - `useFeedEngagement.ts` records bounded events such as view, dwell, expand,
-  react, comment, and share only when an active feed algorithm is present.
+  react, comment, and share into a session queue regardless of algorithm state;
+  only the flush that trains a profile is gated on an active feed algorithm,
+  which is discarded when none is set. Per-session dedup state for view and
+  dwell is retained either way, so "no active algorithm" is not "nothing is
+  remembered" — exactly the gap this note argues is uninventoried.
 - The feed algorithm utilities support named, private, branchable interest
   profiles and a protected active pointer.
 
