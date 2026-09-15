@@ -3339,3 +3339,22 @@ Current admins can open **Things → Error logs** (`/things?logs=1`) and search 
 No new provider credentials or external logging service are required. Forks need the normal home MongoDB setup and an admin account (see existing `ADMIN_USERNAMES` setup). Boot-time index convergence adds the shared home-only `things_ephemeral_expires_at` in place of the former diagnostic TTL; error-log reads reuse `{ thingtime, createdAt, shareId }`; give the existing MongoDB application role index-creation permission. Logs expire after seven days and do not consume account storage. No content migration is needed.
 
 Captures cover shared `safeErrorText`, registered API unhandled exceptions/5xx responses, and OpenAI/Anthropic moderation failures. Records contain a closed, redacted error snapshot plus server-generated correlation metadata, never request bodies, cookies, authorization headers, images, or full SDK objects. Upstream request IDs and error types help distinguish throttling from account restrictions. Persistence is best effort: one-second deadline, five captures/request, five concurrent writes and 60 writes/minute per server instance. Console metadata remains when persistence is unavailable or capped; this is a diagnostic trail, not a complete audit ledger. Background paths should await `recordErrorLog` before returning. Do not pass user content as authored context fields.
+
+
+### Feed algorithms and geographic Things
+
+The feed offers Hot, New, Top, Rising, Controversial, Local, Global and Political.
+`/algorithms` searches the explicitly published directory and creates private learning profiles.
+Sharing a link and publishing are separate choices; neither exposes the stored Thing or raw weights.
+Branching copies the learned interests and always starts private.
+
+Things accept optional `geo: { "lat": -37.81, "lng": 144.96 }` on POST/PUT/PATCH;
+`null` removes location. Only finite latitude -90..90 and longitude -180..180 are accepted.
+The server derives an indexed GeoJSON Point; normal ACLs govern its lat/lng projection.
+POST `/api/v1/things/search` accepts `near: {lat,lng}` and `radiusKm` (default 50, max 1000).
+Local uses browser location only after an explicit button press, without adding it to posts;
+a location tag works without granting permission. No geocoding provider or secret is required.
+The normal MongoDB index bootstrap creates `things_geo` on first use.
+
+Algorithm development worktree: localhost port 13480 (HMR 13481 / Nitro 13482).
+Tailscale/Funnel is unavailable on the validation machine: its CLI points to an absent Tailscale.app.

@@ -79,6 +79,10 @@ import {
 } from '~/schemas/registry';
 import { scorePost, type AlgorithmWeights, type PostFeatures } from './feedRanking';
 import { pollShapeOfCrystal, tallyPollVotes, type PollVoteEntry, type PublicPollVotes } from './pollCore';
+import { parseGeo, publicGeo, geoRadiusClause, type GeoLocation, type StoredGeoLocation } from '~/schemas/geo';
+import { rankSubspacePosts } from '../subspaces/subspaceCore';
+import { updownTalliesFor } from './updown';
+import type { DefaultAlgorithmId } from '~/components/Feed/defaultAlgorithms';
 import { emptyUpdownVotes, orderCommentPage, tallyUpdown, type CommentSort, type PublicUpdownVotes, type UpdownEntry } from './updownCore';
 import {
 	assertSubspaceInteraction,
@@ -190,6 +194,7 @@ export type ThingDoc = {
   // the platform envelope — never validated, structured-searchable, or
   // interpreted (see sanitizeExtended in schemas/registry.ts)
   extended?: unknown | null;
+  geo?: StoredGeoLocation | null;
   ownerId: string;
   acl?: string[]; // v2 — tt: grants/exclusions (see schemas/registry.ts)
   visibility?: ThingVisibility; // v1 residue (mapped onto acl at read time)
@@ -388,6 +393,7 @@ export type PublicPost = {
   // (batched savedTargetIds lookup — anonymous projections omit the field)
   viewerSaved?: boolean;
   extended: unknown | null;
+  geo?: GeoLocation | null;
   createdAt: string;
 };
 
@@ -439,6 +445,7 @@ export type PublicThing = {
   folderId: string | null;
   crystal: Record<string, any>;
   extended: unknown | null;
+  geo?: GeoLocation | null;
   tags: string[];
   // owner-only: the thing's tt:token/<id> grant list (absent for other
   // viewers and when empty)
@@ -1107,6 +1114,7 @@ export type CreateThingInput = {
   thingtime?: unknown;
   crystal?: unknown;
   extended?: unknown;
+  geo?: unknown;
   acl?: unknown;
   visibility?: unknown; // legacy alias, mapped onto acl
   targetId?: unknown;
@@ -1260,6 +1268,8 @@ export const createThing = async (
     inputAcl = resolved;
   }
 
+  const geo = input.geo == null ? null : parseGeo(input.geo);
+  if (input.geo != null && !geo) return fail(400, 'geo requires finite lat (-90..90) and lng (-180..180)');
   const extended = sanitizeExtended(input.extended);
   if (isFail(extended)) return extended;
 
@@ -1401,6 +1411,7 @@ export const createThing = async (
     thingtime: validated.thingtime,
     crystal: validated.crystal,
     extended: extended.value === undefined ? null : extended.value,
+    ...(geo ? { geo } : {}),
     ownerId,
     acl,
     targetId,
@@ -1700,6 +1711,7 @@ export type CreatePostInput = {
   subspaceId?: unknown;
   flairId?: unknown;
   extended?: unknown;
+  geo?: unknown;
   acl?: unknown;
   visibility?: unknown;
   tags?: unknown;
@@ -1734,6 +1746,7 @@ export const createPost = async (
 			flairId: input.flairId
 		},
       extended: input.extended,
+      geo: input.geo,
       acl: input.acl,
       visibility: input.visibility,
       tags: input.tags,
@@ -2548,6 +2561,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       // field at all (nothing to bookmark without a library)
       ...(viewerId ? { viewerSaved: savedIds.has(doc.shareId) } : {}),
       extended: doc.extended ?? null,
+      geo: publicGeo(doc.geo),
       createdAt: new Date(doc.createdAt).toISOString()
     };
   };
@@ -2580,6 +2594,7 @@ export const toPublicThings = async (docs: ThingDoc[], viewerInput: string | Vie
       folderId: folderIdOf(doc),
       crystal: crystalOf(doc),
       extended: doc.extended ?? null,
+      geo: publicGeo(doc.geo),
       tags: doc.tags || [],
       ...(tokenAcl.length ? { tokenAcl } : {}),
       createdAt: new Date(doc.createdAt).toISOString(),
@@ -3078,6 +3093,10 @@ const enforceReactionCaps = async (targetShareId: string, ownerId: string, token
 // Reads.
 
 export type FeedQuery = {
+  preset?: DefaultAlgorithmId | null;
+  localTag?: string | null;
+  near?: GeoLocation | null;
+  radiusKm?: number;
   types?: PostType[];
   circles?: PostVisibility[];
   // public tag feeds (claude-todo/10 ✨): narrow to posts carrying one tag.
@@ -3161,6 +3180,10 @@ export const getFeed = async (
     typeClause(types),
     tag ? { tags: tag } : {},
     range,
+    query.preset === 'political' ? { tags: { $in: ['politics', 'political'] } } : {},
+    query.preset === 'global' ? circleClause('public') : {},
+    query.preset === 'local' ? (query.near ? geoRadiusClause(query.near, query.radiusKm || 50) : { tags: (query.localTag || '').trim().toLowerCase().replace(/^#/, '').slice(0, MAX_TAG_CHARS) }) : {},
+    query.preset === 'rising' ? { createdAt: { $gte: new Date(Date.now() - 86400000) } } : {},
     scopedSubspaceIds ? { 'crystal.subspaceId': { $in: scopedSubspaceIds } } : {},
     ...subspaceFeedClauses(viewer)
   );
@@ -3168,7 +3191,10 @@ export const getFeed = async (
   const things = await getThingsCollection();
   const weights = query.weights || null;
 
-  if (!weights) {
+  const voteSort = query.preset && !['new', 'local'].includes(query.preset)
+    ? (query.preset === 'global' || query.preset === 'political' ? 'hot' : query.preset) as 'hot' | 'top' | 'rising' | 'controversial'
+    : null;
+  if (!weights && !voteSort) {
     // chronological: stable (createdAt, shareId) cursor pagination
     const cursor = parseChronoCursor(query.cursor);
     const pageMatch = cursor ? withMatch(match, chronoCursorClause(cursor)) : match;
@@ -3200,10 +3226,16 @@ export const getFeed = async (
     .toArray()) as any as ThingDoc[];
 
   const now = new Date();
+  const tallies = voteSort ? await updownTalliesFor(candidates.map((doc) => doc.shareId), viewer?.id || null) : new Map();
+  const voteOrder = voteSort ? rankSubspacePosts(candidates.map((doc) => ({
+    id: doc.shareId, createdAtMs: new Date(doc.createdAt).getTime(), pinned: false,
+    up: tallies.get(doc.shareId)?.up || 0, down: tallies.get(doc.shareId)?.down || 0
+  })), voteSort, now.getTime()) : [];
+  const voteRanks = new Map(voteOrder.map((id, index) => [id, voteOrder.length - index]));
   const scored = candidates
     .map((doc) => ({
       doc,
-      score: scorePost(weights, featuresOf(doc), now)
+      score: voteSort ? voteRanks.get(doc.shareId)! : scorePost(weights!, featuresOf(doc), now)
     }))
     .sort(
       (a, b) =>
@@ -4645,6 +4677,7 @@ export const deletePost = deleteThing;
 export type UpdateThingInput = {
   crystal?: unknown;
   extended?: unknown;
+  geo?: unknown;
   acl?: unknown;
   visibility?: unknown; // legacy alias, mapped onto acl
   folderId?: unknown; // move: an owned folder's shareId, or null for the root
@@ -4858,6 +4891,8 @@ export const updateThing = async (
   // extended replaces as a whole value only when provided (undefined leaves it
   // untouched, null clears it) — both PATCH and PUT, since deep-merging
   // arbitrary JSON is ambiguous
+  const geo = input.geo == null ? null : parseGeo(input.geo);
+  if (input.geo != null && !geo) return fail(400, 'geo requires finite lat (-90..90) and lng (-180..180)');
   const extended = sanitizeExtended(input.extended);
   if (isFail(extended)) return extended;
   const hasExtendedChange = input.extended !== undefined;
@@ -4931,6 +4966,7 @@ export const updateThing = async (
     thingtime,
     crystal: validated.crystal,
     ...(hasExtendedChange ? { extended: extended.value } : {}),
+    ...(input.geo !== undefined ? { geo } : {}),
     ...(nextTokenAcl !== undefined ? { tokenAcl: nextTokenAcl } : {}),
     targetId: targetIdOf(doc),
     ...(hasFolderChange ? { folderId: nextFolderId } : {}),
