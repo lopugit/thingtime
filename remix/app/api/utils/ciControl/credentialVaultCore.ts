@@ -1,5 +1,5 @@
 export const LOPU_CREDENTIAL_TYPE = 'claude-code-oauth-token' as const;
-export const LOPU_CREDENTIAL_MAX_ITEMS = 8;
+export const LOPU_CREDENTIAL_MAX_ITEMS = 128;
 export const LOPU_CREDENTIAL_MAX_VALUE_BYTES = 32 * 1024;
 export const LOPU_CREDENTIAL_FETCH_MAX_BYTES = 128 * 1024;
 export const LOPU_CREDENTIAL_CLOCK_SKEW_MS = 5 * 60 * 1000;
@@ -24,6 +24,13 @@ export const credentialTypeForPlatform = (platform: string) => {
 	if (normalized === 'openai') return 'openai-api-key';
 	if (normalized === 'google' || normalized === 'gemini') return 'google-ai-api-key';
 	return 'platform-token';
+};
+
+export const requirePlatformCredentialValue = (platform: string, value: unknown): string => {
+  if (typeof value !== 'string' || !value.trim() || Buffer.byteLength(value, 'utf8') > LOPU_CREDENTIAL_MAX_VALUE_BYTES) throw new Error('A non-empty credential within the size limit is required.');
+  const token = value.trim();
+  if (credentialTypeForPlatform(platform) === LOPU_CREDENTIAL_TYPE && !token.startsWith('sk-ant-oat')) throw new Error('Claude requires a Claude Code OAuth token. Anthropic API keys are not supported.');
+  return token;
 };
 
 export const normalizeCredentialOrder = (value: unknown) => {

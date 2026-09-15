@@ -1052,16 +1052,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'Manage the ordered Lopu credential waterfall',
     endpoint: '/api/v1/admin/ci/credentials',
-    featureVersion: '2.0.0',
+    featureVersion: '3.0.0',
     summary: 'Store, rotate, enable, delete, and reorder named AI-platform credentials without exposing their values.',
     detail:
-      'Credential values are AES-256-GCM encrypted with THINGTIME_ADMIN_VAULT_KEY and are write-only from the browser. Each entry has a built-in or custom AI platform label; GET and every mutation response contain redacted metadata only. Lopu requests the ordered compatible platform subset from the vault at run time, so GitHub needs one stable router secret instead of one repository secret per account. At most eight entries are stored.',
+      'Credential values are AES-256-GCM encrypted with THINGTIME_ADMIN_VAULT_KEY and are write-only from the browser. Each entry has a built-in or custom AI platform label; GET and every mutation response contain redacted metadata only. Lopu requests the ordered compatible platform subset from the vault at run time, so GitHub needs one stable router secret instead of one repository secret per account. At most 128 entries are stored. Anthropic and Claude entries accept only Claude Code OAuth tokens; API keys are rejected. Claude and CI share this store.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET', 'POST'],
     steps: [
       'GET the redacted ordered list.',
       'POST create, rotate, set-enabled, reorder, or delete.',
-      'Use the CI Control page to manage the order without copying values back into the browser.'
+      'Use Admin System Secure Vault to manage the order without copying values back into the browser.'
     ],
     requestExamples: [
       { name: 'Add a named AI account', description: 'The platform may be built-in or custom; the value is accepted once and never returned.', method: 'POST', body: { action: 'create', name: 'Thingtime Claude', platform: 'Anthropic', value: '<oauth-token>', enabled: true } },
@@ -1314,10 +1314,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'integrations',
     title: 'Deliver the ordered Lopu credential waterfall',
     endpoint: '/api/v1/integrations/ci/credentials',
-    featureVersion: '1.1.0',
+    featureVersion: '1.1.1',
     summary: 'Return enabled credentials to one fresh, signed, protected-branch GitHub Actions request.',
     detail:
-      'The exact body is HMAC-SHA256 signed with THINGTIME_CI_ROUTER_SECRET. The server verifies repository, workflow ref, run identity, freshness, requested platform, and a single-use nonce before decrypting only the ordered compatible entries. Responses are no-store and intended only for immediate in-memory use by Lopu.',
+      'The exact body is HMAC-SHA256 signed with THINGTIME_CI_ROUTER_SECRET. The server verifies repository, workflow ref, run identity, freshness, requested platform, and a single-use nonce before decrypting only the first eight ordered compatible entries from the System vault. Claude delivery excludes legacy API keys. Responses are no-store and intended only for immediate in-memory use by Lopu.',
     auth: { mode: 'none', description: 'Server-to-server HMAC authentication via X-Thingtime-CI-Signature.' },
     methods: ['POST'],
     steps: [
@@ -1435,6 +1435,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			},
       { status: 403, description: 'Signature mismatch.', body: { ok: false, error: 'Invalid webhook signature' } }
     ]
+  }),
+  endpoint({
+    id: 'admin-system-environment', group: 'admin', title: 'Manage Thingtime deployment environment',
+    endpoint: '/api/v1/admin/system/environment', featureVersion: '1.0.0', methods: ['GET', 'POST'],
+    summary: 'List metadata and create, rotate or delete a variable in the server-configured Thingtime Vercel project.',
+    detail: 'The project and Vercel token are server-selected. GET and mutation responses omit all values. Creation stores an encrypted variable for one standard environment with no upsert. Rotation preserves the selected entry scope. Same-origin admin mutations are required. Values are revealed separately with fresh verification via api.vault-reveal 1.1.0. Vercel sensitive values stay write-only. Environment changes require redeployment. Retired Anthropic API credentials cannot be created or rotated.',
+    auth: { mode: 'session', description: 'Current admin account session required.' },
+    steps: ['Negotiate api.admin-system-environment >=1.0.0.', 'GET metadata.', 'POST create, rotate or delete for one selected entry.', 'Redeploy to apply changes.'],
+    requestExamples: [{ name: 'Add a variable', description: 'One environment; an existing variable is not overwritten.', method: 'POST', body: { action: 'create', key: 'SERVICE_TOKEN', value: '<secret>', target: 'preview' } }],
+    responseExamples: [{ status: 200, description: 'Metadata only.', body: { ok: true, configured: true, entries: [{ id: 'example', key: 'SERVICE_TOKEN', target: ['preview'], type: 'encrypted', gitBranch: null, revealable: true }] } }]
   }),
   endpoint({
     id: 'admin-integrations',
@@ -2836,12 +2846,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'settings-pr-conflict-auto-resolver-model-waterfall',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'settings',
     title: 'AI workflow model waterfall',
     endpoint: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall',
     summary: 'Read or administratively reorder the model chain used by conflict, rebase, and semantic-refresh AI workflows.',
     detail:
-      'GET publicly returns the ordered, non-secret model ids plus the base-model catalog. POST replaces the order for administrators only. The first entry is the preferred model for merge-conflict resolution, stacked-PR rebases, and their semantic Graphify refreshes; conflict-editing calls may use later entries for eligible availability failures. Direct Anthropic features use the first Anthropic-capable entry and OpenAI-backed features the first OpenAI entry, each stopping at the default sentinel. Entries compose a catalog base model with optional variant segments — `<model>[:<effort>][:fast]` (for example claude-opus-5:high:fast or gpt-5.6-sol:ultra) — where the effort must be one the model supports and fast requires the model to offer a fast lane (Anthropic fast mode or OpenAI priority processing). The list length is unlimited; ids must be unique and include default as the hard fallback. Missing or corrupt stored settings resolve safely, dropping unknown entries and collapsing to ["default"] when nothing usable remains.',
+      'GET publicly returns the ordered, non-secret model ids plus the base-model catalog. POST replaces the order for administrators only. The first entry is the preferred model for merge-conflict resolution, stacked-PR rebases, and their semantic Graphify refreshes; conflict-editing calls may use later entries for eligible availability failures. Direct Anthropic features use the first Anthropic-capable entry and OpenAI-backed features the first OpenAI entry, each stopping at the default sentinel. Entries compose a catalog base model with optional variant segments — `<model>[:<effort>][:fast]` (for example claude-opus-5:high:fast or gpt-5.6-sol:ultra) — where the effort must be one the model supports and fast requires the model to offer a fast lane (Anthropic fast mode or OpenAI priority processing). The list length is unlimited; ids must be unique. Configured orders are returned exactly without appending a default; default is optional and runs only if selected. Missing or corrupt stored settings resolve safely, dropping unknown entries and collapsing to ["default"] when nothing usable remains.',
     auth: {
       mode: 'optional',
       description: 'GET is public. POST requires an authenticated administrator session.'
@@ -2851,7 +2863,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'GET to read the current waterfall and the base-model catalog with per-model efforts and speeds.',
       'Administrators POST { waterfall: [modelId, ...] } to replace the priority order.',
       'Compose entries as <model>[:<effort>][:fast] from the catalog; ids must be unique.',
-      'Always include default so the resolver has a final provider-selected fallback.'
+      'Include default only when a provider-selected attempt is wanted; it can be removed.'
     ],
     requestExamples: [
       {
@@ -2893,7 +2905,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           ]
         }
       },
-      { status: 400, description: 'Invalid waterfall.', body: { ok: false, error: 'waterfall must include default as a hard fallback' } },
+      { status: 400, description: 'Invalid waterfall.', body: { ok: false, error: 'waterfall must contain at least 1 model id' } },
       { status: 403, description: 'POST caller is not an admin.', body: { ok: false, error: 'Admins only' } }
     ],
     notes: ['Responses set Cache-Control: no-store. Storage audit fields are never exposed by this endpoint.']
@@ -2910,21 +2922,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.4.0: `models[].pricing` — the list price per million tokens with an `estimated` flag
     // (verified-access design note §2, additive).
     // contractVersion feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.4.0',
-    featureVersion: '1.4.0',
-    summary: 'Lists every AI model Lopu can chat with, its availability (provider keys verified, not merely detected), the resolved chat defaults, and (for a session) the caller’s own Secure Vault providers.',
+    contractVersion: '1.4.1',
+    featureVersion: '1.4.1',
+    summary: 'Lists every AI model Lopu can chat with, its provider access state, the resolved chat defaults, and (for a session) the caller’s own Secure Vault providers.',
     detail:
       'The public projection of the protected `ai-model` Things — one per base model in the Thingtime Admin catalog, ' +
       'seeded idempotently from code on the first read (the `default` sentinel is routing, not a model, so it is never ' +
       'listed). Each model carries its provider, the reasoning-effort tiers it offers, the speed lanes it sells (fast = ' +
       'Anthropic fast mode / OpenAI priority processing), a derived family, the admin `enabled` toggle, `verified` (the ' +
       'provider key’s probe verdict: true accepted, false rejected, null unknown), and `available` = enabled AND the provider ' +
-      'key is configured on the server (ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN; OPENAI_API_KEY) AND that key has not been ' +
-      'rejected. Keys are verified, not merely detected: a bounded server-side probe (GET /v1/models on each configured ' +
-      'provider — ANTHROPIC_BASE_URL / OPENAI_BASE_URL honoured — 5 s cap, no retries, no redirects, cached in-process for ' +
-      '10 minutes, 2 after a failure) answers `providers.<provider>` = { configured, verified, checkedAt, reason? }; 401/403 ' +
-      'marks the key invalid and hides its models, while an unreachable provider, a timeout, or an unexpected status leaves ' +
-      '`verified: null` and the models offered. `defaults` is the Thingtime.LopuChatDefaults singleton after availability is ' +
+      'key is configured on the server (CLAUDE_CODE_OAUTH_TOKEN or admin vault Claude OAuth; OPENAI_API_KEY) AND that key has not been ' +
+      'rejected. Claude checks the shared vault for an enabled OAuth token and reports verified: null until an actual ' +
+      'reply checks model access and allowance. OpenAI uses a bounded GET /v1/models probe (OPENAI_BASE_URL honoured, ' +
+      '5 s cap, no retries or redirects, cached for 10 minutes and 2 after failure). A rejected OpenAI key hides its models; ' +
+      'unreachable or unexpected responses leave verified: null. `defaults` is the Thingtime.LopuChatDefaults singleton after availability is ' +
       'applied — the stored model when it is available, else the first available model in catalog order with its effort ' +
       'clamped (preferring high), else `model: null` when no provider is usable (Lopu then answers from the canned fallback). ' +
       '`providers` reports presence and verdicts only; no value ever leaves the server. Model ids compose into the same ' +
@@ -4623,10 +4634,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // each spend the same last credit — past the cap the request is refused 429
     // LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted (additive). contractVersion
     // feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.7.1',
-    featureVersion: '1.7.1',
+    contractVersion: '1.7.2',
+    featureVersion: '1.7.2',
     summary: 'Sends one message to Lopu and streams its reply — text, tool calls and live builder patches — as newline-delimited JSON. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
     detail:
+      'Version 1.7.2 runs Claude only through the shared OAuth vault and preserves an explicit model, effort and speed; a failed explicit choice never silently switches providers. ' +
       'Version 1.7.1 rechecks positive balance atomically when reserving a billed turn, preventing a concurrent invite gift from spending the same available balance. ' +
       'Version 1.6.2 clarifies comment proposal guidance: the first unapproved comment_on_thing call opens the exact-target/full-text Confirm card without posting; only a subsequent server-verified approved call can post. Plain-text agreement is not a substitute for a signed confirmation. ' +
       'Version 1.6.1 retains bounded public tool receipts in server-loaded conversation history, so later turns can distinguish completed and failed actions. Receipts are historical outcomes, not current-state guarantees or authorization to repeat actions; raw tool results and confirmation tokens are never replayed. ' +
@@ -4759,7 +4771,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Rate limited per user by lopu.chat (40 per 10 minutes), enforced fail-closed; vault turns share the bucket.',
       'Verified access + credits (verified-access design note §1–§2): the gate runs after the body, conversation and provider are validated and BEFORE anything is persisted or any provider is dialed — 403 { code: "LOPU_UNVERIFIED" } for an unverified account (unless the turn runs on the caller’s own vault provider and Thingtime.LopuAccess.allowByoUnverified is on), 402 { code: "LOPU_NO_CREDITS", balanceMicros } when the turn would run on Thingtime’s keys with a balance of zero or less, 403 { code: "LOPU_GUEST" } for a temporary session. Every turn is then priced from the catalog list prices (GET /api/v1/ai/models pricing; the scripted test provider reports 100 in / 50 out tokens per hop and prices against test-model) and recorded as a lopu-usage row: meta carries billing ("thingtime" = server keys, debited from the credit balance with a lopu-credit ledger row; "byo" = the caller’s vault provider, recorded only; "free" = the canned fallback), done carries billing, costMicros (the list price in micro-USD), priced (the model had a price) and balanceMicros (the balance after the debit; null when no account is involved), and the persisted assistant row’s lopu meta keeps the same fields. The balance may go negative by at most one turn; the next one is refused. An accounting failure is logged and retried once, never surfaced as a chat error.',
       'Confirmations are purpose JWTs on the auth key material (15-minute expiry, bound to account + chat + action key); they are single-use within the turn that spends them and the client retires a card after one press. Nothing the model reads — tool results, page blocks, thing content — can grant one.',
-      'Env: ANTHROPIC_API_KEY / OPENAI_API_KEY pick the providers; LOPU_CHAT_PROVIDER (auto|claude|openai|test) and LOPU_OPENAI_TOOLS (native|text) shape routing; LOPU_CLAUDE_MODEL / LOPU_OPENAI_MODEL are the provider defaults for the admin waterfall’s default slot.',
+      'Env: Claude OAuth / OPENAI_API_KEY pick the providers; LOPU_CHAT_PROVIDER (auto|claude|openai|test) and LOPU_OPENAI_TOOLS (native|text) shape routing; LOPU_CLAUDE_MODEL / LOPU_OPENAI_MODEL are the provider defaults for the admin waterfall’s default slot.',
       'Vault turns need THINGTIME_USER_VAULT_KEY (or the admin vault key) and honour THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS for custom compatible hosts; a vault turn takes precedence over LOPU_CHAT_PROVIDER, test mode included.'
     ]
   }),
@@ -13183,13 +13195,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'vault-reveal',
-		contractVersion: '1.0.0',
-		featureVersion: '1.0.0',
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
 		group: 'auth',
 		title: 'Verify and reveal one vault credential',
 		endpoint: '/api/v1/vault/reveal',
 		summary: 'Fresh password or user-verified passkey confirmation for one saved credential.',
-		detail: 'Supports ci and admin vaults for current admins, and personal Secure Vault entries for their owner only. Lists remain value-free. Same-origin JSON POST, a live full account session, and fresh verification are required. Passkey options issue a two-minute single-use challenge bound to the current session, origin and selected item. Login assertions cannot be reused. Five reveal attempts per fifteen minutes, including successful requests, apply independently of subscription tier. No arbitrary secure fields, bulk export, cached reveal grants or server secrets are supported.',
+		detail: 'Supports ci and admin vaults for current admins, and personal Secure Vault entries for their owner only. Lists remain value-free. Same-origin JSON POST, a live full account session, and fresh verification are required. Passkey options issue a two-minute single-use challenge bound to the current session, origin and selected item. Login assertions cannot be reused. Five reveal attempts per fifteen minutes, including successful requests, apply independently of subscription tier. Deployment selection reveals one encrypted Vercel environment value from the server-configured Thingtime project only. Vercel sensitive values cannot be revealed. No arbitrary secure fields, bulk export or cached reveal grants are supported.',
 		auth: { mode: 'session-or-bearer', description: 'Live full account plus current password or a fresh user-verified passkey assertion; admin role for shared admin/CI vaults.' },
 		methods: ['POST'],
 		steps: ['Choose vault and id.', 'POST action options for passkey options and ticket, or use your current password.', 'POST action reveal with password OR ticket and response.', 'Keep the returned value transient and hide it after use.'],

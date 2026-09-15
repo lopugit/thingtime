@@ -92,9 +92,9 @@ test('family is derived from provider and id', () => {
 
 test('provider availability is key presence only, honouring the Anthropic auth-token alias', () => {
   assert.deepEqual(aiProviderStatusFromEnv({}), NONE);
-  assert.deepEqual(aiProviderStatusFromEnv({ ANTHROPIC_API_KEY: '   ' }), NONE);
-  assert.deepEqual(aiProviderStatusFromEnv({ ANTHROPIC_AUTH_TOKEN: 'tok' }), ANTHROPIC_ONLY);
-  assert.deepEqual(aiProviderStatusFromEnv({ ANTHROPIC_API_KEY: 'sk', OPENAI_API_KEY: 'sk' }), BOTH_CONFIGURED);
+  assert.deepEqual(aiProviderStatusFromEnv({ CLAUDE_CODE_OAUTH_TOKEN: '   ' }), NONE);
+  assert.deepEqual(aiProviderStatusFromEnv({ CLAUDE_CODE_OAUTH_TOKEN: 'tok' }), ANTHROPIC_ONLY);
+  assert.deepEqual(aiProviderStatusFromEnv({ CLAUDE_CODE_OAUTH_TOKEN: 'sk', OPENAI_API_KEY: 'sk' }), BOTH_CONFIGURED);
 });
 
 test('a probe verdict layers onto the env status; a rejected key makes the provider unusable, an unknown verdict does not', () => {
