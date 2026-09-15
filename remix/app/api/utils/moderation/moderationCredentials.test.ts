@@ -5,13 +5,13 @@ import { createOmniTextScreen } from './textModeration';
 import { createOmniScreen } from './openaiProvider';
 
 test('vault credential overrides legacy only for moderation, and reaches both Omni request paths', async () => {
-  const original = { OPENAI_API_KEY: 'old-fixture', ANTHROPIC_API_KEY: 'unchanged' };
+  const original = { OPENAI_API_KEY: 'old-fixture', CLAUDE_CODE_OAUTH_TOKEN: 'unchanged' };
   const resolved = await resolveModerationEnvironment(original, async (platform) => {
     assert.equal(platform, MODERATION_CREDENTIAL_PLATFORM);
     return 'vault-fixture';
   });
   assert.equal(original.OPENAI_API_KEY, 'old-fixture');
-  assert.equal(resolved.ANTHROPIC_API_KEY, 'unchanged');
+  assert.equal(resolved.CLAUDE_CODE_OAUTH_TOKEN, 'unchanged');
   const payloads: any[] = [];
   const fetcher = (async (_url: unknown, init: RequestInit) => {
     assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer vault-fixture');

@@ -4,10 +4,10 @@ import { getAdminIntegrationClaimsCollection, getLopuCredentialsCollection } fro
 import { COLLECTION_SCHEMA_VERSIONS } from '../../../schemas/registry';
 import {
   LOPU_CREDENTIAL_MAX_ITEMS,
-  LOPU_CREDENTIAL_MAX_VALUE_BYTES,
   LOPU_CREDENTIAL_TYPE,
 	credentialTypeForPlatform,
   normalizeCredentialName,
+  requirePlatformCredentialValue,
   normalizeCredentialOrder,
 	normalizeCredentialPlatform,
   type LopuCredentialFetchRequest
@@ -121,19 +121,12 @@ export const listLopuCredentials = async () => {
   return { vaultConfigured: lopuCredentialVaultConfigured(), credentials: rows.map((row: StoredLopuCredential) => publicCredential(row)) };
 };
 
-const requireValue = (value: unknown) => {
-  if (typeof value !== 'string' || !value.trim() || Buffer.byteLength(value, 'utf8') > LOPU_CREDENTIAL_MAX_VALUE_BYTES) {
-		throw new Error('A non-empty credential within the size limit is required.');
-  }
-  return value.trim();
-};
-
 export const createLopuCredential = async (input: { name?: unknown; platform?: unknown; value?: unknown; enabled?: unknown }, actorId: string) => {
   const name = normalizeCredentialName(input.name);
   if (!name) throw new Error('A credential name is required (80 characters maximum).');
 	const platform = normalizeCredentialPlatform(input.platform ?? 'Anthropic');
 	if (!platform) throw new Error('A platform name is required (80 characters maximum).');
-  const value = requireValue(input.value);
+  const value = requirePlatformCredentialValue(platform, input.value);
   const collection = await getLopuCredentialsCollection();
   if (await collection.findOne({ name })) throw new Error('A credential with that name already exists.');
 	if ((await collection.countDocuments({})) >= LOPU_CREDENTIAL_MAX_ITEMS)
@@ -162,7 +155,7 @@ export const rotateLopuCredential = async (id: unknown, value: unknown) => {
   if (typeof id !== 'string' || !id) throw new Error('Choose a credential to rotate.');
   const current = await (await getLopuCredentialsCollection()).findOne({ id });
   if (!current) throw new Error('Credential not found.');
-  const encrypted = encrypt(id, requireValue(value));
+  const encrypted = encrypt(id, requirePlatformCredentialValue(current.platform ?? 'Anthropic', value));
   await (await getLopuCredentialsCollection()).updateOne({ id }, { $set: { ...encrypted, updatedAt: new Date() } });
 };
 
@@ -232,7 +225,7 @@ export const fetchLopuCredentialBundle = async (platform = 'Anthropic') => {
 		platform: row.platform ?? 'Anthropic',
 		credentialType: row.credentialType,
 		value: decrypt(row)
-	}));
+	})).filter((entry) => credentialTypeForPlatform(entry.platform) !== LOPU_CREDENTIAL_TYPE || (entry.credentialType === LOPU_CREDENTIAL_TYPE && entry.value.startsWith('sk-ant-oat'))).slice(0, 8);
 };
 
 export const bootstrapLopuCredentialsIfEmpty = async (entries: Array<{ name: string; value: string }>, actorId: string) => {

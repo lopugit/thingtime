@@ -25,6 +25,7 @@ import {
   Tr
 } from '@chakra-ui/react';
 
+import { SystemVault } from './SystemVault';
 import { AdminPanel } from '~/components/Admin/AdminPanel';
 import { CIControlDashboard } from '~/components/Admin/CIControl/CIControlDashboard';
 import { IntegrationManager } from '~/components/Admin/IntegrationManager';
@@ -1032,6 +1033,7 @@ export const AdminDashboard = () => {
             </React.Suspense>
           </TabPanel>
           <TabPanel px={0}>
+            <SystemVault key={user.id} cacheIdentity={user.id} />
             <AdminPanel />
           </TabPanel>
         </TabPanels>

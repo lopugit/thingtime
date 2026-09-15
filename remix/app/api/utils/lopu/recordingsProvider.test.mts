@@ -37,6 +37,14 @@ mock.module(new URL('./recordingsConnections.ts', import.meta.url).href, {
 		}
 	}
 });
+mock.module(new URL('../ai/claudeOAuth.ts', import.meta.url).href, { namedExports: {
+  createClaudeOAuthClient: (options: any) => ({ messages: { create: async (body: any) => {
+    assert.equal(options.token, 'synthetic-claude');
+    assert.equal(body.tools, undefined);
+    assert.deepEqual(body.messages, [{role:'user',content:'Please buy bike tubes.'}]);
+    return {content:[{type:'text',text:JSON.stringify({items:[{kind:'todo',title:'Buy bike tubes',description:'',evidence:'buy bike tubes'}]})}]};
+  } } })
+} });
 const { readRecordingBytes, transcribeRecording, analyzeRecording } = await import('./recordingsProvider');
 
 beforeEach(() => {
@@ -71,20 +79,12 @@ test('real SDK transcription falls through 429 to the next selected key without 
 	assert.equal(guards, 2);
 });
 
-test('analysis can fall through to a Claude API key without sending audio or enabling tools', async () => {
+test('analysis can fall through to the Claude OAuth runtime without sending audio or enabling tools', async () => {
 	const transcript = 'Please buy bike tubes.';
 	mock.method(globalThis, 'fetch', async (url: any, options: any) => {
 		assert.equal(options.redirect, 'error');
 		if (new URL(String(url)).hostname === 'limited.example.test') return Response.json({ error: { message: 'quota' } }, { status: 429 });
-		assert.equal(new Headers(options.headers).get('x-api-key'), 'synthetic-claude');
-		const body = JSON.parse(options.body);
-		assert.equal(body.tools, undefined);
-		assert.deepEqual(body.messages, [{ role: 'user', content: transcript }]);
-		return Response.json({
-			content: [
-				{ type: 'text', text: JSON.stringify({ items: [{ kind: 'todo', title: 'Buy bike tubes', description: '', evidence: 'buy bike tubes' }] }) }
-			]
-		});
+		throw new Error('Claude must never send an API-key HTTP request.');
 	});
 	const insights = await analyzeRecording(transcript, async () => {}, 'owner');
 	assert.equal(insights[0].title, 'Buy bike tubes');
