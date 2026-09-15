@@ -30,7 +30,7 @@ const directClientFiles = sourceFiles(appRoot)
 
 assert.deepEqual(
   directClientFiles,
-  ['app/api/utils/lopu/chat.ts', 'app/api/utils/lopu/musing.ts', 'app/api/utils/lopu/recordingsProvider.ts', 'app/api/utils/moderation/claudeProvider.ts'],
+  ['app/api/utils/ai/claudeOAuth.ts', 'app/api/utils/lopu/chat.ts', 'app/api/utils/lopu/musing.ts', 'app/api/utils/lopu/recordingsProvider.ts'],
   'new direct AI clients must be added to the Thingtime Admin model-routing contract'
 );
 

@@ -1,3 +1,4 @@
+import { resetAiProviderProbeCache } from '~/api/utils/ai/providerProbe';
 import { json, readJsonBody } from '~/api/http';
 import { withAdminPrivateResponse } from '~/api/utils/admin/adminResponse';
 import { requireAdmin } from '~/api/utils/auth/requireAdmin';
@@ -44,6 +45,7 @@ export const action = ({ request }: { request: Request }) =>
         default:
           return json({ ok: false, error: 'Choose a supported credential action.' }, { status: 400, headers: privateHeaders });
       }
+      resetAiProviderProbeCache();
       return json({ ok: true, ...(await listLopuCredentials()) }, { headers: privateHeaders });
     } catch (error) {
       return json(
