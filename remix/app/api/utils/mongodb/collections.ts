@@ -760,6 +760,7 @@ export const createThingsDataIndexes = (db: any, { relationshipLookups = false, 
   const col = taggedCollection(thingsCollection(db), 'things');
   return [
     col.createIndex({ shareId: 1 }, { unique: true, sparse: true }),
+    col.createIndex({ geo: '2dsphere' }, { name: 'things_geo' }),
     // generalized uniqueness for system kinds (username:<u>, hashed email
     // keys, schema:<id>, …) AND relationship dedupe (followKey:<a>:<b>,
     // memberKey:, dmKey:, inviteCode:, emojiKey:, friendKey:, voteKey:,

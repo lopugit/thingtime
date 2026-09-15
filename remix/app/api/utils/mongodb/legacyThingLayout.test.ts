@@ -33,9 +33,9 @@ const fixture = async (residue = 0) => {
 
 test('steady home plan omits eight legacy indexes while compatibility plan retains them', async () => {
   const home = await thingsIndexPlanEntries();
-  assert.equal(home.length + 1, 49); // shared ephemeral TTL replaces the prior diagnostic TTL; logs add no indexes
+  assert.equal(home.length + 1, 50); // shared ephemeral TTL replaces the prior diagnostic TTL; geographic queries add one 2dsphere index
   const fallback = await thingsIndexPlanEntries({ legacyLookups: true });
-  assert.equal(fallback.length + 1, 57);
+  assert.equal(fallback.length + 1, 58);
   for (const name of LEGACY_THING_INDEX_NAMES) {
     assert.equal(home.some(index => index.name === name), false);
     assert.equal(fallback.some(index => index.name === name), true);
