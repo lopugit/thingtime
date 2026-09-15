@@ -48,12 +48,13 @@ export const lopuResultLinks = (data: unknown): LopuToolLink[] => {
 		const kind = text(item.kind) || (Array.isArray(item.thingtime) ? text(item.thingtime[0]) : '') || fallback;
 		const name = text(crystal.name) || text(item.name) || text(item.title);
 		if (id && (kind || fallback === 'thing')) {
-			const key = encodeURIComponent(
-				text(crystal.componentKey) || text(item.componentKey) || text(crystal.actionKey) || text(item.actionKey) || text(item.key) || id
-			);
+			// Route keys are kind-scoped: an action's key must never address a
+			// component route (or vice versa), so each kind reads only its own
+			// key before falling back to the generic `key` and finally the id.
+			const keyFor = (own: unknown, alsoOwn: unknown) => encodeURIComponent(text(own) || text(alsoOwn) || text(item.key) || id);
 			if (kind === 'webpage') push(`/builder?page=${encodeURIComponent(id)}`, `Open ${name || 'the page'} in the builder`);
-			else if (kind === 'component') push(`/components/${key}`, `Open ${name || 'the component'}`);
-			else if (kind === 'action') push(`/actions/${key}`, `Open ${name || 'the action'}`);
+			else if (kind === 'component') push(`/components/${keyFor(crystal.componentKey, item.componentKey)}`, `Open ${name || 'the component'}`);
+			else if (kind === 'action') push(`/actions/${keyFor(crystal.actionKey, item.actionKey)}`, `Open ${name || 'the action'}`);
 			else if (kind === 'schema') push(`/schemas/${encodeURIComponent(id)}`, `Open ${name || 'the schema'}`);
 			else push(`/thing/${encodeURIComponent(id)}`, `Open ${name || 'the thing'}`);
 		}

@@ -40,6 +40,28 @@ test('unsafe, malformed, unresolved and private payload references never become 
 	assert.deepEqual(lopuResultLinks(cycle), []);
 });
 
+test('route keys stay scoped to their own kind instead of borrowing a sibling key', () => {
+	// A component carrying only an actionKey must fall back to its id, not
+	// address /components/ with an unrelated action's key (and vice versa).
+	assert.deepEqual(
+		lopuResultLinks({ components: [{ id: 'c1', actionKey: 'run-payroll', name: 'Card' }] }).map((link) => link.href),
+		['/components/c1']
+	);
+	assert.deepEqual(
+		lopuResultLinks({ actions: [{ id: 'a1', componentKey: 'table', name: 'Compare' }] }).map((link) => link.href),
+		['/actions/a1']
+	);
+	// Each kind still prefers its own key, and the generic `key` still works.
+	assert.deepEqual(
+		lopuResultLinks({
+			components: [{ id: 'c2', componentKey: 'table', actionKey: 'run-payroll' }],
+			actions: [{ id: 'a2', actionKey: 'compare' }],
+			hits: [{ id: 'a3', kind: 'action', key: 'generic' }]
+		}).map((link) => link.href),
+		['/actions/generic', '/components/table', '/actions/compare']
+	);
+});
+
 test('reminder lists link their public Things, related Things and destination conversations', () => {
 	assert.deepEqual(
 		lopuResultLinks([{ id: 'private-control', thingId: 'task', relatedThingIds: ['reference'], chatId: 'conversation' }]).map((link) => link.href),
