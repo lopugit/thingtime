@@ -305,6 +305,7 @@ test('Claude: streams tool input, executes as the viewer, feeds tool_result back
   assert.equal(outcome.provider, 'claude');
   assert.equal(outcome.stopReason, 'end_turn');
   assert.equal(outcome.text, 'Building… Done ✨');
+  assert.ok(outcome.toolCalls[0].links?.some((link) => link.href === '/builder?page=page-new'));
   assert.deepEqual(outcome.toolCalls.map((call) => ({ name: call.name, ok: call.ok, thingId: call.thingId })), [{ name: 'create_page', ok: true, thingId: 'page-new' }]);
   assert.equal(outcome.usage?.outputTokens, 22);
 
