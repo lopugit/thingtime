@@ -44,6 +44,9 @@ jobs:
             .github
             vercel.json
 
+      - name: Verify exact configured AI model orders
+        run: node --test .github/scripts/admin-model-order.test.mjs
+
       - name: Validate JavaScript syntax
         run: |
           set -euo pipefail

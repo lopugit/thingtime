@@ -166,3 +166,10 @@ Detailed behavior is enforced by resolve-pr-conflicts-routing-contract.mjs and
 the comments beside each job and publication boundary below. Keep this file
 below the guarded byte limit: GitHub leaves oversized revisions permanently
 pre-queued with no jobs, logs, or cancellable run graph.
+
+## Exact configured workflow model orders
+
+- Run `node --test .github/scripts/admin-model-order.test.mjs`. Resolver,
+  rebase and build doctor retain configured compatible entries without adding
+  default. Missing, invalid, incompatible-only and oversized orders stop before
+  a model invocation. An explicitly selected default retains its position.

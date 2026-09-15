@@ -1322,7 +1322,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          waterfall='["default"]'
+          waterfall='[]'
           response="$RUNNER_TEMP/rebase-model-waterfall.json"
           if curl --disable --fail --silent --show-error --proto '=https' --tlsv1.2 \
                --connect-timeout 5 --max-time 12 --retry 2 --retry-delay 1 \
@@ -1342,9 +1342,6 @@ jobs:
               | select(length == (unique | length))
             ' "$response" 2>/dev/null || true)"
             [ -z "$configured" ] || waterfall="$configured"
-          fi
-          if ! jq -e 'index("default") != null' >/dev/null <<<"$waterfall"; then
-            waterfall="$(jq -c '. + ["default"]' <<<"$waterfall")"
           fi
           # Re-validate each entry against fixed patterns and rebuild the
           # Claude chain only from matched tokens. Claude Code runs
@@ -1409,16 +1406,9 @@ jobs:
             models+=("$model")
           done
           if [ "$mapping_failed" -eq 1 ] || [ "${#models[@]}" -eq 0 ]; then
-            models=("default")
-            claude_effort="max"
+            echo "::error::No valid configured Claude model order; no model will run."
+            exit 1
           fi
-          has_default=0
-          for existing in "${models[@]}"; do
-            if [ "$existing" = "default" ]; then
-              has_default=1
-            fi
-          done
-          [ "$has_default" -eq 1 ] || models+=("default")
           primary="${models[0]}"
           args="--model $primary"
           if [ "${#models[@]}" -gt 1 ]; then
@@ -1429,10 +1419,8 @@ jobs:
           # Fail closed at the loader if the chain exceeds the 2048-character
           # transport cap enforced downstream, instead of erroring after work.
           if [ "${#args}" -gt 2048 ]; then
-            echo "::warning::Validated model args exceed the 2048-character transport cap; using [default]."
-            primary="default"
-            claude_effort="max"
-            args="--model $primary --effort $claude_effort"
+            echo "::error::Validated model args exceed the 2048-character transport cap; no model will run."
+            exit 1
           fi
           echo "model_args=$args" >> "$GITHUB_OUTPUT"
           echo "primary_model=$primary" >> "$GITHUB_OUTPUT"
