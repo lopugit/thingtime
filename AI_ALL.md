@@ -187,6 +187,27 @@ or authorization for new work.
   references and private metadata in logs/toasts. Preserve protected storage
   projections rather than weakening validators to get a migration green.
 
+### Keep Vercel variables minimal and configuration in the vault
+
+- Keep Vercel environment variables to the absolute minimum. Store application
+  configuration, provider credentials and environment-specific values in the
+  Thingtime vault, scoped to the deployment environment, instead of duplicating
+  them across Vercel production, preview, development or custom environments.
+- Keep only irreducible startup values in Vercel: the minimum needed to identify
+  the environment and securely reach and unlock the vault. Do not create a
+  circular dependency by storing the only vault bootstrap credential inside
+  that same vault. Reuse platform-provided deployment metadata where possible.
+  A new Vercel variable requires a documented bootstrap necessity.
+- Resolve configuration through a central server-side vault abstraction with
+  explicit environment selection, validation and bounded caching. Preserve
+  production/development isolation and fail closed when required configuration
+  is unavailable; never silently borrow another environment's credentials.
+  Keep secrets out of client bundles, build artifacts, logs and public APIs.
+- Migrate existing Vercel values through the canonical vault workflow. Verify
+  each affected environment's build and runtime behavior, rotation and recovery
+  before removing the old value. Keep a bounded rollback path and document
+  fork-safe setup with placeholders rather than real credentials.
+
 ### Register and negotiate the real executable API
 
 - API changes must update route implementation/import map, canonical docs,

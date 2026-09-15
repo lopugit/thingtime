@@ -31,6 +31,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-15 — **Codex (AI)** — System now manages shared platform credentials,
+  integration secrets and Vercel environment variables with verified reveals.
+  Claude chat, voice, recordings and moderation use the shared Claude OAuth
+  runtime; explicit chat selections preserve model/effort/speed and never
+  silently switch providers. Packages the pinned runtime for Vercel.
+  [Validation and rollout notes](../PRs/811-claude-oauth-only-shared-system-vault.md).
+- 2026-09-15 — AI workflow model order preserves configured entries without appending or requiring a default fallback; adds save/load regression coverage and capability negotiation. — **Codex (AI)**
+
+- 2026-09-15 — **Codex (AI)** — Moderation now resolves a dedicated encrypted
+  `OpenAI Moderation` admin-vault credential per deployment environment for
+  images, invitation avatars and text, ahead of the legacy server key. Rotation
+  is immediate; vault failures remain closed. No new env variable or index.
+
+- 2026-09-15 — **Codex (AI)** — Added the shared AI policy requiring minimal Vercel bootstrap variables and environment-scoped application configuration in the Thingtime vault, with centralized resolution, isolation and verified migration/rollback.
+
 - 2026-09-14 — **Codex (AI)** — Added protected admin-searchable error-log Things in `/things?logs=1`, bounded seven-day retention using shared Thing indexes, request correlation, redacted shared/API error capture and richer moderation provider diagnostics. [PR 799 details](../PRs/799-admin-error-log-things-searchable-admin-error-log-things.md).
 
 - 2026-09-14 · Codex: Subspace icon/banner settings now reuse upload-first media fields with **Use URL instead**, previews and retry; added purpose-bound, quota-accounted branding attachments and the repo-wide media-input rule. Desktop/mobile URL saves and production build verified; upload storage remains subject to existing approval. See [PR #805 details](../PRs/805-subspace-image-upload-upload-first-subspace-branding.md).

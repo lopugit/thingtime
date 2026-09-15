@@ -1,3 +1,4 @@
+import { createClaudeOAuthClient } from '../ai/claudeOAuth';
 import OpenAI, { toFile } from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { getAttachmentDownload } from '../attachments/attachments';
@@ -131,13 +132,7 @@ export const analyzeRecording = async (transcript: string, beforeSend?: () => Pr
 	const attempt = async (connection: LopuVaultProviderRecord | undefined, signal?: AbortSignal) => {
 		if (connection?.provider === 'anthropic') {
 			const choice = resolveAiPreferredAnthropicChoice(preferences, process.env.LOPU_CLAUDE_MODEL || 'claude-sonnet-4-6');
-			const api = new Anthropic({
-				apiKey: connection.token,
-				baseURL: connection.endpoint,
-				timeout: 20_000,
-				maxRetries: 0,
-				fetch: (url, init) => fetch(url, { ...init, redirect: 'error' })
-			});
+			const api = createClaudeOAuthClient({ token: connection.token });
 			const result = await api.messages.create(
 				{
 					model: connection.model || choice.model,

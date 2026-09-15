@@ -1,3 +1,4 @@
+import { createClaudeOAuthClient } from '../ai/claudeOAuth';
 // Claude API vision moderation provider. One bounded request per image:
 // base64 image + a strict-JSON classification ask. The raw image never
 // persists anywhere new — bytes come from the private S3 object and go only
@@ -51,7 +52,7 @@ export const createClaudeModerationProvider = (env: NodeJS.ProcessEnv = process.
 	// provider default used when the waterfall says 'default'.
 	const providerDefaultModel = env.TT_MODERATION_MODEL?.trim() || DEFAULT_MODERATION_MODEL;
 	let lastResolvedModel = providerDefaultModel;
-	const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+	const client = createClaudeOAuthClient({ env });
 	return {
 		name: 'claude',
 		get model() {

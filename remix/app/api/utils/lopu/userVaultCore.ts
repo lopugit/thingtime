@@ -57,7 +57,7 @@ export const LOPU_PROVIDER_TEMPLATES: readonly LopuProviderTemplate[] = [
 		id: 'anthropic',
 		label: 'Anthropic / Claude',
 		endpoint: 'https://api.anthropic.com',
-		tokenLabel: 'Anthropic API key',
+		tokenLabel: 'Claude Code OAuth token',
 		models: [
 			{ id: 'claude-fable-5', label: 'Claude Fable 5', efforts: CLAUDE_REASONING, speeds: NORMAL },
 			{ id: 'claude-opus-5', label: 'Claude Opus 5', efforts: CLAUDE_REASONING, speeds: NORMAL_FAST },
