@@ -1693,6 +1693,14 @@ email whose link points at the attacker.
       uploads stamp provider `openai`; switching either surface to Off stops
       new stamps. Choices survive a reload (settings collection, not local
       state).
+- [ ] Store a dedicated **OpenAI Moderation** credential in the encrypted admin
+      vault separately on production and develop. A valid vault key overrides
+      a stale legacy env key for invitation avatars, media and text; clean
+      synthetic input obtains a real Omni verdict. Rotation is observed on the
+      next request, the other environment stays isolated, and a vault read or
+      decryption failure never silently falls back. Paid chat/CI credentials
+      remain unchanged. Create and then cancel a zero-credit test invitation
+      with an avatar; normal vault/API reads must never return its secret.
 - [ ] With an OpenAI key configured, a post/comment containing threatening
       harassment vanishes from feeds/threads for everyone shortly after
       creation and a `text` flag row (with excerpt, no View button) appears in

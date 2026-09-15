@@ -31,6 +31,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-15 — **Codex (AI)** — Moderation now resolves a dedicated encrypted
+  `OpenAI Moderation` admin-vault credential per deployment environment for
+  images, invitation avatars and text, ahead of the legacy server key. Rotation
+  is immediate; vault failures remain closed. No new env variable or index.
+
 - 2026-09-15 — **Codex (AI)** — Added the shared AI policy requiring minimal Vercel bootstrap variables and environment-scoped application configuration in the Thingtime vault, with centralized resolution, isolation and verified migration/rollback.
 
 - 2026-09-14 — **Codex (AI)** — Added protected admin-searchable error-log Things in `/things?logs=1`, bounded seven-day retention using shared Thing indexes, request correlation, redacted shared/API error capture and richer moderation provider diagnostics. [PR 799 details](../PRs/799-admin-error-log-things-searchable-admin-error-log-things.md).
