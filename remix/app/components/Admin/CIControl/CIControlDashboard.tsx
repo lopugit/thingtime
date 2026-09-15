@@ -92,7 +92,7 @@ import {
 import { useApi } from '~/hooks/useApi';
 import { readLocalCache, writeLocalCache } from '~/hooks/localCache';
 import { CARD_STYLES } from '~/theme/card';
-import { ClaudeCredentialWaterfall } from './ClaudeCredentialWaterfall';
+import { PlatformCredentials } from '../PlatformCredentials';
 import {
 	ALL_PULL_REQUEST_STATUS_FILTER_IDS,
 	matchesPullRequestStatusFilter,
@@ -2112,7 +2112,7 @@ export const CIControlDashboard = ({ cacheIdentity }: { cacheIdentity: string })
         onToggleCollapsed={() => toggleSection('automation')}
       />
 
-      <ClaudeCredentialWaterfall
+      <PlatformCredentials readOnly
         cacheIdentity={cacheIdentity}
         collapsed={collapsedSections.has('credentials')}
         onToggleCollapsed={() => toggleSection('credentials')}
