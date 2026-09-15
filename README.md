@@ -8,6 +8,51 @@ With Thingtime, you can create and share any abstract data structure you want, o
 
 At Thingtime, we believe that data and knowledge should be open, accessible, and empowering. We are building Thingtime to make this vision a reality. Join us and start exploring the limitless possibilities of data!
 
+## Platform Secure Vault and Claude OAuth
+
+Manage shared platform credentials at **Admin → System → Thingtime Secure
+Vault**. Existing CI credentials keep their IDs and encrypted records; CI
+Control shows the same list and links to System for changes. Enabled Claude
+accounts run in priority order, with at most eight accounts considered per
+request. A credential failure can try the next account before output begins,
+using the same model, effort and speed. An explicit chat model never silently
+switches to another provider.
+
+Fork setup:
+
+1. Set `THINGTIME_ADMIN_VAULT_KEY=<base64url-encoded-32-byte-key>` in each
+   deployment environment. Keep the encryption key stable; changing it without
+   re-encrypting records makes existing entries unreadable.
+2. Add a **Claude / Anthropic** entry in System using a Claude Code OAuth token
+   (`sk-ant-oat…`). The existing entries formerly managed in CI Control already
+   work here. Standalone local setups may use
+   `CLAUDE_CODE_OAUTH_TOKEN_THINGTIME` or `CLAUDE_CODE_OAUTH_TOKEN` when the
+   platform vault has no enabled Claude entries. Anthropic API keys and
+   `ANTHROPIC_AUTH_TOKEN` are never used for inference.
+3. CI keeps its existing `THINGTIME_CI_ROUTER_SECRET` signed delivery protocol
+   and pulls its AI credential subset from that same store. The dedicated
+   `OpenAI Moderation` entry remains scoped to moderation.
+4. To manage Vercel variables in System, set `VERCEL_PROJECT_ID` and the team's
+   `VERCEL_TEAM_ID` (or `VERCEL_ORG_ID`). Add a platform credential labelled
+   **Vercel**, or configure `VERCEL_API_TOKEN`. The server fixes the project and
+   origin; clients cannot select another project. Lists omit values. Showing
+   one value requires fresh current-password or passkey verification. Vercel
+   `sensitive` values cannot be revealed; they can be replaced. Creates use
+   encrypted variables with no upsert, and edits take effect on redeployment.
+
+The pinned official Claude Code runtime runs with built-in tools, MCP servers,
+user settings and session persistence disabled. Thingtime retains its own
+permission-checked tool executor. The Vercel build includes a compressed native
+executable with a SHA-256/size manifest, checks the function size, and expands
+it into private temporary storage before execution. No runtime download or
+Anthropic API-key fallback is performed. Provider access checks distinguish
+OAuth configuration from model/allowance verification by a real reply.
+
+Local worktree verification: `http://localhost:15080/admin/system` (Nitro
+15082, HMR 15081). Tailscale/Funnel was unavailable on this machine during
+verification because the configured Tailscale executable was missing. Standard
+checkouts continue to derive ports from `remix/scripts/worktree-ports.cjs`.
+
 ## Lopu reminders and notification tests
 
 The Lopu page keeps one conversation while switching between Chat and Voice.

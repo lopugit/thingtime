@@ -1,3 +1,4 @@
+import { claudeOAuthConfigured } from '../ai/claudeOAuthCore';
 // Moderation provider registry. The provider analyzes ONE image and returns
 // a ModerationVerdict; the orchestrator (analyzeAttachment.ts) owns loading
 // bytes, stamping results, and every attachment-shape decision.
@@ -103,11 +104,11 @@ export const resolveModerationProvider = async (
 			`[moderation] unrecognized THINGTIME_MODERATION_PROVIDER "${configured}" — using the key-based default. Valid: openai+claude | tiered | claude | openai | test | off.`
 		);
 	}
-	if (env.OPENAI_API_KEY && env.ANTHROPIC_API_KEY) {
+	if (env.OPENAI_API_KEY && claudeOAuthConfigured(env)) {
 		const { createTieredModerationProvider } = await import('./openaiProvider');
 		return { kind: 'provider', provider: createTieredModerationProvider(env) };
 	}
-	if (env.ANTHROPIC_API_KEY) {
+	if (claudeOAuthConfigured(env)) {
 		const { createClaudeModerationProvider } = await import('./claudeProvider');
 		return { kind: 'provider', provider: createClaudeModerationProvider(env) };
 	}
