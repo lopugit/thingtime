@@ -3236,7 +3236,7 @@ email whose link points at the attacker.
       at least five total entries (more than the historical 3-entry cap);
       drag a row by its dedicated handle, use the Up/Down controls, remove a
       non-default row, save, reload, and confirm the exact order persists.
-      `default` stays present and cannot be removed. The effort select only
+      Remove `default`, apply and save a single explicit model, then reload and reopen the selector; both the summary and public GET must retain exactly that model without an added fallback. The effort select only
       offers that model's tiers and the speed select only appears for models
       with a fast lane; re-adding an already-listed combo is blocked.
 - [ ] Exercise the editor at desktop and mobile widths from the top to the
@@ -3246,8 +3246,8 @@ email whose link points at the attacker.
 - [ ] Composed variant ids (`<model>[:<effort>][:fast]`) validate per model:
       efforts a model does not support, `fast` on a model without a fast
       lane, and duplicate segments are rejected on write; reads drop unknown
-      entries without discarding the rest of the order and always keep
-      `default` present.
+      entries without discarding the rest of the order or adding
+      `default`.
 - [ ] Resolver workflow config parsing in the `github-actions` control plane
       (PR #391) validates the widened-but-closed grammar: unique 1..256
       entries matching `^[a-z0-9][a-z0-9.:-]{0,63}$`, parsed into
