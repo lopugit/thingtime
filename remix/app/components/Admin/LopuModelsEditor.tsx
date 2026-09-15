@@ -24,7 +24,7 @@ import { useApi } from '~/hooks/useApi';
 
 // Admin editor for Lopu's model catalog (the `ai-model` things): the state of
 // each provider key (verified / invalid / unverified / missing, with a
-// "Re-check keys" action that bypasses the server's probe cache), enable or
+// "Re-check access" action that bypasses the server's probe cache), enable or
 // disable each model, and pick the chat defaults (model / effort / speed)
 // that every viewer starts from. Rendered inside AdminPanel. Every action is
 // re-checked server-side; this is only the surface.
@@ -81,7 +81,7 @@ const providerLabel = (provider: string): string => PROVIDER_LABELS[provider] ??
 
 // which env var carries each provider's key (names only — never a value)
 const PROVIDER_ENV_HINTS: Record<string, string> = {
-	anthropic: 'ANTHROPIC_API_KEY (or ANTHROPIC_AUTH_TOKEN)',
+	anthropic: 'Claude OAuth token in the admin credential vault',
 	openai: 'OPENAI_API_KEY'
 };
 
@@ -233,7 +233,7 @@ export const LopuModelsEditor = () => {
 					.join(' · ');
 				const rejected = Object.values(next.providers).some((info) => info.verified === false);
 				lopu({
-					title: rejected ? 'A provider rejected its key' : 'Provider keys re-checked ✨',
+					title: rejected ? 'Provider access needs attention' : 'Provider access re-checked',
 					description: summary,
 					status: rejected ? 'warning' : 'success',
 					duration: 6000
@@ -293,11 +293,10 @@ export const LopuModelsEditor = () => {
 		<Flex flexDirection="column" rowGap={3}>
 			<Text sx={eyebrow}>Lopu models 🦄</Text>
 			<Text fontSize="xs" color={LOPU_UI.muted} lineHeight="1.5">
-				The catalog Lopu may think with. A model is offered to people only while it is enabled here, its provider key is set on the server, and the
-				provider has not rejected that key.
+				The catalog Lopu may think with. A model is offered to people only while it is enabled here, its provider credential is configured, and provider access is available.
 			</Text>
 
-			<Text sx={eyebrow}>Provider keys</Text>
+			<Text sx={eyebrow}>Provider access</Text>
 			<Flex flexDirection="column" rowGap={1}>
 				{providerRows.map(([provider, info]) => {
 					const state = providerKeyState(info);
@@ -321,7 +320,7 @@ export const LopuModelsEditor = () => {
 							</Text>
 							<Chip tone={KEY_STATE_TONES[state]}>
 								{KEY_STATE_MARKS[state]}
-								{PROVIDER_KEY_STATE_LABELS[state]}
+								{provider === 'anthropic' ? (info?.configured ? 'OAuth configured' : 'OAuth missing') : PROVIDER_KEY_STATE_LABELS[state]}
 							</Chip>
 							<Text fontSize="11px" color={LOPU_UI.muted} minWidth={0} flex="1 1 220px" wordBreak="break-word">
 								{describeProviderKey(provider, info, state)}
@@ -332,11 +331,10 @@ export const LopuModelsEditor = () => {
 			</Flex>
 			<Flex columnGap={2} rowGap={2} flexWrap="wrap" alignItems="center">
 				<Button size="xs" variant="outline" borderColor={LOPU_UI.borderColor} color={LOPU_UI.ink} borderRadius={LOPU_UI.radiusSm} isLoading={probing} onClick={recheckKeys}>
-					Re-check keys
+					Re-check access
 				</Button>
 				<Text fontSize="xs" color={LOPU_UI.muted}>
-					Asks each provider whether its key still works (one GET /v1/models, 5 s cap). Verdicts are cached for 10 minutes; a rejected key hides its
-					models until it is fixed, an unreachable provider leaves them offered.
+					Checks Claude OAuth configuration in the System vault and OpenAI key access. Claude model access and available usage are checked when a reply runs.
 				</Text>
 			</Flex>
 
@@ -381,8 +379,8 @@ export const LopuModelsEditor = () => {
 									</Text>
 									<Chip>{providerLabel(model.provider)}</Chip>
 									{model.isDefault && <Chip tone="ink">default</Chip>}
-									{(keyState === 'missing' || (!keyInfo && model.enabled && !model.available)) && <Chip tone="danger">needs {providerLabel(model.provider)} key</Chip>}
-									{keyState === 'invalid' && <Chip tone="danger">{providerLabel(model.provider)} key invalid</Chip>}
+									{(keyState === 'missing' || (!keyInfo && model.enabled && !model.available)) && <Chip tone="danger">needs {model.provider === 'anthropic' ? 'Claude OAuth' : `${providerLabel(model.provider)} key`}</Chip>}
+									{keyState === 'invalid' && <Chip tone="danger">{model.provider === 'anthropic' ? 'Claude OAuth unavailable' : `${providerLabel(model.provider)} key invalid`}</Chip>}
 								</Flex>
 								<Text fontSize="11px" color={LOPU_UI.muted} wordBreak="break-word" mt="2px">
 									{model.id}
@@ -416,7 +414,7 @@ export const LopuModelsEditor = () => {
 				{stored.model && stored.model !== catalog.defaults.model
 					? catalog.defaults.model
 						? ` (stored ${stored.model} is unavailable, so the first available model stands in)`
-						: ` (stored ${stored.model} is unavailable and no other model is usable — Lopu answers from the canned fallback until a provider key verifies)`
+						: ` (stored ${stored.model} is unavailable and no other model is usable — Lopu answers from the canned fallback until provider access is restored)`
 					: ''}
 				.
 			</Text>
@@ -431,7 +429,7 @@ export const LopuModelsEditor = () => {
 						<option key={model.id} value={model.id}>
 							{model.label}
 							{model.enabled ? '' : ' — disabled'}
-							{model.enabled && !model.available ? (model.verified === false ? ` — ${providerLabel(model.provider)} key invalid` : ` — needs ${providerLabel(model.provider)} key`) : ''}
+							{model.enabled && !model.available ? (model.verified === false ? ` — ${model.provider === 'anthropic' ? 'Claude OAuth unavailable' : `${providerLabel(model.provider)} key invalid`}` : ` — needs ${model.provider === 'anthropic' ? 'Claude OAuth' : `${providerLabel(model.provider)} key`}`) : ''}
 						</option>
 					))}
 				</Select>

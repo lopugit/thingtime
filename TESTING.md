@@ -429,6 +429,15 @@
   daily notification transaction commits. Retries never send another push for
   the same daily ID; blocked preferences/checkpoints send none. A push transport
   failure does not erase or duplicate the durable bell reminder.
+## System vault and OAuth-only Claude
+
+- [ ] System lists the existing CI credential IDs and integration secrets; CI Control uses the same list and its Manage link opens System.
+- [ ] At desktop and 390px, scroll System top to bottom. Open platform menus, replacement forms, and Show dialogs for long names; no large blank form gaps, clipping or horizontal overflow.
+- [ ] Add/rotate/enable/reorder a disposable Claude OAuth entry. The next Claude and signed CI request use the same enabled entries; legacy Anthropic API keys are rejected and excluded from delivery.
+- [ ] Request Claude Opus 5 with High effort. Confirm the provider reports that model; a failed OAuth credential may retry another account with identical settings, but cannot become GPT-4o mini or drop the effort setting. Text, tools, cancellation, usage, refusal and incomplete-tool failures remain correct.
+- [ ] Deployment variable lists and mutation responses never contain values. Wrong password, revoked admin access, wrong-origin requests and arbitrary project fields fail closed. Show opens only the selected encrypted variable; Vercel-sensitive values stay write-only. Add a disposable preview variable without overwriting an existing variable, replace it, and delete it; each successful write reports that redeployment is required.
+- [ ] Build the Vercel output, verify the compressed native runtime and function size, then smoke the built server's capability manifest for System environment 1.0.0, vault reveal 1.1.0 and platform credentials 3.0.0.
+
 ## Verified vault reveal
 
 - [ ] At desktop and 390px widths, CI, external integrations and personal Secure Vault offer Show without changing ordinary value-free list responses.
@@ -1693,6 +1702,14 @@ email whose link points at the attacker.
       uploads stamp provider `openai`; switching either surface to Off stops
       new stamps. Choices survive a reload (settings collection, not local
       state).
+- [ ] Store a dedicated **OpenAI Moderation** credential in the encrypted admin
+      vault separately on production and develop. A valid vault key overrides
+      a stale legacy env key for invitation avatars, media and text; clean
+      synthetic input obtains a real Omni verdict. Rotation is observed on the
+      next request, the other environment stays isolated, and a vault read or
+      decryption failure never silently falls back. Paid chat/CI credentials
+      remain unchanged. Create and then cancel a zero-credit test invitation
+      with an avatar; normal vault/API reads must never return its secret.
 - [ ] With an OpenAI key configured, a post/comment containing threatening
       harassment vanishes from feeds/threads for everyone shortly after
       creation and a `text` flag row (with excerpt, no View button) appears in
@@ -3219,7 +3236,7 @@ email whose link points at the attacker.
       at least five total entries (more than the historical 3-entry cap);
       drag a row by its dedicated handle, use the Up/Down controls, remove a
       non-default row, save, reload, and confirm the exact order persists.
-      `default` stays present and cannot be removed. The effort select only
+      Remove `default`, apply and save a single explicit model, then reload and reopen the selector; both the summary and public GET must retain exactly that model without an added fallback. The effort select only
       offers that model's tiers and the speed select only appears for models
       with a fast lane; re-adding an already-listed combo is blocked.
 - [ ] Exercise the editor at desktop and mobile widths from the top to the
@@ -3229,8 +3246,8 @@ email whose link points at the attacker.
 - [ ] Composed variant ids (`<model>[:<effort>][:fast]`) validate per model:
       efforts a model does not support, `fast` on a model without a fast
       lane, and duplicate segments are rejected on write; reads drop unknown
-      entries without discarding the rest of the order and always keep
-      `default` present.
+      entries without discarding the rest of the order or adding
+      `default`.
 - [ ] Resolver workflow config parsing in the `github-actions` control plane
       (PR #391) validates the widened-but-closed grammar: unique 1..256
       entries matching `^[a-z0-9][a-z0-9.:-]{0,63}$`, parsed into

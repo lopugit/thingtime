@@ -1,3 +1,4 @@
+import Anthropic from '@anthropic-ai/sdk';
 import assert from 'node:assert/strict';
 import { createServer, type IncomingHttpHeaders, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -109,7 +110,7 @@ const server = createServer(async (request, response) => {
 await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
 const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 const envNames = [
-	'ANTHROPIC_API_KEY',
+	'CLAUDE_CODE_OAUTH_TOKEN',
 	'ANTHROPIC_BASE_URL',
 	'OPENAI_API_KEY',
 	'OPENAI_BASE_URL',
@@ -129,6 +130,11 @@ mock.module(new URL('../settings/prConflictResolverModelWaterfall.ts', import.me
 	}
 });
 
+mock.module(new URL('../ai/claudeOAuth.ts', import.meta.url).href, { exports: {
+  claudeOAuthConfigured: () => Boolean(process.env.CLAUDE_CODE_OAUTH_TOKEN),
+  createClaudeOAuthClient: (options: any = {}) => new Anthropic({ apiKey: null, authToken: options.token || process.env.CLAUDE_CODE_OAUTH_TOKEN, baseURL: process.env.ANTHROPIC_BASE_URL })
+} });
+
 const { streamLopuMusing } = await import('./musing.ts');
 
 beforeEach(() => {
@@ -139,7 +145,7 @@ beforeEach(() => {
 	waterfallReads = 0;
 	waterfall = ['claude-opus-5:max:fast', 'gpt-5.6-sol:max:fast', 'default'];
 	Date.now = () => 1;
-	process.env.ANTHROPIC_API_KEY = 'anthropic-test-key';
+	process.env.CLAUDE_CODE_OAUTH_TOKEN = 'anthropic-test-key';
 	process.env.ANTHROPIC_BASE_URL = origin;
 	process.env.OPENAI_API_KEY = 'openai-test-key';
 	process.env.OPENAI_BASE_URL = `${origin}/v1`;
@@ -175,29 +181,18 @@ const text = (events) =>
 		.map((event) => event.text)
 		.join('');
 
-test('a starved decorated Claude stream retries bare on the same model', async () => {
-	anthropicPlans.push({}, { text: 'Claude stayed preferred' });
-
-	const events = await collect();
-
-	assert.deepEqual(sources(events), ['claude']);
-	assert.equal(text(events), 'Claude stayed preferred');
-	assert.equal(anthropicRequests.length, 2);
-	assert.equal(anthropicRequests[0].surface, 'beta');
-	assert.equal(anthropicRequests[0].body.model, 'claude-opus-5');
-	assert.deepEqual(anthropicRequests[0].body.output_config, { effort: 'max' });
-	assert.equal(anthropicRequests[0].body.speed, 'fast');
-	assert.match(String(anthropicRequests[0].headers['anthropic-beta']), /fast-mode-2026-02-01/);
-	assert.equal(anthropicRequests[1].surface, 'stable');
-	assert.equal(anthropicRequests[1].body.model, 'claude-opus-5');
-	assert.equal(anthropicRequests[1].body.output_config, undefined);
-	assert.equal(anthropicRequests[0].body.max_tokens, 4096);
-	assert.equal(anthropicRequests[1].body.max_tokens, 4096);
-	assert.equal(openAiRequests.length, 0);
-	assert.equal(waterfallReads, 1);
+test('Claude musing preserves the selected effort and speed', async () => {
+  anthropicPlans.push({ text: 'Claude stayed preferred' });
+  const events = await collect();
+  assert.deepEqual(sources(events), ['claude']);
+  assert.equal(text(events), 'Claude stayed preferred');
+  assert.equal(anthropicRequests.length, 1);
+  assert.deepEqual(anthropicRequests[0].body.output_config, { effort: 'max' });
+  assert.equal(anthropicRequests[0].body.speed, 'fast');
+  assert.equal(openAiRequests.length, 0);
 });
 
-test('two starved Claude attempts fall through without emitting a blank Claude meta event', async () => {
+test('a starved Claude attempt falls through without emitting a blank Claude meta event', async () => {
 	anthropicPlans.push({}, {});
 	openAiPlans.push({ text: 'OpenAI fallback' });
 
@@ -205,7 +200,7 @@ test('two starved Claude attempts fall through without emitting a blank Claude m
 
 	assert.deepEqual(sources(events), ['openai']);
 	assert.equal(text(events), 'OpenAI fallback');
-	assert.equal(anthropicRequests.length + openAiRequests.length, 3);
+	assert.equal(anthropicRequests.length + openAiRequests.length, 2);
 	assert.equal(waterfallReads, 1);
 });
 
