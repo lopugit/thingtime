@@ -31,6 +31,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-16: Lopu tool cards now expose safe Open anchors for read pages, search/list results, related components and URLs, retained in new saved receipts. Verified desktop/390px layouts and production build; older receipts keep their available Thing link.
+
 - 2026-09-15 — **Codex (AI)** — System now manages shared platform credentials,
   integration secrets and Vercel environment variables with verified reveals.
   Claude chat, voice, recordings and moderation use the shared Claude OAuth
