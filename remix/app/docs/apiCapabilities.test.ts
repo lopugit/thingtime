@@ -471,3 +471,11 @@ test('subspace rename requires the post-media additive contract', () => {
   for (const unsupported of [undefined, '1.3.0', '1.4.0', '1.4.9', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.5.0'), false);
   for (const supported of ['1.5.0', '1.5.1', '1.6.0']) assert.equal(capabilitySatisfies(supported, '1.5.0'), true);
 });
+
+ test('exact AI workflow orders negotiate removal of the mandatory default', () => {
+  const feature = 'api.settings-pr-conflict-auto-resolver-model-waterfall';
+  assert.equal(createApiCapabilitiesManifest().features[feature], '1.1.0');
+  assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features[feature].version, '1.1.0');
+  for (const version of [undefined, '1.0.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), false);
+  for (const version of ['1.1.0', '1.1.1', '1.2.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), true);
+});

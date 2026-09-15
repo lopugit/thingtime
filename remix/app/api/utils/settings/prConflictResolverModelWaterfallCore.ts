@@ -45,7 +45,7 @@ const NORMAL_AND_FAST = ['normal', 'fast'] as const;
 export const AI_WORKFLOW_BASE_MODELS: readonly AiWorkflowBaseModel[] = [
   // The provider-selected default: Claude Code's own default in workflow
   // automation, LOPU_CLAUDE_MODEL / TT_MODERATION_MODEL / LOPU_OPENAI_MODEL
-  // for the direct application clients. Always kept as the hard fallback.
+  // for the direct application clients. Only used when explicitly selected.
   { id: 'default', label: 'Default model', provider: 'default', efforts: [], speeds: NORMAL_ONLY },
 
   // Anthropic — reasoning-effort tiers per model capability; fast mode is an
@@ -165,9 +165,8 @@ export const DEFAULT_PR_CONFLICT_RESOLVER_MODEL_WATERFALL: PRConflictResolverMod
 // Reads are deliberately forgiving, entry by entry: unknown or malformed
 // entries are dropped (an older deploy reading a newer catalog keeps the rest
 // of the order instead of losing it), duplicates keep their first position,
-// and a value with nothing usable collapses to exactly the safe default. A
-// valid order that predates the mandatory fallback is upgraded in memory by
-// appending `default` as the final attempt.
+// and a value with nothing usable collapses to the initial default. Valid
+// configured orders never gain additional model attempts.
 export const normalizePrConflictResolverModelWaterfall = (value: unknown): PRConflictResolverModelId[] => {
   if (!Array.isArray(value)) return [...DEFAULT_PR_CONFLICT_RESOLVER_MODEL_WATERFALL];
 
@@ -181,7 +180,6 @@ export const normalizePrConflictResolverModelWaterfall = (value: unknown): PRCon
   }
 
   if (waterfall.length < 1) return [...DEFAULT_PR_CONFLICT_RESOLVER_MODEL_WATERFALL];
-  if (!waterfall.includes('default')) waterfall.push('default');
   return waterfall;
 };
 
@@ -279,10 +277,6 @@ export const validatePrConflictResolverModelWaterfall = (
     waterfall.push(choice.id);
   }
 
-  if (!waterfall.includes('default')) {
-    return { ok: false, error: 'waterfall must include default as a hard fallback' };
-  }
-
   return { ok: true, waterfall };
 };
 
@@ -290,7 +284,7 @@ export const validatePrConflictResolverModelWaterfall = (
 // accessibility announcements.
 export const describeAiWorkflowModelChoice = (choice: AiWorkflowModelChoice): string => {
   if (choice.provider === 'default') {
-    return 'Provider-selected model · always included';
+    return 'Provider-selected model';
   }
   const bits = [
     AI_MODEL_PROVIDER_LABELS[choice.provider],
