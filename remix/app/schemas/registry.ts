@@ -644,6 +644,10 @@ const rootThingSchema: ThingtimeSchema = {
         'Thingtime Schema ids applied to this thing, e.g. ["post"] or ["post","share"]. Omitting it on create defaults to ["data"] — the schema-less crystal.'
     },
     { name: 'crystal', type: 'object', required: true, description: 'The sub-schema payload, validated against every schema in thingtime.' },
+    { name: 'geo', type: 'object', required: false, description: 'Optional explicitly supplied geographic location, visible to everyone allowed to read this Thing. null clears it. Stored as a GeoJSON Point with derived coordinates for radius queries.', children: [
+      { name: 'lat', type: 'number', required: true, min: -90, max: 90, description: 'Latitude in degrees.' },
+      { name: 'lng', type: 'number', required: true, min: -180, max: 180, description: 'Longitude in degrees.' }
+    ] },
     {
       name: 'extended',
       type: 'record',
@@ -4263,6 +4267,8 @@ const feedAlgorithmThingSchema: ThingtimeSchema = {
     { name: 'name', type: 'string', required: true, max: 60, description: 'Algorithm name.' },
     { name: 'emoji', type: 'string', required: true, description: 'Display emoji.' },
     { name: 'parentId', type: 'id', required: false, description: 'Branch lineage parent.' },
+    { name: 'description', type: 'string', required: false, max: 300, description: 'Owner-written directory description.' },
+    { name: 'listed', type: 'boolean', required: false, description: 'Explicit public directory opt-in, requires shared=true. Existing link-only profiles remain unlisted.' },
     {
       name: 'weights',
       type: 'record',
@@ -6623,7 +6629,9 @@ const sanitizeFeedAlgorithmCrystal = (input: Record<string, unknown>): { ok: tru
       // algorithms.ts and the feed-algorithms-to-things migration build the
       // crystal directly. Keep the field listed anyway so the allowlist stays
       // honest if the kind ever becomes generically writable.
-      shared: input.shared === true
+      shared: input.shared === true,
+      listed: input.shared === true && input.listed === true,
+      description: boundedString(input.description, 300) || ''
     }
   };
 };

@@ -26,14 +26,15 @@ export const buildThingCreateRequestPayload = (args: ThingRequestArgs): Record<s
 		tags,
 		tokenAcl,
 		attachmentIds,
-		shareId
+		shareId,
+    geo
 	} = input;
 
 	// Unified writes carry rich text inside `crystal`; legacy post writes use
 	// the first-class `richText` field beside their canonical text fallback.
 	return Array.isArray(thingtime)
-		? { thingtime, crystal, targetId, folderId, acl, visibility, tags, tokenAcl, attachmentIds, shareId }
-		: { type, text, richText, images, listing, thing, mediaLayout, title, subspaceId, flairId, acl, visibility, tags, attachmentIds, shareId };
+		? { thingtime, crystal, targetId, folderId, acl, visibility, tags, tokenAcl, attachmentIds, shareId, ...(geo !== undefined ? { geo } : {}) }
+		: { type, text, richText, images, listing, thing, mediaLayout, title, subspaceId, flairId, acl, visibility, tags, attachmentIds, shareId, ...(geo !== undefined ? { geo } : {}) };
 };
 
 export const buildThingCommentRequestPayload = (args: ThingRequestArgs): Record<string, unknown> => {

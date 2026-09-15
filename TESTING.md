@@ -7426,3 +7426,10 @@ approval; `access.test.ts` — the reservation matrix) and
 - At `/s/:slug/mod?tab=settings`, verify icon and banner default to upload tiles, each with **Use URL instead**. Upload a raster image to each slot, verify preview/progress and Save blocking, save and reload; check directory/card/feed icon and subspace banner as another viewer. Branding remains public directory identity for private subspaces.
 - Replace, remove, cancel, retry a failed upload/save, and switch to/from a valid URL. Existing URLs survive unchanged saves; invalid URLs/non-images/over-64-MiB files and wrong-purpose, wrong-owner, expired or already-bound uploads are refused. Replacement URLs stop serving old managed bytes; abandoned/replaced objects remain billed until reaped.
 - Check revoked moderator access, upload approval, quota failure, ownership transfer and deletion cleanup. On desktop and 390px mobile, open both URL panels and scroll top to bottom; verify no overlap, clipping or horizontal overflow.
+
+## Feed defaults, algorithm directory and geographic Things
+
+- [ ] Open `/feed` on desktop and mobile: all eight builtins appear in the bounded, scrollable picker; selecting one updates the feed and reloading preserves it. Builtins never receive training events.
+- [ ] Open `/algorithms`, search by name/description, create a private profile, publish it, branch it from another account, unpublish, and disable sharing. Private and link-only algorithms never appear in the directory; previews never expose learned weights; existing copies survive unsharing.
+- [ ] Create Things through the API with `geo: {lat,lng}`. Invalid/missing/out-of-range coordinates return 400. POST `/things/search` with `near` and `radiusKm`, and Local feed with lat/lng, find nearby visible posts, exclude far/private posts, and retain tag/subspace/ACL filters. PATCH `geo:null` removes the location.
+- [ ] Local's location request occurs only from its button; denial leaves the location-tag fallback usable. Scroll directory/feed top-to-bottom at desktop/mobile widths, including the editor and open picker; no content overflows.
