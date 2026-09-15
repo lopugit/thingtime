@@ -2836,12 +2836,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'settings-pr-conflict-auto-resolver-model-waterfall',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'settings',
     title: 'AI workflow model waterfall',
     endpoint: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall',
     summary: 'Read or administratively reorder the model chain used by conflict, rebase, and semantic-refresh AI workflows.',
     detail:
-      'GET publicly returns the ordered, non-secret model ids plus the base-model catalog. POST replaces the order for administrators only. The first entry is the preferred model for merge-conflict resolution, stacked-PR rebases, and their semantic Graphify refreshes; conflict-editing calls may use later entries for eligible availability failures. Direct Anthropic features use the first Anthropic-capable entry and OpenAI-backed features the first OpenAI entry, each stopping at the default sentinel. Entries compose a catalog base model with optional variant segments — `<model>[:<effort>][:fast]` (for example claude-opus-5:high:fast or gpt-5.6-sol:ultra) — where the effort must be one the model supports and fast requires the model to offer a fast lane (Anthropic fast mode or OpenAI priority processing). The list length is unlimited; ids must be unique and include default as the hard fallback. Missing or corrupt stored settings resolve safely, dropping unknown entries and collapsing to ["default"] when nothing usable remains.',
+      'GET publicly returns the ordered, non-secret model ids plus the base-model catalog. POST replaces the order for administrators only. The first entry is the preferred model for merge-conflict resolution, stacked-PR rebases, and their semantic Graphify refreshes; conflict-editing calls may use later entries for eligible availability failures. Direct Anthropic features use the first Anthropic-capable entry and OpenAI-backed features the first OpenAI entry, each stopping at the default sentinel. Entries compose a catalog base model with optional variant segments — `<model>[:<effort>][:fast]` (for example claude-opus-5:high:fast or gpt-5.6-sol:ultra) — where the effort must be one the model supports and fast requires the model to offer a fast lane (Anthropic fast mode or OpenAI priority processing). The list length is unlimited; ids must be unique. Configured orders are returned exactly without appending a default; default is optional and runs only if selected. Missing or corrupt stored settings resolve safely, dropping unknown entries and collapsing to ["default"] when nothing usable remains.',
     auth: {
       mode: 'optional',
       description: 'GET is public. POST requires an authenticated administrator session.'
@@ -2851,7 +2853,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'GET to read the current waterfall and the base-model catalog with per-model efforts and speeds.',
       'Administrators POST { waterfall: [modelId, ...] } to replace the priority order.',
       'Compose entries as <model>[:<effort>][:fast] from the catalog; ids must be unique.',
-      'Always include default so the resolver has a final provider-selected fallback.'
+      'Include default only when a provider-selected attempt is wanted; it can be removed.'
     ],
     requestExamples: [
       {
@@ -2893,7 +2895,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           ]
         }
       },
-      { status: 400, description: 'Invalid waterfall.', body: { ok: false, error: 'waterfall must include default as a hard fallback' } },
+      { status: 400, description: 'Invalid waterfall.', body: { ok: false, error: 'waterfall must contain at least 1 model id' } },
       { status: 403, description: 'POST caller is not an admin.', body: { ok: false, error: 'Admins only' } }
     ],
     notes: ['Responses set Cache-Control: no-store. Storage audit fields are never exposed by this endpoint.']
