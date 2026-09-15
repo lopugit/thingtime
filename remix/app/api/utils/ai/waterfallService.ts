@@ -1,3 +1,4 @@
+import { resolveClaudeOAuthToken } from './claudeOAuth';
 import { getUserVaultProvider, listUserVaultProviders } from '../lopu/userVault';
 import { callVaultProviderPlainCompletion, type PlainCompletionInput, type LopuVaultProviderRecord } from '../lopu/vaultProviderClient';
 import { isLopuVaultProviderKind } from '../lopu/vaultProviders';
@@ -24,11 +25,11 @@ export const authorizeAiWaterfall = async (ownerId: string, value: unknown): Pro
 const resolve = async (ownerId: string, entry: AiWaterfallEntry): Promise<LopuVaultProviderRecord> => {
 	if (entry.endpointId.startsWith('vault:')) {
 		const provider = await getUserVaultProvider(ownerId, entry.endpointId.slice(6));
-		if (!provider.token || provider.token.startsWith('sk-ant-oat')) throw new AiTransportFailure(401);
+		if (!provider.token || (provider.provider !== 'anthropic' && provider.token.startsWith('sk-ant-oat'))) throw new AiTransportFailure(401);
 		return { ...provider, model: entry.modelId };
 	}
 	const provider = entry.endpointId === 'server:anthropic' ? 'anthropic' : 'openai';
-	const token = provider === 'anthropic' ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY;
+	const token = provider === 'anthropic' ? await resolveClaudeOAuthToken() : process.env.OPENAI_API_KEY;
 	if (!token) throw new AiTransportFailure(401);
 	return {
 		id: entry.endpointId,

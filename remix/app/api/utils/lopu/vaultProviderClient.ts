@@ -1,3 +1,4 @@
+import { createClaudeOAuthClient, type runClaudeOAuth } from '../ai/claudeOAuth';
 // The one place Thingtime dials a user's own AI provider (design note §1.3):
 // the SSRF guard (server allowlist → fresh public DNS → private-range check),
 // the redirect-refusing fetch every call goes through, the SDK client
@@ -167,6 +168,7 @@ const readBoundedJson = async (response: Response): Promise<any> => {
 };
 
 export type PlainCompletionInput = {
+  claudeRun?: typeof runClaudeOAuth;
 	system: string;
 	history: LopuVaultHistoryMessage[];
 	prompt: string;
@@ -196,25 +198,7 @@ export const buildPlainCompletionRequest = (
 ): { url: string; headers: Record<string, string>; body: Record<string, unknown> } => {
 	const { effort, speed } = input;
 	const active = effort && effort !== 'none' ? effort : null;
-	if (provider.provider === 'anthropic') {
-		return {
-			url: joinEndpoint(endpoint, 'v1/messages'),
-			headers: {
-				'Content-Type': 'application/json',
-				'x-api-key': provider.token,
-				'anthropic-version': '2023-06-01',
-				...(speed === 'fast' ? { 'anthropic-beta': 'fast-mode-2026-02-01' } : {})
-			},
-			body: {
-				model: input.model,
-				max_tokens: input.maxTokens,
-				system: input.system,
-				messages: input.messages,
-				...(active ? { output_config: { effort: active } } : {}),
-				...(speed === 'fast' ? { speed: 'fast' } : {})
-			}
-		};
-	}
+	if (provider.provider === 'anthropic') throw new Error('Claude uses the OAuth runtime, not an HTTP API-key request.');
 	if (provider.provider === 'google') {
 		return {
 			url: joinEndpoint(endpoint, `models/${encodeURIComponent(input.model)}:generateContent`),
@@ -305,6 +289,17 @@ export const callVaultProviderPlainCompletion = async (provider: LopuVaultProvid
 export const callVaultProviderCompletion = async (provider: LopuVaultProviderRecord, input: PlainCompletionInput): Promise<VaultProviderCompletion> => {
 	const model = resolveVaultTurnModel(provider.model, input.model, defaultVaultProviderModel(provider.provider));
 	if (!model) throw vaultGuardError(LOPU_VAULT_NO_MODEL_REASON);
+	if (provider.provider === 'anthropic') {
+    const result = await createClaudeOAuthClient({ token: provider.token, run: input.claudeRun }).messages.create({
+      model, system: input.system, messages: [...input.history, { role: 'user', content: input.prompt }],
+      max_tokens: input.maxTokens ?? 4096,
+      ...(input.speed === 'fast' ? { speed: 'fast' } : {}),
+      ...(input.effort && input.effort !== 'none' ? { output_config: { effort: input.effort as any } } : {})
+    }, { signal: input.signal });
+    const text = extractPlainCompletionText('anthropic', result);
+    if (!text?.trim()) throw new Error('Claude OAuth returned no text.');
+    return { text: text.trim(), model, usage: extractPlainCompletionUsage('anthropic', result) };
+  }
 	const safe = await (input.assertEndpoint ?? assertSafeProviderEndpoint)(provider.endpoint);
 	const request = buildPlainCompletionRequest(provider, safe.endpoint, {
 		system: input.system,

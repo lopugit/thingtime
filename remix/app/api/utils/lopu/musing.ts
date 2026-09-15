@@ -1,3 +1,4 @@
+import { createClaudeOAuthClient, claudeOAuthConfigured } from '../ai/claudeOAuth';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 
@@ -15,7 +16,7 @@ import { pickFallbackMusing } from './fallbacks';
 // context (approximate location + current weather + local time of day).
 //
 // Providers (set either or both env keys):
-//   - ANTHROPIC_API_KEY → Claude (first Anthropic-capable Thingtime Admin
+//   - Claude OAuth credentials → Claude (first Anthropic-capable Thingtime Admin
 //     waterfall entry, with its effort/fast knobs; LOPU_CLAUDE_MODEL is the
 //     provider-valid fallback when the Admin preference resolves to `default`)
 //   - OPENAI_API_KEY    → ChatGPT (first OpenAI Admin waterfall entry with its
@@ -162,7 +163,7 @@ const MUSING_MAX_OUTPUT_TOKENS = 4096;
 // before producing any text (e.g. a knob the model rejects), one bare retry
 // with just the model keeps the admin's model preference alive.
 async function* streamClaude(system: string, user: string, choice: AiWorkflowModelChoice): AsyncGenerator<string> {
-  const client = new Anthropic();
+  const client = createClaudeOAuthClient();
   const base = {
     model: choice.model,
     max_tokens: MUSING_MAX_OUTPUT_TOKENS,
@@ -172,22 +173,9 @@ async function* streamClaude(system: string, user: string, choice: AiWorkflowMod
 
   const effort = toAnthropicEffort(choice.effort);
   const decorated = choice.speed === 'fast' || effort;
-  const attempts =
-    choice.speed === 'fast'
-      ? [
-          // Fast mode is beta-gated and needs the beta stream surface.
-          () =>
-            client.beta.messages.stream({
-              ...base,
-              ...(effort ? { output_config: { effort } } : {}),
-              speed: 'fast',
-              betas: ['fast-mode-2026-02-01']
-            }),
-          () => client.messages.stream(base)
-        ]
-      : effort
-        ? [() => client.messages.stream({ ...base, output_config: { effort } }), () => client.messages.stream(base)]
-        : [() => client.messages.stream(base)];
+  const attempts = [() => choice.speed === 'fast'
+    ? client.beta.messages.stream({ ...base, ...(effort ? { output_config: { effort } } : {}), speed: 'fast', betas: ['fast-mode-2026-02-01'] })
+    : client.messages.stream({ ...base, ...(effort ? { output_config: { effort } } : {}) })];
 
   for (let attempt = 0; attempt < attempts.length; attempt++) {
     let yielded = false;
@@ -271,7 +259,7 @@ const providerOrder = (): Array<'claude' | 'openai'> => {
   return pref === 'openai' ? ['openai', 'claude'] : ['claude', 'openai'];
 };
 
-const hasAnyKey = () => !!process.env.ANTHROPIC_API_KEY || !!process.env.OPENAI_API_KEY;
+const hasAnyKey = () => claudeOAuthConfigured() || !!process.env.OPENAI_API_KEY;
 export const hasLopuAiProviderConfigured = hasAnyKey;
 
 // Split a string into word-sized chunks (keeping trailing spaces) so a canned
@@ -311,7 +299,7 @@ export async function* streamLopuMusing(
   const choices = await getLopuModelChoices();
 
   for (const provider of providerOrder()) {
-    const key = provider === 'claude' ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY;
+    const key = provider === 'claude' ? claudeOAuthConfigured() : process.env.OPENAI_API_KEY;
     if (!key) continue;
     try {
       const gen =

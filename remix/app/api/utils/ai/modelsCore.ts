@@ -1,3 +1,4 @@
+import { claudeOAuthConfigured } from './claudeOAuthCore';
 // Pure, Mongo-free half of the Lopu model catalog (design note §1.1).
 //
 // Everything here is data or arithmetic over the Thingtime Admin base-model
@@ -47,7 +48,7 @@ export const AI_MODEL_FAMILIES: readonly AiModelFamily[] = ['claude', 'gpt', 'o-
 // Which environment variable makes each provider available (surfaced in
 // picker hints and admin errors — never the values themselves).
 export const AI_PROVIDER_ENV_HINTS: Readonly<Record<AiModelProviderId, string>> = {
-  anthropic: 'ANTHROPIC_API_KEY',
+  anthropic: 'CLAUDE_CODE_OAUTH_TOKEN',
   openai: 'OPENAI_API_KEY'
 };
 
@@ -149,7 +150,7 @@ const unverified = (configured: boolean): AiProviderStatusEntry => ({ configured
 // reported, values never leave the server. The probe's verdict is layered on
 // top by applyAiProviderProbe.
 export const aiProviderStatusFromEnv = (env: Readonly<Record<string, string | undefined>>): AiProviderStatus => ({
-  anthropic: unverified(hasEnvValue(env.ANTHROPIC_API_KEY) || hasEnvValue(env.ANTHROPIC_AUTH_TOKEN)),
+  anthropic: unverified(claudeOAuthConfigured(env)),
   openai: unverified(hasEnvValue(env.OPENAI_API_KEY))
 });
 

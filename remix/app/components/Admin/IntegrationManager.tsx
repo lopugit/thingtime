@@ -58,7 +58,7 @@ const emptyEndpoint = (): Omit<EndpointRow, 'id'> => ({
 
 // Values are intentionally held in this one local input only until the
 // write-only create request resolves. They are never loaded from API state.
-export const IntegrationManager = () => {
+export const IntegrationManager = ({ secretsOnly = false }: { secretsOnly?: boolean }) => {
 	const api = useApi();
 	const lopu = useLopu();
 	const [vaultConfigured, setVaultConfigured] = React.useState<boolean | null>(null);
@@ -176,10 +176,9 @@ export const IntegrationManager = () => {
 	return (
 		<Flex flexDirection="column" rowGap={3}>
 			<Flex flexDirection="column" rowGap={2} padding={4} {...CARD_STYLES}>
-				<Text sx={eyebrow}>External integrations</Text>
+				<Text sx={eyebrow}>{secretsOnly ? 'Other platform secrets' : 'External integrations'}</Text>
 				<Text fontSize="xs" color="var(--tt-text, #5a5a66)" lineHeight="tall">
-					Credentials stay encrypted and hidden until you verify your password or passkey. The proxy only calls saved HTTPS origins and paths, and applies the permissions below before it decrypts a
-					credential.
+					{secretsOnly ? 'Platform integration secrets stay encrypted. Confirm your password or passkey to show one. Endpoint permissions are managed in External integrations.' : 'Credentials stay encrypted and hidden until you verify your password or passkey. The proxy only calls saved HTTPS origins and paths, and applies the permissions below before it decrypts a credential.'}
 				</Text>
 				{vaultConfigured === false ? (
 					<Box
@@ -268,6 +267,7 @@ export const IntegrationManager = () => {
 				</Flex>
 			</Flex>
 
+			{!secretsOnly ? <>
 			<Flex flexDirection="column" rowGap={2} padding={4} {...CARD_STYLES}>
 				<Text sx={eyebrow}>{editingId ? 'Edit endpoint permissions' : 'Endpoint permissions'}</Text>
 				<Flex flexDirection="column" rowGap={2} padding={3} borderRadius="var(--tt-radius-sm, 9px)" background="var(--tt-surface-alt, #f5f5f7)">
@@ -552,6 +552,7 @@ export const IntegrationManager = () => {
 					</Text>
 				)}
 			</Flex>
+			</> : null}
 		</Flex>
 	);
 };
