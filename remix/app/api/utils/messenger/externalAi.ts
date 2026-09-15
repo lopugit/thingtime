@@ -1,3 +1,4 @@
+import { normalizeLopuLinks, type LopuToolLink } from '~/utils/lopuLinks';
 // 'lopu' is the first-party assistant (api/utils/messenger/lopuChats.ts): a
 // discriminator on Lopu chats and their assistant rows, never an importable
 // or live-device provider — publicExternalAiSource ties it to
@@ -175,7 +176,7 @@ export const LOPU_MAX_TOOL_CALLS = 20;
 export const LOPU_TOOL_SUMMARY_MAX_CHARS = 240;
 export const LOPU_PROVIDER_LABEL_MAX_CHARS = 80;
 
-export type PublicLopuToolCall = { name: string; ok: boolean; summary: string; thingId?: string };
+export type PublicLopuToolCall = { name: string; ok: boolean; summary: string; thingId?: string; links?: LopuToolLink[] };
 
 export type PublicLopuMessageMeta = {
 	role: 'user' | 'assistant';
@@ -249,7 +250,8 @@ export const publicLopuMessageMeta = (value: unknown): PublicLopuMessageMeta | n
 				name,
 				ok: call.ok === true,
 				summary: text(call.summary, LOPU_TOOL_SUMMARY_MAX_CHARS),
-				...(thingId ? { thingId } : {})
+				...(thingId ? { thingId } : {}),
+				...(Array.isArray(call.links) ? { links: normalizeLopuLinks(call.links) } : {})
 			});
 		}
 		if (toolCalls.length) meta.toolCalls = toolCalls;

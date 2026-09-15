@@ -1,3 +1,4 @@
+import { lopuResultLinks, normalizeLopuLinks, safeLopuHref, type LopuToolLink } from '~/utils/lopuLinks';
 // Pure, DOM-free core for the Lopu chat client (PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md
 // §2.3 event protocol, §3.1 streaming reducer): the client mirror of the
 // NDJSON event union, the streaming-turn reducer, tool labels + links, the
@@ -7,6 +8,7 @@
 
 import type { WebpageBlock } from '~/components/Builder/webpageBlocks';
 import type { ChatMessage } from '~/components/Messenger/messengerTypes';
+export type { LopuToolLink } from '~/utils/lopuLinks';
 
 // ——— the wire protocol (client mirror of api/utils/lopu/chatEvents.ts) ——————
 
@@ -626,60 +628,19 @@ export const TOOL_GLYPHS: Record<string, string> = {
 
 export const toolGlyph = (name: string): string => TOOL_GLYPHS[name] || '🔧';
 
-export type LopuToolLink = { label: string; href: string };
-
-const thingKind = (thing: LopuThingLike | null | undefined, fallback: string | null): string | null => {
-	const declared = Array.isArray(thing?.thingtime) ? thing?.thingtime.find((kind) => typeof kind === 'string') : null;
-	return declared || fallback;
-};
-
-const linkForThing = (thing: LopuThingLike | null | undefined, kind: string | null): LopuToolLink | null => {
-	if (!thing || typeof thing.id !== 'string' || !thing.id) return null;
-	const resolvedKind = thingKind(thing, kind);
-	const crystal = thing.crystal || {};
-	if (resolvedKind === 'webpage') {
-		return { label: `Open ${crystal.name || 'the page'} in the builder`, href: `/builder?page=${encodeURIComponent(thing.id)}` };
-	}
-	if (resolvedKind === 'component') {
-		const key = typeof crystal.componentKey === 'string' && crystal.componentKey ? crystal.componentKey : thing.id;
-		return { label: `Open ${crystal.name || 'the component'}`, href: `/components/${encodeURIComponent(key)}` };
-	}
-	if (resolvedKind === 'action') {
-		const key = typeof crystal.actionKey === 'string' && crystal.actionKey ? crystal.actionKey : thing.id;
-		return { label: `Open ${crystal.name || 'the action'}`, href: `/actions/${encodeURIComponent(key)}` };
-	}
-	if (resolvedKind === 'schema') {
-		return { label: `Open ${crystal.name || 'the schema'}`, href: `/schemas/${encodeURIComponent(thing.id)}` };
-	}
-	return { label: `Open ${crystal.name || 'the thing'}`, href: `/thing/${encodeURIComponent(thing.id)}` };
-};
-
-/**
- * Where a finished tool card links: the thing it created/updated, the page a
- * patch landed on, or a page named in the result data. Deduplicated by href.
- */
+/** Shared reference extraction keeps live and persisted cards consistent. */
 export const toolLinks = (activity: LopuToolActivity): LopuToolLink[] => {
-	const links: LopuToolLink[] = [];
-	const push = (link: LopuToolLink | null) => {
-		if (link && !links.some((entry) => entry.href === link.href)) links.push(link);
-	};
-	push(linkForThing(activity.thing?.thing, activity.thing?.kind ?? null));
-	if (activity.patch?.pageId) {
-		push({ label: 'Open in the builder', href: `/builder?page=${encodeURIComponent(activity.patch.pageId)}` });
-	}
-	const data = activity.result?.data;
-	if (data && typeof data === 'object') {
-		const record = data as { thing?: LopuThingLike; pageId?: unknown; things?: unknown };
-		if (record.thing && typeof record.thing === 'object') push(linkForThing(record.thing, null));
-		if (typeof record.pageId === 'string' && record.pageId) {
-			push({ label: 'Open in the builder', href: `/builder?page=${encodeURIComponent(record.pageId)}` });
-		}
-	}
+	const links = lopuResultLinks({
+		thing: activity.thing ? { ...activity.thing.thing, kind: activity.thing.kind } : undefined,
+		pageId: activity.patch?.pageId,
+		subject: activity.confirm?.subject
+	});
+	links.push(...lopuResultLinks(activity.result?.data));
 	if (activity.name === 'navigate' && activity.input && typeof activity.input === 'object') {
 		const path = (activity.input as { path?: unknown }).path;
-		if (typeof path === 'string' && isSiteRelativePath(path)) push({ label: `Go to ${path}`, href: path });
+		if (typeof path === 'string' && isSiteRelativePath(path)) links.push({ label: `Go to ${path}`, href: path });
 	}
-	return links;
+	return normalizeLopuLinks(links);
 };
 
 // ——— chat titling ————————————————————————————————————————————————————————
@@ -703,9 +664,8 @@ export const chatTitleFromText = (text: string): string => {
 // Deliberately tiny: paragraphs, bullet lists, fenced code, inline code, bold,
 // italic and `[label](/site-relative)` links. NO raw HTML ever — the renderer
 // draws text nodes only, so a model that emits `<script>` shows the literal
-// characters. A link that is not site-relative (another host, a scheme) is
-// demoted to plain text "label (url)" — nothing ever leaves the site through
-// a Lopu bubble.
+// characters. Local paths and credential-free HTTP(S) links are clickable;
+// unsafe schemes are demoted to plain text "label (url)".
 export type LopuInline =
 	| { kind: 'text'; text: string }
 	| { kind: 'code'; text: string }
@@ -736,7 +696,7 @@ export const parseLopuInlines = (text: string): LopuInline[] => {
 			const link = LINK_TOKEN.exec(token);
 			const label = link?.[1] ?? token;
 			const href = link?.[2] ?? '';
-			if (isSiteRelativePath(href)) out.push({ kind: 'link', text: label, href });
+			if (safeLopuHref(href)) out.push({ kind: 'link', text: label, href });
 			else out.push({ kind: 'text', text: `${label} (${href})` });
 		} else if (token.startsWith('**') || token.startsWith('__')) out.push({ kind: 'strong', text: token.slice(2, -2) });
 		else out.push({ kind: 'em', text: token.slice(1, -1) });
@@ -977,7 +937,7 @@ export const isLopuAssistantMessage = (message: Pick<ChatMessage, 'externalSourc
 // What an assistant row remembers about the turn that produced it (design
 // note §1.2: crystal.lopu projects onto the public message as `lopu`). Read
 // defensively — older rows and user rows carry nothing.
-export type LopuMessageToolCall = { name: string; ok: boolean; summary: string; thingId: string | null };
+export type LopuMessageToolCall = { name: string; ok: boolean; summary: string; thingId: string | null; links?: LopuToolLink[] };
 
 /**
  * Old receipts store only ok + the server's bounded summary, not a live grant.
@@ -1019,7 +979,7 @@ export const lopuMessageMeta = (message: unknown): LopuMessageMeta | null => {
 		if (!call || typeof call !== 'object') continue;
 		const entry = call as Record<string, unknown>;
 		if (typeof entry.name !== 'string' || !entry.name) continue;
-		toolCalls.push({ name: entry.name, ok: entry.ok === true, summary: stringOrNull(entry.summary) ?? '', thingId: stringOrNull(entry.thingId) });
+		toolCalls.push({ name: entry.name, ok: entry.ok === true, summary: stringOrNull(entry.summary) ?? '', thingId: stringOrNull(entry.thingId), ...(Array.isArray(entry.links) ? { links: normalizeLopuLinks(entry.links) } : {}) });
 	}
 	const provider = LOPU_PROVIDERS.includes(record.provider as LopuProvider) ? (record.provider as LopuProvider) : null;
 	const usageRaw = record.usage && typeof record.usage === 'object' ? (record.usage as Record<string, unknown>) : null;
