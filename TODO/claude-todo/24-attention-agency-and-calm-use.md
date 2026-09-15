@@ -47,6 +47,9 @@ default change, new signal, or telemetry collection by itself.
   match, ordering, explanation, retention, and promotion boundaries. This TODO
   owns feed recommendation and learning; neither may silently borrow the
   other's query or behavior signals.
+- [TODO 49](./49-personalization-agency-and-accountable-memory.md) owns whether
+  retained personal inputs may enter a feed policy and how a person inspects,
+  excludes, corrects, forgets, or resets them. This TODO owns feed behavior.
 - Ranking, training, reporting, blocking, moderation, and account-security
   notifications remain distinct capabilities and user intents.
 - Calm controls and chronological/no-training mode apply to every account tier.

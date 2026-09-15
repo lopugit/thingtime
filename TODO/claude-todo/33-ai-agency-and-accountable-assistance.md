@@ -40,6 +40,9 @@ participants.
 
 - [ ] [TODO 23](./23-data-portability-and-exit.md) defines complete export,
       retention, selective deletion, closure, and verified exit.
+- [ ] [TODO 49](./49-personalization-agency-and-accountable-memory.md) defines
+      durable assistant-memory provenance, purpose, effects, correction,
+      forgetting, and reset. Conversation history alone grants no such use.
 - [ ] [TODO 24](./24-attention-agency-and-calm-use.md) defines calm defaults,
       stopping points, explanations, correction, and notification agency.
 - [ ] [TODO 25](./25-accessibility-and-language-readiness.md) supplies

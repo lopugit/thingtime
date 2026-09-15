@@ -96,6 +96,9 @@ unless the user explicitly adopts it into an account.
   change impact, preview, compatibility, rollback, deprecation, and sunset. A
   historical checkpoint may aid recovery but never proves an old product
   contract is supported or authorizes restoring code, data, or permissions.
+- [TODO 49](./49-personalization-agency-and-accountable-memory.md) owns the
+  retained model that may affect a person's future experience. This TODO owns
+  evidence of what happened then; replay is not permission to personalize now.
 - A historical replay uses the captured ordered result set and cached safe
   projection. A current rerun uses today's data and current algorithm; the UI
   must never blur those modes.

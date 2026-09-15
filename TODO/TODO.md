@@ -763,3 +763,21 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     personalized experiments, a feature-flag platform, policy or permission
     changes, external API changes, minors, and sensitive or high-impact changes
     remain separately gated.
+
+49. **🧠 Make personalization agency and accountable memory a product contract.**
+
+    Give people one inspectable account of the choices, observations, and
+    derivatives Thingtime retains about them: source, purpose, scope, store,
+    age, expiry, policy, and current effects, plus honest correction,
+    exclusion, forgetting, and reset controls. Start only with adult internal
+    reviewers, one synthetic account, one synthetic private text Thing, one
+    exact non-production build, and four fixed low-stakes items: an explicit
+    display preference, a device-local last-view value, a synthetic
+    observation, and a deterministic manually seeded derivative. Execute
+    `claude-todo/49-personalization-agency-and-accountable-memory.md` only after
+    qualified owners approve the vocabulary, inventory contract, derivative
+    lifecycle, non-personalized baseline, accessibility matrix, evidence,
+    cleanup, and stop authority. Real personal data, production telemetry,
+    model/provider calls, training, public feeds, advertising, sensitive-trait
+    inference, minors, institutions, and high-impact uses remain separately
+    gated.

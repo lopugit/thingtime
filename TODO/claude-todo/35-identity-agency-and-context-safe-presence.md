@@ -44,6 +44,9 @@ No unchecked item above is permission to start engineering or recruit people.
       epic must not silently broaden or weaken that proposed boundary.
 - [ ] [TODO 23](./23-data-portability-and-exit.md) owns export, deletion,
       closure, and verified exit.
+- [ ] [TODO 49](./49-personalization-agency-and-accountable-memory.md) owns
+      inferred-profile provenance and controls. A profile or derivative does
+      not establish identity, authentication, disclosure, or authority.
 - [ ] [TODO 25](./25-accessibility-and-language-readiness.md) owns shared
       accessibility and locale foundations.
 - [ ] [TODO 26](./26-community-safety-and-accountable-moderation.md) owns

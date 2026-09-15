@@ -36,6 +36,9 @@ experience.
       notification-pressure controls.
 - [ ] [TODO 25](./25-accessibility-and-language-readiness.md) owns shared
       complete-journey access and language foundations.
+- [ ] [TODO 49](./49-personalization-agency-and-accountable-memory.md) remains
+      adult-only until this TODO's qualified owners approve any youth memory,
+      inference, profiling, explanation, forgetting, or reset boundary.
 - [ ] [TODO 26](./26-community-safety-and-accountable-moderation.md) owns
       reports, cases, moderation, appeals, remedies, and safety transparency;
       it is not an age-assurance system.

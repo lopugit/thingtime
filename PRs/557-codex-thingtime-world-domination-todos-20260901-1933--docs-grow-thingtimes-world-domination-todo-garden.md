@@ -18,6 +18,38 @@ required sequence:
 The branch is intentionally cumulative. It does not merge itself, implement
 the product work, or treat a plausible idea as an approved decision.
 
+## 2026-09-16 morning — personalization agency and accountable memory
+
+This run identifies a cross-product memory gap: Thingtime has explicit
+preferences, bounded local caches, account-backed saved AI configurations, and
+private feed-interest algorithms, but no shared person-facing contract for what
+is remembered, whether it is a choice, observation, or derivative, why it is
+retained, what it changes, or how correction, exclusion, forgetting, and reset
+propagate. It adds:
+
+- `NOTES/personalization-agency-and-accountable-memory-baseline.md`, a dated
+  evidence ledger, working vocabulary, domain boundaries, and open decisions;
+- `PLAN/personalization-agency-and-accountable-memory-roadmap.md`, a gated path
+  through ownership, inventory, inspect-and-explain, controls, derivative
+  cleanup, non-personalized operation, evaluation, and removal; and
+- `TODO/claude-todo/49-personalization-agency-and-accountable-memory.md`, an
+  execution epic with acceptance criteria, hard stops, and a concrete owner
+  packet.
+
+The recommended pilot uses adult internal reviewers, one synthetic account,
+one synthetic private text Thing, one exact non-production build, and four
+fixed low-stakes items: an explicit display preference, a device-local
+last-view value, a synthetic observation, and a deterministic manually seeded
+derivative. It exercises inspect, explain, edit, exclude, expire, forget,
+domain reset, global personalization reset, account switching, device-origin
+change, offline and stale states, import quarantine, and complete cleanup while
+proving a useful non-personalized baseline.
+
+Real personal data, production telemetry, provider/model calls, training,
+public feeds, advertising, sensitive-trait inference, minors, institutions,
+and high-impact decisions remain separately gated. No runtime, API, schema,
+UI, personalization, telemetry, account, or production behavior changed.
+
 ## 2026-09-15 evening — change agency and humane product evolution
 
 This run identifies a human-transition gap: Thingtime has internal changelogs,

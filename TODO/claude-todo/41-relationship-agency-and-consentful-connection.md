@@ -50,6 +50,9 @@ reasonable while remaining hard for a person to predict as one journey.
   notification lifecycle evidence and channel delivery.
 - [TODO 38](./38-search-and-discovery-agency.md) owns people discovery, query
   privacy, ranking, recommendations, and influence.
+- [TODO 49](./49-personalization-agency-and-accountable-memory.md) owns retained
+  personal inputs and derivatives; relationship state does not authorize an
+  inferred profile, training signal, or unrelated personalization use.
 - [TODO 23](./23-data-portability-and-exit.md) owns export, deletion, account
   closure, restore, and residual-state truth.
 - [TODO 25](./25-accessibility-and-language-readiness.md) owns complete-journey

@@ -50,6 +50,9 @@ change by itself.
 - [TODO 24](./24-attention-agency-and-calm-use.md) owns feed recommendation,
   learning, corrective feedback, and calm use. This epic owns explicit-query
   retrieval and discovery presentation.
+- [TODO 49](./49-personalization-agency-and-accountable-memory.md) owns whether
+  retained personal inputs may enter search or discovery policies, plus their
+  provenance, purpose, effects, correction, forgetting, and reset.
 - [TODO 25](./25-accessibility-and-language-readiness.md) owns complete-journey
   access, locale, translation, and multilingual release gates.
 - [TODO 26](./26-community-safety-and-accountable-moderation.md) owns reports,

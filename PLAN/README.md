@@ -36,6 +36,7 @@ engineering decisions in [`../DECISIONS.md`](../DECISIONS.md).
 | [Evidence agency and accountable product claims roadmap](./evidence-agency-and-accountable-product-claims-roadmap.md)               | Claim ownership through exact meaning, pre-publication evidence, visible limits, expiry, correction-family convergence, and one private synthetic pilot     | Proposed |
 | [Support agency and accountable remedy roadmap](./support-agency-and-accountable-remedy-roadmap.md)                                 | Support ownership through consistent help, consentful intake, accountable handoffs, domain-bound remedies, correction, closure, and one synthetic pilot     | Proposed |
 | [Change agency and humane product evolution roadmap](./change-agency-and-humane-product-evolution-roadmap.md)                       | Change ownership through exact impact, truthful preview and choice, safe coexistence, rollback, retirement, remedy, and one synthetic preference pilot      | Proposed |
+| [Personalization agency and accountable-memory roadmap](./personalization-agency-and-accountable-memory-roadmap.md)                 | Memory ownership through an inspectable inventory, deterministic effects, correction, exclusion, forgetting, reset, and one four-item synthetic pilot       | Proposed |
 
 ## Conventions
 

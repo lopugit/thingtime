@@ -43,6 +43,9 @@ itself.
   change, compatibility, deprecation, sunset, and transition journey. This TODO
   retains authority for export, restore, deletion, closure, and usable exit
   before an old path is retired.
+- [TODO 49](./49-personalization-agency-and-accountable-memory.md) owns memory
+  meaning, purpose, effects, and derivative lifecycle. This TODO owns complete
+  transport, deletion, closure, and independently verified exit.
 - [TODO 20](./20-versioned-experience-history.md) owns reversible experience
   history. Restoring a search/feed snapshot is not account backup.
 - The current API registry, runtime route map, capability manifest, and each

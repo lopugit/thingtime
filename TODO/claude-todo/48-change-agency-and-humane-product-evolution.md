@@ -65,6 +65,9 @@ layer without freezing responsible improvement.
   Thingtime may claim about a change and its evidence.
 - [TODO 47](./47-support-agency-and-accountable-remedy.md) owns shared help and
   accountable routing; each qualified domain retains remedy authority.
+- [TODO 49](./49-personalization-agency-and-accountable-memory.md) owns what is
+  remembered about a person and the effect of that memory. This epic owns how
+  a changed memory policy preserves choices, migrates, rolls back, or retires.
 - W3C, GOV.UK, and IETF references are design inputs, not adopted compliance,
   legal duties, service promises, or proof that a change is safe.
 
