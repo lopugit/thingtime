@@ -3339,3 +3339,42 @@ Current admins can open **Things → Error logs** (`/things?logs=1`) and search 
 No new provider credentials or external logging service are required. Forks need the normal home MongoDB setup and an admin account (see existing `ADMIN_USERNAMES` setup). Boot-time index convergence adds the shared home-only `things_ephemeral_expires_at` in place of the former diagnostic TTL; error-log reads reuse `{ thingtime, createdAt, shareId }`; give the existing MongoDB application role index-creation permission. Logs expire after seven days and do not consume account storage. No content migration is needed.
 
 Captures cover shared `safeErrorText`, registered API unhandled exceptions/5xx responses, and OpenAI/Anthropic moderation failures. Records contain a closed, redacted error snapshot plus server-generated correlation metadata, never request bodies, cookies, authorization headers, images, or full SDK objects. Upstream request IDs and error types help distinguish throttling from account restrictions. Persistence is best effort: one-second deadline, five captures/request, five concurrent writes and 60 writes/minute per server instance. Console metadata remains when persistence is unavailable or capped; this is a diagnostic trail, not a complete audit ledger. Background paths should await `recordErrorLog` before returning. Do not pass user content as authored context fields.
+
+
+### Background AI replies
+
+Signed-in web clients negotiate `api.lopu-background-tasks` plus each operation's
+capability before starting chat replies, voice transcript replies, musings or AI
+completions. A same-origin SharedWorker submits and observes while tabs remain;
+unsupported or failed workers use the same idempotent page transport. Nitro owns
+inference from admission onward. Vercel `waitUntil` drains the canonical handler
+after the last tab closes. Reconnection never makes a second provider call and
+workers never receive provider credentials.
+
+The Lopu drawer's **Background tasks** page shows running, interrupted and recent
+operations, saved output, Stop and conversation links. Static rings show stages,
+not estimated percentages. **Retry / Continue** submits a new explicit chat turn
+asking Lopu to inspect saved tool receipts and current state first. It never
+resubmits approval tokens. Closing a page detaches its observer; Stop requests
+cancellation. A tool already committing may finish, with its receipt preserved.
+
+Fork setup uses the normal MongoDB/auth/provider settings; no new secret or queue
+service is required. Keep the canonical web build and Vercel output verification:
+the generated server function needs 300 seconds. Replies stop at 240 seconds and
+task collection at 260 seconds, leaving time for persistence/accounting. A killed
+runtime becomes interrupted after its deadline; tools are never replayed
+implicitly. This is bounded execution. Existing scheduled/recording workers keep
+their lifecycle; live microphone capture and direct realtime audio still need an
+open capture surface.
+
+Task output is owner-private, origin/data-source-scoped secure BinData (2 MiB
+maximum). Access expires after seven days; the next task read clears expired
+bytes. The small immutable operation marker remains for deduplication. Normal
+chat transcripts retain their existing lifecycle; lost/deleted conversation
+access also prevents reading task output.
+
+This branch's disposable local QA uses the normal worktree PM2 stack at
+`http://127.0.0.1:14700` (HMR 14701, Nitro 14702). Never point
+`LOPU_CHAT_PROVIDER=test` at real account data: its scripted tools make real
+writes. `LOPU_TEST_PROVIDER_PACE_MS=150` slows disposable fixtures for tab-close,
+Stop and recovery checks.

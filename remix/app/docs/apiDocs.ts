@@ -12,7 +12,6 @@ export type ApiRequestExample = {
   method: ApiHttpMethod;
   headers?: Record<string, string>;
   query?: Record<string, string | number | boolean | null>;
-  headers?: Record<string, string>;
   body?: unknown;
 };
 
@@ -645,10 +644,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [{ status: 200, description: 'Handoff queued or already requested.', body: { ok: true, ownerId: 'your-user-id', message: 'Recording queued for Lopu.' } }, { status: 403, description: 'Processor not enabled or source not eligible.', body: { ok: false, error: 'Enable recording processing first.' } }]
 	}),
 	endpoint({
-		id: 'ai-complete', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'lopu', title: 'AI connection waterfall',
+        id: 'lopu-background-tasks', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'lopu', title: 'Background AI tasks',
+        endpoint: '/api/v1/lopu/tasks', methods: ['GET', 'POST'],
+        summary: 'Observe and stop account-owned background AI requests without replaying them.',
+        detail: 'Negotiate this feature before opting into X-Thingtime-Background-Id on chat replies, voice replies, musings or AI completions. The header is an immutable operation ID: identical retries return the existing task with HTTP 202; different payloads return 409. X-Thingtime-Task-Owner fences account changes. Canonical handlers retain their authentication, provider, permission, quota and billing checks. A SharedWorker observes jobs while origin tabs remain; Nitro and Vercel waitUntil drain the canonical handler even after every tab closes. Execution is bounded to 260 seconds and 2 MiB of private output. GET lists up to 100 recent tasks without output; GET ?id=...&offset=0 returns a bounded 65536-character output slice, next offset and total length. The task contains responseStatus and contentType for reconstructing its response. Polling never re-executes an action. A stale or failed job requires review and explicit continuation; it is never blindly retried. POST {id,action:"stop"} requests cancellation. Alternatively requestId stops an operation before admission using an immutable cancellation marker. Task output is protected binary operational state; no provider credentials or request headers are stored. Tasks are fenced to account, browser-facing origin and selected data source. Output access expires after seven days (410); expired bytes are lazily cleared on the next task read, while the small immutable operation marker remains to prevent replay. Chat transcript access is rechecked before returning its task output.',
+        auth: { mode: 'session-or-bearer', description: 'Full first-party account only; same-origin, private no-store. Every read and cancellation rechecks identity and task scope.' },
+        steps: ['Negotiate api.lopu-background-tasks >=1.0.0 on this origin.', 'Start a supported AI request with a fresh operation ID and expected owner header.', 'Retain the accepted task ID; observe its output without resubmitting.', 'Review partial output before explicitly continuing interrupted work.'],
+        requestExamples: [{ name: 'Stop task', description: 'Stop only this owned execution.', method: 'POST', body: { id: 'lopu-background-example', action: 'stop' } }],
+        responseExamples: [{ status: 200, description: 'Owned task overview.', body: { ok: true, ownerId: 'your-user-id', tasks: [] } }, { status: 404, description: 'No task in this account and origin.', body: { ok: false, error: 'Task not found.' } }]
+    }),
+	endpoint({
+		id: 'ai-complete', contractVersion: '1.2.0', featureVersion: '1.2.0', group: 'lopu', title: 'AI connection waterfall',
 		endpoint: '/api/v1/ai/complete', methods: ['POST'],
 		summary: 'Complete text through an explicit ordered waterfall of your own Secure Vault endpoint connections.',
-		detail: 'Accepts connectionIds (one to four unique owned vault IDs), prompt (1–40000 characters), and optional system (up to 8000 characters). No inline credentials, URLs, tools, owner IDs, model overrides or audio. Connections retain their own endpoint, token and model. Supports the existing Anthropic Messages, Gemini generateContent and OpenAI-compatible adapters. Validates the entire selection before external delivery, then re-resolves each owned connection immediately before use. Tries each connection once with a 20-second transport deadline and 80-second waterfall budget. Only network/timeout and HTTP 401/403/408/429/500/502/503/504/529 permit fallback; invalid configuration, malformed output, other HTTP failures and caller cancellation stop. HTTPS/host allowlisting, public DNS checks, refusal of redirects and response-size limits apply. Claude session tokens are not endpoint credentials and are rejected. This route does not implement a personal Claude Code runtime or transcription. Text goes to the selected endpoints and is not persisted by this route. All inference is billed to the selected connection owner; platform and CI credentials are never selected implicitly.',
+		detail: 'Optional background transport: negotiate api.lopu-background-tasks 1.0.0 and send X-Thingtime-Background-Id plus X-Thingtime-Task-Owner; HTTP 202 returns an idempotent task for polling its original response. Accepts connectionIds (one to four unique owned vault IDs), prompt (1–40000 characters), and optional system (up to 8000 characters). No inline credentials, URLs, tools, owner IDs, model overrides or audio. Connections retain their own endpoint, token and model. Supports the existing Anthropic Messages, Gemini generateContent and OpenAI-compatible adapters. Validates the entire selection before external delivery, then re-resolves each owned connection immediately before use. Tries each connection once with a 20-second transport deadline and 80-second waterfall budget. Only network/timeout and HTTP 401/403/408/429/500/502/503/504/529 permit fallback; invalid configuration, malformed output, other HTTP failures and caller cancellation stop. HTTPS/host allowlisting, public DNS checks, refusal of redirects and response-size limits apply. Claude session tokens are not endpoint credentials and are rejected. This route does not implement a personal Claude Code runtime or transcription. Text goes to the selected endpoints and is not persisted by this route. All inference is billed to the selected connection owner; platform and CI credentials are never selected implicitly.',
 		auth: { mode: 'session-or-bearer', description: 'Live full first-party user account only; temporary/service accounts and scoped app/PAT/device tokens are rejected. Same-origin JSON. Protected subscription tier controls the account rate: Free/custom tiers use the configured ai.complete rule (default 20 per ten minutes), Plus 5x, Pro/PAYG unlimited. Stable account buckets survive session/IP/tier changes. Subscription or limiter outages fail closed with 503; finite quota exhaustion returns 429 with Retry-After. Provider quotas, body limits and security checks still apply.' },
 		steps: ['Create endpoint connections in Settings → Secure Vault.', 'Negotiate api.ai-complete >=1.1.0 with matching major on this origin.', 'Send their IDs in your desired fallback order with the text.', 'Inspect the chosen connectionId and redacted attempts; a configured connection is not proof of quota availability.'],
 		requestExamples: [{ name: 'Text completion', description: 'Try a second owned connection only if the first is unavailable.', method: 'POST', body: { connectionIds: ['your-primary-id', 'your-fallback-id'], prompt: 'Summarize this transcript.', system: 'Return concise notes.' } }],
@@ -4395,9 +4404,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'lopu',
     title: 'Lopu musing stream',
     endpoint: '/api/v1/lopu/musing',
+    contractVersion: '1.1.0', featureVersion: '1.1.0',
     summary: 'Streams a short Lopu musing as newline-delimited JSON.',
     detail:
-      'The stream uses weather/time context from Vercel geo headers when present and falls back to a canned stream if no AI provider is configured or quota is exhausted.',
+      'Optional background transport: negotiate api.lopu-background-tasks 1.0.0 and send X-Thingtime-Background-Id plus X-Thingtime-Task-Owner; HTTP 202 returns an idempotent task for polling its original response. The stream uses weather/time context from Vercel geo headers when present and falls back to a canned stream if no AI provider is configured or quota is exhausted.',
     auth: {
       mode: 'optional',
       description: 'Anonymous calls are allowed. Auth may affect rate-limit accounting when provider-backed output is enabled.'
@@ -4634,11 +4644,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // each spend the same last credit — past the cap the request is refused 429
     // LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted (additive). contractVersion
     // feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.7.2',
-    featureVersion: '1.7.2',
+    contractVersion: '1.8.0',
+    featureVersion: '1.8.0',
     summary: 'Sends one message to Lopu and streams its reply — text, tool calls and live builder patches — as newline-delimited JSON. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
     detail:
-      'Version 1.7.2 runs Claude only through the shared OAuth vault and preserves an explicit model, effort and speed; a failed explicit choice never silently switches providers. ' +
+      'Optional background transport: negotiate api.lopu-background-tasks 1.0.0 and send X-Thingtime-Background-Id plus X-Thingtime-Task-Owner; HTTP 202 returns an idempotent task for polling its original response. Version 1.7.2 runs Claude only through the shared OAuth vault and preserves an explicit model, effort and speed; a failed explicit choice never silently switches providers. ' +
       'Version 1.7.1 rechecks positive balance atomically when reserving a billed turn, preventing a concurrent invite gift from spending the same available balance. ' +
       'Version 1.6.2 clarifies comment proposal guidance: the first unapproved comment_on_thing call opens the exact-target/full-text Confirm card without posting; only a subsequent server-verified approved call can post. Plain-text agreement is not a substitute for a signed confirmation. ' +
       'Version 1.6.1 retains bounded public tool receipts in server-loaded conversation history, so later turns can distinguish completed and failed actions. Receipts are historical outcomes, not current-state guarantees or authorization to repeat actions; raw tool results and confirmation tokens are never replayed. ' +
@@ -4836,7 +4846,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		endpoint: '/api/v1/lopu/voice/reply',
 		summary: 'Streams one Lopu conversation turn or persists one private transcription page. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
 		detail:
-			'Conversation mode decrypts only the selected owner-scoped provider token in server memory, calls the fixed provider endpoint through the shared SSRF fence, and streams NDJSON text deltas. The model is the connection’s own, else the kind’s first catalog model, else the optional `model` in the body; optional `effort` and `speed` must be supported by that model. Version 1.3 transcribe mode accepts chatId and requestId, persists the transcript in the same Lopu conversation and as a linked owner-private data Thing, and returns meta.chatId, quote.page and done.messages. Stable request IDs deduplicate chat/page/turn writes. Transcription makes no provider call and is limited to 12000 characters per utterance.',
+			'Optional background transport: negotiate api.lopu-background-tasks 1.0.0 and send X-Thingtime-Background-Id plus X-Thingtime-Task-Owner; HTTP 202 returns an idempotent task for polling its original response. Conversation mode decrypts only the selected owner-scoped provider token in server memory, calls the fixed provider endpoint through the shared SSRF fence, and streams NDJSON text deltas. The model is the connection’s own, else the kind’s first catalog model, else the optional `model` in the body; optional `effort` and `speed` must be supported by that model. Version 1.3 transcribe mode accepts chatId and requestId, persists the transcript in the same Lopu conversation and as a linked owner-private data Thing, and returns meta.chatId, quote.page and done.messages. Stable request IDs deduplicate chat/page/turn writes. Transcription makes no provider call and is limited to 12000 characters per utterance.',
 		auth: { mode: 'session', description: 'Requires the current full Thingtime user session (a temporary guest session is a 403). Bodies must be application/json (415 otherwise).' },
 		methods: ['POST'],
 		steps: [

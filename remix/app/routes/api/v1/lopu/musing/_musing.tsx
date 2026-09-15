@@ -63,7 +63,7 @@ export const loader = async ({ request }: { request: Request }) => {
   const body = new ReadableStream({
     async start(controller) {
       try {
-        for await (const ev of streamLopuMusing(ctx, { forceFallback })) {
+        for await (const ev of streamLopuMusing(ctx, { forceFallback, signal: request.signal })) {
           controller.enqueue(encoder.encode(JSON.stringify(ev) + '\n'));
         }
       } catch {

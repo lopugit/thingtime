@@ -134,8 +134,8 @@ export async function* runClaudeOAuth(request: TextRequest, token: string, signa
 	const timer = setTimeout(() => {
 		timedOut = true;
 		stop();
-	}, 120_000);
-	const killTimer = setTimeout(() => child.kill('SIGKILL'), 125_000);
+	}, 230_000);
+	const killTimer = setTimeout(() => child.kill('SIGKILL'), 235_000);
 	signal?.addEventListener('abort', stop, { once: true });
 	// Never forward CLI diagnostics: they can contain prompts or credentials.
 	child.stderr.resume();
@@ -172,7 +172,8 @@ export async function* runClaudeOAuth(request: TextRequest, token: string, signa
 		}
 		const code = await closed;
 		signal?.throwIfAborted();
-		if (timedOut || code !== 0 || !result || result.is_error)
+		if (timedOut) throw new Error('Claude reached the time limit before finishing the reply.');
+        if (code !== 0 || !result || result.is_error)
 			throw new Error('Claude OAuth could not complete this request. Check the credential and Claude Code allowance.');
 		const usage = result.usage || {};
 		yield {
@@ -262,7 +263,14 @@ export function createClaudeOAuthClient(options: { token?: string; env?: NodeJS.
 							if (emitted || signal.aborted || slot === tokens.length - 1) throw error;
 						}
 					}
-					for (const event of parser.finish()) emit(event);
+					try { for (const event of parser.finish()) emit(event); }
+                    catch (error) {
+                        // Token exhaustion may cut JSON halfway through a tool. No
+                        // partial call was emitted; retain text and the real stop
+                        // reason so the chat offers Continue instead of a false
+                        // connection failure. Other malformed output still fails.
+                        if (stopReason !== 'max_tokens') throw error;
+                    }
 					for (let index = 0; index < blocks.length; index++) send({ type: 'content_block_stop', index });
 					send({
 						type: 'message_delta',

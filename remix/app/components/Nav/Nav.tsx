@@ -258,7 +258,7 @@ export const Nav = (props) => {
 						position="relative"
 						zIndex={10000}
 						flexShrink={0}
-						display={['none', 'flex']}
+						display={{ base: 'none', md: 'flex' }}
 						height="36px"
 						marginRight="auto"
 						columnGap={2}

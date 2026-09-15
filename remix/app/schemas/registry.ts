@@ -4110,6 +4110,7 @@ export const PROTECTED_THINGTIME = [
 
   'account-invite',
 	'lopu-recording-settings',
+	'lopu-background-task',
 	'lopu-recording-job',
 	'lopu-recording-reminder',
 	'lopu-reminder',
@@ -4301,6 +4302,10 @@ const waitlistThingSchema: ThingtimeSchema = {
 };
 
 export const thingtimeSchemas: ThingtimeSchema[] = [
+	{ id: 'lopu-background-task', version: 1, kind: 'crystal', collection: null, title: 'Background AI task',
+    summary: 'Protected owner-private execution and reconnect state.',
+    detail: 'Home control Thing with origin/data-source scope, immutable request digest and bounded secure BinData output. Seven-day output access; lazy byte removal; retained operation marker prevents replay. Chat output additionally requires current conversation access.',
+    createdVia: 'Background transport on the canonical AI endpoints', fields: [], example: {} },
 	...(['lopu-recording-settings', 'lopu-recording-job', 'lopu-recording-reminder', 'lopu-reminder'] as const).map((id): ThingtimeSchema => ({
 		id, version: 1, kind: 'crystal', collection: null, title: id,
 		summary: 'Protected owner-private recording or reminder automation state.',
