@@ -154,8 +154,8 @@ jobs:
           endpoint="https://thingtime.com/api/v1/settings/pr-conflict-auto-resolver-model-waterfall"
           response_file="$RUNNER_TEMP/all-doctor-model-waterfall.json"
 
-          waterfall='["default"]'
-          source="built-in default"
+          waterfall='[]'
+          source="Thingtime admin setting"
 
           if curl --fail --silent --show-error \
             --proto '=https' \
@@ -186,14 +186,13 @@ jobs:
             ' "$response_file" 2>/dev/null)"; then
               waterfall="$configured"
               source="Thingtime admin setting"
-              if ! jq -e 'index("default") != null' >/dev/null <<<"$waterfall"; then
-                waterfall="$(jq -c '. + ["default"]' <<<"$waterfall")"
-              fi
             else
-              echo "::warning::Thingtime returned a malformed model waterfall; using [default]."
+              echo "::error::Thingtime returned a malformed model waterfall; no model will run."
+              exit 1
             fi
           else
-            echo "::warning::Thingtime model waterfall is unavailable; using [default]."
+            echo "::error::Thingtime model waterfall is unavailable; no model will run."
+            exit 1
           fi
 
           # Never interpolate API strings into claude_args. Re-validate each
@@ -260,23 +259,13 @@ jobs:
             models+=("$model")
           done
           if [ "$mapping_failed" -eq 1 ]; then
-            echo "::warning::Validated waterfall mapping failed closed; using [default]."
-            models=("default")
-            claude_effort="max"
-            source="built-in default"
+            echo "::error::Validated waterfall mapping failed closed; no model will run."
+            exit 1
           fi
           if [ "${#models[@]}" -eq 0 ]; then
-            echo "::warning::No Claude-capable waterfall entries; using [default]."
-            models=("default")
-            claude_effort="max"
+            echo "::error::No Claude-capable waterfall entries; no model will run."
+            exit 1
           fi
-          has_default=0
-          for existing in "${models[@]}"; do
-            if [ "$existing" = "default" ]; then
-              has_default=1
-            fi
-          done
-          [ "$has_default" -eq 1 ] || models+=("default")
 
           primary="${models[0]}"
           model_args="--model $primary"
@@ -288,10 +277,8 @@ jobs:
           # Fail closed at the loader if the chain exceeds the 2048-character
           # transport cap enforced downstream, instead of erroring after work.
           if [ "${#model_args}" -gt 2048 ]; then
-            echo "::warning::Validated model args exceed the 2048-character transport cap; using [default]."
-            models=("default")
-            claude_effort="max"
-            model_args="--model ${models[0]} --effort $claude_effort"
+            echo "::error::Validated model args exceed the 2048-character transport cap; no model will run."
+            exit 1
           fi
 
           echo "Model waterfall source: $source"

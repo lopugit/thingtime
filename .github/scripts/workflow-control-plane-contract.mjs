@@ -278,8 +278,8 @@ function assertAdminWaterfallGrammar(block, label) {
     `${label}: rebuilds Claude models from the closed base pattern`,
   );
   assert.ok(
-    block.includes('. + ["default"]'),
-    `${label}: appends the default hard fallback defensively`,
+    !block.includes('. + ["default"]') && !block.includes('models+=("default")'),
+    `${label}: never appends an unconfigured default`,
   );
   // A repeated segment (`model:fast:fast`, `model:high:low`) must fail the
   // whole mapping closed rather than being silently absorbed by one copy.
@@ -320,21 +320,8 @@ function assertAdminTransportCap(block, label) {
     `${label}: caps the assembled model args at the ${ADMIN_MODEL_ARGS_CAP}-character transport limit`,
   );
   const body = guard[1];
-  assert.match(
-    body,
-    /::warning::/u,
-    `${label}: warns when the transport cap collapses the chain`,
-  );
-  assert.match(
-    body,
-    /claude_effort="max"/u,
-    `${label}: transport-cap fallback resets the session effort`,
-  );
-  assert.match(
-    body,
-    /(?:model_)?args="--model \$\{?[a-z_]+.*--effort \$claude_effort"/u,
-    `${label}: transport-cap fallback rebuilds the chain from validated variables`,
-  );
+  assert.match(body, /::error::/u, `${label}: reports an unusable configured chain`);
+  assert.match(body, /exit 1/u, `${label}: stops rather than running an unconfigured model`);
   // Measuring anything but the finished chain would let an oversized value
   // through to the downstream gate, which is the failure this guard exists to
   // prevent — so pin assembly < guard < export.
