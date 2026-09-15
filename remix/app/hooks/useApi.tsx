@@ -386,7 +386,10 @@ export function useApi() {
         [asyncFetcher]
       ),
       setPrConflictResolverModelWaterfall: useCallback(
-				async (waterfall) => asyncFetcher.submit({ waterfall }, { action: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall' }),
+				async (waterfall) => {
+          await requireThingtimeCapability('api.settings-pr-conflict-auto-resolver-model-waterfall', '1.1.0');
+          return asyncFetcher.submit({ waterfall }, { action: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall' });
+        },
         [asyncFetcher]
       ),
       rateLimits: useCallback(async () => getJson('/api/v1/admin/rate-limits'), []),
