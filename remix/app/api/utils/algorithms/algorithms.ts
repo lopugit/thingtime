@@ -775,13 +775,16 @@ export const searchListedAlgorithms = async (query: { q?: string | null; cursor?
   const superseded = new Set(twins.map((doc) => doc.shareId));
   const docs = [...current.map((doc) => ({ ...doc, ...doc.crystal, current: true })), ...old.map((doc) => ({ ...doc, current: false }))]
     .sort((a, b) => a.shareId.localeCompare(b.shareId));
-  const page = docs.slice(0, 20);
+  // Keep both eras at a cursor boundary together so a legacy twin cannot
+  // advance the cursor past the authoritative current listing.
+  const cutoff = docs[19]?.shareId;
+  const page = cutoff ? docs.filter((doc) => doc.shareId.localeCompare(cutoff) <= 0) : docs;
   const visible = page.filter((doc) => doc.current || !superseded.has(doc.shareId));
   const usernames = await resolveAuthorUsernames(visible.map((doc) => String(doc.ownerId)));
   return {
     algorithms: visible.map((doc) => ({ id: doc.shareId, name: doc.name || '', emoji: doc.emoji || '🧠',
       description: doc.description || '', eventCount: doc.eventCount || 0,
       ownerUsername: usernames.get(String(doc.ownerId)) ?? null })),
-    nextCursor: docs.length > 20 ? page[page.length - 1].shareId : null
+    nextCursor: docs.length > page.length ? page[page.length - 1].shareId : null
   };
 };
