@@ -31,6 +31,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-15 — AI workflow model order preserves configured entries without appending or requiring a default fallback; adds save/load regression coverage and capability negotiation. — **Codex (AI)**
+
 - 2026-09-15 — **Codex (AI)** — Moderation now resolves a dedicated encrypted
   `OpenAI Moderation` admin-vault credential per deployment environment for
   images, invitation avatars and text, ahead of the legacy server key. Rotation
