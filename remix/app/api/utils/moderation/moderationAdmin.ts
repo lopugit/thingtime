@@ -120,6 +120,10 @@ export type ModerationSettingsView = {
 
 export const getModerationSettingsView = async (env: NodeJS.ProcessEnv = process.env): Promise<ModerationSettingsView> => {
 	const settings = await getModerationSettings();
+	if (settings.mediaProvider !== 'off' || settings.textProvider !== 'off') {
+		const { resolveModerationEnvironment } = await import('./moderationCredentials');
+		env = await resolveModerationEnvironment(env);
+	}
 	const mediaChoice = await resolveModerationProvider(env, settings.mediaProvider);
 	const textChoice = resolveTextModeration(env, settings.textProvider);
 	return {

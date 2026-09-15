@@ -187,7 +187,7 @@ test('tiered lazy claude import contract holds without a network call', async ()
 	// regression fails here instead of hiding inside the tiered catch in prod.
 	const { createClaudeModerationProvider } = await import('./claudeProvider');
 	assert.equal(typeof createClaudeModerationProvider, 'function');
-	const claude = createClaudeModerationProvider({ ANTHROPIC_API_KEY: 'stub-key' } as any);
+	const claude = createClaudeModerationProvider({ CLAUDE_CODE_OAUTH_TOKEN: 'stub-key' } as any);
 	assert.equal(claude.name, 'claude');
 	assert.equal(typeof claude.analyzeImage, 'function');
 });
@@ -237,19 +237,19 @@ test('provider resolution covers the new openai and tiered values plus key-based
 	const openai = await resolveModerationProvider({ THINGTIME_MODERATION_PROVIDER: 'openai' } as any);
 	assert.equal(openai.kind === 'provider' && openai.provider.name, 'openai');
 	// unset: both keys → tiered; single key → that provider; none → off
-	const bothKeys = await resolveModerationProvider({ OPENAI_API_KEY: 'o', ANTHROPIC_API_KEY: 'a' } as any);
+	const bothKeys = await resolveModerationProvider({ OPENAI_API_KEY: 'o', CLAUDE_CODE_OAUTH_TOKEN: 'a' } as any);
 	assert.equal(bothKeys.kind === 'provider' && bothKeys.provider.name, 'openai+claude');
 	const openaiOnly = await resolveModerationProvider({ OPENAI_API_KEY: 'o' } as any);
 	assert.equal(openaiOnly.kind === 'provider' && openaiOnly.provider.name, 'openai');
-	const anthropicOnly = await resolveModerationProvider({ ANTHROPIC_API_KEY: 'a' } as any);
+	const anthropicOnly = await resolveModerationProvider({ CLAUDE_CODE_OAUTH_TOKEN: 'a' } as any);
 	assert.equal(anthropicOnly.kind === 'provider' && anthropicOnly.provider.name, 'claude');
 	assert.equal((await resolveModerationProvider({} as any)).kind, 'off');
 	// explicit choices are never silently rerouted by extra keys
-	const explicitClaude = await resolveModerationProvider({ THINGTIME_MODERATION_PROVIDER: 'claude', OPENAI_API_KEY: 'o', ANTHROPIC_API_KEY: 'a' } as any);
+	const explicitClaude = await resolveModerationProvider({ THINGTIME_MODERATION_PROVIDER: 'claude', OPENAI_API_KEY: 'o', CLAUDE_CODE_OAUTH_TOKEN: 'a' } as any);
 	assert.equal(explicitClaude.kind === 'provider' && explicitClaude.provider.name, 'claude');
 	// a typo'd value must not silently disable moderation: it warns and honors
 	// the key-based default instead of resolving to 'off'
-	const typo = await resolveModerationProvider({ THINGTIME_MODERATION_PROVIDER: 'claude+openai', OPENAI_API_KEY: 'o', ANTHROPIC_API_KEY: 'a' } as any);
+	const typo = await resolveModerationProvider({ THINGTIME_MODERATION_PROVIDER: 'claude+openai', OPENAI_API_KEY: 'o', CLAUDE_CODE_OAUTH_TOKEN: 'a' } as any);
 	assert.equal(typo.kind === 'provider' && typo.provider.name, 'openai+claude');
 	assert.equal((await resolveModerationProvider({ THINGTIME_MODERATION_PROVIDER: 'bogus' } as any)).kind, 'off');
 });
