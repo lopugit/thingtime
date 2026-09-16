@@ -1,3 +1,4 @@
+import { useBackgroundRefresh } from '~/hooks/useBackgroundRefresh';
 import { Outlet, ScrollRestoration, useLoaderData, useLocation, useRevalidator } from 'react-router';
 import { Analytics } from '@vercel/analytics/react';
 import React from 'react';
@@ -141,6 +142,8 @@ export default function App() {
     window.addEventListener('thingtime:root-data-refresh', refreshRootData);
     return () => window.removeEventListener('thingtime:root-data-refresh', refreshRootData);
   }, [revalidator]);
+
+  useBackgroundRefresh('root-data', () => revalidator.state === 'idle' ? revalidator.revalidate() : undefined, 60_000, false);
 
   if (identity.pending && rootData.clientIdentityGeneration !== identity.generation) return <RootRecovery refreshing />;
 

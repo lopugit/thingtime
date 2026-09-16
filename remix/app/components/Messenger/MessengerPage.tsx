@@ -1,3 +1,4 @@
+import { subscribeBackgroundRefresh } from '~/hooks/backgroundRefresh';
 import React from 'react';
 import { Box, Button, Flex } from '@chakra-ui/react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
@@ -90,22 +91,20 @@ export const MessengerPage = () => {
   }, [api, navigate, userId]);
 
   React.useEffect(() => {
-    void refresh();
-    const interval = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void refresh();
-    }, LIST_POLL_MS);
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') void refresh();
+    let pending = false;
+    const poll = async () => {
+      if (pending) return;
+      pending = true;
+      try { await refresh(); } finally { pending = false; }
     };
-    const onRefreshEvent = () => void refresh();
-    document.addEventListener('visibilitychange', onVisible);
+    const unsubscribe = subscribeBackgroundRefresh(`messenger-list:${userId}`, poll, LIST_POLL_MS);
+    const onRefreshEvent = () => { void poll(); };
     window.addEventListener(MESSENGER_REFRESH_EVENT, onRefreshEvent);
     return () => {
-      window.clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisible);
+      unsubscribe();
       window.removeEventListener(MESSENGER_REFRESH_EVENT, onRefreshEvent);
     };
-  }, [refresh]);
+  }, [refresh, userId]);
 
   // deep links stay shareable: ?chat= opens a conversation, ?view=requests
   // (the drawer's Requests entry) opens the requests pane
