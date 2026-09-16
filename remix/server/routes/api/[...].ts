@@ -12,6 +12,7 @@ type RouteModule = {
 };
 
 export const routeModules: Record<string, () => Promise<RouteModule>> = {
+  'v1/lopu/tasks': () => import('../../../app/routes/api/v1/lopu/tasks/_tasks'),
   'v1/admin/error-logs': () => import('../../../app/routes/api/v1/admin/error-logs/_error-logs'),
   'v1/integrations/ci/stack-completion': () => import('../../../app/routes/api/v1/integrations/ci/stack-completion/_stack-completion'),
   'v1/watch/recordings': () => import('../../../app/routes/api/v1/watch/recordings/_recordings'),
@@ -66,6 +67,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/algorithms': () => import('../../../app/routes/api/v1/algorithms/_algorithms'),
   'v1/algorithms/active': () => import('../../../app/routes/api/v1/algorithms/active/_active'),
   'v1/algorithms/delete': () => import('../../../app/routes/api/v1/algorithms/delete/_delete'),
+  'v1/algorithms/search': () => import('../../../app/routes/api/v1/algorithms/search/_search'),
   'v1/algorithms/shared': () => import('../../../app/routes/api/v1/algorithms/shared/_shared'),
   'v1/algorithms/track': () => import('../../../app/routes/api/v1/algorithms/track/_track'),
   'v1/algorithms/update': () => import('../../../app/routes/api/v1/algorithms/update/_update'),
@@ -432,7 +434,13 @@ export default defineHandler(async (event) => {
   const mongoEndpoint = path.startsWith('v1/admin/') ? null : await getRequestMongoEndpoint(event.req);
 
   try {
-		const response = await runWithMongoEndpoint(mongoEndpoint, async () => normalizeResponse(await handler({ request: event.req })));
+		const response = await runWithMongoEndpoint(mongoEndpoint, async () => {
+      if (event.req.headers.has('X-Thingtime-Background-Id')) {
+        const { startBackgroundTask } = await import('../../../app/api/utils/lopu/backgroundTasks');
+        return startBackgroundTask(event.req, async request => normalizeResponse(await handler({ request })));
+      }
+      return normalizeResponse(await handler({ request: event.req }));
+    });
     if (response.status >= 500 && path !== 'v1/admin/error-logs') await recordErrorLog(new Error('HTTP request returned a server error'), { source: 'http-response', status: response.status });
     return response;
   } catch (err) {

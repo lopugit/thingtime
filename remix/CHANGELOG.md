@@ -31,6 +31,15 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-16 — Background chat, voice transcript replies, musings and AI
+  completions: SharedWorker observation, idempotent Nitro/Vercel execution,
+  private task overview, static rings, Stop and Retry / Continue. Keeps partial
+  output, handles complete tool JSON missing its closing fence, and preserves
+  token-limit recovery. Fixes proxy origin checks and reserves a 300-second
+  Vercel budget. [Details and validation](../PRs/814-codex-lopu-background-tasks-keep-lopu-ai-tasks-running-in-the-background-with-recovery-controls.md). **Codex (AI)**
+- 2026-09-16: Added eight feed perspectives, the opt-in public algorithm directory and creation/sharing flows, plus validated Thing coordinates and radius-based Local/search queries. Verified the Vercel build and responsive screens. See [PR #813](../PRs/813-feed-algorithm-community-defaults-discovery-geographic-queries.md).
+
+
 - 2026-09-16: Lopu tool cards now expose safe Open anchors for read pages, search/list results, related components and URLs, retained in new saved receipts. Verified desktop/390px layouts and production build; older receipts keep their available Thing link.
 
 - 2026-09-15 — **Codex (AI)** — System now manages shared platform credentials,

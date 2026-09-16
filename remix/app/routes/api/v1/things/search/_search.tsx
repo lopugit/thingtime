@@ -132,6 +132,8 @@ export const action = async ({ request }: { request: Request }) => {
   const body = await readJsonBodyWithCors(request, MAX_BODY_BYTES, actorCors(actor));
   return respond(request, actor, {
     q: body?.q,
+    near: body?.near,
+    radiusKm: body?.radiusKm,
     mode: body?.mode,
     conditions: body?.conditions,
     thingtime: body?.thingtime,

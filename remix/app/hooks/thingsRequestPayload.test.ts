@@ -76,3 +76,11 @@ test('unified creation keeps rich text inside its crystal without a second top-l
 	assert.deepEqual(payload.crystal, { type: 'text', text: 'Posts', richText });
 	assert.equal('richText' in payload, false);
 });
+
+
+test('geo is opt-in and retained by both post transport forms', () => {
+  for (const base of [{ type: 'text' }, { thingtime: ['post'], crystal: { type: 'text' } }]) {
+    assert.equal('geo' in buildThingCreateRequestPayload(base), false);
+    assert.deepEqual(buildThingCreateRequestPayload({ ...base, geo: { lat: 0, lng: 0 } }).geo, { lat: 0, lng: 0 });
+  }
+});

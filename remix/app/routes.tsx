@@ -191,11 +191,13 @@ export const router = createBrowserRouter([
       // public trending board — guest-visible like /feed
       { path: 'explore', element: <Explore /> },
       { path: 'feed', element: <Feed /> },
+      { path: 'algorithms', lazy: lazyRoute(() => import('./routes/algorithms')) },
       { path: 'messages', lazy: lazyRoute(() => import('./routes/messages')), loader: requireUser('/login') },
       // Lopu 🦄 — the AI assistant page; no loader guard: it renders its own
       // signed-out quiet state, like /apps. /lopu/:chatId deep-links a
       // conversation (the floating window shares the same store).
       { path: 'lopu', lazy: lazyRoute(() => import('./routes/lopu')) },
+      { path: 'lopu/tasks', lazy: lazyRoute(() => import('./routes/lopu.tasks')), loader: requireUser('/login') },
       { path: 'lopu/voice', lazy: lazyRoute(() => import('./routes/lopu-voice')), loader: requireUser('/login') },
       { path: 'lopu/:chatId', lazy: lazyRoute(() => import('./routes/lopu')) },
       { path: 'login', element: <Login />, loader: requireGuest('/profile') },

@@ -18,6 +18,7 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { getWebpageDraftsVersion, subscribeWebpageDrafts } from './lopuBuildBridge';
 import {
 	abortLopuTurn,
+	recoverLopuBackgroundTasks,
 	activeDraftLabel,
 	bindLopuApi,
 	canUndoLopuPatch,
@@ -38,7 +39,6 @@ import {
 	selectLopuMessages,
 	selectLopuModelLabels,
 	selectLopuProviderNames,
-	selectLopuStreaming,
 	selectLopuTurnsForChat,
 	sendLopuMessage,
 	setLopuSettings,
@@ -201,6 +201,15 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 	const byo = !!snapshot.settings.providerId;
 	const account = useLopuAccount({ byo });
 
+	React.useEffect(() => {
+		if (!userId) return;
+		const refresh = () => { void recoverLopuBackgroundTasks().catch(() => {}); };
+		refresh();
+		const timer = setInterval(refresh, 3000);
+		window.addEventListener('focus', refresh);
+		return () => { clearInterval(timer); window.removeEventListener('focus', refresh); };
+	}, [userId]);
+
 	// background refetches
 	React.useEffect(() => {
 		if (!userId) return;
@@ -287,8 +296,7 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 	const timeline = React.useMemo(() => buildLopuTimeline(messages, turns, userId || ''), [messages, turns, userId]);
 	const modelLabels = React.useMemo(() => selectLopuModelLabels(snapshot), [snapshot]);
 	const providerNames = React.useMemo(() => selectLopuProviderNames(snapshot), [snapshot]);
-	const streamingAny = selectLopuStreaming(snapshot);
-	const streaming = streamingAny && streamingAny.chatId === activeChatId ? streamingAny : null;
+	const streaming = Object.values(snapshot.turns).find(turn => turn.chatId === activeChatId && turn.status === 'streaming') ?? null;
 
 	return {
 		viewer: { id: userId, signedIn: !!user && !user.temporary, temporary: !!user?.temporary, admin: user?.isAdmin === true },
@@ -300,7 +308,7 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 		turns,
 		timeline,
 		streaming,
-		sending: snapshot.sending,
+		sending: !!streaming,
 		send,
 		abort: abortLopuTurn,
 		selectChat,

@@ -162,7 +162,7 @@ const MUSING_MAX_OUTPUT_TOKENS = 4096;
 // fast-mode knobs are applied when present; if the decorated request fails
 // before producing any text (e.g. a knob the model rejects), one bare retry
 // with just the model keeps the admin's model preference alive.
-async function* streamClaude(system: string, user: string, choice: AiWorkflowModelChoice): AsyncGenerator<string> {
+async function* streamClaude(system: string, user: string, choice: AiWorkflowModelChoice, signal?: AbortSignal): AsyncGenerator<string> {
   const client = createClaudeOAuthClient();
   const base = {
     model: choice.model,
@@ -174,8 +174,8 @@ async function* streamClaude(system: string, user: string, choice: AiWorkflowMod
   const effort = toAnthropicEffort(choice.effort);
   const decorated = choice.speed === 'fast' || effort;
   const attempts = [() => choice.speed === 'fast'
-    ? client.beta.messages.stream({ ...base, ...(effort ? { output_config: { effort } } : {}), speed: 'fast', betas: ['fast-mode-2026-02-01'] })
-    : client.messages.stream({ ...base, ...(effort ? { output_config: { effort } } : {}) })];
+    ? client.beta.messages.stream({ ...base, ...(effort ? { output_config: { effort } } : {}), speed: 'fast', betas: ['fast-mode-2026-02-01'] }, { signal })
+    : client.messages.stream({ ...base, ...(effort ? { output_config: { effort } } : {}) }, { signal })];
 
   for (let attempt = 0; attempt < attempts.length; attempt++) {
     let yielded = false;
@@ -202,7 +202,8 @@ async function* streamClaude(system: string, user: string, choice: AiWorkflowMod
 async function* streamOpenAI(
   system: string,
   user: string,
-  choice: AiWorkflowModelChoice | null
+  choice: AiWorkflowModelChoice | null,
+  signal?: AbortSignal
 ): AsyncGenerator<string> {
   const client = new OpenAI();
   const base = {
@@ -228,10 +229,10 @@ async function* streamOpenAI(
             ...(effort ? { reasoning_effort: effort } : {}),
             // 'fast' maps to OpenAI priority processing.
             ...(choice.speed === 'fast' ? { service_tier: 'priority' as const } : {})
-          }),
-        () => client.chat.completions.create(base)
+          }, { signal }),
+        () => client.chat.completions.create(base, { signal })
       ]
-    : [() => client.chat.completions.create(base)];
+    : [() => client.chat.completions.create(base, { signal })];
 
   for (let attempt = 0; attempt < attempts.length; attempt++) {
     let yielded = false;
@@ -280,8 +281,9 @@ async function* streamFallback(mode: LopuMode): AsyncGenerator<LopuStreamEvent> 
 // failure (no key / no credits / network) fall back to the canned library.
 export async function* streamLopuMusing(
   ctx: LopuContext,
-  opts: { forceFallback?: boolean } = {}
+  opts: { forceFallback?: boolean; signal?: AbortSignal } = {}
 ): AsyncGenerator<LopuStreamEvent> {
+  opts.signal?.throwIfAborted();
   const mode = opts.forceFallback ? 'fallback' : pickMode();
 
   // Pure-fallback mode, or no AI configured at all: serve a canned line.
@@ -304,8 +306,8 @@ export async function* streamLopuMusing(
     try {
       const gen =
         provider === 'claude'
-          ? streamClaude(SYSTEM_PROMPT, user, choices.claude)
-          : streamOpenAI(SYSTEM_PROMPT, user, choices.openai);
+          ? streamClaude(SYSTEM_PROMPT, user, choices.claude, opts.signal)
+          : streamOpenAI(SYSTEM_PROMPT, user, choices.openai, opts.signal);
       // Pull the first chunk inside the try so a failing provider (bad key, no
       // credits) is caught here and we move to the next one cleanly.
       const first = await gen.next();
@@ -328,6 +330,7 @@ export async function* streamLopuMusing(
       yield { type: 'done' };
       return;
     } catch {
+      opts.signal?.throwIfAborted();
       // try the next provider
     }
   }

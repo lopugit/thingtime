@@ -1,3 +1,4 @@
+import { aiTaskFetch } from './aiTasks.client';
 import React from 'react';
 import { Box, Button, Center, Flex, Input, Popover, PopoverBody, PopoverContent, PopoverTrigger, Select, Switch, Text } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
@@ -385,7 +386,7 @@ export const useLopuVoice = (options: UseLopuVoiceOptions): UseLopuVoice => {
 				const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
 				await requireThingtimeCapability('api.lopu-voice-reply', '1.3.0');
 				if (requestOwner !== getLopuStoreSnapshot().userId) return;
-				const response = await fetch(VOICE_REPLY_ENDPOINT, {
+				const response = await aiTaskFetch(VOICE_REPLY_ENDPOINT, {
 					method: 'POST',
 					credentials: 'include',
 					headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' },

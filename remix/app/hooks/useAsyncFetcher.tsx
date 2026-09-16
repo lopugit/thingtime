@@ -1,3 +1,4 @@
+import { aiTaskFetch } from '~/components/Lopu/aiTasks.client';
 import { useCallback, useState } from 'react';
 
 import { createApiFailure, readApiResponsePayload } from './apiFailure';
@@ -39,7 +40,7 @@ export function useAsyncFetcher() {
       const started = performance.now();
       let response: Response;
       try {
-        response = await fetch(nextOpts.action, {
+        response = await aiTaskFetch(nextOpts.action, {
           method,
           credentials: 'include',
           headers,

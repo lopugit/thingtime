@@ -324,6 +324,30 @@
   or attached galleries before writes. A later mixed-import failure must clean
   new themes through the dedicated theme delete writer, never generic CRUD.
 
+## Background AI execution and recovery
+
+- [ ] With disposable data and `LOPU_CHAT_PROVIDER=test`, send a reply, navigate
+  away, close its tab with another origin tab open, then repeat with all origin
+  tabs closed. Reopen task overview/chat: one user turn, assistant turn and set
+  of tool receipts. Start two separate chats; both progress independently.
+- [ ] Same-chat concurrent replies are refused. Retrying uncertain admission with
+  its identical ID never increases inference/billing; changed payload gets 409.
+- [ ] Stop, reload and Retry / Continue: keep partial text and completed receipts,
+  never replay old approvals. Cover missing done, malformed JSON, complete tool
+  JSON without closing fence, max-token truncation, deadlines and provider loss.
+- [ ] Switch accounts during requests, including switching back: no stale output,
+  patch or navigation crosses sessions. Reject foreign owner/origin/data-source
+  task reads and output for deleted/inaccessible conversations.
+- [ ] Desktop and 390px: drawer sub-tab, Running/Needs attention/Recent, expanded
+  output, Stop, chat links and recovery buttons. Scroll entire pages/chats and
+  open tool details; check static rings, wrapping, clipping and overlap. At
+  480–767px the header account link occurs once and notifications fit.
+- [ ] Interrupt worker support in a disposable browser: direct observation reuses
+  the same accepted operation with no duplicate output. Verify built manifests
+  and >=300-second server function budget. Check musing, voice transcript reply
+  and AI completion after navigation; real provider acceptance needs configured
+  credentials, separate from provider-less fallback/validation fixtures.
+
 ## Unified Lopu conversations, scheduled Things and discussions
 
 - [ ] Read a page with related components, search/list Things, and follow each
@@ -7402,3 +7426,10 @@ approval; `access.test.ts` — the reservation matrix) and
 - At `/s/:slug/mod?tab=settings`, verify icon and banner default to upload tiles, each with **Use URL instead**. Upload a raster image to each slot, verify preview/progress and Save blocking, save and reload; check directory/card/feed icon and subspace banner as another viewer. Branding remains public directory identity for private subspaces.
 - Replace, remove, cancel, retry a failed upload/save, and switch to/from a valid URL. Existing URLs survive unchanged saves; invalid URLs/non-images/over-64-MiB files and wrong-purpose, wrong-owner, expired or already-bound uploads are refused. Replacement URLs stop serving old managed bytes; abandoned/replaced objects remain billed until reaped.
 - Check revoked moderator access, upload approval, quota failure, ownership transfer and deletion cleanup. On desktop and 390px mobile, open both URL panels and scroll top to bottom; verify no overlap, clipping or horizontal overflow.
+
+## Feed defaults, algorithm directory and geographic Things
+
+- [ ] Open `/feed` on desktop and mobile: all eight builtins appear in the bounded, scrollable picker; selecting one updates the feed and reloading preserves it. Builtins never receive training events.
+- [ ] Open `/algorithms`, search by name/description, create a private profile, publish it, branch it from another account, unpublish, and disable sharing. Private and link-only algorithms never appear in the directory; previews never expose learned weights; existing copies survive unsharing.
+- [ ] Create Things through the API with `geo: {lat,lng}`. Invalid/missing/out-of-range coordinates return 400. POST `/things/search` with `near` and `radiusKm`, and Local feed with lat/lng, find nearby visible posts, exclude far/private posts, and retain tag/subspace/ACL filters. PATCH `geo:null` removes the location.
+- [ ] Local's location request occurs only from its button; denial leaves the location-tag fallback usable. Scroll directory/feed top-to-bottom at desktop/mobile widths, including the editor and open picker; no content overflows.

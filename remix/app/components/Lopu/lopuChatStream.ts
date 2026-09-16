@@ -3,6 +3,7 @@
 // useLopu.tsx generalised so every consumer (the shared chat store, tests)
 // parses the stream identically. Pure fetch/Response code, no React.
 
+import { aiTaskFetch } from './aiTasks.client';
 import { recordApiCall } from '~/hooks/apiRequestLog';
 import { isLopuChatEvent, type LopuChatEvent } from './lopuTurnCore';
 
@@ -82,7 +83,7 @@ export const postLopuReply = async (body: LopuReplyBody, options?: { signal?: Ab
 	const started = performance.now();
 	let response: Response;
 	try {
-		response = await fetch(LOPU_REPLY_PATH, {
+		response = await aiTaskFetch(LOPU_REPLY_PATH, {
 			method: 'POST',
 			credentials: 'include',
 			headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' },

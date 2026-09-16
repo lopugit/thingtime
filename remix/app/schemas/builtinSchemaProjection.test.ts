@@ -20,6 +20,7 @@ const fieldNames = (crystal: Record<string, unknown>): string[] => (crystal.fiel
 // reserved name) and the pin updated in the same change.
 const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
 	// Protected operational state has no user-editable schema fields.
+	'lopu-background-task': [],
 	'lopu-recording-settings': [],
 	'lopu-recording-job': [],
 	'lopu-recording-reminder': [],
@@ -201,7 +202,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   follow: ['followKey'],
   user: ['username', 'ttid', 'displayName', 'bio', 'avatarUrl', 'bannerUrl'],
   theme: ['name'], // theme: record → dropped
-  'feed-algorithm': ['name', 'emoji', 'parentId', 'eventCount', 'lastTrainedAt', 'shared'], // weights: record → dropped
+  'feed-algorithm': ['name', 'emoji', 'parentId', 'description', 'listed', 'eventCount', 'lastTrainedAt', 'shared'], // weights: record → dropped
   waitlist: [] // marker schema — email lives in the secure root field
 };
 
