@@ -1,3 +1,4 @@
+import { ComponentUpload } from '../Builder/ComponentUpload';
 import React from 'react';
 import { mapRenderMediaProps } from '../Sharing/renderMediaCore';
 import { useSharedMediaUrl } from '../Sharing/SharedMedia';
@@ -246,6 +247,7 @@ const renderNode = (node: ChakraThingNode, key: number, depth: number, state: Re
 	if (!node || typeof node !== 'object' || Array.isArray(node)) return null;
 
 	const name = typeof node.chakra === 'string' ? node.chakra : 'Box';
+	if (name === 'Upload') return <ComponentUpload key={key} name={node.props?.name} imageOnly={node.props?.imageOnly} disabled={node.props?.disabled} title={node.props?.title} />;
 	const Component = ALLOWED_COMPONENTS[name];
 	if (!Component) {
 		// unknown component: render children in a plain span so content shows

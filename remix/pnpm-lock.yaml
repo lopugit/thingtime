@@ -152,6 +152,9 @@ importers:
       gradient-path:
         specifier: ^2.3.0
         version: 2.3.0
+      heic-to:
+        specifier: 1.5.2
+        version: 1.5.2
       hex-to-rgba:
         specifier: ^2.0.1
         version: 2.0.1
@@ -3903,6 +3906,9 @@ packages:
 
   header-case@2.0.4:
     resolution: {integrity: sha512-H/vuk5TEEVZwrR0lp2zed9OCo1uAILMlx0JEMgC26rzyJJ3N1v6XkwHHXJQdR2doSjcGPM6OKPYoJgf0plJ11Q==}
+
+  heic-to@1.5.2:
+    resolution: {integrity: sha512-8Fns+lZHAWmz5U5IUxDeXKwIf3foBoKNPLxxFY4B0MkLjNuomEIHCoDbDE+x/llFK3NCEO1cu4+n3iUKY+Svmw==}
 
   hex-to-rgba@2.0.1:
     resolution: {integrity: sha512-5XqPJBpsEUMsseJUi2w2Hl7cHFFi3+OO10M2pzAvKB1zL6fc+koGMhmBqoDOCB4GemiRM/zvDMRIhVw6EkB8dQ==}
@@ -10483,6 +10489,8 @@ snapshots:
     dependencies:
       capital-case: 1.0.4
       tslib: 2.8.1
+
+  heic-to@1.5.2: {}
 
   hex-to-rgba@2.0.1: {}
 

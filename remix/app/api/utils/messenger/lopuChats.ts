@@ -123,7 +123,7 @@ export type DeleteLopuChatResult = Fail | { ok: true };
 // `message` is the first (usually only) row; `messages` lists every segment.
 export type LopuUserTurnResult = Fail | { ok: true; message: PublicChatMessage; messages: PublicChatMessage[]; existing?: boolean };
 export type LopuAssistantTurnResult = Fail | { ok: true; messages: PublicChatMessage[]; existing?: boolean };
-export type LoadLopuHistoryResult = Fail | { ok: true; history: LopuHistoryTurn[]; chars: number; truncated: boolean };
+export type LoadLopuHistoryResult = Fail | { ok: true; history: LopuHistoryTurn[]; chars: number; truncated: boolean; attachmentIds?: string[] };
 
 export const EMPTY_LOPU_SETTINGS: LopuChatSettings = Object.freeze({ model: null, effort: null, speed: null, providerId: null });
 
@@ -748,5 +748,12 @@ export const loadLopuHistory = async (viewerId: string, chatId: unknown, opts: {
 		.limit(Math.min(limit * 8, 400))
 		.toArray();
 	const folded = buildLopuHistory([...(rows as LopuHistoryRow[])].reverse(), { limit, maxChars: LOPU_HISTORY_MAX_CHARS });
-	return { ok: true, ...folded };
+	// Read relational attachments only from this already-authorized conversation.
+	// Each file is reauthorized again immediately before provider disclosure.
+	const messageIds = rows.filter(row => historyRole(row as LopuHistoryRow) === 'user').slice(0, 10).map(row => row.shareId);
+	const attachments = messageIds.length ? await things.find(
+		{ thingtime: 'attachment', targetId: { $in: messageIds }, attachmentPurpose: 'message', attachmentState: 'ready' } as any,
+		{ projection: { shareId: 1 } }
+	).sort({ createdAt: -1 }).limit(10).toArray() : [];
+	return { ok: true, ...folded, ...(attachments.length ? { attachmentIds: attachments.map(row => String(row.shareId)) } : {}) };
 };

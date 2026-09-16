@@ -1,3 +1,5 @@
+import { prepareProfileThumbnail } from './profileThumbnail';
+import { HEIC_IMAGE_ACCEPT } from '../Attachments/heicImage';
 import React from 'react';
 import { Box, Button, Flex, IconButton, Image, Input, Progress, Text } from '@chakra-ui/react';
 import { ImagePlus, Link2, RotateCcw, Trash2, X } from 'lucide-react';
@@ -18,12 +20,14 @@ import {
 } from './profileMediaCore';
 
 const MUTED = 'var(--tt-muted, #9a9aa6)';
-const ACCEPTED_PROFILE_IMAGES = 'image/avif,image/gif,image/jpeg,image/png,image/webp';
+const ACCEPTED_PROFILE_IMAGES = `image/avif,image/gif,image/jpeg,image/png,image/webp,${HEIC_IMAGE_ACCEPT}`;
 
 type ProfileMediaIntent = ProfileMediaMutation['kind'];
 
 export type ProfileMediaFieldProps = {
 	slot: ProfileMediaSlot;
+	/** For invite/signup forms whose account does not exist yet. */
+	storageMode?: 'attachment' | 'inline-thumbnail';
 	label?: string;
 	purpose?: 'subspace-icon' | 'subspace-banner';
 	ownerId: string;
@@ -55,7 +59,8 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 	const lopu = useLopu();
 	const label = props.label || (slot === 'avatar' ? 'Avatar' : 'Banner');
 	const purpose = props.purpose || (slot === 'avatar' ? 'profile-avatar' : 'profile-banner');
-	const uploadsNotGranted = privateUploadsEnabled === false;
+	const inlineThumbnail = props.storageMode === 'inline-thumbnail';
+	const uploadsNotGranted = !inlineThumbnail && privateUploadsEnabled === false;
 	const pickerDisabled = disabled || uploadsNotGranted;
 	const inputRef = React.useRef<HTMLInputElement | null>(null);
 	const [baselineUrl, setBaselineUrl] = React.useState<string | null>(savedUrl);
@@ -95,7 +100,7 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 		onSelectionError,
 		Boolean(props.purpose),
 		onCleanupDeferred,
-		{ purpose, maxFiles: 1, imageOnly: true, remainingBytes, storageStatus }
+		{ purpose, maxFiles: 1, imageOnly: true, remainingBytes, storageStatus, ...(inlineThumbnail ? { maxBytesPerFile: 10 * 1024 * 1024, allowedContentTypes: ['image/jpeg', 'image/png', 'image/webp'], prepareLocalImage: prepareProfileThumbnail } : {}) }
 	);
 	const upload = uploads[0];
 
@@ -209,7 +214,7 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 		[markCommitted, remove, uploads]
 	);
 
-	const uploadLabel = statusText(upload);
+	const uploadLabel = inlineThumbnail && upload?.status === 'preparing' ? 'Preparing photo…' : statusText(upload);
 	const hasDisplayedMedia = Boolean(previewUrl) || intent === 'clear' || Boolean(upload);
 	const currentLabel =
 		intent === 'clear'
@@ -219,7 +224,7 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 			: baselineUrl
 			? isManagedProfileMediaUrl(baselineUrl)
 				? 'Saved privately in Thingtime'
-				: 'Public image URL'
+				: inlineThumbnail ? 'Invite photo' : 'Public image URL'
 			: 'No image selected';
 	const storageLabel =
 		storageStatus === 'reconciling'
@@ -271,7 +276,7 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 						{label} image
 					</Text>
 					<Text fontSize="11px" color={MUTED} whiteSpace="normal">
-						{props.purpose ? 'Branding images are public and count toward your account’s storage.' : 'Private uploads count toward this account’s storage.'} {storageLabel}
+						{inlineThumbnail ? 'Choose a photo up to 10 MB. HEIC and HEIF photos are converted automatically.' : `${props.purpose ? 'Branding images are public and count toward your account’s storage.' : 'Private uploads count toward this account’s storage.'} ${storageLabel}`}
 					</Text>
 				</Box>
 			</Flex>
@@ -394,7 +399,7 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 			</Box>
 
 			<Flex alignItems="center" columnGap={2} rowGap={2} flexWrap="wrap">
-				<Button
+				{!inlineThumbnail && <Button
 					type="button"
 					size="sm"
 					minHeight="44px"
@@ -406,7 +411,7 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 					onClick={showExternal ? cancelExternal : beginExternal}
 				>
 					{showExternal ? 'Cancel URL' : 'Use URL instead'}
-				</Button>
+				</Button>}
 				{(baselineUrl || upload || intent === 'external') && intent !== 'clear' ? (
 					<Button type="button" size="sm" minHeight="44px" variant="ghost" leftIcon={<Trash2 size={14} />} isDisabled={disabled} onClick={clearMedia}>
 						Remove {label.toLowerCase()}

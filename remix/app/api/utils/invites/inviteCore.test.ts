@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { inviteToken, inviteTokenHash, inviteAmount, inviteProfile } from './inviteCore';
+import { inviteToken, inviteTokenHash, inviteAmount, inviteProfile, inviteExpiry } from './inviteCore';
 import { capabilitySatisfies, thingtimeCapabilityManifest } from '../capabilities/thingtimeCapabilities';
 import { isProtectedThingtime } from '~/schemas/registry';
 test('invite tokens have 256 bits of entropy and only fixed-shape tokens are accepted', () => {
@@ -28,8 +28,17 @@ test('profile suggestions cannot carry ACL separators or privileges', () => {
 });
 test('invites and invite-aware signup have explicit capability contracts', () => {
 	const manifest = thingtimeCapabilityManifest('https://thingtime.example');
-	assert.equal(manifest.features['api.auth-invites'].version, '1.0.1');
+	assert.equal(manifest.features['api.auth-invites'].version, '2.0.0');
 	assert.ok(capabilitySatisfies(manifest.features['api.auth-register'].version, '1.2.0'));
 	assert.equal(capabilitySatisfies('1.1.0', '1.2.0'), false);
 	assert.equal(capabilitySatisfies('2.0.0', '1.2.0'), false);
+});
+
+test('expiry defaults to never and only accepts supported durations', () => {
+	assert.equal(inviteExpiry(undefined), null);
+	assert.equal(inviteExpiry(null), null);
+	for (const days of [1, 7, 30, 90]) assert.equal(inviteExpiry(days, 0)?.getTime(), days * 86400000);
+	for (const invalid of [0, -1, '7', 1.5, 365, {}, Infinity]) assert.throws(() => inviteExpiry(invalid));
+	assert.equal(capabilitySatisfies('1.0.1', '2.0.0'), false);
+	assert.equal(capabilitySatisfies('2.1.0', '2.0.0'), true);
 });

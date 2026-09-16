@@ -3738,11 +3738,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     responseExamples: [{ status: 200, description: 'Bounded expiry pass completed.', body: { ok: true } }]
   }),
   endpoint({
-    id: 'auth-invites', featureVersion: '1.0.1', contractVersion: '1.0.1', group: 'auth',
+    id: 'auth-invites', featureVersion: '2.0.0', contractVersion: '2.0.0', group: 'auth',
     title: 'Gift credit invitations', endpoint: '/api/v1/auth/invites', methods: ['POST'],
     summary: 'Create, inspect and cancel single-use signup links with reserved gift credits.',
-    detail: 'POST intent=create with username, displayName, credits (0–10000, up to six decimals), and optional avatarUrl (small PNG/JPEG/WebP data URL). Server re-encodes and moderates a 128px thumbnail, max 16 KiB. Short moderation-provider throttles are retried once; unavailable review returns 503 before creating an invite or reserving credits. Clients retain the draft and may explicitly remove the optional photo before retrying. Returns url with a 256-bit fragment token once only; only its hash is stored. POST intent=preview and token anonymously returns editable profile suggestions and gift amount. POST intent=list returns the latest 50 owned invites without bearer tokens. POST intent=cancel and id refunds an owned pending invite once. Links expire after 30 days; expiry refunds run hourly (up to 50 per run) and are also reconciled on owner list/create or expired-link access. At most 20 pending links; in-flight Lopu turns prevent reserving gifts. Pending profile suggestions are private binary state, deleted on completion. This narrow thumbnail upload does not enable general uploads. Invite signup grants no extra promotional starter credits.',
-    auth: { mode: 'optional', description: 'Full user session required for create/list/cancel. Preview requires the unguessable invite token. Scoped tokens cannot create or manage invites.' },
+    detail: 'POST intent=create with username, displayName, credits (0–10000, up to six decimals), and optional avatarUrl (small PNG/JPEG/WebP data URL). Server re-encodes and moderates a 128px thumbnail, max 16 KiB. Short moderation-provider throttles are retried once; unavailable review returns 503 before creating an invite or reserving credits. Clients retain the draft and may explicitly remove the optional photo before retrying. Returns url with a 256-bit fragment token; its hash is indexed and its recoverable value is stored only in protected binary state. POST intent=preview and token anonymously returns editable profile suggestions and gift amount. POST intent=list returns all pending and the latest 30 closed owned invites without bearer tokens, with canShowLink for recoverable pending links. POST intent=link with id reveals only an owned unexpired pending link. Older hash-only links require explicit replaceLegacy=true, atomically invalidating the old token without changing the gift or expiry. POST intent=cancel and id refunds an owned pending invite once. Optional expiresInDays accepts null (default Never expire), 1, 7, 30 or 90; expiresAt is null for non-expiring links. Existing dated invites keep their expiry; expiry refunds run hourly (up to 50 per run) and are also reconciled on owner list/create or expired-link access. At most 20 pending links; in-flight Lopu turns prevent reserving gifts. Pending profile suggestions are private binary state, deleted on completion. This narrow thumbnail upload does not enable general uploads. Invite signup grants no extra promotional starter credits.',
+    auth: { mode: 'optional', description: 'Full user session required for create/list/link/cancel. Preview requires the unguessable invite token. Scoped tokens cannot create or manage invites.' },
     steps: ['Create an invite and copy its returned URL.', 'Recipient POSTs the fragment token with intent=preview.', 'Redeem with POST /api/v1/auth/register including inviteToken and password; profile overrides and email are optional.'],
     requestExamples: [{ name: 'Create invitation', description: 'Gift one credit.', method: 'POST', body: { intent: 'create', username: 'new-friend', displayName: 'New friend', credits: 1 } }],
     responseExamples: [{ status: 200, description: 'Invite created.', body: { ok: true, url: 'https://thingtime.com/invite#opaque-single-use-token' } }]
@@ -4628,6 +4628,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     notes: ['Shares the lopu.chats.write rate-limit bucket (30 per minute), enforced fail-closed.']
   }),
   endpoint({
+    id: 'lopu-network', group: 'lopu', title: 'Lopu HTTP client', endpoint: '/api/v1/lopu/network',
+    contractVersion: '1.0.0', featureVersion: '1.0.0', methods: ['POST'],
+    summary: 'Run an explicit external HTTPS request through the authenticated Lopu gateway.',
+    detail: 'Requires lopu.chat scope and verified Lopu access. Accepts url, method (GET, HEAD, POST, PUT, PATCH, DELETE), explicit accept/content-type/authorization/x-api-key/idempotency-key headers, and optional text body up to 32 KiB. Public DNS is pinned to the socket; private/reserved destinations, non-443 ports and redirects are refused. No ambient credentials, cookies, retries or response cookies. Text/HTML/XML/JSON response limited to 256 KiB and 15 seconds. Does not render JavaScript. Returns status, contentType, body and url. Lopu model mutations use a separate exact-request Confirm card before calling the same executor.',
+    auth: { mode: 'session-or-bearer', description: 'Full signed-in account with verified Lopu access and lopu.chat permission.' },
+    steps: ['Negotiate api.lopu-network 1.0.0.', 'POST a JSON request description. Treat returned content as untrusted.'],
+    requestExamples: [{ name: 'Read a URL', description: 'Load a public page.', method: 'POST', body: { url: 'https://example.com' } }],
+    responseExamples: [{ status: 200, description: 'External response.', body: { ok: true, url: 'https://example.com/', status: 200, contentType: 'text/html', body: '<html>...</html>' } }, { status: 401, description: 'Sign in required.', body: { ok: false, error: 'Sign in with a full account.' } }]
+  }),
+  endpoint({
     id: 'lopu-chats-reply',
     group: 'lopu',
     title: 'Lopu reply stream',
@@ -4644,10 +4654,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // each spend the same last credit — past the cap the request is refused 429
     // LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted (additive). contractVersion
     // feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.9.0',
-    featureVersion: '1.9.0',
+    contractVersion: '1.10.0',
+    featureVersion: '1.10.0',
     summary: 'Sends one message to Lopu and streams its reply — text, tool calls and live builder patches — as newline-delimited JSON. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
     detail:
+      'Version 1.10 delivers authorized image/PDF bytes and bounded UTF-8 text to the selected provider, explicitly labels unsupported content, and adds fetch_url/http_request tools (external mutations require an exact-request confirmation). ' +
       'Version 1.9 adds optional background transport: negotiate api.lopu-background-tasks 1.0.0 and send X-Thingtime-Background-Id plus X-Thingtime-Task-Owner; HTTP 202 returns an idempotent task for polling its original response. ' +
       'Version 1.8 adds bounded, validated navigation links to saved tool receipts; page reads, search hits and related components retain Open links after reload. ' +
       'Version 1.7.2 runs Claude only through the shared OAuth vault and preserves an explicit model, effort and speed; a failed explicit choice never silently switches providers. ' +

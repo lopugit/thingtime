@@ -1,3 +1,4 @@
+import { HEIC_IMAGE_ACCEPT } from './heicImage';
 import React from 'react';
 import { Box, Button, Flex, IconButton, Image, Input, Progress, Text } from '@chakra-ui/react';
 import {
@@ -630,7 +631,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 					ref={inputRef}
 					type="file"
 					multiple={boundedMaxFiles > 1}
-					accept={allowedContentTypes?.join(',') || (imageOnly ? 'image/gif,image/jpeg,image/png,image/webp' : undefined)}
+					accept={allowedContentTypes?.length ? [...allowedContentTypes, ...(allowedContentTypes.includes('image/jpeg') ? [HEIC_IMAGE_ACCEPT] : [])].join(',') : imageOnly ? `image/gif,image/jpeg,image/png,image/webp,${HEIC_IMAGE_ACCEPT}` : undefined}
 					hidden
 					disabled={pickerDisabled}
 					onChange={(event) => {

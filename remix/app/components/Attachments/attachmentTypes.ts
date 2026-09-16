@@ -3,6 +3,8 @@ export type AttachmentMediaKind = 'image' | 'video' | 'audio' | 'file';
 export type AttachmentUploadPurpose = 'post' | 'comment' | 'message' | 'profile-avatar' | 'profile-banner' | 'custom-emoji' | 'recording-import' | 'subspace-icon' | 'subspace-banner';
 
 export type AttachmentUploadOptions = {
+	// Pre-account forms use the same queue and cancellation without an authenticated S3 upload.
+	prepareLocalImage?: (file: File) => Promise<string>;
 	// A transfer spans many Things; normal composers retain the per-Thing cap.
 	selectionScope?: 'single-thing' | 'transfer';
 	purpose?: AttachmentUploadPurpose;
@@ -54,6 +56,8 @@ export type ComposerAttachmentUpload = {
 	purpose?: AttachmentUploadPurpose;
 	localId: string;
 	file: File;
+	// Selection identity survives HEIC normalization for duplicate detection.
+	sourceFile?: File;
 	previewUrl: string | null;
 	status: AttachmentUploadStatus;
 	progress: number;
