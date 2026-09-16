@@ -51,7 +51,10 @@ changed. Real-account storage upload and selected-provider inference have not
 been accepted live. Physical iPhone keyboard, viewport panning and safe-area
 behavior still require device testing; desktop resizing is not that proof.
 Unsupported provider models may reject native media; the app does not silently
-switch providers. This PR targets develop and does not claim a production rollout.
+switch providers. The user subsequently authorized merging this PR into main. Before merging,
+main was incorporated and the navigation source-contract test was updated for
+the visual-viewport geometry; its obsolete fixed-height assertion caused CI to
+fail despite the dedicated Lopu UI suite passing.
 
 ## Local and deployment
 
