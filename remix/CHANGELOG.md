@@ -31,6 +31,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-16 — Restore held-row drawer reordering after navigation rows became
+  real links. Prevent native anchor/image dragging only while a reorder is
+  armed, preserving normal navigation and browser link shortcuts. **Codex (AI)**
+
 - 2026-09-16 — Background chat, voice transcript replies, musings and AI
   completions: SharedWorker observation, idempotent Nitro/Vercel execution,
   private task overview, static rings, Stop and Retry / Continue. Keeps partial
@@ -67,6 +71,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-09-14 — Dropping files onto a post composer opens Photos and queues the files through the existing uploader without deselecting other modes, including Poll. Collapsed prompts and rich comments use the same flow. — Codex (AI)
 
 - 2026-09-14 — Allow `thingtime` as a subspace slug and let owners rename URLs in Mod tools → Settings, preserving posts and memberships with atomic uniqueness checks and capability negotiation. **Codex (AI)**
+
+- Add a public support page with the existing GoFundMe contribution link and
+  editable paid-setup/sponsorship email enquiries. Replace unsupported landing
+  totals, reward promises and the unavailable Indiegogo link; add a funding
+  launch plan and fork-safe support setup notes. — Codex (AI), 2026-09-14
 
 - Recover committed text/link posts when the server omits an empty media layout;
   bound stalled publish/readback requests and preserve the same retry UUID. Use

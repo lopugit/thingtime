@@ -2913,6 +2913,14 @@ email whose link points at the attacker.
 
 ## Drawer navigation & settings (`remix/app/components/Nav/Drawer/`)
 
+- [ ] Hold a linked top-level row or submenu row for 280ms, then drag over
+      another row and release. The row moves without a native URL/image ghost,
+      navigation, or drawer dismissal; the order survives reload. Repeat upward
+      and downward at desktop and 390px, including touch hold/drag and quick
+      scrolling. Ordinary clicks, keyboard Enter, modified clicks, middle-click,
+      and the link context menu still work. A quick drag before the hold arms
+      must not reorder, and dragging from a nested list must not reorder its parent.
+
 - [ ] Settings popup and `/settings/:tab` show the same controls in every category; Profile is the default, Admin is restricted to admins, and direct links/reload/back preserve the selected tab. Check legacy `#secure-vault` and `#lopu-credits` links, modal close/Escape, and Open settings page at desktop and 390px. Scroll long categories to the bottom.
 - [ ] On a paired healthy Mac, dismiss the Things connection panel, reload, and confirm it stays hidden. Settings → Things must still show the panel and restore switch. Stop/disconnect the node or fail a permission check: the panel returns automatically. Switching accounts must not inherit another account’s dismissal. The real Desktop adapter’s unknown transport status must still allow dismissal of a healthy local node; an explicit offline result must reveal it.
 
@@ -7496,3 +7504,23 @@ approval; `access.test.ts` — the reservation matrix) and
 - [ ] Open `/algorithms`, search by name/description, create a private profile, publish it, branch it from another account, unpublish, and disable sharing. Private and link-only algorithms never appear in the directory; previews never expose learned weights; existing copies survive unsharing.
 - [ ] Create Things through the API with `geo: {lat,lng}`. Invalid/missing/out-of-range coordinates return 400. POST `/things/search` with `near` and `radiusKm`, and Local feed with lat/lng, find nearby visible posts, exclude far/private posts, and retain tag/subspace/ACL filters. PATCH `geo:null` removes the location.
 - [ ] Local's location request occurs only from its button; denial leaves the location-tag fallback usable. Scroll directory/feed top-to-bottom at desktop/mobile widths, including the editor and open picker; no content overflows.
+
+## Funding and support (`/support`, landing funding section)
+
+- [ ] Signed out, open `/support` directly and reload; contribution, paid setup
+      enquiry and sponsorship enquiry paths remain visible without signing in.
+- [ ] At desktop and 375px widths, scroll the homepage and `/support` from top
+      to bottom. Cards, sticky navigation, form controls and footer links stay
+      reachable without horizontal overflow, clipping or overlap.
+- [ ] Homepage support links and the shared footer reach `/support`. Contribution
+      links reach the real Thingtime GoFundMe campaign. No Indiegogo prelaunch
+      link, hard-coded raised total/backer count/deadline, merch entitlement or
+      lifetime AI promise appears in the active funding section or FAQ.
+- [ ] Switch between setup and sponsorship enquiries, enter a brief including
+      punctuation/newlines, and inspect the generated email recipient, subject
+      and body. The visitor can edit the message; preparing it never sends it.
+- [ ] Copy the enquiry on desktop and mobile. If clipboard access is unavailable,
+      the visible draft and contact address remain available to copy manually.
+- [ ] Open the homepage funding FAQ with keyboard and pointer. Donation terms remain separate
+      from paid services and Lopu credits; no payment-success claim is shown
+      merely from clicking an outbound link or returning to the page.

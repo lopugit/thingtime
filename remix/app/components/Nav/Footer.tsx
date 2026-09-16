@@ -10,6 +10,7 @@ import { useLopu } from '../Lopu/useLopu';
 import { burstAtEvent } from '../Landing/confetti';
 import { motionOK, pickIncantation } from '~/eggs/eggs';
 import { LOGIN_TO_CLAIM_LABEL, getUserDisplayName, getUserMention } from '~/utils/userIdentity';
+import { SUPPORT_EMAIL, SUPPORT_PATH } from '../Support/supportContent';
 
 const BRANCH_NAME =
   typeof process !== 'undefined' && process.env?.THINGTIME_BRANCH_NAME
@@ -28,9 +29,6 @@ export const Footer = (props) => {
   const branchName = envFromCookie.THINGTIME_BRANCH_NAME || BRANCH_NAME || 'git/unknown';
   const commitSha = envFromCookie.THINGTIME_VERCEL_GIT_COMMIT_SHA || COMMIT_SHA;
   const showDeploymentStatus = envFromCookie.THINGTIME_SHOW_DEPLOYMENT_STATUS === 'true';
-
-  const investmentEmail = 'invest@thingtime.com';
-  const contactEmail = 'connect@thingtime.com';
 
   const year = new Date().getFullYear();
 
@@ -82,25 +80,6 @@ export const Footer = (props) => {
         rowGap={8}
         width={['100%', '760px']}
       >
-        {false && (
-          <Flex flexDirection="column" rowGap={3}>
-            <Flex flexDirection="column">
-              <Flex flexDirection="row" fontSize="xs">
-                <Icon name="cash" size="12px" chakras={{ pr: 1 }}></Icon>
-                To invest, please contact:
-                {/* <Icon name="money bag" size="10px" chakras={{ pl: 1 }}></Icon> */}
-              </Flex>
-              <Link to={`mailto:${investmentEmail}`}>
-                <Flex flexDirection="row">
-                  <Text color="var(--tt-positive, #2f8f4f)">{investmentEmail}</Text>
-                </Flex>
-              </Link>
-            </Flex>
-            <Flex flexDirection="column" fontSize="xs">
-              {/* copyright message */}© {year} Thingtime
-            </Flex>
-          </Flex>
-        )}
         <Flex flex="1 1 160px" flexDirection="column" minWidth="140px" rowGap={3}>
           <Flex flexDirection="column">
             <Flex
@@ -117,14 +96,19 @@ export const Footer = (props) => {
               Contact
               {/* <Icon name="money bag" size="10px" chakras={{ pl: 1 }}></Icon> */}
             </Flex>
-            <Link to={`mailto:${contactEmail}`}>
+            <Link to={`mailto:${SUPPORT_EMAIL}`}>
               <Flex flexDirection="row">
                 <Text fontSize="xs" color="var(--tt-text, #5a5a66)">
-                  {contactEmail}
+                  {SUPPORT_EMAIL}
                 </Text>
               </Flex>
             </Link>
           </Flex>
+          <Link to={SUPPORT_PATH}>
+            <Text fontSize="xs" fontWeight={600} color="var(--tt-ink, #16161a)">
+              Support Thingtime
+            </Text>
+          </Link>
           <Flex alignItems="center" flexDirection="row" fontSize="xs">
             <Text color="var(--tt-muted, #9a9aa6)">
               {/* copyright message */}© {year} Thingtime
