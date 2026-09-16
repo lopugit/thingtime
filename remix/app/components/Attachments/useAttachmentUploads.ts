@@ -152,8 +152,12 @@ export const useAttachmentUploads = (
 ) => {
 	const uploadPurpose = options.purpose ?? 'post';
 	const prepareLocalImage = options.prepareLocalImage;
-	// Archive imports promise byte-for-byte fidelity; ordinary media selections are normalized.
-	const convertHeic = options.selectionScope !== 'transfer';
+	// Archive imports promise byte-for-byte fidelity; ordinary media selections are normalized,
+	// so a HEIC selection is judged against the JPEG it becomes.
+	const normalizesHeic = options.selectionScope !== 'transfer';
+	// A local preparer decodes HEIC itself from the original selection, so converting in the
+	// queue first would only measure intermediate JPEG bytes that never leave the browser.
+	const convertHeic = normalizesHeic && !options.prepareLocalImage;
 	const purposeForFileRef = React.useRef(options.purposeForFile);
 	purposeForFileRef.current = options.purposeForFile;
 	const maxFiles = Number.isSafeInteger(options.maxFiles)
@@ -276,11 +280,9 @@ export const useAttachmentUploads = (
 					if (!isCurrent(localId, attempt) || controller.signal.aborted) return;
 					if (maxBytesPerFile && file.size > maxBytesPerFile)
 						throw new HeicImageError(`The converted photo exceeds ${Math.round(maxBytesPerFile / 1024)} KiB. Choose a smaller photo.`);
-					if (!prepareLocalImage) {
-						const previewUrl = URL.createObjectURL(file);
-						if (existing?.previewUrl) URL.revokeObjectURL(existing.previewUrl);
-						patchUpload(localId, attempt, { file, previewUrl });
-					}
+					const previewUrl = URL.createObjectURL(file);
+					if (existing?.previewUrl) URL.revokeObjectURL(existing.previewUrl);
+					patchUpload(localId, attempt, { file, previewUrl });
 				}
 				if (prepareLocalImage) {
 					const previewUrl = await prepareLocalImage(file);
@@ -409,7 +411,7 @@ export const useAttachmentUploads = (
 			const eligible = files.filter(
 				(file) =>
 					(!imageOnly || localFileMediaKind(file) === 'image') &&
-					(!allowedContentTypes || allowedContentTypes.has(convertHeic && isHeicImage(file) ? 'image/jpeg' : file.type.toLowerCase())) &&
+					(!allowedContentTypes || allowedContentTypes.has(normalizesHeic && isHeicImage(file) ? 'image/jpeg' : file.type.toLowerCase())) &&
 					(!maxBytesPerFile || file.size <= maxBytesPerFile)
 			);
 			if (eligible.length < files.length) {
@@ -471,7 +473,7 @@ export const useAttachmentUploads = (
 			setUploads(nextUploads);
 			for (const upload of next) enqueue({ localId: upload.localId, file: upload.file, attempt: 1 });
 		},
-		[allowedContentTypes, cleanupUpload, convertHeic, enqueue, imageOnly, maxBytesPerFile, maxFiles, onCleanupDeferred, onCleanupError, onSelectionError, uploadPurpose]
+		[allowedContentTypes, cleanupUpload, normalizesHeic, enqueue, imageOnly, maxBytesPerFile, maxFiles, onCleanupDeferred, onCleanupError, onSelectionError, uploadPurpose]
 	);
 
 	const addFiles = React.useCallback((files: File[]) => addFilesInternal(files, false), [addFilesInternal]);

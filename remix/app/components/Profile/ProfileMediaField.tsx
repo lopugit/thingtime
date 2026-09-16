@@ -1,4 +1,10 @@
-import { prepareProfileThumbnail } from './profileThumbnail';
+import {
+	INLINE_THUMBNAIL_ACCEPT,
+	INLINE_THUMBNAIL_CONTENT_TYPES,
+	MAX_INLINE_THUMBNAIL_BYTES,
+	inlineThumbnailFileError,
+	prepareProfileThumbnail
+} from './profileThumbnail';
 import { HEIC_IMAGE_ACCEPT } from '../Attachments/heicImage';
 import React from 'react';
 import { Box, Button, Flex, IconButton, Image, Input, Progress, Text } from '@chakra-ui/react';
@@ -100,7 +106,20 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 		onSelectionError,
 		Boolean(props.purpose),
 		onCleanupDeferred,
-		{ purpose, maxFiles: 1, imageOnly: true, remainingBytes, storageStatus, ...(inlineThumbnail ? { maxBytesPerFile: 10 * 1024 * 1024, allowedContentTypes: ['image/jpeg', 'image/png', 'image/webp'], prepareLocalImage: prepareProfileThumbnail } : {}) }
+		{
+			purpose,
+			maxFiles: 1,
+			imageOnly: true,
+			remainingBytes,
+			storageStatus,
+			...(inlineThumbnail
+				? {
+						maxBytesPerFile: MAX_INLINE_THUMBNAIL_BYTES,
+						allowedContentTypes: [...INLINE_THUMBNAIL_CONTENT_TYPES],
+						prepareLocalImage: prepareProfileThumbnail
+				  }
+				: {})
+		}
 	);
 	const upload = uploads[0];
 
@@ -126,7 +145,7 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 		(files: FileList | null) => {
 			const file = files?.[0];
 			if (!file) return;
-			const error = profileImageFileError(file);
+			const error = inlineThumbnail ? inlineThumbnailFileError(file) : profileImageFileError(file);
 			if (error) {
 				onSelectionError(error);
 				return;
@@ -136,7 +155,7 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 			setBrokenPreview(false);
 			replaceFiles([file]);
 		},
-		[onSelectionError, replaceFiles]
+		[inlineThumbnail, onSelectionError, replaceFiles]
 	);
 
 	const beginExternal = React.useCallback(() => {
@@ -292,7 +311,7 @@ const ProfileMediaFieldInner = React.forwardRef<ProfileMediaFieldHandle, Profile
 			<input
 				ref={inputRef}
 				type="file"
-				accept={ACCEPTED_PROFILE_IMAGES}
+				accept={inlineThumbnail ? INLINE_THUMBNAIL_ACCEPT : ACCEPTED_PROFILE_IMAGES}
 				hidden
 				disabled={pickerDisabled}
 				aria-label={`Choose ${label.toLowerCase()} image`}

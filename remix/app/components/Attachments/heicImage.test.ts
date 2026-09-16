@@ -3,6 +3,42 @@ import test from 'node:test';
 import { createHeicImagePreparer, HeicImageError, isHeicImage, MAX_HEIC_BYTES } from './heicImage';
 import { localFileMediaKind, safeAttachmentMediaKind } from './attachmentUiCore';
 import { profileImageFileError } from '../Profile/profileMediaCore';
+import {
+	INLINE_THUMBNAIL_ACCEPT,
+	INLINE_THUMBNAIL_CONTENT_TYPES,
+	MAX_INLINE_THUMBNAIL_BYTES,
+	inlineThumbnailFileError
+} from '../Profile/profileThumbnail';
+
+// A pre-account field rejects a file only at its picker. A file the picker offers but the
+// upload queue silently drops never becomes an upload, so the field stays blocking with
+// nothing to preview, retry or remove and the invite/signup submit button never re-enables.
+test('the inline-thumbnail picker, selection filter and preparer accept exactly the same files', () => {
+	const sized = (file: File, size: number) => {
+		Object.defineProperty(file, 'size', { value: size });
+		return file;
+	};
+	// Every MIME the picker advertises must survive the picker's own validator...
+	for (const accepted of INLINE_THUMBNAIL_ACCEPT.split(',')) {
+		const file = accepted.startsWith('.')
+			? new File(['x'], `photo${accepted}`)
+			: new File(['x'], 'photo.bin', { type: accepted });
+		assert.equal(inlineThumbnailFileError(file), null, `${accepted} must pass the inline picker`);
+		// ...and the queue's allowed set, which judges a HEIC as the JPEG it is converted into.
+		const queueType = isHeicImage(file) ? 'image/jpeg' : file.type.toLowerCase();
+		assert.ok((INLINE_THUMBNAIL_CONTENT_TYPES as readonly string[]).includes(queueType), `${accepted} must pass the queue filter`);
+		assert.ok(sized(file, MAX_INLINE_THUMBNAIL_BYTES).size <= MAX_INLINE_THUMBNAIL_BYTES);
+	}
+	// Formats the wider profile field allows are not offered here, so they cannot strand the form.
+	for (const type of ['image/avif', 'image/gif']) {
+		assert.ok(!INLINE_THUMBNAIL_ACCEPT.includes(type));
+		assert.match(String(inlineThumbnailFileError({ type, size: 5 })), /PNG, JPEG, WebP, HEIC or HEIF/);
+	}
+	// The 10 MB rule is a rule about the chosen photo, and it is enforced before the queue sees it.
+	assert.equal(inlineThumbnailFileError(sized(new File(['x'], 'big.heic'), MAX_INLINE_THUMBNAIL_BYTES + 1)), 'Choose a photo under 10 MB.');
+	assert.equal(inlineThumbnailFileError(sized(new File(['x'], 'ok.heic'), MAX_INLINE_THUMBNAIL_BYTES)), null);
+	assert.equal(inlineThumbnailFileError(new File([], 'empty.heic')), 'Choose an image that contains data.');
+});
 
 test('HEIC and HEIF pickers accept MIME aliases and uppercase filenames without a MIME', () => {
 	for (const type of ['image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence', 'IMAGE/HEIC']) {
