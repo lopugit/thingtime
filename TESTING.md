@@ -2912,6 +2912,13 @@ email whose link points at the attacker.
 ## Drawer navigation & settings (`remix/app/components/Nav/Drawer/`)
 
 - [ ] With the desktop drawer collapsed, hover the trigger and move into the preview: it starts below the top bar, stays open, and scrolls from the first to last menu item while its brand and account footer stay visible. Recheck at a short desktop viewport and with a safe-area/titlebar inset; no clipping or page scroll chaining. Click to pin/unpin, then at 390px verify tap-to-open, menu scrolling, navigation dismissal, and no hover popup.
+- [ ] Hold a linked top-level row or submenu row for 280ms, then drag over
+      another row and release. The row moves without a native URL/image ghost,
+      navigation, or drawer dismissal; the order survives reload. Repeat upward
+      and downward at desktop and 390px, including touch hold/drag and quick
+      scrolling. Ordinary clicks, keyboard Enter, modified clicks, middle-click,
+      and the link context menu still work. A quick drag before the hold arms
+      must not reorder, and dragging from a nested list must not reorder its parent.
 
 - [ ] Settings popup and `/settings/:tab` show the same controls in every category; Profile is the default, Admin is restricted to admins, and direct links/reload/back preserve the selected tab. Check legacy `#secure-vault` and `#lopu-credits` links, modal close/Escape, and Open settings page at desktop and 390px. Scroll long categories to the bottom.
 - [ ] On a paired healthy Mac, dismiss the Things connection panel, reload, and confirm it stays hidden. Settings → Things must still show the panel and restore switch. Stop/disconnect the node or fail a permission check: the panel returns automatically. Switching accounts must not inherit another account’s dismissal. The real Desktop adapter’s unknown transport status must still allow dismissal of a healthy local node; an explicit offline result must reveal it.
