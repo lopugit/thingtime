@@ -192,7 +192,7 @@ export const InvitePanel = () => {
 											}
 										}}
 									>
-										Cancel
+										Cancel invite
 									</Button>
 								</Flex>
 							)}

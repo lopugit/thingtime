@@ -3400,3 +3400,24 @@ The normal MongoDB index bootstrap creates `things_geo` on first use.
 
 Algorithm development worktree: localhost port 13480 (HMR 13481 / Nitro 13482).
 Tailscale/Funnel is unavailable on the validation machine: its CLI points to an absent Tailscale.app.
+
+### Legal documents
+
+Public directory: `/legal`. Current documents: `/pages/privacy-policy`,
+`/pages/apple-tv-privacy-policy`, `/pages/terms-of-service`. Append the version
+(e.g. `/1.0.0`) for a permanent edition. `/privacy` and `/terms` redirect to
+the current documents. The registry is `remix/app/legal/documents.ts`; preserve
+published entries and add a new version when changing policy text, marking the
+previous edition archived. Do not rewrite a published version. Legacy website
+and merchandise text is retained as explicitly historical material.
+
+Copy text and Download .txt use the same registry as the reader. Copy public URL
+always exports `https://thingtime.com`, including on previews. Fork operators
+must replace operator/contact details, verify their actual data practices and
+change that canonical origin before publishing their own policies. No private
+configuration or credentials are needed for these pages. App Store Connect
+requires separate App Privacy disclosures in addition to policy URL/text.
+
+Legal-page development worktree: local `http://localhost:18460` (Nitro 18462,
+HMR 18461). Public preview is delivered through the branch Vercel deployment;
+check the PR deployment status for its current URL.

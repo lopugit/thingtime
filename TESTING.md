@@ -7443,3 +7443,7 @@ approval; `access.test.ts` — the reservation matrix) and
 - [ ] Local's location request occurs only from its button; denial leaves the location-tag fallback usable. Scroll directory/feed top-to-bottom at desktop/mobile widths, including the editor and open picker; no content overflows.
 
 - [ ] Account invitations default to Never expire; select each dated expiry. Reload and show/copy a pending invite, including clipboard-denied fallback. Legacy replacement warns before invalidating the old link; cancelled/claimed/expired rows have no link control. Check desktop and 390px page/popup top to bottom with dropdown open. Never-expiring gifts survive expiry sweeps; dated gifts refund once; another owner cannot reveal/replace a link.
+## Legal pages and policy exports
+
+- [ ] Signed out, open `/legal`, all three current `/pages/` documents and their version links on desktop and mobile; scroll to the bottom and confirm readable text and no overflow. Select the archived privacy version and return to current. Unknown versions must show a not-found message, never current text.
+- [ ] Copy privacy URL and Apple TV text, compare copied text and `.txt` download with the selected document. Deny clipboard permission and verify the selectable fallback. Confirm archived exports carry an archive warning and production URLs never use a preview origin.
