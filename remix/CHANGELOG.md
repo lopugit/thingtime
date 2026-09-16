@@ -34,9 +34,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-09-16: Account invites default to Never expire, offer an expiry dropdown and owner-only show/copy links, with explicit replacement for older hash-only links. Worktree validation uses localhost:17360; Funnel unavailable because the installed Tailscale CLI target is missing.
 
 
+- 2026-09-16 — Messenger spaces show only their own direct/group conversations. Add an account-specific **Show Lopu chats** checkbox, off by default, while preserving explicit conversation links. **Codex (AI)**
 - 2026-09-16 — Restore held-row drawer reordering after navigation rows became
   real links. Prevent native anchor/image dragging only while a reorder is
   armed, preserving normal navigation and browser link shortcuts. **Codex (AI)**
@@ -4958,6 +4958,9 @@ Detailed PR notes:
 ---
 
 <!--
+
+- 2026-09-16: Account invites default to Never expire, offer an expiry dropdown and owner-only show/copy links, with explicit replacement for older hash-only links. Worktree validation uses localhost:17360; Funnel unavailable because the installed Tailscale CLI target is missing.
+
 ## [1.0.0] - YYYY-MM-DD
 Move entries up from [Unreleased] when cutting a tagged release.
 -->
