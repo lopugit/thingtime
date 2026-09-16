@@ -781,3 +781,21 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     model/provider calls, training, public feeds, advertising, sensitive-trait
     inference, minors, institutions, and high-impact uses remain separately
     gated.
+
+50. **🕯️ Make legacy agency and dignified stewardship a product contract.**
+
+    Let people leave, review, and revoke bounded instructions for prolonged
+    inactivity, incapacity, or death without granting present access, treating
+    silence as proof, transferring credentials, exposing other people, or
+    letting software decide legal authority. Start only with adult internal
+    reviewers, one synthetic owner, one synthetic contact, one conflicting
+    claimant, one synthetic private text Thing, one local test inbox, and one
+    exact non-production build; rehearse a notify-only instruction and a scoped
+    export decision without contacting anyone or exporting content. Execute
+    `claude-todo/50-legacy-agency-and-dignified-stewardship.md` only after
+    qualified owners approve the event/role/action/data matrix, safe default,
+    instruction and claim envelopes, conflict/hold/appeal path, accessibility,
+    evidence retention, cleanup, and manual stop authority. Real people,
+    claims, documents, notifications, account access, content disclosure,
+    ownership transfer, memorialization, deletion, closure, minors, money,
+    entitlements, and legal or privacy claims remain separately gated.

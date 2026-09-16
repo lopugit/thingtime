@@ -37,6 +37,7 @@ actionable item in [`../TODO/`](../TODO/TODO.md) when it is ready to execute.
 | [Support agency and accountable remedy baseline](./support-agency-and-accountable-remedy-baseline.md)                                 | Evidence on help discovery, consentful intake, acknowledgements, accountable handoffs, service-time truth, domain remedies, and one synthetic support pilot         | 2026-09-15    |
 | [Change agency and humane product evolution baseline](./change-agency-and-humane-product-evolution-baseline.md)                       | Evidence on human-facing change gaps, previews, prior choices, compatibility, deprecation, sunset, rollback, remedy, and one synthetic preference pilot             | 2026-09-15    |
 | [Personalization agency and accountable-memory baseline](./personalization-agency-and-accountable-memory-baseline.md)                 | Evidence on remembered choices, observations, derivatives, purpose, effects, correction, forgetting, reset, and a non-personalized baseline                         | 2026-09-16    |
+| [Legacy agency and dignified stewardship baseline](./legacy-agency-and-dignified-stewardship-baseline.md)                             | Evidence on inactivity, incapacity and death gaps, narrow live transfer primitives, future instructions, claimant boundaries, holds, and one notify-only rehearsal  | 2026-09-16    |
 
 ## Conventions
 
