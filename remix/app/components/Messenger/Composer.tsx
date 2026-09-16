@@ -1,4 +1,5 @@
 import React from 'react';
+import { chatAttachmentInput } from '../Attachments/chatAttachmentInput';
 import { Box, Button, Flex, Popover, PopoverBody, PopoverContent, PopoverTrigger, Portal, Text, Textarea } from '@chakra-ui/react';
 
 import { AttachmentComposer, type AttachmentComposerHandle } from '~/components/Attachments/AttachmentComposer';
@@ -153,6 +154,9 @@ export const Composer = (props: ComposerProps) => {
       {contextStrip}
 			{props.agentControls ? <AgentComposerControls state={props.agentControls} /> : null}
       <Flex
+        {...chatAttachmentInput(files => {
+					if (attachmentRef.current?.addFiles(files)) setAttachmentOpen(true);
+				}, composerLocked || !!props.editing || props.attachmentsSupported === false || !user)}
         align="flex-end"
         gap={2}
         background="var(--tt-surface, #fafafa)"
@@ -261,8 +265,8 @@ export const Composer = (props: ComposerProps) => {
 					Thingtime may already have sent this. Retry safely to confirm it without creating a duplicate.
 				</Text>
 			) : null}
-			{user && !props.editing && (attachmentOpen || attachmentSnapshot.hasSelection) ? (
-				<Box paddingTop={2}>
+			{user && !props.editing && props.attachmentsSupported !== false ? (
+				<Box paddingTop={2} display={attachmentOpen || attachmentSnapshot.hasSelection ? undefined : 'none'}>
 					<AttachmentComposer
 						ref={attachmentRef}
 						key={`message-attachments-${user.id}-${attachmentSession}`}
