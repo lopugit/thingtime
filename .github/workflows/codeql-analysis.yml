@@ -61,7 +61,10 @@ jobs:
   scope:
     name: Select one analysis owner
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # The push path now waits up to 150s for PR adoption to settle before it
+    # decides, so the old 5-minute ceiling no longer leaves room for the
+    # lookups around it.
+    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: read
@@ -259,14 +262,57 @@ jobs:
               fi
             fi
           elif [ "$EVENT_NAME" = push ]; then
-            open_prs="$(gh pr list --repo "$REPO" --state open \
-              --head "$GITHUB_REF_NAME" --limit 100 \
-              --json headRefOid)"
-            if jq -e --arg sha "$GITHUB_SHA" \
-                 'any(.[]; .headRefOid == $sha)' <<<"$open_prs" >/dev/null; then
-              analyze=false
-              echo "An open PR owns $GITHUB_REF_NAME@$GITHUB_SHA; its pull_request run is the single CodeQL analysis owner."
-            fi
+            # This pre-flight fires within seconds of the push, and BOTH of the
+            # ways a PR comes to own the pushed SHA are still invisible that
+            # early:
+            #   * the PR is opened moments after its branch is pushed -- PR
+            #     #832 was created 11:20:27Z against a push whose run started
+            #     11:20:06Z, 21s earlier;
+            #   * the PR already exists and GitHub has not yet advanced its
+            #     cached `headRefOid` to the pushed commit -- PR #826 (open
+            #     since 03:24:55Z) still reported its previous head to a
+            #     05:35:14Z push run.
+            # A single sample therefore reports "no PR owns this" and the
+            # analyze matrix starts. Declining the UPLOAD later (see "Confirm
+            # this push still owns the analysis") is not enough, because
+            # `codeql-action/init` has by then already registered two
+            # configurations against this commit with Advanced Security. The
+            # PR's aggregate `CodeQL` check waits on registrations that never
+            # upload and closes `timed_out` ~6m30s after the merge-ref
+            # analysis lands -- exactly what #832 and #826 did, while ten
+            # contemporaneous PRs whose push runs never reached `init` all
+            # passed within 2-13s.
+            #
+            # So let ownership settle before deciding. Poll instead of
+            # sleeping: an adopted push exits on its first sighting, and a
+            # branch nothing ever claims pays the full window once. Scanning
+            # a push two minutes later costs nothing; scanning one that a PR
+            # owns costs that PR its check and burns a full analysis whose
+            # upload is then thrown away (#826 spent 10m12s doing exactly
+            # that).
+            adoption_deadline=$((SECONDS + 150))
+            while :; do
+              # Preserve `gh`'s exit status rather than `|| true`: a
+              # rate-limited lookup must retry, not be misread as "no PR owns
+              # this commit" and send an owned SHA into the matrix.
+              if open_prs="$(gh pr list --repo "$REPO" --state open \
+                --head "$GITHUB_REF_NAME" --limit 100 \
+                --json headRefOid)"; then
+                if jq -e --arg sha "$GITHUB_SHA" \
+                     'any(.[]; .headRefOid == $sha)' <<<"$open_prs" >/dev/null; then
+                  analyze=false
+                  echo "An open PR owns $GITHUB_REF_NAME@$GITHUB_SHA; its pull_request run is the single CodeQL analysis owner."
+                  break
+                fi
+              else
+                echo "::warning::Could not list open PRs for $GITHUB_REF_NAME; retrying before deciding push ownership."
+              fi
+              if [ "$SECONDS" -ge "$adoption_deadline" ]; then
+                echo "No open PR claimed $GITHUB_REF_NAME@$GITHUB_SHA within the adoption window; this push owns the analysis."
+                break
+              fi
+              sleep 15
+            done
           fi
           {
             echo "analyze=$analyze"
@@ -333,6 +379,44 @@ jobs:
           fetch-depth: 2
           persist-credentials: false
 
+      # Last harmless moment to disown a push. `codeql-action/init` is the
+      # point of no return: it registers this leg as a CodeQL configuration
+      # for this commit with Advanced Security, and nothing later can retract
+      # that registration -- declining the upload at the end of the job leaves
+      # the PR's aggregate check waiting on a configuration that will never
+      # arrive. The scope job's adoption window above makes this rare, but the
+      # gap between that decision and this job's checkout is still real (on
+      # PR #832 the push run's checkout finished 11:20:26Z and the PR was
+      # created 11:20:27Z), so re-check once more here, where skipping is
+      # still free.
+      #
+      # Never fail here: a red leg is a worse PR check state than a redundant
+      # scan, so an unreadable lookup proceeds with a warning exactly like the
+      # ordering and upload guards below.
+      - name: Re-confirm this push owns the analysis before initializing CodeQL
+        id: preinit
+        if: github.event_name == 'push' && needs.scope.outputs.analysis_ref == ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          own=true
+          if open_prs="$(gh pr list --repo "$REPO" --state open \
+            --head "$GITHUB_REF_NAME" --limit 100 \
+            --json headRefOid)"; then
+            if jq -e --arg sha "$GITHUB_SHA" \
+                 'any(.[]; .headRefOid == $sha)' <<<"$open_prs" >/dev/null; then
+              own=false
+              echo "::notice::An open PR claimed $GITHUB_REF_NAME@$GITHUB_SHA before this leg initialized CodeQL; its pull_request run is the single analysis owner, so this leg registers no configuration."
+            fi
+          else
+            echo "::warning::Could not re-confirm PR ownership of $GITHUB_REF_NAME@$GITHUB_SHA before init; analyzing this push rather than leaving the commit unscanned."
+          fi
+          echo "own=$own" >>"$GITHUB_OUTPUT"
+
       # Advanced Security opens the PR's aggregate CodeQL check the moment the
       # FIRST configuration uploads, and closes it right there if no other
       # CodeQL configuration is in flight for that SHA. These two legs are
@@ -364,7 +448,7 @@ jobs:
       # wait proceeds with a warning, exactly like the push-ownership
       # re-check below.
       - name: Wait for every sibling language leg to start
-        if: strategy.job-total > 1
+        if: strategy.job-total > 1 && steps.preinit.outputs.own != 'false'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -406,6 +490,7 @@ jobs:
           done
 
       - name: Initialize CodeQL
+        if: steps.preinit.outputs.own != 'false'
         uses: github/codeql-action/init@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4
         with:
           languages: ${{ matrix.language }}
@@ -436,7 +521,7 @@ jobs:
       # its sibling still uploads, because an unscanned commit is a worse
       # outcome than a late one.
       - name: Hold the faster analysis until the slowest language lands
-        if: matrix.language != 'javascript-typescript'
+        if: matrix.language != 'javascript-typescript' && steps.preinit.outputs.own != 'false'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -599,7 +684,7 @@ jobs:
       # analyses land. Re-check ownership at the last moment before upload.
       - name: Confirm this push still owns the analysis
         id: ownership
-        if: github.event_name == 'push' && needs.scope.outputs.analysis_ref == ''
+        if: github.event_name == 'push' && needs.scope.outputs.analysis_ref == '' && steps.preinit.outputs.own != 'false'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -628,8 +713,13 @@ jobs:
           fi
           echo "upload=$upload" >>"$GITHUB_OUTPUT"
 
+      # `steps.preinit.outputs.own` must be checked here as well as on the
+      # `ownership` step above. Skipping that step leaves its `upload` output
+      # empty, and an empty output is `!= 'false'` -- without this clause a
+      # disowned push would sail past its own guard and upload the branch
+      # snapshot it just declined to register.
       - name: Analyze the triggering revision
-        if: needs.scope.outputs.analysis_ref == '' && steps.ownership.outputs.upload != 'false'
+        if: needs.scope.outputs.analysis_ref == '' && steps.preinit.outputs.own != 'false' && steps.ownership.outputs.upload != 'false'
         uses: github/codeql-action/analyze@4c0873ef8656cb3c50b3f42fb63bc1ade0cfa827 # v4
         with:
           category: /language:${{ matrix.language }}
