@@ -122,6 +122,27 @@ or authorization for new work.
 
 ### Keep storage, uniqueness and migrations coherent
 
+- Keep MongoDB indexes to the smallest performant set. Define index creation at
+  the highest reusable Thing abstraction through the central index registry and
+  shared query builders. Logs, posts, media and other kinds must prefer common
+  property paths and the existing general Thing indexes instead of adding one
+  index per kind or field. Reuse or generalize an existing index wherever it can
+  serve the query correctly and efficiently.
+- A new index is a rare, evidence-backed exception. Before proposing one, inspect
+  existing definitions and representative `explain('executionStats')` plans;
+  document why shared indexes or a better query/property layout cannot meet the
+  need. Heavily favor performance and optimization: compare scan/sort work,
+  latency, write amplification, storage and index-budget headroom. Do not force
+  a slow scan merely to reduce the count, or assume one wildcard/compound index
+  can satisfy every sort, uniqueness constraint or TTL lifecycle.
+- Keep reusable index definitions, shared property semantics and query ordering
+  aligned across writers and readers. Consolidate kind-specific indexes when
+  practical, preserve authorization and uniqueness, and explicitly opt only
+  safe-to-delete kinds into shared TTL policies. Retention that refunds credits,
+  deletes external media or updates accounting requires its canonical cleanup
+  lifecycle. Verify replacement performance and live rollout before retiring
+  old indexes; never remove a required constraint to meet a numeric target.
+
 - Keep user-writable crystal fields separate from protected root `uniqueKeys`
   identities. Never add a kind-blind unique crystal-path index or reserve normal
   data-property names as the permanent fix. Trace **every** generic, dedicated,
@@ -165,6 +186,27 @@ or authorization for new work.
   Test revocation between read and commit, namespace escape, wrong-account
   references and private metadata in logs/toasts. Preserve protected storage
   projections rather than weakening validators to get a migration green.
+
+### Keep Vercel variables minimal and configuration in the vault
+
+- Keep Vercel environment variables to the absolute minimum. Store application
+  configuration, provider credentials and environment-specific values in the
+  Thingtime vault, scoped to the deployment environment, instead of duplicating
+  them across Vercel production, preview, development or custom environments.
+- Keep only irreducible startup values in Vercel: the minimum needed to identify
+  the environment and securely reach and unlock the vault. Do not create a
+  circular dependency by storing the only vault bootstrap credential inside
+  that same vault. Reuse platform-provided deployment metadata where possible.
+  A new Vercel variable requires a documented bootstrap necessity.
+- Resolve configuration through a central server-side vault abstraction with
+  explicit environment selection, validation and bounded caching. Preserve
+  production/development isolation and fail closed when required configuration
+  is unavailable; never silently borrow another environment's credentials.
+  Keep secrets out of client bundles, build artifacts, logs and public APIs.
+- Migrate existing Vercel values through the canonical vault workflow. Verify
+  each affected environment's build and runtime behavior, rotation and recovery
+  before removing the old value. Keep a bounded rollback path and document
+  fork-safe setup with placeholders rather than real credentials.
 
 ### Register and negotiate the real executable API
 
@@ -410,6 +452,10 @@ commits.
 - If local web dev 500s with a missing `bcrypt_lib.node` native binding, run `corepack pnpm --dir remix run ensure-bcrypt`, then restart the PM2-managed `tt-nitro-react-router-9999` app. The app `postinstall`, `dev`, and `build` scripts also run this check automatically.
 
 ## Browser and UI validation
+
+### Configurable images and files
+
+- Every configurable or customizable image/file usage across Thingtime must use the shared upload-first pattern: offer an upload picker as the primary control and an optional **Use URL instead** button that reveals a URL field. Reuse the shared media/upload components; do not introduce URL-only settings. Preserve previews, replacement/removal, progress, retry, and unsaved drafts. Use canonical server-validated attachment purposes, target/slot authorization, moderation, quota accounting, and cleanup; a pasted URL remains a validated fallback and must never bypass these boundaries.
 
 ### Feature customization defaults
 

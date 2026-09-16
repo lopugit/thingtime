@@ -1490,7 +1490,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     [post.subspace, rootRemoved, canModerate]
   );
   const [subspacePrefs] = useSubspacePrefs();
-  const showVotes = subspacePrefs.showVotes;
+  const showVotes = !!post.subspace && subspacePrefs.showVotes;
 
   // up/down vote — the separate focused reaction kind. Optimistic through the
   // same functional PostChange path reactions use (idempotent against the
@@ -2365,31 +2365,6 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
           </Flex>
         ) : (
           <PostBody post={post} attachments={post.attachments} poll={pollContext} />
-        )}
-
-        {/* tags — each chip links to that tag's public feed (claude-todo/10 ✨) */}
-        {post.tags?.length > 0 && (
-          <Flex columnGap={1} rowGap={1} flexWrap="wrap">
-            {post.tags.map((tag) => (
-              <Text
-                key={tag}
-                as={Link}
-                to={`/feed?tag=${encodeURIComponent(tag)}`}
-                fontFamily="mono"
-                fontSize="12px"
-                fontWeight={600}
-                color={MUTED}
-                paddingX={2}
-                paddingY="1px"
-                borderRadius="999px"
-                border={BORDER}
-                _hover={{ color: INK, background: 'var(--tt-surface-hover, #ececee)' }}
-                title={`See every post tagged #${tag}`}
-              >
-                #{tag}
-              </Text>
-            ))}
-          </Flex>
         )}
 
         {/* action row — icons + counts only (X-style, no labels); the merged

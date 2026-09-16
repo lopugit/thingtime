@@ -25,6 +25,7 @@ import {
   Tr
 } from '@chakra-ui/react';
 
+import { SystemVault } from './SystemVault';
 import { AdminPanel } from '~/components/Admin/AdminPanel';
 import { CIControlDashboard } from '~/components/Admin/CIControl/CIControlDashboard';
 import { IntegrationManager } from '~/components/Admin/IntegrationManager';
@@ -48,6 +49,11 @@ import { useLopu } from '~/components/Lopu/useLopu';
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { CARD_STYLES } from '~/theme/card';
+// The marketing publishing panel imports the 1,600-page marketing catalog;
+// keep it out of the admin chunk until the tab is actually opened.
+const MarketingPublishingTab = React.lazy(() =>
+  import('~/components/Admin/MarketingPublishingTab').then((module) => ({ default: module.MarketingPublishingTab }))
+);
 
 // /admin — the management dashboard: Users (tiers, quotas, storage, links),
 // Apps (owners, users, storage, suspension), System (the existing rate-limit
@@ -1021,6 +1027,13 @@ export const AdminDashboard = () => {
             <IntegrationManager />
           </TabPanel>
           <TabPanel px={0}>
+            {/* empty fallback, never a spinner: the panel paints from the cached publish state */}
+            <React.Suspense fallback={<Box minHeight="240px" />}>
+              <MarketingPublishingTab />
+            </React.Suspense>
+          </TabPanel>
+          <TabPanel px={0}>
+            <SystemVault key={user.id} cacheIdentity={user.id} />
             <AdminPanel />
           </TabPanel>
         </TabPanels>

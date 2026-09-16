@@ -1,8 +1,10 @@
+import { createClaudeOAuthClient } from '../ai/claudeOAuth';
 // Claude API vision moderation provider. One bounded request per image:
 // base64 image + a strict-JSON classification ask. The raw image never
 // persists anywhere new — bytes come from the private S3 object and go only
 // to the Claude API call.
 import Anthropic from '@anthropic-ai/sdk';
+import { recordErrorLog } from '../errors/errorLogs';
 
 import { getAiPreferredModelWaterfall } from '../settings/prConflictResolverModelWaterfall';
 import { resolveAiPreferredAnthropicChoice, toAnthropicEffort } from '../settings/prConflictResolverModelWaterfallCore';
@@ -50,7 +52,7 @@ export const createClaudeModerationProvider = (env: NodeJS.ProcessEnv = process.
 	// provider default used when the waterfall says 'default'.
 	const providerDefaultModel = env.TT_MODERATION_MODEL?.trim() || DEFAULT_MODERATION_MODEL;
 	let lastResolvedModel = providerDefaultModel;
-	const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+	const client = createClaudeOAuthClient({ env });
 	return {
 		name: 'claude',
 		get model() {
@@ -82,7 +84,11 @@ export const createClaudeModerationProvider = (env: NodeJS.ProcessEnv = process.
 						]
 					}
 				]
-			});
+			}).catch(async (error) => {
+        // Capture only the SDK's closed error snapshot, not headers/body/image.
+        await recordErrorLog(error, { source: 'moderation', provider: 'anthropic', status: error?.status, providerRequestId: error?.request_id, providerType: error?.error?.error?.type });
+        throw error;
+      });
 
 			// A safety-classifier refusal on a moderation request is itself signal:
 			// the image was extreme enough that the model declined to process it.

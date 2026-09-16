@@ -1,4 +1,5 @@
 import { ownerLibraryMatch } from './ownerLibraryQuery';
+import { moveManagedContent } from './managedPlacement';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { ObjectId, type Binary } from 'mongodb';
@@ -60,6 +61,7 @@ import {
   MAX_TEXT_CHARS,
   MESSENGER_THINGTIME,
 	MIGRATION_DIAGNOSTIC_ID_PREFIX,
+  ERROR_LOG_ID_PREFIX, ERROR_LOG_THINGTIME,
 	MIGRATION_DIAGNOSTIC_THINGTIME,
   POST_TYPES as REGISTRY_POST_TYPES,
   PROTECTED_THINGTIME,
@@ -80,6 +82,10 @@ import {
 } from '~/schemas/registry';
 import { scorePost, type AlgorithmWeights, type PostFeatures } from './feedRanking';
 import { pollShapeOfCrystal, tallyPollVotes, type PollVoteEntry, type PublicPollVotes } from './pollCore';
+import { parseGeo, publicGeo, geoRadiusClause, type GeoLocation, type StoredGeoLocation } from '~/schemas/geo';
+import { rankSubspacePosts } from '../subspaces/subspaceCore';
+import { updownTalliesFor } from './updown';
+import type { DefaultAlgorithmId } from '~/components/Feed/defaultAlgorithms';
 import { emptyUpdownVotes, orderCommentPage, tallyUpdown, type CommentSort, type PublicUpdownVotes, type UpdownEntry } from './updownCore';
 import {
 	assertSubspaceInteraction,
@@ -191,6 +197,7 @@ export type ThingDoc = {
   // the platform envelope — never validated, structured-searchable, or
   // interpreted (see sanitizeExtended in schemas/registry.ts)
   extended?: unknown | null;
+  geo?: StoredGeoLocation | null;
   ownerId: string;
   acl?: string[]; // v2 — tt: grants/exclusions (see schemas/registry.ts)
   visibility?: ThingVisibility; // v1 residue (mapped onto acl at read time)
@@ -398,6 +405,7 @@ export type PublicPost = {
   // (batched savedTargetIds lookup — anonymous projections omit the field)
   viewerSaved?: boolean;
   extended: unknown | null;
+  geo?: GeoLocation | null;
   createdAt: string;
 };
 
@@ -449,6 +457,7 @@ export type PublicThing = {
   folderId: string | null;
   crystal: Record<string, any>;
   extended: unknown | null;
+  geo?: GeoLocation | null;
   tags: string[];
   // owner-only: the thing's tt:token/<id> grant list (absent for other
   // viewers and when empty)
@@ -1191,6 +1200,7 @@ export const sanitizeShareId = (value: unknown): string | null | Fail => {
   }
   if (
     trimmed.startsWith('lopu-recording-') ||
+    trimmed.startsWith('lopu-background-') ||
     trimmed.startsWith(MIGRATION_RESERVED_ID_PREFIX) ||
     trimmed.startsWith(SCHEMA_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(COMPONENT_RESERVED_ID_PREFIX) ||
@@ -1198,7 +1208,7 @@ export const sanitizeShareId = (value: unknown): string | null | Fail => {
 		trimmed.startsWith(ACTION_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(SUBSCRIPTION_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(SERVICE_QUOTA_RESERVED_ID_PREFIX) ||
-		trimmed.startsWith(MIGRATION_DIAGNOSTIC_ID_PREFIX) ||
+		trimmed.startsWith(MIGRATION_DIAGNOSTIC_ID_PREFIX) || trimmed.startsWith(ERROR_LOG_ID_PREFIX) ||
 		trimmed.startsWith(APP_STORAGE_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(EXTERNAL_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(SEEDED_DATA_SUITE_RESERVED_ID_PREFIX) ||
@@ -1285,6 +1295,7 @@ export type CreateThingInput = {
   thingtime?: unknown;
   crystal?: unknown;
   extended?: unknown;
+  geo?: unknown;
   acl?: unknown;
   visibility?: unknown; // legacy alias, mapped onto acl
   targetId?: unknown;
@@ -1438,6 +1449,8 @@ export const createThing = async (
     inputAcl = resolved;
   }
 
+  const geo = input.geo == null ? null : parseGeo(input.geo);
+  if (input.geo != null && !geo) return fail(400, 'geo requires finite lat (-90..90) and lng (-180..180)');
   const extended = sanitizeExtended(input.extended);
   if (isFail(extended)) return extended;
 
@@ -1579,6 +1592,7 @@ export const createThing = async (
     thingtime: validated.thingtime,
     crystal: validated.crystal,
     extended: extended.value === undefined ? null : extended.value,
+    ...(geo ? { geo } : {}),
     ownerId,
     acl,
     targetId,
@@ -1878,6 +1892,7 @@ export type CreatePostInput = {
   subspaceId?: unknown;
   flairId?: unknown;
   extended?: unknown;
+  geo?: unknown;
   acl?: unknown;
   visibility?: unknown;
   tags?: unknown;
@@ -1912,6 +1927,7 @@ export const createPost = async (
 			flairId: input.flairId
 		},
       extended: input.extended,
+      geo: input.geo,
       acl: input.acl,
       visibility: input.visibility,
       tags: input.tags,
@@ -2750,6 +2766,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       // field at all (nothing to bookmark without a library)
       ...(viewerId ? { viewerSaved: savedIds.has(doc.shareId) } : {}),
       extended: doc.extended ?? null,
+      geo: publicGeo(doc.geo),
       createdAt: new Date(doc.createdAt).toISOString()
     };
   };
@@ -2782,6 +2799,7 @@ export const toPublicThings = async (docs: ThingDoc[], viewerInput: string | Vie
       folderId: folderIdOf(doc),
       crystal: crystalOf(doc),
       extended: doc.extended ?? null,
+      geo: publicGeo(doc.geo),
       tags: doc.tags || [],
       ...(tokenAcl.length ? { tokenAcl } : {}),
       createdAt: new Date(doc.createdAt).toISOString(),
@@ -2802,7 +2820,7 @@ const aclOf = (doc: ThingDoc): string[] => (Array.isArray(doc.acl) && doc.acl.le
 export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
 	// Operational diagnostics have a stricter boundary than ordinary private
 	// Things: only the dedicated current-admin endpoint may decode/read them.
-	if (thingtimeOf(doc).includes(MIGRATION_DIAGNOSTIC_THINGTIME)) return false;
+	if ((thingtimeOf(doc).includes(MIGRATION_DIAGNOSTIC_THINGTIME) || thingtimeOf(doc).includes(ERROR_LOG_THINGTIME))) return false;
 	// Moderation-blocked things vanish from every ordinary read for everyone —
 	// owner included, same as blocked attachments. Admins review through the
 	// moderationFlag queue (which carries a bounded excerpt), never this path.
@@ -3287,6 +3305,10 @@ const enforceReactionCaps = async (targetShareId: string, ownerId: string, token
 // Reads.
 
 export type FeedQuery = {
+  preset?: DefaultAlgorithmId | null;
+  localTag?: string | null;
+  near?: GeoLocation | null;
+  radiusKm?: number;
   types?: PostType[];
   circles?: PostVisibility[];
   // public tag feeds (claude-todo/10 ✨): narrow to posts carrying one tag.
@@ -3370,6 +3392,10 @@ export const getFeed = async (
     typeClause(types),
     tag ? { tags: tag } : {},
     range,
+    query.preset === 'political' ? { tags: { $in: ['politics', 'political'] } } : {},
+    query.preset === 'global' ? circleClause('public') : {},
+    query.preset === 'local' ? (query.near ? geoRadiusClause(query.near, query.radiusKm || 50) : { tags: (query.localTag || '').trim().toLowerCase().replace(/^#/, '').slice(0, MAX_TAG_CHARS) }) : {},
+    query.preset === 'rising' ? { createdAt: { $gte: new Date(Date.now() - 86400000) } } : {},
     scopedSubspaceIds ? { 'crystal.subspaceId': { $in: scopedSubspaceIds } } : {},
     ...subspaceFeedClauses(viewer)
   );
@@ -3377,7 +3403,10 @@ export const getFeed = async (
   const things = await getThingsCollection();
   const weights = query.weights || null;
 
-  if (!weights) {
+  const voteSort = query.preset && !['new', 'local'].includes(query.preset)
+    ? (query.preset === 'global' || query.preset === 'political' ? 'hot' : query.preset) as 'hot' | 'top' | 'rising' | 'controversial'
+    : null;
+  if (!weights && !voteSort) {
     // chronological: stable (createdAt, shareId) cursor pagination
     const cursor = parseChronoCursor(query.cursor);
     const pageMatch = cursor ? withMatch(match, chronoCursorClause(cursor)) : match;
@@ -3409,10 +3438,16 @@ export const getFeed = async (
     .toArray()) as any as ThingDoc[];
 
   const now = new Date();
+  const tallies = voteSort ? await updownTalliesFor(candidates.map((doc) => doc.shareId), viewer?.id || null) : new Map();
+  const voteOrder = voteSort ? rankSubspacePosts(candidates.map((doc) => ({
+    id: doc.shareId, createdAtMs: new Date(doc.createdAt).getTime(), pinned: false,
+    up: tallies.get(doc.shareId)?.up || 0, down: tallies.get(doc.shareId)?.down || 0
+  })), voteSort, now.getTime()) : [];
+  const voteRanks = new Map(voteOrder.map((id, index) => [id, voteOrder.length - index]));
   const scored = candidates
     .map((doc) => ({
       doc,
-      score: scorePost(weights, featuresOf(doc), now)
+      score: voteSort ? voteRanks.get(doc.shareId)! : scorePost(weights!, featuresOf(doc), now)
     }))
     .sort(
       (a, b) =>
@@ -3584,7 +3619,8 @@ export type ListThingsQuery = {
 export const listThings = async (
   viewerInput: string | Viewer,
   query: ListThingsQuery,
-  app: AppLens = null
+  app: AppLens = null,
+  context: { archiveOwnerId?: string } = {}
 ): Promise<Fail | { ok: true; things: PublicThing[]; nextCursor: string | null }> => {
   const viewer = await withFriendIds(asViewer(viewerInput));
   const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_LIMIT), MAX_FEED_LIMIT);
@@ -3612,7 +3648,7 @@ export const listThings = async (
       ? [...PROTECTED_THINGTIME, ...FOLDER_UNFILEABLE]
       : [...PROTECTED_THINGTIME, ...MESSENGER_THINGTIME, ...SUBSPACE_THINGTIME, UPDOWN_THINGTIME];
     match = withMatch(
-      ownerLibraryMatch(viewer.id, hiddenKinds),
+      ownerLibraryMatch(viewer.id, hiddenKinds, context.archiveOwnerId === viewer.id && !viewer.pat && !query.appId && !isCustomMongoEndpointActive()),
       await legacyThingReadsRequired() ? { $or: [{ thingtime: { $exists: true } }, { kind: 'post' }] } : { thingtime: { $exists: true } }
     );
     if (folder === 'root') {
@@ -3668,6 +3704,13 @@ export const listThings = async (
     visible = page.filter((_, index) => verdicts[index]);
   }
   const projected = await toPublicThings(visible, viewer);
+  for (const thing of projected) if (thing.thingtime.length === 1 && thing.thingtime[0] === 'chat-archive') {
+    // Library entries are private root summaries, never history or stored
+    // authority. Only the dedicated snapshot route returns archived people.
+    thing.crystal = { name: typeof thing.crystal.name === 'string' ? thing.crystal.name : 'Chat archive' };
+    thing.acl = ['tt:user']; thing.visibility = 'private'; thing.extended = null; thing.tags = [];
+    delete thing.linkKey; delete thing.tokenAcl;
+  }
   if (app) await appShapeProjections(app, visible, projected);
   return { ok: true, things: projected, nextCursor };
 };
@@ -4849,6 +4892,7 @@ export const deletePost = deleteThing;
 export type UpdateThingInput = {
   crystal?: unknown;
   extended?: unknown;
+  geo?: unknown;
   acl?: unknown;
   visibility?: unknown; // legacy alias, mapped onto acl
   folderId?: unknown; // move: an owned folder's shareId, or null for the root
@@ -5062,6 +5106,8 @@ export const updateThing = async (
   // extended replaces as a whole value only when provided (undefined leaves it
   // untouched, null clears it) — both PATCH and PUT, since deep-merging
   // arbitrary JSON is ambiguous
+  const geo = input.geo == null ? null : parseGeo(input.geo);
+  if (input.geo != null && !geo) return fail(400, 'geo requires finite lat (-90..90) and lng (-180..180)');
   const extended = sanitizeExtended(input.extended);
   if (isFail(extended)) return extended;
   const hasExtendedChange = input.extended !== undefined;
@@ -5135,6 +5181,7 @@ export const updateThing = async (
     thingtime,
     crystal: validated.crystal,
     ...(hasExtendedChange ? { extended: extended.value } : {}),
+    ...(input.geo !== undefined ? { geo } : {}),
     ...(nextTokenAcl !== undefined ? { tokenAcl: nextTokenAcl } : {}),
     targetId: targetIdOf(doc),
     ...(hasFolderChange ? { folderId: nextFolderId } : {}),
@@ -5400,7 +5447,9 @@ const collectFolderTree = async (
 
 export const bulkThings = async (
   viewerInput: string | Viewer,
-  input: BulkThingsInput
+  input: BulkThingsInput,
+  placementDependencies: { collection?: typeof getThingsCollection; moveRecording?: typeof moveManagedContent } = {},
+  context: { archiveOwnerId?: string } = {}
 ): Promise<Fail | { ok: true; op: BulkOp; results: BulkItemResult[]; succeeded: number; failed: number }> => {
   const viewer = asViewer(viewerInput);
   if (!viewer?.id) return fail(401, 'Unauthorized');
@@ -5464,7 +5513,7 @@ export const bulkThings = async (
     );
   };
 
-  const things = await getThingsCollection();
+  const things = await (placementDependencies.collection || getThingsCollection)();
   const results: BulkItemResult[] = [];
   for (const id of ids) {
     if (op === 'delete') {
@@ -5473,6 +5522,24 @@ export const bulkThings = async (
       continue;
     }
     if (op === 'move') {
+      const owned = await things.findOne({ shareId: id, ownerId: viewer.id } as any) as unknown as ThingDoc | null;
+      if (owned?.thingtime?.length === 1 && ['attachment', 'theme', 'feed-algorithm', 'custom-emoji', 'chat-archive'].includes(owned.thingtime[0])) {
+        if (owned.thingtime[0] === 'chat-archive' && (context.archiveOwnerId !== viewer.id || viewer.pat)) {
+          results.push({ id, ok: false, error: 'Only the first-party archive owner can move this history' });
+          continue;
+        }
+        if (patSandboxBlocks(viewer, owned) || await patVisibilityBlocksDoc(viewer, owned)) {
+          results.push({ id, ok: false, error: 'This token cannot move that managed content' });
+          continue;
+        }
+        try {
+          await (placementDependencies.moveRecording || moveManagedContent)(viewer.id, id, folderId, new Date(owned.updatedAt).toISOString());
+          results.push({ id, ok: true });
+        } catch {
+          results.push({ id, ok: false, error: 'Content could not be moved. Refresh and check that it is saved managed content and the destination is in your own library. Legacy themes/algorithms must first be copied into the current library.' });
+        }
+        continue;
+      }
       const result = await updateThing(viewer, id, { folderId });
       results.push('error' in result ? { id, ok: false, error: result.error } : { id, ok: true });
       continue;

@@ -14,6 +14,7 @@ import { CARD_STYLES } from '~/theme/card';
 import { ThingActionMenuButton } from '../Thingtime/ContextMenu/ThingActionMenuButton';
 import { buildThingsItemMenu } from './thingsMenuModel';
 import { thingBrowseHref } from './thingsLocation';
+import { RecordingTranscript } from '../Attachments/RecordingTranscript';
 
 import type {
   ThingsDisplayMode,
@@ -41,6 +42,10 @@ const previewSourceOf = (thing: ThingsThing): unknown => {
 // The page looks a data thing's schema render template up per thing (fetched +
 // cached there); views just pass it through to the preview box.
 export type SchemaRenderLookup = (thing: ThingsThing) => Record<string, unknown> | null;
+
+const RecordingThingTranscript = ({ thing }: { thing: ThingsThing }) =>
+  thing.thingtime.includes('attachment') && thing.crystal?.mediaKind === 'audio'
+    ? <RecordingTranscript attachmentId={thing.id} compact /> : null;
 
 // A data thing drawn through its schema's render template: {field} tokens
 // interpolate the thing's own crystal values, then the tree goes through the
@@ -118,6 +123,7 @@ export type ThingsItemAction =
   | 'move'
   | 'share'
   | 'copy'
+  | 'download'
   | 'cut'
   | 'duplicate'
   | 'copyLink'
@@ -360,6 +366,7 @@ export const ThingsGridView = ({
               {formatWhen(thing.updatedAt)}
             </Text>
           </Flex>
+          <RecordingThingTranscript thing={thing} />
         </Flex>
       );
     })}
@@ -504,6 +511,7 @@ export const ThingsListView = ({
 									<ThingPreviewBox fallback={null} maxHeight="120px" schemaRender={schemaRenderFor?.(thing) || null} thing={thing} />
           </Box>
         )}
+        <RecordingThingTranscript thing={thing} />
         </Flex>
       );
     })}
@@ -616,6 +624,7 @@ export const ThingsColumnsView = ({
 										<ThingPreviewBox fallback={null} maxHeight="90px" schemaRender={schemaRenderFor?.(thing) || null} thing={thing} />
                   </Box>
                 )}
+                <RecordingThingTranscript thing={thing} />
               </Flex>
             );
           })}

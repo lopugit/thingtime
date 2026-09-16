@@ -321,7 +321,7 @@ export function Launcher({ state }: { state: CommanderState }) {
         else
           void state
             .rememberRecentSearch(state.query)
-            .then(hideLauncher)
+            .then(() => hideLauncher(true))
             .catch((error: unknown) =>
               state.reportError(error instanceof Error ? error.message : 'Could not close Commander'),
             );

@@ -30,7 +30,7 @@ const directClientFiles = sourceFiles(appRoot)
 
 assert.deepEqual(
   directClientFiles,
-  ['app/api/utils/lopu/chat.ts', 'app/api/utils/lopu/musing.ts', 'app/api/utils/lopu/recordingsProvider.ts', 'app/api/utils/moderation/claudeProvider.ts'],
+  ['app/api/utils/ai/claudeOAuth.ts', 'app/api/utils/lopu/chat.ts', 'app/api/utils/lopu/musing.ts', 'app/api/utils/lopu/recordingsProvider.ts'],
   'new direct AI clients must be added to the Thingtime Admin model-routing contract'
 );
 
@@ -49,8 +49,8 @@ const musing = readFileSync(join(remixRoot, 'app/api/utils/lopu/musing.ts'), 'ut
 assert.match(musing, /getAiPreferredModelWaterfall/);
 assert.match(musing, /resolveAiPreferredAnthropicChoice/);
 assert.match(musing, /resolveAiPreferredOpenAiChoice/);
-assert.match(musing, /streamClaude\(SYSTEM_PROMPT, user, choices\.claude\)/);
-assert.match(musing, /streamOpenAI\(SYSTEM_PROMPT, user, choices\.openai\)/);
+assert.match(musing, /streamClaude\(SYSTEM_PROMPT, user, choices\.claude, opts\.signal\)/);
+assert.match(musing, /streamOpenAI\(SYSTEM_PROMPT, user, choices\.openai, opts\.signal\)/);
 assert.doesNotMatch(musing, /model:\s*process\.env\.LOPU_CLAUDE_MODEL/);
 assert.doesNotMatch(musing, /model:\s*process\.env\.LOPU_OPENAI_MODEL/);
 

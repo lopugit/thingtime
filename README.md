@@ -8,6 +8,51 @@ With Thingtime, you can create and share any abstract data structure you want, o
 
 At Thingtime, we believe that data and knowledge should be open, accessible, and empowering. We are building Thingtime to make this vision a reality. Join us and start exploring the limitless possibilities of data!
 
+## Platform Secure Vault and Claude OAuth
+
+Manage shared platform credentials at **Admin → System → Thingtime Secure
+Vault**. Existing CI credentials keep their IDs and encrypted records; CI
+Control shows the same list and links to System for changes. Enabled Claude
+accounts run in priority order, with at most eight accounts considered per
+request. A credential failure can try the next account before output begins,
+using the same model, effort and speed. An explicit chat model never silently
+switches to another provider.
+
+Fork setup:
+
+1. Set `THINGTIME_ADMIN_VAULT_KEY=<base64url-encoded-32-byte-key>` in each
+   deployment environment. Keep the encryption key stable; changing it without
+   re-encrypting records makes existing entries unreadable.
+2. Add a **Claude / Anthropic** entry in System using a Claude Code OAuth token
+   (`sk-ant-oat…`). The existing entries formerly managed in CI Control already
+   work here. Standalone local setups may use
+   `CLAUDE_CODE_OAUTH_TOKEN_THINGTIME` or `CLAUDE_CODE_OAUTH_TOKEN` when the
+   platform vault has no enabled Claude entries. Anthropic API keys and
+   `ANTHROPIC_AUTH_TOKEN` are never used for inference.
+3. CI keeps its existing `THINGTIME_CI_ROUTER_SECRET` signed delivery protocol
+   and pulls its AI credential subset from that same store. The dedicated
+   `OpenAI Moderation` entry remains scoped to moderation.
+4. To manage Vercel variables in System, set `VERCEL_PROJECT_ID` and the team's
+   `VERCEL_TEAM_ID` (or `VERCEL_ORG_ID`). Add a platform credential labelled
+   **Vercel**, or configure `VERCEL_API_TOKEN`. The server fixes the project and
+   origin; clients cannot select another project. Lists omit values. Showing
+   one value requires fresh current-password or passkey verification. Vercel
+   `sensitive` values cannot be revealed; they can be replaced. Creates use
+   encrypted variables with no upsert, and edits take effect on redeployment.
+
+The pinned official Claude Code runtime runs with built-in tools, MCP servers,
+user settings and session persistence disabled. Thingtime retains its own
+permission-checked tool executor. The Vercel build includes a compressed native
+executable with a SHA-256/size manifest, checks the function size, and expands
+it into private temporary storage before execution. No runtime download or
+Anthropic API-key fallback is performed. Provider access checks distinguish
+OAuth configuration from model/allowance verification by a real reply.
+
+Local worktree verification: `http://localhost:15080/admin/system` (Nitro
+15082, HMR 15081). Tailscale/Funnel was unavailable on this machine during
+verification because the configured Tailscale executable was missing. Standard
+checkouts continue to derive ports from `remix/scripts/worktree-ports.cjs`.
+
 ## Lopu reminders and notification tests
 
 The Lopu page keeps one conversation while switching between Chat and Voice.
@@ -1487,7 +1532,7 @@ or **all** variation per user:
 | Scope | Covers | Flag |
 | --- | --- | --- |
 | `public` | post, comment, and custom-emoji attachments | `meta.publicUploads` |
-| `private` | message attachments + the user's own profile avatar/banner | `meta.privateUploads` |
+| `private` | message attachments, recordings (including recording-import drafts), and the user's own profile avatar/banner | `meta.privateUploads` |
 | `all` | both of the above in one write | both flags |
 
 The account carries `meta.publicUploads: false` and `meta.privateUploads:
@@ -1575,13 +1620,31 @@ THINGTIME_MODERATION_PROVIDER="openai+claude"  # 'openai+claude' (alias 'tiered'
                                                # unset default by keys: both → openai+claude; ANTHROPIC only → claude;
                                                # OPENAI only → openai; neither → off
 ANTHROPIC_API_KEY="<key>"                # Claude API key (escalation / claude provider)
-OPENAI_API_KEY="<key>"                   # OpenAI key for the free omni-moderation screen
+OPENAI_API_KEY="<key>"                   # legacy fallback; prefer the dedicated encrypted vault entry below
 TT_MODERATION_MODEL="claude-opus-5"      # optional Claude model override
 TT_MODERATION_ESCALATION_SCORE="0.2"     # optional; escalate unflagged images whose max
                                          # image-category score meets this 0..1 threshold
 ```
 
-Note: `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are shared with the Lopu musing
+For each deployment environment, open `/admin/ci-control` → AI credential
+waterfall and add an enabled credential with the exact platform **OpenAI
+Moderation** (use Add platform), a descriptive account name, and an OpenAI API
+key. The server reads the first enabled entry in that platform's priority order
+from that environment's encrypted admin vault. Production and develop must each
+have their own entry and existing `THINGTIME_ADMIN_VAULT_KEY` bootstrap; never
+copy encrypted records between environments. No new Vercel variable or MongoDB
+index is needed. This dedicated key is used only for image, invitation-avatar,
+and post/comment moderation, including the Admin settings effective-provider
+view. It does not replace paid chat or CI keys. Rotation takes effect on the
+next request; reads/decryption failures stop moderation rather than silently
+using a stale key. When there is no enabled entry, `OPENAI_API_KEY` remains a
+migration fallback. Verify an actual image verdict before removing that legacy
+value, and check its other consumers before removal. A successful models-list
+check alone does not prove moderation access. Omni has no usage charge, but the
+API organization must have working API access; persistent 429s can reflect
+account funding/provisioning even with a visible active key.
+
+Note: legacy `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are shared with the Lopu musing
 feature — their presence alone activates image moderation when
 `THINGTIME_MODERATION_PROVIDER` is unset. Set it to `off` explicitly in
 environments that carry the keys for musing but must not moderate. An
@@ -3237,6 +3300,49 @@ the local launcher points to a missing Tailscale app; no public mapping was chan
 
 Settings → AI waterfalls stores private named model/endpoint orders using the existing Things database and authenticated API. No extra collection, migration, or secret is required. Configure provider keys or personal Secure Vault connections as described in [the waterfall setup](docs/ai-waterfall-selector.md). Forks must deploy the registered `api.ai-waterfalls` 1.0.0 contract before clients can save a library.
 
+## Portable transfer real-storage acceptance
+
+The optional `remix` command `test:transfer-binary` exercises real multipart
+uploads and image ZIP import/export through the application API. It is disabled
+unless `TT_TRANSFER_BINARY_TEST=1` is explicitly set. Use a local fixture server
+(`TT_TRANSFER_TEST_URL=http://127.0.0.1:<your-worktree-port>`) backed by a
+disposable test account and the private storage setup documented above. That
+account must already have public-upload approval and a ready storage ledger.
+Provide its session cookie through `TT_TRANSFER_TEST_COOKIE` in the process
+environment using your local secret tooling; never put it in a command literal,
+tracked file, screenshot or test report. Do not use a production account.
+
+Run `corepack pnpm --dir remix run test:transfer-binary` with those environment
+values. The test checks API capability versions, uploads tiny PNG fixtures,
+compares bytes and annotations after ZIP/reimport, checks anonymous denial and
+concurrent emoji import claims, then deletes its own returned IDs and verifies
+cleanup. It does not connect directly to MongoDB, enable uploads, reconcile
+storage or run migrations. A failed approval/storage precondition is a blocker,
+not a passed test. Investigate any reported cleanup IDs before another run.
+
+For isolated archive UI checks, run `node --import tsx scripts/archive-ui-smoke.mts`
+from `remix` with `TT_TRANSFER_UI_ORIGIN=http://localhost:<worktree-port>`.
+Install Playwright and Chrome locally, or point `TT_PLAYWRIGHT_MODULE` at an
+existing Playwright module. The test accepts loopback HTTP only, starts a fresh
+browser context, supplies fictional history, blocks API mutations, and writes
+screenshots to a temporary directory. It never copies browser credentials or
+imports real account data. This does not replace live media/clipboard acceptance.
+
+`corepack pnpm --dir remix run test:transfer-archives` adds a metadata-only
+archive import/read/delete lifecycle check. Enable it with
+`TT_TRANSFER_ARCHIVE_TEST=1` and the same origin/cookie variables, plus
+`TT_TRANSFER_TEST_USERNAME` for the expected disposable fixture identity.
+Remote dev origins require `TT_TRANSFER_REMOTE_DEV_TEST=1`; only
+`https://dev.thingtime.com` or an exact `https://pr-N.previews.dev.thingtime.com`
+origin is accepted. Production, lookalikes and implicit remote writes are
+refused. The selected origin must advertise import 1.9.0 and Things 1.13.0
+before any archive is created. The test uses fictional participants, verifies
+full history and private reads, rejects individual-row mutation/deletion and
+stale preview deletion, then removes only its returned archive root. No real
+user, live-message, invitation, notification or upload APIs are called. This
+test does not yet cover avatars, custom emoji, export or UI rendering; a skipped
+or capability-blocked run is not live acceptance.
+
 ## Thingtime Widgets automatic releases
 
 `.github/workflows/widgets-release.yml` publishes an Apple-silicon Widgets ZIP and
@@ -3263,3 +3369,127 @@ Recovery's **App → Thingtime Widgets** selector; its cache and install target 
 isolated from Desktop, Commander and Recovery. Local bundle construction is not
 proof of a successful cloud release: the first main run and download/install via
 Recovery remain release acceptance checks.
+
+## Gifted signup invitations
+
+Signed-in personal accounts can create single-use invites in **Settings → Account →
+Invite someone with a gift**. Choose a username, display name, optional avatar and
+0–10,000 credits (six decimal places). The gift is deducted immediately and held
+until signup. Cancelling an unused invite returns it; links expire after 30 days.
+Up to 20 unused invites are allowed per account. Copy the link when it is created:
+only its hash is stored, so the link cannot be recovered from the history list.
+
+The `/invite#<token>` page lets the recipient keep or replace every suggested
+profile field and choose their own password. Email is optional; supplying one
+enables the existing email verification and password recovery flow. An invited
+account receives its gift without another promotional starter grant. Invitations
+do not grant admin status, Lopu verification or general upload permissions.
+
+Fork setup uses the existing home MongoDB transaction support (a replica set),
+canonical account/credit collections, rate limiter and configured moderation
+provider. No new provider key is required. Set the existing `CRON_SECRET` in the
+deployment secret store so Vercel's hourly `/api/v1/auth/invites/expire` job can
+refund expired gifts, up to 50 per run; account visits also settle their expired
+invites. Do not add a TTL index that deletes invitation records before refund.
+The advertised contracts are `api.auth-invites@1.0.0`,
+`api.auth-invites-expire@1.0.0` and `api.auth-register@1.2.0`.
+
+Avatar upload is a narrowly scoped signup thumbnail: the browser crops an image
+under 10 MB, then the server decodes, strips metadata, moderates and re-encodes a
+128px JPEG of at most 16 KiB. The private control record holds this bounded
+thumbnail until redemption, cancellation or expiry. It becomes the new user's
+canonical profile avatar on signup; it never enables general attachment uploads
+or accepts an arbitrary remote URL or another user's attachment ID.
+
+Local validation for `codex/gift-credit-invites`: `http://localhost:11000`
+(Vite), API `11002`, HMR `11001`, managed through `npm run web-pms`. The local
+Tailscale CLI wrapper currently targets a missing Tailscale application, so no
+Funnel URL could be configured or verified for this worktree.
+
+### Mobile authentication and moderation recovery
+
+Foreign previews use the authority published by `dataEnvironment` for same-tab sign-in. Deploy the `/authorize?self=1&redirect=1` frontend to that authority as well as the preview. Keep the existing SSO signing/issuer configuration consistent within each environment; never share production sessions with an unrelated development database. Return codes are single-use, origin-bound and carried in fragments.
+
+Image review uses the Admin moderation selection and server-only `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` configuration. A short OpenAI throttle is retried once; persistent provider quota/auth failures require repairing that provider account or selecting another configured moderation provider in Admin. Logs expose only allowlisted status/code diagnostics. Never disable review to work around a provider outage. Invite drafts remain editable so the sender can explicitly remove the optional photo.
+
+Recovery worktree QA uses Vite `http://localhost:13210`, Nitro 13212 and HMR 13211 through the canonical PM2 worktree-port resolver. Tailscale Funnel could not be verified on 2026-09-13: the installed CLI wrapper points to an absent `/Applications/Tailscale.app` executable.
+
+### Recovery app sections and build dates
+
+In Thingtime Recovery, use the App picker to choose Thingtime Electron, Commander,
+Thingtime Widgets or Thingtime Recovery itself. Each section shows only that app's
+cached builds and GitHub releases, even when a GitHub release includes several apps.
+
+Build dates use the signed bundle's `ThingtimeBuildDate` ISO-8601 value (native)
+or `Contents/Resources/web/metadata.json` `builtAt` (Electron). Native packaging
+records the UTC timestamp before signing. Older builds use GitHub's publication
+date, labelled **Released**, which is retained in the local cache for offline use.
+A **Cached** date is separate and never presented as a build date. Builds without
+recorded build/release metadata show **Build date unavailable**.
+
+### Admin error logs
+
+Current admins can open **Things → Error logs** (`/things?logs=1`) and search redacted failures by message, source, provider, route, code or request ID. Each record is a protected `error-log` Thing in the deployment's home database. Generic Things reads, writes, search, feeds and exports cannot expose or alter it. The admin endpoint rechecks current privileges on every request and disables caching.
+
+No new provider credentials or external logging service are required. Forks need the normal home MongoDB setup and an admin account (see existing `ADMIN_USERNAMES` setup). Boot-time index convergence adds the shared home-only `things_ephemeral_expires_at` in place of the former diagnostic TTL; error-log reads reuse `{ thingtime, createdAt, shareId }`; give the existing MongoDB application role index-creation permission. Logs expire after seven days and do not consume account storage. No content migration is needed.
+
+Captures cover shared `safeErrorText`, registered API unhandled exceptions/5xx responses, and OpenAI/Anthropic moderation failures. Records contain a closed, redacted error snapshot plus server-generated correlation metadata, never request bodies, cookies, authorization headers, images, or full SDK objects. Upstream request IDs and error types help distinguish throttling from account restrictions. Persistence is best effort: one-second deadline, five captures/request, five concurrent writes and 60 writes/minute per server instance. Console metadata remains when persistence is unavailable or capped; this is a diagnostic trail, not a complete audit ledger. Background paths should await `recordErrorLog` before returning. Do not pass user content as authored context fields.
+
+
+### Background AI replies
+
+Signed-in web clients negotiate `api.lopu-background-tasks` plus each operation's
+capability before starting chat replies, voice transcript replies, musings or AI
+completions. A same-origin SharedWorker submits and observes while tabs remain;
+unsupported or failed workers use the same idempotent page transport. Nitro owns
+inference from admission onward. Vercel `waitUntil` drains the canonical handler
+after the last tab closes. Reconnection never makes a second provider call and
+workers never receive provider credentials.
+
+The Lopu drawer's **Background tasks** page shows running, interrupted and recent
+operations, saved output, Stop and conversation links. Static rings show stages,
+not estimated percentages. **Retry / Continue** submits a new explicit chat turn
+asking Lopu to inspect saved tool receipts and current state first. It never
+resubmits approval tokens. Closing a page detaches its observer; Stop requests
+cancellation. A tool already committing may finish, with its receipt preserved.
+
+Fork setup uses the normal MongoDB/auth/provider settings; no new secret or queue
+service is required. Keep the canonical web build and Vercel output verification:
+the generated server function needs 300 seconds. Replies stop at 240 seconds and
+task collection at 260 seconds, leaving time for persistence/accounting. A killed
+runtime becomes interrupted after its deadline; tools are never replayed
+implicitly. This is bounded execution. Existing scheduled/recording workers keep
+their lifecycle; live microphone capture and direct realtime audio still need an
+open capture surface.
+
+Task output is owner-private, origin/data-source-scoped secure BinData (2 MiB
+maximum). Access expires after seven days; the next task read clears expired
+bytes. The small immutable operation marker remains for deduplication. Normal
+chat transcripts retain their existing lifecycle; lost/deleted conversation
+access also prevents reading task output.
+
+This branch's disposable local QA uses the normal worktree PM2 stack at
+`http://127.0.0.1:14700` (HMR 14701, Nitro 14702). Never point
+`LOPU_CHAT_PROVIDER=test` at real account data: its scripted tools make real
+writes. `LOPU_TEST_PROVIDER_PACE_MS=150` slows disposable fixtures for tab-close,
+Stop and recovery checks.
+
+Funnel status for this QA worktree is unavailable: the installed `tailscale`
+wrapper targets a missing Tailscale.app executable; no mapping was changed.
+### Feed algorithms and geographic Things
+
+The feed offers Hot, New, Top, Rising, Controversial, Local, Global and Political.
+`/algorithms` searches the explicitly published directory and creates private learning profiles.
+Sharing a link and publishing are separate choices; neither exposes the stored Thing or raw weights.
+Branching copies the learned interests and always starts private.
+
+Things accept optional `geo: { "lat": -37.81, "lng": 144.96 }` on POST/PUT/PATCH;
+`null` removes location. Only finite latitude -90..90 and longitude -180..180 are accepted.
+The server derives an indexed GeoJSON Point; normal ACLs govern its lat/lng projection.
+POST `/api/v1/things/search` accepts `near: {lat,lng}` and `radiusKm` (default 50, max 1000).
+Local uses browser location only after an explicit button press, without adding it to posts;
+a location tag works without granting permission. No geocoding provider or secret is required.
+The normal MongoDB index bootstrap creates `things_geo` on first use.
+
+Algorithm development worktree: localhost port 13480 (HMR 13481 / Nitro 13482).
+Tailscale/Funnel is unavailable on the validation machine: its CLI points to an absent Tailscale.app.

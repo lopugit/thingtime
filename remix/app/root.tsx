@@ -24,6 +24,7 @@ import { WatchPendingApprovals } from './components/Watch/WatchPendingApprovals'
 import { SiteBlocksHost } from './components/Builder/SiteBlocksHost';
 import { LopuHost } from './components/Lopu/LopuHost';
 import { rememberAuthReturnTo } from './utils/authReturn';
+import { bindTransferIdentity } from './utils/thingTransfer/intent';
 import { rootIdentity } from './utils/rootIdentity';
 import { RootRecovery } from './components/Layout/RootRecovery';
 
@@ -59,9 +60,11 @@ export default function App() {
   React.useLayoutEffect(() => { rootIdentity.confirm(rootData.clientIdentityGeneration); }, [rootData.clientIdentityGeneration]);
   const { envFromCookie, titlePrefix } = rootData;
   const { pathname, search, hash } = useLocation();
-  const isAuthorizePopup = pathname === '/authorize' || pathname === '/watch/pair' || pathname.startsWith('/pair/');
+  const isAuthorizePopup = pathname === '/invite' || pathname === '/authorize' || pathname === '/watch/pair' || pathname.startsWith('/pair/');
   const revalidator = useRevalidator();
   const [mounted, setMounted] = React.useState(false);
+  React.useLayoutEffect(() => bindTransferIdentity(rootIdentity, rootData.user?.id, rootData.clientIdentityGeneration),
+    [rootData.user?.id, rootData.clientIdentityGeneration]);
 
   React.useEffect(() => {
     setMounted(true);
@@ -81,6 +84,8 @@ export default function App() {
   }, [envFromCookie]);
 
   React.useEffect(() => {
+    // Invite fragments are bearer credentials, never persist them as return-to hints.
+    if (pathname === '/invite') return;
     rememberAuthReturnTo(`${pathname}${search}${hash}`);
   }, [hash, pathname, search]);
 
@@ -151,8 +156,8 @@ export default function App() {
         <LopuPositionSync />
         {mounted ? <ElectronBridgeHost /> : null}
         {mounted ? <NativeBridgeHost /> : null}
-        {/* /authorize is the "Login with Thingtime" popup — a focused embed
-            surface with its own chrome, so the app shell (nav, drawer trigger,
+        {/* Invite signup and authorization/pairing use a focused auth
+            surface with their own chrome, so the app shell (nav, drawer trigger,
             DevKit bubble, Main's footer + its 900px spacer) stays out of it. */}
         {isAuthorizePopup ? null : <DevKit />}
         {isAuthorizePopup ? null : <Nav />}

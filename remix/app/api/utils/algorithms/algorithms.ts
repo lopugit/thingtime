@@ -1,3 +1,4 @@
+import { isDefaultAlgorithm } from '~/components/Feed/defaultAlgorithms';
 import { randomUUID } from 'node:crypto';
 import { ObjectId } from 'mongodb';
 
@@ -10,6 +11,7 @@ import { applyEventsToWeights, emptyWeights, topInterests, type AlgorithmWeights
 import { getPostFeatures } from '../things/things';
 import { StorageMutationError, USER_STORAGE_ACCOUNTING_VERSION, currentContentStorageSizeBytes, thingStorageSizeBytes } from '../storage/storageCore';
 import { applyUserStorageDelta, markUserStorageNeedsReconcile, readyUserStorageMatch } from '../storage/userStorage';
+import { parseAlgorithmTransfer, type AlgorithmTransferContent } from './algorithmTransferCore';
 
 // Personal feed algorithms: named, branchable interest-weight profiles trained
 // by doomscroll engagement. A user can keep many and switch the active one
@@ -40,6 +42,8 @@ export type FeedAlgorithmDoc = {
   // invitation. The doc itself STAYS private (acl never changes) — shared:true
   // only lets link-holders read the tiny preview and branch their own copy.
   shared: boolean;
+  listed?: boolean;
+  description?: string;
   schemaVersion: number;
   createdAt: Date;
   updatedAt: Date;
@@ -53,6 +57,8 @@ export type PublicAlgorithm = {
   eventCount: number;
   lastTrainedAt: string | null;
   shared: boolean;
+  listed?: boolean;
+  description?: string;
   createdAt: string;
   updatedAt: string;
   topInterests: Array<{ kind: 'type' | 'tag' | 'author'; key: string; label?: string; weight: number }>;
@@ -122,6 +128,8 @@ const algorithmThingToDoc = (thing: any): FeedAlgorithmDoc => ({
   eventCount: thing.crystal?.eventCount || 0,
   lastTrainedAt: thing.crystal?.lastTrainedAt ?? null,
   shared: thing.crystal?.shared === true,
+  listed: thing.crystal?.listed === true,
+  description: thing.crystal?.description || '',
   schemaVersion: thing.schemaVersion,
   createdAt: thing.createdAt,
   updatedAt: thing.updatedAt
@@ -163,6 +171,8 @@ const projectAlgorithm = (doc: FeedAlgorithmDoc, usernames: Map<string, string>)
   emoji: doc.emoji || DEFAULT_EMOJI,
   parentId: doc.parentId || null,
   shared: doc.shared === true,
+  listed: doc.listed === true,
+  description: doc.description || '',
   eventCount: doc.eventCount || 0,
   lastTrainedAt: doc.lastTrainedAt ? new Date(doc.lastTrainedAt).toISOString() : null,
   createdAt: new Date(doc.createdAt).toISOString(),
@@ -293,17 +303,36 @@ export const getOwnedAlgorithmWeights = async (ownerId: string, shareId: string)
   return doc ? doc.weights || emptyWeights() : null;
 };
 
+/** Owner-only full portable profile. Shared previews deliberately omit weights;
+ * possessing a preview URL is not authority for this export path. */
+export const getOwnedAlgorithmTransfer = async (ownerId: string, shareId: string): Promise<AlgorithmTransferContent | null> => {
+  const doc = await findOwnedAlgorithm(ownerId, shareId);
+  return doc ? parseAlgorithmTransfer({ name: doc.name, emoji: doc.emoji, weights: doc.weights || emptyWeights(),
+    eventCount: doc.eventCount, lastTrainedAt: doc.lastTrainedAt ? new Date(doc.lastTrainedAt).toISOString() : null }) : null;
+};
+
+/** Server-only entry point. Normal algorithm HTTP input cannot supply a seed.
+ * The canonical writer still owns caps, storage admission, private ACL and IDs. */
+export const importAlgorithmTransfer = async (ownerId: string, content: unknown) => {
+  const parsed = parseAlgorithmTransfer(content);
+  return createAlgorithm(ownerId, { name: parsed.name, emoji: parsed.emoji }, parsed);
+};
+
 export type CreateAlgorithmInput = {
   name?: unknown;
   emoji?: unknown;
   branchFrom?: unknown;
   events?: unknown;
+  description?: unknown;
 };
 
 // Create a fresh algorithm, optionally branched from an existing one (weights
 // copied, lineage kept in parentId) and optionally seed-trained from a batch
 // of session events ("save this doomscroll session as an algorithm").
-export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInput): Promise<Fail | { ok: true; algorithm: PublicAlgorithm }> => {
+export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInput, transferSeed?: AlgorithmTransferContent): Promise<Fail | { ok: true; algorithm: PublicAlgorithm }> => {
+  // Validate again at the writer boundary, even for an in-process caller.
+  const imported = transferSeed === undefined ? undefined : parseAlgorithmTransfer(transferSeed);
+  if (imported && (input.branchFrom != null || input.events !== undefined)) return fail(400, 'An imported profile cannot also branch or train');
   const name = typeof input.name === 'string' ? input.name.trim().slice(0, MAX_NAME_CHARS) : '';
   if (!name) return fail(400, 'Algorithm name is required');
 
@@ -318,7 +347,7 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
     return fail(400, `Algorithm limit reached (${MAX_ALGORITHMS_PER_USER})`);
   }
 
-  let weights = emptyWeights();
+  let weights = imported?.weights || emptyWeights();
   let parentId: string | null = null;
   if (input.branchFrom !== undefined && input.branchFrom !== null) {
     // own algorithms first; otherwise a share-link branch — allowed only when
@@ -338,8 +367,8 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
   }
 
   const now = new Date();
-  let eventCount = 0;
-  let lastTrainedAt: Date | null = null;
+  let eventCount = imported?.eventCount || 0;
+  let lastTrainedAt: Date | null = imported?.lastTrainedAt ? new Date(imported.lastTrainedAt) : null;
 
   const seedEvents = sanitizeEvents(input.events);
   if (seedEvents.length) {
@@ -357,6 +386,8 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
     shareId: randomUUID(),
     ownerId,
     name,
+    description: typeof input.description === 'string' ? input.description.trim().slice(0, 300) : '',
+    listed: false,
     emoji: sanitizeEmoji(input.emoji),
     parentId,
     weights,
@@ -384,7 +415,9 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
       weights: doc.weights,
       eventCount: doc.eventCount,
       lastTrainedAt: doc.lastTrainedAt,
-      shared: doc.shared
+      shared: doc.shared,
+      listed: false,
+      description: doc.description
     },
 		extended: null,
     ownerId,
@@ -410,12 +443,14 @@ export const createAlgorithm = async (ownerId: string, input: CreateAlgorithmInp
 		if (projected) return projected;
 		throw error;
 	}
-  return { ok: true, algorithm: await toPublicAlgorithm(doc) };
+  // Import must return the minted ID without a fallible username lookup after
+  // commit; its caller needs that ID to compensate a later mixed-import failure.
+  return { ok: true, algorithm: imported ? projectAlgorithm(doc, new Map()) : await toPublicAlgorithm(doc) };
 };
 
 export const updateAlgorithm = async (
   ownerId: string,
-  input: { id?: unknown; name?: unknown; emoji?: unknown; shared?: unknown }
+  input: { id?: unknown; name?: unknown; emoji?: unknown; shared?: unknown; listed?: unknown; description?: unknown }
 ): Promise<Fail | { ok: true; algorithm: PublicAlgorithm }> => {
   const found = await findOwnedAlgorithmWithEra(ownerId, input.id);
   if (!found) return fail(404, 'Algorithm not found');
@@ -436,6 +471,18 @@ export const updateAlgorithm = async (
     set.shared = input.shared;
   }
 
+  if (input.description !== undefined) {
+    if (typeof input.description !== 'string') return fail(400, 'description must be text');
+    set.description = input.description.trim().slice(0, 300);
+  }
+  if (input.listed !== undefined) {
+    if (typeof input.listed !== 'boolean') return fail(400, 'listed must be a boolean');
+    if (input.listed && input.shared === false) return fail(400, 'Listed algorithms must be shared');
+    set.listed = input.listed;
+    if (input.listed) set.shared = true;
+  }
+  if (set.shared === false) set.listed = false;
+
 	let updatedDoc: FeedAlgorithmDoc | null = null;
 	try {
 		// Write to the store the doc actually lives in. Thing-era updates read a
@@ -453,6 +500,8 @@ export const updateAlgorithm = async (
 				if (set.name !== undefined) crystal.name = set.name;
 				if (set.emoji !== undefined) crystal.emoji = set.emoji;
 				if (set.shared !== undefined) crystal.shared = set.shared;
+        if (set.listed !== undefined) crystal.listed = set.listed;
+        if (set.description !== undefined) crystal.description = set.description;
 				const extended = before.extended ?? null;
 				const tags = Array.isArray(before.tags) ? before.tags : [];
 				const sizeBytes = thingStorageSizeBytes({ crystal, extended, tags });
@@ -561,6 +610,10 @@ export const setActiveAlgorithm = async (ownerId: string, algorithmId: unknown):
   if (algorithmId === null || algorithmId === undefined || algorithmId === '') {
     await setUserActiveFeedAlgorithm(ownerId, null);
     return { ok: true, activeAlgorithmId: null };
+  }
+  if (isDefaultAlgorithm(algorithmId)) {
+    await setUserActiveFeedAlgorithm(ownerId, algorithmId);
+    return { ok: true, activeAlgorithmId: algorithmId };
   }
   const doc = await findOwnedAlgorithm(ownerId, algorithmId);
   if (!doc) return fail(404, 'Algorithm not found');
@@ -693,4 +746,45 @@ export const trackEngagement = async (
 	// authoritative post-flush total so clients can detect growth-stage
 	// crossings (🥚→🐣→🐥→🧠) without double-counting session events
 	return { ok: true, trained: applied > 0, applied, eventCount };
+};
+
+/** Public directory: explicit listing consent, bounded search, no behavioral profile. */
+export const searchListedAlgorithms = async (query: { q?: string | null; cursor?: string | null }) => {
+  const things = await getThingsCollection();
+  const text = (query.q || '').trim().slice(0, 80);
+  const escaped = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match: Record<string, unknown> = {
+    thingtime: 'feed-algorithm', 'crystal.shared': true, 'crystal.listed': true,
+    ...(text ? { $or: [{ 'crystal.name': { $regex: escaped, $options: 'i' } }, { 'crystal.description': { $regex: escaped, $options: 'i' } }] } : {}),
+    ...(query.cursor ? { shareId: { $gt: query.cursor.slice(0, 100) } } : {})
+  };
+  const legacy = await getFeedAlgorithmsCollection();
+  const legacyMatch = {
+    shared: true, listed: true,
+    ...(text ? { $or: [{ name: { $regex: escaped, $options: 'i' } }, { description: { $regex: escaped, $options: 'i' } }] } : {}),
+    ...(query.cursor ? { shareId: { $gt: query.cursor.slice(0, 100) } } : {})
+  };
+  const [current, old] = await Promise.all([
+    things.find(match as any).sort({ shareId: 1 }).limit(21).maxTimeMS(5000)
+      .project({ shareId: 1, ownerId: 1, 'crystal.name': 1, 'crystal.emoji': 1, 'crystal.description': 1, 'crystal.eventCount': 1 }).toArray(),
+    legacy.find(legacyMatch as any).sort({ shareId: 1 }).limit(21).maxTimeMS(5000)
+      .project({ shareId: 1, ownerId: 1, name: 1, emoji: 1, description: 1, eventCount: 1 }).toArray()
+  ]);
+  // A current-era twin is authoritative even after it was unlisted/unshared.
+  const twins = old.length ? await things.find({ thingtime: 'feed-algorithm', shareId: { $in: old.map((doc) => doc.shareId) } } as any).project({ shareId: 1 }).toArray() : [];
+  const superseded = new Set(twins.map((doc) => doc.shareId));
+  const docs = [...current.map((doc) => ({ ...doc, ...doc.crystal, current: true })), ...old.map((doc) => ({ ...doc, current: false }))]
+    .sort((a, b) => a.shareId.localeCompare(b.shareId));
+  // Keep both eras at a cursor boundary together so a legacy twin cannot
+  // advance the cursor past the authoritative current listing.
+  const cutoff = docs[19]?.shareId;
+  const page = cutoff ? docs.filter((doc) => doc.shareId.localeCompare(cutoff) <= 0) : docs;
+  const visible = page.filter((doc) => doc.current || !superseded.has(doc.shareId));
+  const usernames = await resolveAuthorUsernames(visible.map((doc) => String(doc.ownerId)));
+  return {
+    algorithms: visible.map((doc) => ({ id: doc.shareId, name: doc.name || '', emoji: doc.emoji || '🧠',
+      description: doc.description || '', eventCount: doc.eventCount || 0,
+      ownerUsername: usernames.get(String(doc.ownerId)) ?? null })),
+    nextCursor: docs.length > page.length ? page[page.length - 1].shareId : null
+  };
 };

@@ -3,6 +3,7 @@ import { Box, Button, Flex, IconButton, Input, Modal, ModalContent, ModalOverlay
 import { PictureInPicture2, Plus, X } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
+import { withPostRequestDeadline } from '~/hooks/postRequest';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { AttachmentComposer, type AttachmentComposerHandle } from '~/components/Attachments/AttachmentComposer';
 import {
@@ -32,7 +33,7 @@ import { UserAvatarCircle } from '~/components/Nav/Drawer/DrawerContent';
 import { EditorSplit } from '~/components/Thingtime/EditorSplit';
 import { ThingView } from '~/components/Thingtime/ThingView';
 import { useThingtime } from '~/components/Thingtime/useThingtime';
-import { hasUnknownMutationOutcome } from '~/hooks/apiFailure';
+import { apiErrorMessage, hasUnknownMutationOutcome } from '~/hooks/apiFailure';
 import { RAINBOW } from '~/theme/rainbow';
 import { extractInlineHashtags } from './hashtags';
 import { MentionAutocomplete } from './MentionAutocomplete';
@@ -255,7 +256,7 @@ export const PostComposer = (props: PostComposerProps) => {
 	// it and inserts `@username ` at the caret (posts and comments both)
 	const editorBoxRef = React.useRef<HTMLDivElement | null>(null);
 	const attachmentComposerRef = React.useRef<AttachmentComposerHandle | null>(null);
-	const pendingPastedFilesRef = React.useRef<File[]>([]);
+	const pendingMediaFilesRef = React.useRef<File[]>([]);
 	const postTextEditorRef = React.useRef<LongTextEditorHandle | null>(null);
 	// A stable client id turns a lost POST response into a safely reconcilable
 	// read. It is rotated only after the draft is definitively committed/reset.
@@ -292,18 +293,55 @@ export const PostComposer = (props: PostComposerProps) => {
 				attachmentComposerRef.current.addFiles(files);
 				return;
 			}
-			pendingPastedFilesRef.current = [...pendingPastedFilesRef.current, ...files];
+			pendingMediaFilesRef.current = [...pendingMediaFilesRef.current, ...files];
 			setPhotosOn(true);
 		},
 		[posting, submissionUncertain, user]
 	);
 
+	// Capture external files before the body editor can consume the drop. The
+	// mounted attachment drop zone owns its own events (including drag styling
+	// and tile reordering), so a file is never queued by both handlers.
+	const handleComposerDragOver = React.useCallback((event: React.DragEvent<HTMLDivElement>) => {
+		if (!event.currentTarget.contains(event.target as Node)) return;
+		if (!Array.from(event.dataTransfer.types).includes('Files')) return;
+		event.preventDefault();
+		event.dataTransfer.dropEffect = posting || submissionUncertain || !user ? 'none' : 'copy';
+	}, [posting, submissionUncertain, user]);
+
+	const handleComposerDrop = React.useCallback((event: React.DragEvent<HTMLDivElement>) => {
+		if (event.defaultPrevented || !event.currentTarget.contains(event.target as Node)) return;
+		const target = event.target instanceof Element ? event.target : null;
+		if (target?.closest('[data-attachment-drop-zone]')) return;
+		const files = attachmentFilesFromClipboard(event.dataTransfer);
+		if (!files.length) return;
+		event.preventDefault();
+		event.stopPropagation();
+		if (posting || submissionUncertain || !user) return;
+		// Enable only Photos: keep every selected mode and its draft intact,
+		// including Poll, whose question/options can coexist with attachments.
+		setExpanded(true);
+		setPhotosOn(true);
+		if (attachmentComposerRef.current) {
+			attachmentComposerRef.current.addFiles(files);
+			return;
+		}
+		pendingMediaFilesRef.current = [...pendingMediaFilesRef.current, ...files];
+	}, [posting, submissionUncertain, user]);
+
 	React.useEffect(() => {
-		if (!photosOn || !attachmentComposerRef.current || pendingPastedFilesRef.current.length === 0) return;
-		const files = pendingPastedFilesRef.current;
-		pendingPastedFilesRef.current = [];
-		attachmentComposerRef.current.addFiles(files);
-	}, [composerSession, photosOn, user?.id]);
+		if (!expanded || !photosOn || pendingMediaFilesRef.current.length === 0) return;
+		let cancelled = false;
+		// A newly mounted uploader replays its effects in React StrictMode.
+		// Queue after that replay so its cleanup cannot abort the first drop.
+		queueMicrotask(() => {
+			if (cancelled || !attachmentComposerRef.current) return;
+			const files = pendingMediaFilesRef.current;
+			pendingMediaFilesRef.current = [];
+			attachmentComposerRef.current.addFiles(files);
+		});
+		return () => { cancelled = true; };
+	}, [composerSession, expanded, photosOn, user?.id]);
 
   // edit mode: the thing to seed the draft branch with, captured at mount so
   // the seed effect's deps stay constant
@@ -699,6 +737,12 @@ export const PostComposer = (props: PostComposerProps) => {
 		};
 
 		try {
+			if (pendingSubmission?.unknownOutcome && !isComment && !isEdit && postShareId && committedExpectation) {
+				try {
+					const saved = await withPostRequestDeadline(signal => api.v1.things.get({ id: postShareId }, { signal }), 5_000);
+					if (matchesCommittedPostCreate(saved, committedExpectation)) { finishPost(saved.post); return; }
+				} catch { /* Retry only the already-frozen identity and payload. */ }
+			}
 			if (isEdit) {
 				// full-crystal replace: the server sanitizer rebuilds { type, text,
 				// images, listing, thing } per type, so switching type clears the
@@ -760,7 +804,7 @@ export const PostComposer = (props: PostComposerProps) => {
 				for (const delay of [0, 150, 400]) {
 					if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
 					try {
-						const readBack = await api.v1.things.get({ id: postShareId });
+						const readBack = await withPostRequestDeadline(signal => api.v1.things.get({ id: postShareId }, { signal }), 5_000);
 						if (matchesCommittedPostCreate(readBack, committedExpectation)) {
 							reconciled = readBack.post as PublicPost;
 						}
@@ -788,7 +832,11 @@ export const PostComposer = (props: PostComposerProps) => {
 					pendingPostSubmissionRef.current = null;
 					setSubmissionUncertain(false);
 				}
-				lopu({ title: isComment ? 'Comment did not go through 😞' : 'Post did not go through 😞', status: 'error' });
+				lopu({
+					title: preserveAmbiguousSubmission ? 'Still confirming your post' : isComment ? 'Comment did not go through 😞' : 'Post did not go through 😞',
+					description: apiErrorMessage(error, 'Please try again. Your draft is still here.'),
+					status: preserveAmbiguousSubmission ? 'info' : 'error'
+				});
 			}
 		} finally {
     setPosting(false);
@@ -798,6 +846,8 @@ export const PostComposer = (props: PostComposerProps) => {
   if (!expanded) {
     return (
       <Flex
+        onDragOverCapture={handleComposerDragOver}
+        onDropCapture={handleComposerDrop}
         background="var(--tt-card, #ffffff)"
         border={BORDER}
         borderRadius="var(--tt-radius-lg, 16px)"
@@ -839,6 +889,8 @@ export const PostComposer = (props: PostComposerProps) => {
       boxShadow="var(--tt-shadow-card, 0px 1px 2px rgba(22, 22, 26, 0.05))"
       padding={4}
 			onPasteCapture={handleComposerPaste}
+			onDragOverCapture={handleComposerDragOver}
+			onDropCapture={handleComposerDrop}
     >
 			{(posting || submissionUncertain) && (
 				<Flex
@@ -854,8 +906,7 @@ export const PostComposer = (props: PostComposerProps) => {
 					{submissionUncertain && !posting && (
 						<Flex flexDirection="column" alignItems="center" textAlign="center" rowGap={3} maxWidth="360px">
 							<Text fontSize="sm" color={TEXT}>
-								Thingtime is still checking whether this exact {isComment ? 'comment' : 'post'} went live. The draft is frozen so retrying cannot
-								create a duplicate.
+								Thingtime could not confirm whether this exact {isComment ? 'comment' : 'post'} went live. Your draft is kept safe. Check again to recover the saved post or retry the same submission.
 							</Text>
 							<Button size="sm" borderRadius={RADIUS_MD} onClick={handlePost}>
 								Check and retry safely
@@ -956,7 +1007,7 @@ export const PostComposer = (props: PostComposerProps) => {
           borderRadius="8px"
 						isDisabled={posting}
 						onClick={() => {
-							pendingPastedFilesRef.current = [];
+							pendingMediaFilesRef.current = [];
 							if (isComment || isEdit) onClose?.();
 							else {
 								setExpanded(false);

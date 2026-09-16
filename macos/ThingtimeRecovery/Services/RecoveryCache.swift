@@ -34,6 +34,21 @@ public final class RecoveryCache {
         return try listBundles().first { $0.appURL.standardizedFileURL == requested }
     }
 
+    /// Fill legacy date metadata from this component's catalog, once, so dates
+    /// stay available offline. No bundle bytes or verification provenance change.
+    public func updateReleaseDates(from releases: [RecoveryRelease]) throws {
+        let bundles = try listBundles()
+        var manifest = try readManifest()
+        var changed = false
+        for bundle in bundles where RecoveryBuildDate.parse(bundle.entry.publishedAt) == nil {
+            guard let date = bundle.matchingRelease(in: releases)?.publishedAt,
+                  let index = manifest.entries.firstIndex(where: { $0.key == bundle.entry.key }) else { continue }
+            manifest.entries[index].publishedAt = ISO8601DateFormatter().string(from: date)
+            changed = true
+        }
+        if changed { try writeManifest(manifest) }
+    }
+
     public func remove(key: String) throws {
         guard Self.isValidKey(key) else { throw RecoveryError.invalidPath("That cached bundle key is invalid.") }
         try ensureRoot()
@@ -84,7 +99,8 @@ public final class RecoveryCache {
                 sourceSha256: nil,
                 tag: descriptor.tag,
                 isUnsigned: descriptor.isUnsigned,
-                version: descriptor.version
+                version: descriptor.version,
+                publishedAt: descriptor.publishedAt.map { ISO8601DateFormatter().string(from: $0) }
             )
             var manifest = try readManifest()
             manifest.entries = [entry] + recoverableEntries

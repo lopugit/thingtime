@@ -11,6 +11,8 @@ export type RateLimitRule = { limit: number; windowMs: number; enabled: boolean 
 export type RateLimitConfig = Record<string, RateLimitRule>;
 
 export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
+  'invites.create': { limit: 20, windowMs: 3_600_000, enabled: true },
+  'invites.read': { limit: 120, windowMs: 60_000, enabled: true },
   // Private attachment storage: start and completion mutate both S3 and the
   // quota ledger; part-signing is batched (<=20 URLs/request), and reads issue
   // short-lived private redirects. Every surface stays bounded per account/IP.
@@ -342,6 +344,12 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // The integration vault can trigger provider operations; keep its admin
   // control plane bounded even before an endpoint policy is consulted.
   'admin.integrations': { limit: 60, windowMs: 60_000, enabled: true },
+  // marketing publish state (GET /api/v1/marketing/publications) — one tiny
+  // settings read per /marketing navigation, anonymous callers key by IP
+  'marketing.publications': { limit: 240, windowMs: 60_000, enabled: true },
+  // admin publish/unpublish sweeps (POST /api/v1/admin/marketing/publications)
+  // — up to 2,000 keys per call; enforced fail-closed at the route
+  'admin.marketingPublications': { limit: 60, windowMs: 60_000, enabled: true },
   // service-account provisioning is public self-service but each call mints a
   // permanent bearer token + a 5 GiB-allowance account and sends a verification
   // email — bound it tightly per IP (a legit integrator provisions a handful,

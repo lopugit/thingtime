@@ -1,4 +1,5 @@
 import { defineHandler } from 'nitro/h3';
+import { recordErrorLog, withErrorLogRequest } from '../../../app/api/utils/errors/errorLogs';
 
 import { getRequestMongoEndpoint, runWithMongoEndpoint } from '../../../app/api/utils/mongodb/endpoint';
 import { CHATGPT_AUTHORIZE_PATH, CHATGPT_DYNAMIC_CLIENT_REGISTRATION_PATH, CHATGPT_MCP_PATH, CHATGPT_OAUTH_RELAY_PATH, CHATGPT_TOKEN_PATH } from '../../../app/api/utils/chatgpt/pluginCore';
@@ -11,6 +12,8 @@ type RouteModule = {
 };
 
 export const routeModules: Record<string, () => Promise<RouteModule>> = {
+  'v1/lopu/tasks': () => import('../../../app/routes/api/v1/lopu/tasks/_tasks'),
+  'v1/admin/error-logs': () => import('../../../app/routes/api/v1/admin/error-logs/_error-logs'),
   'v1/integrations/ci/stack-completion': () => import('../../../app/routes/api/v1/integrations/ci/stack-completion/_stack-completion'),
   'v1/watch/recordings': () => import('../../../app/routes/api/v1/watch/recordings/_recordings'),
   'v1/notifications/test': () => import('../../../app/routes/api/v1/notifications/test/_test'),
@@ -30,8 +33,10 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/admin/ci/stacks': () => import('../../../app/routes/api/v1/admin/ci/stacks/_stacks'),
   'v1/admin/ci/credentials': () => import('../../../app/routes/api/v1/admin/ci/credentials/_credentials'),
   'v1/admin/ci/reconcile': () => import('../../../app/routes/api/v1/admin/ci/reconcile/_reconcile'),
+  'v1/admin/system/environment': () => import('../../../app/routes/api/v1/admin/system/environment/_environment'),
   'v1/admin/integrations': () => import('../../../app/routes/api/v1/admin/integrations/_integrations'),
   'v1/admin/links': () => import('../../../app/routes/api/v1/admin/links/_links'),
+  'v1/admin/marketing/publications': () => import('../../../app/routes/api/v1/admin/marketing/publications/_publications'),
   'v1/admin/migrations': () => import('../../../app/routes/api/v1/admin/migrations/_migrations'),
   'v1/admin/moderation': () => import('../../../app/routes/api/v1/admin/moderation/_moderation'),
 	'v1/admin/migrations/diagnostic': () => import('../../../app/routes/api/v1/admin/migrations/diagnostic/_diagnostic'),
@@ -62,6 +67,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/algorithms': () => import('../../../app/routes/api/v1/algorithms/_algorithms'),
   'v1/algorithms/active': () => import('../../../app/routes/api/v1/algorithms/active/_active'),
   'v1/algorithms/delete': () => import('../../../app/routes/api/v1/algorithms/delete/_delete'),
+  'v1/algorithms/search': () => import('../../../app/routes/api/v1/algorithms/search/_search'),
   'v1/algorithms/shared': () => import('../../../app/routes/api/v1/algorithms/shared/_shared'),
   'v1/algorithms/track': () => import('../../../app/routes/api/v1/algorithms/track/_track'),
   'v1/algorithms/update': () => import('../../../app/routes/api/v1/algorithms/update/_update'),
@@ -119,6 +125,8 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/auth/passkeys/delete': () => import('../../../app/routes/api/v1/auth/passkeys/delete/_delete'),
   'v1/auth/password-reset': () => import('../../../app/routes/api/v1/auth/password-reset/_password-reset'),
   'v1/auth/password-reset/confirm': () => import('../../../app/routes/api/v1/auth/password-reset/confirm/_confirm'),
+  'v1/auth/invites/expire': () => import('../../../app/routes/api/v1/auth/invites/expire/_expire'),
+  'v1/auth/invites': () => import('../../../app/routes/api/v1/auth/invites/_invites'),
   'v1/auth/register': () => import('../../../app/routes/api/v1/auth/register/_register'),
   'v1/auth/temporary': () => import('../../../app/routes/api/v1/auth/temporary/_temporary'),
   'v1/auth/resend-verification': () => import('../../../app/routes/api/v1/auth/resend-verification/_resend-verification'),
@@ -224,8 +232,11 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/actions/run': () => import('../../../app/routes/api/v1/actions/run/_run'),
   'v1/actions/runs': () => import('../../../app/routes/api/v1/actions/runs/_runs'),
   'v1/components/browse': () => import('../../../app/routes/api/v1/components/browse/_browse'),
+  'v1/marketing/publications': () => import('../../../app/routes/api/v1/marketing/publications/_publications'),
   'v1/webpages/resolve': () => import('../../../app/routes/api/v1/webpages/resolve/_resolve'),
   'v1/things/fork': () => import('../../../app/routes/api/v1/things/fork/_fork'),
+  'v1/things/import': () => import('../../../app/routes/api/v1/things/import/_import'),
+  'v1/things/export': () => import('../../../app/routes/api/v1/things/export/_export'),
   'v1/webpages/demos': () => import('../../../app/routes/api/v1/webpages/demos/_demos'),
   'v1/webpages/suites/install': () => import('../../../app/routes/api/v1/webpages/suites/install/_install'),
   'v1/network-probe/ping': () => import('../../../app/routes/api/v1/network-probe/ping/_ping'),
@@ -410,6 +421,8 @@ export default defineHandler(async (event) => {
     return jsonResponse({ ok: false, error: 'Lopu looked everywhere and found no such endpoint 🤷‍♂️' }, { status: 404 });
   }
 
+  return withErrorLogRequest('/api/' + path, method, async () => {
+  try {
   const route = await loadModule();
   const handler = method === 'GET' || method === 'HEAD' ? route.loader : route.action;
 
@@ -430,7 +443,15 @@ export default defineHandler(async (event) => {
   const mongoEndpoint = path.startsWith('v1/admin/') ? null : await getRequestMongoEndpoint(event.req);
 
   try {
-		return await runWithMongoEndpoint(mongoEndpoint, async () => normalizeResponse(await handler({ request: event.req })));
+		const response = await runWithMongoEndpoint(mongoEndpoint, async () => {
+      if (event.req.headers.has('X-Thingtime-Background-Id')) {
+        const { startBackgroundTask } = await import('../../../app/api/utils/lopu/backgroundTasks');
+        return startBackgroundTask(event.req, async request => normalizeResponse(await handler({ request })));
+      }
+      return normalizeResponse(await handler({ request: event.req }));
+    });
+    if (response.status >= 500 && path !== 'v1/admin/error-logs') await recordErrorLog(new Error('HTTP request returned a server error'), { source: 'http-response', status: response.status });
+    return response;
   } catch (err) {
     if (err instanceof Response) {
       return err;
@@ -441,4 +462,9 @@ export default defineHandler(async (event) => {
 
     throw err;
   }
+  } catch (error) {
+    if (!(error instanceof Response) && path !== 'v1/admin/error-logs') await recordErrorLog(error, { source: 'http-unhandled', status: 500 });
+    throw error;
+  }
+  });
 });

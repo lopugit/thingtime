@@ -20,6 +20,7 @@ const fieldNames = (crystal: Record<string, unknown>): string[] => (crystal.fiel
 // reserved name) and the pin updated in the same change.
 const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
 	// Protected operational state has no user-editable schema fields.
+	'lopu-background-task': [],
 	'lopu-recording-settings': [],
 	'lopu-recording-job': [],
 	'lopu-recording-reminder': [],
@@ -102,6 +103,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
 	], // snapshots/overrides: records → dropped
   'app-storage': ['quotaKind', 'appId', 'usedBytes', 'storageAllowanceBytes'],
 	'service-quota': ['quotaKind', 'quotaVersion', 'key', 'dayKey', 'dailyUsed', 'permitIds', 'releasedIds'], // policy + state records → dropped
+  'error-log': ['source', 'message', 'provider', 'status', 'code', 'requestId', 'route', 'method', 'providerType', 'providerRequestId', 'retryAfter', 'attempt'],
 	'migration-diagnostic': ['diagnosticVersion', 'migrationId', 'mode', 'status', 'outcome', 'summary', 'capturedAt'],
   'ci-repository': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
   'ci-automation': ['provider', 'repository', 'externalId', 'entityKey', 'title', 'status', 'url', 'sourceUpdatedAt'],
@@ -122,6 +124,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   'push-device': ['platform', 'environment', 'topic'],
   passkey: ['nickname', 'description', 'providerName', 'aaguid', 'deviceType', 'backedUp', 'transports', 'lastUsedAt', 'lastUsedOrigin', 'revokedAt'],
   'passkey-app-link': ['linkKey', 'appKey', 'appName', 'firstUsedAt', 'lastUsedAt', 'usageCount'],
+  'account-invite': ['status', 'amountMicros'],
   'account-link': ['linkKind', 'userId', 'targetId', 'role', 'createdBy'],
   // Lopu model catalog — every field is scalar or string[], so all project
   'ai-model': ['modelId', 'label', 'provider', 'efforts', 'speeds', 'family', 'enabled', 'sortOrder', 'contextWindow', 'notes'],
@@ -199,7 +202,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   follow: ['followKey'],
   user: ['username', 'ttid', 'displayName', 'bio', 'avatarUrl', 'bannerUrl'],
   theme: ['name'], // theme: record → dropped
-  'feed-algorithm': ['name', 'emoji', 'parentId', 'eventCount', 'lastTrainedAt', 'shared'], // weights: record → dropped
+  'feed-algorithm': ['name', 'emoji', 'parentId', 'description', 'listed', 'eventCount', 'lastTrainedAt', 'shared'], // weights: record → dropped
   waitlist: [] // marker schema — email lives in the secure root field
 };
 
@@ -231,14 +234,14 @@ test('registered server-owned Things are protected from generic Thing CRUD', () 
 test('managed attachment, moderation, user, and emoji fields are closed server-owned root fields', () => {
 	const root = thingtimeSchemas.find((schema) => schema.id === 'thing')!;
 	const fields = new Map(root.fields.map((field) => [field.name, field]));
-	for (const name of ['attachmentPurpose', 'attachmentProfileSlot', 'moderation', 'avatarAttachmentId', 'bannerAttachmentId', 'emojiAttachmentId']) {
+	for (const name of ['attachmentPurpose', 'attachmentProfileSlot', 'moderation', 'avatarAttachmentId', 'bannerAttachmentId', 'iconAttachmentId', 'subspaceMediaDeleting', 'emojiAttachmentId']) {
 		assert.equal(fields.get(name)?.system, true, name);
 		assert.equal(fields.get(name)?.required, false, name);
 	}
 	// 'recording' is the owner-private standalone purpose: it never binds to a
 	// target, so it stays out of BindableAttachmentPurpose and is denied by
 	// canViewHomeAttachmentTarget's non-post fallthrough.
-	assert.deepEqual(fields.get('attachmentPurpose')?.values, ['post', 'comment', 'message', 'profile', 'emoji', 'recording']);
+	assert.deepEqual(fields.get('attachmentPurpose')?.values, ['post', 'comment', 'message', 'profile', 'emoji', 'recording', 'subspace-icon', 'subspace-banner']);
 	assert.deepEqual(fields.get('attachmentProfileSlot')?.values, ['avatar', 'banner']);
 });
 

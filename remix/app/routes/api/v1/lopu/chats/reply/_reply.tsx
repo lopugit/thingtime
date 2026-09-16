@@ -368,6 +368,8 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
     // --- the stream -----------------------------------------------------------
     const startedAt = Date.now();
     const abort = new AbortController();
+    let timedOut = false;
+    const turnDeadline = setTimeout(() => { timedOut = true; abort.abort(); }, 240_000);
     const requestSignal = (request as Request & { signal?: AbortSignal }).signal;
     if (requestSignal) {
       if (requestSignal.aborted) abort.abort();
@@ -414,8 +416,10 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
           }
         } catch (error: any) {
           console.error('[lopu] reply stream failed:', error?.message || error);
-          send({ type: 'error', message: 'Lopu lost the thread mid-reply — what streamed so far is kept.', retryable: true });
+          send({ type: 'error', message: 'The AI connection was interrupted. Saved progress is kept — use Retry / Continue to pick up from here.', retryable: true });
         } finally {
+          clearTimeout(turnDeadline);
+          if (timedOut && outcome?.stopReason === 'aborted') outcome.stopReason = 'time_limit';
           // persist whatever streamed, even after an error or a disconnect
           const finished = outcome?.stopReason === 'end_turn' || outcome?.stopReason === 'fallback' || outcome?.stopReason === 'tool_limit' || outcome?.stopReason === 'hop_limit' || outcome?.stopReason === 'time_limit' || outcome?.stopReason === 'max_tokens';
           const text = finished && outcome?.text.trim() ? outcome.text : interruptedNote(outcome);

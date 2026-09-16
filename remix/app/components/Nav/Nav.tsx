@@ -255,7 +255,10 @@ export const Nav = (props) => {
 				>
 					<Center
 						className="nav-left-section"
-						display={['none', 'flex']}
+						position="relative"
+						zIndex={10000}
+						flexShrink={0}
+						display={{ base: 'none', md: 'flex' }}
 						height="36px"
 						marginRight="auto"
 						columnGap={2}
@@ -304,17 +307,33 @@ export const Nav = (props) => {
 						</Center>
 						<NavAccountLink className="electron-titlebar-account-button" claimedUser={claimedUser} />
 						{claimedUser && !isMobile ? (
-							<Center className="electron-titlebar-notifications-button" height="36px" paddingX="8px">
+							<Center className="electron-titlebar-notifications-button" height="36px">
 								<NotificationsBell />
 							</Center>
 						) : null}
 					</Center>
-					<CommanderV2 global id="nav" rainbow={false}></CommanderV2>
+					{/* Reserve desktop space for search so it cannot cover the account or bell,
+					including when a pinned drawer narrows the available header. */}
+					<Box
+						className="nav-search-section"
+						position={['absolute', 'relative']}
+						left={[0, 'auto']}
+						right={[0, 'auto']}
+						top={[0, 'auto']}
+						flex={1}
+						minWidth={0}
+						height="48px"
+						marginX={[0, 2]}
+						sx={{ 'html.thingtime-electron-desktop &': { display: 'contents' } }}
+					>
+						<CommanderV2 global id="nav" rainbow={false}></CommanderV2>
+					</Box>
 					{/* relative + above the commander host (zIndex 9999): the centered
 				search pill is absolutely positioned, and long usernames (and now
 				the bell) can extend under it — these controls must stay tappable */}
 				<Center
 					className="nav-right-section"
+					flexShrink={0}
 					columnGap={[3, 8]}
 					height="100%"
 					marginLeft="auto"

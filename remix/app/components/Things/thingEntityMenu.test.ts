@@ -54,3 +54,10 @@ test('Thing actions are origin-scoped and deliberately negotiated', () => {
   for (const version of ['1.0.0', '1.1.0', '1.0.1'])
     assert.equal(supportsThingActions({ origin, features: { 'api.things-actions': { version } } }, origin), true);
 });
+
+test('archive menus offer portable copy/cut/download without live sharing or generic history edits', () => {
+  const menu = buildThingsItemMenu({ thing: { id: 'archive', thingtime: ['chat-archive'] } as any, ownerId: 'owner', actCount: 1, clipboardCount: 0 });
+  const commands = menu.sections.flatMap(section => section.actions).map(action => action.command);
+  for (const command of ['copy', 'cut', 'download', 'move']) assert.ok(commands.includes(command));
+  for (const command of ['share', 'edit', 'duplicate', 'delete', 'preview', 'inspect']) assert.ok(!commands.includes(command));
+});

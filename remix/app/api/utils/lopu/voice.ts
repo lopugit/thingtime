@@ -64,6 +64,7 @@ export type LopuVoiceEvent =
 
 export type LopuVoiceReplyDependencies = {
 	// the accounting writer (never throws); injectable for tests
+	signal?: AbortSignal;
 	recordUsage?: (ownerId: string, input: LopuUsageInput) => Promise<LopuDebitResult>;
 };
 
@@ -164,6 +165,7 @@ export const createTranscriptPage = async (ownerId: string, sessionId: string, t
 const wordChunks = (text: string) => text.match(/\S+\s*/g) || [text];
 
 export async function* streamLopuVoiceReply(ownerId: string, input: LopuVoiceInput, deps: LopuVoiceReplyDependencies = {}): AsyncGenerator<LopuVoiceEvent> {
+	deps.signal?.throwIfAborted();
 	const transcript = boundedVaultText(input.transcript, MAX_PROMPT_CHARS);
 	if (!transcript) throw new Error('A non-empty transcript is required.');
 	const sessionId = normalizeSessionId(input.sessionId);
@@ -188,6 +190,7 @@ export async function* streamLopuVoiceReply(ownerId: string, input: LopuVoiceInp
 		history: normalizeHistory(input.history),
 		prompt: transcript,
 		maxTokens: VOICE_MAX_OUTPUT_TOKENS,
+		signal: deps.signal,
 		model,
 		effort,
 		speed

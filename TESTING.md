@@ -2,6 +2,208 @@
 
 - Connections/index rollout: keep external-source authorization and private-subspace membership fences after merging shared readers. Stub DNS alongside fetch in outbound redirect tests so machine-local `.test` resolution cannot bypass credential-stripping assertions.
 
+## Real browser portable transfer acceptance
+
+- [ ] On desktop and mobile, copy a Thing and use Cmd/Ctrl+V on the Things
+  canvas and inside Import. Require ready content without a file chooser;
+  editable search/text controls must keep native paste. Test clipboard denial,
+  invalid content, selection cancellation and account changes. Select and drop
+  multiple JSON/ZIP files with colliding portable IDs; all validate before writes,
+  import independently in order, and stop on error without replaying completed
+  imports. Confirm every copy and attachment through the API and clean fixtures.
+  Expand the input panel and scroll to both ends; footer controls must remain
+  reachable above floating DevKit controls at mobile widths.
+
+- [ ] Export an authorized chat whose historical participant has a public HTTPS
+  avatar. With export capability 1.14.0, require exact image bytes in its ZIP,
+  no original URL in the archive, a fresh private avatar after normal upload/import,
+  and successful re-export after the source URL is unavailable. Refuse HTTP,
+  redirects, private-network DNS, invalid images and excessive sizes without a
+  partial archive; do not bypass upload approval or create live recipients.
+
+- [ ] Run `node --import tsx --test app/api/utils/things/recordingTransfer.integration.test.ts`
+  from `remix/` with `TT_TRANSFER_RECORDING_TEST=1 TT_TRANSFER_REMOTE_DEV_TEST=1`,
+  the approved dev/PR-preview URL and username, and an ephemeral fixture cookie.
+  Verify synthetic WAV ZIP bytes, a fresh durable recording ID, anonymous denial,
+  source-deletion independence, re-export and both content/Thing 404 cleanup.
+  No microphone or transcription is used. If upload start times out before an ID,
+  reconcile the logged stable request ID with the identical upload metadata before
+  another run; never generate a replacement operation to mask uncertain completion.
+  A default skipped test is not acceptance or playback/transcript coverage.
+
+- [ ] Run `node --import tsx --test app/api/utils/things/libraryTransfer.integration.test.ts`
+  from `remix/` with `TT_TRANSFER_LIBRARY_TEST=1 TT_TRANSFER_REMOTE_DEV_TEST=1`,
+  the approved dev/PR-preview URL and username, and an ephemeral fixture cookie.
+  Verify all nine kinds, copied schema/component references, copy-of-copy content,
+  anonymous folder denial and 18-record cleanup. The test logs its fixture marker
+  before writes. If an import times out without IDs, do not blindly rerun: wait
+  out the server deadline, reconcile that marker in Things plus theme/algorithm
+  libraries, and resolve any retained records through their canonical APIs first.
+  A skipped run is not acceptance; this HTTP test does not replace UI checks.
+
+- [ ] Run the real live-image archive acceptance with explicit
+  `TT_TRANSFER_LIVE_MEDIA_TEST=1 TT_TRANSFER_REMOTE_DEV_TEST=1`, a dev/PR-preview
+  `TT_TRANSFER_TEST_URL`, the expected `TT_TRANSFER_TEST_USERNAME`, and an
+  ephemeral authenticated `TT_TRANSFER_TEST_COOKIE`:
+  `node --import tsx --test app/api/utils/things/liveChatMedia.integration.test.ts`
+  from `remix/`. It requires the existing self-only fixture, never adds members,
+  and verifies ZIP bytes, fresh imported attachment/message binding, anonymous
+  denial, unchanged source history during transfer, independent copied bytes
+  after source deletion, and 404 cleanup. A default skipped run is not acceptance.
+
+- [ ] A member exporting a live chat must retain a custom emoji referenced by
+  another participant, without needing to own its definition. Verify the new
+  archive has independent personal emoji bytes and preserves the reaction.
+  Standalone export of that other-owned emoji must still be denied; blocked,
+  pending, foreign-namespace or missing definitions must not produce a partial
+  archive. Negotiate export 1.12.0 before expecting this behavior.
+
+- [ ] After the canonical self-only live chat fixture passes, run
+  `TT_TRANSFER_LIVE_CHAT_BROWSER_TEST=1 node --import tsx scripts/live-chat-transfer-browser.integration.mts`
+  from `remix/`, using an ephemeral approved preview session and expected
+  fixture username. Verify real clipboard Copy, ZIP download/file-picker import,
+  exact history, unchanged source messages and imported-copy cleanup. The test
+  refuses chats containing anyone else and never sends messages or creates a
+  live chat. It writes fixture content to the macOS clipboard. Media and AI
+  history require separate acceptance; do not infer them from this test.
+
+- [ ] Messenger details: open Transfer with an active or pending membership;
+  Copy and Download must be accessible, but Cut must be absent. Open Download
+  and Import dialogs above the drawer at desktop/mobile widths, scroll the
+  drawer fully, and confirm opening/closing controls sends no chat mutations.
+  `node --import tsx scripts/messenger-transfer-ui-smoke.mts` in `remix/`
+  covers this with a fictional account; live clipboard/history acceptance is separate.
+
+- [ ] When wiring live Messenger export, supply a complete authorized snapshot
+  including former authors/reactors and every thread. Preserve edits, tombstones,
+  reply links and safe historical system content; never export membership roles,
+  receipts, source user authority or credentials. Reject incomplete/oversized
+  history rather than emitting a truncated successful archive.
+
+- [ ] Stall export metadata: Copy/Download must leave busy state within 30
+  seconds with an actionable error and no automatic retry. Retry Download after
+  recovery produces a real ZIP. Check desktop/mobile dialog bounds. Cancellation
+  and account changes prevent late exports; file-byte downloads are not subject
+  to the metadata deadline.
+
+- [ ] Right-click a fixture folder in Things. Copy and Cut must put all nested
+  history on the real OS clipboard; Cut alone must not move/delete it. Download
+  from that same context menu must produce a ZIP containing the folder and its
+  descendants. The real browser harness exercises these controls before the
+  shared Transfer-menu checks.
+- [ ] Stall the archive GET indefinitely: within 15 seconds, show a recoverable
+  timeout with Retry, not permanent "Opening private history". Retry must load
+  normally after the network recovers. Unmount/account changes must cancel the
+  deadline and prevent late responses from exposing the previous account's data.
+
+- [ ] With explicit disposable dev-session variables, run
+  `node --import tsx scripts/transfer-browser.integration.mts` from remix.
+  Requires `TT_TRANSFER_BROWSER_TEST=1`, a PR preview origin, expected fixture
+  username and ephemeral cookie; never store the cookie in a file or command
+  argument. This opens fresh headed Chrome and overwrites the macOS clipboard
+  with disposable fixture data. Check Copy/Paste import, Cut/Paste move,
+  downloaded JSON and ZIP imports through the file chooser, desktop/mobile
+  bounds, and successful cleanup.
+- [ ] Additionally set `TT_TRANSFER_BROWSER_BINARY_TEST=1` only when the fixture
+  already has upload approval and its normal rate-limit window permits it.
+  Select a generated two-image ZIP, click Upload, import, download the actual
+  ZIP and re-import that downloaded file. Both same-name/same-size images must
+  survive browser dedupe with exact bytes and annotations. Delete the source
+  archive and download the copy again; require independent file IDs and bytes.
+  Inspect `media-desktop.png` and `media-mobile.png`, and require every fixture
+  upload to return 404 after cleanup. A refusal or unrun opt-in is not acceptance.
+  This currently added media phase still needs its first live passing run.
+
+## Private chat archive import integration
+
+- [ ] Run the opt-in `test:transfer-binary` against the approved upload-enabled
+  dev fixture. Verify archive avatar/message bytes and annotations survive ZIP
+  re-import and source deletion; all created roots and uploads must be cleaned
+  up. This storage test complements, not replaces, the visible gallery checks.
+- [ ] Include an imported custom reaction in that real ZIP test. Verify the
+  projected emoji ID/bytes and re-export after deleting the source emoji;
+  fixtures must use the stored `emoji` purpose, not upload alias `custom-emoji`.
+
+- [ ] Owned archives appear as private root entries in Things/folders, never as
+  separate historical message/person rows. Open reaches the read-only archive
+  page with the correct Back link. Other users, PATs, apps, service accounts,
+  deleting roots and custom planes do not list them. Exporting an owned folder
+  preserves the entire included archive group and its folder placement.
+- [ ] On desktop/mobile, expand participants, scroll all history, open/close
+  Transfer → Download, retry a failed load and switch/sign out. The importer is
+  You; historical people have Archived badges and no profile/mention/send/react
+  actions. Old private content disappears on identity refresh. Check fixed-nav
+  clearance, long text, reply links and modal bounds. The local fictional smoke
+  is `node --import tsx scripts/archive-ui-smoke.mts` from remix; it proves no
+  real account lifecycle or media bytes. Open the historical gallery lightbox,
+  confirm shielded media cannot be reached by its navigation until Show Anyway,
+  and check pending badges and file download links. Flagged historical avatars
+  and unavailable files must not be fetched. Referenced owner-bound custom emoji
+  images render; missing/flagged/foreign images show an unavailable placeholder
+  without fetching them. No historical reaction chip performs a live action.
+
+- [ ] Cut an owned archive and paste into another owned folder, then back to
+  root: only root placement/timestamp change; message, participant, reply,
+  reaction and media IDs remain identical. Stale/deleting/mixed-kind roots,
+  historical children, foreign folders and non-first-party callers must fail.
+  Re-read the full history and verify quota is unchanged. The selected origin
+  must advertise bulk 1.4.0; repeat after deleting the containing folder.
+
+- [ ] Download/Copy an owned archive, then re-import: preserve every historical
+  message, reply, reaction, archived identity and media byte under fresh private
+  IDs. Optional traversal must not truncate history. Missing emoji/media access
+  or excluded required files/links must fail the whole export. Independent child
+  roots and non-first-party owners cannot export archive history. Require export
+  1.9.0 on the selected origin; repeat with avatar, gallery and custom emoji bytes.
+
+- [ ] Use a real stored-upload emoji ID (emoji_ plus 64 lowercase hex digits)
+  in live Messenger and an archive. Import must remap it to the fresh personal
+  emoji; archive reads and message projections must retain/resolve the token.
+  Legacy UUID/short IDs still work. Oversized noncanonical IDs and invalid hash
+  characters fail; feed reactions still reject every custom token. Verify real
+  image bytes and rendering separately from parser/identity unit tests.
+
+- [ ] Run the explicitly enabled `test:transfer-archives` against the provided
+  dev fixture only after its capability preflight succeeds. Verify no skipped
+  live test and no cleanup failures. It covers folder export, metadata ZIP
+  encode/decode and re-import, move and source-deletion independence; separately
+  test avatar/emoji bytes and the visible chat UI.
+
+- [ ] GET /things?id=<archive>&archive=true as the importing owner returns the
+  complete historical group, exact text, reply/thread/reaction references and
+  ordered attachment IDs. It must not return userId, ACLs, roles, tokens, S3
+  paths or live-user lookup results. The client requires api.things 1.15.0.
+- [ ] Archive attachment metadata preserves labels, order and target IDs in
+  one bounded batch. Blocked/noncanonical media is omitted, pending owner media
+  has pending=true and NSFW media has nsfw=true. No moderation diagnostics,
+  object/upload keys or unknown crystal fields escape. attachmentTargets still
+  covers blocked bindings, preventing incomplete exports. Verify the shared
+  gallery with real stored image/video/audio bytes separately from fixture UI.
+- [ ] Signed-out/PAT/app/service readers cannot use archive mode. A foreign,
+  missing, deleting or custom-plane archive does not expose history. Oversized
+  or inconsistent history returns an error, never a truncated success. All
+  responses are private/no-store, including auth and retryable failures.
+
+- [ ] Delete an imported archive through DELETE /things from the owner session:
+  drain stored files, remove all history rows and refund storage. A stale
+  expectedUpdatedAt returns 409 before cleanup. A deferred provider operation
+  returns a sanitized retryable error, retaining history for another deletion.
+- [ ] Repeat as another user, PAT, app, service account, cross-origin caller or
+  custom data plane: no archive lookup/deletion authority. A participant/message
+  ID cannot delete the archive. Require api.things 1.12.0 before client deletion.
+
+- [ ] Import a complete archive with folders, avatars, message galleries,
+  replies, deleted tombstones and custom emoji reactions. Verify fresh IDs,
+  exact history, importer-as-self and archived counterparts; no real user,
+  membership, invitation or notification writes. This awaits archive UI/export.
+- [ ] Make a later archive fail. Earlier completed archives use whole-archive
+  cleanup; deferred object deletion retains their roots and earlier dependencies
+  in remainingIds. Cancel during the final commit: do not report success.
+- [ ] Reject orphan/mixed-kind archives and source participant userId/roles
+  before any writes. Generic Thing CRUD must not modify archive records.
+- [ ] Require api.things-import 1.9.0 before upload/import; reject pre-archive,
+  missing and incompatible-major manifests from the selected origin.
+
 ## Feature Stack activity and run chat
 
 - [ ] Open a saved run with one merged, one conflicting, and one failed target.
@@ -72,7 +274,89 @@
   Lopu is absent. Test folder clipboard/paste and explicit Open versus Preview.
   Message edit/delete still pass through chat-membership authorization.
 
+## Recording folder transfers
+
+- Cut an owned durable recording, paste into an owned folder, and confirm the
+  same recording ID/bytes/ACL remain; no upload or deletion should occur.
+- Download that folder as ZIP and re-import. The fresh recording must be filed
+  in the fresh parent folder, not silently moved to My Things root.
+- Import a lone recording into Current folder. Delete the destination during
+  placement and check explicit failure/compensation, never a dangling folder.
+- Refuse draft, bound/profile/linked, foreign-owned and custom-endpoint moves;
+  an old bulk capability must prevent client dispatch.
+
+## Recording transfer lifecycle
+
+- [ ] `recording-import` upload starts require private-upload approval, including
+  when public uploads alone are approved. The same request ID cannot be reused
+  across recording-import and ordinary recording/post purposes. Completed drafts
+  retain expiry; expired or already committed draft replays return 409.
+
+- [ ] Verify normal approved
+  uploads retain recording purpose throughout import; incomplete imports stay
+  expiring drafts, do not appear in My Things, and are reclaimed normally.
+- [ ] Verify committed imports are new private recordings with preserved bytes
+  and annotations. Replay, another owner, expired/bound/profile media and wrong
+  byte counts must fail without changing existing recordings. Verify quota and
+  metadata changes commit together and a failed commit leaves a recoverable draft.
+- [ ] Export a standalone recording and a mixed recording/component ZIP on
+  desktop/mobile. Download/clipboard/import/re-export must preserve bytes and
+  annotations with new IDs, including embedded recording URLs and file-ID
+  collisions. A no-files recording export must fail, not create an empty copy.
+- [ ] Simulate a lost import response, then close the dialog. It must not retry
+  the mutation or delete potentially committed recordings. A ready upload-start
+  receipt must go directly to completion metadata, never PUT the bytes again.
+
+## Portable theme transfers
+
+- [ ] In Settings → Things → Feed algorithms, copy/download a trained profile,
+  then import JSON and ZIP at 1280px and 390px. Verify exact weight maps and
+  training statistics, fresh private/unshared copies, unchanged active selection,
+  anonymous/other-owner denial and no overflow through full-page scrolling.
+  The private-interest warning must be visible before export and on import.
+- [ ] Reject algorithm transfer fields that attempt to set sharing, active state,
+  lineage or training events. Reject invalid/out-of-range weights and statistics
+  before writes; a later mixed-import failure uses the dedicated delete writer.
+
+- [ ] On `/themes`, use Transfer to copy/download a saved theme at desktop and
+  mobile widths. Scroll the full page, open the transfer dialogs, then import
+  JSON and ZIP files. Verify fresh private copies in My themes, equal resolved
+  tokens, no change to the active theme, and denial for anonymous readers.
+- [ ] Reject theme entries with account fields, folder placement, child Things
+  or attached galleries before writes. A later mixed-import failure must clean
+  new themes through the dedicated theme delete writer, never generic CRUD.
+
+## Background AI execution and recovery
+
+- [ ] With disposable data and `LOPU_CHAT_PROVIDER=test`, send a reply, navigate
+  away, close its tab with another origin tab open, then repeat with all origin
+  tabs closed. Reopen task overview/chat: one user turn, assistant turn and set
+  of tool receipts. Start two separate chats; both progress independently.
+- [ ] Same-chat concurrent replies are refused. Retrying uncertain admission with
+  its identical ID never increases inference/billing; changed payload gets 409.
+- [ ] Stop, reload and Retry / Continue: keep partial text and completed receipts,
+  never replay old approvals. Cover missing done, malformed JSON, complete tool
+  JSON without closing fence, max-token truncation, deadlines and provider loss.
+- [ ] Switch accounts during requests, including switching back: no stale output,
+  patch or navigation crosses sessions. Reject foreign owner/origin/data-source
+  task reads and output for deleted/inaccessible conversations.
+- [ ] Desktop and 390px: drawer sub-tab, Running/Needs attention/Recent, expanded
+  output, Stop, chat links and recovery buttons. Scroll entire pages/chats and
+  open tool details; check static rings, wrapping, clipping and overlap. At
+  480–767px the header account link occurs once and notifications fit.
+- [ ] Interrupt worker support in a disposable browser: direct observation reuses
+  the same accepted operation with no duplicate output. Verify built manifests
+  and >=300-second server function budget. Check musing, voice transcript reply
+  and AI completion after navigation; real provider acceptance needs configured
+  credentials, separate from provider-less fallback/validation fixtures.
+
 ## Unified Lopu conversations, scheduled Things and discussions
+
+- [ ] Read a page with related components, search/list Things, and follow each
+      Open anchor before and after reloading the chat. Verify actual hrefs,
+      keyboard and new-tab navigation, safe external links, long labels at 390px,
+      expanded details, and top-to-bottom scrolling. Unsafe URL schemes stay text;
+      unsaved drafts and unresolved references do not invent destinations.
 
 - [ ] At 390px width, historical tool rows put long summaries below their label
       and status icon, not in a narrow side column. Check approval, success and
@@ -177,6 +461,15 @@
   daily notification transaction commits. Retries never send another push for
   the same daily ID; blocked preferences/checkpoints send none. A push transport
   failure does not erase or duplicate the durable bell reminder.
+## System vault and OAuth-only Claude
+
+- [ ] System lists the existing CI credential IDs and integration secrets; CI Control uses the same list and its Manage link opens System.
+- [ ] At desktop and 390px, scroll System top to bottom. Open platform menus, replacement forms, and Show dialogs for long names; no large blank form gaps, clipping or horizontal overflow.
+- [ ] Add/rotate/enable/reorder a disposable Claude OAuth entry. The next Claude and signed CI request use the same enabled entries; legacy Anthropic API keys are rejected and excluded from delivery.
+- [ ] Request Claude Opus 5 with High effort. Confirm the provider reports that model; a failed OAuth credential may retry another account with identical settings, but cannot become GPT-4o mini or drop the effort setting. Text, tools, cancellation, usage, refusal and incomplete-tool failures remain correct.
+- [ ] Deployment variable lists and mutation responses never contain values. Wrong password, revoked admin access, wrong-origin requests and arbitrary project fields fail closed. Show opens only the selected encrypted variable; Vercel-sensitive values stay write-only. Add a disposable preview variable without overwriting an existing variable, replace it, and delete it; each successful write reports that redeployment is required.
+- [ ] Build the Vercel output, verify the compressed native runtime and function size, then smoke the built server's capability manifest for System environment 1.0.0, vault reveal 1.1.0 and platform credentials 3.0.0.
+
 ## Verified vault reveal
 
 - [ ] At desktop and 390px widths, CI, external integrations and personal Secure Vault offer Show without changing ordinary value-free list responses.
@@ -221,6 +514,19 @@ every line exists because it broke once. Add a line whenever a new bug class
 is fixed, and cite the checklist you ran in the PR description.
 
 ## Lopu Apple Watch recording automation
+
+- [ ] Recording transcript quotes: verify real Watch attachments and comments
+  using inherited ACLs beneath their private parent; sharing the parent or
+  rebinding/deleting either child must remove the quote on refresh.
+- [ ] Recording transcript quotes: on desktop and 390px mobile inspect a post,
+      Thing/media detail, chat attachment and recording activity. Saved text
+      appears beneath its own player/file; switching audio tracks switches the
+      quote. Expand/collapse a long multiline transcript, scroll to the bottom,
+      and copy its text. No overflow, markup execution or empty quote shell.
+      Batch lookups negotiate recordings 1.7.0; missing/deleted/foreign/shared
+      sources or comments reveal nothing. Account switch/unmount fences stale
+      replies. A transient refresh failure preserves same-view text; successful
+      deletion/revocation refresh clears it. No inference or data migration.
 
 - [ ] Recording/AI subscription rates: Free retains configured windows, Plus receives 5x, Pro/PAYG bypass only the two product request-rate buckets. A spoofed request tier or foreign account cannot grant access. Upgrade/downgrade re-resolves the protected home assignment and keeps the same account bucket across sessions/devices/IPs. Entitlement/limiter outages return private 503 without provider calls; finite exhaustion returns 429/Retry-After. Authentication, upload constraints and provider quotas stay enforced. Negotiate ai-complete 1.1.0 and lopu-recordings 1.2.0; reject older/breaking manifests.
 
@@ -1301,6 +1607,37 @@ email whose link points at the attacker.
       does not float.
 - [ ] Drawer: the Marketing hub appears with its seven children and keeps the
       drawer open on click like Branding/Docs.
+- [ ] Publishing gate (`docs/marketing-suite.md` → Publishing): signed out or
+      as a non-admin, `/marketing`, a category index, a page and
+      `/marketing/social-media` each show the 🔒 "Not published yet" card until
+      an admin publishes them, the `<head>` carries `robots: noindex`, and the
+      drawer has no Marketing section. As an admin every surface renders with
+      the admin bar (state pill, Publish/Unpublish, "Publish all N", 👁️ View
+      as visitor, Manage all →) and `/admin/marketing` opens.
+- [ ] Publish ONE page only (`landing/feed`): a visitor opens it; its crumbs do
+      not link to the unpublished hub/category, the sub-nav lists no
+      categories and no search, footer links skip unpublished targets, related
+      cards and "Same page, other looks" list only published pages, and
+      `/marketing/landing` (the index) still gates.
+- [ ] Publish the `landing` index: visitors see only the published pages
+      (header count matches), cards for unpublished pages are absent; admins
+      see every card with unpublished ones dimmed + 🌐/🔒 chips. "Publish all
+      N pages" then "Unpublish all" round-trip and the count line updates.
+- [ ] Hide a section (the social block on `landing/feed`): admins see it
+      dimmed + dashed with "👁️ Show"; visitors get no such section;
+      `/admin/marketing` lists it under Hidden sections and "Show" restores it.
+- [ ] Social suite: with `social` published and no image set, visitors see
+      "Images are on their way"; publish one set — the visitor menu lists only
+      that feature and `?feature=<unpublished>` falls back to it.
+- [ ] 👁️ View as visitor: the admin bar collapses to the preview strip,
+      gates/filters match a signed-out visit, "Exit preview" restores, and the
+      flag survives a reload.
+- [ ] `/admin/marketing`: stats match the state, per-category page lists
+      filter + toggle, "Publish everything" / "Unpublish everything" need the
+      second confirmation click, Lopu toasts report success/failure, and a
+      rejected POST (e.g. after demotion) reverts the optimistic toggle.
+- [ ] `npm --prefix remix run test:marketing` (publishing + store tests) and
+      `npm --prefix remix run test:api-capabilities` pass.
 
 ## Composer — Thingtime tab (`remix/app/components/Feed/PostComposer.tsx`)
 
@@ -1397,6 +1734,14 @@ email whose link points at the attacker.
       uploads stamp provider `openai`; switching either surface to Off stops
       new stamps. Choices survive a reload (settings collection, not local
       state).
+- [ ] Store a dedicated **OpenAI Moderation** credential in the encrypted admin
+      vault separately on production and develop. A valid vault key overrides
+      a stale legacy env key for invitation avatars, media and text; clean
+      synthetic input obtains a real Omni verdict. Rotation is observed on the
+      next request, the other environment stays isolated, and a vault read or
+      decryption failure never silently falls back. Paid chat/CI credentials
+      remain unchanged. Create and then cancel a zero-credit test invitation
+      with an avatar; normal vault/API reads must never return its secret.
 - [ ] With an OpenAI key configured, a post/comment containing threatening
       harassment vanishes from feeds/threads for everyone shortly after
       creation and a `text` flag row (with excerpt, no View button) appears in
@@ -1445,6 +1790,14 @@ email whose link points at the attacker.
       file. Safe image/video previews appear immediately; each row reports
       progress; Post stays disabled until every selected file is Ready; and a
       26th unique file is rejected with the fixed 25-attachment limit message.
+- [ ] With Photos off, drop image, video/audio, and generic files onto the
+      collapsed post prompt, expanded body editor, and comment/edit composer.
+      Photos opens and every file enters the single bounded uploader once.
+      Marketplace, Things, and Poll selections and entered values stay intact.
+      Repeat with Photos already open, dropping inside and outside its panel;
+      preserve existing attachments, text/link dragging, and tile reordering.
+      During submission/recovery, drops must not mutate the frozen draft or
+      navigate away. Portaled Thing editors must not attach files to the post.
 - [ ] With the post/comment text editor focused, paste (⌘/Ctrl+V) a screenshot,
       copied image, video, and generic file. File-bearing pastes turn Photos on
       when needed and queue into the one Media & files panel; pasting again
@@ -1971,6 +2324,7 @@ email whose link points at the attacker.
 
 ## Subspaces (`remix/app/components/Subspaces/`, `remix/app/api/utils/subspaces/`, `/api/v1/subspaces*`)
 
+- [ ] Owner can rename a subspace to `thingtime`; posts and memberships retain their IDs, settings navigates to the new URL, and reload works. Non-owner renames return 403; reserved slugs return 400; taken/held slugs and concurrent competing renames return 409 without changing the original. The old URL is released.
 - [ ] `/s` lists subspaces newest-first with member counts; search narrows by
       slug/name; **Mine ⭐** shows only joined ones; **Create ➕** (or
       `/s?create=1`, the drawer's Subspaces ▸ Create) opens the modal. The
@@ -2366,7 +2720,16 @@ email whose link points at the attacker.
 
 ## Up/down votes (`remix/app/api/utils/things/updown.ts`, `remix/app/components/Feed/UpdownControl.tsx`)
 
-- [ ] Every post and comment card shows the ▲ score ▼ pill beside the
+- [ ] Publish through the browser composer inside a subspace (and through the
+      Feed composer with a subspace selected): the POST body keeps `subspaceId`,
+      `title` and `flairId`. After reload, the new post appears in that subspace
+      and retains its subspace chip, title, flair and vote pill in Feed and its
+      permalink. An ordinary post remains outside subspaces with no vote pill.
+- [ ] Post cards show the ▲ score ▼ pill only when the post belongs to a
+      subspace and the vote preference is enabled, including Feed, Explore,
+      profile, Saved, search and permalink views. Ordinary posts never show
+      the pill, even with existing votes. Comment voting is unchanged.
+- [ ] Subspace post and comment cards show the ▲ score ▼ pill beside the
       react button (native emoji reactions are untouched — react, multi-react
       and the picker keep working on the same card). Tap ▲: the arrow fills,
       score +1 INSTANTLY (optimistic), then the server tally reconciles; tap
@@ -2905,7 +3268,7 @@ email whose link points at the attacker.
       at least five total entries (more than the historical 3-entry cap);
       drag a row by its dedicated handle, use the Up/Down controls, remove a
       non-default row, save, reload, and confirm the exact order persists.
-      `default` stays present and cannot be removed. The effort select only
+      Remove `default`, apply and save a single explicit model, then reload and reopen the selector; both the summary and public GET must retain exactly that model without an added fallback. The effort select only
       offers that model's tiers and the speed select only appears for models
       with a fast lane; re-adding an already-listed combo is blocked.
 - [ ] Exercise the editor at desktop and mobile widths from the top to the
@@ -2915,8 +3278,8 @@ email whose link points at the attacker.
 - [ ] Composed variant ids (`<model>[:<effort>][:fast]`) validate per model:
       efforts a model does not support, `fast` on a model without a fast
       lane, and duplicate segments are rejected on write; reads drop unknown
-      entries without discarding the rest of the order and always keep
-      `default` present.
+      entries without discarding the rest of the order or adding
+      `default`.
 - [ ] Resolver workflow config parsing in the `github-actions` control plane
       (PR #391) validates the widened-but-closed grammar: unique 1..256
       entries matching `^[a-z0-9][a-z0-9.:-]{0,63}$`, parsed into
@@ -3454,7 +3817,7 @@ halves.
 
 ## Register request body cap (`remix/app/routes/api/v1/auth/register/_register.tsx`)
 
-- [ ] Register rejects an oversize body with 413 (`readJsonBody` 16 KiB cap)
+- [ ] Register rejects an oversize body with 413 (`readJsonBody` 48 KiB cap)
       before validation, bcrypt, or account writes; the existing limiter still
       consumes the request first, and a normal signup from a fresh IP returns
       200 with a session cookie.
@@ -4685,6 +5048,13 @@ default` unsets it, and runtime usage reports the effective cap. A custom
       `friend` doc would fake acl visibility).
 
 ## Notifications (`api/utils/notifications/notifications.ts`, `/api/v1/notifications*`, nav bell)
+
+- [ ] Bell hit area (2026-09-14): at 1440px, 768px and 390px widths, with the
+      drawer open/closed and page scrolled to its footer, click the bell's centre,
+      bottom edge and padded corners to open and close it repeatedly. Every pixel
+      of the 36px button must hit the bell rather than Commander or a transparent
+      layer. Scroll the popup to its last row, reopen, and check Escape/outside
+      dismissal; desktop search must fit between the account and right controls.
 
 - [ ] Watch recovery: an expired/deleting unbound draft returns `watch_upload_restart_required`; retain local bytes and persist a new request identity before re-upload. Lost successful responses retry the same identity; live/bound/foreign drafts never grant rebind permission. A failed file must not mark a healthy account offline or block unrelated queued files. Account switching must not attribute results to the wrong account.
 - [ ] Lopu: ask standard voice/chat to create a private note, an immediate notification, a one-off reminder and a five-minute repeating reminder. Confirm persisted IDs/next runs, pause/resume in Settings, and verify the server sends with the browser closed. Completing/deleting the source or pausing during emission must prevent the send. Late runs skip backlog; owner/auth/CSRF and subscription limits remain enforced.
@@ -6049,6 +6419,21 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ### Recovery cards, build IDs and app selection
 
+- [ ] Select Electron, Commander, Widgets and Thingtime Recovery in the App picker.
+      Each sidebar/cache page must contain only that app's builds and counts;
+      Recovery appears only in its own section. Relaunch with Recovery selected.
+      Every release row/detail and cached build shows a Built/Released date beside
+      the build identity, or an explicit unavailable date for legacy metadata.
+      Refresh and relaunch offline: cached release dates persist, Cached dates
+      stay distinct, and unsigned trust markers are unchanged. Check narrow/wide
+      windows, scroll all lists to the bottom, and open/cancel unsigned prompts.
+- [ ] In release details, use **Download & install** beside **Download and verify**.
+      It must verify and install the exact selected release through the existing
+      helper, preserving rollback; verify-only must leave installed apps unchanged.
+      Both buttons disable during a download and for withdrawn releases. Failed
+      downloads must never install an older cached build. Open/cancel unsigned
+      install acknowledgement, then verify cache-only still only caches. Check
+      the action row at wide and narrow window sizes, scrolling to the bottom.
 - [ ] In both This Mac views, confirm build IDs come from the bundle or manifest,
       old Electron bundles expose their embedded commit, and Recovery cards use
       the Recovery component name even if old metadata used a desktop title.
@@ -6158,6 +6543,9 @@ checks; `TT_VERIFY_LIVE=1` adds a live Hacker News pull). Manual checklist:
       AFTER the run, and a second run is a no-op.
 
 ## Commander emoji paste recovery
+
+- [ ] Seed a disposable clipboard value, paste an emoji into TextEdit and a browser text field, and verify the emoji arrives before restoration. Repeat with a busy destination, rapid Return presses, and two Commander windows. Copy a new value during the paste and verify restoration never overwrites that new copy; check Paste and Keep a Copy separately.
+- [ ] Open Commander over a text editor, dismiss the root launcher with Escape, and immediately type: input must return to the original editor. Escape from Actions must only close Actions. Clicking another app, opening a result, or switching to Commander Settings must not reactivate an older destination. Repeat with a pinned launcher.
 
 - [ ] Follow `Commander/docs/TESTING.md` for denied emoji paste: preserve the selected emoji, recents, learning and clipboard; keep the error, grid and recovery controls inside the native window at standard/minimum/compact widths and large text size. Verify the installed signing requirement stays stable and complete an approved Accessibility grant migration before claiming successful paste.
 
@@ -6812,6 +7200,130 @@ approval; `access.test.ts` — the reservation matrix) and
 
 - When adding a scheduled-task/run schema, run `npm --prefix remix run test:schemas` and review its pinned builtin projection; every registered crystal schema must survive the schema-Thing write gate without lost fields.
 - Run `node remix/scripts/verify-lopu-linked-things.mjs` against the running worktree stack (or pass its loopback HTTP origin). It registers disposable local accounts and exercises real API comments, unchanged parent crystals, shared voice/Messenger history, retry deduplication, searchable scheduled-task Things, linked context, account isolation, protected writes, and pause/resume. It removes its created content and pauses schedules in `finally`; empty test accounts remain, with credentials never persisted. Production origins are rejected. This does not replace browser/device, provider inference, or scheduled-delivery acceptance.
+# Portable Thing transfers
+
+- Start a Cut, then sign in/switch accounts while root-data refresh is delayed
+  or fails. Saved intent and in-flight copy tickets must be revoked immediately,
+  before replacement root data arrives. A stale generation confirmation must
+  not re-arm the previous account; a confirmed new account may create new cuts.
+
+- Incomplete import rollback: make a later create fail, then fail/defer the
+  deletion of an already-created child. Its earlier folders, schemas and media
+  definitions must not be deleted afterward; retain remaining linked resources
+  and report recovery IDs with 503. Also exercise a lost deletion response.
+  The importer must require `api.things-import >= 1.8.1` on major version 1.
+
+- Archive deletion regression: deferred or ambiguous object cleanup must leave
+  a deleting root and all message history for retry. Only refund/delete archive
+  rows after canonical object cleanup and an empty-child check. Refuse foreign,
+  app-scoped, live, malformed and changed record sets; make repeated/concurrent
+  completion idempotent. Verify actual S3 deletion and account ledgers before
+  enabling the archive lifecycle in the HTTP/UI transfer flow.
+
+- Archive storage regression: each historical row must be importer-owned and
+  private, with no live memberships/account lookups. Test fresh avatar/message
+  bindings, mixed file/link order, custom-reaction remapping, missing/foreign/
+  reused resources, quota and concurrent-bind failures, folder-deletion fencing,
+  caller mutation during awaits, and stable IDs across transaction retries.
+  Dependency tests do not replace live storage/rollback and UI acceptance.
+
+- Messenger archive regression contract: preserve exact text, historical dates,
+  reply/thread links, reactions and avatar file references. On import, replace
+  only the exporting self with the importer; other authors must remain archived
+  snapshots, never live user lookup/membership targets. Reject forged authority,
+  orphan/cyclic references, duplicate imported identities and restored deleted
+  text/media. Runtime and browser acceptance is required before enabling this
+  currently unconnected archive contract.
+
+- With a disposable, already upload-approved local fixture account, run
+  `TT_TRANSFER_BINARY_TEST=1 corepack pnpm --dir remix run test:transfer-binary`
+  with `TT_TRANSFER_TEST_URL` and `TT_TRANSFER_TEST_COOKIE` provided securely in
+  the environment. This uses real storage and creates/deletes fixture content;
+  it does not enable uploads. Require PNG byte and annotation equality across
+  ZIP/reimport, anonymous denial, exactly one concurrent emoji-claim winner,
+  and confirmed cleanup. A precondition failure or skipped test is not live
+  storage acceptance. See the README for fork-safe setup.
+
+- Newly durable emoji files start quarantined while asynchronous moderation
+  runs. The binary fixture polls the owner-only archive projection for at most
+  30 seconds and still requires the exact remapped image; it must fail if the
+  safe projection never appears. Unit coverage uses the canonical `pending`
+  and `clear` statuses. Never disable moderation or bypass upload rate limits
+  to make this acceptance test pass.
+
+- For an explicitly authorized dev fixture, additionally set
+  `TT_TRANSFER_REMOTE_DEV_TEST=1` and `TT_TRANSFER_TEST_USERNAME` to the exact
+  expected username. Only HTTPS dev.thingtime.com or numbered PR preview origins
+  are permitted; production and lookalike hosts must fail before requests.
+  Validate synthetic manifests before uploads. Verify ordinary Thing reads return
+  200 before cleanup and 404 after deletion, without spending the shared export
+  budget on cleanup. Preserve both primary and cleanup failures in test output.
+
+- Round-trip stored files with a title, multiline description and display
+  filename through export, ZIP and clipboard import. Verify those annotations
+  on fresh copies while the original filename/bytes stay unchanged. Reject
+  forged detected types/moderation and malformed annotations before writes.
+  A draft bound elsewhere during import must reject annotation rather than
+  modify that existing gallery; expired and non-post drafts also fail.
+
+- Export a linked gallery as JSON and ZIP, then import each via the file picker
+  on desktop/mobile. Verify URLs, multiline descriptions, filename previews,
+  titles and mixed stored-file/link ordering. New private copies must survive
+  source deletion; the import must not fetch external bytes or bypass stored
+  upload approval. Toggle linked-gallery inclusion separately from stored files.
+  Reject unsafe URLs, duplicate IDs, forged moderation stamps and incomplete
+  attachment ordering. Flagged links must not export even for an administrator.
+  A failed annotation/create must clean only new unbound link drafts and report
+  any deferred cleanup. Nested-value import must not silently discard galleries.
+
+- In the nested value editor, import ordinary JSON and exported value JSON/ZIP;
+  review before replacement and round-trip strings such as `"42"`, arrays,
+  null and objects without changing their types. Import the value ZIP through
+  My Things too: it must create one new private data Thing, not a local edit.
+  Copy/Cut must write the portable envelope to the OS clipboard. Top-level
+  and direct nested-path Cut must remove only the copied key; array Cut must
+  preserve array shape and siblings. A clipboard failure or changed value
+  while copying must never delete anything. Read-only menus must omit import,
+  paste and cut. Reject cycles, accessors and non-JSON values explicitly.
+- Stack several transfer success notifications, then open every transfer
+  dialog on mobile. Notifications must not cover the file picker, review,
+  Cancel/Replace/Download controls; verify by clicking those controls.
+- On Thing details, component-family pages, public webpages and the Builder
+  inspector, open Transfer at desktop and mobile widths. Copy must write a
+  portable envelope and Download must produce a real file. Open Import too;
+  menus and both dialogs must sit above the inspector and remain clickable.
+  Unsaved Builder changes must disable export with a save-first explanation.
+- Import a file-bearing app whose image/CSS URL is assembled from multiple
+  saved argument fragments. Repeat with two different page-instance arguments,
+  then export and import that copy again. Every rendered media ID must point
+  to its new owned upload; labels and editable argument text must stay intact.
+  An upload-unapproved account must get an explicit refusal before import.
+- Copy a folder using its context menu, then paste into Things. Verify the OS
+  clipboard holds portable content and importing creates fresh private IDs.
+  Cut/Paste in the same account/session must move the original; after reload,
+  account switch or changed clipboard content it must not infer move authority.
+  Denied clipboard permissions and cancelled exports must show a handled error
+  or cancel cleanly without an unhandled rejection or false success message.
+- Download both JSON and ZIP, then import each downloaded file through the
+  real picker. Verify all selected folder pages and canonical app dependencies,
+  plus desktop/mobile dialog bounds and every inclusion option. Revoked file
+  access must fail the complete export rather than emit a partial ZIP.
+- In Things, open Import on desktop and mobile. Check invalid JSON, unsupported
+  envelopes, a complete JSON transfer, and ZIPs with missing/tampered files.
+  Validation must happen before uploads or creation; the dialog must fit and
+  scroll without clipping its controls.
+- Import into the top level and an owned folder. Copies must get new IDs,
+  private ACLs and current ownership, retain folder/schema/action/component
+  references and extended content, and appear without a manual reload.
+- Upload real files and verify imported bytes independently of the source.
+  Cancel, switch accounts, test quota/permission failure and lost responses;
+  never automatically repeat an import POST or delete source records.
+- Run transfer unit tests and the opt-in local
+  `app/api/utils/things/importTransfer.integration.test.ts` with
+  `TT_TRANSFER_TEST_URL` and a disposable `TT_TRANSFER_TEST_COOKIE` provided
+  securely. It must clean only its newly returned IDs. Clipboard/export and
+  file-bearing UI acceptance remain separate from this JSON import check.
+
 # Synthetic personal recording runtime smoke
 
 - Run `node --import tsx scripts/personal-recording-runtime-smoke.mts` from
@@ -6851,3 +7363,136 @@ approval; `access.test.ts` — the reservation matrix) and
 - Open the same saved config in two editors. Save one, then save the stale one: show a conflict, retain the unsaved draft, and refresh the library for reopening.
 - Anonymous requests return 401; changed-account headers return 409; another owner cannot read or replace a record. Reject extra secret/URL fields and incompatible endpoint selections.
 - At desktop and mobile widths, scroll Settings and the open dialog top to bottom; verify nested controls, fixed footer, focus, and no horizontal overflow.
+
+## Durable recording reads
+
+- AI chat archives: export a complete authorized Lopu/AI history, import and
+  re-export it, and confirm assistant avatar presets and name/result/summary
+  tool receipts survive without target IDs, approvals, billing or connector
+  metadata. Expand receipt lists at desktop/mobile widths and scroll to the
+  bottom; no action control may execute history. Deleted rows retain neither
+  receipts nor content. Reverse equal-timestamp source segments and verify the
+  imported view retains segment order despite fresh IDs. Reject missing,
+  duplicate or mixed-revision segments and incomplete device synchronization.
+
+- Live-chat archive timestamps: exercise the actual Messenger edit/delete APIs,
+  which store canonical ISO strings inside `crystal`, unlike BSON root dates.
+  Export edited messages and tombstones together; preserve `editedAt`, never
+  restore deleted text, and reject invalid calendar dates or loose date strings.
+  Require export 1.11.1 before running the self-only live-history ZIP fixture.
+
+- Ordinary live-chat export: use a first-party active/pending member, include
+  former participants and thread replies, then import as a private archive.
+  Confirm self substitution, historical names/avatars, mixed gallery order,
+  exact bytes and no outgoing messages/invitations/notifications. Repeat as a
+  nonmember, PAT, app account and custom data plane: deny. Revoke media access
+  during export: fail without a partial plan. AI/device chats, external avatars
+  and other-owned emoji definitions remain unsupported; do not count a refusal
+  or unit-test fixture as end-to-end Messenger acceptance.
+
+- Live Messenger archive snapshot reader: require home first-party scope at the
+  eventual caller, check current membership in the same transaction as history,
+  include former members and every thread, and reject foreign/duplicate records
+  or row-budget overflow. An exhausted budget must still query one overflow
+  sentinel, never MongoDB's unbounded `limit(0)`. This reader is internal only;
+  it must not be returned directly or counted as live export UI acceptance.
+
+- A completed owner recording with no expiry must export a descriptor and download successfully.
+- Repeat anonymously and as another account/admin: deny without signing a URL.
+- Expired/invalid-expiry recordings, import drafts without expiry, blocked media and custom data endpoints remain denied.
+- File exports require attachment-content 1.6.4 and things-export 1.6.1; reject pre-fix origins before starting the export.
+## Navigation-safe Cut
+
+- Cut a Thing, follow an internal link away, return to Things and paste: move the original IDs, not imported copies.
+- Change accounts or log out/back in before pasting: never move from old intent. A reload also drops move authority.
+- Replace clipboard text, use Copy, or dismiss the clipboard: prior Cut must not move anything.
+- Export a readable gallery with files unchecked and links checked: unavailable
+  stored bytes must not block links-only export. Included bytes must still fail
+  on unavailable storage; exclusions must not bypass owner/shared-root,
+  moderation or expiry gates, and recording roots must still require bytes.
+- At 390px, select both Download formats: the selected label must fit, and the
+  helper must clearly state whether the archive can include stored file bytes.
+- Export/import saved themes and algorithms both inside an included folder and
+  alone into a selected current folder. Confirm new private IDs, remapped
+  placement, unchanged active selections and dedicated cleanup on placement
+  failure. Check their owned-library Cut menus and same-account folder paste;
+  shared viewers must never receive Cut authority. Exercise the import
+  destination selector at desktop/mobile widths with both kinds in one file.
+- A partially failed move retains only failed IDs; an older request completing must not consume newer Cut intent.
+- Before releasing emoji transfers, verify two simultaneous imports cannot claim
+  one upload; stale/bound/foreign uploads must fail without deleting an existing
+  emoji. An uncertain commit may recover only the same server import attempt.
+  The connected writer is unit-tested; live transaction acceptance remains
+  required with an upload-enabled account.
+- Export a personal stored emoji and a legacy inline emoji to ZIP, then import
+  each into a folder. Confirm identical image bytes, new personal names/IDs,
+  preserved image title/description/filename preview, and no community scope.
+  A failed fresh-upload claim must not annotate any existing image; annotation
+  or placement failure must clean up only the new emoji. Verify the file picker,
+  destination selector and final controls at desktop and mobile sizes.
+
+## Gifted signup invitations (2026-09-13)
+
+- [ ] In Settings → Lopu, create an invite with a profile photo, display name,
+      username and fractional gift. The balance decreases once; copied links use
+      the browser/deployment origin, never the internal Nitro port.
+- [ ] Visit the link signed out at desktop and mobile widths; scroll top to
+      bottom. The avatar/name/username are prefilled, editable, and remain after
+      refresh. Remove and replace the photo; submit stays disabled while it is
+      being prepared. Floating app controls must not cover this focused form.
+- [ ] Enter only a password to complete signup. The chosen profile and gifted
+      balance persist after fresh login. Email-less users see no false email-sent
+      message; regular signup still requires email. No invitation may grant
+      administrator status, upload permissions, Lopu verification or bonus starter
+      credits. Optional email keeps ordinary verification/recovery behavior.
+- [ ] Race two claims: exactly one account receives the gift. Invalid passwords,
+      duplicate usernames, expired/cancelled tokens and ledger failures leave no
+      partial account or consumed gift. No request log or auth return-to hint
+      should persist the bearer token.
+- [ ] Successful invite signup advances the root account generation before
+      refresh, rejecting responses from the previous account. Failed signup and
+      invite preview must leave the current identity unchanged.
+- [ ] Cancel an unused link twice and run expiry twice: return credits once.
+      Insufficient balances, active billed turns, concurrent creates and the
+      20-pending cap must never overspend or leak another user's invites.
+- [ ] Test malformed/oversized images, remote URLs, rejected moderation and a
+      provider outage: no invitation or balance deduction is left behind.
+- [ ] `test:invites`, accounting, schema and capability suites pass. Manifest
+      advertises both invitation routes and invite-aware signup. Expiry without
+      the exact `CRON_SECRET` bearer fails closed without touching balances.
+
+- [ ] Creating a new invite and cancelling an older pending invite keeps the newest copyable link visible; cancelling that newest invite removes its link.
+
+- [ ] Settings → Account (`/settings/account` and popup `?settings=account`) groups account switching, storage, invitations, credits and plans. Profile retains profile editing/privacy; Lopu retains assistant preferences. Check direct reload, category switching, Back, modal close/Escape and Open settings page at desktop and 390px, scrolling both page and modal to the bottom. Old `/settings#lopu-credits` and `/settings/lopu#gift-invites` links select Account and reveal the section below the sticky navigation. Password-only accounts do not show a resend-email action without an email address.
+
+## Mobile sign-in and ambiguous post recovery (2026-09-13)
+
+- [ ] On a foreign preview at 390px and desktop widths, /login offers its selected authority instead of a native passkey for another origin. Continue navigates in the same tab with popup blocking enabled. Approve and cancel both return safely; an expired, wrong-origin or replayed state cannot sign in. No auth code enters query strings, logs or persistent return state.
+- [ ] Scroll login, authorization and account invitations through the footer; expand the feed composer, menus and account controls at both sizes. No account-hint card covers the login form.
+- [ ] Lose the response after a text/link post commits with no media layout. Exact-ID readback recognises the server-omitted layout and completes once; different content, owner, audience, attachments or nonempty layout never reconcile. Retry checks the saved post first and retains the original UUID.
+- [ ] Leave a create request unresolved: after 30 seconds plus bounded readbacks, the composer keeps its draft and offers Check and retry safely. An unresolved readback cannot keep the button spinning indefinitely.
+- [ ] Avatar moderation 429 then success creates the invite; persistent 429, insufficient quota, malformed response and non-JSON 503 never produce a clear verdict. Failure retains the profile fields and thumbnail, reserves no gift, and offers explicit photo removal.
+
+## Admin error-log Things (2026-09-14)
+
+- [ ] Create a harmless server error via the canonical logger; Things → Error logs lists it for current admins. Search by provider, literal punctuation, code and request ID, expand details, refresh without clearing prior rows, and load older rows. At desktop and 390px, scroll from top through footer with details expanded; long traces wrap without overflow or overlays.
+- [ ] Anonymous/non-admin/app-token access returns no logs. Demote/logout/switch accounts while viewing logs: old records disappear and the next API request is denied. Generic Thing reads, search, export, create/update/delete and public ACL spoofing cannot expose or mutate error-log Things.
+- [ ] Provider 429 bodies with only `error.type` retain their redacted reason and request ID. JSON/non-JSON failures, timeout, retry success and retry exhaustion retain fail-closed moderation behavior. No request image/text, credentials, query strings, raw SDK fields or reversible reveal values enter stored detail.
+- [ ] Simulate unavailable log storage and a capture flood: original responses survive, persistence has a one-second deadline, per-request/instance caps apply, and console diagnostics remain. TTL indexes stay home-only; expired records cannot be read even before MongoDB reaps them.
+
+## Post tag rendering
+
+- [ ] At desktop and 390px mobile widths, open a tagged attachment post in the feed and its standalone post page. Each stored tag appears in one pill row beneath the body; tapping a pill opens the matching tag search. Check ordinary posts, comments, and shared originals; tags remain visible without an extra outer-card row. Scroll to the bottom and verify no wrapping overflow or overlap with the action row.
+
+### Subspace branding uploads
+
+- At `/s/:slug/mod?tab=settings`, verify icon and banner default to upload tiles, each with **Use URL instead**. Upload a raster image to each slot, verify preview/progress and Save blocking, save and reload; check directory/card/feed icon and subspace banner as another viewer. Branding remains public directory identity for private subspaces.
+- Replace, remove, cancel, retry a failed upload/save, and switch to/from a valid URL. Existing URLs survive unchanged saves; invalid URLs/non-images/over-64-MiB files and wrong-purpose, wrong-owner, expired or already-bound uploads are refused. Replacement URLs stop serving old managed bytes; abandoned/replaced objects remain billed until reaped.
+- Check revoked moderator access, upload approval, quota failure, ownership transfer and deletion cleanup. On desktop and 390px mobile, open both URL panels and scroll top to bottom; verify no overlap, clipping or horizontal overflow.
+
+## Feed defaults, algorithm directory and geographic Things
+
+- [ ] Open `/feed` on desktop and mobile: all eight builtins appear in the bounded, scrollable picker; selecting one updates the feed and reloading preserves it. Builtins never receive training events.
+- [ ] Open `/algorithms`, search by name/description, create a private profile, publish it, branch it from another account, unpublish, and disable sharing. Private and link-only algorithms never appear in the directory; previews never expose learned weights; existing copies survive unsharing.
+- [ ] Create Things through the API with `geo: {lat,lng}`. Invalid/missing/out-of-range coordinates return 400. POST `/things/search` with `near` and `radiusKm`, and Local feed with lat/lng, find nearby visible posts, exclude far/private posts, and retain tag/subspace/ACL filters. PATCH `geo:null` removes the location.
+- [ ] Local's location request occurs only from its button; denial leaves the location-tag fallback usable. Scroll directory/feed top-to-bottom at desktop/mobile widths, including the editor and open picker; no content overflows.

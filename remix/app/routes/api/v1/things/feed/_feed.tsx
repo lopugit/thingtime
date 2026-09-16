@@ -1,3 +1,5 @@
+import { parseGeo } from '~/schemas/geo';
+import { isDefaultAlgorithm } from '~/components/Feed/defaultAlgorithms';
 import { json } from '~/api/http';
 
 import { resolveThingsActor } from '~/api/utils/auth/patTokens';
@@ -57,14 +59,15 @@ export const loader = async ({ request }: { request: Request }) => {
   // URL's cache entry honest: a fenced body never carries ANON_CACHE_CONTROL,
   // and the cacheable one carries ANON_CACHE_VARY so no shared cache can
   // replay it to a credential that would have been fenced here.
-  const anonCacheable = params.get('anon') === '1' && !request.headers.get('Authorization');
+  const anonymousView = params.get('anon') === '1' && !request.headers.get('Authorization');
+  const anonCacheable = anonymousView && !params.has('lat') && !params.has('lng');
   // Otherwise resolve the things actor (cookie/Bearer session or a scoped PAT)
   // — unknown/stale credentials degrade to an anonymous null user, so
   // logged-out browsers keep the public feed; only PAT-specific failures
   // (missing scope, exhausted) 4xx.
   let user = null;
   let pat: PatContext | null = null;
-  if (!anonCacheable) {
+  if (!anonymousView) {
     const auth = await resolveThingsActor(request, 'things.read');
     if (auth.ok === false) {
       return json({ ok: false, error: auth.error }, { status: auth.status });
@@ -80,8 +83,14 @@ export const loader = async ({ request }: { request: Request }) => {
   const scope = (scopeParam || 'all') as FeedScope;
 
   const algorithmParam = (params.get('algorithm') || '').trim();
+  const hasNear = params.has('lat') || params.has('lng');
+  const near = hasNear && params.get('lat')?.trim() && params.get('lng')?.trim() ? parseGeo({ lat: Number(params.get('lat')), lng: Number(params.get('lng')) }) : null;
+  const radiusKm = params.has('radiusKm') ? Number(params.get('radiusKm')) : 50;
+  if ((hasNear && !near) || !Number.isFinite(radiusKm) || radiusKm <= 0 || radiusKm > 1000) return json({ ok: false, error: 'Valid lat/lng and radiusKm (greater than 0, at most 1000) required' }, { status: 400 });
+  const selected = algorithmParam || user?.activeFeedAlgorithmId || 'latest';
+  const preset = isDefaultAlgorithm(selected) ? selected : null;
   let weights = null;
-  if (user && algorithmParam !== 'latest') {
+  if (user && selected !== 'latest' && !preset) {
     const algorithmId = algorithmParam || user.activeFeedAlgorithmId;
     if (algorithmId) {
       weights = await getOwnedAlgorithmWeights(user.id, algorithmId);
@@ -102,6 +111,10 @@ export const loader = async ({ request }: { request: Request }) => {
     cursor: params.get('cursor'),
     limit: Number(params.get('limit')) || undefined,
     weights,
+    preset,
+    near,
+    radiusKm,
+    localTag: params.get('localTag'),
     scope
   });
 
@@ -113,7 +126,7 @@ export const loader = async ({ request }: { request: Request }) => {
     {
       headers: anonCacheable
         ? { 'Cache-Control': ANON_CACHE_CONTROL, Vary: ANON_CACHE_VARY }
-        : user
+        : user || hasNear
           ? { 'Cache-Control': 'private, no-store' }
           : {}
     }

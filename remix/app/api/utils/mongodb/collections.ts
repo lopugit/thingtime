@@ -2,9 +2,10 @@ import { getMongoUri } from './config';
 import { getActiveMongoDbName, getActiveMongoUri, isCustomMongoEndpointActive } from './endpoint';
 import { getMongoDb } from './mongodb';
 import { COLLECTIONS, physicalCollectionName } from './collectionNames';
-import { MIGRATION_DIAGNOSTIC_THINGTIME } from '../../../schemas/registry';
+import { EPHEMERAL_CONTROL_THINGTIMES } from '../../../schemas/registry';
 import { CI_DASHBOARD_UPDATED_INDEX } from '../ciControl/dashboardQueryCore';
 import { thingUniqueKey } from './uniqueKeys';
+import { THINGS_KIND_CREATED_INDEX } from './thingIndexContracts';
 
 export { COLLECTIONS, physicalCollectionName, versionedCollectionName, collectionVersion } from './collectionNames';
 
@@ -766,6 +767,7 @@ export const createThingsDataIndexes = (db: any, { relationshipLookups = false, 
   const col = taggedCollection(thingsCollection(db), 'things');
   return [
     col.createIndex({ shareId: 1 }, { unique: true, sparse: true }),
+    col.createIndex({ geo: '2dsphere' }, { name: 'things_geo' }),
     // generalized uniqueness for system kinds (username:<u>, hashed email
     // keys, schema:<id>, …) AND relationship dedupe (followKey:<a>:<b>,
     // memberKey:, dmKey:, inviteCode:, emojiKey:, friendKey:, voteKey:,
@@ -837,7 +839,7 @@ export const createThingsDataIndexes = (db: any, { relationshipLookups = false, 
     )] : []),
     // Admin user/app snapshots filter by thingtime without ownerId, then
     // take a small newest-first window with a stable shareId tiebreaker.
-    col.createIndex({ thingtime: 1, createdAt: -1, shareId: 1 }),
+    col.createIndex(THINGS_KIND_CREATED_INDEX),
     // Public theme gallery (`GET /api/v1/themes/shared` with no id): public
     // themes, newest-UPDATED first. Every other index here sorts by createdAt,
     // so the gallery's `updatedAt` sort had nothing to ride: the planner
@@ -1353,16 +1355,20 @@ export const createCiControlIndexes = (db: any): Promise<any>[] => {
 // Home-only `things` indexes that ride beside createThingsDataIndexes in the
 // boot ensure (never on a custom endpoint's database).
 const createHomeOnlyThingsIndexes = (db: any): Promise<any>[] => [
-  // Migration diagnostics exist only on Thingtime's HOME plane. Keep this
-  // live TTL deleter out of createThingsDataIndexes(), which also installs
-  // indexes on user-supplied custom Mongo endpoints.
+  // Invitation expiry must refund before removing private state; this is NOT TTL.
   taggedCollection(thingsCollection(db), 'things').createIndex(
+    { 'crystal.status': 1, expiresAt: 1 },
+    { name: 'account_invite_expiry', partialFilterExpression: { thingtime: 'account-invite' } }
+  ),
+  // Shared root expiry index for disposable control Things. The explicit
+  // eligibility registry protects invitations/refunds and billed attachments.
+  // Retire the former per-kind indexes only after the replacement is ready.
+  createIndexReplacing(
+    taggedCollection(thingsCollection(db), 'things'),
     { expiresAt: 1 },
-    {
-      name: 'migration_diagnostic_expires_at',
-      expireAfterSeconds: 0,
-      partialFilterExpression: { thingtime: MIGRATION_DIAGNOSTIC_THINGTIME }
-    }
+    { name: 'things_ephemeral_expires_at', expireAfterSeconds: 0,
+      partialFilterExpression: { thingtime: { $in: [...EPHEMERAL_CONTROL_THINGTIMES] } } },
+    ['migration_diagnostic_expires_at', 'error_log_expires_at', 'error_log_recent']
   )
 ];
 

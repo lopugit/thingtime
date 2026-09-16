@@ -69,8 +69,8 @@ const defaultDependencies: AttachmentMutationDependencies = {
 // on publicly viewable surfaces, private ones only in the account's own DMs or
 // profile. An unknown purpose is left to the service's own 400 — nothing is
 // reserved either way.
-const PUBLIC_UPLOAD_PURPOSES = new Set<unknown>([undefined, 'post', 'comment', 'custom-emoji']);
-const PRIVATE_UPLOAD_PURPOSES = new Set<unknown>(['message', 'profile-avatar', 'profile-banner', 'recording']);
+const PUBLIC_UPLOAD_PURPOSES = new Set<unknown>([undefined, 'post', 'comment', 'custom-emoji', 'subspace-icon', 'subspace-banner']);
+const PRIVATE_UPLOAD_PURPOSES = new Set<unknown>(['message', 'profile-avatar', 'profile-banner', 'recording', 'recording-import']);
 
 export const createAttachmentMutationAction = (
 	options: { rateKey: string; service: MutationService; requireUploadPermission?: boolean },

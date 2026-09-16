@@ -2,7 +2,7 @@
 import {
 	COLLECTION_SCHEMA_VERSIONS,
 	DEVICE_CONTROL_THINGTIME,
-	MIGRATION_DIAGNOSTIC_THINGTIME,
+	MIGRATION_DIAGNOSTIC_THINGTIME, ERROR_LOG_THINGTIME,
 	USER_STORAGE_ACCOUNTING_VERSION
 } from '../../../schemas/registry.ts';
 // @ts-ignore Node 24's direct TypeScript test runner requires the extension.
@@ -103,6 +103,7 @@ export type UserStorageUsage = {
 
 export const CONTROL_PLANE_STORAGE_THINGTIMES = [
 	'lopu-recording-settings',
+	'lopu-background-task',
 	'lopu-recording-job',
 	'lopu-recording-reminder',
   'account-link',
@@ -146,7 +147,7 @@ export const CONTROL_PLANE_STORAGE_THINGTIMES = [
   'subscription-tier',
   'user',
 	'waitlist',
-	MIGRATION_DIAGNOSTIC_THINGTIME
+	MIGRATION_DIAGNOSTIC_THINGTIME, ERROR_LOG_THINGTIME
 ] as const;
 const CONTROL_PLANE_THINGTIMES = new Set<string>(CONTROL_PLANE_STORAGE_THINGTIMES);
 

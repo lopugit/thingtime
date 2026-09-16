@@ -84,6 +84,11 @@ export type ThingVisibility = (typeof THING_VISIBILITIES)[number];
 
 // Protected operational Things created when an admin migration throws. The
 // prefix is reserved so generic callers cannot squat a future diagnostic URL.
+export const ERROR_LOG_THINGTIME = 'error-log';
+export const ERROR_LOG_ID_PREFIX = 'error-log-';
+// One root expiry policy for disposable control Things; excludes content and
+// invitations whose expiry must perform cleanup/refunds before deletion.
+export const EPHEMERAL_CONTROL_THINGTIMES = ['migration-diagnostic', ERROR_LOG_THINGTIME] as const;
 export const MIGRATION_DIAGNOSTIC_THINGTIME = 'migration-diagnostic';
 export const MIGRATION_DIAGNOSTIC_ID_PREFIX = 'migration-diagnostic-';
 
@@ -675,6 +680,10 @@ const rootThingSchema: ThingtimeSchema = {
         'Thingtime Schema ids applied to this thing, e.g. ["post"] or ["post","share"]. Omitting it on create defaults to ["data"] — the schema-less crystal.'
     },
     { name: 'crystal', type: 'object', required: true, description: 'The sub-schema payload, validated against every schema in thingtime.' },
+    { name: 'geo', type: 'object', required: false, description: 'Optional explicitly supplied geographic location, visible to everyone allowed to read this Thing. null clears it. Stored as a GeoJSON Point with derived coordinates for radius queries.', children: [
+      { name: 'lat', type: 'number', required: true, min: -90, max: 90, description: 'Latitude in degrees.' },
+      { name: 'lng', type: 'number', required: true, min: -180, max: 180, description: 'Longitude in degrees.' }
+    ] },
     {
       name: 'extended',
       type: 'record',
@@ -872,7 +881,21 @@ const rootThingSchema: ThingtimeSchema = {
 			type: 'id',
 			required: false,
 			system: true,
-			description: 'Protected current managed-banner attachment reference on a canonical user Thing.'
+			description: 'Protected current managed-banner attachment reference on a canonical user or subspace Thing.'
+		},
+		{
+			name: 'iconAttachmentId',
+			type: 'id',
+			required: false,
+			system: true,
+			description: 'Protected current managed-icon attachment reference on a subspace Thing.'
+		},
+		{
+			name: 'subspaceMediaDeleting',
+			type: 'boolean',
+			required: false,
+			system: true,
+			description: 'Server-owned subspace deletion fence preventing new media bindings during cleanup.'
 		},
 		{
 			name: 'emojiAttachmentId',
@@ -2287,6 +2310,27 @@ const serviceQuotaSchema: ThingtimeSchema = {
 		releasedIds: [],
 		rollingPermits: []
 	}
+};
+
+const errorLogSchema: ThingtimeSchema = {
+  id: ERROR_LOG_THINGTIME, version: 1, kind: 'crystal', collection: null,
+  title: 'Error log', summary: 'A redacted server error, searchable by current admins in /things?logs=1.',
+  detail: 'Server-only, home-plane control Thing. No generic reads or writes. Seven-day TTL, bounded capture, no account storage charge. Redacted detail is binary; only safe metadata is searchable through the admin endpoint.',
+  createdVia: 'Server error capture',
+  fields: [
+    { name: 'source', type: 'string', required: true, max: 128, description: 'Authored operation label.' },
+    { name: 'message', type: 'string', required: true, max: 2048, description: 'Redacted error summary.' },
+    { name: 'provider', type: 'string', description: 'External provider when applicable.' },
+    { name: 'status', type: 'number', description: 'Upstream or HTTP status.' },
+    { name: 'code', type: 'string', description: 'Provider error code.' },
+    { name: 'requestId', type: 'string', description: 'Server-generated correlation id.' },
+    { name: 'route', type: 'string', description: 'Registered API route, without query strings.' },
+    { name: 'method', type: 'string', description: 'HTTP request method.' },
+    { name: 'providerType', type: 'string', description: 'Provider error classification.' },
+    { name: 'providerRequestId', type: 'string', description: 'Upstream request correlation id.' },
+    { name: 'retryAfter', type: 'string', description: 'Upstream retry delay.' },
+    { name: 'attempt', type: 'number', description: 'Bounded provider attempt number.' }
+  ], example: { source: 'moderation', message: 'Rate limit reached', provider: 'openai', status: 429 }
 };
 
 const migrationDiagnosticSchema: ThingtimeSchema = {
@@ -4122,8 +4166,15 @@ export const DEVICE_THINGTIME = [
 // imported chat rows stay ordinary quota-billed content.
 export const DEVICE_CONTROL_THINGTIME = ['device-command', 'device-command-event', 'device-ai-live-state', 'device-approval'] as const;
 
+// Historical chats have a dedicated atomic lifecycle, never generic CRUD.
+export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
+
 export const PROTECTED_THINGTIME = [
+  ...CHAT_ARCHIVE_THINGTIME,
+
+  'account-invite',
 	'lopu-recording-settings',
+	'lopu-background-task',
 	'lopu-recording-job',
 	'lopu-recording-reminder',
 	'lopu-reminder',
@@ -4142,6 +4193,7 @@ export const PROTECTED_THINGTIME = [
 	'app-storage',
 	'service-quota',
   MIGRATION_DIAGNOSTIC_THINGTIME,
+  ERROR_LOG_THINGTIME,
 	'moderationFlag',
   ...CI_CONTROL_THINGTIME,
   ...EXTERNAL_CONNECTION_THINGTIME,
@@ -4276,6 +4328,8 @@ const feedAlgorithmThingSchema: ThingtimeSchema = {
     { name: 'name', type: 'string', required: true, max: 60, description: 'Algorithm name.' },
     { name: 'emoji', type: 'string', required: true, description: 'Display emoji.' },
     { name: 'parentId', type: 'id', required: false, description: 'Branch lineage parent.' },
+    { name: 'description', type: 'string', required: false, max: 300, description: 'Owner-written directory description.' },
+    { name: 'listed', type: 'boolean', required: false, description: 'Explicit public directory opt-in, requires shared=true. Existing link-only profiles remain unlisted.' },
     {
       name: 'weights',
       type: 'record',
@@ -4315,6 +4369,10 @@ const waitlistThingSchema: ThingtimeSchema = {
 };
 
 export const thingtimeSchemas: ThingtimeSchema[] = [
+	{ id: 'lopu-background-task', version: 1, kind: 'crystal', collection: null, title: 'Background AI task',
+    summary: 'Protected owner-private execution and reconnect state.',
+    detail: 'Home control Thing with origin/data-source scope, immutable request digest and bounded secure BinData output. Seven-day output access; lazy byte removal; retained operation marker prevents replay. Chat output additionally requires current conversation access.',
+    createdVia: 'Background transport on the canonical AI endpoints', fields: [], example: {} },
 	...(['lopu-recording-settings', 'lopu-recording-job', 'lopu-recording-reminder', 'lopu-reminder'] as const).map((id): ThingtimeSchema => ({
 		id, version: 1, kind: 'crystal', collection: null, title: id,
 		summary: 'Protected owner-private recording or reminder automation state.',
@@ -4364,9 +4422,20 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   appStorageLedgerSchema,
 	serviceQuotaSchema,
   migrationDiagnosticSchema,
+  errorLogSchema,
   // the Lopu model catalog (protected, seeded by api/utils/ai/models.ts)
   aiModelSchema,
   // Lopu credits + usage accounting (protected, api/utils/lopu/accounting.ts)
+  {
+    id: 'account-invite', version: 1, kind: 'crystal', collection: null, title: 'Account invite', summary: 'Single-use signup invite with reserved gift credits.',
+    detail: 'Protected control Thing. Private editable profile suggestions are BinData; bearer tokens are hashed in uniqueKeys. Creation reserves credits atomically, cancellation/expiry refunds them, and redemption joins canonical account creation in one transaction. At most 20 pending invites per owner, each lasting 30 days, with a moderated 128px thumbnail capped at 16 KiB. No recipient identity is disclosed to the creator.',
+    createdVia: 'POST /api/v1/auth/invites',
+    example: { status: 'pending', amountMicros: 1000000 },
+    fields: [
+      { name: 'status', type: 'string', required: true, description: 'pending, claimed, cancelled or expired' },
+      { name: 'amountMicros', type: 'number', required: true, min: 0, description: 'Gift reserved from the creator balance, in millionths of a credit.' }
+    ]
+  },
   lopuAccountSchema,
   lopuUsageSchema,
   lopuCreditSchema,
@@ -6621,7 +6690,9 @@ const sanitizeFeedAlgorithmCrystal = (input: Record<string, unknown>): { ok: tru
       // algorithms.ts and the feed-algorithms-to-things migration build the
       // crystal directly. Keep the field listed anyway so the allowlist stays
       // honest if the kind ever becomes generically writable.
-      shared: input.shared === true
+      shared: input.shared === true,
+      listed: input.shared === true && input.listed === true,
+      description: boundedString(input.description, 300) || ''
     }
   };
 };
