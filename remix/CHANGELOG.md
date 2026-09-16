@@ -31,6 +31,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-16 — Fix desktop hover drawer scrolling and place its preview below the top bar, with viewport-safe bounds and fixed header/footer. Local validation: `http://localhost:18640` (HMR 18641, Nitro 18642; `TT_WEB_PORT`/`TT_HMR_PORT`/`TT_API_PORT` overrides for the hover-drawer worktree). Tailscale/Funnel unavailable: the installed launcher points to a missing Tailscale app. **Codex (AI)**
+
 - 2026-09-16 — Background chat, voice transcript replies, musings and AI
   completions: SharedWorker observation, idempotent Nitro/Vercel execution,
   private task overview, static rings, Stop and Retry / Continue. Keeps partial
