@@ -12,6 +12,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-09-16: Added public legal directory, versioned privacy/Apple TV privacy/terms pages and copy/text exports; retained legacy notices as labelled archives. Verified anonymous preview routes and responsive exports.
+
+
 - 2026-09-12 — CI Control now distinguishes target activity, waiting, conflicts,
   failed workers and confirmed merges; removes the rolling finish estimate.
   Adds private per-run Ask Lopu status chat with capability negotiation, durable
