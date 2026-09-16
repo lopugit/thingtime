@@ -7464,7 +7464,6 @@ approval; `access.test.ts` — the reservation matrix) and
 - [ ] Create Things through the API with `geo: {lat,lng}`. Invalid/missing/out-of-range coordinates return 400. POST `/things/search` with `near` and `radiusKm`, and Local feed with lat/lng, find nearby visible posts, exclude far/private posts, and retain tag/subspace/ACL filters. PATCH `geo:null` removes the location.
 - [ ] Local's location request occurs only from its button; denial leaves the location-tag fallback usable. Scroll directory/feed top-to-bottom at desktop/mobile widths, including the editor and open picker; no content overflows.
 
-
 - [ ] Account invitations default to Never expire; select each dated expiry. Reload and show/copy a pending invite, including clipboard-denied fallback. Legacy replacement warns before invalidating the old link; cancelled/claimed/expired rows have no link control. Check desktop and 390px page/popup top to bottom with dropdown open. Never-expiring gifts survive expiry sweeps; dated gifts refund once; another owner cannot reveal/replace a link.
 ### Lopu uploads, provider media and mobile keyboard (2026-09-16)
 
@@ -7505,3 +7504,23 @@ storage only; do not describe it as a production upload or provider acceptance.
 
 - [ ] Signed out, open `/legal`, all three current `/pages/` documents and their version links on desktop and mobile; scroll to the bottom and confirm readable text and no overflow. Select the archived privacy version and return to current. Unknown versions must show a not-found message, never current text.
 - [ ] Copy privacy URL and Apple TV text, compare copied text and `.txt` download with the selected document. Deny clipboard permission and verify the selectable fallback. Confirm archived exports carry an archive warning and production URLs never use a preview origin.
+
+## Funding and support (`/support`, landing funding section)
+
+- [ ] Signed out, open `/support` directly and reload; contribution, paid setup
+      enquiry and sponsorship enquiry paths remain visible without signing in.
+- [ ] At desktop and 375px widths, scroll the homepage and `/support` from top
+      to bottom. Cards, sticky navigation, form controls and footer links stay
+      reachable without horizontal overflow, clipping or overlap.
+- [ ] Homepage support links and the shared footer reach `/support`. Contribution
+      links reach the real Thingtime GoFundMe campaign. No Indiegogo prelaunch
+      link, hard-coded raised total/backer count/deadline, merch entitlement or
+      lifetime AI promise appears in the active funding section or FAQ.
+- [ ] Switch between setup and sponsorship enquiries, enter a brief including
+      punctuation/newlines, and inspect the generated email recipient, subject
+      and body. The visitor can edit the message; preparing it never sends it.
+- [ ] Copy the enquiry on desktop and mobile. If clipboard access is unavailable,
+      the visible draft and contact address remain available to copy manually.
+- [ ] Open the homepage funding FAQ with keyboard and pointer. Donation terms remain separate
+      from paid services and Lopu credits; no payment-success claim is shown
+      merely from clicking an outbound link or returning to the page.
