@@ -1,3 +1,4 @@
+import { withAttachmentRateLimitRetry } from './attachmentRateLimitRetry';
 import { HeicImageError, isHeicImage, prepareHeicImage } from './heicImage';
 import { requireSubspaceMediaCapabilities } from '~/utils/subspaceMediaCapabilities';
 import React from 'react';
@@ -225,7 +226,7 @@ export const useAttachmentUploads = (
 		async (localId: string, uploadId: string, attempt: number, signal?: AbortSignal) => {
 			patchUpload(localId, attempt, { status: 'finalizing', progress: 100, error: null, failedAt: null });
 			try {
-				const response = await apiRef.current.uploads.complete({ uploadId }, { signal });
+				const response = await withAttachmentRateLimitRetry(() => apiRef.current.uploads.complete({ uploadId }, { signal }), signal);
 				if (!isCurrent(localId, attempt)) return;
 				const attachment = normalizePublicAttachment(response?.attachment);
 				if (!attachment) throw new Error('invalid attachment projection');
@@ -295,7 +296,7 @@ export const useAttachmentUploads = (
             await requireSubspaceMediaCapabilities();
             if (controller.signal.aborted) return;
           }
-					const response = await apiRef.current.uploads.create(
+					const response = await withAttachmentRateLimitRetry(() => apiRef.current.uploads.create(
 						{
 							requestId: localId,
 							filename: file.name,
@@ -304,7 +305,7 @@ export const useAttachmentUploads = (
 							...(purpose === 'post' ? {} : { purpose })
 						},
 						{ signal: controller.signal }
-					);
+					), controller.signal);
 					const prepared = response?.upload;
 					uploadId = typeof prepared?.id === 'string' ? prepared.id : null;
 					partSizeBytes = Number(prepared?.partSizeBytes);
@@ -338,7 +339,7 @@ export const useAttachmentUploads = (
 						requested.push({ partNumber, checksumSha256: await sha256Base64(body) });
 					}
 
-					const signedResponse = await apiRef.current.uploads.parts({ uploadId, parts: requested }, { signal: controller.signal });
+					const signedResponse = await withAttachmentRateLimitRetry(() => apiRef.current.uploads.parts({ uploadId: uploadId!, parts: requested }, { signal: controller.signal }), controller.signal);
 					const signedParts = Array.isArray(signedResponse?.parts) ? (signedResponse.parts as SignedUploadPart[]) : [];
 					if (signedParts.length !== requested.length) throw new Error('invalid signed parts');
 					const signedByNumber = new Map(signedParts.map((part) => [part.partNumber, part]));
