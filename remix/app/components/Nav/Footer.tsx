@@ -202,6 +202,7 @@ export const Footer = (props) => {
             <Icon name="book-open" size="12px" chakras={{ pr: 1 }}></Icon>
             Docs
           </Flex>
+          <Link to="/legal"><Text fontSize="xs" color="var(--tt-text, #5a5a66)">Legal policies &amp; terms</Text></Link>
           <Link to="/docs/">
             <Text fontSize="xs" color="var(--tt-text, #5a5a66)">
               Docs home
