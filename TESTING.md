@@ -2911,6 +2911,7 @@ email whose link points at the attacker.
 
 ## Drawer navigation & settings (`remix/app/components/Nav/Drawer/`)
 
+- [ ] With the desktop drawer collapsed, hover the trigger and move into the preview: it starts below the top bar, stays open, and scrolls from the first to last menu item while its brand and account footer stay visible. Recheck at a short desktop viewport and with a safe-area/titlebar inset; no clipping or page scroll chaining. Click to pin/unpin, then at 390px verify tap-to-open, menu scrolling, navigation dismissal, and no hover popup.
 - [ ] Hold a linked top-level row or submenu row for 280ms, then drag over
       another row and release. The row moves without a native URL/image ghost,
       navigation, or drawer dismissal; the order survives reload. Repeat upward

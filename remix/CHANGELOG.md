@@ -34,11 +34,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-09-16 — Lopu conversation lists/messages, Messenger, credits and shared session data now refresh quietly in the background and on returning to a tab or reconnecting. Shared polling avoids duplicate requests, keeps hidden-tab traffic low, and fences stale reads against local edits and account changes. — Codex (AI)
+- 2026-09-16 — Fix desktop hover drawer scrolling and place its preview below the top bar, with viewport-safe bounds and fixed header/footer. Local validation: `http://localhost:18640` (HMR 18641, Nitro 18642; `TT_WEB_PORT`/`TT_HMR_PORT`/`TT_API_PORT` overrides for the hover-drawer worktree). Tailscale/Funnel unavailable: the installed launcher points to a missing Tailscale app. **Codex (AI)**
 - 2026-09-16 — Messenger spaces show only their own direct/group conversations. Add an account-specific **Show Lopu chats** checkbox, off by default, while preserving explicit conversation links. **Codex (AI)**
 - 2026-09-16 — Restore held-row drawer reordering after navigation rows became
   real links. Prevent native anchor/image dragging only while a reorder is
   armed, preserving normal navigation and browser link shortcuts. **Codex (AI)**
+
+- 2026-09-16 — Lopu conversation lists/messages, Messenger, credits and shared session data now refresh quietly in the background and on returning to a tab or reconnecting. Shared polling avoids duplicate requests, keeps hidden-tab traffic low, and fences stale reads against local edits and account changes. [Details and validation](../PRs/818-codex-background-ui-refresh-keep-lopu-and-messenger-current.md). — Codex (AI)
 
 - 2026-09-16 — Background chat, voice transcript replies, musings and AI
   completions: SharedWorker observation, idempotent Nitro/Vercel execution,
