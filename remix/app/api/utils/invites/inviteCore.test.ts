@@ -28,8 +28,8 @@ test('profile suggestions cannot carry ACL separators or privileges', () => {
 });
 test('invites and invite-aware signup have explicit capability contracts', () => {
 	const manifest = thingtimeCapabilityManifest('https://thingtime.example');
-	assert.equal(manifest.features['api.auth-invites'].version, '2.0.0');
-	assert.ok(capabilitySatisfies(manifest.features['api.auth-register'].version, '1.2.0'));
+	assert.equal(manifest.features['api.auth-invites'].version, '2.1.0');
+	assert.ok(capabilitySatisfies(manifest.features['api.auth-register'].version, '1.3.0'));
 	assert.equal(capabilitySatisfies('1.1.0', '1.2.0'), false);
 	assert.equal(capabilitySatisfies('2.0.0', '1.2.0'), false);
 });
@@ -41,4 +41,16 @@ test('expiry defaults to never and only accepts supported durations', () => {
 	for (const invalid of [0, -1, '7', 1.5, 365, {}, Infinity]) assert.throws(() => inviteExpiry(invalid));
 	assert.equal(capabilitySatisfies('1.0.1', '2.0.0'), false);
 	assert.equal(capabilitySatisfies('2.1.0', '2.0.0'), true);
+});
+
+test('PNG invite clients require compatible thumbnail payload capabilities', () => {
+ const manifest = thingtimeCapabilityManifest('https://thingtime.example');
+ for (const [feature, minimum, old, breaking, newer] of [
+  ['api.auth-invites', '2.1.0', '2.0.0', '3.0.0', '2.2.0'],
+  ['api.auth-register', '1.3.0', '1.2.0', '2.0.0', '1.4.0']
+ ]) {
+  assert.equal(capabilitySatisfies(manifest.features[feature].version, minimum), true);
+  assert.equal(capabilitySatisfies(newer, minimum), true);
+  for (const unavailable of [undefined, old, breaking]) assert.equal(capabilitySatisfies(unavailable, minimum), false);
+ }
 });

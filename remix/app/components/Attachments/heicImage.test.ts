@@ -21,22 +21,22 @@ test('HEIC and HEIF pickers accept MIME aliases and uppercase filenames without 
 	assert.equal(safeAttachmentMediaKind('image/heic', 'image'), 'file');
 });
 
-test('conversion produces JPEG metadata and reuses identical bytes across simultaneous selections and retries', async () => {
+test('conversion produces PNG metadata and reuses identical bytes across simultaneous selections and retries', async () => {
 	let calls = 0;
 	const prepare = createHeicImagePreparer(async () => {
 		calls++;
-		return new Blob(['jpeg'], { type: 'image/jpeg' });
+		return new Blob(['png'], { type: 'image/png' });
 	});
 	const file = new File(['heic'], 'Holiday.HEIC', { type: '', lastModified: 123 });
 	const [first, second] = await Promise.all([prepare(file), prepare(file)]);
 	assert.equal(calls, 1);
 	assert.equal(first, second);
 	assert.equal(await prepare(file), first);
-	assert.equal(first.name, 'Holiday.jpg');
-	assert.equal(first.type, 'image/jpeg');
+	assert.equal(first.name, 'Holiday.png');
+	assert.equal(first.type, 'image/png');
 	assert.equal(first.lastModified, 123);
-	assert.equal(first.size, 4);
-	assert.equal(await first.text(), 'jpeg');
+	assert.equal(first.size, 3);
+	assert.equal(await first.text(), 'png');
 });
 
 test('other attachments stay byte-for-byte unchanged and do not load a decoder', async () => {
@@ -53,11 +53,11 @@ test('failed conversions are actionable and can be retried', async () => {
 	let calls = 0;
 	const prepare = createHeicImagePreparer(async () => {
 		if (++calls === 1) throw new Error('decoder internal details');
-		return new Blob(['jpeg'], { type: 'image/jpeg' });
+		return new Blob(['png'], { type: 'image/png' });
 	});
 	const file = new File(['bad'], 'photo.heic');
 	await assert.rejects(prepare(file), (error: Error) => error instanceof HeicImageError && !error.message.includes('internal'));
-	assert.equal((await prepare(file)).type, 'image/jpeg');
+	assert.equal((await prepare(file)).type, 'image/png');
 	assert.equal(calls, 2);
 });
 
@@ -74,7 +74,7 @@ test('empty, oversized, and invalid decoder output fail before upload', async ()
 	assert.equal(calls, 0);
 	await assert.rejects(prepare(new File(['bad'], 'bad.heic')), HeicImageError);
 	const oversizedOutput = createHeicImagePreparer(async () => {
-		const blob = new Blob(['x'], { type: 'image/jpeg' });
+		const blob = new Blob(['x'], { type: 'image/png' });
 		Object.defineProperty(blob, 'size', { value: MAX_HEIC_BYTES + 1 });
 		return blob;
 	});

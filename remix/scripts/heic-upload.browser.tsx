@@ -35,7 +35,7 @@ window.fetch = async (url, init) => {
 	}
 	if (path.endsWith('/parts')) return respond({ parts: [{ partNumber: 1, url: '/fake-object-storage', headers: {} }] });
 	if (path.endsWith('/complete'))
-		return respond({ attachment: { id: body.uploadId, name: 'PHOTO.jpg', size: parts.at(-1)?.size, contentType: 'image/jpeg', mediaKind: 'image' } });
+		return respond({ attachment: { id: body.uploadId, name: 'PHOTO.png', size: parts.at(-1)?.size, contentType: 'image/png', mediaKind: 'image' } });
 	return respond({ ok: true });
 };
 class UploadXhr {
@@ -68,7 +68,7 @@ const waitUntil = async (ready: () => boolean) => {
 let releaseThumbnail: (() => void) | undefined;
 const delayedThumbnail = () =>
 	new Promise<string>((resolve) => {
-		releaseThumbnail = () => resolve('data:image/jpeg;base64,synthetic');
+		releaseThumbnail = () => resolve('data:image/png;base64,synthetic');
 	});
 let current: ReturnType<typeof useAttachmentUploads>;
 const cases: Array<AttachmentUploadPurpose | 'invite' | 'cancel' | 'invalid'> = [
@@ -94,7 +94,7 @@ function Case({ purpose, done }: { purpose: (typeof cases)[number]; done: (resul
 			const start = requests.length;
 			if (purpose === 'cancel') {
 				current.addFiles([file()]);
-				await waitUntil(() => !!releaseThumbnail);
+				await waitUntil(() => !!releaseThumbnail && current.uploads.length === 1);
 				current.remove(current.uploads[0].localId);
 				releaseThumbnail!();
 				await waitUntil(() => !current.uploads.length);
@@ -117,13 +117,16 @@ function Case({ purpose, done }: { purpose: (typeof cases)[number]; done: (resul
 			assert(current.uploads[0].status === 'ready', current.uploads[0].error || 'Not ready');
 			const upload = current.uploads[0];
 			if (purpose === 'invite') {
-				assert(upload.previewUrl?.startsWith('data:image/jpeg;base64,'), 'Invite did not produce thumbnail');
+				assert(upload.previewUrl?.startsWith('data:image/png;base64,'), 'Invite did not produce thumbnail');
 			} else {
 				const request = requests.slice(start).find((r) => r.path.endsWith('/uploads')).body;
-				assert(request.contentType === 'image/jpeg' && request.filename === 'PHOTO.jpg', 'Raw HEIC reached storage');
+				assert(request.contentType === 'image/png' && request.filename === 'PHOTO.png', 'Raw HEIC reached storage');
 				assert(request.sizeBytes === parts.at(-1)?.size, 'Reserved bytes differ from upload');
-				const signature = new Uint8Array(await parts.at(-1)!.slice(0, 3).arrayBuffer());
-				assert(signature[0] === 255 && signature[1] === 216 && signature[2] === 255, 'Not JPEG bytes');
+				const signature = new Uint8Array(await parts.at(-1)!.slice(0, 8).arrayBuffer());
+				assert([137, 80, 78, 71, 13, 10, 26, 10].every((byte, i) => signature[i] === byte), 'Not PNG bytes');
+				const bitmap = await createImageBitmap(parts.at(-1)!);
+				assert(bitmap.width === 640 && bitmap.height === 480, 'Full-resolution image was resized');
+				bitmap.close();
 			}
 			current.addFiles([selected]);
 			await new Promise((resolve) => setTimeout(resolve, 50));

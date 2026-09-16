@@ -8,7 +8,7 @@ export const inviteExpiry = (days: unknown, now = Date.now()): Date | null => {
 	return new Date(now + days * 24 * 60 * 60 * 1000);
 };
 export const MAX_PENDING_INVITES = 20;
-export const MAX_AVATAR_BYTES = 16 * 1024;
+export const MAX_AVATAR_BYTES = 80 * 1024;
 export class InviteError extends Error {
 	constructor(public status: number, message: string) {
 		super(message);
