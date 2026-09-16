@@ -1,7 +1,7 @@
 import React from 'react';
-import { Avatar, Button, Flex, FormControl, FormLabel, Input, Text } from '@chakra-ui/react';
-import { avatarThumbnail } from './inviteClient';
-import { useLopu } from '~/components/Lopu/useLopu';
+import { Flex, FormControl, FormLabel, Input, Text } from '@chakra-ui/react';
+import { ProfileMediaField } from '../Profile/ProfileMediaField';
+import type { ProfileMediaFieldSnapshot } from '../Profile/profileMediaCore';
 export type InviteProfile = { username: string; displayName: string; avatarUrl: string | null };
 export const InviteProfileFields = ({
 	value,
@@ -14,52 +14,29 @@ export const InviteProfileFields = ({
 	disabled?: boolean;
 	onPreparingChange?: (busy: boolean) => void;
 }) => {
-	const lopu = useLopu();
 	const [preparing, setPreparing] = React.useState(false);
-	const selection = React.useRef(0);
 	const id = React.useId();
+	const photoChanged = React.useCallback(
+		(snapshot: ProfileMediaFieldSnapshot) => {
+			setPreparing(snapshot.blocking);
+			onPreparingChange?.(snapshot.blocking);
+			if (!snapshot.blocking)
+				onChange((current) => (current.avatarUrl === snapshot.previewUrl ? current : { ...current, avatarUrl: snapshot.previewUrl }));
+		},
+		[onChange, onPreparingChange]
+	);
 	return (
 		<Flex direction="column" gap={4} minW={0}>
-			<Flex gap={3} align="center" wrap="wrap">
-				<Avatar size="lg" name={value.displayName} src={value.avatarUrl || undefined} />
-				<FormControl flex="1" minW="180px">
-					<FormLabel htmlFor={`${id}-avatar`} fontSize="sm">
-						Profile picture
-					</FormLabel>
-					<Input
-						id={`${id}-avatar`}
-						type="file"
-						accept="image/png,image/jpeg,image/webp"
-						disabled={disabled || preparing}
-						p={1}
-						h="auto"
-						maxW="100%"
-						onChange={async (event) => {
-							const file = event.target.files?.[0];
-							event.target.value = '';
-							if (!file) return;
-							const current = ++selection.current;
-							setPreparing(true);
-							onPreparingChange?.(true);
-							try {
-								const avatarUrl = await avatarThumbnail(file);
-								if (selection.current === current) onChange(current => ({ ...current, avatarUrl }));
-							} catch (error) {
-								lopu({ title: 'Could not use this photo', description: (error as Error).message, status: 'error' });
-							} finally {
-								setPreparing(false);
-								onPreparingChange?.(false);
-							}
-						}}
-					/>
-				</FormControl>
-				{value.avatarUrl && (
-					<Button size="xs" variant="ghost" isDisabled={disabled || preparing} onClick={() => onChange(current => ({ ...current, avatarUrl: null }))}>
-						Remove photo
-					</Button>
-				)}
-			</Flex>
-			{preparing && <Text fontSize="xs">Preparing photo…</Text>}
+			<ProfileMediaField
+				ownerId={id}
+				slot="avatar"
+				label="Profile picture"
+				storageMode="inline-thumbnail"
+				savedUrl={value.avatarUrl}
+				savedLinkedUrl={null}
+				disabled={disabled}
+				onChange={photoChanged}
+			/>
 			<FormControl isRequired>
 				<FormLabel htmlFor={`${id}-name`}>Display name</FormLabel>
 				<Input
@@ -67,7 +44,10 @@ export const InviteProfileFields = ({
 					value={value.displayName}
 					maxLength={100}
 					disabled={disabled || preparing}
-					onChange={(e) => { const displayName = e.target.value; onChange(current => ({ ...current, displayName })); }}
+					onChange={(e) => {
+						const displayName = e.target.value;
+						onChange((current) => ({ ...current, displayName }));
+					}}
 					autoComplete="name"
 				/>
 			</FormControl>
@@ -78,7 +58,10 @@ export const InviteProfileFields = ({
 					value={value.username}
 					maxLength={40}
 					disabled={disabled || preparing}
-					onChange={(e) => { const username = e.target.value; onChange(current => ({ ...current, username })); }}
+					onChange={(e) => {
+						const username = e.target.value;
+						onChange((current) => ({ ...current, username }));
+					}}
 					autoCapitalize="none"
 					autoComplete="username"
 					pattern="[a-zA-Z0-9][a-zA-Z0-9._-]{1,39}"

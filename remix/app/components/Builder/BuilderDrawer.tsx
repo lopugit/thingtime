@@ -1,3 +1,4 @@
+import { HEIC_IMAGE_ACCEPT } from '../Attachments/heicImage';
 import React from 'react';
 import { Box, Button, Flex, Input, Select, Switch, Text, Textarea } from '@chakra-ui/react';
 
@@ -522,7 +523,7 @@ const BlockInspector = ({
 						<Box
 							as="input"
 							type="file"
-							accept="image/*,video/*,audio/*"
+							accept={`image/*,video/*,audio/*,${HEIC_IMAGE_ACCEPT}`}
 							display="none"
 							ref={uploadInputRef}
 							data-testid="media-upload-input"
