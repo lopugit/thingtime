@@ -128,3 +128,9 @@ if (serverFallbackRoute) {
 writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 
 console.log('[vercel] Routed non-API app paths to the Vite index.html shell.');
+
+// Allow the bounded AI task (260s) to finish its persistence tail under waitUntil.
+const serverConfigPath = '.vercel/output/functions/__server.func/.vc-config.json';
+const serverConfig = JSON.parse(readFileSync(serverConfigPath, 'utf8'));
+serverConfig.maxDuration = Math.max(Number(serverConfig.maxDuration) || 0, 300);
+writeFileSync(serverConfigPath, JSON.stringify(serverConfig, null, 2) + '\n');

@@ -122,6 +122,15 @@ System-kind rules (never bypass):
   Blocks never carry raw markup: component blocks reference `component` things
   and draw client-side through the sanitising allowlist renderers with one
   render budget per block.
+- `lopu-background-task` is protected owner-private home control state, minted
+  only around canonical AI handlers. Owner, origin/data-source scope and request
+  ID derive the reserved `lopu-background-` shareId; an immutable body digest
+  rejects changed replay. Existing root `uniqueKeys` serialize replies to a known
+  conversation. Output is bounded secure BinData (2 MiB), never generic content
+  or search data. Output access lasts seven days, with lazy byte removal and a
+  retained small operation marker. Reads recheck chat access. The 260-second
+  execution deadline exposes stale work without replay. No new collection/index.
+
 - Private state lives under root `secure` as a single **BinData blob** (the
   search wildcard text index tokenizes string _fields_ only, so a binary blob
   is entirely unsearchable — no field inside it can ever leak via `q=<value>`),

@@ -1022,6 +1022,7 @@ export const sanitizeShareId = (value: unknown): string | null | Fail => {
   }
   if (
     trimmed.startsWith('lopu-recording-') ||
+    trimmed.startsWith('lopu-background-') ||
     trimmed.startsWith(MIGRATION_RESERVED_ID_PREFIX) ||
     trimmed.startsWith(SCHEMA_RESERVED_ID_PREFIX) ||
 		trimmed.startsWith(COMPONENT_RESERVED_ID_PREFIX) ||

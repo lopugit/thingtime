@@ -449,3 +449,19 @@ test('a Confirm card sends its grant back once as a "Confirmed:" turn; Cancel re
 	assert.equal(getLopuStoreSnapshot().turns[requestId3].tools[0].confirm?.resolved, null);
 	resetLopuStoreForTests();
 });
+
+test('another conversation can reply while the first stream stays active', async () => {
+ resetLopuStoreForTests(); hydrateLopuStore('parallel-owner');
+ let controller: ReadableStreamDefaultController<Uint8Array>;
+ const emit = (event: unknown) => controller.enqueue(new TextEncoder().encode(JSON.stringify(event) + '\n'));
+ const { client } = fakeClient({reply: body => body.chatId === 'first-chat' ? new Response(new ReadableStream({start(c) {controller=c; emit({type:'meta',chatId:body.chatId,userMessageId:'first-user',requestId:body.requestId});}}),{headers:{'Content-Type':'application/x-ndjson'}}) : ndjson([{type:'meta',chatId:body.chatId,userMessageId:'second-user',requestId:body.requestId},{type:'delta',text:'Second complete'},{type:'done',stopReason:'end_turn'}])});
+ bindLopuApi(client); selectLopuChat('first-chat');
+ const first = sendLopuMessage('First reply'); await flush();
+ selectLopuChat('second-chat'); const second = await sendLopuMessage('Second reply');
+ assert.equal(second.ok,true);
+ assert.equal(Object.values(getLopuStoreSnapshot().turns).find(t=>t.chatId==='first-chat')?.status,'streaming');
+ emit({type:'delta',text:'First complete'});emit({type:'done',stopReason:'end_turn'});controller.close();
+ assert.equal((await first).ok,true);assert.equal(getLopuStoreSnapshot().activeChatId,'second-chat');
+ assert.equal(Object.values(getLopuStoreSnapshot().turns).filter(t=>t.status==='done').length,2);
+ resetLopuStoreForTests();
+});
