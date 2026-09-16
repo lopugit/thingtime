@@ -7437,6 +7437,26 @@ approval; `access.test.ts` — the reservation matrix) and
 - Replace, remove, cancel, retry a failed upload/save, and switch to/from a valid URL. Existing URLs survive unchanged saves; invalid URLs/non-images/over-64-MiB files and wrong-purpose, wrong-owner, expired or already-bound uploads are refused. Replacement URLs stop serving old managed bytes; abandoned/replaced objects remain billed until reaped.
 - Check revoked moderator access, upload approval, quota failure, ownership transfer and deletion cleanup. On desktop and 390px mobile, open both URL panels and scroll top to bottom; verify no overlap, clipping or horizontal overflow.
 
+## HEIC/HEIF photo selection
+
+- [ ] Open `/scripts/heic-upload.browser.html` on the Vite dev server: all cases
+  pass using the synthetic HEIC fixture and the real decoder/upload queue with
+  fake HTTP/object storage. Posts, comments, messages, avatars, banners, subspace
+  branding and emoji reserve/send matching JPEG bytes; retry preserves identity;
+  selecting the same original twice stays deduplicated. Invite preparation and
+  removal perform no attachment API calls. This harness does not prove S3 access.
+- [ ] In Settings → Account and its popup, and in invite signup, select HEIC/HEIF
+  photos (including uppercase extensions and missing browser MIME types). The
+  shared profile uploader shows a valid preview, replacement/removal and retry;
+  Create stays disabled while preparing or after a conversion error. Test invalid
+  bytes, size limits and removal/replacement during conversion. Desktop and 390px
+  layouts remain usable when scrolled from top to bottom.
+- [ ] With an upload-approved account, select/paste/drop HEIC in post, comment and
+  message composers, avatar/banner and subspace branding; verify the JPEG preview,
+  matching stored size/type, server moderation, quota refusal, cleanup, and reload.
+  Downloads use the converted `.jpg`; originals remain untouched on the device.
+  Archive imports retain original bytes. External HEIC URLs are not converted.
+
 ## Feed defaults, algorithm directory and geographic Things
 
 - [ ] Open `/feed` on desktop and mobile: all eight builtins appear in the bounded, scrollable picker; selecting one updates the feed and reloading preserves it. Builtins never receive training events.
