@@ -24,24 +24,32 @@ profile.
 
 ## Dependencies and boundaries
 
-- TODO 20 owns historical state; this item owns retained inputs that affect the
-  future.
-- TODO 23 owns export, restore, deletion, and exit mechanics.
-- TODO 24 and TODO 38 own feed and search behavior.
-- TODO 25 owns accessibility and language; explicit access settings are not
-  permission to infer sensitive traits.
-- TODO 29 owns provenance for content; this item owns provenance for personal
-  memory items and derivatives.
-- TODO 33 owns AI context and tool authority; conversation history is not
-  durable-memory consent.
-- TODO 35 owns identity and presence; a profile does not establish identity or
-  authority.
-- TODO 44 owns synchronization and conflict behavior.
-- TODO 45 qualifies all youth scope.
-- TODO 46 owns claims made about the resulting behavior.
-- TODO 47 owns shared support coordination, not domain decisions.
-- TODO 48 owns rollout, migration, rollback, and retirement of memory-policy
-  changes.
+- [TODO 20](./20-versioned-experience-history.md) owns historical state; this
+  item owns retained inputs that affect the future.
+- [TODO 23](./23-data-portability-and-exit.md) owns export, restore, deletion,
+  and exit mechanics.
+- [TODO 24](./24-attention-agency-and-calm-use.md) and
+  [TODO 38](./38-search-and-discovery-agency.md) own feed and search behavior.
+- [TODO 25](./25-accessibility-and-language-readiness.md) owns accessibility and
+  language; explicit access settings are not permission to infer sensitive
+  traits.
+- [TODO 29](./29-content-provenance-and-correction-integrity.md) owns provenance
+  for content; this item owns provenance for personal memory items and
+  derivatives.
+- [TODO 33](./33-ai-agency-and-accountable-assistance.md) owns AI context and
+  tool authority; conversation history is not durable-memory consent.
+- [TODO 35](./35-identity-agency-and-context-safe-presence.md) owns identity and
+  presence; a profile does not establish identity or authority.
+- [TODO 44](./44-local-first-agency-and-accountable-synchronization.md) owns
+  synchronization and conflict behavior.
+- [TODO 45](./45-youth-safety-and-age-appropriate-agency.md) qualifies all youth
+  scope.
+- [TODO 46](./46-evidence-agency-and-accountable-product-claims.md) owns claims
+  made about the resulting behavior.
+- [TODO 47](./47-support-agency-and-accountable-remedy.md) owns shared support
+  coordination, not domain decisions.
+- [TODO 48](./48-change-agency-and-humane-product-evolution.md) owns rollout,
+  migration, rollback, and retirement of memory-policy changes.
 
 ## Phase 0 — owner approval and evidence refresh
 
