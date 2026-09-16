@@ -7441,3 +7441,8 @@ approval; `access.test.ts` — the reservation matrix) and
 - [ ] Open `/algorithms`, search by name/description, create a private profile, publish it, branch it from another account, unpublish, and disable sharing. Private and link-only algorithms never appear in the directory; previews never expose learned weights; existing copies survive unsharing.
 - [ ] Create Things through the API with `geo: {lat,lng}`. Invalid/missing/out-of-range coordinates return 400. POST `/things/search` with `near` and `radiusKm`, and Local feed with lat/lng, find nearby visible posts, exclude far/private posts, and retain tag/subspace/ACL filters. PATCH `geo:null` removes the location.
 - [ ] Local's location request occurs only from its button; denial leaves the location-tag fallback usable. Scroll directory/feed top-to-bottom at desktop/mobile widths, including the editor and open picker; no content overflows.
+
+## Legal pages and policy exports
+
+- [ ] Signed out, open `/legal`, all three current `/pages/` documents and their version links on desktop and mobile; scroll to the bottom and confirm readable text and no overflow. Select the archived privacy version and return to current. Unknown versions must show a not-found message, never current text.
+- [ ] Copy privacy URL and Apple TV text, compare copied text and `.txt` download with the selected document. Deny clipboard permission and verify the selectable fallback. Confirm archived exports carry an archive warning and production URLs never use a preview origin.
