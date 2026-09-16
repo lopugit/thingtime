@@ -36,6 +36,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   including Claude OAuth tool hops; add a capability-negotiated browser HTTP
   SDK and confirmed API tool; keep the mobile composer above the visual
   keyboard viewport with independently scrolling attachments and long text.
+  [Validation and limits](../PRs/816-codex-lopu-attachments-sdk-mobile-fix-lopu-uploads-provider-attachments-http-and-mobile-keyboard.md).
 
 - 2026-09-16 — Background chat, voice transcript replies, musings and AI
   completions: SharedWorker observation, idempotent Nitro/Vercel execution,
