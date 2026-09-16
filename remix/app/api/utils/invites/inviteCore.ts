@@ -1,7 +1,12 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 export const INVITE_KIND = 'account-invite';
-export const INVITE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export const inviteExpiry = (days: unknown, now = Date.now()): Date | null => {
+	if (days === undefined || days === null) return null;
+	if (typeof days !== 'number' || ![1, 7, 30, 90].includes(days))
+		throw new InviteError(400, 'Choose Never expire, 1 day, 7 days, 30 days or 90 days.');
+	return new Date(now + days * 24 * 60 * 60 * 1000);
+};
 export const MAX_PENDING_INVITES = 20;
 export const MAX_AVATAR_BYTES = 16 * 1024;
 export class InviteError extends Error {
