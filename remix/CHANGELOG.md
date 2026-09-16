@@ -31,6 +31,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-16 — Messenger spaces show only their own direct/group conversations. Add an account-specific **Show Lopu chats** checkbox, off by default, while preserving explicit conversation links. **Codex (AI)**
+
 - 2026-09-16 — Background chat, voice transcript replies, musings and AI
   completions: SharedWorker observation, idempotent Nitro/Vercel execution,
   private task overview, static rings, Stop and Retry / Continue. Keeps partial
