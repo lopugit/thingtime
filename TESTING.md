@@ -350,6 +350,21 @@
 
 ## Unified Lopu conversations, scheduled Things and discussions
 
+- Browser regression fixture: `/scripts/chat-attachments.browser.html` uses the
+  production Lopu/Messenger composers and uploader with synthetic HTTP/storage.
+  Run its paste/drop checks at desktop and 390px, then inspect both trays and
+  attachment detail popovers. No real messages or uploaded files are created.
+  This worktree (`thingtime-chat-attachment-input`) uses localhost port 13100
+  (HMR 13101, Nitro 13102). Funnel is unavailable: the installed Tailscale CLI
+  wrapper points to a missing `/Applications/Tailscale.app` binary.
+
+- [ ] Paste screenshots/files and drop multiple files directly on the Lopu and
+  Messenger text field with the media tray closed. Each appears once; ordinary
+  text paste/drop still edits text. Disabled/editing composers reject files.
+  At desktop and 390px, scroll through an expanded tray and open its controls;
+  check overflow. Lopu clears media at message acceptance while the reply is
+  still streaming; a rejected send retains media for retry.
+
 - [ ] Read a page with related components, search/list Things, and follow each
       Open anchor before and after reloading the chat. Verify actual hrefs,
       keyboard and new-tab navigation, safe external links, long labels at 390px,

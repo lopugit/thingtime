@@ -918,6 +918,8 @@ const appendMessages = (chatId: string, rows: ChatMessage[]) => {
 };
 
 export type SendLopuOptions = {
+	// Fired once the server has persisted the user message, before reply completion.
+	onAccepted?: () => void;
 	attachmentIds?: string[];
 	// Display-only public metadata; only the IDs go to the reply endpoint.
 	attachments?: ChatMessage['attachments'];
@@ -996,6 +998,7 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 			case 'meta': {
 				const id = next.chatId;
 				if (!id) break;
+				if (!before.meta) options.onAccepted?.();
 				if (state.activeChatId !== id && (state.activeChatId === chatId || state.activeChatId === null)) {
 					setState({ activeChatId: id });
 				}

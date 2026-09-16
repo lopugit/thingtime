@@ -11,14 +11,14 @@ import { useApi } from '~/hooks/useApi';
 export const EMPTY_LOPU_ATTACHMENTS: AttachmentComposerSnapshot = { attachmentIds: [], attachments: [], blocking: false, hasSelection: false };
 export type LopuSelectedThing = { id: string; name: string };
 
-export function LopuAttachments({ uploadsRef, onUploads, selected, onSelect, disabled }: {
+export function LopuAttachments({ uploadsRef, onUploads, selected, onSelect, disabled, expanded, onExpandedChange }: {
 	uploadsRef: React.Ref<AttachmentComposerHandle>; onUploads: (value: AttachmentComposerSnapshot) => void;
 	selected: LopuSelectedThing[]; onSelect: (value: LopuSelectedThing[]) => void; disabled: boolean;
+	expanded: boolean; onExpandedChange: (expanded: boolean) => void;
 }) {
 	const user = useCurrentUser();
 	const viewport = useLopuVisualViewport();
 	const api = useApi();
-	const [expanded, setExpanded] = React.useState(false);
 	const [open, setOpen] = React.useState(false);
 	const [query, setQuery] = React.useState('');
 	const [results, setResults] = React.useState<LopuSelectedThing[]>([]);
@@ -42,7 +42,7 @@ export function LopuAttachments({ uploadsRef, onUploads, selected, onSelect, dis
 	if (!user?.id) return null;
 	return <Box py={2} minW={0} maxH={viewport ? `${Math.min(240, Math.max(72, viewport.height * 0.28))}px` : '28dvh'} overflowY="auto" overscrollBehavior="contain">
 		<Flex wrap="wrap" gap={2}>
-			<Button size="sm" variant="ghost" leftIcon={<Paperclip size={16} />} onClick={() => setExpanded(!expanded)} aria-expanded={expanded} isDisabled={disabled}>Attachments</Button>
+			<Button size="sm" variant="ghost" leftIcon={<Paperclip size={16} />} onClick={() => onExpandedChange(!expanded)} aria-expanded={expanded} isDisabled={disabled}>Attachments</Button>
 			<Button size="sm" variant="ghost" leftIcon={<Search size={16} />} onClick={() => setOpen(true)} isDisabled={disabled}>Your Things</Button>
 			{selected.map(thing => <Button key={thing.id} size="sm" maxW="100%" rightIcon={<X size={14} />} onClick={() => onSelect(selected.filter(item => item.id !== thing.id))} isDisabled={disabled} aria-label={`Remove ${thing.name}`}><Text isTruncated>{thing.name}</Text></Button>)}
 		</Flex>
