@@ -1,6 +1,7 @@
 import { Outlet, ScrollRestoration, useLoaderData, useLocation, useRevalidator } from 'react-router';
 import { Analytics } from '@vercel/analytics/react';
 import React from 'react';
+import { pageTitle } from './utils/pageTitle';
 
 import type { RootLoaderData } from './root-data.server';
 import { GlobalStyles } from './globals/GlobalStyles';
@@ -98,38 +99,7 @@ export default function App() {
       // viewer — nothing would then set its title and the tab would keep the
       // previous page's one.
       if (pathname === '/marketing' || pathname.startsWith('/marketing/')) return;
-      const baseTitle = titlePrefix ? `${titlePrefix} Thingtime` : 'Thingtime';
-      const routeTitle = pathname.startsWith('/docs/design')
-        ? `${baseTitle} docs - Design mockups`
-        : pathname === '/docs'
-          ? `${baseTitle} docs`
-          : pathname === '/feed'
-            ? `${baseTitle} - Feed`
-            : pathname === '/messages'
-              ? `${baseTitle} - Messages`
-              : pathname.startsWith('/profile')
-              ? `${baseTitle} - Profile`
-              : pathname === '/settings'
-                ? `${baseTitle} - Settings`
-                : pathname === '/admin'
-                  ? `${baseTitle} - Admin`
-                  : pathname === '/things'
-                    ? `${baseTitle} - Things`
-                    : pathname === '/lopu/voice'
-                      ? `${baseTitle} - Lopu voice`
-                    : pathname.startsWith('/lopu')
-                      ? `${baseTitle} - Lopu`
-                    : pathname.startsWith('/builder')
-                      ? `${baseTitle} - Builder`
-                    : pathname.startsWith('/actions')
-                      ? `${baseTitle} - Actions`
-                      : pathname.startsWith('/components')
-                        ? `${baseTitle} - Components`
-                        : pathname === '/branding'
-                          ? `${baseTitle} - Brand resources`
-                          : baseTitle;
-
-      document.title = routeTitle;
+      document.title = pageTitle(pathname, titlePrefix);
     }
   }, [pathname, titlePrefix]);
 

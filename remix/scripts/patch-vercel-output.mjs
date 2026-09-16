@@ -26,10 +26,10 @@ const socialCardHeaders = {
 	'X-Content-Type-Options': 'nosniff'
 };
 const socialMetaRoute = {
-	// Public, shareable screens get server-injected Open Graph tags. Keep
-	// account/admin/auth routes on the ordinary static shell: a card must never
-	// become an oracle for a private screen.
-	src: '^/(?:feed|explore|design-system|post/[^/]+|profile(?:/[^/]+)?|media/[^/]+|thing/[^/]+|p/[^/]+|docs(?:/[^/]+){0,3}|schemas(?:/[^/]+)?|themes(?:/[^/]+)?|components(?:/[^/]+){0,2}|actions(?:/[^/]+)?|search|things(?:/[^/]+)?)/?$',
+	// After filesystem/API routing, every SPA URL gets crawler-visible defaults.
+	// Only the preview resolver's allowlisted public routes read content; private
+	// and unknown screens use public route labels and the static branding asset.
+	src: '^/(?:.*)$',
 	headers: appShellHeaders,
 	dest: serverFallbackRoute?.dest || '/index.html'
 };

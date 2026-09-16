@@ -34,6 +34,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-16 — **Codex (AI):** Default link previews now use the branding
+  press-kit wordmark on white. All SPA routes receive crawler-visible defaults
+  (including invites), using shared public page titles or the new default
+  `Thingtime - Your Home for Everything` (also used for browser tabs), while
+  preserving custom public-content previews and excluding query/fragment secrets.
+
 - 2026-09-16 — Restore held-row drawer reordering after navigation rows became
   real links. Prevent native anchor/image dragging only while a reorder is
   armed, preserving normal navigation and browser link shortcuts. **Codex (AI)**
