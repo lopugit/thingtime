@@ -40,6 +40,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `Thingtime - Your Home for Everything` (also used for browser tabs), while
   preserving custom public-content previews and excluding query/fragment secrets.
 
+- 2026-09-16 — Messenger spaces show only their own direct/group conversations. Add an account-specific **Show Lopu chats** checkbox, off by default, while preserving explicit conversation links. **Codex (AI)**
 - 2026-09-16 — Restore held-row drawer reordering after navigation rows became
   real links. Prevent native anchor/image dragging only while a reorder is
   armed, preserving normal navigation and browser link shortcuts. **Codex (AI)**
