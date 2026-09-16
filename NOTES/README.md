@@ -38,6 +38,7 @@ actionable item in [`../TODO/`](../TODO/TODO.md) when it is ready to execute.
 | [Change agency and humane product evolution baseline](./change-agency-and-humane-product-evolution-baseline.md)                       | Evidence on human-facing change gaps, previews, prior choices, compatibility, deprecation, sunset, rollback, remedy, and one synthetic preference pilot             | 2026-09-15    |
 | [Personalization agency and accountable-memory baseline](./personalization-agency-and-accountable-memory-baseline.md)                 | Evidence on remembered choices, observations, derivatives, purpose, effects, correction, forgetting, reset, and a non-personalized baseline                         | 2026-09-16    |
 | [Legacy agency and dignified stewardship baseline](./legacy-agency-and-dignified-stewardship-baseline.md)                             | Evidence on inactivity, incapacity and death gaps, narrow live transfer primitives, future instructions, claimant boundaries, holds, and one notify-only rehearsal  | 2026-09-16    |
+| [Affordability agency and fair-access baseline](./affordability-agency-and-fair-access-baseline.md)                                   | Evidence on tier and credit primitives, offer truth, total cost, cancellation symmetry, essential access, humane failure, privacy, and a no-money rehearsal         | 2026-09-17    |
 
 ## Conventions
 

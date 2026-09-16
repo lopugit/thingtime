@@ -799,3 +799,22 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     claims, documents, notifications, account access, content disclosure,
     ownership transfer, memorialization, deletion, closure, minors, money,
     entitlements, and legal or privacy claims remain separately gated.
+
+51. **🌱 Make affordability agency and fair access a product contract.**
+
+    Protect a useful free floor and make any future Thingtime service offer
+    understandable, stoppable, privacy-preserving, and humane. Show minimum
+    total cost, period, renewal, change, cancellation, grace, data effects, and
+    remedy before synthetic acceptance; keep safety, privacy, security,
+    accessibility, export, deletion, support, appeal, and correction available
+    through failure or downgrade. Start only with adult internal reviewers,
+    synthetic accounts, invented AUD prices, one exact non-production build,
+    and a deterministic local fake provider. Execute
+    `claude-todo/51-affordability-agency-and-fair-access.md` only after qualified
+    owners approve the essential-floor matrix, state vocabulary, immutable
+    offer/receipt contract, cancellation/grace/downgrade rules, privacy and
+    accessibility matrix, measures, cleanup, and manual stop authority. Real
+    money, provider credentials, production prices or entitlements, sensitive
+    hardship data, personalized pricing, behavioral targeting, public claims,
+    hidden commitments, minors, institutions, and blocked data exit remain
+    separately gated.

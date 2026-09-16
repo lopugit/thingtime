@@ -38,6 +38,7 @@ engineering decisions in [`../DECISIONS.md`](../DECISIONS.md).
 | [Change agency and humane product evolution roadmap](./change-agency-and-humane-product-evolution-roadmap.md)                       | Change ownership through exact impact, truthful preview and choice, safe coexistence, rollback, retirement, remedy, and one synthetic preference pilot      | Proposed |
 | [Personalization agency and accountable-memory roadmap](./personalization-agency-and-accountable-memory-roadmap.md)                 | Memory ownership through an inspectable inventory, deterministic effects, correction, exclusion, forgetting, reset, and one four-item synthetic pilot       | Proposed |
 | [Legacy agency and dignified stewardship roadmap](./legacy-agency-and-dignified-stewardship-roadmap.md)                             | Qualified ownership through revocable instructions, notify-only rehearsal, scoped decision proof, conflict holds, cleanup, and separately gated action      | Proposed |
+| [Affordability agency and fair-access roadmap](./affordability-agency-and-fair-access-roadmap.md)                                   | A protected essential floor, immutable offer truth, symmetric stopping, humane failure, privacy-minimal support, and one synthetic no-money rehearsal       | Proposed |
 
 ## Conventions
 
