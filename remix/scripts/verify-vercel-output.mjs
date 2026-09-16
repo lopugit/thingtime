@@ -161,7 +161,7 @@ const wellKnownDiscoveryIndex = routes.findIndex(
 );
 const socialCardIndex = routes.findIndex((route) => route.src === '^/social-card$' && route.dest === '/__server');
 const socialMetaIndex = routes.findIndex(
-	(route) => route.dest === '/__server' && typeof route.src === 'string' && route.src.includes('post/[^/]+') && route.src.includes('media/[^/]+')
+	(route) => route.dest === '/__server' && route.src === '^/(?:.*)$'
 );
 const socialRouteIndexes = new Set([rootIndex, socialCardIndex, socialMetaIndex]);
 const serverFallbackIndex = routes.findIndex(
