@@ -31,6 +31,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-16 — **Codex (AI)** — Add native image/file uploads to authored
+  components; forward authorized image/PDF/text bytes into Lopu provider calls,
+  including Claude OAuth tool hops; add a capability-negotiated browser HTTP
+  SDK and confirmed API tool; keep the mobile composer above the visual
+  keyboard viewport with independently scrolling attachments and long text.
+
 - 2026-09-16 — Background chat, voice transcript replies, musings and AI
   completions: SharedWorker observation, idempotent Nitro/Vercel execution,
   private task overview, static rings, Stop and Retry / Continue. Keeps partial

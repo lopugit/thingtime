@@ -1,3 +1,4 @@
+import { ComponentUploadEnabled } from './ComponentUpload';
 import React from 'react';
 import { Box } from '@chakra-ui/react';
 
@@ -213,13 +214,23 @@ export const LiveTemplate = ({
 	children?: React.ReactNode;
 }) => {
 	const onTtAction = useTtActionClicks({ onUnowned, confirm });
+	const runtime = useWebpageRuntime();
 	const scopeKey = JSON.stringify(scope);
 	const resolved = React.useMemo(() => (render ? resolveTemplate(render, scope) : null), [render, scopeKey]); // eslint-disable-line react-hooks/exhaustive-deps -- scopeKey is the serialised scope
 	if (!resolved) return null;
 	return (
-		<Box onClickCapture={interactive ? onTtAction : undefined} onDoubleClickCapture={onDoubleClickCapture} width="100%" data-live={interactive ? 'true' : 'false'}>
-			{isChakraThingNode(resolved) ? <ChakraThingRenderer node={resolved as ChakraThingNode} /> : <HtmlThingRenderer node={resolved as HtmlThingNode} />}
-			{children}
-		</Box>
+		<ComponentUploadEnabled.Provider value={interactive && !runtime.sharedRun}>
+			<Box
+				onClickCapture={interactive ? (event) => {
+					if (!(event.target as Element).closest?.('[data-tt-native-upload]')) onTtAction(event);
+				} : undefined}
+				onDoubleClickCapture={onDoubleClickCapture}
+				width="100%"
+				data-live={interactive ? 'true' : 'false'}
+			>
+				{isChakraThingNode(resolved) ? <ChakraThingRenderer node={resolved as ChakraThingNode} /> : <HtmlThingRenderer node={resolved as HtmlThingNode} />}
+				{children}
+			</Box>
+		</ComponentUploadEnabled.Provider>
 	);
 };
