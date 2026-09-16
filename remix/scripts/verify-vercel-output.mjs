@@ -15,6 +15,9 @@ const embedBridge = readFileSync('.vercel/output/static/embed/bridge.html', 'utf
 const embedDemo = readFileSync('.vercel/output/static/embed/demo.html', 'utf8');
 const config = readJson('.vercel/output/config.json');
 const serverFunctionDir = '.vercel/output/functions/__server.func';
+if (readJson(join(serverFunctionDir, '.vc-config.json')).maxDuration < 300) {
+ throw new Error('Background AI needs a 300-second server function budget for execution and persistence.');
+}
 const tracedServerPackage = readJson(join(serverFunctionDir, 'package.json'));
 
 const filesBelow = (dir) =>
