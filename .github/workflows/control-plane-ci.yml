@@ -81,6 +81,9 @@ jobs:
       - name: Validate Lopu review queue coalescing
         run: node --test .github/scripts/lopu-review-queue.test.mjs .github/scripts/lopu-cooperative-review.test.mjs
 
+      - name: Validate PR lifecycle settlement
+        run: node --test .github/scripts/lopu-pr-lifecycle.test.mjs
+
       # The routing contract itself runs in the advisory lane, but the step
       # window its credential-probe exemption is scoped to is pure and cheap to
       # pin, and a wrong window there misreports rather than under-reports.

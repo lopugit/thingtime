@@ -997,9 +997,25 @@ jobs:
       control_dispatch_id: ${{ inputs.control_dispatch_id || '' }}
     secrets: inherit
 
+  lifecycle:
+    name: Settle reviewed and redundant PRs
+    needs: route
+    if: >-
+      !cancelled() && needs.route.result == 'success'
+      && needs.route.outputs.execute == 'true'
+      && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      && inputs.detector_handoff != true
+      && (inputs.maintenance_operation == '' || inputs.maintenance_operation == 'manage-prs')
+      && inputs.promotion_source_pr == '' && inputs.promotion_plan_b64 == ''
+    uses: lopugit/thingtime/.github/workflows/lopu-pr-lifecycle.yml@github-actions
+    permissions:
+      contents: write
+      pull-requests: write
+    secrets: inherit
+
   detect:
     name: Find merge-conflicting PRs
-    needs: route
+    needs: [route, lifecycle]
     # Branch deletions also fire `push`; there is nothing to scan then. Internal
     # repository events have one owner: merge cascades enter this detector,
     # while exact rebase workers stay exclusively in manage_rebases.
@@ -2859,7 +2875,7 @@ jobs:
 
   review_detect:
     name: Find PRs for Lopu repository review
-    needs: route
+    needs: [route, lifecycle]
     # Reviews run when a PR is opened, its head/base moves, or an operator asks
     # for a selector. Internal merge/rebase events already have an exact worker
     # owner, and the scheduled conflict backstop deliberately does not re-review
@@ -4724,6 +4740,13 @@ jobs:
             compared, key findings, every change you made (or why none was needed),
             and validation run/results. Never place secrets, tokens, or private
             values in the report. The report is Lopu's reviewer update to the PR.
+
+            For finished, tested, unchanged work with no unresolved findings,
+            submit an APPROVE review at the manifest head with your report and
+            `<!-- thingtime-lopu-merge-ready:v1 head=<HEAD_SHA> base=<BASE_SHA> -->`.
+            Never approve failing, paused or incomplete work. A separate trusted
+            lifecycle job rechecks CI, threads and refs before merging; you must
+            not merge or close PRs yourself.
 
             PR conversation is a first-class Lopu responsibility. You have no
             comment quota, template, or topic restriction: post as many useful

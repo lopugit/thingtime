@@ -1,5 +1,22 @@
 # Control-plane regression checklist
 
+## PR lifecycle settlement (2026-09-16)
+
+- Run `node --test .github/scripts/lopu-pr-lifecycle.test.mjs`.
+- A managed promotion/Feature Stack with only Graphify artifacts closes after
+  two complete file inventories and fresh ref checks. Ordinary graph work,
+  renames from source files, partial listings, drafts and pause labels survive.
+- Merge only a finished PR with an exact-head/base Lopu APPROVE review, no
+  requested changes or unresolved threads, current successful build/API/CodeQL
+  checks, and two complete readiness snapshots. Never bypass protection or
+  enable auto-merge on an unchecked head. Changed refs defer to another sweep.
+- Inspect a dry run before rollout, then the actual scheduled/manual lifecycle
+  job. A failed API read must defer that PR while allowing the rest to proceed.
+- This repairs the backlog where already-landed promotions were repeatedly
+  resolved and reviewed solely for generated snapshot differences. Lopu now
+  records a durable approval when review is finished; a separate metadata-only
+  job owns closure/merge. No PR code executes in that writer.
+
 This branch contains no application. Its rollout target is `github-actions`;
 do not merge it into the permanently separate product branches to test it.
 
