@@ -1,7 +1,7 @@
 import { changesRootIdentity, rootIdentity } from '~/utils/rootIdentity';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 export const inviteRequest = async (body: Record<string, unknown>, register = false) => {
-	await requireThingtimeCapability(register ? 'api.auth-register' : 'api.auth-invites', register ? '1.2.0' : '2.0.0');
+	await requireThingtimeCapability(register ? 'api.auth-register' : 'api.auth-invites', register ? '1.3.0' : '2.1.0');
 	const response = await fetch(register ? '/api/v1/auth/register' : '/api/v1/auth/invites', {
 		method: 'POST',
 		credentials: 'same-origin',

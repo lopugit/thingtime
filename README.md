@@ -3319,12 +3319,12 @@ provider. No new provider key is required. Set the existing `CRON_SECRET` in the
 deployment secret store so Vercel's hourly `/api/v1/auth/invites/expire` job can
 refund expired gifts, up to 50 per run; account visits also settle their expired
 invites. Do not add a TTL index that deletes invitation records before refund.
-The advertised contracts are `api.auth-invites@2.0.0`,
-`api.auth-invites-expire@1.0.0` and `api.auth-register@1.2.0`.
+The advertised contracts are `api.auth-invites@2.1.0`,
+`api.auth-invites-expire@1.0.0` and `api.auth-register@1.3.0`.
 
 Avatar upload is a narrowly scoped signup thumbnail: the browser crops an image
 under 10 MB, then the server decodes, strips metadata, moderates and re-encodes a
-128px JPEG of at most 16 KiB. The private control record holds this bounded
+128px lossless PNG of at most 80 KiB. The private control record holds this bounded
 thumbnail until redemption, cancellation or expiry. It becomes the new user's
 canonical profile avatar on signup; it never enables general attachment uploads
 or accepts an arbitrary remote URL or another user's attachment ID.

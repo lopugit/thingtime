@@ -1,3 +1,4 @@
+import { chatAttachmentInput } from '../Attachments/chatAttachmentInput';
 import { useLopuVisualViewport } from './useLopuVisualViewport';
 import React from 'react';
 import { Box, Flex, Popover, PopoverBody, PopoverContent, PopoverTrigger, Text, Textarea } from '@chakra-ui/react';
@@ -23,6 +24,7 @@ export type LopuComposerPreferences = { enterSends: boolean; applyPatches: boole
 
 export type LopuComposerProps = {
 	attachments?: React.ReactNode;
+	onAttachFiles?: (files: File[]) => void;
 	value: string;
 	onChange: (next: string) => void;
 	onSend: (text: string) => void;
@@ -132,6 +134,7 @@ const IconButton = ({ label, size, onClick, children, pressed }: { label: string
 
 export const LopuComposer = ({
 	attachments,
+	onAttachFiles,
 	value,
 	onChange,
 	onSend,
@@ -216,6 +219,7 @@ export const LopuComposer = ({
 			{attachments}
 			<Box
 				className="lopuComposer"
+				{...chatAttachmentInput(files => onAttachFiles?.(files), fieldDisabled || streaming || !onAttachFiles)}
 				data-compact={compact ? 'true' : 'false'}
 				data-streaming={streaming ? 'true' : 'false'}
 				border={LOPU_UI.border}

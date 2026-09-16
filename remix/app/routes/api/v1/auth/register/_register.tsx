@@ -9,7 +9,7 @@ import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { prepareUnboundAttachmentCleanupForSessionReplacement } from '~/api/utils/attachments/attachments';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
-const MAX_BODY_BYTES = 48 * 1024;
+const MAX_BODY_BYTES = 128 * 1024;
 
 // POST /api/v1/auth/register — { username, password, email, displayName? }
 // On success: creates the user, logs them in (sets the httpOnly auth cookie),
