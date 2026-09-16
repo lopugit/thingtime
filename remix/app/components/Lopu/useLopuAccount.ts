@@ -1,3 +1,4 @@
+import { useBackgroundRefresh } from '~/hooks/useBackgroundRefresh';
 // 🦄 The viewer's Lopu account (verified-credits design note §3/§4): the
 // verified flag + the access rules, the credit balance, this month's and the
 // lifetime usage, a pending top-up request and the optional "Buy credits"
@@ -727,20 +728,8 @@ export const useLopuAccount = (options: UseLopuAccountOptions = {}): UseLopuAcco
 		void refreshLopuAccount({ minAgeMs: LOPU_ACCOUNT_MOUNT_MIN_AGE_MS });
 	}, [active, userId]);
 
-	// …and slowly on focus / when the tab comes back
-	React.useEffect(() => {
-		if (!active || typeof window === 'undefined') return;
-		const onFocus = () => {
-			if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-			void refreshLopuAccount({ minAgeMs: LOPU_ACCOUNT_FOCUS_MIN_AGE_MS });
-		};
-		window.addEventListener('focus', onFocus);
-		document.addEventListener('visibilitychange', onFocus);
-		return () => {
-			window.removeEventListener('focus', onFocus);
-			document.removeEventListener('visibilitychange', onFocus);
-		};
-	}, [active]);
+	useBackgroundRefresh(active && userId ? `lopu-account:${userId}` : null,
+		() => refreshLopuAccount({ minAgeMs: LOPU_ACCOUNT_FOCUS_MIN_AGE_MS }), 30_000, false);
 
 	const byo = options.byo === true;
 	const access = React.useMemo(

@@ -46,6 +46,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   real links. Prevent native anchor/image dragging only while a reorder is
   armed, preserving normal navigation and browser link shortcuts. **Codex (AI)**
 
+- 2026-09-16 — Lopu conversation lists/messages, Messenger, credits and shared session data now refresh quietly in the background and on returning to a tab or reconnecting. Shared polling avoids duplicate requests, keeps hidden-tab traffic low, and fences stale reads against local edits and account changes. [Details and validation](../PRs/818-codex-background-ui-refresh-keep-lopu-and-messenger-current.md). — Codex (AI)
 - 2026-09-16 — Accept HEIC/HEIF photos throughout the shared media uploader and
   convert them locally to JPEG for previews, moderation and storage. Invite
   photos now use the same profile-media control and queue with a bounded
