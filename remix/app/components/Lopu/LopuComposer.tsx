@@ -1,3 +1,4 @@
+import { useLopuVisualViewport } from './useLopuVisualViewport';
 import React from 'react';
 import { Box, Flex, Popover, PopoverBody, PopoverContent, PopoverTrigger, Text, Textarea } from '@chakra-ui/react';
 import { ArrowUp, Settings2, Square } from 'lucide-react';
@@ -158,6 +159,8 @@ export const LopuComposer = ({
 	hideSettings = false
 }: LopuComposerProps) => {
 	const isMobile = useIsMobileViewport();
+	const viewport = useLopuVisualViewport();
+	const maxTextHeight = isMobile && viewport ? Math.max(48, Math.min(MAX_TEXTAREA_HEIGHT, viewport.height * 0.18)) : MAX_TEXTAREA_HEIGHT;
 	const ownRef = React.useRef<HTMLTextAreaElement | null>(null);
 	const setRefs = React.useCallback(
 		(element: HTMLTextAreaElement | null) => {
@@ -178,9 +181,9 @@ export const LopuComposer = ({
 		const element = ownRef.current;
 		if (!element) return;
 		element.style.height = 'auto';
-		element.style.height = `${Math.min(element.scrollHeight, MAX_TEXTAREA_HEIGHT)}px`;
-		element.style.overflowY = element.scrollHeight > MAX_TEXTAREA_HEIGHT ? 'auto' : 'hidden';
-	}, [value, compact]);
+		element.style.height = `${Math.min(element.scrollHeight, maxTextHeight)}px`;
+		element.style.overflowY = element.scrollHeight > maxTextHeight ? 'auto' : 'hidden';
+	}, [value, compact, maxTextHeight]);
 
 	const submit = React.useCallback(() => {
 		const text = value.trim();
@@ -236,7 +239,7 @@ export const LopuComposer = ({
 					minW={0}
 					boxSizing="border-box"
 					minH={compact ? '40px' : '46px'}
-					maxH={`${MAX_TEXTAREA_HEIGHT}px`}
+					maxH={`${maxTextHeight}px`}
 					resize="none"
 					variant="unstyled"
 					fontSize={bodySize}

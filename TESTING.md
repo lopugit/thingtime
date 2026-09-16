@@ -7451,6 +7451,34 @@ approval; `access.test.ts` — the reservation matrix) and
 - [ ] Leave the tab hidden, update from the other client, then return. Verify an immediate refresh on visibility/focus, reconnect and browser history restoration; hidden tabs poll at most once per minute per resource. Cached content remains during failures.
 - [ ] Keep a draft, scroll into history, open conversation/chat settings drawers, and let several polls run at desktop and phone widths. No draft loss, loading flash, pagination rewind, overlap or clipping. Rename/delete while an earlier read is delayed; an old result cannot undo the edit. Switch accounts away and back during a delayed read; old private data cannot reappear.
 - [ ] Run the hooks, Lopu UI, Lopu store, Messenger and root-data suites. Use the live browser as well: native browser timers require correctly bound callbacks, which Node timers alone do not prove.
+### Lopu uploads, provider media and mobile keyboard (2026-09-16)
+
+- [ ] In an owned interactive HTML component (`tt-upload`) and Chakra component
+  (`Upload`), pick an image and a text file, wait for Ready, choose Use file, and
+  verify `<name>`/`<name>AttachmentId` form values and a private attachment-backed
+  post. Toggle Use URL instead; cancel/retry, switch account, and verify shared
+  read-only runs cannot upload. Clearing a field keeps the saved private file.
+- [ ] Send an image, PDF and UTF-8 text file to each supported provider. Verify
+  provider input contains actual media/text, also after a tool hop and a follow-up
+  turn. Test Claude OAuth separately. Revoke access during download: bytes must
+  be discarded. Linked, unsupported, oversized and failed reads must be explicit.
+- [ ] Read a public URL with `fetch_url`; propose an `http_request`, inspect its
+  exact input, refuse once and confirm once. A changed body invalidates approval.
+  Private literals, mixed public/private DNS, redirects, oversized responses and
+  ambient cookie headers are refused; ambiguous mutations are never retried.
+  Confirm the origin manifest advertises network 1.0.0 and chat reply 1.10.0.
+- [ ] At desktop, 390x844 and 390x444, scroll page/chat/attachment panel to the
+  bottom; expand attachments, model menu, Your Things and chat settings. Send
+  remains visible, long input scrolls inside its own field, and no horizontal
+  overflow appears. On a physical iPhone, repeat keyboard open/close, multiline
+  typing, visual-viewport panning, orientation and safe-area changes in both the
+  Lopu page and floating sheet. Desktop resizing alone is not iOS acceptance.
+
+Automated regression coverage: `chatMedia.test.ts`, `chatMediaLoading.test.ts`,
+`chat.streaming.test.mts`, `lopuVisualViewport.test.ts`, API capability tests and
+existing Lopu/component/webpage suites. Browser synthetic upload QA uses mocked
+storage only; do not describe it as a production upload or provider acceptance.
+
 ## Legal pages and policy exports
 
 - [ ] Signed out, open `/legal`, all three current `/pages/` documents and their version links on desktop and mobile; scroll to the bottom and confirm readable text and no overflow. Select the archived privacy version and return to current. Unknown versions must show a not-found message, never current text.

@@ -78,7 +78,7 @@ export class LopuStreamError extends Error {
 export const postLopuReply = async (body: LopuReplyBody, options?: { signal?: AbortSignal }): Promise<Response> => {
 	if (body.attachmentIds?.length || body.thingIds?.length) {
 		const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
-		await requireThingtimeCapability('api.lopu-chats-reply', '1.6.0');
+		await requireThingtimeCapability('api.lopu-chats-reply', '1.10.0');
 	}
 	const started = performance.now();
 	let response: Response;

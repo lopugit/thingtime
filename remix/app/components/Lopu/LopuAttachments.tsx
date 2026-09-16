@@ -1,3 +1,4 @@
+import { useLopuVisualViewport } from './useLopuVisualViewport';
 import React from 'react';
 import { Box, Button, Flex, Input, Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter, Text } from '@chakra-ui/react';
 import { Paperclip, Search, X } from 'lucide-react';
@@ -15,6 +16,7 @@ export function LopuAttachments({ uploadsRef, onUploads, selected, onSelect, dis
 	selected: LopuSelectedThing[]; onSelect: (value: LopuSelectedThing[]) => void; disabled: boolean;
 }) {
 	const user = useCurrentUser();
+	const viewport = useLopuVisualViewport();
 	const api = useApi();
 	const [expanded, setExpanded] = React.useState(false);
 	const [open, setOpen] = React.useState(false);
@@ -38,14 +40,14 @@ export function LopuAttachments({ uploadsRef, onUploads, selected, onSelect, dis
 		return () => { live = false; clearTimeout(timer); };
 	}, [open, query, user?.id, user?.username]);
 	if (!user?.id) return null;
-	return <Box py={2} minW={0}>
+	return <Box py={2} minW={0} maxH={viewport ? `${Math.min(240, Math.max(72, viewport.height * 0.28))}px` : '28dvh'} overflowY="auto" overscrollBehavior="contain">
 		<Flex wrap="wrap" gap={2}>
 			<Button size="sm" variant="ghost" leftIcon={<Paperclip size={16} />} onClick={() => setExpanded(!expanded)} aria-expanded={expanded} isDisabled={disabled}>Attachments</Button>
 			<Button size="sm" variant="ghost" leftIcon={<Search size={16} />} onClick={() => setOpen(true)} isDisabled={disabled}>Your Things</Button>
 			{selected.map(thing => <Button key={thing.id} size="sm" maxW="100%" rightIcon={<X size={14} />} onClick={() => onSelect(selected.filter(item => item.id !== thing.id))} isDisabled={disabled} aria-label={`Remove ${thing.name}`}><Text isTruncated>{thing.name}</Text></Button>)}
 		</Flex>
 		<Box display={expanded ? 'block' : 'none'} p={2}>
-			<AttachmentComposer ref={uploadsRef} ownerId={user.id} purpose="message" maxFiles={10} disabled={disabled} onChange={onUploads} helperText="Private files attach to this chat. Lopu currently receives file metadata and the text of selected Things—not raw image, video or audio contents." />
+			<AttachmentComposer ref={uploadsRef} ownerId={user.id} purpose="message" maxFiles={10} disabled={disabled} onChange={onUploads} helperText="Private files attach to this chat. Supported images, PDFs and text are sent to your selected AI provider (5 MiB per image/PDF, 128 KiB total text, 12 MiB per turn). Audio, video and unsupported files are labelled explicitly." />
 		</Box>
 		<Modal isOpen={open} onClose={() => setOpen(false)} size="lg" scrollBehavior="inside">
 			<ModalOverlay zIndex={DRAWER_MODAL_OVERLAY_Z} /><ModalContent containerProps={{ zIndex: DRAWER_MODAL_Z }} mx={3} my={4} maxW="min(32rem, calc(100vw - 24px))" maxH="calc(100dvh - 32px)"><ModalHeader>Attach your Things</ModalHeader><ModalCloseButton />
