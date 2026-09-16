@@ -355,3 +355,10 @@ test('Lopu network SDK contract exists on both manifests and refuses missing/bre
   assert.equal(capabilitySatisfies('', '1.0.0'), false);
   assert.equal(capabilitySatisfies('2.0.0', '1.0.0'), false);
 });
+
+test('upload burst correction is published by both manifests and rejects old or breaking origins', () => {
+	assert.equal(createApiCapabilitiesManifest().features['api.attachment-uploads'], '1.4.1');
+	assert.equal(thingtimeCapabilityManifest('https://uploads.test').features['api.attachment-uploads'].version, '1.4.1');
+	for (const version of [undefined, '1.4.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.4.1'), false);
+	for (const version of ['1.4.1', '1.4.2', '1.5.0']) assert.equal(capabilitySatisfies(version, '1.4.1'), true);
+});

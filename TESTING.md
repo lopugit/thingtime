@@ -1805,6 +1805,15 @@ email whose link points at the attacker.
       `🏞️ Add Media` control. At desktop and 390px mobile widths it has no
       horizontal overflow; the URL fallback panel and every lower composer
       control remain reachable after scrolling top-to-bottom.
+- [ ] Upload rate-limit regression: on an approved test account, two 25-file
+      selections fit the default 60/minute start budget (including retry headroom).
+      Exact legacy 30/hour settings upgrade; custom and disabled settings remain.
+      Inject one 429 with Retry-After at start, part signing, and completion:
+      wait before retrying, preserve the request/upload IDs and file, and finish
+      once. Persistent 429 stops after two automatic retries; a wait over 60s
+      shows the real wait and retains the selection. Remove the file, unmount,
+      or switch accounts during the wait: no late request may start. Check the
+      error tile and full composer at desktop and 390px through the footer.
 - [ ] Pick and drag/drop raster images, a supported video, and an arbitrary
       file. Safe image/video previews appear immediately; each row reports
       progress; Post stays disabled until every selected file is Ready; and a
@@ -7459,6 +7468,8 @@ approval; `access.test.ts` — the reservation matrix) and
 - Check revoked moderator access, upload approval, quota failure, ownership transfer and deletion cleanup. On desktop and 390px mobile, open both URL panels and scroll top to bottom; verify no overlap, clipping or horizontal overflow.
 
 ## HEIC/HEIF photo selection
+
+- [ ] Uploader guidance lists every accepted format and matches the picker: invite/signup JPEG, PNG, WebP, HEIC, HEIF; profile/branding additionally AVIF and GIF; emoji GIF, JPEG, PNG, WebP, HEIC, HEIF; unrestricted attachments say all file types. Verify desktop/mobile wrapping, including settings popups.
 
 - [ ] Newly selected HEIC/HEIF files upload as full-resolution PNG with no JPEG encoding; invite previews and saved thumbnails remain PNG (128px crop). Verify detailed/transparent thumbnails above the old 16 KiB ceiling keep their pixels and moderation receives PNG. Existing stored JPEGs are not retroactively changed.
 
