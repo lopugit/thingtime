@@ -1,3 +1,4 @@
+import { LopuChatTaskRing } from './LopuTaskRing';
 import React from 'react';
 import { Box, Button, Center, Flex, Input, Text } from '@chakra-ui/react';
 import { MessagesSquare, PanelLeftClose, PanelLeftOpen, Plus, X } from 'lucide-react';
@@ -149,7 +150,8 @@ const ConversationRow = ({
 					aria-label="Conversation name"
 				/>
 			) : (
-				<Flex align="baseline" gap={2} minW={0}>
+				<Flex align="center" gap={2} minW={0}>
+                    <LopuChatTaskRing chatId={chat.id} />
 					<Text fontSize="13px" fontWeight={selected ? 700 : 600} color={LOPU_UI.ink} isTruncated flex={1}>
 						{name}
 					</Text>

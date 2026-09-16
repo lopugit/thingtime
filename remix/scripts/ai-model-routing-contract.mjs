@@ -49,8 +49,8 @@ const musing = readFileSync(join(remixRoot, 'app/api/utils/lopu/musing.ts'), 'ut
 assert.match(musing, /getAiPreferredModelWaterfall/);
 assert.match(musing, /resolveAiPreferredAnthropicChoice/);
 assert.match(musing, /resolveAiPreferredOpenAiChoice/);
-assert.match(musing, /streamClaude\(SYSTEM_PROMPT, user, choices\.claude\)/);
-assert.match(musing, /streamOpenAI\(SYSTEM_PROMPT, user, choices\.openai\)/);
+assert.match(musing, /streamClaude\(SYSTEM_PROMPT, user, choices\.claude, opts\.signal\)/);
+assert.match(musing, /streamOpenAI\(SYSTEM_PROMPT, user, choices\.openai, opts\.signal\)/);
 assert.doesNotMatch(musing, /model:\s*process\.env\.LOPU_CLAUDE_MODEL/);
 assert.doesNotMatch(musing, /model:\s*process\.env\.LOPU_OPENAI_MODEL/);
 

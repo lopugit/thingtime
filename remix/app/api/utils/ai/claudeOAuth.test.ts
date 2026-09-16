@@ -128,3 +128,27 @@ test('refusal and token-limit stops remain visible to moderation and tool loops'
 		assert.deepEqual(result.usage, usage);
 	}
 });
+
+test('a complete tool at EOF needs no closing Markdown fence', async () => {
+ const client = createClaudeOAuthClient({ token, run: async function* () {
+  yield { text: 'Working…\n```tt-tool\n{"name":"echo","input":{"text":"OK"}}' };
+  yield { usage };
+ } });
+ const result = await client.messages.stream({ model: 'claude-opus-5', max_tokens: 100,
+  tools: [{ name: 'echo', input_schema: { type: 'object' } }], messages: [{ role: 'user', content: 'Echo' }] }).finalMessage();
+ assert.equal(result.stop_reason, 'tool_use');
+ assert.deepEqual((result.content[1] as any).input, { text: 'OK' });
+});
+
+test('token exhaustion retains partial text and never executes truncated tool arguments', async () => {
+ const client = createClaudeOAuthClient({ token, run: async function* () {
+  yield { text: 'Here is the plan.\n```tt-tool\n{"name":"echo","input":{"text":"unfinished' };
+  yield { usage, stopReason: 'max_tokens' };
+ } });
+ const result = await client.messages.stream({ model: 'claude-opus-5', max_tokens: 100,
+  tools: [{ name: 'echo', input_schema: { type: 'object' } }], messages: [{ role: 'user', content: 'Echo' }] }).finalMessage();
+ assert.equal(result.stop_reason, 'max_tokens');
+ assert.equal(result.content.some(block => block.type === 'tool_use'), false);
+ assert.match((result.content[0] as any).text, /Here is the plan/);
+ assert.deepEqual(result.usage, usage);
+});

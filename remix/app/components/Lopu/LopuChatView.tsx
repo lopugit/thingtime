@@ -1,5 +1,6 @@
+import { canContinueLopuReply, LOPU_CONTINUE_PROMPT } from './lopuRecovery';
 import React from 'react';
-import { Box, Flex, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Text } from '@chakra-ui/react';
+import { Button, Box, Flex, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Text } from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router';
 import { ChevronDown, Maximize2 } from 'lucide-react';
 
@@ -333,7 +334,8 @@ const TurnBubble = ({
 					Stopped
 				</Text>
 			) : null}
-			{turn.status === 'error' && turn.error ? <ErrorLine message={turn.error.message} /> : null}
+			{turn.error ? <ErrorLine message={turn.error.message} /> : null}
+            {canContinueLopuReply(turn.status, turn.stopReason) ? <Button size="sm" variant="outline" mt={3} isDisabled={confirmBusy} onClick={() => onRetry(LOPU_CONTINUE_PROMPT)}>Retry / Continue</Button> : null}
 		</LopuAssistantRow>
 	);
 };
@@ -346,7 +348,9 @@ const MessageBubble = React.memo(function MessageBubble({
 	first,
 	last,
 	compact,
-	modelLabels
+	modelLabels,
+    onContinue,
+    busy
 }: {
 	message: ChatMessage;
 	role: 'user' | 'assistant';
@@ -355,6 +359,8 @@ const MessageBubble = React.memo(function MessageBubble({
 	compact: boolean;
 	// catalog id → label, so a persisted row reads "via GPT-5.6 Sol" like a live turn
 	modelLabels: Record<string, string>;
+    onContinue: () => void;
+    busy: boolean;
 }) {
 	const meta = React.useMemo(() => lopuMessageMeta(message), [message]);
 	if (message.deleted) return null;
@@ -384,6 +390,7 @@ const MessageBubble = React.memo(function MessageBubble({
 				</Box>
 			) : null}
 			<LopuMarkdown text={message.text} compact={compact} />
+            {canContinueLopuReply(null, meta?.stopReason) ? <Button size="sm" variant="outline" mt={3} isDisabled={busy} onClick={onContinue}>Retry / Continue</Button> : null}
 		</LopuAssistantRow>
 	);
 });
@@ -650,10 +657,10 @@ export const LopuChatView = ({
 							confirmBusy={confirmBusy}
 							account={chat.account.account}
 							admin={viewerIsAdmin}
-							onRetry={send}
+							onRetry={(text) => text === LOPU_CONTINUE_PROMPT ? chat.send(text) : send(text)}
 						/>
 					) : (
-						<MessageBubble message={row.item.message} role={row.role} first={row.first} last={row.last} compact={compact} modelLabels={chat.modelLabels} />
+						<MessageBubble message={row.item.message} role={row.role} first={row.first} last={row.last} compact={compact} modelLabels={chat.modelLabels} busy={chat.sending} onContinue={() => void chat.send(LOPU_CONTINUE_PROMPT)} />
 					)}
 				</Box>
 			</React.Fragment>

@@ -103,6 +103,7 @@ export type UserStorageUsage = {
 
 export const CONTROL_PLANE_STORAGE_THINGTIMES = [
 	'lopu-recording-settings',
+	'lopu-background-task',
 	'lopu-recording-job',
 	'lopu-recording-reminder',
   'account-link',
