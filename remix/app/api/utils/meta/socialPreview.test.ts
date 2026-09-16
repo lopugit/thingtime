@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { buildSocialMetaTags } from './socialMeta';
+import { buildSocialMetaTags, resolveSocialMeta, renderSocialMetaHtml } from './socialMeta';
+import { DEFAULT_PAGE_TITLE, pageTitle } from '../../../utils/pageTitle';
+import { readFileSync } from 'node:fs';
 import {
 	normaliseSocialMediaKind,
 	normaliseSocialPreviewPath,
@@ -11,6 +13,39 @@ import {
 	socialPreviewRevision,
 	staticSocialPreview
 } from './socialPreview';
+
+test('uncustomized pages use the press-kit PNG and safe shared page titles', async () => {
+	for (const [path, title] of [
+		['/', DEFAULT_PAGE_TITLE],
+		['/invite#secret-token', DEFAULT_PAGE_TITLE],
+		['/branding', 'Thingtime - Brand resources'],
+		['/unknown/private-name?token=secret', DEFAULT_PAGE_TITLE],
+		['/settings', 'Thingtime - Settings']
+	]) {
+		const { tags } = await resolveSocialMeta(new Request(`https://thingtime.example${path}`));
+		const values = new Map(tags.map((tag) => [tag.key, tag.content]));
+		assert.equal(values.get('og:title'), title);
+		assert.equal(values.get('twitter:title'), title);
+		assert.equal(values.get('og:image'), 'https://thingtime.example/branding/presskit/thingtime-og-card-1200x630.png');
+		assert.equal(values.get('twitter:image'), values.get('og:image'));
+		assert.equal(values.get('twitter:card'), 'summary_large_image');
+		assert.doesNotMatch(renderSocialMetaHtml(tags), /secret-token|token=secret/);
+	}
+	const custom = await resolveSocialMeta(new Request('https://thingtime.example/feed'));
+	assert.match(custom.tags.find((tag) => tag.key === 'og:image')!.content, /\/social-card\?/);
+	assert.equal(pageTitle('/branding', '[LC]'), '[LC] Thingtime - Brand resources');
+	assert.equal(pageTitle('/profile-secret'), DEFAULT_PAGE_TITLE);
+	assert.equal(pageTitle('/', '[LC]'), `[LC] ${DEFAULT_PAGE_TITLE}`);
+});
+
+test('static shell fallback uses the same real 1200x630 branding image', () => {
+	const html = readFileSync(new URL('../../../../index.html', import.meta.url), 'utf8');
+	assert.match(html, /og:image" content="\/branding\/presskit\/thingtime-og-card-1200x630.png/);
+	assert.doesNotMatch(html, /og:image" content="\/android-icon/);
+	const png = readFileSync(new URL('../../../../public/branding/presskit/thingtime-og-card-1200x630.png', import.meta.url));
+	assert.equal(png.readUInt32BE(16), 1200);
+	assert.equal(png.readUInt32BE(20), 630);
+});
 
 test('social preview paths never become a redirect or an arbitrary route', () => {
 	assert.equal(normaliseSocialPreviewPath('/post/hello?source=chat'), '/post/hello');
