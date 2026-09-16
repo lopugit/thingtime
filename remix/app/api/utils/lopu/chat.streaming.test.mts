@@ -1,3 +1,4 @@
+import Anthropic from '@anthropic-ai/sdk';
 import assert from 'node:assert/strict';
 import { createServer, type IncomingHttpHeaders, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -141,7 +142,7 @@ const server = createServer(async (request, response) => {
 await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
 const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 const envNames = [
-  'ANTHROPIC_API_KEY',
+  'CLAUDE_CODE_OAUTH_TOKEN',
   'ANTHROPIC_AUTH_TOKEN',
   'ANTHROPIC_BASE_URL',
   'OPENAI_API_KEY',
@@ -167,6 +168,11 @@ mock.module(new URL('../settings/prConflictResolverModelWaterfall.ts', import.me
     }
   }
 });
+
+mock.module(new URL('../ai/claudeOAuth.ts', import.meta.url).href, { exports: {
+  claudeOAuthConfigured: () => Boolean(process.env.CLAUDE_CODE_OAUTH_TOKEN),
+  createClaudeOAuthClient: (options: any = {}) => new Anthropic({ apiKey: null, authToken: options.token || process.env.CLAUDE_CODE_OAUTH_TOKEN, baseURL: process.env.ANTHROPIC_BASE_URL })
+} });
 
 const { streamLopuChatTurn, LOPU_CHAT_MAX_TOOL_EXECUTIONS, LOPU_FALLBACK_VAULT, createTtToolTextParser, unwrapEnvelopeContent, wrapBareToolCalls } = await import('./chat.ts');
 const { parseAiWorkflowModelOptionId } = await import('../settings/prConflictResolverModelWaterfallCore.ts');
@@ -237,7 +243,7 @@ beforeEach(() => {
   toolCalls = [];
   waterfallReads = 0;
   waterfall = ['claude-opus-5:high', 'gpt-5.6-sol:high', 'default'];
-  process.env.ANTHROPIC_API_KEY = 'anthropic-test-key';
+  process.env.CLAUDE_CODE_OAUTH_TOKEN = 'anthropic-test-key';
   process.env.ANTHROPIC_BASE_URL = origin;
   process.env.OPENAI_API_KEY = 'openai-test-key';
   process.env.OPENAI_BASE_URL = `${origin}/v1`;
@@ -299,6 +305,7 @@ test('Claude: streams tool input, executes as the viewer, feeds tool_result back
   assert.equal(outcome.provider, 'claude');
   assert.equal(outcome.stopReason, 'end_turn');
   assert.equal(outcome.text, 'Building… Done ✨');
+  assert.ok(outcome.toolCalls[0].links?.some((link) => link.href === '/builder?page=page-new'));
   assert.deepEqual(outcome.toolCalls.map((call) => ({ name: call.name, ok: call.ok, thingId: call.thingId })), [{ name: 'create_page', ok: true, thingId: 'page-new' }]);
   assert.equal(outcome.usage?.outputTokens, 22);
 
@@ -331,38 +338,21 @@ test('Claude: streams tool input, executes as the viewer, feeds tool_result back
   assert.equal(waterfallReads, 1);
 });
 
-test('Claude fast mode rides the beta surface and a starved decorated attempt retries bare on the same model', async () => {
-  anthropicPlans.push({ blocks: [], stopReason: 'end_turn' }, { blocks: [{ type: 'text', text: 'Bare and quick' }], stopReason: 'end_turn' });
-
+test('Claude preserves the selected effort and speed without a bare retry', async () => {
+  anthropicPlans.push({ blocks: [{ type: 'text', text: 'Selected settings' }], stopReason: 'end_turn' });
   const { events, outcome } = await collect(turn('hi', 'claude-opus-5:max:fast'));
-
-  assert.equal(meta(events).provider, 'claude');
-  assert.equal(text(events), 'Bare and quick');
-  assert.equal(outcome.speed, 'fast');
-  assert.equal(anthropicRequests.length, 2);
-  assert.equal(anthropicRequests[0].surface, 'beta');
+  assert.equal(meta(events).provider, 'claude'); assert.equal(text(events), 'Selected settings');
+  assert.equal(outcome.speed, 'fast'); assert.equal(anthropicRequests.length, 1);
   assert.equal(anthropicRequests[0].body.speed, 'fast');
   assert.deepEqual(anthropicRequests[0].body.output_config, { effort: 'max' });
-  assert.match(String(anthropicRequests[0].headers['anthropic-beta']), /fast-mode-2026-02-01/);
-  assert.equal(anthropicRequests[1].surface, 'stable');
-  assert.equal(anthropicRequests[1].body.speed, undefined);
-  assert.equal(anthropicRequests[1].body.output_config, undefined);
-  assert.equal(anthropicRequests[1].body.model, 'claude-opus-5');
 });
 
-test('a provider failing before any output falls through to the other configured provider on its waterfall choice', async () => {
-  anthropicPlans.push({ status: 400 });
-  openAiPlans.push({ contentChunks: ['OpenAI ', 'stepped in'], finish: 'stop' });
-
+test('an explicit Claude selection never silently falls back to OpenAI', async () => {
+  anthropicPlans.push({ status: 400 }, { status: 400 });
   const { events, outcome } = await collect(turn('hi', 'claude-opus-5:high'));
-
-  assert.equal(meta(events).provider, 'openai');
-  assert.equal(meta(events).model, 'gpt-5.6-sol');
-  assert.equal(meta(events).effort, 'high');
-  assert.equal(text(events), 'OpenAI stepped in');
-  assert.equal(outcome.provider, 'openai');
-  assert.equal(openAiRequests[0].body.reasoning_effort, 'high');
-  assert.equal(waterfallReads, 1);
+  assert.equal(meta(events).provider, 'fallback');
+  assert.equal(outcome.provider, 'fallback');
+  assert.equal(openAiRequests.length, 0);
 });
 
 test('OpenAI native tools: per-index argument accumulation, tool messages, and the request shape', async () => {
@@ -619,7 +609,7 @@ test('LOPU_CHAT_PROVIDER=test drives the scripted provider through the real loop
 });
 
 test('no provider configured → the honest unconfigured line, never a blank reply', async () => {
-  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
   delete process.env.OPENAI_API_KEY;
 
   const { events, outcome } = await collect(turn('hello?', null));
@@ -636,10 +626,10 @@ test('every provider failing before output ends in the daydreaming fallback', as
   // the explicit Claude choice is bare (one attempt); the OpenAI fallback is
   // the waterfall's decorated gpt-5.6-sol:high, so it gets its bare retry and
   // then the plain (non-streaming) completion rung before it is given up on
-  anthropicPlans.push({ status: 400 });
+  anthropicPlans.push({ status: 400 }, { status: 400 });
   openAiPlans.push({ status: 400 }, { status: 400 }, { status: 400 });
 
-  const { events, outcome } = await collect(turn('hello?', 'claude-opus-5'));
+  const { events, outcome } = await collect(turn('hello?', null));
 
   assert.equal(meta(events).provider, 'fallback');
   assert.match(text(events), /daydreaming/);
@@ -768,8 +758,9 @@ test('a vault turn on an Anthropic connection sends the vault key to the Message
   assert.equal(outcome.provider, 'vault');
   assert.equal(outcome.model, 'claude-own');
   assert.equal(anthropicRequests.length, 1);
-  assert.equal(anthropicRequests[0].headers['x-api-key'], 'vault-token-xyz');
-  assert.equal(anthropicRequests[0].headers.authorization, undefined);
+  assert.equal(anthropicRequests[0].headers['x-api-key'], undefined);
+  assert.equal(anthropicRequests[0].headers.authorization, 'Bearer vault-token-xyz');
+  assert.notEqual(anthropicRequests[0].headers.authorization, 'Bearer server-bearer-secret');
   assert.equal(anthropicRequests[0].surface, 'stable');
   assert.equal(anthropicRequests[0].body.model, 'claude-own');
   assert.equal(anthropicRequests[0].body.output_config, undefined);

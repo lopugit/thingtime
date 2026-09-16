@@ -192,6 +192,7 @@ export const router = createBrowserRouter([
       // public trending board — guest-visible like /feed
       { path: 'explore', element: <Explore /> },
       { path: 'feed', element: <Feed /> },
+      { path: 'algorithms', lazy: lazyRoute(() => import('./routes/algorithms')) },
       { path: 'messages', lazy: lazyRoute(() => import('./routes/messages')), loader: requireUser('/login') },
       // Lopu 🦄 — the AI assistant page; no loader guard: it renders its own
       // signed-out quiet state, like /apps. /lopu/:chatId deep-links a

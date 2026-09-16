@@ -18,18 +18,13 @@ import { AI_MODEL_PROVIDER_IDS, AI_PROVIDER_ENV_HINTS, type AiModelProviderId, t
 //
 // The probe never throws, never retries, never follows a redirect (a key must
 // not travel to a host the operator did not name), and never logs, returns,
-// or echoes a key or a provider response body. Base URLs follow the SDKs:
-// ANTHROPIC_BASE_URL (default https://api.anthropic.com) and OPENAI_BASE_URL
-// (default https://api.openai.com/v1), so the probe dials exactly what chat
-// dials. The Anthropic auth-token alias (ANTHROPIC_AUTH_TOKEN → Bearer) is
-// honoured beside x-api-key.
+// or echoes a key or a provider response body. OpenAI probes its models route.
+// Claude checks OAuth configuration; allowance is proven by a real turn.
 
 export const AI_PROVIDER_PROBE_TIMEOUT_MS = 5_000;
 export const AI_PROVIDER_PROBE_OK_TTL_MS = 10 * 60_000;
 export const AI_PROVIDER_PROBE_FAIL_TTL_MS = 2 * 60_000;
-export const ANTHROPIC_DEFAULT_BASE_URL = 'https://api.anthropic.com';
 export const OPENAI_DEFAULT_BASE_URL = 'https://api.openai.com/v1';
-const ANTHROPIC_VERSION = '2023-06-01';
 
 export type AiProviderProbeResult = AiProviderProbeOutcome & {
   // the provider answered 2xx
@@ -55,6 +50,7 @@ export type AiProviderProbeDependencies = {
   okTtlMs?: number;
   failTtlMs?: number;
   log?: (message: string) => void;
+  claudeToken?: () => Promise<string>;
 };
 
 const text = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
@@ -68,15 +64,7 @@ export const buildAiProviderProbeRequest = (
   provider: AiModelProviderId,
   env: Readonly<Record<string, string | undefined>>
 ): AiProviderProbeRequest | null => {
-  if (provider === 'anthropic') {
-    const apiKey = text(env.ANTHROPIC_API_KEY);
-    const authToken = text(env.ANTHROPIC_AUTH_TOKEN);
-    if (!apiKey && !authToken) return null;
-    const headers: Record<string, string> = { accept: 'application/json', 'anthropic-version': ANTHROPIC_VERSION };
-    if (apiKey) headers['x-api-key'] = apiKey;
-    if (authToken) headers.authorization = `Bearer ${authToken}`;
-    return { url: `${trimSlashes(text(env.ANTHROPIC_BASE_URL) || ANTHROPIC_DEFAULT_BASE_URL)}/v1/models`, headers };
-  }
+  if (provider === 'anthropic') return null; // OAuth runs through Claude Code, never /v1/models with an API key.
   const apiKey = text(env.OPENAI_API_KEY);
   if (!apiKey) return null;
   return {
@@ -121,6 +109,15 @@ export const createAiProviderProbe = (dependencies: AiProviderProbeDependencies 
 
   // One request, one verdict. Nothing here throws.
   const runProbe = async (provider: AiModelProviderId): Promise<AiProviderProbeResult> => {
+    if (provider === 'anthropic') {
+      try {
+        const token = dependencies.claudeToken ? await dependencies.claudeToken() : await (await import('./claudeOAuth')).resolveClaudeOAuthToken(env());
+        if (!token) return verdict({ ok: false, verified: false, status: null, error: 'Claude OAuth is not configured.' });
+        return unknown(null, 'Claude OAuth configured; model access and allowance are checked when replying.');
+      } catch {
+        return verdict({ ok: false, verified: false, status: null, error: 'Claude OAuth is unavailable. Check the admin credential vault.' });
+      }
+    }
     const request = buildAiProviderProbeRequest(provider, env());
     if (!request) return unknown(null, `${AI_PROVIDER_ENV_HINTS[provider]} is not configured`);
 
@@ -188,7 +185,7 @@ export const createAiProviderProbe = (dependencies: AiProviderProbeDependencies 
   const probeAll = async (options: AiProviderProbeOptions = {}): Promise<Record<AiModelProviderId, AiProviderProbeResult | null>> => {
     const current = env();
     const entries = await Promise.all(
-      AI_MODEL_PROVIDER_IDS.map(async (provider) => [provider, buildAiProviderProbeRequest(provider, current) ? await probe(provider, options) : null] as const)
+      AI_MODEL_PROVIDER_IDS.map(async (provider) => [provider, provider === 'anthropic' || buildAiProviderProbeRequest(provider, current) ? await probe(provider, options) : null] as const)
     );
     return Object.fromEntries(entries) as Record<AiModelProviderId, AiProviderProbeResult | null>;
   };

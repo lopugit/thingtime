@@ -326,6 +326,12 @@
 
 ## Unified Lopu conversations, scheduled Things and discussions
 
+- [ ] Read a page with related components, search/list Things, and follow each
+      Open anchor before and after reloading the chat. Verify actual hrefs,
+      keyboard and new-tab navigation, safe external links, long labels at 390px,
+      expanded details, and top-to-bottom scrolling. Unsafe URL schemes stay text;
+      unsaved drafts and unresolved references do not invent destinations.
+
 - [ ] At 390px width, historical tool rows put long summaries below their label
       and status icon, not in a narrow side column. Check approval, success and
       failure states through the full chat scroll; desktop retains compact rows.
@@ -429,6 +435,15 @@
   daily notification transaction commits. Retries never send another push for
   the same daily ID; blocked preferences/checkpoints send none. A push transport
   failure does not erase or duplicate the durable bell reminder.
+## System vault and OAuth-only Claude
+
+- [ ] System lists the existing CI credential IDs and integration secrets; CI Control uses the same list and its Manage link opens System.
+- [ ] At desktop and 390px, scroll System top to bottom. Open platform menus, replacement forms, and Show dialogs for long names; no large blank form gaps, clipping or horizontal overflow.
+- [ ] Add/rotate/enable/reorder a disposable Claude OAuth entry. The next Claude and signed CI request use the same enabled entries; legacy Anthropic API keys are rejected and excluded from delivery.
+- [ ] Request Claude Opus 5 with High effort. Confirm the provider reports that model; a failed OAuth credential may retry another account with identical settings, but cannot become GPT-4o mini or drop the effort setting. Text, tools, cancellation, usage, refusal and incomplete-tool failures remain correct.
+- [ ] Deployment variable lists and mutation responses never contain values. Wrong password, revoked admin access, wrong-origin requests and arbitrary project fields fail closed. Show opens only the selected encrypted variable; Vercel-sensitive values stay write-only. Add a disposable preview variable without overwriting an existing variable, replace it, and delete it; each successful write reports that redeployment is required.
+- [ ] Build the Vercel output, verify the compressed native runtime and function size, then smoke the built server's capability manifest for System environment 1.0.0, vault reveal 1.1.0 and platform credentials 3.0.0.
+
 ## Verified vault reveal
 
 - [ ] At desktop and 390px widths, CI, external integrations and personal Secure Vault offer Show without changing ordinary value-free list responses.
@@ -1693,6 +1708,14 @@ email whose link points at the attacker.
       uploads stamp provider `openai`; switching either surface to Off stops
       new stamps. Choices survive a reload (settings collection, not local
       state).
+- [ ] Store a dedicated **OpenAI Moderation** credential in the encrypted admin
+      vault separately on production and develop. A valid vault key overrides
+      a stale legacy env key for invitation avatars, media and text; clean
+      synthetic input obtains a real Omni verdict. Rotation is observed on the
+      next request, the other environment stays isolated, and a vault read or
+      decryption failure never silently falls back. Paid chat/CI credentials
+      remain unchanged. Create and then cancel a zero-credit test invitation
+      with an avatar; normal vault/API reads must never return its secret.
 - [ ] With an OpenAI key configured, a post/comment containing threatening
       harassment vanishes from feeds/threads for everyone shortly after
       creation and a `text` flag row (with excerpt, no View button) appears in
@@ -1741,6 +1764,14 @@ email whose link points at the attacker.
       file. Safe image/video previews appear immediately; each row reports
       progress; Post stays disabled until every selected file is Ready; and a
       26th unique file is rejected with the fixed 25-attachment limit message.
+- [ ] With Photos off, drop image, video/audio, and generic files onto the
+      collapsed post prompt, expanded body editor, and comment/edit composer.
+      Photos opens and every file enters the single bounded uploader once.
+      Marketplace, Things, and Poll selections and entered values stay intact.
+      Repeat with Photos already open, dropping inside and outside its panel;
+      preserve existing attachments, text/link dragging, and tile reordering.
+      During submission/recovery, drops must not mutate the frozen draft or
+      navigate away. Portaled Thing editors must not attach files to the post.
 - [ ] With the post/comment text editor focused, paste (⌘/Ctrl+V) a screenshot,
       copied image, video, and generic file. File-bearing pastes turn Photos on
       when needed and queue into the one Media & files panel; pasting again
@@ -2267,6 +2298,7 @@ email whose link points at the attacker.
 
 ## Subspaces (`remix/app/components/Subspaces/`, `remix/app/api/utils/subspaces/`, `/api/v1/subspaces*`)
 
+- [ ] Owner can rename a subspace to `thingtime`; posts and memberships retain their IDs, settings navigates to the new URL, and reload works. Non-owner renames return 403; reserved slugs return 400; taken/held slugs and concurrent competing renames return 409 without changing the original. The old URL is released.
 - [ ] `/s` lists subspaces newest-first with member counts; search narrows by
       slug/name; **Mine ⭐** shows only joined ones; **Create ➕** (or
       `/s?create=1`, the drawer's Subspaces ▸ Create) opens the modal. The
@@ -2662,7 +2694,16 @@ email whose link points at the attacker.
 
 ## Up/down votes (`remix/app/api/utils/things/updown.ts`, `remix/app/components/Feed/UpdownControl.tsx`)
 
-- [ ] Every post and comment card shows the ▲ score ▼ pill beside the
+- [ ] Publish through the browser composer inside a subspace (and through the
+      Feed composer with a subspace selected): the POST body keeps `subspaceId`,
+      `title` and `flairId`. After reload, the new post appears in that subspace
+      and retains its subspace chip, title, flair and vote pill in Feed and its
+      permalink. An ordinary post remains outside subspaces with no vote pill.
+- [ ] Post cards show the ▲ score ▼ pill only when the post belongs to a
+      subspace and the vote preference is enabled, including Feed, Explore,
+      profile, Saved, search and permalink views. Ordinary posts never show
+      the pill, even with existing votes. Comment voting is unchanged.
+- [ ] Subspace post and comment cards show the ▲ score ▼ pill beside the
       react button (native emoji reactions are untouched — react, multi-react
       and the picker keep working on the same card). Tap ▲: the arrow fills,
       score +1 INSTANTLY (optimistic), then the server tally reconciles; tap
@@ -3201,7 +3242,7 @@ email whose link points at the attacker.
       at least five total entries (more than the historical 3-entry cap);
       drag a row by its dedicated handle, use the Up/Down controls, remove a
       non-default row, save, reload, and confirm the exact order persists.
-      `default` stays present and cannot be removed. The effort select only
+      Remove `default`, apply and save a single explicit model, then reload and reopen the selector; both the summary and public GET must retain exactly that model without an added fallback. The effort select only
       offers that model's tiers and the speed select only appears for models
       with a fast lane; re-adding an already-listed combo is blocked.
 - [ ] Exercise the editor at desktop and mobile widths from the top to the
@@ -3211,8 +3252,8 @@ email whose link points at the attacker.
 - [ ] Composed variant ids (`<model>[:<effort>][:fast]`) validate per model:
       efforts a model does not support, `fast` on a model without a fast
       lane, and duplicate segments are rejected on write; reads drop unknown
-      entries without discarding the rest of the order and always keep
-      `default` present.
+      entries without discarding the rest of the order or adding
+      `default`.
 - [ ] Resolver workflow config parsing in the `github-actions` control plane
       (PR #391) validates the widened-but-closed grammar: unique 1..256
       entries matching `^[a-z0-9][a-z0-9.:-]{0,63}$`, parsed into
@@ -4982,6 +5023,13 @@ default` unsets it, and runtime usage reports the effective cap. A custom
 
 ## Notifications (`api/utils/notifications/notifications.ts`, `/api/v1/notifications*`, nav bell)
 
+- [ ] Bell hit area (2026-09-14): at 1440px, 768px and 390px widths, with the
+      drawer open/closed and page scrolled to its footer, click the bell's centre,
+      bottom edge and padded corners to open and close it repeatedly. Every pixel
+      of the 36px button must hit the bell rather than Commander or a transparent
+      layer. Scroll the popup to its last row, reopen, and check Escape/outside
+      dismissal; desktop search must fit between the account and right controls.
+
 - [ ] Watch recovery: an expired/deleting unbound draft returns `watch_upload_restart_required`; retain local bytes and persist a new request identity before re-upload. Lost successful responses retry the same identity; live/bound/foreign drafts never grant rebind permission. A failed file must not mark a healthy account offline or block unrelated queued files. Account switching must not attribute results to the wrong account.
 - [ ] Lopu: ask standard voice/chat to create a private note, an immediate notification, a one-off reminder and a five-minute repeating reminder. Confirm persisted IDs/next runs, pause/resume in Settings, and verify the server sends with the browser closed. Completing/deleting the source or pausing during emission must prevent the send. Late runs skip backlog; owner/auth/CSRF and subscription limits remain enforced.
 - [ ] Settings notification tests: desktop/mobile, scroll top to bottom, expand every-type tests, send Quiet/Normal/Urgent/Rich/Image to yourself, and inspect history. Quiet has no sound; Urgent requests time-sensitive (not Critical). Test the muted response and offline/retry states. Native banners use plain text; richer content is in Thingtime history. Physical Watch display is a separate acceptance check.
@@ -6345,6 +6393,21 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ### Recovery cards, build IDs and app selection
 
+- [ ] Select Electron, Commander, Widgets and Thingtime Recovery in the App picker.
+      Each sidebar/cache page must contain only that app's builds and counts;
+      Recovery appears only in its own section. Relaunch with Recovery selected.
+      Every release row/detail and cached build shows a Built/Released date beside
+      the build identity, or an explicit unavailable date for legacy metadata.
+      Refresh and relaunch offline: cached release dates persist, Cached dates
+      stay distinct, and unsigned trust markers are unchanged. Check narrow/wide
+      windows, scroll all lists to the bottom, and open/cancel unsigned prompts.
+- [ ] In release details, use **Download & install** beside **Download and verify**.
+      It must verify and install the exact selected release through the existing
+      helper, preserving rollback; verify-only must leave installed apps unchanged.
+      Both buttons disable during a download and for withdrawn releases. Failed
+      downloads must never install an older cached build. Open/cancel unsigned
+      install acknowledgement, then verify cache-only still only caches. Check
+      the action row at wide and narrow window sizes, scrolling to the bottom.
 - [ ] In both This Mac views, confirm build IDs come from the bundle or manifest,
       old Electron bundles expose their embedded commit, and Recovery cards use
       the Recovery component name even if old metadata used a desktop title.
@@ -7323,6 +7386,29 @@ approval; `access.test.ts` — the reservation matrix) and
 - [ ] Leave a create request unresolved: after 30 seconds plus bounded readbacks, the composer keeps its draft and offers Check and retry safely. An unresolved readback cannot keep the button spinning indefinitely.
 - [ ] Avatar moderation 429 then success creates the invite; persistent 429, insufficient quota, malformed response and non-JSON 503 never produce a clear verdict. Failure retains the profile fields and thumbnail, reserves no gift, and offers explicit photo removal.
 
+## Admin error-log Things (2026-09-14)
+
+- [ ] Create a harmless server error via the canonical logger; Things → Error logs lists it for current admins. Search by provider, literal punctuation, code and request ID, expand details, refresh without clearing prior rows, and load older rows. At desktop and 390px, scroll from top through footer with details expanded; long traces wrap without overflow or overlays.
+- [ ] Anonymous/non-admin/app-token access returns no logs. Demote/logout/switch accounts while viewing logs: old records disappear and the next API request is denied. Generic Thing reads, search, export, create/update/delete and public ACL spoofing cannot expose or mutate error-log Things.
+- [ ] Provider 429 bodies with only `error.type` retain their redacted reason and request ID. JSON/non-JSON failures, timeout, retry success and retry exhaustion retain fail-closed moderation behavior. No request image/text, credentials, query strings, raw SDK fields or reversible reveal values enter stored detail.
+- [ ] Simulate unavailable log storage and a capture flood: original responses survive, persistence has a one-second deadline, per-request/instance caps apply, and console diagnostics remain. TTL indexes stay home-only; expired records cannot be read even before MongoDB reaps them.
+
+## Post tag rendering
+
+- [ ] At desktop and 390px mobile widths, open a tagged attachment post in the feed and its standalone post page. Each stored tag appears in one pill row beneath the body; tapping a pill opens the matching tag search. Check ordinary posts, comments, and shared originals; tags remain visible without an extra outer-card row. Scroll to the bottom and verify no wrapping overflow or overlap with the action row.
+
+### Subspace branding uploads
+
+- At `/s/:slug/mod?tab=settings`, verify icon and banner default to upload tiles, each with **Use URL instead**. Upload a raster image to each slot, verify preview/progress and Save blocking, save and reload; check directory/card/feed icon and subspace banner as another viewer. Branding remains public directory identity for private subspaces.
+- Replace, remove, cancel, retry a failed upload/save, and switch to/from a valid URL. Existing URLs survive unchanged saves; invalid URLs/non-images/over-64-MiB files and wrong-purpose, wrong-owner, expired or already-bound uploads are refused. Replacement URLs stop serving old managed bytes; abandoned/replaced objects remain billed until reaped.
+- Check revoked moderator access, upload approval, quota failure, ownership transfer and deletion cleanup. On desktop and 390px mobile, open both URL panels and scroll top to bottom; verify no overlap, clipping or horizontal overflow.
+
+## Feed defaults, algorithm directory and geographic Things
+
+- [ ] Open `/feed` on desktop and mobile: all eight builtins appear in the bounded, scrollable picker; selecting one updates the feed and reloading preserves it. Builtins never receive training events.
+- [ ] Open `/algorithms`, search by name/description, create a private profile, publish it, branch it from another account, unpublish, and disable sharing. Private and link-only algorithms never appear in the directory; previews never expose learned weights; existing copies survive unsharing.
+- [ ] Create Things through the API with `geo: {lat,lng}`. Invalid/missing/out-of-range coordinates return 400. POST `/things/search` with `near` and `radiusKm`, and Local feed with lat/lng, find nearby visible posts, exclude far/private posts, and retain tag/subspace/ACL filters. PATCH `geo:null` removes the location.
+- [ ] Local's location request occurs only from its button; denial leaves the location-tag fallback usable. Scroll directory/feed top-to-bottom at desktop/mobile widths, including the editor and open picker; no content overflows.
 
 ## Funding and support (`/support`, landing funding section)
 

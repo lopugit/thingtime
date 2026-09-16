@@ -1,3 +1,4 @@
+import { parseGeo, geoRadiusClause } from '~/schemas/geo';
 import { escapeRegex, findUserByUsername } from '../auth/users';
 import { getThingsCollection } from '../mongodb/collections';
 import { legacyThingReadsRequired } from '../mongodb/legacyThingLayout';
@@ -128,6 +129,8 @@ export type SearchGroup = {
 };
 
 export type SearchQuery = {
+  near?: unknown;
+  radiusKm?: unknown;
   q?: unknown;
   mode?: unknown;
   conditions?: unknown;
@@ -448,6 +451,12 @@ export const searchThings = async (
   if (sort === 'relevance' && !q) return fail(400, 'Relevance sorting needs a text query (q)');
 
   const clauses: Record<string, any>[] = [];
+  if (query.near !== undefined) {
+    const point = parseGeo(query.near);
+    const radius = query.radiusKm === undefined ? 50 : query.radiusKm;
+    if (!point || typeof radius !== 'number' || !Number.isFinite(radius) || radius <= 0 || radius > 1000) return fail(400, 'near requires lat/lng and radiusKm must be greater than 0 and at most 1000');
+    clauses.push(geoRadiusClause(point, radius));
+  }
 
   if (query.conditions !== undefined && query.conditions !== null) {
     if (!Array.isArray(query.conditions)) return fail(400, 'conditions must be a list');

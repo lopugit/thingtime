@@ -304,6 +304,8 @@ export type PublicAlgorithm = {
   // itself stays private either way — mirrors PublicAlgorithm in
   // api/utils/algorithms/algorithms.ts, which is what this projects.
   shared: boolean;
+  listed?: boolean;
+  description?: string;
   createdAt: string;
   updatedAt: string;
   topInterests: AlgorithmInterest[];

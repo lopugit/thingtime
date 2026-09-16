@@ -24,6 +24,36 @@ test('legacy post creation transports the complete native Editor.js document', (
 	assert.equal(payload.text, 'Posts\n\nAre  now\nWorking');
 });
 
+test('subspace post creation preserves the destination, headline and flair through JSON transport', () => {
+	for (const type of ['text', 'image', 'thingtime']) {
+		const payload = JSON.parse(JSON.stringify(buildThingCreateRequestPayload({
+			type,
+			text: 'A subspace post',
+			title: 'My headline',
+			subspaceId: 'chosen-subspace',
+			flairId: 'discussion',
+			viewerCanModerate: true
+		})));
+		assert.equal(payload.subspaceId, 'chosen-subspace');
+		assert.equal(payload.title, 'My headline');
+		assert.equal(payload.flairId, 'discussion');
+		assert.equal('viewerCanModerate' in payload, false);
+	}
+});
+
+test('ordinary posts do not acquire a subspace destination', () => {
+	const payload = JSON.parse(JSON.stringify(buildThingCreateRequestPayload({ type: 'text', text: 'Outside subspaces' })));
+	assert.equal('subspaceId' in payload, false);
+	assert.equal('flairId' in payload, false);
+});
+
+test('unified posts keep subspace fields in the canonical crystal', () => {
+	const crystal = { type: 'text', text: 'A subspace post', title: 'Headline', subspaceId: 'chosen-subspace', flairId: 'discussion' };
+	const payload = buildThingCreateRequestPayload({ thingtime: ['post'], crystal, subspaceId: 'wrong-subspace', title: 'Wrong', flairId: 'wrong' });
+	assert.deepEqual(payload.crystal, crystal);
+	for (const key of ['subspaceId', 'title', 'flairId']) assert.equal(key in payload, false);
+});
+
 test('rich comments transport the complete native Editor.js document', () => {
 	const payload = buildThingCommentRequestPayload({
 		id: 'parent-post',
@@ -45,4 +75,12 @@ test('unified creation keeps rich text inside its crystal without a second top-l
 
 	assert.deepEqual(payload.crystal, { type: 'text', text: 'Posts', richText });
 	assert.equal('richText' in payload, false);
+});
+
+
+test('geo is opt-in and retained by both post transport forms', () => {
+  for (const base of [{ type: 'text' }, { thingtime: ['post'], crystal: { type: 'text' } }]) {
+    assert.equal('geo' in buildThingCreateRequestPayload(base), false);
+    assert.deepEqual(buildThingCreateRequestPayload({ ...base, geo: { lat: 0, lng: 0 } }).geo, { lat: 0, lng: 0 });
+  }
 });

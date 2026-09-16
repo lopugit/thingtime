@@ -18,7 +18,8 @@ test('unused emoji lookup retires without removing its protected uniqueness or l
   assert.ok(RETIRED_THINGS_INDEXES.includes('things_emoji_key_lookup'));
   assert.equal((RETIRED_THINGS_INDEXES as readonly string[]).includes('things_emoji_key_unique'), false);
   assert.equal(entries.find(({ name }) => name === 'uniqueKeys_1')?.options.unique, true);
-  assert.equal(summarizeThingIndexPlan(entries).total, 49); // released 47 + Watch recording scheduler + invite expiry
+  assert.equal(summarizeThingIndexPlan(entries).total, 50); // shared ephemeral TTL replaces the prior diagnostic TTL; geographic queries add one 2dsphere index
+  assert.deepEqual(entries.find(({ name }) => name === 'things_geo')?.keys, { geo: '2dsphere' });
   assert.deepEqual(entries.find(({ name }) => name === 'lopu_recording_due')?.keys, { thingtime: 1, nextRunAt: 1, shareId: 1 });
 });
 
@@ -45,3 +46,13 @@ test('invite expiry is home-only and never deletes escrow before its refund', as
   await Promise.all(createThingsDataIndexes({ collection: () => ({ createIndex: async (_keys: unknown, options: any = {}) => { custom.push(options.name); } }) }));
   assert.equal(custom.includes('account_invite_expiry'), false);
 });
+
+ test('logs reuse the shared Thing order and central safe expiry policy with no new index slots', async () => {
+   const entries = await thingsIndexPlanEntries();
+   assert.ok(entries.some(({ keys }) => JSON.stringify(keys) === JSON.stringify({ thingtime: 1, createdAt: -1, shareId: 1 })));
+   assert.equal(entries.some(({ name }) => ['error_log_recent', 'error_log_expires_at', 'migration_diagnostic_expires_at'].includes(name)), false);
+   const ttl = entries.find(({ name }) => name === 'things_ephemeral_expires_at')!;
+   assert.deepEqual(ttl.keys, { expiresAt: 1 });
+   assert.deepEqual(ttl.options.partialFilterExpression, { thingtime: { $in: ['migration-diagnostic', 'error-log'] } });
+   assert.equal(ttl.options.expireAfterSeconds, 0);
+ });

@@ -1052,16 +1052,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'admin',
     title: 'Manage the ordered Lopu credential waterfall',
     endpoint: '/api/v1/admin/ci/credentials',
-    featureVersion: '2.0.0',
+    featureVersion: '3.0.0',
     summary: 'Store, rotate, enable, delete, and reorder named AI-platform credentials without exposing their values.',
     detail:
-      'Credential values are AES-256-GCM encrypted with THINGTIME_ADMIN_VAULT_KEY and are write-only from the browser. Each entry has a built-in or custom AI platform label; GET and every mutation response contain redacted metadata only. Lopu requests the ordered compatible platform subset from the vault at run time, so GitHub needs one stable router secret instead of one repository secret per account. At most eight entries are stored.',
+      'Credential values are AES-256-GCM encrypted with THINGTIME_ADMIN_VAULT_KEY and are write-only from the browser. Each entry has a built-in or custom AI platform label; GET and every mutation response contain redacted metadata only. Lopu requests the ordered compatible platform subset from the vault at run time, so GitHub needs one stable router secret instead of one repository secret per account. At most 128 entries are stored. Anthropic and Claude entries accept only Claude Code OAuth tokens; API keys are rejected. Claude and CI share this store.',
     auth: { mode: 'session', description: 'Requires an admin session (isAdmin).' },
     methods: ['GET', 'POST'],
     steps: [
       'GET the redacted ordered list.',
       'POST create, rotate, set-enabled, reorder, or delete.',
-      'Use the CI Control page to manage the order without copying values back into the browser.'
+      'Use Admin System Secure Vault to manage the order without copying values back into the browser.'
     ],
     requestExamples: [
       { name: 'Add a named AI account', description: 'The platform may be built-in or custom; the value is accepted once and never returned.', method: 'POST', body: { action: 'create', name: 'Thingtime Claude', platform: 'Anthropic', value: '<oauth-token>', enabled: true } },
@@ -1314,10 +1314,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     group: 'integrations',
     title: 'Deliver the ordered Lopu credential waterfall',
     endpoint: '/api/v1/integrations/ci/credentials',
-    featureVersion: '1.1.0',
+    featureVersion: '1.1.1',
     summary: 'Return enabled credentials to one fresh, signed, protected-branch GitHub Actions request.',
     detail:
-      'The exact body is HMAC-SHA256 signed with THINGTIME_CI_ROUTER_SECRET. The server verifies repository, workflow ref, run identity, freshness, requested platform, and a single-use nonce before decrypting only the ordered compatible entries. Responses are no-store and intended only for immediate in-memory use by Lopu.',
+      'The exact body is HMAC-SHA256 signed with THINGTIME_CI_ROUTER_SECRET. The server verifies repository, workflow ref, run identity, freshness, requested platform, and a single-use nonce before decrypting only the first eight ordered compatible entries from the System vault. Claude delivery excludes legacy API keys. Responses are no-store and intended only for immediate in-memory use by Lopu.',
     auth: { mode: 'none', description: 'Server-to-server HMAC authentication via X-Thingtime-CI-Signature.' },
     methods: ['POST'],
     steps: [
@@ -1435,6 +1435,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 			},
       { status: 403, description: 'Signature mismatch.', body: { ok: false, error: 'Invalid webhook signature' } }
     ]
+  }),
+  endpoint({
+    id: 'admin-system-environment', group: 'admin', title: 'Manage Thingtime deployment environment',
+    endpoint: '/api/v1/admin/system/environment', featureVersion: '1.0.0', methods: ['GET', 'POST'],
+    summary: 'List metadata and create, rotate or delete a variable in the server-configured Thingtime Vercel project.',
+    detail: 'The project and Vercel token are server-selected. GET and mutation responses omit all values. Creation stores an encrypted variable for one standard environment with no upsert. Rotation preserves the selected entry scope. Same-origin admin mutations are required. Values are revealed separately with fresh verification via api.vault-reveal 1.1.0. Vercel sensitive values stay write-only. Environment changes require redeployment. Retired Anthropic API credentials cannot be created or rotated.',
+    auth: { mode: 'session', description: 'Current admin account session required.' },
+    steps: ['Negotiate api.admin-system-environment >=1.0.0.', 'GET metadata.', 'POST create, rotate or delete for one selected entry.', 'Redeploy to apply changes.'],
+    requestExamples: [{ name: 'Add a variable', description: 'One environment; an existing variable is not overwritten.', method: 'POST', body: { action: 'create', key: 'SERVICE_TOKEN', value: '<secret>', target: 'preview' } }],
+    responseExamples: [{ status: 200, description: 'Metadata only.', body: { ok: true, configured: true, entries: [{ id: 'example', key: 'SERVICE_TOKEN', target: ['preview'], type: 'encrypted', gitBranch: null, revealable: true }] } }]
   }),
   endpoint({
     id: 'admin-integrations',
@@ -2836,12 +2846,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'settings-pr-conflict-auto-resolver-model-waterfall',
+    contractVersion: '1.1.0',
+    featureVersion: '1.1.0',
     group: 'settings',
     title: 'AI workflow model waterfall',
     endpoint: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall',
     summary: 'Read or administratively reorder the model chain used by conflict, rebase, and semantic-refresh AI workflows.',
     detail:
-      'GET publicly returns the ordered, non-secret model ids plus the base-model catalog. POST replaces the order for administrators only. The first entry is the preferred model for merge-conflict resolution, stacked-PR rebases, and their semantic Graphify refreshes; conflict-editing calls may use later entries for eligible availability failures. Direct Anthropic features use the first Anthropic-capable entry and OpenAI-backed features the first OpenAI entry, each stopping at the default sentinel. Entries compose a catalog base model with optional variant segments — `<model>[:<effort>][:fast]` (for example claude-opus-5:high:fast or gpt-5.6-sol:ultra) — where the effort must be one the model supports and fast requires the model to offer a fast lane (Anthropic fast mode or OpenAI priority processing). The list length is unlimited; ids must be unique and include default as the hard fallback. Missing or corrupt stored settings resolve safely, dropping unknown entries and collapsing to ["default"] when nothing usable remains.',
+      'GET publicly returns the ordered, non-secret model ids plus the base-model catalog. POST replaces the order for administrators only. The first entry is the preferred model for merge-conflict resolution, stacked-PR rebases, and their semantic Graphify refreshes; conflict-editing calls may use later entries for eligible availability failures. Direct Anthropic features use the first Anthropic-capable entry and OpenAI-backed features the first OpenAI entry, each stopping at the default sentinel. Entries compose a catalog base model with optional variant segments — `<model>[:<effort>][:fast]` (for example claude-opus-5:high:fast or gpt-5.6-sol:ultra) — where the effort must be one the model supports and fast requires the model to offer a fast lane (Anthropic fast mode or OpenAI priority processing). The list length is unlimited; ids must be unique. Configured orders are returned exactly without appending a default; default is optional and runs only if selected. Missing or corrupt stored settings resolve safely, dropping unknown entries and collapsing to ["default"] when nothing usable remains.',
     auth: {
       mode: 'optional',
       description: 'GET is public. POST requires an authenticated administrator session.'
@@ -2851,7 +2863,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'GET to read the current waterfall and the base-model catalog with per-model efforts and speeds.',
       'Administrators POST { waterfall: [modelId, ...] } to replace the priority order.',
       'Compose entries as <model>[:<effort>][:fast] from the catalog; ids must be unique.',
-      'Always include default so the resolver has a final provider-selected fallback.'
+      'Include default only when a provider-selected attempt is wanted; it can be removed.'
     ],
     requestExamples: [
       {
@@ -2893,7 +2905,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
           ]
         }
       },
-      { status: 400, description: 'Invalid waterfall.', body: { ok: false, error: 'waterfall must include default as a hard fallback' } },
+      { status: 400, description: 'Invalid waterfall.', body: { ok: false, error: 'waterfall must contain at least 1 model id' } },
       { status: 403, description: 'POST caller is not an admin.', body: { ok: false, error: 'Admins only' } }
     ],
     notes: ['Responses set Cache-Control: no-store. Storage audit fields are never exposed by this endpoint.']
@@ -2910,21 +2922,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.4.0: `models[].pricing` — the list price per million tokens with an `estimated` flag
     // (verified-access design note §2, additive).
     // contractVersion feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.4.0',
-    featureVersion: '1.4.0',
-    summary: 'Lists every AI model Lopu can chat with, its availability (provider keys verified, not merely detected), the resolved chat defaults, and (for a session) the caller’s own Secure Vault providers.',
+    contractVersion: '1.4.1',
+    featureVersion: '1.4.1',
+    summary: 'Lists every AI model Lopu can chat with, its provider access state, the resolved chat defaults, and (for a session) the caller’s own Secure Vault providers.',
     detail:
       'The public projection of the protected `ai-model` Things — one per base model in the Thingtime Admin catalog, ' +
       'seeded idempotently from code on the first read (the `default` sentinel is routing, not a model, so it is never ' +
       'listed). Each model carries its provider, the reasoning-effort tiers it offers, the speed lanes it sells (fast = ' +
       'Anthropic fast mode / OpenAI priority processing), a derived family, the admin `enabled` toggle, `verified` (the ' +
       'provider key’s probe verdict: true accepted, false rejected, null unknown), and `available` = enabled AND the provider ' +
-      'key is configured on the server (ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN; OPENAI_API_KEY) AND that key has not been ' +
-      'rejected. Keys are verified, not merely detected: a bounded server-side probe (GET /v1/models on each configured ' +
-      'provider — ANTHROPIC_BASE_URL / OPENAI_BASE_URL honoured — 5 s cap, no retries, no redirects, cached in-process for ' +
-      '10 minutes, 2 after a failure) answers `providers.<provider>` = { configured, verified, checkedAt, reason? }; 401/403 ' +
-      'marks the key invalid and hides its models, while an unreachable provider, a timeout, or an unexpected status leaves ' +
-      '`verified: null` and the models offered. `defaults` is the Thingtime.LopuChatDefaults singleton after availability is ' +
+      'key is configured on the server (CLAUDE_CODE_OAUTH_TOKEN or admin vault Claude OAuth; OPENAI_API_KEY) AND that key has not been ' +
+      'rejected. Claude checks the shared vault for an enabled OAuth token and reports verified: null until an actual ' +
+      'reply checks model access and allowance. OpenAI uses a bounded GET /v1/models probe (OPENAI_BASE_URL honoured, ' +
+      '5 s cap, no retries or redirects, cached for 10 minutes and 2 after failure). A rejected OpenAI key hides its models; ' +
+      'unreachable or unexpected responses leave verified: null. `defaults` is the Thingtime.LopuChatDefaults singleton after availability is ' +
       'applied — the stored model when it is available, else the first available model in catalog order with its effort ' +
       'clamped (preferring high), else `model: null` when no provider is usable (Lopu then answers from the canned fallback). ' +
       '`providers` reports presence and verdicts only; no value ever leaves the server. Model ids compose into the same ' +
@@ -4623,10 +4634,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // each spend the same last credit — past the cap the request is refused 429
     // LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted (additive). contractVersion
     // feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.7.1',
-    featureVersion: '1.7.1',
+    contractVersion: '1.8.0',
+    featureVersion: '1.8.0',
     summary: 'Sends one message to Lopu and streams its reply — text, tool calls and live builder patches — as newline-delimited JSON. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
     detail:
+      'Version 1.8 adds bounded, validated navigation links to saved tool receipts; page reads, search hits and related components retain Open links after reload. ' +
+      'Version 1.7.2 runs Claude only through the shared OAuth vault and preserves an explicit model, effort and speed; a failed explicit choice never silently switches providers. ' +
       'Version 1.7.1 rechecks positive balance atomically when reserving a billed turn, preventing a concurrent invite gift from spending the same available balance. ' +
       'Version 1.6.2 clarifies comment proposal guidance: the first unapproved comment_on_thing call opens the exact-target/full-text Confirm card without posting; only a subsequent server-verified approved call can post. Plain-text agreement is not a substitute for a signed confirmation. ' +
       'Version 1.6.1 retains bounded public tool receipts in server-loaded conversation history, so later turns can distinguish completed and failed actions. Receipts are historical outcomes, not current-state guarantees or authorization to repeat actions; raw tool results and confirmation tokens are never replayed. ' +
@@ -4759,7 +4772,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'Rate limited per user by lopu.chat (40 per 10 minutes), enforced fail-closed; vault turns share the bucket.',
       'Verified access + credits (verified-access design note §1–§2): the gate runs after the body, conversation and provider are validated and BEFORE anything is persisted or any provider is dialed — 403 { code: "LOPU_UNVERIFIED" } for an unverified account (unless the turn runs on the caller’s own vault provider and Thingtime.LopuAccess.allowByoUnverified is on), 402 { code: "LOPU_NO_CREDITS", balanceMicros } when the turn would run on Thingtime’s keys with a balance of zero or less, 403 { code: "LOPU_GUEST" } for a temporary session. Every turn is then priced from the catalog list prices (GET /api/v1/ai/models pricing; the scripted test provider reports 100 in / 50 out tokens per hop and prices against test-model) and recorded as a lopu-usage row: meta carries billing ("thingtime" = server keys, debited from the credit balance with a lopu-credit ledger row; "byo" = the caller’s vault provider, recorded only; "free" = the canned fallback), done carries billing, costMicros (the list price in micro-USD), priced (the model had a price) and balanceMicros (the balance after the debit; null when no account is involved), and the persisted assistant row’s lopu meta keeps the same fields. The balance may go negative by at most one turn; the next one is refused. An accounting failure is logged and retried once, never surfaced as a chat error.',
       'Confirmations are purpose JWTs on the auth key material (15-minute expiry, bound to account + chat + action key); they are single-use within the turn that spends them and the client retires a card after one press. Nothing the model reads — tool results, page blocks, thing content — can grant one.',
-      'Env: ANTHROPIC_API_KEY / OPENAI_API_KEY pick the providers; LOPU_CHAT_PROVIDER (auto|claude|openai|test) and LOPU_OPENAI_TOOLS (native|text) shape routing; LOPU_CLAUDE_MODEL / LOPU_OPENAI_MODEL are the provider defaults for the admin waterfall’s default slot.',
+      'Env: Claude OAuth / OPENAI_API_KEY pick the providers; LOPU_CHAT_PROVIDER (auto|claude|openai|test) and LOPU_OPENAI_TOOLS (native|text) shape routing; LOPU_CLAUDE_MODEL / LOPU_OPENAI_MODEL are the provider defaults for the admin waterfall’s default slot.',
       'Vault turns need THINGTIME_USER_VAULT_KEY (or the admin vault key) and honour THINGTIME_LOPU_PROVIDER_ALLOWED_HOSTS for custom compatible hosts; a vault turn takes precedence over LOPU_CHAT_PROVIDER, test mode included.'
     ]
   }),
@@ -5498,8 +5511,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
 	endpoint({
 		id: 'attachment-uploads',
-		contractVersion: '1.3.0',
-		featureVersion: '1.3.0',
+		contractVersion: '1.4.0',
+		featureVersion: '1.4.0',
 		group: 'attachments',
 		title: 'Start attachment upload',
 		endpoint: '/api/v1/attachments/uploads',
@@ -5514,7 +5527,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		},
 		methods: ['POST'],
 		steps: [
-			'POST a stable random requestId, filename, browser-reported contentType, exact sizeBytes, and the surface purpose: post, comment, message, profile-avatar, profile-banner, custom-emoji, recording, or recording-import.',
+			'POST a stable random requestId, filename, browser-reported contentType, exact sizeBytes, and the surface purpose: post, comment, message, profile-avatar, profile-banner, custom-emoji, recording, recording-import, subspace-icon, or subspace-banner.',
 			'Recording-import requires private-upload approval. It stamps recording purpose plus a server-owned import-draft marker, retains draft expiry after completion and stays out of My Things until the dedicated import commit. Its request fingerprint differs from ordinary recordings; expired or already-committed imports cannot be resumed. Supply this ready upload to the recording adapter of /api/v1/things/import.',
 			'Recording purpose requires private-upload approval and produces an owner-private standalone Thing. Replaying its exact request after completion returns upload.state=ready and expiresAt=null; do not PUT parts again.',
 			'Split the file using partSizeBytes; the final part may be smaller.',
@@ -5856,13 +5869,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-content',
-		contractVersion: '1.6.4',
-		featureVersion: '1.6.4',
+		contractVersion: '1.7.0',
+		featureVersion: '1.7.0',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
 		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
 		detail:
+			'Subspace branding images require a live subspace and the exact current icon/banner slot binding. Branding is public directory identity even for private subspaces; replaced or deleted slots grant no public access. ' +
 			'Saved standalone recordings without a draft expiry remain readable by their exact owner. Import drafts, expired uploads, other viewers and custom data endpoints gain no new access. ' +
 			'Root component render ttMediaRefs bindings are applied once after stored interpolation in media props/CSS, matching the browser. Only resulting rendered URLs are dependencies; unused pairs, labels and action inputs grant nothing. ' +
 			'An independently readable foreign component establishes its own freshly checked audience for its same-author authored media and bound children. The outer root remains required. Cross-author page argument overrides never inherit either author private media authority. ' +
@@ -6623,13 +6637,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-messages',
-    featureVersion: '1.0.1',
-    contractVersion: '1.0.1',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'messenger',
     title: 'Chat messages',
     endpoint: '/api/v1/chats/messages',
     summary: 'Reads a page of messages or sends a new one, including Slack-style thread replies.',
     detail:
+      'Version 1.1 adds optional lopu.toolCalls[].links ({label, href}, at most 100 per call) to assistant message history. Links allow local paths and credential-free HTTP(S) URLs only; raw tool data and approval grants are excluded. ' +
       'GET pages a chat newest-first with cursor and limit (max 100, default 40); pass threadRootId to scope the ' +
       'page to one thread. The response bundles customEmojis (a map of id to name, image, and animated for any ' +
       'custom reaction tokens on the page), nextCursor, threadRoot, members, chat, and myMember so one request ' +
@@ -7577,13 +7592,25 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'algorithms-search', featureVersion: '1.0.0', contractVersion: '1.0.0',
+    group: 'algorithms', title: 'Search public algorithms', endpoint: '/api/v1/algorithms/search',
+    summary: 'Find algorithms their owners explicitly published to the directory.',
+    detail: 'Public, no-store, literal case-insensitive name/description search. q is capped at 80 characters; cursor is the last shareId. Pages hold 20 entries. Only shared AND listed algorithms appear. Returns identity, description, username and training count, never weights or topInterests. Link-only profiles stay undiscoverable.',
+    auth: { mode: 'none', description: 'Guest-visible.' }, methods: ['GET'],
+    steps: ['GET with optional q and cursor.', 'Use nextCursor for another page.', 'Branch through POST /api/v1/algorithms while authenticated.'],
+    requestExamples: [{ name: 'Search', description: 'Find gardening algorithms.', method: 'GET', query: { q: 'gardening' } }],
+    responseExamples: [{ status: 200, description: 'Public directory page.', body: { ok: true, algorithms: [], nextCursor: null } }]
+  }),
+  endpoint({
     id: 'algorithms',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'algorithms',
     title: 'Feed algorithms',
     endpoint: '/api/v1/algorithms',
     summary: 'Lists or creates the current user feed-ranking algorithms.',
     detail:
-      'Feed algorithms store per-user ranking weights trained from dwell, expand, reaction, comment, and share events. Users can keep multiple named algorithms and switch the active one.',
+      'Creation accepts an optional description (300 characters); new algorithms start private and unlisted. Feed algorithms store per-user ranking weights trained from dwell, expand, reaction, comment, and share events. Users can keep multiple named algorithms and switch the active one.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -7624,11 +7651,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'algorithms-active',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'algorithms',
     title: 'Active feed algorithm',
     endpoint: '/api/v1/algorithms/active',
     summary: 'Sets or clears the current user active feed algorithm.',
-    detail: 'Use this endpoint when the feed algorithm picker changes. A null algorithmId returns the feed to latest-first chronological ranking.',
+    detail: 'The eight builtin algorithm IDs are accepted alongside owned algorithm IDs and null. Use this endpoint when the feed algorithm picker changes. A null algorithmId returns the feed to latest-first chronological ranking.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -7742,12 +7771,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'algorithms-update',
+    featureVersion: '1.1.0',
+    contractVersion: '1.1.0',
     group: 'algorithms',
     title: 'Update feed algorithm',
     endpoint: '/api/v1/algorithms/update',
     summary: 'Renames, restyles, or toggles sharing on one of the current user feed algorithms.',
     detail:
-      'Use this endpoint from the settings algorithm manager to update algorithm display metadata without changing its learned weights. shared (strict boolean) turns the "try my feed brain" branch invitation on or off: while true, anyone with the /feed?algorithm=<id> link can read the tiny preview and branch a private copy; the algorithm itself stays private either way.',
+      'Optional listed (strict boolean) opts into the public directory and enables sharing; listed:false removes directory discoverability without revoking links. shared:false clears listed as well. Existing shared algorithms are never automatically listed. Optional description is bounded to 300 characters. Use this endpoint from the settings algorithm manager to update algorithm display metadata without changing its learned weights. shared (strict boolean) turns the "try my feed brain" branch invitation on or off: while true, anyone with the /feed?algorithm=<id> link can read the tiny preview and branch a private copy; the algorithm itself stays private either way.',
     auth: {
       mode: 'session-or-bearer',
       description: 'Requires an auth cookie or Authorization: Bearer token.'
@@ -8927,14 +8958,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // recording attachments — pending uploads and the other protected kinds
     // stay excluded (additive, on top of the sharedRoot correction)
     // Includes additive discussions and the 1.7.5 conditional-media write correction.
-    featureVersion: '1.17.0',
-    contractVersion: '1.16.0',
+    featureVersion: '1.18.0',
+    contractVersion: '1.17.0',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
-			'The archive emoji projection recognizes the canonical persisted attachment purpose emoji (the upload API alias is custom-emoji). ' +
+			'Optional geo: {lat,lng} on create/update stores a validated geographic Point (lat -90..90, lng -180..180); null removes location and omission preserves it on PATCH. Read projections expose lat/lng only under the same Thing ACL. Location is explicitly supplied, never inferred from the author. The archive emoji projection recognizes the canonical persisted attachment purpose emoji (the upload API alias is custom-emoji). ' +
 			'Owner archive snapshots include emojis: referenced personal definitions reduced to id, name and attachmentId. Two bounded snapshot queries enforce exact owner/home scope, ready custom-emoji binding and canonical image metadata; blocked, pending, NSFW, linked, foreign or missing images are omitted and remain unavailable historical reactions. No live accounts or community membership are resolved. ' +
 			'Archive snapshots additionally include ordered attachments with targetId and canonical gallery metadata. The existing owner-only batch query projects safe labels, media type and linked URLs; blocked/noncanonical metadata is omitted, pending owner media is marked pending, and NSFW media is marked nsfw for reveal consent. No object keys, upload identifiers or moderation diagnostics are exposed. attachmentTargets still includes every binding so exports cannot silently omit quarantined files. Stored bytes remain independently authorized by the attachment content endpoint. ' +
 			'First-party user owner library lists include private chat-archive root summaries under the normal chronological/folder pagination. Historical child rows, deleting or namespace-stamped roots, PAT/app/service readers and custom data planes are excluded. Summary crystals contain only the archive name; full history remains on the dedicated archive read mode. Library responses are private/no-store. ' +
@@ -9320,14 +9351,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-search',
-    featureVersion: '1.2.0',
-    contractVersion: '1.2.0',
+    featureVersion: '1.3.0',
+    contractVersion: '1.3.0',
     group: 'things',
     title: 'Search things',
     endpoint: '/api/v1/things/search',
     summary: 'Structured MongoDB-style search plus Google-like ranked text search over every thing you can see. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
-      'The search behind /search. Two modes that compose: q runs a ranked text search (weighted ' +
+      'POST accepts near: {lat,lng} and optional radiusKm (default 50, greater than 0 and at most 1000), narrowing by an indexed spherical radius while preserving all access fences. The search behind /search. Two modes that compose: q runs a ranked text search (weighted ' +
       'wildcard text index over every string field — relevance-sorted like a web search), and ' +
       'conditions runs a structured query built from a whitelisted operator grammar: eq, ne, gt, ' +
       'gte, lt, lte, between, in, nin, exists, type, contains, startsWith, endsWith. Fields address the ' +
@@ -9671,14 +9702,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // the page to posts from the viewer's ACTIVE subspaces (empty for guests /
     // non-members, every other fence intact); the response echoes scope; an
     // unknown scope answers 400 (S6, additive)
-    featureVersion: '1.6.0',
-    contractVersion: '1.6.0',
+    featureVersion: '1.7.0',
+    contractVersion: '1.7.0',
     group: 'things',
     title: 'Feed page',
     endpoint: '/api/v1/things/feed',
     summary: 'Returns public and viewer-visible feed posts with optional algorithm ranking. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
-      'The feed reads recent posts whose acl admits the viewer (tt:all for logged-out callers, plus your own things when authenticated — acl exclusions like -tt:user/<you> are honoured), applies filters, then optionally ranks them with the selected or active feed algorithm. tag narrows to posts carrying one tag (normalized to the stored trim/lowercase form) — the public tag feeds behind /feed?tag=<tag>. scope=subspaces narrows the page to posts from the subspaces the viewer is an ACTIVE member of (the "🪐 My subspaces" chip on /feed) — a pending join request is not a membership, a guest or someone in no subspace gets an empty page, and the usual fences (removed posts hidden, private subspaces members-only) still apply on top; scope=all is the default and the response echoes the scope it served.',
+      'algorithm also accepts hot, new, top, rising, controversial, local, global and political. Vote rankings use the newest 400 matching candidates; rising restricts to 24 hours. Local uses lat/lng with radiusKm (default 50, max 1000), otherwise localTag; no location means an empty feed. Political matches politics/political tags; Global ranks public posts. Existing filters remain conjunctive. The feed reads recent posts whose acl admits the viewer (tt:all for logged-out callers, plus your own things when authenticated — acl exclusions like -tt:user/<you> are honoured), applies filters, then optionally ranks them with the selected or active feed algorithm. tag narrows to posts carrying one tag (normalized to the stored trim/lowercase form) — the public tag feeds behind /feed?tag=<tag>. scope=subspaces narrows the page to posts from the subspaces the viewer is an ACTIVE member of (the "🪐 My subspaces" chip on /feed) — a pending join request is not a membership, a guest or someone in no subspace gets an empty page, and the usual fences (removed posts hidden, private subspaces members-only) still apply on top; scope=all is the default and the response echoes the scope it served.',
     auth: {
       mode: 'optional',
       description: 'Anonymous callers see public posts; authenticated callers may also see their own visible circles.'
@@ -9958,8 +9989,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // counts for, and shows recentPostCount to, them only; everyone else
     // ranks it at zero and its row carries no recentPostCount (compatible
     // corrections)
-    featureVersion: '1.5.0',
-    contractVersion: '1.5.0',
+    featureVersion: '1.5.1',
+    contractVersion: '1.5.1',
     group: 'subspaces',
     title: 'Subspaces',
     endpoint: '/api/v1/subspaces',
@@ -10109,6 +10140,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'subspaces-update',
+    // 1.5.0: owner-only newSlug preserves stable identity; old URLs are released.
     // 1.1.0: changing access resolves the request queues — leaving private
     // activates every pending join request (and notifies them,
     // subspace-join-accepted), leaving restricted clears open posting-approval
@@ -10117,15 +10149,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // allowCustomUserFlair (moderators) — additive
     // 1.3.0: removalReasons (moderators) — the canned { id, title, message }
     // list moderate remove's reasonId picks from (S4, additive)
-    featureVersion: '1.3.0',
-    contractVersion: '1.3.0',
+    featureVersion: '1.5.0',
+    contractVersion: '1.5.0',
     group: 'subspaces',
     title: 'Subspace settings',
     endpoint: '/api/v1/subspaces/update',
-    summary: 'Moderators edit branding, rules, post flairs, user flairs and removal reasons; the owner changes access and the 18+ flag.',
+    summary: 'Moderators edit branding, rules, post flairs, user flairs and removal reasons; the owner changes the URL, access and the 18+ flag.',
     detail:
+      'Optional media: { icon?, banner? } uses { kind: preserve|clear }, { kind: external, url }, or { kind: attachment, attachmentId }. Subspace uploads require public-upload approval, a dedicated subspace-icon/subspace-banner purpose, and a raster image up to 64 MiB. Images bind atomically to the exact current slot; branding remains public directory identity even for private subspaces. Replacements expire through canonical billed cleanup. ' +
       'POST { id|slug, name?, description?, rules?, flairs?, branding?, userFlairs?, userFlairSelfAssign?, ' +
-      'allowCustomUserFlair?, removalReasons? } as a moderator, plus access? and nsfw? as the owner. removalReasons ' +
+      'allowCustomUserFlair?, removalReasons? } as a moderator, plus access?, nsfw? and newSlug? as the owner. newSlug renames the URL while preserving the subspace id, posts and memberships; the old URL stops resolving and becomes available. Reserved, taken and held slugs are refused. removalReasons ' +
       'are the canned reasons moderators remove posts with — a list of { id (slug, minted from the title), title ' +
       '(≤80), message (≤500) }, ≤20 — that POST /api/v1/subspaces/moderate { action: remove, reasonId } picks from ' +
       '(the title — message become the stored reason the author sees). userFlairs are the templates ' +
@@ -10140,7 +10173,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'posting-approval requests (anyone / every member may post now). Every change writes a settings.update ' +
       'mod-log entry whose detail lists the changed fields plus acceptedRequests / clearedApprovalRequests when ' +
       'an access change resolved any.',
-    auth: { mode: 'session-or-bearer', description: 'Requires a moderator (owner for access/nsfw).' },
+    auth: { mode: 'session-or-bearer', description: 'Requires a moderator (owner for access/nsfw/newSlug).' },
     methods: ['POST'],
     steps: ['POST the fields to change.', 'Non-moderators receive 403; owner-only fields 403 for moderators.'],
     requestExamples: [
@@ -10563,14 +10596,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'subspaces-transfer',
+    // 1.2.1: deletion fences concurrent ownership transfer before image cleanup.
     // 1.0.1: every write inside the transfer transaction is guarded by the
     // ownership/membership the gate saw — a concurrent transfer commits at most
     // once, the loser answers 409 (compatible correction)
     // 1.1.0: newOwner carries userFlair and the returned subspace the
     // user-flair settings + viewer.userFlair (S3 user flairs, additive)
     // 1.2.0: the returned subspace carries removalReasons (S4, additive)
-    featureVersion: '1.2.0',
-    contractVersion: '1.2.0',
+    featureVersion: '1.2.1',
+    contractVersion: '1.2.1',
     group: 'subspaces',
     title: 'Transfer subspace ownership',
     endpoint: '/api/v1/subspaces/transfer',
@@ -10605,13 +10639,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'subspaces-delete',
+    // 1.2.0: fences branding writes and drains bound images for every uploader before deleting the subspace.
     // 1.1.0: private-subspace posts and moderator-removed posts leave as
     // author-only posts (privatePosts in the response), rich ['post','comment']
     // things are released too, the slug is held for the previous owner
     // (subspace-tombstone), and a subspace with posts still pointing at it after
     // the release passes answers 409 instead of dropping its doc (additive)
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'subspaces',
     title: 'Delete subspace',
     endpoint: '/api/v1/subspaces/delete',
@@ -13097,6 +13132,22 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       }
     ]
   }),
+  endpoint({
+    id: 'admin-error-logs', featureVersion: '1.0.0', group: 'admin', title: 'Search server error logs',
+    endpoint: '/api/v1/admin/error-logs', methods: ['GET'],
+    summary: 'Current-admin search of redacted, short-lived error-log Things.',
+    detail: 'Home database only. Server-written protected control Things expire after seven days and are never quota billed. Returns at most 30 newest records with a stable opaque before cursor. q is a literal case-insensitive search (160 characters maximum) across redacted message, source, route, provider, code, type and request IDs. Detail is redacted, rendered as plain text and never includes request bodies or arbitrary SDK objects. Capture is best effort, limited to five errors per request, five concurrent writes and 60 per minute per instance; overload retains console metadata. Generic Things CRUD, search, export and feed access are forbidden. Every response is private/no-store; no client write operation exists.',
+    auth: { mode: 'session-or-bearer', description: 'Current admin required on every read, including pagination; app-scoped tokens cannot read logs.' },
+    steps: ['Negotiate api.admin-error-logs >= 1.0.0 on the selected origin.', 'GET with optional q and before.', 'Render redacted text safely in /things?logs=1; retain rows during refresh and clear them when admin access changes.'],
+    requestExamples: [{ name: 'Moderation failures', description: 'Find recent OpenAI errors.', method: 'GET', query: { q: 'openai' } }],
+    responseExamples: [
+      { status: 200, description: 'Newest matching error-log Things.', body: { ok: true, items: [], nextCursor: null } },
+      { status: 401, description: 'Authentication required.', body: { ok: false, error: 'Unauthorized' } },
+      { status: 403, description: 'Current admin required.', body: { ok: false, error: 'Admins only' } },
+      { status: 400, description: 'Invalid cursor.', body: { ok: false, error: 'Invalid error log cursor' } },
+      { status: 503, description: 'Log store unavailable.', body: { ok: false, error: 'Error logs are temporarily unavailable' } }
+    ]
+  }),
 	endpoint({
 		id: 'admin-migrations-diagnostic',
 		group: 'admin',
@@ -13162,13 +13213,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'vault-reveal',
-		contractVersion: '1.0.0',
-		featureVersion: '1.0.0',
+		contractVersion: '1.1.0',
+		featureVersion: '1.1.0',
 		group: 'auth',
 		title: 'Verify and reveal one vault credential',
 		endpoint: '/api/v1/vault/reveal',
 		summary: 'Fresh password or user-verified passkey confirmation for one saved credential.',
-		detail: 'Supports ci and admin vaults for current admins, and personal Secure Vault entries for their owner only. Lists remain value-free. Same-origin JSON POST, a live full account session, and fresh verification are required. Passkey options issue a two-minute single-use challenge bound to the current session, origin and selected item. Login assertions cannot be reused. Five reveal attempts per fifteen minutes, including successful requests, apply independently of subscription tier. No arbitrary secure fields, bulk export, cached reveal grants or server secrets are supported.',
+		detail: 'Supports ci and admin vaults for current admins, and personal Secure Vault entries for their owner only. Lists remain value-free. Same-origin JSON POST, a live full account session, and fresh verification are required. Passkey options issue a two-minute single-use challenge bound to the current session, origin and selected item. Login assertions cannot be reused. Five reveal attempts per fifteen minutes, including successful requests, apply independently of subscription tier. Deployment selection reveals one encrypted Vercel environment value from the server-configured Thingtime project only. Vercel sensitive values cannot be revealed. No arbitrary secure fields, bulk export or cached reveal grants are supported.',
 		auth: { mode: 'session-or-bearer', description: 'Live full account plus current password or a fresh user-verified passkey assertion; admin role for shared admin/CI vaults.' },
 		methods: ['POST'],
 		steps: ['Choose vault and id.', 'POST action options for passkey options and ticket, or use your current password.', 'POST action reveal with password OR ticket and response.', 'Keep the returned value transient and hide it after use.'],

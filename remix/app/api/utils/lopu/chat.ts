@@ -1,3 +1,6 @@
+import { lopuResultLinks } from '~/utils/lopuLinks';
+import { createClaudeOAuthClient, claudeOAuthConfigured } from '../ai/claudeOAuth';
+import { createTtToolTextParser, type TtToolTextParser } from './toolTextParser';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 
@@ -67,7 +70,7 @@ import { friendlyVaultProviderError, resolveVaultTurnModel, vaultProviderTranspo
 // followed by the canned vault line.
 //
 // Providers (set either or both env keys):
-//   - ANTHROPIC_API_KEY (or ANTHROPIC_AUTH_TOKEN) → Claude with native tools
+//   - Claude OAuth credentials → Claude with native tools
 //   - OPENAI_API_KEY → ChatGPT-compatible chat.completions; LOPU_OPENAI_TOOLS
 //     = native (function calling) | text (fenced ```tt-tool blocks parsed
 //     out of the streamed text, for endpoints without function calling such
@@ -106,7 +109,7 @@ export const lopuChatProviderMode = (): LopuChatProviderMode => {
 export const lopuOpenAiToolMode = (): LopuOpenAiToolMode => ((process.env.LOPU_OPENAI_TOOLS || '').trim().toLowerCase() === 'text' ? 'text' : 'native');
 
 export const lopuChatProvidersConfigured = () => ({
-  anthropic: !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN),
+  anthropic: claudeOAuthConfigured(),
   openai: !!process.env.OPENAI_API_KEY
 });
 
@@ -171,7 +174,7 @@ export type LopuChatTurnInput = {
 const defaultDependencies = (): LopuChatDependencies => ({
   runTool: runLopuTool,
   getPreferredModelWaterfall: getAiPreferredModelWaterfall,
-  createAnthropic: (options) => (options ? new Anthropic(options) : new Anthropic()),
+  createAnthropic: (options) => createClaudeOAuthClient(typeof options?.apiKey === 'string' ? { token: options.apiKey } : {}),
   createOpenAi: (options) => (options ? new OpenAI(options) : new OpenAI()),
   resolveVaultProviderClient: resolveVaultProviderClientConfig,
   mintConfirmation: mintLopuConfirmation,
@@ -201,8 +204,8 @@ const planProviderAttempts = async (explicit: AiWorkflowModelChoice | null, deps
   const explicitProvider: 'claude' | 'openai' | null =
     explicit?.provider === 'anthropic' ? 'claude' : explicit?.provider === 'openai' ? 'openai' : null;
   const mode = lopuChatProviderMode();
-  const primary: 'claude' | 'openai' = mode === 'claude' || mode === 'openai' ? mode : (explicitProvider ?? 'claude');
-  const order: Array<'claude' | 'openai'> = primary === 'claude' ? ['claude', 'openai'] : ['openai', 'claude'];
+  const primary: 'claude' | 'openai' = explicitProvider ?? (mode === 'openai' ? 'openai' : 'claude');
+  const order: Array<'claude' | 'openai'> = explicitProvider ? [explicitProvider] : primary === 'claude' ? ['claude', 'openai'] : ['openai', 'claude'];
   return order
     .filter((provider) => (provider === 'claude' ? configured.anthropic : configured.openai))
     .map((provider) => ({
@@ -274,166 +277,7 @@ const isAbortError = (error: unknown): boolean =>
 // closed fence becomes a tool_use. `drop` mode swallows fences (the final
 // text-only hop).
 
-export type TtToolTextParser = {
-  push: (chunk: string) => LopuProviderEvent[];
-  finish: () => LopuProviderEvent[];
-  calls: () => Array<{ id: string; name: string; input: unknown }>;
-  rawText: () => string;
-};
-
-const FENCE_OPEN = /```[ \t]*tt-tool[ \t]*\r?\n?/;
-const FENCE_MARKERS = ['```tt-tool', '``` tt-tool'];
-
-const partialMarkerSuffix = (buffer: string): number => {
-  let longest = 0;
-  for (const marker of FENCE_MARKERS) {
-    const max = Math.min(marker.length - 1, buffer.length);
-    for (let length = max; length > 0; length--) {
-      if (marker.startsWith(buffer.slice(buffer.length - length))) {
-        longest = Math.max(longest, length);
-        break;
-      }
-    }
-  }
-  return longest;
-};
-
-export const createTtToolTextParser = (options: { nextId: () => string; mode: 'execute' | 'drop' }): TtToolTextParser => {
-  let buffer = '';
-  let raw = '';
-  let state: 'text' | 'fence' = 'text';
-  let body = '';
-  let current: { id: string; name: string | null; started: boolean; inputEmitted: number } | null = null;
-  const calls: Array<{ id: string; name: string; input: unknown }> = [];
-
-  const inputSlice = (text: string): string => {
-    const key = text.indexOf('"input"');
-    if (key === -1) return '';
-    const colon = text.indexOf(':', key + 7);
-    return colon === -1 ? '' : text.slice(colon + 1);
-  };
-
-  const progress = (): LopuProviderEvent[] => {
-    if (!current || options.mode === 'drop') return [];
-    const out: LopuProviderEvent[] = [];
-    if (!current.started) {
-      const parsed = parsePartialJson(body);
-      const name = parsed.value && typeof parsed.value === 'object' ? (parsed.value as any).name : null;
-      if (typeof name === 'string' && name.trim()) {
-        current.name = name.trim();
-        current.started = true;
-        out.push({ type: 'tool_use_start', id: current.id, name: current.name });
-      }
-    }
-    if (current.started) {
-      const input = inputSlice(body);
-      if (input.length > current.inputEmitted) {
-        out.push({ type: 'tool_input_delta', id: current.id, name: current.name!, partial: input.slice(current.inputEmitted) });
-        current.inputEmitted = input.length;
-      }
-    }
-    return out;
-  };
-
-  const closeFence = (): LopuProviderEvent[] => {
-    const out: LopuProviderEvent[] = [];
-    const call = current;
-    current = null;
-    state = 'text';
-    if (!call) return out;
-    if (options.mode === 'drop') {
-      out.push({ type: 'text', text: '(tool call skipped — the tool budget for this turn is spent)' });
-      body = '';
-      return out;
-    }
-    let parsed = parsePartialJson(body);
-    // a fence body that arrived JSON-escaped ({\"name\":…} — the reply was a
-    // JSON string literal on the wire) decodes to the real object
-    if ((!parsed.value || typeof parsed.value !== 'object') && /\\"/.test(body)) {
-      try {
-        const decoded = JSON.parse(`"${body.replace(/\r?\n/g, '\\n')}"`);
-        if (typeof decoded === 'string') parsed = parsePartialJson(decoded);
-      } catch {
-        // keep the original parse result
-      }
-    }
-    const value = parsed.value && typeof parsed.value === 'object' ? (parsed.value as any) : {};
-    // the documented shape is { name, input }; models on text-mode endpoints
-    // also reach for OpenAI-ish spellings, so read those too
-    const nameCandidate = [value.name, value.tool, value.tool_name, value.function?.name, value.function].find((entry) => typeof entry === 'string' && entry.trim());
-    const name = typeof nameCandidate === 'string' ? nameCandidate.trim() : call.name || 'unknown_tool';
-    const inputCandidate = [value.input, value.arguments, value.args, value.parameters, value.params, value.function?.arguments].find((entry) => entry !== undefined && entry !== null);
-    const input =
-      inputCandidate && typeof inputCandidate === 'object'
-        ? inputCandidate
-        : typeof inputCandidate === 'string'
-          ? (() => {
-              const inner = parsePartialJson(inputCandidate).value;
-              return inner && typeof inner === 'object' ? inner : {};
-            })()
-          : {};
-    if (!call.started) out.push({ type: 'tool_use_start', id: call.id, name });
-    out.push({ type: 'tool_use', id: call.id, name, input });
-    calls.push({ id: call.id, name, input });
-    body = '';
-    return out;
-  };
-
-  const push = (chunk: string): LopuProviderEvent[] => {
-    raw += chunk;
-    buffer += chunk;
-    const out: LopuProviderEvent[] = [];
-    for (;;) {
-      if (state === 'text') {
-        const match = FENCE_OPEN.exec(buffer);
-        if (match) {
-          const before = buffer.slice(0, match.index);
-          if (before) out.push({ type: 'text', text: before });
-          buffer = buffer.slice(match.index + match[0].length);
-          state = 'fence';
-          body = '';
-          current = { id: options.nextId(), name: null, started: false, inputEmitted: 0 };
-          continue;
-        }
-        const hold = partialMarkerSuffix(buffer);
-        const emit = buffer.slice(0, buffer.length - hold);
-        if (emit) out.push({ type: 'text', text: emit });
-        buffer = buffer.slice(buffer.length - hold);
-        return out;
-      }
-      const close = buffer.indexOf('```');
-      if (close === -1) {
-        // hold back a possible partial closing marker
-        const hold = buffer.endsWith('``') ? 2 : buffer.endsWith('`') ? 1 : 0;
-        body += buffer.slice(0, buffer.length - hold);
-        buffer = buffer.slice(buffer.length - hold);
-        out.push(...progress());
-        return out;
-      }
-      body += buffer.slice(0, close);
-      buffer = buffer.slice(close + 3);
-      out.push(...progress());
-      out.push(...closeFence());
-    }
-  };
-
-  const finish = (): LopuProviderEvent[] => {
-    const out: LopuProviderEvent[] = [];
-    if (state === 'text') {
-      if (buffer) out.push({ type: 'text', text: buffer });
-      buffer = '';
-      return out;
-    }
-    // the model was cut off inside a fence — close it with what we have
-    body += buffer;
-    buffer = '';
-    out.push(...progress());
-    out.push(...closeFence());
-    return out;
-  };
-
-  return { push, finish, calls: () => [...calls], rawText: () => raw };
-};
+export { createTtToolTextParser } from './toolTextParser';
 
 // ---------------------------------------------------------------------------
 // Anthropic
@@ -476,22 +320,13 @@ async function* anthropicProvider(options: AnthropicProviderOptions): LopuProvid
     };
     const requestOptions = signal ? { signal } : {};
     const decorated = !degraded && (choice.speed === 'fast' || !!effort);
-    // Fast mode is beta-gated and needs the beta stream surface; a decorated
-    // request that fails (or completes empty) before producing anything is
-    // retried bare on the same model — and the turn stays bare afterwards.
-    const attempts: Array<() => AsyncIterable<any> & { finalMessage: () => Promise<any> }> =
-      !decorated
-        ? [() => client.messages.stream(base, requestOptions)]
-        : choice.speed === 'fast'
-          ? [
-              () =>
-                client.beta.messages.stream(
-                  { ...(base as any), ...(effort ? { output_config: { effort } } : {}), speed: 'fast', betas: ['fast-mode-2026-02-01'] },
-                  requestOptions
-                ),
-              () => client.messages.stream(base, requestOptions)
-            ]
-          : [() => client.messages.stream({ ...base, output_config: { effort: effort! } }, requestOptions), () => client.messages.stream(base, requestOptions)];
+    // Preserve the chosen effort and speed. Credential retries happen inside
+    // the OAuth runtime; a failure must not silently downgrade the model knobs.
+    const attempts: Array<() => AsyncIterable<any> & { finalMessage: () => Promise<any> }> = [() =>
+      choice.speed === 'fast'
+        ? client.beta.messages.stream({ ...(base as any), ...(effort ? { output_config: { effort } } : {}), speed: 'fast', betas: ['fast-mode-2026-02-01'] }, requestOptions)
+        : client.messages.stream({ ...base, ...(effort ? { output_config: { effort } } : {}) }, requestOptions)
+    ];
 
     let finalMessage: any = null;
     for (let attempt = 0; attempt < attempts.length; attempt++) {
@@ -1000,7 +835,8 @@ async function* runToolLoop(options: LoopOptions): AsyncGenerator<LopuChatStream
               name: call.name,
               ok: result.ok,
               summary: summarise(result.ok === true ? result.summary : result.error),
-              ...(thingIdOf(result) ? { thingId: thingIdOf(result) } : {})
+              ...(thingIdOf(result) ? { thingId: thingIdOf(result) } : {}),
+              ...(result.ok ? { links: lopuResultLinks(result.data) } : {})
             });
             const entry: LopuProviderToolResult = result.ok === true
               ? { id: call.id, name: call.name, ok: true, summary: result.summary, ...(result.data !== undefined ? { data: boundToolData(result.data) } : {}) }
@@ -1061,7 +897,7 @@ async function* runToolLoop(options: LoopOptions): AsyncGenerator<LopuChatStream
 const chunkWords = (text: string): string[] => text.match(/\S+\s*/g) || [text];
 
 export const LOPU_FALLBACK_UNCONFIGURED =
-  'Lopu is resting its horn — no AI provider is configured yet. Ask an admin to add ANTHROPIC_API_KEY (or OPENAI_API_KEY) to this deployment and I will come alive 🦄';
+  'Lopu is resting its horn — no AI provider is configured yet. Ask an admin to add Claude OAuth credentials (or OPENAI_API_KEY) to this deployment and I will come alive 🦄';
 export const LOPU_FALLBACK_FAILED = 'Lopu is daydreaming… every AI provider stumbled just now. Give it a moment and try again 🔮';
 // A vault turn never falls back to the server keys — the user chose their own
 // provider — so its canned line points at the connection instead.
@@ -1092,7 +928,7 @@ const vaultClientOptions = (config: LopuVaultProviderClientConfig): AnthropicCli
   apiKey: config.apiKey,
   baseURL: config.baseURL,
   // never let the server's own credentials ride along on a user's endpoint:
-  // the SDKs read ANTHROPIC_AUTH_TOKEN / OPENAI_ORG_ID / OPENAI_PROJECT_ID /
+  // OpenAI SDKs read OPENAI_ORG_ID / OPENAI_PROJECT_ID /
   // OPENAI_ADMIN_KEY from the env unless told not to
   authToken: null,
   organization: null,
@@ -1316,7 +1152,10 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
   // every provider failed before saying anything — never leave the user empty-handed
   const state = newTurnState();
   yield meta('fallback', null);
-  state.text = yield* streamFallbackReply('failed', deps.fallbackPaceMs);
+  if (explicit) {
+    state.text = 'The selected model could not complete this reply. Check its credential and available usage in Admin → System, then retry. Your model selection has been kept.';
+    yield { type: 'delta', text: state.text };
+  } else state.text = yield* streamFallbackReply('failed', deps.fallbackPaceMs);
   state.stopReason = 'fallback';
   state.error = lastError ? String((lastError as any)?.message || lastError).slice(0, 300) : undefined;
   return outcome('fallback', null, state);

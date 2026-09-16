@@ -31,6 +31,37 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-16: Added eight feed perspectives, the opt-in public algorithm directory and creation/sharing flows, plus validated Thing coordinates and radius-based Local/search queries. Verified the Vercel build and responsive screens. See [PR #813](../PRs/813-feed-algorithm-community-defaults-discovery-geographic-queries.md).
+
+
+- 2026-09-16: Lopu tool cards now expose safe Open anchors for read pages, search/list results, related components and URLs, retained in new saved receipts. Verified desktop/390px layouts and production build; older receipts keep their available Thing link.
+
+- 2026-09-15 — **Codex (AI)** — System now manages shared platform credentials,
+  integration secrets and Vercel environment variables with verified reveals.
+  Claude chat, voice, recordings and moderation use the shared Claude OAuth
+  runtime; explicit chat selections preserve model/effort/speed and never
+  silently switch providers. Packages the pinned runtime for Vercel.
+  [Validation and rollout notes](../PRs/811-claude-oauth-only-shared-system-vault.md).
+- 2026-09-15 — AI workflow model order preserves configured entries without appending or requiring a default fallback; adds save/load regression coverage and capability negotiation. — **Codex (AI)**
+
+- 2026-09-15 — **Codex (AI)** — Moderation now resolves a dedicated encrypted
+  `OpenAI Moderation` admin-vault credential per deployment environment for
+  images, invitation avatars and text, ahead of the legacy server key. Rotation
+  is immediate; vault failures remain closed. No new env variable or index.
+
+- 2026-09-15 — **Codex (AI)** — Added the shared AI policy requiring minimal Vercel bootstrap variables and environment-scoped application configuration in the Thingtime vault, with centralized resolution, isolation and verified migration/rollback.
+
+- 2026-09-14 — **Codex (AI)** — Added protected admin-searchable error-log Things in `/things?logs=1`, bounded seven-day retention using shared Thing indexes, request correlation, redacted shared/API error capture and richer moderation provider diagnostics. [PR 799 details](../PRs/799-admin-error-log-things-searchable-admin-error-log-things.md).
+
+- 2026-09-14 · Codex: Subspace icon/banner settings now reuse upload-first media fields with **Use URL instead**, previews and retry; added purpose-bound, quota-accounted branding attachments and the repo-wide media-input rule. Desktop/mobile URL saves and production build verified; upload storage remains subject to existing approval. See [PR #805 details](../PRs/805-subspace-image-upload-upload-first-subspace-branding.md).
+- Give the notifications bell a 36px click target and reserve desktop search
+  space between navigation controls so Commander cannot intercept bell clicks
+  when the drawer narrows the header. — Codex (AI), 2026-09-14
+
+- 2026-09-14 — Dropping files onto a post composer opens Photos and queues the files through the existing uploader without deselecting other modes, including Poll. Collapsed prompts and rich comments use the same flow. — Codex (AI)
+
+- 2026-09-14 — Allow `thingtime` as a subspace slug and let owners rename URLs in Mod tools → Settings, preserving posts and memberships with atomic uniqueness checks and capability negotiation. **Codex (AI)**
+
 - Add a public support page with the existing GoFundMe contribution link and
   editable paid-setup/sponsorship email enquiries. Replace unsupported landing
   totals, reward promises and the unavailable Indiegogo link; add a funding
@@ -41,6 +72,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   same-tab authority sign-in on foreign previews and keep login forms unobscured.
   Retry brief moderation throttles once and preserve invite drafts on review
   failure; auth-invites contract 1.0.1. [PR #796 evidence](../PRs/796-codex-mobile-auth-post-recovery-mobile-signin-and-invite-review.md). — Codex (AI), 2026-09-13
+
+- 2026-09-14 — Give Thingtime Recovery its own app section, isolate product build
+  lists, and show build/release dates on all Recovery build views. Cache release
+  dates for offline use and stamp new native bundles before signing. — Codex (AI)
 
 - Add Settings → Account in the shared page and popup for account switching,
   storage, invitations, credits and plans. Preserve old credits/invite bookmarks

@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { withPostRequestDeadline } from './postRequest';
+import { isDefaultAlgorithm } from '~/components/Feed/defaultAlgorithms';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 import { AI_COMPLETION_REQUIREMENTS, type AiCompletionInput } from '~/api/utils/ai/completionCore';
 
@@ -386,7 +387,10 @@ export function useApi() {
         [asyncFetcher]
       ),
       setPrConflictResolverModelWaterfall: useCallback(
-				async (waterfall) => asyncFetcher.submit({ waterfall }, { action: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall' }),
+				async (waterfall) => {
+          await requireThingtimeCapability('api.settings-pr-conflict-auto-resolver-model-waterfall', '1.1.0');
+          return asyncFetcher.submit({ waterfall }, { action: '/api/v1/settings/pr-conflict-auto-resolver-model-waterfall' });
+        },
         [asyncFetcher]
       ),
       rateLimits: useCallback(async () => getJson('/api/v1/admin/rate-limits'), []),
@@ -771,7 +775,10 @@ export function useApi() {
       get: useCallback(async (args: { slug?: string; id?: string }) => getJson(`/api/v1/subspaces/get${toQuery(args)}`), []),
       create: useCallback(async (body: Record<string, unknown>) => asyncFetcher.submit(body, { action: '/api/v1/subspaces', errorContext: 'create the subspace' }), [asyncFetcher]),
       update: useCallback(
-        async (body: Record<string, unknown>) => asyncFetcher.submit(body, { action: '/api/v1/subspaces/update', errorContext: 'save the subspace settings' }),
+        async (body: Record<string, unknown>) => {
+          if (body.newSlug !== undefined) await requireThingtimeCapability('api.subspaces-update', '1.5.0');
+          return asyncFetcher.submit(body, { action: '/api/v1/subspaces/update', errorContext: 'save the subspace settings' });
+        },
         [asyncFetcher]
       ),
       // join answers { joined, pending }: a PRIVATE subspace files a join
@@ -878,7 +885,10 @@ export function useApi() {
       }, [asyncFetcher]),
       // scope: 'subspaces' narrows the page to posts from the viewer's ACTIVE
       // subspaces (the "🪐 My subspaces" chip); default all
-      feed: useCallback(async (args) => getJson(`/api/v1/things/feed${toQuery(args)}`), []),
+      feed: useCallback(async (args) => {
+        if (isDefaultAlgorithm(args?.algorithm)) await requireThingtimeCapability('api.things-feed', '1.7.0');
+        return getJson(`/api/v1/things/feed${toQuery(args)}`);
+      }, []),
       // the explore board — public trending posts; `anon: 1` keeps logged-out
       // requests edge-cacheable, mirroring feed
       trending: useCallback(async (args?: { anon?: 1 }) => getJson(`/api/v1/things/trending${toQuery(args)}`), []),
@@ -899,7 +909,8 @@ export function useApi() {
       search: useCallback(
         async (args) => {
           const { conditions, mode, ...rest } = args || {};
-          if (rest.anon && !conditions) {
+          if (rest.near !== undefined) await requireThingtimeCapability('api.things-search', '1.3.0');
+          if (rest.anon && !conditions && rest.near === undefined) {
             return getJson(`/api/v1/things/search${toQuery(rest)}`);
           }
           return asyncFetcher.submit(args || {}, { action: '/api/v1/things/search' });
@@ -940,10 +951,12 @@ export function useApi() {
         return getJson(`/api/v1/things${toQuery({ id: args.id, archive: true })}`, options);
       }, []),
       update: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
+        async (args) => {
+          if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
+          return asyncFetcher.submit(
             {
               id: args?.id,
+              geo: args?.geo,
               crystal: args?.crystal,
               acl: args?.acl,
               visibility: args?.visibility,
@@ -958,7 +971,8 @@ export function useApi() {
               ...(args && 'attachmentIds' in args ? { attachmentIds: args.attachmentIds } : {})
             },
             { action: '/api/v1/things', method: 'PATCH' }
-          ),
+          );
+        },
         [asyncFetcher]
       ),
       // multi-select move/copy/delete/share — see /docs/api things-bulk
@@ -999,7 +1013,8 @@ export function useApi() {
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
       create: useCallback(
         async (args) => {
-					const payload = buildThingCreateRequestPayload(args);
+					if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
+          const payload = buildThingCreateRequestPayload(args);
 					const attachmentIds = args?.attachmentIds;
 					const ret = withPostRequestDeadline(signal => asyncFetcher.submit(payload, { action: '/api/v1/things', errorContext: 'publish your post', signal }));
 					if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {
@@ -1158,6 +1173,10 @@ export function useApi() {
       revoke: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/tokens/revoke' }), [asyncFetcher])
     },
     algorithms: {
+      search: useCallback(async (args = {}) => {
+        await requireThingtimeCapability('api.algorithms-search', '1.0.0');
+        return getJson(`/api/v1/algorithms/search${toQuery(args)}`);
+      }, []),
       list: useCallback(async () => getJson('/api/v1/algorithms'), []),
       // share-link preview (identity + training size only, never weights)
       getShared: useCallback(
@@ -1166,14 +1185,17 @@ export function useApi() {
       ),
       create: useCallback(
         async (args) => {
-          const { name, emoji, branchFrom, events } = args;
-          return asyncFetcher.submit({ name, emoji, branchFrom, events }, { action: '/api/v1/algorithms' });
+          const { name, emoji, branchFrom, events, description } = args;
+          if (description !== undefined) await requireThingtimeCapability('api.algorithms', '1.1.0');
+          return asyncFetcher.submit({ name, emoji, branchFrom, events, description }, { action: '/api/v1/algorithms' });
         },
         [asyncFetcher]
       ),
       update: useCallback(
-        async (args) =>
-          asyncFetcher.submit({ id: args?.id, name: args?.name, emoji: args?.emoji, shared: args?.shared }, { action: '/api/v1/algorithms/update' }),
+        async (args) => {
+          if (args?.listed !== undefined || args?.description !== undefined) await requireThingtimeCapability('api.algorithms-update', '1.1.0');
+          return asyncFetcher.submit({ id: args?.id, name: args?.name, emoji: args?.emoji, shared: args?.shared, listed: args?.listed, description: args?.description }, { action: '/api/v1/algorithms/update' });
+        },
         [asyncFetcher]
       ),
       remove: useCallback(
@@ -1188,6 +1210,7 @@ export function useApi() {
       ),
       setActive: useCallback(
         async (args) => {
+          if (isDefaultAlgorithm(args?.algorithmId)) await requireThingtimeCapability('api.algorithms-active', '1.1.0');
           const ret = asyncFetcher.submit({ algorithmId: args?.algorithmId ?? null }, { action: '/api/v1/algorithms/active' });
           ret.then(refreshRootData).catch(() => {});
           return ret;
