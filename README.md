@@ -3591,3 +3591,19 @@ requires separate App Privacy disclosures in addition to policy URL/text.
 Legal-page development worktree: local `http://localhost:18460` (Nitro 18462,
 HMR 18461). Public preview is delivered through the branch Vercel deployment;
 check the PR deployment status for its current URL.
+
+### Upload admission and local regression checks
+
+Attachment starts use the shared admin rate-limit policy (default: 60 per minute
+per account). The exact persisted legacy 30/hour default is upgraded on read;
+custom/disabled rules are retained. A subsequent admin save records the policy
+version, so explicitly setting 30/hour again remains possible. The browser honors
+`Retry-After` for at most two retries of at most 60 seconds each, keeping the same
+request identity; longer/persistent limits retain the selection and show the wait.
+Upload approval, storage accounting and moderation still apply independently.
+Run `pnpm --dir remix test:attachments`, `test:rate-limit`, and
+`test:api-capabilities` after changes to upload admission.
+
+The upload-regression worktree uses `http://localhost:19800` (HMR 19801, Nitro
+19802), derived by `npm run web-ports`. Tailscale/Funnel could not be configured
+on 2026-09-16: the installed launcher points to a missing Tailscale app.

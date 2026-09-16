@@ -5533,13 +5533,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
 	endpoint({
 		id: 'attachment-uploads',
-		contractVersion: '1.4.0',
-		featureVersion: '1.4.0',
+		contractVersion: '1.4.1',
+		featureVersion: '1.4.1',
 		group: 'attachments',
 		title: 'Start attachment upload',
 		endpoint: '/api/v1/attachments/uploads',
 		summary: 'Reserves account storage and starts a private, checksummed S3 multipart upload.',
 		detail:
+			'Upload starts default to 60 requests per minute per account, including retries. The exact legacy 30/hour default is upgraded; custom and disabled rules are preserved. On 429, honor Retry-After and reuse the same requestId and metadata; never start an unbounded retry loop. ' +
 			'Creates a billable pending attachment before S3 accepts any bytes, preventing concurrent uploads from oversubscribing the account storage tier. ' +
 			'A client-generated requestId makes ambiguous starts idempotent for the same owner, exact metadata, and purpose. The server derives an owner-scoped opaque attachment id, so another account using the same requestId neither collides nor learns that it exists. The object key and multipart id remain private. Request presigned URLs in bounded batches from /uploads/parts.',
 		auth: {

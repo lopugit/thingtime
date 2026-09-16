@@ -16,7 +16,7 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // Private attachment storage: start and completion mutate both S3 and the
   // quota ledger; part-signing is batched (<=20 URLs/request), and reads issue
   // short-lived private redirects. Every surface stays bounded per account/IP.
-  'attachments.start': { limit: 30, windowMs: 3_600_000, enabled: true },
+  'attachments.start': { limit: 60, windowMs: 60_000, enabled: true },
   'attachments.parts': { limit: 600, windowMs: 60_000, enabled: true },
   'attachments.complete': { limit: 60, windowMs: 60_000, enabled: true },
   'attachments.delete': { limit: 120, windowMs: 60_000, enabled: true },
@@ -393,10 +393,16 @@ const clampRule = (rule: any, fallback: RateLimitRule): RateLimitRule => ({
 
 // Only known endpoints survive, each clamped — a stored/patched config can never
 // widen the endpoint set or set nonsensical values.
-const normalize = (endpoints: any): RateLimitConfig => {
+export const normalizeRateLimitConfig = (endpoints: any, uploadStartPolicyVersion = 0): RateLimitConfig => {
 	const out: RateLimitConfig = {};
 	for (const [name, def] of Object.entries(RATE_LIMIT_DEFAULTS)) {
-		out[name] = clampRule(endpoints?.[name], def);
+		const stored = endpoints?.[name];
+		// Admin saves historically persisted every default, so changing only the
+		// default leaves existing deployments stuck at 30/hour. Upgrade that exact
+		// legacy policy; preserve disabled and genuinely customized rules.
+		const legacyUploadDefault = uploadStartPolicyVersion < 1 && name === 'attachments.start' &&
+			stored?.limit === 30 && stored?.windowMs === 3_600_000 && stored?.enabled === true;
+		out[name] = clampRule(legacyUploadDefault ? undefined : stored, def);
 	}
 	return out;
 };
@@ -405,12 +411,12 @@ export const getRateLimitConfig = async (force = false): Promise<RateLimitConfig
 	if (!force && cache && Date.now() - cache.at < CONFIG_TTL_MS) return cache.config;
 	try {
 		const doc = await (await getSettingsCollection()).findOne({ key: SETTINGS_KEY });
-		const config = normalize(doc?.endpoints);
+		const config = normalizeRateLimitConfig(doc?.endpoints, doc?.uploadStartPolicyVersion);
 		cache = { at: Date.now(), config };
 		return config;
 	} catch {
 		// fall back to the last cache or the defaults if the settings read fails
-		return cache?.config || normalize(null);
+		return cache?.config || normalizeRateLimitConfig(null);
 	}
 };
 
@@ -426,7 +432,7 @@ export const setRateLimitConfig = async (patch: RateLimitConfig, updatedBy: stri
 	}
 	await (
 		await getSettingsCollection()
-	).updateOne({ key: SETTINGS_KEY }, { $set: { key: SETTINGS_KEY, endpoints, updatedAt: new Date(), updatedBy } }, { upsert: true });
+	).updateOne({ key: SETTINGS_KEY }, { $set: { key: SETTINGS_KEY, endpoints, uploadStartPolicyVersion: 1, updatedAt: new Date(), updatedBy } }, { upsert: true });
 	cache = { at: Date.now(), config: endpoints };
 	return endpoints;
 };

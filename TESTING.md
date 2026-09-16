@@ -1807,6 +1807,15 @@ email whose link points at the attacker.
       `🏞️ Add Media` control. At desktop and 390px mobile widths it has no
       horizontal overflow; the URL fallback panel and every lower composer
       control remain reachable after scrolling top-to-bottom.
+- [ ] Upload rate-limit regression: on an approved test account, two 25-file
+      selections fit the default 60/minute start budget (including retry headroom).
+      Exact legacy 30/hour settings upgrade; custom and disabled settings remain.
+      Inject one 429 with Retry-After at start, part signing, and completion:
+      wait before retrying, preserve the request/upload IDs and file, and finish
+      once. Persistent 429 stops after two automatic retries; a wait over 60s
+      shows the real wait and retains the selection. Remove the file, unmount,
+      or switch accounts during the wait: no late request may start. Check the
+      error tile and full composer at desktop and 390px through the footer.
 - [ ] Pick and drag/drop raster images, a supported video, and an arbitrary
       file. Safe image/video previews appear immediately; each row reports
       progress; Post stays disabled until every selected file is Ready; and a
