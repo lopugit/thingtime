@@ -132,12 +132,18 @@ export function github(repo) {
   };
   return { api, threads };
 }
+export function selectPulls(pulls, prNumber = '', branch = '') {
+  if (prNumber && !/^[1-9][0-9]*$/.test(prNumber)) throw new Error('Invalid PR selector');
+  if (branch.length > 255 || /[\r\n\0]/.test(branch)) throw new Error('Invalid branch selector');
+  return pulls.filter(p => prNumber ? p.number === Number(prNumber)
+    : !branch || p.head?.ref === branch || p.base?.ref === branch);
+}
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const repo = process.env.REPO;
   if (repo !== 'lopugit/thingtime') throw new Error('Lifecycle is authorized only for lopugit/thingtime');
   const client = github(repo);
   const pulls = await client.api('pulls?state=open&per_page=100', 'pages');
-  for (const p of pulls) {
+  for (const p of selectPulls(pulls, process.env.PR_NUMBER, process.env.BRANCH)) {
     try { console.log(`#${p.number}: ${await settle({ repo, number: p.number, ...client, apply: process.argv.includes('--apply') })}`); }
     catch { console.error(`::warning::PR #${p.number} settlement deferred: incomplete evidence or rejected write.`); process.exitCode = 1; }
   }

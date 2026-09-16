@@ -1008,6 +1008,9 @@ jobs:
       && (inputs.maintenance_operation == '' || inputs.maintenance_operation == 'manage-prs')
       && inputs.promotion_source_pr == '' && inputs.promotion_plan_b64 == ''
     uses: lopugit/thingtime/.github/workflows/lopu-pr-lifecycle.yml@github-actions
+    with:
+      pr_number: ${{ inputs.pr_number }}
+      branch: ${{ inputs.branch }}
     permissions:
       contents: write
       pull-requests: write
@@ -4744,9 +4747,8 @@ jobs:
             For finished, tested, unchanged work with no unresolved findings,
             submit an APPROVE review at the manifest head with your report and
             `<!-- thingtime-lopu-merge-ready:v1 head=<HEAD_SHA> base=<BASE_SHA> -->`.
-            Never approve failing, paused or incomplete work. A separate trusted
-            lifecycle job rechecks CI, threads and refs before merging; you must
-            not merge or close PRs yourself.
+            Never approve failing, paused or incomplete work. The lifecycle job
+            rechecks readiness and merges; never merge or close PRs yourself.
 
             PR conversation is a first-class Lopu responsibility. You have no
             comment quota, template, or topic restriction: post as many useful

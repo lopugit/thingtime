@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import { eligible, redundant, approved, tested, settle } from './lopu-pr-lifecycle.mjs';
+import { eligible, redundant, approved, tested, settle, selectPulls } from './lopu-pr-lifecycle.mjs';
 const repo = 'lopugit/thingtime';
 const head = 'a'.repeat(40), base = 'b'.repeat(40);
 const pull = () => ({ number: 42, state: 'open', draft: false, labels: [], updated_at: 'now',
@@ -12,6 +12,15 @@ const review = () => ({ id: 1, user: { login: 'github-actions[bot]' }, state: 'A
   body: `<!-- thingtime-lopu-merge-ready:v1 head=${head} base=${base} -->` });
 const checks = () => ['Build + typecheck ratchet + unit tests', 'API suite (headless /tests runner)', 'Analyze (actions)', 'Analyze (javascript-typescript)']
   .map((name, i) => ({ id: i + 1, app: { id: 1, slug: 'github-actions' }, name, status: 'completed', conclusion: 'success' }));
+
+test('manual selectors never settle unrelated PRs; exact PR takes precedence', () => {
+  const pulls = [pull(), { ...pull(), number: 43, base: { ...pull().base, ref: 'develop' } }];
+  assert.deepEqual(selectPulls(pulls, '42', 'develop').map(p => p.number), [42]);
+  assert.deepEqual(selectPulls(pulls, '', 'develop').map(p => p.number), [43]);
+  assert.deepEqual(selectPulls(pulls, '', 'missing'), []);
+  assert.deepEqual(selectPulls(pulls), pulls);
+  assert.throws(() => selectPulls(pulls, 'invalid'));
+});
 
 test('only same-repository non-draft unpaused feature heads qualify', () => {
   assert.ok(eligible(pull(), repo));

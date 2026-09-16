@@ -1429,7 +1429,7 @@
       "source_location": "L201",
       "_origin": "ast",
       "id": "github_scripts_deploy_admin_pr_previews_publishadminstatus",
-      "community": 44,
+      "community": 50,
       "norm_label": "publishadminstatus()"
     },
     {
@@ -4703,6 +4703,16 @@
       "norm_label": "github()"
     },
     {
+      "label": "selectPulls()",
+      "file_type": "code",
+      "source_file": ".github/scripts/lopu-pr-lifecycle.mjs",
+      "source_location": "L135",
+      "_origin": "ast",
+      "id": "github_scripts_lopu_pr_lifecycle_selectpulls",
+      "community": 25,
+      "norm_label": "selectpulls()"
+    },
+    {
       "label": "lopu-pr-lifecycle.test.mjs",
       "file_type": "code",
       "source_file": ".github/scripts/lopu-pr-lifecycle.test.mjs",
@@ -4766,7 +4776,7 @@
       "label": "fixture()",
       "file_type": "code",
       "source_file": ".github/scripts/lopu-pr-lifecycle.test.mjs",
-      "source_location": "L54",
+      "source_location": "L63",
       "_origin": "ast",
       "id": "github_scripts_lopu_pr_lifecycle_test_fixture",
       "community": 25,
@@ -5389,7 +5399,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "github_scripts_preview_comments_publishpreviewnotifications",
-      "community": 44,
+      "community": 50,
       "norm_label": "publishpreviewnotifications()"
     },
     {
@@ -25072,6 +25082,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": ".github/scripts/lopu-pr-lifecycle.mjs",
+      "source_location": "L135",
+      "weight": 1.0,
+      "source": "github_scripts_lopu_pr_lifecycle",
+      "target": "github_scripts_lopu_pr_lifecycle_selectpulls",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/lopu-pr-lifecycle.mjs",
       "source_location": "L56",
       "weight": 1.0,
       "source": "github_scripts_lopu_pr_lifecycle",
@@ -25198,6 +25218,17 @@
       "confidence_score": 1.0
     },
     {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": ".github/scripts/lopu-pr-lifecycle.test.mjs",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "github_scripts_lopu_pr_lifecycle_test",
+      "target": "github_scripts_lopu_pr_lifecycle_selectpulls",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": ".github/scripts/lopu-pr-lifecycle.test.mjs",
@@ -25221,7 +25252,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": ".github/scripts/lopu-pr-lifecycle.test.mjs",
-      "source_location": "L54",
+      "source_location": "L63",
       "weight": 1.0,
       "source": "github_scripts_lopu_pr_lifecycle_test",
       "target": "github_scripts_lopu_pr_lifecycle_test_fixture",
@@ -25262,7 +25293,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": ".github/scripts/lopu-pr-lifecycle.test.mjs",
-      "source_location": "L55",
+      "source_location": "L64",
       "weight": 1.0,
       "source": "github_scripts_lopu_pr_lifecycle_test_fixture",
       "target": "github_scripts_lopu_pr_lifecycle_test_pull",
@@ -37941,5 +37972,5 @@
       "source_file": ".github/workflows/promote-features-to-main.yml"
     }
   ],
-  "built_at_commit": "e2ac14988798789d6a623840f24e96440f0bd9dd"
+  "built_at_commit": "0c91b3a844455004b0b1094053aab4d34d2ba6db"
 }

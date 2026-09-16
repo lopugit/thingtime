@@ -1,16 +1,16 @@
 # Graph Report - thingtime-lopu-review-20260916  (2026-09-16)
 
 ## Corpus Check
-- 85 files · ~238,745 words
+- 85 files · ~238,869 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1169 nodes · 2334 edges · 145 communities (50 shown, 95 thin omitted)
+- 1170 nodes · 2336 edges · 145 communities (50 shown, 95 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 32 edges (avg confidence: 0.62)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `e2ac1498`
+- Built from commit: `0c91b3a8`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -318,7 +318,7 @@ Nodes (7): API Suite Job, Build Typecheck Ratchet Unit Tests Job, Product Contra
 
 ### Community 25 - "feature-stack-progress.mjs"
 Cohesion: 0.07
-Nodes (35): answerCommand(), answerQuestion(), safeRunContext(), serveRunChat(), githubJobs(), githubStackPullRequests(), postProgress(), progressSnapshot() (+27 more)
+Nodes (36): answerCommand(), answerQuestion(), safeRunContext(), serveRunChat(), githubJobs(), githubStackPullRequests(), postProgress(), progressSnapshot() (+28 more)
 
 ### Community 26 - "verify-promotion-source-authority.sh"
 Cohesion: 0.33
@@ -378,7 +378,7 @@ Nodes (4): Changes, Evidence and cause, PR #642: Discoverable preview status and
 
 ### Community 44 - "deploy-develop-pr-preview.mjs"
 Cohesion: 0.05
-Nodes (120): publishAdminStatus(), ACTIVE_STATES, assertCurrentPullRequest(), assertPrebuiltOutput(), assertPreviewBundle(), assertRepositoryDispatchSource(), assertTrustedPrincipal(), assertTrustedPullRequest() (+112 more)
+Nodes (118): ACTIVE_STATES, assertCurrentPullRequest(), assertPrebuiltOutput(), assertPreviewBundle(), assertRepositoryDispatchSource(), assertTrustedPrincipal(), assertTrustedPullRequest(), assertTrustedPullRequestStack() (+110 more)
 
 ### Community 45 - "control-plane-events.test.mjs"
 Cohesion: 0.31
@@ -394,7 +394,7 @@ Nodes (4): CODEQL_ADVANCED_ENABLED activation gate, CodeQL analyze job (language
 
 ### Community 50 - "deploy-admin-pr-previews.mjs"
 Cohesion: 0.07
-Nodes (60): ACTIVE_STATES, assertCurrentPullRequest(), assertPrebuiltOutput(), assignAlias(), boundedInteger(), cleanupDeploymentIssue(), cleanupEnvironment(), commentBody() (+52 more)
+Nodes (62): ACTIVE_STATES, assertCurrentPullRequest(), assertPrebuiltOutput(), assignAlias(), boundedInteger(), cleanupDeploymentIssue(), cleanupEnvironment(), commentBody() (+54 more)
 
 ### Community 129 - "build-all-branch.mjs"
 Cohesion: 0.16
@@ -426,12 +426,12 @@ _Questions this graph is uniquely positioned to answer:_
 
 - **What is the exact relationship between `deploy-admin-pr-previews.mjs` and `Admin Controller Job`?**
   _Edge tagged AMBIGUOUS (relation: calls) - confidence is low._
-- **Why does `Main Into Develop Synchronization Job` connect `merge-main-develop-sync-pr.mjs` to `graphify-cas.mjs`?**
-  _High betweenness centrality (0.152) - this node is a cross-community bridge._
-- **Why does `request()` connect `preview-labels.mjs` to `deploy-admin-pr-previews.mjs`, `deploy-develop-pr-preview.mjs`, `merge-main-develop-sync-pr.mjs`?**
-  _High betweenness centrality (0.152) - this node is a cross-community bridge._
 - **Why does `mergeStandingSyncPullRequest()` connect `merge-main-develop-sync-pr.mjs` to `preview-labels.mjs`?**
-  _High betweenness centrality (0.151) - this node is a cross-community bridge._
+  _High betweenness centrality (0.143) - this node is a cross-community bridge._
+- **Why does `request()` connect `preview-labels.mjs` to `deploy-admin-pr-previews.mjs`, `deploy-develop-pr-preview.mjs`, `merge-main-develop-sync-pr.mjs`?**
+  _High betweenness centrality (0.142) - this node is a cross-community bridge._
+- **Why does `Main Into Develop Synchronization Job` connect `merge-main-develop-sync-pr.mjs` to `graphify-cas.mjs`?**
+  _High betweenness centrality (0.141) - this node is a cross-community bridge._
 - **What connects `BASE_BRANCHES`, `completeRefspecs`, `MERGE_CONFIG` to the rest of the system?**
   _321 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `graphify-cas.mjs` be split into smaller, more focused modules?**

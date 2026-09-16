@@ -1,6 +1,13 @@
 name: Lopu PR lifecycle
 on:
   workflow_call:
+    inputs:
+      pr_number:
+        type: string
+        default: ''
+      branch:
+        type: string
+        default: ''
 permissions:
   contents: read
 jobs:
@@ -22,5 +29,7 @@ jobs:
       - name: Apply exact-snapshot lifecycle decisions
         env:
           REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          BRANCH: ${{ inputs.branch }}
           GH_TOKEN: ${{ secrets.CONFLICT_RESOLVER_PAT || github.token }}
         run: node .github/scripts/lopu-pr-lifecycle.mjs --apply
