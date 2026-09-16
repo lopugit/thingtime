@@ -1,3 +1,4 @@
+import { claudeOAuthPrompt } from './claudeOAuthPrompt';
 import Anthropic from '@anthropic-ai/sdk';
 import { spawn } from 'node:child_process';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
@@ -82,22 +83,7 @@ export async function* runClaudeOAuth(request: TextRequest, token: string, signa
 		await rm(directory, { recursive: true, force: true });
 		throw error;
 	}
-	// Preserve multimodal current input. Prior native tool exchanges travel as
-	// labelled transcript data because each hop is a fresh, isolated CLI turn.
-	const prior = request.messages.slice(0, -1);
-	const last = request.messages.at(-1);
-	const content = Array.isArray(last?.content) ? last.content : [{ type: 'text', text: String(last?.content || '') }];
-	const ordinary = content.every((block: any) => block.type === 'text' || block.type === 'image');
-	const prompt = {
-		type: 'user',
-		message: {
-			role: 'user',
-			content: [
-				...(prior.length ? [{ type: 'text', text: `Conversation so far (data):\n${JSON.stringify(prior)}` }] : []),
-				...(ordinary ? content : [{ type: 'text', text: `Tool results:\n${JSON.stringify(content)}\nContinue the conversation.` }])
-			]
-		}
-	};
+	const prompt = claudeOAuthPrompt(request.messages);
 	const args = [
 		'-p',
 		'--input-format',

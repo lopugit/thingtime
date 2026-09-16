@@ -1,3 +1,4 @@
+import { isHeicImage } from './heicImage';
 import type {
 	AttachmentComposerSnapshot,
 	AttachmentMediaKind,
@@ -206,9 +207,9 @@ export const linkedMediaNameForUrl = (url: string): string => {
 	}
 };
 
-export const localFileMediaKind = (file: Pick<File, 'type'>): AttachmentMediaKind => {
+export const localFileMediaKind = (file: Pick<File, 'type'> & { name?: string }): AttachmentMediaKind => {
 	const type = file.type.trim().toLowerCase();
-	if (INLINE_IMAGE_TYPES.has(type)) return 'image';
+	if (INLINE_IMAGE_TYPES.has(type) || isHeicImage(file)) return 'image';
 	if (INLINE_VIDEO_TYPES.has(type)) return 'video';
 	if (isAudioContentType(type)) return 'audio';
 	return 'file';
@@ -463,7 +464,10 @@ export const attachmentCleanupAction = (upload: ComposerAttachmentUpload, commit
 };
 
 export const dedupeSelectedFiles = (current: ComposerAttachmentUpload[], incoming: File[]): File[] => {
-	const seen = new Set(current.map((upload) => `${upload.file.name}\u0000${upload.file.size}\u0000${upload.file.lastModified}`));
+	const seen = new Set(current.map((upload) => {
+		const file = upload.sourceFile || upload.file;
+		return `${file.name}\u0000${file.size}\u0000${file.lastModified}`;
+	}));
 	return incoming.filter((file) => {
 		const key = `${file.name}\u0000${file.size}\u0000${file.lastModified}`;
 		if (seen.has(key)) return false;

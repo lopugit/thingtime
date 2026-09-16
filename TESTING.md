@@ -2917,6 +2917,7 @@ email whose link points at the attacker.
 
 ## Drawer navigation & settings (`remix/app/components/Nav/Drawer/`)
 
+- [ ] With the desktop drawer collapsed, hover the trigger and move into the preview: it starts below the top bar, stays open, and scrolls from the first to last menu item while its brand and account footer stay visible. Recheck at a short desktop viewport and with a safe-area/titlebar inset; no clipping or page scroll chaining. Click to pin/unpin, then at 390px verify tap-to-open, menu scrolling, navigation dismissal, and no hover popup.
 - [ ] Hold a linked top-level row or submenu row for 280ms, then drag over
       another row and release. The row moves without a native URL/image ghost,
       navigation, or drawer dismissal; the order survives reload. Repeat upward
@@ -7442,12 +7443,69 @@ approval; `access.test.ts` — the reservation matrix) and
 - Replace, remove, cancel, retry a failed upload/save, and switch to/from a valid URL. Existing URLs survive unchanged saves; invalid URLs/non-images/over-64-MiB files and wrong-purpose, wrong-owner, expired or already-bound uploads are refused. Replacement URLs stop serving old managed bytes; abandoned/replaced objects remain billed until reaped.
 - Check revoked moderator access, upload approval, quota failure, ownership transfer and deletion cleanup. On desktop and 390px mobile, open both URL panels and scroll top to bottom; verify no overlap, clipping or horizontal overflow.
 
+## HEIC/HEIF photo selection
+
+- [ ] Open `/scripts/heic-upload.browser.html` on the Vite dev server: all cases
+  pass using the synthetic HEIC fixture and the real decoder/upload queue with
+  fake HTTP/object storage. Posts, comments, messages, avatars, banners, subspace
+  branding and emoji reserve/send matching JPEG bytes; retry preserves identity;
+  selecting the same original twice stays deduplicated. Invite preparation and
+  removal perform no attachment API calls. This harness does not prove S3 access.
+- [ ] In Settings → Account and its popup, and in invite signup, select HEIC/HEIF
+  photos (including uppercase extensions and missing browser MIME types). The
+  shared profile uploader shows a valid preview, replacement/removal and retry;
+  Create stays disabled while preparing or after a conversion error. Test invalid
+  bytes, size limits and removal/replacement during conversion. Desktop and 390px
+  layouts remain usable when scrolled from top to bottom.
+- [ ] With an upload-approved account, select/paste/drop HEIC in post, comment and
+  message composers, avatar/banner and subspace branding; verify the JPEG preview,
+  matching stored size/type, server moderation, quota refusal, cleanup, and reload.
+  Downloads use the converted `.jpg`; originals remain untouched on the device.
+  Archive imports retain original bytes. External HEIC URLs are not converted.
+
 ## Feed defaults, algorithm directory and geographic Things
 
 - [ ] Open `/feed` on desktop and mobile: all eight builtins appear in the bounded, scrollable picker; selecting one updates the feed and reloading preserves it. Builtins never receive training events.
 - [ ] Open `/algorithms`, search by name/description, create a private profile, publish it, branch it from another account, unpublish, and disable sharing. Private and link-only algorithms never appear in the directory; previews never expose learned weights; existing copies survive unsharing.
 - [ ] Create Things through the API with `geo: {lat,lng}`. Invalid/missing/out-of-range coordinates return 400. POST `/things/search` with `near` and `radiusKm`, and Local feed with lat/lng, find nearby visible posts, exclude far/private posts, and retain tag/subspace/ACL filters. PATCH `geo:null` removes the location.
 - [ ] Local's location request occurs only from its button; denial leaves the location-tag fallback usable. Scroll directory/feed top-to-bottom at desktop/mobile widths, including the editor and open picker; no content overflows.
+
+
+- [ ] Account invitations default to Never expire; select each dated expiry. Reload and show/copy a pending invite, including clipboard-denied fallback. Legacy replacement warns before invalidating the old link; cancelled/claimed/expired rows have no link control. Check desktop and 390px page/popup top to bottom with dropdown open. Never-expiring gifts survive expiry sweeps; dated gifts refund once; another owner cannot reveal/replace a link.
+### Lopu uploads, provider media and mobile keyboard (2026-09-16)
+
+- [ ] In an owned interactive HTML component (`tt-upload`) and Chakra component
+  (`Upload`), pick an image and a text file, wait for Ready, choose Use file, and
+  verify `<name>`/`<name>AttachmentId` form values and a private attachment-backed
+  post. Toggle Use URL instead; cancel/retry, switch account, and verify shared
+  read-only runs cannot upload. Clearing a field keeps the saved private file.
+- [ ] Send an image, PDF and UTF-8 text file to each supported provider. Verify
+  provider input contains actual media/text, also after a tool hop and a follow-up
+  turn. Test Claude OAuth separately. Revoke access during download: bytes must
+  be discarded. Linked, unsupported, oversized and failed reads must be explicit.
+- [ ] Read a public URL with `fetch_url`; propose an `http_request`, inspect its
+  exact input, refuse once and confirm once. A changed body invalidates approval.
+  Private literals, mixed public/private DNS, redirects, oversized responses and
+  ambient cookie headers are refused; ambiguous mutations are never retried.
+  Confirm the origin manifest advertises network 1.0.0 and chat reply 1.10.0.
+- [ ] At desktop, 390x844 and 390x444, scroll page/chat/attachment panel to the
+  bottom; expand attachments, model menu, Your Things and chat settings. Send
+  remains visible, long input scrolls inside its own field, and no horizontal
+  overflow appears. On a physical iPhone, repeat keyboard open/close, multiline
+  typing, visual-viewport panning, orientation and safe-area changes in both the
+  Lopu page and floating sheet. Desktop resizing alone is not iOS acceptance.
+
+Automated regression coverage: `chatMedia.test.ts`, `chatMediaLoading.test.ts`,
+`chat.streaming.test.mts`, `lopuVisualViewport.test.ts`, API capability tests and
+existing Lopu/component/webpage suites. Browser synthetic upload QA uses mocked
+storage only; do not describe it as a production upload or provider acceptance.
+
+## Background refresh and returning tabs
+
+- [ ] Open an existing Lopu conversation in two clients. Create another conversation and append a message in the other client: the first client's list and selected timeline update without reload or changing the selected conversation. Repeat in the floating Lopu window and Messenger.
+- [ ] Leave the tab hidden, update from the other client, then return. Verify an immediate refresh on visibility/focus, reconnect and browser history restoration; hidden tabs poll at most once per minute per resource. Cached content remains during failures.
+- [ ] Keep a draft, scroll into history, open conversation/chat settings drawers, and let several polls run at desktop and phone widths. No draft loss, loading flash, pagination rewind, overlap or clipping. Rename/delete while an earlier read is delayed; an old result cannot undo the edit. Switch accounts away and back during a delayed read; old private data cannot reappear.
+- [ ] Run the hooks, Lopu UI, Lopu store, Messenger and root-data suites. Use the live browser as well: native browser timers require correctly bound callbacks, which Node timers alone do not prove.
 
 ## Legal pages and policy exports
 

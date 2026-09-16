@@ -40,10 +40,24 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   `Thingtime - Your Home for Everything` (also used for browser tabs), while
   preserving custom public-content previews and excluding query/fragment secrets.
 
+- 2026-09-16 — **Codex (AI)** — Add native image/file uploads to authored
+  components; forward authorized image/PDF/text bytes into Lopu provider calls,
+  including Claude OAuth tool hops; add a capability-negotiated browser HTTP
+  SDK and confirmed API tool; keep the mobile composer above the visual
+  keyboard viewport with independently scrolling attachments and long text.
+  [Validation and limits](../PRs/816-codex-lopu-attachments-sdk-mobile-fix-lopu-uploads-provider-attachments-http-and-mobile-keyboard.md).
+- 2026-09-16 — Fix desktop hover drawer scrolling and place its preview below the top bar, with viewport-safe bounds and fixed header/footer. Local validation: `http://localhost:18640` (HMR 18641, Nitro 18642; `TT_WEB_PORT`/`TT_HMR_PORT`/`TT_API_PORT` overrides for the hover-drawer worktree). Tailscale/Funnel unavailable: the installed launcher points to a missing Tailscale app. **Codex (AI)**
 - 2026-09-16 — Messenger spaces show only their own direct/group conversations. Add an account-specific **Show Lopu chats** checkbox, off by default, while preserving explicit conversation links. **Codex (AI)**
 - 2026-09-16 — Restore held-row drawer reordering after navigation rows became
   real links. Prevent native anchor/image dragging only while a reorder is
   armed, preserving normal navigation and browser link shortcuts. **Codex (AI)**
+
+- 2026-09-16 — Lopu conversation lists/messages, Messenger, credits and shared session data now refresh quietly in the background and on returning to a tab or reconnecting. Shared polling avoids duplicate requests, keeps hidden-tab traffic low, and fences stale reads against local edits and account changes. [Details and validation](../PRs/818-codex-background-ui-refresh-keep-lopu-and-messenger-current.md). — Codex (AI)
+- 2026-09-16 — Accept HEIC/HEIF photos throughout the shared media uploader and
+  convert them locally to JPEG for previews, moderation and storage. Invite
+  photos now use the same profile-media control and queue with a bounded
+  pre-account thumbnail transport. Includes conversion/retry regression checks.
+  — Codex (AI)
 
 - 2026-09-16 — Background chat, voice transcript replies, musings and AI
   completions: SharedWorker observation, idempotent Nitro/Vercel execution,
@@ -4962,6 +4976,9 @@ Detailed PR notes:
 ---
 
 <!--
+
+- 2026-09-16: Account invites default to Never expire, offer an expiry dropdown and owner-only show/copy links, with explicit replacement for older hash-only links. Worktree validation uses localhost:17360; Funnel unavailable because the installed Tailscale CLI target is missing.
+
 ## [1.0.0] - YYYY-MM-DD
 Move entries up from [Unreleased] when cutting a tagged release.
 -->
