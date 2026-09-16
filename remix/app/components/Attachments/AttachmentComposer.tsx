@@ -631,7 +631,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 					ref={inputRef}
 					type="file"
 					multiple={boundedMaxFiles > 1}
-					accept={allowedContentTypes?.length ? [...allowedContentTypes, ...(allowedContentTypes.includes('image/jpeg') ? [HEIC_IMAGE_ACCEPT] : [])].join(',') : imageOnly ? `image/gif,image/jpeg,image/png,image/webp,${HEIC_IMAGE_ACCEPT}` : undefined}
+					accept={allowedContentTypes?.length ? [...allowedContentTypes, ...(allowedContentTypes.includes('image/png') ? [HEIC_IMAGE_ACCEPT] : [])].join(',') : imageOnly ? `image/gif,image/jpeg,image/png,image/webp,${HEIC_IMAGE_ACCEPT}` : undefined}
 					hidden
 					disabled={pickerDisabled}
 					onChange={(event) => {

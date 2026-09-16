@@ -339,8 +339,8 @@ export const apiTests: ApiTestDefinition[] = [
     method: 'POST',
     path: '/api/v1/auth/register',
     headers: { 'X-Forwarded-For': uniqueTestIp() },
-    // ~64 KB payload, well over the 48 KB route cap.
-    body: { username: 'tt-api-test-oversized', password: 'valid-length-password', pad: 'x'.repeat(64 * 1024) },
+    // The JSON envelope puts this payload over the 128 KiB route cap.
+    body: { username: 'tt-api-test-oversized', password: 'valid-length-password', pad: 'x'.repeat(128 * 1024) },
     expect: expectJson(
       [413],
       (body) => body?.ok === false && typeof body?.error === 'string',

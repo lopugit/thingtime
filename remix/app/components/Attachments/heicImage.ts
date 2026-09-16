@@ -1,4 +1,4 @@
-/** HEIC is an input format. Stored images remain JPEG so every viewer can render them. */
+/** HEIC is an input format. PNG encoding preserves decoded pixels without an additional lossy compression step. */
 export const HEIC_IMAGE_ACCEPT = '.heic,.heif,image/heic,image/heif,image/heic-sequence,image/heif-sequence';
 const HEIC_TYPES = new Set(['image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence']);
 export const MAX_HEIC_BYTES = 64 * 1024 * 1024;
@@ -11,7 +11,7 @@ type Decoder = (file: File) => Promise<Blob>;
 const decodeHeic: Decoder = async (file) => {
 	// Lazy, eval-free browser decoder; no third-party upload or server codec dependency.
 	const { heicTo } = await import('heic-to/csp');
-	return heicTo({ blob: file, type: 'image/jpeg', quality: 0.9 });
+	return heicTo({ blob: file, type: 'image/png' });
 };
 
 export const createHeicImagePreparer = (decode: Decoder = decodeHeic) => {
@@ -25,15 +25,15 @@ export const createHeicImagePreparer = (decode: Decoder = decodeHeic) => {
 		if (cached) return cached;
 		const result = (async () => {
 			try {
-				const jpeg = await decode(file);
-				if (!jpeg.size || jpeg.type !== 'image/jpeg') throw new Error('Invalid decoded image');
-				if (jpeg.size > MAX_HEIC_BYTES) throw new HeicImageError('The converted photo exceeds 64 MiB. Choose a smaller photo.');
+				const png = await decode(file);
+				if (!png.size || png.type !== 'image/png') throw new Error('Invalid decoded image');
+				if (png.size > MAX_HEIC_BYTES) throw new HeicImageError('The converted photo exceeds 64 MiB. Choose a smaller photo.');
 				const name = file.name.replace(/\.[^.]+$/, '') || 'photo';
-				return new File([jpeg], `${name}.jpg`, { type: 'image/jpeg', lastModified: file.lastModified });
+				return new File([png], `${name}.png`, { type: 'image/png', lastModified: file.lastModified });
 			} catch (error) {
 				prepared.delete(file);
 				if (error instanceof HeicImageError) throw error;
-				throw new HeicImageError('This HEIC/HEIF photo could not be converted. Try another photo or export it as JPEG.');
+				throw new HeicImageError('This HEIC/HEIF photo could not be converted. Try another photo or export it as PNG.');
 			}
 		})();
 		prepared.set(file, result);

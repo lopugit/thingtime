@@ -14,7 +14,7 @@ export const action = async ({ request }: { request: Request }) => {
 	const user = await getCurrentUser(request);
 	const limit = await enforceRateLimit(request, 'invites.read', user?.id || null, { failClosed: true });
 	if (!limit.allowed) return json({ ok: false, error: 'Too many invite requests. Try again shortly.' }, rateLimitedResponseInit(limit));
-	const body = await readJsonBody(request, 48 * 1024);
+	const body = await readJsonBody(request, 128 * 1024);
 	try {
 		if (body?.intent === 'preview') return json({ ok: true, invite: await previewInvite(body.token) }, { headers });
 		if (!user || user.temporary || user.accountKind !== 'user')
