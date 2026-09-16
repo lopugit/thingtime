@@ -324,7 +324,15 @@ export const generateAiCompletion = async (opts: {
   // One durable waterfall read serves every provider attempt, as in the musing.
   const choices = await getLopuModelChoices();
   for (const provider of providerOrder()) {
-    const key = provider === 'claude' ? process.env.ANTHROPIC_API_KEY : process.env.OPENAI_API_KEY;
+    // Ask the SAME question the provider's client will: streamClaude builds its
+    // client with createClaudeOAuthClient, which authenticates from the OAuth
+    // token / admin vault and never reads ANTHROPIC_API_KEY. Gating on that key
+    // therefore tested a credential this path does not use — on a Claude-first
+    // deployment (the default, and the only one hasAnyKey below accepts without
+    // OpenAI) it skipped Claude every time, so classification silently fell all
+    // the way through to the caller's non-AI heuristic while hasAnyKey still
+    // reported a provider configured. Mirrors streamLopuMusing's gate exactly.
+    const key = provider === 'claude' ? claudeOAuthConfigured() : process.env.OPENAI_API_KEY;
     if (!key) continue;
     // A provider that burned the whole deadline must not hand the NEXT one a
     // fresh start — that is how a two-provider waterfall doubles its own bound.

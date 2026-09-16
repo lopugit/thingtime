@@ -1,3 +1,4 @@
+import Anthropic from '@anthropic-ai/sdk';
 import assert from 'node:assert/strict';
 import { createServer, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -110,11 +111,36 @@ const server = createServer(async (request, response) => {
 
 await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
 const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-const envNames = ['ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'OPENAI_API_KEY', 'OPENAI_BASE_URL', 'LOPU_PROVIDER'];
+const envNames = [
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_BASE_URL',
+  'CLAUDE_CODE_OAUTH_TOKEN',
+  'OPENAI_API_KEY',
+  'OPENAI_BASE_URL',
+  'LOPU_PROVIDER'
+];
 const originalEnv = Object.fromEntries(envNames.map((name) => [name, process.env[name]]));
 
 mock.module(new URL('../settings/prConflictResolverModelWaterfall.ts', import.meta.url).href, {
   exports: { getAiPreferredModelWaterfall: async () => ['default'] }
+});
+
+// The Claude path authenticates through createClaudeOAuthClient, which resolves
+// an OAuth token / admin-vault bundle and installs its OWN fetch — so it never
+// reads ANTHROPIC_API_KEY or ANTHROPIC_BASE_URL and could never reach the
+// stand-in server above. Swap it for a plain SDK client pointed at that server,
+// exactly as musing.streaming.test.mts does, or every "Claude answers" case
+// here silently measures the OpenAI fallback instead of what it claims to.
+mock.module(new URL('../ai/claudeOAuth.ts', import.meta.url).href, {
+  exports: {
+    claudeOAuthConfigured: () => Boolean(process.env.CLAUDE_CODE_OAUTH_TOKEN),
+    createClaudeOAuthClient: (options: any = {}) =>
+      new Anthropic({
+        apiKey: null,
+        authToken: options.token || process.env.CLAUDE_CODE_OAUTH_TOKEN,
+        baseURL: process.env.ANTHROPIC_BASE_URL
+      })
+  }
 });
 
 const { generateAiCompletion } = await import('./musing.ts');
@@ -124,8 +150,10 @@ beforeEach(() => {
   openAiPlans.length = 0;
   anthropicRequests.length = 0;
   openAiRequests.length = 0;
-  process.env.ANTHROPIC_API_KEY = 'anthropic-test-key';
+  // the OAuth token is the credential the Claude path actually gates on
+  process.env.CLAUDE_CODE_OAUTH_TOKEN = 'anthropic-test-key';
   process.env.ANTHROPIC_BASE_URL = origin;
+  delete process.env.ANTHROPIC_API_KEY;
   process.env.OPENAI_API_KEY = 'openai-test-key';
   process.env.OPENAI_BASE_URL = `${origin}/v1`;
   delete process.env.LOPU_PROVIDER;
