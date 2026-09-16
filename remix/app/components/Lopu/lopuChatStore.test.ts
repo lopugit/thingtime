@@ -528,3 +528,37 @@ test('a deleted conversation clears cached messages when the read API returns 40
     assert.deepEqual(getLopuStoreSnapshot().chats, []);
   } finally { globalThis.fetch = original; }
 });
+
+
+test('message acceptance releases the composer before the reply stream finishes', async () => {
+	resetLopuStoreForTests(); hydrateLopuStore('owner');
+	let stream!: ReadableStreamDefaultController<Uint8Array>;
+	const encoder = new TextEncoder();
+	const { client } = fakeClient({ reply: body => new Response(new ReadableStream({
+		start(controller) {
+			stream = controller;
+			controller.enqueue(encoder.encode(JSON.stringify({ type: 'meta', chatId: 'chat-1', userMessageId: 'u-1', requestId: body.requestId }) + '\n'));
+		}
+	})) });
+	bindLopuApi(client);
+	let accepted = 0;
+	let finished = false;
+	const sending = sendLopuMessage('File attached', { onAccepted: () => { accepted++; } }).then(result => { finished = true; return result; });
+	await flush();
+	assert.equal(accepted, 1);
+	assert.equal(finished, false);
+	stream.enqueue(encoder.encode(JSON.stringify({ type: 'done', assistantMessageId: 'a-1', messages: [], stopReason: 'end_turn' }) + '\n'));
+	stream.close();
+	await sending;
+	assert.equal(accepted, 1);
+});
+
+test('rejected sends do not release draft attachments', async () => {
+	resetLopuStoreForTests(); hydrateLopuStore('owner');
+	const { client } = fakeClient({ reply: () => new Response('Unavailable', { status: 503 }) });
+	bindLopuApi(client);
+	let accepted = false;
+	const result = await sendLopuMessage('Retry me', { onAccepted: () => { accepted = true; } });
+	assert.equal(result.ok, false);
+	assert.equal(accepted, false);
+});

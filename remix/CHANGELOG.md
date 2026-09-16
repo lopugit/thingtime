@@ -34,6 +34,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-16: Enable attachment paste/drop directly in Lopu and Messenger message fields; clear Lopu media on server acceptance instead of reply completion. Added synthetic browser regression coverage. — Codex (AI)
+
 - 2026-09-16 — **Codex (AI)** — Add native image/file uploads to authored
   components; forward authorized image/PDF/text bytes into Lopu provider calls,
   including Claude OAuth tool hops; add a capability-negotiated browser HTTP
