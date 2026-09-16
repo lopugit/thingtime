@@ -1,6 +1,8 @@
+import { useBackgroundRefresh } from '~/hooks/useBackgroundRefresh';
 import { Outlet, ScrollRestoration, useLoaderData, useLocation, useRevalidator } from 'react-router';
 import { Analytics } from '@vercel/analytics/react';
 import React from 'react';
+import { pageTitle } from './utils/pageTitle';
 
 import type { RootLoaderData } from './root-data.server';
 import { GlobalStyles } from './globals/GlobalStyles';
@@ -98,40 +100,13 @@ export default function App() {
       // viewer — nothing would then set its title and the tab would keep the
       // previous page's one.
       if (pathname === '/marketing' || pathname.startsWith('/marketing/')) return;
+      // The route -> title table now lives in utils/pageTitle (shared with the
+      // server-rendered social meta). /connections only exists on this branch,
+      // so layer it on top here instead of forking the shared helper.
       const baseTitle = titlePrefix ? `${titlePrefix} Thingtime` : 'Thingtime';
-      const routeTitle = pathname.startsWith('/docs/design')
-        ? `${baseTitle} docs - Design mockups`
-        : pathname === '/docs'
-          ? `${baseTitle} docs`
-          : pathname === '/feed'
-            ? `${baseTitle} - Feed`
-            : pathname === '/messages'
-              ? `${baseTitle} - Messages`
-              : pathname.startsWith('/profile')
-              ? `${baseTitle} - Profile`
-              : pathname === '/settings'
-                ? `${baseTitle} - Settings`
-                : pathname === '/admin'
-                  ? `${baseTitle} - Admin`
-                  : pathname === '/things'
-                    ? `${baseTitle} - Things`
-                    : pathname === '/lopu/voice'
-                      ? `${baseTitle} - Lopu voice`
-                    : pathname.startsWith('/lopu')
-                      ? `${baseTitle} - Lopu`
-                    : pathname.startsWith('/builder')
-                      ? `${baseTitle} - Builder`
-                    : pathname.startsWith('/actions')
-                      ? `${baseTitle} - Actions`
-                      : pathname.startsWith('/components')
-                        ? `${baseTitle} - Components`
-                        : pathname.startsWith('/connections')
-                          ? `${baseTitle} - Connections`
-                          : pathname === '/branding'
-                            ? `${baseTitle} - Brand resources`
-                            : baseTitle;
-
-      document.title = routeTitle;
+      document.title = pathname.startsWith('/connections')
+        ? `${baseTitle} - Connections`
+        : pageTitle(pathname, titlePrefix);
     }
   }, [pathname, titlePrefix]);
 
@@ -143,6 +118,8 @@ export default function App() {
     window.addEventListener('thingtime:root-data-refresh', refreshRootData);
     return () => window.removeEventListener('thingtime:root-data-refresh', refreshRootData);
   }, [revalidator]);
+
+  useBackgroundRefresh('root-data', () => revalidator.state === 'idle' ? revalidator.revalidate() : undefined, 60_000, false);
 
   if (identity.pending && rootData.clientIdentityGeneration !== identity.generation) return <RootRecovery refreshing />;
 

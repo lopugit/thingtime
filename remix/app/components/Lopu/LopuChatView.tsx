@@ -1,3 +1,4 @@
+import { useLopuVisualViewport } from './useLopuVisualViewport';
 import { canContinueLopuReply, LOPU_CONTINUE_PROMPT } from './lopuRecovery';
 import React from 'react';
 import { Button, Box, Flex, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Text } from '@chakra-ui/react';
@@ -511,13 +512,15 @@ export const LopuChatView = ({
 	const compact = compactProp ?? variant === 'window';
 	const resolvedVariant: LopuChatViewVariant = variant ?? (compact ? 'window' : 'page');
 	const isMobile = useIsMobileViewport();
+	const visualViewport = useLopuVisualViewport();
 	const chat = useLopuChat({ chatId, context, applyPatches });
 	const [draft, setDraft] = React.useState('');
+	const [attachmentsExpanded, setAttachmentsExpanded] = React.useState(false);
 	const [uploads, setUploads] = React.useState(EMPTY_LOPU_ATTACHMENTS);
 	const [selectedThings, setSelectedThings] = React.useState<LopuSelectedThing[]>([]);
 	const uploadsRef = React.useRef<AttachmentComposerHandle>(null);
 	const [attachmentRevision, setAttachmentRevision] = React.useState(0);
-	React.useEffect(() => { setDraft(''); setSelectedThings([]); setUploads(EMPTY_LOPU_ATTACHMENTS); setAttachmentRevision(value => value + 1); }, [chat.viewer.id]);
+	React.useEffect(() => { setDraft(''); setAttachmentsExpanded(false); setSelectedThings([]); setUploads(EMPTY_LOPU_ATTACHMENTS); setAttachmentRevision(value => value + 1); }, [chat.viewer.id]);
 	const scrollRef = React.useRef<HTMLDivElement | null>(null);
 	const inputRef = React.useRef<HTMLTextAreaElement | null>(null);
 	const stickRef = React.useRef(true);
@@ -561,15 +564,21 @@ export const LopuChatView = ({
 		async (text: string) => {
 			if (uploads.blocking) return;
 			const ownerId = chat.viewer.id;
+			const uploadHandle = uploadsRef.current;
 			setDraft('');
 			stickRef.current = true;
 			focusInput();
-			const result = await chat.send(text, undefined, { attachmentIds: uploads.attachmentIds, attachments: uploads.attachments, thingIds: selectedThings.map(thing => thing.id) });
-			if (ownerRef.current !== ownerId) return result;
-			if (result.ok === true || (result.ok === false && result.chatIdKnown)) {
-				uploadsRef.current?.markCommitted(uploads.attachmentIds);
+			let accepted = false;
+			const onAccepted = () => {
+				if (accepted || ownerRef.current !== ownerId || uploadsRef.current !== uploadHandle) return;
+				accepted = true;
+				uploadHandle?.markCommitted(uploads.attachmentIds);
+				setAttachmentsExpanded(false);
 				setUploads(EMPTY_LOPU_ATTACHMENTS); setSelectedThings([]); setAttachmentRevision(value => value + 1);
-			}
+			};
+			const result = await chat.send(text, undefined, { attachmentIds: uploads.attachmentIds, attachments: uploads.attachments, thingIds: selectedThings.map(thing => thing.id), onAccepted });
+			if (ownerRef.current !== ownerId) return result;
+			if (result.ok === true || (result.ok === false && result.chatIdKnown)) onAccepted();
 			// a turn that never reached the server hands the text back
 			if (result.ok === false && result.text) setDraft((current) => current || result.text);
 			focusInput();
@@ -757,11 +766,12 @@ export const LopuChatView = ({
 				flexShrink={0}
 				px={gutter}
 				pt={compact ? 1 : 2}
-				pb={compact ? 2 : resolvedVariant === 'window' ? 3 : `calc(${isMobile ? '8px' : '12px'} + ${LOPU_UI.safeAreaBottom})`}
+				pb={compact ? 2 : resolvedVariant === 'window' ? 3 : `calc(${isMobile ? '8px' : '12px'} + ${visualViewport?.keyboardOpen ? '0px' : LOPU_UI.safeAreaBottom})`}
 			>
 				<Box maxW={compact ? '100%' : LOPU_UI.composerMaxWidth} mx="auto" width="100%">
 					<LopuComposer
-						attachments={<LopuAttachments key={`${chat.viewer.id}:${attachmentRevision}`} uploadsRef={uploadsRef} onUploads={setUploads} selected={selectedThings} onSelect={setSelectedThings} disabled={chat.sending || streamingHere} />}
+						attachments={<LopuAttachments key={`${chat.viewer.id}:${attachmentRevision}`} expanded={attachmentsExpanded} onExpandedChange={setAttachmentsExpanded} uploadsRef={uploadsRef} onUploads={setUploads} selected={selectedThings} onSelect={setSelectedThings} disabled={chat.sending || streamingHere} />}
+						onAttachFiles={files => { if (uploadsRef.current?.addFiles(files)) setAttachmentsExpanded(true); }}
 						value={draft}
 						onChange={setDraft}
 						onSend={send}

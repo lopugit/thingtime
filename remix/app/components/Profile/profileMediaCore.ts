@@ -1,3 +1,4 @@
+import { isHeicImage } from '../Attachments/heicImage';
 export type ProfileMediaSlot = 'avatar' | 'banner';
 
 export type ProfileMediaMutation =
@@ -58,9 +59,9 @@ export const preservedProfileMediaSnapshot = (savedUrl: string | null): ProfileM
 	blocking: false
 });
 
-export const profileImageFileError = (file: Pick<File, 'size' | 'type'>): string | null => {
-	if (!PROFILE_MEDIA_CONTENT_TYPE_SET.has(file.type.trim().toLowerCase())) {
-		return 'Choose a JPEG, PNG, GIF, WebP, or AVIF image.';
+export const profileImageFileError = (file: Pick<File, 'size' | 'type'> & { name?: string }): string | null => {
+	if (!PROFILE_MEDIA_CONTENT_TYPE_SET.has(file.type.trim().toLowerCase()) && !isHeicImage(file)) {
+		return 'Choose a JPEG, PNG, GIF, WebP, AVIF, HEIC, or HEIF image.';
 	}
 	if (!Number.isSafeInteger(file.size) || file.size < 1) return 'Choose an image that contains data.';
 	if (file.size > MAX_PROFILE_MEDIA_BYTES) return 'Profile images can be up to 64 MiB.';

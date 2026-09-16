@@ -12,6 +12,7 @@ type RouteModule = {
 };
 
 export const routeModules: Record<string, () => Promise<RouteModule>> = {
+  'v1/lopu/network': () => import('../../../app/routes/api/v1/lopu/network/_network'),
   'v1/lopu/tasks': () => import('../../../app/routes/api/v1/lopu/tasks/_tasks'),
   'v1/admin/error-logs': () => import('../../../app/routes/api/v1/admin/error-logs/_error-logs'),
   'v1/integrations/ci/stack-completion': () => import('../../../app/routes/api/v1/integrations/ci/stack-completion/_stack-completion'),

@@ -20,6 +20,7 @@ mock.module(new URL('./invites.ts', import.meta.url).href, {
 			writes++;
 		},
 		listInvites: async () => [],
+		revealInviteLink: async () => 'a'.repeat(43),
 		previewInvite: async () => ({ credits: 1 }),
 		expireInvites: async () => {
 			expires++;
@@ -33,12 +34,12 @@ beforeEach(() => {
 	writes = 0;
 	expires = 0;
 });
-const call = (origin = 'http://127.0.0.1:11000', type = 'application/json') =>
+const call = (origin = 'http://127.0.0.1:11000', type = 'application/json', body: any = { intent: 'create' }) =>
 	action({
 		request: new Request('http://127.0.0.1:11002/api/v1/auth/invites', {
 			method: 'POST',
 			headers: { Origin: origin, 'X-Forwarded-Host': '127.0.0.1:11000', 'X-Forwarded-Proto': 'http', 'Content-Type': type },
-			body: JSON.stringify({ intent: 'create' })
+			body: JSON.stringify(body)
 		})
 	});
 test('invite management rejects guests, temporary accounts, service accounts and cross-origin writes', async () => {
@@ -87,4 +88,26 @@ test('expiry fails closed without its secret and requires the exact bearer befor
 		if (previous === undefined) delete process.env.CRON_SECRET;
 		else process.env.CRON_SECRET = previous;
 	}
+});
+
+test('link reveal requires a full same-origin owner session and never caches bearer responses', async () => {
+	user = null;
+	assert.equal((await call(undefined, undefined, { intent: 'link', id: 'invite' })).status, 401);
+	user = { id: 'creator', accountKind: 'user' };
+	assert.equal((await call('https://attacker.invalid', undefined, { intent: 'link', id: 'invite' })).status, 403);
+	assert.equal((await call(undefined, undefined, { intent: 'link', id: {} })).status, 400);
+	const response = await call(undefined, undefined, { intent: 'link', id: 'invite' });
+	assert.equal(response.status, 200);
+	assert.equal(response.headers.get('Cache-Control'), 'no-store');
+	assert.equal(response.headers.get('Referrer-Policy'), 'no-referrer');
+	assert.ok((await response.json()).url.endsWith('/invite#' + 'a'.repeat(43)));
+});
+
+test('invite JSON accepts bounded PNG thumbnail payloads and rejects larger bodies', async () => {
+ const response = await call(undefined, undefined, { intent: 'create', avatarUrl: 'x'.repeat(90_000) });
+ assert.equal(response.status, 200); // Avatar decoding is exercised independently; this tests the route body ceiling.
+ const before = writes;
+ await assert.rejects(call(undefined, undefined, { intent: 'create', avatarUrl: 'x'.repeat(128 * 1024) }),
+  (error: unknown) => error instanceof Response && error.status === 413);
+ assert.equal(writes, before);
 });

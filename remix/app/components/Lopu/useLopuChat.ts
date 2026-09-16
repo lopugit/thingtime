@@ -8,6 +8,7 @@
 // per-chat settings in step. Also exports the §3.3 context-provider builder.
 
 import React from 'react';
+import { useBackgroundRefresh } from '~/hooks/useBackgroundRefresh';
 import { useLocation, useNavigate } from 'react-router';
 
 import { useMessengerApi } from '~/components/Messenger/useMessengerApi';
@@ -126,7 +127,7 @@ export type UseLopuChat = {
 	timeline: LopuTimelineItem[];
 	streaming: LopuTurnState | null;
 	sending: boolean;
-	send: (text: string, overrides?: Partial<LopuChatSettings>, attachments?: { attachmentIds?: string[]; attachments?: ChatMessage['attachments']; thingIds?: string[] }) => Promise<SendLopuResult>;
+	send: (text: string, overrides?: Partial<LopuChatSettings>, attachments?: { attachmentIds?: string[]; attachments?: ChatMessage['attachments']; thingIds?: string[]; onAccepted?: () => void }) => Promise<SendLopuResult>;
 	abort: () => void;
 	selectChat: (chatId: string | null) => void;
 	createChat: (args?: { title?: string }) => ReturnType<typeof createLopuChat>;
@@ -201,20 +202,13 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 	const byo = !!snapshot.settings.providerId;
 	const account = useLopuAccount({ byo });
 
-	React.useEffect(() => {
-		if (!userId) return;
-		const refresh = () => { void recoverLopuBackgroundTasks().catch(() => {}); };
-		refresh();
-		const timer = setInterval(refresh, 3000);
-		window.addEventListener('focus', refresh);
-		return () => { clearInterval(timer); window.removeEventListener('focus', refresh); };
-	}, [userId]);
+	useBackgroundRefresh(userId ? `lopu-tasks:${userId}` : null, recoverLopuBackgroundTasks, 3000);
+	useBackgroundRefresh(userId ? `lopu-chats:${userId}` : null, () => loadLopuChats({ quiet: true }));
+	useBackgroundRefresh(userId && activeChatId ? `lopu-messages:${userId}:${activeChatId}` : null,
+		() => activeChatId ? loadLopuMessages(activeChatId) : undefined, 5000);
 
-	// background refetches
 	React.useEffect(() => {
-		if (!userId) return;
-		void loadLopuChats();
-		void loadLopuModels();
+		if (userId) void loadLopuModels();
 	}, [userId]);
 
 	const loadedForChat = activeChatId ? snapshot.messagesLoaded[activeChatId] : true;
@@ -252,7 +246,7 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 
 	const applyPatches = options.applyPatches ?? prefs.applyPatches;
 	const send = React.useCallback(
-		(text: string, overrides?: Partial<LopuChatSettings>, attachments?: { attachmentIds?: string[]; attachments?: ChatMessage['attachments']; thingIds?: string[] }) =>
+		(text: string, overrides?: Partial<LopuChatSettings>, attachments?: { attachmentIds?: string[]; attachments?: ChatMessage['attachments']; thingIds?: string[]; onAccepted?: () => void }) =>
 			sendLopuMessage(text, {
 				...attachments,
 				...(overrides ? { settings: overrides } : {}),

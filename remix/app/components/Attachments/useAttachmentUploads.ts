@@ -1,3 +1,4 @@
+import { HeicImageError, isHeicImage, prepareHeicImage } from './heicImage';
 import { requireSubspaceMediaCapabilities } from '~/utils/subspaceMediaCapabilities';
 import React from 'react';
 
@@ -150,6 +151,9 @@ export const useAttachmentUploads = (
 	options: AttachmentUploadOptions = {}
 ) => {
 	const uploadPurpose = options.purpose ?? 'post';
+	const prepareLocalImage = options.prepareLocalImage;
+	// Archive imports promise byte-for-byte fidelity; ordinary media selections are normalized.
+	const convertHeic = options.selectionScope !== 'transfer';
 	const purposeForFileRef = React.useRef(options.purposeForFile);
 	purposeForFileRef.current = options.purposeForFile;
 	const maxFiles = Number.isSafeInteger(options.maxFiles)
@@ -200,11 +204,12 @@ export const useAttachmentUploads = (
 	const pumpRef = React.useRef<() => void>(() => {});
 
 	const cleanupUpload = React.useCallback((upload: ComposerAttachmentUpload) => {
+		if (prepareLocalImage) return null;
 		const action = attachmentCleanupAction(upload, committedAttachmentIdsRef.current);
 		if (action?.kind === 'delete') return apiRef.current.remove({ id: action.attachmentId });
 		if (action?.kind === 'abort') return apiRef.current.uploads.abort({ uploadId: action.uploadId });
 		return null;
-	}, []);
+	}, [prepareLocalImage]);
 
 	const isCurrent = React.useCallback((localId: string, attempt: number) => mountedRef.current && attemptsRef.current.get(localId) === attempt, []);
 
@@ -266,6 +271,25 @@ export const useAttachmentUploads = (
 			let partSizeBytes = canResume ? savedPlan.partSizeBytes : 0;
 			let partCount = canResume ? savedPlan.partCount : 0;
 			try {
+				if (convertHeic && !prepareLocalImage && isHeicImage(file)) {
+					file = await prepareHeicImage(file);
+					if (!isCurrent(localId, attempt) || controller.signal.aborted) return;
+					if (maxBytesPerFile && file.size > maxBytesPerFile)
+						throw new HeicImageError(`The converted photo exceeds ${Math.round(maxBytesPerFile / 1024)} KiB. Choose a smaller photo.`);
+					if (!prepareLocalImage) {
+						const previewUrl = URL.createObjectURL(file);
+						if (existing?.previewUrl) URL.revokeObjectURL(existing.previewUrl);
+						patchUpload(localId, attempt, { file, previewUrl });
+					}
+				}
+				if (prepareLocalImage) {
+					const previewUrl = await prepareLocalImage(file);
+					if (!isCurrent(localId, attempt) || controller.signal.aborted) return;
+					const previous = uploadsRef.current.find((upload) => upload.localId === localId)?.previewUrl;
+					if (previous) URL.revokeObjectURL(previous);
+					patchUpload(localId, attempt, { file, previewUrl, status: 'ready', progress: 100 });
+					return;
+				}
 				if (!canResume) {
           if (purpose === 'subspace-icon' || purpose === 'subspace-banner') {
             await requireSubspaceMediaCapabilities();
@@ -349,7 +373,7 @@ export const useAttachmentUploads = (
 				const phase = uploadId ? 'upload' : 'prepare';
 				patchUpload(localId, attempt, {
 					status: 'error',
-					error: attachmentUploadError(error, phase, {
+					error: error instanceof HeicImageError ? error.message : attachmentUploadError(error, phase, {
 						...uploadErrorContextRef.current,
 						fileSizeBytes: file.size
 					}),
@@ -359,7 +383,7 @@ export const useAttachmentUploads = (
 				if (activeRequestsRef.current.get(localId) === controller) activeRequestsRef.current.delete(localId);
 			}
 		},
-		[completeUpload, isCurrent, patchUpload, uploadPurpose]
+		[completeUpload, convertHeic, isCurrent, maxBytesPerFile, patchUpload, prepareLocalImage, uploadPurpose]
 	);
 
 	pumpRef.current = () => {
@@ -385,14 +409,14 @@ export const useAttachmentUploads = (
 			const eligible = files.filter(
 				(file) =>
 					(!imageOnly || localFileMediaKind(file) === 'image') &&
-					(!allowedContentTypes || allowedContentTypes.has(file.type.toLowerCase())) &&
+					(!allowedContentTypes || allowedContentTypes.has(convertHeic && isHeicImage(file) ? 'image/png' : file.type.toLowerCase())) &&
 					(!maxBytesPerFile || file.size <= maxBytesPerFile)
 			);
 			if (eligible.length < files.length) {
 				onSelectionError?.(
 					maxBytesPerFile
 						? `Choose a supported image no larger than ${Math.round(maxBytesPerFile / 1024)} KiB.`
-						: 'Choose a JPEG, PNG, GIF, WebP, or AVIF image.'
+						: 'Choose a JPEG, PNG, GIF, WebP, AVIF, HEIC, or HEIF image.'
 				);
 			}
 			const unique = dedupeSelectedFiles(current, eligible);
@@ -426,12 +450,13 @@ export const useAttachmentUploads = (
 			const next = accepted.map((file) => {
 				const localId = localUploadId();
 				const mediaKind = localFileMediaKind(file);
-				const previewUrl = mediaKind === 'image' || mediaKind === 'video' ? URL.createObjectURL(file) : null;
+				const previewUrl = !isHeicImage(file) && (mediaKind === 'image' || mediaKind === 'video') ? URL.createObjectURL(file) : null;
 				attemptsRef.current.set(localId, 1);
 				return {
 					purpose: purposeForFileRef.current?.(file) ?? uploadPurpose,
 					localId,
 					file,
+					sourceFile: file,
 					previewUrl,
 					status: 'queued' as const,
 					progress: 0,
@@ -446,7 +471,7 @@ export const useAttachmentUploads = (
 			setUploads(nextUploads);
 			for (const upload of next) enqueue({ localId: upload.localId, file: upload.file, attempt: 1 });
 		},
-		[allowedContentTypes, cleanupUpload, enqueue, imageOnly, maxBytesPerFile, maxFiles, onCleanupDeferred, onCleanupError, onSelectionError, uploadPurpose]
+		[allowedContentTypes, cleanupUpload, convertHeic, enqueue, imageOnly, maxBytesPerFile, maxFiles, onCleanupDeferred, onCleanupError, onSelectionError, uploadPurpose]
 	);
 
 	const addFiles = React.useCallback((files: File[]) => addFilesInternal(files, false), [addFilesInternal]);

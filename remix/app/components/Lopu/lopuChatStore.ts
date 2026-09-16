@@ -472,35 +472,45 @@ export const loadLopuModels = async (): Promise<void> => {
 	}
 };
 
-export const loadLopuChats = async (): Promise<void> => {
-	if (!client || !state.userId || state.chatsLoading) return;
+let chatWrites = 0;
+export const loadLopuChats = async (options: { quiet?: boolean } = {}): Promise<void> => {
+	if (!client || !state.userId || state.chatsLoading || chatWrites) return;
 	const userId = state.userId;
+	const generation = accountGeneration;
+	const previous = state.chats;
 	setState({ chatsLoading: true });
 	try {
 		const response = await client.chats.list();
-		if (state.userId !== userId) return;
-		const chats: LopuChatSummary[] = Array.isArray(response?.chats) ? response.chats : [];
+		if (generation !== accountGeneration) return;
+		if (response?.ok === false || !Array.isArray(response?.chats)) throw response;
+		// A read started before a local send/rename/delete must not undo it.
+		if (state.chats !== previous || chatWrites) { setState({ chatsLoading: false }); return; }
+		const chats: LopuChatSummary[] = response.chats;
 		writeChatsCache(userId, chats);
 		setState({ chats, chatsLoaded: true, chatsLoading: false });
 	} catch (error) {
-		if (state.userId !== userId) return;
-		setState({ chatsLoading: false, chatsLoaded: true, error: errorText(error, 'Could not load your conversations') });
+		if (generation !== accountGeneration) return;
+		setState({ chatsLoading: false, chatsLoaded: true, ...(!options.quiet ? { error: errorText(error, 'Could not load your conversations') } : {}) });
 	}
 };
 
 const messagesLoading = new Map<string, Promise<boolean>>();
 
 export const loadLopuMessages = (chatId: string): Promise<boolean> => {
-	if (!client || !chatId) return Promise.resolve(false);
+	if (!client || !chatId || !state.userId) return Promise.resolve(false);
+	// The live turn owns its optimistic rows until persistence finishes.
+	if (Object.values(state.turns).some(turn => turn.chatId === chatId && controllers.has(turn.requestId))) return Promise.resolve(false);
 	const generation = accountGeneration;
 	const loadingKey = `${generation}:${chatId}`;
 	const existing = messagesLoading.get(loadingKey);
 	if (existing) return existing;
 	const boundClient = client;
+	const previousMessages = state.messages[chatId];
 	const pending = (async () => {
 	try {
 		const response = await boundClient.messages({ chatId, limit: LOPU_MESSAGES_CACHE_CAP });
-		if (generation !== accountGeneration || response?.ok === false) return false;
+		if (generation !== accountGeneration || response?.ok === false || !Array.isArray(response?.messages)) return false;
+		if (state.messages[chatId] !== previousMessages || Object.values(state.turns).some(turn => turn.chatId === chatId && controllers.has(turn.requestId))) return false;
 		const rows: ChatMessage[] = Array.isArray(response?.messages) ? response.messages : [];
 		// the API pages newest-first; the timeline reads oldest-first. The
 		// server's rows replace any optimistic Lopu rows (their ids differ).
@@ -515,13 +525,18 @@ export const loadLopuMessages = (chatId: string): Promise<boolean> => {
 	} catch (error) {
 		if (generation !== accountGeneration) return false;
 		const status = errorStatus(error);
-		if ((status === 403 || status === 404) && state.activeChatId === chatId) {
+		if (status === 403 || status === 404) {
+			const wasActive = state.activeChatId === chatId;
+			writeMessagesCache(chatId, []);
 			setState((current) => ({
-				activeChatId: null,
+				activeChatId: current.activeChatId === chatId ? null : current.activeChatId,
 				chats: current.chats.filter((chat) => chat.id !== chatId),
+				messages: { ...current.messages, [chatId]: [] },
+				turns: Object.fromEntries(Object.entries(current.turns).filter(([, turn]) => turn.chatId !== chatId)),
 				messagesLoaded: { ...current.messagesLoaded, [chatId]: true }
 			}));
-			notice('That conversation is gone', { description: 'Starting a fresh one.', status: 'info' });
+			writeChatsCache(state.userId, state.chats);
+			if (wasActive) notice('That conversation is gone', { description: 'Starting a fresh one.', status: 'info' });
 		} else {
 			setState((current) => ({ messagesLoaded: { ...current.messagesLoaded, [chatId]: true } }));
 		}
@@ -573,6 +588,7 @@ export const selectLopuChat = (chatId: string | null, options?: { silent?: boole
 
 export const createLopuChat = async (args?: { title?: string }): Promise<{ ok: boolean; chat?: LopuChatSummary; error?: string }> => {
 	if (!client) return { ok: false, error: 'Lopu is not connected yet' };
+	chatWrites++;
 	try {
 		const response = await client.chats.create({
 			...(args?.title ? { title: args.title } : {}),
@@ -601,13 +617,14 @@ export const createLopuChat = async (args?: { title?: string }): Promise<{ ok: b
 		const message = errorText(error, 'Could not start a chat');
 		notice(message, { status: 'error' });
 		return { ok: false, error: message };
-	}
+	} finally { chatWrites--; }
 };
 
 export const renameLopuChat = async (chatId: string, title: string): Promise<{ ok: boolean; error?: string }> => {
 	if (!client) return { ok: false, error: 'Lopu is not connected yet' };
 	const trimmed = title.trim().slice(0, 120);
 	if (!trimmed) return { ok: false, error: 'A name is required' };
+	chatWrites++;
 	const previous = state.chats;
 	setState((current) => {
 		const chats = current.chats.map((chat) => (chat.id === chatId ? { ...chat, name: trimmed } : chat));
@@ -630,12 +647,13 @@ export const renameLopuChat = async (chatId: string, title: string): Promise<{ o
 		const message = errorText(error, 'Could not rename the chat');
 		notice(message, { status: 'error' });
 		return { ok: false, error: message };
-	}
+	} finally { chatWrites--; }
 };
 
 export const deleteLopuChat = async (chatId: string): Promise<{ ok: boolean; error?: string }> => {
 	if (!client) return { ok: false, error: 'Lopu is not connected yet' };
 	if (state.streamingId && state.turns[state.streamingId]?.chatId === chatId) abortLopuTurn();
+	chatWrites++;
 	const previous = state;
 	setState((current) => {
 		const chats = current.chats.filter((chat) => chat.id !== chatId);
@@ -653,7 +671,7 @@ export const deleteLopuChat = async (chatId: string): Promise<{ ok: boolean; err
 		const message = errorText(error, 'Could not delete the chat');
 		notice(message, { status: 'error' });
 		return { ok: false, error: message };
-	}
+	} finally { chatWrites--; }
 };
 
 // ——— live-build bridge (design note §2.5) ————————————————————————————————
@@ -900,6 +918,8 @@ const appendMessages = (chatId: string, rows: ChatMessage[]) => {
 };
 
 export type SendLopuOptions = {
+	// Fired once the server has persisted the user message, before reply completion.
+	onAccepted?: () => void;
 	attachmentIds?: string[];
 	// Display-only public metadata; only the IDs go to the reply endpoint.
 	attachments?: ChatMessage['attachments'];
@@ -978,6 +998,7 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 			case 'meta': {
 				const id = next.chatId;
 				if (!id) break;
+				if (!before.meta) options.onAccepted?.();
 				if (state.activeChatId !== id && (state.activeChatId === chatId || state.activeChatId === null)) {
 					setState({ activeChatId: id });
 				}

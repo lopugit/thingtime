@@ -131,7 +131,7 @@ export const aiTaskFetch = async (url: string, init: RequestInit = {}): Promise<
 	if (!operation || !owner || (init.method || 'GET') !== operation.method || (init.body && typeof init.body !== 'string')) return fetch(url, init);
 	await requireThingtimeCapability('api.lopu-background-tasks', '1.0.0');
 	const versions: Record<string, string> = {
-		'api.lopu-chats-reply': '1.9.0',
+		'api.lopu-chats-reply': '1.10.0',
 		'api.lopu-voice-reply': '1.4.0',
 		'api.lopu-musing': '1.1.0',
 		'api.ai-complete': '1.2.0'

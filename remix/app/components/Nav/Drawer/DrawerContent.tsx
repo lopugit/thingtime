@@ -433,7 +433,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
 		variant === 'panel' && direction === 'left' ? 'calc(var(--thingtime-electron-titlebar-left-inset, 0px) + 52px)' : '16px';
 
 	return (
-		<Flex className="drawerContent" flexDirection="column" width="100%" height="100%" minHeight={0}>
+		<Flex className="drawerContent" flexDirection="column" width="100%" height={variant === 'popup' ? 'auto' : '100%'} flex={variant === 'popup' ? '1 1 auto' : undefined} minHeight={0}>
 			{/* header: brand + search (top right) */}
 			<Flex
 				className="drawerContentHeader"
@@ -484,7 +484,7 @@ export const DrawerContent = (props: DrawerContentProps) => {
 			</Flex>
 
 			{/* scrollable menus */}
-			<Box className="drawerMenuScroll" flex={1} minHeight={0} overflowY="auto" paddingBottom={2}>
+			<Box className="drawerMenuScroll" flex={1} minHeight={0} overflowY="auto" overscrollBehaviorY="contain" paddingBottom={2}>
 				{/* top-level items (limited, with faint More) */}
 				<Flex flexDirection="column" rowGap="1px" paddingTop={1}>
 					<ReorderableList
