@@ -1,3 +1,4 @@
+import { useLopuVisualViewport } from './useLopuVisualViewport';
 import React from 'react';
 import { Box, Button, Center, Flex, Select, Switch, Text } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
@@ -438,6 +439,7 @@ export const LopuSettingsRows = (props: { renderRow: (label: string, control: Re
 };
 
 export const LopuHost = () => {
+	const visualViewport = useLopuVisualViewport();
 	const { pathname } = useLocation();
 	const navigate = useNavigate();
 	const isMobile = useIsMobileViewport();
@@ -936,20 +938,15 @@ export const LopuHost = () => {
 						position="fixed"
 						zIndex={LOPU_WINDOW_Z}
 						right={0}
-						bottom={0}
+						bottom={visualViewport?.bottom ?? 0}
 						left={0}
-						height="88vh"
-						sx={{
-							'@supports (height: 100dvh)': {
-								height: '88dvh'
-							}
-						}}
+						height={visualViewport ? `${visualViewport.height * (visualViewport.keyboardOpen ? 1 : 0.88)}px` : "88dvh"}
 						flexDirection="column"
 						background={LOPU_UI.card}
 						borderTopRadius={LOPU_UI.radiusXl}
 						boxShadow={LOPU_UI.shadowFloating}
 						overflow="hidden"
-						paddingBottom="var(--thingtime-safe-area-bottom, env(safe-area-inset-bottom, 0px))"
+						paddingBottom={visualViewport?.keyboardOpen ? "0px" : "var(--thingtime-safe-area-bottom, env(safe-area-inset-bottom, 0px))"}
 						transform={sheetOffset ? `translateY(${sheetOffset}px)` : 'none'}
 						transition={gesture === 'sheet' ? 'none' : `transform ${LOPU_UI.transition}`}
 					>

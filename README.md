@@ -3399,6 +3399,60 @@ The normal MongoDB index bootstrap creates `things_geo` on first use.
 Algorithm development worktree: localhost port 13480 (HMR 13481 / Nitro 13482).
 Tailscale/Funnel is unavailable on the validation machine: its CLI points to an absent Tailscale.app.
 
+### Lopu uploads, attachment contents and HTTP SDK
+
+Interactive owned components can render the native upload control with HTML
+`{"tag":"tt-upload","props":{"name":"photo","imageOnly":true}}` or Chakra
+`{"chakra":"Upload","props":{"name":"photo","imageOnly":true}}`.
+`imageOnly` is optional; omit it for general files. After selecting a file,
+**Use file** saves a private attachment through the standard attachment APIs and
+writes the form fields `photo` (an authenticated content URL) and
+`photoAttachmentId`. **Use URL instead** exposes the linked-media option.
+Clearing a field does not delete its saved file. Shared/read-only component runs
+cannot upload. Existing upload approval, account storage quota, moderation and
+attachment ACL checks apply; a form value never grants public access.
+
+Lopu forwards actual supported image, PDF and UTF-8 text contents to the selected
+AI provider, including recent chat attachments and explicitly selected attachment
+Things. It rechecks access before disclosure. Limits: ten files, 5 MiB per binary
+file, 128 KiB total text, and 12 MiB total per turn. Linked media, unsupported
+formats (including audio/video), oversized and unavailable files are explicitly
+reported as unread. The selected provider/model must support the supplied media;
+Lopu does not silently switch providers or put signed storage URLs into history.
+
+First-party browser code can import the capability-negotiated SDK:
+
+```ts
+import { lopu } from '~/sdk/lopu.client';
+const page = await lopu.fetch('https://example.com'); // status, contentType, body
+const data = await lopu.json('https://example.com/data.json');
+const result = await lopu.request({
+  url: 'https://example.com/records', method: 'POST',
+  headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Example' })
+});
+```
+
+The SDK uses same-origin `POST /api/v1/lopu/network` (`api.lopu-network@1.0.0`)
+on Nitro/Vercel. It requires a full signed-in account with Lopu access (or the
+`lopu.chat` scope), enforces the Lopu rate limit, and does not forward Thingtime
+cookies. External requests use public HTTPS on port 443, a 15-second deadline,
+DNS-pinned public addresses, a 32 KiB request body and a 256 KiB text/JSON response.
+Redirects, compressed/binary responses, private networks and automatic retries
+are refused. Only explicitly supplied supported headers are sent. Keep provider
+secrets in server-side vault code, never in component JSON or browser bundles.
+
+Lopu itself has `fetch_url` for public reads and `http_request` for an exact
+method/URL/headers/body request that requires its Confirm card. Authored JSON
+components remain scriptless; the SDK is for first-party application code.
+Fork setup uses the existing attachment storage, moderation and Lopu account
+configuration documented above. No new gateway key is required. Configure any
+external API credentials in the fork's own vault, using placeholders in docs.
+
+Validation checkout `lopu-attachments-sdk-mobile` uses local web/HMR/API ports
+15420/15421/15422: http://localhost:15420/lopu. Its Tailscale/Funnel URL is
+unavailable: the installed `tailscale` launcher points to a missing
+`/Applications/Tailscale.app` binary. No existing Funnel mapping was changed.
+
 ### Legal documents
 
 Public directory: `/legal`. Current documents: `/pages/privacy-policy`,

@@ -7437,13 +7437,6 @@ approval; `access.test.ts` — the reservation matrix) and
 - Replace, remove, cancel, retry a failed upload/save, and switch to/from a valid URL. Existing URLs survive unchanged saves; invalid URLs/non-images/over-64-MiB files and wrong-purpose, wrong-owner, expired or already-bound uploads are refused. Replacement URLs stop serving old managed bytes; abandoned/replaced objects remain billed until reaped.
 - Check revoked moderator access, upload approval, quota failure, ownership transfer and deletion cleanup. On desktop and 390px mobile, open both URL panels and scroll top to bottom; verify no overlap, clipping or horizontal overflow.
 
-## Feed defaults, algorithm directory and geographic Things
-
-- [ ] Open `/feed` on desktop and mobile: all eight builtins appear in the bounded, scrollable picker; selecting one updates the feed and reloading preserves it. Builtins never receive training events.
-- [ ] Open `/algorithms`, search by name/description, create a private profile, publish it, branch it from another account, unpublish, and disable sharing. Private and link-only algorithms never appear in the directory; previews never expose learned weights; existing copies survive unsharing.
-- [ ] Create Things through the API with `geo: {lat,lng}`. Invalid/missing/out-of-range coordinates return 400. POST `/things/search` with `near` and `radiusKm`, and Local feed with lat/lng, find nearby visible posts, exclude far/private posts, and retain tag/subspace/ACL filters. PATCH `geo:null` removes the location.
-- [ ] Local's location request occurs only from its button; denial leaves the location-tag fallback usable. Scroll directory/feed top-to-bottom at desktop/mobile widths, including the editor and open picker; no content overflows.
-
 ## HEIC/HEIF photo selection
 
 - [ ] Open `/scripts/heic-upload.browser.html` on the Vite dev server: all cases
@@ -7463,6 +7456,42 @@ approval; `access.test.ts` — the reservation matrix) and
   matching stored size/type, server moderation, quota refusal, cleanup, and reload.
   Downloads use the converted `.jpg`; originals remain untouched on the device.
   Archive imports retain original bytes. External HEIC URLs are not converted.
+
+## Feed defaults, algorithm directory and geographic Things
+
+- [ ] Open `/feed` on desktop and mobile: all eight builtins appear in the bounded, scrollable picker; selecting one updates the feed and reloading preserves it. Builtins never receive training events.
+- [ ] Open `/algorithms`, search by name/description, create a private profile, publish it, branch it from another account, unpublish, and disable sharing. Private and link-only algorithms never appear in the directory; previews never expose learned weights; existing copies survive unsharing.
+- [ ] Create Things through the API with `geo: {lat,lng}`. Invalid/missing/out-of-range coordinates return 400. POST `/things/search` with `near` and `radiusKm`, and Local feed with lat/lng, find nearby visible posts, exclude far/private posts, and retain tag/subspace/ACL filters. PATCH `geo:null` removes the location.
+- [ ] Local's location request occurs only from its button; denial leaves the location-tag fallback usable. Scroll directory/feed top-to-bottom at desktop/mobile widths, including the editor and open picker; no content overflows.
+
+### Lopu uploads, provider media and mobile keyboard (2026-09-16)
+
+- [ ] In an owned interactive HTML component (`tt-upload`) and Chakra component
+  (`Upload`), pick an image and a text file, wait for Ready, choose Use file, and
+  verify `<name>`/`<name>AttachmentId` form values and a private attachment-backed
+  post. Toggle Use URL instead; cancel/retry, switch account, and verify shared
+  read-only runs cannot upload. Clearing a field keeps the saved private file.
+- [ ] Send an image, PDF and UTF-8 text file to each supported provider. Verify
+  provider input contains actual media/text, also after a tool hop and a follow-up
+  turn. Test Claude OAuth separately. Revoke access during download: bytes must
+  be discarded. Linked, unsupported, oversized and failed reads must be explicit.
+- [ ] Read a public URL with `fetch_url`; propose an `http_request`, inspect its
+  exact input, refuse once and confirm once. A changed body invalidates approval.
+  Private literals, mixed public/private DNS, redirects, oversized responses and
+  ambient cookie headers are refused; ambiguous mutations are never retried.
+  Confirm the origin manifest advertises network 1.0.0 and chat reply 1.10.0.
+- [ ] At desktop, 390x844 and 390x444, scroll page/chat/attachment panel to the
+  bottom; expand attachments, model menu, Your Things and chat settings. Send
+  remains visible, long input scrolls inside its own field, and no horizontal
+  overflow appears. On a physical iPhone, repeat keyboard open/close, multiline
+  typing, visual-viewport panning, orientation and safe-area changes in both the
+  Lopu page and floating sheet. Desktop resizing alone is not iOS acceptance.
+
+Automated regression coverage: `chatMedia.test.ts`, `chatMediaLoading.test.ts`,
+`chat.streaming.test.mts`, `lopuVisualViewport.test.ts`, API capability tests and
+existing Lopu/component/webpage suites. Browser synthetic upload QA uses mocked
+storage only; do not describe it as a production upload or provider acceptance.
+
 ## Legal pages and policy exports
 
 - [ ] Signed out, open `/legal`, all three current `/pages/` documents and their version links on desktop and mobile; scroll to the bottom and confirm readable text and no overflow. Select the archived privacy version and return to current. Unknown versions must show a not-found message, never current text.

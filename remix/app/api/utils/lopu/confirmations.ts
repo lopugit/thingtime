@@ -20,7 +20,7 @@ export const LOPU_CONFIRM_TTL_MS = 15 * 60_000;
 export const MAX_LOPU_CONFIRMATIONS_PER_REPLY = 8;
 export const MAX_LOPU_CONFIRM_TOKEN_CHARS = 4096;
 
-const CONFIRMABLE_TOOLS: readonly LopuConfirmableTool[] = ['delete_thing', 'update_thing', 'run_action', 'comment_on_thing'];
+const CONFIRMABLE_TOOLS: readonly LopuConfirmableTool[] = ['delete_thing', 'update_thing', 'run_action', 'comment_on_thing', 'http_request'];
 
 export type LopuConfirmationInput = { key: string; token: string };
 
