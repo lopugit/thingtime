@@ -102,3 +102,12 @@ test('link reveal requires a full same-origin owner session and never caches bea
 	assert.equal(response.headers.get('Referrer-Policy'), 'no-referrer');
 	assert.ok((await response.json()).url.endsWith('/invite#' + 'a'.repeat(43)));
 });
+
+test('invite JSON accepts bounded PNG thumbnail payloads and rejects larger bodies', async () => {
+ const response = await call(undefined, undefined, { intent: 'create', avatarUrl: 'x'.repeat(90_000) });
+ assert.equal(response.status, 200); // Avatar decoding is exercised independently; this tests the route body ceiling.
+ const before = writes;
+ await assert.rejects(call(undefined, undefined, { intent: 'create', avatarUrl: 'x'.repeat(128 * 1024) }),
+  (error: unknown) => error instanceof Response && error.status === 413);
+ assert.equal(writes, before);
+});

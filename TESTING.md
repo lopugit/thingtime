@@ -7439,10 +7439,12 @@ approval; `access.test.ts` — the reservation matrix) and
 
 ## HEIC/HEIF photo selection
 
+- [ ] Newly selected HEIC/HEIF files upload as full-resolution PNG with no JPEG encoding; invite previews and saved thumbnails remain PNG (128px crop). Verify detailed/transparent thumbnails above the old 16 KiB ceiling keep their pixels and moderation receives PNG. Existing stored JPEGs are not retroactively changed.
+
 - [ ] Open `/scripts/heic-upload.browser.html` on the Vite dev server: all cases
   pass using the synthetic HEIC fixture and the real decoder/upload queue with
   fake HTTP/object storage. Posts, comments, messages, avatars, banners, subspace
-  branding and emoji reserve/send matching JPEG bytes; retry preserves identity;
+  branding and emoji reserve/send matching PNG bytes; retry preserves identity;
   selecting the same original twice stays deduplicated. Invite preparation and
   removal perform no attachment API calls. This harness does not prove S3 access.
 - [ ] In Settings → Account and its popup, and in invite signup, select HEIC/HEIF
@@ -7452,9 +7454,9 @@ approval; `access.test.ts` — the reservation matrix) and
   bytes, size limits and removal/replacement during conversion. Desktop and 390px
   layouts remain usable when scrolled from top to bottom.
 - [ ] With an upload-approved account, select/paste/drop HEIC in post, comment and
-  message composers, avatar/banner and subspace branding; verify the JPEG preview,
+  message composers, avatar/banner and subspace branding; verify the PNG preview,
   matching stored size/type, server moderation, quota refusal, cleanup, and reload.
-  Downloads use the converted `.jpg`; originals remain untouched on the device.
+  Downloads use the converted `.png`; originals remain untouched on the device.
   Archive imports retain original bytes. External HEIC URLs are not converted.
 
 ## Feed defaults, algorithm directory and geographic Things

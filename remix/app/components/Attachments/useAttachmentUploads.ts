@@ -271,7 +271,7 @@ export const useAttachmentUploads = (
 			let partSizeBytes = canResume ? savedPlan.partSizeBytes : 0;
 			let partCount = canResume ? savedPlan.partCount : 0;
 			try {
-				if (convertHeic && isHeicImage(file)) {
+				if (convertHeic && !prepareLocalImage && isHeicImage(file)) {
 					file = await prepareHeicImage(file);
 					if (!isCurrent(localId, attempt) || controller.signal.aborted) return;
 					if (maxBytesPerFile && file.size > maxBytesPerFile)
@@ -409,7 +409,7 @@ export const useAttachmentUploads = (
 			const eligible = files.filter(
 				(file) =>
 					(!imageOnly || localFileMediaKind(file) === 'image') &&
-					(!allowedContentTypes || allowedContentTypes.has(convertHeic && isHeicImage(file) ? 'image/jpeg' : file.type.toLowerCase())) &&
+					(!allowedContentTypes || allowedContentTypes.has(convertHeic && isHeicImage(file) ? 'image/png' : file.type.toLowerCase())) &&
 					(!maxBytesPerFile || file.size <= maxBytesPerFile)
 			);
 			if (eligible.length < files.length) {
