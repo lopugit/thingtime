@@ -4,6 +4,7 @@ import { Link as RouterLink } from 'react-router';
 
 import { Logo } from '~/components/Branding/Logo';
 import { useLopu } from '~/components/Lopu/useLopu';
+import { SUPPORT_CAMPAIGN_URL, SUPPORT_PATH } from '~/components/Support/supportContent';
 import { Thingtime } from '~/components/Thingtime/Thingtime';
 import { useThingtime } from '~/components/Thingtime/useThingtime';
 import { useApi } from '~/hooks/useApi';
@@ -139,7 +140,7 @@ const NAV_LINKS = [
 	{ href: '#use-cases', label: 'Use cases' },
 	{ href: '#ecosystem', label: 'Ecosystem' },
 	{ href: '#developers', label: 'Developers' },
-	{ href: '#back', label: 'Back us 💖', color: PURPLE },
+	{ href: '#back', label: 'Support 💖', color: PURPLE },
 	{ href: '#faq', label: 'FAQ' }
 ];
 
@@ -782,46 +783,36 @@ const DevelopersSection = () => (
 );
 
 /* ------------------------------------------------------------------ */
-/* Back the launch                                                     */
+/* Support Thingtime (anchor stays #back / key home-back)              */
 /* ------------------------------------------------------------------ */
-
-const INDIEGOGO_URL = 'https://www.indiegogo.com/projects/thingtime-a-gui-for-the-internet/coming_soon';
-const GOFUNDME_URL = 'https://www.gofundme.com/f/thingtime';
-
-const TIERS = [
-	{ title: '$25 · Sticker pack', copy: '+ your name in the credits' },
-	{ title: '$60 · Merch 🌈', copy: 'the launch tee + stickers' },
-	{ title: '$150 · Unicorn tier 🦄💯', copy: 'lifetime early access + merch', highlight: true }
-];
 
 const BackSection = () => (
 	<Flex id="back" as="section" padding="72px 24px" justifyContent="center">
 		<Flex width="min(1000px, 100%)" gap="44px" flexWrap="wrap">
-			<Flex flex="1" minWidth="300px" direction="column" alignItems="flex-start">
-				<Eyebrow>BACK THE LAUNCH</Eyebrow>
-				<SectionH2 chakras={{ marginTop: '12px' }}>Help us launch the GUI for the internet 💖</SectionH2>
+			<Flex flex="1 1 300px" minWidth={0} direction="column" alignItems="flex-start">
+				<Eyebrow>SUPPORT THINGTIME</Eyebrow>
+				<SectionH2 chakras={{ marginTop: '12px' }}>Help keep Thingtime growing 💖</SectionH2>
 				<Text marginTop="16px" fontSize="17px" lineHeight={1.6} color={TEXT}>
-					Thingtime is open, independent, and funded by people — not ads. Back the launch and own a piece of a
-					friendlier internet.
+					Help cover infrastructure and AI bills, get hands-on help with your Thingtime workflow, or discuss a
+					business sponsorship. Your support makes continued development possible.
 				</Text>
 				<Flex marginTop="22px" direction="column" gap="10px" fontSize="15.5px">
-					<BulletRow color="var(--tt-rainbow-3, #59ff9c)">Open data — yours to export, always</BulletRow>
-					<BulletRow color="var(--tt-rainbow-4, #59bdff)">People and machines read the same things</BulletRow>
-					<BulletRow color="var(--tt-rainbow-2, #ffc20e)">Built in the open, shipped every week</BulletRow>
+					<BulletRow color="var(--tt-rainbow-3, #59ff9c)">Give once or monthly through GoFundMe</BulletRow>
+					<BulletRow color="var(--tt-rainbow-4, #59bdff)">Request a quote for setup and workflow help</BulletRow>
+					<BulletRow color="var(--tt-rainbow-2, #ffc20e)">Offer funding, infrastructure or service credits</BulletRow>
 				</Flex>
 				<Flex marginTop="28px" gap="12px" flexWrap="wrap">
-					<BrutalButton href={INDIEGOGO_URL} target="_blank" rel="noopener" onClick={(e: any) => burstAtEvent(e)}>
-						Back us on Indiegogo
+					<BrutalButton as={RouterLink} to={SUPPORT_PATH}>
+						Ways to support Thingtime
 					</BrutalButton>
 					<BrutalButton
 						variant="secondary"
 						shadow={false}
-						href={GOFUNDME_URL}
+						href={SUPPORT_CAMPAIGN_URL}
 						target="_blank"
-						rel="noopener"
-						onClick={(e: any) => burstAtEvent(e)}
+						rel="noopener noreferrer"
 					>
-						GoFundMe 💖
+						Contribute on GoFundMe ↗
 					</BrutalButton>
 				</Flex>
 			</Flex>
@@ -836,54 +827,13 @@ const BackSection = () => (
 				alignSelf="flex-start"
 				background={CARD}
 			>
-				<Box height="14px" background="var(--tt-surface-hover, #f1f1f1)" position="relative">
-					<Box
-						position="absolute"
-						top={0}
-						left={0}
-						bottom={0}
-						width="62%"
-						background={RAINBOW_TEXT}
-						backgroundSize="calc(100px + 200%)"
-						sx={{ animation: 'var(--tt-rainbow-anim, moving-rainbow 5s linear infinite)' }}
-					/>
-				</Box>
-				<Flex alignItems="baseline" gap="8px">
-					<Text fontSize="30px" fontWeight={900} fontFamily={DISPLAY} color={INK}>
-						$12,438
-					</Text>
-					<Text fontSize="14px" color={MUTED}>
-						of $20,000
-					</Text>
-				</Flex>
-				<Flex gap="16px" fontSize="13.5px" color={TEXT}>
-					<Text as="span">
-						<b>148</b> backers
-					</Text>
-					<Text as="span">
-						<b>21</b> days left
-					</Text>
-					<Text as="span">
-						<b>🦄</b> 12 unicorns
-					</Text>
-				</Flex>
-				<Flex borderTop={`1px solid ${HAIRLINE}`} paddingTop="14px" direction="column" gap="10px">
-					{TIERS.map((tier) => (
-						<Box
-							key={tier.title}
-							border={tier.highlight ? `2px solid ${ACCENT}` : `2px solid ${INK}`}
-							background={tier.highlight ? ACCENT_TINT : undefined}
-							padding="10px 12px"
-						>
-							<Text as="b" fontSize="14px" color={INK} fontFamily={DISPLAY}>
-								{tier.title}
-							</Text>
-							<Text fontSize="12.5px" color={MUTED} marginTop="2px">
-								{tier.copy}
-							</Text>
-						</Box>
-					))}
-				</Flex>
+				<Text fontSize="24px" fontWeight={900} fontFamily={DISPLAY} color={INK}>Practical support, real progress.</Text>
+				<Text fontSize="15px" lineHeight={1.7} color={TEXT}>
+					Contributions help fund hosting, storage, AI usage and development. Current fundraising details are on the GoFundMe campaign.
+				</Text>
+				<Text fontSize="13px" lineHeight={1.6} color={TEXT} borderTop={`1px solid ${HAIRLINE}`} paddingTop="14px">
+					Contributions do not purchase AI credits or paid services. Paid work and sponsorship terms are agreed separately.
+				</Text>
 			</Flex>
 		</Flex>
 	</Flex>
@@ -903,8 +853,8 @@ const FAQS = [
 		a: 'Yes. Data in Thingtime is open, accessible, and exportable — always. No lock-in, no ads. That’s the whole point.'
 	},
 	{
-		q: 'Is it free?',
-		a: 'Free while in beta. Backing the launch on Indiegogo or GoFundMe keeps Thingtime independent and gets you merch 🌈 and early-access perks 🦄.'
+		q: 'What does a contribution support?',
+		a: 'Contributions help cover hosting, storage, AI usage and continued development. They do not purchase AI credits, paid services or merchandise. Visit the support page to contribute, request a setup quote or discuss sponsorship.'
 	},
 	{
 		q: 'Where does it run?',
@@ -912,7 +862,7 @@ const FAQS = [
 	},
 	{
 		q: 'How can I help?',
-		a: 'Join the waitlist, back the launch, or build something on the API. Telling a friend also counts. 💖'
+		a: 'Visit the support page to contribute through GoFundMe, ask about paid setup help, or offer a sponsorship. Sharing Thingtime with someone who could use it also helps. 💖'
 	}
 ];
 
@@ -926,6 +876,12 @@ const FaqSection = () => {
 				{FAQS.map((faq, index) => (
 					<Box key={faq.q} borderTop={`2px solid ${INK}`}>
 						<Flex
+							as="button"
+							type="button"
+							width="100%"
+							textAlign="left"
+							aria-expanded={openFaq === index}
+							aria-controls={`home-faq-answer-${index}`}
 							onClick={() => setOpenFaq(openFaq === index ? -1 : index)}
 							alignItems="center"
 							justifyContent="space-between"
@@ -933,16 +889,17 @@ const FaqSection = () => {
 							padding="18px 4px"
 							cursor="pointer"
 							_hover={{ background: 'var(--tt-surface, #fafafa)' }}
+							_focusVisible={{ outline: `2px solid ${PURPLE}`, outlineOffset: '2px' }}
 						>
-							<Text fontSize="17px" fontWeight={800} fontFamily={DISPLAY} color={INK}>
+							<Text as="span" fontSize="17px" fontWeight={800} fontFamily={DISPLAY} color={INK}>
 								{faq.q}
 							</Text>
-							<Text fontSize="18px" fontWeight={800} color={PURPLE}>
+							<Text as="span" aria-hidden="true" fontSize="18px" fontWeight={800} color={PURPLE}>
 								{openFaq === index ? '−' : '＋'}
 							</Text>
 						</Flex>
 						{openFaq === index ? (
-							<Text margin={0} padding="0 4px 20px" fontSize="15.5px" lineHeight={1.6} color={TEXT} maxWidth="620px">
+							<Text id={`home-faq-answer-${index}`} margin={0} padding="0 4px 20px" fontSize="15.5px" lineHeight={1.6} color={TEXT} maxWidth="620px">
 								{faq.a}
 							</Text>
 						) : null}
@@ -976,10 +933,10 @@ const LandingFooter = () => (
 			<Box as="a" href="https://thingtime.com" target="_blank" rel="noopener" color="inherit">
 				thingtime.com
 			</Box>
-			<Box as="a" href={INDIEGOGO_URL} target="_blank" rel="noopener" color="inherit">
-				Indiegogo
+			<Box as={RouterLink} to={SUPPORT_PATH} color="inherit">
+				Support Thingtime
 			</Box>
-			<Box as="a" href={GOFUNDME_URL} target="_blank" rel="noopener" color="inherit">
+			<Box as="a" href={SUPPORT_CAMPAIGN_URL} target="_blank" rel="noopener noreferrer" color="inherit">
 				GoFundMe
 			</Box>
 		</Flex>
@@ -1042,7 +999,8 @@ export const LANDING_SECTIONS: Array<{ key: string; title: string; Component: Re
 	{ key: 'home-use-cases', title: 'Use cases', Component: HomeUseCasesSection },
 	{ key: 'home-ecosystem', title: 'Ecosystem', Component: HomeEcosystemSection },
 	{ key: 'home-developers', title: 'Developers', Component: HomeDevelopersSection },
-	{ key: 'home-back', title: 'Back the launch', Component: HomeBackSection },
+	// key stays 'home-back' — saved builder pages reference it by key, not title
+	{ key: 'home-back', title: 'Support Thingtime', Component: HomeBackSection },
 	{ key: 'home-faq', title: 'FAQ', Component: HomeFaqSection },
 	{ key: 'home-footer', title: 'Footer', Component: HomeFooterSection }
 ];
