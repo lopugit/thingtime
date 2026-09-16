@@ -979,6 +979,12 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Social meta / link unfurls (`remix/app/api/utils/meta/socialMeta.ts`, `socialPreview.ts`, `socialCard.ts`)
 
+- [ ] `/invite`, `/branding`, `/`, and an unknown SPA path return the white
+      press-kit wordmark PNG as absolute `og:image` and `twitter:image`, with
+      1200×630 dimensions and a large Twitter card. Branding uses the shared
+      page title; unknown paths use `Thingtime - Your Home for Everything`. Query/fragment secrets never
+      enter metadata. Custom `/feed` and public post cards remain custom.
+
 Crawlers never run JS, so verify with plain `curl` against the Nitro port (the
 Vite dev port serves the raw shell without injection; in production, Vercel
 routes every public share surface plus `/social-card` to the Nitro `__server`

@@ -12,7 +12,8 @@
 // could already read.
 
 import { getRequestOrigin } from '../health/statusTarget';
-import { resolveSocialPreview, socialPreviewCardUrl } from './socialPreview';
+import { DEFAULT_SOCIAL_IMAGE_PATH, normaliseSocialPreviewPath, resolveSocialPreview, socialPreviewCardUrl } from './socialPreview';
+import { pageTitle } from '../../../utils/pageTitle';
 
 export type SocialMetaTag = { attr: 'property' | 'name'; key: string; content: string };
 
@@ -45,21 +46,21 @@ type PageMeta = {
 
 export const buildSocialMetaTags = (origin: string, path: string, page: Partial<PageMeta> = {}): SocialMetaTag[] => {
 	const meta: PageMeta = {
-		title: SITE_NAME,
+		title: pageTitle(path),
 		description: GENERIC_SITE_DESCRIPTION,
 		type: 'website',
 		image: null,
-		largeImage: false,
+		largeImage: true,
 		...page
 	};
-	const image = meta.image || socialPreviewCardUrl(origin, path);
+	const image = meta.image || `${origin}${DEFAULT_SOCIAL_IMAGE_PATH}`;
 	return [
 		named('description', meta.description),
 		property('og:site_name', SITE_NAME),
 		property('og:type', meta.type),
 		property('og:title', meta.title),
 		property('og:description', meta.description),
-		property('og:url', `${origin}${path}`),
+		property('og:url', `${origin}${normaliseSocialPreviewPath(path)}`),
 		property('og:image', image),
 		property('og:image:secure_url', image),
 		property('og:image:type', 'image/png'),
@@ -90,7 +91,7 @@ export const resolveSocialMeta = async (request: Request): Promise<SocialMeta> =
 				title: preview.title,
 				description: preview.description,
 				type: preview.article ? 'article' : preview.kind === 'profile' ? 'profile' : 'website',
-				image: socialPreviewCardUrl(origin, path, preview.revision),
+				image: preview.variant === 'app' ? `${origin}${DEFAULT_SOCIAL_IMAGE_PATH}` : socialPreviewCardUrl(origin, path, preview.revision),
 				largeImage: true
 			})
 		};
