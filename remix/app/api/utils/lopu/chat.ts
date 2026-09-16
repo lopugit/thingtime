@@ -1,8 +1,9 @@
+import { anthropicMediaContent, openAiMediaContent, type LopuMedia } from './chatMedia';
 import { recordErrorLog } from '../errors/errorLogs';
 import { lopuResultLinks } from '~/utils/lopuLinks';
 import { createClaudeOAuthClient, claudeOAuthConfigured } from '../ai/claudeOAuth';
 import { createTtToolTextParser, type TtToolTextParser } from './toolTextParser';
-import Anthropic from '@anthropic-ai/sdk';
+import type Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 
 import { parsePartialJson } from '~/utils/partialJson';
@@ -157,6 +158,7 @@ export type LopuChatTurnInput = {
   userMessageId: string;
   requestId: string;
   text: string;
+  media?: LopuMedia[];
   history?: LopuChatHistoryTurn[];
   // the resolved model choice for this turn (null = no provider configured)
   choice?: AiWorkflowModelChoice | null;
@@ -291,6 +293,7 @@ type AnthropicProviderOptions = {
   system: SystemBlocks;
   history: LopuChatHistoryTurn[];
   text: string;
+  media?: LopuMedia[];
   signal?: AbortSignal;
 };
 
@@ -303,7 +306,7 @@ async function* anthropicProvider(options: AnthropicProviderOptions): LopuProvid
   ];
   const messages: Anthropic.Messages.MessageParam[] = [
     ...options.history.map((turn) => ({ role: turn.role, content: turn.text })),
-    { role: 'user', content: options.text }
+    { role: 'user', content: anthropicMediaContent(options.text, options.media) }
   ];
   const effort = toAnthropicEffort(choice.effort);
   const usage: LopuChatUsage = { inputTokens: 0, outputTokens: 0 };
@@ -416,6 +419,7 @@ type OpenAiProviderOptions = {
   systemText: string;
   history: LopuChatHistoryTurn[];
   text: string;
+  media?: LopuMedia[];
   toolMode: LopuOpenAiToolMode;
   signal?: AbortSignal;
 };
@@ -515,7 +519,7 @@ async function* openAiProvider(options: OpenAiProviderOptions): LopuProviderStre
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: 'system', content: options.systemText },
     ...options.history.map((turn) => ({ role: turn.role, content: turn.text })),
-    { role: 'user', content: options.text }
+    { role: 'user', content: openAiMediaContent(options.text, options.media) }
   ];
   const tools = toolMode === 'native' ? openAiToolDefinitions() : null;
   const effort = toOpenAiReasoningEffort(choice.effort);
@@ -1029,8 +1033,8 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
     const options = vaultClientOptions(config);
     const provider =
       config.transport === 'anthropic'
-        ? anthropicProvider({ client: deps.createAnthropic(options), choice, system: { stable: prompt.stable, volatile: prompt.volatile }, history, text: input.text, signal: input.signal })
-        : openAiProvider({ client: deps.createOpenAi(options), choice, systemText: prompt.text, history, text: input.text, toolMode: config.toolProtocol, signal: input.signal });
+        ? anthropicProvider({ client: deps.createAnthropic(options), choice, system: { stable: prompt.stable, volatile: prompt.volatile }, history, text: input.text, media: input.media, signal: input.signal })
+        : openAiProvider({ client: deps.createOpenAi(options), choice, systemText: prompt.text, history, text: input.text, media: input.media, toolMode: config.toolProtocol, signal: input.signal });
     const loop = runToolLoop({ provider, ctx, deps, state, startedAt, signal: input.signal, toolsAllowed: true });
 
     let first: IteratorResult<LopuChatStreamEvent, void>;
@@ -1107,8 +1111,8 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
     const prompt = buildLopuSystemPrompt({ viewer: { username: input.viewer.username }, context: ctx.context, activePage: ctx.activePage, toolProtocol, approved });
     const provider =
       attempt.provider === 'claude'
-        ? anthropicProvider({ client: deps.createAnthropic(), choice: attempt.choice, system: { stable: prompt.stable, volatile: prompt.volatile }, history, text: input.text, signal: input.signal })
-        : openAiProvider({ client: deps.createOpenAi(), choice: attempt.choice, systemText: prompt.text, history, text: input.text, toolMode, signal: input.signal });
+        ? anthropicProvider({ client: deps.createAnthropic(), choice: attempt.choice, system: { stable: prompt.stable, volatile: prompt.volatile }, history, text: input.text, media: input.media, signal: input.signal })
+        : openAiProvider({ client: deps.createOpenAi(), choice: attempt.choice, systemText: prompt.text, history, text: input.text, media: input.media, toolMode, signal: input.signal });
     const loop = runToolLoop({ provider, ctx, deps, state, startedAt, signal: input.signal, toolsAllowed: true });
 
     // Pull the first event inside the try so a provider failing before any
