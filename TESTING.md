@@ -7441,3 +7441,23 @@ approval; `access.test.ts` — the reservation matrix) and
 - [ ] Open `/algorithms`, search by name/description, create a private profile, publish it, branch it from another account, unpublish, and disable sharing. Private and link-only algorithms never appear in the directory; previews never expose learned weights; existing copies survive unsharing.
 - [ ] Create Things through the API with `geo: {lat,lng}`. Invalid/missing/out-of-range coordinates return 400. POST `/things/search` with `near` and `radiusKm`, and Local feed with lat/lng, find nearby visible posts, exclude far/private posts, and retain tag/subspace/ACL filters. PATCH `geo:null` removes the location.
 - [ ] Local's location request occurs only from its button; denial leaves the location-tag fallback usable. Scroll directory/feed top-to-bottom at desktop/mobile widths, including the editor and open picker; no content overflows.
+
+## HEIC/HEIF photo selection
+
+- [ ] Open `/scripts/heic-upload.browser.html` on the Vite dev server: all cases
+  pass using the synthetic HEIC fixture and the real decoder/upload queue with
+  fake HTTP/object storage. Posts, comments, messages, avatars, banners, subspace
+  branding and emoji reserve/send matching JPEG bytes; retry preserves identity;
+  selecting the same original twice stays deduplicated. Invite preparation and
+  removal perform no attachment API calls. This harness does not prove S3 access.
+- [ ] In Settings → Account and its popup, and in invite signup, select HEIC/HEIF
+  photos (including uppercase extensions and missing browser MIME types). The
+  shared profile uploader shows a valid preview, replacement/removal and retry;
+  Create stays disabled while preparing or after a conversion error. Test invalid
+  bytes, size limits and removal/replacement during conversion. Desktop and 390px
+  layouts remain usable when scrolled from top to bottom.
+- [ ] With an upload-approved account, select/paste/drop HEIC in post, comment and
+  message composers, avatar/banner and subspace branding; verify the JPEG preview,
+  matching stored size/type, server moderation, quota refusal, cleanup, and reload.
+  Downloads use the converted `.jpg`; originals remain untouched on the device.
+  Archive imports retain original bytes. External HEIC URLs are not converted.

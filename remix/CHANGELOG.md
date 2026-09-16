@@ -31,6 +31,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-16 — Accept HEIC/HEIF photos throughout the shared media uploader and
+  convert them locally to JPEG for previews, moderation and storage. Invite
+  photos now use the same profile-media control and queue with a bounded
+  pre-account thumbnail transport. Includes conversion/retry regression checks.
+  — Codex (AI)
+
 - 2026-09-16 — Restore held-row drawer reordering after navigation rows became
   real links. Prevent native anchor/image dragging only while a reorder is
   armed, preserving normal navigation and browser link shortcuts. **Codex (AI)**
