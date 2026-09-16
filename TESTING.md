@@ -5522,6 +5522,7 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       draggable DevKit trigger is omitted on this full-viewport route, so it
       cannot cover message actions, Send, attachment, emoji, or textarea
       controls.
+- [ ] Messenger visibility: fresh accounts show an unchecked **Show Lopu chats** checkbox; Lopu rows stay hidden until enabled. Toggle both ways and reload in Chats and Spaces; verify the preference is account-specific, ordinary/imported/live AI chats remain available, and explicit Lopu conversation links still open. Switch between two spaces: each sidebar shows only DMs/groups with that exact community ID, never personal or other-space chats, even with Lopu enabled. Check desktop/mobile and scroll each list to the bottom.
 - [ ] Mode toggle (🏛️ Spaces / 💬 Chats) swaps the SAME conversations between
       Slack-style rows and Messenger bubbles; the choice survives reload
       (per-account localStorage key `tt-messenger-mode:<uid>`).
@@ -6856,7 +6857,7 @@ Design note: `PRs/592-claude-lopu-ai-chatbot-358029--lopu-ai-assistant.md`. Auto
   line, mic (voice mode inside the window, ⤢ then opens `/lopu/voice`), model
   chip (hidden below 380px wide), −, ⤢, ✕; the launcher is a 48px ring with a
   hover lift and a soft pulse while streaming; both themes use tokens only.
-- Messenger: the conversation appears under Chats with the 🦄 rainbow disc,
+- Messenger: enable **Show Lopu chats** (off by default); the conversation appears under Chats with the 🦄 rainbow disc,
   opening it renders the Lopu chat pane (header ⤢ to `/lopu`); assistant
   rows cannot be edited (409) but can be deleted; the Lopu chat never
   bolds/unreads for its owner; MessengerNotifications skip it.
