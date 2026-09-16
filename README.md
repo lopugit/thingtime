@@ -3452,3 +3452,24 @@ Validation checkout `lopu-attachments-sdk-mobile` uses local web/HMR/API ports
 15420/15421/15422: http://localhost:15420/lopu. Its Tailscale/Funnel URL is
 unavailable: the installed `tailscale` launcher points to a missing
 `/Applications/Tailscale.app` binary. No existing Funnel mapping was changed.
+
+### Legal documents
+
+Public directory: `/legal`. Current documents: `/pages/privacy-policy`,
+`/pages/apple-tv-privacy-policy`, `/pages/terms-of-service`. Append the version
+(e.g. `/1.0.0`) for a permanent edition. `/privacy` and `/terms` redirect to
+the current documents. The registry is `remix/app/legal/documents.ts`; preserve
+published entries and add a new version when changing policy text, marking the
+previous edition archived. Do not rewrite a published version. Legacy website
+and merchandise text is retained as explicitly historical material.
+
+Copy text and Download .txt use the same registry as the reader. Copy public URL
+always exports `https://thingtime.com`, including on previews. Fork operators
+must replace operator/contact details, verify their actual data practices and
+change that canonical origin before publishing their own policies. No private
+configuration or credentials are needed for these pages. App Store Connect
+requires separate App Privacy disclosures in addition to policy URL/text.
+
+Legal-page development worktree: local `http://localhost:18460` (Nitro 18462,
+HMR 18461). Public preview is delivered through the branch Vercel deployment;
+check the PR deployment status for its current URL.

@@ -7469,3 +7469,8 @@ Automated regression coverage: `chatMedia.test.ts`, `chatMediaLoading.test.ts`,
 `chat.streaming.test.mts`, `lopuVisualViewport.test.ts`, API capability tests and
 existing Lopu/component/webpage suites. Browser synthetic upload QA uses mocked
 storage only; do not describe it as a production upload or provider acceptance.
+
+## Legal pages and policy exports
+
+- [ ] Signed out, open `/legal`, all three current `/pages/` documents and their version links on desktop and mobile; scroll to the bottom and confirm readable text and no overflow. Select the archived privacy version and return to current. Unknown versions must show a not-found message, never current text.
+- [ ] Copy privacy URL and Apple TV text, compare copied text and `.txt` download with the selected document. Deny clipboard permission and verify the selectable fallback. Confirm archived exports carry an archive warning and production URLs never use a preview origin.
