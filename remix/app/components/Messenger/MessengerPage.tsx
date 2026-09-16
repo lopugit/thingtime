@@ -96,8 +96,11 @@ export const MessengerPage = () => {
         })
       );
     } catch (err: any) {
-      // guests get bounced by the route loader; transient errors keep cache
-      if (err?.error === 'Unauthorized') navigate('/login');
+      // guests get bounced by the route loader; transient errors keep cache.
+      // Read the HTTP status, not the message: a generic 401 body is rewritten
+      // into a readable sentence, so matching on 'Unauthorized' would leave an
+      // expired session polling this page forever instead of going to login.
+      if (err?.status === 401) navigate('/login');
     }
   }, [api, navigate, userId]);
 
