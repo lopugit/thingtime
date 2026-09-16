@@ -20,6 +20,7 @@ const fieldNames = (crystal: Record<string, unknown>): string[] => (crystal.fiel
 // reserved name) and the pin updated in the same change.
 const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
 	// Protected operational state has no user-editable schema fields.
+	'lopu-background-task': [],
 	'lopu-recording-settings': [],
 	'lopu-recording-job': [],
 	'lopu-recording-reminder': [],

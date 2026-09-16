@@ -1,3 +1,4 @@
+import { recordErrorLog } from '../errors/errorLogs';
 import { lopuResultLinks } from '~/utils/lopuLinks';
 import { createClaudeOAuthClient, claudeOAuthConfigured } from '../ai/claudeOAuth';
 import { createTtToolTextParser, type TtToolTextParser } from './toolTextParser';
@@ -1140,10 +1141,10 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
     } catch (error) {
       if (isAbortError(error)) state.stopReason = 'aborted';
       else {
-        console.error(`[lopu] ${attempt.provider} failed mid-reply:`, (error as any)?.message || error);
+        await recordErrorLog(error, { source: 'lopu-chat-stream', provider: attempt.provider });
         state.stopReason = 'error';
         state.error = String((error as any)?.message || error).slice(0, 300);
-        yield { type: 'error', message: 'Lopu lost the thread mid-reply — what streamed so far is kept. Try again.', retryable: true };
+        yield { type: 'error', message: 'The AI connection was interrupted. Your saved progress is kept — use Retry / Continue to pick up from here.', retryable: true };
       }
     }
     return outcome(attempt.provider, attempt.choice, state);

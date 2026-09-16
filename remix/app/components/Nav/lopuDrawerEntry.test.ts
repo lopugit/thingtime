@@ -29,6 +29,7 @@ test('the drawer lists Lopu right after Messages with chat, conversations and se
 		[
 			['lopu-chat', '/lopu'],
 			['lopu-voice', '/lopu/voice'],
+			['lopu-tasks', '/lopu/tasks'],
 			['lopu-conversations', '/messages'],
 			['lopu-vault', '/settings#secure-vault'],
 			['lopu-settings', '/settings#lopu']
@@ -52,7 +53,7 @@ test('the drawer lists Lopu right after Messages with chat, conversations and se
 	);
 	assert.deepEqual(
 		filterDrawerItemsByAuth(lopu.children, true).map((child) => child.id),
-		['lopu-chat', 'lopu-voice', 'lopu-conversations', 'lopu-vault', 'lopu-settings']
+		['lopu-chat', 'lopu-voice', 'lopu-tasks', 'lopu-conversations', 'lopu-vault', 'lopu-settings']
 	);
 
 	// a navigating hub: clicking it closes the drawer like Feed/Messages do

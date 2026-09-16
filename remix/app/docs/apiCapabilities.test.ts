@@ -1,5 +1,4 @@
 import { SUBSPACE_MEDIA_REQUIREMENTS } from '../utils/subspaceMediaCapabilities';
-import { capabilitySatisfies } from '../api/utils/capabilities/capabilityContract';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -232,8 +231,8 @@ test('the Lopu family publishes its minor capability updates (own providers, ver
 	// 1.3.0: the verified-access gate + billing / usage / costMicros / balanceMicros on meta, done and the persisted turn;
 	// 1.4.0: the in-flight cap — a billed turn holds one of at most three slots on the account, past which
 	// the request is refused 429 LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted
-	assert.equal(manifest.features['api.lopu-chats-reply'], '1.8.0');
-	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.lopu-chats-reply'].version, '1.8.0');
+	assert.equal(manifest.features['api.lopu-chats-reply'], '1.9.0');
+	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.lopu-chats-reply'].version, '1.9.0');
 	assert.equal(capabilitySatisfies('1.6.2', '1.6.1'), true);
 	for (const unsupported of ['', '1.6.1', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.6.2'), false);
 	// 1.1.0: optional provider `model` + templates with catalog models / more kinds (vault);
@@ -478,4 +477,16 @@ test('subspace rename requires the post-media additive contract', () => {
   assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features[feature].version, '1.1.0');
   for (const version of [undefined, '1.0.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), false);
   for (const version of ['1.1.0', '1.1.1', '1.2.0']) assert.equal(capabilitySatisfies(version, '1.1.0'), true);
+});
+
+test('background AI requires compatible operation and task contracts on both manifests', () => {
+ const legacy = createApiCapabilitiesManifest(Object.keys(routeModules));
+ const discovery = thingtimeCapabilityManifest('https://background.test');
+ for (const [feature, required] of Object.entries({ 'api.lopu-background-tasks': '1.0.0', 'api.lopu-chats-reply': '1.9.0', 'api.lopu-voice-reply': '1.4.0', 'api.lopu-musing': '1.1.0', 'api.ai-complete': '1.2.0' })) {
+  assert.equal(legacy.features[feature], required);
+  assert.equal(discovery.features[feature].version, required);
+  assert.equal(capabilitySatisfies(required, required), true);
+  for (const invalid of [undefined, '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(invalid, required), false);
+ }
+ assert.ok(routeModules['v1/lopu/tasks']);
 });

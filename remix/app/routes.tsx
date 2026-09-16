@@ -198,6 +198,7 @@ export const router = createBrowserRouter([
       // signed-out quiet state, like /apps. /lopu/:chatId deep-links a
       // conversation (the floating window shares the same store).
       { path: 'lopu', lazy: lazyRoute(() => import('./routes/lopu')) },
+      { path: 'lopu/tasks', lazy: lazyRoute(() => import('./routes/lopu.tasks')), loader: requireUser('/login') },
       { path: 'lopu/voice', lazy: lazyRoute(() => import('./routes/lopu-voice')), loader: requireUser('/login') },
       { path: 'lopu/:chatId', lazy: lazyRoute(() => import('./routes/lopu')) },
       { path: 'login', element: <Login />, loader: requireGuest('/profile') },

@@ -162,7 +162,9 @@ export const createTtToolTextParser = (options: { nextId: () => string; mode: 'e
 			buffer = '';
 			return out;
 		}
-		if (options.strict) throw new Error('Claude stopped before completing a tool call.');
+		// A complete JSON tool at EOF is safe even if the model omitted only
+        // the Markdown closing fence. closeFence still requires strict JSON;
+        // incomplete arguments must never become executable partial input.
 		// the model was cut off inside a fence — close it with what we have
 		body += buffer;
 		buffer = '';

@@ -1,3 +1,4 @@
+import { bindAiTaskOwner, getAiTasks, refreshAiTasks, readAiTaskOutput, stopAiTaskRequest } from './aiTasks.client';
 // The Lopu chat module store (design note §3.1/§3.2): ONE state shared by the
 // /lopu page and the floating window (LopuHost), read through
 // useSyncExternalStore in useLopuChat. Holds the conversation list, the
@@ -198,7 +199,7 @@ const SERVER_SNAPSHOT: LopuStoreState = createInitialState();
 let state: LopuStoreState = createInitialState();
 const listeners = new Set<() => void>();
 let client: LopuApiClient | null = null;
-let controller: AbortController | null = null;
+const controllers = new Map<string, AbortController>();
 let noticeSeq = 0;
 let emitScheduled = false;
 
@@ -403,10 +404,9 @@ let accountGeneration = 0;
 export const hydrateLopuStore = (userId: string | null): LopuStoreState => {
 	if (state.hydrated && state.userId === userId) return state;
 	accountGeneration++;
-	if (state.streamingId && controller) {
-		controller.abort();
-		controller = null;
-	}
+	for (const controller of controllers.values()) controller.abort();
+	controllers.clear();
+	bindAiTaskOwner(userId);
 	const chatsCache = userId ? readLocalCache<ChatsCache>(lopuChatsCacheKey(userId)) : null;
 	const modelsCache = readLocalCache<ModelsCache>(LOPU_MODELS_CACHE_KEY);
 	const settingsCache = userId ? readLocalCache<LopuChatSettings>(lopuSettingsCacheKey(userId)) : null;
@@ -821,7 +821,7 @@ const rememberTurn = (turn: LopuTurnState) => {
 		let turnOrder = current.turnOrder.includes(turn.requestId) ? current.turnOrder : [...current.turnOrder, turn.requestId];
 		while (turnOrder.length > LOPU_TURNS_CAP) {
 			const oldest = turnOrder[0];
-			if (oldest === current.streamingId) break;
+			if (isLopuTurnActive(turns[oldest])) break;
 			turnOrder = turnOrder.slice(1);
 			delete turns[oldest];
 		}
@@ -934,12 +934,15 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 		notice('Sign in to chat with Lopu 🦄', { status: 'info' });
 		return { ok: false, error: 'Sign in to chat with Lopu', text };
 	}
-	if (state.streamingId && isLopuTurnActive(state.turns[state.streamingId])) {
+	if (Object.values(state.turns).some(turn => turn.chatId === state.activeChatId && isLopuTurnActive(turn)) || getAiTasks().some(task => task.chatId === state.activeChatId && task.status === 'running')) {
 		notice('Lopu is still replying — stop it first or wait a moment ✨', { status: 'info' });
 		return { ok: false, error: 'Lopu is still replying', text };
 	}
 
 	const userId = state.userId;
+	const generation = accountGeneration;
+	const startingPath = typeof window === 'undefined' ? null : window.location.pathname;
+	const foreground = () => state.activeChatId === (turn.chatId || chatId) && (startingPath === null || window.location.pathname === startingPath);
 	const requestId = uuid();
 	const chatId = state.activeChatId;
 	const settings = mergeSettingsPatch(options.settings || {});
@@ -953,7 +956,7 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 	let turn = initialLopuTurn({ requestId, chatId, userText: trimmed,
 		userAttachments: (options.attachments ?? []).filter(attachment => attachmentIds.has(attachment.id)) });
 	const abort = new AbortController();
-	controller = abort;
+	controllers.set(requestId, abort);
 	rememberTurn(turn);
 	setState({ streamingId: requestId, sending: true, error: null });
 
@@ -961,11 +964,12 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 		turn = next;
 		// a viewer change mid-stream (logout/switch) must not leak this turn
 		// into the next account's store
-		if (state.userId !== userId) return;
+		if ((state.userId !== userId || generation !== accountGeneration)) return;
 		setState((current) => ({ turns: { ...current.turns, [requestId]: next } }));
 	};
 
 	const onEvent = (event: LopuChatEvent) => {
+		if ((state.userId !== userId || generation !== accountGeneration)) return;
 		const before = turn;
 		const next = reduceLopuTurn(before, event);
 		if (next === before) return;
@@ -982,7 +986,7 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 				break;
 			}
 			case 'tool_input_delta': {
-				if (!applyPatches) break;
+				if (!applyPatches || !foreground()) break;
 				const activity = next.tools.find((tool) => tool.id === event.id);
 				if (!activity) break;
 				if (activity.name === 'patch_page') applyStreamingPatchOps(activity);
@@ -998,7 +1002,7 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 				break;
 			}
 			case 'patch': {
-				if (!applyPatches) break;
+				if (!applyPatches || !foreground()) break;
 				const target = event.target ?? 'active';
 				snapshotForUndo(event.id, target, event.pageId);
 				try {
@@ -1013,7 +1017,7 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 				break;
 			}
 			case 'navigate': {
-				if (next.navigate) setState((current) => ({ pendingNavigate: next.navigate, navigateSeq: current.navigateSeq + 1 }));
+				if (next.navigate && foreground()) setState((current) => ({ pendingNavigate: next.navigate, navigateSeq: current.navigateSeq + 1 }));
 				break;
 			}
 			case 'error': {
@@ -1074,26 +1078,26 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 			}
 		}
 	} finally {
-		if (controller === abort) controller = null;
+		controllers.delete(requestId);
 	}
 
 	// paints from tool calls that never finished go back to how the page was
 	for (const tool of turn.tools) if (tool.status === 'error' && !tool.result) discardToolPaint(tool.id);
 
-	if (state.userId !== userId) return { ok: false, error: 'The account changed while Lopu was replying', text: trimmed, chatIdKnown: !!turn.meta };
+	if ((state.userId !== userId || generation !== accountGeneration)) return { ok: false, error: 'The account changed while Lopu was replying', text: trimmed, chatIdKnown: !!turn.meta };
 
 	const finalChatId = turn.chatId;
 	if (turn.gate && !turn.meta) {
 		// the turn stays in the timeline: the viewer's bubble and Lopu's gate
 		// bubble (request credits / ask an admin); nothing was persisted
-		setState({ sending: false, streamingId: null, error: null });
+		setState({ sending: controllers.size > 0, streamingId: controllers.keys().next().value ?? null, error: null });
 		return { ok: false, error: turn.gate.message, text: '', chatIdKnown: false, gate: turn.gate };
 	}
 	if (!turn.meta || !finalChatId) {
 		// nothing persisted server-side that we know of — drop the turn, hand
 		// the text back to the composer, and say why
 		forgetTurn(requestId);
-		setState({ sending: false, streamingId: null, error: failure });
+		setState({ sending: controllers.size > 0, streamingId: controllers.keys().next().value ?? null, error: failure });
 		if (failure) notice(failure, { status: 'error' });
 		return { ok: false, error: failure || 'Lopu did not reply', text: trimmed };
 	}
@@ -1101,7 +1105,7 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 	const assistantRows = buildAssistantMessages(turn, userId);
 	appendMessages(finalChatId, assistantRows);
 	upsertChatSummary(finalChatId, turn, assistantRows);
-	setState({ sending: false, streamingId: null, error: failure });
+	setState({ sending: controllers.size > 0, streamingId: controllers.keys().next().value ?? null, error: failure });
 	if (failure) notice(failure, { status: 'error' });
 	// reconcile with the server's view in the background: a chat this turn
 	// created gets its server title/settings; a cut-off turn gets whatever
@@ -1113,7 +1117,8 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 
 /** Stop the in-flight reply (what streamed so far is kept). */
 export const abortLopuTurn = (): void => {
-	if (controller) controller.abort();
+ const turn = Object.values(state.turns).find(turn => turn.chatId === state.activeChatId && isLopuTurnActive(turn));
+ if (turn) void stopAiTaskRequest(turn.requestId).then(() => controllers.get(turn.requestId)?.abort()).catch(() => notice('Could not stop the task. Open Background tasks to try again.', { status: 'error' }));
 };
 
 // ——— confirmations (design note §2.4) ——————————————————————————————————————
@@ -1191,11 +1196,43 @@ export const selectLopuProviderNames = (snapshot: LopuStoreState): Record<string
 
 /** Test/HMR hook: reset the module state (never called by the app). */
 export const resetLopuStoreForTests = () => {
-	if (controller) controller.abort();
-	controller = null;
+	for (const controller of controllers.values()) controller.abort();
+	controllers.clear();
 	client = null;
 	undoSnapshots.clear();
 	streamingComponentRefs.clear();
 	state = createInitialState();
 	emit();
+};
+
+let recoveringTasks = false;
+const recoveredTaskVersions = new Map<string, string>();
+export const recoverLopuBackgroundTasks = async () => {
+ if (recoveringTasks || !state.userId) return;
+ recoveringTasks = true;
+ const owner = state.userId, generation = accountGeneration;
+ try {
+  await refreshAiTasks();
+  for (const task of getAiTasks()) {
+   if (task.path !== '/api/v1/lopu/chats/reply' || controllers.has(task.requestId)) continue;
+   if (task.status !== 'running' && task.chatId !== state.activeChatId && !state.turns[task.requestId]) continue;
+   const versionKey = `${generation}:${task.id}`;
+   if (recoveredTaskVersions.get(versionKey) === task.updatedAt) continue;
+   if (task.status !== 'running' && state.turns[task.requestId]?.status === 'done') continue;
+   const result = await readAiTaskOutput(task);
+   if (state.userId !== owner || accountGeneration !== generation) return;
+   if (!result) continue;
+   if (!result.output || !result.task.contentType.includes('ndjson')) continue;
+   let turn = initialLopuTurn({ requestId: task.requestId, chatId: task.chatId, userText: '' });
+   const response = new Response(result.output, { headers: { 'Content-Type': 'application/x-ndjson' } });
+   await readNdjson(response, event => { turn = reduceLopuTurn(turn, event); });
+   if (result.task.status !== 'running' && isLopuTurnActive(turn)) turn = markLopuTurnFailed(turn, result.task.error || 'Reply interrupted. Continue from the saved output.', true);
+   if (state.userId !== owner || accountGeneration !== generation) return;
+   if (turn.chatId) await loadLopuMessages(turn.chatId);
+   if (state.userId !== owner || accountGeneration !== generation) return;
+   rememberTurn(turn);
+   recoveredTaskVersions.set(versionKey, task.updatedAt);
+   if (recoveredTaskVersions.size > 150) recoveredTaskVersions.delete(recoveredTaskVersions.keys().next().value!);
+  }
+ } finally { recoveringTasks = false; }
 };
