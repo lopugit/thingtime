@@ -24,7 +24,7 @@ mock.module(new URL('../settings/lopuAccess.ts', import.meta.url).href, {
 	namedExports: { getStoredLopuAccessSettings: async () => ({ starterCredits: 5, lowBalanceWarningCredits: 1 }) }
 });
 mock.module(new URL('./inviteAvatar.ts', import.meta.url).href, { namedExports: { normalizeInviteAvatar: async () => null } });
-const { createInvite, closeInvite, previewInvite, prepareInviteSignup, expireInvites, listInvites } = await import('./invites');
+const { createInvite, closeInvite, previewInvite, prepareInviteSignup, expireInvites, listInvites, revealInviteLink } = await import('./invites');
 const { ensureLopuAccount, getLopuAccount } = await import('../lopu/accounting');
 beforeEach(() => {
 	things = createMemoryThingsCollection();
@@ -128,4 +128,38 @@ test('old open reservations remain manageable after newer closed invitations fil
 		history.some((row) => 'token' in row || 'ownerId' in row),
 		false
 	);
+});
+
+test('never-expiring invites survive expiry sweeps and can be revealed only by their owner', async () => {
+	const invite = await make();
+	assert.equal(invite.expiresAt, null);
+	await expireInvites();
+	assert.equal((await previewInvite(invite.token)).expiresAt, null);
+	assert.equal(await revealInviteLink('creator', invite.id), invite.token);
+	await assert.rejects(() => revealInviteLink('other-user', invite.id));
+	assert.equal((await listInvites('creator'))[0].canShowLink, true);
+	assert.equal(JSON.stringify(await previewInvite(invite.token)).includes(invite.token), false);
+	assert.equal(JSON.stringify(await listInvites('creator')).includes(invite.token), false);
+	await closeInvite(invite.id, 'creator');
+	await assert.rejects(() => revealInviteLink('creator', invite.id));
+});
+test('legacy replacement preserves gift and expiry, is repeatable, and fences a prepared old-token claim', async () => {
+	const invite = await createInvite('creator', { username: 'friend', displayName: 'Friend', credits: 2, expiresInDays: 7 });
+	const doc = things.ofKind('account-invite')[0];
+	const { Binary } = await import('mongodb');
+	const saved = JSON.parse(Buffer.from(doc.secure.buffer).toString());
+	delete saved.token;
+	await things.updateOne({ shareId: invite.id }, { $set: { secure: new Binary(Buffer.from(JSON.stringify(saved))) } });
+	assert.equal((await listInvites('creator'))[0].canShowLink, false);
+	const prepared = await prepareInviteSignup(invite.token, {});
+	await assert.rejects(() => revealInviteLink('creator', invite.id));
+	const replacement = await revealInviteLink('creator', invite.id, true);
+	assert.notEqual(replacement, invite.token);
+	assert.equal(await revealInviteLink('creator', invite.id, true), replacement);
+	await assert.rejects(() => previewInvite(invite.token));
+	await assert.rejects(() => transaction((session: any) => prepared.onCreated({ _id: 'late' }, session)));
+	assert.equal((await previewInvite(replacement)).expiresAt, invite.expiresAt);
+	assert.equal(await balance(), 3_000_000);
+	await things.updateOne({ shareId: invite.id }, { $set: { expiresAt: new Date(0) } });
+	await assert.rejects(() => revealInviteLink('creator', invite.id, true));
 });

@@ -3280,9 +3280,11 @@ Recovery remain release acceptance checks.
 Signed-in personal accounts can create single-use invites in **Settings → Account →
 Invite someone with a gift**. Choose a username, display name, optional avatar and
 0–10,000 credits (six decimal places). The gift is deducted immediately and held
-until signup. Cancelling an unused invite returns it; links expire after 30 days.
-Up to 20 unused invites are allowed per account. Copy the link when it is created:
-only its hash is stored, so the link cannot be recovered from the history list.
+until signup. Cancelling an unused invite returns it; new links default to Never expire, with 1, 7, 30 or 90 day options. Pending links can be shown/copied later. Older hash-only invites offer an explicit replacement that invalidates the previous link while preserving the gift and expiry.
+Up to 20 unused invites are allowed per account. Tokens are indexed by hash; a
+recoverable copy lives in protected binary invite state and is returned only by
+the owner-authenticated link action, never by list or preview. Closing an invite
+deletes this state.
 
 The `/invite#<token>` page lets the recipient keep or replace every suggested
 profile field and choose their own password. Email is optional; supplying one
@@ -3296,7 +3298,7 @@ provider. No new provider key is required. Set the existing `CRON_SECRET` in the
 deployment secret store so Vercel's hourly `/api/v1/auth/invites/expire` job can
 refund expired gifts, up to 50 per run; account visits also settle their expired
 invites. Do not add a TTL index that deletes invitation records before refund.
-The advertised contracts are `api.auth-invites@1.0.0`,
+The advertised contracts are `api.auth-invites@2.0.0`,
 `api.auth-invites-expire@1.0.0` and `api.auth-register@1.2.0`.
 
 Avatar upload is a narrowly scoped signup thumbnail: the browser crops an image

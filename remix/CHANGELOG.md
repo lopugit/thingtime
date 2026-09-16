@@ -31,6 +31,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-16: Account invites default to Never expire, offer an expiry dropdown and owner-only show/copy links, with explicit replacement for older hash-only links. Worktree validation uses localhost:17360; Funnel unavailable because the installed Tailscale CLI target is missing.
+
+
 - 2026-09-16 — Restore held-row drawer reordering after navigation rows became
   real links. Prevent native anchor/image dragging only while a reorder is
   armed, preserving normal navigation and browser link shortcuts. **Codex (AI)**

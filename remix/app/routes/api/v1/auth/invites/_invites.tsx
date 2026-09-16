@@ -3,7 +3,7 @@ import { json, readJsonBody } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
 import { resolveTrustedOrigin } from '~/api/utils/auth/appOrigin';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
-import { closeInvite, createInvite, listInvites, previewInvite } from '~/api/utils/invites/invites';
+import { closeInvite, createInvite, listInvites, previewInvite, revealInviteLink } from '~/api/utils/invites/invites';
 import { InviteError } from '~/api/utils/invites/inviteCore';
 const headers = { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' };
 export const action = async ({ request }: { request: Request }) => {
@@ -20,12 +20,18 @@ export const action = async ({ request }: { request: Request }) => {
 		if (!user || user.temporary || user.accountKind !== 'user')
 			return json({ ok: false, error: 'Sign in to create or manage invitations.' }, { status: 401, headers });
 		if (body?.intent === 'list') return json({ ok: true, invites: await listInvites(user.id) }, { headers });
+		if (body?.intent === 'link') {
+			if (typeof body.id !== 'string' || !body.id || body.id.length > 100) throw new InviteError(400, 'Choose an invite.');
+			const token = await revealInviteLink(user.id, body.id, body.replaceLegacy === true);
+			const origin = resolveTrustedOrigin(request.headers.get('Origin') ? new Request(request.headers.get('Origin')!) : request);
+			return json({ ok: true, url: `${origin}/invite#${token}` }, { headers });
+		}
 		if (body?.intent === 'cancel') {
 			if (typeof body.id !== 'string' || body.id.length > 100) throw new InviteError(400, 'Choose an invite to cancel.');
 			await closeInvite(body.id, user.id);
 			return json({ ok: true }, { headers });
 		}
-		if (body?.intent !== 'create') throw new InviteError(400, 'Choose create, preview, list or cancel.');
+		if (body?.intent !== 'create') throw new InviteError(400, 'Choose create, preview, list, link or cancel.');
 		const createLimit = await enforceRateLimit(request, 'invites.create', user.id, { failClosed: true });
 		if (!createLimit.allowed) return json({ ok: false, error: 'Too many new invites. Try again later.' }, rateLimitedResponseInit(createLimit));
 		const invite = await createInvite(user.id, body);
