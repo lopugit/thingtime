@@ -1,3 +1,4 @@
+import { useLopuVisualViewport } from './useLopuVisualViewport';
 import { canContinueLopuReply, LOPU_CONTINUE_PROMPT } from './lopuRecovery';
 import React from 'react';
 import { Button, Box, Flex, Menu, MenuButton, MenuDivider, MenuItem, MenuList, Text } from '@chakra-ui/react';
@@ -511,6 +512,7 @@ export const LopuChatView = ({
 	const compact = compactProp ?? variant === 'window';
 	const resolvedVariant: LopuChatViewVariant = variant ?? (compact ? 'window' : 'page');
 	const isMobile = useIsMobileViewport();
+	const visualViewport = useLopuVisualViewport();
 	const chat = useLopuChat({ chatId, context, applyPatches });
 	const [draft, setDraft] = React.useState('');
 	const [uploads, setUploads] = React.useState(EMPTY_LOPU_ATTACHMENTS);
@@ -757,7 +759,7 @@ export const LopuChatView = ({
 				flexShrink={0}
 				px={gutter}
 				pt={compact ? 1 : 2}
-				pb={compact ? 2 : resolvedVariant === 'window' ? 3 : `calc(${isMobile ? '8px' : '12px'} + ${LOPU_UI.safeAreaBottom})`}
+				pb={compact ? 2 : resolvedVariant === 'window' ? 3 : `calc(${isMobile ? '8px' : '12px'} + ${visualViewport?.keyboardOpen ? '0px' : LOPU_UI.safeAreaBottom})`}
 			>
 				<Box maxW={compact ? '100%' : LOPU_UI.composerMaxWidth} mx="auto" width="100%">
 					<LopuComposer

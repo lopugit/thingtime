@@ -836,3 +836,19 @@ test('a vault turn takes precedence over LOPU_CHAT_PROVIDER=test and is served b
   assert.equal(openAiRequests[0].body.stream, true);
   assert.equal(openAiRequests[1].body.stream, false);
 });
+
+test('Both provider transports receive actual image/PDF content and retain it after tool hops', async () => {
+  const media = [{name:'photo.png',contentType:'image/png',data:'cGl4ZWxz'}, {name:'file.pdf',contentType:'application/pdf',data:'cGRm'}];
+  anthropicPlans.push({blocks:[{type:'tool_use',id:'read',name:'get_thing',inputChunks:['{"id":"one"}']}],stopReason:'tool_use'}, {blocks:[{type:'text',text:'Seen'}]});
+  await collect(turn('Inspect', 'claude-opus-5:high', {media}));
+  for (const request of anthropicRequests) {
+    const content = request.body.messages.find((message:any) => Array.isArray(message.content) && message.content.some((part:any) => part.type === 'image')).content;
+    assert.equal(content.find((part:any) => part.type === 'image').source.data, 'cGl4ZWxz');
+    assert.equal(content.find((part:any) => part.type === 'document').source.data, 'cGRm');
+  }
+  openAiPlans.push({contentChunks:['Seen']});
+  await collect(turn('Inspect', 'gpt-5.6-sol:high', {media}));
+  const content = openAiRequests[0].body.messages.at(-1).content;
+  assert.equal(content[1].image_url.url, 'data:image/png;base64,cGl4ZWxz');
+  assert.equal(content[2].file.file_data, 'data:application/pdf;base64,cGRm');
+});

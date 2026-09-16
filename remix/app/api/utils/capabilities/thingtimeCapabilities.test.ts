@@ -257,7 +257,7 @@ test('the Lopu catalog family publishes its verified-provider-key minor updates'
   // and reply 1.4.0 = the in-flight cap (429 LOPU_TURN_IN_FLIGHT past three billed turns at once)
   assert.equal(manifest.features['api.lopu-chats']?.version, '1.3.0');
   assert.equal(manifest.features['api.lopu-chats-update']?.version, '1.2.0');
-  assert.equal(manifest.features['api.lopu-chats-reply']?.version, '1.9.0');
+  assert.equal(manifest.features['api.lopu-chats-reply']?.version, '1.10.0');
   // verified access + credits (design note "Lopu verified access, usage accounting and credits")
   for (const feature of ['api.admin-users-lopu-access', 'api.settings-lopu-access', 'api.lopu-account', 'api.lopu-account-history', 'api.lopu-account-topup-request', 'api.admin-lopu-accounts', 'api.admin-lopu-credits']) {
     assert.equal(manifest.features[feature]?.version, '1.0.0', feature);
@@ -269,7 +269,7 @@ test('historical Lopu receipts advertise a compatible reply patch on both manife
     thingtimeCapabilityManifest('https://thingtime.test').features['api.lopu-chats-reply'].version,
     createApiCapabilitiesManifest().features['api.lopu-chats-reply']
   ]) {
-    assert.equal(version, '1.9.0');
+    assert.equal(version, '1.10.0');
     assert.equal(capabilitySatisfies(version, '1.6.0'), true);
     assert.equal(capabilitySatisfies(version, '1.6.1'), true);
     assert.equal(capabilitySatisfies('1.6.0', '1.6.1'), false);
@@ -344,4 +344,14 @@ test('algorithm discovery and geographic clients negotiate additive features', (
     assert.equal(capabilitySatisfies('2.0.0', version), false);
   }
   assert.equal(capabilitySatisfies('1.6.0', requirements['api.things-feed']), false);
+});
+
+test('Lopu network SDK contract exists on both manifests and refuses missing/breaking origins', () => {
+  const manifest = thingtimeCapabilityManifest('https://thingtime.test');
+  assert.equal(manifest.features['api.lopu-network'].version, '1.0.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.lopu-network'], '1.0.0');
+  assert.ok(manifest.operations.some(operation => operation.path === '/api/v1/lopu/network' && operation.methods.includes('POST')));
+  assert.equal(capabilitySatisfies('1.0.1', '1.0.0'), true);
+  assert.equal(capabilitySatisfies('', '1.0.0'), false);
+  assert.equal(capabilitySatisfies('2.0.0', '1.0.0'), false);
 });

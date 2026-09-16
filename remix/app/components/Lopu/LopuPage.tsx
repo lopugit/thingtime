@@ -1,3 +1,4 @@
+import { useLopuVisualViewport } from './useLopuVisualViewport';
 import { LopuChatTaskRing } from './LopuTaskRing';
 import React from 'react';
 import { Box, Button, Center, Flex, Input, Text } from '@chakra-ui/react';
@@ -417,6 +418,7 @@ const ConversationsSheet = ({ chat, open, onClose }: { chat: UseLopuChat; open: 
 };
 
 export const LopuPage = (props: { mode?: LopuPageMode }) => {
+	const visualViewport = useLopuVisualViewport();
 	const { chatId: routeChatId } = useParams();
 	const { pathname, search } = useLocation();
 	const navigate = useNavigate();
@@ -518,8 +520,8 @@ export const LopuPage = (props: { mode?: LopuPageMode }) => {
 				width={1100}
 				columnProps={{
 					px: 3,
-					pb: 'calc(var(--thingtime-safe-area-bottom, env(safe-area-inset-bottom, 0px)) + 8px)',
-					height: `calc(100dvh - ${PAGE_TOP_CLEARANCE})`,
+					pb: visualViewport?.keyboardOpen ? '8px' : 'calc(var(--thingtime-safe-area-bottom, env(safe-area-inset-bottom, 0px)) + 8px)',
+					height: `calc(${visualViewport ? `${visualViewport.height}px` : '100dvh'} - ${PAGE_TOP_CLEARANCE})`,
 					minHeight: 0,
 					rowGap: 0
 				}}
