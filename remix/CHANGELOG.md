@@ -12,6 +12,9 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-09-16: Added public legal directory, versioned privacy/Apple TV privacy/terms pages and copy/text exports; retained legacy notices as labelled archives. Verified anonymous preview routes and responsive exports.
+
+
 - 2026-09-12 — CI Control now distinguishes target activity, waiting, conflicts,
   failed workers and confirmed merges; removes the rolling finish estimate.
   Adds private per-run Ask Lopu status chat with capability negotiation, durable
@@ -37,6 +40,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   pre-account thumbnail transport. Includes conversion/retry regression checks.
   — Codex (AI)
 
+- 2026-09-16 — Messenger spaces show only their own direct/group conversations. Add an account-specific **Show Lopu chats** checkbox, off by default, while preserving explicit conversation links. **Codex (AI)**
 - 2026-09-16 — Restore held-row drawer reordering after navigation rows became
   real links. Prevent native anchor/image dragging only while a reorder is
   armed, preserving normal navigation and browser link shortcuts. **Codex (AI)**
