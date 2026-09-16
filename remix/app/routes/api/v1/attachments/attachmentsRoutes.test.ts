@@ -492,3 +492,24 @@ test('conditional byte reuse authorizes before returning a cacheable 304', async
 	assert.equal((await route({ request })).status, 404);
 	assert.equal(checks, 2);
 });
+
+test('upload throttling returns Retry-After without reaching storage; limiter outages remain 503', async () => {
+	for (const unavailable of [false, true]) {
+		const handler = createAttachmentMutationAction({
+			rateKey: 'attachments.start', service: async () => { assert.fail('blocked request must not reserve storage'); }
+		}, {
+			getUser: async () => user,
+			enforceLimit: async (_request, key, identity, options) => {
+				assert.equal(key, 'attachments.start');
+				assert.equal(identity, 'user:user-1');
+				assert.equal(options?.failClosed, true);
+				return { allowed: false, limit: 60, remaining: 0, resetAt: new Date(Date.now() + 60_000).toISOString(), unavailable };
+			}
+		});
+		const response = await handler({ request: post({ requestId: 'same-upload' }) });
+		assert.equal(response.status, unavailable ? 503 : 429);
+		assert.match(response.headers.get('Cache-Control')!, /no-store/);
+		if (!unavailable) assert.ok(Number(response.headers.get('Retry-After')) > 0 && Number(response.headers.get('Retry-After')) <= 60);
+		else assert.equal(response.headers.get('Retry-After'), null);
+	}
+});

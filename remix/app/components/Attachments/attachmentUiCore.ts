@@ -377,7 +377,17 @@ export const attachmentUploadError = (
 	}
 	if (status === 403) return 'This account is not allowed to upload that file.';
 	if (status === 413) return 'This file is larger than Thingtime can accept.';
-	if (status === 429) return 'Uploads are moving too quickly. Wait a moment, then retry this file.';
+	if (status === 429) {
+		const seconds = (error as { retryAfterSeconds?: unknown } | null)?.retryAfterSeconds;
+		const wait = typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0
+			? seconds < 60
+				? `${Math.ceil(seconds)} second${Math.ceil(seconds) === 1 ? '' : 's'}`
+				: `${Math.ceil(seconds / 60)} minute${Math.ceil(seconds / 60) === 1 ? '' : 's'}`
+			: null;
+		return wait
+			? `This account’s upload limit was reached. Retry this file in ${wait}. Your selection is kept.`
+			: 'This account’s upload limit was reached. Wait before retrying this file. Your selection is kept.';
+	}
 	if (status === 507 || code === 'quota_exceeded' || snapshotShowsQuota) return ATTACHMENT_QUOTA_ERROR;
 	if (code === 'storage_unconfigured') {
 		return 'Private uploads are unavailable in this environment. For images, use the public image URL option instead.';
