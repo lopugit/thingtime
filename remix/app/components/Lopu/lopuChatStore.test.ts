@@ -511,3 +511,20 @@ test('an older list read cannot undo a rename and polling waits for the write', 
   assert.equal(getLopuStoreSnapshot().chats[0].name, 'New title');
   resolveWrite({ ok: true, chat: { id: 'first', name: 'New title' } }); await pendingWrite;
 });
+
+test('a deleted conversation clears cached messages when the read API returns 404', async () => {
+  const { getMessengerJson } = await import('../Messenger/messengerRequest.ts');
+  resetLopuStoreForTests(); hydrateLopuStore('viewer-a');
+  const { client } = fakeClient({ chats: [{ id: 'gone', name: 'Deleted elsewhere' }] }); bindLopuApi(client);
+  client.messages = async () => ({ ok: true, messages: [{ id: 'm', chatId: 'gone', text: 'Private history', createdAt: '2026-09-16T00:00:00Z' }] });
+  await loadLopuChats(); selectLopuChat('gone'); await loadLopuMessages('gone');
+  const original = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => new Response(JSON.stringify({ ok: false, error: 'Chat not found' }), { status: 404 });
+    client.messages = () => getMessengerJson('/api/v1/chats/messages?chatId=gone');
+    await loadLopuMessages('gone');
+    assert.deepEqual(getLopuStoreSnapshot().messages.gone, []);
+    assert.equal(getLopuStoreSnapshot().activeChatId, null);
+    assert.deepEqual(getLopuStoreSnapshot().chats, []);
+  } finally { globalThis.fetch = original; }
+});
