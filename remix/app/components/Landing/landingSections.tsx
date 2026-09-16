@@ -140,7 +140,7 @@ const NAV_LINKS = [
 	{ href: '#use-cases', label: 'Use cases' },
 	{ href: '#ecosystem', label: 'Ecosystem' },
 	{ href: '#developers', label: 'Developers' },
-	{ href: '#back', label: 'Back us 💖', color: PURPLE },
+	{ href: '#back', label: 'Support 💖', color: PURPLE },
 	{ href: '#faq', label: 'FAQ' }
 ];
 
@@ -783,7 +783,7 @@ const DevelopersSection = () => (
 );
 
 /* ------------------------------------------------------------------ */
-/* Back the launch                                                     */
+/* Support Thingtime (anchor stays #back / key home-back)              */
 /* ------------------------------------------------------------------ */
 
 const BackSection = () => (
@@ -999,7 +999,8 @@ export const LANDING_SECTIONS: Array<{ key: string; title: string; Component: Re
 	{ key: 'home-use-cases', title: 'Use cases', Component: HomeUseCasesSection },
 	{ key: 'home-ecosystem', title: 'Ecosystem', Component: HomeEcosystemSection },
 	{ key: 'home-developers', title: 'Developers', Component: HomeDevelopersSection },
-	{ key: 'home-back', title: 'Back the launch', Component: HomeBackSection },
+	// key stays 'home-back' — saved builder pages reference it by key, not title
+	{ key: 'home-back', title: 'Support Thingtime', Component: HomeBackSection },
 	{ key: 'home-faq', title: 'FAQ', Component: HomeFaqSection },
 	{ key: 'home-footer', title: 'Footer', Component: HomeFooterSection }
 ];
