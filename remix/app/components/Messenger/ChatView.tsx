@@ -1,3 +1,4 @@
+import { subscribeBackgroundRefresh } from '~/hooks/backgroundRefresh';
 import React from 'react';
 import { Box, Button, Flex, Input, Spinner } from '@chakra-ui/react';
 
@@ -137,24 +138,15 @@ export const ChatView = (props: ChatViewProps) => {
       } catch (err: any) {
         if (cancelled) return;
         setLoading(false);
-        lopu({ title: err?.error || 'Could not load this chat 😞', status: 'error' });
+        if (!messagesRef.current.length) lopu({ title: err?.error || 'Could not load this chat 😞', status: 'error' });
       }
     };
-    void load();
-    const interval = window.setInterval(() => {
-      if (document.visibilityState !== 'visible') return;
-      void load();
-    }, ACTIVE_POLL_MS);
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') void load();
-    };
-    document.addEventListener('visibilitychange', onVisible);
+    const unsubscribe = subscribeBackgroundRefresh(`messenger-messages:${userId}:${chatId}`, load, ACTIVE_POLL_MS);
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisible);
+      unsubscribe();
     };
-  }, [api, applyPage, chatId, lopu]);
+  }, [api, applyPage, chatId, lopu, userId]);
 
   // custom emoji palette for this chat (community set + personal set)
   React.useEffect(() => {

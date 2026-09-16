@@ -1,3 +1,4 @@
+import { subscribeBackgroundRefresh } from '~/hooks/backgroundRefresh';
 import React from 'react';
 import { useLocation } from 'react-router';
 
@@ -87,20 +88,12 @@ export const MessengerNotifications = () => {
       }
     };
 
-    void poll();
-    const interval = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void poll();
-    }, IDLE_POLL_MS);
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') void poll();
-    };
+    const unsubscribe = subscribeBackgroundRefresh(`messenger-unread:${user.id}`, poll, IDLE_POLL_MS);
     const onRefresh = () => void poll();
-    document.addEventListener('visibilitychange', onVisible);
     window.addEventListener(MESSENGER_REFRESH_EVENT, onRefresh);
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisible);
+      unsubscribe();
       window.removeEventListener(MESSENGER_REFRESH_EVENT, onRefresh);
     };
   }, [lopu, user?.id]);

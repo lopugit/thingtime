@@ -5,16 +5,7 @@ import { thingUniqueKey, thingUniqueKeyFilter } from '../mongodb/uniqueKeys';
 import { ensureLopuAccount, createLopuAccountingService } from '../lopu/accounting';
 import { getStoredLopuAccessSettings } from '../settings/lopuAccess';
 import { COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
-import {
-	INVITE_KIND,
-	INVITE_TTL_MS,
-	MAX_PENDING_INVITES,
-	InviteError,
-	inviteAmount,
-	inviteProfile,
-	inviteToken,
-	inviteTokenHash
-} from './inviteCore';
+import { INVITE_KIND, inviteExpiry, MAX_PENDING_INVITES, InviteError, inviteAmount, inviteProfile, inviteToken, inviteTokenHash } from './inviteCore';
 import { normalizeInviteAvatar } from './inviteAvatar';
 
 const accountFilter = (ownerId: string) => ({ thingtime: 'lopu-account', ...thingUniqueKeyFilter('lopuAccount', ownerId) });
@@ -47,12 +38,17 @@ const ledger = async (things: any, session: any, ownerId: string, id: string, am
 		{ session }
 	);
 };
+const publicProfile = (doc: any, includeAvatar: boolean) => {
+	const { username, displayName, avatarUrl } = details(doc);
+	return { username, displayName, ...(includeAvatar ? { avatarUrl } : {}) };
+};
+const unexpired = () => ({ $or: [{ expiresAt: { $exists: false } }, { expiresAt: { $gt: new Date() } }] });
 const publicInvite = (doc: any, includeAvatar = true) => ({
 	id: doc.shareId,
 	...doc.crystal,
-	...(doc.crystal.status === 'pending' ? { ...details(doc), ...(includeAvatar ? {} : { avatarUrl: undefined }) } : {}),
+	...(doc.crystal.status === 'pending' ? publicProfile(doc, includeAvatar) : {}),
 	credits: doc.crystal.amountMicros / 1_000_000,
-	expiresAt: new Date(doc.expiresAt).toISOString(),
+	expiresAt: doc.expiresAt ? new Date(doc.expiresAt).toISOString() : null,
 	createdAt: new Date(doc.createdAt).toISOString()
 });
 
@@ -117,13 +113,13 @@ export const listInvites = async (ownerId: string) => {
 			.limit(30)
 			.toArray()
 	]);
-	return [...open, ...closed].map((doc) => publicInvite(doc, false));
+	return [...open, ...closed].map((doc) => ({ ...publicInvite(doc, false), canShowLink: doc.crystal.status === 'pending' && !!details(doc).token }));
 };
 export const lookupInvite = async (token: unknown) => {
 	const hash = inviteTokenHash(token);
 	const doc = await (await getHomeThingsCollection()).findOne({ ...pending, ...thingUniqueKeyFilter('accountInviteToken', hash) });
 	if (!doc) throw new InviteError(404, 'This invite has been used, cancelled or is unavailable.');
-	if (new Date(doc.expiresAt).getTime() <= Date.now()) {
+	if (doc.expiresAt && new Date(doc.expiresAt).getTime() <= Date.now()) {
 		await closeInvite(doc.shareId, null, true);
 		throw new InviteError(410, 'This invite has expired. Ask for a new link.');
 	}
@@ -134,12 +130,13 @@ export const previewInvite = async (token: unknown) => publicInvite(await lookup
 export const createInvite = async (ownerId: string, input: any) => {
 	const profile = inviteProfile(input);
 	const amountMicros = inviteAmount(input.credits);
+	const expiresAt = inviteExpiry(input.expiresInDays);
 	await expireInvites(ownerId);
 	await ensureLopuAccount(ownerId);
 	const avatarUrl = await normalizeInviteAvatar(input.avatarUrl);
 	const token = inviteToken();
 	const id = `account-invite-${randomUUID()}`;
-	const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
+
 	await withHomeMongoTransaction(async (session) => {
 		const things = await getHomeThingsCollection();
 		// The account write serializes concurrent creators, including zero-credit
@@ -160,15 +157,15 @@ export const createInvite = async (ownerId: string, input: any) => {
 		await things.insertOne(
 			{
 				...thing(ownerId, INVITE_KIND, id, { status: 'pending', amountMicros }),
-				expiresAt,
-				secure: encode({ ...profile, avatarUrl }),
+				...(expiresAt ? { expiresAt } : {}),
+				secure: encode({ ...profile, avatarUrl, token }),
 				uniqueKeys: [thingUniqueKey('accountInviteToken', inviteTokenHash(token))]
 			},
 			{ session }
 		);
 		await ledger(things, session, ownerId, `${id}-reserve`, -amountMicros, account.crystal.balanceMicros, 'Credits set aside for an invite');
 	});
-	return { id, token, expiresAt: expiresAt.toISOString(), credits: amountMicros / 1_000_000 };
+	return { id, token, expiresAt: expiresAt?.toISOString() ?? null, credits: amountMicros / 1_000_000 };
 };
 
 export const prepareInviteSignup = async (token: unknown, input: any) => {
@@ -183,7 +180,7 @@ export const prepareInviteSignup = async (token: unknown, input: any) => {
 		onCreated: async (user: any, session: any) => {
 			const things = await getHomeThingsCollection();
 			const current = await things.findOneAndUpdate(
-				{ ...pending, shareId: invite.shareId, expiresAt: { $gt: new Date() } },
+				{ ...pending, shareId: invite.shareId, ...unexpired(), ...thingUniqueKeyFilter('accountInviteToken', inviteTokenHash(token)) },
 				{
 					$set: { 'crystal.status': 'claimed', updatedAt: new Date() },
 					$unset: { secure: '', uniqueKeys: '' }
@@ -223,3 +220,29 @@ export const prepareInviteSignup = async (token: unknown, input: any) => {
 		}
 	};
 };
+
+// Only this owner-authenticated operation reveals bearer material. Legacy hashes
+// cannot be reversed: replacement is explicit and atomically invalidates the old key.
+export const revealInviteLink = async (ownerId: string, id: string, replaceLegacy = false) =>
+	withHomeMongoTransaction(async (session) => {
+		const things = await getHomeThingsCollection();
+		const filter = { ...pending, ownerId, shareId: id, ...unexpired() };
+		const doc = await things.findOne(filter, { session });
+		if (!doc) throw new InviteError(404, 'This invite is no longer available.');
+		const saved = details(doc);
+		if (saved.token) return saved.token as string;
+		if (!replaceLegacy) throw new InviteError(409, 'This older invite needs a replacement link. Its previous link will stop working.');
+		const token = inviteToken();
+		await things.updateOne(
+			filter,
+			{
+				$set: {
+					secure: encode({ ...saved, token }),
+					uniqueKeys: [thingUniqueKey('accountInviteToken', inviteTokenHash(token))],
+					updatedAt: new Date()
+				}
+			},
+			{ session }
+		);
+		return token;
+	});

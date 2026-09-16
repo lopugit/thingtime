@@ -465,3 +465,66 @@ test('another conversation can reply while the first stream stays active', async
  assert.equal(Object.values(getLopuStoreSnapshot().turns).filter(t=>t.status==='done').length,2);
  resetLopuStoreForTests();
 });
+
+test('background conversation reads reject an older account generation, even after switching back', async () => {
+  resetLopuStoreForTests(); hydrateLopuStore('viewer-a');
+  const { client } = fakeClient(); let resolve!: (value: unknown) => void;
+  client.chats.list = () => new Promise(r => { resolve = r; }); bindLopuApi(client);
+  const pending = loadLopuChats({ quiet: true });
+  hydrateLopuStore('viewer-b'); hydrateLopuStore('viewer-a');
+  resolve({ ok: true, chats: [{ id: 'stale', name: 'Stale response' }] }); await pending;
+  assert.deepEqual(getLopuStoreSnapshot().chats, []);
+});
+
+test('background reads preserve cached conversations on malformed responses and network failures', async () => {
+  resetLopuStoreForTests(); hydrateLopuStore('viewer-a');
+  const { client } = fakeClient({ chats: [{ id: 'saved', name: 'Saved chat' }] }); bindLopuApi(client);
+  await loadLopuChats();
+  client.chats.list = async () => ({ ok: false }); await loadLopuChats({ quiet: true });
+  assert.equal(getLopuStoreSnapshot().chats[0].id, 'saved');
+  client.chats.list = async () => { throw new Error('offline'); }; await loadLopuChats({ quiet: true });
+  assert.equal(getLopuStoreSnapshot().chats[0].id, 'saved'); assert.equal(getLopuStoreSnapshot().error, null);
+});
+
+test('periodic reads discover new conversations without changing the selected chat', async () => {
+  resetLopuStoreForTests(); hydrateLopuStore('viewer-a');
+  const { client } = fakeClient({ chats: [{ id: 'first', name: 'First' }] }); bindLopuApi(client);
+  await loadLopuChats(); selectLopuChat('first');
+  client.chats.list = async () => ({ ok: true, chats: [{ id: 'second', name: 'Created elsewhere' }, { id: 'first', name: 'First' }] });
+  await loadLopuChats({ quiet: true });
+  assert.equal(getLopuStoreSnapshot().chats.length, 2); assert.equal(getLopuStoreSnapshot().activeChatId, 'first');
+  client.messages = async () => ({ ok: true, messages: [{ id: 'remote-message', chatId: 'first', text: 'From another tab', createdAt: '2026-09-16T00:00:00Z' }] });
+  await loadLopuMessages('first');
+  assert.equal(getLopuStoreSnapshot().messages.first[0].text, 'From another tab');
+});
+
+test('an older list read cannot undo a rename and polling waits for the write', async () => {
+  const { renameLopuChat } = await import('./lopuChatStore.ts');
+  resetLopuStoreForTests(); hydrateLopuStore('viewer-a');
+  const { client } = fakeClient({ chats: [{ id: 'first', name: 'Old title' }] }); bindLopuApi(client); await loadLopuChats();
+  let resolveRead!: (value: unknown) => void, resolveWrite!: (value: unknown) => void; let reads = 0;
+  client.chats.list = () => { reads++; return new Promise(r => { resolveRead = r; }); };
+  client.chats.update = () => new Promise(r => { resolveWrite = r; });
+  const pendingRead = loadLopuChats({ quiet: true }); const pendingWrite = renameLopuChat('first', 'New title');
+  resolveRead({ ok: true, chats: [{ id: 'first', name: 'Old title' }] }); await pendingRead;
+  await loadLopuChats({ quiet: true }); assert.equal(reads, 1);
+  assert.equal(getLopuStoreSnapshot().chats[0].name, 'New title');
+  resolveWrite({ ok: true, chat: { id: 'first', name: 'New title' } }); await pendingWrite;
+});
+
+test('a deleted conversation clears cached messages when the read API returns 404', async () => {
+  const { getMessengerJson } = await import('../Messenger/messengerRequest.ts');
+  resetLopuStoreForTests(); hydrateLopuStore('viewer-a');
+  const { client } = fakeClient({ chats: [{ id: 'gone', name: 'Deleted elsewhere' }] }); bindLopuApi(client);
+  client.messages = async () => ({ ok: true, messages: [{ id: 'm', chatId: 'gone', text: 'Private history', createdAt: '2026-09-16T00:00:00Z' }] });
+  await loadLopuChats(); selectLopuChat('gone'); await loadLopuMessages('gone');
+  const original = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => new Response(JSON.stringify({ ok: false, error: 'Chat not found' }), { status: 404 });
+    client.messages = () => getMessengerJson('/api/v1/chats/messages?chatId=gone');
+    await loadLopuMessages('gone');
+    assert.deepEqual(getLopuStoreSnapshot().messages.gone, []);
+    assert.equal(getLopuStoreSnapshot().activeChatId, null);
+    assert.deepEqual(getLopuStoreSnapshot().chats, []);
+  } finally { globalThis.fetch = original; }
+});

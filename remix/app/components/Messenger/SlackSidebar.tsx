@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Button, Flex, Menu, MenuButton, MenuItem, MenuList, Portal } from '@chakra-ui/react';
 
+import { spaceDirectMessages } from './conversationVisibility';
 import { chatDisplayName, isLopuAiSource, type ChatSummary, type Community } from './messengerTypes';
 
 const UnreadBadge = ({ count }: { count: number }) =>
@@ -131,15 +132,14 @@ export type SlackSidebarProps = {
 };
 
 // Slack-mode sidebar: community switcher rail at the top, then the active
-// community's sections with their channels, then DMs/groups shared with
-// messenger mode. Channels support right-click rename; sections rename via
+// community's sections with their channels, then only its own DMs/groups. Channels support right-click rename; sections rename via
 // their own context menu.
 export const SlackSidebar = (props: SlackSidebarProps) => {
   const active = props.communities.find((c) => c.id === props.activeCommunityId) || props.communities[0] || null;
   const [collapsed, setCollapsed] = React.useState<Record<string, boolean>>({});
 
   const channels = props.chats.filter((c) => c.chatType === 'channel' && c.communityId === active?.id);
-  const dms = props.chats.filter((c) => c.chatType !== 'channel');
+  const dms = spaceDirectMessages(props.chats, active?.id ?? null);
   const isAdmin = !active?.externalSource && (active?.myRole === 'owner' || active?.myRole === 'admin');
 
   const sectionsWithChannels: { id: string | null; name: string; channels: ChatSummary[] }[] = React.useMemo(() => {

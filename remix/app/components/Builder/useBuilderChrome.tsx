@@ -141,8 +141,9 @@ export const useBuilderChrome = (draft: UseWebpageDraft): UseBuilderChrome => {
 			// entries whose upload errored out never get consumed — drop them
 			// before matching so they can't capture a later same-name upload
 			pendingDropsRef.current = pendingDropsRef.current.filter((entry) => Date.now() - entry.queuedAt < 15 * 60_000);
+			const sourceFile = upload.sourceFile || upload.file;
 			const pendingIndex = pendingDropsRef.current.findIndex(
-				(entry) => entry.name === upload.file.name && entry.size === upload.file.size
+				(entry) => entry.name === sourceFile.name && entry.size === sourceFile.size
 			);
 			const target = pendingIndex >= 0 ? pendingDropsRef.current.splice(pendingIndex, 1)[0].target : null;
 			const attachment = upload.attachment;

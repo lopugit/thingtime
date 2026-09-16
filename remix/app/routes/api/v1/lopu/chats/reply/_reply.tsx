@@ -1,3 +1,4 @@
+import { resolveLopuMedia } from '~/api/utils/lopu/chatMedia.server';
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 import { lopuReferenceIds, resolveLopuThingReferences, lopuReferenceContext } from '~/api/utils/lopu/chatAttachments';
 import { listAiModels, resolveLopuModelChoice } from '~/api/utils/ai/models';
@@ -391,21 +392,23 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
         };
 
         let outcome: LopuChatTurnOutcome | null = null;
-        const generator = streamLopuChatTurn({
-          readOnly: execution.scheduled,
-          viewer,
-          chatId: persistedChatId,
-          userMessageId,
-          requestId: input.requestId,
-          text: input.text + lopuReferenceContext(references) + (input.attachmentIds.length ? '\n\nFiles attached to this message: ' + JSON.stringify(userTurn.message.attachments ?? []).slice(0, 5000) + '\nThese are metadata only. Do not claim to have seen, heard or transcribed their contents.' : ''),
-          history,
-          choice,
-          vaultProvider,
-          context: input.context,
-          approvedConfirmations: approved,
-          signal: abort.signal
-        });
         try {
+          const attachedContent = await resolveLopuMedia(user.id, [...input.attachmentIds, ...references.filter(ref => typeof ref.crystal === "object" && ref.crystal && "contentType" in ref.crystal).map(ref => ref.id), ...(loaded.ok ? loaded.attachmentIds ?? [] : [])], abort.signal);
+          const generator = streamLopuChatTurn({
+            readOnly: execution.scheduled,
+            viewer,
+            chatId: persistedChatId,
+            userMessageId,
+            requestId: input.requestId,
+            text: input.text + lopuReferenceContext(references) + attachedContent.text,
+            media: attachedContent.media,
+            history,
+            choice,
+            vaultProvider,
+            context: input.context,
+            approvedConfirmations: approved,
+            signal: abort.signal
+          });
           for (;;) {
             const step = await generator.next();
             if (step.done === true) {

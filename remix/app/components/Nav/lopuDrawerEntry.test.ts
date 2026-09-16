@@ -139,8 +139,11 @@ test('the floating host is non-modal chrome that hides on /lopu and honours the 
 	assert.match(source, /shouldIgnoreGlobalKeydown\(event\)/);
 	// the window never focuses itself — no programmatic focus() calls
 	assert.doesNotMatch(source, /\.focus\(\)/);
-	// mobile: an 88dvh bottom sheet instead of a floating frame
-	assert.match(source, /height: '88dvh'/);
+	// Mobile sheets follow the visual viewport, retaining an SSR fallback.
+	assert.match(source, /useLopuVisualViewport/);
+	assert.match(source, /bottom=\{visualViewport\?\.bottom \?\? 0\}/);
+	assert.match(source, /visualViewport\.height \* \(visualViewport\.keyboardOpen \? 1 : 0\.88\)/);
+	assert.match(source, /88dvh/);
 	// the shared chat view, compact, without the conversation column
 	assert.match(source, /<LopuChatView compact showConversations=\{false\} onOpenFull=\{openFull\} \/>/);
 });

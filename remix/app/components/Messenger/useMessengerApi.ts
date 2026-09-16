@@ -5,15 +5,7 @@ import { useCallback, useMemo } from 'react';
 import { useAsyncFetcher } from '~/hooks/useAsyncFetcher';
 import { requireThingtimeCapability } from '~/api/utils/capabilities/requireCapability.client';
 
-const getJson = async (url: string) => {
-  const response = await fetch(url, {
-    credentials: 'include',
-    headers: { Accept: 'application/json' }
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload?.ok === false) throw payload;
-  return payload;
-};
+import { getMessengerJson as getJson } from './messengerRequest';
 
 const postJson = async (url: string, body: unknown) => {
   const response = await fetch(url, {
