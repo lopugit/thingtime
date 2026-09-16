@@ -1,8 +1,10 @@
 import { isHeicImage, prepareHeicImage } from '../Attachments/heicImage';
 
+export const PROFILE_THUMBNAIL_CONTENT_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+
 // Bounded inline transport for pre-account forms; server normalization and moderation still run.
 export const prepareProfileThumbnail = async (file: File) => {
-	if ((!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) && !isHeicImage(file)) || file.size > 10 * 1024 * 1024)
+	if ((!(PROFILE_THUMBNAIL_CONTENT_TYPES as readonly string[]).includes(file.type) && !isHeicImage(file)) || file.size > 10 * 1024 * 1024)
 		throw new Error('Choose a PNG, JPEG, WebP, HEIC or HEIF image under 10 MB.');
 	const bitmap = await createImageBitmap(await prepareHeicImage(file));
 	try {

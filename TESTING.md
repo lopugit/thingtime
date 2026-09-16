@@ -7460,6 +7460,8 @@ approval; `access.test.ts` — the reservation matrix) and
 
 ## HEIC/HEIF photo selection
 
+- [ ] Uploader guidance lists every accepted format and matches the picker: invite/signup JPEG, PNG, WebP, HEIC, HEIF; profile/branding additionally AVIF and GIF; emoji GIF, JPEG, PNG, WebP, HEIC, HEIF; unrestricted attachments say all file types. Verify desktop/mobile wrapping, including settings popups.
+
 - [ ] Newly selected HEIC/HEIF files upload as full-resolution PNG with no JPEG encoding; invite previews and saved thumbnails remain PNG (128px crop). Verify detailed/transparent thumbnails above the old 16 KiB ceiling keep their pixels and moderation receives PNG. Existing stored JPEGs are not retroactively changed.
 
 - [ ] Open `/scripts/heic-upload.browser.html` on the Vite dev server: all cases
