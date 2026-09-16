@@ -35,6 +35,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ## [Unreleased]
 
 - 2026-09-16: Enable attachment paste/drop directly in Lopu and Messenger message fields; clear Lopu media on server acceptance instead of reply completion. Added synthetic browser regression coverage. — Codex (AI)
+- 2026-09-16 — **Codex (AI):** Default link previews now use the branding
+  press-kit wordmark on white. All SPA routes receive crawler-visible defaults
+  (including invites), using shared public page titles or the new default
+  `Thingtime - Your Home for Everything` (also used for browser tabs), while
+  preserving custom public-content previews and excluding query/fragment secrets.
 
 - 2026-09-16 — **Codex (AI)** — Add native image/file uploads to authored
   components; forward authorized image/PDF/text bytes into Lopu provider calls,

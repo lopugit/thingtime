@@ -2,6 +2,10 @@
 // projection powers both the Open Graph text tags and the image-card renderer,
 // so a social preview cannot reveal anything the public page does not reveal.
 
+import { pageTitle } from '../../../utils/pageTitle';
+
+export const DEFAULT_SOCIAL_IMAGE_PATH = '/branding/presskit/thingtime-og-card-1200x630.png';
+
 export type SocialPreviewKind =
 	| 'home'
 	| 'feed'
@@ -261,7 +265,7 @@ export const staticSocialPreview = (pathInput: string): SocialPreview => {
 			default:
 				return {
 					kind: 'home' as const,
-					title: 'Thingtime',
+					title: pageTitle(path),
 					description: 'Everything is a thing — share posts, run polls and build a home for the things you care about.',
 					eyebrow: 'THINGTIME · EVERYDAY MAGIC',
 					badges: ['Posts', 'Photos', 'Polls']
