@@ -1,4 +1,4 @@
-import { HEIC_IMAGE_ACCEPT } from './heicImage';
+import { uploadFileTypes } from './attachmentFileTypes';
 import React from 'react';
 import { Box, Button, Flex, IconButton, Image, Input, Progress, Text } from '@chakra-ui/react';
 import {
@@ -448,6 +448,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 		onExistingChange,
 		onExistingRemove
 	} = props;
+	const fileTypes = uploadFileTypes(allowedContentTypes, imageOnly);
 	const boundedMaxFiles = Number.isFinite(maxFiles) ? Math.max(1, Math.min(MAX_POST_ATTACHMENTS, Math.trunc(maxFiles))) : MAX_POST_ATTACHMENTS;
 	const lopu = useLopu();
 	const currentUser = useCurrentUser();
@@ -631,7 +632,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 					ref={inputRef}
 					type="file"
 					multiple={boundedMaxFiles > 1}
-					accept={allowedContentTypes?.length ? [...allowedContentTypes, ...(allowedContentTypes.includes('image/png') ? [HEIC_IMAGE_ACCEPT] : [])].join(',') : imageOnly ? `image/gif,image/jpeg,image/png,image/webp,${HEIC_IMAGE_ACCEPT}` : undefined}
+					accept={fileTypes.accept}
 					hidden
 					disabled={pickerDisabled}
 					onChange={(event) => {
@@ -640,7 +641,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 					}}
 				/>
 				<Text fontSize="11px" color={MUTED} paddingBottom={2} whiteSpace="normal">
-					{helperText ||
+					{fileTypes.label}. {helperText ||
 						`${
 							imageOnly
 								? `${boundedMaxFiles === 1 ? 'One image' : `Up to ${boundedMaxFiles} images`} · drop or paste (⌘/Ctrl+V) ${
