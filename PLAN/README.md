@@ -39,6 +39,7 @@ engineering decisions in [`../DECISIONS.md`](../DECISIONS.md).
 | [Personalization agency and accountable-memory roadmap](./personalization-agency-and-accountable-memory-roadmap.md)                 | Memory ownership through an inspectable inventory, deterministic effects, correction, exclusion, forgetting, reset, and one four-item synthetic pilot       | Proposed |
 | [Legacy agency and dignified stewardship roadmap](./legacy-agency-and-dignified-stewardship-roadmap.md)                             | Qualified ownership through revocable instructions, notify-only rehearsal, scoped decision proof, conflict holds, cleanup, and separately gated action      | Proposed |
 | [Affordability agency and fair-access roadmap](./affordability-agency-and-fair-access-roadmap.md)                                   | A protected essential floor, immutable offer truth, symmetric stopping, humane failure, privacy-minimal support, and one synthetic no-money rehearsal       | Proposed |
+| [Place agency and location-privacy roadmap](./place-agency-and-location-privacy-roadmap.md)                                         | Place taxonomy through minimal precision, choice/preview, one-shot nearby proof, audience-change safety, family cleanup, and a no-location baseline         | Proposed |
 
 ## Conventions
 

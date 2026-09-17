@@ -39,6 +39,7 @@ actionable item in [`../TODO/`](../TODO/TODO.md) when it is ready to execute.
 | [Personalization agency and accountable-memory baseline](./personalization-agency-and-accountable-memory-baseline.md)                 | Evidence on remembered choices, observations, derivatives, purpose, effects, correction, forgetting, reset, and a non-personalized baseline                         | 2026-09-16    |
 | [Legacy agency and dignified stewardship baseline](./legacy-agency-and-dignified-stewardship-baseline.md)                             | Evidence on inactivity, incapacity and death gaps, narrow live transfer primitives, future instructions, claimant boundaries, holds, and one notify-only rehearsal  | 2026-09-16    |
 | [Affordability agency and fair-access baseline](./affordability-agency-and-fair-access-baseline.md)                                   | Evidence on tier and credit primitives, offer truth, total cost, cancellation symmetry, essential access, humane failure, privacy, and a no-money rehearsal         | 2026-09-17    |
+| [Place agency and location-privacy baseline](./place-agency-and-location-privacy-baseline.md)                                         | Evidence on one-shot nearby search, exact stored coordinates, precision, purpose, audience, retention, inference, stopping, and one synthetic place rehearsal       | 2026-09-17    |
 
 ## Conventions
 

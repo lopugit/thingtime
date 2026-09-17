@@ -818,3 +818,24 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     hardship data, personalized pricing, behavioral targeting, public claims,
     hidden commitments, minors, institutions, and blocked data exit remain
     separately gated.
+
+52. **📍 Make place agency and location privacy a product contract.**
+
+    Keep nearby discovery and deliberate place expression useful without
+    turning a one-shot location choice into tracking, unintended exact
+    publication, routine inference, or hidden authority for another system.
+    Separate query input, stored place, publication, and derivation; prefer the
+    coarsest sufficient precision; preview audience and effects; preserve a
+    useful tag/text/no-location path; and make correction and safety stopping
+    follow the full location family. Start only with adult internal reviewers,
+    synthetic accounts, fixed fictional coordinates, one fictional region/tag,
+    one synthetic private text Thing, and one exact non-production build.
+    Execute `claude-todo/52-place-agency-and-location-privacy.md` only after
+    qualified owners approve the taxonomy, purpose/effect matrix, precision
+    ladder, choice/preview/receipt fields, request/log minimisation proof,
+    audience-change and family-cleanup rules, threat model, accessible
+    rehearsal, measures, cleanup, and stop authority. Real positions,
+    background tracking, public exact points, production permission changes,
+    derived routines, advertising/rank/eligibility effects, minors, high-risk
+    safety contexts, and public privacy or compliance claims remain separately
+    gated.
