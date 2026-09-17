@@ -39,7 +39,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   responsive device previews, and a top Go to page link. Dedicated live output
   fills the available space; `/t/` hides Thingtime chrome except its tiny credit
   link. Local PM2 validation uses worktree ports 11060–11062; Tailscale is
-  unavailable because its installed CLI target is missing. — Codex (AI)
+  unavailable because its installed CLI target is missing.
+  [PR 843 notes](../PRs/843-codex-seamless-live-builder-add-seamless-live-builder-modes-responsive-previews-and-standalone-pages.md). — Codex (AI)
 
 - 2026-09-16 — **Codex (AI):** Fix image uploads hitting the legacy 30/hour start limit: default to 60/minute, upgrade only the exact persisted legacy policy, preserve custom rules, and honor bounded Retry-After retries without changing upload identity. Show the actual wait on persistent throttling; add policy, cancellation, route and capability regressions.
 
