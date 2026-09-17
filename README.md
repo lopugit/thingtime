@@ -3491,3 +3491,10 @@ Run `pnpm --dir remix test:attachments`, `test:rate-limit`, and
 The upload-regression worktree uses `http://localhost:19800` (HMR 19801, Nitro
 19802), derived by `npm run web-ports`. Tailscale/Funnel could not be configured
 on 2026-09-16: the installed launcher points to a missing Tailscale app.
+
+## Social previews and search metadata
+
+The Nitro shell automatically serves Open Graph/Twitter metadata, canonical
+URLs and safe Schema.org JSON-LD from anonymous public projections. See
+[the metadata runbook](docs/seo-social-metadata.md) for validation, crawler
+cache diagnosis, fork setup and the broader SEO/rich-results TODO.

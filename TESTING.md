@@ -994,6 +994,15 @@ is fixed, and cite the checklist you ran in the PR description.
 
 ## Social meta / link unfurls (`remix/app/api/utils/meta/socialMeta.ts`, `socialPreview.ts`, `socialCard.ts`)
 
+- [ ] Raw crawler HTML has one matching title, canonical, og:url, og:image and
+      parseable Schema.org JSON-LD graph. Image URLs are absolute 1200×630 PNGs
+      with matching Open Graph/Twitter alt text; GET the actual image bytes.
+      `/things` exposes collection context only, while private/missing/account
+      targets are noindex and have no structured UGC. Query/fragment secrets
+      and user-authored script terminators never become executable markup.
+      Check a freshly composed Messages/Messenger preview separately from old
+      cached bubbles; see `docs/seo-social-metadata.md`.
+
 - [ ] `/invite`, `/branding`, `/`, and an unknown SPA path return the white
       press-kit wordmark PNG as absolute `og:image` and `twitter:image`, with
       1200×630 dimensions and a large Twitter card. Branding uses the shared

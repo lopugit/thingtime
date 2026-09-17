@@ -4,7 +4,8 @@
 
 import { pageTitle } from '../../../utils/pageTitle';
 
-export const DEFAULT_SOCIAL_IMAGE_PATH = '/branding/presskit/thingtime-og-card-1200x630.png';
+// Change the revision when the branded asset changes so image caches can refresh.
+export const DEFAULT_SOCIAL_IMAGE_PATH = '/branding/presskit/thingtime-og-card-1200x630.png?v=20260917';
 
 export type SocialPreviewKind =
 	| 'home'
@@ -74,6 +75,8 @@ export type SocialPreview = {
 	images: SocialPreviewImage[];
 	imageCount: number;
 	revision?: string;
+	/** Set only after an anonymous content read succeeds, never by a static fallback. */
+	publicContent?: boolean;
 };
 
 export const SOCIAL_PREVIEW_WIDTH = 1200;
@@ -450,6 +453,7 @@ const webpagePreview = async (path: string, id: string): Promise<SocialPreview> 
 	const author = cleanSocialText(page.author?.displayName) || cleanSocialText(page.author?.username);
 	const blockCount = webpageBlockCount(crystal.blocks);
 	return {
+		publicContent: true,
 		kind: 'webpage',
 		variant: 'webpage',
 		path,
@@ -565,6 +569,7 @@ export const socialPreviewFromPublicPost = (path: string, post: any, context: { 
 		: truncateSocialText(summary, DESCRIPTION_MAX) || `A post by ${authorName} on ${SITE_NAME}.`;
 	const titleLead = original ? `${authorName} shared` : isReply ? `${authorName} replied` : isComment ? `${authorName} commented` : authorName;
 	return {
+		publicContent: true,
 		kind,
 		variant,
 		path,
@@ -620,6 +625,7 @@ const profilePreview = async (path: string, username: string): Promise<SocialPre
 	const displayName = cleanSocialText(profile.displayName) || cleanSocialText(profile.username);
 	const handle = cleanSocialText(profile.username);
 	return {
+		publicContent: true,
 		kind: 'profile',
 		variant: 'profile',
 		path,
@@ -650,6 +656,7 @@ const mediaPreview = async (path: string, id: string): Promise<SocialPreview> =>
 	const mediaKind = normaliseSocialMediaKind(media.mediaKind);
 	const variant = socialMediaVariant(mediaKind);
 	return {
+		publicContent: true,
 		kind: 'media',
 		variant,
 		path,
@@ -690,6 +697,7 @@ const thingPreview = async (path: string, id: string): Promise<SocialPreview> =>
 	const title = cleanSocialText(crystal.title) || cleanSocialText(crystal.name) || kind;
 	const description = cleanSocialText(crystal.description) || cleanSocialText(crystal.text) || `A ${kind.toLowerCase()} on ${SITE_NAME}.`;
 	return {
+		publicContent: true,
 		kind: 'thing',
 		variant: 'thing',
 		path,
