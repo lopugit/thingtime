@@ -3,6 +3,7 @@ import test from 'node:test';
 
 // @ts-ignore Node executes this TypeScript test directly and requires the .ts extension.
 import {
+	abortLopuTurn,
 	bindLopuApi,
 	confirmLopuTool,
 	declineLopuTool,
@@ -561,4 +562,83 @@ test('rejected sends do not release draft attachments', async () => {
 	const result = await sendLopuMessage('Retry me', { onAccepted: () => { accepted = true; } });
 	assert.equal(result.ok, false);
 	assert.equal(accepted, false);
+});
+
+const continuationReply = (body: any, reason: string, extra: unknown[] = [], saved = true) => ndjson([
+ { type: 'meta', chatId: body.chatId || 'chat-1', userMessageId: `u-${body.requestId}`, requestId: body.requestId, model: body.model || null, effort: body.effort || null, speed: body.speed || 'normal', provider: 'openai', label: 'GPT-5' },
+ { type: 'delta', text: 'Progress saved.' }, ...extra,
+ { type: 'done', assistantMessageId: saved ? `a-${body.requestId}` : '', messages: [], stopReason: reason }
+]);
+
+test('saved budget boundaries automatically continue with fresh IDs and preserve the selected model', async () => {
+ resetLopuStoreForTests(); hydrateLopuStore('owner');
+ let count = 0, accepted = 0;
+ const { client, calls } = fakeClient({ reply: body => continuationReply(body, count++ === 0 ? 'time_limit' : 'end_turn') });
+ bindLopuApi(client);
+ const result = await sendLopuMessage('Build it', { settings: { model: 'gpt-5', effort: 'high', providerId: null }, onAccepted: () => accepted++, attachmentIds: ['file'], confirmations: [{ key: 'once', token: 'grant' }], context: { route: '/builder', page: { id: 'page', blocks: [] } } });
+ assert.equal(result.ok, true);
+ const bodies = calls.filter(c => c.name === 'reply').map(c => c.args as any);
+ assert.equal(bodies.length, 2);
+ assert.equal(bodies[1].chatId, 'chat-1');
+ assert.notEqual(bodies[0].requestId, bodies[1].requestId);
+ assert.equal(bodies[1].model, 'gpt-5'); assert.equal(bodies[1].effort, 'high');
+ assert.match(bodies[1].text, /Do not repeat completed actions/);
+ assert.equal(bodies[1].attachmentIds, undefined); assert.equal(bodies[1].confirmations, undefined);
+ assert.equal(bodies[1].context.page.blocks, undefined); assert.equal(bodies[1].context.page.id, 'page'); assert.equal(accepted, 1);
+ assert.equal(getLopuStoreSnapshot().sending, false);
+});
+
+test('automatic continuation has no fixed step or continuation count cap', async () => {
+ resetLopuStoreForTests(); hydrateLopuStore('owner');
+ let count = 0;
+ const { client, calls } = fakeClient({ reply: body => continuationReply(body, count++ < 16 ? 'checkpoint' : 'end_turn') }); bindLopuApi(client);
+ await sendLopuMessage('Build it');
+ assert.equal(calls.filter(c => c.name === 'reply').length, 17);
+});
+
+for (const reason of ['end_turn', 'aborted', 'error', 'fallback']) test(`does not automatically resume ${reason}`, async () => {
+ resetLopuStoreForTests(); hydrateLopuStore('owner');
+ const { client, calls } = fakeClient({ reply: body => continuationReply(body, reason) }); bindLopuApi(client);
+ await sendLopuMessage('Build it'); assert.equal(calls.filter(c => c.name === 'reply').length, 1);
+});
+
+for (const scenario of ['unsaved', 'confirmation', 'unfinished-tool', 'account-change', 'stop']) test(`does not auto-continue after ${scenario}`, async () => {
+ resetLopuStoreForTests(); hydrateLopuStore('owner');
+ const { client, calls } = fakeClient({ reply: body => {
+  const extra = scenario === 'confirmation' ? [{ type: 'confirm', id: 'delete', name: 'delete_thing', key: 'delete:x', token: 'grant', expiresAt: '2099-01-01', summary: 'Delete x' }] : scenario === 'unfinished-tool' ? [{ type: 'tool_use_start', id: 'write', name: 'create_thing' }] : [];
+  const response = continuationReply(body, 'time_limit', extra, scenario !== 'unsaved');
+  if (scenario === 'account-change') hydrateLopuStore('other');
+  if (scenario === 'stop') abortLopuTurn();
+  return response;
+ } }); bindLopuApi(client);
+ await sendLopuMessage('Build it'); assert.equal(calls.filter(c => c.name === 'reply').length, 1);
+});
+
+
+test('continuation stays with its original conversation without changing the newly selected chat or model', async () => {
+ resetLopuStoreForTests(); hydrateLopuStore('owner');
+ let count = 0;
+ const { client, calls } = fakeClient({ reply: body => {
+  if (count++ === 0) return new Response(new ReadableStream({ async start(controller) {
+   const data = continuationReply(body, 'hop_limit');
+   controller.enqueue(new Uint8Array(await data.arrayBuffer()));
+   await flush();
+   selectLopuChat('chat-other'); setLopuSettings({ model: 'another-model' });
+   controller.close();
+  } }));
+  return continuationReply(body, 'end_turn');
+ } }); bindLopuApi(client);
+ await sendLopuMessage('Build it', { settings: { model: 'gpt-5' } });
+ const bodies = calls.filter(c => c.name === 'reply').map(c => c.args as any);
+ assert.equal(bodies.length, 2); assert.equal(bodies[1].chatId, 'chat-1'); assert.equal(bodies[1].model, 'gpt-5');
+ assert.equal(getLopuStoreSnapshot().activeChatId, 'chat-other'); assert.equal(getLopuStoreSnapshot().settings.model, 'another-model');
+});
+
+test('a truncated stream never automatically replays the request', async () => {
+ resetLopuStoreForTests(); hydrateLopuStore('owner');
+ const { client, calls } = fakeClient({ reply: body => ndjson([
+  { type: 'meta', chatId: 'chat-1', userMessageId: 'u-1', requestId: body.requestId, model: null, effort: null, speed: 'normal', provider: 'openai', label: 'AI' },
+  { type: 'delta', text: 'Working' }
+ ]) }); bindLopuApi(client);
+ await sendLopuMessage('Build it'); assert.equal(calls.filter(c => c.name === 'reply').length, 1);
 });

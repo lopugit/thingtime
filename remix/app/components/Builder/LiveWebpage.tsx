@@ -1,0 +1,371 @@
+import React from 'react';
+import { Box, Button, Flex, Text } from '@chakra-ui/react';
+import { Link, useNavigate, useParams, useSearchParams, useLocation, useRouteLoaderData } from 'react-router';
+
+import { useApi } from '~/hooks/useApi';
+import { useLopu } from '~/components/Lopu/useLopu';
+import { useCurrentUser } from '~/hooks/useCurrentUser';
+// the REGISTRY module (not just the lookups): importing it registers the app
+// suites, so a cold load of /p/pokeworld knows the page belongs to an app
+import { ALL_SUITES } from '~/schemas/appSuites/index';
+import { isSafeCssText } from '../Kinds/safeUrl';
+import { PageShell } from '../Layout/PageShell';
+import { WebpageBlocksRenderer, type BuilderChrome } from './WebpageBlocksRenderer';
+import { installSuite, installSuiteOnServer, suiteKeyFromActionKey, suiteKeyOfPage } from './installSuite';
+import { useWebpageDraft } from './useWebpage';
+import { WebpageRuntimeProvider } from './webpageRuntime';
+import { useSharedMediaUrl } from '../Sharing/SharedMedia';
+import { mapCssMediaUrls } from '../Sharing/renderMediaCore';
+import { getNativeSection, NativeSectionView } from './nativeSections';
+import { BuilderViewport, type BuilderViewportSize } from './BuilderViewport';
+import { type SeamlessMode, isSeamlessMode, usesPageRuntime } from './seamlessMode';
+
+const SeamlessPageEditor = React.lazy(() => import('./SeamlessPageEditor'));
+
+// /p/:id — a published block-based webpage, rendered exactly as the builder
+// composed it. ttAction interactivity follows the PreviewModal trust rule:
+// live for the page owner viewing their own page, inert for everyone else —
+// with one addition: a SYSTEM-seeded page that belongs to a behaviour suite
+// (the demo library's suites and the installable APP suites — Pokeworld,
+// StarsAlign) is platform-curated, so its controls are live for any
+// signed-in viewer. The executor still resolves those clicks owner-only, so
+// a control can only run the viewer's own program; when they have none, the
+// page installs the suite into their things and re-runs the same click.
+//
+// `:id` may be a shareId OR a pageKey: the resolver answers with the viewer's
+// own twin of a keyed page ahead of the seeded copy, so an installed app's
+// links (/p/pokeworld, /p/pokeworld-pokedex) serve everyone the right page.
+// The page runtime (WebpageRuntimeProvider) is what makes source-bound
+// blocks fetch and refetch after every control run.
+
+// Consume the page runtime's media context inside its provider, including the
+// outer page background rather than only media inside individual blocks.
+const SharedPageSurface = ({ background, ...props }: React.ComponentProps<typeof Flex>) => {
+	const mediaUrl = useSharedMediaUrl();
+	return <Flex {...props} background={typeof background === 'string' ? mapCssMediaUrls(background, mediaUrl) : background} />;
+};
+
+export default function LiveWebpage({ builderPageId }: { builderPageId?: string } = {}) {
+	const params = useParams();
+	const id = builderPageId || params.id;
+	const [searchParams, setSearchParams] = useSearchParams();
+	const requestedMode = searchParams.get('mode') || (builderPageId ? 'edit' : null);
+	const standalone = useLocation().pathname.startsWith('/t/');
+	const rootData = useRouteLoaderData('root') as { titlePrefix?: string } | undefined;
+	const runMode = standalone || requestedMode === 'run' || requestedMode === 'visit';
+	const linkKey = (searchParams.get('key') || '').trim();
+	const user = useCurrentUser();
+	const api = useApi();
+	const apiRef = React.useRef(api);
+	apiRef.current = api;
+	const lopu = useLopu();
+	const navigate = useNavigate();
+	const draft = useWebpageDraft(
+		React.useMemo(() => (id ? { kind: 'id' as const, id, ...(linkKey ? { key: linkKey } : {}) } : null), [id, linkKey]),
+		{ editable: !runMode }
+	);
+	const [viewport, setViewport] = React.useState<BuilderViewportSize>(() =>
+		requestedMode === 'container' ? { width: 960, height: 0, presentation: 'container' } : null
+	);
+	const surface = React.useRef<HTMLDivElement>(null);
+	const [surfaceDocument, setSurfaceDocument] = React.useState<Document | null>(null);
+	const setSurface = React.useCallback((node: HTMLDivElement | null) => {
+		surface.current = node;
+		setSurfaceDocument(node?.ownerDocument || null);
+	}, []);
+	const [editorChrome, setEditorChrome] = React.useState<BuilderChrome | null>(null);
+	const page = draft.resolved?.page || null;
+	const isOwner = !!user?.id && page?.author?.id === user.id;
+	const editorMode =
+		(isOwner || (!!builderPageId && !!user?.id)) && !runMode
+			? isSeamlessMode(requestedMode)
+				? requestedMode
+				: requestedMode === 'container'
+				? 'builder'
+				: 'view'
+			: null;
+	const changeMode = (mode: SeamlessMode) => {
+		setSearchParams(
+			(previous) => {
+				const next = new URLSearchParams(previous);
+				next.set('mode', mode);
+				return next;
+			},
+			{ replace: true, preventScrollReset: true }
+		);
+	};
+	// system docs project no author; the seeded suite pages are exactly the
+	// reserved-prefix ids (user creates refuse webpage-), so the id is the test
+	const suiteKey = suiteKeyOfPage(page?.crystal as { suiteKey?: unknown; pageKey?: unknown } | null);
+	const isSeeded =
+		typeof page?.id === 'string' &&
+		page.id.startsWith('webpage-') &&
+		!!suiteKey &&
+		!!ALL_SUITES.some((suite) => suite.key === suiteKey) &&
+		draft.resolved?.source !== 'user';
+	// /p/ renders ANOTHER user's page, so previewBg is untrusted here. The write
+	// gate only bounds it (length, no <>, no javascript:); isSafeCssText is the
+	// shared render-time screen the component previews already apply to this
+	// same field, and the only thing blocking @import / expression().
+	const previewBg =
+		typeof page?.crystal?.previewBg === 'string' && isSafeCssText(page.crystal.previewBg) ? page.crystal.previewBg : 'var(--tt-surface, #fafafb)';
+
+	React.useEffect(() => {
+		if (typeof document !== 'undefined' && page?.crystal?.name) {
+			document.title = `${rootData?.titlePrefix ? rootData.titlePrefix + ' ' : ''}${page.crystal.name} · Thingtime`;
+		}
+	}, [page?.crystal?.name, rootData?.titlePrefix]);
+
+	// The post-install hand-off is deferred so the "installed ✨" toast is
+	// readable before the page moves. That timer OUTLIVES this component if the
+	// viewer navigates away inside the delay, and it would then yank them off
+	// whatever they opened next (or reload it). Held in a ref so unmount — and
+	// a second install — cancels the pending hand-off.
+	const handoffRef = React.useRef<number | null>(null);
+	const scheduleHandoff = React.useCallback((run: () => void, delayMs: number) => {
+		if (handoffRef.current !== null) window.clearTimeout(handoffRef.current);
+		handoffRef.current = window.setTimeout(() => {
+			handoffRef.current = null;
+			run();
+		}, delayMs);
+	}, []);
+	React.useEffect(
+		() => () => {
+			if (handoffRef.current !== null) {
+				window.clearTimeout(handoffRef.current);
+				handoffRef.current = null;
+			}
+		},
+		[]
+	);
+
+	// Install the page's suite for the viewer. App suites go through the
+	// one-request idempotent server install (every page keeps its key, so the
+	// current URL now serves the viewer's own copy); the demo suites keep the
+	// part-by-part client install and open the personal copy by id.
+	const installForViewer = React.useCallback(
+		async (key: string): Promise<{ href: string | null } | null> => {
+			const suite = ALL_SUITES.find((entry) => entry.key === key) || null;
+			if (!suite) return null;
+			if (!user?.id) {
+				lopu({ title: 'Sign in to install this 🗝️', description: 'Installing it makes the programs — and the data — yours.', status: 'info' });
+				navigate('/login');
+				return null;
+			}
+			lopu({
+				title: `Installing ${suite.emoji} ${suite.title}…`,
+				description: 'Your own schemas, controls, actions, and pages.',
+				status: 'info',
+				duration: 4000
+			});
+			if (suite.app) {
+				const installed = await installSuiteOnServer(suite.key);
+				lopu({
+					title: `${suite.emoji} ${suite.title} installed ✨`,
+					description: `${installed.created} things created · ${installed.updated} refreshed — this page is yours now.`,
+					status: 'success',
+					duration: 6000
+				});
+				return { href: `/p/${encodeURIComponent(installed.entryPageKey)}` };
+			}
+			const installed = await installSuite((payload) => apiRef.current.v1.things.create(payload), suite, { seeded: true });
+			lopu({
+				title: `${suite.emoji} ${suite.title} installed ✨`,
+				description: 'Opening your own copy of this page.',
+				status: 'success',
+				duration: 6000,
+				link: { label: 'Open my page', href: `/p/${encodeURIComponent(installed.pageId)}` }
+			});
+			return { href: `/p/${encodeURIComponent(installed.pageId)}` };
+		},
+		[lopu, navigate, user?.id]
+	);
+
+	// a seeded suite control the viewer has no program for: install the suite
+	// (their own schemas/controls/actions/data/page), let the click re-run,
+	// then take them to their own copy where every control is theirs
+	const onUnowned = React.useCallback(
+		async (action: string): Promise<boolean> => {
+			const key = suiteKeyFromActionKey(action, ALL_SUITES) || suiteKey;
+			if (!key) return false;
+			try {
+				const outcome = await installForViewer(key);
+				if (!outcome) return false;
+				if (outcome.href) {
+					const target = outcome.href;
+					scheduleHandoff(() => {
+						// same URL for app suites — a reload re-resolves the viewer's twin
+						if (target === window.location.pathname) window.location.reload();
+						else navigate(target);
+					}, 1200);
+				}
+				return true;
+			} catch (err: any) {
+				lopu({ title: err?.error || 'Couldn’t install — try again 🌈', status: 'error' });
+				return false;
+			}
+		},
+		[installForViewer, lopu, navigate, scheduleHandoff, suiteKey]
+	);
+
+	const onInstall = React.useCallback(async (): Promise<boolean> => {
+		if (!suiteKey) return false;
+		try {
+			const outcome = await installForViewer(suiteKey);
+			if (!outcome) return false;
+			if (outcome.href) {
+				const target = outcome.href;
+				if (target === window.location.pathname) window.location.reload();
+				else navigate(target);
+			}
+			return true;
+		} catch (err: any) {
+			lopu({ title: err?.error || 'Couldn’t install — try again 🌈', status: 'error' });
+			return false;
+		}
+	}, [installForViewer, lopu, navigate, suiteKey]);
+
+	if (draft.error && !page) {
+		return (
+			<PageShell width={680}>
+				<Flex role="alert" flexDirection="column" rowGap={3} paddingTop={12} alignItems="center" textAlign="center">
+					<Text fontFamily="heading" fontSize="xl" fontWeight={800}>
+						This page couldn’t load
+					</Text>
+					<Text fontSize="sm">There was a connection or server problem. Please try again.</Text>
+					<Button size="sm" onClick={draft.refresh} isDisabled={draft.loading}>
+						{draft.loading ? 'Retrying…' : 'Retry loading page'}
+					</Button>
+				</Flex>
+			</PageShell>
+		);
+	}
+
+	if (!draft.loading && !page) {
+		return (
+			<PageShell width={680}>
+				<Flex flexDirection="column" rowGap={2} paddingTop={12} alignItems="center" textAlign="center">
+					<Text fontSize="3xl">🫧</Text>
+					<Text color="var(--tt-ink, #16161a)" fontFamily="heading" fontSize="xl" fontWeight={800}>
+						This page isn’t here
+					</Text>
+					<Text color="var(--tt-text, #5a5a66)" fontSize="sm">
+						It may be private, moved, or never have existed. Build your own in the builder 🧱
+					</Text>
+					<Button as={Link} to="/builder" size="sm" marginTop={2}>
+						Open the builder
+					</Button>
+				</Flex>
+			</PageShell>
+		);
+	}
+
+	const shared = !isOwner && (!isSeeded || !user?.id);
+	const interactive = isOwner || isSeeded || shared;
+
+	return (
+		<WebpageRuntimeProvider
+			enabled={usesPageRuntime(editorMode)}
+			key={`${page?.id || ''}:${user?.id || ''}:${linkKey}`}
+			pageId={page?.id || null}
+			shared={shared}
+			linkKey={linkKey}
+			pageKey={typeof page?.crystal?.pageKey === 'string' ? page.crystal.pageKey : null}
+			suiteKey={suiteKey}
+			source={draft.resolved?.source || null}
+			onInstall={isSeeded ? onInstall : undefined}
+		>
+			<SharedPageSurface
+				flexDirection="column"
+				width="100%"
+				minWidth={0}
+				boxSizing="border-box"
+				minHeight="100vh"
+				background={previewBg}
+				paddingTop={standalone ? 0 : 'calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))'}
+				paddingBottom={standalone ? '22px' : editorMode ? 'var(--tt-builder-toolbar-clearance, 160px)' : 0}
+				whiteSpace="normal"
+			>
+				<Box width="100%" minWidth={0} boxSizing="border-box" flex="1">
+					{draft.error && (
+						<Flex
+							role="alert"
+							gap={3}
+							alignItems="center"
+							flexWrap="wrap"
+							marginBottom={4}
+							padding={3}
+							background="var(--tt-surface, #fafafb)"
+							color="var(--tt-ink, #16161a)"
+							borderRadius="md"
+						>
+							<Text fontSize="sm">Couldn’t refresh this page. Showing the last loaded version.</Text>
+							<Button size="sm" onClick={draft.refresh} isDisabled={draft.loading}>
+								{draft.loading ? 'Retrying…' : 'Retry loading page'}
+							</Button>
+						</Flex>
+					)}
+					<BuilderViewport size={editorMode ? viewport : null}>
+						<Box
+							ref={setSurface}
+							background={previewBg}
+							width="100%"
+							minHeight={standalone ? 'calc(100dvh - 22px)' : 'calc(100dvh - var(--tt-nav-clearance, 54px))'}
+							marginX="auto"
+							minWidth={0}
+							data-testid="seamless-page"
+							data-builder-mode={editorMode || (runMode ? 'run' : 'view')}
+						>
+							<WebpageBlocksRenderer
+								renderNative={builderPageId ? (key) => (getNativeSection(key) ? <NativeSectionView sectionKey={key} /> : null) : undefined}
+								seamless={!runMode}
+								blocks={draft.blocks}
+								componentsByRef={draft.componentsByRef}
+								chrome={editorMode ? editorChrome : null}
+								interactive={interactive && usesPageRuntime(editorMode)}
+								onTtActionUnowned={isSeeded ? onUnowned : undefined}
+							/>
+						</Box>
+					</BuilderViewport>
+					{editorMode && (
+						<React.Suspense fallback={null}>
+							<SeamlessPageEditor
+								key={page?.id}
+								draft={draft}
+								mode={editorMode}
+								onMode={changeMode}
+								surface={surface}
+								surfaceDocument={surfaceDocument}
+								onChrome={setEditorChrome}
+								viewport={viewport}
+								onViewport={setViewport}
+							/>
+						</React.Suspense>
+					)}
+				</Box>
+				{standalone && (
+					<Box
+						as="a"
+						href={`/p/${encodeURIComponent(id || '')}${linkKey ? `?key=${encodeURIComponent(linkKey)}` : ''}`}
+						position="fixed"
+						bottom={0}
+						left={0}
+						right={0}
+						height="22px"
+						display="flex"
+						alignItems="center"
+						justifyContent="center"
+						background="white"
+						color="#777"
+						fontSize="10px"
+						lineHeight="1"
+						zIndex={10000}
+						data-testid="thingtime-credit"
+					>
+						Made with Thingtime
+					</Box>
+				)}
+			</SharedPageSurface>
+		</WebpageRuntimeProvider>
+	);
+}

@@ -1,7 +1,7 @@
 import { defineHandler } from 'nitro/h3';
 import { useStorage } from 'nitro/storage';
 
-import { injectSocialMeta, renderSocialMetaHtml, resolveSocialMeta } from '../../app/api/utils/meta/socialMeta';
+import { fallbackSocialMeta, injectSocialMeta, renderSocialMetaHtml, resolveSocialMeta } from '../../app/api/utils/meta/socialMeta';
 import { normaliseSocialPreviewPath, resolveSocialPreview, staticSocialPreview } from '../../app/api/utils/meta/socialPreview';
 import { getRequestMongoEndpoint, runWithMongoEndpoint } from '../../app/api/utils/mongodb/endpoint';
 
@@ -92,10 +92,11 @@ export default defineHandler(async (event) => {
 		// own follow-up API reads resolve against the same data plane
 		const mongoEndpoint = await getRequestMongoEndpoint(event.req);
 		const social = await runWithMongoEndpoint(mongoEndpoint, () => resolveSocialMeta(event.req));
-		body = injectSocialMeta(html, renderSocialMetaHtml(social.tags));
+		body = injectSocialMeta(html, renderSocialMetaHtml(social));
 	} catch (error) {
 		// serve the untouched shell — but audibly, never silently
-		console.error('[social-meta] falling back to the generic shell:', error);
+		console.error('[social-meta] falling back to generic metadata:', error);
+		body = injectSocialMeta(html, renderSocialMetaHtml(fallbackSocialMeta(event.req)));
 	}
 
 	return new Response(body, {
@@ -103,7 +104,8 @@ export default defineHandler(async (event) => {
 			'Content-Type': 'text/html; charset=utf-8',
 			// marks shells served by this handler (vs the static /index.html copy) so
 			// the Vercel permalink routing stays curl-verifiable in production
-			'X-TT-Shell': 'social-meta'
+			'X-TT-Shell': 'social-meta',
+			'Cache-Control': 'private, no-store, max-age=0, must-revalidate'
 		}
 	});
 });

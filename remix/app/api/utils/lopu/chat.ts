@@ -91,9 +91,10 @@ import { friendlyVaultProviderError, resolveVaultTurnModel, vaultProviderTranspo
 // canned line — never a blank reply.
 
 export const LOPU_CHAT_MAX_OUTPUT_TOKENS = 16000;
-export const LOPU_CHAT_MAX_HOPS = 12;
-export const LOPU_CHAT_MAX_TOOL_EXECUTIONS = 24;
-export const LOPU_CHAT_MAX_TURN_MS = 240_000;
+// A serverless request is an execution window, never a deadline for the task.
+// Yield only BETWEEN completed tool batches so no in-flight mutation is cut off.
+// The client resumes saved checkpoints without a continuation-count limit.
+export const LOPU_HOSTED_CHECKPOINT_MS = 60_000;
 export const LOPU_CHAT_MAX_HISTORY_CHARS = 60_000;
 export const LOPU_CHAT_MAX_TOOL_RESULT_CHARS = 16 * 1024;
 
@@ -405,7 +406,13 @@ async function* anthropicProvider(options: AnthropicProviderOptions): LopuProvid
       finalHop = feed.finalHop;
       continue;
     }
-    yield { type: 'hop_end', stopReason: finalMessage.stop_reason === 'max_tokens' ? 'max_tokens' : 'end_turn', usage: { ...usage } };
+    if (finalMessage.stop_reason === 'pause_turn') {
+      // The provider has saved its server-tool state in this assistant content.
+      // Resume that exact message; a pause is not a completed user request.
+      yield { type: 'hop_end', stopReason: 'pause_turn', usage: { ...usage } };
+      continue;
+    }
+    yield { type: 'hop_end', stopReason: ['max_tokens', 'model_context_window_exceeded'].includes(finalMessage.stop_reason) ? 'max_tokens' : 'end_turn', usage: { ...usage } };
     return;
   }
 }
@@ -770,10 +777,7 @@ async function* runToolLoop(options: LoopOptions): AsyncGenerator<LopuChatStream
   const { provider, ctx, deps, state, startedAt, signal } = options;
   let pending: LopuToolCall[] = [];
   let feed: LopuProviderHopInput | undefined;
-  let finalRequested = false;
-
-  const budgetLeft = () => LOPU_CHAT_MAX_TOOL_EXECUTIONS - state.toolExecutions;
-  const timeLeft = () => LOPU_CHAT_MAX_TURN_MS - (deps.now() - startedAt);
+  let wireChars = 0;
 
   for (;;) {
     if (signal?.aborted) {
@@ -787,6 +791,7 @@ async function* runToolLoop(options: LoopOptions): AsyncGenerator<LopuChatStream
     // `done` discriminant does not narrow IteratorResult
     if (step.done === true) return;
     const event = step.value;
+    wireChars += JSON.stringify(event).length;
     switch (event.type) {
       case 'text':
         state.text += event.text;
@@ -817,22 +822,20 @@ async function* runToolLoop(options: LoopOptions): AsyncGenerator<LopuChatStream
           }
           break;
         }
-        if (finalRequested || !options.toolsAllowed) {
-          // the final text hop asked for tools anyway — refuse politely
-          for (const call of pending) yield { type: 'tool_result', id: call.id, name: call.name, ok: false, summary: 'Not run — the tool budget for this turn is spent' };
+        if (!options.toolsAllowed) {
+          // tools are disabled for this request
+          for (const call of pending) yield { type: 'tool_result', id: call.id, name: call.name, ok: false, summary: 'Not run — tools are disabled for this request' };
           pending = [];
           break;
         }
 
-        const left = Math.max(0, budgetLeft());
-        const toRun = pending.slice(0, left);
-        const refused = pending.slice(left);
+        const toRun = pending;
         pending = [];
 
         const channel = createChannel<LopuChatStreamEvent>();
         ctx.emit = (toolEvent: LopuToolEvent) => channel.push(toolEvent);
         const results: LopuProviderToolResult[] = [];
-        const runs = Promise.all(
+        const runs = Promise.allSettled(
           toRun.map(async (call) => {
             const result = await deps.runTool(call, ctx);
             state.toolExecutions += 1;
@@ -863,31 +866,23 @@ async function* runToolLoop(options: LoopOptions): AsyncGenerator<LopuChatStream
           () => channel.close()
         );
         for await (const toolEvent of channel.drain()) yield toolEvent;
-        await runs;
-        for (const call of refused) {
-          const error = `Not run — Lopu may run at most ${LOPU_CHAT_MAX_TOOL_EXECUTIONS} tools per reply. Summarise what is done and ask the user to continue in a new message.`;
-          results.push({ id: call.id, name: call.name, ok: false, summary: error, error });
-          state.toolCalls.push({ name: call.name, ok: false, summary: summarise(error) });
-          yield { type: 'tool_result', id: call.id, name: call.name, ok: false, summary: error };
-        }
+        const settled = await runs;
+        const failed = settled.find(result => result.status === 'rejected');
+        if (failed?.status === 'rejected') throw failed.reason;
         // keep the provider's order so tool_result blocks line up with its tool_use ids
-        const order = new Map([...toRun, ...refused].map((call, index) => [call.id, index]));
+        const order = new Map(toRun.map((call, index) => [call.id, index]));
         results.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
 
-        const overBudget = refused.length > 0 || budgetLeft() <= 0;
-        const outOfTime = timeLeft() <= 0;
-        const outOfHops = state.hops >= LOPU_CHAT_MAX_HOPS - 1;
-        if (overBudget) {
-          state.stopReason = 'tool_limit';
-          yield { type: 'error', message: `Lopu hit the ${LOPU_CHAT_MAX_TOOL_EXECUTIONS}-tool limit for one reply — wrapping up.`, retryable: true };
-        } else if (outOfTime) {
-          state.stopReason = 'time_limit';
-          yield { type: 'error', message: 'Lopu ran out of time for this reply — wrapping up.', retryable: true };
-        } else if (outOfHops) {
-          state.stopReason = 'hop_limit';
+        // Checkpoint before another provider request on finite-lifetime hosts,
+        // and rotate large streams on every host. Neither limits total work.
+        // Account/persistence completes before the client sees done.
+        const hostedCheckpoint = process.env.VERCEL === '1' && deps.now() - startedAt >= LOPU_HOSTED_CHECKPOINT_MS;
+        if (hostedCheckpoint || wireChars >= 256 * 1024) {
+          state.stopReason = 'checkpoint';
+          await provider.return();
+          return;
         }
-        finalRequested = overBudget || outOfTime || outOfHops;
-        feed = { results, finalHop: finalRequested };
+        feed = { results, finalHop: false };
         break;
       }
       default:

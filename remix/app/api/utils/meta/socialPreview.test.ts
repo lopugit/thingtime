@@ -26,7 +26,7 @@ test('uncustomized pages use the press-kit PNG and safe shared page titles', asy
 		const values = new Map(tags.map((tag) => [tag.key, tag.content]));
 		assert.equal(values.get('og:title'), title);
 		assert.equal(values.get('twitter:title'), title);
-		assert.equal(values.get('og:image'), 'https://thingtime.example/branding/presskit/thingtime-og-card-1200x630.png');
+		assert.equal(values.get('og:image'), 'https://thingtime.example/branding/presskit/thingtime-og-card-1200x630.png?v=20260917');
 		assert.equal(values.get('twitter:image'), values.get('og:image'));
 		assert.equal(values.get('twitter:card'), 'summary_large_image');
 		assert.doesNotMatch(renderSocialMetaHtml(tags), /secret-token|token=secret/);
@@ -40,7 +40,7 @@ test('uncustomized pages use the press-kit PNG and safe shared page titles', asy
 
 test('static shell fallback uses the same real 1200x630 branding image', () => {
 	const html = readFileSync(new URL('../../../../index.html', import.meta.url), 'utf8');
-	assert.match(html, /og:image" content="\/branding\/presskit\/thingtime-og-card-1200x630.png/);
+	assert.match(html, /og:image" content="https:\/\/thingtime.com\/branding\/presskit\/thingtime-og-card-1200x630.png/);
 	assert.doesNotMatch(html, /og:image" content="\/android-icon/);
 	const png = readFileSync(new URL('../../../../public/branding/presskit/thingtime-og-card-1200x630.png', import.meta.url));
 	assert.equal(png.readUInt32BE(16), 1200);

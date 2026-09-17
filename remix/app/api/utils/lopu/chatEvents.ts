@@ -1,3 +1,4 @@
+import type { LopuPageReference } from '~/utils/lopuPageContext';
 import type { LopuToolLink } from '~/utils/lopuLinks';
 // The Lopu chat wire protocol — one JSON object per NDJSON line, streamed by
 // POST /api/v1/lopu/chats/reply. Types only (no runtime imports beyond other
@@ -44,6 +45,7 @@ export type LopuBilling = 'thingtime' | 'byo' | 'free';
 
 export type LopuChatStopReason =
   | 'end_turn'
+  | 'checkpoint'
   | 'max_tokens'
   | 'tool_limit'
   | 'hop_limit'
@@ -67,6 +69,7 @@ export type LopuChatPageContext = {
 };
 
 export type LopuChatContext = {
+	pages?: LopuPageReference[];
   route?: string;
   page?: LopuChatPageContext | null;
   selectedBlockId?: string;
@@ -74,7 +77,7 @@ export type LopuChatContext = {
 };
 
 // Persisted on the assistant message (crystal.lopu.toolCalls) — bounded there
-// to 20 entries / 240-char summaries by the messenger util.
+// to 20 entries per message segment / 240-char summaries by the messenger util.
 export type LopuToolCallSummary = { name: string; ok: boolean; summary: string; thingId?: string; links?: LopuToolLink[] };
 
 // What a `confirm` event asks the user to approve: the exact action (`key`
@@ -166,7 +169,7 @@ export type LopuProviderEvent =
   | { type: 'tool_use_start'; id: string; name: string }
   | { type: 'tool_input_delta'; id: string; name: string; partial: string }
   | { type: 'tool_use'; id: string; name: string; input: unknown }
-  | { type: 'hop_end'; stopReason: 'end_turn' | 'tool_use' | 'max_tokens'; usage?: LopuChatUsage };
+  | { type: 'hop_end'; stopReason: 'end_turn' | 'tool_use' | 'max_tokens' | 'pause_turn'; usage?: LopuChatUsage };
 
 export type LopuProviderToolResult = {
   id: string;

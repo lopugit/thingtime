@@ -12,12 +12,19 @@
 // could already read.
 
 import { getRequestOrigin } from '../health/statusTarget';
-import { DEFAULT_SOCIAL_IMAGE_PATH, normaliseSocialPreviewPath, resolveSocialPreview, socialPreviewCardUrl } from './socialPreview';
+import {
+	DEFAULT_SOCIAL_IMAGE_PATH,
+	normaliseSocialPreviewPath,
+	resolveSocialPreview,
+	socialPreviewCardUrl,
+	staticSocialPreview,
+	type SocialPreview
+} from './socialPreview';
 import { pageTitle } from '../../../utils/pageTitle';
 
 export type SocialMetaTag = { attr: 'property' | 'name'; key: string; content: string };
 
-export type SocialMeta = { tags: SocialMetaTag[] };
+export type SocialMeta = { tags: SocialMetaTag[]; canonical: string; structuredData: Record<string, unknown> };
 
 export const SOCIAL_META_START = '<!-- tt-social-meta:start';
 export const SOCIAL_META_END = 'tt-social-meta:end -->';
@@ -40,6 +47,7 @@ type PageMeta = {
 	description: string;
 	type: 'website' | 'article' | 'profile';
 	image: string | null;
+	imageAlt: string;
 	// all routes use a real 1200×630 PNG social card
 	largeImage: boolean;
 };
@@ -50,6 +58,7 @@ export const buildSocialMetaTags = (origin: string, path: string, page: Partial<
 		description: GENERIC_SITE_DESCRIPTION,
 		type: 'website',
 		image: null,
+		imageAlt: 'Colourful Thingtime wordmark on a white background with a rainbow border',
 		largeImage: true,
 		...page
 	};
@@ -62,54 +71,128 @@ export const buildSocialMetaTags = (origin: string, path: string, page: Partial<
 		property('og:description', meta.description),
 		property('og:url', `${origin}${normaliseSocialPreviewPath(path)}`),
 		property('og:image', image),
-		property('og:image:secure_url', image),
+		...(image.startsWith('https://') ? [property('og:image:secure_url', image)] : []),
 		property('og:image:type', 'image/png'),
 		property('og:image:width', '1200'),
 		property('og:image:height', '630'),
+		property('og:image:alt', meta.imageAlt),
 		named('twitter:card', meta.largeImage ? 'summary_large_image' : 'summary'),
 		named('twitter:title', meta.title),
 		named('twitter:description', meta.description),
-		named('twitter:image', image)
+		named('twitter:image', image),
+		named('twitter:image:alt', meta.imageAlt)
 	];
 };
 
-// Path → meta. Any data-plane failure degrades to the generic site block: the
-// shell must always serve, meta is best-effort garnish on top of it.
-export const resolveSocialMeta = async (request: Request): Promise<SocialMeta> => {
-	const origin = getRequestOrigin(request);
-	let path = '/';
-	try {
-		path = new URL(request.url, origin).pathname || '/';
-	} catch {
-		// keep '/' — og:url degrades to the origin
-	}
+// Only intentional public discovery surfaces are indexable by default. A safe
+// generic card is still useful for sharing settings/invite/missing URLs, but
+// it must not advertise a private screen or a failed lookup as public content.
+export const socialPageIsIndexable = (path: string, preview: SocialPreview): boolean =>
+	Boolean(preview.publicContent) || /^(?:\/|\/(?:welcome|about|branding|feed|explore|legal)(?:\/)?|\/(?:docs|design-system)(?:\/.*)?)$/.test(path);
 
-	try {
-		const preview = await resolveSocialPreview(origin, path);
-		return {
-			tags: buildSocialMetaTags(origin, path, {
-				title: preview.title,
-				description: preview.description,
-				type: preview.article ? 'article' : preview.kind === 'profile' ? 'profile' : 'website',
-				image: preview.variant === 'app' ? `${origin}${DEFAULT_SOCIAL_IMAGE_PATH}` : socialPreviewCardUrl(origin, path, preview.revision),
-				largeImage: true
-			})
+export const socialMetaFromPreview = (origin: string, preview: SocialPreview): SocialMeta => {
+	const path = normaliseSocialPreviewPath(preview.path);
+	const canonical = `${origin}${path === '/index.html' ? '/' : path}`;
+	const image = preview.variant === 'app' ? `${origin}${DEFAULT_SOCIAL_IMAGE_PATH}` : socialPreviewCardUrl(origin, path, preview.revision);
+	const tags = buildSocialMetaTags(origin, path, {
+		title: preview.title,
+		description: preview.description,
+		type: preview.article ? 'article' : preview.publicContent && preview.kind === 'profile' ? 'profile' : 'website',
+		image,
+		...(preview.variant !== 'app' ? { imageAlt: `Thingtime preview card: ${preview.title}` } : {})
+	});
+	const ogUrl = tags.find((tag) => tag.key === 'og:url')!;
+	ogUrl.content = canonical;
+	tags.push(named('robots', socialPageIsIndexable(path, preview) ? 'index, follow, max-image-preview:large' : 'noindex, follow'));
+	const websiteId = `${origin}/#website`;
+	const pageId = `${canonical}#webpage`;
+	const imageObject = { '@type': 'ImageObject', url: image, width: 1200, height: 630 };
+	const page: Record<string, unknown> = {
+		'@type':
+			preview.publicContent && preview.kind === 'profile'
+				? 'ProfilePage'
+				: ['collection', 'feed', 'explore'].includes(preview.kind)
+				? 'CollectionPage'
+				: 'WebPage',
+		'@id': pageId,
+		url: canonical,
+		name: preview.title,
+		description: preview.description,
+		isPartOf: { '@id': websiteId },
+		primaryImageOfPage: imageObject
+	};
+	// Only the already-whitelisted anonymous preview can supply structured
+	// content. Never serialize a raw Thing/crystal, arbitrary UGC schema, token,
+	// engagement count, price, or an invented rating into a search result.
+	if (preview.publicContent) {
+		const type =
+			preview.kind === 'profile'
+				? 'Person'
+				: ['comment', 'reply'].includes(preview.kind)
+				? 'Comment'
+				: ['text-post', 'image-post', 'gallery', 'poll', 'share', 'listing', 'thingtime'].includes(preview.kind)
+				? 'SocialMediaPosting'
+				: 'CreativeWork';
+		page.mainEntity = {
+			'@type': type,
+			'@id': `${canonical}#content`,
+			url: canonical,
+			name: type === 'Person' ? preview.author || preview.title : preview.title,
+			description: preview.description,
+			...(type !== 'Person' ? { mainEntityOfPage: { '@id': pageId }, image: imageObject } : {}),
+			...(type !== 'Person' && preview.author ? { author: { '@type': 'Person', name: preview.author } } : {})
 		};
-	} catch {
-		// fall through to the generic block
 	}
-
-	return { tags: buildSocialMetaTags(origin, path) };
+	return {
+		tags,
+		canonical,
+		structuredData: {
+			'@context': 'https://schema.org',
+			'@graph': [{ '@type': 'WebSite', '@id': websiteId, url: `${origin}/`, name: SITE_NAME }, page]
+		}
+	};
 };
 
-export const renderSocialMetaHtml = (tags: SocialMetaTag[]): string => {
+// Path → meta. Any data-plane failure degrades to a safe, noindex page rather
+// than returning the static shell's wrong canonical/title on a deep URL.
+export const fallbackSocialMeta = (request: Request): SocialMeta =>
+	socialMetaFromPreview(getRequestOrigin(request), staticSocialPreview(new URL(request.url).pathname));
+
+export const resolveSocialMeta = async (request: Request): Promise<SocialMeta> => {
+	const origin = getRequestOrigin(request);
+	const path = new URL(request.url).pathname;
+	try {
+		return socialMetaFromPreview(origin, await resolveSocialPreview(origin, path));
+	} catch {
+		return fallbackSocialMeta(request);
+	}
+};
+
+// JSON encoding alone does not prevent </script> from closing a script element.
+export const serializeStructuredData = (value: Record<string, unknown>): string =>
+	JSON.stringify(value)
+		.replace(/</g, '\\u003c')
+		.replace(/>/g, '\\u003e')
+		.replace(/&/g, '\\u0026')
+		.replace(/\u2028/g, '\\u2028')
+		.replace(/\u2029/g, '\\u2029');
+
+export const renderSocialMetaHtml = (meta: SocialMeta | SocialMetaTag[]): string => {
+	const tags = Array.isArray(meta) ? meta : meta.tags;
 	const lines = tags.map((tag) => `<meta ${tag.attr}="${tag.key}" content="${escapeHtml(tag.content)}" />`);
+	if (!Array.isArray(meta)) {
+		lines.push(`<link rel="canonical" href="${escapeHtml(meta.canonical)}" />`);
+		lines.push(`<script type="application/ld+json">${serializeStructuredData(meta.structuredData)}</script>`);
+	}
 	return [`${SOCIAL_META_START} -->`, ...lines, `<!-- ${SOCIAL_META_END}`].join('\n    ');
 };
 
 // Swap the shell's marker block for the per-request one. A shell built before
 // the marker existed still gets tags via the </head> fallback.
 export const injectSocialMeta = (html: string, metaBlock: string): string => {
+	// Match the server HTML title to the escaped Open Graph title, before JS runs.
+	const title = metaBlock.match(/<meta property="og:title" content="([^"]*)"/);
+	if (title) html = html.replace(/<title>[\s\S]*?<\/title>/i, () => `<title>${title[1]}</title>`);
 	const marker = /<!-- tt-social-meta:start[\s\S]*?tt-social-meta:end -->/;
 	// replacement function so `$`-sequences in user-authored meta text are
 	// never interpreted as String.replace substitution patterns

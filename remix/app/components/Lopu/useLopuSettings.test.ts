@@ -5,7 +5,7 @@ import {
 	LOPU_CATALOG_CACHE_KEY,
 	LOPU_CHAT_STORE_MODELS_CACHE_KEY,
 	LOPU_LAUNCHER_BOTTOM_INSET,
-	LOPU_DEVKIT_CLEARANCE,
+	resizeLopuWindow,
 	LOPU_LAUNCHER_CACHE_KEY,
 	LOPU_LAUNCHER_EDGE_GUTTER,
 	LOPU_LAUNCHER_INSET,
@@ -86,6 +86,7 @@ describe('normalizeLopuSettings', () => {
 			open: true
 		});
 		assert.deepEqual(settings, {
+			dockMode: 'overlay', attachCurrentPage: true, minimised: false,
 			launcher: false,
 			dock: 'right',
 			applyPatches: false,
@@ -194,10 +195,10 @@ describe('window geometry', () => {
 
 	test('docking pins a full-height column to the chosen edge, keeping the free width', () => {
 		// a right column stops above DevKit's corner bubble so the composer stays reachable
-		assert.deepEqual(dockedLopuWindowGeometry('right', 420, desktop), { x: desktop.width - 420, y: 0, width: 420, height: desktop.height - LOPU_DEVKIT_CLEARANCE });
+		assert.deepEqual(dockedLopuWindowGeometry('right', 420, desktop), { x: desktop.width - 420, y: 0, width: 420, height: desktop.height });
 		assert.deepEqual(dockedLopuWindowGeometry('left', 420, desktop), { x: 0, y: 0, width: 420, height: desktop.height });
 		// width still respects the viewport bound
-		assert.equal(dockedLopuWindowGeometry('right', 9999, desktop).width, desktop.width - LOPU_WINDOW_MARGIN);
+		assert.equal(dockedLopuWindowGeometry('right', 9999, desktop).width, desktop.width);
 		assert.equal(dockedLopuWindowGeometry('left', 10, desktop).width, LOPU_WINDOW_MIN_SIZE.width);
 	});
 });
@@ -363,4 +364,26 @@ test('/lopu/voice is the page in voice mode; a chat deep link is not', () => {
 	assert.equal(isLopuVoicePath('/lopu'), false);
 	assert.equal(isLopuVoicePath('/lopu/voiceover-chat'), false);
 	assert.equal(isLopuVoicePath(null), false);
+});
+
+
+test('north/west resize anchors the opposite edges and clamps without drifting', () => {
+ const origin = { x: 200, y: 150, width: 500, height: 450 };
+ for (const edge of ['n', 'w', 'nw', 'ne', 'sw', 's', 'e', 'se'] as const) {
+  const next = resizeLopuWindow(origin, edge, -10000, -10000, desktop);
+  assert.ok(next.x >= 0 && next.y >= 0 && next.width >= 320 && next.height >= 360);
+  if (edge.includes('w')) assert.equal(next.x + next.width, origin.x + origin.width);
+  if (edge.includes('n')) assert.equal(next.y + next.height, origin.y + origin.height);
+ }
+});
+test('all docks are flush and split keeps a usable remaining page', () => {
+ for (const dock of ['left', 'right', 'top', 'bottom'] as const) {
+  const next = dockedLopuWindowGeometry(dock, 9999, desktop, 9999, true);
+  if (dock === 'left' || dock === 'right') { assert.equal(next.height, desktop.height); assert.equal(desktop.width - next.width, 320); }
+  else { assert.equal(next.width, desktop.width); assert.equal(desktop.height - next.height, 240); }
+  if (dock === 'right') assert.equal(next.x + next.width, desktop.width);
+  if (dock === 'bottom') assert.equal(next.y + next.height, desktop.height);
+ }
+ const prefs = normalizeLopuSettings({ minimised: true, dock: 'bottom', dockMode: 'split', attachCurrentPage: false });
+ assert.equal(prefs.minimised, true); assert.equal(prefs.dock, 'bottom'); assert.equal(prefs.dockMode, 'split'); assert.equal(prefs.attachCurrentPage, false);
 });

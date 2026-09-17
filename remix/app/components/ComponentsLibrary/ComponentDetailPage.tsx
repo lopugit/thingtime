@@ -256,20 +256,9 @@ const LivePane = ({
           </Button>
         </Flex>
       )}
-      <Center
-        background={background}
-        border="1px solid var(--tt-border, #ececef)"
-        borderRadius="var(--tt-radius-lg, 16px)"
-        minHeight="180px"
-        overflow="hidden"
-        padding={{ base: 4, md: 8 }}
-        data-testid="component-live"
-        data-trust={interactive ? 'live' : 'inert'}
-      >
-        <Box maxWidth="100%" width="100%" sx={{ '& > *': { maxWidth: '100%' } }}>
-          <LiveTemplate confirm={confirm} interactive={interactive} onUnowned={onUnowned} render={source.render} scope={scope} />
-        </Box>
-      </Center>
+      <Box background={background} width="100%" minWidth={0} data-testid="component-live" data-trust={interactive ? 'live' : 'inert'}>
+        <LiveTemplate confirm={confirm} interactive={interactive} onUnowned={onUnowned} render={source.render} scope={scope} />
+      </Box>
     </Flex>
   );
 };
@@ -784,7 +773,7 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
 
   return (
     <Flex background="var(--tt-surface, #fafafb)" justifyContent="center" minHeight="100vh" width="100%">
-      <Flex direction="column" gap={5} maxWidth="860px" minWidth={0} pb={24} paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 36px)" px={4} width="100%">
+      <Flex direction="column" gap={5} minWidth={0} sx={{ '& > *': { width: '100%', maxWidth: '860px', marginInline: 'auto', paddingInline: '16px' }, '& > [data-testid="component-live-section"]': { maxWidth: 'none', paddingInline: 0 } }} pb={24} paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px) + 36px)" px={0} width="100%">
         <Flex align="center" gap={2} flexWrap="wrap">
           <Button as={Link} leftIcon={<ArrowLeft size={14} />} size="xs" to="/components" variant="ghost">
             Components
@@ -898,7 +887,7 @@ export const ComponentDetailPage = ({ docsFocus = false }: { docsFocus?: boolean
             )}
 
             {/* ------------------------------ live ------------------------------ */}
-            <Flex direction="column" gap={2}>
+            <Flex data-testid="component-live-section" direction="column" gap={2}>
               <Flex align="center" gap={2} wrap="wrap">
                 <Text {...monoLabel}>live</Text>
                 <Badge

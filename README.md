@@ -2,6 +2,33 @@
 
 https://thingtime.com
 
+### Seamless page editor
+
+`/builder?page=<id>` and `/p/<id>` share `LiveWebpage` and its lazy
+`SeamlessPageEditor`. One floating controls bar groups page navigation, preview
+settings, and Builder / Edit / Layout / View / Visit / Deploy / Inspector.
+Builder disables page data; Edit combines contenteditable text with pink block
+handles, outlines, insertion and context menus; Layout arranges blocks; View
+runs the page with the inspector available. Visit saves and reloads
+`/p/<id>?mode=visit` without editor controls (`mode=run` remains compatible).
+Deploy opens `/t/<id>` with only a small credit link back to `/p/`. All paths
+use the same resolver, runtime and access checks.
+The preview menu offers Viewport and Container presentations with the same
+full-width, desktop, tablet, mobile, device presets and custom dimensions.
+Sized Viewports use a style-mirrored iframe portal for real CSS media queries;
+Container uses the page DOM, a maximum width and minimum height, grows with its
+content, and has no maximum height. It does not disable the chosen mode's runtime.
+No second app or API runtime is booted in the frame. Inline drafts publish only
+when saved. Switching between iframe and native presentation can remount form
+DOM; switching editing modes preserves it.
+
+Local verification for `thingtime-seamless-builder`: `http://localhost:11060`
+(Vite 11060, HMR 11061, Nitro 11062), started with `npm run web-pms` using the
+existing worktree port resolver. `/tests/seamless-builder.html` is a Vite-only,
+non-publishing editor fixture. Tailscale/Funnel is unavailable on this machine:
+the configured CLI points at a missing `/Applications/Tailscale.app` executable.
+No new secrets or external setup are required by these editor features.
+
 Thingtime is a powerful platform for storing and sharing information of all kinds. Whether you want to keep track of your personal notes, collaborate on a project with your team, or build a new app that relies on rich data, Thingtime has you covered.
 
 With Thingtime, you can create and share any abstract data structure you want, or store any practical piece of information and share it for people and machines to use equally. Thingtime is not only a platform, but also an ecosystem that empowers developers and users alike to build, share, and utilize all kinds of data and knowledge.
@@ -3512,3 +3539,29 @@ Run `pnpm --dir remix test:attachments`, `test:rate-limit`, and
 The upload-regression worktree uses `http://localhost:19800` (HMR 19801, Nitro
 19802), derived by `npm run web-ports`. Tailscale/Funnel could not be configured
 on 2026-09-16: the installed launcher points to a missing Tailscale app.
+
+
+### Lopu continuation development
+
+Lopu has no fixed tool-count, step-count, continuation-count, or task-duration cap.
+On Vercel, completed tool batches checkpoint between hosting windows; large
+streams also checkpoint before continuing with a fresh request ID. The browser
+continues persisted checkpoints while the app is open, retaining chat/model and
+completed-work receipts. Background jobs renew a worker lease instead of stopping
+a healthy job on a timer. An uncertain provider/write failure remains a manual
+recovery boundary. Closing every app tab can leave a saved checkpoint awaiting
+return to the conversation; this is not a durable cross-window workflow runner.
+Provider transport, context, platform billing and authorization constraints still
+apply. No new private configuration or credentials are required.
+
+Regression fixture: `http://localhost:16650/scripts/lopu-continuation.browser.html`
+(worktree `thingtime-lopu-auto-continue`; HMR 16651, Nitro 16652). It runs the
+production store/composer with synthetic responses, including 17 continuations
+and Stop. The Tailscale/Funnel URL could not be configured: the installed wrapper
+references a missing `/Applications/Tailscale.app/Contents/MacOS/tailscale`.
+## Social previews and search metadata
+
+The Nitro shell automatically serves Open Graph/Twitter metadata, canonical
+URLs and safe Schema.org JSON-LD from anonymous public projections. See
+[the metadata runbook](docs/seo-social-metadata.md) for validation, crawler
+cache diagnosis, fork setup and the broader SEO/rich-results TODO.

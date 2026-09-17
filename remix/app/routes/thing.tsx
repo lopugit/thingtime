@@ -816,7 +816,7 @@ function GenericThingPage() {
 			paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))"
 			paddingBottom={16}
 		>
-			<SharedMediaProvider linkKey={linkKey} sharedRoot={thing && !isThingOwner && canForkThing(thing) ? thing.id : undefined}><Stack spacing={5} width="100%" maxW="920px" px={{ base: 4, md: 6 }} pt={{ base: 4, md: 7 }} minW={0}>
+			<SharedMediaProvider linkKey={linkKey} sharedRoot={thing && !isThingOwner && canForkThing(thing) ? thing.id : undefined}><Stack spacing={5} width="100%" sx={sections.preview ? { '& > :not([data-live])': { width: 'calc(100% - 32px)', maxWidth: '920px', marginInline: 'auto' } } : undefined} maxW={sections.preview ? undefined : "920px"} px={sections.preview ? 0 : { base: 4, md: 6 }} pt={{ base: 4, md: 7 }} minW={0}>
 				<Flex align="center" justify="space-between" gap={3} wrap="wrap">
 					<Box minW={0}>
 						<Text color={MUTED} fontFamily="mono" fontSize="10px" fontWeight="700" letterSpacing="0.12em" textTransform="uppercase">
@@ -977,7 +977,7 @@ function GenericThingPage() {
 								source={isThingOwner ? 'user' : 'system'}
 								onInstall={seeded && suiteKey ? onInstall : undefined}
 							>
-								<Box {...CARD_STYLES} p={{ base: 4, md: 6 }} minW={0} data-live={interactive ? 'true' : 'false'}>
+								<Box width="100%" minW={0} data-live={interactive ? 'true' : 'false'}>
 									<Flex align="center" justify="space-between" gap={3} mb={3} wrap="wrap">
 										<Heading as="h2" fontSize="md">
 											{interactive && (isComponent || isWebpage) ? 'Live preview' : 'Rendered preview'}
@@ -988,7 +988,7 @@ function GenericThingPage() {
 											</Text>
 										) : null}
 									</Flex>
-									<Box minW={0}>{previewBody}</Box>
+									<Box minW={0} width="100%">{previewBody}</Box>
 								</Box>
 							</WebpageRuntimeProvider>
 						) : null}

@@ -35,6 +35,8 @@ export type LopuComposerProps = {
 	// usable, so a locked account that may still chat on its own provider
 	// (Thingtime.LopuAccess allowByoUnverified) can pick one and unlock
 	inputDisabled?: boolean;
+	// Uploads can block submission without blocking draft editing.
+	sendDisabled?: boolean;
 	enterSends?: boolean;
 	placeholder?: string;
 	models: AiModelPublic[];
@@ -142,6 +144,7 @@ export const LopuComposer = ({
 	streaming,
 	disabled = false,
 	inputDisabled = false,
+	sendDisabled = false,
 	enterSends = true,
 	placeholder,
 	models,
@@ -174,7 +177,7 @@ export const LopuComposer = ({
 		[inputRef]
 	);
 	const fieldDisabled = disabled || inputDisabled;
-	const canSend = !fieldDisabled && !streaming && value.trim().length > 0;
+	const canSend = !fieldDisabled && !sendDisabled && !streaming && value.trim().length > 0;
 	const controlSize = isMobile ? LOPU_UI.touchTarget : compact ? 30 : 36;
 	const iconSize = isMobile ? LOPU_UI.touchTarget : compact ? 28 : 32;
 	const bodySize = compact ? LOPU_UI.fontCompact : LOPU_UI.fontBody;
@@ -190,9 +193,9 @@ export const LopuComposer = ({
 
 	const submit = React.useCallback(() => {
 		const text = value.trim();
-		if (!text || fieldDisabled || streaming) return;
+		if (!text || fieldDisabled || sendDisabled || streaming) return;
 		onSend(text.slice(0, LOPU_MAX_MESSAGE_CHARS));
-	}, [value, fieldDisabled, streaming, onSend]);
+	}, [value, fieldDisabled, sendDisabled, streaming, onSend]);
 
 	const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
 		if (event.key !== 'Enter') return;

@@ -695,6 +695,9 @@ const BlockInspector = ({
 };
 
 export const BuilderDrawer = (props: {
+	helpText?: string;
+	hideTransfer?: boolean;
+	footerSpace?: string;
 	title: string;
 	draft: UseWebpageDraft;
 	selectedId: string | null;
@@ -858,7 +861,8 @@ export const BuilderDrawer = (props: {
 				</Box>
 			</Flex>
 
-			<Flex flexDirection="column" rowGap={4} padding={4} flex="1" minHeight={0} overflowY="auto">
+			<Flex flexDirection="column" rowGap={4} padding={4} flex="1" minHeight={0} overflowY="auto" paddingBottom={props.footerSpace}>
+				{props.helpText ? <Text fontSize="xs" color="var(--tt-muted, #9a9aa6)">{props.helpText}</Text> : null}
 				{selected ? (
 					<>
 						{regionLabel ? (
@@ -876,7 +880,7 @@ export const BuilderDrawer = (props: {
 						) : null}
 						<BlockInspector draft={draft} block={selected} onDeselect={onDeselect} onUploadToBlock={onUploadToBlock} />
 					</>
-				) : (
+				) : !props.helpText ? (
 					<Text color="var(--tt-muted, #9a9aa6)" fontSize="xs" lineHeight="1.7">
 						Hover blocks to see their boundaries, click one to edit it, drag the ⠿ chip to move it, and use the inline
 						<Box as="span" color="var(--tt-accent, hotpink)" fontWeight={700}>
@@ -885,7 +889,7 @@ export const BuilderDrawer = (props: {
 						</Box>
 						lines to build. 🌈
 					</Text>
-				)}
+				) : null}
 
 				<Box borderTop="1px solid" borderColor="var(--tt-border-light, #f0f0f2)" paddingTop={3}>
 					<Eyebrow>{mode === 'site' ? 'Site page' : 'Page'}</Eyebrow>
@@ -948,8 +952,8 @@ export const BuilderDrawer = (props: {
 					</Flex>
 				</Box>
 
-				<ThingTransferControls id={pageId} linkKey={draft.resolved?.page?.linkKey}
-					disabledReason={!pageId || source !== 'user' || draft.dirty || metaDirty || anyDirty ? 'Save this page before copying or downloading its saved content.' : undefined} />
+				{!props.hideTransfer && <ThingTransferControls id={pageId} linkKey={draft.resolved?.page?.linkKey}
+					disabledReason={!pageId || source !== 'user' || draft.dirty || metaDirty || anyDirty ? 'Save this page before copying or downloading its saved content.' : undefined} />}
 				<Flex columnGap={2}>
 					<Button
 						size="sm"

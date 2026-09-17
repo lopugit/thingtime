@@ -644,10 +644,10 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		responseExamples: [{ status: 200, description: 'Handoff queued or already requested.', body: { ok: true, ownerId: 'your-user-id', message: 'Recording queued for Lopu.' } }, { status: 403, description: 'Processor not enabled or source not eligible.', body: { ok: false, error: 'Enable recording processing first.' } }]
 	}),
 	endpoint({
-        id: 'lopu-background-tasks', contractVersion: '1.0.0', featureVersion: '1.0.0', group: 'lopu', title: 'Background AI tasks',
+        id: 'lopu-background-tasks', contractVersion: '1.1.0', featureVersion: '1.1.0', group: 'lopu', title: 'Background AI tasks',
         endpoint: '/api/v1/lopu/tasks', methods: ['GET', 'POST'],
         summary: 'Observe and stop account-owned background AI requests without replaying them.',
-        detail: 'Negotiate this feature before opting into X-Thingtime-Background-Id on chat replies, voice replies, musings or AI completions. The header is an immutable operation ID: identical retries return the existing task with HTTP 202; different payloads return 409. X-Thingtime-Task-Owner fences account changes. Canonical handlers retain their authentication, provider, permission, quota and billing checks. A SharedWorker observes jobs while origin tabs remain; Nitro and Vercel waitUntil drain the canonical handler even after every tab closes. Execution is bounded to 260 seconds and 2 MiB of private output. GET lists up to 100 recent tasks without output; GET ?id=...&offset=0 returns a bounded 65536-character output slice, next offset and total length. The task contains responseStatus and contentType for reconstructing its response. Polling never re-executes an action. A stale or failed job requires review and explicit continuation; it is never blindly retried. POST {id,action:"stop"} requests cancellation. Alternatively requestId stops an operation before admission using an immutable cancellation marker. Task output is protected binary operational state; no provider credentials or request headers are stored. Tasks are fenced to account, browser-facing origin and selected data source. Output access expires after seven days (410); expired bytes are lazily cleared on the next task read, while the small immutable operation marker remains to prevent replay. Chat transcript access is rechecked before returning its task output.',
+        detail: 'Negotiate this feature before opting into X-Thingtime-Background-Id on chat replies, voice replies, musings or AI completions. The header is an immutable operation ID: identical retries return the existing task with HTTP 202; different payloads return 409. X-Thingtime-Task-Owner fences account changes. Canonical handlers retain their authentication, provider, permission, quota and billing checks. A SharedWorker observes jobs while origin tabs remain; Nitro and Vercel waitUntil drain the canonical handler even after every tab closes. Version 1.1 removes the total execution deadline: a renewable worker lease detects a lost worker without stopping a healthy task. Each saved transport window retains up to 2 MiB of private output; chat checkpoints rotate windows without capping total work. GET lists up to 100 recent tasks without output; GET ?id=...&offset=0 returns a bounded 65536-character output slice, next offset and total length. The task contains responseStatus and contentType for reconstructing its response. Polling never re-executes an action. A stale or failed job requires review and explicit continuation; it is never blindly retried. POST {id,action:"stop"} requests cancellation. Alternatively requestId stops an operation before admission using an immutable cancellation marker. Task output is protected binary operational state; no provider credentials or request headers are stored. Tasks are fenced to account, browser-facing origin and selected data source. Output access expires after seven days (410); expired bytes are lazily cleared on the next task read, while the small immutable operation marker remains to prevent replay. Chat transcript access is rechecked before returning its task output.',
         auth: { mode: 'session-or-bearer', description: 'Full first-party account only; same-origin, private no-store. Every read and cancellation rechecks identity and task scope.' },
         steps: ['Negotiate api.lopu-background-tasks >=1.0.0 on this origin.', 'Start a supported AI request with a fresh operation ID and expected owner header.', 'Retain the accepted task ID; observe its output without resubmitting.', 'Review partial output before explicitly continuing interrupted work.'],
         requestExamples: [{ name: 'Stop task', description: 'Stop only this owned execution.', method: 'POST', body: { id: 'lopu-background-example', action: 'stop' } }],
@@ -4654,10 +4654,12 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // each spend the same last credit — past the cap the request is refused 429
     // LOPU_TURN_IN_FLIGHT (+ Retry-After) before anything is persisted (additive). contractVersion
     // feeds /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.10.0',
-    featureVersion: '1.10.0',
+    contractVersion: '1.12.0',
+    featureVersion: '1.12.0',
     summary: 'Sends one message to Lopu and streams its reply — text, tool calls and live builder patches — as newline-delimited JSON. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
     detail:
+      'Version 1.12 adds optional context.pages (up to ten { url, title } Thingtime relative page links, URL up to 300 characters, title up to 120). The user input remains capped at 8,000 characters; the persisted turn allows 16,000 including bounded attached Thing/page references. Validated URLs exclude authentication routes, fragments and non-navigation query keys. References are included as untrusted model context and persisted with the user message; references grant no extra read or write permissions. Omitting route/page/selectedBlockId excludes current-page context. ' +
+      'Version 1.11 removes task-wide tool, hop and elapsed-time limits. Completed tool batches may emit done.stopReason=checkpoint to rotate a hosting or stream-storage window; clients continue from persisted receipts with a fresh request ID, without a continuation count limit. Confirmation, Stop and uncertain in-flight writes are never automatically replayed. ' +
       'Version 1.10 delivers authorized image/PDF bytes and bounded UTF-8 text to the selected provider, explicitly labels unsupported content, and adds fetch_url/http_request tools (external mutations require an exact-request confirmation). ' +
       'Version 1.9 adds optional background transport: negotiate api.lopu-background-tasks 1.0.0 and send X-Thingtime-Background-Id plus X-Thingtime-Task-Owner; HTTP 202 returns an idempotent task for polling its original response. ' +
       'Version 1.8 adds bounded, validated navigation links to saved tool receipts; page reads, search hits and related components retain Open links after reload. ' +
@@ -4694,8 +4696,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
       'the connection’s own, tools ride native function calling on known vendors and the fenced tt-tool protocol on a custom ' +
       'compatible host, and the endpoint is fenced like the voice turn (server allowlist, fresh public DNS, no redirects). A ' +
       'failure of the caller’s provider surfaces as an error event with a friendly message followed by the canned line — the ' +
-      'server keys are never used as a fallback for a vault turn. Limits per reply: 12 model hops, 24 tool executions, 240 ' +
-      'seconds, 96KB per tool input.',
+      'server keys are never used as a fallback for a vault turn. No task-wide hop, tool-execution or elapsed-time cap; ' +
+      'individual tool inputs retain the 96KB payload bound.',
     auth: {
       mode: 'session',
       description: 'Requires an auth cookie for a full (non-temporary) account. Bodies must be application/json (415 otherwise — the CSRF fence, checked before the rate limit) and at most 256KB.'
@@ -6660,13 +6662,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'chats-messages',
-    featureVersion: '1.1.0',
-    contractVersion: '1.1.0',
+    featureVersion: '1.2.0',
+    contractVersion: '1.2.0',
     group: 'messenger',
     title: 'Chat messages',
     endpoint: '/api/v1/chats/messages',
     summary: 'Reads a page of messages or sends a new one, including Slack-style thread replies.',
     detail:
+      'Version 1.2 preserves long Lopu assistant output and all public tool receipts across relational message segments; later receipt segments carry lopu.toolReceiptOffset. ' +
       'Version 1.1 adds optional lopu.toolCalls[].links ({label, href}, at most 100 per call) to assistant message history. Links allow local paths and credential-free HTTP(S) URLs only; raw tool data and approval grants are excluded. ' +
       'GET pages a chat newest-first with cursor and limit (max 100, default 40); pass threadRootId to scope the ' +
       'page to one thread. The response bundles customEmojis (a map of id to name, image, and animated for any ' +
