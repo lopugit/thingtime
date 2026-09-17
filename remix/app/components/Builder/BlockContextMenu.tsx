@@ -1,3 +1,4 @@
+import { builderDocuments } from './builderCoordinates';
 import React from 'react';
 import { Box, Flex, Input, Text } from '@chakra-ui/react';
 
@@ -110,13 +111,14 @@ export const BlockContextMenu = ({
 				onClose();
 			}
 		};
-		window.addEventListener('mousedown', onDown);
+		const documents = builderDocuments();
+		for (const doc of documents) doc.addEventListener('mousedown', onDown);
 		// CAPTURE phase: the canvas's own Escape-deselect listener (registered
 		// earlier, bubble phase) must see this Escape already consumed
-		window.addEventListener('keydown', onKey, true);
+		for (const doc of documents) doc.addEventListener('keydown', onKey, true);
 		return () => {
-			window.removeEventListener('mousedown', onDown);
-			window.removeEventListener('keydown', onKey, true);
+			for (const doc of documents) doc.removeEventListener('mousedown', onDown);
+			for (const doc of documents) doc.removeEventListener('keydown', onKey, true);
 		};
 	}, [onClose]);
 

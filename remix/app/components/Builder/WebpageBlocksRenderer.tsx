@@ -1,4 +1,6 @@
 import React from 'react';
+import { componentTextOverrides } from './componentTextOverrides';
+import { builderPoint, builderRect } from './builderCoordinates';
 import { useSharedMediaUrl } from '../Sharing/SharedMedia';
 import { mapCssMediaUrls } from '../Sharing/renderMediaCore';
 import { Box, Flex, Grid, Text } from '@chakra-ui/react';
@@ -12,10 +14,11 @@ import { defaultsFromArgs, resolveTemplate, sanitizeArgSpecs } from '../Componen
 import { useTtActionClicks, type TtActionUnownedHandler } from '../Actions/useTtActionClicks';
 import { useThingSource } from './liveComponent';
 import { htmlToNode } from './htmlToNode';
-import { InlineRichTextEditor } from './InlineRichTextEditor';
 import { EditorHistory } from '../Editor/editorHistory';
 import { RICH_HTML_SX } from './richHtmlStyles';
 import { blockLabel, type WebpageBlock } from './webpageBlocks';
+
+const InlineRichTextEditor = React.lazy(() => import('./InlineRichTextEditor').then((module) => ({ default: module.InlineRichTextEditor })));
 
 // Draws a webpage block tree. Component blocks resolve their referenced
 // component thing's template through the existing arg DSL and draw ONLY
@@ -49,6 +52,8 @@ export const buildComponentsByRef = (payload: {
 };
 
 export type BuilderChrome = {
+	// Seamless modes keep the live element tree mounted between interactions.
+	seamlessMode?: 'edit' | 'view' | 'layout' | 'builder' | 'container';
 	hoverId: string | null;
 	selectedId: string | null;
 	onHover: (id: string | null) => void;
@@ -239,7 +244,7 @@ const EdgeInsertStrip = ({
 	const thickness = coarse ? '28px' : '16px';
 	const offset = coarse ? '-14px' : '-8px';
 	const vThickness = coarse ? '28px' : '18px';
-	const vOffset = coarse ? '-14px' : '-9px';
+	const vOffset = chrome.seamlessMode ? '0px' : coarse ? '-14px' : '-9px';
 	const rect =
 		side === 'top'
 			? { top: offset, left: 0, right: 0, height: thickness }
@@ -377,7 +382,7 @@ const BlockFrame = ({
 	children
 }: {
 	block: WebpageBlock;
-	chrome: BuilderChrome;
+	chrome?: BuilderChrome | null;
 	locked?: boolean;
 	parentDirection?: ParentDirection;
 	// where this block lives — powers the overlay insert strips and grid-cell
@@ -387,11 +392,16 @@ const BlockFrame = ({
 	testIdPrefix?: string;
 	children: React.ReactNode;
 }) => {
-	const hovered = chrome.hoverId === block.id;
+	const live = chrome?.seamlessMode === 'view';
+	const layout = !!chrome && (!chrome.seamlessMode || chrome.seamlessMode === 'layout' || (chrome.seamlessMode === 'builder' || chrome.seamlessMode === 'container'));
+	const hovered = !live && chrome?.hoverId === block.id;
 	const mediaUrl = useSharedMediaUrl();
-	const selected = chrome.selectedId === block.id;
+	const selected = !live && chrome?.selectedId === block.id;
 	const [dropTarget, setDropTarget] = React.useState(false);
 	const tone = locked ? 'var(--tt-muted, #9a9aa6)' : 'var(--tt-accent, hotpink)';
+	if (!chrome || live) return <Box data-block-id={block.id} {...selfPlacement(block, parentDirection)} style={cssRecordToStyle(block.css, mediaUrl)}>
+		{null}{children}{null}{null}
+	</Box>;
 	// EVERY frame is a file-drop target (media blocks swap their src, others
 	// receive the upload via onMediaToBlock) — otherwise the browser opens the
 	// dropped file. Grid cells additionally accept block drags (insert-before),
@@ -401,7 +411,7 @@ const BlockFrame = ({
 	// locked frames (live native app screens) keep their hands off drops —
 	// the app inside owns them (e.g. the post composer's own file drop zone);
 	// unclaimed drops there fall through to the window guard
-	const dropProps = locked
+	const dropProps = locked || !layout
 		? {}
 		: {
 				onDragOver: (event: React.DragEvent) => {
@@ -439,14 +449,14 @@ const BlockFrame = ({
 	return (
 		<Box
 			{...dropProps}
-			className="ttBlockFrame"
+			className={live ? undefined : "ttBlockFrame"}
 			zIndex={selected ? 10 : undefined}
 			data-block-id={block.id}
 			position="relative"
 			{...selfPlacement(block, parentDirection)}
 			style={cssRecordToStyle(block.css, mediaUrl)}
 			onContextMenu={
-				chrome.onContextMenu && !locked
+				layout && chrome.onContextMenu && !locked
 					? (event: React.MouseEvent) => {
 							const target = event.target as HTMLElement;
 							// native context menus stay native inside editors/inputs
@@ -455,7 +465,8 @@ const BlockFrame = ({
 							event.preventDefault();
 							event.stopPropagation();
 							chrome.onSelect(block.id, event.currentTarget as HTMLElement);
-							chrome.onContextMenu?.(block.id, event.clientX, event.clientY);
+							const point = builderPoint(event.currentTarget, event.clientX, event.clientY);
+							chrome.onContextMenu?.(block.id, point.x, point.y);
 					  }
 					: undefined
 			}
@@ -465,7 +476,7 @@ const BlockFrame = ({
 			_after={{
 				content: '""',
 				position: 'absolute',
-				inset: '-4px',
+				inset: chrome.seamlessMode ? '0px' : '-4px',
 				borderRadius: 'var(--tt-radius-xs, 7px)',
 				border: dropTarget
 					? `2px dashed ${tone}`
@@ -477,18 +488,22 @@ const BlockFrame = ({
 				pointerEvents: 'none',
 				zIndex: 5
 			}}
-			cursor="pointer"
+			cursor={live ? undefined : layout ? "pointer" : "text"}
 			onMouseEnter={(event) => {
+				if (live) return;
 				event.stopPropagation();
 				chrome.onHover(block.id);
 			}}
-			onMouseLeave={() => chrome.onHover(null)}
+			onMouseLeave={() => { if (!live) chrome.onHover(null); }}
 			onMouseOver={(event) => {
+				if (live) return;
 				// nested frames: the innermost hovered frame wins the highlight
 				event.stopPropagation();
 				if (chrome.hoverId !== block.id) chrome.onHover(block.id);
 			}}
 			onClickCapture={(event) => {
+				// Inline editing is delegated by SeamlessPageEditor before this frame.
+				if (chrome.seamlessMode && !layout) return;
 				// chrome controls nested inside this frame (insert zones, dropwells)
 				// own their clicks — capturing them would select the container
 				// instead of opening the menu
@@ -513,7 +528,7 @@ const BlockFrame = ({
 				chrome.onSelect(block.id, event.currentTarget as HTMLElement);
 			}}
 		>
-			{(hovered || selected) && (
+			{layout && (hovered || selected) && (
 				<Flex
 					className="ttBlockChip"
 					position="absolute"
@@ -572,7 +587,7 @@ const BlockFrame = ({
 							onClick={(event: React.MouseEvent) => {
 								event.preventDefault();
 								event.stopPropagation();
-								const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+								const rect = builderRect(event.currentTarget);
 								chrome.onSelect(block.id, event.currentTarget as HTMLElement);
 								chrome.onContextMenu?.(block.id, rect.left, rect.bottom + 6, true);
 							}}
@@ -601,7 +616,7 @@ const BlockFrame = ({
 							onClick={(event: React.MouseEvent) => {
 								event.preventDefault();
 								event.stopPropagation();
-								const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+								const rect = builderRect(event.currentTarget);
 								chrome.onSelect(block.id, event.currentTarget as HTMLElement);
 								chrome.onContextMenu?.(block.id, rect.left, rect.bottom + 6);
 							}}
@@ -614,20 +629,20 @@ const BlockFrame = ({
 			{children}
 			{/* overlay insert strips on the parent-axis seams — zero layout
 			    impact, so the edit canvas is pixel-identical to view mode */}
-			<EdgeInsertStrip
+			{layout && <EdgeInsertStrip
 				side={parentDirection === 'column' ? 'top' : 'left'}
 				containerId={containerId}
 				index={indexInParent}
 				chrome={chrome}
 				testIdPrefix={testIdPrefix}
-			/>
-			<EdgeInsertStrip
+			/>}
+			{layout && <EdgeInsertStrip
 				side={parentDirection === 'column' ? 'bottom' : 'right'}
 				containerId={containerId}
 				index={indexInParent + 1}
 				chrome={chrome}
 				testIdPrefix={testIdPrefix}
-			/>
+			/>}
 		</Box>
 	);
 };
@@ -763,8 +778,9 @@ const ComponentBlockView = ({
 	const source = useBlockSource(block, argValues, interactive);
 	const resolved = React.useMemo(() => {
 		if (!crystal?.render) return null;
-		return resolveTemplate(crystal.render, { ...argValues, ...source.scope });
-	}, [crystal?.render, argValues, source.scope]);
+		const authored = componentTextOverrides(crystal.render, block.args, chrome?.seamlessMode === 'edit');
+		return resolveTemplate(authored.render, { ...argValues, ...source.scope });
+	}, [crystal?.render, argValues, source.scope, block.args, chrome?.seamlessMode]);
 
 	// Inline text editing INSIDE components: double-click a piece of rendered
 	// text and, when it matches a string/text arg's current value verbatim, a
@@ -781,7 +797,7 @@ const ComponentBlockView = ({
 			return null;
 		});
 	}, [block.args, block.id, chrome]);
-	const handleDoubleClick = chrome
+	const handleDoubleClick = chrome && !chrome.seamlessMode
 		? (event: React.MouseEvent) => {
 				const target = event.target as HTMLElement;
 				const text = (target.textContent || '').trim();
@@ -825,7 +841,7 @@ const ComponentBlockView = ({
 	}
 
 	return (
-		<Box onClickCapture={interactive ? onTtAction : undefined} onDoubleClickCapture={handleDoubleClick} width="100%">
+		<Box onClickCapture={interactive && (!chrome || chrome.seamlessMode === 'view') ? onTtAction : undefined} onDoubleClickCapture={handleDoubleClick} width="100%">
 			{isChakraThingNode(resolved) ? (
 				<ChakraThingRenderer node={resolved as ChakraThingNode} />
 			) : (
@@ -880,6 +896,8 @@ const ComponentBlockView = ({
 };
 
 export type WebpageBlocksRendererProps = {
+	// Keep the live DOM mounted as editor overlays appear or change modes.
+	seamless?: boolean;
 	blocks: WebpageBlock[];
 	componentsByRef: ComponentsByRef;
 	// wire ttAction clicks (owner-viewing surfaces only — the PreviewModal
@@ -951,18 +969,18 @@ const BlockView = (
 	if (block.type === 'text') {
 		const typo = mergedTypo;
 		const asTag = block.tag || TEXT_STYLE_AS[block.style || 'body'] || 'p';
-		if (chrome && chrome.selectedId === block.id && chrome.onUpdate) {
+		if (chrome && !chrome.seamlessMode && chrome.selectedId === block.id && chrome.onUpdate) {
 			// selected text edits IN PLACE with the FULL Editor.js editor —
 			// headings, lists, quotes, tables, inline formatting, right there on
 			// the canvas (the drawer's modal remains the "advanced" surface)
 			body = (
-				<InlineRichTextEditor
+				<React.Suspense fallback={null}><InlineRichTextEditor
 					history={textHistory}
 					html={block.html}
 					text={block.text}
 					typography={typo}
 					onChange={(patch) => chrome.onUpdate?.(block.id, patch)}
-				/>
+				/></React.Suspense>
 			);
 		} else if (block.html) {
 			// rich text renders as a styled flow container (never inside a <p> —
@@ -979,7 +997,7 @@ const BlockView = (
 		// protocol screen as every other untrusted URL, external targets drop
 		// the opener, and the edit canvas never navigates on click
 		const href = typeof block.href === 'string' && isSafeUrl(block.href) ? mediaUrl(block.href) : null;
-		if (href && !(chrome && chrome.selectedId === block.id)) {
+		if (href && !(chrome && !chrome.seamlessMode && chrome.selectedId === block.id)) {
 			// external = leaves this origin, decided on the RESOLVED url rather
 			// than a scheme prefix: a stored `/\host` href (written before the
 			// gate refused the backslash form) resolves off-site, and it must
@@ -996,7 +1014,7 @@ const BlockView = (
 					color="inherit"
 					textDecoration="none"
 					_hover={{ textDecoration: 'none', opacity: 0.92 }}
-					onClick={chrome ? (event: React.MouseEvent) => event.preventDefault() : undefined}
+					onClick={chrome && chrome.seamlessMode !== 'view' ? (event: React.MouseEvent) => event.preventDefault() : undefined}
 					data-testid="text-block-link"
 				>
 					{body}
@@ -1120,7 +1138,7 @@ const BlockView = (
 		);
 	}
 
-	if (!chrome) {
+	if (!chrome && !props.seamless) {
 		// native sections render BARE in view mode — a full-width wrapper would
 		// defeat page-owned shells that center their children (e.g. /welcome)
 		if (block.type === 'native') return <>{body}</>;
@@ -1150,19 +1168,11 @@ const BlockList = (
 ) => {
 	const { blocks, chrome, containerId, parentDirection = 'column' } = props;
 	const isRoot = containerId === null;
-	if (!chrome) {
-		return (
-			<>
-				{blocks.map((block) => (
-					<BlockView key={block.id} {...props} block={block} isRoot={isRoot} parentDirection={parentDirection} />
-				))}
-			</>
-		);
-	}
+	const showLayout = !!chrome && (!chrome.seamlessMode || chrome.seamlessMode === 'layout' || (chrome.seamlessMode === 'builder' || chrome.seamlessMode === 'container'));
 	// an empty list renders one tall dropwell (never a slim line that could
 	// collide with sibling zones); the end of the root list keeps its zone
 	// visible so a page always invites another block
-	if (blocks.length === 0) {
+	if (blocks.length === 0 && chrome && showLayout) {
 		const well = (
 			<DropWell
 				containerId={containerId}
@@ -1191,7 +1201,7 @@ const BlockList = (
 					indexInParent={index}
 				/>
 			))}
-			{isRoot ? (
+			{isRoot && chrome && showLayout ? (
 				<DropWell
 					containerId={null}
 					index={blocks.length}

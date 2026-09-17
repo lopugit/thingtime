@@ -110,7 +110,9 @@ export const ALLOWED_PROPS = new Set([
 	// click wrapper reads to run an action AS the viewer. Values are plain
 	// strings (an action key/id and a JSON inputs blob); no URL or JS sink.
 	'data-tt-action',
-	'data-tt-action-inputs'
+	'data-tt-action-inputs',
+	// Inert editor address, validated against the authored template before editing.
+	'data-tt-label-key'
 ]);
 
 const sanitizeStyle = (style: unknown): React.CSSProperties | undefined => {

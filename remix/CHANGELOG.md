@@ -34,6 +34,13 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-17 — Shared seamless builder on `/builder` and `/p`: live inline text
+  editing, View/Layout/Builder/Container/Run modes, overlay inspector, real
+  responsive device previews, and a top Go to page link. Dedicated live output
+  fills the available space; `/t/` hides Thingtime chrome except its tiny credit
+  link. Local PM2 validation uses worktree ports 11060–11062; Tailscale is
+  unavailable because its installed CLI target is missing. — Codex (AI)
+
 - 2026-09-16 — **Codex (AI):** Fix image uploads hitting the legacy 30/hour start limit: default to 60/minute, upgrade only the exact persisted legacy policy, preserve custom rules, and honor bounded Retry-After retries without changing upload identity. Show the actual wait on persistent throttling; add policy, cancellation, route and capability regressions.
 
 - 2026-09-16: Enable attachment paste/drop directly in Lopu and Messenger message fields; clear Lopu media on server acceptance instead of reply completion. Added synthetic browser regression coverage. — Codex (AI)

@@ -2,6 +2,26 @@
 
 https://thingtime.com
 
+### Seamless page editor
+
+`/builder?page=<id>` and `/p/<id>` share `LiveWebpage` and its lazy
+`SeamlessPageEditor`. Edit changes authored text in place; View runs the page
+with the inspector available; Layout arranges blocks; Builder disables page
+data; Container adds the classic frame. Run saves and reloads `/p/<id>?mode=run`
+without editor controls. Standalone opens `/t/<id>` with only a small credit
+link back to `/p/`. All paths use the same resolver, runtime and access checks.
+Responsive previews use a style-mirrored iframe portal for real CSS media
+queries; no second app or API runtime is booted in the frame. Inline drafts
+publish only when saved. Switching viewport presentation can remount form DOM;
+switching Edit/View/Layout preserves it.
+
+Local verification for `thingtime-seamless-builder`: `http://localhost:11060`
+(Vite 11060, HMR 11061, Nitro 11062), started with `npm run web-pms` using the
+existing worktree port resolver. `/tests/seamless-builder.html` is a Vite-only,
+non-publishing editor fixture. Tailscale/Funnel is unavailable on this machine:
+the configured CLI points at a missing `/Applications/Tailscale.app` executable.
+No new secrets or external setup are required by these editor features.
+
 Thingtime is a powerful platform for storing and sharing information of all kinds. Whether you want to keep track of your personal notes, collaborate on a project with your team, or build a new app that relies on rich data, Thingtime has you covered.
 
 With Thingtime, you can create and share any abstract data structure you want, or store any practical piece of information and share it for people and machines to use equally. Thingtime is not only a platform, but also an ecosystem that empowers developers and users alike to build, share, and utilize all kinds of data and knowledge.

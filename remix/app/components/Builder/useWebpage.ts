@@ -87,7 +87,7 @@ export const resolveWebpageClient = async (target: WebpageTarget): Promise<Resol
 // Lopu bridge as read-only so a streamed builder patch can never target them;
 // everything else (BuilderCanvas, SiteBlocksEditor — which the host never
 // mounts under /p/) is editable. Callers can always say so explicitly.
-export const isReadOnlyWebpageViewerRoute = (pathname: string): boolean => /^\/p\//.test(pathname);
+export const isReadOnlyWebpageViewerRoute = (pathname: string): boolean => /^\/(p|t)\//.test(pathname);
 
 export type UseWebpageDraftOptions = {
 	// whether Lopu may paint live builder patches into this draft
