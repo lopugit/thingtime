@@ -117,10 +117,11 @@ class LopuHostBoundary extends React.Component<{ children: React.ReactNode }, { 
 	}
 }
 
-const HeaderButton = (props: { title: string; onClick: () => void; children: React.ReactNode; active?: boolean }) => (
+const HeaderButton = (props: { title: string; onClick: () => void; children: React.ReactNode; active?: boolean; href?: string }) => (
 	<Center
-		as="button"
-		type="button"
+		as={props.href ? 'a' : 'button'}
+		type={props.href ? undefined : 'button'}
+		href={props.href}
 		data-lopu-control
 		aria-label={props.title}
 		aria-pressed={props.active}
@@ -132,7 +133,14 @@ const HeaderButton = (props: { title: string; onClick: () => void; children: Rea
 		background={props.active ? LOPU_UI.surfaceAlt : 'transparent'}
 		sx={{ ...lopuIconButtonSx, color: props.active ? LOPU_UI.ink : LOPU_UI.muted }}
 		_focusVisible={{ outline: `2px solid ${LOPU_UI.ink}`, outlineOffset: '1px' }}
-		onClick={props.onClick}
+		onClick={(event: React.MouseEvent) => {
+			if (props.href) {
+				// Leave modified clicks to the browser, including opening a new tab/window.
+				if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+				event.preventDefault();
+			}
+			props.onClick();
+		}}
 	>
 		{props.children}
 	</Center>
@@ -841,7 +849,7 @@ export const LopuHost = () => {
 					{minimised ? <ChevronDown size={14} strokeWidth={2} style={{ transform: 'rotate(180deg)' }} /> : <Minus size={14} strokeWidth={2} />}
 				</HeaderButton>
 			)}
-			<HeaderButton title={voiceMode ? "Open Lopu's voice page" : "Open Lopu's page"} onClick={openFull}>
+			<HeaderButton title={voiceMode ? "Open Lopu's voice page" : "Open Lopu's page"} href={voiceMode ? LOPU_VOICE_PATH : '/lopu'} onClick={openFull}>
 				<Maximize2 size={13} strokeWidth={2} />
 			</HeaderButton>
 			<HeaderButton title="Close (Esc)" onClick={close}>
