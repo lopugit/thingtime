@@ -12,7 +12,7 @@ import { after, beforeEach, mock, test } from 'node:test';
 // streaming parsers, the request shapes and the fall-through are real.
 
 type AnthropicBlock = { type: 'text'; text: string } | { type: 'tool_use'; id: string; name: string; inputChunks: string[] };
-type AnthropicPlan = { blocks?: AnthropicBlock[]; stopReason?: 'end_turn' | 'tool_use' | 'max_tokens'; status?: number };
+type AnthropicPlan = { blocks?: AnthropicBlock[]; stopReason?: 'end_turn' | 'tool_use' | 'max_tokens' | 'pause_turn'; status?: number };
 type OpenAiToolCall = { id: string; name: string; argumentChunks: string[] };
 // `plain` answers a NON-streaming request with a whole chat.completion (an
 // OpenAI-compatible endpoint without streaming); `rejectStreaming` refuses a
@@ -174,7 +174,7 @@ mock.module(new URL('../ai/claudeOAuth.ts', import.meta.url).href, { exports: {
   createClaudeOAuthClient: (options: any = {}) => new Anthropic({ apiKey: null, authToken: options.token || process.env.CLAUDE_CODE_OAUTH_TOKEN, baseURL: process.env.ANTHROPIC_BASE_URL })
 } });
 
-const { streamLopuChatTurn, LOPU_CHAT_MAX_TOOL_EXECUTIONS, LOPU_FALLBACK_VAULT, createTtToolTextParser, unwrapEnvelopeContent, wrapBareToolCalls } = await import('./chat.ts');
+const { streamLopuChatTurn, LOPU_FALLBACK_VAULT, createTtToolTextParser, unwrapEnvelopeContent, wrapBareToolCalls } = await import('./chat.ts');
 const { parseAiWorkflowModelOptionId } = await import('../settings/prConflictResolverModelWaterfallCore.ts');
 const { LOPU_VAULT_HOST_NOT_ALLOWED_REASON } = await import('./vaultProviders.ts');
 
@@ -547,31 +547,32 @@ test('a destructive tool stops for the user (confirm → tool_result needsConfir
   assert.equal(text(approved.events), 'Gone.');
 });
 
-test('the tool budget refuses the overflow, emits an error, and forces a final text hop with tool_choice none', async () => {
-  const many: AnthropicBlock[] = Array.from({ length: LOPU_CHAT_MAX_TOOL_EXECUTIONS + 1 }, (_, index) => ({
-    type: 'tool_use',
-    id: `toolu_${index}`,
-    name: 'navigate',
-    inputChunks: [JSON.stringify({ path: `/p/${index}` })]
-  }));
-  anthropicPlans.push({ blocks: many, stopReason: 'tool_use' }, { blocks: [{ type: 'text', text: 'Wrapping up.' }], stopReason: 'end_turn' });
+test('a tool batch beyond the former 24-call cap executes completely', async () => {
+ const many: AnthropicBlock[] = Array.from({ length: 30 }, (_, index) => ({ type: 'tool_use', id: `toolu_${index}`, name: 'navigate', inputChunks: [JSON.stringify({ path: `/p/${index}` })] }));
+ anthropicPlans.push({ blocks: many, stopReason: 'tool_use' }, { blocks: [{ type: 'text', text: 'Done.' }], stopReason: 'end_turn' });
+ const { events, outcome } = await collect(turn('go everywhere', 'claude-opus-5'));
+ assert.equal(events.filter(event => event.type === 'tool_result' && event.ok).length, 30);
+ assert.equal(toolCalls.length, 30); assert.equal(outcome.stopReason, 'end_turn');
+ assert.equal(events.some(event => event.type === 'error'), false);
+ assert.deepEqual(anthropicRequests[1].body.tool_choice, { type: 'auto' });
+});
 
-  const { events, outcome } = await collect(turn('go everywhere', 'claude-opus-5'));
+test('local execution continues beyond twelve hops and four elapsed minutes', async () => {
+ for (let i = 0; i < 16; i++) anthropicPlans.push({ blocks: [{ type: 'tool_use', id: `toolu_${i}`, name: 'navigate', inputChunks: ['{}'] }], stopReason: 'tool_use' });
+ anthropicPlans.push({ blocks: [{ type: 'text', text: 'Complete.' }], stopReason: 'end_turn' });
+ let clock = 0;
+ const { outcome } = await collect(turn('keep going', 'claude-opus-5', { deps: { runTool: fakeRunTool, now: () => clock += 300_000 } }));
+ assert.equal(outcome.stopReason, 'end_turn'); assert.equal(toolCalls.length, 16); assert.equal(outcome.hops, 17);
+});
 
-  const results = events.filter((event) => event.type === 'tool_result');
-  assert.equal(results.length, LOPU_CHAT_MAX_TOOL_EXECUTIONS + 1);
-  assert.equal(results.slice(0, LOPU_CHAT_MAX_TOOL_EXECUTIONS).every((event) => event.ok), true);
-  assert.equal(results.at(-1).ok, false);
-  assert.match(results.at(-1).summary, /at most 24 tools/);
-  assert.equal(toolCalls.length, LOPU_CHAT_MAX_TOOL_EXECUTIONS);
-  const error = events.find((event) => event.type === 'error');
-  assert.match(error.message, /24-tool limit/);
-  assert.equal(outcome.stopReason, 'tool_limit');
-  assert.equal(text(events), 'Wrapping up.');
-  assert.deepEqual(anthropicRequests[1].body.tool_choice, { type: 'none' });
-  const toolResults = anthropicRequests[1].body.messages.at(-1).content;
-  assert.equal(toolResults.length, LOPU_CHAT_MAX_TOOL_EXECUTIONS + 1);
-  assert.equal(toolResults.at(-1).is_error, true);
+test('hosting checkpoints occur after completed tools without forcing a wrap-up or interrupting a write', async () => {
+ process.env.VERCEL = '1';
+ anthropicPlans.push({ blocks: [{ type: 'tool_use', id: 'toolu_1', name: 'create_page', inputChunks: ['{"name":"Once"}'] }], stopReason: 'tool_use' });
+ let clock = 0;
+ const { events, outcome } = await collect(turn('build', 'claude-opus-5', { deps: { runTool: fakeRunTool, now: () => clock += 65_000 } }));
+ assert.equal(outcome.stopReason, 'checkpoint'); assert.equal(toolCalls.length, 1);
+ assert.equal(outcome.toolCalls[0].ok, true); assert.equal(anthropicRequests.length, 1);
+ assert.equal(events.some(event => event.type === 'error'), false);
 });
 
 test('a provider error after output keeps what streamed, emits a retryable error, and never retries another provider', async () => {
@@ -851,4 +852,34 @@ test('Both provider transports receive actual image/PDF content and retain it af
   const content = openAiRequests[0].body.messages.at(-1).content;
   assert.equal(content[1].image_url.url, 'data:image/png;base64,cGl4ZWxz');
   assert.equal(content[2].file.file_data, 'data:application/pdf;base64,cGRm');
+});
+
+
+test('an Anthropic pause_turn resumes the exact assistant content instead of reporting completion', async () => {
+ anthropicPlans.push({ blocks: [{ type: 'text', text: 'Still working. ' }], stopReason: 'pause_turn' }, { blocks: [{ type: 'text', text: 'Now complete.' }], stopReason: 'end_turn' });
+ const { events, outcome } = await collect(turn('finish it', 'claude-opus-5'));
+ assert.equal(outcome.stopReason, 'end_turn'); assert.equal(anthropicRequests.length, 2);
+ assert.deepEqual(anthropicRequests[1].body.messages.at(-1), { role: 'assistant', content: [{ type: 'text', text: 'Still working. ', citations: null }] });
+ assert.equal(text(events), 'Still working. Now complete.');
+});
+
+
+test('an unexpected tool failure waits for concurrent writes and retains their receipts', async () => {
+  anthropicPlans.push({ blocks: [
+    { type: 'tool_use', id: 'failure', name: 'create_page', inputChunks: ['{}'] },
+    { type: 'tool_use', id: 'success', name: 'create_page', inputChunks: ['{}'] }
+  ], stopReason: 'tool_use' });
+  let completed = false;
+  const runTool = async (call: { id: string }) => {
+    if (call.id === 'failure') throw new Error('Unexpected failure');
+    await new Promise(resolve => setTimeout(resolve, 20));
+    completed = true;
+    return { ok: true, summary: 'Saved once', data: { id: 'saved-thing' } };
+  };
+  const { outcome, events } = await collect(turn('save both', 'claude-opus-5', { deps: { runTool } }));
+  assert.equal(completed, true);
+  assert.equal(outcome.stopReason, 'error');
+  assert.equal(outcome.toolCalls.length, 1);
+  assert.equal(outcome.toolCalls[0].summary, 'Saved once');
+  assert.ok(events.some(event => event.type === 'tool_result' && event.id === 'success'));
 });

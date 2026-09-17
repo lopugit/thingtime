@@ -238,3 +238,26 @@ test('two operation ids cannot concurrently execute against one existing chat', 
 	release!();
 	await Promise.all(pending);
 });
+
+
+test('a healthy worker renews its lease beyond the old task deadline without aborting', async () => {
+ mock.timers.enable({ apis: ['setInterval', 'setTimeout', 'Date'], now: new Date('2026-09-17T00:00:00Z') });
+ let release!: () => void;
+ let workerSignal!: AbortSignal;
+ const gate = new Promise<void>(resolve => { release = resolve; });
+ try {
+  await startBackgroundTask(request('long-work'), async req => {
+   workerSignal = req.signal;
+   await gate;
+   return new Response('{"type":"done","stopReason":"end_turn"}\n', { headers: { 'Content-Type': 'application/x-ndjson' } });
+  });
+  for (let i = 0; i < 20; i++) {
+   mock.timers.tick(20_000);
+   await new Promise(resolve => setImmediate(resolve));
+   assert.ok(rows[0].deadlineAt.getTime() > Date.now());
+   assert.equal(workerSignal.aborted, false);
+  }
+  release(); await Promise.all(pending);
+  assert.equal(rows[0].crystal.status, 'completed');
+ } finally { release?.(); await Promise.all(pending); mock.timers.reset(); }
+});

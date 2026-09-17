@@ -7,8 +7,10 @@ import { ChevronDown, Maximize2, Mic, Minus, X } from 'lucide-react';
 
 import { LopuActivityBadge, LopuRingAvatar, useLopuStreamingActivity } from './LopuActivityBadge';
 import { LopuChatView } from './LopuChatView';
+import { LopuWindowConversations } from './LopuWindowConversations';
 import { getLopuStoreServerSnapshot, getLopuStoreSnapshot, selectLopuProviderNames, setLopuSettings, subscribeLopuStore, type LopuVaultProvider } from './lopuChatStore';
 import { useLopuAccount } from './useLopuAccount';
+import { handlesLopuLinkInApp } from './lopuLinkActivation';
 import { vaultProviderUnavailableReason } from './lopuProviderCore';
 import { LopuVoiceSurface, lopuVoicePhaseLabel, type LopuVoicePhase } from './LopuVoiceControls';
 import { LOPU_UI, lopuIconButtonSx, lopuRainbowRing } from './lopuTheme';
@@ -16,6 +18,7 @@ import {
 	LOPU_LAUNCHER_BOTTOM_INSET,
 	LOPU_LAUNCHER_INSET,
 	LOPU_LAUNCHER_SIZE,
+	LOPU_PAGE_PATH,
 	LOPU_VOICE_PATH,
 	LOPU_WINDOW_MARGIN,
 	LOPU_WINDOW_MIN_SIZE,
@@ -117,10 +120,10 @@ class LopuHostBoundary extends React.Component<{ children: React.ReactNode }, { 
 	}
 }
 
-const HeaderButton = (props: { title: string; onClick: () => void; children: React.ReactNode; active?: boolean }) => (
+const HeaderButton = (props: { title: string; onClick: () => void; children: React.ReactNode; active?: boolean; href?: string }) => (
 	<Center
-		as="button"
-		type="button"
+		as={props.href ? 'a' : 'button'}
+		{...(props.href ? { href: props.href } : { type: 'button' as const })}
 		data-lopu-control
 		aria-label={props.title}
 		aria-pressed={props.active}
@@ -132,7 +135,14 @@ const HeaderButton = (props: { title: string; onClick: () => void; children: Rea
 		background={props.active ? LOPU_UI.surfaceAlt : 'transparent'}
 		sx={{ ...lopuIconButtonSx, color: props.active ? LOPU_UI.ink : LOPU_UI.muted }}
 		_focusVisible={{ outline: `2px solid ${LOPU_UI.ink}`, outlineOffset: '1px' }}
-		onClick={props.onClick}
+		onClick={(event: React.MouseEvent) => {
+			if (props.href) {
+				// Leave modified clicks to the browser, including opening a new tab/window.
+				if (!handlesLopuLinkInApp(event)) return;
+				event.preventDefault();
+			}
+			props.onClick();
+		}}
 	>
 		{props.children}
 	</Center>
@@ -522,7 +532,7 @@ export const LopuHost = () => {
 			// an open menu/picker/popover inside the window (model chip,
 			// composer picker, voice gear) owns this Escape — it closes the
 			// menu, not the window
-			if (windowRef.current?.querySelector('[aria-expanded="true"]')) {
+			if (windowRef.current?.querySelector('[aria-expanded="true"]:not([data-lopu-conversations-toggle])')) {
 				return;
 			}
 			setOpen(false);
@@ -547,10 +557,14 @@ export const LopuHost = () => {
 		};
 	}, [showSheet]);
 
+	// one destination for both the expand control's href and the in-app
+	// navigation, so a new tab and a plain click can never land anywhere else
+	const fullPath = voiceMode ? LOPU_VOICE_PATH : LOPU_PAGE_PATH;
+
 	const openFull = React.useCallback(() => {
 		setOpen(false);
-		navigate(voiceMode ? LOPU_VOICE_PATH : '/lopu');
-	}, [navigate, setOpen, voiceMode]);
+		navigate(fullPath);
+	}, [fullPath, navigate, setOpen]);
 
 	const close = React.useCallback(() => {
 		setOpen(false);
@@ -841,7 +855,7 @@ export const LopuHost = () => {
 					{minimised ? <ChevronDown size={14} strokeWidth={2} style={{ transform: 'rotate(180deg)' }} /> : <Minus size={14} strokeWidth={2} />}
 				</HeaderButton>
 			)}
-			<HeaderButton title={voiceMode ? "Open Lopu's voice page" : "Open Lopu's page"} onClick={openFull}>
+			<HeaderButton title={voiceMode ? "Open Lopu's voice page" : "Open Lopu's page"} href={fullPath} onClick={openFull}>
 				<Maximize2 size={13} strokeWidth={2} />
 			</HeaderButton>
 			<HeaderButton title="Close (Esc)" onClick={close}>
@@ -853,7 +867,9 @@ export const LopuHost = () => {
 	const body = (
 		<Flex flex="1" minHeight={0} flexDirection="column" display={minimised ? 'none' : 'flex'}>
 			<LopuHostBoundary>
-				{voiceMode ? <LopuVoiceSurface compact onOpenFull={openFull} onPhaseChange={setVoicePhase} /> : <LopuChatView compact showConversations={false} onOpenFull={openFull} />}
+				<LopuWindowConversations wide={!isMobile && geometry.width >= 680}>
+					{voiceMode ? <LopuVoiceSurface compact onOpenFull={openFull} onPhaseChange={setVoicePhase} /> : <LopuChatView compact showConversations={false} onOpenFull={openFull} />}
+				</LopuWindowConversations>
 			</LopuHostBoundary>
 		</Flex>
 	);

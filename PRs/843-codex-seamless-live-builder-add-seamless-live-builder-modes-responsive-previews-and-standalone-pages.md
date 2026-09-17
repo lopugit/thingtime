@@ -58,3 +58,8 @@ presentations remounts form DOM; switching editing modes preserves it. Global
 site blocks retain their existing specialized editor. Existing native-site
 sections still render when opened from the builder. No API endpoints or
 permission contracts were changed.
+
+Main integration (2026-09-17): reconciled main `6b9d23595` before the
+authorized merge. Builder source merged unchanged; changelog entries from both
+branches were retained, and the generated graph was restored as a complete
+snapshot then refreshed against the combined source.

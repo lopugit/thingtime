@@ -13,7 +13,7 @@ import {
 	AI_TASK_HEADER,
 	AI_TASK_OWNER_HEADER,
 	AI_TASK_KIND,
-	AI_TASK_MAX_MS,
+	AI_TASK_LEASE_MS,
 	AI_TASK_MAX_BYTES,
 	AI_TASK_OPERATIONS,
 	validAiTaskRequestId,
@@ -213,7 +213,7 @@ export const startBackgroundTask = async (request: Request, execute: (request: R
 		secure: new Binary(Buffer.alloc(0)),
 		createdAt: now,
 		updatedAt: now,
-		deadlineAt: new Date(now.getTime() + AI_TASK_MAX_MS + 15_000),
+		deadlineAt: new Date(now.getTime() + AI_TASK_LEASE_MS),
 		outputExpiresAt: new Date(now.getTime() + 7 * 86_400_000),
 		crystal: {
 			outputExpired: false,
@@ -264,7 +264,8 @@ export const startBackgroundTask = async (request: Request, execute: (request: R
 				'crystal.stage': stage,
 				'crystal.responseStatus': responseStatus, 'crystal.retryAfter': retryAfter,
 				'crystal.contentType': contentType,
-				'crystal.error': taskError
+				'crystal.error': taskError,
+    deadlineAt: new Date(Date.now() + AI_TASK_LEASE_MS)
 			};
 			saving = saving.then(async () => {
 				await things.updateOne({ ...filter, 'crystal.status': 'running' }, { $set: update, ...(terminal ? { $unset: { uniqueKeys: '' } } : {}) });
@@ -280,14 +281,16 @@ export const startBackgroundTask = async (request: Request, execute: (request: R
 				if (!current || current.cancelRequested) {
 					stopped = true;
 					abort.abort();
-				}
+				} else {
+     const renewed = await things.updateOne({ ...filter, 'crystal.status': 'running' }, { $set: { deadlineAt: new Date(Date.now() + AI_TASK_LEASE_MS) } });
+     if (!renewed.matchedCount) abort.abort();
+    }
 			} catch {
 				abort.abort();
 			} finally {
 				checking = false;
 			}
 		}, 1500);
-		const deadline = setTimeout(() => abort.abort(), AI_TASK_MAX_MS);
 		try {
 			let response: Response;
 			try {
@@ -342,7 +345,7 @@ export const startBackgroundTask = async (request: Request, execute: (request: R
 			if (response.ok && contentType.includes('ndjson') && !sawDone)
 				taskError ||= 'The reply connection ended before completion. Review its saved output and continue.';
 			if (!response.ok) taskError ||= 'This request could not complete. Open its saved result for details.';
-			if (abort.signal.aborted && !stopped) taskError ||= 'This task reached its time limit. Its saved output is kept.';
+			if (abort.signal.aborted && !stopped) taskError ||= 'This task lost its worker connection. Its saved output is kept.';
 			status = stopped ? 'stopped' : taskError ? 'needs-attention' : 'completed';
 			stage = stopped ? 'Stopped' : taskError ? 'Needs attention' : 'Completed';
 		} catch {
@@ -356,7 +359,6 @@ export const startBackgroundTask = async (request: Request, execute: (request: R
 			}
 		} finally {
 			clearInterval(heartbeat);
-			clearTimeout(deadline);
 			abort.abort();
 			await save();
 		}

@@ -1,3 +1,4 @@
+import { LOPU_CONTINUE_PROMPT, shouldAutoContinueLopuReply } from './lopuRecovery';
 import { bindAiTaskOwner, getAiTasks, refreshAiTasks, readAiTaskOutput, stopAiTaskRequest } from './aiTasks.client';
 // The Lopu chat module store (design note §3.1/§3.2): ONE state shared by the
 // /lopu page and the floating window (LopuHost), read through
@@ -200,6 +201,7 @@ let state: LopuStoreState = createInitialState();
 const listeners = new Set<() => void>();
 let client: LopuApiClient | null = null;
 const controllers = new Map<string, AbortController>();
+const stoppedRequests = new Set<string>();
 let noticeSeq = 0;
 let emitScheduled = false;
 
@@ -406,6 +408,7 @@ export const hydrateLopuStore = (userId: string | null): LopuStoreState => {
 	accountGeneration++;
 	for (const controller of controllers.values()) controller.abort();
 	controllers.clear();
+ stoppedRequests.clear();
 	bindAiTaskOwner(userId);
 	const chatsCache = userId ? readLocalCache<ChatsCache>(lopuChatsCacheKey(userId)) : null;
 	const modelsCache = readLocalCache<ModelsCache>(LOPU_MODELS_CACHE_KEY);
@@ -947,6 +950,21 @@ export type SendLopuResult =
  * `done` lands. Resolves after the stream ends (or fails).
  */
 export const sendLopuMessage = async (text: string, options: SendLopuOptions = {}): Promise<SendLopuResult> => {
+ const generation = accountGeneration;
+ let continuation: LopuContinuation | undefined;
+ for (;;) {
+  const result = await sendLopuMessagePart(text, options, continuation);
+  if (!result.next || generation !== accountGeneration) return result;
+  text = LOPU_CONTINUE_PROMPT;
+  options = result.next.options;
+  continuation = result.next.continuation;
+ }
+};
+
+type LopuContinuation = { chatId: string; previousRequestId: string };
+type LopuPartResult = SendLopuResult & { next?: { options: SendLopuOptions; continuation: LopuContinuation } };
+const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, continuation?: LopuContinuation): Promise<LopuPartResult> => {
+ const chatId = continuation?.chatId ?? state.activeChatId;
 	const trimmed = (text || '').trim();
 	if (!trimmed) return { ok: false, error: 'Say something first', text };
 	if (!client) return { ok: false, error: 'Lopu is not connected yet', text };
@@ -954,7 +972,7 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 		notice('Sign in to chat with Lopu 🦄', { status: 'info' });
 		return { ok: false, error: 'Sign in to chat with Lopu', text };
 	}
-	if (Object.values(state.turns).some(turn => turn.chatId === state.activeChatId && isLopuTurnActive(turn)) || getAiTasks().some(task => task.chatId === state.activeChatId && task.status === 'running')) {
+	if (Object.values(state.turns).some(turn => turn.chatId === chatId && isLopuTurnActive(turn)) || getAiTasks().some(task => task.chatId === chatId && task.status === 'running' && task.requestId !== continuation?.previousRequestId)) {
 		notice('Lopu is still replying — stop it first or wait a moment ✨', { status: 'info' });
 		return { ok: false, error: 'Lopu is still replying', text };
 	}
@@ -964,9 +982,8 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 	const startingPath = typeof window === 'undefined' ? null : window.location.pathname;
 	const foreground = () => state.activeChatId === (turn.chatId || chatId) && (startingPath === null || window.location.pathname === startingPath);
 	const requestId = uuid();
-	const chatId = state.activeChatId;
 	const settings = mergeSettingsPatch(options.settings || {});
-	if (options.settings && Object.keys(options.settings).length && !sameLopuSettings(settings, state.settings)) {
+	if (!continuation && options.settings && Object.keys(options.settings).length && !sameLopuSettings(settings, state.settings)) {
 		persistSettings(userId, settings);
 		setState({ settings });
 	}
@@ -999,7 +1016,7 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 				const id = next.chatId;
 				if (!id) break;
 				if (!before.meta) options.onAccepted?.();
-				if (state.activeChatId !== id && (state.activeChatId === chatId || state.activeChatId === null)) {
+				if (!continuation && state.activeChatId !== id && (state.activeChatId === chatId || state.activeChatId === null)) {
 					setState({ activeChatId: id });
 				}
 				appendMessages(id, [buildUserMessage(next, userId, id)]);
@@ -1079,9 +1096,11 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 	};
 
 	let failure: string | null = null;
+	let cleanEnd = false;
 	try {
 		const response = await client.reply(body, { signal: abort.signal });
 		await readNdjson(response, onEvent, abort.signal);
+		cleanEnd = true;
 		if (turn.status === 'streaming') commit(markLopuTurnFailed(turn, 'Lopu got cut off before finishing', true));
 	} catch (error) {
 		if (isAbortError(error) || abort.signal.aborted) {
@@ -1133,12 +1152,26 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 	// the server managed to persist (the turn bubble absorbs those rows)
 	if (!chatId) void loadLopuChats();
 	if (!turn.messages.length) void loadLopuMessages(finalChatId);
+	const stopped = stoppedRequests.delete(requestId);
+ if (cleanEnd && !stopped && !abort.signal.aborted && shouldAutoContinueLopuReply(turn)) {
+  // Fresh request IDs let the server persist/account each part independently.
+  // Never resend attachments, acceptance callbacks, spent confirmation grants,
+  // or an old builder snapshot over changes made by the preceding part.
+  notice('Lopu is continuing from its saved progress ✨', { status: 'info' });
+  const page = options.context?.page;
+  const context = options.context ? {
+   route: options.context.route, viewport: options.context.viewport,
+   ...(page ? { page: { id: page.id, source: page.source, pageKey: page.pageKey, siteRoute: page.siteRoute } } : {})
+  } : undefined;
+  return { ok: true, requestId, chatId: finalChatId, next: { options: { settings, context, applyPatches }, continuation: { chatId: finalChatId, previousRequestId: requestId } } };
+ }
 	return { ok: true, requestId, chatId: finalChatId };
 };
 
 /** Stop the in-flight reply (what streamed so far is kept). */
 export const abortLopuTurn = (): void => {
  const turn = Object.values(state.turns).find(turn => turn.chatId === state.activeChatId && isLopuTurnActive(turn));
+ if (turn) stoppedRequests.add(turn.requestId);
  if (turn) void stopAiTaskRequest(turn.requestId).then(() => controllers.get(turn.requestId)?.abort()).catch(() => notice('Could not stop the task. Open Background tasks to try again.', { status: 'error' }));
 };
 
@@ -1219,6 +1252,7 @@ export const selectLopuProviderNames = (snapshot: LopuStoreState): Record<string
 export const resetLopuStoreForTests = () => {
 	for (const controller of controllers.values()) controller.abort();
 	controllers.clear();
+ stoppedRequests.clear();
 	client = null;
 	undoSnapshots.clear();
 	streamingComponentRefs.clear();

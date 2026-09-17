@@ -350,6 +350,20 @@
 
 ## Unified Lopu conversations, scheduled Things and discussions
 
+- [ ] A saved Lopu reply stopped by a tool/hop/time/token limit automatically continues without a fixed count cap with fresh request IDs and the same chat/model. Stop, an account change, pending confirmation, incomplete tool, missing saved assistant, or a truncated stream prevents continuation. Switching chats must not redirect the continuation or change the newly selected model. Continuations do not resend attachments, stale builder blocks, or confirmation grants; provider/network failures keep manual Retry / Continue available. Exceed the former 24 tools, 12 hops and four-minute deadline; a healthy task continues. Hosting checkpoints rotate only after completed tool batches.
+- Browser regression: `/scripts/lopu-send.browser.html` mounts the real chat
+  view, uploader, store and background-task transport with synthetic HTTP. Run
+  the full send checks: type while an upload is held; Send/Enter stay blocked;
+  submission collapses the tray immediately; acceptance clears its files while
+  the reply is still running without deleting committed media; pre-acceptance
+  rejection restores files and preserves newer typing; retry clears correctly.
+  The old disabled-field and unstable imperative-handle guards must fail it.
+
+- [ ] The floating Lopu header expand control is a link to `/lopu` (or
+  `/lopu/voice` in voice mode). Normal click expands in the current tab;
+  Cmd/Ctrl-click, middle-click, Shift-click and the context menu retain native
+  link behavior without closing the original chat. Check desktop and mobile.
+
 - Browser regression fixture: `/scripts/chat-attachments.browser.html` uses the
   production Lopu/Messenger composers and uploader with synthetic HTTP/storage.
   Run its paste/drop checks at desktop and 390px, then inspect both trays and
@@ -993,6 +1007,15 @@ is fixed, and cite the checklist you ran in the PR description.
       unit tests alongside the upload-gate regression test).
 
 ## Social meta / link unfurls (`remix/app/api/utils/meta/socialMeta.ts`, `socialPreview.ts`, `socialCard.ts`)
+
+- [ ] Raw crawler HTML has one matching title, canonical, og:url, og:image and
+      parseable Schema.org JSON-LD graph. Image URLs are absolute 1200×630 PNGs
+      with matching Open Graph/Twitter alt text; GET the actual image bytes.
+      `/things` exposes collection context only, while private/missing/account
+      targets are noindex and have no structured UGC. Query/fragment secrets
+      and user-authored script terminators never become executable markup.
+      Check a freshly composed Messages/Messenger preview separately from old
+      cached bubbles; see `docs/seo-social-metadata.md`.
 
 - [ ] `/invite`, `/branding`, `/`, and an unknown SPA path return the white
       press-kit wordmark PNG as absolute `og:image` and `twitter:image`, with
@@ -7564,3 +7587,9 @@ storage only; do not describe it as a production upload or provider acceptance.
 
 - [ ] Signed out, open `/legal`, all three current `/pages/` documents and their version links on desktop and mobile; scroll to the bottom and confirm readable text and no overflow. Select the archived privacy version and return to current. Unknown versions must show a not-found message, never current text.
 - [ ] Copy privacy URL and Apple TV text, compare copied text and `.txt` download with the selected document. Deny clipboard permission and verify the selectable fallback. Confirm archived exports carry an archive warning and production URLs never use a preview origin.
+
+### Floating Lopu conversation selection (2026-09-17)
+
+- [ ] Open the floating popup and docked panel, widen past 680px, collapse/reopen Conversations, then shrink to 390px: the full list scrolls independently and the composer stays reachable. Repeat in the mobile sheet and voice mode.
+- [ ] With more than twelve conversations and long titles, select the oldest entry, start New chat, rename, cancel deletion, and open its Messenger link. Selection stays in the popup until a page link is explicitly chosen. Confirm the dedicated Lopu page uses the same list and history.
+- [ ] Open/close Conversations with a draft and attachments present; preserve them. Use keyboard Enter/Space on rows and nested Rename/Delete/Keep/Messenger controls: nested actions must not select a row. Escape in the rename field cancels editing without closing the popup.
