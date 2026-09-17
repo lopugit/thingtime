@@ -55,7 +55,7 @@ export const refreshAiTasks = (): Promise<void> => {
 	const owner = ownerId,
 		generation = ownerGeneration;
 	const work = async () => {
-		await requireThingtimeCapability('api.lopu-background-tasks', '1.0.0');
+		await requireThingtimeCapability('api.lopu-background-tasks', '1.1.0');
 		const response = await fetch(AI_TASK_PATH, { credentials: 'include', cache: 'no-store', headers: { [AI_TASK_OWNER_HEADER]: owner } });
 		if (!response.ok) throw new Error('Task status is temporarily unavailable.');
 		const result = await response.json();
@@ -86,7 +86,8 @@ export const stopAiTask = async (id: string) => {
 		body: JSON.stringify({ id, action: 'stop' })
 	});
 	if (!response.ok && response.status !== 409) throw new Error('Could not stop this task. Try again.');
-	await refreshAiTasks();
+	// A successful Stop must not fail just because the following status read is offline.
+	await refreshAiTasks().catch(() => {});
 };
 export const stopAiTaskRequest = async (requestId: string) => {
 	if (!ownerId) return;
@@ -97,7 +98,8 @@ export const stopAiTaskRequest = async (requestId: string) => {
 		body: JSON.stringify({ requestId, action: 'stop' })
 	});
 	if (!response.ok && response.status !== 409) throw new Error('Could not stop this task. Try again.');
-	await refreshAiTasks();
+	// A successful Stop must not fail just because the following status read is offline.
+	await refreshAiTasks().catch(() => {});
 };
 export const readAiTaskOutput = async (task: AiBackgroundTask) => {
 	const owner = ownerId,
@@ -129,9 +131,9 @@ export const aiTaskFetch = async (url: string, init: RequestInit = {}): Promise<
 	const owner = ownerId,
 		generation = ownerGeneration;
 	if (!operation || !owner || (init.method || 'GET') !== operation.method || (init.body && typeof init.body !== 'string')) return fetch(url, init);
-	await requireThingtimeCapability('api.lopu-background-tasks', '1.0.0');
+	await requireThingtimeCapability('api.lopu-background-tasks', '1.1.0');
 	const versions: Record<string, string> = {
-		'api.lopu-chats-reply': '1.10.0',
+		'api.lopu-chats-reply': '1.11.0',
 		'api.lopu-voice-reply': '1.4.0',
 		'api.lopu-musing': '1.1.0',
 		'api.ai-complete': '1.2.0'

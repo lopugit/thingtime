@@ -45,6 +45,7 @@ export type LopuAccessGrant = {
   account: LopuAccountRecord | null;
   // held only when the caller asked to reserve; release it in a finally
   release: (() => Promise<void>) | null;
+  renew?: () => Promise<void>;
 };
 
 export type LopuAccessResult = LopuAccessGrant | LopuAccessRefusal;
@@ -64,6 +65,7 @@ export const createAssertLopuAccess =
     if (early.ok === false) return early;
     let account: LopuAccountRecord | null = null;
     let release: (() => Promise<void>) | null = null;
+    let renew: (() => Promise<void>) | undefined;
     if (input.billing === 'thingtime' && user) {
       account = await dependencies.ensureAccount(user.id);
       const verdict = evaluateLopuAccess(user, { billing: input.billing, settings, balanceMicros: account.crystal.balanceMicros });
@@ -73,9 +75,10 @@ export const createAssertLopuAccess =
         const reserved = await dependencies.reserveTurn(user.id);
         if (reserved.ok === false) return { ok: false, status: 429, code: LOPU_BUSY_CODE, error: LOPU_BUSY_ERROR };
         release = reserved.release;
+        renew = reserved.renew;
       }
     }
-    return { ok: true, billing: input.billing, settings, verified: lopuUserVerified(user), account, release };
+    return { ok: true, billing: input.billing, settings, verified: lopuUserVerified(user), account, release, ...(renew ? { renew } : {}) };
   };
 
 export const assertLopuAccess = createAssertLopuAccess({ getSettings: getStoredLopuAccessSettings, ensureAccount: ensureLopuAccount, reserveTurn: reserveLopuTurn });

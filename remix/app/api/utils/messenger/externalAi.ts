@@ -200,6 +200,7 @@ export type PublicLopuMessageMeta = {
 	priced?: boolean;
 	balanceMicros?: number | null;
 	toolCalls?: PublicLopuToolCall[];
+	toolReceiptOffset?: number;
 	stopReason?: string | null;
 };
 
@@ -238,6 +239,7 @@ export const publicLopuMessageMeta = (value: unknown): PublicLopuMessageMeta | n
 	if (costMicros !== undefined) meta.costMicros = costMicros;
 	if (typeof raw.priced === 'boolean') meta.priced = raw.priced;
 	if (raw.balanceMicros === null || Number.isSafeInteger(raw.balanceMicros)) meta.balanceMicros = raw.balanceMicros as number | null;
+	if (segmentIndex > 0 && raw.toolReceiptOffset === segmentIndex * LOPU_MAX_TOOL_CALLS) meta.toolReceiptOffset = raw.toolReceiptOffset as number;
 	if (Array.isArray(raw.toolCalls)) {
 		const toolCalls: PublicLopuToolCall[] = [];
 		for (const entry of raw.toolCalls.slice(0, LOPU_MAX_TOOL_CALLS)) {

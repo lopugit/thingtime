@@ -65,8 +65,6 @@ export const DEFAULT_LISTED_LOPU_CHATS = 100;
 // (4000), so a long prompt lands as two plain segments.
 // Voice accepts 12k; the public typed-reply route retains its 8k input cap.
 export const LOPU_USER_TURN_MAX_CHARS = 12000;
-// One assistant reply is at most 15 segment rows; anything longer is cut.
-export const LOPU_ASSISTANT_TURN_MAX_CHARS = 60_000;
 export const LOPU_HISTORY_MAX_CHARS = 60_000;
 export const DEFAULT_LOPU_HISTORY_TURNS = 40;
 export const MAX_LOPU_HISTORY_TURNS = 200;
@@ -310,7 +308,7 @@ const historyToolReceipts = (row: LopuHistoryRow): PublicLopuToolCall[] => {
 	const source = row.crystal?.externalSource;
 	if (source?.access !== 'lopu' || source.provider !== 'lopu' || source.role !== 'assistant') return [];
 	const meta = publicLopuMessageMeta(row.crystal?.lopu);
-	return meta?.role === 'assistant' && meta.segmentIndex === 0 ? meta.toolCalls ?? [] : [];
+	return meta?.role === 'assistant' && (meta.segmentIndex === 0 || meta.toolReceiptOffset === meta.segmentIndex * LOPU_MAX_TOOL_CALLS) ? meta.toolCalls ?? [] : [];
 };
 
 const historicalReceiptText = (receipts: PublicLopuToolCall[]): string => receipts.length
@@ -340,7 +338,7 @@ export const buildLopuHistory = (
 		const last = turns[turns.length - 1];
 		if (last && last.role === role) {
 			last.text += last.key && last.key === key ? text : `\n\n${text}`;
-			last.receipts.push(...receipts.slice(0, LOPU_MAX_TOOL_CALLS - last.receipts.length));
+			last.receipts.push(...receipts);
 			continue;
 		}
 		turns.push({ role, text, key, receipts });
@@ -655,6 +653,18 @@ export const persistLopuUserTurn = async (
 	return { ok: true, message: projected.messages[0]!, messages: projected.messages };
 };
 
+// Store every receipt in bounded relational message segments, rather than
+// silently losing tools after the first twenty when long jobs checkpoint.
+export const splitLopuAssistantSegments = (text: string, toolCalls: unknown) => {
+ const parts = splitLiveMessageText(text || LOPU_EMPTY_REPLY_TEXT, MAX_MESSAGE_CHARS);
+ const receipts = Array.isArray(toolCalls) ? chunk(toolCalls, LOPU_MAX_TOOL_CALLS) : [];
+ return Array.from({ length: Math.max(parts.length, receipts.length) }, (_, index) => ({
+  text: parts[index] ?? 'Tool results (continued).',
+  toolCalls: receipts[index],
+  ...(index > 0 && receipts[index]?.length ? { toolReceiptOffset: index * LOPU_MAX_TOOL_CALLS } : {})
+ }));
+};
+
 // Lopu's side of a turn: rows owned by the user carrying the read-only
 // assistant externalSource (+ per-turn metadata under crystal.lopu — model,
 // provider, usage, tool calls — sanitised through publicLopuMessageMeta, tool
@@ -671,10 +681,10 @@ export const persistLopuAssistantTurn = async (
 	const requestId = normalizedMessengerRequestId(input.requestId);
 	if (!requestId) return fail(400, 'Invalid message request id');
 	const rawText = typeof input.text === 'string' ? input.text.trim() : '';
-	const text = (Array.from(rawText).slice(0, LOPU_ASSISTANT_TURN_MAX_CHARS).join('') || LOPU_EMPTY_REPLY_TEXT).trim();
+	const text = rawText || LOPU_EMPTY_REPLY_TEXT;
 	const meta = input.lopu && typeof input.lopu === 'object' ? input.lopu : {};
 
-	const parts = splitLiveMessageText(text, MAX_MESSAGE_CHARS);
+	const parts = splitLopuAssistantSegments(text, meta.toolCalls);
 	const base = new Date();
 	const rows = parts.map((part, index) => {
 		const lopu = publicLopuMessageMeta({
@@ -683,9 +693,11 @@ export const persistLopuAssistantTurn = async (
 			requestId,
 			segmentIndex: index,
 			segmentCount: parts.length,
-			...(index === 0 ? {} : { toolCalls: undefined, usage: undefined })
+			toolCalls: part.toolCalls,
+      toolReceiptOffset: part.toolReceiptOffset,
+			...(index === 0 ? {} : { usage: undefined })
 		});
-		return messageRow(viewerId, chat.shareId, lopuAssistantMessageShareId(viewerId, requestId, index), part, new Date(base.getTime() + index), {
+		return messageRow(viewerId, chat.shareId, lopuAssistantMessageShareId(viewerId, requestId, index), part.text, new Date(base.getTime() + index), {
 			externalSource: lopuAssistantSource(requestId, index, parts.length),
 			lopu
 		});

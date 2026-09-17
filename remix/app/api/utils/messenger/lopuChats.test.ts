@@ -6,6 +6,7 @@ import {
 	LOPU_CHAT_SOURCE,
 	LOPU_HISTORY_MAX_CHARS,
 	buildLopuHistory,
+ splitLopuAssistantSegments,
 	isLopuChatDoc,
 	isLopuSource,
 	lopuAssistantMessageShareId,
@@ -317,15 +318,31 @@ test('buildLopuHistory includes tool-only turns but drops complete receipt block
 	assert.deepEqual(buildLopuHistory([row], { maxChars: 4 }), { history: [], chars: 0, truncated: true });
 });
 
-test('buildLopuHistory caps receipts across consecutive assistant turns and counts them against the history budget', () => {
+test('buildLopuHistory retains receipts across consecutive assistant turns and counts them against the history budget', () => {
 	const rows = Array.from({ length: 30 }, (_, index) => {
 		const row = assistantRow('Saved.', `receipt-${index}`);
 		return { crystal: { ...row.crystal, lopu: { ...row.crystal.lopu, toolCalls: [{ name: `tool_${index}`, ok: true, summary: 'x'.repeat(500) }] } } };
 	});
 	const folded = buildLopuHistory(rows);
 	const receipts = JSON.parse(folded.history[0]!.text.split('\n').at(-1)!);
-	assert.equal(receipts.length, 20);
+	assert.equal(receipts.length, 30);
 	assert.equal(receipts[0].summary.length, 240);
 	assert.equal(folded.chars, folded.history[0]!.text.length);
 	assert.ok(folded.chars <= LOPU_HISTORY_MAX_CHARS);
+});
+
+
+test('long turns retain all receipts across bounded message segments and model history', () => {
+ const receipts = Array.from({ length: 65 }, (_, index) => ({ name: 'create_thing', ok: true, summary: `Created ${index}`, thingId: `thing-${index}` }));
+ const segments = splitLopuAssistantSegments('Saved progress.', receipts);
+ assert.equal(segments.length, 4);
+ assert.ok(segments.every(part => part.toolCalls.length <= 20));
+ const rows = segments.map((part, index) => {
+  const row = assistantRow(part.text, 'long-turn', index);
+  return { crystal: { ...row.crystal, lopu: { ...row.crystal.lopu, toolCalls: part.toolCalls, toolReceiptOffset: part.toolReceiptOffset } } };
+ });
+ const result = buildLopuHistory(rows);
+ assert.deepEqual(JSON.parse(result.history[0].text.split('\n').at(-1)!), receipts);
+ const longText = 'x'.repeat(70_000);
+ assert.equal(splitLopuAssistantSegments(longText, []).map(part => part.text).join(''), longText);
 });
