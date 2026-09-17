@@ -17,7 +17,7 @@
    (closed 2026-07-21).**
 
    This item targeted the old Remix SSR architecture: `61c234a` (`Fix Remix
-   Emotion hydration styling`, merged to main) kept Emotion SSR styles in the
+Emotion hydration styling`, merged to main) kept Emotion SSR styles in the
    React document tree, and the remaining work was to eliminate dev-mode
    `hydrateRoot(document, ...)` mismatch warnings. The app has since migrated
    to the Vite + React Router non-framework shell: `remix/index.html` is a
@@ -91,7 +91,7 @@
    `thingtimeSerialization.ts` codec, so tagged Dates and cycles survive while
    persisted/runtime function source never crosses tabs. Other tabs apply the
    write through the existing mutation queue with `{ ignoreUndoRedo: true,
-   fromRemote: true }`, preventing echo loops and keeping undo per-tab. The
+fromRemote: true }`, preventing echo loops and keeping undo per-tab. The
    internal root `timemachine` path is excluded from channel traffic, while
    ordinary paths restored by undo/redo still converge across tabs. The
    debounced latest-revision autosave in `ThingtimeProvider` remains the one
@@ -839,3 +839,25 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     derived routines, advertising/rank/eligibility effects, minors, high-risk
     safety contexts, and public privacy or compliance claims remain separately
     gated.
+
+53. **💬 Make conversation agency and private communication a product contract.**
+
+    Make every DM, group, channel, Lopu conversation, and private archive
+    legible and controllable: treat membership and roles as live scoped
+    authority; separate request, delivery, display, read, edit, delete, and
+    action; minimize metadata; make safety stops distinct; explain residual
+    retention; keep archives inert; and never present server access controls as
+    end-to-end encryption. Start only with adult internal reviewers, three
+    synthetic accounts, one synthetic DM, one private group, invented messages,
+    one harmless generated attachment, and one exact non-production build.
+    Execute
+    `claude-todo/53-conversation-agency-and-private-communication.md` only after
+    qualified owners approve the taxonomy, role/history matrix,
+    delivery/edit/delete vocabulary, settings scopes, retention and
+    conversation-family cleanup, archive contract, safety-stop handoff,
+    confidentiality language, accessible rehearsal, measures, cleanup, and
+    stop authority. Real messages, contacts, accounts, devices, notifications,
+    reports, moderation, minors, high-risk conversations, production data,
+    external processors, message scanning, covert monitoring, cryptographic
+    implementation, and public privacy/safety/deletion/encryption claims remain
+    separately gated.
