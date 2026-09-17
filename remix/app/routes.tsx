@@ -144,6 +144,7 @@ export const router = createBrowserRouter([
     errorElement: <RootRecovery />,
     children: [
       { index: true, element: <Index /> },
+      { path: 'support', lazy: lazyRoute(() => import('./routes/support')) },
       { path: 'legal', lazy: lazyRoute(() => import('./routes/legal')) },
       { path: 'pages/:slug', lazy: lazyRoute(() => import('./routes/legal')) },
       { path: 'pages/:slug/:version', lazy: lazyRoute(() => import('./routes/legal')) },
