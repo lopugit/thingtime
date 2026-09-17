@@ -52,7 +52,7 @@ test('the opener is the same ring as the launcher, toggles the window and hides 
 test('the floating window can open from the navbar even with the launcher bubble turned off', () => {
 	const source = read('components/Lopu/LopuHost.tsx');
 	// the launcher setting hides the bubble only; the window follows `open`
-	assert.match(source, /const showLauncher = !hiddenOnPath && settings\.launcher/);
+	assert.match(source, /const showLauncher = !hiddenOnPath && \(settings\.launcher \|\| minimised\)/);
 	assert.match(source, /const showWindow = !hiddenOnPath && open/);
 	assert.doesNotMatch(source, /isLopuHostHiddenOnPath\(pathname\) \|\| !settings\.launcher/);
 });

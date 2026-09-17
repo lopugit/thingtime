@@ -1,3 +1,4 @@
+import type { LopuPageReference } from '~/utils/lopuPageContext';
 import type { LopuToolLink } from '~/utils/lopuLinks';
 // The Lopu chat wire protocol — one JSON object per NDJSON line, streamed by
 // POST /api/v1/lopu/chats/reply. Types only (no runtime imports beyond other
@@ -68,6 +69,7 @@ export type LopuChatPageContext = {
 };
 
 export type LopuChatContext = {
+	pages?: LopuPageReference[];
   route?: string;
   page?: LopuChatPageContext | null;
   selectedBlockId?: string;

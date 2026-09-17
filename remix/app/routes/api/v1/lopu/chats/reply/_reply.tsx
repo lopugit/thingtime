@@ -1,3 +1,4 @@
+import { lopuPageReference, lopuPageReferences, LOPU_MAX_PAGE_REFERENCES } from '~/utils/lopuPageContext';
 import { resolveLopuMedia } from '~/api/utils/lopu/chatMedia.server';
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 import { lopuReferenceIds, resolveLopuThingReferences, lopuReferenceContext } from '~/api/utils/lopu/chatAttachments';
@@ -82,6 +83,10 @@ const parseContext = (raw: unknown): { ok: true; context: LopuChatContext | null
   if (raw === undefined || raw === null) return { ok: true, context: null };
   if (!isRecord(raw)) return { ok: false, error: 'context must be an object' };
   const context: LopuChatContext = {};
+  if (raw.pages !== undefined) {
+    if (!Array.isArray(raw.pages) || raw.pages.length > LOPU_MAX_PAGE_REFERENCES || raw.pages.some(page => !lopuPageReference(page))) return { ok: false, error: 'context.pages must contain up to ten Thingtime page links' };
+    context.pages = lopuPageReferences(raw.pages);
+  }
   if (raw.route !== undefined && raw.route !== null) {
     if (typeof raw.route !== 'string' || raw.route.length > MAX_ROUTE_CHARS) return { ok: false, error: 'context.route must be a short path' };
     context.route = raw.route;
@@ -225,7 +230,9 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
   let references: Awaited<ReturnType<typeof resolveLopuThingReferences>>;
   try { references = await resolveLopuThingReferences(user.id, input.thingIds); }
   catch { return json({ ok: false, error: 'One or more attached Things are unavailable.' }, { status: 400 }); }
-  const linkedText = input.thingIds.length ? `${input.text}\n\nAttached Things:\n${input.thingIds.map(id => `/thing/${id}`).join('\n')}` : input.text;
+  const thingLinkedText = input.thingIds.length ? `${input.text}\n\nAttached Things:\n${input.thingIds.map(id => `/thing/${id}`).join('\n')}` : input.text;
+
+  const linkedText = input.context?.pages?.length ? `${thingLinkedText}\n\nAttached pages:\n${input.context.pages.map(page => `${page.title}: ${page.url}`).join('\n')}` : thingLinkedText;
 
   // --- conversation -----------------------------------------------------
   let chatId = input.chatId;

@@ -8,8 +8,9 @@
 // per-chat settings in step. Also exports the §3.3 context-provider builder.
 
 import React from 'react';
+import { useLopuCurrentPage } from './useLopuPages';
 import { useBackgroundRefresh } from '~/hooks/useBackgroundRefresh';
-import { useLocation, useNavigate } from 'react-router';
+import { useNavigate } from 'react-router';
 
 import { useMessengerApi } from '~/components/Messenger/useMessengerApi';
 import type { ChatMessage } from '~/components/Messenger/messengerTypes';
@@ -71,12 +72,13 @@ export type LopuContextProvider = () => LopuContext;
  * (id/source/keys/updatedAt/live blocks ≤ 48KB) from the live-build bridge,
  * the selected block and the viewport. Pure apart from reading the bridge.
  */
-export const buildLopuContext = (base?: Partial<LopuContext>): LopuContext => {
-	const draft = describeActiveDraft();
+export const buildLopuContext = (base?: Partial<LopuContext>, attachCurrentPage = true): LopuContext => {
+	const draft = attachCurrentPage ? describeActiveDraft() : null;
 	return {
-		...(base?.route ? { route: base.route } : {}),
+		...(attachCurrentPage && base?.route ? { route: base.route } : {}),
+		...(base?.pages?.length ? { pages: base.pages } : {}),
 		...(draft ? { page: draft.page } : {}),
-		...(base?.selectedBlockId ? { selectedBlockId: base.selectedBlockId } : {}),
+		...(attachCurrentPage && base?.selectedBlockId ? { selectedBlockId: base.selectedBlockId } : {}),
 		...(base?.viewport ? { viewport: base.viewport } : {})
 	};
 };
@@ -86,13 +88,15 @@ export const createLopuContextProvider = (base?: Partial<LopuContext>): LopuCont
 
 /** The default provider: current route + viewport, the active draft read live. */
 export const useLopuContextProvider = (extra?: { selectedBlockId?: string | null }): LopuContextProvider => {
-	const { pathname, search } = useLocation();
+	const currentPage = useLopuCurrentPage();
+	const { settings } = useLopuSettings();
 	const isMobile = useIsMobileViewport();
-	const route = `${pathname}${search}`;
+	const route = currentPage && currentPage.url.length <= 300 ? currentPage.url : undefined;
+	const attach = settings.attachCurrentPage && !!currentPage;
 	const selectedBlockId = extra?.selectedBlockId ?? null;
 	return React.useCallback(
-		() => buildLopuContext({ route, viewport: isMobile ? 'mobile' : 'desktop', ...(selectedBlockId ? { selectedBlockId } : {}) }),
-		[route, isMobile, selectedBlockId]
+		() => buildLopuContext({ route, pages: attach && currentPage ? [currentPage] : [], viewport: isMobile ? 'mobile' : 'desktop', ...(selectedBlockId ? { selectedBlockId } : {}) }, attach),
+		[route, isMobile, selectedBlockId, attach, currentPage]
 	);
 };
 
@@ -174,7 +178,8 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 	const { settings: prefs, setModelChoice, setEnterSends, setApplyPatches, setConfirmDeletes } = useLopuSettings();
 	const defaultContext = useLopuContextProvider();
 	const contextProvider = options.context ?? defaultContext;
-	const contextLabel = useActiveDraftLabel();
+	const activeLabel = useActiveDraftLabel();
+	const contextLabel = prefs.attachCurrentPage ? activeLabel : null;
 
 	// the store's client: useApi's Lopu family + the messenger's message page
 	bindLopuApi({

@@ -34,6 +34,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- **2026-09-17 — Lopu context and docking (Codex):** Show and toggle current-page context, attach recent Thingtime pages, persist minimise-to-bubble, resize every edge/corner, and dock on all four sides with split or overlay behavior. Split navigation adapts to the remaining page width. Reply capability 1.12 adds validated page references without granting permissions.
+
 - 2026-09-17: Lopu removes the 24-tool, 12-hop and four-minute task limits, renews background worker leases, and automatically continues saved hosting checkpoints and token-truncated replies without a fixed continuation cap, preserving chat/model selection and completed-work receipts. Stop, account switches, confirmations, unsaved replies, and ambiguous interruptions prevent automatic continuation. [PR #842 validation and rollout notes](../PRs/842-codex-lopu-auto-continue-remove-lopu-task-caps.md).
 - **2026-09-17 — Social previews and Schema.org foundation (Codex):** align server titles, canonical URLs, image alt metadata and safe JSON-LD with anonymous public previews; revise the branded image cache URL, make fallback image URLs absolute and mark private/unavailable pages noindex. [PR #841 validation, investigation and broader SEO TODO](../PRs/841-social-schema-crawler-fix.md).
 - 2026-09-17: Lopu collapses submitted attachments optimistically, clears them on server acceptance despite uploader handle changes, restores rejected drafts, and keeps typing enabled during uploads. Expand supports native new-tab/window links. See [PR #838](../PRs/838-lopu-expand-link-optimistic-composer.md).
