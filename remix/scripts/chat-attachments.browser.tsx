@@ -13,7 +13,7 @@ window.fetch = async (url, init) => {
 	const path = String(url),
 		body = JSON.parse(String(init?.body || '{}'));
 	if (path.includes('well-known'))
-		return respond({ schemaVersion: 1, origin: location.origin, features: { 'api.attachment-uploads': { version: '1.4.0' } } });
+		return respond({ schemaVersion: 1, origin: location.origin, features: { 'api.attachment-uploads': { version: '1.4.1' } } });
 	if (path.endsWith('/uploads')) {
 		uploads.set(body.requestId, body);
 		return respond({ upload: { id: body.requestId, partSizeBytes: 5242880, partCount: 1 } });
