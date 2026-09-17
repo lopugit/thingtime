@@ -9,7 +9,7 @@ import { useApi } from '~/hooks/useApi';
 // Preferences are local-first thingtime settings under `settings.lopu.*`
 // (namespace 'lopu', outside the undo/redo timeline — the same posture as the
 // drawer's `settings.drawer.*`): they persist to localforage, restore on
-// reload, and sync between tabs. The one exception is `open`, which describes
+// reload, and sync between tabs. The exceptions are `open` and `minimised`, which describe
 // THIS viewport (is the floating window showing here?) and is written
 // tabLocal so opening Lopu in one tab never pops it open in every other tab.
 //
@@ -18,7 +18,7 @@ import { useApi } from '~/hooks/useApi';
 // tier (`tt-lopu-launcher`, `tt-lopu-window`) so the host paints its
 // last-known geometry on the very first frame and never jumps.
 
-export type LopuDock = 'free' | 'right' | 'left';
+export type LopuDock = 'free' | 'right' | 'left' | 'top' | 'bottom';
 export type LopuSpeed = 'normal' | 'fast';
 
 export interface LopuSettings {
@@ -26,6 +26,9 @@ export interface LopuSettings {
 	launcher: boolean;
 	// where the chat window sits: free-floating or flush against an edge
 	dock: LopuDock;
+	dockMode: 'overlay' | 'split';
+	attachCurrentPage: boolean;
+	minimised: boolean;
 	// paint Lopu's builder patches into the open draft while it streams
 	applyPatches: boolean;
 	// ask before deleting a CONVERSATION from the list (the sidebar's delete
@@ -66,6 +69,9 @@ export const LOPU_SETTINGS_PATH = 'settings.lopu';
 export const LOPU_SETTINGS_DEFAULTS: LopuSettings = {
 	launcher: true,
 	dock: 'free',
+	dockMode: 'overlay',
+	attachCurrentPage: true,
+	minimised: false,
 	applyPatches: true,
 	confirmDeletes: true,
 	enterSends: true,
@@ -81,12 +87,12 @@ export const LOPU_SETTINGS_DEFAULTS: LopuSettings = {
 	open: false
 };
 
-export const LOPU_DOCKS: readonly LopuDock[] = ['free', 'right', 'left'];
+export const LOPU_DOCKS: readonly LopuDock[] = ['free', 'right', 'left', 'top', 'bottom'];
 
 const MAX_ID_LENGTH = 80;
 
 export const normalizeLopuDock = (raw: unknown): LopuDock => {
-	return raw === 'right' || raw === 'left' ? raw : 'free';
+	return raw === 'right' || raw === 'left' || raw === 'top' || raw === 'bottom' ? raw : 'free';
 };
 
 export const normalizeLopuSpeed = (raw: unknown): LopuSpeed | null => {
@@ -114,6 +120,9 @@ export const normalizeLopuSettings = (raw: unknown): LopuSettings => {
 	return {
 		launcher: boolOr(source.launcher, LOPU_SETTINGS_DEFAULTS.launcher),
 		dock: normalizeLopuDock(source.dock),
+	dockMode: source.dockMode === 'split' ? 'split' : 'overlay',
+	attachCurrentPage: boolOr(source.attachCurrentPage, true),
+	minimised: boolOr(source.minimised, false),
 		applyPatches: boolOr(source.applyPatches, LOPU_SETTINGS_DEFAULTS.applyPatches),
 		confirmDeletes: boolOr(source.confirmDeletes, LOPU_SETTINGS_DEFAULTS.confirmDeletes),
 		enterSends: boolOr(source.enterSends, LOPU_SETTINGS_DEFAULTS.enterSends),
@@ -283,23 +292,28 @@ export const resolveLopuWindowGeometry = (
 	);
 };
 
-// Docked: a full-height column flush with the chosen edge, keeping the free
-// frame's width (bounded to the viewport).
-export const dockedLopuWindowGeometry = (dock: Exclude<LopuDock, 'free'>, width: number, viewport: LopuViewport): LopuWindowGeometry => {
+// All four docks are flush with their viewport edge. Split leaves a usable page.
+export const dockedLopuWindowGeometry = (dock: Exclude<LopuDock, 'free'>, width: number, viewport: LopuViewport, height = 400, split = false): LopuWindowGeometry => {
 	const view = safeViewport(viewport);
-	const size = clampLopuWindowSize({ width, height: view.height }, view);
-	const dockedWidth = Math.min(size.width, view.width);
-	// a right-hand column shares its corner with DevKit's bubble: stop above
-	// it so the composer's send button is never covered (a left column is
-	// full height — nothing sits in that corner)
-	const height = dock === 'right' ? Math.max(LOPU_WINDOW_MIN_SIZE.height, view.height - LOPU_DEVKIT_CLEARANCE) : view.height;
+	const horizontal = dock === 'top' || dock === 'bottom';
+	const maxWidth = split ? Math.max(1, view.width - 320) : view.width;
+	const maxHeight = split ? Math.max(1, view.height - 240) : view.height;
+	const w = horizontal ? view.width : Math.min(maxWidth, Math.max(Math.min(320, maxWidth), width));
+	const h = horizontal ? Math.min(maxHeight, Math.max(Math.min(280, maxHeight), height)) : view.height;
+	return { x: dock === 'right' ? view.width - w : 0, y: dock === 'bottom' ? view.height - h : 0, width: w, height: h };
+};
 
-	return {
-		x: dock === 'right' ? Math.max(0, view.width - dockedWidth) : 0,
-		y: 0,
-		width: dockedWidth,
-		height: Math.min(height, view.height)
-	};
+export type LopuResizeEdge = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
+export const resizeLopuWindow = (origin: LopuWindowGeometry, edge: LopuResizeEdge, dx: number, dy: number, viewport: LopuViewport): LopuWindowGeometry => {
+	const view = safeViewport(viewport);
+	const minW = Math.min(LOPU_WINDOW_MIN_SIZE.width, view.width);
+	const minH = Math.min(LOPU_WINDOW_MIN_SIZE.height, view.height);
+	let left = origin.x, right = origin.x + origin.width, top = origin.y, bottom = origin.y + origin.height;
+	if (edge.includes('w')) left = clampNumber(left + dx, Math.max(0, right - view.width + LOPU_WINDOW_MARGIN), right - minW);
+	if (edge.includes('e')) right = clampNumber(right + dx, left + minW, Math.min(view.width, left + view.width - LOPU_WINDOW_MARGIN));
+	if (edge.includes('n')) top = clampNumber(top + dy, Math.max(0, bottom - view.height + LOPU_WINDOW_MARGIN), bottom - minH);
+	if (edge.includes('s')) bottom = clampNumber(bottom + dy, top + minH, Math.min(view.height, top + view.height - LOPU_WINDOW_MARGIN));
+	return { x: Math.round(left), y: Math.round(top), width: Math.round(right - left), height: Math.round(bottom - top) };
 };
 
 export const readLopuLauncherPosition = (): LopuPoint | null => {
@@ -350,7 +364,7 @@ export const useLopuSettings = () => {
 	// Lopu preferences are UI chrome, not content — keep them out of the
 	// undo/redo timeline (mirrors useDrawer.setDrawerSetting).
 	const setLopuSetting = React.useCallback(
-		(key: Exclude<keyof LopuSettings, 'open'>, value: unknown) => {
+		(key: Exclude<keyof LopuSettings, 'open' | 'minimised'>, value: unknown) => {
 			setThingtime?.(`${LOPU_SETTINGS_PATH}.${key}`, value, {
 				ignoreUndoRedo: true,
 				namespace: LOPU_SETTINGS_NAMESPACE
@@ -364,6 +378,7 @@ export const useLopuSettings = () => {
 	// would be wrong. Persisted as before, so a reload still restores it.
 	const setOpen = React.useCallback(
 		(value: boolean) => {
+			if (value) setThingtime?.('settings.lopu.minimised', false, { ignoreUndoRedo: true, namespace: 'lopu', tabLocal: true });
 			setThingtime?.('settings.lopu.open', !!value, { ignoreUndoRedo: true, namespace: 'lopu', tabLocal: true });
 		},
 		[setThingtime]
@@ -371,8 +386,8 @@ export const useLopuSettings = () => {
 
 	const open = settings.open;
 	const toggleOpen = React.useCallback(() => {
-		setOpen(!open);
-	}, [open, setOpen]);
+		setOpen(settings.minimised || !open);
+	}, [open, settings.minimised, setOpen]);
 
 	const setLauncher = React.useCallback(
 		(value: boolean) => {
@@ -477,6 +492,9 @@ export const useLopuSettings = () => {
 		toggleOpen,
 		setLauncher,
 		setDock,
+		setMinimised: (value: boolean) => setThingtime?.('settings.lopu.minimised', value, { ignoreUndoRedo: true, namespace: 'lopu', tabLocal: true }),
+		setDockMode: (value: 'overlay' | 'split') => setLopuSetting('dockMode', value),
+		setAttachCurrentPage: (value: boolean) => setLopuSetting('attachCurrentPage', value),
 		setApplyPatches,
 		setConfirmDeletes,
 		setEnterSends,

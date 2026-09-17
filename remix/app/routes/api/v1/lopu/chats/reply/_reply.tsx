@@ -1,3 +1,4 @@
+import { lopuPageReference, lopuPageReferences, LOPU_MAX_PAGE_REFERENCES } from '~/utils/lopuPageContext';
 import { resolveLopuMedia } from '~/api/utils/lopu/chatMedia.server';
 import { json, readJsonBody, requireJsonContentType } from '~/api/http';
 import { lopuReferenceIds, resolveLopuThingReferences, lopuReferenceContext } from '~/api/utils/lopu/chatAttachments';
@@ -82,6 +83,10 @@ const parseContext = (raw: unknown): { ok: true; context: LopuChatContext | null
   if (raw === undefined || raw === null) return { ok: true, context: null };
   if (!isRecord(raw)) return { ok: false, error: 'context must be an object' };
   const context: LopuChatContext = {};
+  if (raw.pages !== undefined) {
+    if (!Array.isArray(raw.pages) || raw.pages.length > LOPU_MAX_PAGE_REFERENCES || raw.pages.some(page => !lopuPageReference(page))) return { ok: false, error: 'context.pages must contain up to ten Thingtime page links' };
+    context.pages = lopuPageReferences(raw.pages);
+  }
   if (raw.route !== undefined && raw.route !== null) {
     if (typeof raw.route !== 'string' || raw.route.length > MAX_ROUTE_CHARS) return { ok: false, error: 'context.route must be a short path' };
     context.route = raw.route;
@@ -187,6 +192,7 @@ export const titleFromMessage = (text: string): string => {
 const interruptedNote = (outcome: LopuChatTurnOutcome | null): string => {
   if (!outcome) return 'Lopu’s reply was interrupted before it started — ask again in a moment.';
   const text = outcome.text.trim();
+  if (outcome.stopReason === 'checkpoint') return text || 'Progress saved. Continuing…';
   if (outcome.stopReason === 'aborted') return text ? `${text}\n\n_(reply stopped)_` : 'Lopu’s reply was stopped before it started.';
   if (outcome.stopReason === 'error') return text ? `${text}\n\n_(reply interrupted — try again)_` : 'Lopu lost the thread before replying — try again.';
   return text || 'Lopu went quiet for a moment — ask again in a little while.';
@@ -224,7 +230,9 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
   let references: Awaited<ReturnType<typeof resolveLopuThingReferences>>;
   try { references = await resolveLopuThingReferences(user.id, input.thingIds); }
   catch { return json({ ok: false, error: 'One or more attached Things are unavailable.' }, { status: 400 }); }
-  const linkedText = input.thingIds.length ? `${input.text}\n\nAttached Things:\n${input.thingIds.map(id => `/thing/${id}`).join('\n')}` : input.text;
+  const thingLinkedText = input.thingIds.length ? `${input.text}\n\nAttached Things:\n${input.thingIds.map(id => `/thing/${id}`).join('\n')}` : input.text;
+
+  const linkedText = input.context?.pages?.length ? `${thingLinkedText}\n\nAttached pages:\n${input.context.pages.map(page => `${page.title}: ${page.url}`).join('\n')}` : thingLinkedText;
 
   // --- conversation -----------------------------------------------------
   let chatId = input.chatId;
@@ -369,8 +377,6 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
     // --- the stream -----------------------------------------------------------
     const startedAt = Date.now();
     const abort = new AbortController();
-    let timedOut = false;
-    const turnDeadline = setTimeout(() => { timedOut = true; abort.abort(); }, 240_000);
     const requestSignal = (request as Request & { signal?: AbortSignal }).signal;
     if (requestSignal) {
       if (requestSignal.aborted) abort.abort();
@@ -391,6 +397,14 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
           }
         };
 
+        let renewing = false;
+        const leaseHeartbeat = access.renew ? setInterval(async () => {
+          if (renewing) return;
+          renewing = true;
+          try { await access.renew?.(); }
+          catch { abort.abort(); }
+          finally { renewing = false; }
+        }, 30_000) : null;
         let outcome: LopuChatTurnOutcome | null = null;
         try {
           const attachedContent = await resolveLopuMedia(user.id, [...input.attachmentIds, ...references.filter(ref => typeof ref.crystal === "object" && ref.crystal && "contentType" in ref.crystal).map(ref => ref.id), ...(loaded.ok ? loaded.attachmentIds ?? [] : [])], abort.signal);
@@ -421,10 +435,9 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
           console.error('[lopu] reply stream failed:', error?.message || error);
           send({ type: 'error', message: 'The AI connection was interrupted. Saved progress is kept — use Retry / Continue to pick up from here.', retryable: true });
         } finally {
-          clearTimeout(turnDeadline);
-          if (timedOut && outcome?.stopReason === 'aborted') outcome.stopReason = 'time_limit';
+          if (leaseHeartbeat) clearInterval(leaseHeartbeat);
           // persist whatever streamed, even after an error or a disconnect
-          const finished = outcome?.stopReason === 'end_turn' || outcome?.stopReason === 'fallback' || outcome?.stopReason === 'tool_limit' || outcome?.stopReason === 'hop_limit' || outcome?.stopReason === 'time_limit' || outcome?.stopReason === 'max_tokens';
+          const finished = outcome?.stopReason === 'checkpoint' || outcome?.stopReason === 'end_turn' || outcome?.stopReason === 'fallback' || outcome?.stopReason === 'tool_limit' || outcome?.stopReason === 'hop_limit' || outcome?.stopReason === 'time_limit' || outcome?.stopReason === 'max_tokens';
           const text = finished && outcome?.text.trim() ? outcome.text : interruptedNote(outcome);
           const stopReason = outcome?.stopReason || 'error';
 

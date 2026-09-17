@@ -34,6 +34,22 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- **2026-09-17 — Lopu context and docking (Codex):** Show and toggle current-page context, attach recent Thingtime pages, persist minimise-to-bubble, resize every edge/corner, and dock on all four sides with split or overlay behavior. Split navigation adapts to the remaining page width. Reply capability 1.12 adds validated page references without granting permissions. [PR #844 validation notes](../PRs/844-codex-lopu-context-docking-add-page-context-and-flexible-docking-to-lopu.md).
+
+- 2026-09-17 — Shared seamless builder on `/builder` and `/p`: live inline text
+  editing with pink block controls, Builder/Edit/Layout/View/Visit/Deploy, one
+  floating navigation/preview/mode bar, overlay inspector, real
+  responsive device previews and natural-height Container previews without an
+  iframe. Dedicated live output
+  fills the available space; `/t/` hides Thingtime chrome except its tiny credit
+  link. Local PM2 validation uses worktree ports 11060–11062; Tailscale is
+  unavailable because its installed CLI target is missing.
+  [PR 843 notes](../PRs/843-codex-seamless-live-builder-add-seamless-live-builder-modes-responsive-previews-and-standalone-pages.md). — Codex (AI)
+- 2026-09-17: Lopu removes the 24-tool, 12-hop and four-minute task limits, renews background worker leases, and automatically continues saved hosting checkpoints and token-truncated replies without a fixed continuation cap, preserving chat/model selection and completed-work receipts. Stop, account switches, confirmations, unsaved replies, and ambiguous interruptions prevent automatic continuation. [PR #842 validation and rollout notes](../PRs/842-codex-lopu-auto-continue-remove-lopu-task-caps.md).
+- **2026-09-17 — Social previews and Schema.org foundation (Codex):** align server titles, canonical URLs, image alt metadata and safe JSON-LD with anonymous public previews; revise the branded image cache URL, make fallback image URLs absolute and mark private/unavailable pages noindex. [PR #841 validation, investigation and broader SEO TODO](../PRs/841-social-schema-crawler-fix.md).
+- 2026-09-17: Lopu collapses submitted attachments optimistically, clears them on server acceptance despite uploader handle changes, restores rejected drafts, and keeps typing enabled during uploads. Expand supports native new-tab/window links. See [PR #838](../PRs/838-lopu-expand-link-optimistic-composer.md).
+- 2026-09-17: Floating Lopu chat and voice now share the full conversation list with the Lopu page, with collapsible wide-window navigation and a narrow list view that preserves the composer. — Codex (AI)
+
 - 2026-09-16 — **Codex (AI):** Fix image uploads hitting the legacy 30/hour start limit: default to 60/minute, upgrade only the exact persisted legacy policy, preserve custom rules, and honor bounded Retry-After retries without changing upload identity. Show the actual wait on persistent throttling; add policy, cancellation, route and capability regressions.
 
 - 2026-09-16: Enable attachment paste/drop directly in Lopu and Messenger message fields; clear Lopu media on server acceptance instead of reply completion. Added synthetic browser regression coverage. — Codex (AI)

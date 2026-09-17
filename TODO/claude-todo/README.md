@@ -71,6 +71,8 @@ future Claude sessions (use alongside `graphify-out/` for codebase orientation).
 | 48  | Change agency and humane product evolution — exact impact, truthful preview and choice, compatibility, rollback, accountable retirement, remedy, and exit                        | 🟣 Proposed · owner and qualified review needed                                                                            | [48-change-agency-and-humane-product-evolution.md](./48-change-agency-and-humane-product-evolution.md)                       |
 | 49  | Personalization agency and accountable memory — inspectable choices, observations, derivatives, effects, correction, forgetting, reset, and a useful baseline                    | 🟣 Proposed · owner and qualified review needed                                                                            | [49-personalization-agency-and-accountable-memory.md](./49-personalization-agency-and-accountable-memory.md)                 |
 
+| SEO | Automatic Open Graph, Schema.org and rich results across all pages, /things and public UGC | 🟡 Metadata foundation built; broader coverage open | [seo-schema-rich-results.md](./seo-schema-rich-results.md) |
+
 ## Conventions (see `FUNDAMENTALS.md`)
 
 - **All DB access goes through the Thingtime API** + the API utils layer. UI /

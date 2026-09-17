@@ -1,3 +1,4 @@
+import type { LopuPageReference } from '~/utils/lopuPageContext';
 // The Lopu chat transport: POST /api/v1/lopu/chats/reply (credentials
 // included, JSON body) and the NDJSON reader — the `useLopuStream` loop from
 // useLopu.tsx generalised so every consumer (the shared chat store, tests)
@@ -11,6 +12,7 @@ export const LOPU_REPLY_PATH = '/api/v1/lopu/chats/reply';
 
 // Design note §2.6
 export type LopuReplyContext = {
+	pages?: LopuPageReference[];
 	route?: string;
 	page?: {
 		id?: string;
@@ -76,9 +78,9 @@ export class LopuStreamError extends Error {
  * consumes it. Recorded in the DevKit request log like every useApi call.
  */
 export const postLopuReply = async (body: LopuReplyBody, options?: { signal?: AbortSignal }): Promise<Response> => {
-	if (body.attachmentIds?.length || body.thingIds?.length) {
+	{ // Continuation requires the checkpoint-capable origin contract.
 		const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
-		await requireThingtimeCapability('api.lopu-chats-reply', '1.10.0');
+		await requireThingtimeCapability('api.lopu-chats-reply', body.context?.pages?.length ? '1.12.0' : '1.11.0');
 	}
 	const started = performance.now();
 	let response: Response;

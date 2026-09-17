@@ -2,6 +2,11 @@
 
 ## Priority 1 — Fundamental product behavior
 
+- **Complete SEO, Schema.org and rich results across all pages, `/things` and public UGC.**
+  Automatically populate social/schema metadata, preserve private content, and
+  validate actual crawler/search behavior. [Scope and remaining acceptance](claude-todo/seo-schema-rich-results.md);
+  [2026-09-17 investigation and implemented foundation](../docs/seo-social-metadata.md).
+
 - **Preserve and revisit any meaningful app, search, or generated-feed state.**
 
   Thingtime should automatically retain timestamped, versioned experience

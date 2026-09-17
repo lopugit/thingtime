@@ -176,6 +176,7 @@ export const router = createBrowserRouter([
       { path: 'builder/demos/:slug', lazy: lazyRoute(() => import('./routes/builder-demo-detail')) },
       // published block-based webpages (reserved prefix — outranks the * catch-all)
       { path: 'p/:id', lazy: lazyRoute(() => import('./routes/p')) },
+      { path: 't/:id', lazy: lazyRoute(() => import('./routes/p')) },
       // the storybook-style design-system docs own the canonical short URL too
       { path: 'design-system', loader: () => redirect('/docs/design-system'), element: <HydrateFallback /> },
       // third-party app connections — no guard: both pages render their own
