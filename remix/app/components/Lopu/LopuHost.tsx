@@ -9,6 +9,7 @@ import { LopuActivityBadge, LopuRingAvatar, useLopuStreamingActivity } from './L
 import { LopuChatView } from './LopuChatView';
 import { getLopuStoreServerSnapshot, getLopuStoreSnapshot, selectLopuProviderNames, setLopuSettings, subscribeLopuStore, type LopuVaultProvider } from './lopuChatStore';
 import { useLopuAccount } from './useLopuAccount';
+import { handlesLopuLinkInApp } from './lopuLinkActivation';
 import { vaultProviderUnavailableReason } from './lopuProviderCore';
 import { LopuVoiceSurface, lopuVoicePhaseLabel, type LopuVoicePhase } from './LopuVoiceControls';
 import { LOPU_UI, lopuIconButtonSx, lopuRainbowRing } from './lopuTheme';
@@ -16,6 +17,7 @@ import {
 	LOPU_LAUNCHER_BOTTOM_INSET,
 	LOPU_LAUNCHER_INSET,
 	LOPU_LAUNCHER_SIZE,
+	LOPU_PAGE_PATH,
 	LOPU_VOICE_PATH,
 	LOPU_WINDOW_MARGIN,
 	LOPU_WINDOW_MIN_SIZE,
@@ -135,7 +137,7 @@ const HeaderButton = (props: { title: string; onClick: () => void; children: Rea
 		onClick={(event: React.MouseEvent) => {
 			if (props.href) {
 				// Leave modified clicks to the browser, including opening a new tab/window.
-				if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+				if (!handlesLopuLinkInApp(event)) return;
 				event.preventDefault();
 			}
 			props.onClick();
@@ -554,10 +556,14 @@ export const LopuHost = () => {
 		};
 	}, [showSheet]);
 
+	// one destination for both the expand control's href and the in-app
+	// navigation, so a new tab and a plain click can never land anywhere else
+	const fullPath = voiceMode ? LOPU_VOICE_PATH : LOPU_PAGE_PATH;
+
 	const openFull = React.useCallback(() => {
 		setOpen(false);
-		navigate(voiceMode ? LOPU_VOICE_PATH : '/lopu');
-	}, [navigate, setOpen, voiceMode]);
+		navigate(fullPath);
+	}, [fullPath, navigate, setOpen]);
 
 	const close = React.useCallback(() => {
 		setOpen(false);
@@ -848,7 +854,7 @@ export const LopuHost = () => {
 					{minimised ? <ChevronDown size={14} strokeWidth={2} style={{ transform: 'rotate(180deg)' }} /> : <Minus size={14} strokeWidth={2} />}
 				</HeaderButton>
 			)}
-			<HeaderButton title={voiceMode ? "Open Lopu's voice page" : "Open Lopu's page"} href={voiceMode ? LOPU_VOICE_PATH : '/lopu'} onClick={openFull}>
+			<HeaderButton title={voiceMode ? "Open Lopu's voice page" : "Open Lopu's page"} href={fullPath} onClick={openFull}>
 				<Maximize2 size={13} strokeWidth={2} />
 			</HeaderButton>
 			<HeaderButton title="Close (Esc)" onClick={close}>
