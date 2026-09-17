@@ -12,7 +12,7 @@ export const VIEWPORT_PRESETS = [
 	{ id: 'laptop', label: 'Laptop · 1366 × 768', width: 1366, height: 768 },
 	{ id: 'wide', label: 'Wide desktop · 1920 × 1080', width: 1920, height: 1080 }
 ] as const;
-export type BuilderViewportSize = { width: number; height: number } | null;
+export type BuilderViewportSize = { width: number; height: number; presentation?: 'viewport' | 'container' } | null;
 export const boundViewportDimension = (value: number, fallback: number) =>
 	Number.isFinite(value) ? Math.round(Math.min(3840, Math.max(240, value))) : fallback;
 
@@ -24,7 +24,7 @@ export function BuilderViewport({ size, children }: { size: BuilderViewportSize;
 	const frame = React.useRef<HTMLIFrameElement>(null);
 	const [doc, setDoc] = React.useState<Document | null>(null);
 	const [available, setAvailable] = React.useState(960);
-	const framed = !!size;
+	const framed = !!size && size.presentation !== 'container';
 	React.useLayoutEffect(() => {
 		if (!holder.current) return;
 		const observer = new ResizeObserver(([entry]) => setAvailable(entry.contentRect.width));
@@ -82,7 +82,28 @@ export function BuilderViewport({ size, children }: { size: BuilderViewportSize;
 			doc.removeEventListener('click', followFragment);
 		};
 	}, [doc, children]);
-	if (!size) return <>{children}</>;
+	if (!framed)
+		return (
+			<div
+				data-testid={size?.presentation === 'container' ? 'builder-container' : undefined}
+				style={
+					size?.presentation === 'container'
+						? {
+								width: '100%',
+								maxWidth: size.width || undefined,
+								minHeight: size.height || undefined,
+								margin: '0 auto',
+								padding: '24px',
+								border: '1px solid var(--tt-border, #ddd)',
+								borderRadius: 16,
+								boxSizing: 'border-box'
+						  }
+						: { width: '100%', minWidth: 0 }
+				}
+			>
+				{children}
+			</div>
+		);
 	const scale = Math.min(1, available / size.width);
 	return (
 		<div ref={holder} data-testid="builder-viewport" style={{ width: '100%', minWidth: 0 }}>

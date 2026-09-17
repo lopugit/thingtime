@@ -1,16 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isSeamlessMode, matchingTextArg, usesPageRuntime } from './seamlessMode';
+import { isSeamlessMode, matchingTextArg, usesPageRuntime, pageRuntimeSearch } from './seamlessMode';
 import { resolveTemplate } from '../ComponentsLibrary/componentTemplate';
 import { componentTextOverrides } from './componentTextOverrides';
 import { boundViewportDimension } from './BuilderViewport';
 import { builderPoint } from './builderCoordinates';
 
 test('editing modes choose runtime independently from presentation', () => {
-	for (const mode of ['edit', 'view', 'layout', 'builder', 'container']) assert.equal(isSeamlessMode(mode), true);
-	for (const mode of ['run', null, 'unknown']) assert.equal(isSeamlessMode(mode), false);
+	for (const mode of ['edit', 'view', 'layout', 'builder']) assert.equal(isSeamlessMode(mode), true);
+	for (const mode of ['run', 'visit', 'container', null, 'unknown']) assert.equal(isSeamlessMode(mode), false);
 	assert.equal(usesPageRuntime('builder'), false);
-	assert.equal(usesPageRuntime('container'), false);
+	assert.equal(usesPageRuntime('container'), true);
 	for (const mode of ['edit', 'view', 'layout', 'run']) assert.equal(usesPageRuntime(mode), true);
 });
 test('argument matching refuses ambiguous and non-text values', () => {
@@ -68,4 +68,11 @@ test('Chakra rawChildren labels use the same per-block override contract', () =>
 	assert.deepEqual((resolveTemplate(componentTextOverrides(node, args).render, { ...args, result: { secret: 'hidden' } }) as any).rawChildren, [
 		'{result.secret}'
 	]);
+});
+
+test('builder route controls do not leak into page inputs, unrelated query fields survive', () => {
+	assert.equal(pageRuntimeSearch('/builder', '?page=id&mode=edit&customer=42'), 'customer=42');
+	assert.equal(pageRuntimeSearch('/p/id', '?mode=view&customer=42'), 'customer=42');
+	assert.equal(pageRuntimeSearch('/t/id', '?page=2&mode=run'), 'page=2');
+	assert.equal(pageRuntimeSearch('/components/card', '?mode=edit&page=2'), 'mode=edit&page=2');
 });

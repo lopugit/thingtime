@@ -38,10 +38,7 @@ export type ComponentThingLike = {
 export type ComponentsByRef = Record<string, ComponentThingLike | null>;
 
 // Build the ref → component map from a /api/v1/webpages/resolve response.
-export const buildComponentsByRef = (payload: {
-	components?: Array<ComponentThingLike>;
-	refs?: Record<string, string | null>;
-}): ComponentsByRef => {
+export const buildComponentsByRef = (payload: { components?: Array<ComponentThingLike>; refs?: Record<string, string | null> }): ComponentsByRef => {
 	const byId = new Map<string, ComponentThingLike>();
 	for (const component of payload.components || []) byId.set(component.id, component);
 	const out: ComponentsByRef = {};
@@ -53,7 +50,7 @@ export const buildComponentsByRef = (payload: {
 
 export type BuilderChrome = {
 	// Seamless modes keep the live element tree mounted between interactions.
-	seamlessMode?: 'edit' | 'view' | 'layout' | 'builder' | 'container';
+	seamlessMode?: 'edit' | 'view' | 'layout' | 'builder';
 	hoverId: string | null;
 	selectedId: string | null;
 	onHover: (id: string | null) => void;
@@ -82,7 +79,9 @@ export const cssRecordToStyle = (css?: Record<string, string>, mediaUrl?: (url: 
 	const out: Record<string, string> = {};
 	for (const [key, value] of Object.entries(css)) {
 		if (!value || typeof value !== 'string') continue;
-		out[key.startsWith('--') ? key : key.replace(/-([a-z])/g, (_, char: string) => char.toUpperCase())] = mediaUrl ? mapCssMediaUrls(value, mediaUrl) : value;
+		out[key.startsWith('--') ? key : key.replace(/-([a-z])/g, (_, char: string) => char.toUpperCase())] = mediaUrl
+			? mapCssMediaUrls(value, mediaUrl)
+			: value;
 	}
 	return Object.keys(out).length ? (out as React.CSSProperties) : undefined;
 };
@@ -249,17 +248,19 @@ const EdgeInsertStrip = ({
 		side === 'top'
 			? { top: offset, left: 0, right: 0, height: thickness }
 			: side === 'bottom'
-				? { bottom: offset, left: 0, right: 0, height: thickness }
-				: side === 'left'
-					? { left: vOffset, top: 0, bottom: 0, width: vThickness }
-					: { right: vOffset, top: 0, bottom: 0, width: vThickness };
+			? { bottom: offset, left: 0, right: 0, height: thickness }
+			: side === 'left'
+			? { left: vOffset, top: 0, bottom: 0, width: vThickness }
+			: { right: vOffset, top: 0, bottom: 0, width: vThickness };
 	return (
 		<Flex
 			as="button"
 			type="button"
 			aria-label="Add a block here"
 			className="ttInsertZone"
-			data-testid={`insert-${testIdPrefix ? `${testIdPrefix}-` : ''}${containerId ?? 'root'}-${index}${side === 'top' || side === 'left' ? '' : `-${side}`}`}
+			data-testid={`insert-${testIdPrefix ? `${testIdPrefix}-` : ''}${containerId ?? 'root'}-${index}${
+				side === 'top' || side === 'left' ? '' : `-${side}`
+			}`}
 			position="absolute"
 			{...rect}
 			zIndex={6}
@@ -335,7 +336,15 @@ const EdgeInsertStrip = ({
 };
 
 const alignSelfOf = (block: WebpageBlock): string | undefined =>
-	block.align === 'center' ? 'center' : block.align === 'end' ? 'flex-end' : block.align === 'start' ? 'flex-start' : block.align === 'stretch' ? 'stretch' : undefined;
+	block.align === 'center'
+		? 'center'
+		: block.align === 'end'
+		? 'flex-end'
+		: block.align === 'start'
+		? 'flex-start'
+		: block.align === 'stretch'
+		? 'stretch'
+		: undefined;
 
 // Align must be VISIBLE: a 100%-wide box centers to nothing, and grid cells
 // place on the inline axis with justify-self, not align-self. An aligned
@@ -360,10 +369,10 @@ const selfPlacement = (block: WebpageBlock, parentDirection: ParentDirection) =>
 				? align === 'center'
 					? 'center'
 					: align === 'end'
-						? 'end'
-						: align === 'stretch'
-							? 'stretch'
-							: 'start'
+					? 'end'
+					: align === 'stretch'
+					? 'stretch'
+					: 'start'
 				: undefined,
 		marginX: block.align === 'center' ? 'auto' : undefined
 	} as const;
@@ -393,15 +402,42 @@ const BlockFrame = ({
 	children: React.ReactNode;
 }) => {
 	const live = chrome?.seamlessMode === 'view';
-	const layout = !!chrome && (!chrome.seamlessMode || chrome.seamlessMode === 'layout' || (chrome.seamlessMode === 'builder' || chrome.seamlessMode === 'container'));
+	const layout = !!chrome && chrome.seamlessMode !== 'view';
 	const hovered = !live && chrome?.hoverId === block.id;
 	const mediaUrl = useSharedMediaUrl();
 	const selected = !live && chrome?.selectedId === block.id;
 	const [dropTarget, setDropTarget] = React.useState(false);
+	const frameRef = React.useRef<HTMLDivElement>(null);
+	const [chipBelow, setChipBelow] = React.useState(false);
+	React.useLayoutEffect(() => {
+		const frame = frameRef.current;
+		if (!frame || !chrome?.seamlessMode || !(hovered || selected)) return;
+		const owner = frame.ownerDocument;
+		const view = owner.defaultView;
+		const place = () => {
+			const clearance = owner === document ? parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tt-nav-clearance')) || 0 : 0;
+			const rect = frame.getBoundingClientRect();
+			setChipBelow(rect.top < clearance + 14 && rect.bottom < (view?.innerHeight || 0) - 32);
+		};
+		place();
+		owner.addEventListener('scroll', place, true);
+		view?.addEventListener('resize', place);
+		return () => {
+			owner.removeEventListener('scroll', place, true);
+			view?.removeEventListener('resize', place);
+		};
+	}, [chrome?.seamlessMode, hovered, selected]);
+
 	const tone = locked ? 'var(--tt-muted, #9a9aa6)' : 'var(--tt-accent, hotpink)';
-	if (!chrome || live) return <Box data-block-id={block.id} {...selfPlacement(block, parentDirection)} style={cssRecordToStyle(block.css, mediaUrl)}>
-		{null}{children}{null}{null}
-	</Box>;
+	if (!chrome || live)
+		return (
+			<Box data-block-id={block.id} {...selfPlacement(block, parentDirection)} style={cssRecordToStyle(block.css, mediaUrl)}>
+				{null}
+				{children}
+				{null}
+				{null}
+			</Box>
+		);
 	// EVERY frame is a file-drop target (media blocks swap their src, others
 	// receive the upload via onMediaToBlock) — otherwise the browser opens the
 	// dropped file. Grid cells additionally accept block drags (insert-before),
@@ -411,45 +447,47 @@ const BlockFrame = ({
 	// locked frames (live native app screens) keep their hands off drops —
 	// the app inside owns them (e.g. the post composer's own file drop zone);
 	// unclaimed drops there fall through to the window guard
-	const dropProps = locked || !layout
-		? {}
-		: {
-				onDragOver: (event: React.DragEvent) => {
-					if (event.defaultPrevented) return;
-					const hasFiles = event.dataTransfer.types.includes('Files');
-					const hasBlock = acceptsBlockDrag && event.dataTransfer.types.includes(DRAG_MIME);
-					if (hasFiles || hasBlock) {
-						event.preventDefault();
-						event.stopPropagation();
-						event.dataTransfer.dropEffect = hasBlock ? 'move' : 'copy';
-						setDropTarget(true);
+	const dropProps =
+		locked || !layout
+			? {}
+			: {
+					onDragOver: (event: React.DragEvent) => {
+						if (event.defaultPrevented) return;
+						const hasFiles = event.dataTransfer.types.includes('Files');
+						const hasBlock = acceptsBlockDrag && event.dataTransfer.types.includes(DRAG_MIME);
+						if (hasFiles || hasBlock) {
+							event.preventDefault();
+							event.stopPropagation();
+							event.dataTransfer.dropEffect = hasBlock ? 'move' : 'copy';
+							setDropTarget(true);
+						}
+					},
+					onDragLeave: () => setDropTarget(false),
+					onDrop: (event: React.DragEvent) => {
+						setDropTarget(false);
+						// a nested handler (composer drop zone, an inner frame) already
+						// claimed this drop
+						if (event.defaultPrevented) return;
+						const id = event.dataTransfer.getData(DRAG_MIME);
+						if (id && id !== block.id && acceptsBlockDrag) {
+							event.preventDefault();
+							event.stopPropagation();
+							chrome.onMove(id, containerId, indexInParent);
+							return;
+						}
+						const files = Array.from(event.dataTransfer.files || []);
+						if (files.length && chrome.onMediaToBlock) {
+							event.preventDefault();
+							event.stopPropagation();
+							chrome.onMediaToBlock(block.id, files);
+						}
 					}
-				},
-				onDragLeave: () => setDropTarget(false),
-				onDrop: (event: React.DragEvent) => {
-					setDropTarget(false);
-					// a nested handler (composer drop zone, an inner frame) already
-					// claimed this drop
-					if (event.defaultPrevented) return;
-					const id = event.dataTransfer.getData(DRAG_MIME);
-					if (id && id !== block.id && acceptsBlockDrag) {
-						event.preventDefault();
-						event.stopPropagation();
-						chrome.onMove(id, containerId, indexInParent);
-						return;
-					}
-					const files = Array.from(event.dataTransfer.files || []);
-					if (files.length && chrome.onMediaToBlock) {
-						event.preventDefault();
-						event.stopPropagation();
-						chrome.onMediaToBlock(block.id, files);
-					}
-				}
-		  };
+			  };
 	return (
 		<Box
 			{...dropProps}
-			className={live ? undefined : "ttBlockFrame"}
+			ref={frameRef}
+			className={live ? undefined : 'ttBlockFrame'}
 			zIndex={selected ? 10 : undefined}
 			data-block-id={block.id}
 			position="relative"
@@ -460,7 +498,7 @@ const BlockFrame = ({
 					? (event: React.MouseEvent) => {
 							const target = event.target as HTMLElement;
 							// native context menus stay native inside editors/inputs
-							if (target.closest?.('.codex-editor, input, textarea, [contenteditable="true"]')) return;
+							if (target.closest?.('.codex-editor, input, textarea, [contenteditable]:not([contenteditable="false"])')) return;
 							if (target.closest?.('[data-block-id]') !== event.currentTarget) return;
 							event.preventDefault();
 							event.stopPropagation();
@@ -478,23 +516,19 @@ const BlockFrame = ({
 				position: 'absolute',
 				inset: chrome.seamlessMode ? '0px' : '-4px',
 				borderRadius: 'var(--tt-radius-xs, 7px)',
-				border: dropTarget
-					? `2px dashed ${tone}`
-					: selected
-						? `2px solid ${tone}`
-						: hovered
-							? `1px dashed ${tone}`
-							: '1px dashed transparent',
+				border: dropTarget ? `2px dashed ${tone}` : selected ? `2px solid ${tone}` : hovered ? `1px dashed ${tone}` : '1px dashed transparent',
 				pointerEvents: 'none',
 				zIndex: 5
 			}}
-			cursor={live ? undefined : layout ? "pointer" : "text"}
+			cursor={chrome.seamlessMode === 'edit' ? 'text' : 'pointer'}
 			onMouseEnter={(event) => {
 				if (live) return;
 				event.stopPropagation();
 				chrome.onHover(block.id);
 			}}
-			onMouseLeave={() => { if (!live) chrome.onHover(null); }}
+			onMouseLeave={() => {
+				if (!live) chrome.onHover(null);
+			}}
 			onMouseOver={(event) => {
 				if (live) return;
 				// nested frames: the innermost hovered frame wins the highlight
@@ -503,7 +537,7 @@ const BlockFrame = ({
 			}}
 			onClickCapture={(event) => {
 				// Inline editing is delegated by SeamlessPageEditor before this frame.
-				if (chrome.seamlessMode && !layout) return;
+				if (chrome.seamlessMode === 'edit' || chrome.seamlessMode === 'view') return;
 				// chrome controls nested inside this frame (insert zones, dropwells)
 				// own their clicks — capturing them would select the container
 				// instead of opening the menu
@@ -532,7 +566,8 @@ const BlockFrame = ({
 				<Flex
 					className="ttBlockChip"
 					position="absolute"
-					top="-14px"
+					top={chipBelow ? undefined : '-14px'}
+					bottom={chipBelow ? '-14px' : undefined}
 					left="6px"
 					// above the insert strips (also z 6): the strip renders later in
 					// the DOM and would otherwise hit-test OVER the chip's whole
@@ -629,20 +664,24 @@ const BlockFrame = ({
 			{children}
 			{/* overlay insert strips on the parent-axis seams — zero layout
 			    impact, so the edit canvas is pixel-identical to view mode */}
-			{layout && <EdgeInsertStrip
-				side={parentDirection === 'column' ? 'top' : 'left'}
-				containerId={containerId}
-				index={indexInParent}
-				chrome={chrome}
-				testIdPrefix={testIdPrefix}
-			/>}
-			{layout && <EdgeInsertStrip
-				side={parentDirection === 'column' ? 'bottom' : 'right'}
-				containerId={containerId}
-				index={indexInParent + 1}
-				chrome={chrome}
-				testIdPrefix={testIdPrefix}
-			/>}
+			{layout && (
+				<EdgeInsertStrip
+					side={parentDirection === 'column' ? 'top' : 'left'}
+					containerId={containerId}
+					index={indexInParent}
+					chrome={chrome}
+					testIdPrefix={testIdPrefix}
+				/>
+			)}
+			{layout && (
+				<EdgeInsertStrip
+					side={parentDirection === 'column' ? 'bottom' : 'right'}
+					containerId={containerId}
+					index={indexInParent + 1}
+					chrome={chrome}
+					testIdPrefix={testIdPrefix}
+				/>
+			)}
 		</Box>
 	);
 };
@@ -797,29 +836,29 @@ const ComponentBlockView = ({
 			return null;
 		});
 	}, [block.args, block.id, chrome]);
-	const handleDoubleClick = chrome && !chrome.seamlessMode
-		? (event: React.MouseEvent) => {
-				const target = event.target as HTMLElement;
-				const text = (target.textContent || '').trim();
-				if (!text || text.length > 400) return;
-				const spec = specs.find(
-					(candidate) =>
-						(candidate.type === 'string' || candidate.type === 'text' || !candidate.type) &&
-						String(argValues[candidate.name] ?? '').trim() === text
-				);
-				if (!spec) return;
-				event.preventDefault();
-				event.stopPropagation();
-				const rect = target.getBoundingClientRect();
-				setArgEdit({
-					name: spec.name,
-					value: String(argValues[spec.name] ?? ''),
-					left: Math.min(rect.left, Math.max(8, window.innerWidth - 260)),
-					top: rect.bottom + 6,
-					width: Math.max(220, Math.min(420, rect.width))
-				});
-		  }
-		: undefined;
+	const handleDoubleClick =
+		chrome && !chrome.seamlessMode
+			? (event: React.MouseEvent) => {
+					const target = event.target as HTMLElement;
+					const text = (target.textContent || '').trim();
+					if (!text || text.length > 400) return;
+					const spec = specs.find(
+						(candidate) =>
+							(candidate.type === 'string' || candidate.type === 'text' || !candidate.type) && String(argValues[candidate.name] ?? '').trim() === text
+					);
+					if (!spec) return;
+					event.preventDefault();
+					event.stopPropagation();
+					const rect = target.getBoundingClientRect();
+					setArgEdit({
+						name: spec.name,
+						value: String(argValues[spec.name] ?? ''),
+						left: Math.min(rect.left, Math.max(8, window.innerWidth - 260)),
+						top: rect.bottom + 6,
+						width: Math.max(220, Math.min(420, rect.width))
+					});
+			  }
+			: undefined;
 
 	if (!component || !crystal?.render) {
 		// live viewers see nothing — the "not found" card is edit chrome
@@ -841,7 +880,11 @@ const ComponentBlockView = ({
 	}
 
 	return (
-		<Box onClickCapture={interactive && (!chrome || chrome.seamlessMode === 'view') ? onTtAction : undefined} onDoubleClickCapture={handleDoubleClick} width="100%">
+		<Box
+			onClickCapture={interactive && (!chrome || chrome.seamlessMode === 'view') ? onTtAction : undefined}
+			onDoubleClickCapture={handleDoubleClick}
+			width="100%"
+		>
 			{isChakraThingNode(resolved) ? (
 				<ChakraThingRenderer node={resolved as ChakraThingNode} />
 			) : (
@@ -950,10 +993,7 @@ const BlockView = (
 	const [textHistory] = React.useState(() => new EditorHistory());
 	const cssTypo = React.useMemo(() => typographyFromCss(block.css), [block.css]);
 	const styleTypo = TEXT_STYLE_TYPO[block.style || 'body'] || TEXT_STYLE_TYPO.body;
-	const mergedTypo = React.useMemo(
-		() => (cssTypo ? { ...styleTypo, ...cssTypo } : styleTypo),
-		[cssTypo, styleTypo]
-	);
+	const mergedTypo = React.useMemo(() => (cssTypo ? { ...styleTypo, ...cssTypo } : styleTypo), [cssTypo, styleTypo]);
 	const richSx = React.useMemo(
 		() =>
 			cssTypo
@@ -974,13 +1014,15 @@ const BlockView = (
 			// headings, lists, quotes, tables, inline formatting, right there on
 			// the canvas (the drawer's modal remains the "advanced" surface)
 			body = (
-				<React.Suspense fallback={null}><InlineRichTextEditor
-					history={textHistory}
-					html={block.html}
-					text={block.text}
-					typography={typo}
-					onChange={(patch) => chrome.onUpdate?.(block.id, patch)}
-				/></React.Suspense>
+				<React.Suspense fallback={null}>
+					<InlineRichTextEditor
+						history={textHistory}
+						html={block.html}
+						text={block.text}
+						typography={typo}
+						onChange={(patch) => chrome.onUpdate?.(block.id, patch)}
+					/>
+				</React.Suspense>
 			);
 		} else if (block.html) {
 			// rich text renders as a styled flow container (never inside a <p> —
@@ -1094,9 +1136,7 @@ const BlockView = (
 			);
 		}
 	} else if (block.type === 'container') {
-		const children = (
-			<BlockList {...props} blocks={block.children || []} containerId={block.id} parentDirection={block.direction || 'column'} />
-		);
+		const children = <BlockList {...props} blocks={block.children || []} containerId={block.id} parentDirection={block.direction || 'column'} />;
 		if (block.direction === 'grid') {
 			// the authored column count is the desktop layout; phones fold a grid
 			// to one column and small tablets to at most two, so a 3–4 column
@@ -1163,12 +1203,10 @@ const BlockView = (
 	);
 };
 
-const BlockList = (
-	props: WebpageBlocksRendererProps & { containerId: string | null; parentDirection?: ParentDirection }
-) => {
+const BlockList = (props: WebpageBlocksRendererProps & { containerId: string | null; parentDirection?: ParentDirection }) => {
 	const { blocks, chrome, containerId, parentDirection = 'column' } = props;
 	const isRoot = containerId === null;
-	const showLayout = !!chrome && (!chrome.seamlessMode || chrome.seamlessMode === 'layout' || (chrome.seamlessMode === 'builder' || chrome.seamlessMode === 'container'));
+	const showLayout = !!chrome && chrome.seamlessMode !== 'view';
 	// an empty list renders one tall dropwell (never a slim line that could
 	// collide with sibling zones); the end of the root list keeps its zone
 	// visible so a page always invites another block
@@ -1202,14 +1240,7 @@ const BlockList = (
 				/>
 			))}
 			{isRoot && chrome && showLayout ? (
-				<DropWell
-					containerId={null}
-					index={blocks.length}
-					chrome={chrome}
-					label="Add a block"
-					trailing
-					testIdPrefix={props.testIdPrefix}
-				/>
+				<DropWell containerId={null} index={blocks.length} chrome={chrome} label="Add a block" trailing testIdPrefix={props.testIdPrefix} />
 			) : null}
 		</>
 	);

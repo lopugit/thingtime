@@ -1,5 +1,18 @@
 import React from 'react';
-import { Box, Button, Flex, Input, Select } from '@chakra-ui/react';
+import {
+	Box,
+	Button,
+	Flex,
+	Input,
+	Select,
+	Text,
+	Popover,
+	PopoverTrigger,
+	PopoverContent,
+	PopoverBody,
+	PopoverCloseButton,
+	Portal
+} from '@chakra-ui/react';
 import { Link, useNavigate } from 'react-router';
 import { createPortal, flushSync } from 'react-dom';
 
@@ -15,9 +28,8 @@ import { VIEWPORT_PRESETS, boundViewportDimension, type BuilderViewportSize } fr
 import { matchingTextArg, type SeamlessMode } from './seamlessMode';
 
 const HELP = {
-	edit: 'Click text or a button label to edit. Changes appear here immediately; Save publishes them.',
+	edit: 'Click text to edit, drag the pink handles to arrange, or use + to add blocks. Save publishes your changes.',
 	view: 'Use the live page. Forms, links and actions work normally; the inspector stays available.',
-	container: 'The classic framed canvas, with no page data runtime.',
 	builder: 'Build with sample arguments and no page data runtime. Switch to View to use live data.',
 	layout: 'Select blocks, drag their handles, or use + to insert. Page actions pause while arranging.'
 };
@@ -43,7 +55,7 @@ export default function SeamlessPageEditor({
 	mode: SeamlessMode;
 	onMode: (mode: SeamlessMode) => void;
 }) {
-	const builder = useBuilderChrome(draft, { enabled: mode === 'layout' || mode === 'builder' || mode === 'container' });
+	const builder = useBuilderChrome(draft, { enabled: mode !== 'view' });
 	const chromeRef = React.useRef(builder.chrome);
 	chromeRef.current = builder.chrome;
 	const chrome = React.useMemo<BuilderChrome>(
@@ -101,7 +113,11 @@ export default function SeamlessPageEditor({
 			const view = owner.defaultView!;
 			const target = event.target && (event.target as Node).nodeType === 1 ? (event.target as HTMLElement) : null;
 			if (!target || !page.contains(target)) return;
-			if (target.isContentEditable) return;
+			if (
+				target.isContentEditable ||
+				target.closest('.ttInsertZone, .ttDropWell, .ttBlockChip, .ttChipAction, .ttBlockContextMenu, .ttInlineRichTextEditor, .ttArgEditPopover')
+			)
+				return;
 			finishEdit.current?.();
 			const frame = target.closest<HTMLElement>('[data-block-id]');
 			const id = frame?.dataset.blockId;
@@ -249,77 +265,136 @@ export default function SeamlessPageEditor({
 			lopu({ title: result.error || 'Save failed. Your draft is still here.', status: 'error' });
 			return;
 		}
-		// A fresh navigation unloads all editor handlers and unsaved DOM. Run
+		// A fresh navigation unloads all editor handlers and unsaved DOM. Visit
 		// reads the persisted page with exactly the public runtime and ACLs.
 		const url = new URL(window.location.href);
 		url.pathname = `/${standalone ? 't' : 'p'}/${encodeURIComponent(result.id || draft.resolved!.page!.id)}`;
 		url.searchParams.delete('page');
 		if (standalone) url.searchParams.delete('mode');
-		else url.searchParams.set('mode', 'run');
+		else url.searchParams.set('mode', 'visit');
 		window.location.assign(url.href);
 	};
 
-	const topControls = (
-		<Flex data-testid="builder-top-controls" gap={2} alignItems="center" flexWrap="wrap" paddingY={3} paddingX={3}>
-			<Button as={Link} to="/builder" size="xs" variant="link">
-				← My pages
-			</Button>
-			<Button
-				as="a"
-				href={`/p/${encodeURIComponent(draft.resolved?.page?.id || '')}`}
-				target="_blank"
-				rel="noopener noreferrer"
-				size="xs"
-				variant="link"
-			>
-				Go to page ↗
-			</Button>
-			<Select
-				aria-label="Preview size"
-				width="auto"
-				maxWidth="100%"
-				size="sm"
-				value={preset}
-				onChange={(event) => {
-					const id = event.target.value;
-					finishEdit.current?.();
-					setPreset(id);
-					const device = VIEWPORT_PRESETS.find((item) => item.id === id);
-					onViewport(id === 'full' ? null : device ? { width: device.width, height: device.height } : viewport || { width: 390, height: 844 });
-				}}
-			>
-				{VIEWPORT_PRESETS.map((item) => (
-					<option key={item.id} value={item.id}>
-						{item.label}
-					</option>
-				))}
-				<option value="custom">Custom dimensions</option>
-			</Select>
-			{preset === 'custom' && (
-				<Flex gap={2} maxWidth="100%">
-					<Input
-						aria-label="Preview width"
-						type="number"
-						min={240}
-						max={3840}
-						width="88px"
-						size="sm"
-						defaultValue={viewport?.width || 390}
-						onBlur={(event) => { const width = boundViewportDimension(Number(event.target.value), 390); event.target.value = String(width); onViewport({ width, height: viewport?.height || 844 }); }}
-					/>
-					<Input
-						aria-label="Preview height"
-						type="number"
-						min={240}
-						max={3840}
-						width="88px"
-						size="sm"
-						defaultValue={viewport?.height || 844}
-						onBlur={(event) => { const height = boundViewportDimension(Number(event.target.value), 844); event.target.value = String(height); onViewport({ width: viewport?.width || 390, height }); }}
-					/>
-				</Flex>
-			)}
-		</Flex>
+	const presentation = viewport?.presentation === 'container' ? 'container' : 'viewport';
+	const changeViewport = (id: string, kind = presentation) => {
+		finishEdit.current?.();
+		setPreset(id);
+		const device = VIEWPORT_PRESETS.find((item) => item.id === id);
+		onViewport(
+			id === 'full' && kind === 'viewport'
+				? null
+				: {
+						width: device ? device.width : viewport?.width || 390,
+						height: device ? device.height : viewport?.height || 844,
+						presentation: kind as 'container' | 'viewport'
+				  }
+		);
+	};
+	const previewControls = (
+		<Popover placement="top" isLazy>
+			<PopoverTrigger>
+				<Button size="sm" variant="ghost" aria-label="Viewport controls" title="Viewport and container preview">
+					{presentation === 'container' ? 'Container' : preset === 'full' ? 'Full width' : 'Viewport'}{' '}
+					<Box as="span" marginLeft={2} color="var(--tt-muted, #777)">
+						⌄
+					</Box>
+				</Button>
+			</PopoverTrigger>
+			<Portal>
+				<PopoverContent
+					zIndex={10120}
+					width="340px"
+					maxWidth="calc(100vw - 24px)"
+					borderRadius="16px"
+					background="var(--tt-card, #fff)"
+					boxShadow="0 8px 40px #0002"
+					border="1px solid var(--tt-border, #ddd)"
+				>
+					<PopoverCloseButton aria-label="Close viewport controls" />
+					<PopoverBody padding={4}>
+						<Text fontSize="sm" fontWeight={600} marginBottom={3}>
+							Page preview
+						</Text>
+						<Flex
+							role="group"
+							aria-label="Preview presentation"
+							gap={1}
+							padding={1}
+							background="var(--tt-surface, #f5f5f7)"
+							borderRadius="10px"
+							marginBottom={3}
+						>
+							{(['viewport', 'container'] as const).map((kind) => (
+								<Button
+									key={kind}
+									flex={1}
+									size="sm"
+									variant={presentation === kind ? 'solid' : 'ghost'}
+									aria-pressed={presentation === kind}
+									onClick={() => changeViewport(preset, kind)}
+								>
+									{kind === 'viewport' ? 'Viewport' : 'Container'}
+								</Button>
+							))}
+						</Flex>
+						<Select
+							aria-label="Preview size"
+							value={preset}
+							onChange={(event) => changeViewport(event.target.value)}
+							height="38px"
+							border="1px solid var(--tt-border, #ddd)"
+							borderRadius="8px"
+							fontSize="sm"
+							background="var(--tt-card, #fff)"
+						>
+							{VIEWPORT_PRESETS.map((item) => (
+								<option key={item.id} value={item.id}>
+									{item.label}
+								</option>
+							))}
+							<option value="custom">Custom dimensions</option>
+						</Select>
+						{preset === 'custom' && (
+							<Flex gap={3} marginTop={3}>
+								{(['width', 'height'] as const).map((dimension) => (
+									<Box key={dimension} flex={1} minWidth={0}>
+										<Text as="label" htmlFor={`preview-${dimension}`} fontSize="xs" color="var(--tt-muted, #777)">
+											{dimension === 'width'
+												? presentation === 'container'
+													? 'Max width'
+													: 'Width'
+												: presentation === 'container'
+												? 'Min height'
+												: 'Height'}
+										</Text>
+										<Input
+											id={`preview-${dimension}`}
+											aria-label={`Preview ${dimension}`}
+											type="number"
+											min={240}
+											max={3840}
+											size="sm"
+											borderRadius="8px"
+											defaultValue={viewport?.[dimension] || (dimension === 'width' ? 390 : 844)}
+											onBlur={(event) => {
+												const value = boundViewportDimension(Number(event.target.value), dimension === 'width' ? 390 : 844);
+												event.target.value = String(value);
+												onViewport({ width: viewport?.width || 390, height: viewport?.height || 844, presentation, [dimension]: value });
+											}}
+										/>
+									</Box>
+								))}
+							</Flex>
+						)}
+						<Text fontSize="xs" color="var(--tt-muted, #777)" marginTop={3}>
+							{presentation === 'container'
+								? 'A centered container that grows with your content. Height is a minimum; media queries use the browser window.'
+								: 'Device sizes preview real media queries. Full width uses the live page.'}
+						</Text>
+					</PopoverBody>
+				</PopoverContent>
+			</Portal>
+		</Popover>
 	);
 
 	return (
@@ -329,9 +404,6 @@ export default function SeamlessPageEditor({
         .lopuLauncher { top: auto !important; bottom: calc(var(--tt-builder-toolbar-clearance, 160px) + env(safe-area-inset-bottom, 0px)) !important; }
         html[data-lopu-sheet="open"] [data-testid="builder-mode-toolbar"] { visibility: hidden; }
       `}</style>
-			{document.getElementById('builder-top-controls-slot')
-				? createPortal(topControls, document.getElementById('builder-top-controls-slot')!)
-				: topControls}
 
 			{createPortal(
 				<>
@@ -339,34 +411,51 @@ export default function SeamlessPageEditor({
 					<Flex
 						ref={toolbar}
 						data-testid="builder-mode-toolbar"
-				role="toolbar"
-						aria-label="Page mode"
+						role="toolbar"
+						aria-label="Page controls"
 						position="fixed"
 						bottom="max(16px, env(safe-area-inset-bottom))"
 						left="50%"
 						transform="translateX(-50%)"
 						width="max-content"
 						maxWidth="calc(100vw - 24px)"
-						padding="6px"
-						gap="4px"
+						padding="8px"
+						gap="3px"
 						zIndex={10100}
 						background="var(--tt-card, #fff)"
 						border="1px solid var(--tt-border, #ddd)"
-						borderRadius="16px"
+						borderRadius="20px"
 						boxShadow="0 4px 24px #0002"
 						flexWrap="wrap"
 						justifyContent="center"
 					>
-						{(['edit', 'view', 'layout', 'builder', 'container'] as const).map((item) => (
+						<Flex alignItems="center" gap={1}>
+							<Button as={Link} to="/builder" size="sm" variant="ghost">
+								← My pages
+							</Button>
+							<Button
+								as="a"
+								href={`/p/${encodeURIComponent(draft.resolved?.page?.id || '')}`}
+								target="_blank"
+								rel="noopener noreferrer"
+								size="sm"
+								variant="ghost"
+							>
+								Go to page ↗
+							</Button>
+						</Flex>
+						{previewControls}
+						<Box alignSelf="center" width="1px" height="24px" background="var(--tt-border, #ddd)" marginX={1} display={['none', 'block']} />
+						{(['builder', 'edit', 'layout', 'view'] as const).map((item) => (
 							<Button key={item} size="sm" aria-pressed={mode === item} variant={mode === item ? 'solid' : 'ghost'} onClick={() => changeMode(item)}>
 								{item[0].toUpperCase() + item.slice(1)}
 							</Button>
 						))}
 						<Button size="sm" variant="ghost" onClick={() => run()} isLoading={running} title="Save and open the page without builder UI">
-							Run
+							Visit ↗
 						</Button>
 						<Button size="sm" variant="ghost" onClick={() => run(true)} isDisabled={running} title="Save and open without Thingtime navigation">
-							Standalone ↗
+							Deploy ↗
 						</Button>
 						<Button size="sm" variant="outline" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(!drawerOpen)}>
 							Inspector
@@ -393,7 +482,7 @@ export default function SeamlessPageEditor({
 							footerSpace="var(--tt-builder-toolbar-clearance, 160px)"
 						/>
 					)}
-					{mode === 'layout' || mode === 'builder' || mode === 'container' ? builder.insertMenu : null}
+					{mode !== 'view' ? builder.insertMenu : null}
 				</>,
 				document.body
 			)}

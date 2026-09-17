@@ -82,14 +82,8 @@ function Fixture() {
 		<ChakraProvider>
 			<WebpageRuntimeProvider pageId="fixture" pageKey={null} suiteKey={null} source="user" enabled={usesPageRuntime(mode)}>
 				<main style={{ margin: '0 auto', padding: '20px 0 var(--tt-builder-toolbar-clearance, 160px)', background: '#f2f8ef', minHeight: '100vh' }}>
-					<div id="builder-top-controls-slot" />
 					<BuilderViewport size={viewport}>
-						<div
-							ref={setSurface}
-							style={mode === 'container' ? { maxWidth: 960, margin: '0 auto', padding: 24, border: '1px solid #ddd', borderRadius: 16 } : undefined}
-							data-testid="seamless-page"
-							data-builder-mode={mode}
-						>
+						<div ref={setSurface} data-testid="seamless-page" data-builder-mode={mode}>
 							<style>
 								{
 									'.fixture-device::after {content: "Desktop media query"} @media(max-width: 800px){.fixture-device::after {content:"Tablet media query"}} @media(max-width: 480px){.fixture-device::after {content:"Mobile media query"}}'

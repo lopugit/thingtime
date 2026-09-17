@@ -5,15 +5,22 @@ https://thingtime.com
 ### Seamless page editor
 
 `/builder?page=<id>` and `/p/<id>` share `LiveWebpage` and its lazy
-`SeamlessPageEditor`. Edit changes authored text in place; View runs the page
-with the inspector available; Layout arranges blocks; Builder disables page
-data; Container adds the classic frame. Run saves and reloads `/p/<id>?mode=run`
-without editor controls. Standalone opens `/t/<id>` with only a small credit
-link back to `/p/`. All paths use the same resolver, runtime and access checks.
-Responsive previews use a style-mirrored iframe portal for real CSS media
-queries; no second app or API runtime is booted in the frame. Inline drafts
-publish only when saved. Switching viewport presentation can remount form DOM;
-switching Edit/View/Layout preserves it.
+`SeamlessPageEditor`. One floating controls bar groups page navigation, preview
+settings, and Builder / Edit / Layout / View / Visit / Deploy / Inspector.
+Builder disables page data; Edit combines contenteditable text with pink block
+handles, outlines, insertion and context menus; Layout arranges blocks; View
+runs the page with the inspector available. Visit saves and reloads
+`/p/<id>?mode=visit` without editor controls (`mode=run` remains compatible).
+Deploy opens `/t/<id>` with only a small credit link back to `/p/`. All paths
+use the same resolver, runtime and access checks.
+The preview menu offers Viewport and Container presentations with the same
+full-width, desktop, tablet, mobile, device presets and custom dimensions.
+Sized Viewports use a style-mirrored iframe portal for real CSS media queries;
+Container uses the page DOM, a maximum width and minimum height, grows with its
+content, and has no maximum height. It does not disable the chosen mode's runtime.
+No second app or API runtime is booted in the frame. Inline drafts publish only
+when saved. Switching between iframe and native presentation can remount form
+DOM; switching editing modes preserves it.
 
 Local verification for `thingtime-seamless-builder`: `http://localhost:11060`
 (Vite 11060, HMR 11061, Nitro 11062), started with `npm run web-pms` using the

@@ -35,8 +35,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ## [Unreleased]
 
 - 2026-09-17 — Shared seamless builder on `/builder` and `/p`: live inline text
-  editing, View/Layout/Builder/Container/Run modes, overlay inspector, real
-  responsive device previews, and a top Go to page link. Dedicated live output
+  editing with pink block controls, Builder/Edit/Layout/View/Visit/Deploy, one
+  floating navigation/preview/mode bar, overlay inspector, real
+  responsive device previews and natural-height Container previews without an
+  iframe. Dedicated live output
   fills the available space; `/t/` hides Thingtime chrome except its tiny credit
   link. Local PM2 validation uses worktree ports 11060–11062; Tailscale is
   unavailable because its installed CLI target is missing.

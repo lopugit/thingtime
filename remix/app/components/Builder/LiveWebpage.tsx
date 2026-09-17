@@ -52,7 +52,7 @@ export default function LiveWebpage({ builderPageId }: { builderPageId?: string 
 	const requestedMode = searchParams.get('mode') || (builderPageId ? 'edit' : null);
 	const standalone = useLocation().pathname.startsWith('/t/');
 	const rootData = useRouteLoaderData('root') as { titlePrefix?: string } | undefined;
-	const runMode = standalone || requestedMode === 'run';
+	const runMode = standalone || requestedMode === 'run' || requestedMode === 'visit';
 	const linkKey = (searchParams.get('key') || '').trim();
 	const user = useCurrentUser();
 	const api = useApi();
@@ -64,7 +64,9 @@ export default function LiveWebpage({ builderPageId }: { builderPageId?: string 
 		React.useMemo(() => (id ? { kind: 'id' as const, id, ...(linkKey ? { key: linkKey } : {}) } : null), [id, linkKey]),
 		{ editable: !runMode }
 	);
-	const [viewport, setViewport] = React.useState<BuilderViewportSize>(null);
+	const [viewport, setViewport] = React.useState<BuilderViewportSize>(() =>
+		requestedMode === 'container' ? { width: 960, height: 0, presentation: 'container' } : null
+	);
 	const surface = React.useRef<HTMLDivElement>(null);
 	const [surfaceDocument, setSurfaceDocument] = React.useState<Document | null>(null);
 	const setSurface = React.useCallback((node: HTMLDivElement | null) => {
@@ -74,7 +76,14 @@ export default function LiveWebpage({ builderPageId }: { builderPageId?: string 
 	const [editorChrome, setEditorChrome] = React.useState<BuilderChrome | null>(null);
 	const page = draft.resolved?.page || null;
 	const isOwner = !!user?.id && page?.author?.id === user.id;
-	const editorMode = (isOwner || (!!builderPageId && !!user?.id)) && !runMode ? (isSeamlessMode(requestedMode) ? requestedMode : 'view') : null;
+	const editorMode =
+		(isOwner || (!!builderPageId && !!user?.id)) && !runMode
+			? isSeamlessMode(requestedMode)
+				? requestedMode
+				: requestedMode === 'container'
+				? 'builder'
+				: 'view'
+			: null;
 	const changeMode = (mode: SeamlessMode) => {
 		setSearchParams(
 			(previous) => {
@@ -296,16 +305,11 @@ export default function LiveWebpage({ builderPageId }: { builderPageId?: string 
 							</Button>
 						</Flex>
 					)}
-					<div id="builder-top-controls-slot" />
 					<BuilderViewport size={editorMode ? viewport : null}>
 						<Box
 							ref={setSurface}
-							padding={editorMode === 'container' ? [3, 6] : undefined}
-							border={editorMode === 'container' ? '1px solid var(--tt-border, #ddd)' : undefined}
-							borderRadius={editorMode === 'container' ? '16px' : undefined}
 							background={previewBg}
 							width="100%"
-							maxWidth={editorMode === 'container' ? '960px' : undefined}
 							minHeight={standalone ? 'calc(100dvh - 22px)' : 'calc(100dvh - var(--tt-nav-clearance, 54px))'}
 							marginX="auto"
 							minWidth={0}
