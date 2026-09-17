@@ -187,6 +187,7 @@ export const titleFromMessage = (text: string): string => {
 const interruptedNote = (outcome: LopuChatTurnOutcome | null): string => {
   if (!outcome) return 'Lopu’s reply was interrupted before it started — ask again in a moment.';
   const text = outcome.text.trim();
+  if (outcome.stopReason === 'checkpoint') return text || 'Progress saved. Continuing…';
   if (outcome.stopReason === 'aborted') return text ? `${text}\n\n_(reply stopped)_` : 'Lopu’s reply was stopped before it started.';
   if (outcome.stopReason === 'error') return text ? `${text}\n\n_(reply interrupted — try again)_` : 'Lopu lost the thread before replying — try again.';
   return text || 'Lopu went quiet for a moment — ask again in a little while.';
@@ -369,8 +370,6 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
     // --- the stream -----------------------------------------------------------
     const startedAt = Date.now();
     const abort = new AbortController();
-    let timedOut = false;
-    const turnDeadline = setTimeout(() => { timedOut = true; abort.abort(); }, 240_000);
     const requestSignal = (request as Request & { signal?: AbortSignal }).signal;
     if (requestSignal) {
       if (requestSignal.aborted) abort.abort();
@@ -391,6 +390,14 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
           }
         };
 
+        let renewing = false;
+        const leaseHeartbeat = access.renew ? setInterval(async () => {
+          if (renewing) return;
+          renewing = true;
+          try { await access.renew?.(); }
+          catch { abort.abort(); }
+          finally { renewing = false; }
+        }, 30_000) : null;
         let outcome: LopuChatTurnOutcome | null = null;
         try {
           const attachedContent = await resolveLopuMedia(user.id, [...input.attachmentIds, ...references.filter(ref => typeof ref.crystal === "object" && ref.crystal && "contentType" in ref.crystal).map(ref => ref.id), ...(loaded.ok ? loaded.attachmentIds ?? [] : [])], abort.signal);
@@ -421,10 +428,9 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
           console.error('[lopu] reply stream failed:', error?.message || error);
           send({ type: 'error', message: 'The AI connection was interrupted. Saved progress is kept — use Retry / Continue to pick up from here.', retryable: true });
         } finally {
-          clearTimeout(turnDeadline);
-          if (timedOut && outcome?.stopReason === 'aborted') outcome.stopReason = 'time_limit';
+          if (leaseHeartbeat) clearInterval(leaseHeartbeat);
           // persist whatever streamed, even after an error or a disconnect
-          const finished = outcome?.stopReason === 'end_turn' || outcome?.stopReason === 'fallback' || outcome?.stopReason === 'tool_limit' || outcome?.stopReason === 'hop_limit' || outcome?.stopReason === 'time_limit' || outcome?.stopReason === 'max_tokens';
+          const finished = outcome?.stopReason === 'checkpoint' || outcome?.stopReason === 'end_turn' || outcome?.stopReason === 'fallback' || outcome?.stopReason === 'tool_limit' || outcome?.stopReason === 'hop_limit' || outcome?.stopReason === 'time_limit' || outcome?.stopReason === 'max_tokens';
           const text = finished && outcome?.text.trim() ? outcome.text : interruptedNote(outcome);
           const stopReason = outcome?.stopReason || 'error';
 

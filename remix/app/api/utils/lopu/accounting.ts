@@ -85,8 +85,8 @@ export const LOPU_ADMIN_ACCOUNTS_MAX_LIMIT = 100;
 // Comfortably above what the UI can start at once (page + floating window).
 export const LOPU_MAX_CONCURRENT_TURNS = 3;
 // A reservation older than this belonged to a request that died mid-turn (the
-// release never ran); the next reserve sweeps it. Well above the 240s a chat
-// turn can take (LOPU_CHAT_MAX_TURN_MS).
+// release never ran); the next reserve sweeps it. Long-running chat requests
+// renew this lease while alive; elapsed work is not a reason to release it.
 export const LOPU_INFLIGHT_TTL_MS = 10 * 60_000;
 // The last write ids applied to the balance, kept on the account so a retried
 // $inc cannot land twice. Bounded by $slice — never an unbounded array.
@@ -189,7 +189,7 @@ export type LopuGrantInput = {
 
 // One in-flight billed turn's slot on the account. `release` is idempotent and
 // never throws — the reply route calls it in a finally.
-export type LopuTurnReservation = { ok: true; release: () => Promise<void> } | { ok: false; reason: 'busy' };
+export type LopuTurnReservation = { ok: true; release: () => Promise<void>; renew?: () => Promise<void> } | { ok: false; reason: 'busy' };
 
 export type LopuGrantResult = { ok: true; ledgerId: string; balanceMicros: number; account: LopuAccountRecord };
 
@@ -711,7 +711,13 @@ export const createLopuAccountingService = (dependencies: LopuAccountingDependen
         { returnDocument: 'after' }
       );
       if (!reserved) return { ok: false, reason: 'busy' };
-      return { ok: true, release };
+      const renew = async () => {
+        if (!released) await things.updateOne(
+          { ...accountFilter(userId), 'crystal.inflight': { $gt: 0 } },
+          { $set: { 'crystal.inflightSince': now().toISOString() } }
+        );
+      };
+      return { ok: true, release, renew };
     } catch (error) {
       log('[lopu-accounting] in-flight slot not reserved', error);
       return { ok: false, reason: 'busy' };

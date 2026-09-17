@@ -3492,6 +3492,25 @@ The upload-regression worktree uses `http://localhost:19800` (HMR 19801, Nitro
 19802), derived by `npm run web-ports`. Tailscale/Funnel could not be configured
 on 2026-09-16: the installed launcher points to a missing Tailscale app.
 
+
+### Lopu continuation development
+
+Lopu has no fixed tool-count, step-count, continuation-count, or task-duration cap.
+On Vercel, completed tool batches checkpoint between hosting windows; large
+streams also checkpoint before continuing with a fresh request ID. The browser
+continues persisted checkpoints while the app is open, retaining chat/model and
+completed-work receipts. Background jobs renew a worker lease instead of stopping
+a healthy job on a timer. An uncertain provider/write failure remains a manual
+recovery boundary. Closing every app tab can leave a saved checkpoint awaiting
+return to the conversation; this is not a durable cross-window workflow runner.
+Provider transport, context, platform billing and authorization constraints still
+apply. No new private configuration or credentials are required.
+
+Regression fixture: `http://localhost:16650/scripts/lopu-continuation.browser.html`
+(worktree `thingtime-lopu-auto-continue`; HMR 16651, Nitro 16652). It runs the
+production store/composer with synthetic responses, including 17 continuations
+and Stop. The Tailscale/Funnel URL could not be configured: the installed wrapper
+references a missing `/Applications/Tailscale.app/Contents/MacOS/tailscale`.
 ## Social previews and search metadata
 
 The Nitro shell automatically serves Open Graph/Twitter metadata, canonical

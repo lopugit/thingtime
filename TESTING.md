@@ -350,6 +350,7 @@
 
 ## Unified Lopu conversations, scheduled Things and discussions
 
+- [ ] A saved Lopu reply stopped by a tool/hop/time/token limit automatically continues without a fixed count cap with fresh request IDs and the same chat/model. Stop, an account change, pending confirmation, incomplete tool, missing saved assistant, or a truncated stream prevents continuation. Switching chats must not redirect the continuation or change the newly selected model. Continuations do not resend attachments, stale builder blocks, or confirmation grants; provider/network failures keep manual Retry / Continue available. Exceed the former 24 tools, 12 hops and four-minute deadline; a healthy task continues. Hosting checkpoints rotate only after completed tool batches.
 - Browser regression: `/scripts/lopu-send.browser.html` mounts the real chat
   view, uploader, store and background-task transport with synthetic HTTP. Run
   the full send checks: type while an upload is held; Send/Enter stay blocked;

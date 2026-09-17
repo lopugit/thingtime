@@ -76,9 +76,9 @@ export class LopuStreamError extends Error {
  * consumes it. Recorded in the DevKit request log like every useApi call.
  */
 export const postLopuReply = async (body: LopuReplyBody, options?: { signal?: AbortSignal }): Promise<Response> => {
-	if (body.attachmentIds?.length || body.thingIds?.length) {
+	{ // Continuation requires the checkpoint-capable origin contract.
 		const { requireThingtimeCapability } = await import('~/api/utils/capabilities/requireCapability.client');
-		await requireThingtimeCapability('api.lopu-chats-reply', '1.10.0');
+		await requireThingtimeCapability('api.lopu-chats-reply', '1.11.0');
 	}
 	const started = performance.now();
 	let response: Response;
