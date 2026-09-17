@@ -35,6 +35,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ## [Unreleased]
 
 - **2026-09-17 — Social previews and Schema.org foundation (Codex):** align server titles, canonical URLs, image alt metadata and safe JSON-LD with anonymous public previews; revise the branded image cache URL, make fallback image URLs absolute and mark private/unavailable pages noindex. [PR #841 validation, investigation and broader SEO TODO](../PRs/841-social-schema-crawler-fix.md).
+- 2026-09-17: Lopu collapses submitted attachments optimistically, clears them on server acceptance despite uploader handle changes, restores rejected drafts, and keeps typing enabled during uploads. Expand supports native new-tab/window links. See [PR #838](../PRs/838-lopu-expand-link-optimistic-composer.md).
 - 2026-09-17: Floating Lopu chat and voice now share the full conversation list with the Lopu page, with collapsible wide-window navigation and a narrow list view that preserves the composer. — Codex (AI)
 
 - 2026-09-16 — **Codex (AI):** Fix image uploads hitting the legacy 30/hour start limit: default to 60/minute, upgrade only the exact persisted legacy policy, preserve custom rules, and honor bounded Retry-After retries without changing upload identity. Show the actual wait on persistent throttling; add policy, cancellation, route and capability regressions.
