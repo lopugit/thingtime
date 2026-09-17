@@ -61,10 +61,9 @@ export const LOPU_ASSISTANT_LABEL = 'Lopu';
 export const MAX_LOPU_CHATS_PER_USER = 500;
 export const MAX_LISTED_LOPU_CHATS = 300;
 export const DEFAULT_LISTED_LOPU_CHATS = 100;
-// The reply request accepts up to 8000 chars; rows cap at MAX_MESSAGE_CHARS
-// (4000), so a long prompt lands as two plain segments.
-// Voice accepts 12k; the public typed-reply route retains its 8k input cap.
-export const LOPU_USER_TURN_MAX_CHARS = 12000;
+// Typed input accepts 8k and voice accepts 12k. Bounded attached Thing/page
+// references can extend the persisted turn to 16k, split into 4k message rows.
+export const LOPU_USER_TURN_MAX_CHARS = 16000;
 export const LOPU_HISTORY_MAX_CHARS = 60_000;
 export const DEFAULT_LOPU_HISTORY_TURNS = 40;
 export const MAX_LOPU_HISTORY_TURNS = 200;

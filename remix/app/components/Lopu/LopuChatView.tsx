@@ -1,3 +1,7 @@
+import { LopuPageAttachments } from './LopuPageAttachments';
+import { useLopuCurrentPage } from './useLopuPages';
+import { useLopuContextProvider } from './useLopuChat';
+import { lopuPageReferences, type LopuPageReference } from '~/utils/lopuPageContext';
 import { useLopuVisualViewport } from './useLopuVisualViewport';
 import { canContinueLopuReply, LOPU_CONTINUE_PROMPT } from './lopuRecovery';
 import React from 'react';
@@ -513,14 +517,21 @@ export const LopuChatView = ({
 	const resolvedVariant: LopuChatViewVariant = variant ?? (compact ? 'window' : 'page');
 	const isMobile = useIsMobileViewport();
 	const visualViewport = useLopuVisualViewport();
-	const chat = useLopuChat({ chatId, context, applyPatches });
+	const currentPage = useLopuCurrentPage();
+	const defaultContext = useLopuContextProvider();
+	const [selectedPages, setSelectedPages] = React.useState<LopuPageReference[]>([]);
+	const pageContext = React.useCallback(() => {
+		const base = (context || defaultContext)();
+		return { ...base, pages: lopuPageReferences([...(base.pages || []), ...selectedPages]) };
+	}, [context, defaultContext, selectedPages]);
+	const chat = useLopuChat({ chatId, context: pageContext, applyPatches });
 	const [draft, setDraft] = React.useState('');
 	const [attachmentsExpanded, setAttachmentsExpanded] = React.useState(false);
 	const [uploads, setUploads] = React.useState(EMPTY_LOPU_ATTACHMENTS);
 	const [selectedThings, setSelectedThings] = React.useState<LopuSelectedThing[]>([]);
 	const uploadsRef = React.useRef<AttachmentComposerHandle>(null);
 	const [attachmentRevision, setAttachmentRevision] = React.useState(0);
-	React.useEffect(() => { setDraft(''); setAttachmentsExpanded(false); setSelectedThings([]); setUploads(EMPTY_LOPU_ATTACHMENTS); setAttachmentRevision(value => value + 1); }, [chat.viewer.id]);
+	React.useEffect(() => { setDraft(''); setSelectedPages([]); setAttachmentsExpanded(false); setSelectedThings([]); setUploads(EMPTY_LOPU_ATTACHMENTS); setAttachmentRevision(value => value + 1); }, [chat.viewer.id]);
 	const scrollRef = React.useRef<HTMLDivElement | null>(null);
 	const inputRef = React.useRef<HTMLTextAreaElement | null>(null);
 	const stickRef = React.useRef(true);
@@ -580,7 +591,7 @@ export const LopuChatView = ({
 				accepted = true;
 				uploadHandle?.markCommitted(uploads.attachmentIds);
 				setAttachmentsExpanded(false);
-				setUploads(EMPTY_LOPU_ATTACHMENTS); setSelectedThings([]); setAttachmentRevision(value => value + 1);
+				setUploads(EMPTY_LOPU_ATTACHMENTS); setSelectedThings([]); setSelectedPages([]); setAttachmentRevision(value => value + 1);
 			};
 			const result = await chat.send(text, undefined, { attachmentIds: uploads.attachmentIds, attachments: uploads.attachments, thingIds: selectedThings.map(thing => thing.id), onAccepted });
 			if (ownerRef.current !== ownerId) return result;
@@ -780,7 +791,7 @@ export const LopuChatView = ({
 			>
 				<Box maxW={compact ? '100%' : LOPU_UI.composerMaxWidth} mx="auto" width="100%">
 					<LopuComposer
-						attachments={<LopuAttachments key={`${chat.viewer.id}:${attachmentRevision}`} expanded={attachmentsExpanded} onExpandedChange={setAttachmentsExpanded} uploadsRef={uploadsRef} onUploads={setUploads} selected={selectedThings} onSelect={setSelectedThings} disabled={chat.sending || streamingHere} />}
+						attachments={<><LopuPageAttachments owner={chat.viewer.id} current={currentPage} selected={selectedPages} onChange={setSelectedPages} disabled={chat.sending || streamingHere} /><LopuAttachments key={`${chat.viewer.id}:${attachmentRevision}`} expanded={attachmentsExpanded} onExpandedChange={setAttachmentsExpanded} uploadsRef={uploadsRef} onUploads={setUploads} selected={selectedThings} onSelect={setSelectedThings} disabled={chat.sending || streamingHere} /></>}
 						onAttachFiles={files => { if (uploadsRef.current?.addFiles(files)) setAttachmentsExpanded(true); }}
 						value={draft}
 						onChange={setDraft}

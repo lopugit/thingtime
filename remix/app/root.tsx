@@ -1,3 +1,4 @@
+import { LOPU_WINDOW_Z } from './components/Nav/Drawer/useDrawer';
 import { useBackgroundRefresh } from '~/hooks/useBackgroundRefresh';
 import { Outlet, ScrollRestoration, useLoaderData, useLocation, useRevalidator } from 'react-router';
 import { Analytics } from '@vercel/analytics/react';
@@ -24,6 +25,7 @@ import { QuickSwitcher } from './components/QuickSwitcher/QuickSwitcher';
 import { AutoLoginPopup } from './components/Account/AutoLoginPopup';
 import { WatchPendingApprovals } from './components/Watch/WatchPendingApprovals';
 import { SiteBlocksHost } from './components/Builder/SiteBlocksHost';
+import { LopuPageTracker } from './components/Lopu/useLopuPages';
 import { LopuHost } from './components/Lopu/LopuHost';
 import { rememberAuthReturnTo } from './utils/authReturn';
 import { bindTransferIdentity } from './utils/thingTransfer/intent';
@@ -121,8 +123,34 @@ export default function App() {
   return (
     <ChakraWrapper>
       <GlobalStyles />
+      <style>{`
+        #lopuPageViewport { width: 100%; }
+        #lopuPageViewport[data-lopu-split] {
+          position: fixed;
+          top: var(--lopu-inset-top); right: var(--lopu-inset-right);
+          bottom: var(--lopu-inset-bottom); left: var(--lopu-inset-left);
+          width: auto; overflow: hidden; transform: translateZ(0); isolation: isolate;
+          container-type: inline-size; container-name: lopu-page;
+        }
+        #lopuPageViewport[data-lopu-split] > #lopuPageScroll { height: 100%; overflow: auto; }
+        @container lopu-page (max-width: 680px) {
+          .thingtimeTopNavInner { padding-left: 48px !important; padding-right: 12px !important; }
+          .nav-left-section { padding-left: 0 !important; column-gap: 4px !important; }
+          .nav-right-section { column-gap: 12px !important; }
+          .nav-search-section { display: none !important; }
+          .electron-titlebar-account-button { max-width: 100px; overflow: hidden; }
+          .electron-titlebar-account-button a { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        }
+        @container lopu-page (max-width: 440px) {
+          .electron-titlebar-account-button, .electron-titlebar-home-button { display: none !important; }
+        }
+        html[data-lopu-docked] #lopuPageViewport:not([data-lopu-split]) [data-testid="site-edit-pill"],
+        html[data-lopu-docked] #lopuPageViewport:not([data-lopu-split]) [class~="tt.devKit"],
+        html[data-lopu-sheet="open"] [data-testid="site-edit-pill"] { z-index: ${LOPU_WINDOW_Z - 1} !important; }
+      `}</style>
       <ThingtimeProvider key={rootData.user?.id || 'guest'}>
         <VisualSettingsHost />
+        <LopuPageTracker />
         <ThemeHost />
         {/* Mirrors settings.lopu.position into the cache useLopu reads at fire time. */}
         <LopuPositionSync />
@@ -131,8 +159,10 @@ export default function App() {
         {/* Invite signup and authorization/pairing use a focused auth
             surface with their own chrome, so the app shell (nav, drawer trigger,
             DevKit bubble, Main's footer + its 900px spacer) stays out of it. */}
+        <div id="lopuPageViewport">
         {isAuthorizePopup ? null : <DevKit />}
         {isAuthorizePopup ? null : <Nav />}
+        <div id="lopuPageScroll">
         {isAuthorizePopup ? (
           <Outlet />
         ) : (
@@ -144,7 +174,9 @@ export default function App() {
             </SiteBlocksHost>
           </Main>
         )}
+        </div>
         {isAuthorizePopup ? null : <DrawerSystem />}
+        </div>
         {/* 🦄 Lopu: global floating launcher + draggable chat window (hidden on /lopu). */}
         {mounted && !isAuthorizePopup ? <LopuHost /> : null}
         {/* ⌘K quick switcher — global palette; renders nothing until opened. */}

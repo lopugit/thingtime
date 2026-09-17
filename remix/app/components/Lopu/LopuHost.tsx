@@ -3,7 +3,7 @@ import React from 'react';
 import { Box, Button, Center, Flex, Select, Switch, Text } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
 import { useLocation, useNavigate } from 'react-router';
-import { ChevronDown, Maximize2, Mic, Minus, X } from 'lucide-react';
+import { ChevronDown, Maximize2, Mic, Minus, PanelsTopLeft, X } from 'lucide-react';
 
 import { LopuActivityBadge, LopuRingAvatar, useLopuStreamingActivity } from './LopuActivityBadge';
 import { LopuChatView } from './LopuChatView';
@@ -20,8 +20,8 @@ import {
 	LOPU_LAUNCHER_SIZE,
 	LOPU_PAGE_PATH,
 	LOPU_VOICE_PATH,
-	LOPU_WINDOW_MARGIN,
-	LOPU_WINDOW_MIN_SIZE,
+	resizeLopuWindow,
+	type LopuResizeEdge,
 	clampLopuLauncherPosition,
 	clampLopuWindowGeometry,
 	describeLopuEffort,
@@ -349,7 +349,7 @@ const ModelChip = (props: { catalog: LopuCatalog; hasCatalog: boolean; providerI
 // so the same controls land in both surfaces without duplicating the logic.
 export const LopuSettingsRows = (props: { renderRow: (label: string, control: React.ReactNode, hint?: string) => React.ReactNode }) => {
 	const { renderRow } = props;
-	const { settings, setLauncher, setDock, setApplyPatches, setConfirmDeletes, setEnterSends, setModelChoice, setEffort, setSpeed, setSpokenReplies, setTranscribe, setDirectVoice } =
+	const { settings, setLauncher, setDock, setApplyPatches, setConfirmDeletes, setEnterSends, setModelChoice, setEffort, setSpeed, setSpokenReplies, setTranscribe, setDirectVoice, setDockMode, setAttachCurrentPage } =
 		useLopuSettings();
 	const { catalog, hasCatalog } = useLopuModelCatalog(true);
 	const choice = resolveLopuModelChoice(catalog, settings);
@@ -365,15 +365,17 @@ export const LopuSettingsRows = (props: { renderRow: (label: string, control: Re
 			)}
 			{renderRow(
 				'Window docking',
-				<Flex columnGap={1}>
-					{(['free', 'right', 'left'] as LopuDock[]).map((dock) => (
+				<Flex columnGap={1} flexWrap="wrap">
+					{(['free', 'right', 'left', 'top', 'bottom'] as LopuDock[]).map((dock) => (
 						<Button key={dock} size="xs" variant={settings.dock === dock ? 'solid' : 'ghost'} onClick={() => setDock(dock)}>
-							{dock === 'free' ? 'Free' : dock === 'right' ? 'Right' : 'Left'}
+							{dock[0].toUpperCase() + dock.slice(1)}
 						</Button>
 					))}
 				</Flex>,
 				'Float anywhere, or pin the chat to a viewport edge (double-click its header to toggle)'
 			)}
+			{renderRow('Dock behavior', <Select size="sm" aria-label="Dock behavior" value={settings.dockMode} onChange={event => setDockMode(event.target.value as 'overlay' | 'split')}><option value="overlay">Overlay</option><option value="split">Split</option></Select>, 'Split resizes the page beside Lopu; overlay draws over it')}
+			{renderRow('Attach current page', <Switch isChecked={settings.attachCurrentPage} onChange={event => setAttachCurrentPage(event.target.checked)} aria-label="Automatically attach the current page" />, 'Include the current page URL and open builder draft with each message')}
 			{renderRow(
 				'Apply builder changes live',
 				<Switch isChecked={settings.applyPatches} onChange={(event) => setApplyPatches(event.target.checked)} aria-label="Apply builder changes live" />,
@@ -453,14 +455,16 @@ export const LopuHost = () => {
 	const { pathname } = useLocation();
 	const navigate = useNavigate();
 	const isMobile = useIsMobileViewport();
-	const { settings, open, setOpen, toggleOpen, setDock } = useLopuSettings();
+	const { settings, open, setOpen, toggleOpen, setDock, setMinimised, setDockMode } = useLopuSettings();
 	const streaming = useLopuStreamingActivity();
 
 	const [viewport, setViewport] = React.useState<LopuViewport>(readViewport);
 	const [launcherRaw, setLauncherRaw] = React.useState<LopuPoint | null>(readLopuLauncherPosition);
 	const [windowRaw, setWindowRaw] = React.useState<Partial<LopuWindowGeometry> | null>(readLopuWindowGeometry);
 	const [gesture, setGesture] = React.useState<'launcher' | 'move' | 'resize' | 'sheet' | null>(null);
-	const [minimised, setMinimised] = React.useState(false);
+	const minimised = settings.minimised;
+	const [layoutOpen, setLayoutOpen] = React.useState(false);
+	const layoutRef = useOutsideTapClose<HTMLDivElement>(layoutOpen, () => setLayoutOpen(false));
 	const [voiceMode, setVoiceMode] = React.useState(false);
 	const [voicePhase, setVoicePhase] = React.useState<LopuVoicePhase>('idle');
 	const [sheetOffset, setSheetOffset] = React.useState(0);
@@ -474,8 +478,8 @@ export const LopuHost = () => {
 	// hides the bubble only — the window still follows `open` (the navbar
 	// 🦄 toggles it)
 	const hiddenOnPath = isLopuHostHiddenOnPath(pathname);
-	const showLauncher = !hiddenOnPath && settings.launcher;
-	const showWindow = !hiddenOnPath && open;
+	const showLauncher = !hiddenOnPath && (settings.launcher || minimised);
+	const showWindow = !hiddenOnPath && open && !minimised;
 	const showSheet = showWindow && isMobile;
 	const showFrame = showWindow && !isMobile;
 	const docked = settings.dock !== 'free';
@@ -504,7 +508,6 @@ export const LopuHost = () => {
 	// a fresh open always starts expanded, in chat mode
 	React.useEffect(() => {
 		if (!open) {
-			setMinimised(false);
 			setVoiceMode(false);
 			setVoicePhase('idle');
 			setSheetOffset(0);
@@ -513,7 +516,7 @@ export const LopuHost = () => {
 
 	const launcherPos = launcherRaw ? clampLopuLauncherPosition(launcherRaw, viewport) : null;
 	const freeGeometry = resolveLopuWindowGeometry(windowRaw, viewport, launcherPos);
-	const geometry = docked ? dockedLopuWindowGeometry(settings.dock as Exclude<LopuDock, 'free'>, freeGeometry.width, viewport) : freeGeometry;
+	const geometry = docked ? dockedLopuWindowGeometry(settings.dock as Exclude<LopuDock, 'free'>, freeGeometry.width, viewport, freeGeometry.height, settings.dockMode === 'split') : freeGeometry;
 
 	// Escape closes the window — from inside it, or from anywhere on the page
 	// that is not a text field (a caret in a page input keeps its Escape).
@@ -571,7 +574,6 @@ export const LopuHost = () => {
 	}, [setOpen]);
 
 	const toggleVoice = React.useCallback(() => {
-		setMinimised(false);
 		setVoiceMode((prev) => !prev);
 	}, []);
 
@@ -689,78 +691,26 @@ export const LopuHost = () => {
 		[docked, geometry, setDock]
 	);
 
-	// bottom-right grip (free) — the origin stays put, the far edges follow
-	const onResizePointerDown = React.useCallback(
-		(event: React.PointerEvent) => {
-			if (event.button !== 0) {
-				return;
-			}
-			event.preventDefault();
-			event.stopPropagation();
-			const startX = event.clientX;
-			const startY = event.clientY;
-			const origin = geometry;
-			let latest: LopuWindowGeometry | null = null;
-			setGesture('resize');
-
-			startPointerGesture(
-				event,
-				(move) => {
-					const view = readViewport();
-					latest = clampLopuWindowGeometry(
-						{
-							x: origin.x,
-							y: origin.y,
-							width: Math.min(origin.width + (move.clientX - startX), view.width - origin.x),
-							height: Math.min(origin.height + (move.clientY - startY), view.height - origin.y)
-						},
-						view
-					);
-					setWindowRaw(latest);
-				},
-				() => {
-					setGesture(null);
-					if (latest) {
-						writeLopuWindowGeometry(latest);
-					}
-				}
-			);
-		},
-		[geometry]
-	);
-
-	// docked: the inner edge resizes the column's width
-	const onDockHandlePointerDown = React.useCallback(
-		(event: React.PointerEvent) => {
-			if (event.button !== 0) {
-				return;
-			}
-			event.preventDefault();
-			event.stopPropagation();
-			const startX = event.clientX;
-			const originWidth = geometry.width;
-			const direction = settings.dock === 'right' ? -1 : 1;
-			let latest: LopuWindowGeometry | null = null;
-			setGesture('resize');
-
-			startPointerGesture(
-				event,
-				(move) => {
-					const view = readViewport();
-					const width = Math.max(LOPU_WINDOW_MIN_SIZE.width, Math.min(originWidth + direction * (move.clientX - startX), view.width - LOPU_WINDOW_MARGIN));
-					latest = clampLopuWindowGeometry({ ...freeGeometry, width }, view);
-					setWindowRaw(latest);
-				},
-				() => {
-					setGesture(null);
-					if (latest) {
-						writeLopuWindowGeometry(latest);
-					}
-				}
-			);
-		},
-		[freeGeometry, geometry.width, settings.dock]
-	);
+	// A resize keeps the opposite edges anchored, including north/west grips.
+	const onResizePointerDown = (event: React.PointerEvent, edge: LopuResizeEdge) => {
+		if (event.button !== 0) return;
+		event.preventDefault(); event.stopPropagation();
+		const startX = event.clientX, startY = event.clientY;
+		const origin = geometry;
+		let latest: LopuWindowGeometry | null = null;
+		setGesture('resize');
+		startPointerGesture(event, move => {
+			const dx = move.clientX - startX, dy = move.clientY - startY;
+			if (docked) {
+				const horizontal = settings.dock === 'top' || settings.dock === 'bottom';
+				const size = dockedLopuWindowGeometry(settings.dock as Exclude<LopuDock, 'free'>,
+					origin.width + (settings.dock === 'right' ? -dx : dx), readViewport(),
+					origin.height + (settings.dock === 'bottom' ? -dy : dy), settings.dockMode === 'split');
+				latest = { ...freeGeometry, ...(horizontal ? { height: size.height } : { width: size.width }) };
+			} else latest = resizeLopuWindow(origin, edge, dx, dy, readViewport());
+			setWindowRaw(latest);
+		}, () => { setGesture(null); if (latest) writeLopuWindowGeometry(latest); });
+	};
 
 	// mobile sheet: drag the handle down to dismiss
 	const onSheetHandlePointerDown = React.useCallback(
@@ -790,6 +740,24 @@ export const LopuHost = () => {
 		},
 		[setOpen]
 	);
+
+	React.useEffect(() => { document.getElementById('lopuPageScroll')?.scrollTo(0, 0); }, [pathname]);
+
+	// Resize the app's own containing viewport, so fixed navigation and drawers
+	// follow the remaining page area rather than hiding behind a split dock.
+	React.useLayoutEffect(() => {
+		const page = document.getElementById('lopuPageViewport');
+		const split = showFrame && docked && settings.dockMode === 'split';
+		if (!page) return;
+		page.toggleAttribute('data-lopu-split', split);
+		for (const side of ['top', 'right', 'bottom', 'left'] as const) {
+			page.style.setProperty(`--lopu-inset-${side}`, split && settings.dock === side ? `${side === 'top' || side === 'bottom' ? geometry.height : geometry.width}px` : '0px');
+		}
+		page.style.setProperty('--thingtime-page-height', split && (settings.dock === 'top' || settings.dock === 'bottom') ? `${viewport.height - geometry.height}px` : '100dvh');
+		// The editing chip lives inside the resized page; the dock itself needs no gap.
+		document.documentElement.toggleAttribute('data-lopu-docked', showFrame && docked);
+		return () => { page.removeAttribute('data-lopu-split'); document.documentElement.removeAttribute('data-lopu-docked'); };
+	}, [showFrame, docked, settings.dock, settings.dockMode, geometry.height, geometry.width, viewport.height]);
 
 	if (hiddenOnPath) {
 		return null;
@@ -825,7 +793,7 @@ export const LopuHost = () => {
 			height={`${HEADER_HEIGHT_PX}px`}
 			paddingLeft={3}
 			paddingRight={2}
-			borderBottom={minimised ? 'none' : LOPU_UI.border}
+			borderBottom={LOPU_UI.border}
 			background={LOPU_UI.card}
 			cursor={variant === 'frame' ? (gesture === 'move' ? 'grabbing' : 'grab') : 'default'}
 			userSelect="none"
@@ -850,11 +818,20 @@ export const LopuHost = () => {
 				<Mic size={14} strokeWidth={2} />
 			</HeaderButton>
 			{chipVisible && <ModelChip catalog={catalog} hasCatalog={hasCatalog} providerId={chatProviderId} providerName={chatProviderName} vaultProviders={chatStore.vaultProviders} />}
-			{variant === 'frame' && (
-				<HeaderButton title={minimised ? 'Expand' : 'Minimise'} onClick={() => setMinimised((prev) => !prev)}>
-					{minimised ? <ChevronDown size={14} strokeWidth={2} style={{ transform: 'rotate(180deg)' }} /> : <Minus size={14} strokeWidth={2} />}
-				</HeaderButton>
-			)}
+			{variant === 'frame' && <Box position="relative" ref={layoutRef} data-lopu-control>
+				<button type="button" aria-label="Window layout" aria-expanded={layoutOpen} onClick={() => setLayoutOpen(!layoutOpen)} style={{ padding: 6, display: 'flex' }}><PanelsTopLeft size={15} /></button>
+				{layoutOpen && <Flex position="absolute" right={0} top="34px" zIndex={3} width="220px" maxW="calc(100vw - 24px)" p={3} gap={2} direction="column" bg={LOPU_UI.card} border={LOPU_UI.border} borderRadius={LOPU_UI.radiusMd} boxShadow={LOPU_UI.shadowPopover} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setLayoutOpen(false); } }}>
+					<Text fontSize="xs" fontWeight={700}>Window position</Text>
+					<Select size="sm" aria-label="Dock Lopu" value={settings.dock} onChange={event => setDock(event.target.value as LopuDock)}>
+						<option value="free">Floating</option>{(['top', 'left', 'bottom', 'right'] as const).map(side => <option key={side} value={side}>{side[0].toUpperCase() + side.slice(1)}</option>)}
+					</Select>
+					<Text fontSize="xs" fontWeight={700}>Dock behavior</Text>
+					<Select size="sm" aria-label="Dock behavior" value={settings.dockMode} onChange={event => setDockMode(event.target.value as 'overlay' | 'split')}>
+						<option value="overlay">Overlay the page</option><option value="split">Split with the page</option>
+					</Select>
+				</Flex>}
+			</Box>}
+			<HeaderButton title="Minimise" onClick={() => { setMinimised(true); setLayoutOpen(false); }}><Minus size={14} strokeWidth={2} /></HeaderButton>
 			<HeaderButton title={voiceMode ? "Open Lopu's voice page" : "Open Lopu's page"} href={fullPath} onClick={openFull}>
 				<Maximize2 size={13} strokeWidth={2} />
 			</HeaderButton>
@@ -865,7 +842,7 @@ export const LopuHost = () => {
 	);
 
 	const body = (
-		<Flex flex="1" minHeight={0} flexDirection="column" display={minimised ? 'none' : 'flex'}>
+		<Flex flex="1" minHeight={0} flexDirection="column" display="flex">
 			<LopuHostBoundary>
 				<LopuWindowConversations wide={!isMobile && geometry.width >= 680}>
 					{voiceMode ? <LopuVoiceSurface compact onOpenFull={openFull} onPhaseChange={setVoicePhase} /> : <LopuChatView compact showConversations={false} onOpenFull={openFull} />}
@@ -874,15 +851,16 @@ export const LopuHost = () => {
 		</Flex>
 	);
 
-	const frameHeight = minimised ? HEADER_HEIGHT_PX + 2 : geometry.height;
-	const frameY = minimised && !docked ? Math.min(geometry.y, Math.max(0, viewport.height - frameHeight)) : geometry.y;
+	const frameHeight = geometry.height;
+	const frameY = geometry.y;
 
 	return (
 		<>
-			{showFrame && (
+			{!isMobile && open && (
 				<Flex
 					ref={windowRef}
 					className="lopuWindow"
+					display={showFrame ? "flex" : "none"}
 					role="complementary"
 					aria-label="Lopu assistant"
 					data-lopu-dock={settings.dock}
@@ -904,41 +882,18 @@ export const LopuHost = () => {
 				>
 					{header('frame')}
 					{body}
-					{!minimised && !docked && (
-						<Box
-							aria-hidden
-							position="absolute"
-							right="1px"
-							bottom="1px"
-							width="16px"
-							height="16px"
-							cursor="nwse-resize"
-							color={LOPU_UI.faint}
-							sx={{ touchAction: 'none' }}
-							title="Drag to resize"
-							onPointerDown={onResizePointerDown}
-						>
-							<svg viewBox="0 0 14 14" width="14" height="14">
-								<path d="M12 6 L6 12 M12 10 L10 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none" />
-							</svg>
-						</Box>
-					)}
-					{docked && (
-						<Box
-							aria-hidden
-							position="absolute"
-							top={0}
-							bottom={0}
-							left={settings.dock === 'right' ? 0 : undefined}
-							right={settings.dock === 'left' ? 0 : undefined}
-							width={`${DOCK_HANDLE_PX}px`}
-							cursor="ew-resize"
-							sx={{ touchAction: 'none' }}
-							_hover={{ background: LOPU_UI.surfaceHover }}
-							title="Drag to resize"
-							onPointerDown={onDockHandlePointerDown}
-						/>
-					)}
+					{(docked ? [settings.dock === 'right' ? 'w' : settings.dock === 'left' ? 'e' : settings.dock === 'top' ? 's' : 'n'] : ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']).map(edge => {
+						const corner = edge.length === 2;
+						return <Box key={edge} data-lopu-resize={edge} aria-hidden position="absolute" zIndex={4}
+							top={edge.includes('n') ? 0 : edge === 'e' || edge === 'w' ? '12px' : undefined}
+							bottom={edge.includes('s') ? 0 : edge === 'e' || edge === 'w' ? '12px' : undefined}
+							left={edge.includes('w') ? 0 : edge === 'n' || edge === 's' ? '12px' : undefined}
+							right={edge.includes('e') ? 0 : edge === 'n' || edge === 's' ? '12px' : undefined}
+							width={corner ? '12px' : edge === 'e' || edge === 'w' ? `${DOCK_HANDLE_PX}px` : undefined}
+							height={corner ? '12px' : edge === 'n' || edge === 's' ? `${DOCK_HANDLE_PX}px` : undefined}
+							cursor={corner ? (edge === 'ne' || edge === 'sw' ? 'nesw-resize' : 'nwse-resize') : edge === 'e' || edge === 'w' ? 'ew-resize' : 'ns-resize'}
+							sx={{ touchAction: 'none' }} title="Drag to resize" onPointerDown={event => onResizePointerDown(event, edge as LopuResizeEdge)} />;
+					})}
 				</Flex>
 			)}
 
@@ -993,9 +948,9 @@ export const LopuHost = () => {
 						as="button"
 						type="button"
 						className="lopuLauncherButton"
-						aria-label={open ? 'Hide Lopu' : 'Talk to Lopu'}
-						aria-pressed={open}
-						title={open ? 'Hide Lopu · drag to move' : 'Talk to Lopu 🦄 · drag to move'}
+						aria-label={showWindow ? 'Hide Lopu' : 'Talk to Lopu'}
+						aria-pressed={showWindow}
+						title={showWindow ? 'Hide Lopu · drag to move' : 'Talk to Lopu 🦄 · drag to move'}
 						position="relative"
 						boxShadow={LOPU_UI.shadowCard}
 						cursor={gesture === 'launcher' ? 'grabbing' : 'grab'}
