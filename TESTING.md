@@ -7552,3 +7552,9 @@ storage only; do not describe it as a production upload or provider acceptance.
 
 - [ ] Signed out, open `/legal`, all three current `/pages/` documents and their version links on desktop and mobile; scroll to the bottom and confirm readable text and no overflow. Select the archived privacy version and return to current. Unknown versions must show a not-found message, never current text.
 - [ ] Copy privacy URL and Apple TV text, compare copied text and `.txt` download with the selected document. Deny clipboard permission and verify the selectable fallback. Confirm archived exports carry an archive warning and production URLs never use a preview origin.
+
+### Floating Lopu conversation selection (2026-09-17)
+
+- [ ] Open the floating popup and docked panel, widen past 680px, collapse/reopen Conversations, then shrink to 390px: the full list scrolls independently and the composer stays reachable. Repeat in the mobile sheet and voice mode.
+- [ ] With more than twelve conversations and long titles, select the oldest entry, start New chat, rename, cancel deletion, and open its Messenger link. Selection stays in the popup until a page link is explicitly chosen. Confirm the dedicated Lopu page uses the same list and history.
+- [ ] Open/close Conversations with a draft and attachments present; preserve them. Use keyboard Enter/Space on rows and nested Rename/Delete/Keep/Messenger controls: nested actions must not select a row. Escape in the rename field cancels editing without closing the popup.

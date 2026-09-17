@@ -33,8 +33,7 @@ test('every modified, auxiliary or already-handled activation is left to the bro
 
 test('the expand control renders an anchor and only buttons keep the button type', () => {
 	assert.match(source, /as=\{props\.href \? 'a' : 'button'\}/, 'an href makes the header control a real anchor');
-	assert.match(source, /type=\{props\.href \? undefined : 'button'\}/, 'type="button" is meaningless on an anchor');
-	assert.match(source, /href=\{props\.href\}/);
+	assert.match(source, /props\.href \? \{ href: props\.href \} : \{ type: 'button' as const \}/, 'only anchors receive href and only buttons receive type');
 	// the guard is the shared rule, not a hand-rolled copy that can drift
 	assert.match(source, /if \(!handlesLopuLinkInApp\(event\)\) return;/);
 	assert.match(source, /handlesLopuLinkInApp/);

@@ -7,6 +7,7 @@ import { ChevronDown, Maximize2, Mic, Minus, X } from 'lucide-react';
 
 import { LopuActivityBadge, LopuRingAvatar, useLopuStreamingActivity } from './LopuActivityBadge';
 import { LopuChatView } from './LopuChatView';
+import { LopuWindowConversations } from './LopuWindowConversations';
 import { getLopuStoreServerSnapshot, getLopuStoreSnapshot, selectLopuProviderNames, setLopuSettings, subscribeLopuStore, type LopuVaultProvider } from './lopuChatStore';
 import { useLopuAccount } from './useLopuAccount';
 import { handlesLopuLinkInApp } from './lopuLinkActivation';
@@ -531,7 +532,7 @@ export const LopuHost = () => {
 			// an open menu/picker/popover inside the window (model chip,
 			// composer picker, voice gear) owns this Escape — it closes the
 			// menu, not the window
-			if (windowRef.current?.querySelector('[aria-expanded="true"]')) {
+			if (windowRef.current?.querySelector('[aria-expanded="true"]:not([data-lopu-conversations-toggle])')) {
 				return;
 			}
 			setOpen(false);
@@ -866,7 +867,9 @@ export const LopuHost = () => {
 	const body = (
 		<Flex flex="1" minHeight={0} flexDirection="column" display={minimised ? 'none' : 'flex'}>
 			<LopuHostBoundary>
-				{voiceMode ? <LopuVoiceSurface compact onOpenFull={openFull} onPhaseChange={setVoicePhase} /> : <LopuChatView compact showConversations={false} onOpenFull={openFull} />}
+				<LopuWindowConversations wide={!isMobile && geometry.width >= 680}>
+					{voiceMode ? <LopuVoiceSurface compact onOpenFull={openFull} onPhaseChange={setVoicePhase} /> : <LopuChatView compact showConversations={false} onOpenFull={openFull} />}
+				</LopuWindowConversations>
 			</LopuHostBoundary>
 		</Flex>
 	);
