@@ -157,8 +157,8 @@ export const useThingSource = ({
 
 	const scope = React.useMemo<ThingSourceScope>(
 		() => ({
-			result: state.result,
-			state: state.status,
+			result: interactive ? state.result : undefined,
+			state: interactive ? state.status : 'inert',
 			error: state.error,
 			last: runtime.last,
 			viewer: runtime.viewer,
@@ -166,7 +166,7 @@ export const useThingSource = ({
 			installing: runtime.installing,
 			hasSource: !!source
 		}),
-		[state, runtime.last, runtime.viewer, runtime.query, runtime.installing, source]
+		[state, runtime.last, runtime.viewer, runtime.query, runtime.installing, source, interactive]
 	);
 	const refetch = React.useCallback(() => setLocal((current) => current + 1), []);
 	return { scope, refetch };

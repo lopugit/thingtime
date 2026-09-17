@@ -133,3 +133,14 @@ test('a `__proto__` query key never becomes a scope entry', () => {
 	assert.equal(Object.prototype.hasOwnProperty.call(scope, '__proto__'), false);
 	assert.equal(Object.getPrototypeOf(scope), Object.prototype);
 });
+
+test('form gathering treats iframe password and checkbox fields by element type', async () => {
+	const { gatherFormFields } = await import('./webpageRuntime');
+	const fields = [
+		{ tagName: 'INPUT', type: 'password', value: 'must-not-be-collected', getAttribute: () => 'password' },
+		{ tagName: 'INPUT', type: 'checkbox', checked: false, value: 'on', getAttribute: () => 'enabled' },
+		{ tagName: 'INPUT', type: 'text', value: 'hello', getAttribute: () => 'message' }
+	];
+	const form = { querySelectorAll: () => fields } as unknown as HTMLElement;
+	assert.deepEqual(gatherFormFields(form), { enabled: false, message: 'hello' });
+});

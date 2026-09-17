@@ -6203,6 +6203,31 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Design system + builder (`/builder`, `/p/:id`, `/docs/design-system`, `remix/app/components/Builder/`, `/api/v1/webpages/resolve`, `/api/v1/admin/webpages/seed`)
 
+- [ ] Seamless editor: open the same owned page at `/builder?page=<id>` and
+      `/p/<id>`. Builder/Edit/Layout/View/Visit/Deploy use the same blocks.
+      Type into a live form, switch Edit/View/Layout, and confirm its value
+      survives. Edit a heading, rich-text leaf, declared text arg and literal
+      button label (including spaces, braces, paste and Escape); formatting,
+      links and actions survive. Save/reload and verify the changes persisted.
+- [ ] Full width, desktop, tablet, mobile, device presets and custom dimensions
+      change the real preview viewport/media queries. At 390px and desktop,
+      edit inside the preview, open insertion/context menus and the inspector,
+      scroll both page and drawer to the bottom, and check for clipping,
+      overflow and controls hidden under the combined floating bar. Builder shows no live
+      source results. Container is a preview presentation, not an editing mode:
+      verify the same size presets and custom maximum width/minimum height,
+      no iframe, no maximum height and no change to the active runtime mode.
+      Edit exposes pink handles, insertion and context menus without swallowing
+      text editing or structural control clicks. Check first-block handles
+      remain visible beneath fixed navigation.
+- [ ] Visit saves the active edit before navigating; a failed save preserves the
+      draft. `/p/<id>?mode=visit` (and legacy `mode=run`) has Thingtime navigation/footer but no builder
+      controls. Plain `/p/` View has no Transfer or Edit in builder buttons.
+      `/t/<id>` has full-width content and only the tiny Made with Thingtime
+      bar; clicking it returns to `/p/<id>`. Private/link-key access follows the
+      same permissions on both routes. Dedicated thing/component live output
+      has no imposed card, padding or width cap.
+
 - [ ] At desktop, 390px and 320px widths, select a short centred text block,
       a large heading and right-aligned text. The selection toolbar stays above
       the selection, separate from the block label and history buttons; no

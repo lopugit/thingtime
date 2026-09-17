@@ -62,7 +62,8 @@ export default function App() {
   React.useLayoutEffect(() => { rootIdentity.confirm(rootData.clientIdentityGeneration); }, [rootData.clientIdentityGeneration]);
   const { envFromCookie, titlePrefix } = rootData;
   const { pathname, search, hash } = useLocation();
-  const isAuthorizePopup = pathname === '/invite' || pathname === '/authorize' || pathname === '/watch/pair' || pathname.startsWith('/pair/');
+  const isStandalonePage = pathname.startsWith('/t/');
+  const isAuthorizePopup = isStandalonePage || pathname === '/invite' || pathname === '/authorize' || pathname === '/watch/pair' || pathname.startsWith('/pair/');
   const revalidator = useRevalidator();
   const [mounted, setMounted] = React.useState(false);
   React.useLayoutEffect(() => bindTransferIdentity(rootIdentity, rootData.user?.id, rootData.clientIdentityGeneration),
@@ -155,8 +156,8 @@ export default function App() {
             "continue as" suggestions (cross-deployment auto-login). */}
         {mounted && !isAuthorizePopup ? <AutoLoginPopup /> : null}
         {/* App-wide confetti canvas + easter eggs (🥚 party mode, window.tt). */}
-        <ConfettiCanvas />
-        {mounted ? <EasterEggs /> : null}
+        {!isStandalonePage ? <ConfettiCanvas /> : null}
+        {mounted && !isStandalonePage ? <EasterEggs /> : null}
       </ThingtimeProvider>
       <ScrollRestoration />
       {mounted ? <Analytics /> : null}
