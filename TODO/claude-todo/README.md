@@ -38,6 +38,8 @@ future Claude sessions (use alongside `graphify-out/` for codebase orientation).
 | 24 | Migration-safe continuous availability (pending storage migrations never block established reads or writes; expand/coexist/migrate/verify/contract) | 🔴 P0 invariant · not started | [24-migration-safe-continuous-availability.md](./24-migration-safe-continuous-availability.md) |
 | 25 | Subspaces 🪐 — Reddit-style communities (branding, rules, flairs, access modes, moderation, mod log, hot/new/top/rising/controversial) + up/down votes as a separate focused reaction kind | 🟢 Built, live-walked | [25-subspaces.md](./25-subspaces.md) |
 
+| SEO | Automatic Open Graph, Schema.org and rich results across all pages, /things and public UGC | 🟡 Metadata foundation built; broader coverage open | [seo-schema-rich-results.md](./seo-schema-rich-results.md) |
+
 ## Conventions (see `FUNDAMENTALS.md`)
 
 - **All DB access goes through the Thingtime API** + the API utils layer. UI /

@@ -3511,3 +3511,9 @@ Regression fixture: `http://localhost:16650/scripts/lopu-continuation.browser.ht
 production store/composer with synthetic responses, including 17 continuations
 and Stop. The Tailscale/Funnel URL could not be configured: the installed wrapper
 references a missing `/Applications/Tailscale.app/Contents/MacOS/tailscale`.
+## Social previews and search metadata
+
+The Nitro shell automatically serves Open Graph/Twitter metadata, canonical
+URLs and safe Schema.org JSON-LD from anonymous public projections. See
+[the metadata runbook](docs/seo-social-metadata.md) for validation, crawler
+cache diagnosis, fork setup and the broader SEO/rich-results TODO.
