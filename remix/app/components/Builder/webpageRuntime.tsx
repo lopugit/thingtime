@@ -1,4 +1,5 @@
 import React from 'react';
+import { pageRuntimeSearch } from './seamlessMode';
 import { SharedMediaProvider } from '../Sharing/SharedMedia';
 import { useLocation } from 'react-router';
 
@@ -131,6 +132,7 @@ export const queryScopeOf = (search: string): Record<string, string> => {
 };
 
 export const WebpageRuntimeProvider = ({
+	enabled = true,
 	pageId,
 	pageKey,
 	suiteKey,
@@ -148,6 +150,7 @@ export const WebpageRuntimeProvider = ({
 	shared?: boolean;
 	linkKey?: string;
 	children: React.ReactNode;
+	enabled?: boolean;
 }) => {
 	const user = useCurrentUser();
 	const location = useLocation();
@@ -166,17 +169,23 @@ export const WebpageRuntimeProvider = ({
 		}),
 		[user]
 	);
-	const query = React.useMemo(() => queryScopeOf(location.search), [location.search]);
-	const sharedRun = React.useCallback(async (action: string, inputs: Record<string, unknown>) => {
-		await requireThingtimeCapability('api.actions-run', '1.3.1');
-		const response = await fetch('/api/v1/actions/run', {
-			method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ action, inputs, sharedRoot: pageId, ...(linkKey ? { key: linkKey } : {}) })
-		});
-		const data = await response.json();
-		if (!response.ok || !data?.ok) throw new Error(typeof data?.error === 'string' ? data.error : 'Shared control failed');
-		return data;
-	}, [pageId, linkKey]);
+	const runtimeSearch = pageRuntimeSearch(location.pathname, location.search);
+	const query = React.useMemo(() => queryScopeOf(runtimeSearch), [runtimeSearch]);
+	const sharedRun = React.useCallback(
+		async (action: string, inputs: Record<string, unknown>) => {
+			await requireThingtimeCapability('api.actions-run', '1.3.1');
+			const response = await fetch('/api/v1/actions/run', {
+				method: 'POST',
+				credentials: 'include',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action, inputs, sharedRoot: pageId, ...(linkKey ? { key: linkKey } : {}) })
+			});
+			const data = await response.json();
+			if (!response.ok || !data?.ok) throw new Error(typeof data?.error === 'string' ? data.error : 'Shared control failed');
+			return data;
+		},
+		[pageId, linkKey]
+	);
 
 	const refresh = React.useCallback(() => setVersion((current) => current + 1), []);
 	const report = React.useCallback((run: Omit<WebpageRuntimeLastRun, 'at'>) => {
@@ -232,7 +241,17 @@ export const WebpageRuntimeProvider = ({
 		[pageId, pageKey, suiteKey, source, viewer, query, version, last, installing, refresh, report, install, onInstall, load, shared, sharedRun]
 	);
 
-	return <WebpageRuntimeContext.Provider value={value}>{shared ? <SharedMediaProvider linkKey={linkKey} sharedRoot={pageId || undefined}>{children}</SharedMediaProvider> : children}</WebpageRuntimeContext.Provider>;
+	return (
+		<WebpageRuntimeContext.Provider value={enabled ? value : INERT_RUNTIME}>
+			{shared ? (
+				<SharedMediaProvider linkKey={linkKey} sharedRoot={pageId || undefined}>
+					{children}
+				</SharedMediaProvider>
+			) : (
+				children
+			)}
+		</WebpageRuntimeContext.Provider>
+	);
 };
 
 // The localStorage tier for source results — optimistic paint on the next
@@ -294,7 +313,8 @@ export const gatherFormFields = (root: HTMLElement | null): Record<string, unkno
 	fields.forEach((field) => {
 		const name = field.getAttribute('name') || '';
 		if (!name || !QUERY_KEY_PATTERN.test(name)) return;
-		if (field instanceof HTMLInputElement) {
+		if (field.tagName === 'INPUT') {
+			const input = field as HTMLInputElement;
 			// A PASSWORD field is never an action input. ACTION_INPUT_TYPES is
 			// string/text/number/boolean/enum — there is no credential type — and
 			// no suite renders one. But component markup IS untrusted data, and
@@ -307,11 +327,11 @@ export const gatherFormFields = (root: HTMLElement | null): Record<string, unkno
 			// the field can still render and fill, the value just goes nowhere.
 			if (field.type === 'password') return;
 			if (field.type === 'checkbox') {
-				out[name] = field.checked;
+				out[name] = input.checked;
 				return;
 			}
 			if (field.type === 'radio') {
-				if (field.checked) out[name] = field.value;
+				if (input.checked) out[name] = input.value;
 				return;
 			}
 		}

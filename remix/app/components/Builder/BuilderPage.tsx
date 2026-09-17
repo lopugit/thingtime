@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 
+import LiveWebpage from './LiveWebpage';
 import { useApi } from '~/hooks/useApi';
 import { useLopu } from '~/components/Lopu/useLopu';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -311,7 +312,9 @@ const BuilderCanvas = ({ pageId }: { pageId: string }) => {
 export const BuilderPage = () => {
 	const [searchParams] = useSearchParams();
 	const pageId = searchParams.get('page');
-	return pageId ? <BuilderCanvas pageId={pageId} /> : <PagesList />;
+	if (!pageId) return <PagesList />;
+	if (pageId === '__global__') return <BuilderCanvas pageId={pageId} />;
+	return <LiveWebpage builderPageId={pageId} />;
 };
 
 export default BuilderPage;
