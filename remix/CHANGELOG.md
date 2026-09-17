@@ -34,6 +34,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-17: Lopu collapses submitted attachments optimistically, clears them on server acceptance despite uploader handle changes, restores rejected drafts, and keeps typing enabled during uploads. Expand supports native new-tab/window links. See [PR #838](../PRs/838-lopu-expand-link-optimistic-composer.md).
+
 - 2026-09-16 — **Codex (AI):** Fix image uploads hitting the legacy 30/hour start limit: default to 60/minute, upgrade only the exact persisted legacy policy, preserve custom rules, and honor bounded Retry-After retries without changing upload identity. Show the actual wait on persistent throttling; add policy, cancellation, route and capability regressions.
 
 - 2026-09-16: Enable attachment paste/drop directly in Lopu and Messenger message fields; clear Lopu media on server acceptance instead of reply completion. Added synthetic browser regression coverage. — Codex (AI)

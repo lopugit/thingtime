@@ -350,6 +350,14 @@
 
 ## Unified Lopu conversations, scheduled Things and discussions
 
+- Browser regression: `/scripts/lopu-send.browser.html` mounts the real chat
+  view, uploader, store and background-task transport with synthetic HTTP. Run
+  the full send checks: type while an upload is held; Send/Enter stay blocked;
+  submission collapses the tray immediately; acceptance clears its files while
+  the reply is still running without deleting committed media; pre-acceptance
+  rejection restores files and preserves newer typing; retry clears correctly.
+  The old disabled-field and unstable imperative-handle guards must fail it.
+
 - [ ] The floating Lopu header expand control is a link to `/lopu` (or
   `/lopu/voice` in voice mode). Normal click expands in the current tab;
   Cmd/Ctrl-click, middle-click, Shift-click and the context menu retain native

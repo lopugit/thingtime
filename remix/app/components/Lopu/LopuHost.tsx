@@ -120,8 +120,7 @@ class LopuHostBoundary extends React.Component<{ children: React.ReactNode }, { 
 const HeaderButton = (props: { title: string; onClick: () => void; children: React.ReactNode; active?: boolean; href?: string }) => (
 	<Center
 		as={props.href ? 'a' : 'button'}
-		type={props.href ? undefined : 'button'}
-		href={props.href}
+		{...(props.href ? { href: props.href } : { type: 'button' as const })}
 		data-lopu-control
 		aria-label={props.title}
 		aria-pressed={props.active}

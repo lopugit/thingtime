@@ -566,11 +566,17 @@ export const LopuChatView = ({
 			const ownerId = chat.viewer.id;
 			const uploadHandle = uploadsRef.current;
 			setDraft('');
+			// Hide the submitted selection immediately, but keep its uploader mounted
+			// until acceptance so rejected sends retain the original files for retry.
+			setAttachmentsExpanded(false);
+			setSelectedThings([]);
 			stickRef.current = true;
 			focusInput();
 			let accepted = false;
 			const onAccepted = () => {
-				if (accepted || ownerRef.current !== ownerId || uploadsRef.current !== uploadHandle) return;
+				if (accepted || ownerRef.current !== ownerId || uploadsRef.current?.markCommitted !== uploadHandle?.markCommitted) return;
+				// markCommitted is stable for the uploader lifetime; addFiles (and the
+				// containing handle) changes when sending disables file selection.
 				accepted = true;
 				uploadHandle?.markCommitted(uploads.attachmentIds);
 				setAttachmentsExpanded(false);
@@ -579,12 +585,16 @@ export const LopuChatView = ({
 			const result = await chat.send(text, undefined, { attachmentIds: uploads.attachmentIds, attachments: uploads.attachments, thingIds: selectedThings.map(thing => thing.id), onAccepted });
 			if (ownerRef.current !== ownerId) return result;
 			if (result.ok === true || (result.ok === false && result.chatIdKnown)) onAccepted();
-			// a turn that never reached the server hands the text back
-			if (result.ok === false && result.text) setDraft((current) => current || result.text);
+			// A rejected turn restores its own selection without overwriting new text.
+			if (result.ok === false && !accepted && !result.chatIdKnown && uploadsRef.current?.markCommitted === uploadHandle?.markCommitted) {
+				setAttachmentsExpanded(attachmentsExpanded || uploads.hasSelection);
+				setSelectedThings(selectedThings);
+				if (result.text) setDraft((current) => current || result.text);
+			}
 			focusInput();
 			return result;
 		},
-		[chat, focusInput, uploads, selectedThings]
+		[chat, focusInput, uploads, selectedThings, attachmentsExpanded]
 	);
 	const send = React.useCallback(async (text: string) => { await submit(text); }, [submit]);
 	React.useLayoutEffect(() => {
@@ -778,7 +788,8 @@ export const LopuChatView = ({
 						onStop={stop}
 						streaming={streamingHere || chat.sending}
 						disabled={!chat.viewer.id || (locked && !byoUnlock)}
-						inputDisabled={locked || uploads.blocking}
+						inputDisabled={locked}
+						sendDisabled={uploads.blocking}
 						placeholder={composerPlaceholder}
 						enterSends={chat.preferences.enterSends}
 						models={chat.models}
