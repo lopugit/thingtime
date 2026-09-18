@@ -1,3 +1,4 @@
+import { builderAuthoringGuide } from '~/docs/builderGuide';
 // Lopu's system prompt. Two blocks: a STABLE part (voice, Thingtime concepts,
 // the exact grammars pulled from code, few-shot examples, tool guidance) that
 // is byte-identical across requests so Anthropic prompt caching can hold it,
@@ -100,6 +101,7 @@ const propList = [
 const grammars = (): string => {
   const props = propList.join(', ');
   return (
+    builderAuthoringGuide() + '\n\n' +
     '## Exact grammars (the server validates every write against these)\n' +
     '### Webpage blocks\n' +
     `Block types: ${WEBPAGE_BLOCK_TYPES.join(' | ')}. Caps: ${MAX_WEBPAGE_BLOCKS} blocks, depth ${MAX_WEBPAGE_BLOCK_DEPTH}, ${MAX_WEBPAGE_BLOCKS_BYTES} bytes serialised; ` +

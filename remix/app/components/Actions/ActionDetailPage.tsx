@@ -462,10 +462,11 @@ export const ActionDetailPage = () => {
 										<Flex direction="column" gap={1}>
 											{(crystal.capabilities || []).length ? (
 												(crystal.capabilities || []).map((entry) => (
-													<ActionChip key={entry.capability} size="md" tone="ok">
+													<ActionChip key={entry.capability} size="md" tone="ok" wrap>
 														{entry.capability}
 														{entry.schemas?.length ? `: ${entry.schemas.map((ref) => displayRef(ref, schemaNames)).join(', ')}` : ''}
 														{entry.actions?.length ? `: ${entry.actions.join(', ')}` : ''}
+													{entry.providers?.length ? `: ${entry.providers.join(', ')}` : ''}
 													</ActionChip>
 												))
 											) : (
@@ -495,9 +496,10 @@ export const ActionDetailPage = () => {
 									</Section>
 								</Flex>
 
-								{effects.creates.length || effects.reads.length || effects.updates || effects.deletes || effects.publicReads.length || effects.systemReads.length || effects.invokes.length ? (
+								{effects.lookups.length || effects.creates.length || effects.reads.length || effects.updates || effects.deletes || effects.publicReads.length || effects.systemReads.length || effects.invokes.length ? (
 									<Section title="Effects (derived from the steps)">
 										<Flex gap={1.5} wrap="wrap">
+											{effects.lookups.map((provider) => <ActionChip key={provider} tone="read" wrap>sends query to {provider} · uses your Vault key</ActionChip>)}
 											{effects.creates.map((schema) => (
 												<ActionChip key={`c-${schema}`} size="md" tone="create">
 													creates {displayRef(schema, schemaNames)}
