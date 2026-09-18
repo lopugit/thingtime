@@ -39,6 +39,10 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   inspected media, and negotiate `api.things-fork` 1.5.0. Verified with local
   replica-set API tests and desktop/mobile Chrome. [PR #851 validation notes](../PRs/851-codex-copy-nested-things-fix-copying-nested-comments-and-attachment-galleries.md). — **Codex (AI)**
 
+- 2026-09-18 — Floating builder controls follow Lopu split panes and pinned
+  navigation drawers. Narrow panes use a wrapped bar and keyboard-accessible
+  mode menu; preview popovers stay inside the available pane. — Codex (AI)
+
 - **2026-09-18 · Codex (AI):** Fix Enter and the normal send arrow to auto-queue during Lopu replies, remove the separate Queue button, and allow draft attachment editing while replying. Keep Stop visible with a floating send arrow for typed drafts and a compact Send now menu. Remove accepted messages from the queue immediately without releasing the reply lock.
 
 - **2026-09-18 · Codex (AI):** Add Lopu message queues with drag/arrow ordering, default grouped sends, pause/resume and stable retries; add immediately saved notes consumed at safe provider boundaries. Queues restore paused after reload. Publish background-task 1.2.0 and chat-reply 1.13.0 capabilities. [PR #846 validation notes](../PRs/846-codex-lopu-message-queue-add-lopu-message-queues-and-send-now-notes.md).
