@@ -11,12 +11,20 @@ import {
 	PopoverContent,
 	PopoverBody,
 	PopoverCloseButton,
-	Portal
+	Portal,
+	Menu,
+	MenuButton,
+	MenuList,
+	MenuItem,
+	MenuDivider,
+	MenuOptionGroup,
+	MenuItemOption
 } from '@chakra-ui/react';
 import { Link, useNavigate } from 'react-router';
 import { createPortal, flushSync } from 'react-dom';
 
 import { useLopu } from '../Lopu/useLopu';
+import { drawerWidthCss, useDrawer, useDrawerLiveWidth, useIsMobileViewport, DRAWER_POPUP_Z, LOPU_WINDOW_Z } from '../Nav/Drawer/useDrawer';
 import { defaultsFromArgs, sanitizeArgSpecs } from '../ComponentsLibrary/componentTemplate';
 import { BuilderDrawer } from './BuilderDrawer';
 import type { BuilderChrome } from './WebpageBlocksRenderer';
@@ -26,6 +34,10 @@ import type { UseWebpageDraft } from './useWebpage';
 import { componentTextOverrides } from './componentTextOverrides';
 import { VIEWPORT_PRESETS, boundViewportDimension, type BuilderViewportSize } from './BuilderViewport';
 import { matchingTextArg, type SeamlessMode } from './seamlessMode';
+
+const EDITOR_MODES = ['builder', 'edit', 'layout', 'view'] as const;
+const PAGE_POPUP_MODIFIERS = [{ name: 'preventOverflow', options: { altAxis: true, tether: false, padding: 12 } }];
+const modeLabel = (mode: SeamlessMode) => mode[0].toUpperCase() + mode.slice(1);
 
 const HELP = {
 	edit: 'Click text to edit, drag the pink handles to arrange, or use + to add blocks. Save publishes your changes.',
@@ -79,6 +91,7 @@ export default function SeamlessPageEditor({
 	const [acl, setAcl] = React.useState<string[]>(draft.resolved?.page?.acl || ['tt:user']);
 	const [preset, setPreset] = React.useState('full');
 	const [running, setRunning] = React.useState(false);
+	const [openControl, setOpenControl] = React.useState<'mode' | 'viewport' | null>(null);
 	React.useLayoutEffect(() => {
 		onChrome(chrome);
 	}, [chrome, onChrome]);
@@ -86,6 +99,14 @@ export default function SeamlessPageEditor({
 	const current = React.useRef({ draft, chrome });
 	current.current = { draft, chrome };
 	const toolbar = React.useRef<HTMLDivElement>(null);
+	const controlsLayer = React.useRef<HTMLDivElement>(null);
+	// Use the same containing viewport as navigation. Lopu resizes this host
+	// for every split direction, including top/bottom; body portals escape it.
+	const pageHost = document.getElementById('lopuPageViewport') || document.body;
+	const drawer = useDrawer();
+	const { width: navDrawerWidth, resizing: navDrawerResizing } = useDrawerLiveWidth();
+	const mobileViewport = useIsMobileViewport();
+	const navInset = drawer.open && !mobileViewport ? drawerWidthCss(navDrawerWidth) : '0px';
 	React.useLayoutEffect(() => {
 		const node = toolbar.current;
 		if (!node) return;
@@ -100,7 +121,7 @@ export default function SeamlessPageEditor({
 			if (previous) root.style.setProperty('--tt-builder-toolbar-clearance', previous);
 			else root.style.removeProperty('--tt-builder-toolbar-clearance');
 		};
-	}, []);
+	}, [pageHost]);
 	const finishEdit = React.useRef<(() => void) | null>(null);
 	const lopu = useLopu();
 	const navigate = useNavigate();
@@ -291,7 +312,15 @@ export default function SeamlessPageEditor({
 		);
 	};
 	const previewControls = (
-		<Popover placement="top" isLazy>
+		<Popover
+			isOpen={openControl === 'viewport'}
+			onOpen={() => setOpenControl('viewport')}
+			onClose={() => setOpenControl(null)}
+			placement="top"
+			boundary={controlsLayer.current || undefined}
+			modifiers={PAGE_POPUP_MODIFIERS}
+			isLazy
+		>
 			<PopoverTrigger>
 				<Button size="sm" variant="ghost" aria-label="Viewport controls" title="Viewport and container preview">
 					{presentation === 'container' ? 'Container' : preset === 'full' ? 'Full width' : 'Viewport'}{' '}
@@ -300,11 +329,13 @@ export default function SeamlessPageEditor({
 					</Box>
 				</Button>
 			</PopoverTrigger>
-			<Portal>
+			<Portal containerRef={controlsLayer}>
 				<PopoverContent
-					zIndex={10120}
-					width="340px"
-					maxWidth="calc(100vw - 24px)"
+					zIndex={DRAWER_POPUP_Z}
+					pointerEvents="auto"
+					width="min(340px, calc(100cqw - 24px))"
+					maxHeight="calc(100cqh - 24px)"
+					overflowY="auto"
 					borderRadius="16px"
 					background="var(--tt-card, #fff)"
 					boxShadow="0 8px 40px #0002"
@@ -402,65 +433,152 @@ export default function SeamlessPageEditor({
 			<style>{`
         [class~="tt.devKit"] { display: none !important; }
         .lopuLauncher { top: auto !important; bottom: calc(var(--tt-builder-toolbar-clearance, 160px) + env(safe-area-inset-bottom, 0px)) !important; }
-        html[data-lopu-sheet="open"] [data-testid="builder-mode-toolbar"] { visibility: hidden; }
+        html[data-lopu-sheet="open"] [data-testid="builder-controls-layer"] { visibility: hidden; }
+        html[data-lopu-docked] #lopuPageViewport:not([data-lopu-split]) [data-testid="builder-controls-layer"] { z-index: ${LOPU_WINDOW_Z - 1}; }
+        .ttBuilderCompactModes { display: none; }
+        @container builder-controls (max-width: 940px) {
+          .ttBuilderWideModes { display: none; }
+          .ttBuilderCompactModes { display: inline-flex; }
+          .ttBuilderControlsDivider { display: none; }
+        }
+        @container builder-controls (max-width: 560px) {
+          .ttBuilderPageLinks { flex-basis: 100%; }
+          [data-testid="builder-mode-toolbar"] button,
+          [data-testid="builder-mode-toolbar"] a { padding-inline: 10px; font-size: 13px; }
+        }
+        [data-testid="builder-controls-layer"] button,
+        [data-testid="builder-controls-layer"] a { white-space: nowrap; }
+        #lopuPageViewport .ttBuilderDrawer { max-width: calc(100% - 24px); }
       `}</style>
 
 			{createPortal(
 				<>
 					{running && <Box position="fixed" inset={0} zIndex={10200} cursor="wait" aria-label="Saving page" />}
-					<Flex
-						ref={toolbar}
-						data-testid="builder-mode-toolbar"
-						role="toolbar"
-						aria-label="Page controls"
+					<Box
+						ref={controlsLayer}
+						data-testid="builder-controls-layer"
 						position="fixed"
-						bottom="max(16px, env(safe-area-inset-bottom))"
-						left="50%"
-						transform="translateX(-50%)"
-						width="max-content"
-						maxWidth="calc(100vw - 24px)"
-						padding="8px"
-						gap="3px"
-						zIndex={10100}
-						background="var(--tt-card, #fff)"
-						border="1px solid var(--tt-border, #ddd)"
-						borderRadius="20px"
-						boxShadow="0 4px 24px #0002"
-						flexWrap="wrap"
-						justifyContent="center"
+						top={0}
+						bottom={0}
+						left={drawer.direction === 'left' ? navInset : 0}
+						right={drawer.direction === 'right' ? navInset : 0}
+						transition={drawer.loading || navDrawerResizing ? 'none' : 'left 0.28s ease-out, right 0.28s ease-out'}
+						pointerEvents="none"
+						zIndex={openControl ? DRAWER_POPUP_Z : 10100}
+						sx={{ containerType: 'size', containerName: 'builder-controls' }}
 					>
-						<Flex alignItems="center" gap={1}>
-							<Button as={Link} to="/builder" size="sm" variant="ghost">
-								← My pages
-							</Button>
-							<Button
-								as="a"
-								href={`/p/${encodeURIComponent(draft.resolved?.page?.id || '')}`}
-								target="_blank"
-								rel="noopener noreferrer"
-								size="sm"
-								variant="ghost"
+						<Flex
+							ref={toolbar}
+							data-testid="builder-mode-toolbar"
+							role="toolbar"
+							aria-label="Page controls"
+							position="absolute"
+							pointerEvents="auto"
+							bottom="max(12px, env(safe-area-inset-bottom))"
+							left="50%"
+							transform="translateX(-50%)"
+							width="max-content"
+							maxWidth="calc(100% - 24px)"
+							padding="8px"
+							gap="3px"
+							background="var(--tt-card, #fff)"
+							border="1px solid var(--tt-border, #ddd)"
+							borderRadius="20px"
+							boxShadow="0 4px 24px #0002"
+							flexWrap="wrap"
+							justifyContent="center"
+						>
+							<Flex className="ttBuilderPageLinks" alignItems="center" justifyContent="center" flexWrap="wrap" maxWidth="100%" gap={1}>
+								<Button as={Link} to="/builder" size="sm" variant="ghost">
+									← My pages
+								</Button>
+								<Button
+									as="a"
+									href={`/p/${encodeURIComponent(draft.resolved?.page?.id || '')}`}
+									target="_blank"
+									rel="noopener noreferrer"
+									size="sm"
+									variant="ghost"
+								>
+									Go to page ↗
+								</Button>
+							</Flex>
+							{previewControls}
+							<Box
+								className="ttBuilderControlsDivider"
+								alignSelf="center"
+								width="1px"
+								height="24px"
+								background="var(--tt-border, #ddd)"
+								marginX={1}
+								display={['none', 'block']}
+							/>
+							<Flex className="ttBuilderWideModes" gap="3px">
+								{EDITOR_MODES.map((item) => (
+									<Button
+										key={item}
+										size="sm"
+										aria-pressed={mode === item}
+										variant={mode === item ? 'solid' : 'ghost'}
+										onClick={() => changeMode(item)}
+									>
+										{modeLabel(item)}
+									</Button>
+								))}
+								<Button size="sm" variant="ghost" onClick={() => run()} isLoading={running} title="Save and open the page without builder UI">
+									Visit ↗
+								</Button>
+								<Button size="sm" variant="ghost" onClick={() => run(true)} isDisabled={running} title="Save and open without Thingtime navigation">
+									Deploy ↗
+								</Button>
+							</Flex>
+							<Menu
+								isOpen={openControl === 'mode'}
+								onOpen={() => setOpenControl('mode')}
+								onClose={() => setOpenControl(null)}
+								placement="top"
+								boundary={controlsLayer.current || undefined}
+								modifiers={PAGE_POPUP_MODIFIERS}
+								isLazy
 							>
-								Go to page ↗
+								<MenuButton as={Button} className="ttBuilderCompactModes" size="sm" isLoading={running} aria-label={`Page mode: ${modeLabel(mode)}`}>
+									{modeLabel(mode)}{' '}
+									<Box as="span" marginLeft={2} aria-hidden>
+										⌃
+									</Box>
+								</MenuButton>
+								<Portal containerRef={controlsLayer}>
+									<MenuList
+										zIndex={DRAWER_POPUP_Z}
+										pointerEvents="auto"
+										minWidth="0"
+										width="min(220px, calc(100cqw - 24px))"
+										maxHeight="calc(100cqh - 24px)"
+										overflowY="auto"
+										borderRadius="14px"
+									>
+										<MenuOptionGroup value={mode} type="radio" title="Page mode">
+											{EDITOR_MODES.map((item) => (
+												<MenuItemOption key={item} value={item} onClick={() => changeMode(item)}>
+													{modeLabel(item)}
+												</MenuItemOption>
+											))}
+										</MenuOptionGroup>
+										<MenuDivider />
+										<MenuItem onClick={() => run()} isDisabled={running}>
+											Visit ↗
+										</MenuItem>
+										<MenuItem onClick={() => run(true)} isDisabled={running}>
+											Deploy ↗
+										</MenuItem>
+									</MenuList>
+								</Portal>
+							</Menu>
+							<Button size="sm" variant="outline" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(!drawerOpen)}>
+								Inspector
 							</Button>
 						</Flex>
-						{previewControls}
-						<Box alignSelf="center" width="1px" height="24px" background="var(--tt-border, #ddd)" marginX={1} display={['none', 'block']} />
-						{(['builder', 'edit', 'layout', 'view'] as const).map((item) => (
-							<Button key={item} size="sm" aria-pressed={mode === item} variant={mode === item ? 'solid' : 'ghost'} onClick={() => changeMode(item)}>
-								{item[0].toUpperCase() + item.slice(1)}
-							</Button>
-						))}
-						<Button size="sm" variant="ghost" onClick={() => run()} isLoading={running} title="Save and open the page without builder UI">
-							Visit ↗
-						</Button>
-						<Button size="sm" variant="ghost" onClick={() => run(true)} isDisabled={running} title="Save and open without Thingtime navigation">
-							Deploy ↗
-						</Button>
-						<Button size="sm" variant="outline" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(!drawerOpen)}>
-							Inspector
-						</Button>
-					</Flex>
+					</Box>
 					{drawerOpen && (
 						<BuilderDrawer
 							hideTransfer={mode === 'view'}
@@ -484,7 +602,7 @@ export default function SeamlessPageEditor({
 					)}
 					{mode !== 'view' ? builder.insertMenu : null}
 				</>,
-				document.body
+				pageHost
 			)}
 		</>
 	);
