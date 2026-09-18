@@ -1,3 +1,4 @@
+import { FOUND_POST_KIND, FOUND_POST_PREFIX, foundPostViewerId, foundPostGrantMatches, withFoundPostGrant, loadFoundPostsForAuthor, rememberFoundPost } from './foundPosts';
 import { ownerLibraryMatch } from './ownerLibraryQuery';
 import { moveManagedContent } from './managedPlacement';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -478,6 +479,8 @@ export type Viewer = {
   // hidden-link keys presented with THIS request (?key= / body.key) — canView
   // grants a hidden thing to whoever carries its linkKey here
   linkKeys?: ReadonlySet<string>;
+  foundPosts?: ReadonlyMap<string, string>;
+  anonymousId?: string;
 } | null;
 export const asViewer = (value: string | Viewer | null | undefined): Viewer => (typeof value === 'string' ? { id: value } : value || null);
 
@@ -1021,6 +1024,7 @@ export const sanitizeShareId = (value: unknown): string | null | Fail => {
     return fail(400, 'shareId must be a short id without spaces, dots, or $');
   }
   if (
+    trimmed.startsWith(FOUND_POST_PREFIX) ||
     trimmed.startsWith('lopu-recording-') ||
     trimmed.startsWith('lopu-background-') ||
     trimmed.startsWith(MIGRATION_RESERVED_ID_PREFIX) ||
@@ -2295,7 +2299,11 @@ const authorFlairFor = (flairs: AuthorFlairs, embed: SubspaceEmbed | null, subsp
 // before any score is known (resolveRelated), so they re-order among the
 // replies that already ship rather than re-querying per parent — the
 // non-intrusive half the spec allowed; the docs say so.
-export type PostProjectionOptions = { commentSort?: CommentSort | null };
+export type PostProjectionOptions = {
+  rememberDiscovery?: boolean;
+  discoveryIp?: string;
+  commentSort?: CommentSort | null;
+};
 
 export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | Viewer, options: PostProjectionOptions = {}): Promise<PublicPost[]> => {
   const viewer = await withFriendIds(asViewer(viewerInput));
@@ -2616,7 +2624,7 @@ const aclOf = (doc: ThingDoc): string[] => (Array.isArray(doc.acl) && doc.acl.le
 export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
 	// Operational diagnostics have a stricter boundary than ordinary private
 	// Things: only the dedicated current-admin endpoint may decode/read them.
-	if ((thingtimeOf(doc).includes(MIGRATION_DIAGNOSTIC_THINGTIME) || thingtimeOf(doc).includes(ERROR_LOG_THINGTIME))) return false;
+	if ((thingtimeOf(doc).includes(FOUND_POST_KIND) || thingtimeOf(doc).includes(MIGRATION_DIAGNOSTIC_THINGTIME) || thingtimeOf(doc).includes(ERROR_LOG_THINGTIME))) return false;
 	// Moderation-blocked things vanish from every ordinary read for everyone —
 	// owner included, same as blocked attachments. Admins review through the
 	// moderationFlag queue (which carries a bounded excerpt), never this path.
@@ -2649,6 +2657,7 @@ export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
   ) {
     return true;
   }
+  if (foundPostViewerId(viewer) && foundPostGrantMatches(doc, viewer?.foundPosts?.get(doc.shareId))) return true;
   if (viewer?.id && doc.ownerId === viewer.id) return true;
   // private-subspace posts are fenced to that subspace's active members and
   // moderators (the enriched viewer carries the roster; a bare viewer fails
@@ -2719,7 +2728,11 @@ export const canViewInherited = async (
 		return false;
 	}
   const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findByShareId);
-  if (terminal) return canView(terminal, viewer);
+  if (terminal) {
+    if (canView(terminal, viewer)) return true;
+    if (isCustomMongoEndpointActive()) return false;
+    return canView(terminal, await withFoundPostGrant(terminal, viewer, findByShareId));
+  }
 
   // Attachments are independently stored media objects. If a parent was
   // deleted or a legacy migration left the relation dangling, preserve an
@@ -3261,13 +3274,18 @@ export const featuresOf = (doc: ThingDoc): PostFeatures => ({
   createdAt: new Date(doc.createdAt)
 });
 
+// Keep profile candidate selection tied to the feed's canonical grant query.
+export const profilePostsAudienceQuery = (viewer: Viewer, ownerId: string) =>
+  withMatch({ ownerId }, { $or: [visibilityQueryFor(viewer, []) || { shareId: { $in: [] } },
+    { shareId: { $in: !viewer?.pat ? [...(viewer?.foundPosts?.keys() || [])] : [] } }] }, patVisibilityMatchClause(viewer) || {});
+
 export const listUserPosts = async (
   viewerInput: string | Viewer,
   username: string,
   cursor: string | null,
   limit = DEFAULT_FEED_LIMIT
 ): Promise<{ ok: true; posts: PublicPost[]; nextCursor: string | null; postCount?: number } | Fail> => {
-  const viewer = await withFriendIds(asViewer(viewerInput));
+  let viewer = await withFriendIds(asViewer(viewerInput));
   if (typeof username !== 'string' || !username.trim()) return fail(400, 'username is required');
   // dual-era: findUserByUsername resolves user things first, legacy second —
   // a bare users.findOne would 404 every things-era + migrated account
@@ -3275,14 +3293,12 @@ export const listUserPosts = async (
   if (!user) return fail(404, 'User not found');
 
   const ownerId = String(user._id);
+  const discoveryId = foundPostViewerId(viewer);
+  if (discoveryId && !isCustomMongoEndpointActive()) viewer = { id: '', ...viewer, foundPosts: await loadFoundPostsForAuthor(discoveryId, ownerId) };
   const own = viewer?.id === ownerId;
-  // a friend browsing this profile also sees the owner's friends-circle posts
-  const friendOfOwner = !!viewer?.friendIds?.has(ownerId);
-  const baseMatch = own
-    ? withMatch(await postMatch(), { ownerId })
-    : friendOfOwner
-      ? withMatch(await postMatch(), { ownerId }, { $or: [circleClause('public'), circleClause('friends')] })
-      : withMatch(await postMatch(), { ownerId }, circleClause('public'));
+  // Use the same candidate audience as the feed: direct/group grants and
+  // mixed custom audiences must reach the exact canView check below.
+  const baseMatch = withMatch(await postMatch(), profilePostsAudienceQuery(viewer, ownerId));
   // visibility-restricted tokens: conjoin the audience fence the same way
   // listThings does. Not just paging hygiene (without it a public-only token
   // pages an owner's mostly-private profile in near-empty slices while the
@@ -3329,6 +3345,10 @@ export const getThing = async (
   const viewer = await withFriendIds(asViewer(viewerInput));
   const doc = await findViewableThingAs(shareId, viewer, app);
   if (!doc) return fail(404, 'Thing not found');
+  if (!app && options.rememberDiscovery && !isCustomMongoEndpointActive()) {
+    const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findThing);
+    if (terminal && canView(terminal, viewer)) await rememberFoundPost(viewer, terminal, options.discoveryIp);
+  }
   const thing = (await toPublicThings([doc], viewer))[0];
 
   // App consumers get the generic thing shape only: the PublicPost projection

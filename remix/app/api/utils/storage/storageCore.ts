@@ -102,6 +102,7 @@ export type UserStorageUsage = {
 };
 
 export const CONTROL_PLANE_STORAGE_THINGTIMES = [
+  'post-discovery',
 	'lopu-recording-settings',
 	'lopu-background-task',
 	'lopu-recording-job',

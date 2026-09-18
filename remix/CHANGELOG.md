@@ -34,6 +34,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-18 — Remove the post attachment count cap and add Retry all. Images and videos share ordered layouts, a popup player and shareable media links. Profiles include permitted direct/group audiences and previously collected secret posts, with account/browser discovery revoked by link rotation. [PR #852 validation](../PRs/852-codex-media-gallery-profile-access-unify-post-media-and-collect-secret-posts.md). Local validation uses worktree ports 18420–18422; Tailscale/Funnel is unavailable because the installed CLI target is missing. — Codex (AI)
+
 - 2026-09-18 — Fix Copy to my Things for image-only posts and nested comment
   galleries. Copies preserve attachment order/purpose and reply parents, validate
   inspected media, and negotiate `api.things-fork` 1.5.0. Verified with local
