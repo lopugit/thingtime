@@ -6127,7 +6127,7 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 ## Actions (/actions, `remix/app/api/utils/actions/`, `/api/v1/actions/run`, `/api/v1/actions/runs`)
 
 - [ ] `node remix/scripts/verify-actions.mjs http://127.0.0.1:<nitro-port>` passes
-      end to end (89 checks: closed-vocabulary + capability-coverage + scope +
+      end to end (99 checks: closed-vocabulary + capability-coverage + scope +
       ref-grammar refusals at save; run-by-key, $refs/$$-escape/ttConcat/$now,
       run-time scope enforcement, shared budget across actions.invoke, direct +
       ping-pong recursion refusal, ops exhaustion, run-record forgery 403,
@@ -7644,3 +7644,29 @@ storage only; do not describe it as a production upload or provider acceptance.
 - [ ] Run the Lopu store, messenger Lopu and capability suites; `scripts/verify-lopu.mjs` covers real authenticated archive/restore idempotency, invalid booleans, cross-account denial and transcript preservation when its verified test account is available. `scripts/lopu-archive.browser.html` provides a synthetic API fixture for list layout and failure testing.
 
 Local queue-fix validation: `http://localhost:18720/scripts/lopu-queue.browser.html` (worktree `thingtime-lopu-auto-queue`, Vite 18720 / HMR 18721 / Nitro 18722 overrides; default trio occupied). Tailscale/Funnel unavailable: the installed launcher targets a missing `/Applications/Tailscale.app`; no public mapping changed.
+
+## Builder SDK uploads, forms and lookups (2026-09-18)
+
+- [ ] Run `/scripts/builder-sdk-regression.html` on desktop and 390px; the production
+      page renderer enables uploads, inherits component sources and passes all
+      synthetic assertions for required fields, saved initial files, pending upload
+      guards, failed commit/retry identity, double-click suppression, empty text,
+      source refresh, clearing files and draft retention. Open the optional URL
+      control; inspect top-to-bottom for clipping and horizontal overflow.
+- [ ] With configured object storage and an approved account: select a real file
+      on an owned `/p/:id` in View mode, wait for processing, Use file, save the form,
+      read the returned Data Thing, and reload. Verify the same component on its
+      dedicated page. A foreign/anonymous reader cannot access the private file.
+- [ ] Run the 99-check `verify-actions.mjs` against an isolated local database.
+      Empty optional text overrides descriptor defaults; omission retains defaults;
+      partial updates preserve unrelated fields. A missing Vault key fails visibly,
+      and even an explicitly opened foreign lookup action cannot use the viewer's key.
+- [ ] `/docs/builder`, all six section links, `/builder/docs`, Builder's docs link
+      and docs search work at desktop/mobile; scroll each page through the footer.
+- [ ] Create a lookup step in the action builder: query `$input.address`, Google
+      provider, and an owned Vault entry id. The capability and effects display the
+      provider and credential use. Shared execution refuses lookup; no arbitrary
+      URL or secret appears in the authored definition or error.
+- [ ] With an explicitly configured Google key, verify a match, no matches, quota
+      denial and timeout. Display attribution. Do not persist provider-derived
+      results contrary to Google's rules; run history/source cache omit lookup results.
