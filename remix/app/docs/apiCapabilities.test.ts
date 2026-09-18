@@ -223,8 +223,8 @@ test('the Lopu family publishes its minor capability updates (own providers, ver
 	assert.equal(manifest.features['api.settings-lopu-chat-defaults'], '1.1.0');
 	// 1.1.1 / 1.0.1: the chat write buckets fail closed on a limiter outage;
 	// 1.2.0 (create): the verified-access gate (403 LOPU_UNVERIFIED / 402 LOPU_NO_CREDITS, guests 403)
-	assert.equal(manifest.features['api.lopu-chats'], '1.3.0');
-	assert.equal(manifest.features['api.lopu-chats-update'], '1.2.0');
+	assert.equal(manifest.features['api.lopu-chats'], '1.4.0');
+	assert.equal(manifest.features['api.lopu-chats-update'], '1.3.0');
 	assert.equal(manifest.features['api.lopu-chats-delete'], '1.1.0');
 	// 1.2.0: server-verified confirmations (confirmations[] in, confirm event +
 	// tool_result.needsConfirmation out) and the JSON-only fence (415);

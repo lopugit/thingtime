@@ -97,7 +97,7 @@ export type LopuModelsPayload = {
 // a Lopu conversation row — the messenger chat summary plus the chat's own
 // model settings when the list projects them
 export type LopuChatSummary = ChatSummary & {
-	lopu?: (Partial<LopuChatSettings> & { turns?: number; lastModel?: string | null }) | null;
+	lopu?: (Partial<LopuChatSettings> & { turns?: number; lastModel?: string | null; archived?: boolean }) | null;
 };
 
 export type LopuNotice = { id: number; title: string; description?: string; status: 'success' | 'error' | 'info' };
@@ -109,7 +109,7 @@ export type LopuApiClient = {
 	chats: {
 		list: (options?: { signal?: AbortSignal }) => Promise<any>;
 		create: (args?: LopuChatWriteArgs) => Promise<any>;
-		update: (args: { chatId: string } & LopuChatWriteArgs) => Promise<any>;
+		update: (args: { chatId: string; archived?: boolean } & LopuChatWriteArgs) => Promise<any>;
 		delete: (args: { chatId: string }) => Promise<any>;
 	};
 	// the messenger's message page (GET /api/v1/chats/messages, newest first)
@@ -653,6 +653,39 @@ export const renameLopuChat = async (chatId: string, title: string): Promise<{ o
 		notice(message, { status: 'error' });
 		return { ok: false, error: message };
 	} finally { chatWrites--; }
+};
+
+// Archive only changes list visibility. Keep the selected transcript and any
+// running turn alive; a failed write rolls back only this field, not other chats.
+const archivingChats = new Set<string>();
+export const archiveLopuChat = async (chatId: string, archived: boolean): Promise<{ ok: boolean; error?: string }> => {
+	if (!client || !state.userId) return { ok: false, error: 'Lopu is not connected yet' };
+	const previous = state.chats.find(chat => chat.id === chatId);
+	const generation = accountGeneration;
+	const key = `${generation}:${chatId}`;
+	if (!previous || archivingChats.has(key)) return { ok: false, error: 'Conversation is unavailable or already updating' };
+	archivingChats.add(key);
+	chatWrites++;
+	const apply = (value: boolean) => {
+		if (generation !== accountGeneration) return;
+		const chats = state.chats.map(chat => chat.id === chatId ? { ...chat, lopu: { ...chat.lopu, archived: value } } : chat);
+		writeChatsCache(state.userId, chats);
+		setState({ chats });
+	};
+	apply(archived);
+	try {
+		const response = await client.chats.update({ chatId, archived });
+		if (response?.ok !== true) throw response;
+		return { ok: true };
+	} catch (error) {
+		apply(previous.lopu?.archived === true);
+		const message = errorText(error, archived ? 'Could not archive the chat' : 'Could not restore the chat');
+		if (generation === accountGeneration) notice(message, { status: 'error' });
+		return { ok: false, error: message };
+	} finally {
+		archivingChats.delete(key);
+		chatWrites--;
+	}
 };
 
 export const deleteLopuChat = async (chatId: string): Promise<{ ok: boolean; error?: string }> => {

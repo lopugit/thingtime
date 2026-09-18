@@ -255,8 +255,8 @@ test('the Lopu catalog family publishes its verified-provider-key minor updates'
   // 1.1.1 = the write buckets fail closed, 1.2.0 = server-verified confirmations;
   // then the verified-access gate + accounting fields (create 1.2.0, reply 1.3.0),
   // and reply 1.4.0 = the in-flight cap (429 LOPU_TURN_IN_FLIGHT past three billed turns at once)
-  assert.equal(manifest.features['api.lopu-chats']?.version, '1.3.0');
-  assert.equal(manifest.features['api.lopu-chats-update']?.version, '1.2.0');
+  assert.equal(manifest.features['api.lopu-chats']?.version, '1.4.0');
+  assert.equal(manifest.features['api.lopu-chats-update']?.version, '1.3.0');
   assert.equal(manifest.features['api.lopu-chats-reply']?.version, '1.13.0');
   // verified access + credits (design note "Lopu verified access, usage accounting and credits")
   for (const feature of ['api.admin-users-lopu-access', 'api.settings-lopu-access', 'api.lopu-account', 'api.lopu-account-history', 'api.lopu-account-topup-request', 'api.admin-lopu-accounts', 'api.admin-lopu-credits']) {

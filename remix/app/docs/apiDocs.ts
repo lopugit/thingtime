@@ -4447,8 +4447,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // temporary session is 403 { code: LOPU_GUEST } like every other Lopu write (additive
     // refusals; GET is never gated). contractVersion feeds /api/v1/capabilities, featureVersion
     // the well-known Thingtime manifest.
-    contractVersion: '1.3.0',
-    featureVersion: '1.3.0',
+    contractVersion: '1.4.0',
+    featureVersion: '1.4.0',
+    // 1.4.0: entries expose lopu.archived; list includes active and archived chats.
     summary: 'Lists the caller’s conversations with Lopu, or starts a new one. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
     detail:
       'A Lopu conversation is an ordinary messenger chat (a one-member group owned by the caller) whose ' +
@@ -4528,11 +4529,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // 1.1.0: `providerId` retunes / clears the chat's pinned Secure Vault provider
     // (additive). 1.1.1: fails closed on a limiter outage. contractVersion feeds
     // /api/v1/capabilities, featureVersion the well-known Thingtime manifest.
-    contractVersion: '1.2.0',
-    featureVersion: '1.2.0',
+    contractVersion: '1.3.0',
+    featureVersion: '1.3.0',
     summary: 'Renames a Lopu conversation or retunes its model, effort, speed and pinned provider. OAuth callers must explicitly approve the corresponding Lopu chat, voice, or recording permission.',
     detail:
-      'POST { chatId, title?, model?, effort?, speed?, providerId? }. Only the conversation’s member (its owner) may update it. ' +
+      'POST { chatId, title?, model?, effort?, speed?, providerId?, archived? }. Only the conversation’s member (its owner) may update it. ' +
+      'archived: true hides the chat from the active Lopu view; false restores it. This owner-only, idempotent boolean ' +
+      'preserves messages, membership and running replies. GET lists both views via lopu.archived (absent means active). ' +
       'Settings follow the same catalog validation as creation: a composed model id carries its own effort/fast ' +
       'segments, null resets a field to the catalog default, and an effort or speed the chosen model does not ' +
       'offer is a 400 when asked for explicitly (an inherited setting is clamped when the model changes). ' +

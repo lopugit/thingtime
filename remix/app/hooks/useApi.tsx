@@ -512,8 +512,13 @@ export function useApi() {
           [asyncFetcher]
         ),
         update: useCallback(
-          async (args: { chatId: string; title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null }) =>
-            asyncFetcher.submit(args, { action: '/api/v1/lopu/chats/update', errorContext: 'update a Lopu chat' }),
+          async (args: { chatId: string; title?: string; model?: string; effort?: string; speed?: string; providerId?: string | null; archived?: boolean }) => {
+            if (args.archived !== undefined) {
+              await requireThingtimeCapability('api.lopu-chats', '1.4.0');
+              await requireThingtimeCapability('api.lopu-chats-update', '1.3.0');
+            }
+            return asyncFetcher.submit(args, { action: '/api/v1/lopu/chats/update', errorContext: 'update a Lopu chat' });
+          },
           [asyncFetcher]
         ),
         delete: useCallback(

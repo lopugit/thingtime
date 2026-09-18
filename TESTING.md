@@ -7611,3 +7611,9 @@ storage only; do not describe it as a production upload or provider acceptance.
 - [ ] Send now saves a text note without cancelling the existing provider call or tool. The next provider hop receives it as user input. Late notes stay in history for the next reply; notes never approve destructive tools. File/Thing selections must be queued or sent normally, not silently dropped by Send now.
 - [ ] Pause/Resume, Stop, interrupted transport, refresh, account switching and switching conversations retain the right queue. Reload restores paused. Retrying an uncertain batch/note keeps its original operation identity and payload. Old-account completions cannot consume a newer account's queue.
 - [ ] Run Lopu UI, Lopu provider streaming, Lopu route/background-task and API capability suites. `/scripts/lopu-queue.browser.html` is a local-only interaction fixture using the production queue/composer; its simulated delivery is not authenticated provider acceptance.
+
+### Lopu chat archiving (2026-09-18)
+
+- [ ] In the Lopu page and floating conversation list, archive a chat, find it under Archived, reload, read its unchanged transcript, and Restore it. Repeat at desktop and 390px, scroll to the final row, and check long titles and wrapped actions.
+- [ ] Archive while a reply runs: the selected transcript and reply stay alive. New chat, rename, Messenger link and delete confirmation still work. A failed archive restores only that chat's flag; switching accounts while it fails never leaks prior chats.
+- [ ] Run the Lopu store, messenger Lopu and capability suites; `scripts/verify-lopu.mjs` covers real authenticated archive/restore idempotency, invalid booleans, cross-account denial and transcript preservation when its verified test account is available. `scripts/lopu-archive.browser.html` provides a synthetic API fixture for list layout and failure testing.
