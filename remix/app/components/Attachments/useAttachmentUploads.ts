@@ -649,12 +649,16 @@ export const useAttachmentUploads = (
 
 	// Reflect an owner annotate (title/description) the popover already
 	// persisted server-side onto the matching READY upload's projection.
+	// Writes the ref alongside the state like every other mutator: Retry all
+	// and the XHR progress ticks read uploadsRef synchronously, so a functional
+	// update here would let the next ref-based write rebuild from a stale array
+	// and silently drop the annotation.
 	const updateAttachment = React.useCallback((localId: string, attachment: PublicAttachment) => {
-		setUploads((current) =>
-			current.map((upload) =>
-				upload.localId === localId && upload.status === 'ready' && upload.attachment?.id === attachment.id ? { ...upload, attachment } : upload
-			)
+		const next = uploadsRef.current.map((upload) =>
+			upload.localId === localId && upload.status === 'ready' && upload.attachment?.id === attachment.id ? { ...upload, attachment } : upload
 		);
+		uploadsRef.current = next;
+		setUploads(next);
 	}, []);
 
 	const flushDraftsBeforeSessionChange = React.useCallback(async () => {
@@ -697,6 +701,10 @@ export const useAttachmentUploads = (
 		activeRequestsRef.current.clear();
 		activeXhrsRef.current.clear();
 		committedAttachmentIdsRef.current.clear();
+		// Clear the ref with the state, exactly like flushDraftsBeforeSessionChange:
+		// these drafts are already aborted and their previewUrls revoked, so a
+		// ref-based write landing before the commit must not resurrect them.
+		uploadsRef.current = [];
 		setUploads([]);
 	}, [cleanupUpload, ownerId]);
 
