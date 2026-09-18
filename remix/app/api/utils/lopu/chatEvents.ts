@@ -180,6 +180,6 @@ export type LopuProviderToolResult = {
   error?: string;
 };
 
-export type LopuProviderHopInput = { results: LopuProviderToolResult[]; finalHop: boolean };
+export type LopuProviderHopInput = { results: LopuProviderToolResult[]; finalHop: boolean; notes?: string[] };
 
 export type LopuProviderStream = AsyncGenerator<LopuProviderEvent, void, LopuProviderHopInput | undefined>;

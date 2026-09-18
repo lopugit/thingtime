@@ -48,7 +48,7 @@ mock.module('../mongodb/endpoint', {
 });
 mock.module('../auth/getCurrentUser', { namedExports: { getCurrentUser: async () => user } });
 mock.module('../messenger/lopuChats', {
-	namedExports: { getLopuChat: async () => (chatAccessible ? { ok: true } : { ok: false, status: 404, error: 'Not found' }) }
+	namedExports: { persistLopuUserTurn: async (_owner: string, input: any) => chatAccessible ? { ok: true, messages: [input] } : { ok: false, status: 404, error: 'Not found' }, getLopuChat: async () => (chatAccessible ? { ok: true } : { ok: false, status: 404, error: 'Not found' }) }
 });
 mock.module('../rateLimit/enforce', {
 	namedExports: { enforceRateLimit: async () => ({ allowed: true }), rateLimitedResponseInit: () => ({ status: 429 }) }
@@ -260,4 +260,26 @@ test('a healthy worker renews its lease beyond the old task deadline without abo
   release(); await Promise.all(pending);
   assert.equal(rows[0].crystal.status, 'completed');
  } finally { release?.(); await Promise.all(pending); mock.timers.reset(); }
+});
+
+test('notes are persisted without cancelling an active task and recheck scope/membership', async () => {
+ let release!: () => void;
+ const gate = new Promise<void>(resolve => { release = resolve; });
+ const accepted = await startBackgroundTask(request('note-target', { chatId: 'chat', text: 'work', requestId: 'note-target' }), async () => { await gate; return new Response('done'); });
+ const { task } = await accepted.json();
+ const note = (origin = 'https://example.test', text = 'Extra detail') => new Request(`${origin}/api/v1/lopu/tasks`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Thingtime-Task-Owner': 'owner' }, body: JSON.stringify({ action: 'note', id: task.id, noteId: 'note-1', text }) });
+ try {
+ const first = await stopBackgroundTask(note());
+ assert.equal(first.status, 200);
+ const payload = await first.json();
+ assert.equal(payload.active, true);
+ assert.equal(payload.messages[0].text, 'Extra detail');
+ const replay = await (await stopBackgroundTask(note())).json();
+ assert.equal(replay.messages[0].requestId, payload.messages[0].requestId);
+ assert.notEqual(rows[0].cancelRequested, true);
+ assert.equal((await stopBackgroundTask(note('https://other.test'))).status, 404);
+ chatAccessible = false;
+ assert.equal((await stopBackgroundTask(note())).status, 404);
+ assert.equal((await stopBackgroundTask(note('https://example.test', 'x'.repeat(8001)))).status, 400);
+ } finally { release(); await Promise.all(pending); }
 });

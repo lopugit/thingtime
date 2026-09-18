@@ -1,3 +1,4 @@
+import { bindLopuQueue, pauseLopuQueue } from './lopuQueueStore';
 import { LOPU_CONTINUE_PROMPT, shouldAutoContinueLopuReply } from './lopuRecovery';
 import { bindAiTaskOwner, getAiTasks, refreshAiTasks, readAiTaskOutput, stopAiTaskRequest } from './aiTasks.client';
 // The Lopu chat module store (design note §3.1/§3.2): ONE state shared by the
@@ -410,6 +411,7 @@ export const hydrateLopuStore = (userId: string | null): LopuStoreState => {
 	controllers.clear();
  stoppedRequests.clear();
 	bindAiTaskOwner(userId);
+ bindLopuQueue(userId);
 	const chatsCache = userId ? readLocalCache<ChatsCache>(lopuChatsCacheKey(userId)) : null;
 	const modelsCache = readLocalCache<ModelsCache>(LOPU_MODELS_CACHE_KEY);
 	const settingsCache = userId ? readLocalCache<LopuChatSettings>(lopuSettingsCacheKey(userId)) : null;
@@ -954,6 +956,8 @@ const appendMessages = (chatId: string, rows: ChatMessage[]) => {
 };
 
 export type SendLopuOptions = {
+ chatId?: string;
+ requestId?: string;
 	// Fired once the server has persisted the user message, before reply completion.
 	onAccepted?: () => void;
 	attachmentIds?: string[];
@@ -997,7 +1001,7 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 type LopuContinuation = { chatId: string; previousRequestId: string };
 type LopuPartResult = SendLopuResult & { next?: { options: SendLopuOptions; continuation: LopuContinuation } };
 const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, continuation?: LopuContinuation): Promise<LopuPartResult> => {
- const chatId = continuation?.chatId ?? state.activeChatId;
+ const chatId = continuation?.chatId ?? options.chatId ?? state.activeChatId;
 	const trimmed = (text || '').trim();
 	if (!trimmed) return { ok: false, error: 'Say something first', text };
 	if (!client) return { ok: false, error: 'Lopu is not connected yet', text };
@@ -1014,9 +1018,9 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
 	const generation = accountGeneration;
 	const startingPath = typeof window === 'undefined' ? null : window.location.pathname;
 	const foreground = () => state.activeChatId === (turn.chatId || chatId) && (startingPath === null || window.location.pathname === startingPath);
-	const requestId = uuid();
+	const requestId = continuation ? uuid() : options.requestId ?? uuid();
 	const settings = mergeSettingsPatch(options.settings || {});
-	if (!continuation && options.settings && Object.keys(options.settings).length && !sameLopuSettings(settings, state.settings)) {
+	if (!continuation && !options.chatId && options.settings && Object.keys(options.settings).length && !sameLopuSettings(settings, state.settings)) {
 		persistSettings(userId, settings);
 		setState({ settings });
 	}
@@ -1049,7 +1053,7 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
 				const id = next.chatId;
 				if (!id) break;
 				if (!before.meta) options.onAccepted?.();
-				if (!continuation && state.activeChatId !== id && (state.activeChatId === chatId || state.activeChatId === null)) {
+				if (!continuation && !options.chatId && state.activeChatId !== id && (state.activeChatId === chatId || state.activeChatId === null)) {
 					setState({ activeChatId: id });
 				}
 				appendMessages(id, [buildUserMessage(next, userId, id)]);
@@ -1113,7 +1117,7 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
 	// null — a pin the server still holds (a refused update, a provider the
 	// vault no longer lists) must never route the turn behind the picker's back
 	const activeChat = chatId ? state.chats.find((chat) => chat.id === chatId) : null;
-	const statesProvider = !!settings.providerId || !!activeChat?.lopu;
+	const statesProvider = !!settings.providerId || !!activeChat?.lopu || !!(options.settings && 'providerId' in options.settings);
 	const body: LopuReplyBody = {
 		...(chatId ? { chatId } : {}),
 		text: trimmed,
@@ -1161,6 +1165,7 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
 
 	const finalChatId = turn.chatId;
 	if (turn.gate && !turn.meta) {
+  pauseLopuQueue(true);
 		// the turn stays in the timeline: the viewer's bubble and Lopu's gate
 		// bubble (request credits / ask an admin); nothing was persisted
 		setState({ sending: controllers.size > 0, streamingId: controllers.keys().next().value ?? null, error: null });
@@ -1198,11 +1203,13 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
   } : undefined;
   return { ok: true, requestId, chatId: finalChatId, next: { options: { settings, context, applyPatches }, continuation: { chatId: finalChatId, previousRequestId: requestId } } };
  }
+ if (turn.status !== 'done' || stopped || abort.signal.aborted) pauseLopuQueue(true);
 	return { ok: true, requestId, chatId: finalChatId };
 };
 
 /** Stop the in-flight reply (what streamed so far is kept). */
 export const abortLopuTurn = (): void => {
+ pauseLopuQueue(true);
  const turn = Object.values(state.turns).find(turn => turn.chatId === state.activeChatId && isLopuTurnActive(turn));
  if (turn) stoppedRequests.add(turn.requestId);
  if (turn) void stopAiTaskRequest(turn.requestId).then(() => controllers.get(turn.requestId)?.abort()).catch(() => notice('Could not stop the task. Open Background tasks to try again.', { status: 'error' }));
