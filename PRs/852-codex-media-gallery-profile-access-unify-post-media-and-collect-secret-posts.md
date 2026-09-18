@@ -31,8 +31,8 @@ rate-limited before any discovery write. Repeated visits do not grow history.
 ## Validation — 2026-09-18
 
 - Production build and `verify:vercel-output` passed.
-- Attachments: 219 suite tests plus the added home-media discovery regression.
-- Things: 255 suite tests plus the added browser-storage regression.
+- Attachments: 220 tests passed.
+- Things: 256 tests passed.
 - Capabilities: 67; schemas: 196; storage: 17; feed: 54 passed.
 - Discovery tests cover valid/wrong keys, identity separation, key rotation,
   retired ACLs, deletion, token fences, private projections, and cookie isolation.

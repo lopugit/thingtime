@@ -6224,6 +6224,16 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Design system + builder (`/builder`, `/p/:id`, `/docs/design-system`, `remix/app/components/Builder/`, `/api/v1/webpages/resolve`, `/api/v1/admin/webpages/seed`)
 
+- [ ] Floating page controls: dock Lopu in split mode on all four edges and
+      resize it live. The bar, inspector, mode menu and viewport popover stay in
+      the remaining page pane, including a shallow top/bottom split. Repeat with
+      the navigation drawer pinned left/right. At 390px, 320px and a narrow
+      desktop split, controls wrap and modes become a keyboard-accessible menu
+      in Builder/Edit/Layout/View/Visit/Deploy order. Escape restores trigger
+      focus, mode changes retain form values, and the page bottom clears the bar.
+      Mobile Lopu sheets hide the builder layer until dismissed. The safe fixture
+      at `/tests/seamless-builder.html` uses the real Lopu host and ephemeral
+      drafts/settings, and its Visit/Deploy saves intentionally fail without writes.
 - [ ] Seamless editor: open the same owned page at `/builder?page=<id>` and
       `/p/<id>`. Builder/Edit/Layout/View/Visit/Deploy use the same blocks.
       Type into a live form, switch Edit/View/Layout, and confirm its value

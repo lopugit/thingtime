@@ -2,6 +2,10 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { ChakraProvider } from '@chakra-ui/react';
+import { ThingtimeProvider } from '../app/Providers/ThingtimeProvider';
+import { LopuHost } from '../app/components/Lopu/LopuHost';
+import { useDrawer } from '../app/components/Nav/Drawer/useDrawer';
+import { PAGE_VIEWPORT_CSS } from '../app/components/Layout/pageViewport';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import SeamlessPageEditor from '../app/components/Builder/SeamlessPageEditor';
 import { WebpageBlocksRenderer, type BuilderChrome } from '../app/components/Builder/WebpageBlocksRenderer';
@@ -44,6 +48,7 @@ const components = {
 	}
 };
 function Fixture() {
+	const drawer = useDrawer();
 	const [blocks, setBlocks] = React.useState(initial);
 	const [mode, setMode] = React.useState<SeamlessMode>('edit');
 	const [chrome, setChrome] = React.useState<BuilderChrome | null>(null);
@@ -79,41 +84,80 @@ function Fixture() {
 		markSaved: () => {}
 	} as UseWebpageDraft;
 	return (
-		<ChakraProvider>
-			<WebpageRuntimeProvider pageId="fixture" pageKey={null} suiteKey={null} source="user" enabled={usesPageRuntime(mode)}>
-				<main style={{ margin: '0 auto', padding: '20px 0 var(--tt-builder-toolbar-clearance, 160px)', background: '#f2f8ef', minHeight: '100vh' }}>
-					<BuilderViewport size={viewport}>
-						<div ref={setSurface} data-testid="seamless-page" data-builder-mode={mode}>
-							<style>
-								{
-									'.fixture-device::after {content: "Desktop media query"} @media(max-width: 800px){.fixture-device::after {content:"Tablet media query"}} @media(max-width: 480px){.fixture-device::after {content:"Mobile media query"}}'
-								}
-							</style>
-							<div className="fixture-device" />
-							<WebpageBlocksRenderer seamless blocks={blocks} componentsByRef={components} interactive={usesPageRuntime(mode)} chrome={chrome} />
-						</div>
-					</BuilderViewport>
-					<SeamlessPageEditor
-						draft={draft}
-						mode={mode}
-						onMode={setMode}
-						surface={surface}
-						surfaceDocument={surfaceDocument}
-						onChrome={setChrome}
-						viewport={viewport}
-						onViewport={setViewport}
-					/>
-					<output data-testid="saved">{saved ? 'Save attempted safely' : ''}</output>
-					<details>
-						<summary>Draft JSON</summary>
-						<pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(blocks, null, 2)}</pre>
-					</details>
-				</main>
-			</WebpageRuntimeProvider>
-		</ChakraProvider>
+		<>
+			<style>{PAGE_VIEWPORT_CSS}</style>
+			<div id="lopuPageViewport">
+				<div id="lopuPageScroll">
+					<div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+						<button
+							onClick={() => {
+								drawer.setDirection('left');
+								drawer.setOpen(!drawer.open || drawer.direction !== 'left');
+							}}
+						>
+							Toggle left navigation split
+						</button>
+						<button
+							onClick={() => {
+								drawer.setDirection('right');
+								drawer.setOpen(!drawer.open || drawer.direction !== 'right');
+							}}
+						>
+							Toggle right navigation split
+						</button>
+					</div>
+					<WebpageRuntimeProvider pageId="fixture" pageKey={null} suiteKey={null} source="user" enabled={usesPageRuntime(mode)}>
+						<main
+							style={{ margin: '0 auto', padding: '20px 0 var(--tt-builder-toolbar-clearance, 160px)', background: '#f2f8ef', minHeight: '100vh' }}
+						>
+							<BuilderViewport size={viewport}>
+								<div ref={setSurface} data-testid="seamless-page" data-builder-mode={mode}>
+									<style>
+										{
+											'.fixture-device::after {content: "Desktop media query"} @media(max-width: 800px){.fixture-device::after {content:"Tablet media query"}} @media(max-width: 480px){.fixture-device::after {content:"Mobile media query"}}'
+										}
+									</style>
+									<div className="fixture-device" />
+									<WebpageBlocksRenderer seamless blocks={blocks} componentsByRef={components} interactive={usesPageRuntime(mode)} chrome={chrome} />
+								</div>
+							</BuilderViewport>
+							<SeamlessPageEditor
+								draft={draft}
+								mode={mode}
+								onMode={setMode}
+								surface={surface}
+								surfaceDocument={surfaceDocument}
+								onChrome={setChrome}
+								viewport={viewport}
+								onViewport={setViewport}
+							/>
+							<output data-testid="saved">{saved ? 'Save attempted safely' : ''}</output>
+							<details>
+								<summary>Draft JSON</summary>
+								<pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(blocks, null, 2)}</pre>
+							</details>
+						</main>
+					</WebpageRuntimeProvider>
+				</div>
+			</div>
+			<LopuHost />
+		</>
 	);
 }
-const router = createMemoryRouter([{ id: 'root', path: '*', loader: () => ({ user: null }), Component: Fixture }]);
+const router = createMemoryRouter([
+	{
+		id: 'root',
+		path: '*',
+		loader: () => ({ user: null }),
+		Component: () => (
+			<ChakraProvider>
+				<ThingtimeProvider storageKey="seamless-builder-fixture" persistLocal={false} exposeGlobals={false}>
+					<Fixture />
+				</ThingtimeProvider>
+			</ChakraProvider>
+		)
+	}
+]);
 const root = createRoot(document.getElementById('root')!);
 root.render(<RouterProvider router={router} />);
 import.meta.hot?.dispose(() => root.unmount());
