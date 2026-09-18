@@ -1851,8 +1851,29 @@ email whose link points at the attacker.
       error tile and full composer at desktop and 390px through the footer.
 - [ ] Pick and drag/drop raster images, a supported video, and an arbitrary
       file. Safe image/video previews appear immediately; each row reports
-      progress; Post stays disabled until every selected file is Ready; and a
-      26th unique file is rejected with the fixed 25-attachment limit message.
+      progress; Post stays disabled until every selected file is Ready; and posts accept more than 25 unique files (including edits and retained linked media).
+      Comments and other purposes retain their existing count limits; upload
+      concurrency, per-file checks and account storage quotas still apply.
+- [ ] With 30 post files and mixed network/finalization failures, Retry all queues
+      only recoverable failures, preserves order and upload identity, and never
+      exceeds three active transfers. Double-click Retry all, then remove a
+      queued file or switch accounts: no duplicate or late upload may appear.
+      Terminal failures remain removable. `scripts/media-gallery-preview.html`
+      exercises the production composer with synthetic transport and no writes.
+- [ ] In feed/profile/post/media pages, upload photo → video → photo. Verify
+      that every layout reads in that order, including mobile's two columns.
+      Open the video in the shared popup, play/pause/seek, step both directions,
+      copy/open its Thingtime permalink, and reload it. Check secret-link media,
+      desktop and 390px layout, long filenames and the bottom of the page.
+      Unrevealed NSFW videos remain shielded and absent from popup navigation.
+- [ ] A profile shows direct-user, current-group, friend and mixed-audience
+      grants; removing a grant hides the post. Undiscovered link-only posts
+      remain absent. Visit a current secret link and return to its author's
+      profile: that account/browser sees the collected post and can reopen its
+      media. A second account/browser cannot. Rotate the key, remove hidden
+      access, block or delete the post: previous discovery no longer authorizes
+      it. Anonymous identity persists via localStorage/cookie; raw bearer tokens,
+      discovery records and private IP metadata never enter public projections.
 - [ ] With Photos off, drop image, video/audio, and generic files onto the
       collapsed post prompt, expanded body editor, and comment/edit composer.
       Photos opens and every file enters the single bounded uploader once.
@@ -6139,7 +6160,7 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 ## Actions (/actions, `remix/app/api/utils/actions/`, `/api/v1/actions/run`, `/api/v1/actions/runs`)
 
 - [ ] `node remix/scripts/verify-actions.mjs http://127.0.0.1:<nitro-port>` passes
-      end to end (89 checks: closed-vocabulary + capability-coverage + scope +
+      end to end (99 checks: closed-vocabulary + capability-coverage + scope +
       ref-grammar refusals at save; run-by-key, $refs/$$-escape/ttConcat/$now,
       run-time scope enforcement, shared budget across actions.invoke, direct +
       ping-pong recursion refusal, ops exhaustion, run-record forgery 403,
@@ -6215,6 +6236,16 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Design system + builder (`/builder`, `/p/:id`, `/docs/design-system`, `remix/app/components/Builder/`, `/api/v1/webpages/resolve`, `/api/v1/admin/webpages/seed`)
 
+- [ ] Floating page controls: dock Lopu in split mode on all four edges and
+      resize it live. The bar, inspector, mode menu and viewport popover stay in
+      the remaining page pane, including a shallow top/bottom split. Repeat with
+      the navigation drawer pinned left/right. At 390px, 320px and a narrow
+      desktop split, controls wrap and modes become a keyboard-accessible menu
+      in Builder/Edit/Layout/View/Visit/Deploy order. Escape restores trigger
+      focus, mode changes retain form values, and the page bottom clears the bar.
+      Mobile Lopu sheets hide the builder layer until dismissed. The safe fixture
+      at `/tests/seamless-builder.html` uses the real Lopu host and ephemeral
+      drafts/settings, and its Visit/Deploy saves intentionally fail without writes.
 - [ ] Seamless editor: open the same owned page at `/builder?page=<id>` and
       `/p/<id>`. Builder/Edit/Layout/View/Visit/Deploy use the same blocks.
       Type into a live form, switch Edit/View/Layout, and confirm its value
@@ -6293,6 +6324,21 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       The shared browser fixture stubs image bytes to verify key transport;
       attachment service/route tests cover authorization separately. Do not
       treat that fixture as proof of real S3 bytes or independent media copies.
+- [ ] Copy an image-only post with an ordered gallery and comments/replies deeper
+      than the initial rendered preview. Include image-only comments and files on
+      the deepest reply, plus comments on media with their own galleries. Copy to my Things must create a private root, fresh file
+      IDs and correctly nested inherited comments; reload, copy the copy, and
+      revoke/delete the source to verify independence. Check desktop and 390px
+      mobile, open a copied attachment, expand replies, and scroll to the bottom.
+      Hidden/blocked comments must stay excluded; unavailable files, quota errors,
+      source changes and the 512-Thing/file/comment limit must fail without a truncated copy.
+      Negotiate `api.things-fork >= 1.5.0`. Run the opt-in real-API regression with
+      `TT_FORK_TEST_URL=http://127.0.0.1:<port>` and `TT_FORK_COPIER_COOKIE` for an
+      upload-approved disposable account:
+      `node --import tsx --test app/api/utils/actions/forkComments.integration.test.ts`
+      from `remix/`. Its linked galleries prove relational binding and URL
+      independence, while byte-copy unit coverage uses a mocked object store;
+      neither substitutes for real S3 byte-copy acceptance.
 - [ ] Copy a shared standalone Data Thing with extended content and a private
       schema definition. The copy keeps its extended content, gets its own
       private schema/id/name pair, exposes no original link key, and is editable
@@ -7677,9 +7723,9 @@ storage only; do not describe it as a production upload or provider acceptance.
 
 ### Lopu message queue and Send now (2026-09-18)
 
-- [ ] While Lopu works, queue three messages. Each starts with Send together checked. Drag by holding the handle, reorder with both arrows, and remove an item. Check desktop and 390px, long text, queue scrolling, composer settings and the bottom of the page.
+- [ ] While Lopu works, press Enter (Cmd/Ctrl+Enter on mobile or with Enter-to-send off) or the normal send arrow to queue three messages; there is no dedicated Queue button. Shift+Enter and IME confirmation never send. Add/remove draft attachments while replying, then queue them and confirm the next draft remains editable. Accepted queue items disappear before their reply completes; interruption cannot resend an accepted batch. Each starts with Send together checked. Drag by holding the handle, reorder with both arrows, and remove an item. Check desktop and 390px, long text, queue scrolling, composer settings and the bottom of the page.
 - [ ] Leave consecutive messages checked: they reach one reply in queue order. Uncheck the middle message: it waits for the preceding reply, sends individually, and the next message waits for its reply. Different model/page/media snapshots and batches above 8000 characters split at a safe boundary.
-- [ ] Send now saves a text note without cancelling the existing provider call or tool. The next provider hop receives it as user input. Late notes stay in history for the next reply; notes never approve destructive tools. File/Thing selections must be queued or sent normally, not silently dropped by Send now.
+- [ ] With a typed draft, the send arrow floats above the stop square. Stop remains clickable and preserves the draft for a new reply; a paused older queue does not capture that explicit new send. More send options opens above the composer without clipping at desktop/390px. Send now saves a text note without cancelling the existing provider call or tool. The next provider hop receives it as user input. Late notes stay in history for the next reply; notes never approve destructive tools. File/Thing selections must be queued or sent normally, not silently dropped by Send now.
 - [ ] Pause/Resume, Stop, interrupted transport, refresh, account switching and switching conversations retain the right queue. Reload restores paused. Retrying an uncertain batch/note keeps its original operation identity and payload. Old-account completions cannot consume a newer account's queue.
 - [ ] Run Lopu UI, Lopu provider streaming, Lopu route/background-task and API capability suites. `/scripts/lopu-queue.browser.html` is a local-only interaction fixture using the production queue/composer; its simulated delivery is not authenticated provider acceptance.
 
@@ -7688,6 +7734,35 @@ storage only; do not describe it as a production upload or provider acceptance.
 - [ ] In the Lopu page and floating conversation list, archive a chat, find it under Archived, reload, read its unchanged transcript, and Restore it. Repeat at desktop and 390px, scroll to the final row, and check long titles and wrapped actions.
 - [ ] Archive while a reply runs: the selected transcript and reply stay alive. New chat, rename, Messenger link and delete confirmation still work. A failed archive restores only that chat's flag; switching accounts while it fails never leaks prior chats.
 - [ ] Run the Lopu store, messenger Lopu and capability suites; `scripts/verify-lopu.mjs` covers real authenticated archive/restore idempotency, invalid booleans, cross-account denial and transcript preservation when its verified test account is available. `scripts/lopu-archive.browser.html` provides a synthetic API fixture for list layout and failure testing.
+
+Local queue-fix validation: `http://localhost:18720/scripts/lopu-queue.browser.html` (worktree `thingtime-lopu-auto-queue`, Vite 18720 / HMR 18721 / Nitro 18722 overrides; default trio occupied). Tailscale/Funnel unavailable: the installed launcher targets a missing `/Applications/Tailscale.app`; no public mapping changed.
+
+## Builder SDK uploads, forms and lookups (2026-09-18)
+
+- [ ] Run `/scripts/builder-sdk-regression.html` on desktop and 390px; the production
+      page renderer enables uploads, inherits component sources and passes all
+      synthetic assertions for required fields, saved initial files, pending upload
+      guards, failed commit/retry identity, double-click suppression, empty text,
+      source refresh, clearing files and draft retention. Open the optional URL
+      control; inspect top-to-bottom for clipping and horizontal overflow.
+- [ ] With configured object storage and an approved account: select a real file
+      on an owned `/p/:id` in View mode, wait for processing, Use file, save the form,
+      read the returned Data Thing, and reload. Verify the same component on its
+      dedicated page. A foreign/anonymous reader cannot access the private file.
+- [ ] Run the 99-check `verify-actions.mjs` against an isolated local database.
+      Empty optional text overrides descriptor defaults; omission retains defaults;
+      partial updates preserve unrelated fields. A missing Vault key fails visibly,
+      and even an explicitly opened foreign lookup action cannot use the viewer's key.
+- [ ] `/docs/builder`, all six section links, `/builder/docs`, Builder's docs link
+      and docs search work at desktop/mobile; scroll each page through the footer.
+- [ ] Create a lookup step in the action builder: query `$input.address`, Google
+      provider, and an owned Vault entry id. The capability and effects display the
+      provider and credential use. Shared execution refuses lookup; no arbitrary
+      URL or secret appears in the authored definition or error.
+- [ ] With an explicitly configured Google key, verify a match, no matches, quota
+      denial and timeout. Display attribution. Do not persist provider-derived
+      results contrary to Google's rules; run history/source cache omit lookup results.
+- Collected secret posts: open a comment attachment below a post attachment using the collecting anonymous browser; it must load. An unrelated browser, a visibility-scoped token, and the original browser after link rotation must be denied. The home lookup must retain the discovery digest through its database projection.
 
 ## Funding and support (`/support`, landing funding section)
 

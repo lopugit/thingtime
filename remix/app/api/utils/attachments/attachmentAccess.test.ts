@@ -1,3 +1,4 @@
+import { foundPostId, foundPostDigest } from '../things/foundPosts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -227,4 +228,62 @@ test('post-purpose media binds to webpage targets too — authorized by the page
 	page = { ...page, acl: ['tt:user'] };
 	assert.equal(await canView(null, attachment), false);
 	assert.equal(await canView({ id: 'owner-1' } as any, attachment), true);
+});
+
+
+test('collected post content rechecks account/browser proof and the current link generation', async () => {
+ const target: any = post({ acl: ['tt:hidden'], linkKey: 'collected-key' });
+ const discovery = (id: string) => ({ shareId: foundPostId(id, target.shareId), ownerId: id, targetId: target.shareId, thingtime: ['post-discovery'], crystal: { linkKeyDigest: foundPostDigest('collected-key') } });
+ const receipts = [discovery('reader'), discovery('anonymous-fixture')];
+ const canRead = createCanViewHomeAttachmentTarget({ getThings: async () => ({ findOne: async (query: any) => query.shareId === target.shareId ? target : receipts.find(row => row.shareId === query.shareId) || null } as any) });
+ const media = { shareId: 'video', ownerId: target.ownerId, targetId: target.shareId, attachmentPurpose: 'post' as const };
+ assert.equal(await canRead({ id: 'reader' }, media), true);
+ assert.equal(await canRead({ id: '', anonymousId: 'anonymous-fixture' }, media), true);
+ assert.equal(await canRead(null, media), false);
+ assert.equal(await canRead({ id: 'someone-else' }, media), false);
+ assert.equal(await canRead({ id: 'reader', pat: { tokenId: 'pat', onlyCreatedThings: false } }, media), false);
+ target.linkKey = 'rotated';
+ assert.equal(await canRead({ id: 'reader' }, media), false);
+ target.linkKey = 'collected-key'; target.acl = ['tt:user'];
+ assert.equal(await canRead({ id: '', anonymousId: 'anonymous-fixture' }, media), false);
+});
+
+test('comment galleries inherit through media and remain private after root revocation', async () => {
+ const docs = new Map<string, any>([
+  ['reply', { shareId: 'reply', ownerId: 'author', thingtime: ['post', 'comment'], targetId: 'media', acl: ['tt:inherit'] }],
+  ['media', { shareId: 'media', ownerId: 'root-owner', thingtime: ['attachment'], targetId: 'post-1', acl: ['tt:inherit'] }],
+  ['post-1', post()]
+ ]);
+ const view = createCanViewHomeAttachmentTarget({ getThings: async () => ({ findOne: async (filter: any) => docs.get(filter.shareId) || null } as any) });
+ const file = { shareId: 'file', ownerId: 'author', targetId: 'reply', attachmentPurpose: 'comment' as const };
+ assert.equal(await view(null, file), true);
+ docs.set('post-1', post({ acl: ['tt:user'] }));
+ assert.equal(await view(null, file), false);
+ assert.equal(await view({ id: 'owner-1' }, file), true);
+ docs.set('media', { ...docs.get('media'), targetId: 'reply' });
+ assert.equal(await view({ id: 'owner-1' }, file), false);
+});
+
+test('comment galleries on collected media load the discovery proof through the projected home lookup', async () => {
+ const root: any = post({ acl: ['tt:hidden'], linkKey: 'collected-key' });
+ const receipt = { shareId: foundPostId('anonymous-fixture', root.shareId), ownerId: 'anonymous-fixture', targetId: root.shareId, thingtime: ['post-discovery'], crystal: { linkKeyDigest: foundPostDigest('collected-key') } };
+ const docs = new Map<string, any>([
+  [root.shareId, root], [receipt.shareId, receipt],
+  ['media', { shareId: 'media', ownerId: root.ownerId, thingtime: ['attachment'], targetId: root.shareId, acl: ['tt:inherit'] }],
+  ['reply', { shareId: 'reply', ownerId: 'author', thingtime: ['post', 'comment'], targetId: 'media', acl: ['tt:inherit'] }]
+ ]);
+ const view = createCanViewHomeAttachmentTarget({ getThings: async () => ({ findOne: async (filter: any, options: any) => {
+  const doc = docs.get(filter.shareId);
+  if (doc === receipt) {
+   assert.equal(options?.projection?.['crystal.linkKeyDigest'], 1, 'discovery digest must survive the database projection');
+  }
+  return doc || null;
+ } } as any) });
+ const file = { shareId: 'comment-file', ownerId: 'author', targetId: 'reply', attachmentPurpose: 'comment' as const };
+ const viewer = { id: '', anonymousId: 'anonymous-fixture' };
+ assert.equal(await view(viewer, file), true);
+ assert.equal(await view({ id: '', anonymousId: 'unrelated-browser' }, file), false);
+ assert.equal(await view({ id: '', anonymousId: 'anonymous-fixture', pat: { tokenId: 'token', onlyCreatedThings: false, visibility: 'public' } }, file), false);
+ root.linkKey = 'rotated';
+ assert.equal(await view(viewer, file), false);
 });

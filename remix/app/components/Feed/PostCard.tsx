@@ -523,7 +523,7 @@ const TagChipRow = ({ tags, compact }: { tags?: string[]; compact?: boolean }) =
 
 // Body by post type — shared between the main card, nested shares, and
 // comment rows (comments share the post schema, so PostComment fits too).
-type PostBodyShape = Pick<PublicPost, 'type' | 'text' | 'richText' | 'images' | 'listing' | 'thing' | 'tags' | 'mediaLayout'>;
+type PostBodyShape = Pick<PublicPost, 'type' | 'text' | 'richText' | 'images' | 'listing' | 'thing' | 'tags' | 'mediaLayout' | 'linkKey'>;
 
 const PostTextBody = ({ post, compact }: { post: Pick<PostBodyShape, 'text' | 'richText'>; compact?: boolean }) => {
   const richText = getEditorJsDoc(post.richText);
@@ -562,7 +562,7 @@ const PostBody = ({
     {post.type === 'thingtime' && post.thing && <ThingView thing={post.thing} compact={compact} poll={poll} />}
 		{post.type === 'thingtime' && !!post.images?.length && <ImageGrid images={post.images} alt={post.text || 'Thing photo'} />}
     {post.type === 'thingtime' && post.listing && <ListingBlock post={post} hideImage={!!post.images?.length} />}
-    <PostAttachments attachments={attachments} mediaLayout={post.mediaLayout} compact={compact} />
+    <PostAttachments linkKey={post.linkKey} attachments={attachments} mediaLayout={post.mediaLayout} compact={compact} />
     <TagChipRow tags={post.tags} compact={compact} />
   </Flex>
 );
@@ -2346,7 +2346,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
             share copies a public original's tags, so a second chip row here
             would just duplicate it) */}
             <PostTextBody post={post} />
-            <PostAttachments attachments={post.attachments} mediaLayout={post.mediaLayout} />
+            <PostAttachments linkKey={post.linkKey} attachments={post.attachments} mediaLayout={post.mediaLayout} />
             {post.shareOf ? (
               <SharedPostCard post={post.shareOf} />
             ) : (

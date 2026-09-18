@@ -3686,3 +3686,36 @@ Queue development: `npm run web-pms` in the `thingtime-message-queue` worktree
 uses `http://localhost:18900` (HMR 18901, Nitro 18902). Public Tailscale/Funnel
 verification is unavailable on the development host because its installed CLI
 launcher points to a missing Tailscale app; no public mapping was changed.
+
+
+### Builder component SDK
+
+Start at `/docs/builder` (also reachable from `/builder/docs`) for forms, Data
+Things, uploads, source bindings, external lookups and troubleshooting. The same
+reference feeds Lopu's builder instructions. Native `tt-upload` / Chakra `Upload`
+controls require an interactive owned page, sign-in, upload approval, storage
+quota and the attachment service configuration described above. Use file commits
+a private attachment; the form action must save both its URL and attachment id.
+
+Google Maps address lookup is opt-in. Enable the Geocoding API and billing in your
+own Google Cloud project, restrict the key for your server usage, and save the key
+as a **secret in your own Vault**. An owned action references only the Vault entry
+id with `lookup`, provider `google-geocoding`, and an explicit provider capability.
+Never place the actual key in a component, action, frontend environment variable,
+source control or prompt. The server needs the existing Vault encryption setup;
+Google needs no shared project-wide API key. See `/docs/builder/lookups` for the
+complete example, attribution, limits and storage-policy links. Other providers
+require a registered server adapter; authored arbitrary fetch URLs are unsupported.
+
+Local regression fixture: `/scripts/builder-sdk-regression.html` on a Vite dev server.
+It uses production renderers with synthetic file/API transport, makes no external
+provider requests and persists no user data. Run `node remix/scripts/verify-actions.mjs
+http://127.0.0.1:<nitro-port>` only against a disposable database: it creates test
+accounts and data. Provider-positive unit tests use synthetic Google responses;
+a real credential and configured object storage are required for live integration
+acceptance.
+
+Builder SDK QA worktree mapping: web `http://localhost:14870`, HMR `14871`, API
+`14872`; docs `http://localhost:14870/docs/builder`. Tailscale/Funnel was unavailable
+on 2026-09-18 because the installed CLI shim referenced a missing application
+binary. Other worktrees derive their own ports via `npm run web-ports`.

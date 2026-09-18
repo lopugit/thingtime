@@ -5898,13 +5898,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-content',
-		contractVersion: '1.7.0',
-		featureVersion: '1.7.0',
+		contractVersion: '1.8.0',
+		featureVersion: '1.8.0',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
 		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
 		detail:
+			'Previously collected hidden posts also authorize their bound media for the exact signed-in account or anonymous browser cookie. Current hidden ACL, key generation, moderation and storage gates are rechecked on every request. IP metadata never grants access. ' +
+			'Comment galleries follow canonical visibility inheritance through parent comments and media items, including after copying. ' +
 			'Subspace branding images require a live subspace and the exact current icon/banner slot binding. Branding is public directory identity even for private subspaces; replaced or deleted slots grant no public access. ' +
 			'Saved standalone recordings without a draft expiry remain readable by their exact owner. Import drafts, expired uploads, other viewers and custom data endpoints gain no new access. ' +
 			'Root component render ttMediaRefs bindings are applied once after stored interpolation in media props/CSS, matching the browser. Only resulting rendered URLs are dependencies; unused pairs, labels and action inputs grant nothing. ' +
@@ -8502,7 +8504,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Shared things (picker grant)',
     endpoint: '/api/v1/oauth/shared',
     summary: 'Read the things the user hand-picked to share with your app.',
-    detail:
+    detail: 'First-party single reads with a valid hidden post key remember a protected post-discovery relationship for the account or anonymous browser. The browser keeps a cryptographic token in localStorage and mirrors it to the same-origin __Host-tt_found_browser cookie for media requests. Only the one-way anonymous identity, link-generation digest and private visit IP are stored server-side. Revisits and author-profile listings require the same identity and current hidden key generation; rotation and removal revoke collected access. Scoped tokens, app namespaces and custom data endpoints do not acquire discoveries. ' +
       'GET with the app-scoped Bearer token; requires the things scope. Returns exactly the set the ' +
       'user ticked on the consent screen — read-only, ownership re-checked at read time (things the ' +
       'user has since deleted drop out), projected to content fields only ({ shareId, thingtime, ' +
@@ -8988,13 +8990,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // recording attachments — pending uploads and the other protected kinds
     // stay excluded (additive, on top of the sharedRoot correction)
     // Includes additive discussions and the 1.7.5 conditional-media write correction.
-    featureVersion: '1.18.0',
-    contractVersion: '1.17.0',
+    // Builder SDK: action definitions accept registered provider lookup capabilities.
+    featureVersion: '1.20.0',
+    contractVersion: '1.19.0',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Action definitions support lookup steps with registered provider capabilities and literal Vault entry ids; see /docs/builder/lookups. Component native uploads also accept initial value and attachmentId props for editing saved records. ' +
+			'Post creation and attachment sync have no attachment-count cap; ordered relational attachments still require unique owned ready ids, storage quota, upload approval and the bounded JSON body. Comment/message/profile limits remain unchanged. ' +
 			'Optional geo: {lat,lng} on create/update stores a validated geographic Point (lat -90..90, lng -180..180); null removes location and omission preserves it on PATCH. Read projections expose lat/lng only under the same Thing ACL. Location is explicitly supplied, never inferred from the author. The archive emoji projection recognizes the canonical persisted attachment purpose emoji (the upload API alias is custom-emoji). ' +
 			'Owner archive snapshots include emojis: referenced personal definitions reduced to id, name and attachmentId. Two bounded snapshot queries enforce exact owner/home scope, ready custom-emoji binding and canonical image metadata; blocked, pending, NSFW, linked, foreign or missing images are omitted and remain unavailable historical reactions. No live accounts or community membership are resolved. ' +
 			'Archive snapshots additionally include ordered attachments with targetId and canonical gallery metadata. The existing owner-only batch query projects safe labels, media type and linked URLs; blocked/noncanonical metadata is omitted, pending owner media is marked pending, and NSFW media is marked nsfw for reveal consent. No object keys, upload identifiers or moderation diagnostics are exposed. attachmentTargets still includes every binding so exports cannot silently omit quarantined files. Stored bytes remain independently authorized by the attachment content endpoint. ' +
@@ -9525,14 +9530,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // the author's USER flair in the post's subspace (additive)
     // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
     // subspace post, for that subspace's moderators only (S5, additive)
-    featureVersion: '1.5.0',
-    contractVersion: '1.5.0',
+    featureVersion: '1.5.1',
+    contractVersion: '1.5.1',
     group: 'things',
     title: 'Comment on post',
     endpoint: '/api/v1/things/comment',
     summary: 'Adds a comment — comments share the post schema — to a thing visible to the current user. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
-			'Simple comments are standalone things (thingtime ["comment"]) pointing at their target via targetId and inheriting its visibility — this route is sugar over the unified thing path. Comments share the post schema: sending post fields (type, richText, images, listing, thing, tags) creates a RICH comment, a full ["post","comment"] thing validated by the post crystal rules, so comments can retain native rich-text presentation, linked photo URLs, marketplace listings, thingtime things, and private purpose=comment uploads. Attachment-only comments and replies are valid. Attachment comments require a stable client-generated shareId and bind every completed attachmentId atomically in the same home transaction as the comment. Comments are reactable and commentable like any post, and every comment has its own /post/:id permalink. The id may be a post or another comment (replies). Visibility is re-checked before writing, and attachment reads inherit the root post ACL through the complete reply chain, so private or circle-limited content stays private.',
+			'Simple comments are standalone things (thingtime ["comment"]) pointing at their target via targetId and inheriting its visibility — this route is sugar over the unified thing path. Comments share the post schema: sending post fields (type, richText, images, listing, thing, tags) creates a RICH comment, a full ["post","comment"] thing validated by the post crystal rules, so comments can retain native rich-text presentation, linked photo URLs, marketplace listings, thingtime things, and private purpose=comment uploads. Attachment-only comments and replies are valid. Attachment comments require a stable client-generated shareId and bind every completed attachmentId atomically in the same home transaction as the comment. Comments are reactable and commentable like any post, and every comment has its own /post/:id permalink. The id may be a post or another comment (replies). Visibility is re-checked before writing, and attachment reads inherit the root ACL through the complete reply and media-parent chain, so private or circle-limited content stays private.',
     auth: {
       mode: 'session-or-bearer',
       description:
@@ -10869,14 +10874,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-update',
+    // Builder SDK: action updates accept scoped lookup steps and literal Vault entry ids.
     // Stored component and page-block arguments use the same media-addition guard as render edits.
-    featureVersion: '1.3.0',
-    contractVersion: '1.3.0',
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
     group: 'things',
     title: 'Update thing',
     endpoint: '/api/v1/things/update',
     summary: 'Updates one of the current user things — crystal payload, acl audience, or tags. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Action definition updates validate registered lookup provider scopes and literal Vault entry ids. See /docs/builder/lookups for the authoring contract. ' +
       'Independently readable foreign components may be included with their authored private dependencies. Cross-author page overrides cannot borrow private authority, and newly unresolved required references are rejected before saving. ' +
       'New action dependencies selected by saved component arguments or page-block overrides require independent read access for non-owner writers, including a new instance of an already included component. ' +
       'Shared page-block argument and conditional media-property edits use the same resolved media-addition guard as PATCH /things; only the owner may introduce private media that the writer cannot independently read. ' +
@@ -10933,13 +10940,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // the author's USER flair in the post's subspace (additive)
     // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
     // subspace post, for that subspace's moderators only (S5, additive)
-    featureVersion: '1.5.0',
-    contractVersion: '1.5.0',
+    featureVersion: '1.6.0',
+    contractVersion: '1.6.0',
     group: 'things',
     title: 'User posts',
     endpoint: '/api/v1/things/user',
     summary: 'Returns posts for a public profile, filtered by viewer visibility. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
-    detail: 'Profile pages use this route to page through a user posts. Owners can see their full circle set; other viewers only see public content.',
+    detail: 'Profile pages use this route to page through a user posts. Owners can see their full circle set; other viewers see public content, friends posts and direct/group custom grants admitted by the same audience rules as the feed. Mixed secret-link audiences are included through explicit grants; link-only posts stay unlisted until the viewer visits a valid secret link. Successful first-party GET visits record a protected post-discovery relationship for the signed-in account, or the anonymous browser identified by its __Host-tt_found_browser cookie. Collected posts then appear on that author profile. Rotating the link, removing hidden access, moderation or deleting the post revokes access. Discovery receipts and private visit IP metadata are never projected; IP alone is not authority. Exact ACL, moderation, subspace and token checks still apply.',
     auth: {
       mode: 'optional',
       description: 'Anonymous callers can read public posts; authenticated callers may see their own broader visibility.'
@@ -12463,23 +12470,23 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   endpoint({
     id: 'things-fork',
     // 1.4.0: root render media bindings preserve split-fragment template behavior.
-    featureVersion: '1.4.0',
-    contractVersion: '1.4.0',
+    featureVersion: '1.5.0',
+    contractVersion: '1.5.0',
     group: 'things',
     title: 'Copy a shared composition',
     endpoint: '/api/v1/things/fork',
     summary: 'Create an independent private copy of readable standalone content, including pages, components, actions, schema controls and data with extended content and bound post-purpose file galleries; independently readable foreign components include their authored same-author children. Bound files keep their copied home target and gallery order, even when also embedded elsewhere. Linked gallery entries become new private quota-accounted records with the same validated external URL and annotations; external bytes are never fetched, stored or redirected by the content endpoint. Flagged linked media cannot be re-minted as unflagged. Non-post purposes are excluded and unavailable or unsupported files fail the copy instead of silently dropping a gallery.',
-    detail: 'Revalidates the root audience and traverses stored component, action, schema and data references, including saved component arguments and every persisted page instance. Creates fresh caller-owned private Things through normal quota and schema gates. Rewrites executable references and capability scopes to copied ids; never edits the original or overwrites a prior fork. Templated controls retain their editable arguments and receive a bounded ttActionRefs array of [original resolved reference, copied id] pairs on the authored control node. The renderer applies the first matching pair once after ttAction interpolation, never to labels or inputs, and strips the marker from rendered output. Unused pairs are not access grants. Forks of forks rebind to their own actions. Missing dependencies fail before writes. Failed writes trigger best-effort cleanup of exact newly created ids; a cleanup failure is reported explicitly. Repeated successful calls create separate copies.',
+    detail: 'Revalidates the root audience and traverses stored component, action, schema and data references, including saved component arguments and every persisted page instance. Copies readable relational comments and nested replies in parent-first order (up to 512 Things, files and comments; larger copies fail without truncation), including comments on media and each nested gallery. Creates fresh caller-owned private Things through normal quota and schema gates. Rewrites executable references and capability scopes to copied ids; never edits the original or overwrites a prior fork. Templated controls retain their editable arguments and receive a bounded ttActionRefs array of [original resolved reference, copied id] pairs on the authored control node. The renderer applies the first matching pair once after ttAction interpolation, never to labels or inputs, and strips the marker from rendered output. Unused pairs are not access grants. Forks of forks rebind to their own actions. Missing dependencies fail before writes. Failed writes trigger best-effort cleanup of exact newly created ids; a cleanup failure is reported explicitly. Repeated successful calls create separate copies.',
     auth: { mode: 'session', description: 'Requires a signed-in user and read access to id, including its key or group membership when needed. File-bearing copies additionally require the recipient to be a user account with normal post-purpose upload approval; that permission is checked before reservation and throughout copying.' },
     methods: ['POST'],
-    steps: ['POST { id, key? }. Supported roots are post, data, schema, component, webpage and action content; organizational folders, managed records and target-attached relationship rows retain their dedicated lifecycle.', 'Stored first-party media referenced by pages/components is copied to new caller-owned uploads through quota, exact-version authorization and normal moderation. HTML/CSS, saved URL arguments and exact attachment IDs in persisted argument values/defaults are retargeted, including nested lists and page-instance overrides. Matching ttMap keys and ttIf comparison values follow copied IDs so branch selection is preserved. URL template strings, argument labels and unrelated prose are preserved. External URLs are unchanged. Split-fragment file IDs retain their argument program and use root render ttMediaRefs pairs after interpolation. At most 512 valid first-match ID pairs map only first-party unkeyed media props and parsed CSS; the marker is stripped from output, generated text shares the render budget, and unused pairs never grant access. Re-forks compose targets onto their newly copied files.', 'Files bind transactionally to a copied Thing, with at most 25 files per target. The operation shares a 120-second copy deadline and revalidates the source composition before and after writes. Failure cleans only new Things/uploads; deferred cleanup remains billed and is reported. filesCopied counts newly owned attachments, separately from copied Things.', 'Open the returned id in Builder for a webpage or /thing/:id for other content.'],
+    steps: ['POST { id, key? }. Supported roots are post, data, schema, component, webpage and action content; organizational folders, managed records and target-attached relationship rows retain their dedicated lifecycle.', 'Stored first-party media referenced by pages/components is copied to new caller-owned uploads through quota, exact-version authorization and normal moderation. HTML/CSS, saved URL arguments and exact attachment IDs in persisted argument values/defaults are retargeted, including nested lists and page-instance overrides. Matching ttMap keys and ttIf comparison values follow copied IDs so branch selection is preserved. URL template strings, argument labels and unrelated prose are preserved. External URLs are unchanged. Split-fragment file IDs retain their argument program and use root render ttMediaRefs pairs after interpolation. At most 512 valid first-match ID pairs map only first-party unkeyed media props and parsed CSS; the marker is stripped from output, generated text shares the render budget, and unused pairs never grant access. Re-forks compose targets onto their newly copied files.', 'Post and comment galleries preserve order, use their original attachment purpose, and supply inspected media to post validation. Copied comments inherit the new private parent; source community/flair placement is removed. Reactions and votes are not copied. Files bind transactionally to a copied Thing, with at most 25 files per target. The operation shares a 120-second copy deadline and revalidates the source composition before and after writes. Failure cleans only new Things/uploads; deferred cleanup remains billed and is reported. filesCopied counts newly owned attachments, separately from copied Things.', 'Open the returned id in Builder for a webpage or /thing/:id for other content.'],
     requestExamples: [{ name: 'Copy a shared page', description: 'Save an editable private copy.', method: 'POST', body: { id: 'page-id', key: 'owner-issued-link-key' } }],
     responseExamples: [{ status: 200, description: 'Independent private copy created.', body: { ok: true, id: 'new-page-id', copied: 3, ids: ['new-action-id', 'new-component-id', 'new-page-id'], filesCopied: 1 } }]
   }),
   endpoint({
     id: 'actions-run',
-    featureVersion: '1.4.0',
-    contractVersion: '1.4.0',
+    featureVersion: '1.5.0',
+    contractVersion: '1.5.0',
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',
@@ -12487,8 +12494,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     detail:
       'An independently readable foreign component starts its own audience boundary for its authored same-author descendants. The outer root is still required, and revoking either audience removes shared access. Page-authored cross-author arguments may select only independently readable actions, never guessed private actions belonging to either author. Execution remains read-only and never uses an author identity. ' +
       'Shared controls can select actions through persisted component argument defaults, savedArgs and each page-block override. Discovery follows authored render branches and bounded stored repeats; runtime query/result/viewer input and arbitrary metadata grant no access. Copied ttActionRefs bindings resolve to the copied actions without changing input data. ' +
+      'Lookup steps { op: lookup, provider: google-geocoding, credentialId: a literal Vault entry id, query: $input.address } require capability { capability: lookup, providers: [google-geocoding] }. The caller must own the executing action and Vault key. Fixed HTTPS provider, no redirects, 500-character query, 128KB response, five results and an eight-second maximum within the run deadline. Shared lookup runs are refused. Runs using lookups return cache: no-store; persisted run results are replaced by an omission notice. Optional text inputs preserve explicit empty strings for clearing saved fields. See /docs/builder/lookups. ' +
       'The Action Thing executor: action things (thingtime ["action"]) are small declarative programs over a ' +
-      'closed operation vocabulary (things.create/get/search/update, actions.invoke, return) with typed inputs, ' +
+      'closed operation vocabulary (things.create/get/search/update/delete, actions.invoke, lookup, compute, each, fail, return) with typed inputs, ' +
       'author-declared capabilities, and a limits envelope. Capabilities only NARROW — every operation delegates ' +
       'to the ordinary things API as the signed-in caller, so ACL, quotas and schema validation always apply and ' +
       'an action can never do something its invoker couldn’t do by hand. One budget (deadline, operation count, ' +

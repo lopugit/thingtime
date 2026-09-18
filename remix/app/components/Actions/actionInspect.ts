@@ -76,6 +76,7 @@ export const describeActionStep = (step: Record<string, unknown>, names?: Record
 	const op = String(step.op || '');
 	const schema = typeof step.schema === 'string' ? displayRef(step.schema, names) : 'data';
 	const guard = step.when !== undefined ? ' (when a condition holds)' : '';
+	if (op === 'lookup') return `Send query to ${String(step.provider)} using your Vault credential${guard}`;
 	if (op === 'things.create') return `Create a ${schema} thing${guard}`;
 	if (op === 'things.get') return `Read ${String(step.id || 'a thing')}${guard}`;
 	if (op === 'things.search') {
@@ -106,6 +107,7 @@ export const deriveRequiredCapabilities = (steps: Record<string, unknown>[]): Ac
 	const scopes = new Map<string, Set<string>>();
 	const unscoped = new Set<string>();
 	const invoked = new Set<string>();
+	const providers = new Set<string>();
 	let invokeUnscoped = false;
 	const need = (capability: string, schema?: string | null) => {
 		if (!scopes.has(capability)) scopes.set(capability, new Set());
@@ -115,6 +117,7 @@ export const deriveRequiredCapabilities = (steps: Record<string, unknown>[]): Ac
 	for (const step of steps) {
 		if (!step || typeof step !== 'object') continue;
 		const schema = typeof step.schema === 'string' ? step.schema : null;
+		if (step.op === 'lookup') { need('lookup'); if (typeof step.provider === 'string') providers.add(step.provider); }
 		if (step.op === 'things.create') need('things.create', schema);
 		if (step.op === 'things.get' || step.op === 'things.search') need('things.read', schema);
 		if (step.op === 'things.update') need('things.update');
@@ -127,6 +130,7 @@ export const deriveRequiredCapabilities = (steps: Record<string, unknown>[]): Ac
 	}
 	return [...scopes.entries()].map(([capability, schemaSet]) => ({
 		capability,
+		...(capability === 'lookup' ? { providers: [...providers] } : {}),
 		...(schemaSet.size && !unscoped.has(capability) ? { schemas: [...schemaSet] } : {}),
 		...(capability === 'actions.invoke' && invoked.size && !invokeUnscoped ? { actions: [...invoked] } : {})
 	}));
@@ -244,23 +248,22 @@ export const ACTION_LIMIT_LABELS: Record<string, (value: number) => string> = {
 };
 
 // The complement summary — what this program can NEVER touch. The first
-// two are vocabulary invariants (no op reaches the network or a secret); the
-// rest derive from the declared capabilities and their scopes. Deletes are a
+// entries derive from declared capabilities and their scopes. Deletes are a
 // declared capability since the v2 vocabulary, so "No deletes" is only
 // claimed when the program does not declare things.delete.
 export const actionCannotAccess = (
 	capabilities: ActionCapabilityEntry[] | undefined,
 	names?: Record<string, string>
 ): string[] => {
-	const list = ['No network', 'No secrets'];
+	const list: string[] = [];
 	const declared = capabilities || [];
 	const has = (capability: string) => declared.some((entry) => entry.capability === capability);
+	if (!has('lookup') && !has('actions.invoke')) list.push('No network', 'No secrets');
 	if (!has('things.delete')) list.push('No deletes');
 	// An action that invokes another action cannot honestly claim the absolute
 	// negatives: the child runs on ITS own declaration, so "Cannot create
-	// things" would be a claim about code this page never read. Only the two
-	// vocabulary-level negatives above hold unconditionally (no op reaches the
-	// network or a secret). The composed case says so instead, and the Does
+	// things" would be a claim about code this page never read. Child programs
+	// can also use registered lookups. The composed case says so, and the Does
 	// list links each invoked child so its effects are one click away.
 	//
 	// Every line here is rendered under a 🚫 as something the program CANNOT

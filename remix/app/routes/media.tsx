@@ -1,6 +1,7 @@
+import { SharedMediaProvider } from '~/components/Sharing/SharedMedia';
 import React from 'react';
 import { Box, Button, Center, Flex, IconButton, Input, Spinner, Text, Textarea } from '@chakra-ui/react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { ArrowLeft, Check, Download, Pencil, X } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
@@ -36,6 +37,9 @@ type MediaResponse = {
 
 export const MediaPage = () => {
 	const { id } = useParams();
+	const [searchParams] = useSearchParams();
+	const linkKey = searchParams.get('key') || '';
+	const sharedRoot = searchParams.get('sharedRoot') || '';
 	const api = useApi();
 	const user = useCurrentUser();
 	const lopu = useLopu();
@@ -62,7 +66,7 @@ export const MediaPage = () => {
 
 		const startedAt = Date.now();
 		api.v1.things
-			.get({ id: id || '' })
+			.get({ id: id || '', key: linkKey || undefined, sharedRoot: sharedRoot || undefined })
 			.then((resp: any) => {
 				if (cancelled) return;
 				const thing = resp?.thing;
@@ -90,7 +94,7 @@ export const MediaPage = () => {
 		};
 		// api.v1.things.get is a stable useCallback
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [id]);
+	}, [id, linkKey, sharedRoot, user?.id]);
 
 	const attachment = data?.attachment ?? null;
 	const post = data?.post ?? null;
@@ -150,7 +154,7 @@ export const MediaPage = () => {
 	};
 
 	return (
-		<Flex
+		<SharedMediaProvider linkKey={linkKey} sharedRoot={sharedRoot}><Flex
 			justifyContent="center"
 			width="100%"
 			minHeight="100vh"
@@ -262,7 +266,7 @@ export const MediaPage = () => {
 				{(parentId || attachment) && (
 					<Flex alignItems="center" columnGap={2} flexWrap="wrap">
 						{parentId && (
-							<Link to={`/post/${parentId}`}>
+							<Link to={`/post/${parentId}${linkKey ? `?key=${encodeURIComponent(linkKey)}` : ''}`}>
 								<Button size="xs" variant="outline" borderRadius="999px" leftIcon={<ArrowLeft size={12} />}>
 									View the post this media lives in 📌
 								</Button>
@@ -271,7 +275,7 @@ export const MediaPage = () => {
 						{attachment && (
 							<Button
 								as="a"
-								href={attachment.url || attachmentContentUrl(attachment.id, true)}
+								href={attachment.url || `${attachmentContentUrl(attachment.id, true)}${linkKey ? `&key=${encodeURIComponent(linkKey)}` : ''}${sharedRoot ? `&sharedRoot=${encodeURIComponent(sharedRoot)}` : ''}`}
 								// cross-origin ignores the download attribute — linked media
 								// opens the original URL in a new tab instead
 								{...(attachment.url ? { target: '_blank', rel: 'noopener noreferrer' } : { download: attachment.name })}
@@ -311,7 +315,7 @@ export const MediaPage = () => {
 					</Box>
 				)}
 			</Flex>
-		</Flex>
+		</Flex></SharedMediaProvider>
 	);
 };
 

@@ -1,3 +1,4 @@
+import { ensureFoundPostBrowserIdentity } from './foundPostIdentity.client';
 import { useCallback } from 'react';
 import { withPostRequestDeadline } from './postRequest';
 import { isDefaultAlgorithm } from '~/components/Feed/defaultAlgorithms';
@@ -23,6 +24,7 @@ const refreshRootData = () => {
 // parsed payload on !ok so callers catch { ok: false, error } shapes.
 // Every call is recorded in the DevKit request log (method/path/status/ms).
 const getJson = async (url: string, options?: { signal?: AbortSignal }) => {
+  if (url.startsWith('/api/v1/things')) ensureFoundPostBrowserIdentity();
   const started = performance.now();
   let response: Response;
   try {
@@ -922,15 +924,22 @@ export function useApi() {
         },
         [asyncFetcher]
       ),
-      userPosts: useCallback(async (args) => getJson(`/api/v1/things/user${toQuery(args)}`), []),
+      userPosts: useCallback(async (args) => {
+        await requireThingtimeCapability('api.things-user', '1.6.0');
+        await requireThingtimeCapability('api.attachment-content', '1.8.0');
+        return getJson(`/api/v1/things/user${toQuery(args)}`);
+      }, []),
 			// commentSort: 'top' | 'new' | 'old' re-orders the shipped comment page
 			// of the post projection (PostCard's Top / New / Old menu); omit for
 			// the default page. key: a hidden thing's secret link key (?key= on
 			// /post pages) — lets anyone holding the link view the unlisted thing.
 			// sharedRoot scopes a dependency read to an authorized composition.
 			get: useCallback(
-				async (args, options?: { signal?: AbortSignal }) =>
-					getJson(`/api/v1/things${toQuery({ id: args?.id, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, options),
+				async (args, options?: { signal?: AbortSignal }) => {
+          await requireThingtimeCapability('api.things', '1.19.0');
+          await requireThingtimeCapability('api.attachment-content', '1.8.0');
+          return getJson(`/api/v1/things${toQuery({ id: args?.id, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, options);
+        },
 				[]
 			),
       list: useCallback(
@@ -957,7 +966,9 @@ export function useApi() {
       }, []),
       update: useCallback(
         async (args) => {
-          if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
+          if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
+          else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
+          if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'lookup')) await requireThingtimeCapability('api.things', '1.20.0');
           return asyncFetcher.submit(
             {
               id: args?.id,
@@ -1018,7 +1029,9 @@ export function useApi() {
       reactionsRecent: useCallback(async () => getJson('/api/v1/things/reactions-recent'), []),
       create: useCallback(
         async (args) => {
-					if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
+					if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
+          else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
+          if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'lookup')) await requireThingtimeCapability('api.things', '1.20.0');
           const payload = buildThingCreateRequestPayload(args);
 					const attachmentIds = args?.attachmentIds;
 					const ret = withPostRequestDeadline(signal => asyncFetcher.submit(payload, { action: '/api/v1/things', errorContext: 'publish your post', signal }));
@@ -1386,7 +1399,7 @@ export function useApi() {
       // resolution to actions the viewer owns — execute.ts ownedOnly), and an
       // inline list silently dropped it, disarming the delegated ttAction
       // path in every browser while the API-level battery stayed green.
-      run: useCallback(async (args) => asyncFetcher.submit(buildActionRunBody(args), { action: '/api/v1/actions/run' }), [asyncFetcher]),
+      run: useCallback(async (args) => { await requireThingtimeCapability('api.actions-run', '1.5.0'); return asyncFetcher.submit(buildActionRunBody(args), { action: '/api/v1/actions/run' }); }, [asyncFetcher]),
       // your own run records — { action, limit }
       runs: useCallback(async (args) => getJson(`/api/v1/actions/runs${toQuery(args)}`), [])
       // creation rides the unified path: things.create({ thingtime: ['action'], crystal })

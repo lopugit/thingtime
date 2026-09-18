@@ -41,7 +41,8 @@ test('uncertain delivery retains immutable identity and payload, locks edits and
 	add('two');
 	const calls: any[] = [];
 	await drainLopuQueue('chat', async (text, options) => {
-		calls.push({ text, options });
+		const { onAccepted: _accepted, ...payload } = options;
+		calls.push({ text, options: payload });
 		throw new Error('offline');
 	});
 	assert.equal(getLopuQueue().paused, true);
@@ -50,7 +51,8 @@ test('uncertain delivery retains immutable identity and payload, locks edits and
 	add('three');
 	pauseLopuQueue(false);
 	await drainLopuQueue('chat', async (text, options) => {
-		calls.push({ text, options });
+		const { onAccepted: _accepted, ...payload } = options;
+		calls.push({ text, options: payload });
 		return { ok: true };
 	});
 	assert.deepEqual(calls[0], calls[1]);
@@ -86,4 +88,52 @@ test('batch respects wire text limit and snapshots model/context choices', () =>
 	add('one');
 	addLopuQueueMessage('chat', 'two', { settings: { model: 'different' } });
 	assert.equal(planLopuQueueBatch(getLopuQueue().items, 'chat')?.ids.length, 1);
+});
+
+test('accepted messages leave the queue immediately; interrupted replies cannot replay them', async () => {
+	add('first');
+	let reject!: (error: Error) => void;
+	const pending = drainLopuQueue('chat', async (_text, options) => {
+		options.onAccepted?.();
+		return new Promise((_resolve, fail) => {
+			reject = fail;
+		});
+	});
+	assert.equal(getLopuQueue().items.length, 0);
+	assert.equal(getLopuQueue().batch, null);
+	assert.equal(getLopuQueue().busy, true);
+	add('next');
+	let calls = 0;
+	await drainLopuQueue('chat', async () => {
+		calls++;
+		return { ok: true };
+	});
+	assert.equal(calls, 0, 'acceptance must not release the active reply lock');
+	reject(new Error('reply interrupted'));
+	await pending;
+	assert.equal(getLopuQueue().paused, true);
+	pauseLopuQueue(false);
+	await drainLopuQueue('chat', async (text) => {
+		assert.equal(text, 'next');
+		return { ok: true };
+	});
+	assert.equal(getLopuQueue().items.length, 0);
+});
+
+test('old-account acceptance cannot clear or unlock the new account queue', async () => {
+	add('old');
+	let accept!: () => void;
+	let release!: (result: any) => void;
+	const pending = drainLopuQueue('chat', async (_text, options) => {
+		accept = options.onAccepted!;
+		return new Promise((resolve) => {
+			release = resolve;
+		});
+	});
+	bindLopuQueue('new-owner');
+	add('new');
+	accept();
+	release({ ok: true });
+	await pending;
+	assert.equal(getLopuQueue().items[0].text, 'new');
 });
