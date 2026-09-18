@@ -34,6 +34,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-18 — Fix Copy to my Things for image-only posts and nested comment
+  galleries. Copies preserve attachment order/purpose and reply parents, validate
+  inspected media, and negotiate `api.things-fork` 1.5.0. Verified with local
+  replica-set API tests and desktop/mobile Chrome. [PR #851 validation notes](../PRs/851-codex-copy-nested-things-fix-copying-nested-comments-and-attachment-galleries.md). — **Codex (AI)**
+
 - 2026-09-18 — Floating builder controls follow Lopu split panes and pinned
   navigation drawers. Narrow panes use a wrapped bar and keyboard-accessible
   mode menu; preview popovers stay inside the available pane. — Codex (AI)

@@ -228,3 +228,20 @@ test('post-purpose media binds to webpage targets too — authorized by the page
 	assert.equal(await canView(null, attachment), false);
 	assert.equal(await canView({ id: 'owner-1' } as any, attachment), true);
 });
+
+
+test('comment galleries inherit through media and remain private after root revocation', async () => {
+ const docs = new Map<string, any>([
+  ['reply', { shareId: 'reply', ownerId: 'author', thingtime: ['post', 'comment'], targetId: 'media', acl: ['tt:inherit'] }],
+  ['media', { shareId: 'media', ownerId: 'root-owner', thingtime: ['attachment'], targetId: 'post-1', acl: ['tt:inherit'] }],
+  ['post-1', post()]
+ ]);
+ const view = createCanViewHomeAttachmentTarget({ getThings: async () => ({ findOne: async (filter: any) => docs.get(filter.shareId) || null } as any) });
+ const file = { shareId: 'file', ownerId: 'author', targetId: 'reply', attachmentPurpose: 'comment' as const };
+ assert.equal(await view(null, file), true);
+ docs.set('post-1', post({ acl: ['tt:user'] }));
+ assert.equal(await view(null, file), false);
+ assert.equal(await view({ id: 'owner-1' }, file), true);
+ docs.set('media', { ...docs.get('media'), targetId: 'reply' });
+ assert.equal(await view({ id: 'owner-1' }, file), false);
+});

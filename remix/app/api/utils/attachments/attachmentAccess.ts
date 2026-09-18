@@ -4,7 +4,7 @@ import { ObjectId } from 'mongodb';
 import { getHomeThingsCollection, getUsersCollection } from '../mongodb/collections';
 import { relationshipLookupFilter } from '../mongodb/relationshipLookup';
 import { ACL_ALL, ACL_INHERIT, ACL_OWNER, aclFromVisibility, type ThingVisibility } from '../../../schemas/registry';
-import { canView, type ThingDoc, type Viewer } from '../things/things';
+import { canView, canViewInherited, type ThingDoc, type Viewer } from '../things/things';
 import type { AttachmentPurpose, ProfileAttachmentSlot } from './attachmentCore';
 
 export type AttachmentAccessViewer = (NonNullable<Viewer> & { isAdmin?: boolean; sharedRoot?: string }) | null;
@@ -98,39 +98,21 @@ type AttachmentTargetAccessDependencies = {
 const exactThingtime = (value: unknown, expected: readonly string[]): boolean =>
 	Array.isArray(value) && value.length === expected.length && expected.every((entry, index) => value[index] === entry);
 
-const attachmentRootAclAllows = (doc: AttachmentTargetAclDoc | null, viewer: AttachmentAccessViewer): boolean => {
-	if (!doc || !doc.shareId || !doc.ownerId || !Array.isArray(doc.thingtime) || !doc.thingtime.length) return false;
-	if (doc.targetId !== undefined && doc.targetId !== null) return false;
-	const acl =
-		Array.isArray(doc.acl) && doc.acl.length && doc.acl.every((entry) => typeof entry === 'string')
-			? (doc.acl as string[])
-			: aclFromVisibility(doc.visibility) || [ACL_OWNER];
-	if (acl.includes(ACL_INHERIT)) return false;
-	return canView({ ...doc, acl } as ThingDoc, viewer);
-};
-
 const canViewCommentAttachment = async (
 	things: Awaited<ReturnType<typeof getHomeThingsCollection>>,
 	viewer: AttachmentAccessViewer,
 	attachment: AttachmentAccessDocument
 ): Promise<boolean> => {
-	let targetId = attachment.targetId;
-	if (!targetId) return false;
-	const visited = new Set<string>();
-	for (let depth = 0; depth < 64; depth += 1) {
-		if (visited.has(targetId)) return false;
-		visited.add(targetId);
-		const target = (await things.findOne({ shareId: targetId } as any, {
-			projection: { shareId: 1, ownerId: 1, thingtime: 1, targetId: 1, acl: 1, visibility: 1, linkKey: 1, moderation: 1, subspacePrivate: 1, 'crystal.subspaceId': 1 }
-		})) as AttachmentTargetAclDoc | null;
-		if (!target) return false;
-		const isComment = exactThingtime(target.thingtime, ['comment']) || exactThingtime(target.thingtime, ['post', 'comment']);
-		if (!isComment) return attachmentRootAclAllows(target, viewer);
-		if (depth === 0 && target.ownerId !== attachment.ownerId) return false;
-		if (typeof target.targetId !== 'string' || !target.targetId) return false;
-		targetId = target.targetId;
-	}
-	return false;
+	if (!attachment.targetId) return false;
+	const lookup = async (id: string): Promise<ThingDoc | null> => (await things.findOne({ shareId: id } as any, {
+		projection: { shareId: 1, ownerId: 1, thingtime: 1, targetId: 1, acl: 1, visibility: 1, linkKey: 1, moderation: 1, subspacePrivate: 1, 'crystal.subspaceId': 1 }
+	})) as ThingDoc | null;
+	const target = await lookup(attachment.targetId);
+	if (!target || target.ownerId !== attachment.ownerId ||
+		!(exactThingtime(target.thingtime, ['comment']) || exactThingtime(target.thingtime, ['post', 'comment']))) return false;
+	// Comments can target media as well as posts/replies. Follow the canonical
+	// inheritance chain through either kind, preserving cycle and audience gates.
+	return canViewInherited(target, viewer, lookup);
 };
 
 const canViewMessageAttachment = async (

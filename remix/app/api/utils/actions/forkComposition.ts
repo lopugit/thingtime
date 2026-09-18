@@ -1,12 +1,14 @@
+import { isDeepStrictEqual } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import { createThing, deleteThing, fail, isFail, type Viewer, type Fail } from '../things/things';
-import { resolveSharedComposition, type SharedComposition } from './sharedComposition';
+import { type SharedComposition } from './sharedComposition';
 import { rewriteComposition } from './forkCompositionCore';
 import { rewriteCopiedAttachmentReferences, bindCopiedTemplateMedia } from './forkMediaCore';
 import { compositionAttachmentIds } from './compositionMediaCore';
-import { copySharedAttachment, deleteAttachment, createReadyAttachmentPostInsertHook } from '../attachments/attachments';
+import { copySharedAttachment, deleteAttachment, createReadyAttachmentPostInsertHook, createReadyAttachmentCommentInsertHook, inspectReadyAttachmentsForPost, inspectReadyAttachmentsForComment } from '../attachments/attachments';
 import { MAX_ATTACHMENTS_PER_TARGET } from '../attachments/attachmentStore';
 import { listForkBoundMedia } from './forkBoundMedia';
+import { resolveForkComposition } from './forkComments';
 
 type ForkDependencies = {
 	create: typeof createThing;
@@ -15,16 +17,22 @@ type ForkDependencies = {
 	removeFile: typeof deleteAttachment;
 	bind: typeof createReadyAttachmentPostInsertHook;
 	listBoundFiles: typeof listForkBoundMedia;
+	inspect: typeof inspectReadyAttachmentsForPost;
+	inspectComment: typeof inspectReadyAttachmentsForComment;
+	bindComment: typeof createReadyAttachmentPostInsertHook;
 	revalidate: (viewer: Viewer, id: string) => Promise<SharedComposition | Fail>;
 	uuid: () => string;
 };
 const production: ForkDependencies = { create: createThing, remove: deleteThing, copyFile: copySharedAttachment,
 	removeFile: deleteAttachment, bind: createReadyAttachmentPostInsertHook, listBoundFiles: listForkBoundMedia, uuid: randomUUID,
-	revalidate: (viewer, id) => resolveSharedComposition(viewer, id, { contentRoot: true }) };
+	inspect: inspectReadyAttachmentsForPost, inspectComment: inspectReadyAttachmentsForComment,
+	bindComment: createReadyAttachmentCommentInsertHook,
+	revalidate: resolveForkComposition };
 
 export const forkComposition = async (viewer: Viewer, composition: SharedComposition, deps: ForkDependencies = production): Promise<Fail | { ok: true; id: string; copied: number; ids: string[]; filesCopied: number }> => {
 	if (!viewer?.id) return fail(401, 'Sign in to copy this app');
-	const docs = [...composition.docs.values()];
+	const sourceDocs = [...composition.docs.values()];
+	const docs = sourceDocs.filter(doc => !doc.thingtime.includes('attachment'));
 	// A copy must be independently usable, never a quietly incomplete shell.
 	for (const ref of composition.requiredReferences) {
 		if (!composition.references.has(ref)) return fail(403, 'A referenced dependency is unavailable. Ask the owner to repair its sharing before copying.');
@@ -40,7 +48,7 @@ export const forkComposition = async (viewer: Viewer, composition: SharedComposi
 	const revalidate = async () => {
 		if (abort.signal.aborted) throw new Error('The copy timed out');
 		const fresh = await deps.revalidate(viewer, composition.root.shareId);
-		if (isFail(fresh) || docs.some((doc) => !fresh.docs.has(doc.shareId)) ||
+		if (isFail(fresh) || fresh.docs.size !== sourceDocs.length || sourceDocs.some((doc) => !isDeepStrictEqual(fresh.docs.get(doc.shareId), doc)) ||
 			[...fresh.requiredReferences].some((ref) => !fresh.references.has(ref))) throw new Error('The original sharing changed while copying');
 	};
 	try {
@@ -92,9 +100,12 @@ export const forkComposition = async (viewer: Viewer, composition: SharedComposi
 		}
 		for (const id of targets.keys()) {
 			if (abort.signal.aborted) throw new Error('The copy timed out');
-			const result = await deps.copyFile({ ...viewer, sharedRoot: composition.root.shareId }, id, abort.signal);
+			const target = composition.docs.get(targets.get(id)!);
+			const purpose = target?.thingtime.includes('comment') ? 'comment' : 'post';
+			const result = await deps.copyFile({ ...viewer, sharedRoot: composition.root.shareId }, id, abort.signal, purpose);
 			if (isFail(result)) throw new Error(result.error);
 			files.set(id, result.id);
+			ids.set(id, result.id);
 		}
 		const crystals = rewriteMedia(files);
 		await revalidate();
@@ -113,8 +124,15 @@ export const forkComposition = async (viewer: Viewer, composition: SharedComposi
 				crystal.forkOf = doc.shareId;
 			}
 			const boundFiles = [...files].filter(([source]) => targets.get(source) === doc.shareId).map(([, copied]) => copied);
-			const result = await deps.create(viewer.id, { shareId: ids.get(doc.shareId), thingtime: doc.thingtime, crystal, extended: doc.extended, acl: ['tt:user'], tags: doc.tags }, viewer, null,
-				boundFiles.length ? { afterInsert: deps.bind(boundFiles) } : {});
+			const comment = doc.thingtime.includes('comment');
+			const inspected = await (comment ? deps.inspectComment : deps.inspect)(viewer.id, boundFiles);
+			if (isFail(inspected)) throw new Error(inspected.error);
+			if (comment && !ids.has(doc.targetId!)) throw new Error('A comment has an unavailable parent');
+			// Copies belong to a private library, not the source community.
+			if (doc.thingtime.includes('post')) { delete crystal.subspaceId; delete crystal.flairId; }
+			const result = await deps.create(viewer.id, { ...(comment ? { targetId: ids.get(doc.targetId!) } : {}), shareId: ids.get(doc.shareId), thingtime: doc.thingtime, crystal, extended: doc.extended, acl: ['tt:user'], tags: doc.tags }, viewer, null,
+				{ postAttachments: { hasAny: inspected.hasAny, hasVisual: inspected.hasVisual },
+					...(boundFiles.length ? { afterInsert: (comment ? deps.bindComment : deps.bind)(boundFiles) } : {}) });
 			if (isFail(result)) throw new Error(result.error);
 			created.push(result.doc.shareId);
 		}

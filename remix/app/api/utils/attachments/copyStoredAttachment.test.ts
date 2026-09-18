@@ -218,3 +218,14 @@ test('copy/finalization failures retain cleanup state without exposing storage e
 		if (!result.ok) { assert.match(result.error, /cleanup is pending/); assert.doesNotMatch(result.error, /secret|bucket|version/); }
 	}
 });
+
+test('comment copies retain their purpose and reject post/comment cross-purpose reuse', async () => {
+ const f = fixture();
+ f.setSource({ attachmentPurpose: 'comment' });
+ f.setDestination({ attachmentPurpose: 'comment' });
+ f.deps.start = async (_owner, input: any) => { assert.equal(input.purpose, 'comment'); return { ok: true, upload: { id: 'copy' } }; };
+ assert.equal((await copyStoredAttachment(f.deps, { id: 'visitor' }, 'source', undefined, 'comment')).ok, true);
+ assert.equal((await copyStoredAttachment(f.deps, { id: 'visitor' }, 'source')).ok, false);
+ f.setSource({ attachmentPurpose: 'post' });
+ assert.equal((await copyStoredAttachment(f.deps, { id: 'visitor' }, 'source', undefined, 'comment')).ok, false);
+});
