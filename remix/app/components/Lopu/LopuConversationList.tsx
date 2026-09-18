@@ -210,7 +210,9 @@ export const LopuConversationList = ({ chat, onPicked, bottomInset }: { chat: Us
 						size="sm"
 						flex={1}
 						minW={0}
-						variant={archived === value ? 'solid' : 'ghost'}
+						variant="ghost"
+						bg={archived === value ? LOPU_UI.surfaceAlt : 'transparent'}
+						_hover={{ bg: LOPU_UI.surfaceHover }}
 						aria-pressed={archived === value}
 						onClick={() => setArchived(value)}
 						color={LOPU_UI.ink}
