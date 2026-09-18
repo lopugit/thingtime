@@ -229,6 +229,16 @@
 
 ## Session read recovery
 
+- [ ] Keep an unsaved draft and an expanded panel open, fail both background
+  `/api/root-data` reads, and return to the tab: the same page and component
+  instances remain mounted. Restore connectivity: data refreshes without reload.
+  Repeat at desktop and 390px widths. A cold-start failure retries on focus,
+  reconnect and a bounded timer; never replay a mutation.
+- [ ] Fail a root read after switching or signing out in another same-origin tab:
+  old account content disappears and cannot be restored by a delayed read.
+  401/403 and malformed responses clear the fallback; changing route/query/origin
+  cannot borrow the previous route's data.
+
 - [ ] Fail the first `/api/root-data` GET after sign-in: one automatic retry
   restores the app without repeating the login POST. Fail both reads: show
   a clean error with Try again and Reload page, never a raw stack or response.

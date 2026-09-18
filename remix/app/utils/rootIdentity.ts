@@ -22,6 +22,36 @@ export const createRootIdentityState = () => {
 };
 export const rootIdentity = createRootIdentityState();
 
+/** Same-origin tabs share cookies. Broadcast only invalidation, never profiles
+ * or credentials, and never echo a received change back to the other tabs. */
+export const bindRootIdentityChannel = (
+	identity: ReturnType<typeof createRootIdentityState>,
+	channel: Pick<BroadcastChannel, 'postMessage' | 'addEventListener' | 'removeEventListener'>,
+	refresh: () => void
+) => {
+	let generation = identity.read().generation;
+	let receiving = false;
+	const unsubscribe = identity.subscribe(() => {
+		const next = identity.read().generation;
+		if (next === generation) return;
+		generation = next;
+		if (!receiving) {
+			try { channel.postMessage('identity-changed'); } catch { /* Messaging must not fail a completed login/logout. */ }
+		}
+	});
+	const receive = (event: MessageEvent) => {
+		if (event.data !== 'identity-changed') return;
+		receiving = true;
+		try { identity.changed(); } finally { receiving = false; }
+		refresh();
+	};
+	channel.addEventListener('message', receive);
+	return () => {
+		unsubscribe();
+		channel.removeEventListener('message', receive);
+	};
+};
+
 const identityActions = new Set([
 	'/api/v1/login',
 	'/api/v1/auth/register',

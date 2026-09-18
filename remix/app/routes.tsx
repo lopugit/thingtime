@@ -27,6 +27,7 @@ import Welcome from './routes/welcome';
 import { recoverStaleChunk } from './utils/staleChunkRecovery';
 import { shouldBootstrapTemporaryUser } from './utils/temporaryUserBootstrap';
 import { fetchRootData } from './utils/rootDataRecovery';
+import { createRootDataLoader } from './utils/rootDataLoader';
 import { rootIdentity } from './utils/rootIdentity';
 import { RootRecovery } from './components/Layout/RootRecovery';
 
@@ -82,7 +83,7 @@ const fetchJson = async <T,>(url: string, init: RequestInit = {}) => {
   return (await response.json()) as T;
 };
 
-const rootLoader = async ({ request }: LoaderFunctionArgs) => {
+const rootLoader = createRootDataLoader(async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const generation = rootIdentity.read().generation;
   const rootData = await fetchRootData<RootLoaderData>(`/api/root-data${url.search}`, request.signal);
@@ -105,7 +106,7 @@ const rootLoader = async ({ request }: LoaderFunctionArgs) => {
     // with an error boundary for an optional first-session convenience.
     return current(rootData);
   }
-};
+}, rootIdentity);
 
 const currentUserLoader = async () => {
   const response = await fetchJson<{ user: RootLoaderData['user'] }>('/api/v1/auth/me');
