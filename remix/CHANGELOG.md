@@ -34,7 +34,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- **2026-09-18 · Codex (AI):** Fix native uploads in embedded Builder components, preserve explicit empty form fields, validate before saving, guard pending uploads and inherit component sources. Add `/docs/builder` sections shared with Lopu and a capability-scoped Google geocoding adapter using owned Vault credentials. Local isolated validation uses ports 14870–14872; no live Google/storage credentials were used.
+- **2026-09-18 · Codex (AI):** Fix native uploads in embedded Builder components, preserve explicit empty form fields, validate before saving, guard pending uploads and inherit component sources. Add `/docs/builder` sections shared with Lopu and a capability-scoped Google geocoding adapter using owned Vault credentials. Local isolated validation uses ports 14870–14872; no live Google/storage credentials were used. [PR #853 validation and setup](../PRs/853-codex-builder-sdk-uploads-forms-fix-builder-uploads-and-form-saves-document-sdk-and-add-scoped-lookups.md).
 
 - **2026-09-18 · Codex (AI):** Add Lopu message queues with drag/arrow ordering, default grouped sends, pause/resume and stable retries; add immediately saved notes consumed at safe provider boundaries. Queues restore paused after reload. Publish background-task 1.2.0 and chat-reply 1.13.0 capabilities. [PR #846 validation notes](../PRs/846-codex-lopu-message-queue-add-lopu-message-queues-and-send-now-notes.md).
 

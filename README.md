@@ -3714,3 +3714,8 @@ http://127.0.0.1:<nitro-port>` only against a disposable database: it creates te
 accounts and data. Provider-positive unit tests use synthetic Google responses;
 a real credential and configured object storage are required for live integration
 acceptance.
+
+Builder SDK QA worktree mapping: web `http://localhost:14870`, HMR `14871`, API
+`14872`; docs `http://localhost:14870/docs/builder`. Tailscale/Funnel was unavailable
+on 2026-09-18 because the installed CLI shim referenced a missing application
+binary. Other worktrees derive their own ports via `npm run web-ports`.

@@ -54,7 +54,7 @@ export const builderGuideSections = [
 			name: 'Address',
 			fields: [
 				{ name: 'address', type: 'string', required: true },
-				{ name: 'notes', type: 'text' },
+				{ name: 'notes', type: 'string' },
 				{ name: 'photo', type: 'string' },
 				{ name: 'photoAttachmentId', type: 'string' }
 			]

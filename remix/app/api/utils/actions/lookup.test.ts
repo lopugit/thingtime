@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { sharedOperationAllowed } from './sharedCompositionCore';
 import { runLookup } from './lookup';
-import { sanitizeActionCrystal, deriveActionEffects } from '../../../schemas/registry';
-import { builderLookupExample, builderSaveExample } from '../../../docs/builderGuide';
+import { validateThingtimeCrystal, sanitizeActionCrystal, deriveActionEffects } from '../../../schemas/registry';
+import { builderGuideSections, builderFormExample, builderLookupExample, builderSaveExample } from '../../../docs/builderGuide';
 import { deriveRequiredCapabilities, actionCannotAccess } from '../../../components/Actions/actionInspect';
 
 const request = { provider: 'google-geocoding', query: '10 Example Street & key=evil', credential: 'test-secret', deadline: Date.now() + 60000 };
@@ -76,3 +76,10 @@ test('docs action examples validate, lookup needs explicit provider scope and li
 });
 
 test('shared execution never admits external lookups', () => assert.equal(sharedOperationAllowed('lookup'), false));
+
+test('published schema and component examples pass the real saved-Thing grammar', () => {
+ for (const [kind, example] of [['schema', builderGuideSections[0].example], ['component', builderFormExample]] as const) {
+  const result = validateThingtimeCrystal([kind], example);
+  assert.equal(result.ok, true, JSON.stringify(result));
+ }
+});
