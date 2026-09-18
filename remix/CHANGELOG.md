@@ -34,6 +34,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- **2026-09-18 · Codex (AI):** Add Lopu message queues with drag/arrow ordering, default grouped sends, pause/resume and stable retries; add immediately saved notes consumed at safe provider boundaries. Queues restore paused after reload. Publish background-task 1.2.0 and chat-reply 1.13.0 capabilities.
+
 - **2026-09-17 — Lopu context and docking (Codex):** Show and toggle current-page context, attach recent Thingtime pages, persist minimise-to-bubble, resize every edge/corner, and dock on all four sides with split or overlay behavior. Split navigation adapts to the remaining page width. Reply capability 1.12 adds validated page references without granting permissions. [PR #844 validation notes](../PRs/844-codex-lopu-context-docking-add-page-context-and-flexible-docking-to-lopu.md).
 
 - 2026-09-17 — Shared seamless builder on `/builder` and `/p`: live inline text

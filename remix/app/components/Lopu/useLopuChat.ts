@@ -1,3 +1,5 @@
+import { addLopuQueueMessage, drainLopuQueue, getLopuQueue, subscribeLopuQueue } from './lopuQueueStore';
+import { sendAiTaskNote, getAiTasks as queueTasks, refreshAiTasks as refreshQueueTasks } from './aiTasks.client';
 // useLopuChat (design note §3.1) — the ONE React hook every Lopu surface uses
 // (the /lopu page, the floating window, the Messenger pane). It is a thin
 // React binding over lopuChatStore: it hands the store the viewer's API
@@ -121,6 +123,9 @@ export type UseLopuChatOptions = {
 export type LopuViewer = { id: string | null; signedIn: boolean; temporary: boolean; admin: boolean };
 
 export type UseLopuChat = {
+ queue: ReturnType<typeof getLopuQueue>;
+ enqueue: (text: string, attachments?: { attachmentIds?: string[]; attachments?: ChatMessage['attachments']; thingIds?: string[] }) => void;
+ sendNote: (text: string, noteId: string) => Promise<any>;
 	viewer: LopuViewer;
 	chats: LopuChatSummary[];
 	chatsLoaded: boolean;
@@ -261,6 +266,44 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 		[contextProvider, applyPatches]
 	);
 
+ const queue = React.useSyncExternalStore(subscribeLopuQueue, getLopuQueue, getLopuQueue);
+ const enqueue = React.useCallback((text: string, attachments: any = {}) => {
+  if (!activeChatId) throw new Error('Wait for the conversation to start before queuing a message.');
+  addLopuQueueMessage(activeChatId, text, { ...attachments, settings: { ...snapshot.settings }, context: contextProvider(), applyPatches });
+ }, [activeChatId, snapshot.settings, contextProvider, applyPatches]);
+ const noteTargets = React.useRef(new Map<string, { owner: string | null; chatId: string | null; taskId: string }>());
+ const sendNote = React.useCallback(async (text: string, noteId: string) => {
+  await refreshQueueTasks();
+  const owner = snapshot.userId;
+  if (getLopuStoreSnapshot().userId !== owner) throw new Error('The account changed before the note was sent.');
+  const existing = noteTargets.current.get(noteId);
+  const task = existing?.owner === owner && existing?.chatId === activeChatId ? { id: existing.taskId } : queueTasks().find(task => task.chatId === activeChatId && task.path === '/api/v1/lopu/chats/reply');
+  if (!task) throw new Error('Wait for the current task to connect before sending a note.');
+  noteTargets.current.set(noteId, { owner, chatId: activeChatId, taskId: task.id });
+  const result = await sendAiTaskNote(task.id, noteId, text);
+  if (activeChatId && getLopuStoreSnapshot().userId === owner) await loadLopuMessages(activeChatId);
+  noteTargets.current.delete(noteId);
+  return result;
+ }, [activeChatId, snapshot.userId]);
+ React.useEffect(() => {
+  if (queue.paused || queue.busy || !queue.items.length) return;
+  let cancelled = false;
+  const tick = async () => {
+   try {
+    await refreshQueueTasks();
+    for (const target of new Set(queue.items.map(item => item.chatId))) {
+     if (cancelled) return;
+     if (queueTasks().some(task => task.chatId === target && task.status === 'running')) continue;
+     const live = getLopuStoreSnapshot();
+     if (Object.values(live.turns).some(turn => turn.chatId === target && turn.status === 'streaming')) continue;
+     await drainLopuQueue(target, sendLopuMessage);
+    }
+   } catch { /* Preserve queue while task status is unavailable. */ }
+  };
+  void tick(); const timer = setInterval(() => void tick(), 2000);
+  return () => { cancelled = true; clearInterval(timer); };
+ }, [queue, snapshot.sending]);
+
 	const confirmTool = React.useCallback(
 		(requestId: string, toolId: string) => confirmLopuTool(requestId, toolId, { context: contextProvider(), applyPatches }),
 		[contextProvider, applyPatches]
@@ -308,7 +351,7 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 		timeline,
 		streaming,
 		sending: !!streaming,
-		send,
+		send, enqueue, sendNote, queue,
 		abort: abortLopuTurn,
 		selectChat,
 		createChat: createLopuChat,

@@ -642,3 +642,13 @@ test('a truncated stream never automatically replays the request', async () => {
  ]) }); bindLopuApi(client);
  await sendLopuMessage('Build it'); assert.equal(calls.filter(c => c.name === 'reply').length, 1);
 });
+
+test('queued sends retain the target and immutable id without selecting it over another conversation', async () => {
+ resetLopuStoreForTests(); hydrateLopuStore('queue-owner');
+ let body: any;
+ const { client } = fakeClient({ reply: input => { body = input; return ndjson([{type:'meta',chatId:input.chatId,userMessageId:'queued-user',requestId:input.requestId},{type:'delta',text:'Done'},{type:'done',stopReason:'end_turn'}]); } });
+ bindLopuApi(client); selectLopuChat('other-chat');
+ await sendLopuMessage('first\n\nsecond', { chatId: 'queued-chat', requestId: 'stable-queue-id', settings: { model: 'gpt-5' } });
+ assert.equal(body.chatId, 'queued-chat'); assert.equal(body.requestId, 'stable-queue-id');
+ assert.equal(getLopuStoreSnapshot().activeChatId, 'other-chat');
+});

@@ -3544,3 +3544,29 @@ The Nitro shell automatically serves Open Graph/Twitter metadata, canonical
 URLs and safe Schema.org JSON-LD from anonymous public projections. See
 [the metadata runbook](docs/seo-social-metadata.md) for validation, crawler
 cache diagnosis, fork setup and the broader SEO/rich-results TODO.
+
+
+### Lopu message queue
+
+While Lopu replies, **Queue** (or desktop Enter) adds another message without
+stopping the current task. Hold a queue handle to drag, or use the up/down arrows.
+**Send together** is checked by default: consecutive checked messages with the
+same model, page and media context become one prompt in order, with one reply.
+Unchecked messages wait for their own reply. The 8,000-character request limit
+also creates a batch boundary. Pause/Resume controls automatic delivery.
+
+**Send now** saves a text note immediately. The active task reads it after its
+current provider response/tool batch, without interrupting or replaying tools.
+A note arriving after the last boundary remains in history for the next reply.
+Attachments and selected Things use Queue or a normal send; notes never grant
+extra tool permissions.
+
+Queues are private to this browser tab and account, survive reload in session
+storage, and restore paused for review. Keep the tab open for automatic queued
+sends; already accepted background tasks continue independently. Retries preserve
+operation IDs and frozen payloads. Stop pauses queued delivery too.
+
+Queue development: `npm run web-pms` in the `thingtime-message-queue` worktree
+uses `http://localhost:18900` (HMR 18901, Nitro 18902). Public Tailscale/Funnel
+verification is unavailable on the development host because its installed CLI
+launcher points to a missing Tailscale app; no public mapping was changed.

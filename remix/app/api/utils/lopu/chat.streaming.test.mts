@@ -883,3 +883,18 @@ test('an unexpected tool failure waits for concurrent writes and retains their r
   assert.equal(outcome.toolCalls[0].summary, 'Saved once');
   assert.ok(events.some(event => event.type === 'tool_result' && event.id === 'success'));
 });
+
+test('Claude receives a note only after the active tool completes, without replaying it', async () => {
+ anthropicPlans.push({ blocks: [{ type: 'tool_use', id: 'tool-note', name: 'create_page', inputChunks: [pageJson] }], stopReason: 'tool_use' }, { blocks: [{ type: 'text', text: 'Noted.' }], stopReason: 'end_turn' });
+ let reads = 0;
+ const { outcome } = await collect(turn('build a page', 'claude-opus-5', { readNotes: async () => { assert.equal(toolCalls.length, 1); return reads++ === 0 ? ['Please use the new title.'] : []; } }));
+ assert.equal(toolCalls.length, 1); assert.equal(outcome.stopReason, 'end_turn');
+ assert.deepEqual(anthropicRequests[1].body.messages.at(-1), { role: 'user', content: 'Please use the new title.' });
+});
+test('OpenAI includes a note arriving during a text reply in a following hop of the same turn', async () => {
+ openAiPlans.push({ contentChunks: ['Finishing the current work.'], finish: 'stop' }, { contentChunks: ['I have the note.'], finish: 'stop' });
+ let reads = 0;
+ const { outcome } = await collect(turn('work', 'gpt-5.6-sol', { readNotes: async () => reads++ === 0 ? ['An extra detail'] : [] }));
+ assert.equal(openAiRequests.length, 2); assert.equal(outcome.stopReason, 'end_turn');
+ assert.deepEqual(openAiRequests[1].body.messages.at(-1), { role: 'user', content: 'An extra detail' });
+});

@@ -768,3 +768,22 @@ export const loadLopuHistory = async (viewerId: string, chatId: unknown, opts: {
 	).sort({ createdAt: -1 }).limit(10).toArray() : [];
 	return { ok: true, ...folded, ...(attachments.length ? { attachmentIds: attachments.map(row => String(row.shareId)) } : {}) };
 };
+
+/** Notes are ordinary, membership-gated relational user messages, scoped to one run. */
+export const createLopuNoteReader = (viewerId: string, chatId: string, requestId: string) => {
+ const seen = new Set<string>();
+ const prefix = `note:${createHash('sha256').update(requestId).digest('hex').slice(0, 32)}:`;
+ return async (): Promise<string[]> => {
+  const access = await getLopuChat(viewerId, chatId);
+  if (access.ok === false) throw new Error('Conversation is no longer available');
+  const things = await getThingsCollection();
+  const rows = await things.find({ thingtime: 'chat-message', targetId: chatId, ownerId: viewerId,
+   'crystal.lopu.role': 'user', 'crystal.lopu.requestId': { $regex: '^' + prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') },
+   'crystal.deletedAt': null, shareId: { $nin: [...seen] }
+  } as any).sort({ createdAt: 1, shareId: 1 }).limit(100).toArray();
+  let chars = 0;
+  const fresh = rows.filter(row => { const size = String(row.crystal?.text || '').length; if (chars + size > 16000) return false; chars += size; return true; });
+  for (const row of fresh) seen.add(row.shareId);
+  return fresh.map(row => String(row.crystal?.text || ''));
+ };
+};

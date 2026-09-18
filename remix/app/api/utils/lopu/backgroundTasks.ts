@@ -7,7 +7,7 @@ import { getCurrentUser } from '../auth/getCurrentUser';
 import { getHomeThingsCollection } from '../mongodb/collections';
 import { getRequestMongoEndpoint } from '../mongodb/endpoint';
 import { enforceRateLimit, rateLimitedResponseInit } from '../rateLimit/enforce';
-import { getLopuChat } from '../messenger/lopuChats';
+import { getLopuChat, persistLopuUserTurn } from '../messenger/lopuChats';
 import { ACL_OWNER, COLLECTION_SCHEMA_VERSIONS } from '~/schemas/registry';
 import {
 	AI_TASK_HEADER,
@@ -118,7 +118,19 @@ export const stopBackgroundTask = async (request: Request) => {
 	if (request.method !== 'POST' || request.headers.get('Content-Type')?.split(';')[0] !== 'application/json') return fail('Use a JSON POST.', 415);
 	const user = await taskViewer(request);
 	if (!user) return fail('Sign in with the account that started this task.', 401);
-	const input = await readJsonBody(request, 2048);
+	const input = await readJsonBody(request, 40_000);
+ if (input?.action === 'note') {
+  if (typeof input.id !== 'string' || typeof input.text !== 'string' || !input.text.trim() || Array.from(input.text).length > 8000 || typeof input.noteId !== 'string' || !/^[a-zA-Z0-9-]{1,36}$/.test(input.noteId)) return fail('Provide a task id, noteId and up to 8000 characters.');
+  const scope = await scopeFor(request), things = await getHomeThingsCollection();
+  const row = await things.findOne({ ownerId: user.id, thingtime: AI_TASK_KIND, taskScope: scope, shareId: input.id });
+  if (!row?.targetId || row.crystal.path !== '/api/v1/lopu/chats/reply') return fail('Conversation task not found.', 404);
+  // Do not abort, change the lease or launch another billed turn. A late note
+  // remains in history for the next reply if the provider has already finished.
+  const limit = await enforceRateLimit(request, 'lopu.chat', `background-note:${user.id}`, { failClosed: true });
+  if (!limit.allowed) return json({ ok: false, error: 'Please wait before sending another note.' }, rateLimitedResponseInit(limit));
+  const result = await persistLopuUserTurn(user.id, { chatId: row.targetId, requestId: `note:${hash(row.crystal.requestId).slice(0, 32)}:${input.noteId}`, text: input.text });
+  return result.ok === true ? json({ ok: true, messages: result.messages, active: row.crystal.status === 'running' }, { headers }) : fail(result.error, result.status);
+ }
 	if (input?.action !== 'stop' || (typeof input.id !== 'string' && !validAiTaskRequestId(input.requestId)))
 		return fail('Provide a task id or requestId and action=stop.');
 	const scope = await scopeFor(request),

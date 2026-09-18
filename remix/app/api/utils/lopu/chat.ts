@@ -153,6 +153,7 @@ export type LopuChatDependencies = {
 };
 
 export type LopuChatTurnInput = {
+  readNotes?: () => Promise<string[]>;
   readOnly?: boolean;
   viewer: LopuToolViewer;
   chatId: string;
@@ -403,6 +404,7 @@ async function* anthropicProvider(options: AnthropicProviderOptions): LopuProvid
           ...(result.ok ? {} : { is_error: true })
         }))
       });
+      for (const note of feed.notes ?? []) messages.push({ role: 'user', content: note });
       finalHop = feed.finalHop;
       continue;
     }
@@ -412,8 +414,9 @@ async function* anthropicProvider(options: AnthropicProviderOptions): LopuProvid
       yield { type: 'hop_end', stopReason: 'pause_turn', usage: { ...usage } };
       continue;
     }
-    yield { type: 'hop_end', stopReason: ['max_tokens', 'model_context_window_exceeded'].includes(finalMessage.stop_reason) ? 'max_tokens' : 'end_turn', usage: { ...usage } };
-    return;
+    const next = yield { type: 'hop_end', stopReason: ['max_tokens', 'model_context_window_exceeded'].includes(finalMessage.stop_reason) ? 'max_tokens' : 'end_turn', usage: { ...usage } };
+    if (!next?.notes?.length) return;
+    for (const note of next.notes) messages.push({ role: 'user', content: note });
   }
 }
 
@@ -698,11 +701,14 @@ async function* openAiProvider(options: OpenAiProviderOptions): LopuProviderStre
           }`
         });
       }
+      for (const note of feed.notes ?? []) messages.push({ role: 'user', content: note });
       finalHop = feed.finalHop;
       continue;
     }
-    yield { type: 'hop_end', stopReason: finish === 'length' ? 'max_tokens' : 'end_turn', usage: { ...usage } };
-    return;
+    const next = yield { type: 'hop_end', stopReason: finish === 'length' ? 'max_tokens' : 'end_turn', usage: { ...usage } };
+    if (!next?.notes?.length) return;
+    messages.push({ role: 'assistant', content: text });
+    for (const note of next.notes) messages.push({ role: 'user', content: note });
   }
 }
 
@@ -764,6 +770,7 @@ const thingIdOf = (result: LopuToolResult): string | undefined => {
 const summarise = (text: string, max = 240): string => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
 type LoopOptions = {
+  readNotes?: () => Promise<string[]>;
   provider: LopuProviderStream;
   ctx: LopuToolContext;
   deps: LopuChatDependencies;
@@ -815,7 +822,9 @@ async function* runToolLoop(options: LoopOptions): AsyncGenerator<LopuChatStream
         if (event.usage) state.usage = { ...event.usage };
         if (event.stopReason === 'max_tokens') state.stopReason = 'max_tokens';
         if (event.stopReason !== 'tool_use' || !pending.length) {
-          // the provider is done (it returns on the next resume)
+          const notes = event.stopReason === 'end_turn' ? await options.readNotes?.() : undefined;
+          if (notes?.length) feed = { results: [], finalHop: false, notes };
+          // Resume with notes only after the current provider request finishes.
           if (pending.length) {
             for (const call of pending) yield { type: 'tool_result', id: call.id, name: call.name, ok: false, summary: 'Not run — this turn ended before the tool could execute' };
             pending = [];
@@ -882,7 +891,7 @@ async function* runToolLoop(options: LoopOptions): AsyncGenerator<LopuChatStream
           await provider.return();
           return;
         }
-        feed = { results, finalHop: false };
+        feed = { results, finalHop: false, notes: await options.readNotes?.() };
         break;
       }
       default:
@@ -1030,7 +1039,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
       config.transport === 'anthropic'
         ? anthropicProvider({ client: deps.createAnthropic(options), choice, system: { stable: prompt.stable, volatile: prompt.volatile }, history, text: input.text, media: input.media, signal: input.signal })
         : openAiProvider({ client: deps.createOpenAi(options), choice, systemText: prompt.text, history, text: input.text, media: input.media, toolMode: config.toolProtocol, signal: input.signal });
-    const loop = runToolLoop({ provider, ctx, deps, state, startedAt, signal: input.signal, toolsAllowed: true });
+    const loop = runToolLoop({ provider, ctx, deps, state, startedAt, signal: input.signal, toolsAllowed: true, readNotes: input.readNotes });
 
     let first: IteratorResult<LopuChatStreamEvent, void>;
     try {
@@ -1069,7 +1078,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
     const provider = createLopuTestProvider({ userText: input.text, activePage: ctx.activePage, paceMs: deps.testPaceMs });
     yield meta('test', explicit, 'test');
     try {
-      yield* runToolLoop({ provider, ctx, deps, state, startedAt, signal: input.signal, toolsAllowed: true });
+      yield* runToolLoop({ provider, ctx, deps, state, startedAt, signal: input.signal, toolsAllowed: true, readNotes: input.readNotes });
     } catch (error) {
       if (isAbortError(error)) state.stopReason = 'aborted';
       else {
@@ -1108,7 +1117,7 @@ export async function* streamLopuChatTurn(input: LopuChatTurnInput): AsyncGenera
       attempt.provider === 'claude'
         ? anthropicProvider({ client: deps.createAnthropic(), choice: attempt.choice, system: { stable: prompt.stable, volatile: prompt.volatile }, history, text: input.text, media: input.media, signal: input.signal })
         : openAiProvider({ client: deps.createOpenAi(), choice: attempt.choice, systemText: prompt.text, history, text: input.text, media: input.media, toolMode, signal: input.signal });
-    const loop = runToolLoop({ provider, ctx, deps, state, startedAt, signal: input.signal, toolsAllowed: true });
+    const loop = runToolLoop({ provider, ctx, deps, state, startedAt, signal: input.signal, toolsAllowed: true, readNotes: input.readNotes });
 
     // Pull the first event inside the try so a provider failing before any
     // output (bad key, no credits, rejected model) falls through cleanly to
