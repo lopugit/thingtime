@@ -20,6 +20,7 @@ import { useCurrentUser } from '~/hooks/useCurrentUser';
 import { getWebpageDraftsVersion, subscribeWebpageDrafts } from './lopuBuildBridge';
 import {
 	abortLopuTurn,
+	archiveLopuChat,
 	recoverLopuBackgroundTasks,
 	activeDraftLabel,
 	bindLopuApi,
@@ -135,6 +136,7 @@ export type UseLopuChat = {
 	abort: () => void;
 	selectChat: (chatId: string | null) => void;
 	createChat: (args?: { title?: string }) => ReturnType<typeof createLopuChat>;
+	archiveChat: typeof archiveLopuChat;
 	deleteChat: (chatId: string) => ReturnType<typeof deleteLopuChat>;
 	renameChat: (chatId: string, title: string) => ReturnType<typeof renameLopuChat>;
 	models: AiModelPublic[];
@@ -313,6 +315,7 @@ export const useLopuChat = (options: UseLopuChatOptions = {}): UseLopuChat => {
 		selectChat,
 		createChat: createLopuChat,
 		deleteChat: deleteLopuChat,
+		archiveChat: archiveLopuChat,
 		renameChat: renameLopuChat,
 		models: snapshot.models,
 		modelsLoading: snapshot.modelsLoading,

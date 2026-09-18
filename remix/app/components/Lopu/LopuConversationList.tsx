@@ -49,7 +49,8 @@ const ConversationRow = ({
 	confirmDeletes,
 	onSelect,
 	onRename,
-	onDelete
+	onDelete,
+	onArchive
 }: {
 	chat: LopuChatSummary;
 	selected: boolean;
@@ -57,6 +58,7 @@ const ConversationRow = ({
 	onSelect: () => void;
 	onRename: (title: string) => void;
 	onDelete: () => void;
+	onArchive: () => void;
 }) => {
 	const [editing, setEditing] = React.useState(false);
 	const [title, setTitle] = React.useState(chat.name || '');
@@ -124,7 +126,7 @@ const ConversationRow = ({
 				/>
 			) : (
 				<Flex align="center" gap={2} minW={0}>
-                    <LopuChatTaskRing chatId={chat.id} />
+					<LopuChatTaskRing chatId={chat.id} />
 					<Text fontSize="13px" fontWeight={selected ? 700 : 600} color={LOPU_UI.ink} isTruncated flex={1}>
 						{name}
 					</Text>
@@ -138,17 +140,7 @@ const ConversationRow = ({
 					{preview}
 				</Text>
 			) : null}
-			<Flex
-				gap={0.5}
-				mt={1}
-				ml={-1.5}
-				align="center"
-				opacity={selected || confirming ? 1 : 0}
-				_groupHover={{ opacity: 1 }}
-				_groupFocusWithin={{ opacity: 1 }}
-				transition={`opacity ${LOPU_UI.transitionFast}`}
-				onClick={(event) => event.stopPropagation()}
-			>
+			<Flex flexWrap="wrap" gap={0.5} mt={1} ml={-1.5} align="center" onClick={(event) => event.stopPropagation()}>
 				{confirming ? (
 					<>
 						<Text fontSize="11px" color={LOPU_UI.muted} px={1.5}>
@@ -166,6 +158,9 @@ const ConversationRow = ({
 						<TextAction title="Rename" onClick={() => setEditing(true)}>
 							Rename
 						</TextAction>
+						<TextAction title={chat.lopu?.archived ? 'Restore conversation' : 'Archive conversation'} onClick={onArchive}>
+							{chat.lopu?.archived ? 'Restore' : 'Archive'}
+						</TextAction>
 						<TextAction title="Delete" danger onClick={requestDelete}>
 							Delete
 						</TextAction>
@@ -181,52 +176,74 @@ const ConversationRow = ({
 
 // New chat + the rows; the sidebar on desktop (its list ends above the
 // site's fixed bottom-left "Edit page" chip), the sheet body on mobile
-export const LopuConversationList = ({ chat, onPicked, bottomInset }: { chat: UseLopuChat; onPicked?: () => void; bottomInset?: string }) => (
-	<Flex direction="column" gap={2} minH={0} minW={0} flex={1}>
-		<Button
-			size="sm"
-			height="36px"
-			variant="outline"
-			leftIcon={<Plus size={14} strokeWidth={2.2} />}
-			borderColor={LOPU_UI.borderColor}
-			borderRadius={LOPU_UI.radiusMd}
-			bg={LOPU_UI.card}
-			color={LOPU_UI.ink}
-			justifyContent="flex-start"
-			fontWeight={600}
-			fontSize="13px"
-			_hover={{ bg: LOPU_UI.surfaceAlt }}
-			onClick={() => {
-				chat.selectChat(null);
-				onPicked?.();
-			}}
-			flexShrink={0}
-		>
-			New chat
-		</Button>
-		<Box flex={1} minH={0} overflowY="auto" overflowX="hidden" mx={-1} px={1} pb={bottomInset}>
-			{chat.chats.length === 0 ? (
-				<Text fontSize={LOPU_UI.fontSmall} color={LOPU_UI.muted} px={3} py={2}>
-					{chat.chatsLoaded ? 'No conversations yet — say hi.' : ''}
-				</Text>
-			) : (
-				<Flex direction="column" gap="2px">
-					{chat.chats.map((entry) => (
-						<ConversationRow
-							key={entry.id}
-							chat={entry}
-							selected={entry.id === chat.chatId}
-							confirmDeletes={chat.preferences.confirmDeletes}
-							onSelect={() => {
-								chat.selectChat(entry.id);
-								onPicked?.();
-							}}
-							onRename={(title) => void chat.renameChat(entry.id, title)}
-							onDelete={() => void chat.deleteChat(entry.id)}
-						/>
-					))}
-				</Flex>
-			)}
-		</Box>
-	</Flex>
-);
+export const LopuConversationList = ({ chat, onPicked, bottomInset }: { chat: UseLopuChat; onPicked?: () => void; bottomInset?: string }) => {
+	const [archived, setArchived] = React.useState(false);
+	const visibleChats = chat.chats.filter((entry) => (entry.lopu?.archived === true) === archived);
+	return (
+		<Flex direction="column" gap={2} minH={0} minW={0} flex={1}>
+			<Button
+				size="sm"
+				height="36px"
+				variant="outline"
+				leftIcon={<Plus size={14} strokeWidth={2.2} />}
+				borderColor={LOPU_UI.borderColor}
+				borderRadius={LOPU_UI.radiusMd}
+				bg={LOPU_UI.card}
+				color={LOPU_UI.ink}
+				justifyContent="flex-start"
+				fontWeight={600}
+				fontSize="13px"
+				_hover={{ bg: LOPU_UI.surfaceAlt }}
+				onClick={() => {
+					setArchived(false);
+					chat.selectChat(null);
+					onPicked?.();
+				}}
+				flexShrink={0}
+			>
+				New chat
+			</Button>
+			<Flex gap={1} role="group" aria-label="Conversation view" flexShrink={0}>
+				{[false, true].map((value) => (
+					<Button
+						key={String(value)}
+						size="sm"
+						flex={1}
+						minW={0}
+						variant={archived === value ? 'solid' : 'ghost'}
+						aria-pressed={archived === value}
+						onClick={() => setArchived(value)}
+						color={LOPU_UI.ink}
+					>
+						{value ? 'Archived' : 'Chats'}
+					</Button>
+				))}
+			</Flex>
+			<Box flex={1} minH={0} overflowY="auto" overflowX="hidden" mx={-1} px={1} pb={bottomInset}>
+				{visibleChats.length === 0 ? (
+					<Text fontSize={LOPU_UI.fontSmall} color={LOPU_UI.muted} px={3} py={2}>
+						{chat.chatsLoaded ? (archived ? 'No archived conversations.' : 'No conversations yet — say hi.') : ''}
+					</Text>
+				) : (
+					<Flex direction="column" gap="2px">
+						{visibleChats.map((entry) => (
+							<ConversationRow
+								key={entry.id}
+								chat={entry}
+								selected={entry.id === chat.chatId}
+								confirmDeletes={chat.preferences.confirmDeletes}
+								onSelect={() => {
+									chat.selectChat(entry.id);
+									onPicked?.();
+								}}
+								onArchive={() => void chat.archiveChat(entry.id, !archived)}
+								onRename={(title) => void chat.renameChat(entry.id, title)}
+								onDelete={() => void chat.deleteChat(entry.id)}
+							/>
+						))}
+					</Flex>
+				)}
+			</Box>
+		</Flex>
+	);
+};
