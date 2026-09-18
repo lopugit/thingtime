@@ -68,7 +68,7 @@ function App() {
 									renameChat: async () => ({ ok: true }),
 									deleteChat: async () => ({ ok: true }),
 									preferences: { confirmDeletes: true }
-								} as UseLopuChat
+								} as unknown as UseLopuChat
 							}
 						/>
 					</Box>
