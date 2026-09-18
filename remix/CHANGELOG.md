@@ -34,6 +34,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- **2026-09-18 · Codex (AI):** Preserve the mounted page and unsaved UI state when
+  a background session read temporarily fails. Recover initial session failures
+  on return/reconnect, and invalidate same-origin tabs on account changes.
+  Navigation and permission failures continue to fail closed.
+
 - **2026-09-18 · Codex (AI):** Add Lopu message queues with drag/arrow ordering, default grouped sends, pause/resume and stable retries; add immediately saved notes consumed at safe provider boundaries. Queues restore paused after reload. Publish background-task 1.2.0 and chat-reply 1.13.0 capabilities. [PR #846 validation notes](../PRs/846-codex-lopu-message-queue-add-lopu-message-queues-and-send-now-notes.md).
 
 - 2026-09-18: Add reversible account-saved Lopu chat archiving with Chats/Archived views and Restore in the shared page/window list. Preserve transcripts and running replies; guard rollback across account changes and negotiate archive API capabilities. — Codex (AI)
