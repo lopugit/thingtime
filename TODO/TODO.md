@@ -861,3 +861,28 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     external processors, message scanning, covert monitoring, cryptographic
     implementation, and public privacy/safety/deletion/encryption claims remain
     separately gated.
+
+54. **📏 Make measurement agency and privacy-respecting telemetry a product contract.**
+
+    Learn enough to operate, protect, and improve Thingtime without turning
+    visits, reading time, viewport position, errors, or product choices into a
+    hidden behavioral dossier or unrelated decision authority. Give every
+    signal one approved purpose and necessity test; separate diagnostics,
+    public counters, user-owned adaptation, optional product learning, and
+    safety evidence; preserve a useful baseline without optional analytics;
+    minimize resolution and identifier stability; bound the whole measurement
+    family's retention; version metrics and uncertainty; and prohibit silent
+    secondary use. Start only with adult internal reviewers, three synthetic
+    accounts, one fictional public post, one synthetic feed session, generated
+    routes, a deterministic local fake collector, and one exact non-production
+    build. Execute
+    `claude-todo/54-measurement-agency-and-privacy-respecting-telemetry.md`
+    only after qualified owners approve the purpose/plane taxonomy, current
+    signal and provider inventory, field-necessity matrix, essential/optional
+    boundary, inspect/pause/reset/delete scopes, retention and cleanup,
+    aggregation thresholds, metric schema, secondary-use threat model,
+    accessible rehearsal, measures, and stop authority. Real behavior,
+    production analytics, dashboards, exports, drains, experiments, private
+    content, stable identifiers, device fingerprinting, vulnerable groups,
+    minors, advertising, ranking/pricing/eligibility/moderation/AI reuse, and
+    public privacy or accuracy claims remain separately gated.

@@ -41,6 +41,7 @@ actionable item in [`../TODO/`](../TODO/TODO.md) when it is ready to execute.
 | [Affordability agency and fair-access baseline](./affordability-agency-and-fair-access-baseline.md)                                   | Evidence on tier and credit primitives, offer truth, total cost, cancellation symmetry, essential access, humane failure, privacy, and a no-money rehearsal              | 2026-09-17    |
 | [Place agency and location-privacy baseline](./place-agency-and-location-privacy-baseline.md)                                         | Evidence on one-shot nearby search, exact stored coordinates, precision, purpose, audience, retention, inference, stopping, and one synthetic place rehearsal            | 2026-09-17    |
 | [Conversation agency and private-communication baseline](./conversation-agency-and-private-communication-baseline.md)                 | Evidence on membership authority, requests, receipts, message lifecycle, archives, retention, safety stopping, confidentiality, and one synthetic conversation rehearsal | 2026-09-18    |
+| [Measurement agency and privacy-respecting telemetry baseline](./measurement-agency-and-privacy-respecting-telemetry-baseline.md)     | Evidence on page analytics, public view telemetry, owned algorithm learning, bounded diagnostics, purpose limits, retention, metrics, and one synthetic rehearsal        | 2026-09-18    |
 
 ## Conventions
 

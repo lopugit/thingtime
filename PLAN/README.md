@@ -41,6 +41,7 @@ engineering decisions in [`../DECISIONS.md`](../DECISIONS.md).
 | [Affordability agency and fair-access roadmap](./affordability-agency-and-fair-access-roadmap.md)                                   | A protected essential floor, immutable offer truth, symmetric stopping, humane failure, privacy-minimal support, and one synthetic no-money rehearsal                      | Proposed |
 | [Place agency and location-privacy roadmap](./place-agency-and-location-privacy-roadmap.md)                                         | Place taxonomy through minimal precision, choice/preview, one-shot nearby proof, audience-change safety, family cleanup, and a no-location baseline                        | Proposed |
 | [Conversation agency and private-communication roadmap](./conversation-agency-and-private-communication-roadmap.md)                 | Conversation authority through state/effect truth, metadata choices, delivery evidence, safety stopping, family cleanup, archive independence, and one synthetic rehearsal | Proposed |
+| [Measurement agency and privacy-respecting telemetry roadmap](./measurement-agency-and-privacy-respecting-telemetry-roadmap.md)     | Purpose-specific measurement through separated planes, minimum signals, useful-baseline choice, bounded retention, metric truth, and one synthetic rehearsal               | Proposed |
 
 ## Conventions
 
