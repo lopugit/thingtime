@@ -20,6 +20,7 @@ const App = () => {
 	const [replies, setReplies] = React.useState<string[]>([]);
 	const [notes, setNotes] = React.useState<string[]>([]);
 	const [check, setCheck] = React.useState('Ready');
+	const attached = React.useRef<string[]>([]);
 	const runChecks = async () => {
   setCheck('Running…');
 		const wait = () => new Promise((resolve) => setTimeout(resolve, 50));
@@ -52,7 +53,14 @@ const App = () => {
 			document.querySelector<HTMLButtonElement>('.lopuSend')!.click();
 			await wait();
 			assert(getLopuQueue().items.length === before + 2, 'Send arrow did not queue');
-			setCheck('PASS: keyboard, send arrow, Shift+Enter, IME, draft cleanup and uninterrupted reply');
+			// Draft attachments stay editable during a reply, so the composer's own
+			// paste/drop route must reach the uploader instead of swallowing files.
+			const transfer = new DataTransfer();
+			transfer.items.add(new File(['x'], 'pasted.txt', { type: 'text/plain' }));
+			field().dispatchEvent(new ClipboardEvent('paste', { clipboardData: transfer, bubbles: true, cancelable: true }));
+			await wait();
+			assert(attached.current.includes('pasted.txt'), 'Pasting a file while replying was dropped');
+			setCheck('PASS: keyboard, send arrow, Shift+Enter, IME, draft cleanup, paste while replying and uninterrupted reply');
 		} catch (error) {
 			setCheck('FAIL: ' + String(error));
 		}
@@ -103,6 +111,8 @@ const App = () => {
 						pauseLopuQueue(true);
 						setWorking(false);
 					}}
+					onAttachFiles={(files) => attached.current.push(...files.map((file) => file.name))}
+					attachDisabled={false}
 					queuePending={!queue.paused && queue.items.length > 0}
 					streaming={working}
 					models={[]}

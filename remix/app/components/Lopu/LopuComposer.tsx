@@ -25,6 +25,9 @@ export type LopuComposerPreferences = { enterSends: boolean; applyPatches: boole
 export type LopuComposerProps = {
 	attachments?: React.ReactNode;
 	onAttachFiles?: (files: File[]) => void;
+	// Paste/drop must follow the uploader `attachments` renders, not `streaming`:
+	// a caller that keeps file selection live during a reply passes `false` here.
+	attachDisabled?: boolean;
 	value: string;
 	onChange: (next: string) => void;
 	onSend: (text: string) => void;
@@ -177,6 +180,7 @@ const IconButton = ({
 export const LopuComposer = ({
 	attachments,
 	onAttachFiles,
+	attachDisabled,
 	value,
 	onChange,
 	onSend,
@@ -273,7 +277,7 @@ export const LopuComposer = ({
 			{attachments}
 			<Box
 				className="lopuComposer"
-				{...chatAttachmentInput((files) => onAttachFiles?.(files), fieldDisabled || streaming || !onAttachFiles)}
+				{...chatAttachmentInput((files) => onAttachFiles?.(files), fieldDisabled || (attachDisabled ?? streaming) || !onAttachFiles)}
 				data-compact={compact ? 'true' : 'false'}
 				data-streaming={streaming ? 'true' : 'false'}
 				border={LOPU_UI.border}
