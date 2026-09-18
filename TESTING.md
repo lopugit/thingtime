@@ -6312,6 +6312,21 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       The shared browser fixture stubs image bytes to verify key transport;
       attachment service/route tests cover authorization separately. Do not
       treat that fixture as proof of real S3 bytes or independent media copies.
+- [ ] Copy an image-only post with an ordered gallery and comments/replies deeper
+      than the initial rendered preview. Include image-only comments and files on
+      the deepest reply, plus comments on media with their own galleries. Copy to my Things must create a private root, fresh file
+      IDs and correctly nested inherited comments; reload, copy the copy, and
+      revoke/delete the source to verify independence. Check desktop and 390px
+      mobile, open a copied attachment, expand replies, and scroll to the bottom.
+      Hidden/blocked comments must stay excluded; unavailable files, quota errors,
+      source changes and the 512-Thing/file/comment limit must fail without a truncated copy.
+      Negotiate `api.things-fork >= 1.5.0`. Run the opt-in real-API regression with
+      `TT_FORK_TEST_URL=http://127.0.0.1:<port>` and `TT_FORK_COPIER_COOKIE` for an
+      upload-approved disposable account:
+      `node --import tsx --test app/api/utils/actions/forkComments.integration.test.ts`
+      from `remix/`. Its linked galleries prove relational binding and URL
+      independence, while byte-copy unit coverage uses a mocked object store;
+      neither substitutes for real S3 byte-copy acceptance.
 - [ ] Copy a shared standalone Data Thing with extended content and a private
       schema definition. The copy keeps its extended content, gets its own
       private schema/id/name pair, exposes no original link key, and is editable
@@ -7650,3 +7665,5 @@ storage only; do not describe it as a production upload or provider acceptance.
 - [ ] Run the Lopu store, messenger Lopu and capability suites; `scripts/verify-lopu.mjs` covers real authenticated archive/restore idempotency, invalid booleans, cross-account denial and transcript preservation when its verified test account is available. `scripts/lopu-archive.browser.html` provides a synthetic API fixture for list layout and failure testing.
 
 Local queue-fix validation: `http://localhost:18720/scripts/lopu-queue.browser.html` (worktree `thingtime-lopu-auto-queue`, Vite 18720 / HMR 18721 / Nitro 18722 overrides; default trio occupied). Tailscale/Funnel unavailable: the installed launcher targets a missing `/Applications/Tailscale.app`; no public mapping changed.
+
+- Collected secret posts: open a comment attachment below a post attachment using the collecting anonymous browser; it must load. An unrelated browser, a visibility-scoped token, and the original browser after link rotation must be denied. The home lookup must retain the discovery digest through its database projection.

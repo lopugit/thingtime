@@ -1354,13 +1354,13 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		}
 	};
 
-	const copy = (viewer: AttachmentViewer, id: unknown, signal?: AbortSignal) => copyStoredAttachment({
+	const copy = (viewer: AttachmentViewer, id: unknown, signal?: AbortSignal, purpose: 'post' | 'comment' = 'post') => copyStoredAttachment({
 		canCopy: dependencies.canCopyFiles,
 		read: (viewer, id) => readableStoredAttachment(viewer, id, true), start, complete, remove,
 		readyDraftTtlMs: ATTACHMENT_READY_DRAFT_TTL_MS,
 		store: dependencies.store, getS3: dependencies.getS3,
 		plan: attachmentPartPlan, uuid: dependencies.uuid, now: dependencies.now
-	}, viewer, id, signal);
+	}, viewer, id, signal, purpose);
 
 	type ContentAttachmentPurpose = Extract<AttachmentPurpose, 'post' | 'comment' | 'message' | 'emoji'>;
 	type InspectedAttachments = {

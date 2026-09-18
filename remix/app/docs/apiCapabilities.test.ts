@@ -74,12 +74,13 @@ test('shared dependency reads negotiate the additive Things contract on both man
 
 test('standalone Thing copying negotiates the additive copy contract on both manifests', () => {
 	const version = createApiCapabilitiesManifest().features['api.things-fork'];
-	assert.equal(version, '1.4.0');
+	assert.equal(version, '1.5.0');
 	assert.equal(thingtimeCapabilityManifest('https://thingtime.test').features['api.things-fork'].version, version);
 	assert.equal(capabilitySatisfies(version, '1.0.0'), true);
 	for (const unsupported of ['', '1.0.0', '1.1.0', '1.1.1', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.2.0'), false);
 	for (const unsupported of ['', '1.2.1', '1.3.0', '1.3.1', '1.3.2', '1.3.3', '2.0.0']) assert.equal(capabilitySatisfies(unsupported, '1.4.0'), false);
-	assert.equal(capabilitySatisfies('1.4.1', '1.4.0'), true);
+	assert.equal(capabilitySatisfies('1.4.1', '1.5.0'), false);
+	assert.equal(capabilitySatisfies('1.5.1', '1.5.0'), true);
 });
 
 test('Data Thing controls negotiate the shared-content action contract', () => {
@@ -350,7 +351,7 @@ test('subspace user flairs publish their contract versions', () => {
 	// subspaceMod.reportCount for the post's moderators; S6 moved the feed on
 	// to 1.4.0 — scope=all|subspaces)
 	for (const feature of ['api.things-comment', 'api.things-user']) {
-		assert.equal(manifest.features[feature], feature === 'api.things-user' ? '1.6.0' : '1.5.0', feature);
+		assert.equal(manifest.features[feature], feature === 'api.things-user' ? '1.6.0' : '1.5.1', feature);
 	}
 	// (S7 moved the single read on to 1.4.0 — commentSort=top|new|old; the
 	// shared projection's other three ids are untouched)
@@ -399,7 +400,7 @@ test('subspace reports publish their contract versions', () => {
 	assert.equal(manifest.features['api.subspaces-moderate'], '1.4.0');
 	assert.equal(manifest.features['api.subspaces-feed'], '1.3.0');
 	for (const feature of ['api.things-comment', 'api.things-user']) {
-		assert.equal(manifest.features[feature], feature === 'api.things-user' ? '1.6.0' : '1.5.0', feature);
+		assert.equal(manifest.features[feature], feature === 'api.things-user' ? '1.6.0' : '1.5.1', feature);
 	}
 	// (S7 moved the single read on to 1.4.0 — commentSort=top|new|old; the
 	// shared projection's other three ids are untouched)
@@ -423,7 +424,7 @@ test('subspace discovery publishes its contract versions', () => {
 	assert.equal(manifest.features['api.subspaces'], '1.5.1');
 	assert.equal(manifest.features['api.things-feed'], '1.7.0');
 	for (const feature of ['api.things-comment', 'api.things-user']) {
-		assert.equal(manifest.features[feature], feature === 'api.things-user' ? '1.6.0' : '1.5.0', feature);
+		assert.equal(manifest.features[feature], feature === 'api.things-user' ? '1.6.0' : '1.5.1', feature);
 	}
 	// (S7 moved the single read on to 1.4.0 — commentSort=top|new|old; the
 	// shared projection's other three ids are untouched)
