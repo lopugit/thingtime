@@ -8990,13 +8990,15 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // recording attachments — pending uploads and the other protected kinds
     // stay excluded (additive, on top of the sharedRoot correction)
     // Includes additive discussions and the 1.7.5 conditional-media write correction.
-    featureVersion: '1.19.0',
-    contractVersion: '1.18.0',
+    // Builder SDK: action definitions accept registered provider lookup capabilities.
+    featureVersion: '1.20.0',
+    contractVersion: '1.19.0',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Action definitions support lookup steps with registered provider capabilities and literal Vault entry ids; see /docs/builder/lookups. Component native uploads also accept initial value and attachmentId props for editing saved records. ' +
 			'Post creation and attachment sync have no attachment-count cap; ordered relational attachments still require unique owned ready ids, storage quota, upload approval and the bounded JSON body. Comment/message/profile limits remain unchanged. ' +
 			'Optional geo: {lat,lng} on create/update stores a validated geographic Point (lat -90..90, lng -180..180); null removes location and omission preserves it on PATCH. Read projections expose lat/lng only under the same Thing ACL. Location is explicitly supplied, never inferred from the author. The archive emoji projection recognizes the canonical persisted attachment purpose emoji (the upload API alias is custom-emoji). ' +
 			'Owner archive snapshots include emojis: referenced personal definitions reduced to id, name and attachmentId. Two bounded snapshot queries enforce exact owner/home scope, ready custom-emoji binding and canonical image metadata; blocked, pending, NSFW, linked, foreign or missing images are omitted and remain unavailable historical reactions. No live accounts or community membership are resolved. ' +
@@ -10872,14 +10874,16 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'things-update',
+    // Builder SDK: action updates accept scoped lookup steps and literal Vault entry ids.
     // Stored component and page-block arguments use the same media-addition guard as render edits.
-    featureVersion: '1.3.0',
-    contractVersion: '1.3.0',
+    featureVersion: '1.4.0',
+    contractVersion: '1.4.0',
     group: 'things',
     title: 'Update thing',
     endpoint: '/api/v1/things/update',
     summary: 'Updates one of the current user things — crystal payload, acl audience, or tags. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'Action definition updates validate registered lookup provider scopes and literal Vault entry ids. See /docs/builder/lookups for the authoring contract. ' +
       'Independently readable foreign components may be included with their authored private dependencies. Cross-author page overrides cannot borrow private authority, and newly unresolved required references are rejected before saving. ' +
       'New action dependencies selected by saved component arguments or page-block overrides require independent read access for non-owner writers, including a new instance of an already included component. ' +
       'Shared page-block argument and conditional media-property edits use the same resolved media-addition guard as PATCH /things; only the owner may introduce private media that the writer cannot independently read. ' +
@@ -12481,8 +12485,8 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
   }),
   endpoint({
     id: 'actions-run',
-    featureVersion: '1.4.0',
-    contractVersion: '1.4.0',
+    featureVersion: '1.5.0',
+    contractVersion: '1.5.0',
     group: 'actions',
     title: 'Run an action',
     endpoint: '/api/v1/actions/run',
@@ -12490,8 +12494,9 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     detail:
       'An independently readable foreign component starts its own audience boundary for its authored same-author descendants. The outer root is still required, and revoking either audience removes shared access. Page-authored cross-author arguments may select only independently readable actions, never guessed private actions belonging to either author. Execution remains read-only and never uses an author identity. ' +
       'Shared controls can select actions through persisted component argument defaults, savedArgs and each page-block override. Discovery follows authored render branches and bounded stored repeats; runtime query/result/viewer input and arbitrary metadata grant no access. Copied ttActionRefs bindings resolve to the copied actions without changing input data. ' +
+      'Lookup steps { op: lookup, provider: google-geocoding, credentialId: a literal Vault entry id, query: $input.address } require capability { capability: lookup, providers: [google-geocoding] }. The caller must own the executing action and Vault key. Fixed HTTPS provider, no redirects, 500-character query, 128KB response, five results and an eight-second maximum within the run deadline. Shared lookup runs are refused. Runs using lookups return cache: no-store; persisted run results are replaced by an omission notice. Optional text inputs preserve explicit empty strings for clearing saved fields. See /docs/builder/lookups. ' +
       'The Action Thing executor: action things (thingtime ["action"]) are small declarative programs over a ' +
-      'closed operation vocabulary (things.create/get/search/update, actions.invoke, return) with typed inputs, ' +
+      'closed operation vocabulary (things.create/get/search/update/delete, actions.invoke, lookup, compute, each, fail, return) with typed inputs, ' +
       'author-declared capabilities, and a limits envelope. Capabilities only NARROW — every operation delegates ' +
       'to the ordinary things API as the signed-in caller, so ACL, quotas and schema validation always apply and ' +
       'an action can never do something its invoker couldn’t do by hand. One budget (deadline, operation count, ' +

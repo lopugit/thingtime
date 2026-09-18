@@ -5,14 +5,11 @@ import { useSharedMediaUrl } from '../Sharing/SharedMedia';
 import { mapCssMediaUrls } from '../Sharing/renderMediaCore';
 import { Box, Flex, Grid, Text } from '@chakra-ui/react';
 
-import { ChakraThingRenderer, isChakraThingNode } from '../Kinds/ChakraThingRenderer';
 import { isExternalHref, isSafeUrl } from '../Kinds/safeUrl';
-import type { ChakraThingNode } from '../Kinds/ChakraThingRenderer';
 import { HtmlThingRenderer } from '../Kinds/HtmlThingRenderer';
-import type { HtmlThingNode } from '../Kinds/HtmlThingRenderer';
 import { defaultsFromArgs, resolveTemplate, sanitizeArgSpecs } from '../ComponentsLibrary/componentTemplate';
-import { useTtActionClicks, type TtActionUnownedHandler } from '../Actions/useTtActionClicks';
-import { useThingSource } from './liveComponent';
+import { type TtActionUnownedHandler } from '../Actions/useTtActionClicks';
+import { LiveTemplate, useThingSource } from './liveComponent';
 import { htmlToNode } from './htmlToNode';
 import { EditorHistory } from '../Editor/editorHistory';
 import { RICH_HTML_SX } from './richHtmlStyles';
@@ -801,7 +798,6 @@ const ComponentBlockView = ({
 	chrome?: BuilderChrome | null;
 	onUnowned?: TtActionUnownedHandler;
 }) => {
-	const onTtAction = useTtActionClicks({ onUnowned });
 	const crystal = component?.crystal;
 	const specs = React.useMemo(() => sanitizeArgSpecs(crystal?.args), [crystal?.args]);
 	const valuesKey = JSON.stringify({ s: crystal?.savedArgs, b: block.args });
@@ -814,7 +810,7 @@ const ComponentBlockView = ({
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- valuesKey is the serialised form of savedArgs+block.args
 		[specs, valuesKey]
 	);
-	const source = useBlockSource(block, argValues, interactive);
+	const source = useBlockSource({ ...block, source: block.source ?? crystal?.source }, argValues, interactive);
 	const resolved = React.useMemo(() => {
 		if (!crystal?.render) return null;
 		const authored = componentTextOverrides(crystal.render, block.args, chrome?.seamlessMode === 'edit');
@@ -880,16 +876,14 @@ const ComponentBlockView = ({
 	}
 
 	return (
-		<Box
-			onClickCapture={interactive && (!chrome || chrome.seamlessMode === 'view') ? onTtAction : undefined}
+		<LiveTemplate
+			render={resolved}
+			scope={{}}
+			resolved
+			interactive={interactive && (!chrome || chrome.seamlessMode === 'view')}
+			onUnowned={onUnowned}
 			onDoubleClickCapture={handleDoubleClick}
-			width="100%"
 		>
-			{isChakraThingNode(resolved) ? (
-				<ChakraThingRenderer node={resolved as ChakraThingNode} />
-			) : (
-				<HtmlThingRenderer node={resolved as HtmlThingNode} />
-			)}
 			{argEdit ? (
 				<Box
 					className="ttArgEditPopover"
@@ -934,7 +928,7 @@ const ComponentBlockView = ({
 					/>
 				</Box>
 			) : null}
-		</Box>
+		</LiveTemplate>
 	);
 };
 

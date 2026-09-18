@@ -18,29 +18,29 @@ test('owner archive deletion requires the additive Things capability at the chos
   const origin = 'https://preview.example.test';
   const manifest = thingtimeCapabilityManifest(origin);
   assert.equal(manifest.origin, origin);
-  assert.equal(manifest.features['api.things'].version, '1.19.0');
-  assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.18.0');
+  assert.equal(manifest.features['api.things'].version, '1.20.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.19.0');
 });
 
 test('archive history readers require the selected origin to support the private snapshot contract', () => {
   for (const version of ['1.13.1', '1.13.2', '1.14.0']) assert.equal(capabilitySatisfies(version, '1.13.1'), true);
   for (const version of ['', '1.13.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.13.1'), false);
-  assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.18.0');
-  assert.equal(thingtimeCapabilityManifest('https://archive.test').features['api.things'].version, '1.19.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.19.0');
+  assert.equal(thingtimeCapabilityManifest('https://archive.test').features['api.things'].version, '1.20.0');
 });
 
 test('archive emoji readers reject origins without private moderation-aware image projection', () => {
   for (const version of ['', '1.15.0', '1.15.9', '1.16.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.16.1'), false);
-  for (const version of ['1.16.1', '1.16.2', '1.17.0']) assert.equal(capabilitySatisfies(version, '1.16.1'), true);
-  assert.equal(thingtimeCapabilityManifest('https://archive.test').features['api.things'].version, '1.19.0');
-  assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.18.0');
+  for (const version of ['1.16.1', '1.16.2', '1.17.1']) assert.equal(capabilitySatisfies(version, '1.16.1'), true);
+  assert.equal(thingtimeCapabilityManifest('https://archive.test').features['api.things'].version, '1.20.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.19.0');
 });
 
 test('archive gallery readers reject origins without moderation-aware media projection', () => {
   for (const version of ['', '1.13.1', '1.14.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.15.0'), false);
   for (const version of ['1.15.0', '1.15.1', '1.16.0']) assert.equal(capabilitySatisfies(version, '1.15.0'), true);
-  assert.equal(thingtimeCapabilityManifest('https://archive.test').features['api.things'].version, '1.19.0');
-  assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.18.0');
+  assert.equal(thingtimeCapabilityManifest('https://archive.test').features['api.things'].version, '1.20.0');
+  assert.equal(createApiCapabilitiesManifest().features['api.things'], '1.19.0');
 });
 
 test('Messenger custom-emoji parsing and projections publish a compatible correction on both manifests', () => {
@@ -80,7 +80,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
     assert.equal(manifest.features[feature]?.version, '1.2.0');
   }
 	assert.equal(manifest.features['api.webpages-resolve']?.version, '1.2.0');
-	assert.equal(manifest.features['api.actions-run']?.version, '1.4.0');
+	assert.equal(manifest.features['api.actions-run']?.version, '1.5.0');
 	assert.equal(manifest.features['api.things-fork']?.version, '1.5.0');
 	assert.equal(manifest.features['api.things-import']?.version, '1.10.0');
 	assert.equal(manifest.features['api.things-export']?.version, '1.14.0');
@@ -128,7 +128,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   // projection is untouched (1.5.0, additive)
   // Included dependency reads add sharedRoot without widening standalone ACLs.
   // Includes completed recording attachments and portable archive library reads.
-  assert.equal(manifest.features['api.things']?.version, '1.19.0');
+  assert.equal(manifest.features['api.things']?.version, '1.20.0');
   assert.equal(manifest.features['api.lopu-reminders']?.version, '1.1.0');
   assert.equal(manifest.features['api.lopu-voice-reply']?.version, '1.4.0');
   assert.equal(manifest.features['api.lopu-recordings-run']?.version, '1.5.0');
@@ -212,7 +212,7 @@ test('Thingtime capability manifest is origin scoped and covers the generated AP
   assert.equal(manifest.features['api.notifications-list']?.version, '1.7.0');
   assert.equal(manifest.features['api.notifications-settings']?.version, '1.6.0');
   assert.equal(manifest.features['api.notifications-record']?.version, '1.0.0');
-  assert.equal(manifest.features['api.things-update']?.version, '1.3.0');
+  assert.equal(manifest.features['api.things-update']?.version, '1.4.0');
   assert.equal(manifest.features['api.devices-pairing']?.version, '1.1.0');
   assert.ok(manifest.operations.some((operation) => operation.path === THINGTIME_CAPABILITY_MANIFEST_PATH));
   const operationPaths = new Set(manifest.operations.map((operation) => operation.path));
@@ -238,7 +238,7 @@ test('capability negotiation accepts compatible updates and rejects missing or b
 test('AI archive clients require the presentation contract before import, export and history reads', () => {
   const manifest = thingtimeCapabilityManifest('https://archive.test');
   for (const [feature, required, previous] of [['api.things-export', '1.14.0', '1.12.0'],
-    ['api.things-import', '1.10.0', '1.9.1'], ['api.things', '1.19.0', '1.16.1']]) {
+    ['api.things-import', '1.10.0', '1.9.1'], ['api.things', '1.20.0', '1.16.1']]) {
     assert.equal(manifest.features[feature].version, required);
     assert.equal(capabilitySatisfies(required, required), true);
     for (const unsupported of ['', previous, '2.0.0']) assert.equal(capabilitySatisfies(unsupported, required), false);

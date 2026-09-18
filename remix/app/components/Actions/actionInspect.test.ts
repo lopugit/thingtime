@@ -215,8 +215,8 @@ test('selectActionByKey: id wins, then the latest actionKey revision', () => {
 // every program unconditionally.
 test('a composing action does not claim negatives its children can break', () => {
 	const composed = actionCannotAccess([{ capability: 'actions.invoke', actions: ['make-invoice'] }]);
-	assert.ok(composed.includes('No network'), 'vocabulary negatives always hold');
-	assert.ok(composed.includes('No secrets'));
+	assert.equal(composed.includes('No network'), false, 'a child can perform a registered lookup');
+	assert.equal(composed.includes('No secrets'), false);
 	assert.ok(composed.includes('No deletes'));
 	assert.equal(composed.includes('Cannot create things'), false, 'a child may create');
 	assert.equal(composed.includes('Cannot update things'), false, 'a child may update');

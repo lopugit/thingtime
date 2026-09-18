@@ -968,6 +968,7 @@ export function useApi() {
         async (args) => {
           if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
           else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
+          if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'lookup')) await requireThingtimeCapability('api.things', '1.20.0');
           return asyncFetcher.submit(
             {
               id: args?.id,
@@ -1030,6 +1031,7 @@ export function useApi() {
         async (args) => {
 					if (Array.isArray(args?.attachmentIds) && args.attachmentIds.length > 25) await requireThingtimeCapability('api.things', '1.19.0');
           else if (args?.geo !== undefined) await requireThingtimeCapability('api.things', '1.18.0');
+          if (Array.isArray(args?.crystal?.steps) && args.crystal.steps.some((step: { op?: string }) => step?.op === 'lookup')) await requireThingtimeCapability('api.things', '1.20.0');
           const payload = buildThingCreateRequestPayload(args);
 					const attachmentIds = args?.attachmentIds;
 					const ret = withPostRequestDeadline(signal => asyncFetcher.submit(payload, { action: '/api/v1/things', errorContext: 'publish your post', signal }));
@@ -1344,7 +1346,7 @@ export function useApi() {
       // resolution to actions the viewer owns — execute.ts ownedOnly), and an
       // inline list silently dropped it, disarming the delegated ttAction
       // path in every browser while the API-level battery stayed green.
-      run: useCallback(async (args) => asyncFetcher.submit(buildActionRunBody(args), { action: '/api/v1/actions/run' }), [asyncFetcher]),
+      run: useCallback(async (args) => { await requireThingtimeCapability('api.actions-run', '1.5.0'); return asyncFetcher.submit(buildActionRunBody(args), { action: '/api/v1/actions/run' }); }, [asyncFetcher]),
       // your own run records — { action, limit }
       runs: useCallback(async (args) => getJson(`/api/v1/actions/runs${toQuery(args)}`), [])
       // creation rides the unified path: things.create({ thingtime: ['action'], crystal })

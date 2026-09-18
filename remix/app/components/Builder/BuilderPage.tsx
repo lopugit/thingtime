@@ -80,6 +80,7 @@ const PagesList = () => {
 				subtitle="Build webpages from Thingtime components and actions — and personalise every Thingtime page with the ✏️ edit mode."
 				after={
 					<Flex columnGap={2} alignItems="center">
+						<Button as={Link} to="/docs/builder" size="sm" variant="outline">Builder docs</Button>
 						<Button as={Link} to="/builder/demos" size="sm" variant="outline" data-testid="builder-demo-library">
 							Demo library 🧱
 						</Button>
