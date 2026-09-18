@@ -346,3 +346,8 @@ test('long turns retain all receipts across bounded message segments and model h
  const longText = 'x'.repeat(70_000);
  assert.equal(splitLopuAssistantSegments(longText, []).map(part => part.text).join(''), longText);
 });
+
+ test('archive projection accepts only true and preserves legacy active chats', () => {
+ assert.equal(lopuChatStateOf({ archived: true }).archived, true);
+ for (const archived of [undefined, false, 'true', 1, null]) assert.equal(lopuChatStateOf({ archived }).archived, undefined);
+ });

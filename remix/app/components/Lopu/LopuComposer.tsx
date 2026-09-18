@@ -1,7 +1,7 @@
 import { chatAttachmentInput } from '../Attachments/chatAttachmentInput';
 import { useLopuVisualViewport } from './useLopuVisualViewport';
 import React from 'react';
-import { Box, Flex, Popover, PopoverBody, PopoverContent, PopoverTrigger, Text, Textarea } from '@chakra-ui/react';
+import { Box, Button, Flex, Popover, PopoverBody, PopoverContent, PopoverTrigger, Text, Textarea } from '@chakra-ui/react';
 import { ArrowUp, Settings2, Square } from 'lucide-react';
 
 import { useIsMobileViewport } from '../Nav/Drawer/useDrawer';
@@ -29,6 +29,9 @@ export type LopuComposerProps = {
 	onChange: (next: string) => void;
 	onSend: (text: string) => void;
 	onStop: () => void;
+ onQueue?: (text: string) => void;
+ onSendNow?: (text: string) => void;
+ noteDisabled?: boolean;
 	streaming: boolean;
 	disabled?: boolean;
 	// only the message field and Send are disabled — the model chip stays
@@ -140,7 +143,7 @@ export const LopuComposer = ({
 	value,
 	onChange,
 	onSend,
-	onStop,
+	onStop, onQueue, onSendNow, noteDisabled,
 	streaming,
 	disabled = false,
 	inputDisabled = false,
@@ -177,7 +180,7 @@ export const LopuComposer = ({
 		[inputRef]
 	);
 	const fieldDisabled = disabled || inputDisabled;
-	const canSend = !fieldDisabled && !sendDisabled && !streaming && value.trim().length > 0;
+	const canSend = !fieldDisabled && !sendDisabled && (!streaming || !!onQueue) && value.trim().length > 0;
 	const controlSize = isMobile ? LOPU_UI.touchTarget : compact ? 30 : 36;
 	const iconSize = isMobile ? LOPU_UI.touchTarget : compact ? 28 : 32;
 	const bodySize = compact ? LOPU_UI.fontCompact : LOPU_UI.fontBody;
@@ -193,9 +196,9 @@ export const LopuComposer = ({
 
 	const submit = React.useCallback(() => {
 		const text = value.trim();
-		if (!text || fieldDisabled || sendDisabled || streaming) return;
+		if (!text || fieldDisabled || sendDisabled || (streaming && !onQueue)) return;
 		onSend(text.slice(0, LOPU_MAX_MESSAGE_CHARS));
-	}, [value, fieldDisabled, sendDisabled, streaming, onSend]);
+	}, [value, fieldDisabled, sendDisabled, streaming, onSend, onQueue]);
 
 	const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
 		if (event.key !== 'Enter') return;
@@ -214,7 +217,7 @@ export const LopuComposer = ({
 		submit();
 	};
 
-	const hint = isMobile ? null : enterSends ? 'Enter to send · Shift+Enter for a new line' : 'Shift+Enter for a new line · ⌘Enter to send';
+	const hint = isMobile ? null : enterSends ? (streaming && onQueue ? 'Enter to queue · Shift+Enter for a new line' : 'Enter to send · Shift+Enter for a new line') : 'Shift+Enter for a new line · ⌘Enter to send';
 	const showSettings = !hideSettings && (!!preferences || !!settingsContent);
 
 	return (
@@ -238,7 +241,7 @@ export const LopuComposer = ({
 					value={value}
 					onChange={(event) => onChange(event.target.value.slice(0, LOPU_MAX_MESSAGE_CHARS))}
 					onKeyDown={onKeyDown}
-					placeholder={placeholder || (streaming ? 'Lopu is replying…' : 'Ask Lopu anything, or tell it what to build…')}
+					placeholder={placeholder || (streaming ? 'Add a message while Lopu works…' : 'Ask Lopu anything, or tell it what to build…')}
 					aria-label="Message Lopu"
 					rows={1}
 					width="100%"
@@ -332,7 +335,9 @@ export const LopuComposer = ({
 							</PopoverContent>
 						</Popover>
 					) : null}
-					{streaming ? <ActionButton kind="stop" size={controlSize} onClick={onStop} label="Stop Lopu's reply" /> : <ActionButton kind="send" size={controlSize} disabled={!canSend} onClick={submit} label={isMobile || !enterSends ? 'Send' : 'Send (Enter)'} />}
+					{onQueue ? <Button size="sm" minW="auto" px={2} isDisabled={!canSend} onClick={() => onQueue(value.trim())}>Queue</Button> : null}
+     {streaming && onSendNow ? <Button size="sm" minW="auto" px={2} title="Save a note now. Lopu reads it at the next safe step without stopping." isDisabled={!canSend || noteDisabled} onClick={() => onSendNow(value.trim())}>Send now</Button> : null}
+     {streaming ? <ActionButton kind="stop" size={controlSize} onClick={onStop} label="Stop Lopu's reply" /> : <ActionButton kind="send" size={controlSize} disabled={!canSend} onClick={submit} label={isMobile || !enterSends ? 'Send' : 'Send (Enter)'} />}
 					</Flex>
 				</Flex>
 			</Box>

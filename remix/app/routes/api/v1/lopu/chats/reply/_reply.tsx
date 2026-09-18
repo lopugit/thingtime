@@ -14,7 +14,7 @@ import type { LopuApprovedAction } from '~/api/utils/lopu/chatTools';
 import { parseLopuConfirmations, verifyLopuConfirmation, type LopuConfirmationInput } from '~/api/utils/lopu/confirmations';
 import { getUserVaultProvider, userVaultConfigured } from '~/api/utils/lopu/userVault';
 import { safeVaultId } from '~/api/utils/lopu/userVaultCore';
-import { createLopuChat, deleteLopuChat, getLopuChat, loadLopuHistory, persistLopuAssistantTurn, persistLopuUserTurn, updateLopuChat } from '~/api/utils/messenger/lopuChats';
+import { createLopuNoteReader, createLopuChat, deleteLopuChat, getLopuChat, loadLopuHistory, persistLopuAssistantTurn, persistLopuUserTurn, updateLopuChat } from '~/api/utils/messenger/lopuChats';
 import type { PublicChatMessage } from '~/api/utils/messenger/messenger';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 import type { AiWorkflowModelChoice } from '~/api/utils/settings/prConflictResolverModelWaterfallCore';
@@ -409,6 +409,7 @@ export const replyAsUser = async (request: Request, user: Awaited<ReturnType<typ
         try {
           const attachedContent = await resolveLopuMedia(user.id, [...input.attachmentIds, ...references.filter(ref => typeof ref.crystal === "object" && ref.crystal && "contentType" in ref.crystal).map(ref => ref.id), ...(loaded.ok ? loaded.attachmentIds ?? [] : [])], abort.signal);
           const generator = streamLopuChatTurn({
+            readNotes: createLopuNoteReader(user.id, persistedChatId, input.requestId),
             readOnly: execution.scheduled,
             viewer,
             chatId: persistedChatId,
