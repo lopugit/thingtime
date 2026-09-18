@@ -1,3 +1,4 @@
+import { attachmentCountLimit } from '~/schemas/attachmentLimits';
 import { withAttachmentRateLimitRetry } from './attachmentRateLimitRetry';
 import { HeicImageError, isHeicImage, prepareHeicImage } from './heicImage';
 import { requireSubspaceMediaCapabilities } from '~/utils/subspaceMediaCapabilities';
@@ -16,7 +17,6 @@ import {
 	linkedMediaKindForUrl,
 	linkedMediaNameForUrl,
 	localFileMediaKind,
-	MAX_POST_ATTACHMENTS,
 	multipartPartRange,
 	normalizePublicAttachment
 } from './attachmentUiCore';
@@ -158,8 +158,8 @@ export const useAttachmentUploads = (
 	const purposeForFileRef = React.useRef(options.purposeForFile);
 	purposeForFileRef.current = options.purposeForFile;
 	const maxFiles = Number.isSafeInteger(options.maxFiles)
-		? Math.max(1, Math.min(options.selectionScope === 'transfer' ? TRANSFER_LIMITS.files : MAX_POST_ATTACHMENTS, Number(options.maxFiles)))
-		: MAX_POST_ATTACHMENTS;
+		? Math.max(1, Math.min(options.selectionScope === 'transfer' ? TRANSFER_LIMITS.files : attachmentCountLimit(uploadPurpose), Number(options.maxFiles)))
+		: attachmentCountLimit(uploadPurpose);
 	const imageOnly = options.imageOnly === true;
 	const maxBytesPerFile =
 		Number.isSafeInteger(options.maxBytesPerFile) && Number(options.maxBytesPerFile) > 0 ? Number(options.maxBytesPerFile) : null;
@@ -217,7 +217,9 @@ export const useAttachmentUploads = (
 	const patchUpload = React.useCallback(
 		(localId: string, attempt: number, patch: Partial<ComposerAttachmentUpload>) => {
 			if (!isCurrent(localId, attempt)) return;
-			setUploads((current) => current.map((upload) => (upload.localId === localId ? { ...upload, ...patch } : upload)));
+			const next = uploadsRef.current.map((upload) => (upload.localId === localId ? { ...upload, ...patch } : upload));
+			uploadsRef.current = next;
+			setUploads(next);
 		},
 		[isCurrent]
 	);
@@ -568,20 +570,20 @@ export const useAttachmentUploads = (
 			const completeOnly = upload.failedAt === 'complete' && Boolean(upload.uploadId);
 			const savedPlan = uploadPlansRef.current.get(localId);
 			const resumeExisting = !completeOnly && !!upload.uploadId && !!savedPlan && savedPlan.uploadId === upload.uploadId;
-			setUploads((current) =>
-				current.map((entry) =>
+			const nextUploads = uploadsRef.current.map((entry) =>
 					entry.localId === localId
 						? {
 								...entry,
-								status: completeOnly ? 'queued' : 'preparing',
+								status: 'queued' as const,
 								progress: completeOnly ? 100 : 0,
 								uploadId: entry.uploadId,
 								error: null,
 								failedAt: null
 						  }
 						: entry
-				)
 			);
+			uploadsRef.current = nextUploads;
+			setUploads(nextUploads);
 			if (!completeOnly && !resumeExisting && upload.uploadId) {
 				patchUpload(localId, nextAttempt, {
 					status: 'error',
@@ -595,6 +597,12 @@ export const useAttachmentUploads = (
 		[enqueue, patchUpload]
 	);
 
+	const retryAll = React.useCallback(() => {
+		for (const upload of uploadsRef.current) {
+			if (upload.status === 'error' && upload.failedAt !== 'terminal') void retry(upload.localId);
+		}
+	}, [retry]);
+
 	const remove = React.useCallback(
 		(localId: string) => {
 			const upload = uploadsRef.current.find((entry) => entry.localId === localId);
@@ -607,7 +615,9 @@ export const useAttachmentUploads = (
 			activeXhrsRef.current.delete(localId);
 			if (upload.previewUrl) URL.revokeObjectURL(upload.previewUrl);
 			uploadPlansRef.current.delete(localId);
-			setUploads((current) => current.filter((entry) => entry.localId !== localId));
+			const next = uploadsRef.current.filter((entry) => entry.localId !== localId);
+			uploadsRef.current = next;
+			setUploads(next);
 			const cleanup = preserveReadyOnUnmountRef.current && upload.attachment ? null : cleanupUpload(upload);
 			void cleanup
 				?.then((result: any) => {
@@ -723,6 +733,7 @@ export const useAttachmentUploads = (
 		replaceFiles,
 		addLinkedUrl,
 		retry,
+		retryAll,
 		remove,
 		reorder,
 		markCommitted,

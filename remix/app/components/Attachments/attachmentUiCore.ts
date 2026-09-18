@@ -22,7 +22,7 @@ const INLINE_VIDEO_TYPES = new Set([
 	'video/x-matroska'
 ]);
 const isAudioContentType = (value: string) => value.startsWith('audio/');
-export const MAX_POST_ATTACHMENTS = 25;
+export { MAX_POST_ATTACHMENTS } from '~/schemas/attachmentLimits';
 const MAX_POST_TAGS = 12;
 const MAX_POST_TAG_CHARS = 40;
 

@@ -312,6 +312,17 @@ every namespace doc and can browse (`GET /api/v1/things?appId=`,
 
 ### Server error Things
 
+`post-discovery` is a protected, non-billable authorization relationship in home
+`things_v2`, one deterministic record per account/browser and visited secret post.
+`targetId` links the post and `ownerId` identifies its collector. Its crystal holds
+an author ID, one-way link-generation digest, optional one-way anonymous browser
+ID and private visit IP. No bearer key is persisted. It has no generic read/write
+or export surface, uses existing owner/target indexes, and cascades with its post.
+Every grant is revalidated against the current hidden ACL and link generation.
+IP metadata is never itself a grant. Full first-party reads may record discoveries;
+scoped credentials and custom data planes cannot. Anonymous localStorage holds the
+random browser credential, mirrored to a host-only SameSite cookie for media.
+
 `error-log` is a server-minted, non-billable control kind in home `things_v2`. It uses the reserved `error-log-` ID namespace, no public ACL and no generic read/write path. Only the current-admin error-log endpoint projects bounded, irreversibly redacted detail from its binary envelope and safe searchable metadata. Seven-day TTL and bounded best-effort capture prevent indefinite retention; no account data or request payload is intentionally captured. `/things?logs=1` is its read-only admin browser.
 
 ## 4. One MongoDB connection source

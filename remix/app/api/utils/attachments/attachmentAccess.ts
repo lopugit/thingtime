@@ -1,3 +1,4 @@
+import { withFoundPostGrant } from '../things/foundPosts';
 import { subspaceAttachmentTargetAllows } from '../subspaces/subspaceMediaCore';
 import { ObjectId } from 'mongodb';
 
@@ -125,7 +126,10 @@ const canViewCommentAttachment = async (
 		})) as AttachmentTargetAclDoc | null;
 		if (!target) return false;
 		const isComment = exactThingtime(target.thingtime, ['comment']) || exactThingtime(target.thingtime, ['post', 'comment']);
-		if (!isComment) return attachmentRootAclAllows(target, viewer);
+		if (!isComment) {
+      if (attachmentRootAclAllows(target, viewer)) return true;
+      return attachmentRootAclAllows(target, await withFoundPostGrant(target as ThingDoc, viewer, async (shareId) => await things.findOne({ shareId } as any) as ThingDoc | null));
+    }
 		if (depth === 0 && target.ownerId !== attachment.ownerId) return false;
 		if (typeof target.targetId !== 'string' || !target.targetId) return false;
 		targetId = target.targetId;
@@ -272,7 +276,8 @@ export const createCanViewHomeAttachmentTarget = (overrides: Partial<AttachmentT
 				projection: { shareId: 1, ownerId: 1, thingtime: 1, targetId: 1, acl: 1, visibility: 1, linkKey: 1, moderation: 1, subspacePrivate: 1, 'crystal.subspaceId': 1 }
 			}
 		)) as AttachmentTargetAclDoc | null;
-		return attachmentTargetAclAllows(target, viewer);
+		if (!target || attachmentTargetAclAllows(target, viewer)) return !!target;
+    return attachmentTargetAclAllows(target, await withFoundPostGrant(target as ThingDoc, viewer, async (shareId) => await things.findOne({ shareId } as any) as ThingDoc | null));
 	};
 };
 

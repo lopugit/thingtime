@@ -42,6 +42,7 @@ const EXPECTED_PROJECTED_FIELDS: Record<string, string[]> = {
   action: ['name', 'description', 'actionKey', 'category', 'version', 'forkOf'],
   // inputs + result + trace: records → dropped
   'action-run': ['status', 'startedAt', 'durationMs', 'opsUsed', 'depthUsed', 'childActionsUsed', 'error'],
+  'post-discovery': ['authorId', 'linkKeyDigest', 'anonymousId', 'ipAddress'],
   save: [], // marker schema
   vote: ['optionIndex', 'voteKey'],
   updown: ['direction', 'updownKey'],
