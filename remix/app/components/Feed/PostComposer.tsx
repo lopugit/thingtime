@@ -19,7 +19,6 @@ import {
 	attachmentFilesFromClipboard,
 	canonicalPostTags,
 	matchesCommittedPostCreate,
-	MAX_POST_ATTACHMENTS,
 	normalizePublicAttachment,
 	shouldFreezeAmbiguousPostSubmission,
 	type CommittedPostExpectation
@@ -1216,12 +1215,9 @@ export const PostComposer = (props: PostComposerProps) => {
 							storageStatus={user.storage.status}
 							onChange={setAttachmentSnapshot}
 							allowLinkedUrls
-							// legacy URL-images seed as linked tiles, capped so bound
-							// attachments + seeds can never exceed the server's per-post
-							// limit (a pathological >25-media legacy post drops overflow
-							// URLs, matching the old composer's silent client-side filter)
+							// Preserve every legacy image when reopening an existing post.
 							initialLinkedSeeds={
-								isEdit ? (editPost?.images || []).slice(0, Math.max(0, MAX_POST_ATTACHMENTS - editAttachmentsSeedRef.current.length)) : undefined
+								isEdit ? (editPost?.images || []) : undefined
 							}
 							tileExtras={layoutMode === 'grid' ? layoutSpanBadge : undefined}
 								existingAttachments={isEdit ? editAttachments : undefined}

@@ -2379,3 +2379,22 @@ test('subspace uploads stamp slot-specific purposes and bound raster limits befo
     assert.equal(reserved.length, count);
   }
 });
+
+
+test('posts accept more than 25 owned ready attachments without relaxing other purposes or identity validation', async () => {
+	let purpose: 'post' | 'comment' | 'message' = 'post';
+	const ids = Array.from({ length: 80 }, (_, index) => `large-gallery-${index}`);
+	const service = createAttachmentService({
+		store: { getOwnedMany: async (owner: string, requested: string[]) => requested.map(shareId => attachmentDoc({
+			shareId, ownerId: owner, attachmentPurpose: purpose, attachmentState: 'ready', uploadId: undefined
+		})) } as any,
+		now: () => now, customMongoActive: () => false
+	});
+	assert.equal((await service.inspectForPost('user-1', ids)).ok, true);
+	assert.equal((await service.inspectForPost('user-1', [...ids, ids[0]])).ok, false);
+	purpose = 'comment';
+	assert.equal((await service.inspectForComment('user-1', ids)).ok, false);
+	purpose = 'message';
+	assert.equal((await service.inspectForMessage('user-1', ids)).ok, false);
+	assert.equal((await service.inspectForPost('user-1', ids)).ok, false);
+});

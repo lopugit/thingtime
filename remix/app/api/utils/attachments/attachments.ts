@@ -1,3 +1,4 @@
+import { attachmentCountLimit } from '../../../schemas/attachmentLimits';
 import { createHash, randomUUID } from 'node:crypto';
 
 import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
@@ -1372,7 +1373,7 @@ export const createAttachmentService = (overrides: Partial<AttachmentServiceDepe
 		ownerId: string,
 		attachmentIds: readonly unknown[],
 		purpose: ContentAttachmentPurpose,
-		maxAttachments = MAX_ATTACHMENTS_PER_TARGET,
+		maxAttachments = attachmentCountLimit(purpose),
 		expectedTargetId?: unknown
 	): Promise<AttachmentResult<InspectedAttachments>> => {
 		try {

@@ -5898,13 +5898,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-content',
-		contractVersion: '1.7.1',
-		featureVersion: '1.7.1',
+		contractVersion: '1.8.0',
+		featureVersion: '1.8.0',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
 		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
 		detail:
+			'Previously collected hidden posts also authorize their bound media for the exact signed-in account or anonymous browser cookie. Current hidden ACL, key generation, moderation and storage gates are rechecked on every request. IP metadata never grants access. ' +
 			'Comment galleries follow canonical visibility inheritance through parent comments and media items, including after copying. ' +
 			'Subspace branding images require a live subspace and the exact current icon/banner slot binding. Branding is public directory identity even for private subspaces; replaced or deleted slots grant no public access. ' +
 			'Saved standalone recordings without a draft expiry remain readable by their exact owner. Import drafts, expired uploads, other viewers and custom data endpoints gain no new access. ' +
@@ -8503,7 +8504,7 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     title: 'Shared things (picker grant)',
     endpoint: '/api/v1/oauth/shared',
     summary: 'Read the things the user hand-picked to share with your app.',
-    detail:
+    detail: 'First-party single reads with a valid hidden post key remember a protected post-discovery relationship for the account or anonymous browser. The browser keeps a cryptographic token in localStorage and mirrors it to the same-origin __Host-tt_found_browser cookie for media requests. Only the one-way anonymous identity, link-generation digest and private visit IP are stored server-side. Revisits and author-profile listings require the same identity and current hidden key generation; rotation and removal revoke collected access. Scoped tokens, app namespaces and custom data endpoints do not acquire discoveries. ' +
       'GET with the app-scoped Bearer token; requires the things scope. Returns exactly the set the ' +
       'user ticked on the consent screen — read-only, ownership re-checked at read time (things the ' +
       'user has since deleted drop out), projected to content fields only ({ shareId, thingtime, ' +
@@ -8989,13 +8990,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // recording attachments — pending uploads and the other protected kinds
     // stay excluded (additive, on top of the sharedRoot correction)
     // Includes additive discussions and the 1.7.5 conditional-media write correction.
-    featureVersion: '1.18.1',
-    contractVersion: '1.17.1',
+    featureVersion: '1.19.0',
+    contractVersion: '1.18.0',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+			'Post creation and attachment sync have no attachment-count cap; ordered relational attachments still require unique owned ready ids, storage quota, upload approval and the bounded JSON body. Comment/message/profile limits remain unchanged. ' +
 			'Optional geo: {lat,lng} on create/update stores a validated geographic Point (lat -90..90, lng -180..180); null removes location and omission preserves it on PATCH. Read projections expose lat/lng only under the same Thing ACL. Location is explicitly supplied, never inferred from the author. The archive emoji projection recognizes the canonical persisted attachment purpose emoji (the upload API alias is custom-emoji). ' +
 			'Owner archive snapshots include emojis: referenced personal definitions reduced to id, name and attachmentId. Two bounded snapshot queries enforce exact owner/home scope, ready custom-emoji binding and canonical image metadata; blocked, pending, NSFW, linked, foreign or missing images are omitted and remain unavailable historical reactions. No live accounts or community membership are resolved. ' +
 			'Archive snapshots additionally include ordered attachments with targetId and canonical gallery metadata. The existing owner-only batch query projects safe labels, media type and linked URLs; blocked/noncanonical metadata is omitted, pending owner media is marked pending, and NSFW media is marked nsfw for reveal consent. No object keys, upload identifiers or moderation diagnostics are exposed. attachmentTargets still includes every binding so exports cannot silently omit quarantined files. Stored bytes remain independently authorized by the attachment content endpoint. ' +
@@ -10934,13 +10936,13 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // the author's USER flair in the post's subspace (additive)
     // 1.4.0 / contract 1.3.0: subspaceMod.reportCount — open reports against a
     // subspace post, for that subspace's moderators only (S5, additive)
-    featureVersion: '1.5.0',
-    contractVersion: '1.5.0',
+    featureVersion: '1.6.0',
+    contractVersion: '1.6.0',
     group: 'things',
     title: 'User posts',
     endpoint: '/api/v1/things/user',
     summary: 'Returns posts for a public profile, filtered by viewer visibility. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
-    detail: 'Profile pages use this route to page through a user posts. Owners can see their full circle set; other viewers only see public content.',
+    detail: 'Profile pages use this route to page through a user posts. Owners can see their full circle set; other viewers see public content, friends posts and direct/group custom grants admitted by the same audience rules as the feed. Mixed secret-link audiences are included through explicit grants; link-only posts stay unlisted until the viewer visits a valid secret link. Successful first-party GET visits record a protected post-discovery relationship for the signed-in account, or the anonymous browser identified by its __Host-tt_found_browser cookie. Collected posts then appear on that author profile. Rotating the link, removing hidden access, moderation or deleting the post revokes access. Discovery receipts and private visit IP metadata are never projected; IP alone is not authority. Exact ACL, moderation, subspace and token checks still apply.',
     auth: {
       mode: 'optional',
       description: 'Anonymous callers can read public posts; authenticated callers may see their own broader visibility.'
