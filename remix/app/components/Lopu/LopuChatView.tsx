@@ -570,17 +570,21 @@ export const LopuChatView = ({
 		}
 	}, [isMobile]);
 
+	const [submitting, setSubmitting] = React.useState(false);
+ const submittingRef = React.useRef(false);
 	const [composerError, setComposerError] = React.useState<string | null>(null);
  const [noteSending, setNoteSending] = React.useState(false);
  const noteRetry = React.useRef<{ text: string; id: string; chatId: string | null; owner: string | null } | null>(null);
 	const ownerRef = React.useRef(chat.viewer.id);
 	ownerRef.current = chat.viewer.id;
  const noteChatRef = React.useRef(chat.chatId); noteChatRef.current = chat.chatId;
- React.useEffect(() => { setComposerError(null); setNoteSending(false); noteRetry.current = null; }, [chat.viewer.id, chat.chatId]);
+ React.useEffect(() => { setComposerError(null); setNoteSending(false); noteRetry.current = null; submittingRef.current = false; setSubmitting(false); }, [chat.viewer.id, chat.chatId]);
 	const submit = React.useCallback(
 		async (text: string, mode: 'send' | 'queue' = 'send') => {
-			if (uploads.blocking) return;
+			if (uploads.blocking || submittingRef.current) return;
+   submittingRef.current = true; setSubmitting(true); setComposerError(null);
 			const ownerId = chat.viewer.id;
+   const targetChatId = chat.chatId;
 			const uploadHandle = uploadsRef.current;
 			setDraft('');
 			// Hide the submitted selection immediately, but keep its uploader mounted
@@ -591,10 +595,11 @@ export const LopuChatView = ({
 			focusInput();
 			let accepted = false;
 			const onAccepted = () => {
-				if (accepted || ownerRef.current !== ownerId || uploadsRef.current?.markCommitted !== uploadHandle?.markCommitted) return;
+				if (accepted || ownerRef.current !== ownerId || noteChatRef.current !== targetChatId || uploadsRef.current?.markCommitted !== uploadHandle?.markCommitted) return;
 				// markCommitted is stable for the uploader lifetime; addFiles (and the
 				// containing handle) changes when sending disables file selection.
 				accepted = true;
+    submittingRef.current = false; setSubmitting(false);
 				uploadHandle?.markCommitted(uploads.attachmentIds);
 				setAttachmentsExpanded(false);
 				setUploads(EMPTY_LOPU_ATTACHMENTS); setSelectedThings([]); setSelectedPages([]); setAttachmentRevision(value => value + 1);
@@ -605,7 +610,8 @@ export const LopuChatView = ({
     if (mode === 'queue') { chat.enqueue(text, media); onAccepted(); result = { ok: true, requestId: '', chatId: chat.chatId }; }
     else result = await chat.send(text, undefined, media);
    } catch (error) { result = { ok: false, error: error instanceof Error ? error.message : 'Could not queue the message', text }; setComposerError(result.error); }
-			if (ownerRef.current !== ownerId) return result;
+			if (ownerRef.current !== ownerId || noteChatRef.current !== targetChatId) return result;
+   if (!accepted) { submittingRef.current = false; setSubmitting(false); }
 			if (result.ok === true || (result.ok === false && result.chatIdKnown)) onAccepted();
 			// A rejected turn restores its own selection without overwriting new text.
 			if (result.ok === false && !accepted && !result.chatIdKnown && uploadsRef.current?.markCommitted === uploadHandle?.markCommitted) {
@@ -820,19 +826,20 @@ export const LopuChatView = ({
      <LopuMessageQueue items={chat.queue.items.filter(item => item.chatId === chat.chatId)} paused={chat.queue.paused} error={chat.queue.error} lockedIds={chat.queue.batch?.ids}/>
      {composerError ? <Text role="status" fontSize="sm" mb={2}>{composerError}</Text> : null}
 					<LopuComposer
-						attachments={<><LopuPageAttachments owner={chat.viewer.id} current={currentPage} selected={selectedPages} onChange={setSelectedPages} disabled={chat.sending || streamingHere} /><LopuAttachments key={`${chat.viewer.id}:${attachmentRevision}`} expanded={attachmentsExpanded} onExpandedChange={setAttachmentsExpanded} uploadsRef={uploadsRef} onUploads={setUploads} selected={selectedThings} onSelect={setSelectedThings} disabled={chat.sending || streamingHere} /></>}
+						attachments={<><LopuPageAttachments owner={chat.viewer.id} current={currentPage} selected={selectedPages} onChange={setSelectedPages} disabled={submitting} /><LopuAttachments key={`${chat.viewer.id}:${attachmentRevision}`} expanded={attachmentsExpanded} onExpandedChange={setAttachmentsExpanded} uploadsRef={uploadsRef} onUploads={setUploads} selected={selectedThings} onSelect={setSelectedThings} disabled={submitting} /></>}
 						onAttachFiles={files => { if (uploadsRef.current?.addFiles(files)) setAttachmentsExpanded(true); }}
 						value={draft}
 						onChange={setDraft}
 						onSend={send}
       onQueue={chat.chatId ? enqueue : undefined}
+      queuePending={!chat.queue.paused && chat.queue.items.some(item => item.chatId === chat.chatId)}
       onSendNow={sendNow}
       noteDisabled={noteSending || uploads.hasSelection || selectedThings.length > 0}
 						onStop={stop}
 						streaming={streamingHere || chat.sending}
 						disabled={!chat.viewer.id || (locked && !byoUnlock)}
 						inputDisabled={locked}
-						sendDisabled={uploads.blocking}
+						sendDisabled={uploads.blocking || submitting}
 						placeholder={composerPlaceholder}
 						enterSends={chat.preferences.enterSends}
 						models={chat.models}

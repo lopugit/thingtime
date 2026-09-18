@@ -114,8 +114,14 @@ export const drainLopuQueue = async (chatId: string, send: (text: string, option
 	const owner = state.owner,
 		epoch = generation;
 	update({ batch, busy: true });
+	const onAccepted = () => {
+		if (state.owner !== owner || generation !== epoch) return;
+		// Once persisted, this is a sent message. A later interrupted reply must
+		// not leave it locked in the queue or resend it on Resume.
+		update({ items: state.items.filter((item) => !batch.ids.includes(item.id)), batch: null });
+	};
 	try {
-		const result = await send(batch.text, { ...batch.options, requestId: batch.requestId });
+		const result = await send(batch.text, { ...batch.options, requestId: batch.requestId, onAccepted });
 		if (state.owner !== owner || generation !== epoch) return;
 		if (!result.ok) throw new Error(result.error || 'Queue paused. Retry when ready.');
 		update({ items: state.items.filter((item) => !batch.ids.includes(item.id)), batch: null, busy: false });
