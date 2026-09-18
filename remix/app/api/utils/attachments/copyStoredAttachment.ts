@@ -23,7 +23,7 @@ type CopyDependencies = {
 // object key, upload id or owner identity. The normal upload lifecycle owns
 // quota, finalization, moderation, version verification and deletion refunds.
 export const copyStoredAttachment = async (
-	deps: CopyDependencies, viewer: AttachmentAccessViewer, id: unknown, signal?: AbortSignal
+	deps: CopyDependencies, viewer: AttachmentAccessViewer, id: unknown, signal?: AbortSignal, purpose: 'post' | 'comment' = 'post'
 ): Promise<AttachmentResult<{ id: string; attachment: Record<string, unknown> }>> => {
 	if (!viewer?.id) return { ok: false, status: 401, error: 'Sign in to copy files' };
 	let cleanupId: string | undefined;
@@ -37,14 +37,15 @@ export const copyStoredAttachment = async (
 	try {
 		if (abort.signal.aborted) throw new Error('Copy timed out');
 		// Internal service calls do not pass through the upload HTTP adapter.
-		// Preserve its post-purpose approval boundary before reserving anything.
+		// Preserve its public-upload approval boundary before reserving anything.
 		if (!await deps.canCopy(viewer.id)) return { ok: false, status: 403, error: 'File copying requires a user account approved for public uploads' };
 		const initial = await deps.read(viewer, id);
 		if (initial.ok === false) return initial;
 		const source = initial.doc;
-		// Purpose-specific attachments cannot be replayed onto a general app.
+		// Post and comment copies retain their exact content purpose; other
+		// purpose-specific attachments cannot be replayed onto a general app.
 		// An admin review permission also must not republish blocked bytes.
-		if ((source.attachmentPurpose && source.attachmentPurpose !== 'post') || source.moderation?.status === 'blocked' || source.moderation?.status === 'pending') return missing();
+		if ((source.attachmentPurpose || 'post') !== purpose || source.moderation?.status === 'blocked' || source.moderation?.status === 'pending') return missing();
 		const linked = source.attachmentLinked === true;
 		if (!linked && (!source.objectVersionId || source.objectVersionId === 'null')) return missing();
 		// A linked copy preserves a URL, not its bytes. It cannot re-moderate a
@@ -58,7 +59,7 @@ export const copyStoredAttachment = async (
 				fresh.doc.objectVersionId !== source.objectVersionId || fresh.doc.objectSizeBytes !== source.objectSizeBytes ||
 				(fresh.doc.attachmentLinked === true) !== linked ||
 				(linked && (!isDeepStrictEqual(fresh.doc.crystal, source.crystal) || fresh.doc.moderation?.status === 'nsfw')) ||
-				(fresh.doc.attachmentPurpose && fresh.doc.attachmentPurpose !== 'post') ||
+				(fresh.doc.attachmentPurpose || 'post') !== purpose ||
 				fresh.doc.moderation?.status === 'blocked' || fresh.doc.moderation?.status === 'pending') throw new Error('Copy source changed');
 		};
 		if (linked) {
@@ -68,19 +69,20 @@ export const copyStoredAttachment = async (
 			await stillReadable();
 			cleanupId = deps.uuid();
 			const copy = await deps.store.insertLinkedReady({ id: cleanupId, ownerId: viewer.id, crystal,
-				purpose: 'post', expiresAt: new Date(deps.now().getTime() + deps.readyDraftTtlMs) });
+				purpose, expiresAt: new Date(deps.now().getTime() + deps.readyDraftTtlMs) });
 			if (copy.shareId !== cleanupId || copy.ownerId !== viewer.id || copy.targetId || copy.attachmentLinked !== true) throw new Error('Copy is unavailable');
 			await stillReadable();
 			return { ok: true, id: cleanupId, attachment: { ...crystal, id: cleanupId } };
 		}
 		cleanupId = deps.uuid();
-		const started = await deps.start(viewer.id, { requestId: cleanupId, filename: source.crystal.name, contentType: source.crystal.contentType, sizeBytes: source.objectSizeBytes, purpose: 'post' });
+		const started = await deps.start(viewer.id, { requestId: cleanupId, filename: source.crystal.name, contentType: source.crystal.contentType, sizeBytes: source.objectSizeBytes, purpose });
 		if (!started.ok) throw started;
 		if (typeof started.upload.id !== 'string') throw new Error('Copy upload is unavailable');
 		cleanupId = started.upload.id;
 		const destination = await deps.store.getOwned(viewer.id, cleanupId);
 		if (!destination || destination.ownerId !== viewer.id || destination.attachmentState !== 'pending' || !destination.uploadId ||
 			destination.objectSizeBytes !== source.objectSizeBytes || destination.targetId || !source.objectVersionId ||
+			(destination.attachmentPurpose || 'post') !== purpose ||
 			!destination.attachmentExpiresAt || destination.attachmentExpiresAt <= deps.now()) throw new Error('Copy upload is unavailable');
 		const plan = deps.plan(source.objectSizeBytes);
 		const s3 = deps.getS3();

@@ -2331,7 +2331,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
 		...Array.from(related.commentsByTarget.values()).flatMap((entries) => entries.flatMap((entry) => (entry.doc ? [entry.doc.shareId] : [])))
 	];
 	const expectedAttachmentTargets = new Map<string, { ownerId: string; purpose: 'post' | 'comment' }>(
-		allDocs.map((doc) => [doc.shareId, { ownerId: String(doc.ownerId), purpose: 'post' as const }] as const)
+		allDocs.map((doc) => [doc.shareId, { ownerId: String(doc.ownerId), purpose: thingtimeOf(doc).includes('comment') ? 'comment' as const : 'post' as const }] as const)
 	);
 	for (const entries of related.commentsByTarget.values()) {
 		for (const entry of entries) {
