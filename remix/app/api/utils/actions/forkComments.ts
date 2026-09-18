@@ -17,18 +17,18 @@ export const includeForkComments = async (
 	const things = await collection();
 	let parents = [...result.docs.keys()];
 	while (parents.length) {
-  // Attachments are Things too: include their own comment threads. They are
-  // copied through the file lifecycle, never generic createThing.
-  let files: ThingDoc[];
-  try { files = await media(parents.map(id => result.docs.get(id)!).filter(doc => !doc.thingtime.includes('attachment'))); }
-  catch { return fail(422, 'Attached files could not be read completely'); }
-  for (const file of files) {
-   if (result.docs.has(file.shareId)) continue;
-   if (result.docs.size >= MAX_FORK_THINGS) return fail(422, 'This copy has too many Things, files and comments');
-   if (!await visible(file, viewer, async id => result.docs.get(id) || null)) continue;
-   result.docs.set(file.shareId, file);
-   parents.push(file.shareId);
-  }
+		// Attachments are Things too: include their own comment threads. They are
+		// copied through the file lifecycle, never generic createThing.
+		let files: ThingDoc[];
+		try { files = await media(parents.map(id => result.docs.get(id)!).filter(doc => !doc.thingtime.includes('attachment'))); }
+		catch { return fail(422, 'Attached files could not be read completely'); }
+		for (const file of files) {
+			if (result.docs.has(file.shareId)) continue;
+			if (result.docs.size >= MAX_FORK_THINGS) return fail(422, 'This copy has too many Things, files and comments');
+			if (!await visible(file, viewer, async id => result.docs.get(id) || null)) continue;
+			result.docs.set(file.shareId, file);
+			parents.push(file.shareId);
+		}
 
 		const children = await things.find({ thingtime: 'comment', targetId: { $in: parents } } as any)
 			.sort({ createdAt: 1, shareId: 1 }).limit(MAX_FORK_THINGS + 1).toArray() as unknown as ThingDoc[];
@@ -53,4 +53,3 @@ export const resolveForkComposition = async (viewer: Viewer, id: string) => {
 	const composition = await resolveSharedComposition(viewer, id, { contentRoot: true });
 	return isFail(composition) ? composition : includeForkComments(viewer, composition);
 };
-

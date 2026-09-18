@@ -37,7 +37,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 - 2026-09-18 — Fix Copy to my Things for image-only posts and nested comment
   galleries. Copies preserve attachment order/purpose and reply parents, validate
   inspected media, and negotiate `api.things-fork` 1.5.0. Verified with local
-  replica-set API tests and desktop/mobile Chrome. — **Codex (AI)**
+  replica-set API tests and desktop/mobile Chrome. [PR #851 validation notes](../PRs/851-codex-copy-nested-things-fix-copying-nested-comments-and-attachment-galleries.md). — **Codex (AI)**
 
 - **2026-09-18 · Codex (AI):** Fix Enter and the normal send arrow to auto-queue during Lopu replies, remove the separate Queue button, and allow draft attachment editing while replying. Keep Stop visible with a floating send arrow for typed drafts and a compact Send now menu. Remove accepted messages from the queue immediately without releasing the reply lock.
 
