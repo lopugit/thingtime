@@ -1,9 +1,18 @@
-import { useRevalidator } from 'react-router';
+import { useRevalidator, useRouteError } from 'react-router';
+import { useBackgroundRefresh } from '../../hooks/useBackgroundRefresh';
+import { RootDataUnavailableError } from '../../utils/rootDataRecovery';
 
 /** Deliberately outside account/theme providers: no old user content, error
  * payload, stack trace, URL query, or cached profile belongs on this screen. */
 export const RootRecovery = ({ refreshing = false }: { refreshing?: boolean }) => {
 	const revalidator = useRevalidator();
+	const error = useRouteError();
+	useBackgroundRefresh(
+		!refreshing && error instanceof RootDataUnavailableError && error.retryable ? 'root-data-recovery' : null,
+		() => revalidator.state === 'idle' ? revalidator.revalidate() : undefined,
+		30_000,
+		false
+	);
 	const busy = refreshing || revalidator.state !== 'idle';
 	return (
 		<main

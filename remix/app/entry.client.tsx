@@ -10,6 +10,7 @@ import {
 } from './Providers/Chakra/createEmotionCache';
 import { ClientStyleContext } from './Providers/Chakra/emotionContext';
 import { router } from './routes';
+import { bindRootIdentityChannel, rootIdentity } from './utils/rootIdentity';
 import {
   clearStaleChunkReloadGuard,
   reloadForStaleChunk,
@@ -20,6 +21,14 @@ try {
   window.process = window.process || ({ env: {} } as any);
 } catch (err) {
   // nothing
+}
+
+try {
+  const identityChannel = new BroadcastChannel('thingtime:root-identity');
+  const unbind = bindRootIdentityChannel(rootIdentity, identityChannel, () => { void router.revalidate(); });
+  import.meta.hot?.dispose(() => { unbind(); identityChannel.close(); });
+} catch {
+  // Restricted browser contexts may disable cross-tab messaging.
 }
 
 // Stale-chunk self-heal: after a redeploy, an already-open tab still holds the
