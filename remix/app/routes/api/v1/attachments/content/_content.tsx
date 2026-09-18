@@ -1,3 +1,4 @@
+import { withFoundPostBrowser } from '~/api/utils/things/foundPostRequest';
 import { attachmentImageResponse, parseImageWidth } from '~/api/utils/attachments/imageVariants';
 import { json, redirect } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
@@ -43,7 +44,7 @@ export const createAttachmentContentLoader = (overrides: Partial<ContentDependen
 				return json({ ok: false, error: 'Too many attachment requests' }, rateLimitedResponseInit(limit));
 			}
 
-			const audience = await dependencies.enrichViewer(withLinkKeys(viewerOf(user), [url.searchParams.get('key') || '']));
+			const audience = await dependencies.enrichViewer(withLinkKeys(withFoundPostBrowser(viewerOf(user), request, !resolvedUser), [url.searchParams.get('key') || '']));
 			const result = await dependencies.download(
 				// isAdmin rides along so admins can fetch quarantined (blocked)
 				// evidence for moderation review; everyone else 404s on blocked docs.

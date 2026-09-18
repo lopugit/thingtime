@@ -93,3 +93,7 @@ capability tests, 195 schema tests, 101 webpage tests (two environment skips),
 desktop and 390px fixtures pass. The mobile source-refresh assertion now waits
 for an observed fetch after the save, bounded to five seconds, instead of assuming
 React finishes the asynchronous refresh within a fixed 600ms delay.
+
+Main advanced to the media release while opening PR #855. Its changes are
+preserved; Builder lookup authoring now requires `api.things` 1.20.0 (route
+contract 1.19.0), distinguishing it from media release 1.19.0.

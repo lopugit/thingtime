@@ -1,3 +1,5 @@
+import { useCurrentUser } from '~/hooks/useCurrentUser';
+import { SharedMediaProvider } from '~/components/Sharing/SharedMedia';
 import React from 'react';
 import { Box, Button, Center, Flex, Spinner, Text } from '@chakra-ui/react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
@@ -29,6 +31,7 @@ export const PostPage = () => {
   const [searchParams] = useSearchParams();
   const linkKey = (searchParams.get('key') || '').trim();
   const api = useApi();
+  const user = useCurrentUser();
   const navigate = useNavigate();
 
   const [data, setData] = React.useState<ThingResponse | null>(null);
@@ -69,7 +72,7 @@ export const PostPage = () => {
     };
     // api.v1.things.get is a stable useCallback
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, linkKey]);
+  }, [id, linkKey, user?.id]);
 
   const post = data?.post ?? null;
   const isComment = !!post?.thingtime?.includes('comment');
@@ -90,7 +93,7 @@ export const PostPage = () => {
   };
 
   return (
-    <Flex
+    <SharedMediaProvider linkKey={linkKey}><Flex
       justifyContent="center"
       width="100%"
       minHeight="100vh"
@@ -187,7 +190,7 @@ export const PostPage = () => {
           </Box>
         )}
       </Flex>
-    </Flex>
+    </Flex></SharedMediaProvider>
   );
 };
 

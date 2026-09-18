@@ -1839,8 +1839,29 @@ email whose link points at the attacker.
       error tile and full composer at desktop and 390px through the footer.
 - [ ] Pick and drag/drop raster images, a supported video, and an arbitrary
       file. Safe image/video previews appear immediately; each row reports
-      progress; Post stays disabled until every selected file is Ready; and a
-      26th unique file is rejected with the fixed 25-attachment limit message.
+      progress; Post stays disabled until every selected file is Ready; and posts accept more than 25 unique files (including edits and retained linked media).
+      Comments and other purposes retain their existing count limits; upload
+      concurrency, per-file checks and account storage quotas still apply.
+- [ ] With 30 post files and mixed network/finalization failures, Retry all queues
+      only recoverable failures, preserves order and upload identity, and never
+      exceeds three active transfers. Double-click Retry all, then remove a
+      queued file or switch accounts: no duplicate or late upload may appear.
+      Terminal failures remain removable. `scripts/media-gallery-preview.html`
+      exercises the production composer with synthetic transport and no writes.
+- [ ] In feed/profile/post/media pages, upload photo → video → photo. Verify
+      that every layout reads in that order, including mobile's two columns.
+      Open the video in the shared popup, play/pause/seek, step both directions,
+      copy/open its Thingtime permalink, and reload it. Check secret-link media,
+      desktop and 390px layout, long filenames and the bottom of the page.
+      Unrevealed NSFW videos remain shielded and absent from popup navigation.
+- [ ] A profile shows direct-user, current-group, friend and mixed-audience
+      grants; removing a grant hides the post. Undiscovered link-only posts
+      remain absent. Visit a current secret link and return to its author's
+      profile: that account/browser sees the collected post and can reopen its
+      media. A second account/browser cannot. Rotate the key, remove hidden
+      access, block or delete the post: previous discovery no longer authorizes
+      it. Anonymous identity persists via localStorage/cookie; raw bearer tokens,
+      discovery records and private IP metadata never enter public projections.
 - [ ] With Photos off, drop image, video/audio, and generic files onto the
       collapsed post prompt, expanded body editor, and comment/edit composer.
       Photos opens and every file enters the single bounded uploader once.
@@ -7670,3 +7691,4 @@ Local queue-fix validation: `http://localhost:18720/scripts/lopu-queue.browser.h
 - [ ] With an explicitly configured Google key, verify a match, no matches, quota
       denial and timeout. Display attribution. Do not persist provider-derived
       results contrary to Google's rules; run history/source cache omit lookup results.
+- Collected secret posts: open a comment attachment below a post attachment using the collecting anonymous browser; it must load. An unrelated browser, a visibility-scoped token, and the original browser after link rotation must be denied. The home lookup must retain the discovery digest through its database projection.

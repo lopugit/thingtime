@@ -4112,6 +4112,7 @@ export const DEVICE_CONTROL_THINGTIME = ['device-command', 'device-command-event
 export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
 
 export const PROTECTED_THINGTIME = [
+  'post-discovery',
   ...CHAT_ARCHIVE_THINGTIME,
 
   'account-invite',
@@ -4183,7 +4184,7 @@ export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) =>
 // unreachable, unaccounted, and never pruned again — so create/run/delete
 // cycles would re-open exactly the unbounded accumulation the retention cap
 // closes. Cascading is also the only way an owner can ever remove them.
-export const CASCADE_CHILD_THINGTIME = [ATTACHMENT_THINGTIME, 'comment', 'reaction', 'save', 'action-run', 'scheduled-task-run', UPDOWN_THINGTIME, 'lopu-recording-job', 'lopu-recording-reminder', 'lopu-reminder'] as const;
+export const CASCADE_CHILD_THINGTIME = ['post-discovery', ATTACHMENT_THINGTIME, 'comment', 'reaction', 'save', 'action-run', 'scheduled-task-run', UPDOWN_THINGTIME, 'lopu-recording-job', 'lopu-recording-reminder', 'lopu-reminder'] as const;
 
 // Messenger kinds are owned by /api/v1/chats* end to end. Create/update are
 // already refused by the missing crystal sanitizers, and DELETE must be too:
@@ -4345,6 +4346,18 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   webpageSchema,
   actionSchema,
   actionRunSchema,
+  {
+    id: 'post-discovery', version: 1, kind: 'crystal', collection: null,
+    title: 'Collected secret post', summary: 'Private record of a successful secret-link visit.',
+    requiresTarget: true, createdVia: 'GET /api/v1/things?id=...&key=...',
+    detail: 'One protected control Thing per account or anonymous browser and post. targetId identifies the discovered post. Never exposed through generic reads, exports, search or CRUD. Current hidden ACL and key digest are rechecked on every access; rotation or removal revokes the record. Post deletion cascades it. IP metadata is private and does not itself authorize access.',
+    fields: [
+      { name: 'authorId', type: 'id', required: true, system: true, description: 'Author whose profile may list the discovered post.' },
+      { name: 'linkKeyDigest', type: 'string', required: true, system: true, max: 64, description: 'One-way digest of the valid secret link generation.' },
+      { name: 'anonymousId', type: 'id', required: false, system: true, description: 'One-way browser identity, absent for signed-in accounts.' },
+      { name: 'ipAddress', type: 'string', required: false, system: true, max: 45, description: 'Private IP observed when this link generation was collected.' }
+    ], example: { authorId: 'author-id', linkKeyDigest: 'one-way-link-generation-digest' }
+  },
   saveThingSchema,
   voteSchema,
   updownSchema,
