@@ -1604,6 +1604,66 @@ email whose link points at the attacker.
       `remix/public/branding/` + `brandingAssets.generated.json` (byte-stable
       when nothing changed).
 
+## Brand logo SEO — robots.txt, sitemap, Organization JSON-LD (`remix/app/api/utils/seo/`, `remix/app/api/utils/meta/brandIdentity.ts`)
+
+- [ ] `curl -sI https://<origin>/robots.txt` is `200 text/plain` (not the SPA
+      shell); the body has `User-agent: *` / `Allow: /`, an explicit `Allow: /`
+      stanza for each AI crawler in `AI_CRAWLER_USER_AGENTS`, no `Disallow`,
+      and ends with `Sitemap: https://<origin>/sitemap.xml` for **this** origin
+      (a preview must not advertise production's sitemap).
+- [ ] `curl -s https://<origin>/sitemap.xml` is `application/xml` with a
+      `<sitemapindex>` listing `?section=static`, one `?section=posts&page=N`
+      per 500 public posts, `?section=pages&page=N` per 500 public `/p/` pages
+      and `?section=profiles` when anyone has public posts. Every `<loc>`
+      resolves (follow each one) and `Cache-Control` is
+      `public, max-age=300, s-maxage=3600, stale-while-revalidate=86400`.
+- [ ] `?section=static` lists only paths the shell also marks `index, follow`
+      (`indexablePaths.ts`) and carries `<image:image>` entries for
+      `/branding/generated/<slug>/…-1024x….png` + `.svg` for all four variants,
+      every press-kit image, and the icon + wordmark on `/`. Each image URL
+      returns `200 image/*`.
+- [ ] `?section=posts&page=1` contains only `/post/<id>` permalinks that an
+      anonymous `GET /api/v1/things?id=<id>` can read; create a friends-only or
+      hidden post and confirm it never appears; delete a public post and
+      confirm it drops after the edge cache expires. `?section=profiles`
+      contains only authors of public posts (a fresh account with no public
+      posts is absent). `?section=pages` omits route twins (`crystal.siteRoute`).
+- [ ] `?section=posts&page=50` (in range, past the last page) → `404
+      text/plain`; `?section=posts&page=999` (over the 100-page cap),
+      `?section=nope` and `?page=x` → `400 text/plain`; `HEAD` returns headers with an empty body;
+      `POST` → `405` with `Allow: GET, HEAD`. Sending a session cookie or a
+      `x-tt-mongo-url` header changes nothing (the route runs anonymous on the
+      home data plane).
+- [ ] `GET /api/v1/sitemap` (+ the same query strings) returns byte-identical
+      XML to `/sitemap.xml`; `/api/v1/sitemap-docs`, `/robots.txt-docs` and
+      `/sitemap.xml-docs` return the JSON docs payload; all three features
+      appear in `/.well-known/thingtime-capabilities.json` at `1.0.0`.
+- [ ] `npm --prefix remix run sitemap:generate -- --origin https://<origin>`
+      writes `sitemap-out/{robots.txt,sitemap.xml,sitemap-static.xml}` without
+      touching the network; `-- --fetch` additionally mirrors every section from
+      the live API into `sitemap-<section>[-<n>].xml` and rewrites the index to
+      those files. `sitemap-out/` stays untracked.
+- [ ] `curl -s https://<origin>/` and `/branding` each contain one
+      `<script type="application/ld+json">` whose `@graph[2]` is an
+      `Organization` with `logo.url` =
+      `https://<origin>/branding/generated/icon/thingtime-icon-1024x1024.png`
+      (200, square ≥112px), a wordmark `image`, `sameAs` links, and
+      `@graph[0].publisher` pointing at it. Validate with Google's Rich Results
+      Test / Schema.org validator — no warnings on the Organization node.
+- [ ] `/branding` in a browser: the four hero previews are `<img>` elements
+      whose `src` is a committed `/branding/generated/<slug>/…-1024x….png`
+      (not a `data:` URI) with descriptive `alt`; the light/dark panel toggle
+      still swaps the surface; the custom exporter still works.
+- [ ] Landing page (`/`, `/welcome`) and any `<Logo icon theme="nature" />`
+      spot: DevTools shows a real `<img src="/branding/generated/icon/…png">`
+      exactly underneath the voxel grid with identical bounds (no visible
+      double image, no layout shift, hover still fades voxels). A custom
+      `matrix`/`colourMap` `<Logo>` renders no `<img>`.
+- [ ] After changing `logoMatrix.ts`, `brandIdentity.ts` paths or
+      `indexablePaths.ts`, `npm --prefix remix run test:seo` and
+      `test:social-previews` pass, and re-run `branding-assets` so the
+      Organization logo path still exists.
+
 ## Marketing suite (`remix/app/routes/marketing/`, `remix/app/components/Marketing/`, `remix/app/marketing/`)
 
 - [ ] `npm --prefix remix run test:marketing` passes: 1000+ pages, 1000+ social

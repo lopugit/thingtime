@@ -154,7 +154,8 @@ export const BrandAssetSection = ({
   slug,
   matrix,
   colourMap,
-  manifest
+  manifest,
+  alt
 }: {
   eyebrow: string;
   title: string;
@@ -163,6 +164,8 @@ export const BrandAssetSection = ({
   matrix: LogoMatrix;
   colourMap: LogoColourMap;
   manifest?: ManifestVariant;
+  // Descriptive alt text for image search; defaults to `Thingtime <title> logo`.
+  alt?: string;
 }) => {
   const lopu = useLopu();
   const [panel, setPanel] = React.useState<'light' | 'dark'>('light');
@@ -215,6 +218,12 @@ export const BrandAssetSection = ({
   };
 
   const defaultPng = manifest?.pngs.find((png) => png.w === 1024) ?? manifest?.pngs[manifest.pngs.length - 1];
+  // Crawlable preview: search engines never index data: URIs, so the hero
+  // <img> points at the committed PNG (SVG fallback) whenever the ready-made
+  // manifest has this variant; the client-built SVG only covers custom
+  // matrices that have no generated file. Both render identical pixels.
+  const previewSrc = defaultPng?.url ?? manifest?.svg.url ?? previewUri;
+  const previewAlt = alt ?? `Thingtime ${title} logo`;
 
   return (
     <Box as="section" id={slug} pt={{ base: '72px', md: '112px' }}>
@@ -247,8 +256,10 @@ export const BrandAssetSection = ({
         transition="background 200ms ease"
       >
         <img
-          src={previewUri}
-          alt={`Thingtime ${title} logo`}
+          src={previewSrc}
+          alt={previewAlt}
+          width={defaultPng?.w ?? columns}
+          height={defaultPng?.h ?? rows}
           style={{
             imageRendering: 'pixelated',
             width: horizontal ? 'min(100%, 640px)' : 'min(46%, 208px)',

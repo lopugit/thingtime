@@ -18,3 +18,5 @@ tmp/*
 
 # Local media QA process settings
 .media-cache-qa.config.cjs
+# offline sitemap generator output (npm run sitemap:generate)
+sitemap-out/

@@ -30,7 +30,8 @@ const SECTIONS = [
     description:
       'Nine voxel glyphs spelling Thingtime — the full lock-up for headers, docs, decks and anywhere the brand introduces itself. It ships trimmed to the pixel: no baked-in whitespace, ever.',
     matrix: LOGO_FULL_MATRIX,
-    colourMap: LOGO_THEMES.default
+    colourMap: LOGO_THEMES.default,
+    alt: 'Thingtime logo — the full-colour voxel wordmark spelling Thingtime'
   },
   {
     slug: 'icon',
@@ -39,7 +40,8 @@ const SECTIONS = [
     description:
       'Thingtime distilled to five voxels — a leafy little tree. Reach for it when space is tight: avatars, favicons, app grids, pixel jewellery.',
     matrix: LOGO_ICON_MATRIX,
-    colourMap: LOGO_THEMES.default
+    colourMap: LOGO_THEMES.default,
+    alt: 'Thingtime icon — the five-voxel tree logo mark'
   },
   {
     slug: 'logo-pink',
@@ -48,7 +50,8 @@ const SECTIONS = [
     description:
       'The single-colour cut for stickers, stamps, embroidery and moments that call for maximum 🩷. Same voxels, one colour.',
     matrix: LOGO_FULL_MATRIX,
-    colourMap: LOGO_THEMES.pink
+    colourMap: LOGO_THEMES.pink,
+    alt: 'Thingtime logo — single-colour hotpink voxel wordmark'
   },
   {
     slug: 'icon-pink',
@@ -56,7 +59,8 @@ const SECTIONS = [
     title: 'The tree in hotpink',
     description: 'The five-voxel tree in one colour — engraving, laser cutting, single-ink print, tiny UI moments.',
     matrix: LOGO_ICON_MATRIX,
-    colourMap: LOGO_THEMES.pink
+    colourMap: LOGO_THEMES.pink,
+    alt: 'Thingtime icon — single-colour hotpink voxel tree logo mark'
   }
 ];
 

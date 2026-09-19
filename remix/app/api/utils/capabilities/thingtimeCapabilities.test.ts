@@ -363,6 +363,15 @@ test('upload burst correction is published by both manifests and rejects old or 
 	for (const version of ['1.4.1', '1.4.2', '1.5.0']) assert.equal(capabilitySatisfies(version, '1.4.1'), true);
 });
 
+test('crawler discovery endpoints publish their root paths and -docs twins on the origin manifest', () => {
+  const manifest = thingtimeCapabilityManifest('https://thingtime.test');
+  for (const feature of ['api.sitemap', 'api.seo-robots', 'api.seo-sitemap']) assert.equal(manifest.features[feature]?.version, '1.0.0', feature);
+  const paths = (feature: string) => manifest.operations.filter((operation) => operation.feature === feature).map((operation) => operation.path).sort();
+  assert.deepEqual(paths('api.seo-robots'), ['/robots.txt', '/robots.txt-docs']);
+  assert.deepEqual(paths('api.seo-sitemap'), ['/sitemap.xml', '/sitemap.xml-docs']);
+  assert.deepEqual(paths('api.sitemap'), ['/api/v1/sitemap', '/api/v1/sitemap-docs']);
+});
+
 test('inherited audience clients negotiate the additive read and ancestor moderation contracts', () => {
   const manifest = thingtimeCapabilityManifest('https://thingtime.test');
   for (const [id, minimum, previous] of [['api.things', '1.21.0', '1.20.0'], ['api.attachment-content', '1.8.1', '1.8.0']]) {

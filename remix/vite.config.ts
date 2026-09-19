@@ -8,6 +8,7 @@ import { defineConfig, type Plugin } from 'vite';
 
 import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './app/api/utils/capabilities/capabilityContract';
 import { APPLE_APP_ASSOCIATION_PATH } from './app/api/utils/auth/appleAppAssociation';
+import { ROBOTS_PATH, SITEMAP_PATH } from './app/api/utils/seo/sitemapCore';
 import { installPreviewBuildFreshness } from './app/utils/previewBuildFreshness';
 import { designBundlesCsp, devCsp } from './scripts/csp.mjs';
 
@@ -217,6 +218,22 @@ const embedBundleDevPlugin = () => ({
   }
 });
 
+// Proxy to the local Nitro while preserving the browser-facing host/proto (an
+// upstream proxy's x-forwarded-* wins), so origin-derived output stays correct.
+const forwardHostProxy = (target: string) => ({
+  target,
+  changeOrigin: true,
+  configure(proxy: any) {
+    proxy.on('proxyReq', (proxyReq: any, req: any) => {
+      const host = req.headers.host;
+      if (!host || proxyReq.getHeader('x-forwarded-host')) return;
+      proxyReq.setHeader('x-forwarded-host', host);
+      const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0]?.trim();
+      proxyReq.setHeader('x-forwarded-proto', proto || 'http');
+    });
+  }
+});
+
 export default defineConfig({
   build: {
     outDir: 'dist',
@@ -255,6 +272,11 @@ export default defineConfig({
         }
       },
       [APPLE_APP_ASSOCIATION_PATH]: { target: localApiTarget, changeOrigin: true },
+      // Crawler discovery files are Nitro routes (server/handlers/{robots,sitemap}.ts);
+      // prefix matching also covers their -docs twins. Forward the browser host so
+      // the robots Sitemap: line and every sitemap <loc> name this dev origin.
+      [ROBOTS_PATH]: forwardHostProxy(localApiTarget),
+      [SITEMAP_PATH]: forwardHostProxy(localApiTarget),
       [THINGTIME_CAPABILITY_MANIFEST_PATH]: {
         target: localApiTarget,
         changeOrigin: true,
