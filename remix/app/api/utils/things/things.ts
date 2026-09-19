@@ -1,3 +1,4 @@
+import type { ResolvedAudience } from '~/components/Sharing/audienceCore';
 import { FOUND_POST_KIND, FOUND_POST_PREFIX, foundPostViewerId, foundPostGrantMatches, withFoundPostGrant, loadFoundPostsForAuthor, rememberFoundPost } from './foundPosts';
 import { ownerLibraryMatch } from './ownerLibraryQuery';
 import { moveManagedContent } from './managedPlacement';
@@ -338,6 +339,7 @@ export type PublicComment = {
 };
 
 export type PublicPost = {
+  audience?: ResolvedAudience;
   id: string;
   thingtime: string[];
   type: PostType;
@@ -433,6 +435,7 @@ export type PublicSubspaceMod = {
 
 // Generic projection for non-post things (and the unified read endpoint).
 export type PublicThing = {
+  audience?: ResolvedAudience;
   id: string;
   thingtime: string[];
   author: FeedAuthor | null;
@@ -2300,6 +2303,7 @@ const authorFlairFor = (flairs: AuthorFlairs, embed: SubspaceEmbed | null, subsp
 // replies that already ship rather than re-querying per parent — the
 // non-intrusive half the spec allowed; the docs say so.
 export type PostProjectionOptions = {
+  resolveAudience?: boolean;
   rememberDiscovery?: boolean;
   discoveryIp?: string;
   commentSort?: CommentSort | null;
@@ -2323,6 +2327,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   const originalsById = new Map(originals.map((doc) => [doc.shareId, doc]));
 
   const allDocs = [...docs, ...originals];
+  const audiences = options.resolveAudience ? await resolvePublicAudiences(allDocs, viewer) : new Map<string, ResolvedAudience>();
   // One batched pass each: interactions, whole-thread comment totals,
   // protected attachment metadata, and public view stats. Run them together
   // so neither attachments nor views add serial read latency.
@@ -2510,6 +2515,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       thingtime: thingtimeOf(doc),
       type: (crystal.type as PostType) || 'text',
       author: profiles.get(doc.ownerId) || null,
+      audience: audiences.get(doc.shareId),
       visibility: visibilityFromAcl(aclOf(doc)) as PostVisibility,
       acl: aclOf(doc),
       // owner-only: the hidden-link secret, only while the acl says hidden
@@ -2578,10 +2584,10 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   return docs.map((doc) => project(doc, true));
 };
 
-export const toPublicThings = async (docs: ThingDoc[], viewerInput: string | Viewer): Promise<PublicThing[]> => {
+export const toPublicThings = async (docs: ThingDoc[], viewerInput: string | Viewer, resolveAudience = false): Promise<PublicThing[]> => {
   if (!docs.length) return [];
   const viewer = asViewer(viewerInput);
-  const profiles = await resolveProfiles(docs.map((doc) => doc.ownerId));
+  const [profiles, audiences] = await Promise.all([resolveProfiles(docs.map((doc) => doc.ownerId)), resolveAudience ? resolvePublicAudiences(docs, viewer) : Promise.resolve(new Map<string, ResolvedAudience>())]);
   return docs.map((doc) => {
     // token grants are owner-facing management data, not audience — only the
     // owner's own credentials (session or their tokens) see them
@@ -2596,6 +2602,7 @@ export const toPublicThings = async (docs: ThingDoc[], viewerInput: string | Vie
       id: doc.shareId,
       thingtime: thingtimeOf(doc),
       author: profiles.get(doc.ownerId) || null,
+      audience: audiences.get(doc.shareId),
       visibility: visibilityFromAcl(aclOf(doc)),
       acl: aclOf(doc),
       ...(linkKey ? { linkKey } : {}),
@@ -2620,6 +2627,26 @@ export const toPublicThings = async (docs: ThingDoc[], viewerInput: string | Vie
 // it so one evaluation path serves both eras.
 
 const aclOf = (doc: ThingDoc): string[] => (Array.isArray(doc.acl) && doc.acl.length ? doc.acl : aclFromVisibility(doc.visibility) || [ACL_OWNER]);
+
+// Display the actual inherited audience without changing the stored child ACL.
+// One cached, coalesced lookup per ancestry level for the entire page. A key
+// may only be re-shared by its owner or a viewer who already presented it;
+// membership and a remembered discovery never disclose the parent's secret.
+export const resolvePublicAudiences = async (
+  docs: ThingDoc[], viewer: Viewer, lookup = batchedThingLookup()
+): Promise<Map<string, ResolvedAudience>> => {
+  const known = new Map(docs.map(doc => [doc.shareId, doc]));
+  const find = async (id: string) => known.get(id) || lookup(id);
+  const entries = await Promise.all(docs.map(async doc => {
+    const terminal = await resolveInheritChain(doc, d => aclOf(d).includes(ACL_INHERIT), find);
+    const acl = terminal ? aclOf(terminal) : [ACL_OWNER];
+    const key = terminal?.linkKey;
+    const linkKey = key && acl.includes(ACL_HIDDEN) &&
+      (viewer?.id === terminal.ownerId || viewer?.linkKeys?.has(key)) ? key : undefined;
+    return [doc.shareId, { sourceId: terminal?.shareId || doc.shareId, acl, ...(linkKey ? { linkKey } : {}) }] as const;
+  }));
+  return new Map(entries);
+};
 
 export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
 	// Operational diagnostics have a stricter boundary than ordinary private
@@ -2727,7 +2754,15 @@ export const canViewInherited = async (
 	) {
 		return false;
 	}
-  const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findByShareId);
+  let ancestorDenied = false;
+  const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), async id => {
+    const ancestor = await findByShareId(id);
+    if (ancestor && (attachmentIsBlocked(ancestor as any) ||
+      (attachmentModerationStatus(ancestor as any) === 'pending' &&
+       thingtimeOf(ancestor).some(kind => TEXT_MODERATED_THINGTIMES.has(kind)) && ancestor.ownerId !== viewer?.id))) ancestorDenied = true;
+    return ancestor;
+  });
+  if (ancestorDenied) return false;
   if (terminal) {
     if (canView(terminal, viewer)) return true;
     if (isCustomMongoEndpointActive()) return false;
@@ -3349,7 +3384,7 @@ export const getThing = async (
     const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findThing);
     if (terminal && canView(terminal, viewer)) await rememberFoundPost(viewer, terminal, options.discoveryIp);
   }
-  const thing = (await toPublicThings([doc], viewer))[0];
+  const thing = (await toPublicThings([doc], viewer, !app))[0];
 
   // App consumers get the generic thing shape only: the PublicPost projection
   // batch-embeds comments/reactions across ALL viewers (scope-blind), so it
@@ -3366,7 +3401,7 @@ export const getThing = async (
 	// aggregates (those resolvers are target-generic), and the parent walk
 	// links the page back to the post the media is bound to.
 	const isMediaAttachment = thingtimeOf(doc).includes('attachment');
-	const post = isPostThing(doc) || isComment || isMediaAttachment ? (await toPublicPosts([doc], viewer, options))[0] : null;
+	const post = isPostThing(doc) || isComment || isMediaAttachment ? (await toPublicPosts([doc], viewer, { ...options, resolveAudience: true }))[0] : null;
 
   let parent: PublicPost | null = null;
   let root: PublicPost | null = null;
@@ -3382,7 +3417,7 @@ export const getThing = async (
       if (!up || !up.shareId || seenChain.has(up.shareId)) break;
       seenChain.add(up.shareId);
       chain.push(up);
-      if (!thingtimeOf(up).includes('comment')) break;
+      if (!aclOf(up).includes(ACL_INHERIT)) break;
       cursor = up;
     }
     // Each canViewInherited re-walks that entry's own ACL chain, so checking
@@ -3396,7 +3431,7 @@ export const getThing = async (
     const verdicts = await Promise.all(chain.map((entry) => canViewInherited(entry, viewer, lookup)));
     const visibleChain = chain.filter((_, index) => verdicts[index]);
     if (visibleChain.length) {
-      const projected = await toPublicPosts([...new Map(visibleChain.map((entry) => [entry.shareId, entry])).values()], viewer, options);
+      const projected = await toPublicPosts([...new Map(visibleChain.map((entry) => [entry.shareId, entry])).values()], viewer, { ...options, resolveAudience: true });
       const byId = new Map(projected.map((entry) => [entry.id, entry]));
       parent = byId.get(chain[0]?.shareId) || null;
       const last = chain[chain.length - 1];

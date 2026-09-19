@@ -5898,13 +5898,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-content',
-		contractVersion: '1.8.0',
-		featureVersion: '1.8.0',
+		contractVersion: '1.8.1',
+		featureVersion: '1.8.1',
 		group: 'attachments',
 		title: 'Read attachment content',
 		endpoint: '/api/v1/attachments/content',
 		summary: 'Authorizes a stable same-origin attachment URL and redirects to short-lived private S3 content.',
 		detail:
+			'Inherited comment media also enforce moderation on every intervening ancestor, including comments on media. ' +
 			'Previously collected hidden posts also authorize their bound media for the exact signed-in account or anonymous browser cookie. Current hidden ACL, key generation, moderation and storage gates are rechecked on every request. IP metadata never grants access. ' +
 			'Comment galleries follow canonical visibility inheritance through parent comments and media items, including after copying. ' +
 			'Subspace branding images require a live subspace and the exact current icon/banner slot binding. Branding is public directory identity even for private subspaces; replaced or deleted slots grant no public access. ' +
@@ -8991,13 +8992,14 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     // stay excluded (additive, on top of the sharedRoot correction)
     // Includes additive discussions and the 1.7.5 conditional-media write correction.
     // Builder SDK: action definitions accept registered provider lookup capabilities.
-    featureVersion: '1.20.0',
-    contractVersion: '1.19.0',
+    featureVersion: '1.21.0',
+    contractVersion: '1.20.0',
     group: 'things',
     title: 'Things (full CRUD)',
     endpoint: '/api/v1/things',
     summary: 'One endpoint for every thing: create, read, update/upsert, and delete posts, comments, reactions, and shares. OAuth app tokens may use explicitly approved account Things permissions; legacy picker and app-storage grants retain their prior boundaries.',
     detail:
+      'First-party single-Thing reads include audience: {sourceId, acl, linkKey?} on the Thing and post/parent/root cards, resolving the full inherited chain without altering the stored child acl. The ancestor key is returned only to its owner or a viewer who already presented that exact key; group membership and remembered discovery alone never disclose it. App-namespace projections do not include audience. Missing/cyclic chains fail closed, and blocked/pending ancestors constrain descendant access. ' +
       'Action definitions support lookup steps with registered provider capabilities and literal Vault entry ids; see /docs/builder/lookups. Component native uploads also accept initial value and attachmentId props for editing saved records. ' +
 			'Post creation and attachment sync have no attachment-count cap; ordered relational attachments still require unique owned ready ids, storage quota, upload approval and the bounded JSON body. Comment/message/profile limits remain unchanged. ' +
 			'Optional geo: {lat,lng} on create/update stores a validated geographic Point (lat -90..90, lng -180..180); null removes location and omission preserves it on PATCH. Read projections expose lat/lng only under the same Thing ACL. Location is explicitly supplied, never inferred from the author. The archive emoji projection recognizes the canonical persisted attachment purpose emoji (the upload API alias is custom-emoji). ' +

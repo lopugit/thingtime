@@ -34,6 +34,12 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- **2026-09-19 · Codex (AI):** Keep inherited secret-link context through nested
+  comment/media galleries, standalone share menus and parent navigation. Show
+  the resolved parent audience beside privacy icons; enforce intermediate
+  moderation gates and negotiate the additive audience read contract.
+  Details: [PR #857](../PRs/857-codex-inherited-media-audience-preserve-inherited-media-sharing.md).
+
 - **2026-09-18 · Codex (AI):** Preserve the mounted page and unsaved UI state when
   a background session read temporarily fails. Recover initial session failures
   on return/reconnect, and invalidate same-origin tabs on account changes.

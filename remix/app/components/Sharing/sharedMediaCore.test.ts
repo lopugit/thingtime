@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { sharedAttachmentUrl } from './sharedMediaCore';
+import { sharedAttachmentUrl, sharedThingPath } from './sharedMediaCore';
 import { literalAttachmentId, mapCssMediaUrls, mapRenderMediaProps } from './renderMediaCore';
 
 const fixtureUrl = '/api/v1/attachments/content?id=css-image';
@@ -109,4 +109,13 @@ test('unresolved template media is left for the runtime, in props and in CSS ali
 		mapCssMediaUrls(value, (url) => { const id = literalAttachmentId(url); if (id) ids.push(id); return url; });
 		assert.equal(ids.length > 0, mapCssMediaUrls(value, withContext) !== value, value);
 	}
+});
+
+test('post, comment, media and Thing links retain their authorized share context', () => {
+  for (const path of ['/post/comment', '/media/att_nested', '/thing/child']) {
+    assert.equal(sharedThingPath(path, 'parent-secret', 'root'), `${path}?key=parent-secret&sharedRoot=root`);
+  }
+  assert.equal(sharedThingPath('/media/own?key=own', 'parent'), '/media/own?key=own');
+  for (const path of ['https://external.test/media/att', '//external.test/post/a', '/profile/user', '/api/v1/things'])
+    assert.equal(sharedThingPath(path, 'secret'), path);
 });

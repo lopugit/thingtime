@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { canViewInherited, layeredPostCommentCounts, RELATED_CHILD_PROJECTION, viewerOf, visibleRelatedModerationClause, type ThingDoc } from './things.ts';
+import { canViewInherited, resolvePublicAudiences, layeredPostCommentCounts, RELATED_CHILD_PROJECTION, viewerOf, visibleRelatedModerationClause, type ThingDoc } from './things.ts';
 
 test('related child projection preserves rich comment media layouts', () => {
   assert.equal(RELATED_CHILD_PROJECTION['crystal.mediaLayout'], 1);
@@ -55,4 +55,58 @@ test('an owner can recover an orphaned attachment permalink, but nobody else can
 		await canViewInherited(attachment, viewerOf({ id: 'owner-1', username: 'owner' }, { jti: 'pat-1', visibility: 'private' }), missingTarget),
 		false
 	);
+});
+
+const inheritanceFixture = (acl: string[]) => {
+  const root = { shareId: 'root', ownerId: 'author', thingtime: ['post'], acl, linkKey: 'parent-secret' } as ThingDoc;
+  const comment = { shareId: 'comment', ownerId: 'commenter', thingtime: ['post', 'comment'], acl: ['tt:inherit'], targetId: 'root' } as ThingDoc;
+  const media = { shareId: 'media', ownerId: 'commenter', thingtime: ['attachment'], acl: ['tt:inherit'], targetId: 'comment' } as ThingDoc;
+  const reply = { shareId: 'reply', ownerId: 'reply-author', thingtime: ['post', 'comment'], acl: ['tt:inherit'], targetId: 'media' } as ThingDoc;
+  const nestedMedia = { ...media, shareId: 'nested-media', targetId: 'reply', ownerId: 'reply-author' };
+  const docs = [root, comment, media, reply, nestedMedia];
+  return { root, comment, docs, lookup: async (id: string) => docs.find(doc => doc.shareId === id) || null };
+};
+
+test('nested comments and media follow the same hidden key and mixed audience as their root', async () => {
+  const { docs, lookup } = inheritanceFixture(['tt:custom', 'tt:user', 'tt:hidden', 'tt:group/family', 'tt:user/friend']);
+  for (const doc of docs.slice(1)) {
+    assert.equal(await canViewInherited(doc, { id: null, linkKeys: new Set(['parent-secret']) } as any, lookup), true);
+    assert.equal(await canViewInherited(doc, { id: 'member', groupIds: new Set(['family']) } as any, lookup), true);
+    assert.equal(await canViewInherited(doc, { id: 'direct', username: 'friend' } as any, lookup), true);
+    assert.equal(await canViewInherited(doc, null, lookup), false);
+    assert.equal(await canViewInherited(doc, { id: null, linkKeys: new Set(['wrong']) } as any, lookup), false);
+  }
+});
+
+test('inherited projection retains the exact root ACL and exposes only an already-held key', async () => {
+  const { docs, root, lookup } = inheritanceFixture(['tt:custom', 'tt:user', 'tt:hidden', 'tt:group/family', '-tt:user/blocked']);
+  for (const viewer of [{ id: 'author' }, { id: null, linkKeys: new Set(['parent-secret']) }]) {
+    const projected = await resolvePublicAudiences(docs, viewer as any, lookup);
+    for (const doc of docs) assert.deepEqual(projected.get(doc.shareId), { sourceId: 'root', acl: root.acl, linkKey: 'parent-secret' });
+  }
+  for (const viewer of [{ id: 'commenter' }, { id: 'member', groupIds: new Set(['family']) }, null]) {
+    const projected = await resolvePublicAudiences(docs, viewer as any, lookup);
+    assert.equal(projected.get('nested-media')?.linkKey, undefined);
+  }
+  root.acl = ['tt:group/family'];
+  const projected = await resolvePublicAudiences(docs, { id: 'author' } as any, lookup);
+  assert.deepEqual(projected.get('nested-media'), { sourceId: 'root', acl: root.acl });
+  assert.equal(await canViewInherited(docs[4], { id: null, linkKeys: new Set(['parent-secret']) } as any, lookup), false);
+});
+
+test('an intervening blocked or pending comment also hides its media descendants', async () => {
+  const { docs, comment, lookup } = inheritanceFixture(['tt:all']);
+  (comment as any).moderation = { status: 'blocked' } as any;
+  assert.equal(await canViewInherited(docs[4], null, lookup), false);
+  (comment as any).moderation = { status: 'pending' } as any;
+  assert.equal(await canViewInherited(docs[4], null, lookup), false);
+  assert.equal(await canViewInherited(docs[4], { id: 'commenter' } as any, lookup), true);
+});
+
+test('cycles and deleted parents disclose no inherited audience or key', async () => {
+  const { docs, comment, lookup } = inheritanceFixture(['tt:hidden']);
+  comment.targetId = 'media';
+  assert.equal(await canViewInherited(docs[4], null, lookup), false);
+  const projected = await resolvePublicAudiences([docs[4]], { id: 'author' } as any, lookup);
+  assert.deepEqual(projected.get('nested-media'), { sourceId: 'nested-media', acl: ['tt:user'] });
 });
