@@ -1,5 +1,5 @@
 import { getThingsCollection } from '../mongodb/collections';
-import { batchedThingLookup, canViewInherited, fail, isFail, toPublicThings, type Fail, type ThingDoc, type Viewer } from '../things/things';
+import { batchedThingLookup, withThingLink, canViewInherited, fail, isFail, toPublicThings, type Fail, type ThingDoc, type Viewer } from '../things/things';
 import { compositionReferences } from './sharedCompositionCore';
 import { canForkThing } from '~/components/Sharing/forkThingCore';
 import { compositionAttachmentIds } from './compositionMediaCore';
@@ -76,6 +76,7 @@ export type SharedComposition = {
 export const resolveSharedComposition = async (viewer: Viewer, id: string, options: { contentRoot?: boolean } = {}): Promise<SharedComposition | Fail> => {
 	const collection = await getThingsCollection();
 	const root = await collection.findOne({ shareId: id } as any) as unknown as ThingDoc | null;
+	viewer = withThingLink(viewer, id);
 	if (!root || !(await canViewInherited(root, viewer)) || !(options.contentRoot ? canForkThing(root) : root.thingtime?.some((kind) => ['webpage', 'component', 'action'].includes(kind)))) {
 		return fail(404, 'Shared app not found');
 	}

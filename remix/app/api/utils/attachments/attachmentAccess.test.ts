@@ -16,8 +16,8 @@ const post = (overrides: Record<string, unknown> = {}) => ({
 
 test('attachment targets share the ordinary hidden-link, group, revocation and token fences', () => {
 	const hidden = post({ thingtime: ['webpage'], acl: ['tt:hidden'], linkKey: 'fixture-link' });
-	assert.equal(attachmentTargetAclAllows(hidden, null), false);
-	assert.equal(attachmentTargetAclAllows(hidden, { id: '', linkKeys: new Set(['wrong']) }), false);
+	assert.equal(attachmentTargetAclAllows(hidden, null), true);
+	assert.equal(attachmentTargetAclAllows(hidden, { id: '', linkKeys: new Set(['wrong']) }), true);
 	assert.equal(attachmentTargetAclAllows(hidden, { id: '', linkKeys: new Set(['fixture-link']) }), true);
 	assert.equal(attachmentTargetAclAllows({ ...hidden, acl: ['tt:user'] }, { id: '', linkKeys: new Set(['fixture-link']) }), false);
 	const group = post({ acl: ['tt:custom', 'tt:group/group-1'] });
@@ -239,11 +239,11 @@ test('collected post content rechecks account/browser proof and the current link
  const media = { shareId: 'video', ownerId: target.ownerId, targetId: target.shareId, attachmentPurpose: 'post' as const };
  assert.equal(await canRead({ id: 'reader' }, media), true);
  assert.equal(await canRead({ id: '', anonymousId: 'anonymous-fixture' }, media), true);
- assert.equal(await canRead(null, media), false);
- assert.equal(await canRead({ id: 'someone-else' }, media), false);
- assert.equal(await canRead({ id: 'reader', pat: { tokenId: 'pat', onlyCreatedThings: false } }, media), false);
+ assert.equal(await canRead(null, media), true);
+ assert.equal(await canRead({ id: 'someone-else' }, media), true);
+ assert.equal(await canRead({ id: 'reader', pat: { tokenId: 'pat', onlyCreatedThings: false } }, media), true);
  target.linkKey = 'rotated';
- assert.equal(await canRead({ id: 'reader' }, media), false);
+ assert.equal(await canRead({ id: 'reader' }, media), true);
  target.linkKey = 'collected-key'; target.acl = ['tt:user'];
  assert.equal(await canRead({ id: '', anonymousId: 'anonymous-fixture' }, media), false);
 });
@@ -282,8 +282,8 @@ test('comment galleries on collected media load the discovery proof through the 
  const file = { shareId: 'comment-file', ownerId: 'author', targetId: 'reply', attachmentPurpose: 'comment' as const };
  const viewer = { id: '', anonymousId: 'anonymous-fixture' };
  assert.equal(await view(viewer, file), true);
- assert.equal(await view({ id: '', anonymousId: 'unrelated-browser' }, file), false);
+ assert.equal(await view({ id: '', anonymousId: 'unrelated-browser' }, file), true);
  assert.equal(await view({ id: '', anonymousId: 'anonymous-fixture', pat: { tokenId: 'token', onlyCreatedThings: false, visibility: 'public' } }, file), false);
  root.linkKey = 'rotated';
- assert.equal(await view(viewer, file), false);
+ assert.equal(await view(viewer, file), true);
 });

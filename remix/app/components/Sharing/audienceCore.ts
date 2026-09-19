@@ -10,7 +10,7 @@ export const THING_AUDIENCE_META: Record<ThingAudience, { label: string; emoji: 
 	friends: { label: 'Friends', emoji: '🤝', hint: 'Your friends circle' },
 	family: { label: 'Family', emoji: '🏡', hint: 'Your family circle' },
 	private: { label: 'Private', emoji: '🔒', hint: 'Only you' },
-	hidden: { label: 'Anyone with the link', emoji: '🕵️', hint: 'Unlisted — anyone holding its secret link can view' },
+	hidden: { label: 'Anyone with the link', emoji: '🕵️', hint: 'Unlisted — anyone with its URL can view' },
 	custom: { label: 'Custom', emoji: '🎭', hint: 'Pick people or groups and choose read, comment, or edit' }
 };
 
@@ -73,12 +73,10 @@ export const thingPath = (thing: Pick<LinkableThing, 'id' | 'thingtime'>): strin
 	return universalThingLink(thing.id);
 };
 
-// Hidden-link access is guaranteed on the post, webpage, and universal Thing
-// readers. Other dedicated routes do not consume bearer keys, so their
-// secret links intentionally land on the universal reader instead.
+// Unlisted Things use canonical exact-id readers, without secret query parameters.
+// Other kind browsers may be listing-oriented, so use the universal reader there.
 export const sharePathForThing = (thing: LinkableThing): string => {
-	const key = thing.audience?.linkKey || thing.linkKey;
-	const hidden = !!key && !!(thing.audience?.acl || thing.acl)?.includes('tt:hidden');
+	const hidden = !!(thing.audience?.acl || thing.acl)?.includes('tt:hidden');
 	if (!hidden) return thingPath(thing);
 	const base = thing.thingtime.includes('attachment')
 		? `/media/${encodeURIComponent(thing.id)}`
@@ -87,7 +85,7 @@ export const sharePathForThing = (thing: LinkableThing): string => {
 		: thing.thingtime.includes('webpage')
 		? `/p/${encodeURIComponent(thing.id)}`
 		: universalThingLink(thing.id);
-	return `${base}?key=${encodeURIComponent(key!)}`;
+	return base;
 };
 
 // Never enumerate a group's private roster just to explain its audience.

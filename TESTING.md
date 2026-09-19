@@ -7761,17 +7761,20 @@ Local queue-fix validation: `http://localhost:18720/scripts/lopu-queue.browser.h
 - [ ] With an explicitly configured Google key, verify a match, no matches, quota
       denial and timeout. Display attribution. Do not persist provider-derived
       results contrary to Google's rules; run history/source cache omit lookup results.
-- Collected secret posts: open a comment attachment below a post attachment using the collecting anonymous browser; it must load. An unrelated browser, a visibility-scoped token, and the original browser after link rotation must be denied. The home lookup must retain the discovery digest through its database projection.
+- Collected unlisted posts: visiting a bare URL saves discovery for the signed-in
+  account or saved anonymous browser identity. A different browser can open the
+  URL but must not inherit that collection on profile listings. IP alone grants
+  no collection. Removing the link audience revokes anonymous access.
 
+## Canonical unlisted links and inherited audiences (2026-09-19)
 
-## Inherited attachment audiences and share links (2026-09-19)
-
-- Open an unlisted post as its owner, then open media in a comment or a reply on
-  another media Thing. Gallery links, the standalone Share button, Copy link,
-  timestamp and parent/root breadcrumbs must retain the original secret key.
-  Paste the copied URL into a fresh anonymous browser: the page and bytes load.
-  A bare URL or wrong key must not grant access; rotating/removing the root key
-  revokes the old URL. Group and direct recipients retain exactly their root access.
+- Open an unlisted or mixed people/group/link post as an allowed viewer, then
+  open its comment video. Gallery Copy link, Share, menus and breadcrumbs use
+  the canonical Thingtime URL without `key`. Paste into a fresh anonymous
+  browser: both the page and video bytes must load. Repeat for nested comments.
+  Legacy keyed URLs still work, but changing a key cannot revoke a known base
+  URL: remove “Anyone with the link” to revoke anonymous access. Group-only and
+  private posts remain restricted, including their comments and media.
 - Child cards show the root privacy icon and muted audience summary, including
   mixed people/group/link audiences. Never list a group's private member roster.
   Blocked/pending intermediate comments hide their descendant media as well.

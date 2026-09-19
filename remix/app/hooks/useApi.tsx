@@ -936,15 +936,15 @@ export function useApi() {
 			// sharedRoot scopes a dependency read to an authorized composition.
 			get: useCallback(
 				async (args, options?: { signal?: AbortSignal }) => {
-          await requireThingtimeCapability('api.things', '1.21.0');
-          await requireThingtimeCapability('api.attachment-content', '1.8.1');
+          await requireThingtimeCapability('api.things', '1.22.0');
+          await requireThingtimeCapability('api.attachment-content', '1.9.0');
           return getJson(`/api/v1/things${toQuery({ id: args?.id, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, options);
         },
 				[]
 			),
       list: useCallback(
         async (args) => {
-          if (!args?.target) await requireThingtimeCapability('api.things', '1.14.0');
+          await requireThingtimeCapability('api.things', args?.target ? '1.22.0' : '1.14.0');
           return getJson(
             `/api/v1/things${toQuery({
               target: args?.target,
@@ -1043,18 +1043,23 @@ export function useApi() {
         [asyncFetcher]
       ),
       react: useCallback(
-        async (args) =>
-					asyncFetcher.submit({ id: args?.id, emoji: args?.emoji ?? null }, { action: '/api/v1/things/react', errorContext: 'save your reaction' }),
+        async (args) => {
+          await requireThingtimeCapability('api.things-react', '1.2.0');
+          return asyncFetcher.submit({ id: args?.id, emoji: args?.emoji ?? null }, { action: '/api/v1/things/react', errorContext: 'save your reaction' });
+        },
         [asyncFetcher]
       ),
       // toggle a private "add to my library" save on any visible thing
-      save: useCallback(async (args) => asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things/save' }), [asyncFetcher]),
+      save: useCallback(async (args) => {
+        await requireThingtimeCapability('api.things-save', '1.2.0');
+        return asyncFetcher.submit({ id: args?.id }, { action: '/api/v1/things/save' });
+      }, [asyncFetcher]),
       // the viewer's Saved library — posts they bookmarked, newest-saved-first
       saved: useCallback(async (args?: { cursor?: string; limit?: number }) => getJson(`/api/v1/things/saved${toQuery(args)}`), []),
       // cast/move/remove the caller's vote on a visible poll thing
       vote: useCallback(
         async (args: { id: string; optionIndex: number }) => {
-          await requireThingtimeCapability('api.things-vote', '1.0.1');
+          await requireThingtimeCapability('api.things-vote', '1.2.0');
           return asyncFetcher.submit({ id: args?.id, optionIndex: args?.optionIndex }, { action: '/api/v1/things/vote', errorContext: 'save your vote' });
         },
         [asyncFetcher]
@@ -1062,14 +1067,17 @@ export function useApi() {
       // up/down vote (the separate focused reaction kind): 'up' | 'down' casts
       // or flips, the same direction again clears, null clears
       updown: useCallback(
-        async (args: { id: string; direction: 'up' | 'down' | null }) =>
-          asyncFetcher.submit({ id: args?.id, direction: args?.direction ?? null }, { action: '/api/v1/things/updown', errorContext: 'save your vote' }),
+        async (args: { id: string; direction: 'up' | 'down' | null }) => {
+          await requireThingtimeCapability('api.things-updown', '1.2.0');
+          return asyncFetcher.submit({ id: args?.id, direction: args?.direction ?? null }, { action: '/api/v1/things/updown', errorContext: 'save your vote' });
+        },
         [asyncFetcher]
       ),
       comment: useCallback(
         // simple text comments send { id, text }; rich comments add
 				// type/images/listing/thing/mediaLayout/tags/attachments — comments share the post schema
         async (args) => {
+          await requireThingtimeCapability('api.things-comment', '1.6.0');
 					const attachmentIds = args?.attachmentIds;
 					const ret = asyncFetcher.submit(
 						buildThingCommentRequestPayload(args),
@@ -1083,13 +1091,15 @@ export function useApi() {
         [asyncFetcher]
       ),
       share: useCallback(
-        async (args) =>
-          asyncFetcher.submit(
+        async (args) => {
+          await requireThingtimeCapability('api.things-share', '1.3.0');
+          return asyncFetcher.submit(
             // tags: the quote caption's harvested inline #hashtags — merged
             // server-side with the tags carried from the original post
             { id: args?.id, text: args?.text, tags: args?.tags, acl: args?.acl, visibility: args?.visibility },
             { action: '/api/v1/things/share' }
-          ),
+          );
+        },
         [asyncFetcher]
       ),
 			remove: useCallback(
@@ -1346,7 +1356,7 @@ export function useApi() {
       // resolution to actions the viewer owns — execute.ts ownedOnly), and an
       // inline list silently dropped it, disarming the delegated ttAction
       // path in every browser while the API-level battery stayed green.
-      run: useCallback(async (args) => { await requireThingtimeCapability('api.actions-run', '1.5.0'); return asyncFetcher.submit(buildActionRunBody(args), { action: '/api/v1/actions/run' }); }, [asyncFetcher]),
+      run: useCallback(async (args) => { await requireThingtimeCapability('api.actions-run', '1.6.0'); return asyncFetcher.submit(buildActionRunBody(args), { action: '/api/v1/actions/run' }); }, [asyncFetcher]),
       // your own run records — { action, limit }
       runs: useCallback(async (args) => getJson(`/api/v1/actions/runs${toQuery(args)}`), [])
       // creation rides the unified path: things.create({ thingtime: ['action'], crystal })
