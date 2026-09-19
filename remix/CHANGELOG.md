@@ -39,6 +39,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
   Copy/share controls omit legacy secret keys; saved discoveries remain bound
   to the account or anonymous browser identity. Private/group-only access and
   moderation remain enforced. Removing the link audience revokes URL access.
+  Details: [PR #860](../PRs/860-codex-plain-link-sharing-canonical-unlisted-urls.md).
 
 - **2026-09-19 · Codex (AI):** Keep inherited secret-link context through nested
   comment/media galleries, standalone share menus and parent navigation. Show
