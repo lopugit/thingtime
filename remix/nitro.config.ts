@@ -8,6 +8,7 @@ import {
   CHATGPT_PROTECTED_RESOURCE_METADATA_PATH
 } from './app/api/utils/chatgpt/pluginCore.ts';
 import { THINGTIME_CAPABILITY_MANIFEST_PATH } from './app/api/utils/capabilities/thingtimeCapabilities.ts';
+import { ROBOTS_PATH, SITEMAP_PATH } from './app/api/utils/seo/sitemapCore.ts';
 
 const publicDir = new URL('./dist', import.meta.url).pathname;
 const embedDir = new URL('./dist/embed', import.meta.url).pathname;
@@ -30,6 +31,12 @@ export default defineNitroConfig({
     [THINGTIME_CAPABILITY_MANIFEST_PATH]: thingtimeCapabilitiesHandler,
     [APPLE_APP_ASSOCIATION_PATH]: './server/handlers/apple-app-association.ts',
     [`${APPLE_APP_ASSOCIATION_PATH}-docs`]: './server/routes/api/[...].ts',
+    // Crawler discovery lives at the well-known root paths; their -docs twins
+    // are served by the API catch-all like every other documented endpoint.
+    [ROBOTS_PATH]: './server/handlers/robots.ts',
+    [`${ROBOTS_PATH}-docs`]: './server/routes/api/[...].ts',
+    [SITEMAP_PATH]: './server/handlers/sitemap.ts',
+    [`${SITEMAP_PATH}-docs`]: './server/routes/api/[...].ts',
     [CHATGPT_PROTECTED_RESOURCE_METADATA_PATH]: chatGptDiscoveryHandler,
     [CHATGPT_AUTHORIZATION_SERVER_METADATA_PATH]: chatGptDiscoveryHandler,
     [CHATGPT_CAPABILITY_MANIFEST_PATH]: chatGptDiscoveryHandler
