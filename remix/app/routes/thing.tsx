@@ -876,7 +876,7 @@ function GenericThingPage() {
 											</Badge>
 										))}
 										{thing?.visibility ? <Text fontSize="xs" color={MUTED} maxW="100%" overflowWrap="anywhere">
-                      {THING_AUDIENCE_META[audienceOfAcl(thing.audience?.acl || thing.acl)].emoji} {audienceDescription(thing.audience?.acl || thing.acl, 'thing')}
+                      {THING_AUDIENCE_META[audienceOfAcl(thing.audience?.acl || thing.acl)].emoji} {audienceDescription(thing.audience?.acl || thing.acl, 'thing', !!thing.audience && thing.audience.sourceId !== thing.id)}
                     </Text> : null}
 										{isThingOwner ? <Badge colorScheme="green">yours</Badge> : seeded ? <Badge colorScheme="purple">seeded by Thingtime</Badge> : null}
 									</Flex>

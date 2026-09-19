@@ -91,7 +91,7 @@ export const sharePathForThing = (thing: LinkableThing): string => {
 };
 
 // Never enumerate a group's private roster just to explain its audience.
-export const audienceDescription = (acl: readonly string[] | undefined, noun = 'post'): string => {
+export const audienceDescription = (acl: readonly string[] | undefined, noun = 'post', inherited = false): string => {
   const entries = acl || [];
   if (entries.includes('tt:inherit')) return 'follows the parent’s audience';
   const excluded = entries.some(entry => entry.startsWith('-tt:') && entry !== '-tt:all');
@@ -102,10 +102,10 @@ export const audienceDescription = (acl: readonly string[] | undefined, noun = '
   const groups = entries.filter(entry => entry.startsWith('tt:group/')).length;
   const audiences = [...people];
   if (groups) audiences.push(groups === 1 ? 'members of the selected group' : `members of ${groups} selected groups`);
-  if (entries.includes('tt:userFriends')) audiences.push('the author’s friends');
-  if (entries.includes('tt:userFamily')) audiences.push('the author’s family');
+  if (entries.includes('tt:userFriends')) audiences.push(inherited ? 'the parent’s friends circle' : 'the author’s friends');
+  if (entries.includes('tt:userFamily')) audiences.push(inherited ? 'the parent’s family circle' : 'the author’s family');
   if (entries.includes('tt:hidden')) audiences.push('people with the link');
   if (audiences.length === 1 && audiences[0] === 'people with the link') return 'only people with the link';
-  if (!audiences.length) return `only the author can see this ${noun}`;
+  if (!audiences.length) return `only ${inherited ? 'the parent’s owner' : 'the author'} can see this ${noun}`;
   return `only ${audiences.join(', ')} can see this ${noun}`;
 };

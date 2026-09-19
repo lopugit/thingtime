@@ -48,3 +48,8 @@ test('copy-link menus preserve owner, inherited and already-presented guest keys
   assert.equal(thingEntityLink('/post/root', origin, {author:{id:'owner'},linkKey:'secret'}, 'owner').searchParams.get('key'), 'secret');
   assert.equal(thingEntityLink('/post/root', origin, {author:{id:'owner'},linkKey:'secret'}, 'other').searchParams.has('key'), false);
 });
+
+test('inherited private and friends wording refers to the parent rather than the child author', () => {
+  assert.equal(audienceDescription(['tt:user'], 'media', true), 'only the parent’s owner can see this media');
+  assert.equal(audienceDescription(['tt:userFriends'], 'post', true), 'only the parent’s friends circle can see this post');
+});
