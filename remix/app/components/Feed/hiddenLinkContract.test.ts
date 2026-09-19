@@ -28,7 +28,7 @@ const read = (...segments: string[]) => readFileSync(resolve(feedDir, ...segment
 test('PostCard inherits a hidden link derived from the owner-projected key, not circle name', () => {
   assert.match(read('PostCard.tsx'), /<PostThingMenu/);
   assert.match(read('PostThingMenu.tsx'), /<PersistedThingMenu[^>]*initialThing=\{post\}/s);
-  assert.match(read('../Thingtime/ContextMenu/PersistedThingMenu.tsx'), /thingEntityLink\(href, window.location.origin, thing, user\?\.id\)/);
+  assert.match(read('../Thingtime/ContextMenu/PersistedThingMenu.tsx'), /thingEntityLink\(href, window.location.origin, thing, user\?\.id, sharedAccess.key\)/);
   for (const visibility of ['custom', 'hidden']) {
     const thing = { visibility, author: { id: 'owner' }, linkKey: 'test & + / key' };
     const url = thingEntityLink('/post/test', 'https://thingtime.test', thing, 'owner');
@@ -59,4 +59,10 @@ test('visibilityFromAcl reports custom ahead of hidden — the reason the name g
     customAt < hiddenAt,
     'custom outranks hidden, so an acl carrying both never reports visibility "hidden" — any UI keyed on that name misses it'
   );
+});
+
+test('guest menu shares use the presented context while unrelated stale URL keys are removed', () => {
+  const url = thingEntityLink('/media/video?key=stale', 'https://thingtime.test', undefined, undefined, 'current-root-key');
+  assert.equal(url.searchParams.get('key'), 'current-root-key');
+  assert.equal(thingEntityLink('/media/video?key=stale', url.origin, undefined).searchParams.has('key'), false);
 });

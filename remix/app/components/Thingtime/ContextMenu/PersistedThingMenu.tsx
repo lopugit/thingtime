@@ -76,7 +76,7 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
         case 'open': navigate(href); break;
         case 'inspect': navigate(inspectHref); break;
         case 'copy-link': {
-          const url = thingEntityLink(href, window.location.origin, thing, user?.id);
+          const url = thingEntityLink(href, window.location.origin, thing, user?.id, sharedAccess.key);
           void navigator.clipboard.writeText(url.href).then(() => lopu({ title: 'Link copied',
             description: url.searchParams.has('key') ? 'Anyone holding this exact hidden link can view the Thing. Share it deliberately.' : undefined, status: 'success' }))
             .catch(() => lopu({ title: 'Could not copy link', status: 'error' }));

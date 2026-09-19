@@ -44,7 +44,7 @@ test('muted audience wording explains people, groups, and mixed link access', ()
 test('copy-link menus preserve owner, inherited and already-presented guest keys', () => {
   const origin = 'https://thingtime.test';
   assert.equal(thingEntityLink('/media/child', origin, {audience:{linkKey:'root-secret'}}).searchParams.get('key'), 'root-secret');
-  assert.equal(thingEntityLink('/media/child?key=held&sharedRoot=root', origin, undefined).searchParams.get('key'), 'held');
+  assert.equal(thingEntityLink('/media/child?key=held&sharedRoot=root', origin, undefined, undefined, 'held').searchParams.get('key'), 'held');
   assert.equal(thingEntityLink('/post/root', origin, {author:{id:'owner'},linkKey:'secret'}, 'owner').searchParams.get('key'), 'secret');
   assert.equal(thingEntityLink('/post/root', origin, {author:{id:'owner'},linkKey:'secret'}, 'other').searchParams.has('key'), false);
 });
