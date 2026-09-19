@@ -150,6 +150,7 @@ export const router = createBrowserRouter([
       { path: 'pages/:slug/:version', lazy: lazyRoute(() => import('./routes/legal')) },
       { path: 'privacy', loader: () => redirect('/pages/privacy-policy') },
       { path: 'terms', loader: () => redirect('/pages/terms-of-service') },
+      { path: 'support', lazy: lazyRoute(() => import('./routes/support')) },
 
       // "Login with Thingtime" popup (embed SDK) — no guest/user guard: it
       // handles both states itself (login form → consent screen).
@@ -180,6 +181,10 @@ export const router = createBrowserRouter([
       { path: 't/:id', lazy: lazyRoute(() => import('./routes/p')) },
       // the storybook-style design-system docs own the canonical short URL too
       { path: 'design-system', loader: () => redirect('/docs/design-system'), element: <HydrateFallback /> },
+      // third-party app connections — no guard: both pages render their own
+      // signed-out quiet state (the /settings, /apps idiom)
+      { path: 'connections', lazy: lazyRoute(() => import('./routes/connections')) },
+      { path: 'connections/feed', lazy: lazyRoute(() => import('./routes/connections-feed')) },
       { path: 'crypto', lazy: lazyRoute(() => import('./routes/crypto')) },
       {
         path: 'docs',
