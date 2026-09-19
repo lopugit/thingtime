@@ -37,7 +37,7 @@ export const withFoundPostGrant = async (post: ThingDoc, viewer: Viewer, lookup:
 
 export const createFoundPostStore = (getCollection = getThingsCollection) => {
 	// One private, protected relationship per account/post. Only a successfully
-	// presented current key can stamp it; no bearer secret is stored or returned.
+	// opened current permalink can stamp it; no bearer secret is stored or returned.
 	const rememberFoundPost = async (viewer: Viewer, post: ThingDoc, ipAddress?: string): Promise<void> => {
 		const viewerId = foundPostViewerId(viewer);
 		if (
@@ -47,7 +47,7 @@ export const createFoundPostStore = (getCollection = getThingsCollection) => {
 			!post.thingtime?.includes('post') ||
 			!post.acl?.includes('tt:hidden') ||
 			!post.linkKey ||
-			!viewer.linkKeys?.has(post.linkKey)
+			(!viewer.linkKeys?.has(post.linkKey) && !viewer.linkThingIds?.has(post.shareId))
 		)
 			return;
 		const collection = await getCollection();

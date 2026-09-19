@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { canViewInherited, resolvePublicAudiences, layeredPostCommentCounts, RELATED_CHILD_PROJECTION, viewerOf, visibleRelatedModerationClause, type ThingDoc } from './things.ts';
+import { canView, withThingLink, canViewInherited, resolvePublicAudiences, layeredPostCommentCounts, RELATED_CHILD_PROJECTION, viewerOf, visibleRelatedModerationClause, type ThingDoc } from './things.ts';
 
 test('related child projection preserves rich comment media layouts', () => {
   assert.equal(RELATED_CHILD_PROJECTION['crystal.mediaLayout'], 1);
@@ -109,4 +109,38 @@ test('cycles and deleted parents disclose no inherited audience or key', async (
   assert.equal(await canViewInherited(docs[4], null, lookup), false);
   const projected = await resolvePublicAudiences([docs[4]], { id: 'author' } as any, lookup);
   assert.deepEqual(projected.get('nested-media'), { sourceId: 'nested-media', acl: ['tt:user'] });
+});
+
+
+test('canonical links open unlisted roots and arbitrary inherited children for fresh anonymous viewers', async () => {
+  const { root, docs, lookup } = inheritanceFixture(['tt:custom', 'tt:hidden', 'tt:user/invited']);
+  for (const doc of docs) {
+    const anonymous = withThingLink(null, doc.shareId);
+    assert.equal(await canViewInherited(doc, anonymous, lookup), true, doc.shareId);
+    assert.equal(canView({ ...root, shareId: 'unrelated' }, anonymous), false, 'an exact link never grants unrelated hidden Things');
+  }
+  assert.equal(canView(root, null), false, 'plain listing evaluation stays unlisted');
+  assert.equal(await canViewInherited(root, withThingLink(null, 'unrelated'), lookup), false);
+  root.acl = ['tt:custom', 'tt:group/family'];
+  assert.equal(await canViewInherited(docs[4], withThingLink(null, docs[4].shareId), lookup), false, 'group-only remains restricted');
+  assert.equal(await canViewInherited(docs[4], withThingLink({ id: 'member', groupIds: new Set(['family']) }, docs[4].shareId), lookup), true);
+  root.acl = ['tt:user'];
+  assert.equal(await canViewInherited(docs[4], withThingLink(null, docs[4].shareId), lookup), false, 'removing the link audience revokes old URLs');
+});
+
+test('canonical link grants cannot bypass token scopes, moderation, missing parents or cycles', async () => {
+  const { root, docs, lookup } = inheritanceFixture(['tt:hidden']);
+  const target = docs[4];
+  const guest = withThingLink(null, target.shareId);
+  assert.equal(await canViewInherited(target, withThingLink({ id: 'author', pat: { tokenId: 'test', onlyCreatedThings: false, visibility: 'public' } }, target.shareId), lookup), false);
+  (docs[1] as any).moderation = { status: 'blocked' } as any;
+  assert.equal(await canViewInherited(target, guest, lookup), false);
+  (docs[1] as any).moderation = { status: 'pending' } as any;
+  assert.equal(await canViewInherited(target, guest, lookup), false);
+  delete (docs[1] as any).moderation;
+  docs[1].targetId = 'missing';
+  assert.equal(await canViewInherited(target, guest, lookup), false);
+  docs[1].targetId = target.shareId;
+  assert.equal(await canViewInherited(target, guest, lookup), false);
+  assert.equal(canView({ ...root, thingtime: ['post-discovery'] }, withThingLink(null, root.shareId)), false);
 });

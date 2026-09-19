@@ -13,12 +13,13 @@ test('large post galleries preserve every id and reject duplicates during reorde
 	assert.equal(planAttachmentSync(requested, ids, [], attachmentCountLimit('comment')).ok, false);
 });
 
-test('media permalinks keep first-party secret-link context without sharing storage URLs', () => {
+test('media permalinks omit legacy secret keys and preserve composition context', () => {
 	assert.equal(mediaPageLink('video-1', '/api/v1/attachments/content?id=video-1'), '/media/video-1');
 	assert.equal(
 		mediaPageLink('video-1', '/api/v1/attachments/content?id=video-1&key=secret&sharedRoot=post-1&download=true'),
-		'/media/video-1?key=secret&sharedRoot=post-1'
+		'/media/video-1?sharedRoot=post-1'
 	);
+	assert.equal(mediaPageLink('video-1', '/api/v1/attachments/content?id=video-1&key=secret'), '/media/video-1');
 	assert.equal(mediaPageLink('video-1', 'https://storage.example/video.mp4?key=private'), '/media/video-1');
 	assert.equal(mediaPageLink('video-1', '/api/v1/attachments/content?id=other&key=private'), '/media/video-1');
 });

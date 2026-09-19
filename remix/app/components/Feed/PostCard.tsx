@@ -1729,8 +1729,7 @@ function PostCardImpl(props: PostCardProps) {
   };
 
   // menu copy-link: always the clipboard (the share icon owns the native
-  // sheet). Hidden posts copy their SECRET link — permalink + ?key= — the
-  // only door into an unlisted post.
+  // sheet). Unlisted posts share their canonical permalink.
   //
 
   // Toggle one reaction token (single emoji or a multi-emoji group). Optimistic:

@@ -17,19 +17,19 @@ test('custom wins over its public or hidden baseline when deriving the audience'
 	assert.equal(audienceOfAcl(['-tt:all', 'tt:userFriends', 'tt:user']), 'friends');
 });
 
-test('secret links use key-aware readers for every Thing kind', () => {
+test('unlisted links use canonical exact-id readers for every Thing kind', () => {
 	const hidden = { acl: ['tt:hidden', 'tt:user'], linkKey: 'secret key' };
-	assert.equal(sharePathForThing({ id: 'post-1', thingtime: ['post'], ...hidden }), '/post/post-1?key=secret%20key');
-	assert.equal(sharePathForThing({ id: 'page-1', thingtime: ['webpage'], ...hidden }), '/p/page-1?key=secret%20key');
-	assert.equal(sharePathForThing({ id: 'schema-1', thingtime: ['schema'], ...hidden }), '/thing/schema-1?key=secret%20key');
-	assert.equal(sharePathForThing({ id: 'folder-1', thingtime: ['folder'], ...hidden }), '/thing/folder-1?key=secret%20key');
+	assert.equal(sharePathForThing({ id: 'post-1', thingtime: ['post'], ...hidden }), '/post/post-1');
+	assert.equal(sharePathForThing({ id: 'page-1', thingtime: ['webpage'], ...hidden }), '/p/page-1');
+	assert.equal(sharePathForThing({ id: 'schema-1', thingtime: ['schema'], ...hidden }), '/thing/schema-1');
+	assert.equal(sharePathForThing({ id: 'folder-1', thingtime: ['folder'], ...hidden }), '/thing/folder-1');
 	assert.equal(sharePathForThing({ id: 'page-1', thingtime: ['webpage'], acl: ['tt:all'] }), '/p/page-1');
 });
 
-test('attachment and comment permalinks retain the inherited hidden key', () => {
+test('attachment and comment permalinks need no inherited secret', () => {
   const audience = { sourceId: 'root', acl: ['tt:hidden', 'tt:user'], linkKey: 'secret key' };
-  assert.equal(sharePathForThing({ id: 'media', thingtime: ['attachment'], acl: ['tt:inherit'], audience }), '/media/media?key=secret%20key');
-  assert.equal(sharePathForThing({ id: 'comment', thingtime: ['comment'], acl: ['tt:inherit'], audience }), '/post/comment?key=secret%20key');
+  assert.equal(sharePathForThing({ id: 'media', thingtime: ['attachment'], acl: ['tt:inherit'], audience }), '/media/media');
+  assert.equal(sharePathForThing({ id: 'comment', thingtime: ['comment'], acl: ['tt:inherit'], audience }), '/post/comment');
   assert.equal(sharePathForThing({ id: 'media', thingtime: ['attachment'], audience: { ...audience, acl: ['tt:group/family'], linkKey: undefined } }), '/media/media');
 });
 
@@ -41,11 +41,11 @@ test('muted audience wording explains people, groups, and mixed link access', ()
   assert.match(audienceDescription(['tt:all', '-tt:user/bob']), /exclusions apply/);
 });
 
-test('copy-link menus preserve owner, inherited and already-presented guest keys', () => {
+test('copy-link menus omit keys for owners, inherited audiences and old keyed visits', () => {
   const origin = 'https://thingtime.test';
-  assert.equal(thingEntityLink('/media/child', origin, {audience:{linkKey:'root-secret'}}).searchParams.get('key'), 'root-secret');
-  assert.equal(thingEntityLink('/media/child?key=held&sharedRoot=root', origin, undefined, undefined, 'held').searchParams.get('key'), 'held');
-  assert.equal(thingEntityLink('/post/root', origin, {author:{id:'owner'},linkKey:'secret'}, 'owner').searchParams.get('key'), 'secret');
+  assert.equal(thingEntityLink('/media/child', origin, {audience:{linkKey:'root-secret'}}).searchParams.get('key'), null);
+  assert.equal(thingEntityLink('/media/child?key=held&sharedRoot=root', origin, undefined, undefined, 'held').searchParams.get('key'), null);
+  assert.equal(thingEntityLink('/post/root', origin, {author:{id:'owner'},linkKey:'secret'}, 'owner').searchParams.get('key'), null);
   assert.equal(thingEntityLink('/post/root', origin, {author:{id:'owner'},linkKey:'secret'}, 'other').searchParams.has('key'), false);
 });
 

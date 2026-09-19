@@ -29,11 +29,12 @@ export const sharedAttachmentUrl = (value: string, linkKey?: string, sharedRoot?
 	} catch { return value; }
 };
 
-// Carry an already-held share context only to first-party Thing readers.
-export const sharedThingPath = (value: string, linkKey?: string, sharedRoot?: string): string => {
-  if ((!linkKey && !sharedRoot) || !/^\/(?:post|media|thing)\/[A-Za-z0-9._:%-]+(?:[?#]|$)/.test(value)) return value;
+// Canonical Thing URLs need no secret. Preserve only the non-secret composition
+// context for independently private dependencies rendered through shared roots.
+export const sharedThingPath = (value: string, _linkKey?: string, sharedRoot?: string): string => {
+  if (!/^\/(?:post|media|thing)\/[A-Za-z0-9._:%-]+(?:[?#]|$)/.test(value)) return value;
   const url = new URL(value, 'https://local.invalid');
-  if (linkKey && !url.searchParams.has('key')) url.searchParams.set('key', linkKey);
+  url.searchParams.delete('key');
   if (sharedRoot && !url.searchParams.has('sharedRoot')) url.searchParams.set('sharedRoot', sharedRoot);
   return `${url.pathname}${url.search}${url.hash}`;
 };

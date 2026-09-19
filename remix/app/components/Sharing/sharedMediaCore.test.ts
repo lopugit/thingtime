@@ -113,9 +113,9 @@ test('unresolved template media is left for the runtime, in props and in CSS ali
 
 test('post, comment, media and Thing links retain their authorized share context', () => {
   for (const path of ['/post/comment', '/media/att_nested', '/thing/child']) {
-    assert.equal(sharedThingPath(path, 'parent-secret', 'root'), `${path}?key=parent-secret&sharedRoot=root`);
+    assert.equal(sharedThingPath(path, 'parent-secret', 'root'), `${path}?sharedRoot=root`);
   }
-  assert.equal(sharedThingPath('/media/own?key=own', 'parent'), '/media/own?key=own');
+  assert.equal(sharedThingPath('/media/own?key=own', 'parent'), '/media/own');
   for (const path of ['https://external.test/media/att', '//external.test/post/a', '/profile/user', '/api/v1/things'])
     assert.equal(sharedThingPath(path, 'secret'), path);
 });

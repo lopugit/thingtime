@@ -2,7 +2,7 @@ import { ensureFoundPostBrowserIdentity, FOUND_POST_BROWSER_KEY } from '../../..
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createFoundPostStore, foundPostDigest, foundPostGrantMatches, foundPostId, foundPostReceiptMatches, foundPostViewerId } from './foundPosts';
-import { canView, canViewInherited, sanitizeShareId } from './things';
+import { withThingLink, canView, canViewInherited, sanitizeShareId } from './things';
 import { withFoundPostBrowser, foundPostVisitIp } from './foundPostRequest';
 import { isProtectedThingtime } from '~/schemas/registry';
 
@@ -171,4 +171,19 @@ test('browser collection proof survives reloads and uses a secure host-only cook
   if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow); else Reflect.deleteProperty(globalThis, 'window');
   if (previousDocument) Object.defineProperty(globalThis, 'document', previousDocument); else Reflect.deleteProperty(globalThis, 'document');
  }
+});
+
+
+test('plain permalink discoveries persist for the same browser identity without storing a secret URL', async () => {
+  const { store, rows, writes } = storage();
+  const viewer = withThingLink({ id: '', anonymousId: 'saved-browser' }, post.shareId);
+  await store.rememberFoundPost(viewer, post);
+  await store.rememberFoundPost(viewer, post);
+  assert.equal(writes(), 1);
+  assert.equal(foundPostReceiptMatches(rows[0], post, 'saved-browser'), true);
+  assert.equal(foundPostReceiptMatches(rows[0], post, 'fresh-browser'), false);
+  assert.equal(rows[0].crystal.anonymousId, 'saved-browser');
+  assert.equal(JSON.stringify(rows).includes(post.linkKey), false);
+  await store.rememberFoundPost(withThingLink(null, post.shareId), post);
+  assert.equal(writes(), 1, 'no remembered collection without a saved identity');
 });

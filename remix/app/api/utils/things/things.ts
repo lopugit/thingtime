@@ -482,6 +482,8 @@ export type Viewer = {
   // hidden-link keys presented with THIS request (?key= / body.key) — canView
   // grants a hidden thing to whoever carries its linkKey here
   linkKeys?: ReadonlySet<string>;
+  // Exact first-party permalink targets, never populated by feeds/search.
+  linkThingIds?: ReadonlySet<string>;
   foundPosts?: ReadonlyMap<string, string>;
   anonymousId?: string;
 } | null;
@@ -500,6 +502,13 @@ export const withLinkKeys = (viewer: Viewer, keys: readonly string[]): Viewer =>
   if (!presented.length) return viewer;
   return viewer ? { ...viewer, linkKeys: new Set(presented) } : { id: '', linkKeys: new Set(presented) };
 };
+
+// Knowing an unlisted Thing's canonical id is sufficient to open its URL.
+// Keep this request-local and exact-id scoped so listing/projection of unrelated
+// hidden Things does not accidentally become public.
+export const withThingLink = (viewer: Viewer, id: string): NonNullable<Viewer> => ({
+  id: '', ...viewer, linkThingIds: new Set([...(viewer?.linkThingIds || []), id])
+});
 
 // Attach the viewer's accepted-friend set (one indexed query, memoised on the
 // viewer object — already-enriched viewers pass straight through). Read paths
@@ -2672,7 +2681,10 @@ export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
   // private things (inherit acls are judged on their resolved terminal via
   // canViewInherited; a direct hit on one fails closed).
   if (patVisibilityBlocksAcl(viewer, aclOf(doc))) return false;
-  // hidden (unlisted) things: the random link key IS the audience — anyone
+  // Canonical URLs are the unlisted read capability. The stored audience is
+  // still checked live; removing tt:hidden immediately revokes anonymous access.
+  if (viewer?.linkThingIds?.has(doc.shareId) && aclOf(doc).includes(ACL_HIDDEN)) return true;
+  // Legacy keyed URLs remain accepted: the random link key IS the audience — anyone
   // presenting it may view, logged out included. The key only grants while
   // the acl still says hidden, so un-hiding instantly retires shared links.
   if (
@@ -2764,7 +2776,8 @@ export const canViewInherited = async (
   });
   if (ancestorDenied) return false;
   if (terminal) {
-    if (canView(terminal, viewer)) return true;
+    const linkedViewer = viewer?.linkThingIds?.has(doc.shareId) ? withThingLink(viewer, terminal.shareId) : viewer;
+    if (canView(terminal, linkedViewer)) return true;
     if (isCustomMongoEndpointActive()) return false;
     return canView(terminal, await withFoundPostGrant(terminal, viewer, findByShareId));
   }
@@ -2940,7 +2953,7 @@ export const findViewableThing = async (shareId: unknown, viewer: Viewer): Promi
   const doc = await findThing(shareId);
   // friend enrichment happens here so every interaction path (react, comment,
   // share, save, view) resolves friends-only targets for real friends
-  if (!doc || !(await canViewInherited(doc, await withFriendIds(viewer)))) return null;
+  if (!doc || !(await canViewInherited(doc, withThingLink(await withFriendIds(viewer), doc.shareId)))) return null;
   return doc;
 };
 
@@ -3377,9 +3390,13 @@ export const getThing = async (
   app: AppLens = null,
   options: PostProjectionOptions = {}
 ): Promise<Fail | { ok: true; thing: PublicThing; post: PublicPost | null; parent: PublicPost | null; root: PublicPost | null }> => {
-  const viewer = await withFriendIds(asViewer(viewerInput));
+  let viewer = await withFriendIds(asViewer(viewerInput));
   const doc = await findViewableThingAs(shareId, viewer, app);
   if (!doc) return fail(404, 'Thing not found');
+  if (!app) {
+    const terminal = await resolveInheritChain(doc, d => aclOf(d).includes(ACL_INHERIT), findThing);
+    viewer = withThingLink(viewer, terminal?.shareId || doc.shareId);
+  }
   if (!app && options.rememberDiscovery && !isCustomMongoEndpointActive()) {
     const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findThing);
     if (terminal && canView(terminal, viewer)) await rememberFoundPost(viewer, terminal, options.discoveryIp);
@@ -3465,7 +3482,7 @@ export const listThings = async (
   app: AppLens = null,
   context: { archiveOwnerId?: string } = {}
 ): Promise<Fail | { ok: true; things: PublicThing[]; nextCursor: string | null }> => {
-  const viewer = await withFriendIds(asViewer(viewerInput));
+  let viewer = await withFriendIds(asViewer(viewerInput));
   const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_LIMIT), MAX_FEED_LIMIT);
   const thingtime = (query.thingtime || []).filter((id) => typeof id === 'string' && id.trim());
 
@@ -3474,6 +3491,10 @@ export const listThings = async (
     if (query.folder) return fail(400, 'folder filtering applies to your own things, not a target listing');
     const target = await findViewableThingAs(query.targetId, viewer, app);
     if (!target) return fail(404, 'Thing not found');
+    if (!app) {
+      const terminal = await resolveInheritChain(target, d => aclOf(d).includes(ACL_INHERIT), findThing);
+      viewer = withThingLink(viewer, terminal?.shareId || target.shareId);
+    }
     // under the app lens, children are namespace things too — the owner's
     // first-party comments on an app thing (no appId) never surface here
     match = app ? withMatch({ targetId: target.shareId }, ...appMatchClauses(app)) : { targetId: target.shareId };
