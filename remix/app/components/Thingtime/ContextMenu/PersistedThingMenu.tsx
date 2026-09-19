@@ -1,3 +1,4 @@
+import { useSharedAccess, useSharedThingPath } from '~/components/Sharing/SharedMedia';
 import React from 'react';
 import { useNavigate } from 'react-router';
 import { useApi } from '~/hooks/useApi';
@@ -20,6 +21,8 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
   onOpen?: () => void; onChanged?: () => void; handoffDisabled?: boolean;
 }) {
   const api = useApi();
+  const sharedAccess = useSharedAccess();
+  const sharedPath = useSharedThingPath();
   const user = useCurrentUser();
   const navigate = useNavigate();
   const lopu = useLopu();
@@ -38,13 +41,13 @@ export function PersistedThingMenu({ id, initialThing, label, extensions = [], c
   const fetched = resolved?.identity === identity ? resolved.thing : undefined;
   // Live card projections win over an earlier menu read (e.g. privacy changed).
   const thing = initialThing ? { ...fetched, ...initialThing } : fetched;
-  const inspectHref = `/thing/${encodeURIComponent(id)}`;
+  const inspectHref = sharedPath(`/thing/${encodeURIComponent(id)}`);
   const href = openHref || inspectHref;
   // Only fetch the opened Thing. No per-card queries during list rendering.
   const resolve = async () => {
     onOpen?.();
     try {
-      const result = await api.v1.things.get({ id });
+      const result = await api.v1.things.get({ id, ...sharedAccess });
       const next = result?.thing || result?.things?.[0];
       if (currentIdentity.current === identity && next?.id === id) setResolved({ identity, thing: next });
     } catch { /* Keep last-known presentation; all writes reauthorize server-side. */ }

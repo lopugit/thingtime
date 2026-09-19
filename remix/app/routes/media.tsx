@@ -1,3 +1,5 @@
+import { sharePathForThing } from '~/components/Sharing/audienceCore';
+import { sharedThingPath } from '~/components/Sharing/sharedMediaCore';
 import { SharedMediaProvider } from '~/components/Sharing/SharedMedia';
 import React from 'react';
 import { Box, Button, Center, Flex, IconButton, Input, Spinner, Text, Textarea } from '@chakra-ui/react';
@@ -154,7 +156,7 @@ export const MediaPage = () => {
 	};
 
 	return (
-		<SharedMediaProvider linkKey={linkKey} sharedRoot={sharedRoot}><Flex
+		<SharedMediaProvider linkKey={post?.audience?.linkKey || linkKey} sharedRoot={sharedRoot}><Flex
 			justifyContent="center"
 			width="100%"
 			minHeight="100vh"
@@ -266,7 +268,7 @@ export const MediaPage = () => {
 				{(parentId || attachment) && (
 					<Flex alignItems="center" columnGap={2} flexWrap="wrap">
 						{parentId && (
-							<Link to={`/post/${parentId}${linkKey ? `?key=${encodeURIComponent(linkKey)}` : ''}`}>
+							<Link to={sharedThingPath(sharePathForThing(data!.parent!), post?.audience?.linkKey || linkKey, sharedRoot)}>
 								<Button size="xs" variant="outline" borderRadius="999px" leftIcon={<ArrowLeft size={12} />}>
 									View the post this media lives in 📌
 								</Button>
