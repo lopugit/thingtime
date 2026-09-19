@@ -9864,6 +9864,85 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
     ]
   }),
   endpoint({
+    id: 'sitemap',
+    contractVersion: '1.0.0',
+    featureVersion: '1.0.0',
+    group: 'social',
+    title: 'Sitemap (programmatic)',
+    endpoint: '/api/v1/sitemap',
+    summary: 'Returns the crawler sitemap as XML — the same document GET /sitemap.xml serves — for scripts and other deployments.',
+    detail:
+      'Not JSON: the body is a sitemaps.org XML document (Content-Type: application/xml; charset=utf-8). With no query it returns the <sitemapindex> listing every section file; ?section=static returns the hand-listed public pages with brand-logo image entries, ?section=posts&page=N and ?section=pages&page=N return public posts and published /p/<id> pages newest first (500 URLs per page, at most 100 pages per section), and ?section=profiles returns the profiles of people with public posts (most recently active 5000). Every UGC URL is admitted only after the exact anonymous acl walk the public Atom feed uses, and only the permalink plus a timestamp is emitted — never text, names or counts. Page numbers beyond the available range return 404 text; malformed sections/pages return 400 text.',
+    auth: {
+      mode: 'none',
+      description: 'Always anonymous — cookies and bearer tokens are ignored, so only publicly readable URLs are ever listed.'
+    },
+    methods: ['GET'],
+    steps: [
+      'GET the endpoint with no query to receive the sitemap index; follow each <sitemap><loc> to fetch a section.',
+      'Pass ?section=<name> (and ?page=N for posts/pages) to fetch one section file directly.',
+      'Use `npm --prefix remix run sitemap:generate -- --origin <origin> --fetch` to mirror every section into static files offline.'
+    ],
+    requestExamples: [
+      { name: 'Sitemap index', description: 'Fetch the index of section files.', method: 'GET' },
+      { name: 'Second page of posts', description: 'Fetch public posts 501–1000.', method: 'GET', query: { section: 'posts', page: '2' } }
+    ],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Sitemap index XML (shown as a string; the raw body is the XML document).',
+        headers: { 'Content-Type': 'application/xml; charset=utf-8' },
+        body: '<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <sitemap><loc>https://thingtime.com/sitemap.xml?section=static</loc></sitemap>\n</sitemapindex>'
+      },
+      { status: 400, description: 'Unknown section or non-integer page.', headers: { 'Content-Type': 'text/plain; charset=utf-8' }, body: 'Bad sitemap request: section must be one of static, posts, pages, profiles' }
+    ],
+    notes: [
+      'Responses carry Cache-Control: public, max-age=300, s-maxage=3600, stale-while-revalidate=86400 — new public content can take up to an hour to appear at the edge.',
+      'The crawler-facing twin is GET /sitemap.xml (documented as seo-sitemap); robots.txt advertises that URL.'
+    ]
+  }),
+  endpoint({
+    id: 'seo-robots',
+    contractVersion: '1.0.0',
+    featureVersion: '1.0.0',
+    group: 'social',
+    title: 'robots.txt',
+    endpoint: '/robots.txt',
+    summary: 'Crawler policy: everything is allowed for search engines and AI crawlers, plus the Sitemap location.',
+    detail:
+      'Plain text (text/plain; charset=utf-8). `User-agent: *` / `Allow: /` welcomes every crawler; well-known AI crawlers (GPTBot, ClaudeBot, PerplexityBot, Google-Extended and others) are also named explicitly with Allow: /, by the owner’s decision to keep the site open to AI indexing. The final `Sitemap:` line points at this origin’s own /sitemap.xml. No account data or configuration is involved.',
+    auth: { mode: 'none', description: 'Crawlers fetch this publicly.' },
+    methods: ['GET'],
+    steps: ['Nothing to configure — crawlers fetch it automatically. Fork owners edit AI_CRAWLER_USER_AGENTS in app/api/utils/seo/sitemapCore.ts to change policy.'],
+    requestExamples: [{ name: 'Fetch robots.txt', description: 'Read the crawler policy.', method: 'GET' }],
+    responseExamples: [
+      { status: 200, description: 'Crawler policy text.', headers: { 'Content-Type': 'text/plain; charset=utf-8' }, body: 'User-agent: *\nAllow: /\n\nUser-agent: GPTBot\nAllow: /\n\nSitemap: https://thingtime.com/sitemap.xml' }
+    ]
+  }),
+  endpoint({
+    id: 'seo-sitemap',
+    contractVersion: '1.0.0',
+    featureVersion: '1.0.0',
+    group: 'social',
+    title: 'sitemap.xml',
+    endpoint: '/sitemap.xml',
+    summary: 'The crawler-facing sitemap index and section files (identical to GET /api/v1/sitemap).',
+    detail:
+      'Serves exactly the document GET /api/v1/sitemap returns for the same query string: the <sitemapindex> with no query, or one <urlset> for ?section=static|posts|pages|profiles (+ ?page=N on posts/pages). Static entries carry Google image-sitemap <image:image> elements for the committed logo files under /branding/generated and the press kit, which is how image search learns the real brand marks. Always rendered as the anonymous viewer on the home data plane; the response is shared-cacheable.',
+    auth: { mode: 'none', description: 'Crawlers fetch this publicly.' },
+    methods: ['GET'],
+    steps: ['Submit https://<origin>/sitemap.xml in Google Search Console / Bing Webmaster Tools once; robots.txt also advertises it.'],
+    requestExamples: [{ name: 'Fetch the index', description: 'Read the sitemap index.', method: 'GET' }],
+    responseExamples: [
+      {
+        status: 200,
+        description: 'Sitemap index XML.',
+        headers: { 'Content-Type': 'application/xml; charset=utf-8' },
+        body: '<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">…</sitemapindex>'
+      }
+    ]
+  }),
+  endpoint({
     id: 'things-react',
     featureVersion: '1.2.0',
     contractVersion: '1.2.0',
