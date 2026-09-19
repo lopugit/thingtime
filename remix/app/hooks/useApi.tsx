@@ -936,8 +936,8 @@ export function useApi() {
 			// sharedRoot scopes a dependency read to an authorized composition.
 			get: useCallback(
 				async (args, options?: { signal?: AbortSignal }) => {
-          await requireThingtimeCapability('api.things', '1.19.0');
-          await requireThingtimeCapability('api.attachment-content', '1.8.0');
+          await requireThingtimeCapability('api.things', '1.21.0');
+          await requireThingtimeCapability('api.attachment-content', '1.8.1');
           return getJson(`/api/v1/things${toQuery({ id: args?.id, commentSort: args?.commentSort, key: args?.key, sharedRoot: args?.sharedRoot })}`, options);
         },
 				[]

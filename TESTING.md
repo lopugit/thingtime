@@ -7762,3 +7762,28 @@ Local queue-fix validation: `http://localhost:18720/scripts/lopu-queue.browser.h
       denial and timeout. Display attribution. Do not persist provider-derived
       results contrary to Google's rules; run history/source cache omit lookup results.
 - Collected secret posts: open a comment attachment below a post attachment using the collecting anonymous browser; it must load. An unrelated browser, a visibility-scoped token, and the original browser after link rotation must be denied. The home lookup must retain the discovery digest through its database projection.
+
+
+## Inherited attachment audiences and share links (2026-09-19)
+
+- Open an unlisted post as its owner, then open media in a comment or a reply on
+  another media Thing. Gallery links, the standalone Share button, Copy link,
+  timestamp and parent/root breadcrumbs must retain the original secret key.
+  Paste the copied URL into a fresh anonymous browser: the page and bytes load.
+  A bare URL or wrong key must not grant access; rotating/removing the root key
+  revokes the old URL. Group and direct recipients retain exactly their root access.
+- Child cards show the root privacy icon and muted audience summary, including
+  mixed people/group/link audiences. Never list a group's private member roster.
+  Blocked/pending intermediate comments hide their descendant media as well.
+- Run `test:things`, `test:attachments`, and `test:api-capabilities` for inherited
+  chains, key projection, URL transport, broken/cyclic chains, and negotiation.
+- Open `/scripts/inherited-audience-preview.html` at desktop and 390x844. Scroll
+  to the bottom, open the comment's video, navigate to its photo and back, open
+  Media options, copy/share links and inspect the synthetic audit text. Long
+  audience labels ellipsize without overlapping menus or overflowing the page.
+  The fixture uses real components and synthetic transport; it does not prove S3.
+
+Local validation: http://localhost:18420/scripts/inherited-audience-preview.html
+in `thingtime-media-gallery-profile` (Vite 18420 / HMR 18421 / Nitro 18422).
+Tailscale/Funnel is unavailable because its installed launcher points to a
+missing `/Applications/Tailscale.app`; no public mapping was changed.
