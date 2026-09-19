@@ -775,12 +775,12 @@ export const BuilderDrawer = (props: {
 	};
 
 	const copyPageLink = async () => {
-		if (!pageLink || (audienceAcl.includes('tt:hidden') && !draft.resolved?.page?.linkKey)) return;
+		if (!pageLink) return;
 		const url = `${window.location.origin}${pageLink}`;
 		try {
 			await navigator.clipboard.writeText(url);
 			lopu({
-				title: audienceAcl.includes('tt:hidden') ? 'Secret page link copied 🕵️' : 'Page link copied 🔗',
+				title: 'Page link copied 🔗',
 				description: url,
 				status: 'success',
 				duration: 6000
@@ -935,18 +935,18 @@ export const BuilderDrawer = (props: {
 									{pageLink || `/p/${pageId}`}
 								</Box>
 								<Button
-									isDisabled={audienceAcl.includes('tt:hidden') && !draft.resolved?.page?.linkKey}
+									isDisabled={!pageLink}
 									onClick={copyPageLink}
 									size="xs"
 									variant="outline"
 								>
-									{audienceAcl.includes('tt:hidden') ? '🕵️ Copy secret link' : '🔗 Copy link'}
+									🔗 Copy link
 								</Button>
 							</Flex>
 						) : null}
-						{mode === 'page' && audienceAcl.includes('tt:hidden') && !draft.resolved?.page?.linkKey ? (
+						{mode === 'page' && !pageId ? (
 							<Text color="var(--tt-faint, #b6b6c0)" fontSize="11px">
-								Save once to mint the secret link.
+								Save this page to create its link.
 							</Text>
 						) : null}
 					</Flex>

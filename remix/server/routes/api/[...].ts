@@ -285,6 +285,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/things/reactions-recent': () => import('../../../app/routes/api/v1/things/reactions-recent/_reactions-recent'),
   'v1/things/quota': () => import('../../../app/routes/api/v1/things/quota/_quota'),
   'v1/things/rss': () => import('../../../app/routes/api/v1/things/rss/_rss'),
+  'v1/sitemap': () => import('../../../app/routes/api/v1/sitemap/_sitemap'),
 	'v1/things/reveal': () => import('../../../app/routes/api/v1/things/reveal/_reveal'),
 	'v1/vault/reveal': () => import('../../../app/routes/api/v1/vault/reveal/_reveal'),
   'v1/things/save': () => import('../../../app/routes/api/v1/things/save/_save'),

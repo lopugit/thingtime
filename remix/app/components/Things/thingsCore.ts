@@ -3,7 +3,7 @@
 // import it without dragging component code along.
 
 import { primaryKindOf, THING_KIND_ICONS } from './thingIcon';
-import { THING_AUDIENCE_META, sharePathForThing, thingPath } from '../Sharing/audienceCore';
+import { THING_AUDIENCE_META, sharePathForThing, thingPath, type ResolvedAudience } from '../Sharing/audienceCore';
 
 export { FILE_TYPE_ICON_RULES, THING_KIND_ICONS, fileIconForThing, primaryKindOf, thingIcon } from './thingIcon';
 
@@ -16,6 +16,7 @@ export type ThingsAuthor = {
 
 // PublicThing as the /things page consumes it (see api/utils/things/things.ts)
 export type ThingsThing = {
+  audience?: ResolvedAudience;
   id: string;
   thingtime: string[];
   author: ThingsAuthor;

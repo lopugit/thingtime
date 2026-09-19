@@ -1,3 +1,5 @@
+import { SharedMediaProvider, useSharedThingPath, useSharedAccess } from '~/components/Sharing/SharedMedia';
+import { audienceDescription, audienceOfAcl, sharePathForThing, aclForAudience } from '~/components/Sharing/audienceCore';
 import React from 'react';
 import {
   Box,
@@ -41,7 +43,6 @@ import { useRecentReactions } from '~/components/Emoji/useRecentReactions';
 import { getEditorJsDoc } from '~/components/Editor/editorJsValue';
 import { RichTextBlocks } from '~/components/Kinds/kindRenderersMedia';
 import { PostAttachments } from '~/components/Attachments/PostAttachments';
-import { mediaPageUrl } from '~/components/Attachments/attachmentUiCore';
 import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 import { RAINBOW } from '~/theme/rainbow';
@@ -268,13 +269,16 @@ const formatDwell = (ms: number): string => {
 
 // Every post/comment timestamp is a permalink to its /post/:id page, the way
 // timestamps work on every major platform.
-const TimestampLink = ({ id, createdAt, fontSize = 'xs', to }: { id: string; createdAt: string; fontSize?: string; to?: string }) => (
-  <Link to={to || `/post/${id}`} title={new Date(createdAt).toLocaleString()}>
+const TimestampLink = ({ id, createdAt, fontSize = 'xs', to }: { id: string; createdAt: string; fontSize?: string; to?: string }) => {
+  const sharedPath = useSharedThingPath();
+  return (
+  <Link to={sharedPath(to || `/post/${id}`)} title={new Date(createdAt).toLocaleString()}>
     <Text as="span" fontSize={fontSize} color={MUTED} _hover={{ textDecoration: 'underline', color: INK }}>
       {timeAgo(createdAt)}
     </Text>
   </Link>
 );
+};
 
 export const AuthorAvatar = (props: { author: FeedAuthor | null; size?: string; fontSize?: string }) => {
   const { author, size = '36px', fontSize = 'sm' } = props;
@@ -571,7 +575,7 @@ const PostBody = ({
 // A shared poll shows its live tally read-only — voting happens on the
 // original's own card/page.
 const SharedPostCard = ({ post }: { post: PublicPost }) => (
-  <Box border={BORDER} borderRadius={RADIUS_MD} padding={3}>
+  <SharedMediaProvider inheritContext={false} linkKey={post.audience?.linkKey || post.linkKey}><Box border={BORDER} borderRadius={RADIUS_MD} padding={3}>
     <Flex alignItems="center" columnGap={2} marginBottom={2}>
       <AuthorAvatar author={post.author} size="22px" fontSize="10px" />
       <Text fontSize="xs" fontWeight={700} color={INK} noOfLines={1}>
@@ -591,7 +595,7 @@ const SharedPostCard = ({ post }: { post: PublicPost }) => (
       attachments={post.attachments}
       poll={post.pollVotes ? { ...post.pollVotes, canVote: false } : undefined}
     />
-  </Box>
+  </Box></SharedMediaProvider>
 );
 
 // The quick-reaction strip inside the picker popover — the standard emojis
@@ -1393,9 +1397,15 @@ const CommentRow = (props: {
 
 // memoised: engagement telemetry re-renders the feed page frequently, and an
 // unchanged post reference should never re-render its card
-export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
+export const PostCard = React.memo(function PostCard(props: PostCardProps) {
+  return <SharedMediaProvider linkKey={props.post.audience?.linkKey || props.post.linkKey}><PostCardImpl {...props} /></SharedMediaProvider>;
+});
+
+function PostCardImpl(props: PostCardProps) {
   const { post, onChanged, onEngagement, defaultCommentsOpen, mediaThing } = props;
-	const permalinkPath = mediaThing ? mediaPageUrl(post.id) : `/post/${post.id}`;
+	const sharedPath = useSharedThingPath();
+  const sharedAccess = useSharedAccess();
+	const permalinkPath = sharedPath(sharePathForThing(post));
 
   const api = useApi();
   const user = useCurrentUser();
@@ -1606,9 +1616,9 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
       lopu({ title: err?.error || 'Could not change the flair 😞', status: 'error' });
     }
   };
-	const circle = mediaThing
-		? { emoji: '🔗', label: 'Inherited audience', hint: 'This media follows the privacy of the Thing it belongs to' }
-		: CIRCLE_META[post.visibility] || CIRCLE_META.public;
+	const effectiveAcl = post.audience?.acl || post.acl;
+	const circle = CIRCLE_META[audienceOfAcl(effectiveAcl)];
+	const audienceText = audienceDescription(effectiveAcl, mediaThing ? 'media' : 'post', !!post.audience && post.audience.sourceId !== post.id);
 
   // Every reaction token on the post, most-used first — feeds the merged
   // react button (top emojis + total count).
@@ -1687,11 +1697,11 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     try {
       const resp = await api.v1.things.update({ id: post.id, acl });
       if (resp?.post) {
-        onChanged?.(post.id, (prev) => ({ ...prev, visibility: resp.post.visibility, acl: resp.post.acl, linkKey: resp.post.linkKey }));
+        onChanged?.(post.id, (prev) => ({ ...prev, visibility: resp.post.visibility, acl: resp.post.acl, linkKey: resp.post.linkKey, audience: resp.post.audience }));
       }
       lopu({ title: 'Custom audience set 🎭', description: 'Exactly the people you picked, with the powers you gave them.', status: 'success', duration: 4000 });
     } catch (err: any) {
-      onChanged?.(post.id, (prev) => ({ ...prev, visibility: prevVisibility, acl: prevAcl }));
+      onChanged?.(post.id, (prev) => ({ ...prev, visibility: prevVisibility, acl: prevAcl, audience: post.audience }));
       lopu({ title: err?.error || 'Could not change the audience 😞', status: 'error' });
     }
   };
@@ -1708,13 +1718,13 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     if (next === post.visibility) return;
     const prevVisibility = post.visibility;
     const prevAcl = post.acl;
-    onChanged?.(post.id, (prev) => ({ ...prev, visibility: next }));
+    onChanged?.(post.id, (prev) => ({ ...prev, visibility: next, acl: aclForAudience(next, prev.acl), audience: undefined }));
     try {
       const resp = await api.v1.things.update({ id: post.id, visibility: next });
       if (resp?.post) {
         // linkKey rides along: entering hidden mints a fresh secret, so the
         // Copy hidden link item works the moment the switch lands
-        onChanged?.(post.id, (prev) => ({ ...prev, visibility: resp.post.visibility, acl: resp.post.acl, linkKey: resp.post.linkKey }));
+        onChanged?.(post.id, (prev) => ({ ...prev, visibility: resp.post.visibility, acl: resp.post.acl, linkKey: resp.post.linkKey, audience: resp.post.audience }));
       }
       const meta = CIRCLE_META[next];
       lopu({
@@ -1724,14 +1734,13 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
         duration: 4000
       });
     } catch (err: any) {
-      onChanged?.(post.id, (prev) => ({ ...prev, visibility: prevVisibility, acl: prevAcl }));
+      onChanged?.(post.id, (prev) => ({ ...prev, visibility: prevVisibility, acl: prevAcl, audience: post.audience }));
       lopu({ title: err?.error || 'Could not change privacy 😞', status: 'error' });
     }
   };
 
   // menu copy-link: always the clipboard (the share icon owns the native
-  // sheet). Hidden posts copy their SECRET link — permalink + ?key= — the
-  // only door into an unlisted post.
+  // sheet). Unlisted posts share their canonical permalink.
   //
 
   // Toggle one reaction token (single emoji or a multi-emoji group). Optimistic:
@@ -1881,7 +1890,7 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     const seq = ++commentSortSeqRef.current;
     const startedAt = Date.now();
     try {
-      const resp = await api.v1.things.get({ id: post.id, commentSort: next });
+      const resp = await api.v1.things.get({ id: post.id, commentSort: next, ...sharedAccess });
       if (seq !== commentSortSeqRef.current || !resp?.post) return;
       const fresh = resp.post as PublicPost;
       onChanged?.(post.id, (prev) => {
@@ -2167,6 +2176,9 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
                   {circle.emoji}
                 </Text>
               </Tooltip>
+              <Text as="span" fontSize="xs" color={MUTED} minWidth={0} maxWidth="100%" noOfLines={1} title={audienceText} data-testid="post-audience">
+                {audienceText}
+              </Text>
             </Flex>
           </Box>
           <PostThingMenu post={post} mediaThing={mediaThing} isOwner={isOwner} canModerate={canModerate}
@@ -2702,4 +2714,4 @@ export const PostCard = React.memo(function PostCardImpl(props: PostCardProps) {
     </Box>
     </ReplyFocusContext.Provider>
   );
-});
+}

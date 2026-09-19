@@ -5,7 +5,7 @@ import { ObjectId } from 'mongodb';
 import { getHomeThingsCollection, getUsersCollection } from '../mongodb/collections';
 import { relationshipLookupFilter } from '../mongodb/relationshipLookup';
 import { ACL_ALL, ACL_INHERIT, ACL_OWNER, aclFromVisibility, type ThingVisibility } from '../../../schemas/registry';
-import { canView, canViewInherited, type ThingDoc, type Viewer } from '../things/things';
+import { withThingLink, canView, canViewInherited, type ThingDoc, type Viewer } from '../things/things';
 import type { AttachmentPurpose, ProfileAttachmentSlot } from './attachmentCore';
 
 export type AttachmentAccessViewer = (NonNullable<Viewer> & { isAdmin?: boolean; sharedRoot?: string }) | null;
@@ -56,7 +56,7 @@ export const attachmentTargetAclAllows = (doc: AttachmentTargetAclDoc | null, vi
 			? (doc.acl as string[])
 			: aclFromVisibility(doc.visibility) || [ACL_OWNER];
 	if (acl.includes(ACL_INHERIT)) return false;
-	return canView({ ...doc, acl } as ThingDoc, viewer);
+	return canView({ ...doc, acl } as ThingDoc, withThingLink(viewer, doc.shareId));
 };
 
 export const profileAttachmentTargetAllows = (attachment: AttachmentAccessDocument, target: ProfileAttachmentTargetDoc | null): boolean => {
@@ -113,7 +113,7 @@ const canViewCommentAttachment = async (
 		!(exactThingtime(target.thingtime, ['comment']) || exactThingtime(target.thingtime, ['post', 'comment']))) return false;
 	// Comments can target media as well as posts/replies. Follow the canonical
 	// inheritance chain through either kind, preserving cycle and audience gates.
-	return canViewInherited(target, viewer, lookup);
+	return canViewInherited(target, withThingLink(viewer, target.shareId), lookup);
 };
 
 const canViewMessageAttachment = async (

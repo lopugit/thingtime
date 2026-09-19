@@ -56,7 +56,7 @@ export const loadWebpageClient = async (target: WebpageTarget): Promise<WebpageL
 	// behaviour, one less request per navigation.
 	if (target.kind === 'path' && (target.path.length > MAX_WEBPAGE_ROUTE_CHARS || !WEBPAGE_ROUTE_PATTERN.test(target.path))) return { status: 'missing' };
 	try {
-		await requireThingtimeCapability('api.webpages-resolve', '1.2.0');
+		await requireThingtimeCapability('api.webpages-resolve', '1.3.0');
 		const response = await fetch(`/api/v1/webpages/resolve?${targetQuery(target)}`, { credentials: 'include' });
 		if ([400, 401, 403, 404].includes(response.status)) return { status: 'missing' };
 		if (!response.ok) return { status: 'error' };

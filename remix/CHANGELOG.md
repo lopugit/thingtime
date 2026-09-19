@@ -12,6 +12,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-09-19 — **Claude (AI)**: Brand logo SEO. Every public shell now
+  publishes an `Organization` JSON-LD node (logo = the 1024px voxel tree icon,
+  wordmark image, `sameAs` profiles) linked from `WebSite.publisher`; the
+  `/branding` hero previews and the landing `<Logo>` render real committed
+  PNG `<img>` files instead of `data:` URIs / bare `<div>`s so image search can
+  index the marks. New Nitro routes `GET /robots.txt` (everything allowed,
+  AI crawlers named explicitly, origin-scoped `Sitemap:` line) and
+  `GET /sitemap.xml` (index + bounded `static` / `posts` / `pages` / `profiles`
+  sections with image-sitemap entries), twinned by `GET /api/v1/sitemap` and
+  the offline `npm run sitemap:generate` script. Vercel routing sends both
+  root files to Nitro ahead of the SPA shell (`patch-vercel-output.mjs`,
+  verified by `verify-vercel-output.mjs`). Validation: `test:seo`,
+  `test:social-previews`, `test:api-capabilities`, `test:vercel-config`, Vercel
+  preview curl checks. Details: [PR note](../PRs/brand-logo-seo-robots-sitemap-organization.md).
+
 - 2026-09-16: Added public legal directory, versioned privacy/Apple TV privacy/terms pages and copy/text exports; retained legacy notices as labelled archives. Verified anonymous preview routes and responsive exports.
 
 
@@ -33,6 +48,19 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ---
 
 ## [Unreleased]
+
+- **2026-09-19 · Codex (AI):** Make unlisted posts, pages and inherited media
+  open through their canonical URLs, including fresh anonymous gallery visitors.
+  Copy/share controls omit legacy secret keys; saved discoveries remain bound
+  to the account or anonymous browser identity. Private/group-only access and
+  moderation remain enforced. Removing the link audience revokes URL access.
+  Details: [PR #860](../PRs/860-codex-plain-link-sharing-canonical-unlisted-urls.md).
+
+- **2026-09-19 · Codex (AI):** Keep inherited secret-link context through nested
+  comment/media galleries, standalone share menus and parent navigation. Show
+  the resolved parent audience beside privacy icons; enforce intermediate
+  moderation gates and negotiate the additive audience read contract.
+  Details: [PR #857](../PRs/857-codex-inherited-media-audience-preserve-inherited-media-sharing.md).
 
 - **2026-09-18 · Codex (AI):** Preserve the mounted page and unsaved UI state when
   a background session read temporarily fails. Recover initial session failures
