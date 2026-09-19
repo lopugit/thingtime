@@ -4,7 +4,7 @@
 
 import type { PublicAttachment } from '~/components/Attachments/attachmentTypes';
 import type { EditorJsDoc } from '~/components/Editor/editorJsValue';
-import { THING_AUDIENCE_META, type ThingAudience } from '~/components/Sharing/audienceCore';
+import { THING_AUDIENCE_META, type ThingAudience, type ResolvedAudience } from '~/components/Sharing/audienceCore';
 import type { PostMediaLayout } from '~/schemas/registry';
 
 export type { PostMediaLayout };
@@ -80,6 +80,7 @@ export type PostComment = {
 };
 
 export type PublicPost = {
+  audience?: ResolvedAudience;
   id: string;
   type: PostType;
   // Thingtime Schema ids applied to the thing, e.g. ['post'] or ['post','share']

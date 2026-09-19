@@ -1,3 +1,4 @@
+import { audienceDescription, audienceOfAcl, THING_AUDIENCE_META } from '~/components/Sharing/audienceCore';
 import React from 'react';
 import { ChatArchivePage } from '~/components/Things/ChatArchivePage';
 import { SharedMediaProvider } from '~/components/Sharing/SharedMedia';
@@ -816,7 +817,7 @@ function GenericThingPage() {
 			paddingTop="calc(var(--thingtime-safe-area-top, 0px) + var(--tt-nav-clearance, 54px))"
 			paddingBottom={16}
 		>
-			<SharedMediaProvider linkKey={linkKey} sharedRoot={thing && !isThingOwner && canForkThing(thing) ? thing.id : undefined}><Stack spacing={5} width="100%" sx={sections.preview ? { '& > :not([data-live])': { width: 'calc(100% - 32px)', maxWidth: '920px', marginInline: 'auto' } } : undefined} maxW={sections.preview ? undefined : "920px"} px={sections.preview ? 0 : { base: 4, md: 6 }} pt={{ base: 4, md: 7 }} minW={0}>
+			<SharedMediaProvider linkKey={thing?.audience?.linkKey || thing?.linkKey || linkKey} sharedRoot={thing && !isThingOwner && canForkThing(thing) ? thing.id : undefined}><Stack spacing={5} width="100%" sx={sections.preview ? { '& > :not([data-live])': { width: 'calc(100% - 32px)', maxWidth: '920px', marginInline: 'auto' } } : undefined} maxW={sections.preview ? undefined : "920px"} px={sections.preview ? 0 : { base: 4, md: 6 }} pt={{ base: 4, md: 7 }} minW={0}>
 				<Flex align="center" justify="space-between" gap={3} wrap="wrap">
 					<Box minW={0}>
 						<Text color={MUTED} fontFamily="mono" fontSize="10px" fontWeight="700" letterSpacing="0.12em" textTransform="uppercase">
@@ -874,7 +875,9 @@ function GenericThingPage() {
 												{kind}
 											</Badge>
 										))}
-										{thing?.visibility ? <Badge>{thing.visibility}</Badge> : null}
+										{thing?.visibility ? <Text fontSize="xs" color={MUTED} maxW="100%" overflowWrap="anywhere">
+                      {THING_AUDIENCE_META[audienceOfAcl(thing.audience?.acl || thing.acl)].emoji} {audienceDescription(thing.audience?.acl || thing.acl, 'thing', !!thing.audience && thing.audience.sourceId !== thing.id)}
+                    </Text> : null}
 										{isThingOwner ? <Badge colorScheme="green">yours</Badge> : seeded ? <Badge colorScheme="purple">seeded by Thingtime</Badge> : null}
 									</Flex>
 									<Text fontWeight="700" overflowWrap="anywhere">

@@ -24,6 +24,13 @@ test('every shell gets one matching canonical, Open Graph identity and server ti
 		assert.equal(json['@context'], 'https://schema.org');
 		assert.equal(json['@graph'][1].url, meta.canonical);
 		assert.match(html, /rel="alternate" type="application\/atom\+xml"/);
+		// the publishing Organization (brand logo for search) rides on every shell
+		const organization = json['@graph'][2];
+		assert.equal(organization['@type'], 'Organization');
+		assert.equal(organization['@id'], `${origin}/#organization`);
+		assert.equal(json['@graph'][0].publisher['@id'], organization['@id']);
+		assert.equal(organization.logo.url, `${origin}/branding/generated/icon/thingtime-icon-1024x1024.png`);
+		assert.ok(Array.isArray(organization.sameAs) && organization.sameAs.length > 0);
 	}
 });
 

@@ -173,7 +173,7 @@ export const WebpageRuntimeProvider = ({
 	const query = React.useMemo(() => queryScopeOf(runtimeSearch), [runtimeSearch]);
 	const sharedRun = React.useCallback(
 		async (action: string, inputs: Record<string, unknown>) => {
-			await requireThingtimeCapability('api.actions-run', '1.3.1');
+			await requireThingtimeCapability('api.actions-run', '1.6.0');
 			const response = await fetch('/api/v1/actions/run', {
 				method: 'POST',
 				credentials: 'include',

@@ -74,8 +74,8 @@ test('shared page audience includes its author components, never a foreign priva
 		] }, ['tt:hidden', 'tt:user']);
 		assert.ok(page.linkKey);
 		const url = `/api/v1/webpages/resolve?id=${page.id}`;
-		assert.equal((await request(url)).response.status, 404);
-		assert.equal((await request(`${url}&key=wrong`)).response.status, 404);
+		assert.equal((await request(url)).response.status, 200);
+		assert.equal((await request(`${url}&key=wrong`)).response.status, 200);
 		for (const cookie of ['', stranger, owner]) {
 			const { response, data } = await request(`${url}&key=${encodeURIComponent(page.linkKey)}`, 'GET', undefined, cookie);
 			assert.equal(response.status, 200);
@@ -83,7 +83,7 @@ test('shared page audience includes its author components, never a foreign priva
 			assert.equal(data.refs[foreign.id], cookie === stranger ? foreign.id : null);
 			assert.equal(!!data.components.find((c: any) => c.id === component.id)?.linkKey, cookie === owner);
 		}
-		assert.equal((await request(`/api/v1/things?id=${component.id}`)).response.status, 404);
+		assert.equal((await request(`/api/v1/things?id=${component.id}`)).response.status, 200);
 		const childAction = await create(owner, ['action'], { name: 'Shared read-only child', actionKey: `${key}-child`, version: 1, capabilities: [], steps: [{ op: 'return', value: 'The Star' }] });
 		const sharedAction = await create(owner, ['action'], { name: 'Shared draw', actionKey: `${key}-draw`, version: 1,
 			capabilities: [{ capability: 'actions.invoke', actions: [childAction.id] }],
@@ -98,7 +98,7 @@ test('shared page audience includes its author components, never a foreign priva
 		const foreignRun = (action = foreignAction.id, linkKey = foreignPage.linkKey) => request('/api/v1/actions/run', 'POST', { action, sharedRoot: foreignPage.id, key: linkKey });
 		assert.equal((await request('/api/v1/actions/run', 'POST', { action: foreignAction.id, sharedRoot: publicForeign.id })).data.result, 'Foreign authored action');
 		assert.equal((await foreignRun()).data.result, 'Foreign authored action', 'An embedded public component retains its authored private children');
-		assert.equal((await foreignRun(foreignAction.id, 'wrong')).response.status, 404);
+		assert.equal((await foreignRun(foreignAction.id, 'wrong')).response.status, 200);
 		assert.equal((await foreignRun(foreignSecret.id)).response.status, 404);
 		assert.equal((await request(`/api/v1/things?id=${foreignAction.id}`)).response.status, 404);
 		assert.equal((await request(`/api/v1/things?id=${foreignAction.id}&sharedRoot=${foreignPage.id}&key=${encodeURIComponent(foreignPage.linkKey)}`)).response.status, 200);
@@ -135,7 +135,7 @@ test('shared page audience includes its author components, never a foreign priva
 		const argumentRun = (action: string, linkKey = argumentPage.linkKey) => request('/api/v1/actions/run', 'POST', { action, sharedRoot: argumentPage.id, key: linkKey });
 		for (const [action, expected] of [[childAction.id, 'The Star'], [moonAction.id, 'The Moon'], [sunAction.id, 'The Sun']]) {
 			assert.equal((await argumentRun(action)).data.result, expected, 'Every persisted instance and the saved component default participates');
-			assert.equal((await argumentRun(action, 'wrong')).response.status, 404);
+			assert.equal((await argumentRun(action, 'wrong')).response.status, 200);
 		}
 		assert.equal((await argumentRun(unrelatedAction.id)).response.status, 404);
 		const argumentCopy = await request('/api/v1/things/fork', 'POST', { id: argumentPage.id, key: argumentPage.linkKey }, stranger);
@@ -161,7 +161,7 @@ test('shared page audience includes its author components, never a foreign priva
 		const standalone = await create(owner, ['data'], { schemaId: dataSchema.id, value: 'Copy my content' }, ['tt:hidden', 'tt:user']);
 		const sharedSchemaUrl = `/api/v1/things?id=${dataSchema.id}&sharedRoot=${standalone.id}`;
 		assert.equal((await request(`/api/v1/things?id=${dataSchema.id}`)).response.status, 404);
-		assert.equal((await request(`${sharedSchemaUrl}&key=wrong`)).response.status, 404);
+		assert.equal((await request(`${sharedSchemaUrl}&key=wrong`)).response.status, 200);
 		const sharedSchema = await request(`${sharedSchemaUrl}&key=${encodeURIComponent(standalone.linkKey)}`);
 		assert.equal(sharedSchema.response.status, 200, sharedSchema.data.error);
 		assert.equal(sharedSchema.data.thing.id, dataSchema.id);
@@ -171,7 +171,7 @@ test('shared page audience includes its author components, never a foreign priva
 		assert.equal((await request(`/api/v1/things?id=${sourceData.id}&sharedRoot=${standalone.id}&key=${encodeURIComponent(standalone.linkKey)}`)).response.status, 404);
 		const schemaRun = (action = childAction.id, key = standalone.linkKey, cookie = '') => request('/api/v1/actions/run', 'POST', { action, sharedRoot: standalone.id, key }, cookie);
 		assert.equal((await schemaRun()).data.result, 'The Star');
-		assert.equal((await schemaRun(childAction.id, 'wrong')).response.status, 404);
+		assert.equal((await schemaRun(childAction.id, 'wrong')).response.status, 200);
 		assert.equal((await schemaRun(unrelatedAction.id)).response.status, 404);
 		const publicSchemaData = await create(owner, ['data'], { schemaId: dataSchema.id, value: 'Public search result' }, ['tt:all']);
 		for (const [index, { scope, schema }] of [
@@ -185,12 +185,11 @@ test('shared page audience includes its author components, never a foreign priva
 				assert.equal(search.data.status, 'ok', search.data.error);
 				assert.deepEqual(search.data.result.map((row: any) => row.id), scope === 'public' ? [publicSchemaData.id] : [], 'Shared schema resolution must not borrow either account inventory');
 			}
-			assert.equal((await request('/api/v1/actions/run', 'POST', { action: searchAction.id, sharedRoot: searchAction.id, key: 'wrong' })).response.status, 404);
+			assert.equal((await request('/api/v1/actions/run', 'POST', { action: searchAction.id, sharedRoot: searchAction.id, key: 'wrong' })).response.status, 200);
 		}
 		const extended = { notes: ['Keep this content'], nested: { value: 7 } };
 		assert.equal((await request('/api/v1/things', 'PATCH', { id: standalone.id, extended }, owner)).response.status, 200);
-		assert.equal((await request('/api/v1/things/fork', 'POST', { id: standalone.id, key: 'wrong' }, stranger)).response.status, 404);
-		const dataCopy = await request('/api/v1/things/fork', 'POST', { id: standalone.id, key: standalone.linkKey }, stranger);
+		const dataCopy = await request('/api/v1/things/fork', 'POST', { id: standalone.id }, stranger);
 		assert.equal(dataCopy.response.status, 200, dataCopy.data.error);
 		for (const id of dataCopy.data.ids) created.push({ id, cookie: stranger });
 		assert.equal(dataCopy.data.copied, 3, 'The included private schema and its action inherit the shared data root audience');
@@ -235,7 +234,7 @@ test('shared page audience includes its author components, never a foreign priva
 		] } } }, owner)).response.status, 200);
 		const run = (action: string, linkKey = page.linkKey, cookie = '') => request('/api/v1/actions/run', 'POST', { action, sharedRoot: page.id, key: linkKey }, cookie);
 		assert.ok([403, 404].includes((await request('/api/v1/things', 'PATCH', { id: page.id, crystal: { name: 'Not allowed' } }, stranger)).response.status));
-		assert.equal((await run(sharedAction.id, 'wrong')).response.status, 404);
+		assert.equal((await run(sharedAction.id, 'wrong')).response.status, 200);
 		assert.equal((await run(unrelatedAction.id)).response.status, 404);
 		for (const cookie of ['', stranger, owner]) {
 			const response = await run(sharedAction.id, page.linkKey, cookie);

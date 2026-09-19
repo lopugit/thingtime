@@ -145,9 +145,9 @@ export const loader = async ({ request }: { request: Request }) => {
     // (never a silently re-ordered thread)
     const commentSort = parseCommentSort(params.get('commentSort') || undefined);
     if (commentSort.ok === false) return json({ ok: false, error: commentSort.error }, { status: 400, headers: cors });
-    // Secret-link reads stay readable during limiter outages, but creating
+    // Canonical-link reads stay readable during limiter outages, but creating
     // durable discovery state is bounded per authenticated user or request IP.
-    const canRemember = !!params.get('key') && (actor.kind === 'anonymous' || (actor.kind === 'user' && user?.accountKind === 'user'));
+    const canRemember = (actor.kind === 'anonymous' || (actor.kind === 'user' && user?.accountKind === 'user'));
     const discoveryAllowed = canRemember && (await enforceRateLimit(request, 'things.views', user ? `user:${user.id}` : null, { failClosed: true })).allowed;
     const result = await getThing(viewer, id, app, { commentSort: commentSort.sort, rememberDiscovery: discoveryAllowed, discoveryIp: foundPostVisitIp(request) });
     if (result.ok === false) {
