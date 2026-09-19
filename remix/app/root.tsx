@@ -104,13 +104,7 @@ export default function App() {
       // viewer — nothing would then set its title and the tab would keep the
       // previous page's one.
       if (pathname === '/marketing' || pathname.startsWith('/marketing/')) return;
-      // The route -> title table now lives in utils/pageTitle (shared with the
-      // server-rendered social meta). /connections only exists on this branch,
-      // so layer it on top here instead of forking the shared helper.
-      const baseTitle = titlePrefix ? `${titlePrefix} Thingtime` : 'Thingtime';
-      document.title = pathname.startsWith('/connections')
-        ? `${baseTitle} - Connections`
-        : pageTitle(pathname, titlePrefix);
+      document.title = pageTitle(pathname, titlePrefix);
     }
   }, [pathname, titlePrefix]);
 
