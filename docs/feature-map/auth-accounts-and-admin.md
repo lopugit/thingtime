@@ -16,7 +16,7 @@ data stay on the home data plane.
 | PAT scopes / actors for Things routes | `app/api/utils/auth/patScopes.ts`, `resolveThingsActor` |
 | Routes | `app/routes/api/v1/auth/*` (`register`, `me`, `logout`, `accounts/{assume,owned,remove,switch}`, `passkeys`, `password-reset`, `two-factor`, `verify-email`, `invites`, `sso-*`, `service-account`, `introspect`, `jwks`, `account-hints`), `app/routes/api/v1/login/_login.tsx`, `app/routes/api/v1/oauth/*` |
 | Admin routes | `app/routes/api/v1/admin/*` (users/public-uploads, ci, integrations, error-logs, moderation, migrations) |
-| Client hooks | `app/hooks/useCurrentUser.ts`, account switcher components in `app/components/Account/*` |
+| Client hooks | `app/hooks/useCurrentUser.tsx`, account switcher components in `app/components/Account/*` |
 
 ## Authorization helper
 
