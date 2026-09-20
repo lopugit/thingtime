@@ -520,3 +520,14 @@ test('uncapped post attachments and profile grants negotiate their own feature c
     assert.equal(capabilitySatisfies('1.99.0', version), true);
   }
 });
+
+test('download-all archives are advertised by both manifests and routed as an executable endpoint', () => {
+	assert.equal(createApiCapabilitiesManifest().features['api.attachment-archive'], '1.0.0');
+	const discovery = thingtimeCapabilityManifest('https://archive.test');
+	assert.equal(discovery.features['api.attachment-archive'].version, '1.0.0');
+	assert.ok(discovery.operations.some((operation) => operation.feature === 'api.attachment-archive' && operation.path === '/api/v1/attachments/archive' && operation.methods.includes('GET')));
+	assert.ok(routeModules['v1/attachments/archive']);
+	assert.match(createApiCapabilitiesManifest(Object.keys(routeModules)).features[apiRouteCapabilityId('v1/attachments/archive')] || '', /^\d+\.\d+\.\d+$/);
+	for (const version of [undefined, '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
+	for (const version of ['1.0.0', '1.0.1', '1.1.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), true);
+});

@@ -4,7 +4,7 @@ import { SharedMediaProvider } from '~/components/Sharing/SharedMedia';
 import React from 'react';
 import { Box, Button, Center, Flex, IconButton, Input, Spinner, Text, Textarea } from '@chakra-ui/react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import { ArrowLeft, Check, Download, Pencil, X } from 'lucide-react';
+import { ArrowLeft, Check, Download, FolderDown, Pencil, X } from 'lucide-react';
 
 import { useApi } from '~/hooks/useApi';
 import { useCurrentUser } from '~/hooks/useCurrentUser';
@@ -13,11 +13,14 @@ import { PostCard } from '~/components/Feed/PostCard';
 import { useViewTracking } from '~/components/Feed/useViewTracking';
 import { mergeReactionOverlay } from '~/components/Feed/reactionOverlay';
 import {
+	archiveDownloadLabel,
 	attachmentContentUrl,
 	attachmentDisplayName,
+	downloadableAttachments,
 	formatAttachmentBytes,
 	normalizePublicAttachment
 } from '~/components/Attachments/attachmentUiCore';
+import { useAttachmentArchive } from '~/components/Attachments/useAttachmentArchive';
 import type { PublicAttachment } from '~/components/Attachments/attachmentTypes';
 import { RAINBOW_TEXT } from '~/theme/rainbow';
 import type { PostChange, PublicPost } from '~/components/Feed/feedTypes';
@@ -102,6 +105,15 @@ export const MediaPage = () => {
 	const post = data?.post ?? null;
 	const parentId = data?.parent?.id ?? null;
 	const isOwner = !!user?.id && !!post?.author?.id && user.id === post.author.id;
+	// this media is one of several stored files on its parent post: offer the
+	// whole gallery as one ZIP (the single-file download stays beside it)
+	const archive = useAttachmentArchive({ key: linkKey || undefined, sharedRoot: sharedRoot || undefined });
+	const gallery = React.useMemo(() => {
+		const stored = downloadableAttachments(data?.parent?.attachments);
+		return data?.parent && stored.length > 1
+			? { id: data.parent.id, fileCount: stored.length, totalBytes: stored.reduce((sum, item) => sum + (Number.isFinite(item.size) ? item.size : 0), 0) }
+			: null;
+	}, [data?.parent]);
 
 	// the interaction card renders the media itself as the body — one visual
 	// system with the feed (masonry/lightbox included via PostAttachments)
@@ -289,6 +301,18 @@ export const MediaPage = () => {
 								Download
 							</Button>
 						)}
+						{gallery && (
+							<Button
+								size="xs"
+								variant="ghost"
+								borderRadius="999px"
+								leftIcon={<FolderDown size={12} />}
+								title="Every stored file of the post this media lives in, as one ZIP"
+								onClick={() => void archive.download(gallery.id, 'gallery')}
+							>
+								{archiveDownloadLabel(gallery.fileCount, gallery.totalBytes)}
+							</Button>
+						)}
 					</Flex>
 				)}
 
@@ -313,7 +337,7 @@ export const MediaPage = () => {
 
 				{!loading && displayPost && (
 					<Box ref={(element: HTMLDivElement | null) => observeView(element, displayPost.id)}>
-						<PostCard post={displayPost} onChanged={handleChanged} defaultCommentsOpen mediaThing />
+						<PostCard post={displayPost} onChanged={handleChanged} defaultCommentsOpen mediaThing gallery={gallery ? { id: gallery.id, fileCount: gallery.fileCount } : null} />
 					</Box>
 				)}
 			</Flex>
