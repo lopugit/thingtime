@@ -2,16 +2,19 @@ import { ProgressiveImage } from './ProgressiveImage';
 import React from 'react';
 import { SharedMediaProvider, useSharedMediaUrl } from '../Sharing/SharedMedia';
 import { Box, Button, Flex, Text } from '@chakra-ui/react';
-import { Download, File as FileIcon, Play } from 'lucide-react';
+import { Download, File as FileIcon, FolderDown, Play } from 'lucide-react';
 
 import {
+	archiveDownloadLabel,
 	attachmentContentUrl,
 	attachmentDisplayName,
 	attachmentMediaSrc,
 	attachmentTypeLabel,
+	downloadableAttachments,
 	formatAttachmentBytes,
 	normalizePublicAttachment
 } from './attachmentUiCore';
+import { useAttachmentArchive } from './useAttachmentArchive';
 import { MediaLightbox } from './MediaLightbox';
 import { AudioAttachmentPlayer } from './AudioAttachmentPlayer';
 import type { PublicAttachment } from './attachmentTypes';
@@ -209,15 +212,19 @@ const PostAttachmentsGallery = ({
 	attachments,
 	mediaLayout,
 	compact,
-	ariaLabel = 'Attachments'
+	ariaLabel = 'Attachments',
+	postId
 }: {
 	attachments?: PublicAttachment[];
 	mediaLayout?: PostMediaLayout | null;
 	compact?: boolean;
 	ariaLabel?: string;
+	// the owning post/comment: enables "Download all" (one ZIP of every stored file)
+	postId?: string;
 }) => {
 	// Per-render reveal consent; navigating away re-shields.
 	const mediaUrl = useSharedMediaUrl();
+	const archive = useAttachmentArchive();
 	const [revealedIds, setRevealedIds] = React.useState<ReadonlySet<string>>(new Set());
 	const reveal = React.useCallback((id: string) => {
 		setRevealedIds((current) => {
@@ -236,6 +243,11 @@ const PostAttachmentsGallery = ({
 	const visualMedia = normalized.filter((attachment) => attachment.mediaKind === 'image' || attachment.mediaKind === 'video');
 	const audio = normalized.filter((attachment) => attachment.mediaKind === 'audio');
 	const files = normalized.filter((attachment) => attachment.mediaKind === 'file');
+	// "Download all" only earns its row once there are two or more stored files;
+	// a lone file already has its own download control. Linked media has no bytes.
+	const stored = downloadableAttachments(normalized);
+	const storedBytes = stored.reduce((sum, attachment) => sum + (Number.isFinite(attachment.size) ? attachment.size : 0), 0);
+	const downloadAll = postId && stored.length > 1 ? () => void archive.download(postId, 'post') : undefined;
 
 	const layout: PostMediaLayout = mediaLayout && visualMedia.length > 1 ? mediaLayout : { mode: 'masonry' };
 
@@ -404,11 +416,35 @@ const PostAttachmentsGallery = ({
 				</Flex>
 			)}
 
+			{downloadAll ? (
+				<Flex>
+					<Button
+						size="xs"
+						variant="outline"
+						borderRadius="999px"
+						leftIcon={<FolderDown size={13} aria-hidden />}
+						color="var(--tt-ink, #16161a)"
+						borderColor="var(--tt-border, #ececef)"
+						background="var(--tt-surface, #fafafb)"
+						_hover={{ background: 'var(--tt-surface-alt, #f5f5f7)' }}
+						title="Every stored file in this post as one ZIP"
+						onClick={(event) => {
+							event.preventDefault();
+							event.stopPropagation();
+							downloadAll();
+						}}
+					>
+						{archiveDownloadLabel(stored.length, storedBytes)}
+					</Button>
+				</Flex>
+			) : null}
+
 			<MediaLightbox
 				attachments={lightboxMedia}
 				index={lightbox.index}
 				isOpen={lightbox.open}
 				onClose={() => setLightbox((state) => ({ ...state, open: false }))}
+				onDownloadAll={postId && stored.length > 1 ? () => void archive.download(postId, 'gallery') : undefined}
 			/>
 		</Flex>
 	);

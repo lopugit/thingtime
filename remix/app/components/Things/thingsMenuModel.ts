@@ -12,6 +12,7 @@ import type {
   ThingContextSubmenu
 } from '~/components/Thingtime/ContextMenu/contextMenuModel';
 import { canOfferRecordingHandoff } from '../Lopu/recordingThingHandoff';
+import { archiveNounForKinds, buildArchiveMenuSection } from '../Attachments/attachmentArchiveActions';
 import { buildThingEntityMenu } from '../Thingtime/ContextMenu/thingEntityMenu';
 import { thingBrowseHref } from './thingsLocation';
 
@@ -50,6 +51,10 @@ export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, 
   const folder = isFolder(thing);
   const archive = thing.thingtime.length === 1 && thing.thingtime[0] === 'chat-archive';
   const bulkHint = actCount > 1 ? `Applies to ${actCount} selected Things` : undefined;
+  // "Download all files" (one ZIP) + its share link: folders enumerate server-side,
+  // so the count is unknown here; the page probes the manifest before saving.
+  const archiveNoun = archive ? null : archiveNounForKinds(thing.thingtime);
+  const files = archiveNoun ? buildArchiveMenuSection({ fileCount: null, noun: archiveNoun, bulk: actCount > 1 }) : null;
   return buildThingEntityMenu({
     open: { href: thingBrowseHref(thing, locationSearch) }, inspect: !archive && { href: `/thing/${encodeURIComponent(thing.id)}?from=things` }, 'copy-link': true,
     edit: canRename(thing) && actCount === 1,
@@ -58,6 +63,7 @@ export const buildThingsItemMenu = ({ thing, actCount, clipboardCount, ownerId, 
     'send-to-lopu': actCount === 1 && canOfferRecordingHandoff(thing, ownerId)
   }, [
     ...(!folder && !archive ? [{ id: 'preview', actions: [{ id: 'preview', command: 'preview', label: 'Preview', icon: '👀', lucide: 'eye' }] }] : []),
+    ...(files ? [files] : []),
     { id: 'organise', label: 'Organise', actions: [
       { id: 'move', command: 'move', label: `${countLabel('Move', actCount)} to…`, icon: '📁', lucide: 'folder-input' }
     ] },

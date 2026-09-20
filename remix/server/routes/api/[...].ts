@@ -91,6 +91,7 @@ export const routeModules: Record<string, () => Promise<RouteModule>> = {
   'v1/attachments/backfill-detected-types': () => import('../../../app/routes/api/v1/attachments/backfill-detected-types/_backfill-detected-types'),
   'v1/attachments/annotate': () => import('../../../app/routes/api/v1/attachments/annotate/_annotate'),
   'v1/attachments/content': () => import('../../../app/routes/api/v1/attachments/content/_content'),
+  'v1/attachments/archive': () => import('../../../app/routes/api/v1/attachments/archive/_archive'),
   'v1/attachments/cleanup': () => import('../../../app/routes/api/v1/attachments/cleanup/_cleanup'),
   'v1/moderation/sweep': () => import('../../../app/routes/api/v1/moderation/sweep/_sweep'),
   'v1/attachments/delete': () => import('../../../app/routes/api/v1/attachments/delete/_delete'),
