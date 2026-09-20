@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import {
 	LOCAL_ATTACHMENT_STORAGE_PATH,
@@ -207,4 +208,23 @@ test('copyUploadPart clones exact byte ranges of a stored version into a new upl
 		await storage.abortMultipartUpload({ objectKey: 'objects/att_abandoned', uploadId: abandoned });
 		await assert.rejects(storage.listParts({ objectKey: 'objects/att_abandoned', uploadId: abandoned }), (error: unknown) => storage.isNoSuchUpload(error));
 	});
+});
+
+// The stand-in's signed URLs are RELATIVE (`/api/v1/attachments/local-object?...`)
+// so the browser PUTs to the same origin without CORS. Node's global fetch()
+// cannot parse a relative URL, so every server-side reader of a signed object
+// URL must go through fetchStoredObject(). Missing one degrades silently on a
+// developer machine (an empty social card, an unreadable recording), which is
+// exactly the kind of gap a scan catches and review does not.
+test('every server-side reader of a signed object URL goes through fetchStoredObject', () => {
+	const apiRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+	// `deps.fetch(x.url)` is an injected seam whose default is fetchStoredObject.
+	const bareFetch = /(?<![\w.])fetch\(\s*[A-Za-z_$][\w$]*\.url\b/;
+	const offenders: string[] = [];
+	for (const entry of readdirSync(apiRoot, { recursive: true, withFileTypes: true })) {
+		if (!entry.isFile() || !/\.tsx?$/.test(entry.name) || entry.name.includes('.test.')) continue;
+		const file = path.join(entry.parentPath ?? entry.path, entry.name);
+		if (bareFetch.test(readFileSync(file, 'utf8'))) offenders.push(path.relative(apiRoot, file));
+	}
+	assert.deepEqual(offenders, [], `use fetchStoredObject() for signed object URLs: ${offenders.join(', ')}`);
 });
