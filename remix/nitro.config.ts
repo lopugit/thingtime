@@ -25,7 +25,6 @@ export default defineNitroConfig({
   // The Vite shell copied by sync:nitro-template. Nitro's default assets:server
   // mount resolves to <rootDir>/assets (which does not exist here), so the page
   // catch-all reads the shell through this explicit assets:shell mount instead.
-  serverAssets: [{ baseName: 'shell', dir: 'server/assets' }],
   routes: {
     ...Object.fromEntries(apiRoutes.map((route) => [`/api/${route}`, apiHandler])),
     [THINGTIME_CAPABILITY_MANIFEST_PATH]: thingtimeCapabilitiesHandler,
@@ -41,7 +40,10 @@ export default defineNitroConfig({
     [CHATGPT_AUTHORIZATION_SERVER_METADATA_PATH]: chatGptDiscoveryHandler,
     [CHATGPT_CAPABILITY_MANIFEST_PATH]: chatGptDiscoveryHandler
   },
+  // One key: a duplicate `serverAssets` literal silently dropped the shell
+  // mount (the last key wins), leaving the page route on its client fallback.
   serverAssets: [
+    { baseName: 'shell', dir: 'server/assets' },
     {
       baseName: 'client',
       dir: publicDir,

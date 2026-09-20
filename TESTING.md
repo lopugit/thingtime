@@ -1789,6 +1789,20 @@ email whose link points at the attacker.
 
 ## Post and comment attachments (`remix/app/components/Attachments/`)
 
+- [ ] Local attachment storage stand-in (PR: developer-experience follow-ups):
+      with `THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=.local-attachments` in
+      `remix/.env` and the dev stack restarted, run
+      `node remix/scripts/seed-fixture.mjs create --files 3 --name demo`, enable
+      uploads (admin login flags or `ADMIN_USERNAMES` + `resume`), then confirm
+      `remix/.local-attachments/objects/<id>/<version>.bin|.json` exist, the
+      post page renders the images (WebP `width=` previews return 200), the
+      content endpoint 302s to a signed `/api/v1/attachments/local-object` URL
+      that streams the bytes (Range → 206), the download-all archive unzips
+      cleanly, and `cleanup` deletes the post/folder and every object file.
+      An unsigned or expired `local-object` URL answers 403; with the variable
+      unset every request answers 404; the module throws when `VERCEL` is set.
+      `npm --prefix remix run test:attachments` covers the multipart, copy,
+      signature and traversal cases without a server.
 - [ ] Download all (PR: download-all attachments): a post with two or more
       stored attachments shows a `Download all · N files · size` pill under its
       gallery/file rows (single-file posts and linked-only galleries show none).
@@ -5883,6 +5897,19 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Things page (`/things`, `remix/app/components/Things/`, `/api/v1/things/bulk`)
 
+- [ ] Fresh-worktree bootstrap: create a linked worktree
+      (`git worktree add ../tt-check -b tmp/check`), confirm the tracked
+      `post-checkout` hook wrote `worktree-bootstrap.log` in the Git directory
+      and that `remix/node_modules/.pnpm`, missing env files copied from the main
+      checkout, and `.claude/launch.json` (entry `thingtime-web-<derived port>`)
+      exist; `git config --worktree --get core.hooksPath` prints `.githooks`.
+      `npm run worktree-bootstrap` a second time changes nothing. Remove the
+      worktree afterwards.
+- [ ] Graphify snapshot immutability: after `scripts/graphify update .`,
+      `stat -f %Lp graphify-out/snapshots/v1/*/*/GRAPH_REPORT.md` prints `444`;
+      running the upstream `graphify update` (or an old hook) through the root
+      alias fails with EACCES instead of dirtying the committed snapshot, and
+      `git status` stays clean. `npm run test:graphify-cas` passes.
 - [ ] Folder download-all: browse into a folder that contains posts with
       stored attachments and/or saved recordings; the toolbar shows a
       `Download all · N files · size` pill (absent at the root, in folders with

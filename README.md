@@ -845,6 +845,20 @@ the thin control-plane branch carries its own root config with all Git
 deployments disabled, so branches created from it never try to build an absent
 app.
 
+### One-step worktree bootstrap
+
+A fresh linked worktree (Claude Code, Codex, `git worktree add`) has no remix
+dependencies, no ignored env files and no port-specific `.claude/launch.json`.
+`npm run worktree-bootstrap` (`remix/scripts/worktree-bootstrap.cjs`) relinks
+dependencies from the shared pnpm store, copies missing ignored env files from
+the main checkout (never overwriting), writes `.claude/launch.json` with this
+checkout's derived dev ports, points this worktree's `core.hooksPath` at the
+tracked `.githooks`, and prints the ports, PM2 name and local URLs. The tracked
+`post-checkout` hook runs it automatically (in the background, logged to the
+Git directory as `worktree-bootstrap.log`) the first time a linked worktree is
+checked out without dependencies. Flags: `--no-deps`, `--no-env`,
+`--no-launch`, `--no-hooks`, `--quiet`.
+
 ## Electron desktop app
 
 The desktop shell lives in `electron/` and packages the same `remix/` web app
@@ -2017,6 +2031,48 @@ PUT that finishes late from escaping tier accounting; the seven-day S3
 incomplete-MPU lifecycle remains a required independent guard.
 An MPU that never issued a part URL has no possible late browser PUT and can be
 refunded promptly after Abort/ListParts/HEAD proves it empty.
+
+### Local attachment storage (laptop stand-in for the private bucket)
+
+The private bucket is reached only through Vercel's OIDC role, so a checkout
+without that role cannot upload, preview or download a single byte. For local
+development set one variable in `remix/.env` and restart the dev stack:
+
+```sh
+THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR=.local-attachments
+```
+
+`remix/app/api/utils/attachments/localAttachmentStorage.ts` then implements the
+same `AttachmentS3` interface on the filesystem (objects, versions, multipart
+parts under that directory, ignored by git) and mints short-lived HMAC-signed
+URLs to `GET|PUT /api/v1/attachments/local-object`, which it also serves.
+Uploads, image previews, downloads, "download all" archives, copies and
+moderation fetches run unchanged; quota, ACL and moderation gates are exactly
+the production ones. The module refuses to start when `VERCEL` or `VERCEL_ENV`
+is set and the route answers 404 without the variable, so it can never become a
+storage tier. Delete the directory to reset local media.
+
+### Seed a local fixture through the API
+
+```sh
+node remix/scripts/seed-fixture.mjs create --files 3 --name demo   # user + folder + public post with 3 stored files
+node remix/scripts/seed-fixture.mjs list
+node remix/scripts/seed-fixture.mjs cleanup remix/.fixtures/demo.json
+```
+
+The script only talks to the real endpoints (register, uploads/parts/complete,
+things, PATCH move) so seeded data shares one code path with real signups
+(FUNDAMENTALS §2). New accounts start with uploads locked: pass
+`--admin-user <name> --admin-password-file <file>` so the script enables uploads
+via `POST /api/v1/admin/users/public-uploads`. Without an admin, `create`
+registers the user and stops at the first refused upload; add
+`ADMIN_USERNAMES=<that username>` to `remix/.env`, restart the dev stack (env
+admins bypass approval, and a name listed there cannot *register*, hence the
+order), then `node remix/scripts/seed-fixture.mjs resume remix/.fixtures/<name>.json`.
+State, including the generated password for logging in as the fixture
+user, lives in `remix/.fixtures/<name>.json` (ignored, mode 0600). Cleanup
+deletes the post (cascading its attachments) and folder and signs the fixture
+session out; there is no account-deletion API, so the user row remains.
 
 ### Poll index headroom during the Watch rollout
 

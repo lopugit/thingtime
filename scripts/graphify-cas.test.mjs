@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { execFileSync, spawn, spawnSync } from "node:child_process"
 import {
+  chmodSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
@@ -237,6 +238,8 @@ test("an existing artifact path rejects changed portable bytes", () => {
       ...fingerprint,
       version: "graphify test",
     })
+    // snapshot files are read-only on disk; simulate an out-of-band corruption
+    chmodSync(path.join(snapshot.path, "graph.json"), 0o644)
     writeFileSync(
       path.join(snapshot.path, "graph.json"),
       '{"directed":false,"multigraph":false,"graph":{},"nodes":[],"links":[]}\n',
@@ -785,4 +788,27 @@ test("a routed query holds its snapshot lock until the subprocess finishes", { t
     await stopLockWorkers(workers)
     rmSync(root, { recursive: true, force: true })
   }
+})
+
+test("snapshot files are marked read-only so alias writes cannot mutate committed content", async () => {
+  const { markSnapshotReadOnly } = await import(pathToFileURL(path.join(process.cwd(), "scripts", "graphify-cas.mjs")).href)
+  const snapshot = mkdtempSync(path.join(tmpdir(), "graphify-readonly-"))
+  try {
+    for (const name of ["graph.json", "manifest.json", "GRAPH_REPORT.md", "snapshot.json"]) writeFileSync(path.join(snapshot, name), "{}\n")
+    writeFileSync(path.join(snapshot, "unrelated.txt"), "x")
+    markSnapshotReadOnly(snapshot)
+    const { statSync: stat } = await import("node:fs")
+    for (const name of ["graph.json", "manifest.json", "GRAPH_REPORT.md", "snapshot.json"]) {
+      assert.equal(stat(path.join(snapshot, name)).mode & 0o222, 0, `${name} must be read-only`)
+    }
+    assert.notEqual(stat(path.join(snapshot, "unrelated.txt")).mode & 0o222, 0, "only snapshot files are touched")
+    // an in-place write through the path now fails instead of editing the snapshot
+    assert.throws(() => writeFileSync(path.join(snapshot, "GRAPH_REPORT.md"), "rewritten"), /EACCES|EPERM/)
+    assert.equal(readFileSync(path.join(snapshot, "GRAPH_REPORT.md"), "utf8"), "{}\n")
+    // idempotent and safe on an already read-only tree; the directory stays removable
+    markSnapshotReadOnly(snapshot)
+  } finally {
+    rmSync(snapshot, { recursive: true, force: true })
+  }
+  assert.equal(existsSync(snapshot), false, "read-only files never block pruning")
 })

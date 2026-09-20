@@ -49,6 +49,23 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- **2026-09-20 · Claude (AI):** Developer-experience follow-ups. Filesystem
+  stand-in for the private S3 bucket (`THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR`,
+  `localAttachmentStorage.ts`, dev-only `GET|PUT /api/v1/attachments/local-object`
+  with HMAC-signed URLs, refused on Vercel) so uploads, previews, downloads,
+  archives and moderation fetches run locally; `remix/scripts/seed-fixture.mjs`
+  (`create`/`resume`/`cleanup`/`list`) seeds a user, folder and post with N
+  stored files through the real API; `docs/feature-map/` per-domain maps linked
+  from `AI_ALL.md`; `nitro.config.ts` duplicate `serverAssets` merged (the
+  `shell` mount was silently dropped), `registry.ts` schema fields completed and
+  the typecheck baseline ratcheted down; Graphify snapshot files are now
+  read-only on activation so stale hooks cannot mutate committed snapshots;
+  `npm run worktree-bootstrap` + `post-checkout` auto-bootstrap for linked
+  worktrees (deps, env copy, derived-port `.claude/launch.json`, relative
+  `core.hooksPath`). Validation: `test:attachments`, `test:api-capabilities`,
+  `test:graphify-cas`, seed → archive → cleanup against the local stand-in.
+  Details: [PR note](../PRs/dx-local-storage-fixtures-feature-maps.md).
+
 - **2026-09-20 · Claude (AI):** Download all attachments. New
   `GET /api/v1/attachments/archive?id=<post|comment|page|folder|media>` streams
   one stored (uncompressed) ZIP of every file the caller may already read —

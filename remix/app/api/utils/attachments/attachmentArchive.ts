@@ -3,6 +3,7 @@ import { isCustomMongoEndpointActive } from '../mongodb/endpoint';
 import { getThingsCollection } from '../mongodb/collections';
 import { canViewInherited, fail, findViewableThing, type Fail, type ThingDoc, type Viewer } from '../things/things';
 import { getAttachmentDownload } from './attachments';
+import { fetchStoredObject } from './localAttachmentStorage';
 import { orderAttachmentDocsByStoredSort } from './attachmentCore';
 import {
 	ARCHIVE_LINKS_FILE,
@@ -142,7 +143,8 @@ const defaultDependencies: ArchiveDependencies = {
 		(await (await getThingsCollection()).findOne({ shareId: id, thingtime: 'attachment' } as any, { projection: ARCHIVE_ATTACHMENT_PROJECTION })) as any as ArchiveAttachmentDoc | null,
 	download: getAttachmentDownload,
 	customMongoActive: isCustomMongoEndpointActive,
-	fetch: (input, init) => fetch(input, init),
+	// signed object URLs: real S3 over the network, the local stand-in in-process
+	fetch: (input, init) => fetchStoredObject(String(input), { signal: init?.signal, redirect: init?.redirect }),
 	now: Date.now
 };
 

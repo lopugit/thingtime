@@ -2322,16 +2322,16 @@ const errorLogSchema: ThingtimeSchema = {
   fields: [
     { name: 'source', type: 'string', required: true, max: 128, description: 'Authored operation label.' },
     { name: 'message', type: 'string', required: true, max: 2048, description: 'Redacted error summary.' },
-    { name: 'provider', type: 'string', description: 'External provider when applicable.' },
-    { name: 'status', type: 'number', description: 'Upstream or HTTP status.' },
-    { name: 'code', type: 'string', description: 'Provider error code.' },
-    { name: 'requestId', type: 'string', description: 'Server-generated correlation id.' },
-    { name: 'route', type: 'string', description: 'Registered API route, without query strings.' },
-    { name: 'method', type: 'string', description: 'HTTP request method.' },
-    { name: 'providerType', type: 'string', description: 'Provider error classification.' },
-    { name: 'providerRequestId', type: 'string', description: 'Upstream request correlation id.' },
-    { name: 'retryAfter', type: 'string', description: 'Upstream retry delay.' },
-    { name: 'attempt', type: 'number', description: 'Bounded provider attempt number.' }
+    { name: 'provider', type: 'string', required: false, description: 'External provider when applicable.' },
+    { name: 'status', type: 'number', required: false, description: 'Upstream or HTTP status.' },
+    { name: 'code', type: 'string', required: false, description: 'Provider error code.' },
+    { name: 'requestId', type: 'string', required: false, description: 'Server-generated correlation id.' },
+    { name: 'route', type: 'string', required: false, description: 'Registered API route, without query strings.' },
+    { name: 'method', type: 'string', required: false, description: 'HTTP request method.' },
+    { name: 'providerType', type: 'string', required: false, description: 'Provider error classification.' },
+    { name: 'providerRequestId', type: 'string', required: false, description: 'Upstream request correlation id.' },
+    { name: 'retryAfter', type: 'string', required: false, description: 'Upstream retry delay.' },
+    { name: 'attempt', type: 'number', required: false, description: 'Bounded provider attempt number.' }
   ], example: { source: 'moderation', message: 'Rate limit reached', provider: 'openai', status: 429 }
 };
 
@@ -2420,16 +2420,16 @@ const ciControlSchemas: ThingtimeSchema[] = [
     detail: 'The root stores fixed configuration and latest-run metadata. Ordered sources and targets are relational ci-feature-stack-entry Things published by revision, so edits never expose a partially replaced list.',
     createdVia: '/api/v1/admin/ci/stacks',
     fields: [
-      { name: 'title', type: 'string', required: true, max: 80 },
-      { name: 'repository', type: 'string', required: true, max: 300 },
-      { name: 'autoDecideBranches', type: 'boolean', required: true },
-      { name: 'revision', type: 'string', required: true, max: 80 },
-      { name: 'status', type: 'string', required: true, max: 120 },
-      { name: 'archived', type: 'boolean', required: true },
-      { name: 'createdBy', type: 'string', required: true, max: 180 },
-      { name: 'updatedBy', type: 'string', required: true, max: 180 },
-      { name: 'lastDispatchId', type: 'string', required: false, max: 180 },
-      { name: 'lastRunAt', type: 'date', required: false }
+      { name: 'title', type: 'string', required: true, max: 80, description: 'Human name of the saved Feature Stack.' },
+      { name: 'repository', type: 'string', required: true, max: 300, description: 'GitHub owner/name the stack builds against.' },
+      { name: 'autoDecideBranches', type: 'boolean', required: true, description: 'Whether Lopu chooses branch names for each stacked feature.' },
+      { name: 'revision', type: 'string', required: true, max: 80, description: 'Immutable revision id of the saved stack definition.' },
+      { name: 'status', type: 'string', required: true, max: 120, description: 'Lifecycle status such as saved, dispatched or completed.' },
+      { name: 'archived', type: 'boolean', required: true, description: 'Hidden from the active stack list when true.' },
+      { name: 'createdBy', type: 'string', required: true, max: 180, description: 'Admin username that saved the stack.' },
+      { name: 'updatedBy', type: 'string', required: true, max: 180, description: 'Admin username of the latest edit.' },
+      { name: 'lastDispatchId', type: 'string', required: false, max: 180, description: 'Id of the most recent controller dispatch, when any.' },
+      { name: 'lastRunAt', type: 'date', required: false, description: 'When the stack was last dispatched to the controller.' }
     ],
     example: { title: 'Search + Actions', repository: 'lopugit/thingtime', autoDecideBranches: true, revision: 'revision-id', status: 'saved', archived: false, createdBy: 'admin', updatedBy: 'admin' }
   },
@@ -2440,12 +2440,12 @@ const ciControlSchemas: ThingtimeSchema[] = [
     detail: 'Each child belongs to one root and revision. entryType chooses either prNumber or branch; position preserves administrator order without embedding an unbounded list on the root.',
     createdVia: '/api/v1/admin/ci/stacks',
     fields: [
-      { name: 'repository', type: 'string', required: true, max: 300 },
-      { name: 'revision', type: 'string', required: true, max: 80 },
-      { name: 'entryType', type: 'enum', required: true, values: ['source', 'target'] },
-      { name: 'position', type: 'number', required: true, min: 0 },
-      { name: 'prNumber', type: 'number', required: false, min: 1 },
-      { name: 'branch', type: 'string', required: false, max: 180 }
+      { name: 'repository', type: 'string', required: true, max: 300, description: 'GitHub owner/name the entry belongs to.' },
+      { name: 'revision', type: 'string', required: true, max: 80, description: 'Revision of the parent Feature Stack this entry is part of.' },
+      { name: 'entryType', type: 'enum', required: true, values: ['source', 'target'], description: 'Whether the entry is a source pull request or a target branch.' },
+      { name: 'position', type: 'number', required: true, min: 0, description: 'Zero-based administrator ordering within the stack.' },
+      { name: 'prNumber', type: 'number', required: false, min: 1, description: 'Pull request number for source entries.' },
+      { name: 'branch', type: 'string', required: false, max: 180, description: 'Branch name for target entries.' }
     ],
     example: { repository: 'lopugit/thingtime', revision: 'revision-id', entryType: 'source', position: 0, prNumber: 427 }
   },
