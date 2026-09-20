@@ -217,14 +217,20 @@ test('copyUploadPart clones exact byte ranges of a stored version into a new upl
 // developer machine (an empty social card, an unreadable recording), which is
 // exactly the kind of gap a scan catches and review does not.
 test('every server-side reader of a signed object URL goes through fetchStoredObject', () => {
-	const apiRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+	const remixRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
+	// Every server-only tree, not just app/api: route loaders/actions read signed
+	// URLs too (content?cache=bytes). Client components are excluded on purpose —
+	// a browser resolves a relative URL that Node's fetch() cannot.
+	const roots = ['app/api', 'app/routes/api', 'server'].map((relative) => path.join(remixRoot, relative));
 	// `deps.fetch(x.url)` is an injected seam whose default is fetchStoredObject.
 	const bareFetch = /(?<![\w.])fetch\(\s*[A-Za-z_$][\w$]*\.url\b/;
 	const offenders: string[] = [];
-	for (const entry of readdirSync(apiRoot, { recursive: true, withFileTypes: true })) {
-		if (!entry.isFile() || !/\.tsx?$/.test(entry.name) || entry.name.includes('.test.')) continue;
-		const file = path.join(entry.parentPath ?? entry.path, entry.name);
-		if (bareFetch.test(readFileSync(file, 'utf8'))) offenders.push(path.relative(apiRoot, file));
+	for (const root of roots) {
+		for (const entry of readdirSync(root, { recursive: true, withFileTypes: true })) {
+			if (!entry.isFile() || !/\.tsx?$/.test(entry.name) || entry.name.includes('.test.')) continue;
+			const file = path.join(entry.parentPath ?? entry.path, entry.name);
+			if (bareFetch.test(readFileSync(file, 'utf8'))) offenders.push(path.relative(remixRoot, file));
+		}
 	}
 	assert.deepEqual(offenders, [], `use fetchStoredObject() for signed object URLs: ${offenders.join(', ')}`);
 });
