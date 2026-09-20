@@ -29,6 +29,18 @@ update stale details. Do not recursively reread this file through its aliases.
 - For PR reviews, prioritize code quality, performance, potential bugs,
   crashes, and especially security issues before style commentary.
 
+## Feature maps — read the map for the domain you touch
+
+`docs/feature-map/` holds one short map per domain (attachments and media,
+sharing and audiences, things and folders, posts and feed, API endpoints and
+capabilities, UI shell and menus, auth and accounts, local development). Each
+lists the routes, service modules, the authorization helper every read/write
+must call, the UI entry points, the registration steps and the tests to run.
+Before broad `graphify`/`rg` exploration, read the map for the domain you are
+changing; when you add a route, service, menu action or test script, update the
+map in the same PR. Maps link to `FUNDAMENTALS.md`, `TESTING.md`, the API docs
+registry and design notes instead of duplicating them.
+
 ## Recurring development lessons — 2026-09-11
 
 These rules come from the [two-month PR review](docs/ai-guidance-review-2026-09-11.md)
@@ -434,6 +446,18 @@ points, not the individual files.
   PM2 on a free trio: `TT_WEB_PORT=<web> TT_HMR_PORT=<hmr> TT_API_PORT=<api>
   npm --prefix remix run dev`. Keep any tooling config that hardcodes worktree
   ports (for example `.claude/launch.json`) untracked.
+- Fresh worktrees: run `npm run worktree-bootstrap` (or let the tracked
+  `post-checkout` hook do it on first checkout). It relinks remix dependencies,
+  copies missing ignored env files from the main checkout, writes the
+  derived-port `.claude/launch.json`, and sets this worktree's `core.hooksPath`
+  to the relative `.githooks` so stale hooks from another checkout never run
+  here. Keep `core.hooksPath` relative; an absolute path shared across
+  worktrees runs one checkout's hook files everywhere.
+- Local attachment bytes: set `THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR` in
+  `remix/.env` (see README "Local attachment storage") so uploads, previews,
+  downloads and archives work without the private bucket. Seed realistic data
+  with `node remix/scripts/seed-fixture.mjs create` (real API only) and remove it
+  with `cleanup`; never insert attachment records into Mongo by hand.
 - Codex-managed worktrees use the root `.worktreeinclude` to copy ignored local
   setup into new managed worktrees. Keep tracked files and every
   `node_modules/` directory out of `.worktreeinclude`: copied pnpm symlink

@@ -531,3 +531,11 @@ test('download-all archives are advertised by both manifests and routed as an ex
 	for (const version of [undefined, '0.9.0', '2.0.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), false);
 	for (const version of ['1.0.0', '1.0.1', '1.1.0']) assert.equal(capabilitySatisfies(version, '1.0.0'), true);
 });
+
+test('the local development object-storage route is advertised and registered like every executable endpoint', () => {
+	assert.equal(createApiCapabilitiesManifest().features['api.attachment-local-object'], '1.0.0');
+	const discovery = thingtimeCapabilityManifest('https://local.test');
+	assert.equal(discovery.features['api.attachment-local-object'].version, '1.0.0');
+	assert.ok(discovery.operations.some((operation) => operation.feature === 'api.attachment-local-object' && operation.path === '/api/v1/attachments/local-object' && operation.methods.includes('PUT')));
+	assert.ok(routeModules['v1/attachments/local-object']);
+});

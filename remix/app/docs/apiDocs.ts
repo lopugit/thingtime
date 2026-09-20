@@ -6017,6 +6017,41 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		]
 	}),
 	endpoint({
+		id: 'attachment-local-object',
+		contractVersion: '1.0.0',
+		featureVersion: '1.0.0',
+		group: 'attachments',
+		title: 'Local development object storage',
+		endpoint: '/api/v1/attachments/local-object',
+		summary: 'Filesystem stand-in for the private S3 bucket: serves the server-signed part-upload and download URLs when THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR is set on a developer machine; 404 everywhere else.',
+		detail:
+			'Never active in deployments: the module refuses to start when Vercel environment variables are present, and without the directory variable every request answers 404. URLs are minted only by the attachment service (upload part signing and downloads) and carry a ten-minute HMAC signature over every parameter. PUT stores one multipart part after verifying the signed length and SHA-256 checksum; GET/HEAD stream one exact object version with Range support and the signed Content-Type/Content-Disposition. Object keys, upload ids and version ids are validated against fixed grammars so no request can reach outside the storage directory. Quota, moderation, ACL and copy behaviour are unchanged — they only ever see the AttachmentS3 interface.',
+		auth: {
+			mode: 'none',
+			description: 'Authorization is the short-lived signature minted by the attachment service after its own audience checks. Callers never construct these URLs.'
+		},
+		methods: ['GET', 'PUT'],
+		steps: [
+			'Set THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR (for example remix/.local-attachments) in remix/.env and restart the dev stack. Uploads, previews, downloads, archives and moderation fetches then run against local files.',
+			'Upload through the normal /api/v1/attachments/uploads flow; the signed part URLs point at this route and the browser PUTs to the same origin, so no CORS setup is needed.',
+			'Downloads follow the content endpoint redirect to a signed GET here; Range requests return 206 for video scrubbing.',
+			'Delete the storage directory to reset local media. Never set the variable in a Vercel environment.'
+		],
+		requestExamples: [
+			{
+				name: 'Serve a signed object',
+				description: 'The content endpoint redirects here with a server-minted signature.',
+				method: 'GET',
+				query: { op: 'get', key: 'objects/att_example', version: 'v0abc-0123456789abcdef', disposition: 'aW5saW5l', type: 'aW1hZ2UvcG5n', exp: 1790000000, sig: '<hmac>' }
+			}
+		],
+		responseExamples: [
+			{ status: 200, description: 'Object bytes with the signed headers.', headers: { 'Content-Type': 'image/png', 'Accept-Ranges': 'bytes', 'Cache-Control': 'private, no-store, max-age=0' } },
+			{ status: 403, description: 'Expired or mismatched signature.', body: { ok: false, error: 'Signature does not match' } },
+			{ status: 404, description: 'Stand-in not configured, or unknown object.', body: { ok: false, error: 'Local attachment storage is not configured' } }
+		]
+	}),
+	endpoint({
 		id: 'attachment-cleanup',
 		group: 'attachments',
 		title: 'Reap expired attachment drafts',

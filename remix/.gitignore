@@ -20,3 +20,7 @@ tmp/*
 .media-cache-qa.config.cjs
 # offline sitemap generator output (npm run sitemap:generate)
 sitemap-out/
+# filesystem stand-in for the private S3 bucket (THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR)
+.local-attachments/
+# seed-fixture state files (ids + generated fixture passwords)
+.fixtures/

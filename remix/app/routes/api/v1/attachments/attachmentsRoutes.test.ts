@@ -605,3 +605,21 @@ test('archive requests refuse malformed ids and roots before authenticating, and
 	});
 	assert.equal((await limited({ request: new Request('https://thingtime.example/api/v1/attachments/archive?id=post-1') })).status, 503);
 });
+
+// The filesystem stand-in for private S3 is a laptop convenience: without its
+// directory variable the route is inert (404 for every method) and never
+// reveals which operations exist.
+test('the local object-storage route is inert unless the stand-in directory is configured', async () => {
+	const previous = process.env.THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR;
+	delete process.env.THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR;
+	try {
+		const { loader, action } = await import('./local-object/_local-object');
+		for (const [handler, method] of [[loader, 'GET'], [loader, 'HEAD'], [action, 'PUT']] as const) {
+			const response = await handler({ request: new Request('https://thingtime.example/api/v1/attachments/local-object?op=get&key=objects%2Fx', { method }) });
+			assert.equal(response.status, 404, method);
+			assert.match(response.headers.get('Cache-Control')!, /no-store/);
+		}
+	} finally {
+		if (previous !== undefined) process.env.THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR = previous;
+	}
+});

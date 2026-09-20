@@ -1,4 +1,5 @@
 import { describeAttachmentTransfer, getAttachmentDownload } from '../attachments/attachments';
+import { fetchStoredObject } from '../attachments/localAttachmentStorage';
 import {
 	isLopuImage,
 	isLopuText,
@@ -16,7 +17,9 @@ export async function resolveLopuMedia(
 	deps = {
 		describe: describeAttachmentTransfer,
 		download: getAttachmentDownload,
-		fetch: globalThis.fetch
+		// Signed object URLs: real S3 over the network, the local stand-in in-process.
+		fetch: ((input: RequestInfo | URL, init?: RequestInit) =>
+			fetchStoredObject(String(input), { signal: init?.signal, redirect: init?.redirect })) as typeof globalThis.fetch
 	}
 ) {
 	const media: LopuMedia[] = [];
