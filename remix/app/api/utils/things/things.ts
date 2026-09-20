@@ -1,3 +1,5 @@
+import type { ResolvedAudience } from '~/components/Sharing/audienceCore';
+import { FOUND_POST_KIND, FOUND_POST_PREFIX, foundPostViewerId, foundPostGrantMatches, withFoundPostGrant, loadFoundPostsForAuthor, rememberFoundPost } from './foundPosts';
 import { ownerLibraryMatch } from './ownerLibraryQuery';
 import { moveManagedContent } from './managedPlacement';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -337,6 +339,7 @@ export type PublicComment = {
 };
 
 export type PublicPost = {
+  audience?: ResolvedAudience;
   id: string;
   thingtime: string[];
   type: PostType;
@@ -432,6 +435,7 @@ export type PublicSubspaceMod = {
 
 // Generic projection for non-post things (and the unified read endpoint).
 export type PublicThing = {
+  audience?: ResolvedAudience;
   id: string;
   thingtime: string[];
   author: FeedAuthor | null;
@@ -478,6 +482,10 @@ export type Viewer = {
   // hidden-link keys presented with THIS request (?key= / body.key) — canView
   // grants a hidden thing to whoever carries its linkKey here
   linkKeys?: ReadonlySet<string>;
+  // Exact first-party permalink targets, never populated by feeds/search.
+  linkThingIds?: ReadonlySet<string>;
+  foundPosts?: ReadonlyMap<string, string>;
+  anonymousId?: string;
 } | null;
 export const asViewer = (value: string | Viewer | null | undefined): Viewer => (typeof value === 'string' ? { id: value } : value || null);
 
@@ -494,6 +502,13 @@ export const withLinkKeys = (viewer: Viewer, keys: readonly string[]): Viewer =>
   if (!presented.length) return viewer;
   return viewer ? { ...viewer, linkKeys: new Set(presented) } : { id: '', linkKeys: new Set(presented) };
 };
+
+// Knowing an unlisted Thing's canonical id is sufficient to open its URL.
+// Keep this request-local and exact-id scoped so listing/projection of unrelated
+// hidden Things does not accidentally become public.
+export const withThingLink = (viewer: Viewer, id: string): NonNullable<Viewer> => ({
+  id: '', ...viewer, linkThingIds: new Set([...(viewer?.linkThingIds || []), id])
+});
 
 // Attach the viewer's accepted-friend set (one indexed query, memoised on the
 // viewer object — already-enriched viewers pass straight through). Read paths
@@ -1021,6 +1036,7 @@ export const sanitizeShareId = (value: unknown): string | null | Fail => {
     return fail(400, 'shareId must be a short id without spaces, dots, or $');
   }
   if (
+    trimmed.startsWith(FOUND_POST_PREFIX) ||
     trimmed.startsWith('lopu-recording-') ||
     trimmed.startsWith('lopu-background-') ||
     trimmed.startsWith(MIGRATION_RESERVED_ID_PREFIX) ||
@@ -2295,7 +2311,12 @@ const authorFlairFor = (flairs: AuthorFlairs, embed: SubspaceEmbed | null, subsp
 // before any score is known (resolveRelated), so they re-order among the
 // replies that already ship rather than re-querying per parent — the
 // non-intrusive half the spec allowed; the docs say so.
-export type PostProjectionOptions = { commentSort?: CommentSort | null };
+export type PostProjectionOptions = {
+  resolveAudience?: boolean;
+  rememberDiscovery?: boolean;
+  discoveryIp?: string;
+  commentSort?: CommentSort | null;
+};
 
 export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | Viewer, options: PostProjectionOptions = {}): Promise<PublicPost[]> => {
   const viewer = await withFriendIds(asViewer(viewerInput));
@@ -2315,6 +2336,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   const originalsById = new Map(originals.map((doc) => [doc.shareId, doc]));
 
   const allDocs = [...docs, ...originals];
+  const audiences = options.resolveAudience ? await resolvePublicAudiences(allDocs, viewer) : new Map<string, ResolvedAudience>();
   // One batched pass each: interactions, whole-thread comment totals,
   // protected attachment metadata, and public view stats. Run them together
   // so neither attachments nor views add serial read latency.
@@ -2331,7 +2353,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
 		...Array.from(related.commentsByTarget.values()).flatMap((entries) => entries.flatMap((entry) => (entry.doc ? [entry.doc.shareId] : [])))
 	];
 	const expectedAttachmentTargets = new Map<string, { ownerId: string; purpose: 'post' | 'comment' }>(
-		allDocs.map((doc) => [doc.shareId, { ownerId: String(doc.ownerId), purpose: 'post' as const }] as const)
+		allDocs.map((doc) => [doc.shareId, { ownerId: String(doc.ownerId), purpose: thingtimeOf(doc).includes('comment') ? 'comment' as const : 'post' as const }] as const)
 	);
 	for (const entries of related.commentsByTarget.values()) {
 		for (const entry of entries) {
@@ -2502,6 +2524,7 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
       thingtime: thingtimeOf(doc),
       type: (crystal.type as PostType) || 'text',
       author: profiles.get(doc.ownerId) || null,
+      audience: audiences.get(doc.shareId),
       visibility: visibilityFromAcl(aclOf(doc)) as PostVisibility,
       acl: aclOf(doc),
       // owner-only: the hidden-link secret, only while the acl says hidden
@@ -2570,10 +2593,10 @@ export const toPublicPosts = async (docs: ThingDoc[], viewerInput: string | View
   return docs.map((doc) => project(doc, true));
 };
 
-export const toPublicThings = async (docs: ThingDoc[], viewerInput: string | Viewer): Promise<PublicThing[]> => {
+export const toPublicThings = async (docs: ThingDoc[], viewerInput: string | Viewer, resolveAudience = false): Promise<PublicThing[]> => {
   if (!docs.length) return [];
   const viewer = asViewer(viewerInput);
-  const profiles = await resolveProfiles(docs.map((doc) => doc.ownerId));
+  const [profiles, audiences] = await Promise.all([resolveProfiles(docs.map((doc) => doc.ownerId)), resolveAudience ? resolvePublicAudiences(docs, viewer) : Promise.resolve(new Map<string, ResolvedAudience>())]);
   return docs.map((doc) => {
     // token grants are owner-facing management data, not audience — only the
     // owner's own credentials (session or their tokens) see them
@@ -2588,6 +2611,7 @@ export const toPublicThings = async (docs: ThingDoc[], viewerInput: string | Vie
       id: doc.shareId,
       thingtime: thingtimeOf(doc),
       author: profiles.get(doc.ownerId) || null,
+      audience: audiences.get(doc.shareId),
       visibility: visibilityFromAcl(aclOf(doc)),
       acl: aclOf(doc),
       ...(linkKey ? { linkKey } : {}),
@@ -2613,10 +2637,30 @@ export const toPublicThings = async (docs: ThingDoc[], viewerInput: string | Vie
 
 const aclOf = (doc: ThingDoc): string[] => (Array.isArray(doc.acl) && doc.acl.length ? doc.acl : aclFromVisibility(doc.visibility) || [ACL_OWNER]);
 
+// Display the actual inherited audience without changing the stored child ACL.
+// One cached, coalesced lookup per ancestry level for the entire page. A key
+// may only be re-shared by its owner or a viewer who already presented it;
+// membership and a remembered discovery never disclose the parent's secret.
+export const resolvePublicAudiences = async (
+  docs: ThingDoc[], viewer: Viewer, lookup = batchedThingLookup()
+): Promise<Map<string, ResolvedAudience>> => {
+  const known = new Map(docs.map(doc => [doc.shareId, doc]));
+  const find = async (id: string) => known.get(id) || lookup(id);
+  const entries = await Promise.all(docs.map(async doc => {
+    const terminal = await resolveInheritChain(doc, d => aclOf(d).includes(ACL_INHERIT), find);
+    const acl = terminal ? aclOf(terminal) : [ACL_OWNER];
+    const key = terminal?.linkKey;
+    const linkKey = key && acl.includes(ACL_HIDDEN) &&
+      (viewer?.id === terminal.ownerId || viewer?.linkKeys?.has(key)) ? key : undefined;
+    return [doc.shareId, { sourceId: terminal?.shareId || doc.shareId, acl, ...(linkKey ? { linkKey } : {}) }] as const;
+  }));
+  return new Map(entries);
+};
+
 export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
 	// Operational diagnostics have a stricter boundary than ordinary private
 	// Things: only the dedicated current-admin endpoint may decode/read them.
-	if ((thingtimeOf(doc).includes(MIGRATION_DIAGNOSTIC_THINGTIME) || thingtimeOf(doc).includes(ERROR_LOG_THINGTIME))) return false;
+	if ((thingtimeOf(doc).includes(FOUND_POST_KIND) || thingtimeOf(doc).includes(MIGRATION_DIAGNOSTIC_THINGTIME) || thingtimeOf(doc).includes(ERROR_LOG_THINGTIME))) return false;
 	// Moderation-blocked things vanish from every ordinary read for everyone —
 	// owner included, same as blocked attachments. Admins review through the
 	// moderationFlag queue (which carries a bounded excerpt), never this path.
@@ -2637,7 +2681,10 @@ export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
   // private things (inherit acls are judged on their resolved terminal via
   // canViewInherited; a direct hit on one fails closed).
   if (patVisibilityBlocksAcl(viewer, aclOf(doc))) return false;
-  // hidden (unlisted) things: the random link key IS the audience — anyone
+  // Canonical URLs are the unlisted read capability. The stored audience is
+  // still checked live; removing tt:hidden immediately revokes anonymous access.
+  if (viewer?.linkThingIds?.has(doc.shareId) && aclOf(doc).includes(ACL_HIDDEN)) return true;
+  // Legacy keyed URLs remain accepted: the random link key IS the audience — anyone
   // presenting it may view, logged out included. The key only grants while
   // the acl still says hidden, so un-hiding instantly retires shared links.
   if (
@@ -2649,6 +2696,7 @@ export const canView = (doc: ThingDoc, viewer: Viewer): boolean => {
   ) {
     return true;
   }
+  if (foundPostViewerId(viewer) && foundPostGrantMatches(doc, viewer?.foundPosts?.get(doc.shareId))) return true;
   if (viewer?.id && doc.ownerId === viewer.id) return true;
   // private-subspace posts are fenced to that subspace's active members and
   // moderators (the enriched viewer carries the roster; a bare viewer fails
@@ -2718,8 +2766,21 @@ export const canViewInherited = async (
 	) {
 		return false;
 	}
-  const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findByShareId);
-  if (terminal) return canView(terminal, viewer);
+  let ancestorDenied = false;
+  const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), async id => {
+    const ancestor = await findByShareId(id);
+    if (ancestor && (attachmentIsBlocked(ancestor as any) ||
+      (attachmentModerationStatus(ancestor as any) === 'pending' &&
+       thingtimeOf(ancestor).some(kind => TEXT_MODERATED_THINGTIMES.has(kind)) && ancestor.ownerId !== viewer?.id))) ancestorDenied = true;
+    return ancestor;
+  });
+  if (ancestorDenied) return false;
+  if (terminal) {
+    const linkedViewer = viewer?.linkThingIds?.has(doc.shareId) ? withThingLink(viewer, terminal.shareId) : viewer;
+    if (canView(terminal, linkedViewer)) return true;
+    if (isCustomMongoEndpointActive()) return false;
+    return canView(terminal, await withFoundPostGrant(terminal, viewer, findByShareId));
+  }
 
   // Attachments are independently stored media objects. If a parent was
   // deleted or a legacy migration left the relation dangling, preserve an
@@ -2892,7 +2953,7 @@ export const findViewableThing = async (shareId: unknown, viewer: Viewer): Promi
   const doc = await findThing(shareId);
   // friend enrichment happens here so every interaction path (react, comment,
   // share, save, view) resolves friends-only targets for real friends
-  if (!doc || !(await canViewInherited(doc, await withFriendIds(viewer)))) return null;
+  if (!doc || !(await canViewInherited(doc, withThingLink(await withFriendIds(viewer), doc.shareId)))) return null;
   return doc;
 };
 
@@ -3261,13 +3322,18 @@ export const featuresOf = (doc: ThingDoc): PostFeatures => ({
   createdAt: new Date(doc.createdAt)
 });
 
+// Keep profile candidate selection tied to the feed's canonical grant query.
+export const profilePostsAudienceQuery = (viewer: Viewer, ownerId: string) =>
+  withMatch({ ownerId }, { $or: [visibilityQueryFor(viewer, []) || { shareId: { $in: [] } },
+    { shareId: { $in: !viewer?.pat ? [...(viewer?.foundPosts?.keys() || [])] : [] } }] }, patVisibilityMatchClause(viewer) || {});
+
 export const listUserPosts = async (
   viewerInput: string | Viewer,
   username: string,
   cursor: string | null,
   limit = DEFAULT_FEED_LIMIT
 ): Promise<{ ok: true; posts: PublicPost[]; nextCursor: string | null; postCount?: number } | Fail> => {
-  const viewer = await withFriendIds(asViewer(viewerInput));
+  let viewer = await withFriendIds(asViewer(viewerInput));
   if (typeof username !== 'string' || !username.trim()) return fail(400, 'username is required');
   // dual-era: findUserByUsername resolves user things first, legacy second —
   // a bare users.findOne would 404 every things-era + migrated account
@@ -3275,14 +3341,12 @@ export const listUserPosts = async (
   if (!user) return fail(404, 'User not found');
 
   const ownerId = String(user._id);
+  const discoveryId = foundPostViewerId(viewer);
+  if (discoveryId && !isCustomMongoEndpointActive()) viewer = { id: '', ...viewer, foundPosts: await loadFoundPostsForAuthor(discoveryId, ownerId) };
   const own = viewer?.id === ownerId;
-  // a friend browsing this profile also sees the owner's friends-circle posts
-  const friendOfOwner = !!viewer?.friendIds?.has(ownerId);
-  const baseMatch = own
-    ? withMatch(await postMatch(), { ownerId })
-    : friendOfOwner
-      ? withMatch(await postMatch(), { ownerId }, { $or: [circleClause('public'), circleClause('friends')] })
-      : withMatch(await postMatch(), { ownerId }, circleClause('public'));
+  // Use the same candidate audience as the feed: direct/group grants and
+  // mixed custom audiences must reach the exact canView check below.
+  const baseMatch = withMatch(await postMatch(), profilePostsAudienceQuery(viewer, ownerId));
   // visibility-restricted tokens: conjoin the audience fence the same way
   // listThings does. Not just paging hygiene (without it a public-only token
   // pages an owner's mostly-private profile in near-empty slices while the
@@ -3326,10 +3390,18 @@ export const getThing = async (
   app: AppLens = null,
   options: PostProjectionOptions = {}
 ): Promise<Fail | { ok: true; thing: PublicThing; post: PublicPost | null; parent: PublicPost | null; root: PublicPost | null }> => {
-  const viewer = await withFriendIds(asViewer(viewerInput));
+  let viewer = await withFriendIds(asViewer(viewerInput));
   const doc = await findViewableThingAs(shareId, viewer, app);
   if (!doc) return fail(404, 'Thing not found');
-  const thing = (await toPublicThings([doc], viewer))[0];
+  if (!app) {
+    const terminal = await resolveInheritChain(doc, d => aclOf(d).includes(ACL_INHERIT), findThing);
+    viewer = withThingLink(viewer, terminal?.shareId || doc.shareId);
+  }
+  if (!app && options.rememberDiscovery && !isCustomMongoEndpointActive()) {
+    const terminal = await resolveInheritChain(doc, (d) => aclOf(d).includes(ACL_INHERIT), findThing);
+    if (terminal && canView(terminal, viewer)) await rememberFoundPost(viewer, terminal, options.discoveryIp);
+  }
+  const thing = (await toPublicThings([doc], viewer, !app))[0];
 
   // App consumers get the generic thing shape only: the PublicPost projection
   // batch-embeds comments/reactions across ALL viewers (scope-blind), so it
@@ -3346,7 +3418,7 @@ export const getThing = async (
 	// aggregates (those resolvers are target-generic), and the parent walk
 	// links the page back to the post the media is bound to.
 	const isMediaAttachment = thingtimeOf(doc).includes('attachment');
-	const post = isPostThing(doc) || isComment || isMediaAttachment ? (await toPublicPosts([doc], viewer, options))[0] : null;
+	const post = isPostThing(doc) || isComment || isMediaAttachment ? (await toPublicPosts([doc], viewer, { ...options, resolveAudience: true }))[0] : null;
 
   let parent: PublicPost | null = null;
   let root: PublicPost | null = null;
@@ -3362,7 +3434,7 @@ export const getThing = async (
       if (!up || !up.shareId || seenChain.has(up.shareId)) break;
       seenChain.add(up.shareId);
       chain.push(up);
-      if (!thingtimeOf(up).includes('comment')) break;
+      if (!aclOf(up).includes(ACL_INHERIT)) break;
       cursor = up;
     }
     // Each canViewInherited re-walks that entry's own ACL chain, so checking
@@ -3376,7 +3448,7 @@ export const getThing = async (
     const verdicts = await Promise.all(chain.map((entry) => canViewInherited(entry, viewer, lookup)));
     const visibleChain = chain.filter((_, index) => verdicts[index]);
     if (visibleChain.length) {
-      const projected = await toPublicPosts([...new Map(visibleChain.map((entry) => [entry.shareId, entry])).values()], viewer, options);
+      const projected = await toPublicPosts([...new Map(visibleChain.map((entry) => [entry.shareId, entry])).values()], viewer, { ...options, resolveAudience: true });
       const byId = new Map(projected.map((entry) => [entry.id, entry]));
       parent = byId.get(chain[0]?.shareId) || null;
       const last = chain[chain.length - 1];
@@ -3410,7 +3482,7 @@ export const listThings = async (
   app: AppLens = null,
   context: { archiveOwnerId?: string } = {}
 ): Promise<Fail | { ok: true; things: PublicThing[]; nextCursor: string | null }> => {
-  const viewer = await withFriendIds(asViewer(viewerInput));
+  let viewer = await withFriendIds(asViewer(viewerInput));
   const limit = Math.min(Math.max(1, query.limit || DEFAULT_FEED_LIMIT), MAX_FEED_LIMIT);
   const thingtime = (query.thingtime || []).filter((id) => typeof id === 'string' && id.trim());
 
@@ -3419,6 +3491,10 @@ export const listThings = async (
     if (query.folder) return fail(400, 'folder filtering applies to your own things, not a target listing');
     const target = await findViewableThingAs(query.targetId, viewer, app);
     if (!target) return fail(404, 'Thing not found');
+    if (!app) {
+      const terminal = await resolveInheritChain(target, d => aclOf(d).includes(ACL_INHERIT), findThing);
+      viewer = withThingLink(viewer, terminal?.shareId || target.shareId);
+    }
     // under the app lens, children are namespace things too — the owner's
     // first-party comments on an app thing (no appId) never surface here
     match = app ? withMatch({ targetId: target.shareId }, ...appMatchClauses(app)) : { targetId: target.shareId };

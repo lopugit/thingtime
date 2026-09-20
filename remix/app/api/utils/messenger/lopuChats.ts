@@ -87,7 +87,7 @@ export type LopuChatSettings = {
 	speed: AiModelSpeed | null; // null = catalog default (the admin default speed, else 'normal')
 	providerId?: string | null; // one of the owner's Secure Vault provider connections; null/absent = Thingtime's models
 };
-export type LopuChatState = LopuChatSettings & { turns: number; lastModel: string | null };
+export type LopuChatState = LopuChatSettings & { turns: number; lastModel: string | null; archived?: boolean };
 export type LopuChatSettingsInput = { model?: unknown; effort?: unknown; speed?: unknown; providerId?: unknown };
 export type LopuTurnProvider = NonNullable<PublicLopuMessageMeta['provider']>;
 export type LopuAssistantTurnMeta = {
@@ -178,7 +178,7 @@ export const lopuChatStateOf = (value: unknown): LopuChatState => {
 	const turns = Number.isSafeInteger(raw.turns) && Number(raw.turns) >= 0 ? Number(raw.turns) : 0;
 	const lastModel = typeof raw.lastModel === 'string' && raw.lastModel.trim() ? raw.lastModel.trim().slice(0, 128) : null;
 	const providerId = safeVaultId(raw.providerId);
-	return { model, effort, speed, providerId, turns, lastModel };
+	return { model, effort, speed, providerId, turns, lastModel, ...(raw.archived === true ? { archived: true } : {}) };
 };
 
 const withLopuState = (entry: ChatListEntry, lopu: unknown): LopuChatEntry => ({ ...entry, lopu: lopuChatStateOf(lopu) });
@@ -508,12 +508,18 @@ export const getLopuChat = async (viewerId: string, chatId: unknown): Promise<Ge
 export const updateLopuChat = async (
 	viewerId: string,
 	chatId: unknown,
-	input: { title?: unknown; model?: unknown; effort?: unknown; speed?: unknown; providerId?: unknown } = {}
+	input: { title?: unknown; model?: unknown; effort?: unknown; speed?: unknown; providerId?: unknown; archived?: unknown } = {}
 ): Promise<LopuChatResult> => {
 	const access = await resolveLopuChat(viewerId, chatId);
 	if ('ok' in access && access.ok === false) return access;
 	const { chat } = access as ChatAccess;
 	const patch: Record<string, unknown> = {};
+	if (input.archived !== undefined) {
+		if (typeof input.archived !== 'boolean') return fail(400, 'archived must be a boolean');
+		if (String(chat.ownerId) !== viewerId) return fail(403, 'Only the owner can archive a Lopu conversation');
+		// Explicit assignment is idempotent; never touches turns or membership.
+		patch['crystal.lopu.archived'] = input.archived;
+	}
 	if (input.title !== undefined) {
 		const title = boundedTrimmed(input.title, MAX_CHAT_NAME_CHARS);
 		if (!title) return fail(400, 'Lopu conversations need a title');
@@ -537,7 +543,7 @@ export const updateLopuChat = async (
 	await updateMessengerThing(things, { shareId: chat.shareId, thingtime: 'chat' } as any, { $set: { ...patch, updatedAt: new Date() } });
 	const entry = await chatListEntryFor(viewerId, chat.shareId);
 	if (entry.ok === false) return entry;
-	return { ok: true, chat: withLopuState(entry.chat, { ...(chat.crystal?.lopu || {}), ...(normalized.changed ? normalized.settings : {}) }) };
+	return { ok: true, chat: withLopuState(entry.chat, { ...(chat.crystal?.lopu || {}), ...(normalized.changed ? normalized.settings : {}), ...(input.archived !== undefined ? { archived: input.archived } : {}) }) };
 };
 
 // Owner only. Chat + membership + every message (+ their reactions) go in one
@@ -767,4 +773,23 @@ export const loadLopuHistory = async (viewerId: string, chatId: unknown, opts: {
 		{ projection: { shareId: 1 } }
 	).sort({ createdAt: -1 }).limit(10).toArray() : [];
 	return { ok: true, ...folded, ...(attachments.length ? { attachmentIds: attachments.map(row => String(row.shareId)) } : {}) };
+};
+
+/** Notes are ordinary, membership-gated relational user messages, scoped to one run. */
+export const createLopuNoteReader = (viewerId: string, chatId: string, requestId: string) => {
+ const seen = new Set<string>();
+ const prefix = `note:${createHash('sha256').update(requestId).digest('hex').slice(0, 32)}:`;
+ return async (): Promise<string[]> => {
+  const access = await getLopuChat(viewerId, chatId);
+  if (access.ok === false) throw new Error('Conversation is no longer available');
+  const things = await getThingsCollection();
+  const rows = await things.find({ thingtime: 'chat-message', targetId: chatId, ownerId: viewerId,
+   'crystal.lopu.role': 'user', 'crystal.lopu.requestId': { $regex: '^' + prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') },
+   'crystal.deletedAt': null, shareId: { $nin: [...seen] }
+  } as any).sort({ createdAt: 1, shareId: 1 }).limit(100).toArray();
+  let chars = 0;
+  const fresh = rows.filter(row => { const size = String(row.crystal?.text || '').length; if (chars + size > 16000) return false; chars += size; return true; });
+  for (const row of fresh) seen.add(row.shareId);
+  return fresh.map(row => String(row.crystal?.text || ''));
+ };
 };

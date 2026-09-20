@@ -1,3 +1,4 @@
+import { isActionLookupProvider } from './actionLookups';
 // Thingtime Schemas — the single source of truth for the shapes Thingtime data
 // can take. Everything in the `things` collection is a thing: one root Thing
 // schema (schemaVersion per doc), sub-schemas applied via the root `thingtime`
@@ -1540,6 +1541,7 @@ const webpageSchema: ThingtimeSchema = {
 // which is the whole of branching: there is still no loop primitive other
 // than the budget-bounded `each`, and no persisted code.
 export const ACTION_STEP_OPS = [
+	'lookup',
 	'things.create',
 	'things.get',
 	'things.search',
@@ -1551,7 +1553,7 @@ export const ACTION_STEP_OPS = [
 	'fail',
 	'return'
 ] as const;
-export const ACTION_CAPABILITIES = ['things.read', 'things.create', 'things.update', 'things.delete', 'actions.invoke'] as const;
+export const ACTION_CAPABILITIES = ['lookup', 'things.read', 'things.create', 'things.update', 'things.delete', 'actions.invoke'] as const;
 export const ACTION_INPUT_TYPES = ['string', 'text', 'number', 'boolean', 'enum'] as const;
 export const MAX_ACTION_STEPS = 40;
 export const MAX_ACTION_INPUTS = 16;
@@ -1644,9 +1646,9 @@ const actionSchema: ThingtimeSchema = {
 		'"$now") or { ttConcat: [...] } string composition — reference substitution, never ' +
 		'evaluation. Child actions started via actions.invoke consume the PARENT invocation\'s ' +
 		'budget, so recursive chains terminate by construction. Every run is recorded as a ' +
-		'protected action-run child thing for inspection. In v1 the vocabulary has no network, ' +
-		'no secrets, and no delete — external integrations arrive later as Connection-owned ' +
-		'capabilities.',
+		'protected action-run child thing for inspection. Lookup steps use a registered provider ' +
+		'and the action owner’s Vault credential; provider results are omitted from run history. ' +
+		'Authored actions cannot supply arbitrary network destinations or read raw secrets.',
 	fields: [
 		{ name: 'name', type: 'string', required: true, max: MAX_SCHEMA_NAME_CHARS, description: 'Display name, e.g. "Create customer".' },
 		{ name: 'description', type: 'string', required: false, max: MAX_SCHEMA_DESCRIPTION_CHARS, description: 'What this action does and when to run it.' },
@@ -1672,7 +1674,7 @@ const actionSchema: ThingtimeSchema = {
 			description:
 				`Ordered step list, 1–${MAX_ACTION_STEPS}, each { op: ${ACTION_STEP_OPS.join(' | ')}, … }. ` +
 				'things.create { schema, values }; things.get { id }; things.search { schema?, limit? }; ' +
-				'things.update { id, values }; actions.invoke { action, inputs? }; return { value }. ' +
+				'things.update { id, values }; actions.invoke { action, inputs? }; lookup { provider, credentialId, query }; return { value }. ' +
 				'Values are literal JSON, whole-value refs, or ttConcat compositions.'
 		},
 		{
@@ -1682,7 +1684,7 @@ const actionSchema: ThingtimeSchema = {
 			max: MAX_ACTION_CAPABILITY_ENTRIES,
 			description:
 				`Declared capability list, max ${MAX_ACTION_CAPABILITY_ENTRIES}: { capability (${ACTION_CAPABILITIES.join('/')}), ` +
-				'schemas? (scope list), actions? (invoke allowlist) }. Save-time validation requires every step ' +
+				'schemas? (scope list), actions? (invoke allowlist), providers? (lookup allowlist) }. Save-time validation requires every step ' +
 				'to be covered by a declared capability, so the declaration is always true.'
 		},
 		{
@@ -4110,6 +4112,7 @@ export const DEVICE_CONTROL_THINGTIME = ['device-command', 'device-command-event
 export const CHAT_ARCHIVE_THINGTIME = ['chat-archive', 'chat-archive-participant', 'chat-archive-message', 'chat-archive-reaction'] as const;
 
 export const PROTECTED_THINGTIME = [
+  'post-discovery',
   ...CHAT_ARCHIVE_THINGTIME,
 
   'account-invite',
@@ -4181,7 +4184,7 @@ export const isProtectedThingtime = (ids: string[]): boolean => ids.some((id) =>
 // unreachable, unaccounted, and never pruned again — so create/run/delete
 // cycles would re-open exactly the unbounded accumulation the retention cap
 // closes. Cascading is also the only way an owner can ever remove them.
-export const CASCADE_CHILD_THINGTIME = [ATTACHMENT_THINGTIME, 'comment', 'reaction', 'save', 'action-run', 'scheduled-task-run', UPDOWN_THINGTIME, 'lopu-recording-job', 'lopu-recording-reminder', 'lopu-reminder'] as const;
+export const CASCADE_CHILD_THINGTIME = ['post-discovery', ATTACHMENT_THINGTIME, 'comment', 'reaction', 'save', 'action-run', 'scheduled-task-run', UPDOWN_THINGTIME, 'lopu-recording-job', 'lopu-recording-reminder', 'lopu-reminder'] as const;
 
 // Messenger kinds are owned by /api/v1/chats* end to end. Create/update are
 // already refused by the missing crystal sanitizers, and DELETE must be too:
@@ -4343,6 +4346,18 @@ export const thingtimeSchemas: ThingtimeSchema[] = [
   webpageSchema,
   actionSchema,
   actionRunSchema,
+  {
+    id: 'post-discovery', version: 1, kind: 'crystal', collection: null,
+    title: 'Collected secret post', summary: 'Private record of a successful secret-link visit.',
+    requiresTarget: true, createdVia: 'GET /api/v1/things?id=...&key=...',
+    detail: 'One protected control Thing per account or anonymous browser and post. targetId identifies the discovered post. Never exposed through generic reads, exports, search or CRUD. Current hidden ACL and key digest are rechecked on every access; rotation or removal revokes the record. Post deletion cascades it. IP metadata is private and does not itself authorize access.',
+    fields: [
+      { name: 'authorId', type: 'id', required: true, system: true, description: 'Author whose profile may list the discovered post.' },
+      { name: 'linkKeyDigest', type: 'string', required: true, system: true, max: 64, description: 'One-way digest of the valid secret link generation.' },
+      { name: 'anonymousId', type: 'id', required: false, system: true, description: 'One-way browser identity, absent for signed-in accounts.' },
+      { name: 'ipAddress', type: 'string', required: false, system: true, max: 45, description: 'Private IP observed when this link generation was collected.' }
+    ], example: { authorId: 'author-id', linkKeyDigest: 'one-way-link-generation-digest' }
+  },
   saveThingSchema,
   voteSchema,
   updownSchema,
@@ -6037,7 +6052,7 @@ const sanitizeActionInputs = (input: unknown): Fail | { ok: true; inputs: Record
 	return { ok: true, inputs };
 };
 
-export type ActionCapabilityEntry = { capability: string; schemas?: string[]; actions?: string[] };
+export type ActionCapabilityEntry = { capability: string; schemas?: string[]; actions?: string[]; providers?: string[] };
 
 const sanitizeActionCapabilities = (input: unknown): Fail | { ok: true; capabilities: ActionCapabilityEntry[] } => {
 	if (!Array.isArray(input)) return fail(400, 'Action capabilities must be a list');
@@ -6056,6 +6071,10 @@ const sanitizeActionCapabilities = (input: unknown): Fail | { ok: true; capabili
 		if (seen.has(capability)) return fail(400, `Duplicate capability: ${capability}`);
 		seen.add(capability);
 		const sanitized: ActionCapabilityEntry = { capability };
+		if (capability === 'lookup') {
+			if (!Array.isArray(raw.providers) || !raw.providers.length || raw.providers.length > MAX_ACTION_CAPABILITY_SCOPES || raw.providers.some((provider) => !isActionLookupProvider(provider))) return fail(400, 'lookup needs a registered providers allowlist');
+			sanitized.providers = [...new Set(raw.providers)] as string[];
+		} else if (raw.providers !== undefined) return fail(400, 'Only lookup takes providers');
 		if (raw.schemas !== undefined && raw.schemas !== null) {
 			if (!Array.isArray(raw.schemas) || raw.schemas.length > MAX_ACTION_CAPABILITY_SCOPES) {
 				return fail(400, `Capability ${capability} scopes cap at ${MAX_ACTION_CAPABILITY_SCOPES} schemas`);
@@ -6186,7 +6205,14 @@ const sanitizeActionSteps = (
 			return null;
 		};
 		let failure: Fail | null = null;
-		if (op === 'things.create') {
+		if (op === 'lookup') {
+			if (!isActionLookupProvider(raw.provider)) return fail(400, `Step ${stepIndex} needs a registered lookup provider`);
+			if (!byCapability.get('lookup')?.providers?.includes(raw.provider)) return fail(400, `Step ${stepIndex} needs lookup capability for ${raw.provider}`);
+			if (typeof raw.credentialId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(raw.credentialId)) return fail(400, 'lookup credentialId must be a literal Vault entry id');
+			step.provider = raw.provider;
+			step.credentialId = raw.credentialId;
+			failure = checkRefString(raw.query, 'query');
+		} else if (op === 'things.create') {
 			const schema = sanitizeActionSchemaRef(raw.schema, `Step ${stepIndex} schema`);
 			if (isFail(schema)) return schema;
 			step.schema = schema.ref;
@@ -6310,6 +6336,7 @@ const sanitizeActionSteps = (
 // renders THIS, never an author-written claim, so the display can't drift
 // from the behaviour.
 export type ActionEffects = {
+	lookups: string[];
 	creates: string[];
 	reads: string[];
 	updates: boolean;
@@ -6326,7 +6353,7 @@ export type ActionEffects = {
 };
 
 export const deriveActionEffects = (steps: unknown): ActionEffects => {
-	const effects: ActionEffects = { creates: [], reads: [], updates: false, deletes: false, invokes: [], returns: false, computes: false, publicReads: [], systemReads: [] };
+	const effects: ActionEffects = { lookups: [], creates: [], reads: [], updates: false, deletes: false, invokes: [], returns: false, computes: false, publicReads: [], systemReads: [] };
 	if (!Array.isArray(steps)) return effects;
 	for (const entry of steps) {
 		if (!entry || typeof entry !== 'object') continue;
@@ -6348,6 +6375,7 @@ export const deriveActionEffects = (steps: unknown): ActionEffects => {
 		if ((step.op === 'actions.invoke' || step.op === 'each') && typeof step.action === 'string' && !effects.invokes.includes(step.action)) {
 			effects.invokes.push(step.action);
 		}
+		if (step.op === 'lookup' && typeof step.provider === 'string' && !effects.lookups.includes(step.provider)) effects.lookups.push(step.provider);
 		if (step.op === 'compute') effects.computes = true;
 		if (step.op === 'return') effects.returns = true;
 	}

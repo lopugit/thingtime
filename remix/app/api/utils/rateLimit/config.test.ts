@@ -33,13 +33,13 @@ test('the subspace write, join and report keys keep their round-2 windows', () =
 	assert.ok(RATE_LIMIT_DEFAULTS['subspaces.report'].limit < RATE_LIMIT_DEFAULTS['subspaces.write'].limit);
 });
 
-test('upload policy admits two full composer selections without an hour-long lockout', async () => {
-	const { MAX_POST_ATTACHMENTS } = await import('../../../components/Attachments/attachmentUiCore');
+test('upload policy admits two 25-file batches without an hour-long lockout', async () => {
+	const batchSize = 25;
 	const { normalizeRateLimitConfig } = await import('./config');
 	for (const stored of [null, { 'attachments.start': { limit: 30, windowMs: 3_600_000, enabled: true } }]) {
 		const rule = normalizeRateLimitConfig(stored)['attachments.start'];
 		assert.equal(rule.enabled, true);
-		assert.ok(rule.limit >= 2 * MAX_POST_ATTACHMENTS + 3, 'two 25-file selections plus in-flight retry headroom');
+		assert.ok(rule.limit >= 2 * batchSize + 3, 'two 25-file selections plus in-flight retry headroom');
 		assert.ok(rule.limit <= 60, 'upload admission remains bounded');
 		assert.equal(rule.windowMs, 60_000, 'old uploads cannot block the next hour');
 	}

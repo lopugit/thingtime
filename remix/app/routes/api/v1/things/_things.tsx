@@ -1,3 +1,4 @@
+import { withFoundPostBrowser, foundPostVisitIp } from '~/api/utils/things/foundPostRequest';
 import { json } from '~/api/http';
 
 import { actorCors, actorPat, actorUser, resolveActor } from '~/api/utils/auth/resolveActor';
@@ -101,7 +102,7 @@ export const loader = async ({ request }: { request: Request }) => {
   // private-only) must have its audience fence applied to everything it lists.
   // A presented ?key= rides along so hidden things resolve for key-holders —
   // logged-out ones included.
-  const viewer = withLinkKeys(viewerOf(user, actorPat(actor)), [(params.get('key') || '').trim()]);
+  const viewer = withLinkKeys(withFoundPostBrowser(viewerOf(user, actorPat(actor)), request, actor.kind === 'anonymous'), [(params.get('key') || '').trim()]);
   const app = actor.kind === 'app' ? actor.scope : null;
   const cors = actorCors(actor);
 
@@ -144,7 +145,11 @@ export const loader = async ({ request }: { request: Request }) => {
     // (never a silently re-ordered thread)
     const commentSort = parseCommentSort(params.get('commentSort') || undefined);
     if (commentSort.ok === false) return json({ ok: false, error: commentSort.error }, { status: 400, headers: cors });
-    const result = await getThing(viewer, id, app, { commentSort: commentSort.sort });
+    // Canonical-link reads stay readable during limiter outages, but creating
+    // durable discovery state is bounded per authenticated user or request IP.
+    const canRemember = (actor.kind === 'anonymous' || (actor.kind === 'user' && user?.accountKind === 'user'));
+    const discoveryAllowed = canRemember && (await enforceRateLimit(request, 'things.views', user ? `user:${user.id}` : null, { failClosed: true })).allowed;
+    const result = await getThing(viewer, id, app, { commentSort: commentSort.sort, rememberDiscovery: discoveryAllowed, discoveryIp: foundPostVisitIp(request) });
     if (result.ok === false) {
       return json({ ok: false, error: result.error }, { status: result.status, headers: cors });
     }
@@ -153,7 +158,7 @@ export const loader = async ({ request }: { request: Request }) => {
     // the response echoes the comment order it shipped (null = default)
     return json(
       { ok: true, thing: result.thing, post: result.post, parent: result.parent, root: result.root, commentSort: commentSort.sort },
-      { headers: cors }
+      { headers: { ...cors, 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' } }
     );
   }
 

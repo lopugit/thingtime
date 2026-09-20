@@ -141,6 +141,18 @@ test('form gathering treats iframe password and checkbox fields by element type'
 		{ tagName: 'INPUT', type: 'checkbox', checked: false, value: 'on', getAttribute: () => 'enabled' },
 		{ tagName: 'INPUT', type: 'text', value: 'hello', getAttribute: () => 'message' }
 	];
-	const form = { querySelectorAll: () => fields } as unknown as HTMLElement;
+	const form = { querySelectorAll: () => fields.map((field) => ({ ...field, matches: () => false })) } as unknown as HTMLElement;
 	assert.deepEqual(gatherFormFields(form), { enabled: false, message: 'hello' });
+});
+
+
+test('forms preserve empty text, false, leading zeros and long text without collecting unsafe fields', async () => {
+ const { gatherFormFields } = await import('./webpageRuntime');
+ const fields = [
+  ['notes', 'text', '', false], ['phone', 'text', '0412345678', false],
+  ['long', 'text', 'a'.repeat(5000), false], ['secret', 'password', 'private', false],
+  ['file', 'file', 'fakepath', false], ['disabled', 'text', 'old', true], ['constructor', 'text', 'bad', false]
+ ].map(([name, type, value, disabled]) => ({ tagName: 'INPUT', type, value, getAttribute: () => name, matches: () => disabled }));
+ const result = gatherFormFields({ querySelectorAll: () => fields } as unknown as HTMLElement);
+ assert.deepEqual(result, { notes: '', phone: '0412345678', long: 'a'.repeat(5000) });
 });

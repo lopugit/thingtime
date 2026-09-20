@@ -12,6 +12,8 @@
 // could already read.
 
 import { getRequestOrigin } from '../health/statusTarget';
+import { organizationId, organizationStructuredData } from './brandIdentity';
+import { isIndexableStaticPath } from './indexablePaths';
 import {
 	DEFAULT_SOCIAL_IMAGE_PATH,
 	normaliseSocialPreviewPath,
@@ -88,7 +90,7 @@ export const buildSocialMetaTags = (origin: string, path: string, page: Partial<
 // generic card is still useful for sharing settings/invite/missing URLs, but
 // it must not advertise a private screen or a failed lookup as public content.
 export const socialPageIsIndexable = (path: string, preview: SocialPreview): boolean =>
-	Boolean(preview.publicContent) || /^(?:\/|\/(?:welcome|about|branding|feed|explore|legal)(?:\/)?|\/(?:docs|design-system)(?:\/.*)?)$/.test(path);
+	Boolean(preview.publicContent) || isIndexableStaticPath(path);
 
 export const socialMetaFromPreview = (origin: string, preview: SocialPreview): SocialMeta => {
 	const path = normaliseSocialPreviewPath(preview.path);
@@ -105,6 +107,7 @@ export const socialMetaFromPreview = (origin: string, preview: SocialPreview): S
 	ogUrl.content = canonical;
 	tags.push(named('robots', socialPageIsIndexable(path, preview) ? 'index, follow, max-image-preview:large' : 'noindex, follow'));
 	const websiteId = `${origin}/#website`;
+	const publisherId = organizationId(origin);
 	const pageId = `${canonical}#webpage`;
 	const imageObject = { '@type': 'ImageObject', url: image, width: 1200, height: 630 };
 	const page: Record<string, unknown> = {
@@ -148,7 +151,14 @@ export const socialMetaFromPreview = (origin: string, preview: SocialPreview): S
 		canonical,
 		structuredData: {
 			'@context': 'https://schema.org',
-			'@graph': [{ '@type': 'WebSite', '@id': websiteId, url: `${origin}/`, name: SITE_NAME }, page]
+			// Order is a contract: [0] WebSite, [1] the page, [2] the publishing
+		// Organization (its `logo` is what search engines use for the brand
+		// mark in knowledge panels and brand results — brandIdentity.ts).
+		'@graph': [
+			{ '@type': 'WebSite', '@id': websiteId, url: `${origin}/`, name: SITE_NAME, publisher: { '@id': publisherId } },
+			page,
+			organizationStructuredData(origin)
+		]
 		}
 	};
 };

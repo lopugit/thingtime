@@ -173,7 +173,7 @@ export const WebpageRuntimeProvider = ({
 	const query = React.useMemo(() => queryScopeOf(runtimeSearch), [runtimeSearch]);
 	const sharedRun = React.useCallback(
 		async (action: string, inputs: Record<string, unknown>) => {
-			await requireThingtimeCapability('api.actions-run', '1.3.1');
+			await requireThingtimeCapability('api.actions-run', '1.6.0');
 			const response = await fetch('/api/v1/actions/run', {
 				method: 'POST',
 				credentials: 'include',
@@ -288,6 +288,12 @@ export const readSourceCache = (viewerId: string | null, pageId: string | null, 
 	}
 };
 
+export const clearSourceCache = (viewerId: string | null, pageId: string | null, blockId: string): void => {
+ const key = sourceCacheKey(viewerId, pageId, blockId);
+ if (!key || typeof window === 'undefined') return;
+ try { window.localStorage.removeItem(key); } catch { /* storage unavailable */ }
+};
+
 export const writeSourceCache = (viewerId: string | null, pageId: string | null, blockId: string, value: unknown): void => {
 	const key = sourceCacheKey(viewerId, pageId, blockId);
 	if (!key || typeof window === 'undefined') return;
@@ -300,43 +306,22 @@ export const writeSourceCache = (viewerId: string | null, pageId: string | null,
 	}
 };
 
-// Named form fields inside one component root, read the way the click
-// wrapper reads them: input/select/textarea with a `name`, checkboxes as
-// booleans, radios only when checked, everything else as its string value.
-// Password inputs are never read (see below). Empty strings are dropped so a
-// static ttActionInputs value survives an untouched field. Pure DOM, shared by
-// the click hook and its tests.
+// Read one bounded form group. Explicit empty text clears saved values;
+// disabled controls and native file/password contents never become action inputs.
 export const gatherFormFields = (root: HTMLElement | null): Record<string, unknown> => {
 	const out: Record<string, unknown> = {};
 	if (!root) return out;
 	const fields = root.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input[name], select[name], textarea[name]');
 	fields.forEach((field) => {
 		const name = field.getAttribute('name') || '';
-		if (!name || !QUERY_KEY_PATTERN.test(name)) return;
+		if (!name || !QUERY_KEY_PATTERN.test(name) || ['__proto__', 'constructor', 'prototype'].includes(name) || field.matches(':disabled')) return;
 		if (field.tagName === 'INPUT') {
 			const input = field as HTMLInputElement;
-			// A PASSWORD field is never an action input. ACTION_INPUT_TYPES is
-			// string/text/number/boolean/enum — there is no credential type — and
-			// no suite renders one. But component markup IS untrusted data, and
-			// `autoComplete` now passes the HtmlThingRenderer allowlist, so a
-			// crafted component can put `<input type="password"
-			// autoComplete="current-password">` on this origin and let the
-			// viewer's password manager fill it. Reading that value would carry
-			// the viewer's own site password into a run's inputs — stored on
-			// their data thing and echoed in their run record. Never gather one:
-			// the field can still render and fill, the value just goes nowhere.
-			if (field.type === 'password') return;
-			if (field.type === 'checkbox') {
-				out[name] = input.checked;
-				return;
-			}
-			if (field.type === 'radio') {
-				if (input.checked) out[name] = input.value;
-				return;
-			}
+			if (['password', 'file', 'submit', 'button', 'reset'].includes(input.type)) return;
+			if (input.type === 'checkbox') { out[name] = input.checked; return; }
+			if (input.type === 'radio') { if (input.checked) out[name] = input.value; return; }
 		}
-		const value = field.value;
-		if (typeof value === 'string' && value !== '') out[name] = value.slice(0, 4000);
+		if (typeof field.value === 'string') out[name] = field.value;
 	});
 	return out;
 };

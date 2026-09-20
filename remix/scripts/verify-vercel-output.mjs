@@ -159,11 +159,14 @@ const wellKnownDiscoveryIndex = routes.findIndex(
 		route.src === '^/\\.well-known/(?:apple-app-site-association(?:-docs)?|oauth-protected-resource|oauth-authorization-server|thingtime-chatgpt-capabilities\\.json|thingtime-capabilities\\.json)$' &&
 		route.dest === '/__server'
 );
+const seoDiscoveryIndex = routes.findIndex(
+	(route) => route.src === '^/(?:robots\\.txt|sitemap\\.xml)(?:-docs)?$' && route.dest === '/__server'
+);
 const socialCardIndex = routes.findIndex((route) => route.src === '^/social-card$' && route.dest === '/__server');
 const socialMetaIndex = routes.findIndex(
 	(route) => route.dest === '/__server' && route.src === '^/(?:.*)$'
 );
-const socialRouteIndexes = new Set([rootIndex, socialCardIndex, socialMetaIndex]);
+const socialRouteIndexes = new Set([rootIndex, socialCardIndex, socialMetaIndex, seoDiscoveryIndex]);
 const serverFallbackIndex = routes.findIndex(
 	(route, index) => route.dest === '/__server' && index !== wellKnownDiscoveryIndex && !socialRouteIndexes.has(index)
 );
@@ -206,6 +209,14 @@ if (wellKnownDiscoveryIndex === -1) {
 
 if (wellKnownDiscoveryIndex > filesystemIndex || wellKnownDiscoveryIndex > spaIndex) {
 	throw new Error('Vercel output checks static or SPA fallbacks before well-known discovery.');
+}
+
+if (seoDiscoveryIndex === -1) {
+	throw new Error('Vercel output does not route /robots.txt and /sitemap.xml to Nitro.');
+}
+
+if (seoDiscoveryIndex > filesystemIndex || seoDiscoveryIndex > spaIndex) {
+	throw new Error('Vercel output checks static or SPA fallbacks before robots/sitemap discovery.');
 }
 
 if (apiIndex > spaIndex) {

@@ -10,7 +10,7 @@ export const THING_AUDIENCE_META: Record<ThingAudience, { label: string; emoji: 
 	friends: { label: 'Friends', emoji: '🤝', hint: 'Your friends circle' },
 	family: { label: 'Family', emoji: '🏡', hint: 'Your family circle' },
 	private: { label: 'Private', emoji: '🔒', hint: 'Only you' },
-	hidden: { label: 'Anyone with the link', emoji: '🕵️', hint: 'Unlisted — anyone holding its secret link can view' },
+	hidden: { label: 'Anyone with the link', emoji: '🕵️', hint: 'Unlisted — anyone with its URL can view' },
 	custom: { label: 'Custom', emoji: '🎭', hint: 'Pick people or groups and choose read, comment, or edit' }
 };
 
@@ -54,12 +54,16 @@ export const audienceOfAcl = (acl: readonly string[] | undefined): ThingAudience
 	return 'private';
 };
 
-type LinkableThing = { id: string; thingtime: readonly string[]; acl?: readonly string[]; linkKey?: string | null };
+export type ResolvedAudience = { sourceId: string; acl: string[]; linkKey?: string };
+
+type LinkableThing = { audience?: ResolvedAudience; id: string; thingtime: readonly string[]; acl?: readonly string[]; linkKey?: string | null };
 
 const universalThingLink = (id: string): string => `/thing/${encodeURIComponent(id)}`;
 
 export const thingPath = (thing: Pick<LinkableThing, 'id' | 'thingtime'>): string => {
 	const id = encodeURIComponent(thing.id);
+	if (thing.thingtime.includes('attachment')) return `/media/${id}`;
+	if (thing.thingtime.includes('comment')) return `/post/${id}`;
 	if (thing.thingtime.includes('folder')) return `/things?folder=${id}`;
 	if (thing.thingtime.includes('post')) return `/post/${id}`;
 	if (thing.thingtime.includes('action')) return `/actions/${id}`;
@@ -69,16 +73,37 @@ export const thingPath = (thing: Pick<LinkableThing, 'id' | 'thingtime'>): strin
 	return universalThingLink(thing.id);
 };
 
-// Hidden-link access is guaranteed on the post, webpage, and universal Thing
-// readers. Other dedicated routes do not consume bearer keys, so their
-// secret links intentionally land on the universal reader instead.
+// Unlisted Things use canonical exact-id readers, without secret query parameters.
+// Other kind browsers may be listing-oriented, so use the universal reader there.
 export const sharePathForThing = (thing: LinkableThing): string => {
-	const hidden = !!thing.linkKey && !!thing.acl?.includes('tt:hidden');
+	const hidden = !!(thing.audience?.acl || thing.acl)?.includes('tt:hidden');
 	if (!hidden) return thingPath(thing);
-	const base = thing.thingtime.includes('post')
+	const base = thing.thingtime.includes('attachment')
+		? `/media/${encodeURIComponent(thing.id)}`
+		: thing.thingtime.includes('post') || thing.thingtime.includes('comment')
 		? `/post/${encodeURIComponent(thing.id)}`
 		: thing.thingtime.includes('webpage')
 		? `/p/${encodeURIComponent(thing.id)}`
 		: universalThingLink(thing.id);
-	return `${base}?key=${encodeURIComponent(thing.linkKey!)}`;
+	return base;
+};
+
+// Never enumerate a group's private roster just to explain its audience.
+export const audienceDescription = (acl: readonly string[] | undefined, noun = 'post', inherited = false): string => {
+  const entries = acl || [];
+  if (entries.includes('tt:inherit')) return 'follows the parent’s audience';
+  const excluded = entries.some(entry => entry.startsWith('-tt:') && entry !== '-tt:all');
+  if (excluded) return `selected people can see this ${noun} · exclusions apply`;
+  if (entries.includes('tt:all') && !entries.includes('-tt:all')) return `anyone can see this ${noun}`;
+  const people = [...new Set(entries.filter(entry => entry.startsWith('tt:user/')).map(entry =>
+    '@' + entry.slice(8).replace(/\/(?:read|comment|write)$/, '')))];
+  const groups = entries.filter(entry => entry.startsWith('tt:group/')).length;
+  const audiences = [...people];
+  if (groups) audiences.push(groups === 1 ? 'members of the selected group' : `members of ${groups} selected groups`);
+  if (entries.includes('tt:userFriends')) audiences.push(inherited ? 'the parent’s friends circle' : 'the author’s friends');
+  if (entries.includes('tt:userFamily')) audiences.push(inherited ? 'the parent’s family circle' : 'the author’s family');
+  if (entries.includes('tt:hidden')) audiences.push('people with the link');
+  if (audiences.length === 1 && audiences[0] === 'people with the link') return 'only people with the link';
+  if (!audiences.length) return `only ${inherited ? 'the parent’s owner' : 'the author'} can see this ${noun}`;
+  return `only ${audiences.join(', ')} can see this ${noun}`;
 };

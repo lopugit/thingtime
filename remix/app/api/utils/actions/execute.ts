@@ -1,3 +1,5 @@
+import { runLookup } from './lookup';
+import { revealUserVaultValue } from '../lopu/userVault';
 import { randomUUID } from 'node:crypto';
 
 import {
@@ -48,9 +50,9 @@ import { sharedOperationAllowed } from './sharedCompositionCore';
 //   storage accounting always apply. An action can never do something its
 //   invoker couldn't do by hand.
 // - Closed vocabulary: an op that isn't in the sanitized program cannot run,
-//   and the executor has no fetch, no env access, and no raw Mongo writes on
-//   behalf of the program (its only direct collection reads are the
-//   scoped searches below and the run-record insert).
+//   and authored programs have no arbitrary fetch, env access or raw Mongo
+//   writes. Registered lookup adapters alone can use owner-scoped Vault
+//   credentials for a fixed provider destination.
 // - One shared budget per root invocation: deadline, operation count, depth,
 //   child-action count, and (v2) expression evaluations. actions.invoke and
 //   each recurse with the SAME budget object, so A→B→A terminates by
@@ -85,6 +87,7 @@ export type ActionRunTraceEntry = {
 };
 
 type ActionBudget = {
+	usedLookup?: boolean;
 	deadline: number;
 	opsRemaining: number;
 	maxDepth: number;
@@ -106,6 +109,7 @@ type ActionBudget = {
 
 type ActionProgram = {
 	id: string;
+	ownerId?: string;
 	name: string;
 	crystal: Record<string, unknown>;
 	steps: ActionStep[];
@@ -121,6 +125,7 @@ export type RunActionResult =
 			status: 'ok' | 'error';
 			actionId: string;
 			result: unknown;
+			cache?: 'no-store';
 			error?: string;
 			durationMs: number;
 			opsUsed: number;
@@ -172,7 +177,7 @@ const resolveActionProgram = async (
 	const trimmed = typeof reference === 'string' ? reference.trim() : '';
 	if (!trimmed) return fail(400, 'Which action? Pass its id or actionKey');
 
-	let doc: { id: string; crystal: Record<string, unknown> } | null = null;
+	let doc: { id: string; ownerId?: string; crystal: Record<string, unknown> } | null = null;
 	if (options?.shared) {
 		const included = options.parentId
 			? options.shared.children.get(`${options.parentId}:${trimmed}`)
@@ -182,11 +187,11 @@ const resolveActionProgram = async (
 	} else if (options?.ownedOnly) {
 		const things = await getThingsCollection();
 		const own = await things.findOne({ shareId: trimmed, ownerId: viewer.id, thingtime: 'action' } as any);
-		if (own) doc = { id: own.shareId, crystal: (own.crystal || {}) as Record<string, unknown> };
+		if (own) doc = { id: own.shareId, ownerId: own.ownerId, crystal: (own.crystal || {}) as Record<string, unknown> };
 	} else {
 		const byId = await getThing(viewer, trimmed);
 		if (byId.ok !== false && byId.thing && Array.isArray(byId.thing.thingtime) && byId.thing.thingtime.includes('action')) {
-			doc = { id: byId.thing.id, crystal: (byId.thing.crystal || {}) as Record<string, unknown> };
+			doc = { id: byId.thing.id, ownerId: byId.thing.author?.id, crystal: (byId.thing.crystal || {}) as Record<string, unknown> };
 		}
 	}
 	if (!doc) {
@@ -205,7 +210,7 @@ const resolveActionProgram = async (
 			.sort({ 'crystal.version': -1, createdAt: -1 })
 			.limit(1)
 			.toArray();
-		if (own) doc = { id: own.shareId, crystal: (own.crystal || {}) as Record<string, unknown> };
+		if (own) doc = { id: own.shareId, ownerId: own.ownerId, crystal: (own.crystal || {}) as Record<string, unknown> };
 	}
 	if (!doc) {
 		return fail(
@@ -223,6 +228,7 @@ const resolveActionProgram = async (
 	const crystal = sanitized.crystal;
 	return {
 		id: doc.id,
+		ownerId: doc.ownerId,
 		name: typeof crystal.name === 'string' ? crystal.name : 'Action',
 		crystal,
 		steps: (crystal.steps || []) as ActionStep[],
@@ -256,7 +262,8 @@ const validateRunInputs = (
 		// step value. $step paths are already gated both ways (banned segments in
 		// parseActionRef + hasOwnProperty in resolvePath); $input is now too.
 		let value = Object.prototype.hasOwnProperty.call(raw, name) ? raw[name] : undefined;
-		if (value === undefined || value === null || value === '') {
+		if (value === '' && descriptor.required === true) return fail(400, `Input ${name} is required`);
+		if (value === undefined || value === null || (value === '' && type !== 'string' && type !== 'text')) {
 			if (descriptor.default !== undefined) value = descriptor.default;
 			else if (descriptor.required === true) return fail(400, `Input ${name} is required`);
 			else continue;
@@ -549,7 +556,14 @@ const executeProgram = async (
 
 			consumeOp(budget);
 
-			if (step.op === 'compute') {
+			if (step.op === 'lookup') {
+				budget.usedLookup = true;
+				if (budget.shared || program.ownerId !== viewer?.id) runError('Lookups require an action you own and your own Vault credential');
+				if (!capabilityOf(effective, 'lookup')?.providers?.includes(String(step.provider))) runError('Lookup provider is outside the declared capability');
+				const credential = await revealUserVaultValue(viewer!.id, String(step.credentialId));
+				if (!credential) runError('Lookup credential is unavailable in your Vault');
+				scope.steps[index] = await runLookup({ provider: step.provider, query: resolveValue(step.query, scope), credential: credential!, deadline: budget.deadline });
+			} else if (step.op === 'compute') {
 				scope.steps[index] = resolveValue(step.value, scope) ?? null;
 			} else if (step.op === 'fail') {
 				const message = resolveValue(step.message, scope);
@@ -977,7 +991,7 @@ export const runAction = async (
 		childActionsUsed: budget.childActionsUsed,
 		...(errorMessage ? { error: errorMessage } : {}),
 		inputs: capBytes(validated.inputs, budget.maxInputBytes),
-		result: capBytes(result, budget.maxResultBytes),
+		result: budget.usedLookup ? { omitted: 'External lookup results are transient' } : capBytes(result, budget.maxResultBytes),
 		trace: budget.trace
 	});
 
@@ -1006,6 +1020,7 @@ export const runAction = async (
 		runId,
 		status,
 		actionId: program.id,
+		...(budget.usedLookup ? { cache: 'no-store' as const } : {}),
 		result,
 		...(errorMessage ? { error: errorMessage } : {}),
 		durationMs,

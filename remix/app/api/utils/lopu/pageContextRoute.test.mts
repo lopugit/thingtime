@@ -13,6 +13,7 @@ mock.module('./chat', { namedExports: {
  streamLopuChatTurn: async function* (input: any) { providerContext = input.context; yield {type:'text',delta:'Checked'}; return {text:'Checked',stopReason:'fallback',provider:'fallback',toolCalls:[],usage:null}; }
 } });
 mock.module('../messenger/lopuChats', { namedExports: {
+ createLopuNoteReader: () => async () => [],
  createLopuChat: async () => ({ok:true,chat:{id:'test-chat'}}), deleteLopuChat:ok,
  getLopuChat:async()=>({ok:true,settings:{}}), loadLopuHistory:async()=>({ok:true,history:[]}), updateLopuChat:ok,
  persistLopuUserTurn:async (_owner: string, input: any)=>{ writes++; savedText=input.text; return {ok:true,message:{id:'user-message'}}; },

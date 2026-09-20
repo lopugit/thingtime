@@ -36,9 +36,9 @@ const slugify = (value: string): string =>
 
 type InputRow = { name: string; type: string; required: boolean; default: string };
 type ValueRow = { key: string; value: string };
-type StepRow = { op: string; schema: string; id: string; action: string; limit: string; values: ValueRow[] };
+type StepRow = { provider: string; credentialId: string; query: string; op: string; schema: string; id: string; action: string; limit: string; values: ValueRow[] };
 
-const emptyStep = (op = 'things.create'): StepRow => ({ op, schema: '', id: '', action: '', limit: '', values: [{ key: '', value: '' }] });
+const emptyStep = (op = 'things.create'): StepRow => ({ op, provider: 'google-geocoding', credentialId: '', query: '$input.address', schema: '', id: '', action: '', limit: '', values: [{ key: '', value: '' }] });
 
 const FieldLabel = ({ children }: { children: React.ReactNode }) => (
 	<Text color="var(--tt-text, #33333c)" fontSize="xs" fontWeight="600" mb={1}>
@@ -100,6 +100,7 @@ export const ActionBuilder = ({ onClose, onCreated }: { onClose: () => void; onC
 			if (row.op === 'things.get' || row.op === 'things.update') {
 				if (row.id.trim()) step.id = row.id.trim();
 			}
+			if (row.op === 'lookup') { step.provider = row.provider; step.credentialId = row.credentialId.trim(); step.query = row.query; }
 			if (row.op === 'actions.invoke' && row.action.trim()) step.action = row.action.trim();
 			if (row.op === 'things.search' && row.limit.trim()) step.limit = Number(row.limit);
 			if (row.op === 'things.create' || row.op === 'things.update' || row.op === 'actions.invoke') {
@@ -310,6 +311,11 @@ export const ActionBuilder = ({ onClose, onCreated }: { onClose: () => void; onC
 											</option>
 										))}
 									</Select>
+									{row.op === 'lookup' ? <>
+										<Text fontSize="sm">Google Maps · sends your address query</Text>
+										<Input {...rowInput} aria-label="Vault credential entry id" placeholder="Vault entry id (not the key)" value={row.credentialId} onChange={(event) => setSteps((prior) => prior.map((entry, i) => i === index ? { ...entry, credentialId: event.target.value } : entry))} />
+										<Input {...rowInput} aria-label="Lookup query" placeholder="$input.address" value={row.query} onChange={(event) => setSteps((prior) => prior.map((entry, i) => i === index ? { ...entry, query: event.target.value } : entry))} />
+									</> : null}
 									{(row.op === 'things.create' || row.op === 'things.search') ? (
 										<>
 											<Input
@@ -438,8 +444,9 @@ export const ActionBuilder = ({ onClose, onCreated }: { onClose: () => void; onC
 										{entry.capability}
 										{entry.schemas?.length ? `: ${entry.schemas.map((ref) => displayRef(ref, schemaNames)).join(', ')}` : ''}
 										{entry.actions?.length ? `: ${entry.actions.join(', ')}` : ''}
+										{entry.providers?.length ? `: ${entry.providers.join(', ')}` : ''}
 									</ActionChip>
-									{entry.capability !== 'actions.invoke' ? (
+									{entry.capability !== 'actions.invoke' && entry.capability !== 'lookup' ? (
 										<Input
 											{...rowInput}
 											maxW="320px"

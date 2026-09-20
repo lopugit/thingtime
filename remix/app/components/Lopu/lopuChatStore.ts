@@ -1,3 +1,4 @@
+import { bindLopuQueue, pauseLopuQueue } from './lopuQueueStore';
 import { LOPU_CONTINUE_PROMPT, shouldAutoContinueLopuReply } from './lopuRecovery';
 import { bindAiTaskOwner, getAiTasks, refreshAiTasks, readAiTaskOutput, stopAiTaskRequest } from './aiTasks.client';
 // The Lopu chat module store (design note §3.1/§3.2): ONE state shared by the
@@ -96,7 +97,7 @@ export type LopuModelsPayload = {
 // a Lopu conversation row — the messenger chat summary plus the chat's own
 // model settings when the list projects them
 export type LopuChatSummary = ChatSummary & {
-	lopu?: (Partial<LopuChatSettings> & { turns?: number; lastModel?: string | null }) | null;
+	lopu?: (Partial<LopuChatSettings> & { turns?: number; lastModel?: string | null; archived?: boolean }) | null;
 };
 
 export type LopuNotice = { id: number; title: string; description?: string; status: 'success' | 'error' | 'info' };
@@ -108,7 +109,7 @@ export type LopuApiClient = {
 	chats: {
 		list: (options?: { signal?: AbortSignal }) => Promise<any>;
 		create: (args?: LopuChatWriteArgs) => Promise<any>;
-		update: (args: { chatId: string } & LopuChatWriteArgs) => Promise<any>;
+		update: (args: { chatId: string; archived?: boolean } & LopuChatWriteArgs) => Promise<any>;
 		delete: (args: { chatId: string }) => Promise<any>;
 	};
 	// the messenger's message page (GET /api/v1/chats/messages, newest first)
@@ -410,6 +411,7 @@ export const hydrateLopuStore = (userId: string | null): LopuStoreState => {
 	controllers.clear();
  stoppedRequests.clear();
 	bindAiTaskOwner(userId);
+ bindLopuQueue(userId);
 	const chatsCache = userId ? readLocalCache<ChatsCache>(lopuChatsCacheKey(userId)) : null;
 	const modelsCache = readLocalCache<ModelsCache>(LOPU_MODELS_CACHE_KEY);
 	const settingsCache = userId ? readLocalCache<LopuChatSettings>(lopuSettingsCacheKey(userId)) : null;
@@ -651,6 +653,39 @@ export const renameLopuChat = async (chatId: string, title: string): Promise<{ o
 		notice(message, { status: 'error' });
 		return { ok: false, error: message };
 	} finally { chatWrites--; }
+};
+
+// Archive only changes list visibility. Keep the selected transcript and any
+// running turn alive; a failed write rolls back only this field, not other chats.
+const archivingChats = new Set<string>();
+export const archiveLopuChat = async (chatId: string, archived: boolean): Promise<{ ok: boolean; error?: string }> => {
+	if (!client || !state.userId) return { ok: false, error: 'Lopu is not connected yet' };
+	const previous = state.chats.find(chat => chat.id === chatId);
+	const generation = accountGeneration;
+	const key = `${generation}:${chatId}`;
+	if (!previous || archivingChats.has(key)) return { ok: false, error: 'Conversation is unavailable or already updating' };
+	archivingChats.add(key);
+	chatWrites++;
+	const apply = (value: boolean) => {
+		if (generation !== accountGeneration) return;
+		const chats = state.chats.map(chat => chat.id === chatId ? { ...chat, lopu: { ...chat.lopu, archived: value } } : chat);
+		writeChatsCache(state.userId, chats);
+		setState({ chats });
+	};
+	apply(archived);
+	try {
+		const response = await client.chats.update({ chatId, archived });
+		if (response?.ok !== true) throw response;
+		return { ok: true };
+	} catch (error) {
+		apply(previous.lopu?.archived === true);
+		const message = errorText(error, archived ? 'Could not archive the chat' : 'Could not restore the chat');
+		if (generation === accountGeneration) notice(message, { status: 'error' });
+		return { ok: false, error: message };
+	} finally {
+		archivingChats.delete(key);
+		chatWrites--;
+	}
 };
 
 export const deleteLopuChat = async (chatId: string): Promise<{ ok: boolean; error?: string }> => {
@@ -921,6 +956,8 @@ const appendMessages = (chatId: string, rows: ChatMessage[]) => {
 };
 
 export type SendLopuOptions = {
+ chatId?: string;
+ requestId?: string;
 	// Fired once the server has persisted the user message, before reply completion.
 	onAccepted?: () => void;
 	attachmentIds?: string[];
@@ -964,7 +1001,7 @@ export const sendLopuMessage = async (text: string, options: SendLopuOptions = {
 type LopuContinuation = { chatId: string; previousRequestId: string };
 type LopuPartResult = SendLopuResult & { next?: { options: SendLopuOptions; continuation: LopuContinuation } };
 const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, continuation?: LopuContinuation): Promise<LopuPartResult> => {
- const chatId = continuation?.chatId ?? state.activeChatId;
+ const chatId = continuation?.chatId ?? options.chatId ?? state.activeChatId;
 	const trimmed = (text || '').trim();
 	if (!trimmed) return { ok: false, error: 'Say something first', text };
 	if (!client) return { ok: false, error: 'Lopu is not connected yet', text };
@@ -981,9 +1018,9 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
 	const generation = accountGeneration;
 	const startingPath = typeof window === 'undefined' ? null : window.location.pathname;
 	const foreground = () => state.activeChatId === (turn.chatId || chatId) && (startingPath === null || window.location.pathname === startingPath);
-	const requestId = uuid();
+	const requestId = continuation ? uuid() : options.requestId ?? uuid();
 	const settings = mergeSettingsPatch(options.settings || {});
-	if (!continuation && options.settings && Object.keys(options.settings).length && !sameLopuSettings(settings, state.settings)) {
+	if (!continuation && !options.chatId && options.settings && Object.keys(options.settings).length && !sameLopuSettings(settings, state.settings)) {
 		persistSettings(userId, settings);
 		setState({ settings });
 	}
@@ -1016,7 +1053,7 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
 				const id = next.chatId;
 				if (!id) break;
 				if (!before.meta) options.onAccepted?.();
-				if (!continuation && state.activeChatId !== id && (state.activeChatId === chatId || state.activeChatId === null)) {
+				if (!continuation && !options.chatId && state.activeChatId !== id && (state.activeChatId === chatId || state.activeChatId === null)) {
 					setState({ activeChatId: id });
 				}
 				appendMessages(id, [buildUserMessage(next, userId, id)]);
@@ -1080,7 +1117,7 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
 	// null — a pin the server still holds (a refused update, a provider the
 	// vault no longer lists) must never route the turn behind the picker's back
 	const activeChat = chatId ? state.chats.find((chat) => chat.id === chatId) : null;
-	const statesProvider = !!settings.providerId || !!activeChat?.lopu;
+	const statesProvider = !!settings.providerId || !!activeChat?.lopu || !!(options.settings && 'providerId' in options.settings);
 	const body: LopuReplyBody = {
 		...(chatId ? { chatId } : {}),
 		text: trimmed,
@@ -1128,6 +1165,7 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
 
 	const finalChatId = turn.chatId;
 	if (turn.gate && !turn.meta) {
+  pauseLopuQueue(true);
 		// the turn stays in the timeline: the viewer's bubble and Lopu's gate
 		// bubble (request credits / ask an admin); nothing was persisted
 		setState({ sending: controllers.size > 0, streamingId: controllers.keys().next().value ?? null, error: null });
@@ -1165,11 +1203,13 @@ const sendLopuMessagePart = async (text: string, options: SendLopuOptions = {}, 
   } : undefined;
   return { ok: true, requestId, chatId: finalChatId, next: { options: { settings, context, applyPatches }, continuation: { chatId: finalChatId, previousRequestId: requestId } } };
  }
+ if (turn.status !== 'done' || stopped || abort.signal.aborted) pauseLopuQueue(true);
 	return { ok: true, requestId, chatId: finalChatId };
 };
 
 /** Stop the in-flight reply (what streamed so far is kept). */
 export const abortLopuTurn = (): void => {
+ pauseLopuQueue(true);
  const turn = Object.values(state.turns).find(turn => turn.chatId === state.activeChatId && isLopuTurnActive(turn));
  if (turn) stoppedRequests.add(turn.requestId);
  if (turn) void stopAiTaskRequest(turn.requestId).then(() => controllers.get(turn.requestId)?.abort()).catch(() => notice('Could not stop the task. Open Background tasks to try again.', { status: 'error' }));

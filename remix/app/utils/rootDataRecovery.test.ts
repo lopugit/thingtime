@@ -153,3 +153,12 @@ test('OTP challenges and failed or unrelated mutations do not reset the account'
 	assert.equal(changesRootIdentity('/api/v1/auth/accounts/switch', { ok: true, user: {} }), true);
 	assert.equal(changesRootIdentity('/api/v1/auth/logout', { ok: true }), true);
 });
+
+test('only temporary read failures permit keeping the mounted session', async () => {
+	for (const status of [401, 403, 404, 429, 500, 502, 503, 504]) {
+		await assert.rejects(fetchRootData('/api/root-data', signal(), async () => new Response('', { status }), options),
+			(error: unknown) => error instanceof RootDataUnavailableError && error.retryable === [429, 500, 502, 503, 504].includes(status));
+	}
+	await assert.rejects(fetchRootData('/api/root-data', signal(), async () => new Response('invalid'), options),
+		(error: unknown) => error instanceof RootDataUnavailableError && !error.retryable);
+});

@@ -236,3 +236,17 @@ export const aiTaskFetch = async (url: string, init: RequestInit = {}): Promise<
 		} else resume();
 	});
 };
+
+export const sendAiTaskNote = async (id: string, noteId: string, text: string) => {
+ const owner = ownerId, generation = ownerGeneration;
+ if (!owner) throw new Error('Sign in to send a note.');
+ await requireThingtimeCapability('api.lopu-background-tasks', '1.2.0');
+ await requireThingtimeCapability('api.lopu-chats-reply', '1.13.0');
+ const response = await fetch(AI_TASK_PATH, { method: 'POST', credentials: 'include',
+  headers: { 'Content-Type': 'application/json', [AI_TASK_OWNER_HEADER]: owner },
+  body: JSON.stringify({ action: 'note', id, noteId, text }) });
+ const result = await response.json();
+ if (owner !== ownerId || generation !== ownerGeneration) throw new Error('The account changed.');
+ if (!response.ok || !result.ok) throw new Error(result.error || 'Could not send this note.');
+ return result;
+};

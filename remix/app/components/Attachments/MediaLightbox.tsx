@@ -1,25 +1,24 @@
+import { useLopu } from '~/components/Lopu/useLopu';
+import { mediaPageLink } from './mediaGalleryCore';
 import { ProgressiveImage } from './ProgressiveImage';
 import React from 'react';
 import { useSharedMediaUrl } from '../Sharing/SharedMedia';
-import { Box, Flex, IconButton, Modal, ModalContent, ModalOverlay, Text } from '@chakra-ui/react';
+import { Box, Button, Flex, IconButton, Modal, ModalContent, ModalOverlay, Text } from '@chakra-ui/react';
 import { Link } from 'react-router';
-import { ChevronLeft, ChevronRight, Download, ExternalLink, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, Download, ExternalLink, FolderDown, X } from 'lucide-react';
 
 import {
 	attachmentContentUrl,
 	attachmentDisplayName,
 	attachmentMediaSrc,
-	attachmentThingUrl,
 	formatAttachmentBytes,
-	mediaPageUrl
 } from './attachmentUiCore';
 import type { PublicAttachment } from './attachmentTypes';
 
 // Click-to-view lightbox for a post's visual attachments. Arrow keys / edge
 // buttons move through the gallery, "Open" deeplinks to the media's own
 // /media/:id Thing page (comments + reactions live there), and Download uses
-// the stable authenticated content URL. Videos keep their inline players —
-// this modal is for images.
+// the stable authenticated content URL. Images and videos share navigation.
 
 const MUTED = 'rgba(255, 255, 255, 0.72)';
 
@@ -28,10 +27,15 @@ export type MediaLightboxProps = {
 	index: number;
 	isOpen: boolean;
 	onClose: () => void;
+	// present when this lightbox browses a multi-file gallery: one click saves
+	// every stored file of the parent post as a ZIP (see useAttachmentArchive)
+	onDownloadAll?: () => void;
 };
 
-export const MediaLightbox = ({ attachments, index, isOpen, onClose }: MediaLightboxProps) => {
+export const MediaLightbox = ({ attachments, index, isOpen, onClose, onDownloadAll }: MediaLightboxProps) => {
 	const mediaUrl = useSharedMediaUrl();
+	const lopu = useLopu();
+	const [videoFailed, setVideoFailed] = React.useState(false);
 	const [current, setCurrent] = React.useState(index);
 	React.useEffect(() => {
 		if (isOpen) setCurrent(index);
@@ -39,6 +43,8 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose }: MediaLigh
 
 	const count = attachments.length;
 	const attachment = attachments[Math.min(Math.max(current, 0), Math.max(count - 1, 0))];
+
+	React.useEffect(() => setVideoFailed(false), [attachment?.id, isOpen]);
 
 	const step = React.useCallback(
 		(delta: number) => {
@@ -51,11 +57,10 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose }: MediaLigh
 	React.useEffect(() => {
 		if (!isOpen) return;
 		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key === 'Escape') { onClose(); return; }
+			if (event.target instanceof HTMLElement && event.target.closest('video, input, textarea, [contenteditable=true]')) return;
 			if (event.key === 'ArrowLeft') step(-1);
 			if (event.key === 'ArrowRight') step(1);
-			// autoFocus is off, so focus can sit outside the modal where Chakra's
-			// own closeOnEsc handling never hears the key — close from here too.
-			if (event.key === 'Escape') onClose();
 		};
 		window.addEventListener('keydown', onKeyDown);
 		return () => window.removeEventListener('keydown', onKeyDown);
@@ -63,6 +68,7 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose }: MediaLigh
 
 	if (!attachment) return null;
 
+	const pageLink = mediaPageLink(attachment.id, mediaUrl(attachmentContentUrl(attachment.id)));
 	return (
 		<Modal isOpen={isOpen} onClose={onClose} size="full" motionPreset="none" autoFocus={false}>
 			<ModalOverlay background="rgba(10, 10, 14, 0.92)" />
@@ -78,7 +84,7 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose }: MediaLigh
 					<Flex alignItems="center" columnGap={1} paddingX={3} paddingY={2} onClick={(event) => event.stopPropagation()}>
 						<Text
 							as={Link}
-							to={attachmentThingUrl(attachment.id)}
+							to={pageLink}
 							fontSize="xs"
 							color={MUTED}
 							noOfLines={1}
@@ -94,7 +100,7 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose }: MediaLigh
 						</Text>
 						<IconButton
 							as={Link}
-							to={mediaPageUrl(attachment.id)}
+							to={pageLink}
 							aria-label="Open this media's own page"
 							title="Open media page — comments, reactions and details"
 							icon={<ExternalLink size={16} />}
@@ -119,8 +125,26 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose }: MediaLigh
 							_hover={{ color: 'white', background: 'rgba(255,255,255,0.12)' }}
 							borderRadius="999px"
 						/>
+						{count > 1 && onDownloadAll ? (
+							<IconButton
+								// the gallery may also hold audio/files outside this visual set, so the
+								// label promises the post's files rather than quoting this count
+								aria-label="Download every file in this post as a ZIP"
+								title="Download all files (ZIP)"
+								icon={<FolderDown size={16} />}
+								size="sm"
+								variant="ghost"
+								color={MUTED}
+								_hover={{ color: 'white', background: 'rgba(255,255,255,0.12)' }}
+								borderRadius="999px"
+								onClick={(event) => {
+									event.stopPropagation();
+									onDownloadAll();
+								}}
+							/>
+						) : null}
 						<IconButton
-							aria-label="Close image popup"
+							aria-label="Close media popup"
 							title="Close"
 							icon={<X size={18} />}
 							size="sm"
@@ -133,12 +157,13 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose }: MediaLigh
 					</Flex>
 
 					{/* stage */}
-					<Flex flex="1" minHeight={0} alignItems="center" justifyContent="center" position="relative" paddingX={[2, 12]}>
+					<Flex flex="1" minHeight={0} alignItems="center" justifyContent="center" position="relative" paddingX={count > 1 ? [12, 14] : [2, 12]}>
 						{count > 1 && (
 							<IconButton
 								aria-label="Previous media"
 								icon={<ChevronLeft size={22} />}
 								position="absolute"
+								zIndex={1}
 								left={[1, 3]}
 								size="md"
 								variant="ghost"
@@ -151,6 +176,13 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose }: MediaLigh
 								}}
 							/>
 						)}
+						{attachment.mediaKind === 'video' ? (
+							videoFailed ? <Text color="white" textAlign="center">This browser cannot play this video. Use Download to open the original file.</Text> :
+							<Box as="video" key={attachment.id} src={mediaUrl(attachmentMediaSrc(attachment))}
+								aria-label={attachment.title || attachmentDisplayName(attachment)} controls playsInline preload="metadata"
+								width="100%" height="100%" maxWidth="100%" maxHeight="100%" objectFit="contain"
+								onError={() => setVideoFailed(true)} onClick={(event: React.MouseEvent) => event.stopPropagation()} />
+						) : (
 						<ProgressiveImage
 							width="100%"
 							height="100%"
@@ -165,6 +197,7 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose }: MediaLigh
 							borderRadius="var(--tt-radius-md, 12px)"
 							onClick={(event: React.MouseEvent) => event.stopPropagation()}
 						/>
+						)}
 						{count > 1 && (
 							<IconButton
 								aria-label="Next media"
@@ -195,6 +228,16 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose }: MediaLigh
 						marginX="auto"
 						onClick={(event) => event.stopPropagation()}
 					>
+						<Flex gap={2} align="center" minWidth={0}>
+							<Text as={Link} to={pageLink} color={MUTED} fontSize="xs" noOfLines={1} flex="1" minWidth={0} textDecoration="underline">
+								{typeof window === 'undefined' ? pageLink : `${window.location.origin}${pageLink}`}
+							</Text>
+							<Button size="xs" flexShrink={0} leftIcon={<Copy size={12} />} onClick={async () => {
+								try { await navigator.clipboard.writeText(new URL(pageLink, window.location.origin).href); lopu({ title: 'Media link copied', status: 'success' }); }
+								catch { lopu({ title: 'Could not copy the link. Open the media page to share its address.', status: 'error' }); }
+							}}>Copy link</Button>
+						</Flex>
+
 						{attachment.description ? (
 							<Text fontSize="sm" color="white" whiteSpace="pre-wrap" noOfLines={4}>
 								{attachment.description}

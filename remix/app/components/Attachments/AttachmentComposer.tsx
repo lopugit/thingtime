@@ -1,3 +1,4 @@
+import { attachmentCountLimit } from '~/schemas/attachmentLimits';
 import { uploadFileTypes } from './attachmentFileTypes';
 import React from 'react';
 import { Box, Button, Flex, IconButton, Image, Input, Progress, Text } from '@chakra-ui/react';
@@ -25,7 +26,6 @@ import {
 	attachmentDisplayName,
 	formatAttachmentBytes,
 	localFileMediaKind,
-	MAX_POST_ATTACHMENTS,
 	sameAttachmentSnapshot
 } from './attachmentUiCore';
 import type { AttachmentComposerSnapshot, AttachmentUploadPurpose, ComposerAttachmentUpload, PublicAttachment } from './attachmentTypes';
@@ -435,7 +435,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 		storageStatus,
 		onChange,
 		purpose = 'post',
-		maxFiles = MAX_POST_ATTACHMENTS,
+		maxFiles = attachmentCountLimit(purpose),
 		imageOnly = false,
 		maxBytesPerFile,
 		allowedContentTypes,
@@ -449,7 +449,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 		onExistingRemove
 	} = props;
 	const fileTypes = uploadFileTypes(allowedContentTypes, imageOnly);
-	const boundedMaxFiles = Number.isFinite(maxFiles) ? Math.max(1, Math.min(MAX_POST_ATTACHMENTS, Math.trunc(maxFiles))) : MAX_POST_ATTACHMENTS;
+	const boundedMaxFiles = Number.isFinite(maxFiles) ? Math.max(1, Math.min(attachmentCountLimit(purpose), Math.trunc(maxFiles))) : attachmentCountLimit(purpose);
 	const lopu = useLopu();
 	const currentUser = useCurrentUser();
 	const uploadScope = attachmentUploadScopeForPurpose(purpose);
@@ -470,7 +470,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 			}),
 		[lopu]
 	);
-	const { uploads, addFiles: enqueueFiles, addLinkedUrl, retry, remove, reorder, markCommitted, updateAttachment, snapshot } = useAttachmentUploads(
+	const { uploads, addFiles: enqueueFiles, addLinkedUrl, retry, retryAll, remove, reorder, markCommitted, updateAttachment, snapshot } = useAttachmentUploads(
 		ownerId,
 		onCleanupError,
 		onSelectionError,
@@ -595,7 +595,7 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 				<Text fontFamily="mono" fontSize="10px" fontWeight={600} letterSpacing="0.08em" textTransform="uppercase" color={MUTED}>
 					Media & files 📎
 				</Text>
-				<Text fontSize="11px" color={MUTED} marginLeft="auto" whiteSpace="normal">
+				<Text fontSize="11px" color={MUTED} marginLeft={[0, 'auto']} flexBasis={['100%', 'auto']} minWidth={0} whiteSpace="normal">
 					{storageLabel}
 				</Text>
 			</Flex>
@@ -644,12 +644,17 @@ const AttachmentComposerInner = React.forwardRef<AttachmentComposerHandle, Attac
 					{fileTypes.label}. {helperText ||
 						`${
 							imageOnly
-								? `${boundedMaxFiles === 1 ? 'One image' : `Up to ${boundedMaxFiles} images`} · drop or paste (⌘/Ctrl+V) ${
+								? `${boundedMaxFiles === 1 ? 'One image' : Number.isFinite(boundedMaxFiles) ? `Up to ${boundedMaxFiles} images` : 'Images'} · drop or paste (⌘/Ctrl+V) ${
 										boundedMaxFiles === 1 ? 'it' : 'them'
 								  } anywhere in this panel`
-								: `Photos, videos, or any file · up to ${boundedMaxFiles} · drop or paste (⌘/Ctrl+V) anywhere in this panel`
+								: `Photos, videos, or any file${Number.isFinite(boundedMaxFiles) ? ` · up to ${boundedMaxFiles}` : ''} · drop or paste (⌘/Ctrl+V) anywhere in this panel`
 						}${totalCount > 1 ? ' · drag the ⠿ handle to set the order' : ''}`}
 				</Text>
+
+				{uploads.some((upload) => upload.status === 'error' && upload.failedAt !== 'terminal') && (
+					<Button size="sm" variant="outline" leftIcon={<RotateCcw size={14} />} marginBottom={3}
+						isDisabled={disabled} onClick={retryAll}>Retry all</Button>
+				)}
 
 				{existingAttachments.length > 0 && onExistingChange ? (
 					<Box paddingBottom={uploads.length > 0 || totalCount < boundedMaxFiles ? 2 : 0}>

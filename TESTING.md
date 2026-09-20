@@ -229,6 +229,16 @@
 
 ## Session read recovery
 
+- [ ] Keep an unsaved draft and an expanded panel open, fail both background
+  `/api/root-data` reads, and return to the tab: the same page and component
+  instances remain mounted. Restore connectivity: data refreshes without reload.
+  Repeat at desktop and 390px widths. A cold-start failure retries on focus,
+  reconnect and a bounded timer; never replay a mutation.
+- [ ] Fail a root read after switching or signing out in another same-origin tab:
+  old account content disappears and cannot be restored by a delayed read.
+  401/403 and malformed responses clear the fallback; changing route/query/origin
+  cannot borrow the previous route's data.
+
 - [ ] Fail the first `/api/root-data` GET after sign-in: one automatic retry
   restores the app without repeating the login POST. Fail both reads: show
   a clean error with Try again and Reload page, never a raw stack or response.
@@ -1594,6 +1604,66 @@ email whose link points at the attacker.
       `remix/public/branding/` + `brandingAssets.generated.json` (byte-stable
       when nothing changed).
 
+## Brand logo SEO — robots.txt, sitemap, Organization JSON-LD (`remix/app/api/utils/seo/`, `remix/app/api/utils/meta/brandIdentity.ts`)
+
+- [ ] `curl -sI https://<origin>/robots.txt` is `200 text/plain` (not the SPA
+      shell); the body has `User-agent: *` / `Allow: /`, an explicit `Allow: /`
+      stanza for each AI crawler in `AI_CRAWLER_USER_AGENTS`, no `Disallow`,
+      and ends with `Sitemap: https://<origin>/sitemap.xml` for **this** origin
+      (a preview must not advertise production's sitemap).
+- [ ] `curl -s https://<origin>/sitemap.xml` is `application/xml` with a
+      `<sitemapindex>` listing `?section=static`, one `?section=posts&page=N`
+      per 500 public posts, `?section=pages&page=N` per 500 public `/p/` pages
+      and `?section=profiles` when anyone has public posts. Every `<loc>`
+      resolves (follow each one) and `Cache-Control` is
+      `public, max-age=300, s-maxage=3600, stale-while-revalidate=86400`.
+- [ ] `?section=static` lists only paths the shell also marks `index, follow`
+      (`indexablePaths.ts`) and carries `<image:image>` entries for
+      `/branding/generated/<slug>/…-1024x….png` + `.svg` for all four variants,
+      every press-kit image, and the icon + wordmark on `/`. Each image URL
+      returns `200 image/*`.
+- [ ] `?section=posts&page=1` contains only `/post/<id>` permalinks that an
+      anonymous `GET /api/v1/things?id=<id>` can read; create a friends-only or
+      hidden post and confirm it never appears; delete a public post and
+      confirm it drops after the edge cache expires. `?section=profiles`
+      contains only authors of public posts (a fresh account with no public
+      posts is absent). `?section=pages` omits route twins (`crystal.siteRoute`).
+- [ ] `?section=posts&page=50` (in range, past the last page) → `404
+      text/plain`; `?section=posts&page=999` (over the 100-page cap),
+      `?section=nope` and `?page=x` → `400 text/plain`; `HEAD` returns headers with an empty body;
+      `POST` → `405` with `Allow: GET, HEAD`. Sending a session cookie or a
+      `x-tt-mongo-url` header changes nothing (the route runs anonymous on the
+      home data plane).
+- [ ] `GET /api/v1/sitemap` (+ the same query strings) returns byte-identical
+      XML to `/sitemap.xml`; `/api/v1/sitemap-docs`, `/robots.txt-docs` and
+      `/sitemap.xml-docs` return the JSON docs payload; all three features
+      appear in `/.well-known/thingtime-capabilities.json` at `1.0.0`.
+- [ ] `npm --prefix remix run sitemap:generate -- --origin https://<origin>`
+      writes `sitemap-out/{robots.txt,sitemap.xml,sitemap-static.xml}` without
+      touching the network; `-- --fetch` additionally mirrors every section from
+      the live API into `sitemap-<section>[-<n>].xml` and rewrites the index to
+      those files. `sitemap-out/` stays untracked.
+- [ ] `curl -s https://<origin>/` and `/branding` each contain one
+      `<script type="application/ld+json">` whose `@graph[2]` is an
+      `Organization` with `logo.url` =
+      `https://<origin>/branding/generated/icon/thingtime-icon-1024x1024.png`
+      (200, square ≥112px), a wordmark `image`, `sameAs` links, and
+      `@graph[0].publisher` pointing at it. Validate with Google's Rich Results
+      Test / Schema.org validator — no warnings on the Organization node.
+- [ ] `/branding` in a browser: the four hero previews are `<img>` elements
+      whose `src` is a committed `/branding/generated/<slug>/…-1024x….png`
+      (not a `data:` URI) with descriptive `alt`; the light/dark panel toggle
+      still swaps the surface; the custom exporter still works.
+- [ ] Landing page (`/`, `/welcome`) and any `<Logo icon theme="nature" />`
+      spot: DevTools shows a real `<img src="/branding/generated/icon/…png">`
+      exactly underneath the voxel grid with identical bounds (no visible
+      double image, no layout shift, hover still fades voxels). A custom
+      `matrix`/`colourMap` `<Logo>` renders no `<img>`.
+- [ ] After changing `logoMatrix.ts`, `brandIdentity.ts` paths or
+      `indexablePaths.ts`, `npm --prefix remix run test:seo` and
+      `test:social-previews` pass, and re-run `branding-assets` so the
+      Organization logo path still exists.
+
 ## Marketing suite (`remix/app/routes/marketing/`, `remix/app/components/Marketing/`, `remix/app/marketing/`)
 
 - [ ] `npm --prefix remix run test:marketing` passes: 1000+ pages, 1000+ social
@@ -1717,6 +1787,22 @@ email whose link points at the attacker.
 
 ## Post and comment attachments (`remix/app/components/Attachments/`)
 
+- [ ] Download all (PR: download-all attachments): a post with two or more
+      stored attachments shows a `Download all · N files · size` pill under its
+      gallery/file rows (single-file posts and linked-only galleries show none).
+      Clicking it fetches `GET /api/v1/attachments/archive?id=<post>&manifest=1`
+      first, then saves `<post opener>.zip`; unzip it and confirm every stored
+      file is present in gallery order with duplicate names suffixed ` (2)`,
+      linked media listed in `links.txt`, and moderation-pending/blocked files
+      absent for other viewers. The post ⋯ menu shows a **Files** section with
+      `Download all files (N files)` and `Share download link`; the latter copies
+      `https://<origin>/api/v1/attachments/archive?id=<post>` (no `key`) and
+      the toast explains the audience rule. `wget` / `curl -OJ` of that URL
+      saves the same ZIP for a public or unlisted post, returns 404 JSON for a
+      private one without a session, and stops working the moment the post is
+      made private. Repeat for a comment permalink (comment-purpose media only)
+      and check the `-docs` twin plus `/.well-known/thingtime-capabilities.json`
+      advertise `api.attachment-archive` 1.0.0.
 - [ ] Internal shared-file copies: run `npm --prefix remix run test:attachments`.
       With post-purpose upload approval denied (or its lookup unavailable),
       copying must reserve no quota or S3 upload. Revoke approval between parts:
@@ -1839,8 +1925,29 @@ email whose link points at the attacker.
       error tile and full composer at desktop and 390px through the footer.
 - [ ] Pick and drag/drop raster images, a supported video, and an arbitrary
       file. Safe image/video previews appear immediately; each row reports
-      progress; Post stays disabled until every selected file is Ready; and a
-      26th unique file is rejected with the fixed 25-attachment limit message.
+      progress; Post stays disabled until every selected file is Ready; and posts accept more than 25 unique files (including edits and retained linked media).
+      Comments and other purposes retain their existing count limits; upload
+      concurrency, per-file checks and account storage quotas still apply.
+- [ ] With 30 post files and mixed network/finalization failures, Retry all queues
+      only recoverable failures, preserves order and upload identity, and never
+      exceeds three active transfers. Double-click Retry all, then remove a
+      queued file or switch accounts: no duplicate or late upload may appear.
+      Terminal failures remain removable. `scripts/media-gallery-preview.html`
+      exercises the production composer with synthetic transport and no writes.
+- [ ] In feed/profile/post/media pages, upload photo → video → photo. Verify
+      that every layout reads in that order, including mobile's two columns.
+      Open the video in the shared popup, play/pause/seek, step both directions,
+      copy/open its Thingtime permalink, and reload it. Check secret-link media,
+      desktop and 390px layout, long filenames and the bottom of the page.
+      Unrevealed NSFW videos remain shielded and absent from popup navigation.
+- [ ] A profile shows direct-user, current-group, friend and mixed-audience
+      grants; removing a grant hides the post. Undiscovered link-only posts
+      remain absent. Visit a current secret link and return to its author's
+      profile: that account/browser sees the collected post and can reopen its
+      media. A second account/browser cannot. Rotate the key, remove hidden
+      access, block or delete the post: previous discovery no longer authorizes
+      it. Anonymous identity persists via localStorage/cookie; raw bearer tokens,
+      discovery records and private IP metadata never enter public projections.
 - [ ] With Photos off, drop image, video/audio, and generic files onto the
       collapsed post prompt, expanded body editor, and comment/edit composer.
       Photos opens and every file enters the single bounded uploader once.
@@ -2055,6 +2162,16 @@ email whose link points at the attacker.
 
 ## Media thing pages — masonry, lightbox, `/media/:id`, annotate (`remix/app/components/Attachments/`, `remix/app/routes/media.tsx`)
 
+- [ ] Gallery download-all: open the lightbox from a post with two or more
+      stored images/videos and confirm a folder-down icon sits between Download
+      and Close (absent for single-file galleries); it saves the parent post's
+      ZIP without closing the lightbox. On `/media/:id` for one of those files
+      the context row shows `Download` plus `Download all · N files · size`, and
+      the Media options ⋯ menu offers `Download all files (N files)` + `Share
+      download link` targeting the parent post; for a media Thing whose parent
+      has one stored file the menu instead offers `Download as ZIP` + a share
+      link for that media id. Verify at desktop and 375px widths that the extra
+      controls wrap without clipping the filename.
 - [ ] A post with 3+ images renders the image section as a CSS-columns masonry
       (natural aspect ratios, `break-inside` avoided) with 1/2/3 responsive
       columns; at desktop and 375px mobile widths there is no horizontal
@@ -5764,6 +5881,20 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Things page (`/things`, `remix/app/components/Things/`, `/api/v1/things/bulk`)
 
+- [ ] Folder download-all: browse into a folder that contains posts with
+      stored attachments and/or saved recordings; the toolbar shows a
+      `Download all · N files · size` pill (absent at the root, in folders with
+      no stored files, and while the manifest probe is still pending). Save the
+      ZIP and confirm nested folders become directories, each post gallery gets
+      its own sub-directory named after the post, recordings sit at the folder
+      level, and children another viewer cannot see are excluded (share the
+      folder as hidden, open its `/api/v1/attachments/archive?id=<folder>` URL
+      logged out: only public/unlisted children's files appear). The item ⋯ /
+      right-click menu on folders, posts, pages and media shows a **Files**
+      section (`Download all files`, `Share download link`); multi-selections
+      hide it. Downloading a folder with nothing downloadable toasts the server
+      message instead of navigating to JSON. Over 500 files or 2 GiB returns
+      413 with a "download the folders inside separately" message.
 - [ ] A paired Mac appears at `/things` root and search from the dedicated
       devices projection, with cached-first name/presence and current system,
       volume, brightness, lock, open-app, permission, and connector state.
@@ -6127,7 +6258,7 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 ## Actions (/actions, `remix/app/api/utils/actions/`, `/api/v1/actions/run`, `/api/v1/actions/runs`)
 
 - [ ] `node remix/scripts/verify-actions.mjs http://127.0.0.1:<nitro-port>` passes
-      end to end (89 checks: closed-vocabulary + capability-coverage + scope +
+      end to end (99 checks: closed-vocabulary + capability-coverage + scope +
       ref-grammar refusals at save; run-by-key, $refs/$$-escape/ttConcat/$now,
       run-time scope enforcement, shared budget across actions.invoke, direct +
       ping-pong recursion refusal, ops exhaustion, run-record forgery 403,
@@ -6203,6 +6334,16 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Design system + builder (`/builder`, `/p/:id`, `/docs/design-system`, `remix/app/components/Builder/`, `/api/v1/webpages/resolve`, `/api/v1/admin/webpages/seed`)
 
+- [ ] Floating page controls: dock Lopu in split mode on all four edges and
+      resize it live. The bar, inspector, mode menu and viewport popover stay in
+      the remaining page pane, including a shallow top/bottom split. Repeat with
+      the navigation drawer pinned left/right. At 390px, 320px and a narrow
+      desktop split, controls wrap and modes become a keyboard-accessible menu
+      in Builder/Edit/Layout/View/Visit/Deploy order. Escape restores trigger
+      focus, mode changes retain form values, and the page bottom clears the bar.
+      Mobile Lopu sheets hide the builder layer until dismissed. The safe fixture
+      at `/tests/seamless-builder.html` uses the real Lopu host and ephemeral
+      drafts/settings, and its Visit/Deploy saves intentionally fail without writes.
 - [ ] Seamless editor: open the same owned page at `/builder?page=<id>` and
       `/p/<id>`. Builder/Edit/Layout/View/Visit/Deploy use the same blocks.
       Type into a live form, switch Edit/View/Layout, and confirm its value
@@ -6281,6 +6422,21 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       The shared browser fixture stubs image bytes to verify key transport;
       attachment service/route tests cover authorization separately. Do not
       treat that fixture as proof of real S3 bytes or independent media copies.
+- [ ] Copy an image-only post with an ordered gallery and comments/replies deeper
+      than the initial rendered preview. Include image-only comments and files on
+      the deepest reply, plus comments on media with their own galleries. Copy to my Things must create a private root, fresh file
+      IDs and correctly nested inherited comments; reload, copy the copy, and
+      revoke/delete the source to verify independence. Check desktop and 390px
+      mobile, open a copied attachment, expand replies, and scroll to the bottom.
+      Hidden/blocked comments must stay excluded; unavailable files, quota errors,
+      source changes and the 512-Thing/file/comment limit must fail without a truncated copy.
+      Negotiate `api.things-fork >= 1.5.0`. Run the opt-in real-API regression with
+      `TT_FORK_TEST_URL=http://127.0.0.1:<port>` and `TT_FORK_COPIER_COOKIE` for an
+      upload-approved disposable account:
+      `node --import tsx --test app/api/utils/actions/forkComments.integration.test.ts`
+      from `remix/`. Its linked galleries prove relational binding and URL
+      independence, while byte-copy unit coverage uses a mocked object store;
+      neither substitutes for real S3 byte-copy acceptance.
 - [ ] Copy a shared standalone Data Thing with extended content and a private
       schema definition. The copy keeps its extended content, gets its own
       private schema/id/name pair, exposes no original link key, and is editable
@@ -7602,6 +7758,77 @@ storage only; do not describe it as a production upload or provider acceptance.
 - [ ] Drag all four edges and four corners. Opposite edges stay anchored; frame bounds stay within the viewport. Dock to top/left/bottom/right, select overlay/split, and resize each divider. Split reduces the actual page rectangle; overlay preserves it. Scroll the page fully in each mode; fixed navigation remains in the page area and DevKit/Edit controls stay behind overlay Lopu.
 - [ ] Shrink split page width to 320px: compact navigation controls do not collide, page content has no horizontal overflow, and the drawer/quick switcher remain accessible. On mobile, check the full sheet, minimise/restore, page picker and conversation controls in a short viewport.
 - [ ] Both capability manifests advertise api.lopu-chats-reply 1.12.0. Page-bearing clients refuse 1.11 origins, while continuation without pages keeps its 1.11 requirement. Invalid page arrays/URLs fail before writes. Real route tests must prove sanitized references reach the provider and persisted message, and opt-out omits implicit page context.
+
+### Lopu message queue and Send now (2026-09-18)
+
+- [ ] While Lopu works, press Enter (Cmd/Ctrl+Enter on mobile or with Enter-to-send off) or the normal send arrow to queue three messages; there is no dedicated Queue button. Shift+Enter and IME confirmation never send. Add/remove draft attachments while replying, then queue them and confirm the next draft remains editable. Accepted queue items disappear before their reply completes; interruption cannot resend an accepted batch. Each starts with Send together checked. Drag by holding the handle, reorder with both arrows, and remove an item. Check desktop and 390px, long text, queue scrolling, composer settings and the bottom of the page.
+- [ ] Leave consecutive messages checked: they reach one reply in queue order. Uncheck the middle message: it waits for the preceding reply, sends individually, and the next message waits for its reply. Different model/page/media snapshots and batches above 8000 characters split at a safe boundary.
+- [ ] With a typed draft, the send arrow floats above the stop square. Stop remains clickable and preserves the draft for a new reply; a paused older queue does not capture that explicit new send. More send options opens above the composer without clipping at desktop/390px. Send now saves a text note without cancelling the existing provider call or tool. The next provider hop receives it as user input. Late notes stay in history for the next reply; notes never approve destructive tools. File/Thing selections must be queued or sent normally, not silently dropped by Send now.
+- [ ] Pause/Resume, Stop, interrupted transport, refresh, account switching and switching conversations retain the right queue. Reload restores paused. Retrying an uncertain batch/note keeps its original operation identity and payload. Old-account completions cannot consume a newer account's queue.
+- [ ] Run Lopu UI, Lopu provider streaming, Lopu route/background-task and API capability suites. `/scripts/lopu-queue.browser.html` is a local-only interaction fixture using the production queue/composer; its simulated delivery is not authenticated provider acceptance.
+
+### Lopu chat archiving (2026-09-18)
+
+- [ ] In the Lopu page and floating conversation list, archive a chat, find it under Archived, reload, read its unchanged transcript, and Restore it. Repeat at desktop and 390px, scroll to the final row, and check long titles and wrapped actions.
+- [ ] Archive while a reply runs: the selected transcript and reply stay alive. New chat, rename, Messenger link and delete confirmation still work. A failed archive restores only that chat's flag; switching accounts while it fails never leaks prior chats.
+- [ ] Run the Lopu store, messenger Lopu and capability suites; `scripts/verify-lopu.mjs` covers real authenticated archive/restore idempotency, invalid booleans, cross-account denial and transcript preservation when its verified test account is available. `scripts/lopu-archive.browser.html` provides a synthetic API fixture for list layout and failure testing.
+
+Local queue-fix validation: `http://localhost:18720/scripts/lopu-queue.browser.html` (worktree `thingtime-lopu-auto-queue`, Vite 18720 / HMR 18721 / Nitro 18722 overrides; default trio occupied). Tailscale/Funnel unavailable: the installed launcher targets a missing `/Applications/Tailscale.app`; no public mapping changed.
+
+## Builder SDK uploads, forms and lookups (2026-09-18)
+
+- [ ] Run `/scripts/builder-sdk-regression.html` on desktop and 390px; the production
+      page renderer enables uploads, inherits component sources and passes all
+      synthetic assertions for required fields, saved initial files, pending upload
+      guards, failed commit/retry identity, double-click suppression, empty text,
+      source refresh, clearing files and draft retention. Open the optional URL
+      control; inspect top-to-bottom for clipping and horizontal overflow.
+- [ ] With configured object storage and an approved account: select a real file
+      on an owned `/p/:id` in View mode, wait for processing, Use file, save the form,
+      read the returned Data Thing, and reload. Verify the same component on its
+      dedicated page. A foreign/anonymous reader cannot access the private file.
+- [ ] Run the 99-check `verify-actions.mjs` against an isolated local database.
+      Empty optional text overrides descriptor defaults; omission retains defaults;
+      partial updates preserve unrelated fields. A missing Vault key fails visibly,
+      and even an explicitly opened foreign lookup action cannot use the viewer's key.
+- [ ] `/docs/builder`, all six section links, `/builder/docs`, Builder's docs link
+      and docs search work at desktop/mobile; scroll each page through the footer.
+- [ ] Create a lookup step in the action builder: query `$input.address`, Google
+      provider, and an owned Vault entry id. The capability and effects display the
+      provider and credential use. Shared execution refuses lookup; no arbitrary
+      URL or secret appears in the authored definition or error.
+- [ ] With an explicitly configured Google key, verify a match, no matches, quota
+      denial and timeout. Display attribution. Do not persist provider-derived
+      results contrary to Google's rules; run history/source cache omit lookup results.
+- Collected unlisted posts: visiting a bare URL saves discovery for the signed-in
+  account or saved anonymous browser identity. A different browser can open the
+  URL but must not inherit that collection on profile listings. IP alone grants
+  no collection. Removing the link audience revokes anonymous access.
+
+## Canonical unlisted links and inherited audiences (2026-09-19)
+
+- Open an unlisted or mixed people/group/link post as an allowed viewer, then
+  open its comment video. Gallery Copy link, Share, menus and breadcrumbs use
+  the canonical Thingtime URL without `key`. Paste into a fresh anonymous
+  browser: both the page and video bytes must load. Repeat for nested comments.
+  Legacy keyed URLs still work, but changing a key cannot revoke a known base
+  URL: remove “Anyone with the link” to revoke anonymous access. Group-only and
+  private posts remain restricted, including their comments and media.
+- Child cards show the root privacy icon and muted audience summary, including
+  mixed people/group/link audiences. Never list a group's private member roster.
+  Blocked/pending intermediate comments hide their descendant media as well.
+- Run `test:things`, `test:attachments`, and `test:api-capabilities` for inherited
+  chains, key projection, URL transport, broken/cyclic chains, and negotiation.
+- Open `/scripts/inherited-audience-preview.html` at desktop and 390x844. Scroll
+  to the bottom, open the comment's video, navigate to its photo and back, open
+  Media options, copy/share links and inspect the synthetic audit text. Long
+  audience labels ellipsize without overlapping menus or overflowing the page.
+  The fixture uses real components and synthetic transport; it does not prove S3.
+
+Local validation: http://localhost:18420/scripts/inherited-audience-preview.html
+in `thingtime-media-gallery-profile` (Vite 18420 / HMR 18421 / Nitro 18422).
+Tailscale/Funnel is unavailable because its installed launcher points to a
+missing `/Applications/Tailscale.app`; no public mapping was changed.
 
 ## Funding and support (`/support`, landing funding section)
 

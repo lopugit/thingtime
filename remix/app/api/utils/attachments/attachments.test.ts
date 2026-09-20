@@ -1,3 +1,4 @@
+import { createCanViewHomeAttachmentTarget } from './attachmentAccess';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -2378,4 +2379,44 @@ test('subspace uploads stamp slot-specific purposes and bound raster limits befo
     for (const [contentType, sizeBytes] of [['image/svg+xml', 128], ['text/plain', 128], ['image/png', 64 * 1024 * 1024 + 1]]) assert.equal((await service.start('user-1', { filename: 'bad', contentType, sizeBytes, purpose })).ok, false);
     assert.equal(reserved.length, count);
   }
+});
+
+
+test('posts accept more than 25 owned ready attachments without relaxing other purposes or identity validation', async () => {
+	let purpose: 'post' | 'comment' | 'message' = 'post';
+	const ids = Array.from({ length: 80 }, (_, index) => `large-gallery-${index}`);
+	const service = createAttachmentService({
+		store: { getOwnedMany: async (owner: string, requested: string[]) => requested.map(shareId => attachmentDoc({
+			shareId, ownerId: owner, attachmentPurpose: purpose, attachmentState: 'ready', uploadId: undefined
+		})) } as any,
+		now: () => now, customMongoActive: () => false
+	});
+	assert.equal((await service.inspectForPost('user-1', ids)).ok, true);
+	assert.equal((await service.inspectForPost('user-1', [...ids, ids[0]])).ok, false);
+	purpose = 'comment';
+	assert.equal((await service.inspectForComment('user-1', ids)).ok, false);
+	purpose = 'message';
+	assert.equal((await service.inspectForMessage('user-1', ids)).ok, false);
+	assert.equal((await service.inspectForPost('user-1', ids)).ok, false);
+});
+
+
+test('a fresh anonymous video download follows its plain permalink through a comment and rechecks revocation', async () => {
+  const root: any = { shareId: 'hidden-root', ownerId: 'root-owner', thingtime: ['post'], acl: ['tt:hidden', 'tt:custom', 'tt:user/invited'] };
+  const comment: any = { shareId: 'comment', ownerId: 'user-1', thingtime: ['post', 'comment'], targetId: root.shareId, acl: ['tt:inherit'] };
+  const doc = attachmentDoc({ attachmentPurpose: 'comment', attachmentState: 'ready', targetId: comment.shareId, acl: ['tt:inherit'], objectVersionId: 'version-1', attachmentExpiresAt: undefined,
+    moderation: { status: 'clean' } as any, crystal: { name: 'clip.mp4', contentType: 'video/mp4', mediaKind: 'video', size: 10 } });
+  const canViewTarget = createCanViewHomeAttachmentTarget({ getThings: async () => ({ findOne: async ({ shareId }: any) => [root, comment].find(row => row.shareId === shareId) || null } as any) });
+  let signs = 0;
+  const service = createAttachmentService({ store: { getById: async () => doc } as any, now: () => now,
+    customMongoActive: () => false, canViewTarget, canViewSharedTarget: async () => false,
+    getS3: () => noopS3({ signDownload: async () => { signs++; return { url: 'https://s3.example/video', expiresAt: now.toISOString() }; } }) });
+  assert.equal((await service.download(null, doc.shareId, false)).ok, true);
+  assert.equal(signs, 1);
+  root.acl = ['tt:custom', 'tt:group/family'];
+  assert.equal((await service.download(null, doc.shareId, false)).ok, false);
+  assert.equal(signs, 1, 'revoked viewers never reach S3');
+  assert.equal((await service.download({ id: 'member', groupIds: new Set(['family']) }, doc.shareId, false)).ok, true);
+  root.acl = ['tt:user'];
+  assert.equal((await service.download(null, doc.shareId, false)).ok, false);
 });

@@ -5,6 +5,7 @@ import test from 'node:test';
 import {
 	abortLopuTurn,
 	bindLopuApi,
+	archiveLopuChat,
 	confirmLopuTool,
 	declineLopuTool,
 	getLopuStoreSnapshot,
@@ -641,4 +642,58 @@ test('a truncated stream never automatically replays the request', async () => {
   { type: 'delta', text: 'Working' }
  ]) }); bindLopuApi(client);
  await sendLopuMessage('Build it'); assert.equal(calls.filter(c => c.name === 'reply').length, 1);
+});
+
+test('queued sends retain the target and immutable id without selecting it over another conversation', async () => {
+ resetLopuStoreForTests(); hydrateLopuStore('queue-owner');
+ let body: any;
+ const { client } = fakeClient({ reply: input => { body = input; return ndjson([{type:'meta',chatId:input.chatId,userMessageId:'queued-user',requestId:input.requestId},{type:'delta',text:'Done'},{type:'done',stopReason:'end_turn'}]); } });
+ bindLopuApi(client); selectLopuChat('other-chat');
+ await sendLopuMessage('first\n\nsecond', { chatId: 'queued-chat', requestId: 'stable-queue-id', settings: { model: 'gpt-5' } });
+ assert.equal(body.chatId, 'queued-chat'); assert.equal(body.requestId, 'stable-queue-id');
+ assert.equal(getLopuStoreSnapshot().activeChatId, 'other-chat');
+});
+
+test('archive and restore preserve selection and prevent an older list refresh undoing the change', async () => {
+ resetLopuStoreForTests();
+ hydrateLopuStore('archive-owner');
+ const { client } = fakeClient({ chats: [{ id: 'chat-archive', name: 'Keep me', lopu: {} }] });
+ bindLopuApi(client);
+ await loadLopuChats();
+ selectLopuChat('chat-archive');
+ let finishRead!: (value: any) => void;
+ client.chats.list = () => new Promise(resolve => { finishRead = resolve; });
+ const read = loadLopuChats();
+ let finishWrite!: (value: any) => void;
+ client.chats.update = () => new Promise(resolve => { finishWrite = resolve; });
+ const write = archiveLopuChat('chat-archive', true);
+ assert.equal(getLopuStoreSnapshot().chats[0].lopu?.archived, true);
+ assert.equal(getLopuStoreSnapshot().activeChatId, 'chat-archive');
+ finishRead({ ok: true, chats: [{ id: 'chat-archive', lopu: {} }] });
+ await read;
+ finishWrite({ ok: true });
+ await write;
+ assert.equal(getLopuStoreSnapshot().chats[0].lopu?.archived, true);
+ client.chats.update = async args => { assert.equal(args.archived, false); return { ok: true }; };
+ assert.equal((await archiveLopuChat('chat-archive', false)).ok, true);
+ assert.equal(getLopuStoreSnapshot().chats[0].lopu?.archived, false);
+});
+
+test('archive failure rolls back only its own field and never crosses an account switch', async () => {
+ resetLopuStoreForTests();
+ hydrateLopuStore('archive-owner');
+ const { client } = fakeClient({ chats: [{ id: 'chat-archive', name: 'Keep me', lopu: {} }] });
+ bindLopuApi(client);
+ await loadLopuChats();
+ client.chats.update = async () => ({ ok: false, error: 'Unavailable' });
+ assert.equal((await archiveLopuChat('chat-archive', true)).ok, false);
+ assert.equal(getLopuStoreSnapshot().chats[0].lopu?.archived, false);
+ let reject!: (reason: Error) => void;
+ client.chats.update = () => new Promise((_resolve, failure) => { reject = failure; });
+ const write = archiveLopuChat('chat-archive', true);
+ hydrateLopuStore('other-owner');
+ reject(new Error('Unavailable'));
+ await write;
+ assert.deepEqual(getLopuStoreSnapshot().chats, []);
+ assert.deepEqual(getLopuStoreSnapshot().notices, []);
 });

@@ -8,7 +8,7 @@ import { ChakraThingRenderer, isChakraThingNode, type ChakraThingNode } from '..
 import { HtmlThingRenderer, type HtmlThingNode } from '../Kinds/HtmlThingRenderer';
 import { defaultsFromArgs, resolveTemplate, sanitizeArgSpecs, type ComponentArgSpec } from '../ComponentsLibrary/componentTemplate';
 import { useTtActionClicks, type TtActionConfirmHandler, type TtActionUnownedHandler } from '../Actions/useTtActionClicks';
-import { readSourceCache, useWebpageRuntime, writeSourceCache } from './webpageRuntime';
+import { clearSourceCache, readSourceCache, useWebpageRuntime, writeSourceCache } from './webpageRuntime';
 
 // The ONE live-component path. A component thing renders live in exactly
 // one way everywhere — inside a builder page (ComponentBlockView), on its own
@@ -137,7 +137,10 @@ export const useThingSource = ({
 					: apiRef.current.v1.actions.run({ action: source.action, inputs, source: 'component' }));
 				if (cancelled) return;
 				if (response?.status === 'ok') {
-					if (!runtime.sharedRun) writeSourceCache(viewerId, pageId, cacheId, response.result ?? null);
+					if (!runtime.sharedRun) {
+						if (response.cache === 'no-store') clearSourceCache(viewerId, pageId, cacheId);
+						else writeSourceCache(viewerId, pageId, cacheId, response.result ?? null);
+					}
 					setState({ status: 'ok', result: response.result ?? null, error: null });
 				} else {
 					setState((current) => ({ ...current, status: 'error', error: response?.error || 'The source action failed' }));
@@ -199,6 +202,7 @@ export const useComponentArgValues = (
 export const LiveTemplate = ({
 	render,
 	scope,
+	resolved: alreadyResolved = false,
 	interactive,
 	onUnowned,
 	confirm,
@@ -206,6 +210,7 @@ export const LiveTemplate = ({
 	children
 }: {
 	render: unknown;
+	resolved?: boolean;
 	scope: Record<string, unknown>;
 	interactive: boolean;
 	onUnowned?: TtActionUnownedHandler;
@@ -216,7 +221,7 @@ export const LiveTemplate = ({
 	const onTtAction = useTtActionClicks({ onUnowned, confirm });
 	const runtime = useWebpageRuntime();
 	const scopeKey = JSON.stringify(scope);
-	const resolved = React.useMemo(() => (render ? resolveTemplate(render, scope) : null), [render, scopeKey]); // eslint-disable-line react-hooks/exhaustive-deps -- scopeKey is the serialised scope
+	const resolved = React.useMemo(() => (render ? alreadyResolved ? render : resolveTemplate(render, scope) : null), [render, scopeKey, alreadyResolved]); // eslint-disable-line react-hooks/exhaustive-deps -- scopeKey is the serialised scope
 	if (!resolved) return null;
 	return (
 		<ComponentUploadEnabled.Provider value={interactive && !runtime.sharedRun}>

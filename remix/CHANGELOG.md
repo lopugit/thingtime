@@ -12,6 +12,21 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 > When you make a manual change, add a bullet under `[Unreleased]` ending with
 
+- 2026-09-19 — **Claude (AI)**: Brand logo SEO. Every public shell now
+  publishes an `Organization` JSON-LD node (logo = the 1024px voxel tree icon,
+  wordmark image, `sameAs` profiles) linked from `WebSite.publisher`; the
+  `/branding` hero previews and the landing `<Logo>` render real committed
+  PNG `<img>` files instead of `data:` URIs / bare `<div>`s so image search can
+  index the marks. New Nitro routes `GET /robots.txt` (everything allowed,
+  AI crawlers named explicitly, origin-scoped `Sitemap:` line) and
+  `GET /sitemap.xml` (index + bounded `static` / `posts` / `pages` / `profiles`
+  sections with image-sitemap entries), twinned by `GET /api/v1/sitemap` and
+  the offline `npm run sitemap:generate` script. Vercel routing sends both
+  root files to Nitro ahead of the SPA shell (`patch-vercel-output.mjs`,
+  verified by `verify-vercel-output.mjs`). Validation: `test:seo`,
+  `test:social-previews`, `test:api-capabilities`, `test:vercel-config`, Vercel
+  preview curl checks. Details: [PR note](../PRs/brand-logo-seo-robots-sitemap-organization.md).
+
 - 2026-09-16: Added public legal directory, versioned privacy/Apple TV privacy/terms pages and copy/text exports; retained legacy notices as labelled archives. Verified anonymous preview routes and responsive exports.
 
 
@@ -33,6 +48,61 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 ---
 
 ## [Unreleased]
+
+- **2026-09-20 · Claude (AI):** Download all attachments. New
+  `GET /api/v1/attachments/archive?id=<post|comment|page|folder|media>` streams
+  one stored (uncompressed) ZIP of every file the caller may already read —
+  posts/comments archive their gallery in stored order, folders walk nested
+  folders and post galleries with each child re-judged on its own ACL, linked
+  media lands in `links.txt`, and `manifest=1` returns the file list/bytes as
+  JSON. Every file is signed through the existing content-endpoint gates; bounds
+  are 500 files / 2 GiB / 1000 Things / 280 s. UI: a `Download all · N files`
+  pill under multi-file post galleries, a folder-down button in the lightbox,
+  a **Files** section (`Download all files`, `Share download link`) in the
+  post/media ⋯ menus and the /things item menu, a `/media/:id` gallery button
+  and a current-folder pill on /things. The share link is the canonical
+  endpoint URL (no secret key): it downloads directly in browsers, `wget` and
+  `curl` for whoever can view the Thing. Capability `api.attachment-archive`
+  1.0.0 on both manifests; rate key `attachments.archive`. Validation:
+  `test:attachments`, `test:api-capabilities`, lint, browser checks. Details:
+  [PR note](../PRs/download-all-attachments-archive.md).
+
+- **2026-09-19 · Codex (AI):** Make unlisted posts, pages and inherited media
+  open through their canonical URLs, including fresh anonymous gallery visitors.
+  Copy/share controls omit legacy secret keys; saved discoveries remain bound
+  to the account or anonymous browser identity. Private/group-only access and
+  moderation remain enforced. Removing the link audience revokes URL access.
+  Details: [PR #860](../PRs/860-codex-plain-link-sharing-canonical-unlisted-urls.md).
+
+- **2026-09-19 · Codex (AI):** Keep inherited secret-link context through nested
+  comment/media galleries, standalone share menus and parent navigation. Show
+  the resolved parent audience beside privacy icons; enforce intermediate
+  moderation gates and negotiate the additive audience read contract.
+  Details: [PR #857](../PRs/857-codex-inherited-media-audience-preserve-inherited-media-sharing.md).
+
+- **2026-09-18 · Codex (AI):** Preserve the mounted page and unsaved UI state when
+  a background session read temporarily fails. Recover initial session failures
+  on return/reconnect, and invalidate same-origin tabs on account changes.
+  Navigation and permission failures continue to fail closed.
+
+- 2026-09-18 — Remove the post attachment count cap and add Retry all. Images and videos share ordered layouts, a popup player and shareable media links. Profiles include permitted direct/group audiences and previously collected secret posts, with account/browser discovery revoked by link rotation. [PR #852 validation](../PRs/852-codex-media-gallery-profile-access-unify-post-media-and-collect-secret-posts.md). Local validation uses worktree ports 18420–18422; Tailscale/Funnel is unavailable because the installed CLI target is missing. — Codex (AI)
+
+- 2026-09-18 — Fix Copy to my Things for image-only posts and nested comment
+  galleries. Copies preserve attachment order/purpose and reply parents, validate
+  inspected media, and negotiate `api.things-fork` 1.5.0. Verified with local
+  replica-set API tests and desktop/mobile Chrome. [PR #851 validation notes](../PRs/851-codex-copy-nested-things-fix-copying-nested-comments-and-attachment-galleries.md). — **Codex (AI)**
+
+- 2026-09-18 — Floating builder controls follow Lopu split panes and pinned
+  navigation drawers. Narrow panes use a wrapped bar and keyboard-accessible
+  mode menu; preview popovers stay inside the available pane. — Codex (AI)
+
+- **2026-09-18 · Codex (AI):** Fix Enter and the normal send arrow to auto-queue during Lopu replies, remove the separate Queue button, and allow draft attachment editing while replying. Keep Stop visible with a floating send arrow for typed drafts and a compact Send now menu. Remove accepted messages from the queue immediately without releasing the reply lock.
+
+- **2026-09-18 · Codex (AI):** Fix native uploads in embedded Builder components, preserve explicit empty form fields, validate before saving, guard pending uploads and inherit component sources. Add `/docs/builder` sections shared with Lopu and a capability-scoped Google geocoding adapter using owned Vault credentials. Local isolated validation uses ports 14870–14872; no live Google/storage credentials were used. [PR #853 validation and setup](../PRs/853-codex-builder-sdk-uploads-forms-fix-builder-uploads-and-form-saves-document-sdk-and-add-scoped-lookups.md).
+
+- **2026-09-18 · Codex (AI):** Add Lopu message queues with drag/arrow ordering, default grouped sends, pause/resume and stable retries; add immediately saved notes consumed at safe provider boundaries. Queues restore paused after reload. Publish background-task 1.2.0 and chat-reply 1.13.0 capabilities. [PR #846 validation notes](../PRs/846-codex-lopu-message-queue-add-lopu-message-queues-and-send-now-notes.md).
+
+- 2026-09-18: Add reversible account-saved Lopu chat archiving with Chats/Archived views and Restore in the shared page/window list. Preserve transcripts and running replies; guard rollback across account changes and negotiate archive API capabilities. — Codex (AI)
 
 - **2026-09-17 — Lopu context and docking (Codex):** Show and toggle current-page context, attach recent Thingtime pages, persist minimise-to-bubble, resize every edge/corner, and dock on all four sides with split or overlay behavior. Split navigation adapts to the remaining page width. Reply capability 1.12 adds validated page references without granting permissions. [PR #844 validation notes](../PRs/844-codex-lopu-context-docking-add-page-context-and-flexible-docking-to-lopu.md).
 

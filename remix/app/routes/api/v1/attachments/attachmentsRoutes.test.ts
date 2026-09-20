@@ -513,3 +513,95 @@ test('upload throttling returns Retry-After without reaching storage; limiter ou
 		else assert.equal(response.headers.get('Retry-After'), null);
 	}
 });
+
+// "Download all" archives share the content endpoint's audience plumbing: the
+// presented key, the enriched viewer, sharedRoot and admin review ride into the
+// planner; malformed ids fail before authentication; manifests stay JSON.
+test('archive requests carry the exact viewer context into the planner and stream a ZIP body', async () => {
+	const { createAttachmentArchiveLoader } = await import('./archive/_archive');
+	let observed: any;
+	const plan = {
+		ok: true as const,
+		id: 'post-1',
+		kind: 'post' as const,
+		name: 'Beach day',
+		fileName: 'Beach day.zip',
+		entries: [{ id: 'att-1', path: 'a.png', name: 'a.png', size: 3, contentType: 'image/png', url: 'https://bucket.test/a' }],
+		links: [],
+		skipped: 0,
+		totalBytes: 3
+	};
+	const route = createAttachmentArchiveLoader({
+		getUser: async () => ({ ...user, isAdmin: true }),
+		enforceLimit: allowed as any,
+		enrichViewer: async (viewer) => (viewer?.id ? { ...viewer, groupIds: new Set(['group-1']) } : viewer),
+		plan: async (viewer, id, options) => {
+			observed = { viewer, id, options };
+			return plan;
+		},
+		manifest: (value) => ({ ok: true, id: value.id, kind: value.kind, name: value.name, fileName: value.fileName, fileCount: 1, totalBytes: 3, skipped: 0, linkCount: 0, files: [] }),
+		stream: () => new Response('PK').body!
+	});
+	const response = await route({ request: new Request('https://thingtime.example/api/v1/attachments/archive?id=post-1&key=read-key&sharedRoot=page') });
+	assert.equal(response.status, 200);
+	assert.equal(response.headers.get('Content-Type'), 'application/zip');
+	assert.match(response.headers.get('Content-Disposition')!, /^attachment; filename="Beach day\.zip"/);
+	assert.match(response.headers.get('Cache-Control')!, /no-store/);
+	assert.equal(response.headers.get('X-Thingtime-Archive-Files'), '1');
+	assert.equal(await response.text(), 'PK');
+	assert.equal(observed.id, 'post-1');
+	assert.equal(observed.viewer.id, 'user-1');
+	assert.deepEqual([...observed.viewer.linkKeys], ['read-key']);
+	assert.equal(observed.viewer.groupIds.has('group-1'), true);
+	assert.deepEqual(observed.options, { sharedRoot: 'page', isAdmin: true });
+
+	const manifest = await route({ request: new Request('https://thingtime.example/api/v1/attachments/archive?id=post-1&manifest=1') });
+	assert.equal(manifest.status, 200);
+	assert.match(manifest.headers.get('Content-Type')!, /application\/json/);
+	assert.deepEqual(await manifest.json(), { ok: true, id: 'post-1', kind: 'post', name: 'Beach day', fileName: 'Beach day.zip', fileCount: 1, totalBytes: 3, skipped: 0, linkCount: 0, files: [] });
+	assert.deepEqual(observed.options, { sharedRoot: null, isAdmin: true });
+
+	const head = await route({ request: new Request('https://thingtime.example/api/v1/attachments/archive?id=post-1', { method: 'HEAD' }) });
+	assert.equal(head.status, 200);
+	assert.equal(head.body, null);
+	assert.equal(head.headers.get('Content-Type'), 'application/zip');
+});
+
+test('archive requests refuse malformed ids and roots before authenticating, and surface planner failures as JSON', async () => {
+	const { createAttachmentArchiveLoader } = await import('./archive/_archive');
+	const unauthenticated = createAttachmentArchiveLoader({ getUser: async () => { throw new Error('must not authenticate'); } });
+	for (const query of ['', 'id=', 'id=-bad', `id=${'a'.repeat(129)}`, 'id=ok&sharedRoot=../x', 'id=ok&sharedRoot=']) {
+		const response = await unauthenticated({ request: new Request(`https://thingtime.example/api/v1/attachments/archive?${query}`) });
+		assert.equal(response.status, 400, query);
+		assert.match(response.headers.get('Cache-Control')!, /no-store/);
+	}
+	const anonymous = createAttachmentArchiveLoader({
+		getUser: async () => null,
+		enforceLimit: allowed as any,
+		enrichViewer: async (viewer) => viewer,
+		plan: async (viewer) => {
+			assert.equal(viewer, null);
+			return { ok: false, status: 404, error: 'Thing not found' };
+		}
+	});
+	const missing = await anonymous({ request: new Request('https://thingtime.example/api/v1/attachments/archive?id=nope') });
+	assert.equal(missing.status, 404);
+	assert.deepEqual(await missing.json(), { ok: false, error: 'Thing not found' });
+	// service credentials read exactly like anonymous callers
+	const service = createAttachmentArchiveLoader({
+		getUser: async () => ({ id: 'svc', accountKind: 'service', isAdmin: true }) as any,
+		enforceLimit: allowed as any,
+		enrichViewer: async (viewer) => viewer,
+		plan: async (viewer, _id, options) => {
+			assert.equal(viewer, null);
+			assert.deepEqual(options, { sharedRoot: null });
+			return { ok: false, status: 404, error: 'Thing not found' };
+		}
+	});
+	assert.equal((await service({ request: new Request('https://thingtime.example/api/v1/attachments/archive?id=post-1') })).status, 404);
+	const limited = createAttachmentArchiveLoader({
+		getUser: async () => null,
+		enforceLimit: (async () => ({ allowed: false, unavailable: true, limit: 0, remaining: 0, resetAt: new Date().toISOString() })) as any
+	});
+	assert.equal((await limited({ request: new Request('https://thingtime.example/api/v1/attachments/archive?id=post-1') })).status, 503);
+});
