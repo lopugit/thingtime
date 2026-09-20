@@ -36,8 +36,11 @@ Requested by the owner on 20 September 2026 after PR #861; delivered by Claude (
 5. **Graphify snapshot immutability** — `markSnapshotReadOnly()` in
    `scripts/graphify-cas.mjs` marks snapshot files 0444 on finalize and
    activate, so an older upstream hook writing through a root alias symlink
-   fails with EACCES instead of dirtying committed bytes. Wrapper test added;
-   the existing corruption-simulation test lifts the mode first.
+   fails with EACCES instead of dirtying committed bytes. Working copies made
+   by `copyPortableFiles()` are chmod-ed writable again (the first CI run
+   caught upstream Graphify failing to overwrite an inherited 0444 copy).
+   Wrapper tests added; the existing corruption-simulation test lifts the mode
+   first.
 6. **One-step worktree bootstrap** — `remix/scripts/worktree-bootstrap.cjs`
    (`npm run worktree-bootstrap`): relink deps, copy missing ignored env files
    from the main checkout, write the derived-port `.claude/launch.json`, set

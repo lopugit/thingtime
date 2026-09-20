@@ -492,15 +492,22 @@ export function pruneSnapshots(
   }
 }
 
-function copyPortableFiles(from, to) {
+// Snapshot files are read-only on disk (markSnapshotReadOnly); a working copy
+// must be writable again or upstream Graphify cannot overwrite its own output.
+function copyWritable(source, destination) {
+  cpSync(source, destination)
+  chmodSync(destination, (statSync(destination).mode & 0o777) | 0o600)
+}
+
+export function copyPortableFiles(from, to) {
   mkdirSync(to, { recursive: true })
   for (const name of PORTABLE_FILES) {
     const source = path.join(from, name)
-    if (existsSync(source)) cpSync(source, path.join(to, name))
+    if (existsSync(source)) copyWritable(source, path.join(to, name))
   }
   for (const name of [".graphify_analysis.json", ".graphify_labels.json"]) {
     const source = path.join(from, name)
-    if (existsSync(source)) cpSync(source, path.join(to, name))
+    if (existsSync(source)) copyWritable(source, path.join(to, name))
   }
 }
 
