@@ -124,6 +124,8 @@ export type ThingsItemAction =
   | 'share'
   | 'copy'
   | 'download'
+  | 'download-archive'
+  | 'share-download-link'
   | 'cut'
   | 'duplicate'
   | 'copyLink'

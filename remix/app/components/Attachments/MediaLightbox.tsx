@@ -5,7 +5,7 @@ import React from 'react';
 import { useSharedMediaUrl } from '../Sharing/SharedMedia';
 import { Box, Button, Flex, IconButton, Modal, ModalContent, ModalOverlay, Text } from '@chakra-ui/react';
 import { Link } from 'react-router';
-import { ChevronLeft, ChevronRight, Copy, Download, ExternalLink, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, Download, ExternalLink, FolderDown, X } from 'lucide-react';
 
 import {
 	attachmentContentUrl,
@@ -27,9 +27,12 @@ export type MediaLightboxProps = {
 	index: number;
 	isOpen: boolean;
 	onClose: () => void;
+	// present when this lightbox browses a multi-file gallery: one click saves
+	// every stored file of the parent post as a ZIP (see useAttachmentArchive)
+	onDownloadAll?: () => void;
 };
 
-export const MediaLightbox = ({ attachments, index, isOpen, onClose }: MediaLightboxProps) => {
+export const MediaLightbox = ({ attachments, index, isOpen, onClose, onDownloadAll }: MediaLightboxProps) => {
 	const mediaUrl = useSharedMediaUrl();
 	const lopu = useLopu();
 	const [videoFailed, setVideoFailed] = React.useState(false);
@@ -122,6 +125,24 @@ export const MediaLightbox = ({ attachments, index, isOpen, onClose }: MediaLigh
 							_hover={{ color: 'white', background: 'rgba(255,255,255,0.12)' }}
 							borderRadius="999px"
 						/>
+						{count > 1 && onDownloadAll ? (
+							<IconButton
+								// the gallery may also hold audio/files outside this visual set, so the
+								// label promises the post's files rather than quoting this count
+								aria-label="Download every file in this post as a ZIP"
+								title="Download all files (ZIP)"
+								icon={<FolderDown size={16} />}
+								size="sm"
+								variant="ghost"
+								color={MUTED}
+								_hover={{ color: 'white', background: 'rgba(255,255,255,0.12)' }}
+								borderRadius="999px"
+								onClick={(event) => {
+									event.stopPropagation();
+									onDownloadAll();
+								}}
+							/>
+						) : null}
 						<IconButton
 							aria-label="Close media popup"
 							title="Close"

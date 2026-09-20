@@ -1787,6 +1787,22 @@ email whose link points at the attacker.
 
 ## Post and comment attachments (`remix/app/components/Attachments/`)
 
+- [ ] Download all (PR: download-all attachments): a post with two or more
+      stored attachments shows a `Download all · N files · size` pill under its
+      gallery/file rows (single-file posts and linked-only galleries show none).
+      Clicking it fetches `GET /api/v1/attachments/archive?id=<post>&manifest=1`
+      first, then saves `<post opener>.zip`; unzip it and confirm every stored
+      file is present in gallery order with duplicate names suffixed ` (2)`,
+      linked media listed in `links.txt`, and moderation-pending/blocked files
+      absent for other viewers. The post ⋯ menu shows a **Files** section with
+      `Download all files (N files)` and `Share download link`; the latter copies
+      `https://<origin>/api/v1/attachments/archive?id=<post>` (no `key`) and
+      the toast explains the audience rule. `wget` / `curl -OJ` of that URL
+      saves the same ZIP for a public or unlisted post, returns 404 JSON for a
+      private one without a session, and stops working the moment the post is
+      made private. Repeat for a comment permalink (comment-purpose media only)
+      and check the `-docs` twin plus `/.well-known/thingtime-capabilities.json`
+      advertise `api.attachment-archive` 1.0.0.
 - [ ] Internal shared-file copies: run `npm --prefix remix run test:attachments`.
       With post-purpose upload approval denied (or its lookup unavailable),
       copying must reserve no quota or S3 upload. Revoke approval between parts:
@@ -2146,6 +2162,16 @@ email whose link points at the attacker.
 
 ## Media thing pages — masonry, lightbox, `/media/:id`, annotate (`remix/app/components/Attachments/`, `remix/app/routes/media.tsx`)
 
+- [ ] Gallery download-all: open the lightbox from a post with two or more
+      stored images/videos and confirm a folder-down icon sits between Download
+      and Close (absent for single-file galleries); it saves the parent post's
+      ZIP without closing the lightbox. On `/media/:id` for one of those files
+      the context row shows `Download` plus `Download all · N files · size`, and
+      the Media options ⋯ menu offers `Download all files (N files)` + `Share
+      download link` targeting the parent post; for a media Thing whose parent
+      has one stored file the menu instead offers `Download as ZIP` + a share
+      link for that media id. Verify at desktop and 375px widths that the extra
+      controls wrap without clipping the filename.
 - [ ] A post with 3+ images renders the image section as a CSS-columns masonry
       (natural aspect ratios, `break-inside` avoided) with 1/2/3 responsive
       columns; at desktop and 375px mobile widths there is no horizontal
@@ -5855,6 +5881,20 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Things page (`/things`, `remix/app/components/Things/`, `/api/v1/things/bulk`)
 
+- [ ] Folder download-all: browse into a folder that contains posts with
+      stored attachments and/or saved recordings; the toolbar shows a
+      `Download all · N files · size` pill (absent at the root, in folders with
+      no stored files, and while the manifest probe is still pending). Save the
+      ZIP and confirm nested folders become directories, each post gallery gets
+      its own sub-directory named after the post, recordings sit at the folder
+      level, and children another viewer cannot see are excluded (share the
+      folder as hidden, open its `/api/v1/attachments/archive?id=<folder>` URL
+      logged out: only public/unlisted children's files appear). The item ⋯ /
+      right-click menu on folders, posts, pages and media shows a **Files**
+      section (`Download all files`, `Share download link`); multi-selections
+      hide it. Downloading a folder with nothing downloadable toasts the server
+      message instead of navigating to JSON. Over 500 files or 2 GiB returns
+      413 with a "download the folders inside separately" message.
 - [ ] A paired Mac appears at `/things` root and search from the dedicated
       devices projection, with cached-first name/presence and current system,
       volume, brightness, lock, open-app, permission, and connector state.

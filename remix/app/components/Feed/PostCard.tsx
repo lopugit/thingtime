@@ -43,6 +43,9 @@ import { useRecentReactions } from '~/components/Emoji/useRecentReactions';
 import { getEditorJsDoc } from '~/components/Editor/editorJsValue';
 import { RichTextBlocks } from '~/components/Kinds/kindRenderersMedia';
 import { PostAttachments } from '~/components/Attachments/PostAttachments';
+import { downloadableAttachments } from '~/components/Attachments/attachmentUiCore';
+import { useAttachmentArchive } from '~/components/Attachments/useAttachmentArchive';
+import type { PostArchiveTarget } from './PostThingMenu';
 import { sanitizeReactionToken } from '~/utils/reactionTokens';
 import { getUserDisplayName, getUserIdentityDetail } from '~/utils/userIdentity';
 import { RAINBOW } from '~/theme/rainbow';
@@ -217,6 +220,9 @@ export type PostCardProps = {
 	// interactions stay live, but the owner menu drops edit/privacy/delete
 	// (title/description edit via annotate; lifecycle belongs to the parent post)
 	mediaThing?: boolean;
+	// media pages: the parent post's gallery this media belongs to, so the menu
+	// can offer "Download all" for the whole set instead of the single file
+	gallery?: { id: string; fileCount: number } | null;
 };
 
 const authorName = (author: FeedAuthor | null) => (author ? getUserDisplayName(author) : 'Anonymous 👻');
@@ -516,7 +522,7 @@ const TagChipRow = ({ tags, compact }: { tags?: string[]; compact?: boolean }) =
 
 // Body by post type — shared between the main card, nested shares, and
 // comment rows (comments share the post schema, so PostComment fits too).
-type PostBodyShape = Pick<PublicPost, 'type' | 'text' | 'richText' | 'images' | 'listing' | 'thing' | 'tags' | 'mediaLayout' | 'linkKey'>;
+type PostBodyShape = Pick<PublicPost, 'id' | 'type' | 'text' | 'richText' | 'images' | 'listing' | 'thing' | 'tags' | 'mediaLayout' | 'linkKey'>;
 
 const PostTextBody = ({ post, compact }: { post: Pick<PostBodyShape, 'text' | 'richText'>; compact?: boolean }) => {
   const richText = getEditorJsDoc(post.richText);
@@ -555,7 +561,7 @@ const PostBody = ({
     {post.type === 'thingtime' && post.thing && <ThingView thing={post.thing} compact={compact} poll={poll} />}
 		{post.type === 'thingtime' && !!post.images?.length && <ImageGrid images={post.images} alt={post.text || 'Thing photo'} />}
     {post.type === 'thingtime' && post.listing && <ListingBlock post={post} hideImage={!!post.images?.length} />}
-    <PostAttachments linkKey={post.linkKey} attachments={attachments} mediaLayout={post.mediaLayout} compact={compact} />
+    <PostAttachments linkKey={post.linkKey} attachments={attachments} mediaLayout={post.mediaLayout} compact={compact} postId={post.id} />
     <TagChipRow tags={post.tags} compact={compact} />
   </Flex>
 );
@@ -1391,10 +1397,23 @@ export const PostCard = React.memo(function PostCard(props: PostCardProps) {
 });
 
 function PostCardImpl(props: PostCardProps) {
-  const { post, onChanged, onEngagement, defaultCommentsOpen, mediaThing } = props;
+  const { post, onChanged, onEngagement, defaultCommentsOpen, mediaThing, gallery } = props;
 	const sharedPath = useSharedThingPath();
   const sharedAccess = useSharedAccess();
 	const permalinkPath = sharedPath(sharePathForThing(post));
+
+  // "Download all" target: the parent gallery on media pages, this card's own
+  // stored gallery otherwise, or the lone media file itself (one-file ZIP) so
+  // "Share download link" still exists for a single media Thing.
+  const archive = useAttachmentArchive();
+  const storedFileCount = downloadableAttachments(post.attachments).length;
+  const archiveTarget: PostArchiveTarget | null = gallery && gallery.fileCount > 1
+    ? { id: gallery.id, fileCount: gallery.fileCount, noun: 'gallery' }
+    : mediaThing
+      ? (storedFileCount ? { id: post.id, fileCount: 1, noun: 'media' } : null)
+      : storedFileCount
+        ? { id: post.id, fileCount: storedFileCount, noun: post.thingtime?.includes('comment') ? 'comment' : 'post' }
+        : null;
 
   const api = useApi();
   const user = useCurrentUser();
@@ -2158,11 +2177,14 @@ function PostCardImpl(props: PostCardProps) {
           </Box>
           <PostThingMenu post={post} mediaThing={mediaThing} isOwner={isOwner} canModerate={canModerate}
             canReport={canReport} guestReport={guestReport} flairs={modFlairs} openHref={permalinkPath}
+            archive={archiveTarget}
             onOpen={() => { if (isOwner || canModerate) void loadFlairs(); }}
             handlers={{
               edit: handleEditStart, delete: handleDelete, privacy: handleVisibilityChange,
               report: () => guestReport ? lopu({ title: 'Log in to report 🚩', status: 'info', duration: 6000 }) : setReportOpen(true),
-              remove: () => setRemoveOpen(true), moderate: handleModerate, flair: handleOwnFlair
+              remove: () => setRemoveOpen(true), moderate: handleModerate, flair: handleOwnFlair,
+              downloadArchive: () => { if (archiveTarget) void archive.download(archiveTarget.id, archiveTarget.noun); },
+              shareDownloadLink: () => { if (archiveTarget) void archive.shareLink(archiveTarget.id, archiveTarget.noun); }
             }} />
           {canModerate && post.subspace && !mediaThing && (
             <RemoveModal
@@ -2333,7 +2355,7 @@ function PostCardImpl(props: PostCardProps) {
             share copies a public original's tags, so a second chip row here
             would just duplicate it) */}
             <PostTextBody post={post} />
-            <PostAttachments linkKey={post.linkKey} attachments={post.attachments} mediaLayout={post.mediaLayout} />
+            <PostAttachments linkKey={post.linkKey} attachments={post.attachments} mediaLayout={post.mediaLayout} postId={post.id} />
             {post.shareOf ? (
               <SharedPostCard post={post.shareOf} />
             ) : (
