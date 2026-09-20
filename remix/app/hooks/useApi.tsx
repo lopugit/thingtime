@@ -8,6 +8,7 @@ import { AI_COMPLETION_REQUIREMENTS, type AiCompletionInput } from '~/api/utils/
 import { buildActionRunBody } from '~/components/Actions/actionRunRequest';
 import { flushAttachmentDraftCleanups } from '~/components/Attachments/attachmentDraftCleanup';
 import type { AttachmentUploadPurpose } from '~/components/Attachments/attachmentTypes';
+import { ATTACHMENT_ARCHIVE_REQUIREMENTS, attachmentArchiveUrl } from '~/components/Attachments/attachmentUiCore';
 import { postLopuReply, type LopuReplyBody } from '~/components/Lopu/lopuChatStream';
 import { recordApiCall } from './apiRequestLog';
 import { useAsyncFetcher } from './useAsyncFetcher';
@@ -643,6 +644,15 @@ export function useApi() {
       )
     },
 		attachments: {
+			// "download all" ZIP manifests: what a post/folder/media archive would
+			// hold (count, bytes, paths) without streaming any bytes. The download
+			// itself is a plain navigation to attachmentArchiveUrl().
+			archive: {
+				manifest: useCallback(async (args: { id: string; key?: string; sharedRoot?: string }, options?: { signal?: AbortSignal }) => {
+					await requireThingtimeCapability('api.attachment-archive', ATTACHMENT_ARCHIVE_REQUIREMENTS['api.attachment-archive']);
+					return getJson(attachmentArchiveUrl(args.id, { key: args.key, sharedRoot: args.sharedRoot, manifest: true }), options);
+				}, [])
+			},
 			uploads: {
 				create: useCallback(
 					async (

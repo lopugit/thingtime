@@ -27,6 +27,9 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // thing inserts, no object storage; same shape as annotate/delete
   'attachments.link': { limit: 120, windowMs: 60_000, enabled: true },
   'attachments.read': { limit: 600, windowMs: 60_000, enabled: true },
+  // "download all" ZIP builds (GET /api/v1/attachments/archive) — each call
+  // enumerates a Thing's files and streams them; heavier than one read
+  'attachments.archive': { limit: 30, windowMs: 60_000, enabled: true },
   // admin-only legacy re-detection sweep; each call is one bounded S3-reading pass
   'attachments.detectionBackfill': { limit: 30, windowMs: 60_000, enabled: true },
   'things.react': { limit: 60, windowMs: 60_000, enabled: true },

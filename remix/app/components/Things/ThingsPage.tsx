@@ -3,10 +3,13 @@ import { transferIntent } from '~/utils/thingTransfer/intent';
 import { readThingsLocation, writeThingsLocation, type ThingsLocationState } from './thingsLocation';
 
 import { Box, Button, Flex, Input, Menu, MenuButton, MenuItem, MenuList, Portal, Text } from '@chakra-ui/react';
-import { ArrowUpDown, Columns3, Eye, LayoutGrid, Layers, Plus, Rows3, Search as SearchIcon, Tag, X } from 'lucide-react';
+import { ArrowUpDown, Columns3, Eye, FolderDown, LayoutGrid, Layers, Plus, Rows3, Search as SearchIcon, Tag, X } from 'lucide-react';
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router';
 
 import { useLopu } from '~/components/Lopu/useLopu';
+import { archiveNounForKinds } from '~/components/Attachments/attachmentArchiveActions';
+import { archiveDownloadLabel } from '~/components/Attachments/attachmentUiCore';
+import { useAttachmentArchive } from '~/components/Attachments/useAttachmentArchive';
 import { sendRecordingThingToLopu } from '~/components/Lopu/recordingThingHandoff';
 import { useIsMobileViewport } from '~/components/Nav/Drawer/useDrawer';
 import { Rainbow } from '~/components/Rainbow/Rainbow';
@@ -156,6 +159,30 @@ export const ThingsPage = () => {
   const previewParam = searchParams.get('preview') || null;
 	const deviceParam = searchParams.get('device') || null;
   const currentKey = folderKeyOf(folderId);
+
+  // "Download all files" for the folder being browsed: one small manifest read
+  // per folder visit says whether a ZIP would hold anything (folders with no
+  // stored files show no button). Keyed per folder so a stale answer for an
+  // earlier folder never labels the current one.
+  const archive = useAttachmentArchive();
+  const [folderArchives, setFolderArchives] = useState<Record<string, { fileCount: number; totalBytes: number } | null>>({});
+  useEffect(() => {
+    if (!user?.id || !folderId) return;
+    let cancelled = false;
+    apiRef.current.v1.attachments.archive
+      .manifest({ id: folderId })
+      .then((manifest: any) => {
+        if (cancelled) return;
+        setFolderArchives((prev) => ({ ...prev, [folderId]: manifest?.ok && manifest.fileCount > 0 ? { fileCount: manifest.fileCount, totalBytes: manifest.totalBytes || 0 } : null }));
+      })
+      .catch(() => {
+        if (!cancelled) setFolderArchives((prev) => ({ ...prev, [folderId]: null }));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, folderId]);
+  const folderArchive = folderId ? folderArchives[folderId] : null;
 
 	const devicesEnabled = Boolean(user && user.accountKind === 'user' && !user.temporary);
 	const deviceStore = useDeviceStore({
@@ -1025,6 +1052,12 @@ export const ThingsPage = () => {
         case 'download':
           setExportIds(group.map((entry) => entry.id));
           break;
+        case 'download-archive':
+          void archive.download(thing.id, archiveNounForKinds(thing.thingtime) || 'post');
+          break;
+        case 'share-download-link':
+          void archive.shareLink(thing.id, archiveNounForKinds(thing.thingtime) || 'post');
+          break;
         case 'send-to-lopu':
           void sendRecording(thing);
           break;
@@ -1076,7 +1109,7 @@ export const ThingsPage = () => {
           break;
       }
     },
-    [copyLink, copyToClipboard, duplicateThings, openThing, selectedThings, selection, sendRecording, navigate, pasteClipboardTo]
+    [archive, copyLink, copyToClipboard, duplicateThings, openThing, selectedThings, selection, sendRecording, navigate, pasteClipboardTo]
   );
 
   // ------------------------------------------------------------------ drag & drop
@@ -1175,6 +1208,10 @@ export const ThingsPage = () => {
       switch (action.command) {
         case 'download':
           onItemAction(menuThing, 'download');
+          break;
+        case 'download-archive':
+        case 'share-download-link':
+          onItemAction(menuThing, action.command);
           break;
         case 'send-to-lopu':
           onItemAction(menuThing, 'send-to-lopu');
@@ -1508,6 +1545,11 @@ export const ThingsPage = () => {
             <Button {...pillProps(false)} onClick={() => { setImportBundle(null); setImportDestination(folderId); setImportOpen(true); }}>Import…</Button>
             <Button {...pillProps(false)} onClick={pasteClipboard}>Paste</Button>
             {!!selection.size && <Button {...pillProps(false)} onClick={() => setExportIds([...selection])}>Download…</Button>}
+            {folderId && folderArchive ? (
+              <Button {...pillProps(false)} leftIcon={<FolderDown size={13} />} title="Every stored file in this folder (and its sub-folders) as one ZIP" onClick={() => void archive.download(folderId, 'folder')}>
+                {archiveDownloadLabel(folderArchive.fileCount, folderArchive.totalBytes)}
+              </Button>
+            ) : null}
           </>}
           <ToolbarGroup label="view">
             <Button {...pillProps(view === 'grid')} leftIcon={<LayoutGrid size={13} />} onClick={() => setView('grid')}>

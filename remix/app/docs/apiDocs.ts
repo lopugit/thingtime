@@ -5958,6 +5958,65 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		]
 	}),
 	endpoint({
+		id: 'attachment-archive',
+		contractVersion: '1.0.0',
+		featureVersion: '1.0.0',
+		group: 'attachments',
+		title: 'Download all files as a ZIP',
+		endpoint: '/api/v1/attachments/archive',
+		summary: 'Streams one ZIP of every stored file the caller may already read on a post, comment, page, folder or single media Thing; the URL doubles as a share link that downloads directly in browsers, wget and curl.',
+		detail:
+			'The root Thing resolves through the canonical Thing reader: public and unlisted (hidden) Things open by exact id, private and custom audiences need a current eligible session. Posts and comments archive their own bound gallery in stored order; pages archive their bound post-purpose media; a media Thing archives itself; folders are walked recursively (owner-scoped children, nested folders as sub-directories, each post gallery in its own sub-directory) with every child re-judged on its own inherited ACL — the folder audience never leaks into its contents. ' +
+			'Each file is then authorized and signed through the same gates as the content endpoint (purpose/target ACL, moderation, ready state, exact object version, home-storage guards). Files that fail a gate are skipped and counted; blocked media stays hidden for everyone but administrators reviewing evidence. Linked (external URL) media has no stored bytes and is listed in a links.txt member instead. ' +
+			'Bounds: 500 files, 2 GiB, 1000 traversed Things, 64 folder levels and a 280-second stream budget; larger sets return 413 so callers can archive sub-folders separately. Signed object URLs are fetched server-side and piped into a stored (uncompressed) ZIP — no object key, version or signed URL is ever exposed. Responses are private and never cached. Missing, unauthorized and empty roots return 404 uniformly.',
+		auth: {
+			mode: 'optional',
+			description:
+				'Anonymous access works for public and unlisted post/page/comment roots and their galleries. Folders default to owner-only unless shared; private, friends-only, group and subspace audiences require a current eligible session. Service accounts read exactly like anonymous callers.'
+		},
+		methods: ['GET'],
+		steps: [
+			'GET with id (a post, comment, page, folder or media Thing id). Optional sharedRoot authorizes page-composition media exactly as the content endpoint does; optional key accepts a legacy hidden-link secret.',
+			'Save the response body as a .zip; the Content-Disposition filename is derived from the folder name, media filename, page title or the post’s opening words. HEAD returns the headers without building the archive.',
+			'Add manifest=1 to receive JSON instead: { ok, id, kind, name, fileName, fileCount, totalBytes, skipped, linkCount, files: [{ id, path, name, size }] }. Use it to label buttons and to detect folders without downloadable files before offering a download.',
+			'Share the plain URL (no key) as the “download link”: anyone who can view the Thing gets the ZIP, and access is revoked the moment the Thing’s audience changes.',
+			'Treat 404 uniformly for missing, unauthorized and empty roots; 413 means the set exceeds one archive’s bounds.'
+		],
+		requestExamples: [
+			{
+				name: 'Download a post’s gallery',
+				description: 'Every stored attachment of one post as a ZIP.',
+				method: 'GET',
+				query: { id: '3bda8208-625c-4f5d-941f-348020021848' }
+			},
+			{
+				name: 'Inspect before downloading',
+				description: 'JSON manifest of a folder’s downloadable files.',
+				method: 'GET',
+				query: { id: 'folder-id', manifest: 1 }
+			}
+		],
+		responseExamples: [
+			{
+				status: 200,
+				description: 'Streamed ZIP archive.',
+				headers: {
+					'Content-Type': 'application/zip',
+					'Content-Disposition': 'attachment; filename="Recipes.zip"; filename*=UTF-8\'\'Recipes.zip',
+					'Cache-Control': 'private, no-store, max-age=0',
+					'X-Thingtime-Archive-Files': '3'
+				}
+			},
+			{
+				status: 200,
+				description: 'manifest=1 JSON.',
+				body: { ok: true, id: 'folder-id', kind: 'folder', name: 'Recipes', fileName: 'Recipes.zip', fileCount: 2, totalBytes: 4096, skipped: 0, linkCount: 0, files: [{ id: 'att-1', path: 'Dinner/photo.jpg', name: 'photo.jpg', size: 2048 }] }
+			},
+			{ status: 404, description: 'Missing, unauthorized or nothing to download.', body: { ok: false, error: 'Thing not found' } },
+			{ status: 413, description: 'Too many files or bytes for one archive.', body: { ok: false, error: 'These files are too large to download as one ZIP — download the folders inside separately' } }
+		]
+	}),
+	endpoint({
 		id: 'attachment-cleanup',
 		group: 'attachments',
 		title: 'Reap expired attachment drafts',

@@ -49,6 +49,24 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- **2026-09-20 · Claude (AI):** Download all attachments. New
+  `GET /api/v1/attachments/archive?id=<post|comment|page|folder|media>` streams
+  one stored (uncompressed) ZIP of every file the caller may already read —
+  posts/comments archive their gallery in stored order, folders walk nested
+  folders and post galleries with each child re-judged on its own ACL, linked
+  media lands in `links.txt`, and `manifest=1` returns the file list/bytes as
+  JSON. Every file is signed through the existing content-endpoint gates; bounds
+  are 500 files / 2 GiB / 1000 Things / 280 s. UI: a `Download all · N files`
+  pill under multi-file post galleries, a folder-down button in the lightbox,
+  a **Files** section (`Download all files`, `Share download link`) in the
+  post/media ⋯ menus and the /things item menu, a `/media/:id` gallery button
+  and a current-folder pill on /things. The share link is the canonical
+  endpoint URL (no secret key): it downloads directly in browsers, `wget` and
+  `curl` for whoever can view the Thing. Capability `api.attachment-archive`
+  1.0.0 on both manifests; rate key `attachments.archive`. Validation:
+  `test:attachments`, `test:api-capabilities`, lint, browser checks. Details:
+  [PR note](../PRs/download-all-attachments-archive.md).
+
 - **2026-09-19 · Codex (AI):** Make unlisted posts, pages and inherited media
   open through their canonical URLs, including fresh anonymous gallery visitors.
   Copy/share controls omit legacy secret keys; saved discoveries remain bound
