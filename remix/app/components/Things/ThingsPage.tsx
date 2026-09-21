@@ -1,3 +1,4 @@
+import { FilesystemThingsPage } from './FilesystemThingsBrowser';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { transferIntent } from '~/utils/thingTransfer/intent';
 import { readThingsLocation, writeThingsLocation, type ThingsLocationState } from './thingsLocation';
@@ -127,6 +128,11 @@ const dedupeById = (things: ThingsThing[]): ThingsThing[] => {
 };
 
 export const ThingsPage = () => {
+  const [params] = useSearchParams();
+  return params.has("files") ? <FilesystemThingsPage /> : <ThingsLibraryPage />;
+};
+
+const ThingsLibraryPage = () => {
   const user = useCurrentUser();
   const [importOpen, setImportOpen] = useState(false);
   const [importBundle, setImportBundle] = useState<TransferBundle | null>(null);
@@ -1465,6 +1471,7 @@ export const ThingsPage = () => {
         style={{ boxSizing: 'border-box', minWidth: 0, paddingInline: 16 }}>
         <Flex alignItems="baseline" gap={3} wrap="wrap">
           <Text {...monoLabel}>Thingtime · Things</Text>
+          <Button as={RouterLink} to="/things?files=thingtime" size="sm" variant="ghost">Browse files</Button>
         </Flex>
 				{devicesEnabled && !folderId && !searchMode && !shouldHideLocalNodePanel(localNode, nodePanelDismissed) ? (
 					<LocalNodeSetupCard onDismiss={() => setNodePanelDismissed(true)} onRefresh={localNode.refresh} controlFor={localDeviceControlFor} onAction={executeLocalDeviceAction} state={localNode} />

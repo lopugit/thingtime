@@ -1,5 +1,34 @@
 # TESTING.md — per-area manual test checklists
 
+## Remote brightness and files
+
+- [ ] On a paired Apple Silicon Mac, change main-display and per-display
+  brightness, verify the real panel and next telemetry value, then restore it.
+  A display without a usable setter stays unavailable. Existing pairings gain
+  updated capabilities on a higher-revision heartbeat without being re-paired.
+- [ ] Open `/things?files=thingtime` and a device's Files drawer section at
+  desktop and 390px widths. Exercise grid/list, name/type filters, sort, hidden
+  files, long names, selection, context menus, folder navigation, and the
+  expanded pop-up. Scroll the full page, drawer list and pop-up to their ends;
+  menus and approval/cancel controls remain visible and inside the viewport.
+- [ ] Copy and cut synthetic files and a nested folder between Thingtime and
+  an unlocked paired Mac, and between two folders on the same device. Verify
+  byte hashes, destination listing and source retention/removal. Refuse existing
+  names, self-descendants, links, oversized files and changed source versions.
+  Cancel or fail a destination write: original files must remain. A successful
+  remote source removal goes to Trash; an uncertain move must not be retried
+  blindly. No test should read unrelated home-directory files.
+- [ ] Verify deny and ask-every-time device settings, locked sessions, old node
+  capabilities, an unapproved upload account, expired results and another
+  account's command IDs. Command history/events never contain chunk bytes.
+  Repeat directory listing after temporary-upload cleanup: scanning on a
+  duplicated descriptor must not consume the subsequent listing's cursor.
+- [ ] Run native `swift test`, `test:devices`, `test:things`, `test:attachments`,
+  `test:api-capabilities`, a complete web build, and Electron tests. The
+  opt-in `TT_BRIGHTNESS_HARDWARE_TEST=1 swift test --filter DisplayBrightnessTests`
+  briefly changes and restores the actual display; do not count a skipped
+  hardware test or synthetic UI relay as real remote-transfer acceptance.
+
 ## Integration catalogue
 
 - [ ] Assert 500 unique recipes, pinned CDN URLs and schema-valid private saved

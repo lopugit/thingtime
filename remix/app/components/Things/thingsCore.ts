@@ -16,6 +16,7 @@ export type ThingsAuthor = {
 
 // PublicThing as the /things page consumes it (see api/utils/things/things.ts)
 export type ThingsThing = {
+  inode?: import('~/api/utils/devices/deviceFilesystemCore').FilesystemEntry & { deviceId: string };
   audience?: ResolvedAudience;
   id: string;
   thingtime: string[];
@@ -99,6 +100,7 @@ export const isDuplicable = (thing: Pick<ThingsThing, 'thingtime'>): boolean =>
 export const THINGS_KIND_FILTERS = [
   { id: 'all', label: 'All', icon: '🌀' },
   { id: 'folder', label: 'Folders', icon: '📁' },
+  { id: 'attachment', label: 'Files', icon: '💾' },
   { id: 'post', label: 'Posts', icon: '📝' },
   { id: 'data', label: 'Data', icon: '📦' },
   { id: 'schema', label: 'Schemas', icon: '💎' },

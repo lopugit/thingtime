@@ -1,6 +1,6 @@
 import { json, readJsonBody } from '~/api/http';
 import { getCurrentUser } from '~/api/utils/auth/getCurrentUser';
-import { createDeviceCommand, listDeviceCommands } from '~/api/utils/devices/deviceCommands';
+import { createDeviceCommand, listDeviceCommands, readDeviceCommand } from '~/api/utils/devices/deviceCommands';
 import { enforceRateLimit, rateLimitedResponseInit } from '~/api/utils/rateLimit/enforce';
 
 export const loader = async ({ request }: { request: Request }) => {
@@ -8,6 +8,10 @@ export const loader = async ({ request }: { request: Request }) => {
 	if (!user) return json({ ok: false, error: 'Unauthorized' }, { status: 401 });
 	if (user.accountKind !== 'user') return json({ ok: false, error: 'Device commands require a full Thingtime account' }, { status: 403 });
 	const params = new URL(request.url).searchParams;
+	if (params.has('commandId')) {
+		const result = await readDeviceCommand(user.id, params.get('deviceId') || '', params.get('commandId') || '');
+		return json(result, { status: result.ok ? 200 : result.status, headers: { 'Cache-Control': 'private, no-store' } });
+	}
 	const result = await listDeviceCommands(user.id, params.get('deviceId'), params.get('status'));
 	if (result.ok === false) return json(result, { status: result.status });
 	return json(result);

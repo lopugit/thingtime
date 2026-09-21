@@ -103,8 +103,8 @@ test('import annotation fence refuses already-bound, expired and non-post drafts
 	}
 });
 
-test('durable recording export and download work without a draft expiry, for the owner only', async () => {
-	const saved = attachmentDoc({ attachmentPurpose: 'recording', attachmentState: 'ready', attachmentExpiresAt: undefined, objectVersionId: 'version-1' });
+for (const purpose of ['recording', 'file'] as const) test(`${purpose}: durable recording export and download work without a draft expiry, for the owner only`, async () => {
+	const saved = attachmentDoc({ attachmentPurpose: purpose, attachmentState: 'ready', attachmentExpiresAt: undefined, objectVersionId: 'version-1' });
 	let doc = saved;
 	let signs = 0;
 	let custom = false;
@@ -1904,7 +1904,7 @@ test('global expired draft scan is expiry-first, unattached, bounded, and repeat
 		attachmentExpiresAt: { $lte: now },
 		$or: [
 			{ targetId: { $exists: false }, attachmentState: 'pending' },
-			{ targetId: { $exists: false }, attachmentState: 'ready', $or: [{ attachmentPurpose: { $ne: 'recording' } }, { attachmentPurpose: 'recording', attachmentImportDraft: true }] },
+			{ targetId: { $exists: false }, attachmentState: 'ready', $or: [{ attachmentPurpose: { $nin: ['recording', 'file'] } }, { attachmentPurpose: { $in: ['recording', 'file'] }, attachmentImportDraft: true }] },
 			{
 				targetId: { $exists: false },
 				attachmentState: 'finalizing',
@@ -2321,7 +2321,7 @@ test('detection backfill validates input, fails closed off the home plane, and s
 });
 
 
-test('recording upload starts remain owner-bound and replay a completed Thing without a second reservation', async () => {
+for (const purpose of ['recording', 'file'] as const) test(`${purpose}: recording upload starts remain owner-bound and replay a completed Thing without a second reservation`, async () => {
   const stored = new Map<string, AttachmentDoc>();
   let reservations = 0;
   let creates = 0;
@@ -2342,14 +2342,14 @@ test('recording upload starts remain owner-bound and replay a completed Thing wi
   };
   const service = createAttachmentService({ store, now: () => now, customMongoActive: () => false,
     getS3: () => noopS3({ createMultipartUpload: async () => { creates++; return { uploadId: 'mpu' }; } }) });
-  const input = { requestId: 'voice-recording-1', filename: 'Lopu.m4a', contentType: 'audio/mp4', sizeBytes: 100, purpose: 'recording' };
+  const input = { requestId: 'voice-recording-1', filename: 'Lopu.m4a', contentType: 'audio/mp4', sizeBytes: 100, purpose };
   const start = await service.start('user-1', input);
   assert.equal(start.ok, true);
   if (!start.ok) return;
   const id = start.upload.id as string;
   const draft = stored.get(id)!;
   assert.deepEqual(draft.acl, ['tt:user']);
-  assert.equal(draft.attachmentPurpose, 'recording');
+  assert.equal(draft.attachmentPurpose, purpose);
   stored.set(id, { ...draft, attachmentState: 'ready', attachmentExpiresAt: undefined, uploadId: undefined, objectVersionId: 'version-1' });
   const replay = await service.start('user-1', input);
   assert.equal(replay.ok, true);

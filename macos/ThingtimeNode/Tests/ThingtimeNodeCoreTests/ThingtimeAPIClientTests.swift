@@ -14,7 +14,14 @@ private final class MockURLProtocol: URLProtocol, @unchecked Sendable {
             Self.lock.lock()
             let handler = Self.handler
             Self.lock.unlock()
-            let (status, data) = try XCTUnwrap(handler)(request)
+            let status: Int, data: Data
+            if request.url?.path == "/.well-known/thingtime-capabilities.json" {
+                XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+                var origin = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!
+                origin.path = ""; origin.query = nil
+                status = 200
+                data = try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "origin": origin.string!, "features": ThingtimeAPIClient.capabilityRequirements.mapValues { ["version": $0] }])
+            } else { (status, data) = try XCTUnwrap(handler)(request) }
             let response = HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: status, httpVersion: nil, headerFields: nil)!
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: data)
@@ -27,6 +34,24 @@ private final class MockURLProtocol: URLProtocol, @unchecked Sendable {
 }
 
 final class ThingtimeAPIClientTests: XCTestCase {
+    func testCapabilityRequirementsRejectWrongOriginMissingAndBreakingFeatures() throws {
+        let origin = URL(string: "https://thingtime.test")!
+        let features = ThingtimeAPIClient.capabilityRequirements.mapValues { ["version": $0] }
+        func accepts(_ versions: [String: [String: String]], _ scope: String = "https://thingtime.test") throws -> Bool {
+            ThingtimeAPIClient.compatibleManifest(try JSONSerialization.data(withJSONObject: ["schemaVersion": 1, "origin": scope, "features": versions]), origin: origin)
+        }
+        XCTAssertTrue(try accepts(features))
+        XCTAssertFalse(try accepts(features, "https://other.test"))
+        XCTAssertFalse(try accepts([:]))
+        var changed = features
+        changed["api.devices-node-state"] = ["version": "1.10.0"]
+        XCTAssertTrue(try accepts(changed))
+        changed["api.devices-node-state"] = ["version": "2.0.0"]
+        XCTAssertFalse(try accepts(changed))
+        changed["api.devices-node-state"] = ["version": "1.8.9"]
+        XCTAssertFalse(try accepts(changed))
+    }
+
     private func claimRequest() throws -> PairingClaimRequest {
         let privateKey = Curve25519.Signing.PrivateKey()
         let publicKey = privateKey.publicKey.rawRepresentation
@@ -137,7 +162,12 @@ final class ThingtimeAPIClientTests: XCTestCase {
             XCTAssertEqual(request.url?.path, "/api/v1/devices/node/state")
             let body = try JSONSerialization.jsonObject(with: try Self.bodyData(request)) as! [String: Any]
             XCTAssertNotNil(body["revision"])
-            XCTAssertEqual(Set(body.keys), Set(["revision", "state", "connectors"]))
+            XCTAssertEqual(Set(body.keys), Set(["revision", "state", "connectors", "capabilities"]))
+            let capabilities = try XCTUnwrap(body["capabilities"] as? [String])
+            XCTAssertLessThanOrEqual(capabilities.count, 64)
+            XCTAssertEqual(Set(capabilities).count, capabilities.count)
+            XCTAssertTrue(capabilities.contains("filesystem.v1"))
+            XCTAssertTrue(capabilities.contains("system.brightness.write"))
             let state = try XCTUnwrap(body["state"] as? [String: Any])
             XCTAssertEqual((state["openApps"] as? [[String: Any]])?.count, 64)
             XCTAssertEqual(try XCTUnwrap(state["brightness"] as? Double), 0.42, accuracy: 0.001)

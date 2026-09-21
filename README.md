@@ -3732,3 +3732,37 @@ dev server and press **Run all public examples**. The harness executes only
 credential-free catalogue defaults, four at a time, through the actual isolated
 runner. `?ids=example-id,another-id` limits a rerun. This development-only harness
 is not copied into production static assets. Provider outages can change results.
+
+
+## Remote device files and brightness
+
+Open **Things → Browse files**, or expand **Files** in a paired device's drawer.
+The shared Things grid/list, type/name filters and action menu work in a full
+page, narrow dock and expanded pop-up. Copy or Cut, select **Your Thingtime** or
+another paired device and destination folder, then Paste. Keyboard shortcuts
+work while the file browser is focused; text inputs keep normal text editing.
+
+Update the Mac's Thingtime Node as well as the web server. An updated heartbeat
+refreshes the existing device's capabilities; re-pairing is unnecessary. The
+native brightness adapter supports DisplayServices and falls back to a matched
+IOKit display, reporting unavailable when macOS exposes no usable control.
+
+Remote files stay inside the paired Mac's home folder and obey its existing
+permission mode and locked-session policy. Files are bounded to 32 MiB each;
+a recursive browser transfer supports 500 entries, 32 levels and 128 MiB total.
+Symlinks, special files and overwrite are refused. Moves across locations copy
+and verify first, then remove originals; remote removals use recoverable Trash.
+Thingtime uploads require existing private-upload access and storage allowance,
+and use the normal protected attachment pipeline. Empty remote files can be
+read/copied on devices; Thingtime's upload pipeline requires non-empty content.
+No new secrets or environment variables are required. Forks need their existing
+MongoDB, S3 attachment setup and pairing configuration, plus the API capability
+versions documented in [the remote file contract](docs/remote-files.md).
+
+Local acceptance for `codex/remote-device-files` uses `http://localhost:22420`
+(HMR 22421, Nitro 22422), with a unique PM2 entry
+`tt-wt-remote-device-files-22420` using the canonical `pm2AppConfig` and
+`autorestart: false`. These overrides avoid another Codex checkout with the same
+`thingtime` directory basename. Tailscale/Funnel was unavailable on 2026-09-21:
+the configured launcher points to the missing Tailscale app; no public mapping
+was changed or verified.

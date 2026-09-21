@@ -49,6 +49,14 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-21 — **Codex (AI)**: Restore native display brightness on Apple
+  Silicon Macs and refresh paired capabilities on heartbeat. Add a shared
+  Things file browser in full-page, docked and pop-up layouts, with protected
+  Thingtime files and bounded remote copy/cut/paste. Preserve originals on
+  failed transfers and keep file bytes out of device history/events. Verified
+  real brightness round-trip, repeated native/web tests, a full web build and
+  desktop/mobile browser states. [Contract](../docs/remote-files.md).
+
 - 2026-09-21 — **Codex (AI)**: Added an admin catalog importer on `/components`
   with whole-file schema validation, capability negotiation, bounded paced
   batches, cancellation and real publication counts. Functional demo runtime
