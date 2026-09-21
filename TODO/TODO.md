@@ -886,3 +886,26 @@ below was confirmed by reading the cited code — file/line refs are load-bearin
     content, stable identifiers, device fingerprinting, vulnerable groups,
     minors, advertising, ranking/pricing/eligibility/moderation/AI reuse, and
     public privacy or accuracy claims remain separately gated.
+
+55. **⏳ Make temporal agency and humane time semantics a product contract.**
+
+    Make “today,” “tomorrow,” “daily at 9,” “expires,” “last seen,” and
+    “never” predictable across time zones, locale, daylight-saving changes,
+    travel, offline recovery, and clock skew. Name every value as an instant,
+    duration, civil time, recurrence, day domain, deadline, expiry, lease,
+    retention, freshness, or display; preserve future wall-time intent and its
+    resolved instant; keep security authority on trusted clocks; provide
+    accessible exact-time disclosure; and distinguish due, late, skipped,
+    expired, interrupted, and unknown. Start only with adult internal
+    reviewers, synthetic dates, a deterministic fake authority clock,
+    Melbourne/New York zones, DST gap/fold, leap-day, midnight, offline, skew,
+    and tzdata-change fixtures in one exact non-production build. Execute
+    `claude-todo/55-temporal-agency-and-humane-time-semantics.md` only after
+    qualified owners approve the temporal vocabulary, field/helper inventory,
+    authority-clock map, day/zone/calendar scopes, gap/fold and recalculation
+    rules, shared formatting and receipt presets, WCAG time-limit review,
+    notification-filter slice, measures, rollback, cleanup, and stop authority.
+    Production clocks, tzdata, sessions, tokens, grants, retention, legal
+    deadlines, real schedules or notifications, routine/location inference,
+    dark-pattern countdowns, bulk semantic migration, and public punctuality,
+    expiry, accessibility, or deletion claims remain separately gated.
