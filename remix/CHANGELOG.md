@@ -49,6 +49,11 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-22 — **Codex (AI)**: Keep remote device telemetry flowing when a
+  macOS application has a blank display name. The native heartbeat now uses
+  its bundle identifier as the name and skips blank identifiers before paging,
+  preventing HTTP 400 responses that hide brightness and file capabilities.
+
 - 2026-09-21 — **Codex (AI)**: Restore native display brightness on Apple
   Silicon Macs and refresh paired capabilities on heartbeat. Add a shared
   Things file browser in full-page, docked and pop-up layouts, with protected
