@@ -1,10 +1,11 @@
 import { getLibraryExample } from './catalog';
 import { exampleSandbox } from './sandbox';
+import { sdkSandbox } from './sdkSandbox';
 import { buildExampleRequest, parseExampleInput, readBoundedJson } from './request';
 let started = false;
 addEventListener('message', async (event) => {
 	if (event.source !== parent || started || event.data?.type !== 'tt-library-start') return;
-	const { exampleId, runId, input } = event.data;
+	const { exampleId, runId, input, browserKey } = event.data;
 	if (typeof exampleId !== 'string' || typeof runId !== 'string' || runId.length > 80) return;
 	const example = getLibraryExample(exampleId);
 	if (!example || example.request?.auth) return;
@@ -12,7 +13,7 @@ addEventListener('message', async (event) => {
 	const send = (ok: boolean, text: string) => parent.postMessage({ type: 'tt-library', runId, ok, text: text.slice(0, 65536) }, '*');
 	try {
 		const parsed = parseExampleInput(JSON.stringify(input));
-		if (example.module) {
+		if (example.module || example.sdk) {
 			const child = document.createElement('iframe');
 			child.title = 'Isolated remote example';
 			child.sandbox.add('allow-scripts');
@@ -26,7 +27,7 @@ addEventListener('message', async (event) => {
 				)
 					send(message.data.ok === true, message.data.text);
 			});
-			child.srcdoc = exampleSandbox(example, parsed, runId);
+			child.srcdoc = example.sdk ? sdkSandbox(example, parsed, runId, browserKey) : exampleSandbox(example, parsed, runId);
 			document.body.append(child);
 		} else {
 			const { url, headers } = buildExampleRequest(example, parsed);

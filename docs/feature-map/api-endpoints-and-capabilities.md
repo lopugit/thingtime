@@ -61,3 +61,14 @@ the source of truth for the route table and both capability manifests.
   for anything touching private data.
 - A duplicate object key in `nitro.config.ts` silently drops the earlier one
   (last wins); the ratchet catches it as TS1117.
+
+## Integration library runtime
+
+`app/library/platformApis.ts` adds fixed read-only provider operations to
+`api.library-request` 1.2.0, including Google Places POST search templates.
+`app/library/request.ts` is the request builder and client requirement source;
+`app/api/utils/library/request.ts` bounds and redacts upstream transport.
+Browser Mapbox and Google SDKs use `app/library/sdkSandbox.ts` and the separately
+restricted `/library/sdk.html` document. Browser keys never enter saved Things.
+Run `npm --prefix remix run test:library`, included in `test:unit`, for catalog,
+builder hierarchy, credential boundaries, and SDK recipe contract coverage.

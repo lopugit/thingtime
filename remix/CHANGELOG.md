@@ -49,6 +49,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-21 — **Codex (AI)**: Add 40 Mapbox, Google Maps/Places and larger-platform examples (540 total), isolated browser SDK loading with transient key controls, bounded Places POST searches and generated builder pages. `api.library-request` advances to 1.2.0; setup and verification guidance cover separate browser/server keys. [PR #880 details](../PRs/880-codex-library-maps-platforms-maps-and-major-platform-examples.md).
+
 - 2026-09-21 — **Codex (AI)**: Added shared franchise list controls with search, relevant filters, result counts, 5/10/15/20 page sizes and infinite scrolling across records, histories, comments, media and planner days. Removed the eight-visit dashboard cutoff; paged planner moves retain the full day order. Details: [PR #879](../PRs/879-codex-franchise-list-controls-paginate-and-filter-franchise-lists.md).
 
 - 2026-09-21 — **Codex (AI):** Require native app changes, including Thingtime

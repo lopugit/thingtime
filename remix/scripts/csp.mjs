@@ -129,3 +129,15 @@ export const librarySandboxCsp = serialize({
   'style-src': ["'unsafe-inline'"], 'img-src': ['data:', 'blob:'], 'font-src': ['data:'],
   'frame-src': ["'self'"], 'base-uri': ["'none'"], 'form-action': ["'none'"], sandbox: ['allow-scripts']
 });
+
+// Official map SDKs in a separate opaque-origin document, with per-provider
+// srcdoc policies further restricting this union. No account cookies/storage.
+export const librarySdkCsp = serialize({
+ 'default-src': ["'none'"],
+ 'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'", 'blob:', 'https://api.mapbox.com', 'https://maps.googleapis.com', 'https://maps.gstatic.com'],
+ 'connect-src': ['https://api.mapbox.com', 'https://events.mapbox.com', 'https://*.googleapis.com', 'https://*.gstatic.com', 'https://*.google.com', 'data:', 'blob:'],
+ 'style-src': ["'unsafe-inline'", 'https://api.mapbox.com', 'https://fonts.googleapis.com'],
+ 'img-src': ['data:', 'blob:', 'https://api.mapbox.com', 'https://*.googleapis.com', 'https://*.gstatic.com', 'https://*.google.com', 'https://*.googleusercontent.com'],
+ 'font-src': ['data:', 'https://fonts.gstatic.com'], 'worker-src': ['blob:'],
+ 'frame-src': ["'self'"], 'base-uri': ["'none'"], 'form-action': ["'none'"], sandbox: ['allow-scripts']
+});

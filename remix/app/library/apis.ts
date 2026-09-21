@@ -1,7 +1,7 @@
 import { slug, type LibraryExample } from './types';
 
 type ApiRecipe = [title: string, path: string, input?: Record<string, unknown>, params?: Record<string, string>];
-function api(
+export function api(
 	provider: string,
 	category: string,
 	origin: string,
