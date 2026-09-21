@@ -1563,6 +1563,20 @@ email whose link points at the attacker.
 - [ ] In a fresh linked worktree with no copied `node_modules`, run
       `npm run worktree-setup`: every direct Remix dependency is linked and
       `npm --prefix remix run ensure-deps -- --check` passes.
+- [ ] Fresh-worktree bootstrap (`remix/scripts/worktree-bootstrap.cjs`): create
+      a linked worktree (`git worktree add ../tt-check -b tmp/check`), confirm
+      the tracked `post-checkout` hook wrote `worktree-bootstrap.log` in the Git
+      directory and that `remix/node_modules/.pnpm`, missing env files copied
+      from the main checkout (the `.env*` entries of `.worktreeinclude`), and
+      `.claude/launch.json` (entries `thingtime-web-<derived port>` attaching to
+      the PM2 stack and `thingtime-web-<derived port>-foreground`) exist;
+      `git config --worktree --get core.hooksPath` prints `.githooks`.
+      `npm run worktree-bootstrap` a second time changes nothing. Start
+      `npm run worktree-setup` while the background bootstrap is still
+      installing: the second run prints "Another dependency install is
+      running; waiting" and both finish with a complete `node_modules`
+      (`remix/node_modules/.thingtime-install.lock` is gone afterwards). Remove
+      the worktree afterwards.
 - [ ] With the pnpm virtual store present but top-level `eslint` and `vite`
       links removed, run `npm run worktree-setup`: both links are restored
       without copying dependency files from another checkout.
@@ -3177,6 +3191,11 @@ email whose link points at the attacker.
 - [ ] Run `npm run test:graphify-cas`. Confirm Graphify-only edits leave the
       source fingerprint unchanged, source edits change it, and computing a
       fingerprint leaves the real staged index byte-for-byte unchanged.
+- [ ] Snapshot immutability: after `scripts/graphify update .`,
+      `stat -f %Lp graphify-out/snapshots/v1/*/*/GRAPH_REPORT.md` prints `444`;
+      running the upstream `graphify update` (or an old hook) through the root
+      alias fails with EACCES instead of dirtying the committed snapshot, and
+      `git status` stays clean.
 - [ ] Finalize the same portable output twice and confirm it deduplicates to
       one artifact path. Finalize two valid variants for one source fingerprint
       and confirm both remain immutable while the deterministic selector picks
@@ -5897,19 +5916,6 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
 
 ## Things page (`/things`, `remix/app/components/Things/`, `/api/v1/things/bulk`)
 
-- [ ] Fresh-worktree bootstrap: create a linked worktree
-      (`git worktree add ../tt-check -b tmp/check`), confirm the tracked
-      `post-checkout` hook wrote `worktree-bootstrap.log` in the Git directory
-      and that `remix/node_modules/.pnpm`, missing env files copied from the main
-      checkout, and `.claude/launch.json` (entry `thingtime-web-<derived port>`)
-      exist; `git config --worktree --get core.hooksPath` prints `.githooks`.
-      `npm run worktree-bootstrap` a second time changes nothing. Remove the
-      worktree afterwards.
-- [ ] Graphify snapshot immutability: after `scripts/graphify update .`,
-      `stat -f %Lp graphify-out/snapshots/v1/*/*/GRAPH_REPORT.md` prints `444`;
-      running the upstream `graphify update` (or an old hook) through the root
-      alias fails with EACCES instead of dirtying the committed snapshot, and
-      `git status` stays clean. `npm run test:graphify-cas` passes.
 - [ ] Folder download-all: browse into a folder that contains posts with
       stored attachments and/or saved recordings; the toolbar shows a
       `Download all · N files · size` pill (absent at the root, in folders with
@@ -5918,7 +5924,13 @@ reactions, custom emojis, generic-things escape hatches). Then in a browser:
       its own sub-directory named after the post, recordings sit at the folder
       level, and children another viewer cannot see are excluded (share the
       folder as hidden, open its `/api/v1/attachments/archive?id=<folder>` URL
-      logged out: only public/unlisted children's files appear). The item ⋯ /
+      logged out: only public children's files appear — an unlisted child opens
+      by its own exact id and is never enumerated through a folder). The
+      manifest's `skipped` count is non-zero only for the folder's owner or an
+      administrator; a stranger's manifest says `0` even when files were
+      withheld, and an empty folder and a fully-withheld folder answer the same
+      404 message. Browsing back into an unchanged folder fires no second
+      manifest probe (Network tab); adding or deleting a post in it does. The item ⋯ /
       right-click menu on folders, posts, pages and media shows a **Files**
       section (`Download all files`, `Share download link`); multi-selections
       hide it. Downloading a folder with nothing downloadable toasts the server

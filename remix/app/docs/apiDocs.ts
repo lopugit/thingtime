@@ -5959,16 +5959,20 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 	}),
 	endpoint({
 		id: 'attachment-archive',
-		contractVersion: '1.0.0',
-		featureVersion: '1.0.0',
+		contractVersion: '1.0.1',
+		// 1.0.1: manifest/HEAD probes rate-limit separately and never presign; one
+		// wall clock covers planning and streaming (504 when planning overruns);
+		// `skipped` is reported only to the root's owner or an administrator and
+		// 404 carries one message for missing, unauthorized and empty roots.
+		featureVersion: '1.0.1',
 		group: 'attachments',
 		title: 'Download all files as a ZIP',
 		endpoint: '/api/v1/attachments/archive',
 		summary: 'Streams one ZIP of every stored file the caller may already read on a post, comment, page, folder or single media Thing; the URL doubles as a share link that downloads directly in browsers, wget and curl.',
 		detail:
 			'The root Thing resolves through the canonical Thing reader: public and unlisted (hidden) Things open by exact id, private and custom audiences need a current eligible session. Posts and comments archive their own bound gallery in stored order; pages archive their bound post-purpose media; a media Thing archives itself; folders are walked recursively (owner-scoped children, nested folders as sub-directories, each post gallery in its own sub-directory) with every child re-judged on its own inherited ACL — the folder audience never leaks into its contents. ' +
-			'Each file is then authorized and signed through the same gates as the content endpoint (purpose/target ACL, moderation, ready state, exact object version, home-storage guards). Files that fail a gate are skipped and counted; blocked media stays hidden for everyone but administrators reviewing evidence. Linked (external URL) media has no stored bytes and is listed in a links.txt member instead. ' +
-			'Bounds: 500 files, 2 GiB, 1000 traversed Things, 64 folder levels and a 280-second stream budget; larger sets return 413 so callers can archive sub-folders separately. Signed object URLs are fetched server-side and piped into a stored (uncompressed) ZIP — no object key, version or signed URL is ever exposed. Responses are private and never cached. Missing, unauthorized and empty roots return 404 uniformly.',
+			'Each file is then authorized and, for a real download, signed through the same gates as the content endpoint (purpose/target ACL, moderation, ready state, exact object version, home-storage guards). Files that fail a gate are skipped; the skipped count is reported only to the root’s owner or an administrator, because it would otherwise reveal moderation or audience state of files a stranger cannot see. Blocked media stays hidden for everyone but administrators reviewing evidence, linked media included. Linked (external URL) media has no stored bytes and is listed in a links.txt member instead. ' +
+			'Bounds: 500 files, 2 GiB, 1000 visible Things (private siblings never count toward it), 2000 bound attachment rows per folder level, 64 folder levels and one 280-second wall clock covering planning and streaming; larger sets return 413 so callers can archive sub-folders separately, and planning that overruns the clock returns 504. Signed object URLs are fetched server-side and piped into a stored (uncompressed) ZIP — no object key, version or signed URL is ever exposed. Responses are private and never cached. Missing, unauthorized and empty roots return 404 with one message.',
 		auth: {
 			mode: 'optional',
 			description:
@@ -5976,11 +5980,11 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 		},
 		methods: ['GET'],
 		steps: [
-			'GET with id (a post, comment, page, folder or media Thing id). Optional sharedRoot authorizes page-composition media exactly as the content endpoint does; optional key accepts a legacy hidden-link secret.',
-			'Save the response body as a .zip; the Content-Disposition filename is derived from the folder name, media filename, page title or the post’s opening words. HEAD returns the headers without building the archive.',
-			'Add manifest=1 to receive JSON instead: { ok, id, kind, name, fileName, fileCount, totalBytes, skipped, linkCount, files: [{ id, path, name, size }] }. Use it to label buttons and to detect folders without downloadable files before offering a download.',
+			'GET with id (a post, comment, page, folder or media Thing id). Optional sharedRoot authorizes page-composition media exactly as the content endpoint does — including a media root that is only readable through that page; optional key accepts a legacy hidden-link secret.',
+			'Save the response body as a .zip; the Content-Disposition filename is derived from the folder name, media filename, page title or the post’s opening words. HEAD returns the headers without presigning or streaming anything.',
+			'Add manifest=1 to receive JSON instead: { ok, id, kind, name, fileName, fileCount, totalBytes, skipped, linkCount, files: [{ id, path, name, size }] }. Use it to label buttons and to detect folders without downloadable files before offering a download. Probes (manifest=1, HEAD) are limited at 120/min per identity, ZIP downloads at 30/min.',
 			'Share the plain URL (no key) as the “download link”: anyone who can view the Thing gets the ZIP, and access is revoked the moment the Thing’s audience changes.',
-			'Treat 404 uniformly for missing, unauthorized and empty roots; 413 means the set exceeds one archive’s bounds.'
+			'Treat 404 uniformly for missing, unauthorized and empty roots; 413 means the set exceeds one archive’s bounds; 504 means planning alone overran the wall clock.'
 		],
 		requestExamples: [
 			{
@@ -6013,19 +6017,24 @@ export const apiEndpointDocs: ApiEndpointDoc[] = [
 				body: { ok: true, id: 'folder-id', kind: 'folder', name: 'Recipes', fileName: 'Recipes.zip', fileCount: 2, totalBytes: 4096, skipped: 0, linkCount: 0, files: [{ id: 'att-1', path: 'Dinner/photo.jpg', name: 'photo.jpg', size: 2048 }] }
 			},
 			{ status: 404, description: 'Missing, unauthorized or nothing to download.', body: { ok: false, error: 'Thing not found' } },
-			{ status: 413, description: 'Too many files or bytes for one archive.', body: { ok: false, error: 'These files are too large to download as one ZIP — download the folders inside separately' } }
+			{ status: 413, description: 'Too many files or bytes for one archive.', body: { ok: false, error: 'These files are too large to download as one ZIP — download the folders inside separately' } },
+			{ status: 504, description: 'Planning overran the request wall clock.', body: { ok: false, error: 'Preparing this download took too long — try a smaller folder' } }
 		]
 	}),
 	endpoint({
 		id: 'attachment-local-object',
-		contractVersion: '1.0.0',
-		featureVersion: '1.0.0',
+		contractVersion: '1.0.1',
+		// 1.0.1: optional THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN mints absolute
+		// URLs for native and script clients; exact versions carry ETag /
+		// Last-Modified and answer If-None-Match with 304; a PUT whose body ends
+		// early is a 400; foreign version ids read as absent objects.
+		featureVersion: '1.0.1',
 		group: 'attachments',
 		title: 'Local development object storage',
 		endpoint: '/api/v1/attachments/local-object',
 		summary: 'Filesystem stand-in for the private S3 bucket: serves the server-signed part-upload and download URLs when THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR is set on a developer machine; 404 everywhere else.',
 		detail:
-			'Never active in deployments: the module refuses to start when Vercel environment variables are present, and without the directory variable every request answers 404. URLs are minted only by the attachment service (upload part signing and downloads) and carry a ten-minute HMAC signature over every parameter. PUT stores one multipart part after verifying the signed length and SHA-256 checksum; GET/HEAD stream one exact object version with Range support and the signed Content-Type/Content-Disposition. Object keys, upload ids and version ids are validated against fixed grammars so no request can reach outside the storage directory. Quota, moderation, ACL and copy behaviour are unchanged — they only ever see the AttachmentS3 interface.',
+			'Never active in deployments: the module refuses to start when Vercel environment variables are present (a non-retryable storage configuration failure), and without the directory variable every request answers 404. URLs are minted only by the attachment service (upload part signing and downloads) and carry a ten-minute HMAC signature over every parameter; they are root-relative by default and absolute when THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN names the dev server origin (native uploaders and scripts need the absolute form, exactly like a presigned S3 URL). PUT stores one multipart part after verifying the signed length and SHA-256 checksum — a body that ends early is a 400, never an unhandled error; GET/HEAD stream one exact object version with Range support, the signed Content-Type/Content-Disposition, an ETag and Last-Modified (If-None-Match answers 304). Object keys, upload ids and version ids are validated against fixed grammars so no request can reach outside the storage directory; a version id the stand-in never minted reads as an absent object. Quota, moderation, ACL and copy behaviour are unchanged — they only ever see the AttachmentS3 interface.',
 		auth: {
 			mode: 'none',
 			description: 'Authorization is the short-lived signature minted by the attachment service after its own audience checks. Callers never construct these URLs.'

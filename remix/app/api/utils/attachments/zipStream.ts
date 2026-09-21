@@ -19,7 +19,11 @@ export type ZipStreamText = { path: string; bytes: Uint8Array };
 export type ZipStreamOptions = {
 	// Output queued ahead of the consumer before the pump waits (bytes).
 	highWaterMarkBytes?: number;
-	// Absolute deadline (ms epoch); the pump aborts upstream reads past it.
+	// Absolute deadline (ms epoch). Checked between chunks AND enforced by a
+	// timer, so a stalled upstream read or a consumer that stops pulling still
+	// ends the archive with an error at the deadline instead of holding the
+	// function, its buffers and the upstream connection until the platform
+	// kills it.
 	deadlineAt?: number;
 	now?: () => number;
 };
@@ -51,9 +55,20 @@ export const createZipStream = (
 	const abort = new AbortController();
 	let waitingForPull: (() => void) | undefined;
 	let finished = false;
+	let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
 
+	const timedOut = () => new ZipStreamError('Archive download timed out');
 	const checkDeadline = () => {
-		if (options.deadlineAt !== undefined && now() > options.deadlineAt) throw new ZipStreamError('Archive download timed out');
+		if (options.deadlineAt !== undefined && now() > options.deadlineAt) throw timedOut();
+	};
+	const stopTimer = () => {
+		if (deadlineTimer !== undefined) clearTimeout(deadlineTimer);
+		deadlineTimer = undefined;
+	};
+	const wake = () => {
+		const resume = waitingForPull;
+		waitingForPull = undefined;
+		resume?.();
 	};
 
 	return new ReadableStream<Uint8Array>(
@@ -74,15 +89,37 @@ export const createZipStream = (
 					if (finished) return;
 					if (error) {
 						finished = true;
+						stopTimer();
 						controller.error(error);
 						return;
 					}
 					if (chunk.byteLength) controller.enqueue(chunk);
 					if (final) {
 						finished = true;
+						stopTimer();
 						controller.close();
 					}
 				});
+
+				// A pump parked in reader.read() or in drain() cannot observe the clock,
+				// so the deadline itself aborts the upstream read and fails the stream.
+				const failNow = (error: unknown) => {
+					if (finished) return;
+					finished = true;
+					stopTimer();
+					abort.abort();
+					try {
+						zip.terminate();
+					} catch {
+						/* already ended */
+					}
+					controller.error(error);
+					wake();
+				};
+				if (options.deadlineAt !== undefined) {
+					deadlineTimer = setTimeout(() => failNow(timedOut()), Math.max(0, options.deadlineAt - now()));
+					deadlineTimer.unref?.();
+				}
 
 				const pump = async () => {
 					for (const entry of entries) {
@@ -122,29 +159,16 @@ export const createZipStream = (
 					zip.end();
 				};
 
-				pump().catch((error) => {
-					if (finished) return;
-					finished = true;
-					abort.abort();
-					try {
-						zip.terminate();
-					} catch {
-						/* already ended */
-					}
-					controller.error(error);
-				});
+				pump().catch(failNow);
 			},
 			pull() {
-				const resume = waitingForPull;
-				waitingForPull = undefined;
-				resume?.();
+				wake();
 			},
 			cancel() {
 				finished = true;
+				stopTimer();
 				abort.abort();
-				const resume = waitingForPull;
-				waitingForPull = undefined;
-				resume?.();
+				wake();
 			}
 		},
 		new ByteLengthQueuingStrategy({ highWaterMark: options.highWaterMarkBytes ?? DEFAULT_HIGH_WATER_MARK })

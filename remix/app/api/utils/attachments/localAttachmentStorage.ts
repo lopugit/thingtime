@@ -1,11 +1,13 @@
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { fileTypeFromBuffer } from 'file-type';
 
+import { PrivateS3ConfigError } from './config';
 import type { AttachmentObjectHead, AttachmentS3, AttachmentUploadedPart } from './privateS3';
 
 // A laptop stand-in for the private S3 bucket.
@@ -24,6 +26,11 @@ import type { AttachmentObjectHead, AttachmentS3, AttachmentUploadedPart } from 
 
 export const LOCAL_ATTACHMENT_STORAGE_PATH = '/api/v1/attachments/local-object';
 export const LOCAL_ATTACHMENT_STORAGE_DIR_ENV = 'THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR';
+// Optional absolute origin for the signed URLs (for example http://127.0.0.1:19921).
+// Browsers and server-side readers are happy with the default root-relative form;
+// native uploaders (the Watch inbox), curl-driven smoke scripts and other API
+// clients need an absolute URL exactly like a real presigned S3 URL.
+export const LOCAL_ATTACHMENT_STORAGE_ORIGIN_ENV = 'THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN';
 
 const PART_URL_TTL_SECONDS = 10 * 60;
 const DOWNLOAD_URL_TTL_SECONDS = 10 * 60;
@@ -34,7 +41,7 @@ const UPLOAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 const VERSION_ID = /^v[0-9a-z]{1,16}-[0-9a-f]{16}$/;
 const PART_NUMBER_MAX = 10_000;
 
-export type LocalAttachmentStorageConfig = { directory: string };
+export type LocalAttachmentStorageConfig = { directory: string; origin?: string };
 
 export class LocalAttachmentStorageError extends Error {
 	readonly $metadata: { httpStatusCode: number };
@@ -49,14 +56,42 @@ export class LocalAttachmentStorageError extends Error {
 	}
 }
 
-// Fail closed anywhere that looks like a deployment. Vercel always sets VERCEL.
+// A misconfigured stand-in is a configuration failure, not a transient outage:
+// the attachment service reports it as non-retryable `storage_unconfigured`
+// exactly like a missing bucket role, instead of telling clients to retry.
+export class LocalAttachmentStorageConfigError extends PrivateS3ConfigError {
+	constructor(message: string) {
+		super();
+		this.message = message;
+		this.name = 'LocalAttachmentStorageConfigError';
+	}
+}
+
+const expandHome = (value: string): string => (value === '~' ? homedir() : value.startsWith('~/') ? path.join(homedir(), value.slice(2)) : value);
+
+// Fail closed anywhere that looks like a deployment. Vercel always sets VERCEL
+// (and VERCEL_ENV / VERCEL_TARGET_ENV in builds and functions).
 export const resolveLocalAttachmentStorageConfig = (env: NodeJS.ProcessEnv = process.env): LocalAttachmentStorageConfig | null => {
 	const raw = String(env[LOCAL_ATTACHMENT_STORAGE_DIR_ENV] || '').trim();
 	if (!raw) return null;
-	if (env.VERCEL || env.VERCEL_ENV) {
-		throw new Error('Local attachment storage is a local-development stand-in and must not run on Vercel');
+	if (env.VERCEL || env.VERCEL_ENV || env.VERCEL_TARGET_ENV) {
+		throw new LocalAttachmentStorageConfigError('Local attachment storage is a local-development stand-in and must not run on Vercel');
 	}
-	return { directory: path.resolve(raw) };
+	// Relative paths resolve against the process working directory (the remix
+	// directory for the dev server); `~` is expanded because dotenv never does.
+	const directory = path.resolve(expandHome(raw));
+	const originRaw = String(env[LOCAL_ATTACHMENT_STORAGE_ORIGIN_ENV] || '').trim();
+	if (!originRaw) return { directory };
+	let origin: URL;
+	try {
+		origin = new URL(originRaw);
+	} catch {
+		throw new LocalAttachmentStorageConfigError(`${LOCAL_ATTACHMENT_STORAGE_ORIGIN_ENV} must be an absolute http(s) origin`);
+	}
+	if ((origin.protocol !== 'http:' && origin.protocol !== 'https:') || origin.pathname !== '/' || origin.search || origin.hash || origin.username || origin.password) {
+		throw new LocalAttachmentStorageConfigError(`${LOCAL_ATTACHMENT_STORAGE_ORIGIN_ENV} must be an absolute http(s) origin without a path, query or credentials`);
+	}
+	return { directory, origin: origin.origin };
 };
 
 const notFound = (what: string) => new LocalAttachmentStorageError('NotFound', `${what} not found`, 404);
@@ -116,16 +151,32 @@ const writeJsonAtomic = async (file: string, value: unknown) => {
 const encodeParam = (value: string) => Buffer.from(value, 'utf8').toString('base64url');
 const decodeParam = (value: string) => Buffer.from(value, 'base64url').toString('utf8');
 
+const isAbortLike = (error: unknown): boolean => {
+	const value = error as { name?: unknown; code?: unknown; message?: unknown } | null;
+	return value?.name === 'AbortError' || value?.code === 'ABORT_ERR' || value?.code === 'ECONNRESET' || value?.message === 'aborted';
+};
+
+const abortError = (signal: AbortSignal): unknown => signal.reason ?? new DOMException('This operation was aborted', 'AbortError');
+
+const notConfiguredResponse = () =>
+	new Response(JSON.stringify({ ok: false, error: 'Local attachment storage is not configured' }), {
+		status: 404,
+		headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'private, no-store, max-age=0' }
+	});
+
 export const createLocalAttachmentStorage = (config: LocalAttachmentStorageConfig, now: () => number = Date.now) => {
 	const root = config.directory;
+	const urlPrefix = `${config.origin || ''}${LOCAL_ATTACHMENT_STORAGE_PATH}`;
 	const uploadsRoot = path.join(root, 'uploads');
 	const objectsRoot = path.join(root, 'objects');
 	let secretPromise: Promise<Buffer> | null = null;
 
 	// One signing secret per storage directory (0600) so signed URLs survive dev
-	// server restarts but never leave the machine.
-	const secret = () =>
-		(secretPromise ??= (async () => {
+	// server restarts but never leave the machine. A failed read/create is not
+	// memoised: the next call retries instead of poisoning every later signature.
+	const secret = () => {
+		if (secretPromise) return secretPromise;
+		const attempt = (async () => {
 			await mkdir(root, { recursive: true });
 			const file = path.join(root, '.signing-secret');
 			try {
@@ -137,7 +188,13 @@ export const createLocalAttachmentStorage = (config: LocalAttachmentStorageConfi
 			const fresh = randomBytes(32).toString('hex');
 			await writeFile(file, `${fresh}\n`, { mode: 0o600 });
 			return Buffer.from(fresh, 'hex');
-		})());
+		})();
+		secretPromise = attempt;
+		attempt.catch(() => {
+			if (secretPromise === attempt) secretPromise = null;
+		});
+		return attempt;
+	};
 
 	const sign = async (fields: readonly string[]) => createHmac('sha256', await secret()).update(fields.join('\n')).digest('hex');
 	const verify = async (fields: readonly string[], signature: string | null) => {
@@ -241,7 +298,7 @@ export const createLocalAttachmentStorage = (config: LocalAttachmentStorageConfi
 			const exp = String(Math.floor(now() / 1000) + PART_URL_TTL_SECONDS);
 			const fields = ['part', objectKey, uploadId, String(partNumber), checksumSha256, String(contentLength), exp];
 			const params = new URLSearchParams({ op: 'part', key: objectKey, upload: uploadId, part: String(partNumber), checksum: checksumSha256, length: String(contentLength), exp, sig: await sign(fields) });
-			return { url: `${LOCAL_ATTACHMENT_STORAGE_PATH}?${params}`, expiresAt: expiresAt(PART_URL_TTL_SECONDS), headers: { 'x-amz-checksum-sha256': checksumSha256 } };
+			return { url: `${urlPrefix}?${params}`, expiresAt: expiresAt(PART_URL_TTL_SECONDS), headers: { 'x-amz-checksum-sha256': checksumSha256 } };
 		},
 
 		async listParts({ objectKey, uploadId }) {
@@ -279,18 +336,36 @@ export const createLocalAttachmentStorage = (config: LocalAttachmentStorageConfi
 			}
 			const versionId = newVersionId();
 			await mkdir(objectDir(id), { recursive: true });
-			const temporary = `${objectFile(id, versionId)}.tmp`;
-			const sink = createWriteStream(temporary, { mode: 0o600 });
-			try {
-				for (const part of ordered) {
-					await pipeline(createReadStream(partFile(uploadId, part.partNumber)), sink, { end: false });
+			// A concurrent complete of the same upload removes the part files under
+			// us; S3 reports that as NoSuchUpload, which the service already settles.
+			const raced = async (error: unknown) => {
+				if (isEnoent(error) && !(await readJson<UploadRecord>(path.join(uploadDir(uploadId), 'upload.json')))) return noSuchUpload();
+				return error;
+			};
+			if (ordered.length === 1) {
+				// One part IS the object: move it instead of copying it a second time.
+				try {
+					await rename(partFile(uploadId, ordered[0].partNumber), objectFile(id, versionId));
+				} catch (error) {
+					throw await raced(error);
 				}
-				await new Promise<void>((resolve, reject) => sink.end((error?: Error | null) => (error ? reject(error) : resolve())));
-				await rename(temporary, objectFile(id, versionId));
-			} catch (error) {
-				sink.destroy();
-				await rm(temporary, { force: true });
-				throw error;
+			} else {
+				const temporary = `${objectFile(id, versionId)}.tmp`;
+				try {
+					// One pipeline over every part in order: backpressure, error propagation
+					// and listener cleanup in one place (a pipeline per part with end:false
+					// leaves its listeners on the shared sink).
+					await pipeline(
+						(async function* () {
+							for (const part of ordered) yield* createReadStream(partFile(uploadId, part.partNumber));
+						})(),
+						createWriteStream(temporary, { mode: 0o600 })
+					);
+					await rename(temporary, objectFile(id, versionId));
+				} catch (error) {
+					await rm(temporary, { force: true });
+					throw await raced(error);
+				}
 			}
 			const record: ObjectRecord = {
 				versionId,
@@ -344,10 +419,11 @@ export const createLocalAttachmentStorage = (config: LocalAttachmentStorageConfi
 			await rm(uploadDir(uploadId), { recursive: true, force: true });
 		},
 
-		// S3 semantics: deleting an absent version is a success.
+		// S3 semantics: deleting an absent version is a success — including a
+		// version id this stand-in never minted (rows left over from a bucket).
 		async deleteObject({ objectKey, versionId }) {
 			const id = assertObjectKey(objectKey);
-			assertVersionId(versionId);
+			if (!VERSION_ID.test(versionId)) return;
 			await rm(objectFile(id, versionId), { force: true });
 			await rm(objectMeta(id, versionId), { force: true });
 			try {
@@ -368,15 +444,17 @@ export const createLocalAttachmentStorage = (config: LocalAttachmentStorageConfi
 			await storePart(uploadId, partNumber, createReadStream(objectFile(sourceId, source.versionId), { start, end, signal }), { contentLength: end - start + 1 });
 		},
 
+		// Presigning never touches storage (S3 semantics): an unknown version id
+		// yields a URL whose GET answers 404, not a signing failure.
 		async signDownload({ objectKey, versionId, contentDisposition, contentType }) {
 			assertObjectKey(objectKey);
-			assertVersionId(versionId);
+			if (typeof versionId !== 'string' || !versionId || /[\p{Cc}]/u.test(versionId)) throw invalid('Invalid object version');
 			const exp = String(Math.floor(now() / 1000) + DOWNLOAD_URL_TTL_SECONDS);
 			const disposition = encodeParam(contentDisposition);
 			const type = encodeParam(contentType);
 			const fields = ['get', objectKey, versionId, disposition, type, exp];
 			const params = new URLSearchParams({ op: 'get', key: objectKey, version: versionId, disposition, type, exp, sig: await sign(fields) });
-			return { url: `${LOCAL_ATTACHMENT_STORAGE_PATH}?${params}`, expiresAt: expiresAt(DOWNLOAD_URL_TTL_SECONDS) };
+			return { url: `${urlPrefix}?${params}`, expiresAt: expiresAt(DOWNLOAD_URL_TTL_SECONDS) };
 		},
 
 		isNoSuchUpload(error) {
@@ -395,6 +473,9 @@ export const createLocalAttachmentStorage = (config: LocalAttachmentStorageConfi
 	// Serves the signed URLs above. Reached through the dev-only route AND
 	// directly (no network) by server-side readers via fetchStoredObject().
 	const handleRequest = async (request: Request): Promise<Response> => {
+		// fetch() semantics for in-process readers: an already-aborted signal
+		// rejects instead of serving bytes nobody is waiting for.
+		if (request.signal?.aborted) throw abortError(request.signal);
 		const url = new URL(request.url);
 		const op = url.searchParams.get('op');
 		const exp = url.searchParams.get('exp') || '';
@@ -430,14 +511,20 @@ export const createLocalAttachmentStorage = (config: LocalAttachmentStorageConfi
 				await stat(file).catch((error) => {
 					throw isEnoent(error) ? notFound('Object') : error;
 				});
+				// Exact versions are immutable, so validators are cheap and exact: the
+				// browser revalidates a preview instead of refetching every byte.
 				const headers: Record<string, string> = {
 					'Content-Type': decodeParam(type) || 'application/octet-stream',
 					'Content-Disposition': decodeParam(disposition) || 'attachment',
 					'Cache-Control': 'private, max-age=0, must-revalidate',
+					ETag: etagFor(record.checksumSha256),
+					'Last-Modified': new Date(record.createdAt).toUTCString(),
 					'Accept-Ranges': 'bytes',
 					'X-Content-Type-Options': 'nosniff',
+					'Referrer-Policy': 'no-referrer',
 					'x-amz-version-id': record.versionId
 				};
+				if (request.headers.get('if-none-match') === headers.ETag) return new Response(null, { status: 304, headers: { ETag: headers.ETag, 'Cache-Control': headers['Cache-Control'] } });
 				let start = 0;
 				let end = record.sizeBytes - 1;
 				let status = 200;
@@ -457,13 +544,19 @@ export const createLocalAttachmentStorage = (config: LocalAttachmentStorageConfi
 				}
 				headers['Content-Length'] = String(record.sizeBytes ? end - start + 1 : 0);
 				if (request.method === 'HEAD' || !record.sizeBytes) return new Response(null, { status, headers });
-				return new Response(Readable.toWeb(createReadStream(file, { start, end })) as ReadableStream<Uint8Array>, { status, headers });
+				// The caller's signal (a reader timeout, a cancelled Lopu turn, a
+				// disconnected client) destroys the file stream instead of being ignored.
+				return new Response(Readable.toWeb(createReadStream(file, { start, end, signal: request.signal })) as ReadableStream<Uint8Array>, { status, headers });
 			}
 			// Unknown operations read exactly like a bad signature: nothing about the
 			// stand-in's surface is discoverable without a server-minted URL.
 			return jsonResponse(403, { ok: false, error: 'Signature does not match' });
 		} catch (error) {
 			if (error instanceof LocalAttachmentStorageError) return jsonResponse(error.$metadata.httpStatusCode, { ok: false, error: error.message });
+			// A client that cancels its part PUT mid-body is a routine 400, never an
+			// unhandled 500 that lands in the error log.
+			if (request.signal?.aborted) throw abortError(request.signal);
+			if (isAbortLike(error)) return jsonResponse(400, { ok: false, error: 'Upload body ended before its declared length' });
 			throw error;
 		}
 	};
@@ -473,35 +566,49 @@ export const createLocalAttachmentStorage = (config: LocalAttachmentStorageConfi
 
 export type LocalAttachmentStorage = ReturnType<typeof createLocalAttachmentStorage>;
 
-let cached: { directory: string; value: LocalAttachmentStorage } | undefined;
+let cached: { directory: string; origin: string | undefined; value: LocalAttachmentStorage } | undefined;
 
 export const getLocalAttachmentStorage = (config: LocalAttachmentStorageConfig): LocalAttachmentStorage => {
-	if (cached?.directory === config.directory) return cached.value;
+	if (cached?.directory === config.directory && cached.origin === config.origin) return cached.value;
 	const value = createLocalAttachmentStorage(config);
-	cached = { directory: config.directory, value };
+	cached = { directory: config.directory, origin: config.origin, value };
 	return value;
 };
 
-export const isLocalAttachmentStorageUrl = (url: string): boolean => url.startsWith(`${LOCAL_ATTACHMENT_STORAGE_PATH}?`);
+// The root-relative form the stand-in mints by default, or the absolute form
+// minted under THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN. Real S3 URLs never
+// carry this path.
+const localStorageQuery = (url: string): string | null => {
+	if (url.startsWith(`${LOCAL_ATTACHMENT_STORAGE_PATH}?`)) return url.slice(LOCAL_ATTACHMENT_STORAGE_PATH.length);
+	if (!/^https?:\/\//i.test(url)) return null;
+	try {
+		const parsed = new URL(url);
+		return parsed.pathname === LOCAL_ATTACHMENT_STORAGE_PATH && parsed.search ? parsed.search : null;
+	} catch {
+		return null;
+	}
+};
+
+export const isLocalAttachmentStorageUrl = (url: string): boolean => localStorageQuery(url) !== null;
 
 // Serve a signed local URL for a first-party request, or 404 when the
 // stand-in is not configured (the route never exists in deployments).
 export const handleLocalAttachmentStorageRequest = async (request: Request, config: LocalAttachmentStorageConfig | null = resolveLocalAttachmentStorageConfig()): Promise<Response> => {
-	if (!config) {
-		return new Response(JSON.stringify({ ok: false, error: 'Local attachment storage is not configured' }), {
-			status: 404,
-			headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'private, no-store, max-age=0' }
-		});
-	}
+	if (!config) return notConfiguredResponse();
 	return getLocalAttachmentStorage(config).handleRequest(request);
 };
 
 // Server-side readers (image previews, byte proxying, archives, moderation)
-// resolve signed URLs through this helper so a relative local URL is served
-// in-process while real S3 URLs still go over the network.
+// resolve signed URLs through this helper so a local URL is served in-process
+// while real S3 URLs still go over the network. Abort signals and timeouts
+// behave like fetch(): an aborted signal rejects, a later abort ends the body.
 export const fetchStoredObject = (url: string, init: { method?: string; headers?: HeadersInit; signal?: AbortSignal | null; redirect?: RequestRedirect } = {}): Promise<Response> => {
-	if (isLocalAttachmentStorageUrl(url)) {
-		return handleLocalAttachmentStorageRequest(new Request(`http://local-attachments.invalid${url}`, { method: init.method || 'GET', headers: init.headers, signal: init.signal ?? undefined }));
+	const query = localStorageQuery(url);
+	if (query !== null) {
+		if (init.signal?.aborted) return Promise.reject(abortError(init.signal));
+		return handleLocalAttachmentStorageRequest(
+			new Request(`http://local-attachments.invalid${LOCAL_ATTACHMENT_STORAGE_PATH}${query}`, { method: init.method || 'GET', headers: init.headers, signal: init.signal ?? undefined })
+		);
 	}
 	return fetch(url, { method: init.method, headers: init.headers, signal: init.signal ?? undefined, redirect: init.redirect });
 };

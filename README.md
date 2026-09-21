@@ -2048,9 +2048,24 @@ parts under that directory, ignored by git) and mints short-lived HMAC-signed
 URLs to `GET|PUT /api/v1/attachments/local-object`, which it also serves.
 Uploads, image previews, downloads, "download all" archives, copies and
 moderation fetches run unchanged; quota, ACL and moderation gates are exactly
-the production ones. The module refuses to start when `VERCEL` or `VERCEL_ENV`
-is set and the route answers 404 without the variable, so it can never become a
-storage tier. Delete the directory to reset local media.
+the production ones. The module refuses to start when `VERCEL`, `VERCEL_ENV`
+or `VERCEL_TARGET_ENV` is set (reported as a non-retryable storage
+configuration failure) and the route answers 404 without the variable, so it
+can never become a storage tier. A relative directory resolves against the dev
+server's working directory (`remix/`); `~` is expanded. Delete the directory to
+reset local media.
+
+The signed URLs are root-relative by default, which is what the browser and
+every server-side reader need. A native app (the Watch recording inbox against
+a simulator build), `curl`, or a smoke script cannot follow a relative URL, so
+for those also set the dev server's origin and restart:
+
+```sh
+THINGTIME_LOCAL_ATTACHMENT_STORAGE_ORIGIN=http://127.0.0.1:10000   # this checkout's Nitro port (npm run web-ports)
+```
+
+Exact object versions are immutable, so the stand-in answers with an `ETag`
+and `Last-Modified` and honours `If-None-Match` (304) like a bucket would.
 
 ### Seed a local fixture through the API
 

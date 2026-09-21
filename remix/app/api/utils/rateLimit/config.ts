@@ -30,6 +30,10 @@ export const RATE_LIMIT_DEFAULTS: RateLimitConfig = {
   // "download all" ZIP builds (GET /api/v1/attachments/archive) — each call
   // enumerates a Thing's files and streams them; heavier than one read
   'attachments.archive': { limit: 30, windowMs: 60_000, enabled: true },
+  // manifest=1 and HEAD probes on the same endpoint: enumerate + authorize
+  // without presigning or streaming. Their own window so folder browsing and
+  // download-manager probes never spend the ZIP budget above.
+  'attachments.archiveManifest': { limit: 120, windowMs: 60_000, enabled: true },
   // admin-only legacy re-detection sweep; each call is one bounded S3-reading pass
   'attachments.detectionBackfill': { limit: 30, windowMs: 60_000, enabled: true },
   'things.react': { limit: 60, windowMs: 60_000, enabled: true },
