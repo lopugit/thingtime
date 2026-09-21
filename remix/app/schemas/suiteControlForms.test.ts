@@ -31,3 +31,12 @@ test('RSVP choice buttons preserve their fixed answers rather than a shared fiel
 	const answers = tree.filter((node) => node.ttAction?.endsWith('-reply')).map((node) => node.ttActionInputs.attending);
 	assert.deepEqual(answers.sort(), ['maybe', 'no', 'yes']);
 });
+
+
+test('video controls appear only after a nonempty URL is provided', () => {
+  const component = materializeSuite(getBehaviourSuite('site-forms')!, 'own').components.find(part => part.key === 'media')!;
+  assert.equal(nodes(resolveTemplate(component.crystal.render, { mediaUrl: '' })).some(node => node.tag === 'video'), false);
+  const video = nodes(resolveTemplate(component.crystal.render, { mediaUrl: 'https://example.test/video.mp4' })).find(node => node.tag === 'video');
+  assert.equal(video.props.src, 'https://example.test/video.mp4');
+  assert.equal(video.props.controls, true);
+});

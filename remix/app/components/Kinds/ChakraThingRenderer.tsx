@@ -72,6 +72,8 @@ import { applyNoOpener, isEventHandlerProp, isSafeCssText, isSafeUrl } from './s
 // / element-swapping props never pass through, URL props are checked, and
 // string values are screened for css escape hatches. Safe for untrusted JSON.
 
+const LibraryExample = React.lazy(() => import('../IntegrationLibrary/LibraryDemo'));
+
 const ALLOWED_COMPONENTS: Record<string, React.ElementType> = {
 	Alert,
 	AlertDescription,
@@ -247,6 +249,7 @@ const renderNode = (node: ChakraThingNode, key: number, depth: number, state: Re
 	if (!node || typeof node !== 'object' || Array.isArray(node)) return null;
 
 	const name = typeof node.chakra === 'string' ? node.chakra : 'Box';
+	if (name === 'IntegrationExample') return <React.Suspense key={key} fallback={<Text>Integration example</Text>}><LibraryExample exampleId={node.props?.exampleId} inputJson={node.props?.inputJson} /></React.Suspense>;
 	if (name === 'Upload') return <ComponentUpload key={key} name={node.props?.name} imageOnly={node.props?.imageOnly} disabled={node.props?.disabled} title={node.props?.title} value={node.props?.value} attachmentId={node.props?.attachmentId} />;
 	const Component = ALLOWED_COMPONENTS[name];
 	if (!Component) {

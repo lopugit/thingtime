@@ -115,7 +115,7 @@ const mediaControl: SuiteComponentDef = {
 					}
 				]
 			},
-			{ ttIf: { arg: 'mediaUrl', then: { tag: 'video', props: { src: '{mediaUrl}', controls: true, preload: 'metadata', style: { width: '100%', maxHeight: '480px' } } } } },
+			{ ttIf: { arg: 'mediaUrl', equals: '', then: null, else: { tag: 'video', props: { src: '{mediaUrl}', controls: true, preload: 'metadata', style: { width: '100%', maxHeight: '480px' } } } } },
 			{ tag: 'small', children: ['Add a playable video URL to play, pause, seek, adjust volume, and use fullscreen.'] }
 		]
 	})
