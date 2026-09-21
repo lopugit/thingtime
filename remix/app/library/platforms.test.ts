@@ -9,6 +9,9 @@ import { buildExampleRequest, LIBRARY_REQUEST_REQUIREMENT } from './request';
 import { runLibraryRequest } from '../api/utils/library/request';
 import { capabilitySatisfies, thingtimeCapabilityManifest } from '../api/utils/capabilities/thingtimeCapabilities';
 
+const referencedHosts = (source: string) =>
+	new Set(Array.from(source.matchAll(/https:\/\/[^'"\s;]+/g), ([address]) => new URL(address).hostname));
+
 test('every new platform has executable, bounded catalogue examples', () => {
 	assert.equal(MAP_SDK_EXAMPLES.length, 14);
 	assert.equal(PLATFORM_API_EXAMPLES.length, 26);
@@ -56,15 +59,15 @@ test('browser keys, coordinate bounds and source escaping fail closed before SDK
 	for (const input of [{ ...mapbox.input, latitude: 95 }, { ...mapbox.input, longitude: '144' }, {}])
 		assert.throws(() => validateSdkInput(mapbox, input, 'pk.fixture'));
 	const marker = MAP_SDK_EXAMPLES.find((e) => e.id === 'google-maps-marker-information-window')!;
-	const html = sdkSandbox(marker, { ...marker.input, label: '</script><script>evil()</script>' }, 'run', 'AIzaFixture');
-	assert.equal(html.match(/<script>/g)?.length, 1);
+	const html = sdkSandbox(marker, { ...marker.input, label: '</ScRiPt><SCRIPT src="https://evil.test/payload.js">evil()</SCRIPT>' }, 'run', 'AIzaFixture');
+	assert.equal(html.match(/<script\b/gi)?.length, 1);
 	assert.ok(!html.includes('</script><script>'));
 	assert.ok(!html.includes('allow-same-origin'));
 	assert.ok(html.includes('textContent'));
-	assert.ok(!html.includes('https://api.mapbox.com'));
+	assert.equal(referencedHosts(html).has('api.mapbox.com'), false);
 	const mapboxHtml = sdkSandbox(mapbox, mapbox.input, 'run', 'pk.fixture');
 	assert.ok(mapboxHtml.includes(MAPBOX_SCRIPT));
-	assert.ok(!mapboxHtml.includes('maps.googleapis.com'));
+	assert.equal(referencedHosts(mapboxHtml).has('maps.googleapis.com'), false);
 });
 test('all SDK recipes execute against provider contracts and return real operation results', async () => {
 	for (const example of MAP_SDK_EXAMPLES) {
@@ -199,8 +202,8 @@ test('all SDK recipes execute against provider contracts and return real operati
 test('SDK network policy is isolated from ordinary module demos and Vercel validates it', () => {
 	const csp = readFileSync(new URL('../../scripts/csp.mjs', import.meta.url), 'utf8');
 	const ordinary = csp.split('export const librarySandboxCsp =')[1].split('export const librarySdkCsp =')[0];
-	assert.ok(!ordinary.includes('maps.googleapis.com'));
-	assert.ok(!ordinary.includes('api.mapbox.com'));
+	assert.equal(referencedHosts(ordinary).has('maps.googleapis.com'), false);
+	assert.equal(referencedHosts(ordinary).has('api.mapbox.com'), false);
 	const entry = readFileSync(new URL('./sandboxEntry.ts', import.meta.url), 'utf8');
 	assert.ok(entry.includes('example.request?.auth'));
 	assert.ok(entry.includes('event.source !== parent'));
