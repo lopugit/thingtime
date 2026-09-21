@@ -49,6 +49,8 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
+- 2026-09-21 — **Codex (AI)**: Added shared franchise list controls with search, relevant filters, result counts, 5/10/15/20 page sizes and infinite scrolling across records, histories, comments, media and planner days. Removed the eight-visit dashboard cutoff; paged planner moves retain the full day order.
+
 - 2026-09-21 — **Codex (AI)**: Production franchise follow-up: restore saved
   comment attachments in workspace galleries, clear committed upload batches,
   and show safe Google Places setup or gateway error guidance. Contracts:
