@@ -49,7 +49,7 @@ assistant and manual changes attributed so future PR archaeology is less cursed.
 
 ## [Unreleased]
 
-- 2026-09-21: Added an integration builder index, 42 service pages and 500 individual example pages with reusable component blocks, private editing, and an idempotent admin setup action. Long account names now truncate in the mobile header, with a compact search trigger. [PR #875 notes](../PRs/875-codex-library-builder-pages-integration-builder-pages.md).
+- 2026-09-21: Added an integration builder index, 42 service pages and 500 individual example pages with reusable component blocks, private editing, and an idempotent admin setup action. Long account names now truncate in the mobile header, with a compact search trigger. Retired a stale Connections lookup that could block seeding at the MongoDB index limit. [PR #875 notes](../PRs/875-codex-library-builder-pages-integration-builder-pages.md).
 - **2026-09-20 · Claude (AI):** Developer-experience follow-ups. Filesystem
   stand-in for the private S3 bucket (`THINGTIME_LOCAL_ATTACHMENT_STORAGE_DIR`,
   `localAttachmentStorage.ts`, dev-only `GET|PUT /api/v1/attachments/local-object`

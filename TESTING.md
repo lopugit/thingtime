@@ -8077,3 +8077,8 @@ missing `/Applications/Tailscale.app`; no public mapping was changed.
   the full name remains available to assistive technology and on hover.
   The compact mobile search button opens a focused input below the header;
   results remain below that input and Escape closes it. Desktop search remains inline.
+
+- Index-capacity upgrade: a home database carrying the pre-release Connections
+  lookup can run the integration seed with legacy read layouts still enabled.
+  Bootstrap retires that obsolete non-unique index before creating missing
+  current indexes; unique constraints and saved Things remain intact.
